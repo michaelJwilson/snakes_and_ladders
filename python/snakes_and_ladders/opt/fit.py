@@ -198,6 +198,7 @@ def fit(
         relative_gradient_norm=result.gradient_norm,
         wall_s=time.perf_counter() - started,
     )
+    tracked.record_cost(iterations, result.theta.nbytes)
     _log.debug(
         "fit %s after %d iterations at value %.6f, relative gradient norm %.2e",
         "converged" if converged else "stopped",

@@ -20,6 +20,7 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.opt.fit import (
     constrained_standard_errors,
     covers,
@@ -29,8 +30,8 @@ from snakes_and_ladders.opt.fit import (
 )
 from snakes_and_ladders.opt.hmm import HmmObjective, align_states, baum_welch
 from snakes_and_ladders.opt.potts import PottsObjective
-from snakes_and_ladders.sim.hmm import load_hmm_params, simulate_sequences
-from snakes_and_ladders.sim.potts_chain import load_potts_params, simulate_chains
+from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
+from snakes_and_ladders.sim.potts_chain import PottsParams, simulate_chains
 
 from tests._fixtures import FIXTURES_DIR
 
@@ -48,7 +49,7 @@ _COVERAGE_SIGMA = 3.0
 
 
 def _potts_objective(seed_offset: int = 0) -> tuple[PottsObjective, torch.Tensor]:
-    base = load_potts_params(POTTS_FIXTURE)
+    base = load_params(POTTS_FIXTURE, PottsParams)
     params = replace(base, seed=base.seed + seed_offset)
     objective = PottsObjective(simulate_chains(params), params.n_states)
     truth = objective.theta_from_truth(params.coupling, params.field)
@@ -56,7 +57,7 @@ def _potts_objective(seed_offset: int = 0) -> tuple[PottsObjective, torch.Tensor
 
 
 def _hmm_objective(seed_offset: int = 0) -> tuple[HmmObjective, torch.Tensor]:
-    base = load_hmm_params(HMM_FIXTURE)
+    base = load_params(HMM_FIXTURE, HmmParams)
     params = replace(base, seed=base.seed + seed_offset)
     objective = HmmObjective(
         simulate_sequences(params).observations, params.n_states, params.n_symbols
@@ -130,7 +131,7 @@ def test_potts_intervals_cover_the_truth_at_the_nominal_rate() -> None:
     # 60 independent datasets from the same truth, one fit each, every
     # parameter's 95% Wald interval checked. Deterministic: the seeds are
     # fixed, so this is a pinned number rather than a sample.
-    base = load_potts_params(POTTS_FIXTURE)
+    base = load_params(POTTS_FIXTURE, PottsParams)
     truth_coupling = torch.tensor(base.coupling, dtype=torch.float64)
     truth_field = torch.as_tensor(base.field)
 
@@ -164,7 +165,7 @@ def test_potts_intervals_cover_the_truth_at_the_nominal_rate() -> None:
 
 @pytest.mark.end2end
 def test_potts_point_estimates_land_near_the_truth() -> None:
-    base = load_potts_params(POTTS_FIXTURE)
+    base = load_params(POTTS_FIXTURE, PottsParams)
     objective, _ = _potts_objective()
     estimate = objective.constrain(fit(objective).theta)
     error = constrained_standard_errors(objective, fit(objective).theta)
@@ -191,7 +192,7 @@ def test_hmm_interval_coverage_approaches_nominal_with_sample_size() -> None:
     # are fitted near zero, where a Wald interval on the log scale is a poor
     # approximation, and aligning the state permutation to truth is a
     # post-selection step that costs a little coverage.
-    base = load_hmm_params(HMM_FIXTURE)
+    base = load_params(HMM_FIXTURE, HmmParams)
     truth = {
         "log_initial": torch.log(torch.as_tensor(base.initial)),
         "log_transition": torch.log(torch.as_tensor(base.transition)),
@@ -236,7 +237,7 @@ def test_the_gradient_fit_agrees_with_baum_welch() -> None:
     # Baum-Welch shares only the model: no optimizer, no unconstrained
     # coordinates, no constraint map. Two algorithms reaching the same
     # optimum is evidence neither of them alone provides.
-    params = load_hmm_params(HMM_FIXTURE)
+    params = load_params(HMM_FIXTURE, HmmParams)
     observations = simulate_sequences(params).observations
     objective = HmmObjective(observations, params.n_states, params.n_symbols)
 
@@ -300,7 +301,7 @@ def test_an_estimate_on_the_boundary_has_no_interval() -> None:
     # successfully and returns an astronomically large covariance. Refusing
     # is the whole point of checking the conditioning rather than trusting
     # the inversion to fail.
-    base = load_hmm_params(HMM_FIXTURE)
+    base = load_params(HMM_FIXTURE, HmmParams)
     params = replace(base, lengths=(5,) * 30)
     objective = HmmObjective(
         simulate_sequences(params).observations, params.n_states, params.n_symbols
@@ -364,7 +365,7 @@ def test_the_information_grows_with_the_data() -> None:
     # A standard error is a claim about how much the data says. Four times
     # the data must halve it, to within the sampling noise of a different
     # dataset; a covariance that ignored the sample size would not move.
-    base = load_potts_params(POTTS_FIXTURE)
+    base = load_params(POTTS_FIXTURE, PottsParams)
     small = PottsObjective(simulate_chains(base), base.n_states)
     large = PottsObjective(
         simulate_chains(replace(base, n_chains=16 * base.n_chains)), base.n_states

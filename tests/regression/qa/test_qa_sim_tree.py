@@ -13,6 +13,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.qa.figure import state_label
 from snakes_and_ladders.qa.sim_tree import (
     SITES_SHOWN,
@@ -21,7 +22,7 @@ from snakes_and_ladders.qa.sim_tree import (
     render_sim_tree,
     tree_layout,
 )
-from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import Node, preorder
 
@@ -43,7 +44,7 @@ def _expected_depth(node: Node, parent_depth: float, target: str) -> float | Non
 
 @pytest.mark.oracle
 def test_tree_layout_depths_match_branch_length_sums() -> None:
-    params = load_simulation_params(FIXTURES_DIR / "tree_jc/release.yaml")
+    params = load_params(FIXTURES_DIR / "tree_jc/release.yaml", SimulationParams)
     layout = tree_layout(params.tau)
 
     for node in preorder(params.tau):
@@ -59,7 +60,7 @@ def test_the_drawn_axis_puts_the_first_taxon_at_the_top() -> None:
     # counts y upward, so the figure reads in the fixture's own order only if
     # the axis is inverted. Asserted on the drawn axes rather than on the
     # layout, which is deliberately left in tree coordinates.
-    params = load_simulation_params(PARAMS_PATH)
+    params = load_params(PARAMS_PATH, SimulationParams)
     _figure, ax = plt.subplots()
     try:
         layout = render_sim_tree(params.tau, ax)
@@ -74,7 +75,7 @@ def test_the_drawn_axis_puts_the_first_taxon_at_the_top() -> None:
 
 @pytest.mark.smoke
 def test_tree_layout_gives_every_leaf_a_distinct_ordered_y() -> None:
-    params = load_simulation_params(FIXTURES_DIR / "tree_jc/release.yaml")
+    params = load_params(FIXTURES_DIR / "tree_jc/release.yaml", SimulationParams)
     layout = tree_layout(params.tau)
     leaves = [node.name for node in preorder(params.tau) if node.is_leaf]
 
@@ -87,7 +88,7 @@ def test_main_writes_a_figure_and_caption_with_generating_truth(
     tmp_path: Path,
 ) -> None:
     params_path = FIXTURES_DIR / "tree_jc/release.yaml"
-    params = load_simulation_params(params_path)
+    params = load_params(params_path, SimulationParams)
 
     qa_figure = main(["--params", str(params_path), "--output-dir", str(tmp_path)])
 
@@ -117,7 +118,7 @@ def test_main_reads_sys_argv_when_no_argv_is_given(
     caption_path = tmp_path / "sim_tree_caption.txt"
     assert figure_path.is_file()
     assert caption_path.read_text() == build_caption(
-        load_simulation_params(params_path)
+        load_params(params_path, SimulationParams)
     )
     # The runner reports what it wrote through the run logger (issue #311),
     # which writes to stderr; nothing goes to stdout.
@@ -132,7 +133,7 @@ def test_every_leaf_gets_its_own_sequence_aligned_to_its_row() -> None:
     # The figure's claim is that these sequences came from this tree, so the
     # check is that each leaf's text is its own simulated states, placed at
     # that leaf's y. Pinned against the alignment, not against the drawing.
-    params = load_simulation_params(PARAMS_PATH)
+    params = load_params(PARAMS_PATH, SimulationParams)
     dataset = simulate_alignment(
         tau=params.tau,
         k=params.k,
@@ -165,7 +166,7 @@ def test_every_leaf_gets_its_own_sequence_aligned_to_its_row() -> None:
 def test_no_sequences_are_drawn_when_no_alignment_is_given() -> None:
     # The parameter is optional, and a tree without an alignment must not
     # acquire an empty column of text.
-    params = load_simulation_params(PARAMS_PATH)
+    params = load_params(PARAMS_PATH, SimulationParams)
     _, ax = plt.subplots()
     render_sim_tree(params.tau, ax)
 

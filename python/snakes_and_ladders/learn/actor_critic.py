@@ -100,6 +100,7 @@ def actor_critic[S, A](
     max_steps: int,
     learning_rate: float = 0.05,
     critic_steps: int = 50,
+    stop_at_local_optimum: bool = True,
 ) -> ActorCriticTraining:
     """Alternate a critic refit and one advantage-weighted policy step, ``iterations`` times.
 
@@ -107,7 +108,9 @@ def actor_critic[S, A](
     it, so the baseline at step ``t`` depends on the episode's own return
     through the fit. That is a small bias the exact-critic identity does not
     have, and it is why the identity is pinned with a fixed critic and the
-    training curve is reported as a diagnostic.
+    training curve is reported as a diagnostic. ``stop_at_local_optimum`` is
+    :func:`~snakes_and_ladders.learn.rollout.rollout`'s, ``True`` being what
+    every published number was trained under (issue #820).
     """
     if iterations < 1 or batch < 1:
         msg = f"iterations and batch must be >= 1, got {iterations}, {batch}"
@@ -115,7 +118,16 @@ def actor_critic[S, A](
     optimizer = torch.optim.Adam(policy.parameters(), lr=learning_rate)
     mean_returns, critic_losses = [], []
     for _ in range(iterations):
-        episodes = [rollout(environment, policy, rng, max_steps) for _ in range(batch)]
+        episodes = [
+            rollout(
+                environment,
+                policy,
+                rng,
+                max_steps,
+                stop_at_local_optimum=stop_at_local_optimum,
+            )
+            for _ in range(batch)
+        ]
         features, targets = monte_carlo_targets(environment, episodes)
         critic_losses.append(
             fit_critic(critic, features, targets, steps=critic_steps).losses[-1]

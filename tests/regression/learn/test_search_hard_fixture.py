@@ -20,9 +20,10 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.learn.rollout import greedy_rollout
 from snakes_and_ladders.learn.tree import RewardModel, TreeEnvironment
-from snakes_and_ladders.sim.params import SimulationParams, load_simulation_params
+from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.topology import MoveSet, Topology, enumerate_topologies
 from snakes_and_ladders.sim.tree import edges
@@ -52,7 +53,7 @@ _NNI_MEDIAN_GAP = 38.2
 
 @pytest.fixture(scope="module")
 def params() -> SimulationParams:
-    return load_simulation_params(FIXTURE)
+    return load_params(FIXTURE, SimulationParams)
 
 
 @pytest.fixture(scope="module")

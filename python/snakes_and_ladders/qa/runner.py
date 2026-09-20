@@ -22,28 +22,30 @@ import argparse
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Any
 
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.log import get_logger, phase
-from snakes_and_ladders.opt.testfunctions import load_test_function_params
+from snakes_and_ladders.opt.testfunctions import TestFunctionSuite
 from snakes_and_ladders.qa.figure import (
     QAFigure,
     QATable,
     write_qa_figure,
     write_qa_table,
 )
-from snakes_and_ladders.sim.canonical import load_frustrated_lattice_params
-from snakes_and_ladders.sim.convolutional import load_turbo_params
-from snakes_and_ladders.sim.hmm import load_hmm_params
-from snakes_and_ladders.sim.ldpc import load_ldpc_params
-from snakes_and_ladders.sim.mixture import load_mixture_params
-from snakes_and_ladders.sim.params import load_simulation_params
-from snakes_and_ladders.sim.potts_chain import load_potts_params
-from snakes_and_ladders.sim.spatio_sequential import load_spatio_sequential_params
+from snakes_and_ladders.sim.canonical import FrustratedLatticeParams
+from snakes_and_ladders.sim.convolutional import TurboParams
+from snakes_and_ladders.sim.hmm import HmmParams
+from snakes_and_ladders.sim.ldpc import LdpcParams
+from snakes_and_ladders.sim.mixture import MixtureParams
+from snakes_and_ladders.sim.params import SimulationParams
+from snakes_and_ladders.sim.potts_chain import PottsParams
+from snakes_and_ladders.sim.spatio_sequential import SpatioSequentialParams
 
 
 @dataclass(frozen=True)
@@ -253,15 +255,23 @@ def table_main(
 # its test cannot disagree about which file the figure was rendered from. Every
 # script takes one: a figure whose instance is typed into the module is a
 # figure whose inputs the stamp of issue #372 cannot see (``qa/CLAUDE.md``).
-SIMULATION_PARAMS = ParamsArgument("params", load_simulation_params)
-SIMULATION_PARAMS_REPEATED = ParamsArgument(
-    "params", load_simulation_params, repeated=True
+SIMULATION_PARAMS = ParamsArgument(
+    "params", partial(load_params, kind=SimulationParams)
 )
-POTTS_PARAMS = ParamsArgument("potts-params", load_potts_params)
-HMM_PARAMS = ParamsArgument("hmm-params", load_hmm_params)
-MIXTURE_PARAMS = ParamsArgument("params", load_mixture_params)
-FRUSTRATED_LATTICE_PARAMS = ParamsArgument("params", load_frustrated_lattice_params)
-TEST_FUNCTION_PARAMS = ParamsArgument("params", load_test_function_params)
-LDPC_PARAMS = ParamsArgument("params", load_ldpc_params)
-TURBO_PARAMS = ParamsArgument("params", load_turbo_params)
-SPATIO_SEQUENTIAL_PARAMS = ParamsArgument("params", load_spatio_sequential_params)
+SIMULATION_PARAMS_REPEATED = ParamsArgument(
+    "params", partial(load_params, kind=SimulationParams), repeated=True
+)
+POTTS_PARAMS = ParamsArgument("potts-params", partial(load_params, kind=PottsParams))
+HMM_PARAMS = ParamsArgument("hmm-params", partial(load_params, kind=HmmParams))
+MIXTURE_PARAMS = ParamsArgument("params", partial(load_params, kind=MixtureParams))
+FRUSTRATED_LATTICE_PARAMS = ParamsArgument(
+    "params", partial(load_params, kind=FrustratedLatticeParams)
+)
+TEST_FUNCTION_PARAMS = ParamsArgument(
+    "params", partial(load_params, kind=TestFunctionSuite)
+)
+LDPC_PARAMS = ParamsArgument("params", partial(load_params, kind=LdpcParams))
+TURBO_PARAMS = ParamsArgument("params", partial(load_params, kind=TurboParams))
+SPATIO_SEQUENTIAL_PARAMS = ParamsArgument(
+    "params", partial(load_params, kind=SpatioSequentialParams)
+)

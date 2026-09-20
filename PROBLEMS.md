@@ -63,3 +63,37 @@ Every symbol above is rooted at `snakes_and_ladders`;
 cannot outlive what it names. Every key is a directory under
 `tests/regression/fixtures/`, and `tests/regression/test_fixture_registry.py`
 fails a row without a loadable CI-tier fixture and a fixture no row names.
+
+## Structural moves and what survives them
+
+A structural move constructs a new objective (`search/CLAUDE.md`, #815): the
+parameter vector changes meaning and length, so nothing describing the old
+space crosses the move, and what crosses is what the move leaves identical.
+Each problem with such a move says what that is, or that the rule does not
+apply. A list and not a table, so the two catalogue readers above see no row.
+
+- **Phylogenetic tree** --- NNI and SPR on the topology (`search.infer`). A
+  branch is the split it induces: the parent's fitted length on every kept
+  split, the default on the splits the move made (`_warm_lengths`). Measured
+  at #821 on `tree_search/ci`: the warm start saves 1.22x gradient evaluations
+  and moves 9 of 60 optima by up to 3.55; with inherited collapsed branches
+  started at the default it saves 0.98x and moves none. The saving was a
+  defect of the fit (#839), and the learned environment stays cold.
+- **Coupled spatio-sequential** --- relabelling of the sites
+  (`search.spatio_sequential.label_step`). Not structural: the labels are
+  discrete coordinates of the one objective `log p(x, l | theta)` and the
+  emission parameters keep their meaning under a relabelling, so
+  `fit_spatio_sequential` is block-coordinate ascent and the M step's
+  parameters cross by right. A class permutation would be the structural move,
+  and none is made.
+- **Gaussian and emission mixtures** --- no move in the package. An assignment
+  is the E step of one objective, not a move; `search.projection` and
+  `kmeans_plus_plus` seed the fit once and nothing crosses after.
+- **Hidden Markov model** --- no move in the package. The path is summed or
+  maximized inside one objective; no segmentation is searched.
+- **Potts lattice and planted glass** --- single-site, cluster and label moves
+  on the configuration. Not structural: a configuration change leaves what
+  `(J, h)` mean untouched, so there is nothing to carry and no warm start to
+  invent.
+- **Parsimony** --- NNI and SPR. Nothing continuous to fit, as
+  `likelihood.parsimony` states.

@@ -16,6 +16,7 @@ outside this repository:
 
 from __future__ import annotations
 
+from dataclasses import replace
 from itertools import pairwise
 
 import numpy as np
@@ -232,16 +233,7 @@ def test_a_fixture_asking_for_an_impossible_reed_muller_rate_is_refused() -> Non
     # error names the sizes RM does produce rather than silently returning the
     # nearest.
     declared = _declared()
-    impossible = type(declared)(
-        **{
-            **{
-                field: getattr(declared, field)
-                for field in declared.__dataclass_fields__
-            },
-            "construction": "reed-muller",
-            "n_info": 7,
-        }
-    )
+    impossible = replace(declared, construction="reed-muller", n_info=7)
     with pytest.raises(ValueError, match="no RM"):
         impossible.code()
 

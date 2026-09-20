@@ -2908,6 +2908,8 @@ asserted rather than glossed: on a complete bipartite graph, whose maximum cut
 is exactly `|E|`, the ratio comes out slightly **above 1** — impossible for an
 exact solve.
 
+**Simulated bifurcation is the first kernel the GPU rule can be read against, and on CPU it reads 1.9x** ([#823](https://github.com/michaelJwilson/snakes_and_ladders/issues/823)). `search.bifurcation.simulated_bifurcation` relaxes each site and label to an oscillator, integrates every one at once, and reads the labelling off the arg max; the same arithmetic runs on NumPy and on `torch` (`Backend.TORCH`, new), the two labellings pinned equal. Where couplings decide it wins: one replica reaches the declared 18-node glass's enumerated ground state from **0.562** of 32 seeds against a single descent's recorded 0.079, and the frustrated 3x3 antiferromagnet's from 0.938 of 16 at two states and 0.438 at three. Where a per-site field decides it loses: on a 4x4 lattice with `N(0, 1)` fields it reaches the cut's optimum on 1 of 6 fields at a mean gap of 1.09 against ICM's 0.089, which is the regime the textbook states rather than a number tuned away. The force scale is read from the instance --- one half over the largest drive a site can see --- because Goto's dense-matrix scale left the field as the whole drive and returned the field-only labelling (mean gap 3.24). At 5,041 sites and three states the torch path is **0.29 us per site-step against NumPy's 0.58**, 1.9x on the 4-core CPU host; no device is attached to this host, so the >=10x rule is not yet read and the kernel is admitted as the candidate, not the result.
+
 **Temperature is one object, and it lives where all three consumers can reach
 it.** `snakes_and_ladders.sample.schedule` carries the schedules — constant, linear,
 geometric, cosine, each mirroring its `torch.optim.lr_scheduler` counterpart
@@ -3182,6 +3184,27 @@ restarts, and with the global basin covering about 48% of starting topologies
 beat on this fixture is therefore 1.000, not the 0.480 the tree-policy
 comparison above was stated against, and nothing measured here beats it.
 
+**Accepted worsening is a first-class action, and the measurement says what
+it buys and what it does not**
+([#820](https://github.com/michaelJwilson/snakes_and_ladders/issues/820)).
+Every learner and the arena take `stop_at_local_optimum`; under `False` an
+episode runs past a local optimum and the greedy row is hill climbing
+restarted until the decision budget is spent, the baseline `learn/CLAUDE.md`
+names for a wandering searcher. On the chain (81 starts, the published
+budget of 60 x 32 x 6) the rule moves greedy and nothing else: restarted
+greedy reaches **81 of 81** against 65 stopped (McNemar `p < 1e-4`, 16
+discordant), while REINFORCE reads 71 against 72, actor--critic 70 against 72,
+PPO 80 against 78 and the MLP 81 against 79 (`p` from 0.50 to 1.0), and
+against restarted greedy REINFORCE and actor--critic **lose** (`p = 0.002`,
+`0.001`) where PPO and the MLP tie. On the 7-taxon fixture (9 traps and 50
+random starts, 40 x 16 x 60) the rule lifts every row --- escape 0 of 9 to 8
+or 9 of 9, random-start success 14 to 29 of 50 up to 46 to 50 of 50, `p <
+1e-4` on all five --- and no trained policy beats restarted greedy's 59 of 59:
+PPO ties at 59, the MLP 57, REINFORCE and actor--critic 55 (`p = 0.125`). The
+wandering rule buys the *baseline* its escape, and a policy that wanders has
+to beat a searcher that restarts; on these two fixtures none does. Recorded in
+the pull request's tables; the null default is bitwise the arena before it.
+
 **All three problem classes are now MDPs.**
 `snakes_and_ladders.learn.environment.Environment` had one instance, a 1-D Potts chain. It
 now carries the Potts environment over an arbitrary graph — the chain is the
@@ -3442,7 +3465,28 @@ states and the Rust sweep over 2,000 sweeps, reads **0.7068 s** against
 the ticket's 1% bar, and both differences are smaller than the spread of
 either variant, which is what the direct timing predicts: 0.35 ms is 0.006%
 of the chain and 0.50 ms is 0.07% of the anneal. Measured 2026-09-19 on the
-4-core host at a 1-minute load of 0.04 rising to 0.97. **Aim is the store #75 asked
+4-core host at a 1-minute load of 0.04 rising to 0.97. **The tracker reaches every loop, and the five metrics nothing recorded are
+recorded** ([#799](https://github.com/michaelJwilson/snakes_and_ladders/issues/799)).
+`slice_sample` records its objective evaluations per draw, the unit it is
+counted in; `annealed_importance_sampling` and `population_annealing` record
+`log Z`, its standard error and its effective sample size per rung by the
+closing formulas, so the last entry is the result's bitwise; `simulated_tempering`
+records the rung, the acceptance, the sweep rate and, once, the occupation per
+rung under the rung's context; the two tempered ensembles record the round
+trips and the up fraction read from the trace so far, and the sweep rate;
+`mala` was recorded already through `hmc._run_chain`. `record_cost` reaches
+`fit`, `hmc.anneal`, `hmc.parallel_tempering` and both ensembles. The
+per-rung reductions and the per-sweep round-trip read are assembled behind
+`is_null`, so the null path pays one returned call: on the 12x12 lattice
+(64 replicas over 12 rungs, 300 tempering sweeps, a 100-sweep pair ensemble)
+and 2,000 slice draws, two alternating reads of the minimum of three runs
+read 1.003x and 0.97x for AIS, 1.012x and 0.97x for population annealing,
+1.003x and 0.94x for tempering, 0.98x and 1.00x for slice sampling and 0.99x
+and 0.98x for the pair ensemble, each inside its own spread. Twenty-six tests
+in `tests/regression/test_track.py` pin the six loops bitwise on the null run
+and every new series' last value against the result's field.
+
+**Aim is the store #75 asked
 for, and it is the optional `track` extra**: nothing imports it at module
 scope --- `track.as_aim` imports it where it is called --- so no CI job
 installs it and the audit job, which syncs `dev`, stays clean. What the

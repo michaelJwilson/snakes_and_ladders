@@ -20,10 +20,11 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.likelihood.distance import DistanceKind, distance_matrix
 from snakes_and_ladders.search.infer import infer, score_topology
 from snakes_and_ladders.search.neighbor_joining import neighbor_joining
-from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.topology import normalized_robinson_foulds
 from snakes_and_ladders.sim.tree import Node, balanced_tree, preorder
@@ -44,7 +45,7 @@ _LAZY_TOP = 4
 
 
 def _dataset(instance: Fixture) -> tuple[Node, dict[str, np.ndarray], int]:
-    params = load_simulation_params(instance.path)
+    params = load_params(instance.path, SimulationParams)
     dataset = simulate_alignment(
         tau=params.tau,
         k=params.k,

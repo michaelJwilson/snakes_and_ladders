@@ -75,6 +75,7 @@ from snakes_and_ladders.search.alpha_expansion import (
     alpha_expansion,
     iterated_conditional_modes,
 )
+from snakes_and_ladders.search.bifurcation import simulated_bifurcation
 from snakes_and_ladders.sim.factor_graph import from_potts
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import (
@@ -635,6 +636,26 @@ def run_max_product(rung: Rung, budget: Budget, rng: np.random.Generator) -> Met
     )
 
 
+def run_bifurcation(rung: Rung, budget: Budget, rng: np.random.Generator) -> MethodRun:
+    """Simulated bifurcation, one replica, the budget spent in integration steps.
+
+    A step reads every edge twice and writes every site once, the heat-bath
+    sweep's unit, so ``steps = budget // visits_per_sweep`` matches the rows
+    beside it in what they spend (issue #823).
+    """
+    steps = max(1, budget.size // rung.visits_per_sweep)
+    start = time.perf_counter()
+    result = simulated_bifurcation(
+        rung.graph, rung.field, rung.n_states, rng, steps=steps
+    )
+    return MethodRun(
+        labelling=result.labelling,
+        energy=result.energy,
+        spent=steps * rung.visits_per_sweep,
+        seconds=time.perf_counter() - start,
+    )
+
+
 #: Every entry, in report order. ICM and Gibbs at T = 0 are two rows of one
 #: axis, named so the report cannot present them as independent methods.
 METHODS: dict[str, Method] = {
@@ -648,6 +669,7 @@ METHODS: dict[str, Method] = {
     "alpha-expansion": run_alpha_expansion,
     "alpha-beta-swap": run_alpha_beta_swap,
     "max-product": run_max_product,
+    "bifurcation": run_bifurcation,
 }
 
 #: The two rows that are one axis, so a reader of the table is told rather

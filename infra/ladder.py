@@ -37,7 +37,8 @@ predates it, is an instance at a size.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import KW_ONLY, dataclass
+from enum import StrEnum
 
 #: The five ladders, in the order the survey tables run.
 PROBLEMS = ("potts", "tree", "hmm", "codes", "mixture")
@@ -46,6 +47,34 @@ PROBLEMS = ("potts", "tree", "hmm", "codes", "mixture")
 #: it today; the guard reads it to hold that a rung without a test names an
 #: issue, which is the rule and not the count.
 LADDER_TICKET = 734
+
+
+class Cost(StrEnum):
+    """The unit a rung spends, as the sampler or optimizer reports it (issue #818).
+
+    A gradient is an objective evaluation and a backward pass through the
+    same tape, so a rung spending gradients and one spending evaluations are
+    not ranked by either column alone (`sample/CLAUDE.md`): the rung declares
+    what it spends, the table does not rank. An exact rung says so, its cost
+    being the instance's count rather than a budget's.
+    """
+
+    EXACT = "exact"
+    """An enumeration: the cost is the instance's count, not a budget."""
+    PASS = "one pass"
+    """One deterministic pass over the instance: a recursion, a cut, a construction."""
+    ITERATIONS = "iterations"
+    """Message passes, EM or decoder iterations, cycles of a solver."""
+    SWEEPS = "sweeps"
+    """Monte Carlo sweeps over the sites, or single-cluster steps counted as one."""
+    EVALUATIONS = "objective evaluations"
+    """Candidate scorings or density evaluations, no backward pass."""
+    GRADIENTS = "gradients"
+    """Objective evaluations each with a backward pass through the same tape."""
+    TRAINED = "objective evaluations, and gradients to train"
+    """A learned method: gradients in training, evaluations when it acts."""
+    SEVERAL = "several: each method its own"
+    """A rung naming several methods that do not share a unit."""
 
 
 @dataclass(frozen=True)
@@ -69,6 +98,10 @@ class Rung:
     test : str or None
         The pytest node id pinning the pair, `tests/regression/<path>::<function>`,
         or None where no test does.
+    cost : Cost
+        The unit the rung spends, keyword-only so every declaration states it
+        (issue #818). The field names the unit and carries no number; a
+        number belongs in `STATUS.md` or a benchmark.
     ticket : int or None
         The issue carrying the missing pin, set exactly where `test` is None.
     """
@@ -78,6 +111,8 @@ class Rung:
     callable: str
     below: str | None
     test: str | None
+    _: KW_ONLY
+    cost: Cost
     ticket: int | None = None
 
 
@@ -94,6 +129,7 @@ LADDER: tuple[Rung, ...] = (
         None,
         T + "search/test_search_support.py"
         "::test_the_enumerated_labelling_weight_is_enumerate_potts_s_boltzmann_weight_at_beta_one",
+        cost=Cost.EXACT,
     ),
     Rung(
         "potts",
@@ -102,6 +138,7 @@ LADDER: tuple[Rung, ...] = (
         "enumeration",
         T + "likelihood/test_potts_exact.py"
         "::test_the_transfer_matrix_reproduces_exhaustive_enumeration",
+        cost=Cost.PASS,
     ),
     Rung(
         "potts",
@@ -110,6 +147,7 @@ LADDER: tuple[Rung, ...] = (
         "sum-product / BP",
         T + "likelihood/test_potts_exact.py"
         "::test_the_transfer_matrix_is_sum_product_on_the_strip_that_is_a_tree",
+        cost=Cost.PASS,
     ),
     Rung(
         "potts",
@@ -118,6 +156,7 @@ LADDER: tuple[Rung, ...] = (
         "transfer matrix",
         T + "opt/test_opt_potts.py"
         "::test_squaring_is_the_transfer_matrix_on_a_strip_one_site_wide",
+        cost=Cost.PASS,
     ),
     Rung(
         "potts",
@@ -126,6 +165,7 @@ LADDER: tuple[Rung, ...] = (
         "enumeration",
         T + "likelihood/test_message_passing.py"
         "::test_sum_product_on_the_potts_tree_is_the_enumeration",
+        cost=Cost.ITERATIONS,
     ),
     Rung(
         "potts",
@@ -134,6 +174,7 @@ LADDER: tuple[Rung, ...] = (
         "sum-product / BP",
         T + "likelihood/test_message_passing.py"
         "::test_flooding_on_the_loopy_lattice_is_belief_propagation",
+        cost=Cost.ITERATIONS,
     ),
     Rung(
         "potts",
@@ -142,6 +183,7 @@ LADDER: tuple[Rung, ...] = (
         "enumeration",
         T + "sandbox/test_region_graph.py"
         "::test_the_free_energy_is_the_exact_log_partition_on_a_tree",
+        cost=Cost.ITERATIONS,
     ),
     Rung(
         "potts",
@@ -150,6 +192,7 @@ LADDER: tuple[Rung, ...] = (
         "enumeration",
         T + "search/test_tightening.py"
         "::test_the_bound_never_exceeds_the_enumerated_ground_state",
+        cost=Cost.ITERATIONS,
     ),
     Rung(
         "potts",
@@ -158,6 +201,7 @@ LADDER: tuple[Rung, ...] = (
         "sum-product / BP",
         T + "search/test_tightening.py"
         "::test_the_dual_bound_is_the_zero_temperature_belief_propagation_energy",
+        cost=Cost.ITERATIONS,
     ),
     Rung(
         "potts",
@@ -166,6 +210,7 @@ LADDER: tuple[Rung, ...] = (
         "enumeration",
         T + "likelihood/test_surrogate.py"
         "::test_mean_field_and_spanning_tree_bounds_sandwich_log_z",
+        cost=Cost.ITERATIONS,
     ),
     Rung(
         "potts",
@@ -174,6 +219,23 @@ LADDER: tuple[Rung, ...] = (
         "enumeration",
         T + "search/test_maxflow.py"
         "::test_the_cut_finds_the_enumerated_minimum_with_a_per_node_field",
+        cost=Cost.PASS,
+    ),
+    Rung(
+        "potts",
+        "simulated bifurcation",
+        "search.bifurcation.simulated_bifurcation",
+        "enumeration",
+        T + "search/test_bifurcation.py"
+        "::test_the_relaxation_reaches_the_enumerated_ground_state_of_the_declared_glass",
+    ),
+    Rung(
+        "potts",
+        "simulated bifurcation",
+        "search.bifurcation.simulated_bifurcation",
+        "exact cut / max-flow",
+        T + "search/test_bifurcation.py"
+        "::test_at_two_labels_the_relaxation_is_read_against_the_exact_cut",
     ),
     Rung(
         "potts",
@@ -182,6 +244,7 @@ LADDER: tuple[Rung, ...] = (
         "exact cut / max-flow",
         T + "sandbox/test_maxflow_declined.py"
         "::test_every_declined_kernel_returns_the_python_cut_on_seeded_networks",
+        cost=Cost.PASS,
     ),
     Rung(
         "potts",
@@ -190,6 +253,7 @@ LADDER: tuple[Rung, ...] = (
         "enumeration",
         T + "search/test_max_cut.py"
         "::test_the_rounded_cut_reaches_the_enumerated_optimum_on_a_lattice",
+        cost=Cost.ITERATIONS,
     ),
     Rung(
         "potts",
@@ -198,6 +262,7 @@ LADDER: tuple[Rung, ...] = (
         "alpha-expansion",
         T + "search/test_max_cut.py"
         "::test_the_rounded_cut_is_the_gauged_alpha_expansion_optimum_at_two_labels",
+        cost=Cost.ITERATIONS,
     ),
     Rung(
         "potts",
@@ -206,6 +271,7 @@ LADDER: tuple[Rung, ...] = (
         "exact cut / max-flow",
         T + "search/test_alpha_expansion.py"
         "::test_two_labels_reproduce_the_exact_minimum_cut",
+        cost=Cost.ITERATIONS,
     ),
     Rung(
         "potts",
@@ -214,6 +280,7 @@ LADDER: tuple[Rung, ...] = (
         "alpha-expansion",
         T + "search/test_alpha_expansion.py"
         "::test_the_rust_cut_reproduces_the_python_expansion",
+        cost=Cost.ITERATIONS,
     ),
     Rung(
         "potts",
@@ -222,6 +289,7 @@ LADDER: tuple[Rung, ...] = (
         "exact cut / max-flow",
         T + "search/test_potts_sizing.py"
         "::test_the_zero_field_optimum_is_a_closed_form_three_ways",
+        cost=Cost.SWEEPS,
     ),
     Rung(
         "potts",
@@ -230,6 +298,7 @@ LADDER: tuple[Rung, ...] = (
         "enumeration",
         T + "sim/test_potts_simulate.py"
         "::test_gibbs_sampling_matches_brute_force_enumeration_on_a_loopy_lattice",
+        cost=Cost.SWEEPS,
     ),
     Rung(
         "potts",
@@ -238,6 +307,7 @@ LADDER: tuple[Rung, ...] = (
         "enumeration",
         T + "sample/test_potts_mcmc.py"
         "::test_the_chain_is_drawn_from_the_exact_boltzmann_distribution",
+        cost=Cost.SWEEPS,
     ),
     Rung(
         "potts",
@@ -246,6 +316,7 @@ LADDER: tuple[Rung, ...] = (
         "Potts MCMC, Wolff, Swendsen--Wang",
         T + "sample/test_potts_mcmc_cluster_rust.py"
         "::test_the_rust_pass_is_the_oracles_pass_bitwise_on_the_same_draws",
+        cost=Cost.SWEEPS,
     ),
     Rung(
         "potts",
@@ -254,6 +325,7 @@ LADDER: tuple[Rung, ...] = (
         "enumeration",
         T + "sample/test_potts_mcmc.py"
         "::test_the_locally_balanced_chain_is_drawn_from_the_exact_boltzmann_distribution",
+        cost=Cost.SWEEPS,
     ),
     Rung(
         "potts",
@@ -262,6 +334,7 @@ LADDER: tuple[Rung, ...] = (
         "enumeration",
         T + "sample/test_potts_mcmc.py"
         "::test_the_gibbs_with_gradients_chain_is_drawn_from_the_exact_boltzmann_distribution",
+        cost=Cost.SWEEPS,
     ),
     Rung(
         "potts",
@@ -270,6 +343,7 @@ LADDER: tuple[Rung, ...] = (
         "enumeration",
         T + "sample/test_potts_mcmc.py"
         "::test_the_niedermayer_chain_is_drawn_from_the_exact_boltzmann_distribution",
+        cost=Cost.SWEEPS,
     ),
     Rung(
         "potts",
@@ -278,6 +352,7 @@ LADDER: tuple[Rung, ...] = (
         "enumeration",
         T + "sample/test_potts_mcmc.py"
         "::test_each_replica_of_a_houdayer_pair_is_drawn_from_the_exact_boltzmann_distribution",
+        cost=Cost.SWEEPS,
     ),
     Rung(
         "potts",
@@ -286,6 +361,7 @@ LADDER: tuple[Rung, ...] = (
         "transfer matrix",
         T + "sample/test_search_annealed.py"
         "::test_the_importance_sampled_log_partition_is_the_transfer_matrix",
+        cost=Cost.SWEEPS,
     ),
     Rung(
         "potts",
@@ -294,6 +370,7 @@ LADDER: tuple[Rung, ...] = (
         "transfer matrix",
         T + "sample/test_search_annealed.py"
         "::test_the_population_annealed_log_partition_is_the_transfer_matrix",
+        cost=Cost.SWEEPS,
     ),
     Rung(
         "potts",
@@ -302,6 +379,7 @@ LADDER: tuple[Rung, ...] = (
         "enumeration",
         T + "sample/test_search_annealed.py"
         "::test_the_simulated_tempering_walker_is_the_enumerated_law_at_every_rung",
+        cost=Cost.SWEEPS,
     ),
     Rung(
         "potts",
@@ -310,6 +388,7 @@ LADDER: tuple[Rung, ...] = (
         "Potts MCMC, Wolff, Swendsen--Wang",
         T + "learn/test_cluster_arms.py"
         "::test_a_wolff_step_is_potts_mcmcs_own_sweep_bitwise",
+        cost=Cost.SWEEPS,
     ),
     Rung(
         "potts",
@@ -318,6 +397,7 @@ LADDER: tuple[Rung, ...] = (
         None,
         T + "sample/test_potts_mcmc.py"
         "::test_annealing_reaches_the_closed_form_ground_energy_where_descent_does_not",
+        cost=Cost.SWEEPS,
     ),
     Rung(
         "potts",
@@ -326,6 +406,7 @@ LADDER: tuple[Rung, ...] = (
         "annealing",
         T + "sample/test_potts_mcmc.py"
         "::test_tempering_reaches_the_ground_energy_annealing_reaches",
+        cost=Cost.SWEEPS,
     ),
     Rung(
         "potts",
@@ -333,6 +414,7 @@ LADDER: tuple[Rung, ...] = (
         "learn.potts_nd.PottsNDEnvironment",
         "exact cut / max-flow",
         T + "learn/test_potts_nd.py::test_two_labels_agree_with_the_exact_cut",
+        cost=Cost.TRAINED,
     ),
     Rung(
         "potts",
@@ -341,6 +423,7 @@ LADDER: tuple[Rung, ...] = (
         "enumeration",
         T + "learn/test_search_lattice_surrogate.py"
         "::test_a_surrogate_learns_the_gap_above_the_mean_field_bound_at_nine_sites",
+        cost=Cost.TRAINED,
     ),
     Rung(
         "potts",
@@ -349,6 +432,7 @@ LADDER: tuple[Rung, ...] = (
         None,
         T + "search/test_ground_state.py"
         "::test_the_runners_record_the_energy_their_kernels_return",
+        cost=Cost.SEVERAL,
     ),
     # --- trees / phylogenetics ---------------------------------------------
     Rung(
@@ -358,6 +442,7 @@ LADDER: tuple[Rung, ...] = (
         None,
         T + "search/test_projection_seeding.py"
         "::test_the_projected_draw_is_the_closed_form_mixture_of_the_flattened_families",
+        cost=Cost.PASS,
     ),
     Rung(
         "tree",
@@ -366,6 +451,7 @@ LADDER: tuple[Rung, ...] = (
         None,
         T + "search/test_search_exhaustive.py"
         "::test_enumeration_produces_every_topology_exactly_once",
+        cost=Cost.EXACT,
     ),
     Rung(
         "tree",
@@ -374,6 +460,7 @@ LADDER: tuple[Rung, ...] = (
         None,
         T + "search/test_search_topology_rustworkx.py"
         "::test_two_topologies_our_code_calls_equal_are_isomorphic",
+        cost=Cost.PASS,
     ),
     Rung(
         "tree",
@@ -382,6 +469,7 @@ LADDER: tuple[Rung, ...] = (
         None,
         T + "likelihood/test_likelihood_parsimony.py"
         "::test_fitch_matches_exhaustive_enumeration_over_internal_labellings",
+        cost=Cost.PASS,
     ),
     Rung(
         "tree",
@@ -390,6 +478,7 @@ LADDER: tuple[Rung, ...] = (
         "parsimony, Fitch",
         T + "likelihood/test_likelihood_parsimony.py"
         "::test_sankoff_with_the_unit_matrix_is_fitch_on_every_five_taxon_topology",
+        cost=Cost.PASS,
     ),
     Rung(
         "tree",
@@ -398,6 +487,7 @@ LADDER: tuple[Rung, ...] = (
         "pruning, NumPy",
         T + "likelihood/test_likelihood_parsimony.py"
         "::test_the_short_branch_likelihood_ranks_the_topologies_as_the_fitch_score_does",
+        cost=Cost.PASS,
     ),
     Rung(
         "tree",
@@ -405,6 +495,7 @@ LADDER: tuple[Rung, ...] = (
         "likelihood.pruning.log_likelihood",
         None,
         T + "likelihood/test_likelihood_pruning.py::test_pruning_matches_brute_force",
+        cost=Cost.PASS,
     ),
     Rung(
         "tree",
@@ -412,6 +503,7 @@ LADDER: tuple[Rung, ...] = (
         "likelihood.pruning_rust.log_likelihood",
         "pruning, NumPy",
         T + "likelihood/test_pruning_rust.py::test_rust_matches_numpy_oracle",
+        cost=Cost.PASS,
     ),
     Rung(
         "tree",
@@ -419,6 +511,7 @@ LADDER: tuple[Rung, ...] = (
         "likelihood.pruning_torch.log_likelihood",
         "pruning, NumPy",
         T + "likelihood/test_pruning_torch.py::test_torch_matches_numpy_oracle",
+        cost=Cost.PASS,
     ),
     Rung(
         "tree",
@@ -427,6 +520,7 @@ LADDER: tuple[Rung, ...] = (
         "pruning, Torch",
         T + "likelihood/test_pruning_gradient.py"
         "::test_every_route_agrees_with_the_taped_gradient",
+        cost=Cost.PASS,
     ),
     Rung(
         "tree",
@@ -435,6 +529,7 @@ LADDER: tuple[Rung, ...] = (
         None,
         T + "likelihood/test_likelihood_hadamard.py"
         "::test_the_conjugation_returns_the_true_split_weights_on_the_exact_spectrum",
+        cost=Cost.PASS,
     ),
     Rung(
         "tree",
@@ -443,6 +538,7 @@ LADDER: tuple[Rung, ...] = (
         None,
         T + "search/test_search_neighbor_joining_scipy.py"
         "::test_the_two_return_the_same_tree_on_an_ultrametric_matrix",
+        cost=Cost.PASS,
     ),
     Rung(
         "tree",
@@ -451,6 +547,7 @@ LADDER: tuple[Rung, ...] = (
         "topology enumeration",
         T + "search/test_neighbor_joining.py"
         "::test_the_joined_tree_is_the_least_squares_optimum_over_the_enumerated_topologies",
+        cost=Cost.PASS,
     ),
     Rung(
         "tree",
@@ -459,6 +556,7 @@ LADDER: tuple[Rung, ...] = (
         None,
         T + "sandbox/test_sandbox_tropical.py"
         "::test_the_combinatorial_resolution_is_the_tropical_plucker_argmin",
+        cost=Cost.PASS,
     ),
     Rung(
         "tree",
@@ -467,6 +565,7 @@ LADDER: tuple[Rung, ...] = (
         "topology enumeration",
         T + "search/test_search_exhaustive.py"
         "::test_hill_climbing_reaches_the_enumerated_maximum",
+        cost=Cost.EVALUATIONS,
     ),
     Rung(
         "tree",
@@ -475,6 +574,7 @@ LADDER: tuple[Rung, ...] = (
         "topology enumeration",
         T + "search/test_search_exhaustive.py"
         "::test_the_cheaper_searches_reach_the_enumerated_maximum",
+        cost=Cost.EVALUATIONS,
     ),
     Rung(
         "tree",
@@ -483,6 +583,7 @@ LADDER: tuple[Rung, ...] = (
         "pruning, NumPy",
         T + "likelihood/test_surrogate.py"
         "::test_plug_in_bound_is_below_every_fitted_likelihood",
+        cost=Cost.PASS,
     ),
     Rung(
         "tree",
@@ -491,6 +592,7 @@ LADDER: tuple[Rung, ...] = (
         "tree search (NNI/SPR)",
         T + "learn/test_search_surrogate.py"
         "::test_surrogate_ranked_search_reaches_what_the_full_search_reaches",
+        cost=Cost.TRAINED,
     ),
     Rung(
         "tree",
@@ -499,6 +601,7 @@ LADDER: tuple[Rung, ...] = (
         "analytic surrogates",
         T + "learn/test_search_surrogate.py"
         "::test_the_learned_surrogate_ranks_the_topologies_the_plug_in_bound_ranks",
+        cost=Cost.TRAINED,
     ),
     Rung(
         "tree",
@@ -507,6 +610,7 @@ LADDER: tuple[Rung, ...] = (
         None,
         T + "learn/test_learn_surrogate_pyg.py"
         "::test_pyg_s_gin_reproduces_the_graph_surrogate_on_tied_weights",
+        cost=Cost.TRAINED,
     ),
     Rung(
         "tree",
@@ -515,6 +619,7 @@ LADDER: tuple[Rung, ...] = (
         "topology enumeration",
         T
         + "learn/test_search_rl.py::test_greedy_search_reaches_the_enumerated_optimum",
+        cost=Cost.TRAINED,
     ),
     Rung(
         "tree",
@@ -523,6 +628,7 @@ LADDER: tuple[Rung, ...] = (
         "topology enumeration",
         T + "search/test_search_support.py"
         "::test_the_nni_neighbourhood_of_four_taxa_is_the_whole_space_so_the_two_supports_agree",
+        cost=Cost.SWEEPS,
     ),
     Rung(
         "tree",
@@ -531,6 +637,7 @@ LADDER: tuple[Rung, ...] = (
         "topology enumeration",
         T + "sample/test_gibbs.py"
         "::test_the_topology_move_at_temperature_one_samples_the_enumerated_flat_prior_weight",
+        cost=Cost.SWEEPS,
     ),
     # --- HMM / spatio-sequential -------------------------------------------
     Rung(
@@ -540,6 +647,7 @@ LADDER: tuple[Rung, ...] = (
         None,
         T + "likelihood/test_hmm_paths.py"
         "::test_a_marginal_is_the_summed_joint_over_paths_through_that_state",
+        cost=Cost.EXACT,
     ),
     Rung(
         "hmm",
@@ -547,6 +655,7 @@ LADDER: tuple[Rung, ...] = (
         "likelihood.forward_backward.forward_backward",
         "path enumeration",
         T + "opt/test_opt_hmm.py::test_forward_matches_brute_force_path_enumeration",
+        cost=Cost.PASS,
     ),
     Rung(
         "hmm",
@@ -555,6 +664,7 @@ LADDER: tuple[Rung, ...] = (
         "path enumeration",
         T + "likelihood/test_hmm_paths.py"
         "::test_the_sampled_paths_are_drawn_from_the_enumerated_path_posterior",
+        cost=Cost.PASS,
     ),
     Rung(
         "hmm",
@@ -563,6 +673,7 @@ LADDER: tuple[Rung, ...] = (
         "forward / forward-backward",
         T + "likelihood/test_message_passing.py"
         "::test_the_tree_schedule_on_a_deep_chain_is_the_forward_recursion",
+        cost=Cost.ITERATIONS,
     ),
     Rung(
         "hmm",
@@ -571,6 +682,7 @@ LADDER: tuple[Rung, ...] = (
         "forward via sum-product",
         T + "likelihood/test_message_passing_rust.py"
         "::test_the_rust_tree_schedule_agrees_with_the_numpy_oracle",
+        cost=Cost.ITERATIONS,
     ),
     Rung(
         "hmm",
@@ -579,6 +691,7 @@ LADDER: tuple[Rung, ...] = (
         "path enumeration",
         T
         + "likelihood/test_message_passing.py::test_max_product_on_the_chain_is_viterbi",
+        cost=Cost.PASS,
     ),
     Rung(
         "hmm",
@@ -587,6 +700,7 @@ LADDER: tuple[Rung, ...] = (
         "coupled E and M steps",
         T + "likelihood/test_message_passing.py"
         "::test_max_product_decodes_the_mode_of_the_coupled_e_step_s_path_law",
+        cost=Cost.PASS,
     ),
     Rung(
         "hmm",
@@ -595,6 +709,7 @@ LADDER: tuple[Rung, ...] = (
         "Viterbi",
         T + "learn/test_learn_relaxed.py"
         "::test_the_relaxed_optimum_of_the_hmm_is_the_viterbi_path",
+        cost=Cost.GRADIENTS,
     ),
     Rung(
         "hmm",
@@ -603,6 +718,7 @@ LADDER: tuple[Rung, ...] = (
         "path enumeration",
         T + "opt/test_opt_hmm.py"
         "::test_baum_welch_reaches_the_enumerated_path_evidence_and_its_fixed_point",
+        cost=Cost.ITERATIONS,
     ),
     Rung(
         "hmm",
@@ -611,6 +727,7 @@ LADDER: tuple[Rung, ...] = (
         None,
         T + "opt/test_opt_hmm.py"
         "::test_baum_welch_ascends_and_settles_on_the_re_estimation_equations",
+        cost=Cost.ITERATIONS,
     ),
     Rung(
         "hmm",
@@ -619,6 +736,7 @@ LADDER: tuple[Rung, ...] = (
         "forward / forward-backward",
         T + "opt/test_ragged_hmm.py"
         "::test_equal_lengths_reproduce_the_conserved_route_bitwise",
+        cost=Cost.PASS,
     ),
     Rung(
         "hmm",
@@ -627,6 +745,7 @@ LADDER: tuple[Rung, ...] = (
         "path enumeration",
         T
         + "learn/test_learn_hmm.py::test_hill_climbing_reaches_the_enumerated_optimum",
+        cost=Cost.TRAINED,
     ),
     Rung(
         "hmm",
@@ -635,6 +754,7 @@ LADDER: tuple[Rung, ...] = (
         None,
         T + "likelihood/test_spatio_sequential.py"
         "::test_the_enumerated_evidence_equals_the_per_class_forward_route",
+        cost=Cost.EXACT,
     ),
     Rung(
         "hmm",
@@ -643,6 +763,7 @@ LADDER: tuple[Rung, ...] = (
         "coupled model, exact",
         T + "likelihood/test_spatio_sequential_fit.py"
         "::test_the_class_e_step_is_the_conditional_posterior_by_enumeration",
+        cost=Cost.ITERATIONS,
     ),
     Rung(
         "hmm",
@@ -651,6 +772,7 @@ LADDER: tuple[Rung, ...] = (
         "coupled E and M steps",
         T + "likelihood/test_spatio_sequential_rust.py"
         "::test_the_rust_e_step_and_field_match_the_numpy_oracle",
+        cost=Cost.ITERATIONS,
     ),
     Rung(
         "hmm",
@@ -659,6 +781,7 @@ LADDER: tuple[Rung, ...] = (
         "coupled model, exact",
         T + "search/test_spatio_sequential_fit.py"
         "::test_the_label_step_reaches_the_enumerated_map_from_the_planted_labels",
+        cost=Cost.SEVERAL,
     ),
     Rung(
         "hmm",
@@ -667,6 +790,7 @@ LADDER: tuple[Rung, ...] = (
         "coupled model, exact",
         T + "sample/test_gibbs.py"
         "::test_the_coupled_sweep_draws_labellings_from_the_enumerated_joint_law",
+        cost=Cost.SWEEPS,
     ),
     # --- codes -------------------------------------------------------------
     Rung(
@@ -676,6 +800,7 @@ LADDER: tuple[Rung, ...] = (
         None,
         T + "likelihood/test_ldpc.py"
         "::test_the_enumeration_oracle_on_a_single_parity_check_by_hand",
+        cost=Cost.EXACT,
     ),
     Rung(
         "codes",
@@ -684,6 +809,7 @@ LADDER: tuple[Rung, ...] = (
         "brute-force ML",
         T + "likelihood/test_convolutional.py"
         "::test_bcjr_posteriors_are_the_exact_bitwise_map",
+        cost=Cost.PASS,
     ),
     Rung(
         "codes",
@@ -692,6 +818,7 @@ LADDER: tuple[Rung, ...] = (
         "BCJR",
         T + "likelihood/test_convolutional_rust.py"
         "::test_the_rust_pass_is_the_numpy_oracle_bitwise_on_the_declared_registers",
+        cost=Cost.PASS,
     ),
     Rung(
         "codes",
@@ -700,6 +827,7 @@ LADDER: tuple[Rung, ...] = (
         "brute-force ML",
         T + "likelihood/test_convolutional.py"
         "::test_viterbi_returns_the_maximum_likelihood_message_with_a_pinned_margin",
+        cost=Cost.PASS,
     ),
     Rung(
         "codes",
@@ -708,6 +836,7 @@ LADDER: tuple[Rung, ...] = (
         "brute-force ML",
         T + "likelihood/test_turbo.py"
         "::test_the_joint_posterior_is_the_enumerated_one_where_the_two_chains_agree",
+        cost=Cost.ITERATIONS,
     ),
     Rung(
         "codes",
@@ -716,6 +845,7 @@ LADDER: tuple[Rung, ...] = (
         "BCJR",
         T + "likelihood/test_turbo.py"
         "::test_the_turbo_posterior_is_bcjr_on_the_first_constituent_alone",
+        cost=Cost.ITERATIONS,
     ),
     Rung(
         "codes",
@@ -723,6 +853,7 @@ LADDER: tuple[Rung, ...] = (
         "likelihood.ldpc.decode",
         "brute-force ML",
         T + "likelihood/test_ldpc.py::test_sum_product_is_exact_on_a_cycle_free_code",
+        cost=Cost.ITERATIONS,
     ),
     Rung(
         "codes",
@@ -731,6 +862,7 @@ LADDER: tuple[Rung, ...] = (
         "brute-force ML",
         T + "likelihood/test_bicycle.py"
         "::test_the_exact_decodings_bound_belief_propagation",
+        cost=Cost.PASS,
     ),
     Rung(
         "codes",
@@ -739,6 +871,7 @@ LADDER: tuple[Rung, ...] = (
         "brute-force ML",
         T + "likelihood/test_css.py"
         "::test_summing_a_coset_beats_maximizing_over_one_error",
+        cost=Cost.ITERATIONS,
     ),
     Rung(
         "codes",
@@ -747,6 +880,7 @@ LADDER: tuple[Rung, ...] = (
         "LDPC sum-product / min-sum",
         T + "likelihood/test_css.py"
         "::test_the_syndrome_decode_is_belief_propagation_on_the_component_code",
+        cost=Cost.ITERATIONS,
     ),
     Rung(
         "codes",
@@ -755,6 +889,7 @@ LADDER: tuple[Rung, ...] = (
         None,
         T + "likelihood/test_polar.py"
         "::test_successive_cancellation_is_the_reference_implementation_bitwise",
+        cost=Cost.PASS,
     ),
     Rung(
         "codes",
@@ -771,6 +906,7 @@ LADDER: tuple[Rung, ...] = (
         "LDPC sum-product / min-sum",
         T + "likelihood/test_polar.py"
         "::test_successive_cancellation_against_min_sum_on_the_same_parity_check",
+        cost=Cost.PASS,
     ),
     Rung(
         "codes",
@@ -779,6 +915,7 @@ LADDER: tuple[Rung, ...] = (
         None,
         T + "sim/test_polar.py"
         "::test_the_polar_and_reed_muller_rules_coincide_at_eight_and_part_at_sixteen",
+        cost=Cost.PASS,
     ),
     Rung(
         "codes",
@@ -787,6 +924,7 @@ LADDER: tuple[Rung, ...] = (
         None,
         T + "sim/test_elementary_codes.py"
         "::test_the_single_parity_check_posterior_is_the_tanh_rule",
+        cost=Cost.PASS,
     ),
     Rung(
         "codes",
@@ -795,6 +933,7 @@ LADDER: tuple[Rung, ...] = (
         "brute-force ML",
         T + "sim/test_elementary_codes.py"
         "::test_syndrome_correction_is_the_nearest_codeword_enumeration_returns",
+        cost=Cost.PASS,
     ),
     Rung(
         "codes",
@@ -803,6 +942,7 @@ LADDER: tuple[Rung, ...] = (
         None,
         T + "sim/test_reed_solomon.py"
         "::test_reed_solomon_meets_the_singleton_bound_with_equality",
+        cost=Cost.PASS,
     ),
     Rung(
         "codes",
@@ -811,6 +951,7 @@ LADDER: tuple[Rung, ...] = (
         "brute-force ML",
         T + "sim/test_reed_solomon.py"
         "::test_the_algebraic_decode_is_the_nearest_codeword_enumeration_returns",
+        cost=Cost.PASS,
     ),
     # --- mixtures ----------------------------------------------------------
     # The foot and the rung above it name one test: it computes the 65,536
@@ -823,6 +964,7 @@ LADDER: tuple[Rung, ...] = (
         None,
         T + "opt/test_opt_mixture.py"
         "::test_the_evidence_and_the_e_step_match_the_enumerated_assignments",
+        cost=Cost.EXACT,
     ),
     Rung(
         "mixture",
@@ -831,6 +973,7 @@ LADDER: tuple[Rung, ...] = (
         "assignment enumeration",
         T + "opt/test_opt_mixture.py"
         "::test_the_evidence_and_the_e_step_match_the_enumerated_assignments",
+        cost=Cost.ITERATIONS,
     ),
     Rung(
         "mixture",
@@ -839,6 +982,7 @@ LADDER: tuple[Rung, ...] = (
         "assignment enumeration",
         T + "opt/test_opt_emission_mixture.py"
         "::test_the_responsibilities_are_the_enumerated_posterior",
+        cost=Cost.ITERATIONS,
     ),
     Rung(
         "mixture",
@@ -847,6 +991,7 @@ LADDER: tuple[Rung, ...] = (
         None,
         T + "opt/test_opt_mixture_seeding.py"
         "::test_the_shipped_rule_is_k_means_plus_plus_on_a_gaussian",
+        cost=Cost.PASS,
     ),
     Rung(
         "mixture",
@@ -855,6 +1000,7 @@ LADDER: tuple[Rung, ...] = (
         "assignment enumeration",
         T + "opt/test_opt_mixture.py"
         "::test_the_optimal_clustering_cost_is_the_minimum_over_the_enumerated_assignments",
+        cost=Cost.EXACT,
     ),
     Rung(
         "mixture",
@@ -863,6 +1009,7 @@ LADDER: tuple[Rung, ...] = (
         "k-means++ seeding",
         T + "search/test_projection_seeding.py"
         "::test_euclidean_seeding_is_one_dimensional_kmeans_plus_plus_on_a_flat_channel",
+        cost=Cost.PASS,
     ),
     Rung(
         "mixture",
@@ -871,6 +1018,7 @@ LADDER: tuple[Rung, ...] = (
         "k-means++ seeding",
         T + "search/test_projection_seeding.py"
         "::test_the_non_euclidean_seedings_draw_the_law_of_the_metric_they_declare",
+        cost=Cost.PASS,
     ),
     Rung(
         "mixture",
@@ -878,6 +1026,7 @@ LADDER: tuple[Rung, ...] = (
         "sample.hmc.sample",
         None,
         T + "sample/test_opt_hmc.py::test_the_chain_recovers_an_analytic_gaussian",
+        cost=Cost.GRADIENTS,
     ),
     Rung(
         "mixture",
@@ -886,6 +1035,7 @@ LADDER: tuple[Rung, ...] = (
         "assignment enumeration",
         T + "sample/test_opt_hmc.py"
         "::test_the_chain_recovers_the_enumerated_assignment_posterior_of_a_mixture",
+        cost=Cost.GRADIENTS,
     ),
     Rung(
         "mixture",
@@ -894,6 +1044,7 @@ LADDER: tuple[Rung, ...] = (
         None,
         T + "sample/test_opt_langevin.py"
         "::test_the_langevin_chain_recovers_an_analytic_gaussian",
+        cost=Cost.GRADIENTS,
     ),
     Rung(
         "mixture",
@@ -902,6 +1053,7 @@ LADDER: tuple[Rung, ...] = (
         "assignment enumeration",
         T + "sample/test_opt_langevin.py"
         "::test_the_langevin_chain_recovers_the_enumerated_assignment_posterior",
+        cost=Cost.GRADIENTS,
     ),
     Rung(
         "mixture",
@@ -910,6 +1062,7 @@ LADDER: tuple[Rung, ...] = (
         None,
         T
         + "sample/test_opt_slice.py::test_the_slice_chain_recovers_an_analytic_gaussian",
+        cost=Cost.EVALUATIONS,
     ),
     Rung(
         "mixture",
@@ -918,6 +1071,7 @@ LADDER: tuple[Rung, ...] = (
         "assignment enumeration",
         T + "sample/test_opt_slice.py"
         "::test_the_slice_chain_recovers_the_enumerated_assignment_posterior",
+        cost=Cost.EVALUATIONS,
     ),
     Rung(
         "mixture",
@@ -926,6 +1080,7 @@ LADDER: tuple[Rung, ...] = (
         None,
         T + "opt/test_opt_initialize.py"
         "::test_the_sampled_starts_are_their_runs_own_records_and_leave_the_cell_descent_cannot",
+        cost=Cost.SWEEPS,
     ),
 )
 

@@ -50,12 +50,13 @@ writing one.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, ClassVar, Self
 
 import numpy as np
 
-from snakes_and_ladders.fixtures import load_declared
 from snakes_and_ladders.sim.ldpc import ChannelParams, ParityCheck, null_space
 
 #: Arikan's kernel. Every polar construction is this matrix and nothing else.
@@ -417,30 +418,31 @@ class PolarParams(ChannelParams):
         )
         raise ValueError(msg)
 
+    #: The fields :func:`snakes_and_ladders.fixtures.load_params` checks are present before
+    #: calling :meth:`from_declared`.
+    required_fields: ClassVar[frozenset[str]] = _REQUIRED_FIELDS
 
-def load_polar_params(path: Path) -> PolarParams:
-    """Read a polar fixture.
+    @classmethod
+    def from_declared(cls, declared: Mapping[str, Any], _path: Path, /) -> Self:
+        """Read a polar fixture.
 
-    Parameters
-    ----------
-    path : Path
-        Path to the yaml file.
+        ``declared`` is the mapping
+        :func:`snakes_and_ladders.fixtures.load_params` read from ``path``
+        with :attr:`required_fields` present; ``path`` names the file in
+        every error.
 
-    Returns
-    -------
-    PolarParams
-        The parsed truth. Which construction the fields describe is checked by
-        :meth:`PolarParams.code`, so one statement of that serves both callers.
-    """
-    raw = load_declared(path, _REQUIRED_FIELDS)
-    return PolarParams(
-        n_stages=int(raw["n_stages"]),
-        n_info=int(raw["n_info"]),
-        construction=str(raw["construction"]),
-        flip_probability=float(raw["flip_probability"]),
-        erasure_probability=float(raw["erasure_probability"]),
-        noise_scale=float(raw["noise_scale"]),
-    )
+        The parsed truth. Which construction the fields describe is checked
+        by :meth:`PolarParams.code`, so one statement of that serves both
+        callers.
+        """
+        return cls(
+            n_stages=int(declared["n_stages"]),
+            n_info=int(declared["n_info"]),
+            construction=str(declared["construction"]),
+            flip_probability=float(declared["flip_probability"]),
+            erasure_probability=float(declared["erasure_probability"]),
+            noise_scale=float(declared["noise_scale"]),
+        )
 
 
 __all__ = [
@@ -453,7 +455,6 @@ __all__ = [
     "capacity",
     "gaussian_polar_code",
     "gaussian_reliability",
-    "load_polar_params",
     "parity_check",
     "polar_information_set",
     "polar_transform",

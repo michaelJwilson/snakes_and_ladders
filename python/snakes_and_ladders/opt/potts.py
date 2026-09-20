@@ -25,7 +25,7 @@ open-chain sampler is the general-per-edge-coupling form of the one here. They
 are not consolidated: ``opt/CLAUDE.md``'s "no application imports" rule,
 enforced by ``tests/regression/opt/test_opt_objective.py``, forbids importing
 ``snakes_and_ladders.sim``. Issue #186 tracks the duplication, by moving
-``PottsParams``/``load_potts_params`` out of ``snakes_and_ladders.opt`` as
+``PottsParams``/``PottsParams`` out of ``snakes_and_ladders.opt`` as
 issue #171 moved ``snakes_and_ladders.opt.hmm``'s truth type into
 ``snakes_and_ladders.sim.hmm``.
 """

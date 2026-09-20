@@ -49,32 +49,32 @@ refusal is still a :class:`StaleBaselineError`.
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from snakes_and_ladders.fixtures import Scale
+from snakes_and_ladders.fixtures import Params, Scale, load_params
 from snakes_and_ladders.inputs import library_versions
-from snakes_and_ladders.opt.testfunctions import load_test_function_params
-from snakes_and_ladders.sim.canonical import load_frustrated_lattice_params
-from snakes_and_ladders.sim.convolutional import load_turbo_params
-from snakes_and_ladders.sim.count_pairs import load_spatio_sequential_counts_params
-from snakes_and_ladders.sim.css import load_css_params
-from snakes_and_ladders.sim.emission_mixture import load_emission_mixture_params
-from snakes_and_ladders.sim.hmm import load_hmm_params
-from snakes_and_ladders.sim.ldpc import load_bicycle_params, load_ldpc_params
-from snakes_and_ladders.sim.mixture import load_mixture_params
-from snakes_and_ladders.sim.params import load_simulation_params
-from snakes_and_ladders.sim.polar import load_polar_params
+from snakes_and_ladders.opt.testfunctions import TestFunctionSuite
+from snakes_and_ladders.sim.canonical import FrustratedLatticeParams
+from snakes_and_ladders.sim.convolutional import TurboParams
+from snakes_and_ladders.sim.count_pairs import SpatioSequentialCountsParams
+from snakes_and_ladders.sim.css import CssBicycleParams
+from snakes_and_ladders.sim.emission_mixture import EmissionMixtureParams
+from snakes_and_ladders.sim.hmm import HmmParams
+from snakes_and_ladders.sim.ldpc import BicycleParams, LdpcParams
+from snakes_and_ladders.sim.mixture import MixtureParams
+from snakes_and_ladders.sim.params import SimulationParams
+from snakes_and_ladders.sim.polar import PolarParams
 from snakes_and_ladders.sim.potts import (
-    load_potts_lattice_params,
-    load_spatio_only_params,
+    PottsLatticeParams,
+    SpatioOnlyParams,
 )
-from snakes_and_ladders.sim.potts_chain import load_potts_params
-from snakes_and_ladders.sim.spatio_sequential import load_spatio_sequential_params
+from snakes_and_ladders.sim.potts_chain import PottsParams
+from snakes_and_ladders.sim.spatio_sequential import SpatioSequentialParams
 
 #: The repository root, from this file rather than a working directory: the
 #: fixture directory is named from it, and a caller in another tree passes its
@@ -86,26 +86,26 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 #: test from wherever pytest was started.
 FIXTURES_DIR = REPO_ROOT / "tests" / "regression" / "fixtures"
 
-#: Which loader reads each declared model. The model is stated in the file
+#: Which truth each declared model is, read by :func:`snakes_and_ladders.fixtures.load_params`. The model is stated in the file
 #: rather than derived from the directory, so two problems may share a model
 #: --- as the tree fixtures do --- without either naming the other.
-LOADERS: dict[str, Callable[[Path], Any]] = {
-    "jukes-cantor": load_simulation_params,
-    "potts-chain": load_potts_params,
-    "potts-lattice": load_potts_lattice_params,
-    "spatio-only": load_spatio_only_params,
-    "hidden-markov": load_hmm_params,
-    "gaussian-mixture": load_mixture_params,
-    "emission-mixture": load_emission_mixture_params,
-    "spatio-sequential": load_spatio_sequential_params,
-    "spatio-sequential-counts": load_spatio_sequential_counts_params,
-    "ldpc": load_ldpc_params,
-    "bicycle": load_bicycle_params,
-    "bicycle-css": load_css_params,
-    "frustrated-lattice": load_frustrated_lattice_params,
-    "test-functions": load_test_function_params,
-    "turbo": load_turbo_params,
-    "polar": load_polar_params,
+PARAMS: dict[str, type[Params]] = {
+    "jukes-cantor": SimulationParams,
+    "potts-chain": PottsParams,
+    "potts-lattice": PottsLatticeParams,
+    "spatio-only": SpatioOnlyParams,
+    "hidden-markov": HmmParams,
+    "gaussian-mixture": MixtureParams,
+    "emission-mixture": EmissionMixtureParams,
+    "spatio-sequential": SpatioSequentialParams,
+    "spatio-sequential-counts": SpatioSequentialCountsParams,
+    "ldpc": LdpcParams,
+    "bicycle": BicycleParams,
+    "bicycle-css": CssBicycleParams,
+    "frustrated-lattice": FrustratedLatticeParams,
+    "test-functions": TestFunctionSuite,
+    "turbo": TurboParams,
+    "polar": PolarParams,
 }
 
 #: The oracles a fixture may state: an exhaustive sum over the instance, the
@@ -275,8 +275,8 @@ def fixture(problem: str, tier: str | Scale, directory: Path = FIXTURES_DIR) -> 
         msg = f"{path}: missing required field(s) {sorted(missing)}"
         raise ValueError(msg)
     model = str(raw["model"])
-    if model not in LOADERS:
-        msg = f"{path}: model {model!r} has no loader; known: {sorted(LOADERS)}"
+    if model not in PARAMS:
+        msg = f"{path}: model {model!r} has no loader; known: {sorted(PARAMS)}"
         raise ValueError(msg)
     oracle = str(raw["oracle"])
     if oracle not in ORACLES:
@@ -288,7 +288,7 @@ def fixture(problem: str, tier: str | Scale, directory: Path = FIXTURES_DIR) -> 
         model=model,
         oracle=oracle,
         path=path,
-        params=LOADERS[model](path),
+        params=load_params(path, PARAMS[model]),
     )
 
 

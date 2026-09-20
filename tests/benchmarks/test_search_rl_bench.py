@@ -17,8 +17,9 @@ from pathlib import Path
 
 import numpy as np
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.learn.tree import RewardModel, TreeEnvironment
-from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.topology import random_topology
 
@@ -37,7 +38,7 @@ _HARD_BRANCH_LENGTH = 0.2451
 def _alignment(
     fixture: Path = FIXTURE,
 ) -> tuple[dict[str, np.ndarray], int, np.ndarray]:
-    params = load_simulation_params(fixture)
+    params = load_params(fixture, SimulationParams)
     dataset = simulate_alignment(
         tau=params.tau,
         k=params.k,

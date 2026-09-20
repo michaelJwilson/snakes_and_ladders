@@ -10,9 +10,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.qa.figure import QATable, latex_integer
 from snakes_and_ladders.qa.runner import ParamsArgument, table_main
-from snakes_and_ladders.sim.params import SimulationParams, load_simulation_params
+from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.tree import preorder
 
 
@@ -107,7 +108,7 @@ def _load_named(path: Path) -> tuple[str, SimulationParams]:
     tuple[str, SimulationParams]
         The fixture's problem and tier, and its loaded contents.
     """
-    return f"{path.parent.name}/{path.name}", load_simulation_params(path)
+    return f"{path.parent.name}/{path.name}", load_params(path, SimulationParams)
 
 
 # Repeated, because the table is one row per fixture and the row order is the

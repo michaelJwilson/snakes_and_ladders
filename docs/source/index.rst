@@ -69,6 +69,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sim.simulate
    :members:
 
+.. automodule:: snakes_and_ladders.sim.simulator
+   :members:
+
 .. automodule:: snakes_and_ladders.sim.graph
    :members:
 
@@ -403,6 +406,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.search.tightening
+   :members:
+
+.. automodule:: snakes_and_ladders.search.bifurcation
    :members:
 
 .. automodule:: snakes_and_ladders.search.alpha_expansion

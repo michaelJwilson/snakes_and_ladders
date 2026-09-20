@@ -35,6 +35,17 @@ module. It is referenced here, never restated. What follows is local.
 
 - **A structure is scored at most once per search**, keyed on a canonical form.
 
+- **A structural move constructs a new objective; it does not step inside
+  one.** A move changes what the parameter vector means and how long it is, so
+  nothing that describes the old parameter space crosses it: no step size, no
+  curvature estimate, no adaptation state, and `opt.fit` builds its optimizer
+  per call. What crosses is what the move leaves identical, named by what makes
+  it identical --- a branch *is* the split it induces, so a kept branch's
+  fitted length starts the neighbour's fit under the same key whatever the
+  rooting. `PROBLEMS.md` says per problem what survives its moves, or that the
+  rule does not apply and why; a fitted value read across a move is two optima
+  of two objectives, not a monotone sequence (#815).
+
 - **A cheap objective is a different surface, not a noisy estimate.**
 
 - **A surface that does not totally order its candidates cannot be measured

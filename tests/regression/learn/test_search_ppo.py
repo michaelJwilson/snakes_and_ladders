@@ -14,6 +14,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.learn.critic import Critic, n_state_features
 from snakes_and_ladders.learn.policy import EpsilonGreedyPolicy, LinearPolicy
 from snakes_and_ladders.learn.ppo import ppo
@@ -22,7 +23,7 @@ from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
 from snakes_and_ladders.learn.tree import RewardModel, TreeEnvironment
 from snakes_and_ladders.qa.rl_tree_policy import BATCH, HORIZON, ITERATIONS, STARTS
 from snakes_and_ladders.sample.schedule import LinearTempSchedule
-from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.topology import MoveSet, Topology, enumerate_topologies
 from snakes_and_ladders.sim.tree import edges
@@ -33,7 +34,7 @@ ROLLOUTS_PER_START = 4
 
 @pytest.fixture(scope="module")
 def environment() -> TreeEnvironment:
-    params = load_simulation_params(FIXTURE)
+    params = load_params(FIXTURE, SimulationParams)
     dataset = simulate_alignment(
         tau=params.tau,
         k=params.k,
@@ -56,7 +57,7 @@ def environment() -> TreeEnvironment:
 
 @pytest.fixture(scope="module")
 def maximum(environment: TreeEnvironment) -> float:
-    params = load_simulation_params(FIXTURE)
+    params = load_params(FIXTURE, SimulationParams)
     leaves = sorted(node.name for _, node in edges(params.tau) if node.is_leaf)
     return max(environment.score(t) for t in enumerate_topologies(leaves))
 
@@ -73,7 +74,7 @@ def test_ppo_on_the_hard_fixture_is_no_worse_than_reinforce_at_the_same_budget(
     # Same 640 episodes, same starts, same horizon as test_search_tree_policy.
     # Measured (recorded in STATUS.md): the rates at which greedy, REINFORCE
     # and PPO reach the enumerated maximum from the 50 seeded starts.
-    rng = np.random.default_rng(load_simulation_params(FIXTURE).seed + 1000)
+    rng = np.random.default_rng(load_params(FIXTURE, SimulationParams).seed + 1000)
     starts = [environment.reset(rng) for _ in range(STARTS)]
     greedy = _rate(
         environment,
