@@ -161,10 +161,11 @@
 
 "Polar code, successive cancellation and list decoding":
   optimizers: >-
-    Successive cancellation decodes in one pass over the polar graph and the
-    list at L = 2^k is the enumerated maximum likelihood; at N = 16 the gap
-    between the two is the one the list closes, and past N = 16 the exhaustive
-    list no longer runs and the reference recursion is the only referee.
+    Successive cancellation decodes in one pass over the polar graph, and the
+    list at its exhaustive size is the enumerated maximum likelihood; at 16
+    bits the gap between the two is the one the list closes, and past 16 bits
+    the exhaustive list no longer runs and the reference recursion is the only
+    referee.
 
 "Polar code, BEC-constructed at rate 1/2":
   optimizers: >-
