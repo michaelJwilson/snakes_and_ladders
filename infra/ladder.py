@@ -178,6 +178,15 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "potts",
+        "residual schedule",
+        "likelihood.schedule.ResidualMessageSchedule",
+        "flooding schedule",
+        T + "likelihood/test_message_passing.py"
+        "::test_residual_on_the_loopy_lattice_is_belief_propagation",
+        cost=Cost.ITERATIONS,
+    ),
+    Rung(
+        "potts",
         "Kikuchi / region graph",
         "sandbox.region_graph.kikuchi_free_energy",
         "enumeration",

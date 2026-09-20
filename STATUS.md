@@ -32,7 +32,7 @@ the code behind each problem class.
 | 2.2 Curriculum learning | Started: the surrogate curriculum from 5 to 6 taxa, from 3x3 to 4x6 lattices, and across `spatio_only`'s 9 to 5,041 sites; weight transfer for a policy and batched rollout not started | Zero-shot at six taxa the set surrogate falls to `R^2` 0.68 and recovers to 0.94 after transfer, the MLP holds 0.92 and reaches 0.95; lattice surrogates transfer zero-shot at 0.99 at a shared field and collapse to -338.6 at a per-site one, recovering to 0.722 | [#317](https://github.com/michaelJwilson/snakes_and_ladders/pull/317), [#547](https://github.com/michaelJwilson/snakes_and_ladders/pull/547) |
 | 2.3 Empirical validation | The budget utility and the exact paired test landed, and six budget-matched comparisons are recorded; no empirical alignment and no external tool ([#126](https://github.com/michaelJwilson/snakes_and_ladders/issues/126)) | Every comparison at one budget over shared seeds with McNemar's exact test: the glass, Rastrigin, the mixture, the relaxation against greedy, the cluster updates at the transition, and the tree's starts at equal evaluations | [#303](https://github.com/michaelJwilson/snakes_and_ladders/pull/303), [#348](https://github.com/michaelJwilson/snakes_and_ladders/pull/348) |
 | 3.1 Surrogates & bounds | Landed as certified analytic bounds plus learned predictors on the gap above them, ranking a neighbourhood so only the top-`K` are re-scored exactly; the filter's cost ratio at large `n` is **unmeasured** and is what remains | Each bound proved in Appendix B and asserted against the exact value it bounds; the learned gap predictor refereed by the enumeration the bound is checked on | [#317](https://github.com/michaelJwilson/snakes_and_ladders/issues/317) |
-| 4.1 Tracking, ablations & leaderboard | The experiment ledger, its generated index and the run logger landed; six experiments recorded, each capped at a ten-line body (#458); the Aim run store not started ([#75](https://github.com/michaelJwilson/snakes_and_ladders/issues/75)) | Every file under `docs/experiments/` validated against the template and the cap per pull request, and this file cites the files rather than restating them | [#316](https://github.com/michaelJwilson/snakes_and_ladders/pull/316), [#318](https://github.com/michaelJwilson/snakes_and_ladders/pull/318) |
+| 4.1 Tracking, ablations & leaderboard | The experiment ledger, its generated index and the run logger landed; six experiments recorded, each capped at a ten-line body (#458); the Aim run store landed as the optional `track` extra, `Run` written from `aim.Run` ([#75](https://github.com/michaelJwilson/snakes_and_ladders/issues/75), #782) | Every file under `docs/experiments/` validated against the template and the cap per pull request, and this file cites the files rather than restating them | [#316](https://github.com/michaelJwilson/snakes_and_ladders/pull/316), [#318](https://github.com/michaelJwilson/snakes_and_ladders/pull/318) |
 | Stage 5 Research extensions | Gumbel-softmax relaxation of Potts and HMM states landed; the tropical Grassmannian half landed, refereed by enumeration and the Hadamard closed form, and not shown to beat a classical baseline, so it is conserved in `sandbox/`; learned surrogates rank a neighbourhood with exact re-scoring of the top candidates; stochastic escape by epsilon-greedy landed | Gumbel-softmax exact at every corner to 1e-11 and deterministic ascent 18/40 against greedy's 5/40, McNemar `p = 0.00098`; the tropical relaxation exact at every corner to 3.8e-16 relative, four-point violation of the Hadamard metric under 1e-12, ascent 8/8 at five and six taxa and 7/8 at eight against the enumerated maximum, and neighbor joining reaching it at no gradient steps; a surrogate-ranked SPR search reaches its optimum from 4/4 starts at 5 fits against 312; escape from a local optimum rises from 0.111 at `epsilon = 0` to 0.883 at 0.4 | [#198](https://github.com/michaelJwilson/snakes_and_ladders/pull/198), [#225](https://github.com/michaelJwilson/snakes_and_ladders/pull/225), [#317](https://github.com/michaelJwilson/snakes_and_ladders/pull/317) |
 
 ## Progress Since the 0.4.0 Audit
@@ -1824,6 +1824,22 @@ lost their evidence to `NaN` and the field argmin fell to 0.113, the fraction
 of vertices in the first class. The loader now refuses a trials ladder that
 varies, the trial count being a property of the observation and not of the
 state.
+
+**The pruning routes share their plumbing; the oracle shares nothing**
+([#858](https://github.com/michaelJwilson/snakes_and_ladders/issues/858)). The
+post-order, the leaf indicator, the rescaling step and the `pi`-shape,
+missing-leaf, branch-length and branch-order validations were written five
+times over. `likelihood.pruning_common` holds one of each and
+`likelihood.pruning_rust`, `pruning_torch`, `pruning_analytic`,
+`surrogate.prune_with_matrices`, `blocks` and `sandbox.pruning_burn` call it:
+130 lines out of the routes. `likelihood.pruning` is byte for byte unchanged,
+being the oracle each route is pinned against, and `brute_force`, the referee
+that pins *it*, keeps its own checks for the same reason. No arithmetic is
+unified: the vanished-scale fallback and the scatter index's device differed
+between copies and are parameters, so no call site's bits or device move.
+Evidence is 38 blake2b digests of the float64 bytes --- every route, rescaled,
+unrescaled, weighted, cached, with the analytic gradient --- on `tree_jc/ci`
+and `tree_search/ci`, identical before and after.
 
 ## Milestone 1.3 — Continuous Optimization via Autodiff
 
@@ -4302,6 +4318,28 @@ shape instead of once per level paid **1.21x** on the plan (64.2 to 52.9 ms at
 remains has no hotspot: it is Python bookkeeping proportional to the edges, and
 removing it would mean vectorising the level assignment wholesale.
 `docs/experiments/018` carries the run.
+
+**A sixth schedule, and where it earns its heap**
+([#825](https://github.com/michaelJwilson/snakes_and_ladders/issues/825)).
+`residual` orders sends by the largest residual a factor's inputs last saw
+(Elidan, McGraw & Koller 2006): a heap over the factors, the runner feeding each
+applied step's residual back through `send`, so the seam gains `adaptive` and
+`sweep_length` and no consumer names the schedule. It reaches the Bethe fixed
+point flooding and sequential reach, pinned against the reference flooding on
+the loopy lattice to 1e-9 in `log Z` and 1e-8 in the marginals. Sweeps to a
+residual of 1e-10 at damping 0.5, one sweep being every factor sent once
+whatever the order: on the 3x3 `ci` lattice 60 flooding, 53 sequential, 60
+residual; on an 8x8 at `J = 0.5` in a random field 61, 53, 55; on a 12x12 at
+the critical coupling in a random field **254, 196, 176**, where the residual
+order is the only one under 200. On the (3,6) Gallager codes at 96 and 996
+bits over a Gaussian channel at `sigma = 0.8` it is the worst of the three:
+1,761, 1,133, **2,357** sweeps at 96 bits and 1,769, 1,139, 2,135 at 996,
+because a parity factor's outgoing residual bumps every neighbour whether or
+not its own inputs moved, and the hard constraints keep the residuals large
+late into the run. Wall is not the comparison: flooding's one vectorised step
+runs 128 ms where the two per-factor orders run 4.9 s and 5.2 s on the 12x12,
+a cost of the Python step loop and not of the order, and the decoder keeps its
+own layered schedule.
 
 ## Consistency audit at 0.4.0
 

@@ -17,6 +17,12 @@ itself.
 `snakes_and_ladders.likelihood.belief_propagation`. They had not drifted in *behaviour* --
 the two spellings compute the same thing -- which is what makes consolidating
 them safe, and what would have made a later divergence hard to notice.
+
+Not everything here is arithmetic: `constant_chain_kernel` reads a *shape* and
+raises. It is here for the reason the rest is --- the NumPy recursion and the
+torch one each carried the dispatch, with the same error text written twice,
+and `opt` may not import `likelihood` --- and it names a chain and no model
+(issue #857).
 """
 
 from __future__ import annotations
@@ -161,3 +167,46 @@ def logsumexp(values: np.ndarray, axis: int | tuple[int, ...]) -> np.ndarray:
     shifted = np.log(np.exp(values - peak).sum(axis=axis, keepdims=True))
     result: np.ndarray = (peak + shifted).squeeze(axis)
     return result
+
+
+def constant_chain_kernel(shape: tuple[int, ...], length: int, n_states: int) -> bool:
+    """Whether a chain's transition kernel is the one-matrix form, refusing a third.
+
+    A chain carries either one ``(K, K)`` kernel or one per step,
+    ``(T - 1, K, K)`` --- a rate that varies along the sequence (issue #653).
+    Which of the two a caller passed is read here, so the NumPy recursion and
+    the torch one refuse the same shapes in the same words.
+
+    Parameters
+    ----------
+    shape : tuple[int, ...]
+        The kernel's shape. A :class:`torch.Size` is converted by the caller,
+        so the message reads the same either way.
+    length : int
+        Positions in the chain, ``T``.
+    n_states : int
+        Hidden states, ``K``.
+
+    Returns
+    -------
+    bool
+        ``True`` for the ``(K, K)`` form, ``False`` for the per-step form. The
+        constant form is read first, so a chain of ``K + 1`` positions carrying
+        ``(K, K)`` is one kernel rather than ``K`` of them.
+
+    Raises
+    ------
+    ValueError
+        If the shape is neither.
+    """
+    steps = max(length - 1, 0)
+    if shape == (n_states, n_states):
+        return True
+    if shape == (steps, n_states, n_states):
+        return False
+    msg = (
+        f"log_transition {shape} is neither ({n_states}, {n_states}) "
+        f"nor ({steps}, {n_states}, {n_states}) for a chain of {length} positions "
+        f"over {n_states} states"
+    )
+    raise ValueError(msg)

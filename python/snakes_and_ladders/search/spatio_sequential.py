@@ -32,11 +32,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from enum import StrEnum
+from functools import partial
 
 import numpy as np
 import torch
 from scipy.optimize import linear_sum_assignment
 
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.emissions import (
     CategoricalEmission,
     EmissionFamily,
@@ -44,9 +46,7 @@ from snakes_and_ladders.emissions import (
 )
 from snakes_and_ladders.likelihood.forward_backward import sample_path
 from snakes_and_ladders.likelihood.spatio_sequential import (
-    NUMPY_BACKEND,
     ClassPosteriors,
-    CoupledBackend,
     class_log_density,
     class_posteriors,
     covariate_block,
@@ -54,9 +54,12 @@ from snakes_and_ladders.likelihood.spatio_sequential import (
     labelled_log_likelihood,
 )
 from snakes_and_ladders.opt.mixture import emission_mixture_plus_plus
+from snakes_and_ladders.sample.accept import accept
 from snakes_and_ladders.sample.schedule import TempSchedule
 from snakes_and_ladders.search.alpha_expansion import (
+    SweepOrder,
     alpha_expansion,
+    iterated_conditional_modes,
 )
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import energy
@@ -206,7 +209,7 @@ def _wolff_update(
         return
     cluster = np.array(members, dtype=np.int64)
     difference = beta * float((field[cluster, proposed] - field[cluster, colour]).sum())
-    if difference >= 0.0 or rng.random() < np.exp(difference):
+    if accept(difference, rng):
         labels[cluster] = proposed
 
 
@@ -239,21 +242,20 @@ def label_step(
             alpha_expansion(graph, potential, params.n_classes, start=labels).labelling
         )
     if solver is LabelSolver.ICM:
-        current = labels.copy()
-        best = energy(graph, potential, current)
-        for _ in range(200):
-            moved = False
-            for node in rng.permutation(graph.n_nodes):
-                for label in range(params.n_classes):
-                    if label == current[node]:
-                        continue
-                    trial = current.copy()
-                    trial[node] = label
-                    value = energy(graph, potential, trial)
-                    if value < best - 1e-12:
-                        best, current, moved = value, trial, True
-            if not moved:
-                break
+        # The sweep `search.alpha_expansion` runs, started from `labels` in a
+        # random site order (issue #858). It reads the same argmin off local
+        # deltas rather than off a full energy per candidate, which is
+        # `O(k * degree)` per site against `O(k * n_edges)`; the labelling is
+        # pinned against the recomputing loop this replaced.
+        current, _ = iterated_conditional_modes(
+            graph,
+            potential,
+            params.n_classes,
+            rng,
+            start=labels,
+            sweep_order=SweepOrder.RANDOM,
+            backend=Backend.PYTHON,
+        )
         return current
     if wolff_schedule is None:
         msg = "the Wolff solver needs a schedule"
@@ -282,7 +284,7 @@ def fit_spatio_sequential(
     labels: np.ndarray | None = None,
     fit_parameters: bool = True,
     wolff_schedule: TempSchedule | None = None,
-    backend: CoupledBackend = NUMPY_BACKEND,
+    backend: Backend = Backend.PYTHON,
 ) -> SpatioSequentialFit:
     """Block-coordinate ascent on ``log p(x, l | theta)``.
 
@@ -306,12 +308,13 @@ def fit_spatio_sequential(
         setting in which the label step is pinned against enumeration.
     wolff_schedule : TempSchedule | None
         Required by the Wolff solver.
-    backend : CoupledBackend
-        Which E step computes the class posteriors, the field and the labelled
-        log-likelihood. The default is the NumPy one, which is the oracle;
-        `likelihood.spatio_sequential_rust.RUST_BACKEND` is the tabulated
-        kernel, and is what makes the declared 5,041-vertex instance fit a
-        budget (issue #399).
+    backend : Backend
+        Which kernel runs the E step, the field and the labelled log-likelihood:
+        :data:`~snakes_and_ladders.backend.Backend.PYTHON` is the NumPy oracle
+        and :data:`~snakes_and_ladders.backend.Backend.RUST` the tabulated
+        kernel of :mod:`snakes_and_ladders.likelihood.spatio_sequential_rust`,
+        chosen inside :mod:`snakes_and_ladders.likelihood.spatio_sequential`
+        so the three cannot be mixed (#828).
 
     Raises
     ------
@@ -327,16 +330,17 @@ def fit_spatio_sequential(
         if labels is None
         else np.asarray(labels, dtype=np.int64).copy()
     )
-    values = [backend.labelled_log_likelihood(params, observations, current)]
+    posteriors_of = partial(class_posteriors, backend=backend)
+    field_of = partial(external_field, backend=backend)
+    log_likelihood_of = partial(labelled_log_likelihood, backend=backend)
+    values = [log_likelihood_of(params, observations, current)]
     for _ in range(n_blocks):
-        posteriors = backend.class_posteriors(params, observations, current)
+        posteriors = posteriors_of(params, observations, current)
         if fit_parameters:
             params = m_step(params, observations, current, posteriors)
-            posteriors = backend.class_posteriors(params, observations, current)
-        values.append(backend.labelled_log_likelihood(params, observations, current))
-        field = backend.external_field(
-            params, observations, current, posteriors.posterior
-        )
+            posteriors = posteriors_of(params, observations, current)
+        values.append(log_likelihood_of(params, observations, current))
+        field = field_of(params, observations, current, posteriors.posterior)
         proposed = label_step(
             params,
             observations,
@@ -346,13 +350,13 @@ def fit_spatio_sequential(
             field=field,
             wolff_schedule=wolff_schedule,
         )
-        candidate = backend.labelled_log_likelihood(params, observations, proposed)
+        candidate = log_likelihood_of(params, observations, proposed)
         if candidate >= values[-1]:
             current = proposed
             values.append(candidate)
         else:
             values.append(values[-1])
-    field = backend.external_field(params, observations, current, None)
+    field = field_of(params, observations, current, None)
     return SpatioSequentialFit(params, current, np.array(values), field)
 
 

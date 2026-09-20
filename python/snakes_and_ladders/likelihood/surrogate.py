@@ -48,6 +48,7 @@ import numpy as np
 import torch
 
 from snakes_and_ladders.bound import Bound, Surrogate
+from snakes_and_ladders.likelihood.pruning_common import leaf_indicator_array
 from snakes_and_ladders.likelihood.pruning_torch import log_likelihood
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.topology import Topology, branch_splits
@@ -168,10 +169,7 @@ def prune_with_matrices(
 
     def partial(node: Node) -> np.ndarray:
         if node.is_leaf:
-            states = np.asarray(alignment[node.name], dtype=np.int64)
-            table = np.zeros((n_sites, k))
-            table[np.arange(n_sites), states] = 1.0
-            return table
+            return leaf_indicator_array(alignment[node.name], n_sites, k)
         table = np.ones((n_sites, k))
         for child in node.children:
             table = table * (partial(child) @ np.asarray(matrices[child.name]).T)

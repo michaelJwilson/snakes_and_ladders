@@ -22,6 +22,7 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
+import torch
 from snakes_and_ladders.emissions import CovariateNotSupportedError
 from snakes_and_ladders.sim.count_pairs import (
     SUCCESSES,
@@ -32,6 +33,10 @@ from snakes_and_ladders.sim.count_pairs import (
     binned_model,
     coarsen,
     simulate_count_pairs,
+    split_covariate,
+)
+from snakes_and_ladders.sim.count_pairs_rust import (
+    _channels,
 )
 from snakes_and_ladders.sim.count_pairs_rust import (
     simulate_count_pairs as simulate_rust,
@@ -167,6 +172,57 @@ def test_a_covariate_that_names_no_channel_is_refused() -> None:
             CovariateNotSupportedError, match="one covariate per channel"
         ):
             simulate(covaried)
+
+
+def _numpy_channels(covariate: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """The NumPy draw's check: the family's own split, flattened per channel."""
+    family = _declared().model.emissions[0]
+    exposure, trials = split_covariate(family, torch.as_tensor(covariate))
+    assert exposure is not None
+    assert trials is not None
+    return exposure.numpy().reshape(-1), trials.numpy().reshape(-1)
+
+
+def _rust_channels(covariate: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """The Rust draw's check, which is now the same call."""
+    exposure, trials = _channels(covariate)
+    assert exposure is not None
+    assert trials is not None
+    return exposure, trials
+
+
+@pytest.mark.smoke
+@pytest.mark.bug
+@pytest.mark.parametrize(
+    "twin", [_numpy_channels, _rust_channels], ids=["numpy", "rust"]
+)
+@pytest.mark.parametrize(
+    ("shape", "refused"),
+    [((6, 2), False), ((3, 4, 2), False), ((4, 3), True)],
+)
+def test_both_twins_read_one_rank_rule(
+    twin: Callable[[np.ndarray], tuple[np.ndarray, np.ndarray]],
+    shape: tuple[int, ...],
+    refused: bool,
+) -> None:
+    # The NumPy check accepted a bare `(2,)` and the Rust one refused every
+    # rank but three, so a covariate one simulator drew under was a refusal in
+    # the other (issue #856). One check now: the trailing axis is the channel
+    # pair, the leading axes are the caller's layout, and each twin gives the
+    # same answer on the same shape.
+    covariate = np.arange(float(np.prod(shape))).reshape(shape)
+
+    if refused:
+        with pytest.raises(
+            CovariateNotSupportedError, match="one covariate per channel"
+        ):
+            twin(covariate)
+        return
+
+    exposure, trials = twin(covariate)
+
+    np.testing.assert_array_equal(exposure, covariate[..., TOTAL].reshape(-1))
+    np.testing.assert_array_equal(trials, covariate[..., SUCCESSES].reshape(-1))
 
 
 @pytest.mark.analytic

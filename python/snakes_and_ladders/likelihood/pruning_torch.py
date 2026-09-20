@@ -29,6 +29,14 @@ import numpy as np
 import torch
 
 from snakes_and_ladders.likelihood.patterns import check_weights
+from snakes_and_ladders.likelihood.pruning_common import (
+    check_alignment_covers,
+    check_branch_lengths_shape,
+    check_pi_shape,
+    leaf_indicator,
+    require_branch_length,
+    rescale_partial,
+)
 from snakes_and_ladders.sim.tree import Node, edges, preorder
 
 
@@ -77,12 +85,7 @@ def branch_lengths_from_tree(
     ValueError
         If a non-root node has no ``branch_length``.
     """
-    lengths: list[float] = []
-    for _, child in edges(tau):
-        if child.branch_length is None:
-            msg = f"non-root node {child.name!r} has no branch_length"
-            raise ValueError(msg)
-        lengths.append(child.branch_length)
+    lengths = [require_branch_length(child) for _, child in edges(tau)]
     return torch.tensor(lengths, dtype=dtype, device=device)
 
 
@@ -173,9 +176,7 @@ def _leaf_partial(
     if hit is not None and hit[0] is states:
         return hit[1]
 
-    observed = torch.as_tensor(states, dtype=torch.long, device=device)
-    partial = torch.zeros((n_sites, k), dtype=dtype, device=device)
-    partial[torch.arange(n_sites, device=device), observed] = 1.0
+    partial = leaf_indicator(states, n_sites, k, dtype, device, index_device=device)
     if len(_LEAF_PARTIALS) >= _LEAF_PARTIAL_LIMIT:
         _LEAF_PARTIALS.pop(next(iter(_LEAF_PARTIALS)))
     _LEAF_PARTIALS[key] = (states, partial)
@@ -330,22 +331,11 @@ def log_likelihood(
     dtype = branch_lengths.dtype
     device = branch_lengths.device
     pi_t = torch.as_tensor(pi, dtype=dtype, device=device)
-    if pi_t.shape != (k,):
-        msg = f"pi has shape {tuple(pi_t.shape)}, expected ({k},)"
-        raise ValueError(msg)
+    check_pi_shape(tuple(pi_t.shape), k)
 
     traversal = _traversal(tau)
-    if branch_lengths.shape != (len(traversal.order),):
-        msg = (
-            f"branch_lengths has shape {tuple(branch_lengths.shape)}, "
-            f"expected ({len(traversal.order)},) to match branch_order(tau)"
-        )
-        raise ValueError(msg)
-
-    missing = [name for name in traversal.leaf_names if name not in alignment]
-    if missing:
-        msg = f"alignment is missing leaf(ves) {missing}"
-        raise ValueError(msg)
+    check_branch_lengths_shape(tuple(branch_lengths.shape), len(traversal.order))
+    check_alignment_covers(traversal.leaf_names, alignment)
 
     n_sites = int(torch.as_tensor(alignment[traversal.leaf_names[0]]).shape[0])
     weight = check_weights(weights, n_sites)
@@ -384,15 +374,10 @@ def log_likelihood(
             partial = torch.ones((n_sites, k), dtype=dtype, device=device)
 
         if rescale:
-            scale = partial.amax(dim=1)
-            # See snakes_and_ladders.likelihood.pruning: a zero scale means the site is
-            # genuinely impossible under the model, left at 0 rather than
-            # divided so log(0) = -inf propagates instead of being masked.
-            # The replacement is the scalar one rather than a tensor of ones,
-            # which is the same value without the per-node allocation.
-            safe_scale = torch.where(scale > 0, scale, one)
-            partial = partial / safe_scale.unsqueeze(1)
-            log_scale = log_scale + torch.log(safe_scale)
+            # The replacement for a vanished scale is the scalar one rather
+            # than a tensor of ones, which is the same value without the
+            # per-node allocation.
+            partial, log_scale, _ = rescale_partial(partial, log_scale, one)
 
         partials[slot] = partial
 
@@ -500,11 +485,9 @@ def log_likelihood_cached(
                 found = cache.get(key)
                 if found is not None:
                     return key, *found
-                states = torch.as_tensor(
-                    alignment[node.name], dtype=torch.long, device=device
+                partial = leaf_indicator(
+                    alignment[node.name], n_sites, k, dtype, device, index_device=None
                 )
-                partial = torch.zeros((n_sites, k), dtype=dtype, device=device)
-                partial[torch.arange(n_sites), states] = 1.0
                 scale = torch.zeros(n_sites, dtype=dtype, device=device)
                 cache.put(key, (partial, scale))
                 return key, partial, scale
@@ -527,10 +510,7 @@ def log_likelihood_cached(
                 transition = transitions[index[child.name]]
                 partial = partial * (child_partial @ transition.T)
                 log_scale = log_scale + child_scale
-            scale = partial.amax(dim=1)
-            safe_scale = torch.where(scale > 0, scale, torch.ones_like(scale))
-            partial = partial / safe_scale.unsqueeze(1)
-            log_scale = log_scale + torch.log(safe_scale)
+            partial, log_scale, _ = rescale_partial(partial, log_scale, None)
             cache.put(key, (partial, log_scale))
             return key, partial, log_scale
 

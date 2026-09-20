@@ -46,7 +46,6 @@ import torch
 from snakes_and_ladders import oxi_snakes_and_ladders
 from snakes_and_ladders.likelihood.spatio_sequential import (
     ClassPosteriors,
-    CoupledBackend,
     log_prior,
 )
 from snakes_and_ladders.sim.count_pairs import (
@@ -305,12 +304,3 @@ def labelled_log_likelihood(
     return own + float(
         class_posteriors(params, observations, labels).log_evidence.sum()
     )
-
-
-#: This module's implementations as one backend, for
-#: :func:`snakes_and_ladders.search.spatio_sequential.fit_spatio_sequential`.
-RUST_BACKEND = CoupledBackend(
-    class_posteriors=class_posteriors,
-    external_field=external_field,
-    labelled_log_likelihood=labelled_log_likelihood,
-)

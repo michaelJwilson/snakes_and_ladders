@@ -54,6 +54,8 @@ docs/*.blg
 docs/*.fdb_latexmk
 docs/*.fls
 docs/*.log
+# The per-section PDFs `infra/split_textbook.py` cuts from the book (#844).
+/docs/textbook/
 docs/*.out
 docs/*.toc
 docs/*.synctex.gz

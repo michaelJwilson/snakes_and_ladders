@@ -34,7 +34,7 @@ import hashlib
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, ClassVar, Self
+from typing import Any, ClassVar, Self, TypeVar
 
 import numpy as np
 import torch
@@ -58,10 +58,16 @@ TOTAL = 0
 #: Channel index of the success count, the beta-binomial one.
 SUCCESSES = 1
 
+#: A covariate in either form its consumers hold it: the model's NumPy array,
+#: which the Rust draw passes on, and the tensor a family scores against. One
+#: check reads both, so the two simulators cannot refuse different shapes
+#: (issue #856).
+CovariateT = TypeVar("CovariateT", np.ndarray, torch.Tensor)
+
 
 def split_covariate(
-    family: object, covariate: torch.Tensor | None
-) -> tuple[torch.Tensor | None, torch.Tensor | None]:
+    family: object, covariate: CovariateT | None
+) -> tuple[CovariateT | None, CovariateT | None]:
     """One covariate per channel, from the axis the observation already has.
 
     #631 refused a covariate on a pair family because "the two channels would
@@ -82,6 +88,14 @@ def split_covariate(
     the tensor #631 was right about: nothing says which channel it belongs to,
     and a family that guesses conditions half the model on the wrong number.
 
+    **The rank rule, stated here because this is the one check.** The trailing
+    axis is the channel pair and the leading axes are the caller's layout ---
+    ``(S, 2)`` for a vertex's column, ``(S, V, 2)`` for the model's block,
+    ``(S * n_m, 2)`` for a flattened draw --- so the rule is a trailing axis of
+    two and at least one axis before it. Both simulators call this, and so
+    accept and refuse the same shapes; the Rust draw refused every rank but
+    three and this accepted a bare ``(2,)`` (issue #856).
+
     **The neutral covariate is not ones.** It is ones for the total, whose
     exposure multiplies a rate, and the family's own declared ``trials`` for
     the successes, whose covariate replaces a trial count. A caller passing
@@ -90,26 +104,36 @@ def split_covariate(
     The two channels condition on different kinds of thing, which is the whole
     reason one tensor could not be both.
 
+    Parameters
+    ----------
+    family : object
+        The family refusing, or its class where the caller holds no instance:
+        the Rust draw builds none. Named in the refusal.
+    covariate : np.ndarray | torch.Tensor | None
+        One value per observation per channel, or ``None``.
+
     Returns
     -------
-    tuple[torch.Tensor | None, torch.Tensor | None]
-        The total's and the successes', or ``(None, None)`` for ``None``.
+    tuple
+        The total's and the successes', in ``covariate``'s own type, or
+        ``(None, None)`` for ``None``.
 
     Raises
     ------
     CovariateNotSupportedError
-        If ``covariate`` does not carry the two-channel axis.
+        If ``covariate`` does not carry the two-channel axis under at least
+        one leading axis.
     """
     if covariate is None:
         return None, None
-    if covariate.ndim == 0 or covariate.shape[-1] != 2:
-        name = type(family).__name__
+    if covariate.ndim < 2 or covariate.shape[-1] != 2:
+        name = family.__name__ if isinstance(family, type) else type(family).__name__
         msg = (
             f"{name} takes one covariate per channel, shape (..., 2) as its "
             f"observations are: channel {TOTAL} the total's exposure and channel "
-            f"{SUCCESSES} the successes' trial count. Got "
-            f"{tuple(covariate.shape)}, which names no channel -- the tensor "
-            "that cannot be both (#631, #658)."
+            f"{SUCCESSES} the successes' trial count, under at least one axis of "
+            f"the caller's layout. Got {tuple(covariate.shape)}, which names no "
+            "channel -- the tensor that cannot be both (#631, #658, #856)."
         )
         raise CovariateNotSupportedError(msg)
     return covariate[..., TOTAL, None], covariate[..., SUCCESSES, None]

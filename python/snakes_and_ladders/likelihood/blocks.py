@@ -52,6 +52,10 @@ import torch
 
 from snakes_and_ladders.bound import Bound, Surrogate
 from snakes_and_ladders.likelihood.patterns import compress_columns
+from snakes_and_ladders.likelihood.pruning_common import (
+    check_branch_lengths_shape,
+    check_pi_shape,
+)
 from snakes_and_ladders.likelihood.pruning_torch import (
     branch_order,
     log_likelihood,
@@ -192,16 +196,9 @@ def site_log_likelihood_extremes(
     dtype = branch_lengths.dtype
     device = branch_lengths.device
     pi_t = torch.as_tensor(pi, dtype=dtype, device=device)
-    if pi_t.shape != (k,):
-        msg = f"pi has shape {tuple(pi_t.shape)}, expected ({k},)"
-        raise ValueError(msg)
+    check_pi_shape(tuple(pi_t.shape), k)
     order = branch_order(tau)
-    if branch_lengths.shape != (len(order),):
-        msg = (
-            f"branch_lengths has shape {tuple(branch_lengths.shape)}, "
-            f"expected ({len(order)},) to match branch_order(tau)"
-        )
-        raise ValueError(msg)
+    check_branch_lengths_shape(tuple(branch_lengths.shape), len(order))
     index = {name: position for position, name in enumerate(order)}
     transitions = transition_probabilities(branch_lengths, k, rate_matrix)
 

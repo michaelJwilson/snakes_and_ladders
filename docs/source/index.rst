@@ -150,6 +150,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.likelihood.pruning
    :members:
 
+.. automodule:: snakes_and_ladders.likelihood.pruning_common
+   :members:
+
 .. automodule:: snakes_and_ladders.likelihood.pruning_torch
    :members:
 
@@ -271,6 +274,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.sample
+   :members:
+
+.. automodule:: snakes_and_ladders.sample.accept
    :members:
 
 .. automodule:: snakes_and_ladders.sample.hmc

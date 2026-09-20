@@ -23,7 +23,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 import numpy as np
 
@@ -82,10 +82,18 @@ class Outcome:
         log-likelihood.
     spent : int
         What the run cost, in the budget's unit, as the method counted it.
+    detail : Any
+        What else the run produced, carried back to the caller on the cell
+        that made it: `search.ground_state` returns its labelling here.
+        ``None`` where a method reports a value and a spend and nothing else.
+        A method that recorded it in a module-level list instead recorded
+        nothing at ``workers > 1``, where the cell runs in another process
+        (issue #856).
     """
 
     value: float
     spent: int
+    detail: Any = None
 
 
 Method = Callable[[InstanceT, Budget, np.random.Generator], Outcome]
@@ -159,6 +167,11 @@ class Comparison:
     reference : np.ndarray
         Per instance, the value a hit is scored against: the known optimum
         where one was given, else the best any method found.
+    outcomes : tuple[Outcome, ...]
+        Every cell's outcome, in method, instance, seed order --- the order
+        :func:`compare` builds its cells in. The rows above reduce over the
+        seeds, so what a cell carried in :attr:`Outcome.detail` is read here
+        (issue #856).
     """
 
     budget: Budget
@@ -166,6 +179,7 @@ class Comparison:
     best: np.ndarray
     spent: np.ndarray
     reference: np.ndarray
+    outcomes: tuple[Outcome, ...]
 
     def reached(
         self, tolerance: float = 1e-9, *, relative: bool = False
@@ -321,7 +335,7 @@ def compare(
     reference = (
         np.asarray(known, dtype=float) if known is not None else best.min(axis=0)
     )
-    return Comparison(budget, names, best, spent, reference)
+    return Comparison(budget, names, best, spent, reference, tuple(outcomes))
 
 
 def mcnemar(first: np.ndarray, second: np.ndarray) -> float:

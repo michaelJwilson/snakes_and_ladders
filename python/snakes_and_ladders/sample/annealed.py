@@ -47,6 +47,7 @@ import numpy as np
 
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.numerics import logsumexp
+from snakes_and_ladders.sample.accept import accept
 from snakes_and_ladders.sample.potts_mcmc import (
     PottsMove,
     _refuse_negative_coupling,
@@ -642,7 +643,7 @@ def simulated_tempering(
             log_ratio = (ladder[rung] - ladder[candidate]) * energy + (
                 g[candidate] - g[rung]
             )
-            if log_ratio >= 0.0 or rng.random() < math.exp(log_ratio):
+            if accept(log_ratio, rng):
                 accepted += 1
                 rung = candidate
         if step >= 0 and (step + 1) % thin == 0:

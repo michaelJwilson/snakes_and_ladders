@@ -176,3 +176,22 @@ Each: what is built, the oracle, the tier, and what the roadmap item it serves.
   enumerated optimum at `≤ 8` taxa; #317's zero-shot-against-transferred
   comparison (set model R² 0.68 to 0.94 at 5 to 6 taxa) as the precedent
   for the measurement. *Tier:* CI at `≤ 8` taxa; stress at 20.
+
+## 3. Candidates proposed 2026-09-20
+
+Ten, each with the referee that would decide it and the tier it runs at; four
+are filed (#823 to #826) and the rest wait on a ticket.
+
+| Candidate | What it buys | Referee | Tier | Ticket |
+| --- | --- | --- | --- | --- |
+| Simulated bifurcation for Potts ground states | A relaxation reaching the planted glass's ground state from 0.562 of seeds against descent's 0.079, on NumPy and torch | enumeration on the declared glass; `sim.potts.energy` on every labelling | ci, stress | #823, in review (#833) |
+| Sequential Monte Carlo over topologies | A population over trees with resampling, where a single tempered chain round-trips slowly | enumeration at 7 taxa; `round_trips` against the tempered ensemble | ci | #824 |
+| Residual belief propagation | An adaptive message order: 176 sweeps against 254 on the critical lattice, worse on the codes | the reference flooding; `strip_log_partition` | ci | #825, in review (#845) |
+| Polar codes as a problem row | 683 conserved lines promoted, then CRC-aided list decoding | the reference recursion; `exact_decoding` at `N = 16` | ci, stress | #826 |
+| Tensor-network contraction for lattice `log Z` | An exact-to-tolerance `log Z` on lattices past the strip's width, by boundary MPS with a stated bond dimension | `strip_log_partition` where it reaches; the bond-dimension sweep's convergence where it does not | stress | none |
+| Belief-propagation-guided decimation for the frustrated lattice | A ground-state route that fixes the surest spin and re-runs, against alpha-expansion and the max-cut SDP | enumeration on the planted glass; `minimum_frustrated_edges` on the triangular lattice | ci | none |
+| A learned temperature ladder | The rung placement `adapt_ladder` tunes by round trips, learned across instances of one family | `round_trips` and `up_fraction` at a matched sweep budget against the geometric and adapted ladders | stress | none |
+| Gumbel-top-k sampling of topologies | Sampling without replacement from a policy's scores, so a neighbourhood's top-`K` is drawn once rather than re-scored | the exact expectation from `enumerate_topologies` at 6 taxa | ci | none |
+| CRC-aided list decoding on the turbo code | The polar step's CRC, applied where a decoder already exists | `exact_decoding` on the caterpillar code; the turbo waterfall's committed error counts | ci, release | none |
+| Coloured Gibbs sweeps on the lattice | A two-colour update that vectorises every odd then every even site, the shape a GPU kernel wants, before any device is targeted | `sample_potts` single-site chains: same law by the goodness-of-fit test, same autocorrelation time | ci, stress | none |
+

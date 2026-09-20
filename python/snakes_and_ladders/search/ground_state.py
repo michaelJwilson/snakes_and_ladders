@@ -52,7 +52,7 @@ from __future__ import annotations
 import functools
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
@@ -62,7 +62,7 @@ from snakes_and_ladders.likelihood.message_passing import (
     MessageScheduleName,
     max_product,
 )
-from snakes_and_ladders.opt.budget import Budget, Outcome
+from snakes_and_ladders.opt.budget import Budget, Comparison, Outcome
 from snakes_and_ladders.sample.potts_mcmc import (
     ClusterCounter,
     PottsMove,
@@ -71,6 +71,7 @@ from snakes_and_ladders.sample.potts_mcmc import (
 )
 from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
 from snakes_and_ladders.search.alpha_expansion import (
+    SweepOrder,
     alpha_beta_swap,
     alpha_expansion,
     iterated_conditional_modes,
@@ -483,22 +484,27 @@ def run_gibbs_zero(rung: Rung, budget: Budget, rng: np.random.Generator) -> Meth
     two differ in the order sites are visited and in nothing else. Running
     both and reporting one axis is what keeps the comparison from counting
     the same method twice; the pair's spread *is* the sweep order's effect.
+
+    That is why this is :func:`run_icm`'s call under two parameters rather
+    than a second sweep written beside it (issue #858): a random order, and
+    every sweep of the budget run whether or not one changes nothing. The
+    compiled kernel walks in index order, so this is the Python sweep.
     """
     steps = max(1, budget.size // rung.visits_per_sweep)
     start = time.perf_counter()
-    labelling = rng.integers(0, rung.n_states, size=rung.n_nodes)
-    offsets, neighbour_index, edge_couplings = rung.graph.compressed_adjacency()
-    bounds = offsets.tolist()
-    neighbours, couplings = neighbour_index.tolist(), edge_couplings.tolist()
-    for _ in range(steps):
-        for node in rng.permutation(rung.n_nodes):
-            local = -rung.field[node].copy()
-            for position in range(bounds[node], bounds[node + 1]):
-                local[labelling[neighbours[position]]] -= couplings[position]
-            labelling[node] = int(np.argmin(local))
+    labelling, value = iterated_conditional_modes(
+        rung.graph,
+        rung.field,
+        rung.n_states,
+        rng,
+        max_sweeps=steps,
+        sweep_order=SweepOrder.RANDOM,
+        stop_when_clean=False,
+        backend=Backend.PYTHON,
+    )
     return MethodRun(
         labelling=labelling,
-        energy=energy(rung.graph, rung.field, labelling),
+        energy=value,
         spent=steps * rung.visits_per_sweep,
         seconds=time.perf_counter() - start,
     )
@@ -682,25 +688,44 @@ def outcome(run: MethodRun) -> Outcome:
     return Outcome(value=run.energy, spent=run.spent)
 
 
-#: Every run this process has made, in call order. :func:`~snakes_and_ladders.opt.budget.compare`
-#: returns an energy and a spend and nothing else, and the structural referee
-#: needs the *labelling*. Rather than run every method twice --- once for the
-#: energy and once for the structure --- an entry records its run here as it
-#: goes. It is a memo of work already done, not a second code path, and it is
-#: correct only at ``workers=1``, which is where the comparison is run and
-#: which `opt/budget.py` states is the default until a measurement says
-#: otherwise.
-_RUNS: list[tuple[str, str, MethodRun]] = []
+@dataclass(frozen=True)
+class MethodRecord:
+    """One entry's run, carried out of the comparison on its outcome.
+
+    :func:`~snakes_and_ladders.opt.budget.compare` scores an energy and a
+    spend, and the structural referee needs the *labelling*. Rather than run
+    every method twice --- once for the energy and once for the structure ---
+    an entry returns the run it already made, on
+    :attr:`~snakes_and_ladders.opt.budget.Outcome.detail`. A module-level list
+    held the same memo and was correct only at ``workers=1``, since a cell
+    past that runs in another process (issue #856).
+
+    Parameters
+    ----------
+    method : str
+        The entry's name, a key of :data:`METHODS`.
+    rung : str
+        The instance's name, :attr:`Rung.name`.
+    run : MethodRun
+        What the method returned, labelling included.
+    """
+
+    method: str
+    rung: str
+    run: MethodRun
 
 
-def recorded() -> tuple[tuple[str, str, MethodRun], ...]:
-    """Every run since :func:`forget`, as ``(method, rung, run)``."""
-    return tuple(_RUNS)
+def recorded(comparison: Comparison) -> tuple[MethodRecord, ...]:
+    """Every run ``comparison``'s cells made, in cell order.
 
-
-def forget() -> None:
-    """Drop the recorded runs, so one process can run two comparisons."""
-    _RUNS.clear()
+    A cell run by anything other than an :class:`Entry` carries no record and
+    is left out, so this is the entries' runs and not the comparison's cells.
+    """
+    return tuple(
+        cell.detail
+        for cell in comparison.outcomes
+        if isinstance(cell.detail, MethodRecord)
+    )
 
 
 @dataclass(frozen=True)
@@ -716,8 +741,7 @@ class Entry:
 
     def __call__(self, rung: Rung, budget: Budget, rng: np.random.Generator) -> Outcome:
         run = METHODS[self.name](rung, budget, rng)
-        _RUNS.append((self.name, rung.name, run))
-        return outcome(run)
+        return replace(outcome(run), detail=MethodRecord(self.name, rung.name, run))
 
 
 def entries() -> dict[str, Entry]:
