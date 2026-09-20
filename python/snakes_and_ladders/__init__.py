@@ -43,6 +43,7 @@ if TYPE_CHECKING:
     from snakes_and_ladders.sim.factor_graph import FactorGraph
     from snakes_and_ladders.sim.fixtures import fixture
     from snakes_and_ladders.sim.graph import PottsGraph
+    from snakes_and_ladders.sim.simulator import Simulator
 
 __all__ = [
     "Backend",
@@ -50,6 +51,7 @@ __all__ = [
     "FactorGraph",
     "Objective",
     "PottsGraph",
+    "Simulator",
     "fixture",
     "parallel",
 ]
@@ -61,6 +63,7 @@ _SURFACE: dict[str, tuple[str, str | None]] = {
     "FactorGraph": ("snakes_and_ladders.sim.factor_graph", "FactorGraph"),
     "Objective": ("snakes_and_ladders.opt.objective", "Objective"),
     "PottsGraph": ("snakes_and_ladders.sim.graph", "PottsGraph"),
+    "Simulator": ("snakes_and_ladders.sim.simulator", "Simulator"),
     "fixture": ("snakes_and_ladders.sim.fixtures", "fixture"),
     "parallel": ("snakes_and_ladders.parallel", None),
 }

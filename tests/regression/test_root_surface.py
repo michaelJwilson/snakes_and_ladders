@@ -19,6 +19,7 @@ from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.sim.factor_graph import FactorGraph
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import PottsGraph
+from snakes_and_ladders.sim.simulator import Simulator
 
 
 @pytest.mark.infra
@@ -30,6 +31,7 @@ def test_every_exported_name_is_the_object_its_module_declares() -> None:
         "FactorGraph": FactorGraph,
         "Objective": Objective,
         "PottsGraph": PottsGraph,
+        "Simulator": Simulator,
         "fixture": fixture,
         "parallel": parallel,
     }

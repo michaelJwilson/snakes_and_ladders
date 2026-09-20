@@ -297,13 +297,19 @@ class SimulatedHmmDataset:
         return _categorical(self.emissions).matrix.numpy()
 
 
-def simulate_sequences(params: HmmParams) -> SimulatedHmmDataset:
+def simulate_sequences(
+    params: HmmParams, rng: np.random.Generator | None = None
+) -> SimulatedHmmDataset:
     """Draw hidden state paths and observation sequences by ancestral sampling.
 
     Parameters
     ----------
     params : HmmParams
         The generating truth.
+    rng : np.random.Generator | None
+        Generator to draw from. ``None`` builds one from ``params.seed``,
+        which is the stream every fixture was drawn on; a caller drawing an
+        ensemble passes its own (issue #829).
 
     Returns
     -------
@@ -311,7 +317,7 @@ def simulate_sequences(params: HmmParams) -> SimulatedHmmDataset:
         The hidden paths, the emitted observations, and the generating
         truth.
     """
-    rng = np.random.default_rng(params.seed)
+    rng = np.random.default_rng(params.seed) if rng is None else rng
     # Segments of one length are drawn together, which is what keeps the draw
     # vectorized. Where every chain is the same length --- every fixture that
     # predates #666 --- there is one group, the calls below are the calls this
