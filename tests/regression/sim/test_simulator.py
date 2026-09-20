@@ -14,13 +14,13 @@ import inspect
 
 import numpy as np
 import pytest
-from snakes_and_ladders.opt.potts import simulate_chains
 from snakes_and_ladders.sim.emission_mixture import simulate_emission_mixture
 from snakes_and_ladders.sim.fixtures import LOADERS, fixture
 from snakes_and_ladders.sim.graph import lattice_graph
 from snakes_and_ladders.sim.hmm import simulate_sequences
 from snakes_and_ladders.sim.mixture import simulate_mixture
 from snakes_and_ladders.sim.potts import simulate_potts
+from snakes_and_ladders.sim.potts_chain import simulate_chains
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.simulator import NOT_SIMULATED, SIMULATORS, Simulator
 from snakes_and_ladders.sim.spatio_sequential import simulate_spatio_sequential

@@ -41,9 +41,9 @@ from snakes_and_ladders.sim.simulate import SimulatedDataset, simulate_alignment
 from snakes_and_ladders.sim.spatio_sequential import simulate_spatio_sequential
 
 if TYPE_CHECKING:
-    from snakes_and_ladders.opt.potts import PottsParams
     from snakes_and_ladders.sim.params import SimulationParams
     from snakes_and_ladders.sim.potts import PottsLatticeParams, SpatioOnlyParams
+    from snakes_and_ladders.sim.potts_chain import PottsParams
 
 P_contra = TypeVar("P_contra", contravariant=True)
 D_co = TypeVar("D_co", covariant=True)
