@@ -147,6 +147,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.likelihood.pruning
    :members:
 
+.. automodule:: snakes_and_ladders.likelihood.pruning_common
+   :members:
+
 .. automodule:: snakes_and_ladders.likelihood.pruning_torch
    :members:
 

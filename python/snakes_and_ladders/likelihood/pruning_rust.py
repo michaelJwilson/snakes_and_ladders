@@ -32,9 +32,9 @@ over the pattern table. The alternative, a weights argument in ``src/``, is
 one call rather than a few and is what a later change should do.
 
 Nodes cross the boundary in post-order (children before parents, root
-last): ``snakes_and_ladders.sim.tree`` has no ``postorder`` helper, so this module builds
-one locally rather than adding one there for a single caller. Validated to
-machine precision against the NumPy oracle
+last), by ``snakes_and_ladders.likelihood.pruning_common.postorder``, which
+the differentiable routes walk with too (issue #858); the NumPy oracle keeps
+its own recursion. Validated to machine precision against the NumPy oracle
 (``tests/regression/test_pruning_rust.py``), per ``likelihood/CLAUDE.md``'s
 statement of the Rust-backend tolerance.
 """
@@ -45,31 +45,13 @@ import numpy as np
 
 from snakes_and_ladders import oxi_snakes_and_ladders
 from snakes_and_ladders.likelihood.patterns import check_weights
+from snakes_and_ladders.likelihood.pruning_common import (
+    check_alignment_covers,
+    check_pi_shape,
+    postorder,
+    require_branch_length,
+)
 from snakes_and_ladders.sim.tree import Node
-
-
-def _postorder(root: Node) -> list[Node]:
-    """Every node in the tree rooted at ``root``, children before parents.
-
-    Parameters
-    ----------
-    root : Node
-        Root of the tree to walk.
-
-    Returns
-    -------
-    list[Node]
-        Nodes in post-order; ``root`` is always last.
-    """
-    order: list[Node] = []
-
-    def _walk(node: Node) -> None:
-        for child in node.children:
-            _walk(child)
-        order.append(node)
-
-    _walk(root)
-    return order
 
 
 def log_likelihood(
@@ -122,16 +104,11 @@ def log_likelihood(
         leaf of ``tau``, the alignment is ragged, ``weights`` does not have
         one entry per column, or a non-root node has no ``branch_length``.
     """
-    if pi.shape != (k,):
-        msg = f"pi has shape {pi.shape}, expected ({k},)"
-        raise ValueError(msg)
+    check_pi_shape(pi.shape, k)
 
-    order = _postorder(tau)
+    order = postorder(tau)
     leaves = [node for node in order if node.is_leaf]
-    missing = [leaf.name for leaf in leaves if leaf.name not in alignment]
-    if missing:
-        msg = f"alignment is missing leaf(ves) {missing}"
-        raise ValueError(msg)
+    check_alignment_covers((leaf.name for leaf in leaves), alignment)
 
     index = {id(node): position for position, node in enumerate(order)}
     n_nodes = len(order)
@@ -151,10 +128,7 @@ def log_likelihood(
     for position, node in enumerate(order):
         is_root = position == n_nodes - 1
         if not is_root:
-            if node.branch_length is None:
-                msg = f"non-root node {node.name!r} has no branch_length"
-                raise ValueError(msg)
-            branch_length[position] = float(node.branch_length)
+            branch_length[position] = require_branch_length(node)
 
         children.append([index[id(child)] for child in node.children])
 

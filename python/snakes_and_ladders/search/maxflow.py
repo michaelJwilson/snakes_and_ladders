@@ -358,6 +358,33 @@ def _augment(
     return 0.0
 
 
+def check_non_negative_couplings(graph: PottsGraph, reason: str) -> None:
+    """Refuse a negative coupling, saying which construction the sign holds up.
+
+    Three constructions rest on non-negativity for three reasons --- the
+    expansion's metric bound, the swap's submodular sub-problem, this
+    module's submodular energy --- and each stated it in its own copy of the
+    refusal (issue #858). The reason is the caller's; the refusal and the
+    number in it are not.
+
+    Parameters
+    ----------
+    graph : PottsGraph
+        The graph whose couplings are read.
+    reason : str
+        What non-negativity buys the caller, which follows the colon.
+
+    Raises
+    ------
+    ValueError
+        If any coupling is negative, naming the smallest.
+    """
+    couplings = graph.edge_coupling
+    if couplings.size and couplings.min() < 0.0:
+        msg = f"every coupling must be non-negative, got {couplings.min()}: {reason}"
+        raise ValueError(msg)
+
+
 def ising_ground_state(
     graph: PottsGraph, field_values: np.ndarray, *, backend: Backend = Backend.PYTHON
 ) -> tuple[np.ndarray, float]:
@@ -419,14 +446,11 @@ def ising_ground_state(
     values = site_field(
         np.asarray(field_values, dtype=float), graph.n_nodes, n_states=2
     )
-    couplings = graph.edge_coupling
-    if couplings.size and couplings.min() < 0.0:
-        msg = (
-            f"every coupling must be non-negative, got {couplings.min()}: a "
-            "negative coupling makes the energy non-submodular, the ground "
-            "state NP-hard, and this construction inapplicable rather than slow"
-        )
-        raise ValueError(msg)
+    check_non_negative_couplings(
+        graph,
+        "a negative coupling makes the energy non-submodular, the ground "
+        "state NP-hard, and this construction inapplicable rather than slow",
+    )
 
     source, sink = graph.n_nodes, graph.n_nodes + 1
     network = FlowNetwork(n_nodes=graph.n_nodes + 2)
