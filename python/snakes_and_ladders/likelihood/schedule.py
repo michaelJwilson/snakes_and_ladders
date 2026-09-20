@@ -532,10 +532,10 @@ class MessageSchedule(ABC):
     def adaptive(self) -> bool:
         """Whether :meth:`steps` chooses its next send from the last send's residual.
 
-        False for a fixed order. True means the runner ``send``s each applied
-        step's residual back into the generator, which is how an adaptive
-        schedule sees the graph move without the runner naming it (issue
-        #825).
+        False for a fixed order. True means the runner passes each applied
+        step's residual back into the generator through ``send``, which is
+        how an adaptive schedule sees the graph move without the runner naming
+        it (issue #825).
         """
         return False
 
