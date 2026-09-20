@@ -69,6 +69,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sim.simulate
    :members:
 
+.. automodule:: snakes_and_ladders.sim.simulator
+   :members:
+
 .. automodule:: snakes_and_ladders.sim.graph
    :members:
 
