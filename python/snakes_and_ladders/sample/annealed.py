@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import itertools
 import math
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
@@ -55,6 +56,7 @@ from snakes_and_ladders.sample.potts_mcmc import (
 from snakes_and_ladders.sample.schedule import ExponentialTempSchedule, temperatures
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import site_field
+from snakes_and_ladders.track import TrackedOptimization, current
 
 
 class Resampling(StrEnum):
@@ -310,13 +312,34 @@ def annealed_importance_sampling(
 
     log_w = np.zeros(n_replicas)
     rung_log_z = [log_zero]
+    # One lookup, one record per rung (`snakes_and_ladders.track`, issue
+    # #799): the estimate, its error and its effective sample size read from
+    # the weights at that rung by the closing formulas below, so the last
+    # entry is the result's own number bitwise. Assembled only when a run
+    # listens, since the reductions are the cost of the estimate itself.
+    tracked: TrackedOptimization = current()
+    started = time.perf_counter()
     for rung in range(1, len(ladder)):
         log_w = log_w - (ladder[rung] - ladder[rung - 1]) * energies(
             graph, rows, states
         )
         rung_log_z.append(log_zero + float(logsumexp(log_w, axis=0) - log_n))
+        if not tracked.is_null:
+            so_far = logsumexp(log_w, axis=0)
+            relative_so_far = math.expm1(
+                float(log_n + logsumexp(2.0 * log_w, axis=0) - 2.0 * so_far)
+            )
+            tracked.record(
+                rung,
+                state=states[0],
+                log_z=rung_log_z[-1],
+                log_z_stderr=math.sqrt(max(relative_so_far, 0.0) / n_replicas),
+                ess=n_replicas / (relative_so_far + 1.0),
+                wall_s=time.perf_counter() - started,
+            )
         for replica in range(n_replicas):
             advance(states[replica], children[replica], ladder[rung])
+    tracked.record_cost(max(len(ladder) - 1, 0), states.nbytes)
 
     total = logsumexp(log_w, axis=0)
     square = logsumexp(2.0 * log_w, axis=0)
@@ -408,6 +431,10 @@ def population_annealing(
     log_z = log_zero
     rung_log_z = [log_zero]
     variance = 0.0
+    # As in `annealed_importance_sampling`: one record per rung, the running
+    # estimate, error and effective size by the closing formulas (issue #799).
+    tracked: TrackedOptimization = current()
+    started = time.perf_counter()
     for rung in range(1, len(ladder)):
         log_weights = log_weights - (ladder[rung] - ladder[rung - 1]) * energies(
             graph, rows, states
@@ -419,6 +446,16 @@ def population_annealing(
         variance += (
             math.expm1(float(log_n + logsumexp(2.0 * log_weights, axis=0))) / n_replicas
         )
+        if not tracked.is_null:
+            stderr_so_far = math.sqrt(max(variance, 0.0))
+            tracked.record(
+                rung,
+                state=states[0],
+                log_z=log_z,
+                log_z_stderr=stderr_so_far,
+                ess=1.0 / (stderr_so_far**2 + 1.0 / n_replicas),
+                wall_s=time.perf_counter() - started,
+            )
         if resample is not Resampling.NONE:
             kept = _resampled(np.exp(log_weights), rng, resample)
             states = np.ascontiguousarray(states[kept])
@@ -427,6 +464,7 @@ def population_annealing(
         for replica in range(n_replicas):
             advance(states[replica], children[replica], ladder[rung])
 
+    tracked.record_cost(max(len(ladder) - 1, 0), states.nbytes)
     stderr = math.sqrt(max(variance, 0.0))
     return LogPartition(
         log_z=log_z,
@@ -581,6 +619,11 @@ def simulated_tempering(
     proposed = 0
     recorded_rungs = np.empty(n_sweeps, dtype=np.int64)
     recorded_states = np.empty((n_sweeps, graph.n_nodes), dtype=np.int64)
+    # One record per recorded sweep: the rung the walker is at, the rung-move
+    # acceptance so far and the sweep rate; the occupation per rung once, at
+    # the end, under the rung's context (issue #799).
+    tracked: TrackedOptimization = current()
+    started = time.perf_counter()
     for step in range(-burn_in * thin, n_sweeps * thin):
         advance(state, child, ladder[rung])
         candidate = rung + (1 if rng.random() < 0.5 else -1)
@@ -596,7 +639,22 @@ def simulated_tempering(
         if step >= 0 and (step + 1) % thin == 0:
             recorded_rungs[step // thin] = rung
             recorded_states[step // thin] = state
+            wall = time.perf_counter() - started
+            tracked.record(
+                step // thin,
+                state=state,
+                rung=float(rung),
+                acceptance=accepted / proposed,
+                sweeps_per_second=(step + burn_in * thin + 1) / wall if wall else 0.0,
+                wall_s=wall,
+            )
     occupation = np.bincount(recorded_rungs, minlength=len(ladder)) / n_sweeps
+    if not tracked.is_null:
+        for index, fraction in enumerate(occupation):
+            tracked.record(
+                n_sweeps - 1, context={"rung": index}, occupation=float(fraction)
+            )
+    tracked.record_cost(n_sweeps - 1, recorded_states.nbytes)
     return SimulatedTempered(
         betas=ladder,
         weights=g,

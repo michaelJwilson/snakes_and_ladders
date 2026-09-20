@@ -55,7 +55,14 @@ from snakes_and_ladders.opt.mixture import (
 from snakes_and_ladders.opt.testfunctions import Himmelblau, Rastrigin, Rosenbrock
 from snakes_and_ladders.parallel import map_tasks
 from snakes_and_ladders.qa.figure import write_qa_figure
-from snakes_and_ladders.sample import hmc, potts_mcmc
+from snakes_and_ladders.sample import (
+    annealed,
+    hmc,
+    langevin,
+    potts_mcmc,
+    slice,
+    tempered,
+)
 from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
 from snakes_and_ladders.sim.elementary_codes import hamming_code
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
@@ -579,3 +586,199 @@ def test_an_aim_run_reads_back_what_the_memory_run_recorded(tmp_path: Path) -> N
         assert sorted(sequence.values.values_list()) == sorted(recorded)
         assert sequence.first_step() == 0
         assert sequence.last_step() == len(recorded) - 1
+
+
+# --- The five loops #799 named, and the five metrics nothing recorded -------
+
+#: A three-rung ladder from the uniform law, as the annealed estimators need.
+BETAS = (0.0, 0.5, 1.0)
+
+
+def _slice() -> slice.SliceChain:
+    return slice.slice_sample(
+        _objective(),
+        torch.Generator().manual_seed(SEED),
+        N_SAMPLES,
+        width=1.0,
+        max_steps_out=8,
+        burn_in=BURN_IN,
+    )
+
+
+def _mala() -> langevin.LangevinChain:
+    return langevin.mala(
+        _objective(),
+        torch.Generator().manual_seed(SEED),
+        N_SAMPLES,
+        step_size=STEP_SIZE,
+        burn_in=BURN_IN,
+    )
+
+
+def _ais() -> annealed.LogPartition:
+    return annealed.annealed_importance_sampling(
+        _graph(), FIELD, BETAS, np.random.default_rng(SEED), 16, backend=Backend.PYTHON
+    )
+
+
+def _population() -> annealed.LogPartition:
+    return annealed.population_annealing(
+        _graph(), FIELD, BETAS, np.random.default_rng(SEED), 16, backend=Backend.PYTHON
+    )
+
+
+def _simulated_tempering() -> annealed.SimulatedTempered:
+    return annealed.simulated_tempering(
+        _graph(),
+        FIELD,
+        (0.5, 1.0, 2.0),
+        np.zeros(3),
+        np.random.default_rng(SEED),
+        SWEEPS,
+        backend=Backend.PYTHON,
+    )
+
+
+def _ensemble() -> tempered.TemperedEnsemble:
+    return tempered.tempered_potts_pair(
+        _graph(),
+        FIELD,
+        TEMPERATURES,
+        np.random.default_rng(SEED),
+        SWEEPS,
+        backend=Backend.PYTHON,
+    )
+
+
+@pytest.mark.patch
+@pytest.mark.smoke
+def test_the_null_run_leaves_the_five_loops_bitwise_what_they_were() -> None:
+    outside = (
+        _slice(),
+        _mala(),
+        _ais(),
+        _population(),
+        _simulated_tempering(),
+        _ensemble(),
+    )
+    with track(NULL_RUN):
+        inside = (
+            _slice(),
+            _mala(),
+            _ais(),
+            _population(),
+            _simulated_tempering(),
+            _ensemble(),
+        )
+    assert torch.equal(inside[0].theta, outside[0].theta)
+    assert inside[0].objective_evaluations == outside[0].objective_evaluations
+    assert torch.equal(inside[1].theta, outside[1].theta)
+    for one, other in ((inside[2], outside[2]), (inside[3], outside[3])):
+        assert one.log_z == other.log_z
+        assert one.stderr == other.stderr
+        assert np.array_equal(one.rung_log_z, other.rung_log_z)
+    assert np.array_equal(inside[4].states, outside[4].states)
+    assert inside[4].acceptance == outside[4].acceptance
+    assert np.array_equal(inside[5].walkers, outside[5].walkers)
+    assert np.array_equal(inside[5].log_densities, outside[5].log_densities)
+
+
+@pytest.mark.smoke
+def test_the_slice_and_langevin_chains_record_the_unit_each_is_counted_in() -> None:
+    with track() as tracked:
+        sliced = _slice()
+    run = _memory(tracked.run)
+    assert len(run.series("objective_evaluations")) == N_SAMPLES
+    assert run.last("objective_evaluations") == float(sliced.objective_evaluations)
+    assert run.last("state_bytes") == float(sliced.theta.nbytes)
+    with track() as tracked:
+        chain = _mala()
+    run = _memory(tracked.run)
+    # `mala` runs `hmc._run_chain`, so the hook is the chain's and the unit is
+    # gradients, one per proposal.
+    assert run.last("acceptance_so_far") == chain.acceptance_rate
+    assert run.last("force_evaluations") == float(chain.force_evaluations)
+    assert len(run.series("energy_error")) == N_SAMPLES
+
+
+@pytest.mark.smoke
+def test_the_annealed_estimators_record_log_z_its_error_and_its_ess_per_rung() -> None:
+    for estimator in (_ais, _population):
+        with track() as tracked:
+            estimate = estimator()
+        run = _memory(tracked.run)
+        assert [step for step, _ in run.series("log_z")] == [1, 2]
+        assert run.last("log_z") == estimate.log_z
+        assert run.last("log_z_stderr") == estimate.stderr
+        assert run.last("ess") == estimate.ess
+        assert [value for _, value in run.series("log_z")] == list(
+            estimate.rung_log_z[1:]
+        )
+        assert run.last("state_bytes") > 0.0
+
+
+@pytest.mark.smoke
+def test_simulated_tempering_records_the_rung_the_acceptance_and_the_occupation() -> (
+    None
+):
+    with track() as tracked:
+        walker = _simulated_tempering()
+    run = _memory(tracked.run)
+    assert [value for _, value in run.series("rung")] == [
+        float(r) for r in walker.rungs
+    ]
+    assert run.last("acceptance") == walker.acceptance
+    assert run.last("sweeps_per_second") > 0.0
+    for index, fraction in enumerate(walker.occupation):
+        assert run.series("occupation", context={"rung": index}) == [
+            (SWEEPS - 1, float(fraction))
+        ]
+    assert run.last("state_bytes") == float(walker.states.nbytes)
+
+
+@pytest.mark.smoke
+def test_the_ensemble_records_the_round_trips_its_walkers_carry() -> None:
+    with track() as tracked:
+        ensemble = _ensemble()
+    run = _memory(tracked.run)
+    assert run.last("round_trips") == float(
+        tempered.round_trips(ensemble.walkers).sum()
+    )
+    assert run.last("up_fraction") == float(
+        np.nanmean(tempered.up_fraction(ensemble.walkers))
+    )
+    assert len(run.series("sweeps_per_second")) == SWEEPS
+    assert run.last("state_bytes") == float(
+        ensemble.walkers.nbytes + ensemble.log_densities.nbytes
+    )
+
+
+@pytest.mark.smoke
+def test_every_loop_records_what_it_cost_the_machine() -> None:
+    # #799: `record_cost` was on three hooks of nine; the fit, the HMC annealer
+    # and its tempering gain it, so every loop ends with its bytes beside its
+    # last number.
+    with track() as tracked:
+        result = fit(_objective(), torch.tensor([2.0, -3.0], dtype=torch.float64))
+    assert _memory(tracked.run).last("state_bytes") == float(result.theta.nbytes)
+    with track() as tracked:
+        annealed_hmc = hmc.anneal(
+            _objective(),
+            ExponentialTempSchedule(start=2.0, end=0.1, n_steps=SWEEPS),
+            torch.Generator().manual_seed(SEED),
+            step_size=STEP_SIZE,
+            n_steps=3,
+        )
+    assert _memory(tracked.run).last("state_bytes") == float(annealed_hmc.theta.nbytes)
+    with track() as tracked:
+        tempered_hmc = hmc.parallel_tempering(
+            _objective(),
+            TEMPERATURES,
+            torch.Generator().manual_seed(SEED),
+            SWEEPS,
+            step_size=STEP_SIZE,
+            n_steps=3,
+        )
+    assert _memory(tracked.run).last("state_bytes") == float(
+        tempered_hmc.positions.nbytes
+    )

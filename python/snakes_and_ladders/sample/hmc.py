@@ -782,6 +782,7 @@ def anneal(
         if value < best_value:
             best, best_value = position.clone(), value
         tracked.record(step, state=best, temperature=temperature, energy=best_value)
+    tracked.record_cost(max(schedule.n_steps - 1, 0), best.nbytes)
     return Annealed(
         theta=best,
         value=best_value,
@@ -975,6 +976,7 @@ def parallel_tempering(
             swap_acceptance=float(swapped.mean()) / (round_index + 1),
             energy=best_value,
         )
+    tracked.record_cost(max(n_rounds - 1, 0), recorded.nbytes)
 
     return Tempered(
         theta=best,

@@ -3420,7 +3420,28 @@ states and the Rust sweep over 2,000 sweeps, reads **0.7068 s** against
 the ticket's 1% bar, and both differences are smaller than the spread of
 either variant, which is what the direct timing predicts: 0.35 ms is 0.006%
 of the chain and 0.50 ms is 0.07% of the anneal. Measured 2026-09-19 on the
-4-core host at a 1-minute load of 0.04 rising to 0.97. **Aim is the store #75 asked
+4-core host at a 1-minute load of 0.04 rising to 0.97. **The tracker reaches every loop, and the five metrics nothing recorded are
+recorded** ([#799](https://github.com/michaelJwilson/snakes_and_ladders/issues/799)).
+`slice_sample` records its objective evaluations per draw, the unit it is
+counted in; `annealed_importance_sampling` and `population_annealing` record
+`log Z`, its standard error and its effective sample size per rung by the
+closing formulas, so the last entry is the result's bitwise; `simulated_tempering`
+records the rung, the acceptance, the sweep rate and, once, the occupation per
+rung under the rung's context; the two tempered ensembles record the round
+trips and the up fraction read from the trace so far, and the sweep rate;
+`mala` was recorded already through `hmc._run_chain`. `record_cost` reaches
+`fit`, `hmc.anneal`, `hmc.parallel_tempering` and both ensembles. The
+per-rung reductions and the per-sweep round-trip read are assembled behind
+`is_null`, so the null path pays one returned call: on the 12x12 lattice
+(64 replicas over 12 rungs, 300 tempering sweeps, a 100-sweep pair ensemble)
+and 2,000 slice draws, two alternating reads of the minimum of three runs
+read 1.003x and 0.97x for AIS, 1.012x and 0.97x for population annealing,
+1.003x and 0.94x for tempering, 0.98x and 1.00x for slice sampling and 0.99x
+and 0.98x for the pair ensemble, each inside its own spread. Twenty-six tests
+in `tests/regression/test_track.py` pin the six loops bitwise on the null run
+and every new series' last value against the result's field.
+
+**Aim is the store #75 asked
 for, and it is the optional `track` extra**: nothing imports it at module
 scope --- `track.as_aim` imports it where it is called --- so no CI job
 installs it and the audit job, which syncs `dev`, stays clean. What the
