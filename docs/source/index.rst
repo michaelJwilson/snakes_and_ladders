@@ -402,12 +402,6 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.search.maxflow_rust
    :members:
 
-.. automodule:: snakes_and_ladders.search.rl
-
-.. automodule:: snakes_and_ladders.search.gym
-
-.. automodule:: snakes_and_ladders.search.surrogate
-
 .. automodule:: snakes_and_ladders.learn.ranking
    :members:
 

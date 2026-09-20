@@ -18,7 +18,7 @@ body:
     id: duplicates
     attributes:
       label: What is defined more than once
-      description: Measured by `infra/duplication_survey.py` or `grep` over `python/`, with the tree named.
+      description: Measured by `grep` over `python/`, with the tree and the command named.
       value: |
         | what | count | where | proposal |
         | --- | ---: | --- | --- |
@@ -43,7 +43,7 @@ body:
     id: counts
     attributes:
       label: Counts before and after
-      description: Flat modules, API-map entries (`infra/api_map.py`) and the survey's rows, and the `test_duplication_guards.py` pin that holds the new count so the next duplicate fails a test rather than an audit.
+      description: Flat modules and API-map entries (`infra/api_map.py`), and the guard in `test_duplication_guards.py` that refuses the next copy so it fails a test rather than an audit.
     validations:
       required: true
   - type: textarea

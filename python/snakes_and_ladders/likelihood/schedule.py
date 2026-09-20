@@ -444,11 +444,12 @@ class MessageSchedule(ABC):
     Under the seam rule: one module names this base, and five call through it
     by :class:`MessageScheduleName` --- which is the convenience the enum
     exists to be, and the reason the consumer count `infra/gate_new_seams.py`
-    reads is 1 while `tests/regression/test_duplication_guards.py` pins five
-    schedules, one base and five modules reaching it. The rule counts a
-    module naming the base; a seam reached through a registry is counted by
-    neither that nor the import graph, and #813's audit records the gap
-    rather than the base pretending to a consumer it does not have.
+    reads is 1 while `tests/regression/test_duplication_guards.py` asserts
+    that every schedule is written under this base and no consumer branches
+    on its name. The rule counts a module naming the base; a seam reached
+    through a registry is counted by neither that nor the import graph, and
+    #813's review records the gap rather than the base pretending to a
+    consumer it does not have.
     """
 
     #: The name :func:`resolve` registers it under.

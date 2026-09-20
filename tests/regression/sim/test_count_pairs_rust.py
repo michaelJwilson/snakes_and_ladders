@@ -24,6 +24,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import yaml
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.emissions import PoissonEmission
 from snakes_and_ladders.sim.count_pairs import (
     SUCCESSES,
@@ -93,6 +94,22 @@ def test_the_rust_simulator_draws_what_the_numpy_one_draws() -> None:
         np.testing.assert_allclose(
             actual[..., 1], expected[..., 1], rtol=DISPERSION_TOLERANCE
         )
+
+
+@pytest.mark.backend
+def test_the_backend_seam_reaches_the_rust_draw_bitwise() -> None:
+    # `simulate_count_pairs(..., backend=Backend.RUST)` is the one way a caller
+    # names the kernel (#813); it must hand back the twin's own draw and not a
+    # third one, so the comparison is equality and not a moment.
+    declared = fixture(PROBLEM, "ci").params
+    through_seam = simulate_numpy(declared, backend=Backend.RUST)
+    twin = simulate_rust(declared)
+
+    np.testing.assert_array_equal(through_seam.observations, twin.observations)
+    np.testing.assert_array_equal(through_seam.labels, twin.labels)
+    np.testing.assert_array_equal(through_seam.states, twin.states)
+    with pytest.raises(ValueError, match="runs on"):
+        simulate_numpy(declared, backend=Backend.NUMBA)
 
 
 @pytest.mark.end2end

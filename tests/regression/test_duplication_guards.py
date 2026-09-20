@@ -1,5 +1,14 @@
 """The duplications issues #230, #413 and #277 closed, asserted rather than remembered.
 
+What this module holds is a guard per seam: a copy of a routine, a value or a
+store that the tree once carried several times is refused the next time it is
+written. What it no longer holds is a survey. The pinned row counts of #717 and
+the pinned cluster sizes of #755 read the tree through `infra/duplication_survey.py`
+and `infra/appraise_structures.py`, and #813 retired both: an overlap audit is
+a reading of the code, recorded in a dated review with the command that
+reproduces each number, not a script whose pins move with every edit to the
+file that holds them.
+
 A consolidation that nothing enforces is a consolidation with a half-life.
 Each of the three below was written between four and twelve times before it
 had one home, and each grew *after* the survey that counted it was filed:
@@ -41,7 +50,6 @@ from __future__ import annotations
 
 import ast
 import re
-import sys
 from pathlib import Path
 
 import pytest
@@ -53,105 +61,6 @@ from snakes_and_ladders.likelihood.schedule import (
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = REPO_ROOT / "python" / "snakes_and_ladders"
-sys.path.insert(0, str(REPO_ROOT / "infra"))
-
-import appraise_structures  # noqa: E402
-import duplication_survey  # noqa: E402
-
-#: Issue #717's rows, pinned at the count on the day each was first measured
-#: (2026-09-18, `main` at a5b6fa4) so nothing grows while the eight pull
-#: requests land; the pull request that lowers a row lowers its pin. Two of
-#: the ticket's numbers were impressions this query corrected: it named 14
-#: modules without a docstring and there is one (`scripts/__init__.py`), and
-#: nine compiled twins where eight sit beside an oracle.
-SLIMMING_BASELINE = {
-    "Potts energies of a labelling": 1,
-    "site-field broadcasts": 0,
-    # `anneal\w*` catches a name and not a duplicate: #756's
-    # `sample.annealed.annealed_importance_sampling` is an estimator of
-    # `log Z`, not a fourth annealing optimizer, and the row moves with the
-    # spelling Neal gave it.
-    "annealers": 4,
-    "ground-state run_ wrappers": 7,
-    "backend enums": 1,
-    "Python paths above a compiled kernel": 8,
-    "surrogate modules": 4,
-    "modules without a docstring": 0,
-    "root exports": 7,
-    "test modules pinning a twin to its oracle beyond the first": 13,
-    # Both rows count the tree rather than a duplicate, so they move when a
-    # module lands: `sample.balanced`, the one proposal kernel the Potts
-    # lattice and the factor graph share, took them from 148 and 1,576
-    # (#756). The second moves on a public name too, and #756's cluster moves
-    # for a frustrated lattice added twelve without adding a module; issue
-    # #755's seam is one public callable, so the row rises by one more. A row
-    # that rises states why here or it is a duplicate. #756's
-    # `sample.annealed` added both, a module and fourteen names. #754's BCJR
-    # pass in Rust added one module, `likelihood/convolutional_rust.py`, and
-    # one public name. #756's two samplers --- `sample.langevin` and `sample.slice`,
-    # one module each, which is the package's shape for a sampler --- added
-    # two and eight. #754's tree schedule in Rust added one module,
-    # `likelihood/message_passing_rust.py`, and three public names; #775's squaring adds three names and no module.
-    # Issue #779's three deprecation shims are three modules while they
-    # stand, so the first row falls by three at the release after 0.3.0 that
-    # removes them. Issue #777's eleven modules moved into `sample/`, which
-    # moves neither row: the same modules and the same public names, under
-    # another directory.
-    "flat modules": 158,
-    "API-map entries": 1659,
-    # Issue #813 reads its target against these three, and they are the
-    # survey's convention rather than a shell's: the sandbox is excluded,
-    # as it is from every row here, and the test rows count
-    # `tests/regression/test_*.py` -- not the benchmarks, which are a
-    # separate invocation, and not the helpers a test imports. A row that
-    # falls is a fold that landed; a row that rises states why here. The
-    # test-lines row excludes this module: a count including its own pin
-    # moves every time the pin is edited, and the first two readings taken
-    # while writing these rows disagreed by exactly the comment that
-    # explained them. #813's PR 2 moved all three: one test module for the
-    # seam survey, and nine package lines stating why `MessageSchedule`
-    # stands at one named consumer. Its test-lines figure was 57,035, read
-    # on a branch that had left `main` before #810, #811 and #812 landed
-    # there; the row is 53 higher here because it is read on the merged
-    # tree, one of those lines being the raise this pull request splits in
-    # two for `ruff`. A pin read off a stale branch is a pin for a tree
-    # nobody has.
-    "package lines": 51525,
-    "test modules": 252,
-    "test lines": 57088,
-}
-
-#: Issue #755's audit, pinned at the count it was taken on (2026-09-19, this
-#: tree): every cluster `infra/appraise_structures.py` reports at three or
-#: more members, and how many members each holds. A cluster that grows is a
-#: near-duplicate added, and a cluster that appears is a shape nobody
-#: decided --- the audit's outcome per row is in `docs/reviews/2026-09-19.md`
-#: and a row that moves without that file moving is the audit going stale.
-#: The consuming-reference counts are deliberately absent: they move with
-#: every unrelated mention of a name, so pinning them would fail for reasons
-#: that are not duplication.
-CLUSTER_BASELINE = {
-    "fields:name": 7,
-    # The cluster issue #778 added: `HmmMetrics`, `MixtureMetrics` and
-    # `TestFunctionMetrics` carry an objective and the series names, because a
-    # metrics set over `theta` is defined by the objective it reads. What each
-    # computes is its problem's, so folding the three would put three problems
-    # in one class. Decided in `docs/reviews/2026-09-19.md`.
-    "fields:names,objective": 3,
-    "prefix:Exact": 5,
-    "role:incidence": 15,
-    "suffix:Dataset": 5,
-    "suffix:Decoding": 7,
-    "suffix:Fit": 6,
-    "suffix:Params": 17,
-    "suffix:Result": 6,
-}
-
-#: State-carrying classes over the whole package, the number the clusters are
-#: drawn from.
-#: Re-pinned on the merge with `main` 929b998 (2026-09-19): 263, main's 257
-#: plus the six `Metrics` sets issue #778 declares, one per problem class.
-STRUCTURE_BASELINE = 263
 
 #: `enumeration.argmax` outside its own module. Issue #755 folded the three
 #: `learn` oracles that enumerated, scored and took the first maximizer onto
@@ -239,8 +148,7 @@ SEAM_CONSUMERS = 12
 
 #: Files this guard does not read, each against the reason, rather than an
 #: allow-list nobody can audit. The first two are measurements the
-#: 2026-09-19 review records and `infra/appraise_structures.py` prints in
-#: `MEASURED`; the third is what this guard found on `main`.
+#: 2026-09-19 review records; the third is what this guard found on `main`.
 EXCLUDED: dict[str, str] = {
     "ragged.py": (
         "offsets rebuilt per call kept: the Python scan is 39.3 us against "
@@ -716,79 +624,6 @@ def test_each_guard_fails_on_violating_source() -> None:
     assert _builds_through_the_seam(builds) is False
 
 
-@pytest.mark.critical
-@pytest.mark.infra
-def test_the_slimming_rows_hold_at_their_baseline() -> None:
-    # Issue #717 is measured by these rows before and after each of its
-    # pull requests. A row above its pin is a new duplicate; a row below it
-    # is a pull request that landed and did not lower the pin.
-    rows = {finding.name: finding for finding in duplication_survey.FINDINGS}
-    realized = {name: rows[name].now() for name in SLIMMING_BASELINE}
-
-    assert realized == SLIMMING_BASELINE
-
-
-@pytest.mark.critical
-@pytest.mark.infra
-def test_each_slimming_query_counts_a_violating_tree(tmp_path: Path) -> None:
-    # The file-and-import queries exercised on a tree built to trip each:
-    # a twin beside its oracle, a module without a docstring, a root that
-    # exports one name, and two test modules that both pin the twin.
-    package = tmp_path / "pkg"
-    package.mkdir()
-    (package / "__init__.py").write_text('"""Root."""\n\n__all__ = ["one"]\n')
-    (package / "kernel.py").write_text('"""The oracle."""\n')
-    (package / "kernel_rust.py").write_text("import numpy\n")
-    (package / "surrogate.py").write_text('"""A surrogate."""\n')
-    (package / "sandbox").mkdir()
-    (package / "sandbox" / "declined_rust.py").write_text("x = 1\n")
-    tests = tmp_path / "tests"
-    tests.mkdir()
-    for name in ("test_a.py", "test_b.py"):
-        (tests / name).write_text(
-            "from pkg import kernel\nfrom pkg.kernel_rust import run\n"
-        )
-    (tests / "test_c.py").write_text("from pkg import kernel\n")
-
-    assert duplication_survey.flat_modules(package) == 3
-    assert duplication_survey.twin_modules(package) == 1
-    assert duplication_survey.surrogate_modules(package) == 1
-    assert duplication_survey.undocumented_modules(package) == 1
-    assert duplication_survey.root_exports(package) == 1
-    assert duplication_survey.twin_pins_beyond_the_first(package, tests) == 1
-
-    (package / "kernel_rust.py").write_text('"""Now documented."""\n')
-    assert duplication_survey.undocumented_modules(package) == 0
-
-
-@pytest.mark.critical
-@pytest.mark.infra
-def test_each_slimming_pattern_matches_its_own_kind() -> None:
-    # The regular-expression rows, on one violating and one clean line each.
-    patterns = {
-        finding.name: re.compile(finding.pattern, re.MULTILINE)
-        for finding in duplication_survey.FINDINGS
-        if finding.pattern
-    }
-    violating = {
-        "Potts energies of a labelling": "def energy(graph, field, labelling):\n",
-        "site-field broadcasts": "def _site_field(graph, values):\n",
-        "annealers": "def anneal_potts(graph, field, schedule):\n",
-        "ground-state run_ wrappers": "def run_wolff(rung, budget, rng):\n",
-        "backend enums": "class CoupledBackend:\n",
-    }
-    clean = {
-        "Potts energies of a labelling": "    energy = energies(graph, f, s)[0]\n",
-        "site-field broadcasts": "values = site_field(field, graph.n_nodes)\n",
-        "annealers": "schedule = geometric_schedule(1.0, 0.1, 100)\n",
-        "ground-state run_ wrappers": "result = METHODS[name](rung, budget, rng)\n",
-        "backend enums": "backend = Backend.RUST\n",
-    }
-
-    assert [n for n, text in violating.items() if not patterns[n].search(text)] == []
-    assert [n for n, text in clean.items() if patterns[n].search(text)] == []
-
-
 def _imports_argmax(path: Path) -> bool:
     """Whether ``path`` imports ``argmax`` from the enumeration seam.
 
@@ -844,22 +679,3 @@ def test_the_argmax_query_reads_a_parenthesised_import(tmp_path: Path) -> None:
 
     assert _imports_argmax(over_five_lines)
     assert not _imports_argmax(through_the_seam)
-
-
-@pytest.mark.critical
-@pytest.mark.infra
-def test_the_structure_clusters_hold_at_their_audited_size() -> None:
-    # Issue #755 decided each cluster against root `CLAUDE.md`'s rule --- one
-    # abstraction where it aligns and simplifies several use cases --- and
-    # recorded the reason per row. The decision is only worth what the count
-    # it was taken at is worth, so the count is asserted rather than cited.
-    # The query itself is exercised in `test_structure_survey.py`, which
-    # plants a near-duplicate and a shape below the rule and reads both back.
-    found = appraise_structures.structures()
-    realized = {
-        cluster.key: len(cluster.members)
-        for cluster in appraise_structures.clusters(found)
-    }
-
-    assert len(found) == STRUCTURE_BASELINE
-    assert realized == CLUSTER_BASELINE

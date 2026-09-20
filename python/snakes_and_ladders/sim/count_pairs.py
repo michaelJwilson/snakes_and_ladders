@@ -38,6 +38,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.emissions import (
     BetaBinomialEmission,
     CovariateNotSupportedError,
@@ -655,7 +656,7 @@ def vertex_covariate(params: SpatioSequentialParams, node: int) -> torch.Tensor 
 
 
 def simulate_count_pairs(
-    declared: SpatioSequentialCountsParams,
+    declared: SpatioSequentialCountsParams, *, backend: Backend = Backend.PYTHON
 ) -> CountPairInstance:
     """Draw the fine instance: the planted labels, every class's chain, and every vertex's counts.
 
@@ -679,6 +680,13 @@ def simulate_count_pairs(
     ----------
     declared : SpatioSequentialCountsParams
         The loaded fixture.
+    backend : Backend
+        :data:`~snakes_and_ladders.backend.Backend.PYTHON` draws here, vertex
+        by vertex, and is the oracle;
+        :data:`~snakes_and_ladders.backend.Backend.RUST` is
+        :mod:`snakes_and_ladders.sim.count_pairs_rust`, pinned to it draw for
+        draw. Chosen here so a caller names the kernel rather than the module
+        (#813).
 
     Returns
     -------
@@ -696,6 +704,15 @@ def simulate_count_pairs(
         holds are one statement. A draw that overflows it is a fixture whose
         parameters moved, not a type to widen silently.
     """
+    if backend not in (Backend.PYTHON, Backend.RUST):
+        msg = f"simulate_count_pairs runs on {Backend.PYTHON} or {Backend.RUST}, not {backend}"
+        raise ValueError(msg)
+    if backend is Backend.RUST:
+        # Local, because the twin imports its labels and chains from here: a
+        # module-level import is the cycle.
+        from snakes_and_ladders.sim import count_pairs_rust
+
+        return count_pairs_rust.simulate_count_pairs(declared)
     params = declared.model
     n_nodes = params.graph.n_nodes
     labels = planted_labels(params, params.n_classes)
