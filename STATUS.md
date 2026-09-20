@@ -3133,6 +3133,21 @@ distinguishing them fitting to zero and the tree collapsing to the same
 polytomy — so a rank correlation moves by up to 0.04 under a perturbation of
 one part in 1e9 and is not a measurement.
 
+**A warm start does not make the fitted reward affordable, and it is refused**
+([#821](https://github.com/michaelJwilson/snakes_and_ladders/issues/821)). On
+`tree_search/ci.yaml`, every NNI neighbour of every one of the 15 topologies
+fitted cold and from its parent's fitted lengths, as `search.infer` starts its
+candidates: 40.4 gradient evaluations per candidate against 49.2, 1.22x, and
+69.0 ms against 85.6 ms — and 9 of 60 candidates reach a different maximum, by
+up to 3.55 log-likelihood units, cold better on 5 and warm on 4, every fit
+flagged converged. The gap is a collapsed branch: at length zero the gradient in
+the log-length coordinate vanishes and the fit stops on the boundary, and the
+warm start inherits the parent's collapsed branch. Starting any inherited length
+below 1e-3 at the default recovers the same optimum on all 60 (largest
+difference 1.2e-7) at 50.2 evaluations per candidate, 0.98x: the saving was the
+trap. The defect is the fit's and reaches the search's own warm start
+([#839](https://github.com/michaelJwilson/snakes_and_ladders/issues/839)).
+
 **The tree policy has now been trained, and the result is negative.** On the
 7-taxon fixture where NNI hill climbing reaches the enumerated maximum from
 only 24 of 50 starts, a trained policy reaches it on 0.485 of episodes against
