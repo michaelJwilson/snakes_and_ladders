@@ -50,6 +50,7 @@ from snakes_and_ladders.opt.constrain import (
     positive,
     probability,
 )
+from snakes_and_ladders.opt.em import em_loop
 from snakes_and_ladders.opt.initialize import quantile_locations
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.ragged import Ragged
@@ -1179,7 +1180,9 @@ def baum_welch_family(
     The E step is the model: forward and backward messages in log space,
     identical whatever a state emits, and so is the M step for the initial
     distribution and the transitions, both simplex-valued for every family.
-    Only the emission M step differs, and it is delegated to the family.
+    Only the emission M step differs, and it is delegated to the family. The
+    alternation around them is :func:`snakes_and_ladders.opt.em.em_loop`'s
+    (issue #859); what this function computes in one iteration is below.
 
     Parameters
     ----------
@@ -1292,10 +1295,19 @@ def baum_welch_family(
         if exposure.ndim == data.ndim == 2:
             exposure = exposure[..., None]
 
-    previous = -float("inf")
-    log_likelihood = previous
     at_boundary = False
-    for _ in range(max_iterations):
+
+    def iterate(
+        state: tuple[torch.Tensor, torch.Tensor, torch.Tensor, EmissionFamily],
+    ) -> tuple[tuple[torch.Tensor, torch.Tensor, torch.Tensor, EmissionFamily], float]:
+        """One E step, one M step, and the log-likelihood at the state given.
+
+        The state is the initial distribution, the transition matrix, the
+        per-step kernels it is expanded to and the emission family --- every
+        parameter the recursion below reads and the M step rewrites.
+        """
+        nonlocal at_boundary
+        log_initial, log_transition, kernels, emissions = state
         # --- E step: forward and backward messages in log space ----------
         emit = emissions.log_density(data, covariate=exposure)
         # A padded position scores log 1, so it adds nothing wherever it is
@@ -1369,13 +1381,15 @@ def baum_welch_family(
                 f"shown it"
             )
             raise ValueError(msg)
-        emissions = step.emissions
         at_boundary = at_boundary or step.at_boundary
+        return (log_initial, log_transition, kernels, step.emissions), log_likelihood
 
-        if abs(log_likelihood - previous) <= tolerance * abs(log_likelihood):
-            break
-        previous = log_likelihood
-
+    (log_initial, log_transition, _, emissions), log_likelihood, _ = em_loop(
+        iterate,
+        (log_initial, log_transition, kernels, emissions),
+        tolerance=tolerance,
+        max_iterations=max_iterations,
+    )
     return EmFit(
         log_initial=log_initial,
         log_transition=log_transition,
