@@ -38,6 +38,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from snakes_and_ladders.likelihood.pruning import log_likelihood
+from snakes_and_ladders.numerics import logsumexp
 from snakes_and_ladders.sim.topology import leaf_bipartitions
 from snakes_and_ladders.sim.tree import Node
 
@@ -74,11 +75,6 @@ class SmcTopologies:
     ess: np.ndarray
     evaluations: int
     branch_length: float
-
-
-def _logsumexp(values: np.ndarray) -> float:
-    peak = float(np.max(values))
-    return peak + float(np.log(np.sum(np.exp(values - peak))))
 
 
 class _Partials:
@@ -215,9 +211,9 @@ def smc_topologies(
             )
             forest[first] = joined
             del forest[second]
-        log_mean = _logsumexp(increments) - np.log(n_particles)
+        log_mean = float(logsumexp(increments, axis=0)) - np.log(n_particles)
         log_evidence += log_mean
-        log_w = increments - _logsumexp(increments)
+        log_w = increments - float(logsumexp(increments, axis=0))
         ess_per_step.append(1.0 / float(np.sum(np.exp(2.0 * log_w))))
 
     trees = tuple(Node(forest[0].name, None, forest[0].children) for forest in forests)
