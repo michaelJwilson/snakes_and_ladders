@@ -52,7 +52,7 @@ from __future__ import annotations
 import functools
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
@@ -62,7 +62,7 @@ from snakes_and_ladders.likelihood.message_passing import (
     MessageScheduleName,
     max_product,
 )
-from snakes_and_ladders.opt.budget import Budget, Outcome
+from snakes_and_ladders.opt.budget import Budget, Comparison, Outcome
 from snakes_and_ladders.sample.potts_mcmc import (
     ClusterCounter,
     PottsMove,
@@ -682,25 +682,44 @@ def outcome(run: MethodRun) -> Outcome:
     return Outcome(value=run.energy, spent=run.spent)
 
 
-#: Every run this process has made, in call order. :func:`~snakes_and_ladders.opt.budget.compare`
-#: returns an energy and a spend and nothing else, and the structural referee
-#: needs the *labelling*. Rather than run every method twice --- once for the
-#: energy and once for the structure --- an entry records its run here as it
-#: goes. It is a memo of work already done, not a second code path, and it is
-#: correct only at ``workers=1``, which is where the comparison is run and
-#: which `opt/budget.py` states is the default until a measurement says
-#: otherwise.
-_RUNS: list[tuple[str, str, MethodRun]] = []
+@dataclass(frozen=True)
+class MethodRecord:
+    """One entry's run, carried out of the comparison on its outcome.
+
+    :func:`~snakes_and_ladders.opt.budget.compare` scores an energy and a
+    spend, and the structural referee needs the *labelling*. Rather than run
+    every method twice --- once for the energy and once for the structure ---
+    an entry returns the run it already made, on
+    :attr:`~snakes_and_ladders.opt.budget.Outcome.detail`. A module-level list
+    held the same memo and was correct only at ``workers=1``, since a cell
+    past that runs in another process (issue #856).
+
+    Parameters
+    ----------
+    method : str
+        The entry's name, a key of :data:`METHODS`.
+    rung : str
+        The instance's name, :attr:`Rung.name`.
+    run : MethodRun
+        What the method returned, labelling included.
+    """
+
+    method: str
+    rung: str
+    run: MethodRun
 
 
-def recorded() -> tuple[tuple[str, str, MethodRun], ...]:
-    """Every run since :func:`forget`, as ``(method, rung, run)``."""
-    return tuple(_RUNS)
+def recorded(comparison: Comparison) -> tuple[MethodRecord, ...]:
+    """Every run ``comparison``'s cells made, in cell order.
 
-
-def forget() -> None:
-    """Drop the recorded runs, so one process can run two comparisons."""
-    _RUNS.clear()
+    A cell run by anything other than an :class:`Entry` carries no record and
+    is left out, so this is the entries' runs and not the comparison's cells.
+    """
+    return tuple(
+        cell.detail
+        for cell in comparison.outcomes
+        if isinstance(cell.detail, MethodRecord)
+    )
 
 
 @dataclass(frozen=True)
@@ -716,8 +735,7 @@ class Entry:
 
     def __call__(self, rung: Rung, budget: Budget, rng: np.random.Generator) -> Outcome:
         run = METHODS[self.name](rung, budget, rng)
-        _RUNS.append((self.name, rung.name, run))
-        return outcome(run)
+        return replace(outcome(run), detail=MethodRecord(self.name, rung.name, run))
 
 
 def entries() -> dict[str, Entry]:

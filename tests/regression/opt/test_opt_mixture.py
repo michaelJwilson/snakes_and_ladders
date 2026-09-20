@@ -14,11 +14,13 @@ computable exactly, so the bound has something to be checked against.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from snakes_and_ladders.emissions import GaussianEmission
+from snakes_and_ladders.emissions import GaussianEmission, Reestimate
 from snakes_and_ladders.likelihood.mixture_assignments import (
     enumerate_mixture_assignments,
 )
@@ -673,3 +675,82 @@ def test_the_optimal_clustering_cost_is_the_minimum_over_the_enumerated_assignme
     assert_allclose(costs.min(), 10.883384005190335, rtol=1e-12)
     assert_allclose(contiguous.min(), 14.421633014203367, rtol=1e-12)
     assert_allclose(optimal_clustering_cost(points, 2), 5.327649356018618, rtol=1e-12)
+
+
+class _ReportingGaussian(GaussianEmission):
+    """`GaussianEmission` carrying the M-step report an iterative solve gives.
+
+    The Gaussian M step is closed form: it settles by construction and reaches
+    no boundary, so the two flags are planted rather than provoked. A count
+    family's M step is an optimization and reports both
+    (`emissions.Reestimate`), and the loop must read the report whichever
+    family it holds -- which is what `opt.emission_mixture` does with the same
+    step (issue #856).
+    """
+
+    def __init__(
+        self,
+        mean: np.ndarray,
+        scale: np.ndarray,
+        variance_floor: float,
+        *,
+        converged: bool = True,
+        at_boundary: bool = False,
+    ) -> None:
+        super().__init__(mean, scale, variance_floor)
+        self._converged = converged
+        self._at_boundary = at_boundary
+
+    def reestimate(
+        self,
+        observations: torch.Tensor,
+        posterior: torch.Tensor,
+        covariate: torch.Tensor | None = None,
+    ) -> Reestimate[GaussianEmission]:
+        """The closed-form step, reported as the planted flags say."""
+        step = super().reestimate(observations, posterior, covariate)
+        if not self._converged:
+            return replace(step, converged=False, iterations=3, residual=0.25)
+        return replace(step, at_boundary=self._at_boundary)
+
+
+@pytest.mark.smoke
+@pytest.mark.bug
+def test_an_unconverged_component_m_step_is_refused() -> None:
+    # The loop read `.emissions` off the report and dropped the rest, so a
+    # number from an inner solve that never settled reached the outer
+    # likelihood -- what `likelihood/CLAUDE.md` forbids and what the sibling
+    # `opt.emission_mixture.expectation_maximization` refuses (issue #856).
+    observations = _dataset(n_samples=100)
+    components = _ReportingGaussian(MEAN, SCALE, 1e-9, converged=False)
+
+    with pytest.raises(ValueError, match="did not settle at EM iteration 1"):
+        expectation_maximization(
+            observations, torch.as_tensor(WEIGHTS, dtype=torch.float64), components
+        )
+
+
+@pytest.mark.smoke
+@pytest.mark.bug
+def test_a_component_m_step_at_a_boundary_is_reported_on_the_fit() -> None:
+    # `at_boundary` is not an error: the estimate is a bound rather than a
+    # maximum, so a caller counts it (issue #122). It was computed and
+    # discarded, and the fit carries the accumulation now (issue #856). The
+    # flag moves no number: both fits run the same closed-form step.
+    observations = _dataset(n_samples=100)
+    weights = torch.as_tensor(WEIGHTS, dtype=torch.float64)
+
+    flagged = expectation_maximization(
+        observations,
+        weights,
+        _ReportingGaussian(MEAN, SCALE, 1e-9, at_boundary=True),
+        max_iterations=3,
+    )
+    clear = expectation_maximization(
+        observations, weights, GaussianEmission(MEAN, SCALE, 1e-9), max_iterations=3
+    )
+
+    assert flagged.at_boundary
+    assert not clear.at_boundary
+    assert torch.equal(flagged.components.mean, clear.components.mean)
+    assert torch.equal(flagged.components.scale, clear.components.scale)
