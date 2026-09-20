@@ -26,6 +26,7 @@ from enum import StrEnum
 import numpy as np
 import pytest
 import torch
+from snakes_and_ladders.cost import Cost
 from snakes_and_ladders.likelihood.distance import DistanceKind
 from snakes_and_ladders.likelihood.objective import (
     BranchLengthObjective,
@@ -62,9 +63,9 @@ SIX_TAXA = "tree_search/stress.yaml"
 #: Likelihood evaluations one branch-length fit may spend; every start
 #: converges well inside it, and a fit that did not would be refused by the
 #: comparison rather than rounded.
-FIT_BUDGET = Budget("evaluations", 2000)
+FIT_BUDGET = Budget(Cost.EVALUATIONS, 2000)
 #: Candidates one topology search may score.
-SEARCH_BUDGET = Budget("candidates", 60)
+SEARCH_BUDGET = Budget(Cost.CANDIDATES, 60)
 #: Sites of the twenty-taxon instance, where nothing is enumerated, and its
 #: branch-length range: with twenty taxa a path crosses up to a dozen
 #: branches, and at ``[0.02, 0.4]`` some pairs saturate at 1,000 sites ---

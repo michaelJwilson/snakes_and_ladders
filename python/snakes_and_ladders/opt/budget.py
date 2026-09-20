@@ -11,9 +11,10 @@ on two methods' per-instance hits.
 
 Two refusals carry the discipline. A method that spends more than its budget
 is refused rather than rounded, since "wins by running longer" is the error
-this exists to make impossible. And a budget is in one unit: a sweep and a
-likelihood evaluation are not exchangeable, so a comparison across units is
-two comparisons.
+this exists to make impossible. And a budget is in one unit, named by
+:class:`snakes_and_ladders.cost.Cost`: a sweep and a likelihood evaluation
+are not exchangeable, so a comparison across units is two comparisons, and a
+unit spelled two ways is one comparison read as two (issue #860).
 
 Model-agnostic, per ``opt/CLAUDE.md``: nothing here knows what an instance is.
 """
@@ -27,6 +28,7 @@ from typing import Any, Generic, TypeVar
 
 import numpy as np
 
+from snakes_and_ladders.cost import Cost
 from snakes_and_ladders.parallel import Backend, map_tasks
 
 InstanceT = TypeVar("InstanceT")
@@ -52,14 +54,18 @@ class Budget:
 
     Parameters
     ----------
-    unit : str
-        What is counted: ``"sweeps"``, ``"evaluations"``, ``"fits"``. Named
-        so a comparison states what it holds equal.
+    unit : Cost
+        What is counted, as a member of the package's one vocabulary
+        (:class:`snakes_and_ladders.cost.Cost`, issue #860): a comparison
+        states what it holds equal in the words the oracle ladder states it
+        in, and a unit outside the enum is a unit nobody declared. The member
+        is a :class:`str`, so the header :meth:`Comparison.table` prints is
+        its value.
     size : int
         How many of them, at least one.
     """
 
-    unit: str
+    unit: Cost
     size: int
 
     def __post_init__(self) -> None:

@@ -31,6 +31,10 @@ Infrastructure, not science: the callables are strings this module never
 imports, read the way `infra/problems_tables.py` reads the fixture registry
 (`infra/CLAUDE.md`). The guard resolves them; nothing here does.
 
+The unit a rung spends is `snakes_and_ladders.cost.Cost`, declared here until
+issue #860 and imported since: `opt.budget.Budget` holds the same axis equal,
+and one axis is one vocabulary.
+
 `Rung` here is a rung of the oracle ladder. `search.ground_state.Rung`, which
 predates it, is an instance at a size.
 """
@@ -38,7 +42,8 @@ predates it, is an instance at a size.
 from __future__ import annotations
 
 from dataclasses import KW_ONLY, dataclass
-from enum import StrEnum
+
+from snakes_and_ladders.cost import Cost
 
 #: The five ladders, in the order the survey tables run.
 PROBLEMS = ("potts", "tree", "hmm", "codes", "mixture")
@@ -49,32 +54,21 @@ PROBLEMS = ("potts", "tree", "hmm", "codes", "mixture")
 LADDER_TICKET = 734
 
 
-class Cost(StrEnum):
-    """The unit a rung spends, as the sampler or optimizer reports it (issue #818).
-
-    A gradient is an objective evaluation and a backward pass through the
-    same tape, so a rung spending gradients and one spending evaluations are
-    not ranked by either column alone (`sample/CLAUDE.md`): the rung declares
-    what it spends, the table does not rank. An exact rung says so, its cost
-    being the instance's count rather than a budget's.
-    """
-
-    EXACT = "exact"
-    """An enumeration: the cost is the instance's count, not a budget."""
-    PASS = "one pass"
-    """One deterministic pass over the instance: a recursion, a cut, a construction."""
-    ITERATIONS = "iterations"
-    """Message passes, EM or decoder iterations, cycles of a solver."""
-    SWEEPS = "sweeps"
-    """Monte Carlo sweeps over the sites, or single-cluster steps counted as one."""
-    EVALUATIONS = "objective evaluations"
-    """Candidate scorings or density evaluations, no backward pass."""
-    GRADIENTS = "gradients"
-    """Objective evaluations each with a backward pass through the same tape."""
-    TRAINED = "objective evaluations, and gradients to train"
-    """A learned method: gradients in training, evaluations when it acts."""
-    SEVERAL = "several: each method its own"
-    """A rung naming several methods that do not share a unit."""
+#: The units the rungs spend. `Cost` is the package's vocabulary and carries
+#: the units a budget names as well (issue #860), so a member no rung spends
+#: is not a stale one; what this holds is the ladder's own side of it.
+LADDER_UNITS: frozenset[Cost] = frozenset(
+    {
+        Cost.EXACT,
+        Cost.PASS,
+        Cost.ITERATIONS,
+        Cost.SWEEPS,
+        Cost.EVALUATIONS,
+        Cost.GRADIENTS,
+        Cost.TRAINED,
+        Cost.SEVERAL,
+    }
+)
 
 
 @dataclass(frozen=True)

@@ -32,6 +32,7 @@ import numpy as np
 import pytest
 import torch
 from scipy.optimize import minimize_scalar
+from snakes_and_ladders.cost import Cost
 from snakes_and_ladders.opt.budget import Budget
 from snakes_and_ladders.opt.initialize import Initializer
 from snakes_and_ladders.opt.mixture import kmeans_plus_plus, uniform_seeds
@@ -66,7 +67,7 @@ PROBLEM = "spatio_sequential_counts"
 CI_SAMPLES = 4000
 
 #: Iterations the CI-size fit is held to.
-CI_BUDGET = Budget("passes", 6)
+CI_BUDGET = Budget(Cost.PASSES, 6)
 
 #: The largest relative error in a component's negative-binomial mean that the
 #: three chain-based candidates may leave at the CI size, and the recovery they
@@ -413,7 +414,7 @@ def test_a_bin_factor_that_does_not_divide_the_positions_is_refused() -> None:
 #: the spread over instances is the experiment's to report.
 KEY_SAMPLES = 4000
 KEY_INSTANCES = 3
-KEY_BUDGET = Budget("passes", 6)
+KEY_BUDGET = Budget(Cost.PASSES, 6)
 
 #: The two candidates the key model's finding is about. `tempering` samples a
 #: surrogate surface for 144 passes; `prior` reads none of the data for none.
