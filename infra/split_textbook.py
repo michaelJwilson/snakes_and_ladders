@@ -43,9 +43,16 @@ class Section:
 
     @property
     def slug(self) -> str:
-        """``NN-words`` for the file, from the number and the title's words."""
+        """``NN-words`` for the file, from the number and the title's words.
+
+        A numbered section is zero-padded to two digits so the files sort as
+        the book reads; an appendix keeps its letter (``A-...``), which sorts
+        after the digits.
+        """
         words = UNSAFE.sub("-", _plain(self.title).lower()).strip("-")
-        return f"{int(self.number):02d}-{words}"
+        number = self.number.strip()
+        label = f"{int(number):02d}" if number.isdigit() else number.lower()
+        return f"{label}-{words}"
 
 
 def _plain(title: str) -> str:
