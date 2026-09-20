@@ -42,6 +42,7 @@ from snakes_and_ladders.emissions import (
     identifiable_dispersion_bound,
     pooled_variance_floor,
 )
+from snakes_and_ladders.numerics import constant_chain_kernel
 from snakes_and_ladders.opt.constrain import free_from_log_simplex, log_simplex
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.ragged import Ragged
@@ -995,22 +996,19 @@ def forward_log_likelihood_from_density(
     admitted, bitwise. The ``length``-fold memory the varying form costs is
     paid only by a caller who asks for it. The same reasoning and the
     measurement behind the hoist are in
-    :func:`snakes_and_ladders.likelihood.forward_backward.step_kernels`.
+    :func:`snakes_and_ladders.likelihood.forward_backward.step_kernels`, whose
+    shape check this shares
+    (:func:`snakes_and_ladders.numerics.constant_chain_kernel`, issue #857):
+    ``opt`` may not import ``likelihood``, so the dispatch sits at the root
+    rather than in either recursion.
     """
     length, n_states = log_density.shape[1], log_density.shape[2]
     constant: torch.Tensor | None = None
-    if log_transition.shape == (n_states, n_states):
+    if constant_chain_kernel(tuple(log_transition.shape), length, n_states):
         kernels = log_transition.expand(max(length - 1, 0), n_states, n_states)
         constant = log_transition
-    elif log_transition.shape == (max(length - 1, 0), n_states, n_states):
-        kernels = log_transition
     else:
-        msg = (
-            f"log_transition {tuple(log_transition.shape)} is neither "
-            f"({n_states}, {n_states}) nor ({max(length - 1, 0)}, {n_states}, "
-            f"{n_states}) for a chain of {length} positions over {n_states} states"
-        )
-        raise ValueError(msg)
+        kernels = log_transition
     alpha = log_initial.unsqueeze(0) + log_density[:, 0]
     for t in range(1, length):
         step = kernels[t - 1] if constant is None else constant

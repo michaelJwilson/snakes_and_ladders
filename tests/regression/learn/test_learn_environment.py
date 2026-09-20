@@ -42,7 +42,8 @@ FORBIDDEN_PREFIXES = (
 #: a `learn/` interface over one application's objects --- a topology, a
 #: lattice --- so each imports that application. `potts_nd.py` imports one
 #: enum, `sample.potts_mcmc.MoveKind`, which #779 moved down to sit beside the
-#: moves it names rather than be spelled out twice. The interface, the policy
+#: moves it names rather than be spelled out twice, and the accept step its
+#: flip takes (`sample.accept`, #857): neither is an application. The interface, the policy
 #: and the estimators import none, which is the claim this guard makes and the
 #: reason an agent is not shaped by one problem. Listed rather than
 #: pattern-matched, so a fourth is a failure a reader decides on rather than a
