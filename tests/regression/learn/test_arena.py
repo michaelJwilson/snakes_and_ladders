@@ -180,7 +180,10 @@ def test_a_registered_learner_is_bitwise_the_direct_call(name: str) -> None:
     """
     environment = _environment()
     starts = _starts(environment)
-    through = LEARNERS[name].episodes(environment, starts, SHORT, _streams())
+    through = [
+        run
+        for (run,) in LEARNERS[name].episodes(environment, starts, SHORT, _streams())
+    ]
     policy = _direct(name, environment, SHORT, 0)
     rng = np.random.default_rng(1)
     direct = [
@@ -211,7 +214,12 @@ def test_the_greedy_row_is_the_greedy_rollout_and_not_a_policy() -> None:
     """
     environment = _environment()
     starts = _starts(environment)
-    through = LEARNERS["greedy"].episodes(environment, starts, PUBLISHED, _streams())
+    through = [
+        run
+        for (run,) in LEARNERS["greedy"].episodes(
+            environment, starts, PUBLISHED, _streams()
+        )
+    ]
     direct = [
         greedy_rollout(environment, start, PUBLISHED.max_steps) for start in starts
     ]

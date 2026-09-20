@@ -166,6 +166,7 @@ def ppo[S, A](
     entropy_coefficient: float = 0.0,
     behaviour: EpsilonGreedyPolicy | None = None,
     epsilon_schedule: TempSchedule | None = None,
+    stop_at_local_optimum: bool = True,
 ) -> PPOTraining:
     """Collect a batch, refit the critic, then ``epochs`` clipped policy steps on that batch.
 
@@ -178,6 +179,8 @@ def ppo[S, A](
     which is what makes the update valid off-policy. ``epsilon_schedule``
     sets the wrapper's epsilon per iteration from ``sample.schedule`` (issue
     #194 measured a constant one) and must span ``iterations`` steps.
+    ``stop_at_local_optimum`` is :func:`~snakes_and_ladders.learn.rollout.rollout`'s,
+    ``True`` being what every published number was trained under (issue #820).
     """
     if iterations < 1 or batch < 1 or epochs < 1:
         msg = f"iterations, batch and epochs must be >= 1, got {iterations}, {batch}, {epochs}"
@@ -200,7 +203,14 @@ def ppo[S, A](
         if behaviour is not None and epsilon_schedule is not None:
             behaviour.epsilon = epsilon_schedule(iteration)
         episodes = [
-            rollout(environment, collector, rng, max_steps) for _ in range(batch)
+            rollout(
+                environment,
+                collector,
+                rng,
+                max_steps,
+                stop_at_local_optimum=stop_at_local_optimum,
+            )
+            for _ in range(batch)
         ]
         features = torch.stack(
             [state_features(environment, s) for e in episodes for s in e.states[:-1]]
