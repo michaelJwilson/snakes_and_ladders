@@ -30,10 +30,10 @@ from snakes_and_ladders.sample.tempered import (
     tempered_potts_pair,
     tempered_topologies,
 )
-from snakes_and_ladders.search.topology import enumerate_topologies
 from snakes_and_ladders.sim.factor_graph import from_potts
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import enumerate_topologies
 
 from tests._fixtures import FOUR_TAXA, load_fixture
 
