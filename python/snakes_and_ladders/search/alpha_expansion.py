@@ -26,6 +26,7 @@ energies a cut can represent.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 
 import numpy as np
 
@@ -327,22 +328,49 @@ def alpha_expansion(
     raise ValueError(msg)
 
 
+class SweepOrder(StrEnum):
+    """The order one sweep visits the sites in --- a parameter, not a second method.
+
+    A sweep order is first-class here for the reason
+    ``likelihood/schedule.py`` gives for message orders: being unable to ask
+    for a different one hides what the default buys. The update is the same
+    argmin either way, so the pair's spread *is* the order's effect
+    (issue #858).
+    """
+
+    INDEX = "index"
+    """``range(n_nodes)``: the sites in index order, every sweep."""
+    RANDOM = "random"
+    """A fresh ``rng.permutation(n_nodes)`` per sweep, which is Gibbs at T = 0."""
+
+
 def iterated_conditional_modes(
     graph: PottsGraph,
     field_values: np.ndarray,
     n_states: int,
     rng: np.random.Generator,
     *,
+    start: np.ndarray | None = None,
     max_sweeps: int = 200,
+    sweep_order: SweepOrder = SweepOrder.INDEX,
+    stop_when_clean: bool = True,
     backend: Backend = Backend.NUMBA,
 ) -> tuple[np.ndarray, float]:
     """Single-site descent: the baseline alpha expansion has to beat.
 
-    Each site takes the label minimizing the energy given its neighbours, in
-    index order, until a sweep changes nothing. This is the natural point of
-    comparison because it is the *same objective* under a move set of one
-    site at a time --- so a difference between the two is a statement about
-    the move set rather than about the model or the code path.
+    Each site takes the label minimizing the energy given its neighbours,
+    until a sweep changes nothing. This is the natural point of comparison
+    because it is the *same objective* under a move set of one site at a time
+    --- so a difference between the two is a statement about the move set
+    rather than about the model or the code path.
+
+    Three parameters say what a caller varies and the sweep does not
+    (issue #858): where it starts, the order it visits sites in, and whether
+    a clean sweep ends it. Gibbs at ``T = 0`` is this descent under
+    :data:`SweepOrder.RANDOM` with ``stop_when_clean=False``, and the label
+    block of :mod:`snakes_and_ladders.search.spatio_sequential` is this
+    descent from a given ``start``; neither is a second implementation of the
+    update.
 
     Local deltas rather than a full energy per candidate: only the site's own
     field term and its incident edges change, so a sweep costs
@@ -360,15 +388,59 @@ def iterated_conditional_modes(
     not move. :data:`~snakes_and_ladders.backend.Backend.PYTHON` is the oracle
     that pins it.
 
+    Parameters
+    ----------
+    graph : PottsGraph
+        The lattice, read through its compressed adjacency.
+    field_values : np.ndarray
+        External field, ``(n_states,)`` or ``(n_nodes, n_states)``.
+    n_states : int
+        Labels available at each site.
+    rng : np.random.Generator
+        Draws the start where ``start`` is ``None``, and one permutation per
+        sweep under :data:`SweepOrder.RANDOM`.
+    start : np.ndarray | None
+        The labelling to descend from, or ``None`` to draw one uniformly.
+    max_sweeps : int
+        Sweeps the descent is allowed.
+    sweep_order : SweepOrder
+        The order sites are visited in; index order by default.
+    stop_when_clean : bool
+        Whether a sweep that changes nothing ends the descent. ``False`` runs
+        every sweep of ``max_sweeps``, which is what a method charged a fixed
+        budget spends.
+    backend : Backend
+        The sweep's implementation. The compiled kernel walks the sites in
+        index order and stops on a clean sweep, so any other setting of the
+        two needs :data:`~snakes_and_ladders.backend.Backend.PYTHON` and is
+        refused here rather than quietly run in the wrong order.
+
     Returns
     -------
     tuple[np.ndarray, float]
         The labelling it settles on, and its energy.
+
+    Raises
+    ------
+    ValueError
+        If ``backend`` names no sweep, or names the compiled one for a
+        descent it does not implement.
     """
     values = site_field(np.asarray(field_values, dtype=float), graph.n_nodes)
-    labelling = rng.integers(0, n_states, size=graph.n_nodes)
+    labelling = (
+        rng.integers(0, n_states, size=graph.n_nodes)
+        if start is None
+        else np.asarray(start, dtype=np.int64).copy()
+    )
 
     if backend is Backend.NUMBA:
+        if sweep_order is not SweepOrder.INDEX or not stop_when_clean:
+            msg = (
+                f"the compiled sweep visits the sites in {SweepOrder.INDEX} order "
+                f"and stops on a clean sweep; {sweep_order} order or "
+                f"stop_when_clean={stop_when_clean} needs {Backend.PYTHON}"
+            )
+            raise ValueError(msg)
         from snakes_and_ladders.sample.kernels import icm_sweeps
 
         offsets, neighbour_index, couplings = graph.compressed_adjacency()
@@ -398,8 +470,13 @@ def iterated_conditional_modes(
     # cheaper than a NumPy scalar one. Same reads, same order, same writes.
     labels = labelling.tolist()
     for _ in range(max_sweeps):
+        order = (
+            range(graph.n_nodes)
+            if sweep_order is SweepOrder.INDEX
+            else rng.permutation(graph.n_nodes)
+        )
         changed = False
-        for node in range(graph.n_nodes):
+        for node in order:
             local = -values[node].copy()
             for position in range(bounds[node], bounds[node + 1]):
                 local[labels[neighbours[position]]] -= couplings[position]
@@ -407,7 +484,7 @@ def iterated_conditional_modes(
             if best != labels[node]:
                 labels[node] = best
                 changed = True
-        if not changed:
+        if stop_when_clean and not changed:
             break
     labelling[:] = labels
 

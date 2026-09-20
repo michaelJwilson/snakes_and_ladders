@@ -138,13 +138,15 @@ INCIDENCE_OWNER = "incidence.py"
 #: Package modules building a store through the seam, pinned at what this
 #: guard reads on `main` at 048a342: `sim/graph.py`,
 #: `sim/ldpc.py`, `sim/factor_graph.py`, `sim/potts.py`, `search/maxflow.py`,
-#: `sample/potts_mcmc.py`, `sample/potts_keyed.py`, `search/ground_state.py`,
-#: `search/alpha_expansion.py` and `search/spatio_sequential.py`; the eleventh
-#: and twelfth are `sample/tempered.py` and `sample/annealed.py`, which #766
-#: added. The pull request that adds a consumer raises the pin; one that
-#: removes the last caller of the seam lowers it to a number a reader can
-#: question.
-SEAM_CONSUMERS = 12
+#: `sample/potts_mcmc.py`, `sample/potts_keyed.py`,
+#: `search/alpha_expansion.py` and `search/spatio_sequential.py`; the tenth
+#: and eleventh are `sample/tempered.py` and `sample/annealed.py`, which #766
+#: added. `search/ground_state.py` was the twelfth until #858 folded its
+#: second single-site sweep onto `alpha_expansion`'s, which leaves it no
+#: adjacency of its own to walk. The pull request that adds a consumer raises
+#: the pin; one that removes the last caller of the seam lowers it to a number
+#: a reader can question.
+SEAM_CONSUMERS = 11
 
 #: Files this guard does not read, each against the reason, rather than an
 #: allow-list nobody can audit. The first two are measurements the

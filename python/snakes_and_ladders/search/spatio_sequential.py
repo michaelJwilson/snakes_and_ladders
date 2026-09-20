@@ -37,6 +37,7 @@ import numpy as np
 import torch
 from scipy.optimize import linear_sum_assignment
 
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.emissions import (
     CategoricalEmission,
     EmissionFamily,
@@ -56,7 +57,9 @@ from snakes_and_ladders.likelihood.spatio_sequential import (
 from snakes_and_ladders.opt.mixture import emission_mixture_plus_plus
 from snakes_and_ladders.sample.schedule import TempSchedule
 from snakes_and_ladders.search.alpha_expansion import (
+    SweepOrder,
     alpha_expansion,
+    iterated_conditional_modes,
 )
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import energy
@@ -239,21 +242,20 @@ def label_step(
             alpha_expansion(graph, potential, params.n_classes, start=labels).labelling
         )
     if solver is LabelSolver.ICM:
-        current = labels.copy()
-        best = energy(graph, potential, current)
-        for _ in range(200):
-            moved = False
-            for node in rng.permutation(graph.n_nodes):
-                for label in range(params.n_classes):
-                    if label == current[node]:
-                        continue
-                    trial = current.copy()
-                    trial[node] = label
-                    value = energy(graph, potential, trial)
-                    if value < best - 1e-12:
-                        best, current, moved = value, trial, True
-            if not moved:
-                break
+        # The sweep `search.alpha_expansion` runs, started from `labels` in a
+        # random site order (issue #858). It reads the same argmin off local
+        # deltas rather than off a full energy per candidate, which is
+        # `O(k * degree)` per site against `O(k * n_edges)`; the labelling is
+        # pinned against the recomputing loop this replaced.
+        current, _ = iterated_conditional_modes(
+            graph,
+            potential,
+            params.n_classes,
+            rng,
+            start=labels,
+            sweep_order=SweepOrder.RANDOM,
+            backend=Backend.PYTHON,
+        )
         return current
     if wolff_schedule is None:
         msg = "the Wolff solver needs a schedule"
