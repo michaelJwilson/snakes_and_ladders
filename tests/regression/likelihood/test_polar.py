@@ -19,8 +19,8 @@ question:
 
 from __future__ import annotations
 
+import itertools
 from itertools import pairwise
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -29,20 +29,16 @@ from snakes_and_ladders.likelihood.ldpc import (
     decode,
     exact_decoding,
 )
-from snakes_and_ladders.sandbox.polar import (
-    PolarCode,
-    PolarParams,
-    load_polar_params,
-    parity_check,
-    polar_transform,
-)
-from snakes_and_ladders.sandbox.polar_decoding import (
+from snakes_and_ladders.likelihood.polar import (
+    crc_checks,
+    crc_encode,
     decode_sc,
     decode_scl,
     is_codeword,
     transmitted,
 )
 from snakes_and_ladders.sandbox.polar_reference import decode_sc_reference
+from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.ldpc import (
     BinaryErasureChannel,
     BinaryInputGaussianChannel,
@@ -51,18 +47,29 @@ from snakes_and_ladders.sim.ldpc import (
     ParityCheck,
     all_zero_transmission,
 )
+from snakes_and_ladders.sim.polar import (
+    PolarCode,
+    PolarParams,
+    gaussian_polar_code,
+    parity_check,
+    polar_transform,
+)
+
+from tests._fixtures import FIXTURES_DIR
 
 #: The declared instance every test here shares: `N = 16`, `k = 8`, so
 #: enumeration over 256 codewords is the maximum-likelihood oracle.
 DRAWS = 200
 
 #: The declared instance, read off the sandbox's own file as `test_polar.py` does.
-FIXTURES = Path(__file__).parent / "fixtures" / "polar"
+FIXTURES = FIXTURES_DIR / "polar"
 
 
 def _declared() -> PolarParams:
-    """The `ci` instance the sandbox declares."""
-    return load_polar_params(FIXTURES / "ci.yaml")
+    """The declared `ci` instance, through the registry (#826)."""
+    params = fixture("polar", "ci").params
+    assert isinstance(params, PolarParams)
+    return params
 
 
 def _instance() -> tuple[PolarCode, ParityCheck]:
@@ -309,3 +316,82 @@ def test_the_frozen_positions_carry_their_evidence_into_the_metric() -> None:
     # the transform's last row and lies in the code.
     assert decode_scl(code, inside, 1).metric == pytest.approx(0.0, abs=1e-9)
     assert decode_scl(code, outside, 1).metric > 25.0
+
+
+#: CRC-3, ``x^3 + x + 1``, most significant bit first: three check bits on the
+#: declared code's eight message bits leave a five-bit payload, 32 codewords.
+CRC3 = np.array([1, 0, 1, 1])
+
+
+def _crc_codebook(code: PolarCode) -> list[np.ndarray]:
+    """Every codeword whose message passes CRC-3: the outer code, enumerated."""
+    payload_bits = code.n_info - (CRC3.size - 1)
+    return [
+        code.encode(crc_encode(np.array(bits), CRC3))
+        for bits in itertools.product((0, 1), repeat=payload_bits)
+    ]
+
+
+@pytest.mark.oracle
+def test_crc_aided_exhaustive_list_is_maximum_likelihood_over_the_outer_code() -> None:
+    # The referee shares nothing with the list: every CRC-valid codeword is
+    # enumerated and scored by the channel's log-likelihood, ``sum (1 - 2c) L``
+    # under `sim.ldpc`'s convention that a positive ratio favours zero. The
+    # CRC-aided decoder at the exhaustive list must return that codeword, and
+    # must say the check passed (#826).
+    code = _declared().code()
+    codebook = _crc_codebook(code)
+    assert len(codebook) == 32
+    channel = BinaryInputGaussianChannel(sigma=1.0)
+    rng = np.random.default_rng(826)
+    for _ in range(12):
+        payload = rng.integers(0, 2, size=code.n_info - 3)
+        sent = code.encode(crc_encode(payload, CRC3))
+        llr = channel.log_likelihood_ratios(sent, rng)
+        decoded = decode_scl(code, llr, list_size=2**code.n_info, crc=CRC3)
+        scores = [
+            float(np.sum((1 - 2 * word.astype(float)) * llr)) for word in codebook
+        ]
+        best = codebook[int(np.argmax(scores))]
+        assert decoded.crc_passed is True
+        np.testing.assert_array_equal(decoded.codeword, best)
+        assert crc_checks(decoded.message, CRC3)
+
+
+@pytest.mark.analytic
+def test_crc_aided_decoding_falls_back_to_the_best_metric_when_no_survivor_checks() -> (
+    None
+):
+    # At list size one there is one survivor; if its check fails the decoder
+    # returns it and says so, rather than inventing a second candidate.
+    code = _declared().code()
+    llr = np.where(code.encode(np.zeros(code.n_info, dtype=np.int64)) == 0, 4.0, -4.0)
+    plain = decode_scl(code, llr, list_size=1)
+    aided = decode_scl(code, llr, list_size=1, crc=CRC3)
+    np.testing.assert_array_equal(plain.codeword, aided.codeword)
+    assert aided.crc_passed is crc_checks(aided.message, CRC3)
+    assert plain.crc_passed is None
+    with pytest.raises(ValueError, match="cannot carry"):
+        crc_checks(np.zeros(3, dtype=np.int64), CRC3)
+
+
+@pytest.mark.end2end
+def test_crc_aided_list_decoding_recovers_more_blocks_than_the_plain_list() -> None:
+    # The step the ticket names, at a size the per-pull-request tier affords:
+    # N = 64 at rate 1/2 with CRC-8 (x^8 + x^2 + x + 1), L = 8, 120 blocks on
+    # shared seeds through a Gaussian channel. Judged against the payload that
+    # was sent; the pull request carries the N = 256 sweep (#826).
+    crc8 = np.array([1, 0, 0, 0, 0, 0, 1, 1, 1])
+    code = gaussian_polar_code(6, 32, 0.8)
+    channel = BinaryInputGaussianChannel(sigma=0.8)
+    rng = np.random.default_rng(2026)
+    plain_errors = aided_errors = 0
+    for _ in range(120):
+        payload = rng.integers(0, 2, size=code.n_info - 8)
+        sent = code.encode(crc_encode(payload, crc8))
+        llr = channel.log_likelihood_ratios(sent, rng)
+        plain_errors += int(not np.array_equal(decode_scl(code, llr, 8).codeword, sent))
+        aided_errors += int(
+            not np.array_equal(decode_scl(code, llr, 8, crc=crc8).codeword, sent)
+        )
+    assert aided_errors < plain_errors, (aided_errors, plain_errors)

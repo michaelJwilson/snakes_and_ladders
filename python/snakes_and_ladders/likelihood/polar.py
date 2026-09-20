@@ -35,8 +35,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from snakes_and_ladders.sandbox.polar import PolarCode, polar_transform
+from snakes_and_ladders.sim.elementary_codes import crc_remainder
 from snakes_and_ladders.sim.ldpc import LLR_CAP
+from snakes_and_ladders.sim.polar import PolarCode, polar_transform
 
 
 @dataclass(frozen=True)
@@ -59,6 +60,10 @@ class PolarDecoding:
         across candidates of one code and not across codes.
     list_size : int
         The list the decoder ran with; ``1`` for plain successive cancellation.
+    crc_passed : bool | None
+        Under CRC-aided decoding, whether the returned candidate's check
+        passes --- ``False`` means no survivor passed and the best metric was
+        returned as plain list decoding would; ``None`` without a CRC.
     """
 
     message: np.ndarray
@@ -66,6 +71,7 @@ class PolarDecoding:
     source: np.ndarray
     metric: float
     list_size: int
+    crc_passed: bool | None = None
 
 
 def _f(a: np.ndarray, b: np.ndarray) -> np.ndarray:
@@ -163,7 +169,13 @@ def _recurse(
     )
 
 
-def decode_scl(code: PolarCode, llr: np.ndarray, list_size: int = 1) -> PolarDecoding:
+def decode_scl(
+    code: PolarCode,
+    llr: np.ndarray,
+    list_size: int = 1,
+    *,
+    crc: np.ndarray | None = None,
+) -> PolarDecoding:
     """Successive-cancellation list decoding; ``list_size = 1`` is plain SC.
 
     Parameters
@@ -177,6 +189,14 @@ def decode_scl(code: PolarCode, llr: np.ndarray, list_size: int = 1) -> PolarDec
         Candidate prefixes carried. Past ``2^k`` nothing more can be carried,
         and at ``2^k`` the search is exhaustive and the answer is maximum
         likelihood.
+    crc : np.ndarray | None
+        A CRC generator, most significant bit first, whose remainder the
+        message's last ``r`` bits carry (:func:`crc_encode`). Given, the
+        survivor with the best metric *whose check passes* is returned, and
+        the best metric of all when none passes (Tal & Vardy 2015): the list
+        holds ``list_size`` candidates the metric alone cannot rank, and the
+        check is the outer code that ranks them. The payload is the first
+        ``k - r`` message bits.
 
     Returns
     -------
@@ -200,14 +220,44 @@ def decode_scl(code: PolarCode, llr: np.ndarray, list_size: int = 1) -> PolarDec
     source, codeword, metric, _ = _recurse(
         values.reshape(1, -1), frozen, np.zeros(1), list_size
     )
-    best = int(np.argmin(metric))
+    order = np.argsort(metric, kind="stable")
+    best = int(order[0])
+    passed: bool | None = None
+    if crc is not None:
+        passed = False
+        for candidate in order:
+            if crc_checks(source[candidate][code.information], crc):
+                best, passed = int(candidate), True
+                break
     return PolarDecoding(
         message=np.asarray(source[best][code.information], dtype=np.uint8),
         codeword=np.asarray(codeword[best], dtype=np.uint8),
         source=np.asarray(source[best], dtype=np.uint8),
         metric=float(metric[best]),
         list_size=list_size,
+        crc_passed=passed,
     )
+
+
+def crc_encode(payload: np.ndarray, crc: np.ndarray) -> np.ndarray:
+    """The ``k`` message bits a CRC-aided code carries: the payload, then its remainder.
+
+    ``crc`` is the generator :func:`snakes_and_ladders.sim.elementary_codes.crc_remainder`
+    divides by, so the receiver's check is that function on the payload
+    against the tail. The message is what :meth:`PolarCode.encode` takes.
+    """
+    bits = np.asarray(payload, dtype=np.int64).reshape(-1) % 2
+    return np.concatenate([bits, crc_remainder(bits, crc)]).astype(np.uint8)
+
+
+def crc_checks(message: np.ndarray, crc: np.ndarray) -> bool:
+    """Whether ``message``'s last ``r`` bits are the remainder of its first ``k - r``."""
+    bits = np.asarray(message, dtype=np.int64).reshape(-1) % 2
+    degree = np.asarray(crc).size - 1
+    if bits.size <= degree:
+        msg = f"a message of {bits.size} bits cannot carry a {degree}-bit check"
+        raise ValueError(msg)
+    return bool(np.array_equal(crc_remainder(bits[:-degree], crc), bits[-degree:]))
 
 
 def decode_sc(code: PolarCode, llr: np.ndarray) -> PolarDecoding:
@@ -242,6 +292,8 @@ def is_codeword(code: PolarCode, bits: np.ndarray) -> bool:
 
 __all__ = [
     "PolarDecoding",
+    "crc_checks",
+    "crc_encode",
     "decode_sc",
     "decode_scl",
     "is_codeword",

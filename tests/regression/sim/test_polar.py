@@ -17,13 +17,14 @@ outside this repository:
 from __future__ import annotations
 
 from itertools import pairwise
-from pathlib import Path
 
 import numpy as np
 import pytest
 import yaml
 from snakes_and_ladders.likelihood.ldpc import enumerate_codewords
-from snakes_and_ladders.sandbox.polar import (
+from snakes_and_ladders.likelihood.polar import decode_sc
+from snakes_and_ladders.sim.fixtures import fixture
+from snakes_and_ladders.sim.polar import (
     KERNEL,
     MAX_DENSE_LENGTH,
     PolarCode,
@@ -33,26 +34,27 @@ from snakes_and_ladders.sandbox.polar import (
     capacity,
     gaussian_polar_code,
     gaussian_reliability,
-    load_polar_params,
     parity_check,
     polar_information_set,
     polar_transform,
     reed_muller_code,
     reed_muller_information_set,
 )
-from snakes_and_ladders.sandbox.polar_decoding import decode_sc
+
+from tests._fixtures import FIXTURES_DIR
 
 #: The information set the ticket states at `N = 16`, rate 1/2, on BEC(0.5).
 CI_INFORMATION = (3, 5, 7, 9, 11, 13, 14, 15)
 
-#: The declared instance, outside the fixture registry: a conserved route's
-#: file lives beside its tests, and `PROBLEMS.md` names no row for it.
-FIXTURES = Path(__file__).parent / "fixtures" / "polar"
+#: The declared instances, in the registry since #826 gave the code its row.
+FIXTURES = FIXTURES_DIR / "polar"
 
 
 def _declared(tier: str = "ci") -> PolarParams:
-    """The instance the sandbox declares at one tier."""
-    return load_polar_params(FIXTURES / f"{tier}.yaml")
+    """The declared instance at one tier, through the registry (#826)."""
+    params = fixture("polar", tier).params
+    assert isinstance(params, PolarParams)
+    return params
 
 
 @pytest.mark.analytic

@@ -159,6 +159,13 @@
     uncoded closed form at every declared point and at K = 1,024 the curve
     turns between 0.4 and 1.2 dB.
 
+"Polar code, successive cancellation and list decoding":
+  optimizers: >-
+    Successive cancellation decodes in one pass over the polar graph and the
+    list at L = 2^k is the enumerated maximum likelihood; at N = 16 the gap
+    between the two is the one the list closes, and past N = 16 the exhaustive
+    list no longer runs and the reference recursion is the only referee.
+
 "Polar code, BEC-constructed at rate 1/2":
   optimizers: >-
     Successive cancellation is a schedule and not an approximation: each input

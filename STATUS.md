@@ -373,7 +373,7 @@ sites the plan lists after these — the candidate fits of `search.infer`,
 
 ## Milestone 1.1 — Simulation & Ground Truth Engine
 
-**Modules.** The generators and the registry this milestone's ground truth comes from: `sim.jc`, `sim.gtr`, `sim.simulate`, `sim.tree`, `sim.newick`, `sim.params`, `sim.css`, `sim.emission_mixture`, `sim.count_pairs_rust` and `sim.fixtures`, which declares every instance the suite is checked on. `sim.galois`, `sim.reed_solomon`, `sim.elementary_codes` and `sim.capacity` are the algebraic codes and the capacity they are read against (#700).
+**Modules.** The generators and the registry this milestone's ground truth comes from: `sim.jc`, `sim.gtr`, `sim.simulate`, `sim.tree`, `sim.newick`, `sim.params`, `sim.css`, `sim.emission_mixture`, `sim.count_pairs_rust` and `sim.fixtures`, which declares every instance the suite is checked on. `sim.galois`, `sim.reed_solomon`, `sim.elementary_codes` and `sim.capacity` are the algebraic codes and the capacity they are read against (#700); `sim.polar` is the polar construction, promoted from `sandbox` with its row (#826).
 
 **Phylogenetics: landed.** A `k`-state Jukes-Cantor simulator generates an
 alignment and the ancestral tree in Newick from a typed tree fixture, retaining
@@ -695,7 +695,29 @@ comparison.
 
 ## Milestone 1.2 — Differentiable Likelihood & Energy Engine
 
-**Modules.** The evaluators and the oracle they are pinned to: `likelihood.brute_force`, `likelihood.parsimony`, `likelihood.algebraic`, `likelihood.css`, `likelihood.mixture_assignments`, `likelihood.schedule`, `likelihood.spatio_sequential_rust`, and `likelihood.device`, which owns the cross-device tolerance this milestone's claims are stated against. `likelihood.ragged_rust` is the compiled kernel behind the ragged path, conserved beside `sandbox.rectangular_hmm` (#666).
+**Modules.** The evaluators and the oracle they are pinned to: `likelihood.brute_force`, `likelihood.parsimony`, `likelihood.algebraic`, `likelihood.polar` (successive cancellation and the list, #826), `likelihood.css`, `likelihood.mixture_assignments`, `likelihood.schedule`, `likelihood.spatio_sequential_rust`, and `likelihood.device`, which owns the cross-device tolerance this milestone's claims are stated against. `likelihood.ragged_rust` is the compiled kernel behind the ragged path, conserved beside `sandbox.rectangular_hmm` (#666).
+
+**Polar codes are a row, and the CRC-aided list is built and measured**
+([#826](https://github.com/michaelJwilson/snakes_and_ladders/issues/826)).
+`sandbox.polar` and `sandbox.polar_decoding` --- 711 lines conserved since #593
+--- are `sim.polar` and `likelihood.polar`, moved bitwise with their 22 tests,
+and the `polar` fixture joins the registry at three tiers with its row in
+`PROBLEMS.md`, so the applicability tables carry it by generation;
+`sandbox.polar_reference` stays as the oracle that pins successive
+cancellation bitwise. `decode_scl(..., crc=)` returns the best survivor whose
+check passes and the best metric when none does (Tal & Vardy 2015): at
+`N = 16` with a three-bit check and the exhaustive list it is the
+maximum-likelihood codeword of the enumerated 32-word outer code on every one
+of 12 draws, and at `N = 64`, rate 1/2, CRC-8 and `L = 8` it decodes more of
+120 shared blocks than the plain list. **At `N = 256` it buys nothing yet**:
+over 200 shared blocks at `sigma` from 1.0 to 0.6 (0 to 4.4 dB) the CRC-aided
+and plain block error rates are equal at `L = 8` (1.000, 0.995, 0.925, 0.570,
+0.090) and at `L = 32` (0.805 and 0.395 at 0.8 and 0.7), because every list
+failure is the sent path pruned --- in 1,000 decodes the sent word was never in
+the final list below the top --- and the check can only re-rank what survives.
+The gain the literature reports at `N = 2048`, `L = 32` waits on a list the
+pruning does not reach first, which is a longer list or a better construction,
+and the measurement says which is missing here.
 
 **A covariate reaches the two-channel family, every seam above it, and the
 compiled backend** ([#660](https://github.com/michaelJwilson/snakes_and_ladders/pull/660)).

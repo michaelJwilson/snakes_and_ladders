@@ -120,6 +120,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sim.ldpc
    :members:
 
+.. automodule:: snakes_and_ladders.sim.polar
+   :members:
+
 .. automodule:: snakes_and_ladders.sim.css
    :members:
 
@@ -205,6 +208,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.likelihood.ldpc
+   :members:
+
+.. automodule:: snakes_and_ladders.likelihood.polar
    :members:
 
 .. automodule:: snakes_and_ladders.likelihood.algebraic
@@ -441,12 +447,6 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.sandbox.region_graph
-   :members:
-
-.. automodule:: snakes_and_ladders.sandbox.polar
-   :members:
-
-.. automodule:: snakes_and_ladders.sandbox.polar_decoding
    :members:
 
 .. automodule:: snakes_and_ladders.sandbox.polar_reference

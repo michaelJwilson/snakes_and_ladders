@@ -51,5 +51,5 @@ pull request that made the move, and `STATUS.md` where they are evidence.
 | `circulant_schedule` | superseded in capability | the circulant case, where a rate per step and the matrix stack it builds are one chain (#658) |
 | `rectangular_hmm` | superseded in capability | the equal-length case, where the ragged fit's mask is everywhere true and must fall through to this arithmetic bit for bit (#666) |
 | `region_graph` | declined | the Bethe region graph, where the Kikuchi free energy is `message_passing`'s Bethe value and its fixed point; the plaquettes settle at weak coupling on the strip and at strong coupling not at all (#689) |
-| `polar`, `polar_decoding`, `polar_reference` | declined | the declared code, where `SCL(1) == SC` bitwise, `SCL(2^k)` is the enumerated maximum likelihood, and the naive recursion pins the list layout bitwise (#593) |
+| `polar_reference` | oracle | the naive successive-cancellation recursion that pins `likelihood.polar.decode_sc` bitwise; the construction and the decoders it referees were promoted to `sim.polar` and `likelihood.polar` when the code got its row (#826) |
 | `maxflow_declined` | declined | the minimal minimum cut, arc for arc against the Python Dinic and the package kernel, by three algorithms the kept one is not; the parallel one bitwise across thread counts (#715) |

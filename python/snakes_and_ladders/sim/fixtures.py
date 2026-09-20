@@ -68,6 +68,7 @@ from snakes_and_ladders.sim.hmm import load_hmm_params
 from snakes_and_ladders.sim.ldpc import load_bicycle_params, load_ldpc_params
 from snakes_and_ladders.sim.mixture import load_mixture_params
 from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.polar import load_polar_params
 from snakes_and_ladders.sim.potts import (
     load_potts_lattice_params,
     load_spatio_only_params,
@@ -104,6 +105,7 @@ LOADERS: dict[str, Callable[[Path], Any]] = {
     "frustrated-lattice": load_frustrated_lattice_params,
     "test-functions": load_test_function_params,
     "turbo": load_turbo_params,
+    "polar": load_polar_params,
 }
 
 #: The oracles a fixture may state: an exhaustive sum over the instance, the
