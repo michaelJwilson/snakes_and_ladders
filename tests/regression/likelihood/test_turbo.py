@@ -39,7 +39,7 @@ from snakes_and_ladders.likelihood.turbo import (
     split_streams,
     uncoded_bit_error_rate,
 )
-from snakes_and_ladders.sim.convolutional import TurboCode, turbo_encode
+from snakes_and_ladders.sim.convolutional import TurboCode, TurboParams, turbo_encode
 from snakes_and_ladders.sim.fixtures import Fixture, fixture
 from snakes_and_ladders.sim.ldpc import BinaryInputGaussianChannel
 
@@ -375,7 +375,9 @@ def test_the_error_pattern_under_a_codeword_is_the_pattern_under_zero() -> None:
 # --- the waterfall ---------------------------------------------------------------
 
 
-def _waterfall(instance: Fixture, backend: Backend = Backend.RUST) -> list[ErrorRates]:
+def _waterfall(
+    instance: Fixture[TurboParams], backend: Backend = Backend.RUST
+) -> list[ErrorRates]:
     """Every declared point of one instance, under that instance's own seed."""
     params = instance.params
     code = params.code()

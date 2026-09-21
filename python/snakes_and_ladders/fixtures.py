@@ -123,6 +123,42 @@ class Params(Protocol):
 P = TypeVar("P", bound=Params)
 
 
+def params_from(declared: Mapping[str, Any], path: Path, kind: type[P]) -> P:
+    """Build ``kind``'s declared truth from a mapping already read from ``path``.
+
+    The half of :func:`load_params` that is not the read, for a caller
+    holding the parse: `sim.fixtures.fixture` reads the model and the oracle
+    off the same mapping and parsed the file a second time to get here
+    (issue #864).
+
+    Parameters
+    ----------
+    declared : Mapping[str, Any]
+        The fixture's fields, as :func:`load_declared` returns them.
+    path : Path
+        The file ``declared`` was read from, reported in every error.
+    kind : type[Params]
+        Which truth the file declares.
+
+    Returns
+    -------
+    P
+        The parsed, validated truth.
+
+    Raises
+    ------
+    ValueError
+        If a field of :attr:`~Params.required_fields` is absent, in the
+        message :func:`load_declared` gives, and from ``kind.from_declared``
+        on its own terms.
+    """
+    missing = set(kind.required_fields) - declared.keys()
+    if missing:
+        msg = f"{path}: missing required field(s) {sorted(missing)}"
+        raise ValueError(msg)
+    return kind.from_declared(declared, path)
+
+
 def load_params(path: Path, kind: type[P]) -> P:
     """Read a fixture yaml and build its declared truth as ``kind``.
 
@@ -148,4 +184,4 @@ def load_params(path: Path, kind: type[P]) -> P:
         a required field is absent, and from ``kind.from_declared`` on its own
         terms.
     """
-    return kind.from_declared(load_declared(path, kind.required_fields), path)
+    return params_from(load_declared(path, ()), path, kind)
