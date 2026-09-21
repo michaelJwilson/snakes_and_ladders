@@ -16,6 +16,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
+from snakes_and_ladders.cost import Cost
 from snakes_and_ladders.opt.budget import Budget, Outcome, compare, restarts
 from snakes_and_ladders.opt.fit import fit, fit_from
 from snakes_and_ladders.opt.hmm import HmmObjective
@@ -168,7 +169,7 @@ def test_restarts_barely_help_on_rastrigin_and_the_number_says_so() -> None:
     result = compare(
         {"one start": one_start, "restarts": restarts(random_start, 1)},
         [objective] * 10,
-        Budget("fits", 8),
+        Budget(Cost.FITS, 8),
         seeds=(0,),
         workers=1,
         known=[0.0] * 10,

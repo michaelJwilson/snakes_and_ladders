@@ -26,7 +26,8 @@ sys.path.insert(0, str(REPO_ROOT / "infra"))
 
 import coverage_recut  # noqa: E402
 import ladder  # noqa: E402
-from ladder import LADDER, PROBLEMS, Cost, Rung  # noqa: E402
+from ladder import LADDER, LADDER_UNITS, PROBLEMS, Rung  # noqa: E402
+from snakes_and_ladders.cost import Cost  # noqa: E402
 
 #: What issue #734 counts as unpinned today: none. The Potts five (step 2),
 #: the tree four (step 3), the HMM four (step 4), the codes five (step 5) and
@@ -215,9 +216,11 @@ def test_every_rung_belongs_to_one_of_the_five_ladders() -> None:
 def test_every_rung_declares_a_unit_and_every_unit_is_spent() -> None:
     # The field is keyword-only with no default, so a rung without a cost does
     # not construct; what is asserted is the vocabulary: every rung's unit is
-    # one of the eight, and no unit is declared that no rung spends. An exact
-    # rung may sit above another exact rung (the k-means dynamic programme is
-    # pinned against assignment enumeration), so exactness is not a foot rule
-    # (issue #818).
+    # one of the eight the ladder declares, and each of the eight is spent. An
+    # exact rung may sit above another exact rung (the k-means dynamic
+    # programme is pinned against assignment enumeration), so exactness is not
+    # a foot rule (issue #818). `Cost` is the package's vocabulary since #860
+    # and carries the units `opt.budget.Budget` names too, so the ladder's
+    # eight are named by `LADDER_UNITS` rather than read off the enum.
     assert [rung.name for rung in LADDER if not isinstance(rung.cost, Cost)] == []
-    assert {rung.cost for rung in LADDER} == set(Cost)
+    assert {rung.cost for rung in LADDER} == LADDER_UNITS

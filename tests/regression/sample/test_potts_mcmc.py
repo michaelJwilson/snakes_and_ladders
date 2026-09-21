@@ -28,6 +28,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.cost import Cost
 from snakes_and_ladders.likelihood.potts import log_weights
 from snakes_and_ladders.opt.budget import Budget, Outcome, compare, restarts
 from snakes_and_ladders.sample import potts_mcmc
@@ -1485,7 +1486,7 @@ def test_tempering_and_annealing_beat_restarts_at_equal_budget_on_the_glass() ->
     # instance. The referee is that planted energy: `planted_spin_glass`
     # plants a configuration and reports its energy, so a solver at or below
     # it has recovered the truth the instance was generated from.
-    budget = Budget("sweeps", 400)
+    budget = Budget(Cost.SWEEPS, 400)
     ladder = (2.0, 1.2, 0.7, 0.4)
     instances = [
         planted_spin_glass(60, 4.0, 0.2, np.random.default_rng(1000 + seed))

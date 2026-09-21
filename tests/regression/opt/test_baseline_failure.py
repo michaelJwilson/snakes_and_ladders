@@ -21,6 +21,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from snakes_and_ladders.cost import Cost
 from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.learn.failure import (
     FailureCurve,
@@ -85,7 +86,7 @@ def test_a_probe_counts_what_it_ran_and_what_it_reached() -> None:
         _draw,
         _Basin(1.0),
         target=0.0,
-        budget=Budget("decisions", 10),
+        budget=Budget(Cost.DECISIONS, 10),
         starts=8,
         rng=np.random.default_rng(0),
         size=1,
@@ -98,7 +99,7 @@ def test_a_probe_counts_what_it_ran_and_what_it_reached() -> None:
         _draw,
         _Basin(0.0),
         target=0.0,
-        budget=Budget("decisions", 10),
+        budget=Budget(Cost.DECISIONS, 10),
         starts=8,
         rng=np.random.default_rng(0),
         size=1,
@@ -119,7 +120,7 @@ def test_the_sweep_stops_at_the_size_the_binomial_predicts() -> None:
         _draw,
         _family,
         sizes=(1, 2, 3, 4),
-        budget=Budget("decisions", 10),
+        budget=Budget(Cost.DECISIONS, 10),
         starts=32,
         rng=np.random.default_rng(596),
     )
@@ -140,7 +141,7 @@ def test_the_whole_curve_is_available_when_the_sweep_is_asked_for_it() -> None:
         _draw,
         _family,
         sizes=(1, 2, 3, 4),
-        budget=Budget("decisions", 10),
+        budget=Budget(Cost.DECISIONS, 10),
         starts=64,
         rng=np.random.default_rng(596),
         stop_at_failure=False,
@@ -161,7 +162,7 @@ def test_a_baseline_that_never_fails_reports_no_failure() -> None:
         _draw,
         _never_fails,
         sizes=(1, 2, 3),
-        budget=Budget("decisions", 10),
+        budget=Budget(Cost.DECISIONS, 10),
         starts=16,
         rng=np.random.default_rng(1),
     )
@@ -179,7 +180,7 @@ def test_the_clock_truncates_a_probe_and_the_probe_says_so() -> None:
         _draw,
         _Basin(1.0),
         target=0.0,
-        budget=Budget("decisions", 10),
+        budget=Budget(Cost.DECISIONS, 10),
         starts=10_000_000,
         rng=np.random.default_rng(0),
         size=1,
@@ -193,7 +194,7 @@ def test_the_clock_truncates_a_probe_and_the_probe_says_so() -> None:
 
 @pytest.mark.smoke
 def test_the_harness_refuses_what_it_cannot_measure() -> None:
-    budget = Budget("decisions", 10)
+    budget = Budget(Cost.DECISIONS, 10)
     with pytest.raises(ValueError, match="at least one start"):
         probe_failure(
             _draw,
@@ -300,7 +301,7 @@ def test_the_harness_reproduces_the_restart_baseline_on_the_seven_taxon_tree() -
     # same 60-decision budget reach it from all of them. So the baseline
     # Milestone 2.1 has to beat here is 1.000, and the harness says so.
     environment, maximum = _tree_instance()
-    budget = Budget("decisions", DECISIONS)
+    budget = Budget(Cost.DECISIONS, DECISIONS)
 
     single = probe_failure(
         _descent,
@@ -373,7 +374,7 @@ def test_the_curve_is_the_binomial_the_family_declares() -> None:
         _draw,
         _family,
         sizes=(1, 2, 3, 4, 5),
-        budget=Budget("decisions", 10),
+        budget=Budget(Cost.DECISIONS, 10),
         starts=400,
         rng=np.random.default_rng(729),
         stop_at_failure=False,

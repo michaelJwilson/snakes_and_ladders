@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.incidence import SparseIncidence
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import energy, site_field
@@ -434,9 +434,7 @@ def ising_ground_state(
         is the submodularity boundary: the problem is NP-hard there and this
         returns nothing rather than a lattice-shaped wrong answer.
     """
-    if backend not in (Backend.PYTHON, Backend.RUST):
-        msg = f"ising_ground_state runs on {Backend.PYTHON} or {Backend.RUST}, not {backend}"
-        raise ValueError(msg)
+    refuse_backend("ising_ground_state", backend, (Backend.PYTHON, Backend.RUST))
     if backend is Backend.RUST:
         # Local, because the twin imports `FlowNetwork` and `MinCut` from
         # here: a module-level import is the cycle.

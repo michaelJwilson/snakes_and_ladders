@@ -14,6 +14,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from scipy.stats import binomtest
+from snakes_and_ladders.cost import Cost
 from snakes_and_ladders.opt.budget import (
     Budget,
     Comparison,
@@ -47,7 +48,7 @@ def _misses_above_one(
 
 @pytest.mark.analytic
 def test_restarts_run_as_many_times_as_the_budget_allows_and_keep_the_minimum() -> None:
-    budget = Budget("evaluations", 10)
+    budget = Budget(Cost.EVALUATIONS, 10)
     method = restarts(_draw, cost=3)
 
     outcome = method(0.0, budget, np.random.default_rng(1))
@@ -59,7 +60,7 @@ def test_restarts_run_as_many_times_as_the_budget_allows_and_keep_the_minimum() 
 
 @pytest.mark.analytic
 def test_compare_scores_the_best_over_seeds_against_the_best_any_method_found() -> None:
-    budget = Budget("evaluations", 4)
+    budget = Budget(Cost.EVALUATIONS, 4)
     instances = [0.0, 10.0]
 
     result = compare(
@@ -92,7 +93,7 @@ def test_a_known_optimum_is_the_reference_when_given() -> None:
     result = compare(
         {"single": _draw},
         [0.0, 1.0],
-        Budget("evaluations", 1),
+        Budget(Cost.EVALUATIONS, 1),
         seeds=(0,),
         workers=1,
         known=[0.0, 1.0],
@@ -106,7 +107,7 @@ def test_a_known_optimum_is_the_reference_when_given() -> None:
 @pytest.mark.infra
 def test_the_table_names_the_unit_the_hits_and_the_spend() -> None:
     result = compare(
-        {"single": _draw}, [0.0], Budget("sweeps", 5), seeds=(3,), workers=1
+        {"single": _draw}, [0.0], Budget(Cost.SWEEPS, 5), seeds=(3,), workers=1
     )
 
     table = result.table()
@@ -123,14 +124,20 @@ def test_a_method_that_spends_past_its_budget_is_refused() -> None:
 
     with pytest.raises(OverspendError, match="above the budget"):
         compare(
-            {"greedy": greedy}, [0.0], Budget("evaluations", 3), seeds=(0,), workers=1
+            {"greedy": greedy},
+            [0.0],
+            Budget(Cost.EVALUATIONS, 3),
+            seeds=(0,),
+            workers=1,
         )
 
 
 @pytest.mark.smoke
 def test_a_restart_that_costs_more_than_the_whole_budget_is_refused() -> None:
     with pytest.raises(ValueError, match="above the budget"):
-        restarts(_draw, cost=5)(0.0, Budget("evaluations", 4), np.random.default_rng(0))
+        restarts(_draw, cost=5)(
+            0.0, Budget(Cost.EVALUATIONS, 4), np.random.default_rng(0)
+        )
     with pytest.raises(ValueError, match="at least one unit"):
         restarts(_draw, cost=0)
 
@@ -154,16 +161,24 @@ def test_an_empty_or_inconsistent_comparison_is_refused(
 ) -> None:
     with pytest.raises(ValueError, match=match):
         compare(
-            methods, instances, Budget("evaluations", 1), seeds, workers=1, known=known
+            methods,
+            instances,
+            Budget(Cost.EVALUATIONS, 1),
+            seeds,
+            workers=1,
+            known=known,
         )
 
 
 @pytest.mark.smoke
 def test_a_budget_without_a_unit_or_a_size_is_refused() -> None:
+    # The empty unit is outside the enum and `mypy` says so; the guard stays
+    # because a caller reaching this constructor from an untyped route --- a
+    # record read back, a notebook --- is the one it is there for (issue #860).
     with pytest.raises(ValueError, match="names its unit"):
-        Budget("", 1)
+        Budget("", 1)  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="at least one"):
-        Budget("evaluations", 0)
+        Budget(Cost.EVALUATIONS, 0)
 
 
 @pytest.mark.oracle
@@ -208,7 +223,7 @@ def test_a_relative_tolerance_scales_with_the_reference_and_the_paired_p_reads_t
     result = compare(
         {"first": first, "second": second},
         [1000.0, 1000.0, 0.0],
-        Budget("evaluations", 1),
+        Budget(Cost.EVALUATIONS, 1),
         seeds=(0,),
         workers=1,
         known=[1000.0, 1000.0, 0.0],
@@ -284,7 +299,7 @@ def test_a_hand_built_comparison_reports_the_hits_gaps_and_p_value_it_must() -> 
     result = compare(
         {"first": _reaches_every_instance, "second": _misses_above_one},
         instances,
-        Budget("evaluations", 1),
+        Budget(Cost.EVALUATIONS, 1),
         seeds=(0,),
         workers=1,
         known=list(instances),
@@ -308,7 +323,7 @@ def test_four_workers_report_the_comparison_one_worker_reports() -> None:
     """
     methods = {"single": _draw, "restarts": restarts(_draw, 1)}
     instances = [0.0, 10.0, 20.0]
-    budget = Budget("evaluations", 4)
+    budget = Budget(Cost.EVALUATIONS, 4)
 
     serial = compare(methods, instances, budget, seeds=(0, 1), workers=1)
     pooled = compare(methods, instances, budget, seeds=(0, 1), workers=4)

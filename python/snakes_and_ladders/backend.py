@@ -20,6 +20,37 @@ site only where the draw clears every cumulative boundary by more than the
 two exponentials can move it, and hands the rest back. The pin is then exact
 and the compiled path is the default without a committed number moving
 (issues #561, #599).
+
+**Which way each module's default points** (issue #860). A default decides
+what a caller who does not ask gets, and it is a per-module decision; stated
+here so it is read once rather than off 46 signatures.
+
+``RUST``
+    `numerics.sample_rows`, `likelihood.convolutional`,
+    `likelihood.message_passing`, `likelihood.turbo`,
+    `likelihood.ragged_rust`, and the sweeps of `sample.potts_mcmc`,
+    `sample.annealed` and `sample.tempered`.
+``NUMBA``
+    `sample.gibbs` and
+    `search.alpha_expansion.iterated_conditional_modes`: arithmetic that is
+    NumPy's operation for operation.
+``PYTHON``
+    everything else that takes the enum --- `likelihood.pruning`,
+    `likelihood.spatio_sequential`, `search.maxflow`,
+    `search.alpha_expansion`'s cut moves, `search.bifurcation`,
+    `search.spatio_sequential`, `sim.count_pairs`, `sample.potts_keyed`,
+    `learn.ranking`.
+
+The rule the split follows is the one above: a compiled default is taken
+where the pin against the oracle is *exact* and a measurement earned it, and
+left at ``PYTHON`` otherwise --- which is every entry point whose return is a
+number a document quotes, an oracle's own answer or a fixture's draw. There
+the compiled route is asked for by name and the pin says the answer is the
+same.
+
+:func:`refuse_backend` is how a module declines a member it has no
+implementation for. The sentence was written inline at five sites and is one
+here, so a refusal reads the same wherever a caller meets it.
 """
 
 from __future__ import annotations
@@ -44,3 +75,30 @@ class Backend(StrEnum):
     which is what puts it on a device. Admitted for a hot path that is
     elementwise over sites and earns the GPU rule, or is measured against it
     (issue #823); a kernel whose loop is over an adjacency belongs to Rust."""
+
+
+def refuse_backend(name: str, backend: Backend, allowed: tuple[Backend, ...]) -> None:
+    """Refuse a member ``name`` has no implementation for, in the one sentence.
+
+    Parameters
+    ----------
+    name : str
+        What was asked for, as the message names it: the callable, or the
+        phrase its module wrote --- ``"message passing"``, ``"the coupled
+        model"``. The caller passes what the site printed, so no message
+        changed when the guards moved here (issue #860).
+    backend : Backend
+        What the caller asked for.
+    allowed : tuple[Backend, ...]
+        What does run it, listed in the message in this order.
+
+    Raises
+    ------
+    ValueError
+        If ``backend`` is not among ``allowed``.
+    """
+    if backend in allowed:
+        return
+    runs_on = " or ".join(str(one) for one in allowed)
+    msg = f"{name} runs on {runs_on}, not {backend}"
+    raise ValueError(msg)

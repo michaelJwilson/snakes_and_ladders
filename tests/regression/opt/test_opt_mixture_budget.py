@@ -26,6 +26,7 @@ from dataclasses import dataclass
 import numpy as np
 import pytest
 import torch
+from snakes_and_ladders.cost import Cost
 from snakes_and_ladders.emissions import GaussianEmission
 from snakes_and_ladders.opt.budget import (
     Budget,
@@ -63,7 +64,7 @@ SCALE = np.asarray(PARAMS.components.scale)
 #: observations' per-component log densities: an EM iteration, an objective
 #: value, or an objective gradient each count one (measured single-threaded:
 #: 0.6 ms, 0.4 ms and 1.5 ms).
-BUDGET = Budget("evaluations", 3000)
+BUDGET = Budget(Cost.EVALUATIONS, 3000)
 #: EM iterations per restart before its polish.
 EM_COST = 200
 #: The polish: L-BFGS outer steps, and the evaluations that bounds. Each
@@ -229,7 +230,7 @@ def _referee(fixture: Fixture, n_restarts: int) -> tuple[float, float, float]:
     for index in range(n_restarts):
         outcome = _em_then_polish(
             fixture,
-            Budget("evaluations", 500 + POLISH_RESERVE),
+            Budget(Cost.EVALUATIONS, 500 + POLISH_RESERVE),
             np.random.default_rng([REFEREE_SEED, index]),
         )
         best = min(best, outcome.value)

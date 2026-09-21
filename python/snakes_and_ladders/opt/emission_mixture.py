@@ -38,6 +38,7 @@ from snakes_and_ladders.opt.mixture import (
     responsibilities,
     uniform_seeds,
 )
+from snakes_and_ladders.opt.termination import Termination
 
 #: Builds a ``k``-state family centred on ``k`` observations, one per row. The
 #: seam an initializer needs from a model whose parameters it cannot otherwise
@@ -72,6 +73,10 @@ class EmissionMixtureFit:
         identifies its parameter over --- a flat likelihood in a dispersion or
         a concentration, reported rather than treated as an error (issue
         #122).
+    termination : Termination | None
+        Whether the loop met its relative tolerance or ran out of iterations,
+        in the form every result states it in (issue #860). ``iterations``
+        stays: it is what this result has always been read by.
     """
 
     weights: torch.Tensor
@@ -80,6 +85,7 @@ class EmissionMixtureFit:
     log_likelihood: float
     iterations: int
     at_boundary: bool
+    termination: Termination | None = None
 
 
 def expectation_maximization(
@@ -163,7 +169,7 @@ def expectation_maximization(
         components,
         torch.empty((values.shape[0], components.n_states), dtype=torch.float64),
     )
-    (weights, components, posterior), log_likelihood, iterations = em_loop(
+    (weights, components, posterior), log_likelihood, termination = em_loop(
         step, start, tolerance=tolerance, max_iterations=max_iterations
     )
     return EmissionMixtureFit(
@@ -171,8 +177,9 @@ def expectation_maximization(
         components=components,
         responsibilities=posterior,
         log_likelihood=log_likelihood,
-        iterations=iterations,
+        iterations=termination.iterations,
         at_boundary=boundary,
+        termination=termination,
     )
 
 
