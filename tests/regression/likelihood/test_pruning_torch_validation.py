@@ -1,9 +1,11 @@
-"""Validation-error paths for ``snakes_and_ladders.likelihood.pruning_torch``.
+"""The refusals that are this route's alone (issue #863).
 
-Separated from tests/regression/test_pruning_torch.py, which pins
-scientific correctness; these pin the guardrails around malformed inputs,
-mirroring tests/regression/test_likelihood_validation.py's split for the
-NumPy oracle.
+The three every route makes --- ``pi``, the alignment, a non-root node
+without a branch length --- are one body each in
+`test_likelihood_validation.py`, parametrised over the routes and asked of
+this one there. What is left here is what only a route taking its branch
+lengths as a tensor can be asked: a tensor of the wrong shape, and the
+refusal `branch_lengths_from_tree` makes when it builds one.
 """
 
 from __future__ import annotations
@@ -33,24 +35,10 @@ _BRANCH_LENGTHS = branch_lengths_from_tree(_TAU)
 
 
 @pytest.mark.smoke
-def test_rejects_mismatched_pi_shape() -> None:
-    with pytest.raises(ValueError, match="pi has shape"):
-        log_likelihood(_TAU, 4, np.full(3, 1.0 / 3), _ALIGNMENT, _BRANCH_LENGTHS)
-
-
-@pytest.mark.smoke
 def test_rejects_mismatched_branch_lengths_shape() -> None:
     with pytest.raises(ValueError, match="branch_lengths has shape"):
         log_likelihood(
             _TAU, 4, np.full(4, 0.25), _ALIGNMENT, torch.zeros(3, dtype=torch.float64)
-        )
-
-
-@pytest.mark.smoke
-def test_rejects_alignment_missing_a_leaf() -> None:
-    with pytest.raises(ValueError, match="alignment is missing leaf"):
-        log_likelihood(
-            _TAU, 4, np.full(4, 0.25), {"A": _ALIGNMENT["A"]}, _BRANCH_LENGTHS
         )
 
 

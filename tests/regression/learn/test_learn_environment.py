@@ -23,6 +23,8 @@ from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.potts import PottsEnvironment
 from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
 
+from tests.regression.learn.conftest import potts_environment
+
 # Same rule, same wording, same reason as `tests/regression/test_opt_objective.py`.
 FORBIDDEN_PREFIXES = (
     "snakes_and_ladders.sim",
@@ -49,12 +51,6 @@ FORBIDDEN_PREFIXES = (
 #: pattern-matched, so a fourth is a failure a reader decides on rather than a
 #: name that slips through.
 APPLICATION_INSTANCES = ("potts.py", "potts_nd.py", "ranking.py", "tree.py")
-
-FIELD = np.array([0.4, -0.1, -0.3])
-
-
-def _environment(chain_length: int = 4) -> PottsEnvironment:
-    return PottsEnvironment(coupling=0.75, field=FIELD, chain_length=chain_length)
 
 
 def _imported_modules(source: Path) -> set[str]:
@@ -105,7 +101,14 @@ def test_every_named_application_instance_exists_and_imports_one() -> None:
 
 @pytest.mark.smoke
 def test_the_reference_environment_satisfies_the_protocol() -> None:
-    assert isinstance(_environment(), Environment)
+    # Annotated, so the module names the problem it exercises: a test module
+    # says which problem it is by the code it imports (`tests/_problems.py`),
+    # and a helper that moved into the conftest may not take that statement
+    # with it (issue #863). It is also the claim, spelled out: the concrete
+    # class the learners are written against satisfies the protocol.
+    environment: PottsEnvironment = potts_environment()
+
+    assert isinstance(environment, Environment)
 
 
 # --- the return telescopes -----------------------------------------------
@@ -117,7 +120,7 @@ def test_total_reward_is_the_improvement_between_first_and_last_state() -> None:
     # total improvement it
     # achieved, independent of the path. This is what licenses gamma = 1, so
     # it is checked against the objective rather than assumed from the algebra.
-    environment = _environment()
+    environment = potts_environment()
     policy = LinearPolicy(2)
     episode = rollout(environment, policy, np.random.default_rng(0), max_steps=5)
     improvement = environment.energy(episode.states[-1]) - environment.energy(
@@ -152,7 +155,7 @@ def test_an_empty_episode_has_zero_return() -> None:
 
 @pytest.mark.smoke
 def test_a_rollout_respects_its_budget_and_reports_truncation() -> None:
-    environment = _environment(chain_length=8)
+    environment = potts_environment(chain_length=8)
     policy = LinearPolicy(2)
     # Weights that make downhill moves likely, so the episode does not
     # terminate at a local maximum before the budget bites.
@@ -164,7 +167,7 @@ def test_a_rollout_respects_its_budget_and_reports_truncation() -> None:
 
 @pytest.mark.smoke
 def test_a_rollout_stops_on_reaching_a_local_maximum() -> None:
-    environment = _environment()
+    environment = potts_environment()
     policy = LinearPolicy(2)
     policy.set_weights(environment.greedy_weights() * 50.0)
     episode = rollout(
@@ -177,7 +180,7 @@ def test_a_rollout_stops_on_reaching_a_local_maximum() -> None:
 
 @pytest.mark.smoke
 def test_a_rollout_started_at_a_local_maximum_takes_no_action() -> None:
-    environment = _environment()
+    environment = potts_environment()
     optimum_state = (0, 0, 0, 0)
     assert environment.is_terminal(optimum_state)
     episode = rollout(
@@ -189,7 +192,7 @@ def test_a_rollout_started_at_a_local_maximum_takes_no_action() -> None:
 
 @pytest.mark.smoke
 def test_a_rollout_is_reproducible_from_its_seed() -> None:
-    environment = _environment()
+    environment = potts_environment()
     policy = LinearPolicy(2)
     policy.set_weights(torch.tensor([0.3, 0.9], dtype=torch.float64))
     first = rollout(environment, policy, np.random.default_rng(11), max_steps=6)
@@ -200,7 +203,7 @@ def test_a_rollout_is_reproducible_from_its_seed() -> None:
 
 @pytest.mark.oracle
 def test_greedy_takes_the_best_rewarded_action_at_every_step() -> None:
-    environment = _environment()
+    environment = potts_environment()
     episode = greedy_rollout(environment, (2, 1, 1, 0), max_steps=20)
     for state, taken, reward in zip(
         episode.states, episode.actions, episode.rewards, strict=False
@@ -216,13 +219,13 @@ def test_greedy_takes_the_best_rewarded_action_at_every_step() -> None:
 @pytest.mark.smoke
 def test_a_negative_budget_is_rejected_by_a_policy_rollout() -> None:
     with pytest.raises(ValueError, match="max_steps must be >= 0"):
-        rollout(_environment(), LinearPolicy(2), np.random.default_rng(0), -1)
+        rollout(potts_environment(), LinearPolicy(2), np.random.default_rng(0), -1)
 
 
 @pytest.mark.smoke
 def test_a_negative_budget_is_rejected_by_the_greedy_rollout() -> None:
     with pytest.raises(ValueError, match="max_steps must be >= 0"):
-        greedy_rollout(_environment(), (0, 1, 0, 1), -1)
+        greedy_rollout(potts_environment(), (0, 1, 0, 1), -1)
 
 
 # --- the gauge -----------------------------------------------------------

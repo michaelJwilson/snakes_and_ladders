@@ -25,6 +25,8 @@ from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.potts import PottsEnvironment
 from snakes_and_ladders.learn.rollout import rollout
 
+from tests.regression.learn.conftest import potts_environment
+
 torchrl = pytest.importorskip("torchrl")
 tensordict = pytest.importorskip("tensordict")
 ppo = pytest.importorskip(
@@ -41,8 +43,6 @@ from tensordict.nn import (  # noqa: E402
 from torchrl.objectives import ClipPPOLoss  # noqa: E402
 from torchrl.objectives.value import GAE  # noqa: E402
 
-FIELD = np.array([0.4, -0.1, -0.3])
-
 # One fixed rollout, in the shape `generalized_advantages` takes: rewards per
 # decision and one value per state, the last being the final state's.
 ROLLOUTS = (
@@ -50,10 +50,6 @@ ROLLOUTS = (
     ([0.3], [0.2, -0.7]),
     ([-1.0, 0.25, 0.5, 0.125, -2.0], [0.0, 1.0, -1.0, 0.5, 0.25, 3.0]),
 )
-
-
-def _environment() -> PottsEnvironment:
-    return PottsEnvironment(coupling=0.75, field=FIELD, chain_length=4)
 
 
 @pytest.mark.oracle
@@ -139,7 +135,7 @@ def _log_probabilities(
 @pytest.mark.oracle
 @pytest.mark.parametrize("clip", [0.1, 0.2, 0.5])
 def test_the_clipped_objective_and_its_gradient_are_torchrl_s(clip: float) -> None:
-    environment = _environment()
+    environment = potts_environment()
     collector = LinearPolicy(2)
     collector.set_weights(torch.tensor([0.1, 0.2], dtype=torch.float64))
     _, features, taken, owner = _decisions(environment, collector, seed=0, episodes=12)

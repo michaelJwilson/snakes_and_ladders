@@ -31,12 +31,12 @@ from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.topology import MoveSet, leaf_bipartitions
 
 from tests._fixtures import FIXTURES_DIR
+from tests.regression.learn.conftest import FIELD
 
 gymnasium = pytest.importorskip("gymnasium")
 from gymnasium.utils.env_checker import check_env  # noqa: E402
 from snakes_and_ladders.learn.gym import GymnasiumEnvironment  # noqa: E402
 
-FIELD = np.array([0.4, -0.1, -0.3])
 FIXTURE = FIXTURES_DIR / "tree_search/ci.yaml"
 BRANCH_LENGTH = 0.1629
 

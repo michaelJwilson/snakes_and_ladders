@@ -42,12 +42,9 @@ from snakes_and_ladders.learn.potts import (
 )
 from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
 
-FIELD = np.array([0.4, -0.1, -0.3])
+from tests.regression.learn.conftest import potts_environment
+
 HORIZON = 3
-
-
-def _environment() -> PottsEnvironment:
-    return PottsEnvironment(coupling=0.75, field=FIELD, chain_length=4)
 
 
 def _policy(weights: list[float]) -> LinearPolicy:
@@ -66,7 +63,7 @@ def _states(environment: PottsEnvironment) -> list[tuple[int, ...]]:
 def test_action_values_satisfy_bellmans_equation() -> None:
     # V^pi(s) = sum_a pi(a | s) Q^pi(s, a), the two sides computed by different
     # recursions; and the optimal value dominates every policy's value.
-    environment, policy = _environment(), _policy([0.3, -0.6])
+    environment, policy = potts_environment(), _policy([0.3, -0.6])
     for state in _states(environment)[::7]:
         value = float(exact_expected_return(environment, policy, state, HORIZON))
         q = exact_action_values(environment, policy, state, HORIZON)
@@ -95,7 +92,7 @@ def test_the_optimal_value_over_a_long_horizon_reaches_the_enumerated_optimum() 
     # With enough decisions the best return from any start is the gap to the
     # enumerated minimum energy, since single flips connect every pair of
     # configurations.
-    environment = _environment()
+    environment = potts_environment()
     best = optimum(environment)[1]
     checked = 0
     for state in _states(environment)[::11]:
@@ -117,7 +114,7 @@ def test_a_fitted_critic_explains_the_enumerated_state_values(
 ) -> None:
     # Fitted to V^pi on every configuration: the linear critic explains 0.87
     # of the variance (measured), the MLP 0.996; pinned at the margin below.
-    environment, policy = _environment(), _policy([0.3, -0.6])
+    environment, policy = potts_environment(), _policy([0.3, -0.6])
     states = _states(environment)
     features = torch.stack([state_features(environment, s) for s in states])
     targets = torch.tensor(
@@ -147,7 +144,7 @@ def test_the_estimator_with_the_exact_critic_is_unbiased_for_the_exact_gradient(
     # 4000 episodes: the advantage-weighted score function with V^pi as the
     # baseline against autodiff through the enumerated J, to the Monte Carlo
     # tolerance the sample size supports (5e-3 measured; asserted at 3e-2).
-    environment, policy = _environment(), _policy([0.3, -0.6])
+    environment, policy = potts_environment(), _policy([0.3, -0.6])
     start = _states(environment)[5]
     exact = exact_policy_gradient(environment, policy, start, HORIZON)
     rng = np.random.default_rng(0)
@@ -170,7 +167,7 @@ def test_the_estimator_with_the_exact_critic_is_unbiased_for_the_exact_gradient(
 
 @pytest.mark.smoke
 def test_targets_and_advantages_line_up_with_the_decisions() -> None:
-    environment, policy = _environment(), _policy([0.3, -0.6])
+    environment, policy = potts_environment(), _policy([0.3, -0.6])
     rng = np.random.default_rng(1)
     episodes = [rollout(environment, policy, rng, HORIZON) for _ in range(5)]
     n_decisions = sum(len(e.actions) for e in episodes)
@@ -203,7 +200,7 @@ def test_actor_critic_reaches_the_optimum_at_least_as_often_as_greedy() -> None:
     # 60 iterations of 32 episodes, the budget #135 trained REINFORCE on:
     # the actor-critic reaches the enumerated optimum from 88.9% of the 81
     # starts against greedy's 80.2% (measured; asserted at greedy's rate).
-    environment = _environment()
+    environment = potts_environment()
     policy = LinearPolicy(2)
     critic = Critic(
         n_state_features(environment),
@@ -239,7 +236,7 @@ def test_actor_critic_reaches_the_optimum_at_least_as_often_as_greedy() -> None:
 
 @pytest.mark.smoke
 def test_mlp_policy_is_a_softmax_over_the_available_actions() -> None:
-    environment = _environment()
+    environment = potts_environment()
     policy = MLPPolicy(2, hidden=8, generator=torch.Generator().manual_seed(0))
     state = _states(environment)[3]
     features = environment.features(state, environment.actions(state))
@@ -306,7 +303,7 @@ def test_the_action_values_are_a_brute_force_over_trajectories() -> None:
     orders. Realized over seven states, the largest disagreement is 2.2e-16
     absolute on values of order 1, against a declared 1e-12.
     """
-    environment, policy = _environment(), _policy([0.3, -0.6])
+    environment, policy = potts_environment(), _policy([0.3, -0.6])
 
     for state in _states(environment)[::13]:
         assert float(
@@ -348,7 +345,7 @@ def test_the_bootstrapped_targets_telescope_to_the_closed_form_return() -> None:
     `monte_carlo_targets` is read against the same closed form, where the
     agreement is term by term rather than in the sum.
     """
-    environment = _environment()
+    environment = potts_environment()
     critic = Critic(
         n_state_features(environment),
         hidden=None,

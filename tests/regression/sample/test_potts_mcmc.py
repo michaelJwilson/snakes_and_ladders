@@ -82,6 +82,7 @@ from snakes_and_ladders.sim.potts import (
     site_field,
 )
 
+from tests._chains import enumerated_law, fit_p_value
 from tests._scale import at_scale
 
 # Declared significance. The worst p-value over 36 runs -- six seeds across
@@ -145,23 +146,6 @@ ABLATION_SWEEPS = 2_000
 KERNEL_TRIALS = 12_500
 
 
-def _exact_distribution(
-    graph: PottsGraph, field: np.ndarray
-) -> tuple[dict[tuple[int, ...], int], np.ndarray]:
-    """Every configuration and its exact Boltzmann probability."""
-    n_states = int(field.shape[0])
-    configurations = np.array(
-        list(itertools.product(range(n_states), repeat=graph.n_nodes)),
-        dtype=np.int64,
-    )
-    weights = log_weights(graph, field, configurations)
-    weights = weights - weights.max()
-    probability = np.exp(weights)
-    probability /= probability.sum()
-    index = {tuple(row): position for position, row in enumerate(configurations)}
-    return index, probability
-
-
 def _goodness_of_fit(move: PottsMove, field: np.ndarray, seed: int = SEED) -> float:
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
     return _chi_square_against(graph, field, move, seed)
@@ -175,7 +159,7 @@ def _chi_square_against(
     sweeps: int | None = None,
 ) -> float:
     """One chain's realized frequencies against the enumerated Boltzmann law."""
-    index, probability = _exact_distribution(graph, field)
+    index, probability = enumerated_law(graph, field)
     sweeps = SWEEPS_BY_MOVE[move] if sweeps is None else sweeps
 
     chain = sample_potts(
@@ -188,10 +172,7 @@ def _chi_square_against(
         thin=THINNING[move],
     )
 
-    observed = np.zeros(len(probability))
-    for row in chain.states:
-        observed[index[tuple(row)]] += 1
-    return chi_square_p_value(observed, probability * sweeps)
+    return fit_p_value(index, probability, chain.states, sweeps)
 
 
 @pytest.mark.oracle
@@ -257,7 +238,7 @@ def test_single_site_is_still_exact_on_a_negative_coupling() -> None:
     # cluster moves decline. Realized p = 0.524 at the declared seed and
     # 0.608 at the next, against the 0.001 significance.
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, -0.5)
-    index, probability = _exact_distribution(graph, NO_FIELD)
+    index, probability = enumerated_law(graph, NO_FIELD)
 
     chain = sample_potts(
         graph,
@@ -369,7 +350,7 @@ def _pair_chi_square(
     graph: PottsGraph, field: np.ndarray, move: PottsMove, seed: int
 ) -> tuple[float, float]:
     """Each replica's realized frequencies against the enumerated Boltzmann law."""
-    index, probability = _exact_distribution(graph, field)
+    index, probability = enumerated_law(graph, field)
     chains = sample_potts_pair(
         graph,
         field,
@@ -379,12 +360,9 @@ def _pair_chi_square(
         burn_in=PAIR_SWEEPS // 10,
         thin=PAIR_THINNING[move],
     )
-    realized = []
-    for chain in chains:
-        observed = np.zeros(len(probability))
-        for row in chain.states:
-            observed[index[tuple(row)]] += 1
-        realized.append(chi_square_p_value(observed, probability * PAIR_SWEEPS))
+    realized = [
+        fit_p_value(index, probability, chain.states, PAIR_SWEEPS) for chain in chains
+    ]
     return realized[0], realized[1]
 
 
@@ -1155,26 +1133,6 @@ def test_a_wolff_cluster_is_smaller_than_the_lattice_but_larger_than_a_site() ->
 TEMPERATURES = [2.0, 0.5]
 
 
-def _tempered_exact_distribution(
-    graph: PottsGraph, field: np.ndarray, temperature: float
-) -> tuple[dict[tuple[int, ...], int], np.ndarray]:
-    """``exp(-E / T)`` from the *unscaled* model: the oracle a tempered chain is held to.
-
-    Computed from `log_weights` of the model as declared, divided by the
-    temperature, so it shares nothing with `tempered`.
-    """
-    n_states = int(field.shape[0])
-    configurations = np.array(
-        list(itertools.product(range(n_states), repeat=graph.n_nodes)),
-        dtype=np.int64,
-    )
-    log_probability = log_weights(graph, field, configurations) / temperature
-    probability = np.exp(log_probability - log_probability.max())
-    probability /= probability.sum()
-    index = {tuple(row): position for position, row in enumerate(configurations)}
-    return index, probability
-
-
 @pytest.mark.oracle
 @pytest.mark.parametrize("temperature", TEMPERATURES)
 def test_tempering_is_model_scaling_exactly(temperature: float) -> None:
@@ -1199,7 +1157,7 @@ def test_tempering_is_model_scaling_exactly(temperature: float) -> None:
 def test_a_tempered_chain_is_drawn_from_the_tempered_boltzmann_distribution(
     move: PottsMove, temperature: float
 ) -> None:
-    # Refereed by `_tempered_exact_distribution`, the enumeration of all 16
+    # Refereed by `tests._chains.enumerated_law`, the enumeration of all 16
     # configurations at the same temperature, which shares no sweep, cluster
     # or accept step with the sampler.
     # Hot and cold, in a field, for every move set: the bond probabilities
@@ -1207,7 +1165,7 @@ def test_a_tempered_chain_is_drawn_from_the_tempered_boltzmann_distribution(
     # bath. Realized p-values over two seeds range 0.016 to 0.89 against the
     # 0.001 significance the untempered tests use.
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
-    index, probability = _tempered_exact_distribution(graph, WITH_FIELD, temperature)
+    index, probability = enumerated_law(graph, WITH_FIELD, temperature)
     sweeps = SWEEPS_BY_MOVE[move]
 
     chain = sample_potts(
@@ -1310,11 +1268,10 @@ def _replica_p_values(
     """Each replica's chi-square against its own tempered target, from the unscaled model."""
     p_values = []
     for replica, temperature in enumerate(run.temperatures):
-        index, probability = _tempered_exact_distribution(graph, field, temperature)
-        observed = np.zeros(len(probability))
-        for row in run.states[:, replica]:
-            observed[index[tuple(row)]] += 1
-        p_values.append(chi_square_p_value(observed, probability * run.states.shape[0]))
+        index, probability = enumerated_law(graph, field, temperature)
+        p_values.append(
+            fit_p_value(index, probability, run.states[:, replica], run.states.shape[0])
+        )
     return p_values
 
 

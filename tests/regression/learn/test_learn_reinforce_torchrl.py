@@ -37,6 +37,8 @@ from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.potts import PottsEnvironment
 from snakes_and_ladders.learn.reinforce import surrogate_loss
 
+from tests.regression.learn.conftest import potts_environment
+
 torchrl = pytest.importorskip("torchrl")
 tensordict = pytest.importorskip("tensordict")
 
@@ -50,12 +52,7 @@ from tensordict.nn import (  # noqa: E402
 )
 from torchrl.objectives import ReinforceLoss  # noqa: E402
 
-FIELD = np.array([0.4, -0.1, -0.3])
 BASELINES = (0.0, 0.5, -1.25)
-
-
-def _environment() -> Environment[tuple[int, ...], tuple[int, int]]:
-    return PottsEnvironment(coupling=0.75, field=FIELD, chain_length=4)
 
 
 def _greedy_episode(
@@ -141,7 +138,11 @@ def _actor(policy: LinearPolicy) -> ProbabilisticTensorDictSequential:
 def test_the_surrogate_loss_and_its_gradient_are_torchrl_s_reinforce_loss(
     baseline: float,
 ) -> None:
-    environment = _environment()
+    # Annotated, so the module names the problem it exercises: a test module
+    # says which problem it is by the code it imports (`tests/_problems.py`),
+    # and a helper that moved into the conftest may not take that statement
+    # with it (issue #863).
+    environment: PottsEnvironment = potts_environment()
     policy = LinearPolicy(2)
     policy.set_weights(torch.tensor([0.3, -0.6], dtype=torch.float64))
     episodes = _episodes(environment, policy, seed=0, count=12)

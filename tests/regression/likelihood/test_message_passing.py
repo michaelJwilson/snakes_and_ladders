@@ -59,19 +59,14 @@ from snakes_and_ladders.sim.spatio_sequential import simulate_spatio_sequential
 from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import SMALL_SITES, load_fixture
+from tests.regression.likelihood.conftest import FIELD, TREE
 
 RTOL = 1e-11
 ATOL = 1e-12
 
-FIELD = np.array([0.3, -0.7, 0.15])
 
 # The tree `test_belief_propagation.py` uses: six nodes, five edges, couplings
 # of mixed sign so a symmetric mistake cannot pass.
-TREE = PottsGraph(
-    n_nodes=6,
-    edges=((0, 1), (0, 2), (1, 3), (1, 4), (2, 5)),
-    coupling=(0.8, -0.4, 1.2, 0.3, 0.9),
-)
 
 LOOPY = lattice_graph((3, 3), coupling=0.4, boundary=BoundaryCondition.OPEN)
 

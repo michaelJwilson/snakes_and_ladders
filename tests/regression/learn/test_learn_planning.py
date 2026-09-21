@@ -31,11 +31,7 @@ from snakes_and_ladders.learn.potts import (
 )
 from snakes_and_ladders.learn.rollout import greedy_rollout
 
-FIELD = np.array([0.4, -0.1, -0.3])
-
-
-def _environment() -> PottsEnvironment:
-    return PottsEnvironment(coupling=0.75, field=FIELD, chain_length=4)
+from tests.regression.learn.conftest import potts_environment
 
 
 def _states(environment: PottsEnvironment) -> list[tuple[int, ...]]:
@@ -54,7 +50,7 @@ def _policy() -> LinearPolicy:
 def test_one_step_search_with_the_exact_leaf_value_picks_an_optimal_action() -> None:
     # Depth one: every backed-up value is r + V*(s'), so the most visited move
     # is an argmax of Q*, ties allowed.
-    environment, policy = _environment(), _policy()
+    environment, policy = potts_environment(), _policy()
     leaf = lambda s, remaining: exact_optimal_value(environment, s, remaining)  # noqa: E731
     checked = 0
     for state in _states(environment)[::4]:
@@ -80,7 +76,7 @@ def test_the_visit_distribution_improves_on_the_prior_at_depth_three() -> None:
     # Policy improvement: the one-step mixture of the exact action values under
     # the visit distribution is no worse than under the prior on 13 of 14
     # non-terminal states sampled (measured at 400 simulations); pinned at 12.
-    environment, policy = _environment(), _policy()
+    environment, policy = potts_environment(), _policy()
     leaf = lambda s, remaining: exact_optimal_value(environment, s, remaining)  # noqa: E731
     improved, checked = 0, 0
     for state in _states(environment)[::5]:
@@ -111,7 +107,7 @@ def test_expert_iteration_makes_the_planner_reach_the_optimum_at_a_fraction_of_g
     # greedy's 80.2% at 48; after 10 iterations of 8 planned episodes the
     # planner reaches it from 92.6% at 8.3 evaluations per episode, and at
     # six simulations (6.3 evaluations) matches greedy's 80.2%.
-    environment = _environment()
+    environment = potts_environment()
     starts = _states(environment)
     best = optimum(environment)[1]
     greedy = float(
@@ -170,7 +166,7 @@ def test_expert_iteration_makes_the_planner_reach_the_optimum_at_a_fraction_of_g
 
 @pytest.mark.smoke
 def test_the_search_refuses_a_non_positive_budget_and_handles_a_terminal_root() -> None:
-    environment, policy = _environment(), _policy()
+    environment, policy = potts_environment(), _policy()
     leaf = critic_leaf_value(
         environment,
         Critic(

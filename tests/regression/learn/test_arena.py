@@ -60,8 +60,9 @@ from snakes_and_ladders.learn.ppo import ppo
 from snakes_and_ladders.learn.reinforce import reinforce
 from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
 
+from tests.regression.learn.conftest import potts_environment
+
 #: The chain issue #313's five rows were measured on.
-FIELD = np.array([0.4, -0.1, -0.3])
 
 #: What #313 gave each learned row.
 PUBLISHED = TrainingBudget(iterations=60, batch=32, max_steps=6)
@@ -79,10 +80,6 @@ CHAIN_ROWS = {
     "ppo": 78,
     "mlp-ppo": 79,
 }
-
-
-def _environment() -> PottsEnvironment:
-    return PottsEnvironment(coupling=0.75, field=FIELD, chain_length=4)
 
 
 def _starts(environment: PottsEnvironment) -> list[tuple[int, ...]]:
@@ -178,7 +175,7 @@ def test_a_registered_learner_is_bitwise_the_direct_call(name: str) -> None:
     implementation is what makes a table's rows incomparable with the numbers
     published against the functions it wraps.
     """
-    environment = _environment()
+    environment = potts_environment()
     starts = _starts(environment)
     through = [
         run
@@ -212,7 +209,7 @@ def test_the_greedy_row_is_the_greedy_rollout_and_not_a_policy() -> None:
     on this fixture they differ on most starts, which is what makes the
     distinction load-bearing rather than pedantic.
     """
-    environment = _environment()
+    environment = potts_environment()
     starts = _starts(environment)
     through = [
         run
@@ -255,7 +252,7 @@ def test_the_cost_is_the_scored_actions_and_greedy_spends_fewer_than_its_budget(
     and they are not the same number, so the unit is stated here and the
     figure with it.
     """
-    environment = _environment()
+    environment = potts_environment()
     starts = _starts(environment)
     episodes = [
         greedy_rollout(environment, start, PUBLISHED.max_steps) for start in starts
@@ -322,7 +319,7 @@ def test_a_budget_is_three_positive_numbers_and_reports_their_product() -> None:
 @pytest.mark.smoke
 def test_the_table_names_its_rows_and_refuses_one_it_does_not_carry() -> None:
     """A partial table says which rows it is; an unknown name is not silent."""
-    environment = _environment()
+    environment = potts_environment()
     starts = _starts(environment)
     best = optimum(environment)[1]
     partial = table(
@@ -352,7 +349,7 @@ def test_the_table_names_its_rows_and_refuses_one_it_does_not_carry() -> None:
 @pytest.mark.smoke
 def test_an_untrained_row_spends_no_training_decisions() -> None:
     """A row states what it spent, and greedy spent none."""
-    environment = _environment()
+    environment = potts_environment()
     starts = _starts(environment)
     best = optimum(environment)[1]
     greedy = row(
@@ -388,7 +385,7 @@ def test_the_chains_five_rows_come_back_at_the_published_fractions() -> None:
     again. The chain's evaluations are 17.4 (greedy), 23.5, 23.5, 23.9 and
     21.9.
     """
-    environment = _environment()
+    environment = potts_environment()
     starts = _starts(environment)
     best = optimum(environment)[1]
 

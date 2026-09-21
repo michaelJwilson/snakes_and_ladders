@@ -149,57 +149,6 @@ def test_rescaled_and_unrescaled_rust_paths_agree() -> None:
 
 
 @pytest.mark.smoke
-def test_rust_rejects_mismatched_pi_shape() -> None:
-    tau = Node(
-        name="root",
-        branch_length=None,
-        children=(
-            Node(name="A", branch_length=0.1),
-            Node(name="B", branch_length=0.2),
-        ),
-    )
-    alignment = {
-        "A": np.zeros(5, dtype=np.int64),
-        "B": np.zeros(5, dtype=np.int64),
-    }
-    with pytest.raises(ValueError, match="pi has shape"):
-        pruning_rust.log_likelihood(tau, 4, np.full(3, 1.0 / 3), alignment)
-
-
-@pytest.mark.smoke
-def test_rust_rejects_alignment_missing_a_leaf() -> None:
-    tau = Node(
-        name="root",
-        branch_length=None,
-        children=(
-            Node(name="A", branch_length=0.1),
-            Node(name="B", branch_length=0.2),
-        ),
-    )
-    alignment = {"A": np.zeros(5, dtype=np.int64)}
-    with pytest.raises(ValueError, match="alignment is missing leaf"):
-        pruning_rust.log_likelihood(tau, 4, np.full(4, 0.25), alignment)
-
-
-@pytest.mark.smoke
-def test_rust_rejects_non_root_node_without_branch_length() -> None:
-    tau = Node(
-        name="root",
-        branch_length=None,
-        children=(
-            Node(name="A", branch_length=None),
-            Node(name="B", branch_length=0.2),
-        ),
-    )
-    alignment = {
-        "A": np.zeros(5, dtype=np.int64),
-        "B": np.zeros(5, dtype=np.int64),
-    }
-    with pytest.raises(ValueError, match="has no branch_length"):
-        pruning_rust.log_likelihood(tau, 4, np.full(4, 0.25), alignment)
-
-
-@pytest.mark.smoke
 @pytest.mark.release
 def test_relative_tolerance_transfers_to_fixture_scale() -> None:
     """The tolerance holds at 200,000 sites, where an absolute one would not.

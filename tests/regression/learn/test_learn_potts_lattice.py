@@ -33,8 +33,8 @@ from snakes_and_ladders.learn.potts import (
 from snakes_and_ladders.learn.rollout import greedy_rollout
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 
-FIELD = np.array([0.4, -0.1, -0.3])
-COUPLING = 0.75
+from tests.regression.learn.conftest import COUPLING, FIELD
+
 _GRADIENT_TOLERANCE = 1e-8
 
 

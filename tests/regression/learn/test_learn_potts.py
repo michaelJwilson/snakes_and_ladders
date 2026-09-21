@@ -27,13 +27,9 @@ from snakes_and_ladders.learn.rollout import greedy_rollout
 from snakes_and_ladders.sim.potts_chain import PottsParams
 
 from tests._fixtures import FIXTURES_DIR
+from tests.regression.learn.conftest import FIELD, potts_environment
 
-FIELD = np.array([0.4, -0.1, -0.3])
 FIXTURE = FIXTURES_DIR / "potts_chain/ci.yaml"
-
-
-def _environment(chain_length: int = 4) -> PottsEnvironment:
-    return PottsEnvironment(coupling=0.75, field=FIELD, chain_length=chain_length)
 
 
 # --- the model ------------------------------------------------------------
@@ -43,7 +39,7 @@ def _environment(chain_length: int = 4) -> PottsEnvironment:
 def test_energy_matches_its_definition_term_by_term() -> None:
     # E(s) = J * (agreeing adjacent pairs) + sum of the field at each site,
     # written out here independently of the implementation's loop.
-    environment = _environment()
+    environment = potts_environment()
     state = (2, 2, 0, 1)
     expected = 0.75 * 1 + (FIELD[2] + FIELD[2] + FIELD[0] + FIELD[1])
     assert_allclose(environment.energy(state), expected, atol=1e-12)
@@ -54,7 +50,7 @@ def test_the_local_reward_equals_a_full_energy_difference() -> None:
     # The step function updates two bonds and one site rather than
     # re-evaluating E. Every state, every action: at this size the claim can
     # be checked exhaustively instead of sampled.
-    environment = _environment()
+    environment = potts_environment()
     for state in enumerate_configurations(3, 4):
         base = environment.energy(state)
         for action in environment.actions(state):
@@ -67,7 +63,7 @@ def test_the_features_span_the_reward_exactly() -> None:
     # delta_energy = J * agreement_delta + field_delta, which is why the
     # greedy searcher is inside the policy class. If this ever stopped
     # holding, `greedy_weights` would silently stop being greedy.
-    environment = _environment()
+    environment = potts_environment()
     weights = environment.greedy_weights()
     for state in itertools.islice(enumerate_configurations(3, 4), 20):
         actions = environment.actions(state)
@@ -78,7 +74,7 @@ def test_the_features_span_the_reward_exactly() -> None:
 
 @pytest.mark.oracle
 def test_the_neighbourhood_has_one_flip_per_site_and_alternative_state() -> None:
-    environment = _environment(chain_length=5)
+    environment = potts_environment(chain_length=5)
     state = (0, 1, 2, 0, 1)
     actions = environment.actions(state)
     assert len(actions) == 5 * (3 - 1)
@@ -88,7 +84,7 @@ def test_the_neighbourhood_has_one_flip_per_site_and_alternative_state() -> None
 
 @pytest.mark.smoke
 def test_a_terminal_state_is_one_no_flip_improves() -> None:
-    environment = _environment()
+    environment = potts_environment()
     for state in enumerate_configurations(3, 4):
         improvable = any(
             environment.step(state, action)[1] > 0.0
@@ -108,7 +104,7 @@ def test_shifting_the_field_leaves_every_reward_unchanged() -> None:
     # every *difference* is untouched. Recorded because the fixture is
     # canonicalized on load and a reader is entitled to know whether the
     # environment depended on it. It does not.
-    base = _environment()
+    base = potts_environment()
     shifted = PottsEnvironment(0.75, FIELD + 1.7, 4)
     for state in itertools.islice(enumerate_configurations(3, 4), 25):
         for action in base.actions(state):
@@ -129,7 +125,7 @@ def test_enumeration_produces_every_configuration_exactly_once() -> None:
 
 @pytest.mark.oracle
 def test_the_optimum_is_the_best_of_every_configuration() -> None:
-    environment = _environment()
+    environment = potts_environment()
     state, energy = optimum(environment)
     energies = [
         environment.energy(candidate) for candidate in enumerate_configurations(3, 4)
@@ -150,7 +146,7 @@ def test_the_environment_is_hard_enough_to_be_worth_searching() -> None:
     # by 41.6 log units and both move sets reached it every time. Asserting
     # only that *some* start stalls: the count is the measurement, and
     # pinning it would break on any harmless change to tie-breaking.
-    environment = _environment()
+    environment = potts_environment()
     best = optimum(environment)[1]
     stalled = sum(
         abs(
@@ -169,7 +165,7 @@ def test_the_environment_is_hard_enough_to_be_worth_searching() -> None:
 def test_the_greedy_weights_reproduce_the_greedy_searcher() -> None:
     # Not a convenience: it is what makes "the agent beat hill climbing" a
     # statement about learning rather than about two unrelated algorithms.
-    environment = _environment()
+    environment = potts_environment()
     policy = LinearPolicy(2)
     policy.set_weights(environment.greedy_weights() * 50.0)
     for start in itertools.islice(enumerate_configurations(3, 4), 15):
@@ -218,7 +214,7 @@ def test_an_unusable_environment_is_rejected(
 
 @pytest.mark.smoke
 def test_reset_draws_a_configuration_of_the_right_shape() -> None:
-    environment = _environment(chain_length=6)
+    environment = potts_environment(chain_length=6)
     state = environment.reset(np.random.default_rng(0))
     assert len(state) == 6
     assert all(0 <= value < 3 for value in state)
@@ -227,7 +223,7 @@ def test_reset_draws_a_configuration_of_the_right_shape() -> None:
 
 @pytest.mark.smoke
 def test_features_have_one_row_per_action() -> None:
-    environment = _environment()
+    environment = potts_environment()
     state = (0, 1, 2, 0)
     actions = environment.actions(state)
     features = environment.features(state, actions)

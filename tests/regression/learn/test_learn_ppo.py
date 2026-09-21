@@ -43,11 +43,7 @@ from snakes_and_ladders.learn.reinforce import reinforce
 from snakes_and_ladders.learn.rollout import rollout
 from snakes_and_ladders.sim.fixtures import baseline, fixture
 
-FIELD = np.array([0.4, -0.1, -0.3])
-
-
-def _environment() -> PottsEnvironment:
-    return PottsEnvironment(coupling=0.75, field=FIELD, chain_length=4)
+from tests.regression.learn.conftest import potts_environment
 
 
 def _states(environment: PottsEnvironment) -> list[tuple[int, ...]]:
@@ -114,7 +110,7 @@ def test_generalized_advantages_reduce_to_their_two_limits() -> None:
 def test_unclipped_ppo_at_the_collecting_policy_has_the_actor_critic_gradient() -> None:
     # Every ratio is one, so min(rho A, clip(rho) A) = A and the gradient of
     # the clipped objective is the advantage-weighted score function.
-    environment = _environment()
+    environment = potts_environment()
     policy = LinearPolicy(2)
     policy.set_weights(torch.tensor([0.3, -0.6], dtype=torch.float64))
     critic = Critic(
@@ -159,7 +155,7 @@ def test_ppo_raises_the_enumerated_expected_return_and_beats_reinforce_at_a_matc
     # with mean exact return 2.21; PPO from 96.3% with 2.28; greedy from
     # 80.2%. At a quarter of the budget (480 episodes) REINFORCE reaches it
     # from 32.1% and PPO from 87.7%. Asserted at the margins below.
-    environment = _environment()
+    environment = potts_environment()
     ppo_policy = LinearPolicy(2)
     before = _mean_return(environment, ppo_policy)
     critic = Critic(
@@ -224,7 +220,7 @@ def test_an_mlp_policy_trained_by_ppo_reaches_the_optimum() -> None:
     # Measured 97.5% of the 81 starts with mean exact return 2.55, against
     # the linear policy's 96.3% and 2.28: the deeper scorer can represent the
     # worsening move a chain needs, which the two linear features cannot.
-    environment = _environment()
+    environment = potts_environment()
     policy = MLPPolicy(2, hidden=8, generator=torch.Generator().manual_seed(0))
     critic = Critic(
         n_state_features(environment),
@@ -247,7 +243,7 @@ def test_an_mlp_policy_trained_by_ppo_reaches_the_optimum() -> None:
 
 @pytest.mark.smoke
 def test_ppo_refuses_a_non_positive_budget() -> None:
-    environment = _environment()
+    environment = potts_environment()
     critic = Critic(
         n_state_features(environment),
         hidden=None,

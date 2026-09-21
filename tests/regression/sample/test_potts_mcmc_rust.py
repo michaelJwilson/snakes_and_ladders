@@ -22,18 +22,17 @@ the hundreds.
 
 from __future__ import annotations
 
-import itertools
-
 import numpy as np
 import pytest
 from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.likelihood.potts import log_weights
 from snakes_and_ladders.sample import potts_mcmc
 from snakes_and_ladders.sample.potts_mcmc import _GUARD, PottsChain, PottsMove
 from snakes_and_ladders.sample.potts_mcmc import sample_potts as oracle_sample_potts
 from snakes_and_ladders.sample.statistics import chi_square_p_value
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import site_field
+
+from tests._chains import enumerated_law, fit_p_value
 
 
 def sample_potts(
@@ -69,26 +68,9 @@ NO_FIELD = np.zeros(2)
 WITH_FIELD = np.array([0.6, -0.4])
 
 
-def _exact_distribution(
-    graph: PottsGraph, field: np.ndarray
-) -> tuple[dict[tuple[int, ...], int], np.ndarray]:
-    """Every configuration and its exact Boltzmann probability."""
-    n_states = int(field.shape[0])
-    configurations = np.array(
-        list(itertools.product(range(n_states), repeat=graph.n_nodes)),
-        dtype=np.int64,
-    )
-    weights = log_weights(graph, field, configurations)
-    weights = weights - weights.max()
-    probability = np.exp(weights)
-    probability /= probability.sum()
-    index = {tuple(row): position for position, row in enumerate(configurations)}
-    return index, probability
-
-
 def _goodness_of_fit(field: np.ndarray, seed: int = SEED) -> float:
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
-    index, probability = _exact_distribution(graph, field)
+    index, probability = enumerated_law(graph, field)
 
     chain = sample_potts(
         graph,
@@ -99,10 +81,7 @@ def _goodness_of_fit(field: np.ndarray, seed: int = SEED) -> float:
         thin=THINNING,
     )
 
-    observed = np.zeros(len(probability))
-    for row in chain.states:
-        observed[index[tuple(row)]] += 1
-    return chi_square_p_value(observed, probability * SWEEPS)
+    return fit_p_value(index, probability, chain.states, SWEEPS)
 
 
 @pytest.mark.oracle
@@ -133,7 +112,7 @@ def test_the_test_would_catch_a_sampler_that_ignored_the_field() -> None:
     truth, must be rejected.
     """
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
-    index, with_field_truth = _exact_distribution(graph, WITH_FIELD)
+    index, with_field_truth = enumerated_law(graph, WITH_FIELD)
 
     chain = sample_potts(
         graph,
