@@ -18,6 +18,13 @@ is refused past its cap. The hot replicas are there to move it: a chain at
 temperature one alone stays where it starts on a rugged surface, and an
 exchange carries what the hot replicas find down the ladder.
 
+**The exchange loop below is not this module's alone.**
+:func:`snakes_and_ladders.sample.hmc.parallel_tempering` runs it too, supplying
+one Hamiltonian transition per replica as its step and its own torch stream as
+the swap's draw (issue #861). The two temperings stay two entry points with two
+referees --- enumeration for the lattice, quadrature for the posterior --- and
+what they share is the loop, not the rung.
+
 **Every replica draws from its own generator**, spawned from the parent that
 then draws only the exchange uniforms, as ``potts_mcmc.parallel_tempering``
 does and for the reason it gives. And the estimate is a Monte Carlo one:
@@ -66,6 +73,7 @@ from snakes_and_ladders.sim.topology import Model, MoveSet, Topology, leaf_bipar
 from snakes_and_ladders.track import TrackedOptimization, current
 
 S = TypeVar("S")
+G = TypeVar("G")
 
 
 @dataclass(frozen=True)
@@ -262,6 +270,11 @@ def up_fraction(walkers: np.ndarray) -> np.ndarray:
         return np.where(total > 0.0, up / total, np.nan)
 
 
+def _swap_drawn(rng: np.random.Generator) -> Callable[[float], bool]:
+    """The exchange's accept step on a NumPy stream: one uniform, and only where the ratio is negative."""
+    return lambda log_ratio: accept(log_ratio, rng)
+
+
 def _check_budget(n_sweeps: int, thin: int, burn_in: int) -> None:
     """What a run is asked for, beside what its ladder is."""
     if n_sweeps < 1 or thin < 1 or burn_in < 0:
@@ -270,22 +283,37 @@ def _check_budget(n_sweeps: int, thin: int, burn_in: int) -> None:
 
 
 def _exchange(
-    step: Callable[[S, float, float, np.random.Generator], tuple[S, float]],
-    key: Callable[[S], Hashable],
+    step: Callable[[S, float, float, G], tuple[S, float]],
+    key: Callable[[S], Hashable] | None,
     states: list[S],
     values: list[float],
     temperatures: Sequence[float],
-    children: Sequence[np.random.Generator],
-    rng: np.random.Generator,
+    children: Sequence[G],
+    swap: Callable[[float], bool],
     n_sweeps: int,
     burn_in: int,
     thin: int,
+    record: Callable[[Sequence[S], Sequence[float]], None] | None = None,
 ) -> TemperedEnsemble:
     """The replica-exchange loop, over any structure with a step and a key.
 
     ``step(state, value, temperature, generator)`` advances one replica one
     sweep and returns its new state and log-density at temperature one; the
     exchange ratio takes the energy ``-value``.
+
+    **The draw is the caller's and the test is here**, which is
+    :mod:`snakes_and_ladders.sample.accept`'s own division: ``swap`` is
+    handed the log ratio and answers whether the pair exchanges, so a site
+    that draws one NumPy uniform only where the ratio is negative and one
+    that draws a torch uniform every time are the same loop on their own
+    streams (issue #861).
+
+    ``key`` is ``None`` where a state has no canonical key --- a continuous
+    position is a point, not a structure --- and the ensemble then carries
+    no keys and no scores. ``record`` is called at every recorded sweep with
+    the states and their log-densities after the exchanges, for a caller
+    whose result carries the states themselves; the ensemble carries the
+    keys of them.
     """
     n_replicas = len(temperatures)
     betas = [1.0 / temperature for temperature in temperatures]
@@ -320,16 +348,19 @@ def _exchange(
                 betas[pair], betas[pair + 1], -values[pair], -values[pair + 1]
             )
             proposed[pair] += 1
-            if accept(log_ratio, rng):
+            if swap(log_ratio):
                 accepted[pair] += 1
                 states[pair], states[pair + 1] = states[pair + 1], states[pair]
                 values[pair], values[pair + 1] = values[pair + 1], values[pair]
                 at_rung[pair], at_rung[pair + 1] = at_rung[pair + 1], at_rung[pair]
         if sweep >= burn_in and (sweep - burn_in) % thin == 0:
-            for replica in range(n_replicas):
-                name = key(states[replica])
-                scores[name] = values[replica]
-                recorded_keys[replica].append(name)
+            if record is not None:
+                record(states, values)
+            if key is not None:
+                for replica in range(n_replicas):
+                    name = key(states[replica])
+                    scores[name] = values[replica]
+                    recorded_keys[replica].append(name)
             densities.append(list(values))
             rungs = [0] * n_replicas
             for rung, walker in enumerate(at_rung):
@@ -430,7 +461,7 @@ def tempered_factor_graph(
         values,
         temperatures,
         children,
-        rng,
+        _swap_drawn(rng),
         n_sweeps,
         burn_in,
         thin,
@@ -557,7 +588,7 @@ def tempered_potts_pair(
         values,
         temperatures,
         children,
-        rng,
+        _swap_drawn(rng),
         n_sweeps,
         burn_in,
         thin,
@@ -619,7 +650,7 @@ def tempered_topologies(
         [value] * len(temperatures),
         temperatures,
         children,
-        rng,
+        _swap_drawn(rng),
         n_sweeps,
         burn_in,
         thin,
