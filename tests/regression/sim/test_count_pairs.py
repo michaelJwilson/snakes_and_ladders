@@ -290,6 +290,10 @@ def test_the_key_instance_is_the_one_the_5k_file_marks() -> None:
     ("edit", "message"),
     [
         ({"bin": [{"factor": 3, "marker": "key"}]}, "does not divide"),
+        (
+            {"bin": [{"factor": 0, "marker": "key"}]},
+            "a bin holds at least one position",
+        ),
         ({"bin": [{"factor": 1, "marker": "hourly"}]}, "is not one of"),
         (
             {

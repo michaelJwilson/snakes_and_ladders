@@ -28,6 +28,7 @@ from typing import Any, ClassVar, Self
 import numpy as np
 
 from snakes_and_ladders.emissions import CountPairEmission, EmissionFamily
+from snakes_and_ladders.sim.mixture import MixtureParamsBase, draw_mixture
 
 #: The component families a fixture may declare, and the constructor
 #: arguments each reads. Both are :class:`CountPairEmission`, one per form:
@@ -45,58 +46,21 @@ _REQUIRED_FIELDS = frozenset(
 
 
 @dataclass(frozen=True)
-class EmissionMixtureParams:
+class EmissionMixtureParams(MixtureParamsBase[EmissionFamily]):
     """Fully-specified truth for a count-emission mixture fixture.
+
+    :class:`~snakes_and_ladders.sim.mixture.MixtureParamsBase`'s fields,
+    with the component family left open: the mixture never asks what its
+    components are, which is this fixture's claim.
 
     Parameters
     ----------
-    weights : np.ndarray
-        Mixing weights, shape ``(n_components,)``, summing to 1 and all
-        strictly positive --- a component with zero weight is not a component
-        of the model, and leaving it in would make the fitted parameter for it
-        undefined rather than merely uncertain.
     components : EmissionFamily
         The per-component emission, one state per component.
-    n_samples : int
-        Observations to draw.
-    seed : int
-        Seed for ``np.random.default_rng``.
     tolerance : float
         Relative tolerance a validation test checks a recovered weight or
         component parameter against its planted value within.
-
-    Raises
-    ------
-    ValueError
-        If the weights do not match the components, do not sum to 1, or are
-        not strictly positive.
     """
-
-    weights: np.ndarray
-    components: EmissionFamily
-    n_samples: int
-    seed: int
-    tolerance: float
-
-    def __post_init__(self) -> None:
-        weights = np.asarray(self.weights, dtype=np.float64)
-        if weights.shape != (self.components.n_states,):
-            msg = (
-                f"weights have shape {weights.shape}, expected "
-                f"({self.components.n_states},)"
-            )
-            raise ValueError(msg)
-        if not np.isclose(weights.sum(), 1.0):
-            msg = f"weights sum to {weights.sum()}, expected 1.0"
-            raise ValueError(msg)
-        if bool((weights <= 0.0).any()):
-            msg = f"every weight must be positive, got {weights.tolist()}"
-            raise ValueError(msg)
-
-    @property
-    def n_components(self) -> int:
-        """Components in the mixture."""
-        return self.components.n_states
 
     #: The fields :func:`snakes_and_ladders.fixtures.load_params` checks are present before
     #: calling :meth:`from_declared`.
@@ -182,13 +146,10 @@ def simulate_emission_mixture(
     SimulatedEmissionMixtureDataset
         The labels, the observations, and the generating truth.
     """
-    generator = np.random.default_rng(params.seed) if rng is None else rng
-    labels = generator.choice(
-        params.n_components, size=params.n_samples, p=params.weights
-    )
+    labels, observations = draw_mixture(params, rng)
     return SimulatedEmissionMixtureDataset(
         labels=labels,
-        observations=params.components.sample(labels, generator),
+        observations=observations,
         weights=params.weights,
         components=params.components,
         seed=params.seed,
