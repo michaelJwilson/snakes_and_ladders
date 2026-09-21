@@ -36,7 +36,7 @@ import torch
 
 from snakes_and_ladders.learn.environment import Environment, Episode
 from snakes_and_ladders.learn.policy import LinearPolicy
-from snakes_and_ladders.learn.rollout import rollout
+from snakes_and_ladders.learn.rollout import log_probabilities_of, rollout
 
 # Adam rather than plain SGD, for the reason the baseline exists: the
 # gradient's scale is set by the objective's units, which differ between
@@ -75,12 +75,10 @@ def surrogate_loss[S, A](
 ) -> torch.Tensor:
     """A scalar whose gradient is the REINFORCE estimator, negated to minimize.
 
-    The log-probabilities are recomputed here rather than cached during the
-    rollout: the rollout samples under ``no_grad`` because sampling is not
-    the thing being differentiated, and a cached graph would tie the
-    estimator to the policy that *collected* the data instead of the one
-    being updated. That distinction is what separates REINFORCE from the
-    importance-weighted objective PPO uses.
+    The log-probabilities come from
+    :func:`~snakes_and_ladders.learn.rollout.log_probabilities_of`, which
+    recomputes them rather than caching them during the rollout, and states
+    why.
 
     Parameters
     ----------
@@ -110,17 +108,12 @@ def surrogate_loss[S, A](
         raise ValueError(msg)
 
     total = torch.zeros((), dtype=policy.weights.dtype)
-    for episode in episodes:
+    for episode, decisions in zip(
+        episodes, log_probabilities_of(policy, environment, episodes), strict=True
+    ):
         advantages = [value - baseline for value in episode.returns_to_go()]
-        for step, action in enumerate(episode.actions):
-            state = episode.states[step]
-            available = environment.actions(state)
-            log_probabilities = policy.log_probabilities(
-                environment.features(state, available)
-            )
-            total = (
-                total + log_probabilities[available.index(action)] * advantages[step]
-            )
+        for step, decision in enumerate(decisions):
+            total = total + decision.taken * advantages[step]
     return -total / len(episodes)
 
 
