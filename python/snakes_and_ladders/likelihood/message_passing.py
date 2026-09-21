@@ -64,8 +64,9 @@ for.
 from __future__ import annotations
 
 import math
-from collections.abc import Generator, Mapping
+from collections.abc import Generator, Iterator, Mapping
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
@@ -247,6 +248,55 @@ def _apply(
     return residual, scale
 
 
+@dataclass(frozen=True)
+class _Run:
+    """What one run of a schedule leaves behind.
+
+    Parameters
+    ----------
+    layout : Layout
+        The graph's edge and incidence arrays, built once for the run.
+    to_variable : np.ndarray
+        ``(n_edges, width)``, factor to variable.
+    to_factor : np.ndarray
+        ``(n_edges, width)``, variable to factor.
+    iterations : int
+        Sweeps run, as :attr:`Marginals.iterations` reports them.
+    plan : MessageSchedule
+        The schedule that ran, resolved from whatever named it.
+    scale : float | None
+        What normalization removed on the way up, which
+        :meth:`~snakes_and_ladders.likelihood.schedule.MessageSchedule.log_partition`
+        reads where the Bethe route is unavailable. ``nan`` on the unbounded
+        route, which keeps no total, and ``None`` on the compiled one, which
+        accumulates nothing back in Python. A schedule that reads the scale
+        answers ``False`` to
+        :attr:`~snakes_and_ladders.likelihood.schedule.MessageSchedule.compiled`,
+        so no caller of that branch reads this field (issue #865).
+    """
+
+    layout: Layout
+    to_variable: np.ndarray
+    to_factor: np.ndarray
+    iterations: int
+    plan: MessageSchedule
+    scale: float | None
+
+    def __iter__(self) -> Iterator[Any]:
+        """The six in the order callers unpack.
+
+        ``Any`` because an unpacking gives all six the element type.
+        """
+        yield from (
+            self.layout,
+            self.to_variable,
+            self.to_factor,
+            self.iterations,
+            self.plan,
+            self.scale,
+        )
+
+
 def _run(
     graph: FactorGraph,
     schedule: MessageSchedule | MessageScheduleName | str,
@@ -255,7 +305,7 @@ def _run(
     tolerance: float,
     max_iterations: int,
     backend: Backend,
-) -> tuple[Layout, np.ndarray, np.ndarray, int, MessageSchedule, float]:
+) -> _Run:
     """Messages in both directions as edge rows, the sweeps run, and the schedule.
 
     One loop for every schedule (issue #592). A bounded schedule's plan is
@@ -285,12 +335,11 @@ def _run(
         # `convolutional`/`convolutional_rust`'s.
         from snakes_and_ladders.likelihood import message_passing_rust
 
-        to_variable, to_factor = message_passing_rust.tree_messages(
-            layout, maximum=maximum
-        )
-        # `0.0` and not the scale: a schedule reading the scale answers false
-        # to `compiled`, so no caller of this branch reads the last field.
-        return layout, to_variable, to_factor, 2, plan, 0.0
+        messages = message_passing_rust.tree_messages(layout, maximum=maximum)
+        # `None` and not a number: a schedule reading the scale answers false
+        # to `compiled`, so no caller of this branch reads the last field, and
+        # a number here would be one this route did not compute (issue #865).
+        return _Run(layout, messages.to_variable, messages.to_factor, 2, plan, None)
 
     to_variable = np.zeros((layout.n_edges, layout.width))
     to_factor = np.zeros((layout.n_edges, layout.width))
@@ -304,7 +353,7 @@ def _run(
         # Reported as passes, not steps: two for the tree schedule, one for
         # each of its halves, which is what the count meant before #592.
         passes = 2 if plan.guarantee is Guarantee.EXACT else 1
-        return layout, to_variable, to_factor, passes, plan, steps
+        return _Run(layout, to_variable, to_factor, passes, plan, steps)
 
     if not 0.0 <= damping < 1.0:
         msg = f"damping must be in [0, 1), got {damping}"
@@ -329,7 +378,7 @@ def _run(
             continue
         position, sweep = 0, sweep + 1
         if residual <= tolerance:
-            return layout, to_variable, to_factor, sweep, plan, math.nan
+            return _Run(layout, to_variable, to_factor, sweep, plan, math.nan)
         if sweep >= max_iterations:
             break
     msg = (
@@ -446,18 +495,16 @@ def sum_product(
     ConvergenceError
         If flooding does not settle in ``max_iterations`` sweeps.
     """
-    layout, to_variable, to_factor, iterations, plan, scale = _run(
-        graph, schedule, False, damping, tolerance, max_iterations, backend
-    )
+    run = _run(graph, schedule, False, damping, tolerance, max_iterations, backend)
     variable, factor, log_partition = _beliefs(
-        layout, to_variable, to_factor, False, plan.defined(layout)
+        run.layout, run.to_variable, run.to_factor, False, run.plan.defined(run.layout)
     )
     return Marginals(
         variable,
         factor,
-        plan.log_partition(layout, to_variable, log_partition, scale),
-        iterations,
-        plan.guarantee,
+        run.plan.log_partition(run.layout, run.to_variable, log_partition, run.scale),
+        run.iterations,
+        run.plan.guarantee,
         graph.is_tree(),
     )
 
@@ -482,11 +529,9 @@ def max_product(
     ``logsumexp``, and the assignment and its max-marginals are bitwise the
     NumPy route's.
     """
-    layout, to_variable, to_factor, iterations, plan, scale = _run(
-        graph, schedule, True, damping, tolerance, max_iterations, backend
-    )
+    run = _run(graph, schedule, True, damping, tolerance, max_iterations, backend)
     variable, factor, _ = _beliefs(
-        layout, to_variable, to_factor, True, plan.defined(layout)
+        run.layout, run.to_variable, run.to_factor, True, run.plan.defined(run.layout)
     )
     assignment = {name: int(np.argmax(values)) for name, values in variable.items()}
     density = (
@@ -495,7 +540,7 @@ def max_product(
         else math.nan
     )
     return assignment, Marginals(
-        variable, factor, density, iterations, plan.guarantee, graph.is_tree()
+        variable, factor, density, run.iterations, run.plan.guarantee, graph.is_tree()
     )
 
 
