@@ -381,7 +381,8 @@ class SwendsenWangMove:
             # partition per cluster, which `potts_mcmc.cluster_members`
             # measures: the members and their order are the same
             # (issue #754).
-            order, bounds = cluster_members(partition)
+            clusters = cluster_members(partition)
+            order, bounds = clusters.order, clusters.bounds
             for cluster in range(bounds.size - 1):
                 members = order[bounds[cluster] : bounds[cluster + 1]]
                 proposed = int(rng.integers(self.n_states))

@@ -53,6 +53,7 @@ from snakes_and_ladders.sample.accept import accept_ratio, acceptance_probabilit
 from snakes_and_ladders.sample.hmc import (
     Adaptation,
     Adapted,
+    Transition,
     gradient_at,
     run_chain,
 )
@@ -179,7 +180,7 @@ def mala(
         msg = f"step_size must be positive, got {step_size}"
         raise ValueError(msg)
 
-    draws, acceptance_rate, errors, evaluations, adapted = run_chain(
+    chain = run_chain(
         _LangevinKernel(corrected=corrected),
         GRADIENTS_PER_PROPOSAL,
         objective,
@@ -192,11 +193,11 @@ def mala(
         adaptation=adaptation,
     )
     return LangevinChain(
-        theta=draws,
-        acceptance_rate=acceptance_rate,
-        energy_error=errors,
-        force_evaluations=evaluations,
-        adapted=adapted,
+        theta=chain.draws,
+        acceptance_rate=chain.acceptance_rate,
+        energy_error=chain.energy_error,
+        force_evaluations=chain.force_evaluations,
+        adapted=chain.adapted,
         corrected=corrected,
     )
 
@@ -240,7 +241,7 @@ class _LangevinKernel:
         temperature: float,
         generator: torch.Generator,
         step_size: float,
-    ) -> tuple[torch.Tensor, float, int, float]:
+    ) -> Transition:
         gradient = gradient_at(objective, position)
         noise = torch.randn(
             position.shape, generator=generator, dtype=torch.float64
@@ -265,8 +266,20 @@ class _LangevinKernel:
         ratio = float(torch.exp(torch.tensor(log_ratio)))
         probability = acceptance_probability(ratio)
         if not self.corrected:
-            return proposal, error, 1, probability
+            return Transition(
+                position=proposal,
+                energy_error=error,
+                accepted=1,
+                probability=probability,
+            )
         uniform = float(torch.rand(1, generator=generator))
         if accept_ratio(ratio, uniform):
-            return proposal, error, 1, probability
-        return position, error, 0, probability
+            return Transition(
+                position=proposal,
+                energy_error=error,
+                accepted=1,
+                probability=probability,
+            )
+        return Transition(
+            position=position, energy_error=error, accepted=0, probability=probability
+        )

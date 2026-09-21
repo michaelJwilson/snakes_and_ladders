@@ -1,0 +1,1 @@
+The `sample/` package's entry points that returned a bare tuple return a frozen dataclass named for what it carries --- `Transition`, `Chain`, `PhaseSpace`, `TopologyStep`, `PottsPair`, `TemperedModel`, `Clusters`, `Change` --- each iterating in its old tuple order, so every caller unpacking one is unchanged (issue #865, the last of four, one pull request per package).

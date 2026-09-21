@@ -57,9 +57,9 @@ from __future__ import annotations
 import itertools
 import math
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 import numpy as np
 import torch
@@ -154,6 +154,40 @@ DUAL_AVERAGING_T0 = 10.0
 DUAL_AVERAGING_KAPPA = 0.75
 
 
+@dataclass(frozen=True)
+class Transition:
+    """What one Metropolis step leaves behind, for the loop that drives it.
+
+    Parameters
+    ----------
+    position : torch.Tensor
+        Where the chain is after the step: the proposal if it was accepted,
+        the current point if it was not.
+    energy_error : float
+        ``|H(proposal) - H(current)|``, the diagnostic a step size too large
+        moves and an acceptance rate does not.
+    accepted : int
+        1 if the proposal was accepted, 0 otherwise. Summed over a chain, so
+        an ``int`` rather than a ``bool``.
+    probability : float
+        ``min(1, exp(-dH / T))``, the statistic dual averaging drives. It has
+        less variance than ``accepted``, which is why it is carried beside it.
+    """
+
+    position: torch.Tensor
+    energy_error: float
+    accepted: int
+    probability: float
+
+    def __iter__(self) -> Iterator[Any]:
+        """``(position, energy_error, accepted, probability)``: the order callers unpack.
+
+        ``Any`` and not a union: an unpacking gives every name the element
+        type, so a union would mistype each of them.
+        """
+        yield from (self.position, self.energy_error, self.accepted, self.probability)
+
+
 class Kernel(Protocol):
     """One Metropolis transition at a step size, as a warm-up has to see it.
 
@@ -178,7 +212,7 @@ class Kernel(Protocol):
         temperature: float,
         generator: torch.Generator,
         step_size: float,
-    ) -> tuple[torch.Tensor, float, int, float]:
+    ) -> Transition:
         """The new position, the energy error, 1 if accepted, and the probability.
 
         The fourth is ``min(1, exp(-dH / T))``, the statistic dual averaging
@@ -354,6 +388,31 @@ LEAPFROG_WEIGHTS = (1.0,)
 
 
 @dataclass(frozen=True)
+class PhaseSpace:
+    """A point of the phase space an :class:`Integrator` moves through.
+
+    Parameters
+    ----------
+    position : torch.Tensor
+        ``theta``, 1-D.
+    momentum : torch.Tensor
+        ``p``, the same length. The trajectory's, not the negated one the
+        acceptance ratio reads: the negation is the caller's, and the
+        Hamiltonian is even in it.
+    """
+
+    position: torch.Tensor
+    momentum: torch.Tensor
+
+    def __iter__(self) -> Iterator[Any]:
+        """``(position, momentum)``: the order callers unpack.
+
+        ``Any`` for :meth:`Transition.__iter__`'s reason.
+        """
+        yield from (self.position, self.momentum)
+
+
+@dataclass(frozen=True)
 class Integrator:
     """A symplectic integrator, as the composition of sub-steps it is.
 
@@ -422,7 +481,7 @@ class Integrator:
         momentum: torch.Tensor,
         step_size: float,
         n_steps: int,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> PhaseSpace:
         """Integrate Hamiltonian dynamics over ``n_steps`` steps.
 
         Separated from :func:`sample` because its two defining properties ---
@@ -443,7 +502,7 @@ class Integrator:
 
         Returns
         -------
-        tuple[torch.Tensor, torch.Tensor]
+        PhaseSpace
             Position and momentum after ``n_steps``.
         """
         position = theta.detach().clone()
@@ -454,7 +513,7 @@ class Integrator:
         for drift, kick in zip(drifts, kicks[1:], strict=True):
             position = position + drift * step_size * velocity
             velocity = velocity - kick * step_size * gradient_at(objective, position)
-        return position, velocity
+        return PhaseSpace(position=position, momentum=velocity)
 
 
 def _coefficients(
@@ -563,7 +622,7 @@ def sample(
         every diagnostic.
     """
     _check_trajectory(step_size, n_steps)
-    draws, acceptance_rate, errors, evaluations, adapted = run_chain(
+    chain = run_chain(
         _HamiltonianKernel(n_steps=n_steps, integrator=integrator),
         integrator.force_evaluations(n_steps),
         objective,
@@ -576,12 +635,59 @@ def sample(
         adaptation=adaptation,
     )
     return HmcChain(
-        theta=draws,
-        acceptance_rate=acceptance_rate,
-        energy_error=errors,
-        force_evaluations=evaluations,
-        adapted=adapted,
+        theta=chain.draws,
+        acceptance_rate=chain.acceptance_rate,
+        energy_error=chain.energy_error,
+        force_evaluations=chain.force_evaluations,
+        adapted=chain.adapted,
     )
+
+
+@dataclass(frozen=True)
+class Chain:
+    """What a run of :func:`run_chain` drew, whatever kernel drew it.
+
+    The fields :class:`HmcChain` and
+    :class:`~snakes_and_ladders.sample.langevin.LangevinChain` are built
+    from, in the unit each sampler spends: the evaluations are gradients for
+    both kernels here.
+
+    Parameters
+    ----------
+    draws : torch.Tensor
+        Recorded draws, shape ``(n_samples, dimension)``, in the coordinates
+        the caller asked for --- a mass diagonal is undone before they are
+        returned.
+    acceptance_rate : float
+        Fraction of the recorded proposals accepted; the burn-in's are not
+        counted.
+    energy_error : torch.Tensor
+        ``|H(proposal) - H(current)|`` per recorded proposal.
+    force_evaluations : int
+        Evaluations spent, the warm-up's and the burn-in's included.
+    adapted : Adapted | None
+        What the warm-up settled on, or ``None`` for a fixed-parameter chain.
+    """
+
+    draws: torch.Tensor
+    acceptance_rate: float
+    energy_error: torch.Tensor
+    force_evaluations: int
+    adapted: Adapted | None
+
+    def __iter__(self) -> Iterator[Any]:
+        """``(draws, acceptance_rate, energy_error, force_evaluations, adapted)``.
+
+        The order callers unpack. ``Any`` for :meth:`Transition.__iter__`'s
+        reason.
+        """
+        yield from (
+            self.draws,
+            self.acceptance_rate,
+            self.energy_error,
+            self.force_evaluations,
+            self.adapted,
+        )
 
 
 def run_chain(
@@ -596,7 +702,7 @@ def run_chain(
     burn_in: int,
     temperature: float,
     adaptation: Adaptation | None,
-) -> tuple[torch.Tensor, float, torch.Tensor, int, Adapted | None]:
+) -> Chain:
     """The warm-up, the burn-in and the recorded draws, for any :class:`Kernel`.
 
     Extracted from :func:`sample` when a second kernel wanted the same three:
@@ -619,7 +725,7 @@ def run_chain(
 
     Returns
     -------
-    tuple[torch.Tensor, float, torch.Tensor, int, Adapted | None]
+    Chain
         The draws, the acceptance rate over them, the per-proposal energy
         error over them, the evaluations spent including the warm-up's, and
         what the warm-up settled on.
@@ -668,17 +774,18 @@ def run_chain(
     started = time.perf_counter()
     warmup_evaluations = adapted.force_evaluations if adapted is not None else 0
     for index in range(n_samples + burn_in):
-        position, error, was_accepted, _ = kernel(
+        step = kernel(
             target,
             position,
             temperature,
             generator,
             _jittered(step_size, jitter, generator),
         )
+        position, error = step.position, step.energy_error
         errors[index] = error
         if index >= burn_in:
             drawn = index - burn_in
-            accepted += was_accepted
+            accepted += step.accepted
             draws[drawn] = position
             tracked.record(
                 drawn,
@@ -692,12 +799,12 @@ def run_chain(
     if scale is not None:
         draws = draws * scale
     tracked.record_cost(max(n_samples - 1, 0), draws.nbytes)
-    return (
-        draws,
-        accepted / n_samples if n_samples else 0.0,
-        errors[burn_in:],
-        (n_samples + burn_in) * per_proposal + warmup_evaluations,
-        adapted,
+    return Chain(
+        draws=draws,
+        acceptance_rate=accepted / n_samples if n_samples else 0.0,
+        energy_error=errors[burn_in:],
+        force_evaluations=(n_samples + burn_in) * per_proposal + warmup_evaluations,
+        adapted=adapted,
     )
 
 
@@ -780,7 +887,7 @@ def anneal(
     tracked: TrackedOptimization = current_tracked()
     for step in range(schedule.n_steps):
         temperature = schedule(step)
-        position, _, was_accepted, _ = _transition(
+        taken = _transition(
             objective,
             position,
             temperature,
@@ -789,7 +896,8 @@ def anneal(
             n_steps,
             integrator,
         )
-        accepted += was_accepted
+        position = taken.position
+        accepted += taken.accepted
         value = float(objective(position))
         if value < best_value:
             best, best_value = position.clone(), value
@@ -958,11 +1066,11 @@ def parallel_tempering(
         child: torch.Generator,
     ) -> tuple[torch.Tensor, float]:
         """One Hamiltonian transition, and the log-density where it landed."""
-        moved, _unused, was_accepted, _also = _transition(
+        step = _transition(
             objective, position, temperature, child, step_size, n_steps, integrator
         )
-        accepted[rung[temperature]] += was_accepted
-        return moved, -float(objective(moved))
+        accepted[rung[temperature]] += step.accepted
+        return step.position, -float(objective(step.position))
 
     def observe(states: Sequence[torch.Tensor], densities: Sequence[float]) -> None:
         """The round the exchange closed: the positions it left, and the best point seen."""
@@ -1041,7 +1149,7 @@ class _HamiltonianKernel:
         temperature: float,
         generator: torch.Generator,
         step_size: float,
-    ) -> tuple[torch.Tensor, float, int, float]:
+    ) -> Transition:
         return _transition(
             objective,
             position,
@@ -1061,7 +1169,7 @@ def _transition(
     step_size: float,
     n_steps: int,
     integrator: Integrator,
-) -> tuple[torch.Tensor, float, int, float]:
+) -> Transition:
     """One Metropolis step with a Hamiltonian proposal at ``temperature``.
 
     Momentum is drawn with variance ``temperature`` and the acceptance ratio
@@ -1071,7 +1179,7 @@ def _transition(
 
     Returns
     -------
-    tuple[torch.Tensor, float, int, float]
+    Transition
         The new position, the absolute energy error of the proposal, 1 if
         it was accepted, and the Metropolis acceptance probability
         ``min(1, exp(-dH / T))`` --- the statistic dual averaging drives,
@@ -1083,21 +1191,24 @@ def _transition(
     ) * math.sqrt(temperature)
     current = hamiltonian(objective, position, momentum)
 
-    proposal, proposed_momentum = integrator(
-        objective, position, momentum, step_size, n_steps
-    )
+    trajectory = integrator(objective, position, momentum, step_size, n_steps)
+    proposal = trajectory.position
     # Negating the momentum makes the proposal symmetric, which is what
     # leaves the acceptance ratio as the energy difference alone. It has
     # no effect on the next iteration, where the momentum is redrawn.
-    proposed = hamiltonian(objective, proposal, -proposed_momentum)
+    proposed = hamiltonian(objective, proposal, -trajectory.momentum)
 
     error = abs(proposed - current)
     uniform = float(torch.rand(1, generator=generator))
     ratio = float(torch.exp(torch.tensor((current - proposed) / temperature)))
     probability = acceptance_probability(ratio)
     if accept_ratio(ratio, uniform):
-        return proposal, error, 1, probability
-    return position, error, 0, probability
+        return Transition(
+            position=proposal, energy_error=error, accepted=1, probability=probability
+        )
+    return Transition(
+        position=position, energy_error=error, accepted=0, probability=probability
+    )
 
 
 def gradient_at(objective: Objective, theta: torch.Tensor) -> torch.Tensor:
@@ -1189,14 +1300,15 @@ def _warm_up(
     recorded = []
     jitter = adaptation.step_jitter
     for index in range(first):
-        position, _, _, probability = kernel(
+        step = kernel(
             objective,
             position,
             temperature,
             generator,
             _jittered(step_size, jitter, generator),
         )
-        step_size = averaging.update(probability)
+        position = step.position
+        step_size = averaging.update(step.probability)
         if index >= first // 2:
             recorded.append(position)
     variance = torch.stack(recorded).var(dim=0, unbiased=True)
@@ -1218,15 +1330,16 @@ def _warm_up(
     step_size = averaging.averaged
     total = 0.0
     for _ in range(second):
-        position, _, _, probability = kernel(
+        step = kernel(
             scaled,
             position,
             temperature,
             generator,
             _jittered(step_size, jitter, generator),
         )
-        step_size = averaging.update(probability)
-        total += probability
+        position = step.position
+        step_size = averaging.update(step.probability)
+        total += step.probability
 
     report = Adapted(
         step_size=averaging.averaged,

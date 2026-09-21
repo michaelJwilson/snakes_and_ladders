@@ -63,12 +63,12 @@ Montanari ch. 2).
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from enum import StrEnum
 from functools import partial
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import numpy as np
 
@@ -109,11 +109,14 @@ from snakes_and_ladders.track import current as current_tracked
 __all__ = [
     "AnnealedPotts",
     "ClusterCounter",
+    "Clusters",
     "MoveKind",
     "PottsChain",
     "PottsMove",
+    "PottsPair",
     "Recolour",
     "TemperedChains",
+    "TemperedModel",
     "adapt_ladder_potts",
     "anneal_potts",
     "autodiff_log_ratios",
@@ -324,9 +327,32 @@ def _spans(members: np.ndarray, graph: PottsGraph | None) -> bool:
     )
 
 
-def tempered(
-    graph: PottsGraph, field: np.ndarray, temperature: float
-) -> tuple[PottsGraph, np.ndarray]:
+@dataclass(frozen=True)
+class TemperedModel:
+    """A model rescaled to the temperature it is to be sampled at.
+
+    Parameters
+    ----------
+    graph : PottsGraph
+        The couplings divided by the temperature.
+    field : np.ndarray
+        The field divided by the same, so the pair is one model and not two
+        scalings a caller has to keep together.
+    """
+
+    graph: PottsGraph
+    field: np.ndarray
+
+    def __iter__(self) -> Iterator[Any]:
+        """``(graph, field)``: the order callers unpack.
+
+        ``Any`` and not a union: an unpacking gives every name the element
+        type, so a union would mistype each of them.
+        """
+        yield from (self.graph, self.field)
+
+
+def tempered(graph: PottsGraph, field: np.ndarray, temperature: float) -> TemperedModel:
     """The model whose Boltzmann weight at temperature 1 is this one's at ``temperature``.
 
     ``(J, h) / T``. At ``T = 1`` the division is the identity bitwise, which
@@ -348,7 +374,9 @@ def tempered(
         coupling=tuple(coupling / temperature for coupling in graph.coupling),
         shape=graph.shape,
     )
-    return scaled, np.asarray(field, dtype=float) / temperature
+    return TemperedModel(
+        graph=scaled, field=np.asarray(field, dtype=float) / temperature
+    )
 
 
 def sample_potts(
@@ -428,7 +456,8 @@ def sample_potts(
     """
     refuse_negative_coupling(move, graph)
 
-    graph, field = tempered(graph, field, temperature)
+    model = tempered(graph, field, temperature)
+    graph, field = model.graph, model.field
     rows = site_field(field, graph.n_nodes)
     n_states = int(rows.shape[1])
     # Contiguous `int64` because the kernel borrows this buffer rather than
@@ -961,6 +990,30 @@ def sweep_for(
     return one_cluster
 
 
+@dataclass(frozen=True)
+class PottsPair:
+    """The two replicas :func:`sample_potts_pair` ran, recorded alike.
+
+    Parameters
+    ----------
+    first, second : PottsChain
+        One replica each, on the same recording schedule and at the same
+        temperature. Neither is the other's reference: Houdayer's move is
+        symmetric in the pair, and the order is the order the generator
+        spawned the children in.
+    """
+
+    first: PottsChain
+    second: PottsChain
+
+    def __iter__(self) -> Iterator[Any]:
+        """``(first, second)``: the order callers unpack.
+
+        ``Any`` for :meth:`TemperedModel.__iter__`'s reason.
+        """
+        yield from (self.first, self.second)
+
+
 def sample_potts_pair(
     graph: PottsGraph,
     field: np.ndarray,
@@ -973,7 +1026,7 @@ def sample_potts_pair(
     temperature: float = 1.0,
     houdayer: bool = True,
     backend: Backend = Backend.RUST,
-) -> tuple[PottsChain, PottsChain]:
+) -> PottsPair:
     """Two replicas at one temperature, joined by Houdayer's isoenergetic move.
 
     Each recorded step is one sweep of ``move`` on each replica, then --- where
@@ -1009,7 +1062,7 @@ def sample_potts_pair(
 
     Returns
     -------
-    tuple[PottsChain, PottsChain]
+    PottsPair
         One per replica, recorded on the same schedule. ``mean_cluster_size``
         is the replica's own move's, so Houdayer's clusters are not counted
         into a number that means the within-replica move's cost.
@@ -1025,7 +1078,8 @@ def sample_potts_pair(
     """
     refuse_negative_coupling(move, graph)
 
-    graph, field = tempered(graph, field, temperature)
+    model = tempered(graph, field, temperature)
+    graph, field = model.graph, model.field
     rows = site_field(field, graph.n_nodes)
     n_states = int(rows.shape[1])
     if houdayer and n_states != 2:
@@ -1059,7 +1113,7 @@ def sample_potts_pair(
         if step >= 0 and (step + 1) % thin == 0:
             for replica in range(2):
                 recorded[replica][step // thin] = states[replica]
-    return tuple(  # type: ignore[return-value]
+    first, second = (
         PottsChain(
             states=recorded[replica],
             mean_cluster_size=(
@@ -1070,6 +1124,7 @@ def sample_potts_pair(
         )
         for replica in range(2)
     )
+    return PottsPair(first=first, second=second)
 
 
 def _sweep_at(
@@ -1260,7 +1315,31 @@ def _site_update(
     state[node] = np.searchsorted(cumulative, draw * cumulative[-1])
 
 
-def cluster_members(labels: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+@dataclass(frozen=True)
+class Clusters:
+    """A labelling grouped into its clusters, as one sort rather than a scan.
+
+    Parameters
+    ----------
+    order : np.ndarray
+        The nodes, sorted by label and by index within a label.
+    bounds : np.ndarray
+        Where each cluster starts in ``order``, with ``labels.size`` last, so
+        cluster ``k`` is ``order[bounds[k]:bounds[k + 1]]``.
+    """
+
+    order: np.ndarray
+    bounds: np.ndarray
+
+    def __iter__(self) -> Iterator[Any]:
+        """``(order, bounds)``: the order callers unpack.
+
+        ``Any`` for :meth:`TemperedModel.__iter__`'s reason.
+        """
+        yield from (self.order, self.bounds)
+
+
+def cluster_members(labels: np.ndarray) -> Clusters:
     """Group a labelling into its clusters: the members, and where each starts.
 
     ``labels[order[bounds[k]:bounds[k + 1]]]`` is the ``k``-th root in
@@ -1284,7 +1363,7 @@ def cluster_members(labels: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     starts = np.flatnonzero(
         np.concatenate(([True], sorted_labels[1:] != sorted_labels[:-1]))
     )
-    return order, np.concatenate((starts, [labels.size]))
+    return Clusters(order=order, bounds=np.concatenate((starts, [labels.size])))
 
 
 def taylor_log_ratios(
@@ -1427,7 +1506,8 @@ def _balanced_sweep_at(
             )
             forward_weights = log_balanced_weights(estimate, state)
             forward_total = log_normalizer(forward_weights)
-            node, colour = draw_change(forward_weights, forward_total, rng)
+            change = draw_change(forward_weights, forward_total, rng)
+            node, colour = change.variable, change.value
 
             previous = int(state[node])
             log_ratio = float(exact[node, colour])
@@ -1546,7 +1626,10 @@ def swendsen_wang_sweep(
     # made it 10.5 ms of the same 41.2 ms pass. Every entry is the value the
     # per-cluster form produced, so no recolouring moves.
     scaled = beta * rows
-    order, bounds = cluster_members(labels)
+    clusters = cluster_members(labels)
+    # Bound once: the pass walks a cluster per 1.7 sites, and the lookups
+    # would be paid per cluster (#754).
+    order, bounds = clusters.order, clusters.bounds
     for cluster in range(bounds.size - 1):
         members = order[bounds[cluster] : bounds[cluster + 1]]
         outcome = _recolour(state, members, scaled, rng)
@@ -1634,7 +1717,8 @@ def _cluster_pass_rust(
         )
         if cluster >= n_clusters:
             return
-        order, bounds = cluster_members(labels)
+        clusters = cluster_members(labels)
+        order, bounds = clusters.order, clusters.bounds
         members = order[bounds[cluster] : bounds[cluster + 1]]
         # The draw behind a call rather than as a value, for the reason
         # `_recolour_drawn` gives: it is read only where the field difference
