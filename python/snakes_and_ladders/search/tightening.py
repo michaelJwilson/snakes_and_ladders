@@ -36,6 +36,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from snakes_and_ladders.opt.termination import Termination
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import energy, site_field
 
@@ -59,6 +60,11 @@ class Certificate:
         nowhere else.
     iterations : int
         Coordinate-ascent sweeps taken.
+    termination : Termination | None
+        Whether the sweeps settled --- the dual moved by less than 1e-12 ---
+        or the count ran out (issue #860). Not ``optimal``, which is a
+        statement about the gap and so about the instance, not about the
+        loop.
 
     Notes
     -----
@@ -71,6 +77,7 @@ class Certificate:
     energy: float
     bound: float
     iterations: int
+    termination: Termination | None = None
 
     @property
     def gap(self) -> float:
@@ -218,6 +225,7 @@ def dual_bound(
     best = np.inf
     best_shares = node_shares()
     taken = 0
+    settled = False
     for sweep in range(1, iterations + 1):
         taken = sweep
         before = dual_value()
@@ -248,6 +256,7 @@ def dual_bound(
         if current < best:
             best, best_shares = current, node_shares()
         if abs(before - current) <= 1e-12:
+            settled = True
             break
 
     labelling = np.asarray(best_shares.argmax(axis=1), dtype=np.int64)
@@ -258,4 +267,5 @@ def dual_bound(
         # negative, so an upper bound there is a lower bound here.
         bound=-float(best),
         iterations=taken,
+        termination=Termination.after(taken, converged=settled),
     )

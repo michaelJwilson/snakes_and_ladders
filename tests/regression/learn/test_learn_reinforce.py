@@ -31,7 +31,11 @@ from snakes_and_ladders.learn.potts import (
     optimum,
 )
 from snakes_and_ladders.learn.reinforce import reinforce, surrogate_loss
-from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
+from snakes_and_ladders.learn.rollout import (
+    greedy_rollout,
+    log_probabilities_of,
+    rollout,
+)
 
 from tests.regression.learn.conftest import potts_environment
 
@@ -308,6 +312,41 @@ def test_the_gradient_check_would_catch_a_biased_estimator() -> None:
     (myopic / len(episodes)).backward()  # type: ignore[no-untyped-call]
     assert policy.weights.grad is not None
     assert _relative_difference(policy.weights.grad, exact) > _ESTIMATOR_TOLERANCE
+
+
+@pytest.mark.smoke
+@pytest.mark.patch
+def test_the_shared_decision_loop_reproduces_the_loop_it_replaced() -> None:
+    # `log_probabilities_of` is the one score-function loop the five
+    # estimators walked apiece (issue #862), so it is read against the loop
+    # written out here: the same neighbourhood, the same distribution, the
+    # same index. Bitwise, both the taken entry and the whole vector, since
+    # an entropy bonus and a cross-entropy read the vector.
+    environment, policy = potts_environment(), _policy([0.3, -0.6])
+    rng = np.random.default_rng(4)
+    episodes = [rollout(environment, policy, rng, EPISODE_HORIZON) for _ in range(8)]
+
+    replayed = log_probabilities_of(policy, environment, episodes)
+    assert [len(decisions) for decisions in replayed] == [
+        len(episode.actions) for episode in episodes
+    ]
+    for episode, decisions in zip(episodes, replayed, strict=True):
+        for step, action in enumerate(episode.actions):
+            state = episode.states[step]
+            available = environment.actions(state)
+            log_probabilities = policy.log_probabilities(
+                environment.features(state, available)
+            )
+            assert decisions[step].chosen == available.index(action)
+            assert_allclose(
+                decisions[step].log_probabilities.detach().numpy(),
+                log_probabilities.detach().numpy(),
+                rtol=0.0,
+                atol=0.0,
+            )
+            assert float(decisions[step].taken.detach()) == float(
+                log_probabilities[available.index(action)].detach()
+            )
 
 
 # --- validation -----------------------------------------------------------

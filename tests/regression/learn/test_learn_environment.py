@@ -293,3 +293,29 @@ def test_set_weights_rejects_the_wrong_shape() -> None:
     policy = LinearPolicy(2)
     with pytest.raises(ValueError, match="expected weights of shape"):
         policy.set_weights(torch.zeros(3, dtype=torch.float64))
+
+
+@pytest.mark.smoke
+@pytest.mark.patch
+def test_every_rollout_loop_reads_terminated_from_the_state_it_ended_in() -> None:
+    # `Episode.from_rollout` is the one tail four loops wrote out (issue
+    # #862). `terminated` is a property of the last state, not of the loop
+    # that reached it, so it is read from that state here: under both
+    # stopping rules, at a budget that truncates, at a budget of none, and
+    # for the greedy searcher beside the policy.
+    environment = potts_environment()
+    rng = np.random.default_rng(0)
+    policy = LinearPolicy(2)
+    episodes = [
+        rollout(environment, policy, rng, budget, stop_at_local_optimum=stop)
+        for budget in (0, 1, 8)
+        for stop in (True, False)
+    ]
+    episodes += [
+        greedy_rollout(environment, environment.reset(rng), budget) for budget in (0, 8)
+    ]
+
+    for episode in episodes:
+        assert episode.terminated == environment.is_terminal(episode.states[-1])
+        assert len(episode.states) == len(episode.actions) + 1
+        assert len(episode.rewards) == len(episode.actions)

@@ -40,6 +40,8 @@ equality and the bound separately rather than the looser one everywhere.
 from __future__ import annotations
 
 import itertools
+from collections.abc import Iterator
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -54,7 +56,27 @@ def _offsets(lists: list[list[int]]) -> np.ndarray:
     return out
 
 
-def tree_messages(layout: Layout, *, maximum: bool) -> tuple[np.ndarray, np.ndarray]:
+@dataclass(frozen=True)
+class TreeMessages:
+    """Both directions of the tree schedule, as edge rows.
+
+    Parameters
+    ----------
+    to_variable : np.ndarray
+        ``(n_edges, width)``, factor to variable.
+    to_factor : np.ndarray
+        ``(n_edges, width)``, variable to factor.
+    """
+
+    to_variable: np.ndarray
+    to_factor: np.ndarray
+
+    def __iter__(self) -> Iterator[np.ndarray]:
+        """``(to_variable, to_factor)``: the order callers unpack."""
+        yield from (self.to_variable, self.to_factor)
+
+
+def tree_messages(layout: Layout, *, maximum: bool) -> TreeMessages:
     """The tree schedule's two passes, computed in Rust.
 
     Leaves to root and then root to leaves, rooted at
@@ -73,11 +95,12 @@ def tree_messages(layout: Layout, *, maximum: bool) -> tuple[np.ndarray, np.ndar
 
     Returns
     -------
-    tuple[np.ndarray, np.ndarray]
-        ``(to_variable, to_factor)``, both ``(n_edges, width)``, as
-        :func:`snakes_and_ladders.likelihood.message_passing._run` returns
-        them. A row's columns past its variable's cardinality are zero and
-        never read.
+    TreeMessages
+        Both ``(n_edges, width)``, as
+        :func:`snakes_and_ladders.likelihood.message_passing._run` carries
+        them. The arrays are the extension's own, reshaped here and not
+        copied, so a pin reads what the kernel wrote. A row's columns past
+        its variable's cardinality are zero and never read.
 
     Raises
     ------
@@ -116,7 +139,9 @@ def tree_messages(layout: Layout, *, maximum: bool) -> tuple[np.ndarray, np.ndar
         maximum,
     )
     shape = (n_edges, layout.width)
-    return np.asarray(to_variable).reshape(shape), np.asarray(to_factor).reshape(shape)
+    return TreeMessages(
+        np.asarray(to_variable).reshape(shape), np.asarray(to_factor).reshape(shape)
+    )
 
 
 def _table_offsets(layout: Layout) -> np.ndarray:

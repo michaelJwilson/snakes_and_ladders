@@ -12,22 +12,62 @@ short ones is where the padding is nearly all of the block.
 
 Per root `CLAUDE.md`, the pure-Python route stays as the oracle and the
 regression test pins this against it.
+
+**The selector is here rather than on `forward_backward` (issue #860).** The
+ragged kernel returns *log* gamma, the log transition counts **summed over
+the segments** and one log evidence per segment; `forward_backward` returns
+probabilities on one dense chain, including the per-step pairwise posterior
+`(T - 1, K, K)`. The sum is not the steps, so no conversion recovers a
+`ForwardBackward` from what the kernel returns, and a `backend` on the
+evaluator would have to be a second implementation rather than a door. The
+choice the two do share is this function's --- kernel or oracle, over the
+same inputs and the same return --- and that is where `Backend` names it.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from dataclasses import dataclass
+
 import numpy as np
 
+from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.likelihood.forward_backward import forward_backward
 from snakes_and_ladders.oxi_snakes_and_ladders import ragged_posteriors
 from snakes_and_ladders.ragged import Ragged
+
+
+@dataclass(frozen=True)
+class Posteriors:
+    """What one ragged forward--backward pass returns, in the log domain.
+
+    Parameters
+    ----------
+    gamma : np.ndarray
+        ``(total, n_states)``, the log marginal at every position.
+    counts : np.ndarray
+        ``(n_states, n_states)``, the log transition counts summed over
+        segments. The pair spanning a boundary is in none of them.
+    evidence : np.ndarray
+        One log evidence per segment.
+    """
+
+    gamma: np.ndarray
+    counts: np.ndarray
+    evidence: np.ndarray
+
+    def __iter__(self) -> Iterator[np.ndarray]:
+        """``(gamma, counts, evidence)``: the order callers unpack."""
+        yield from (self.gamma, self.counts, self.evidence)
 
 
 def posteriors(
     log_density: Ragged,
     log_initial: np.ndarray,
     log_transition: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    *,
+    backend: Backend = Backend.RUST,
+) -> Posteriors:
     """Marginals, transition counts and per-segment evidence, in Rust.
 
     Parameters
@@ -38,14 +78,31 @@ def posteriors(
         ``(n_states,)``, the distribution each segment restarts at.
     log_transition : np.ndarray
         ``(n_states, n_states)`` in log space.
+    backend : Backend
+        Which implementation runs it. ``RUST`` is the compiled kernel and is
+        the default, this being the compiled module's entry point;
+        ``PYTHON`` is :func:`posteriors_oracle`, the sibling it is pinned
+        against, reached through the enum rather than by naming the function
+        (issue #860). Nothing else.
 
     Returns
     -------
-    tuple[np.ndarray, np.ndarray, np.ndarray]
-        ``gamma`` as ``(total, n_states)``, the log transition counts summed
-        over segments as ``(n_states, n_states)``, and one log evidence per
-        segment. The pair spanning a boundary is in none of the counts.
+    Posteriors
+        The three arrays the kernel writes: ``gamma`` as ``(total,
+        n_states)``, the log transition counts summed over segments as
+        ``(n_states, n_states)``, and one log evidence per segment; the pair
+        spanning a boundary is in none of the counts. On ``RUST`` they are the
+        extension's own buffers, wrapped here and not copied, so a pin reads
+        what the kernel wrote.
+
+    Raises
+    ------
+    ValueError
+        If ``backend`` is neither ``RUST`` nor ``PYTHON``.
     """
+    refuse_backend("ragged posteriors", backend, (Backend.PYTHON, Backend.RUST))
+    if backend is Backend.PYTHON:
+        return posteriors_oracle(log_density, log_initial, log_transition)
     values = np.ascontiguousarray(log_density.values, dtype=np.float64)
     n_states = values.shape[1]
     gamma = np.empty_like(values)
@@ -60,14 +117,14 @@ def posteriors(
         counts,
         evidence,
     )
-    return gamma, counts, evidence
+    return Posteriors(gamma, counts, evidence)
 
 
 def posteriors_oracle(
     log_density: Ragged,
     log_initial: np.ndarray,
     log_transition: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> Posteriors:
     """The same, one segment at a time through `forward_backward`.
 
     The oracle the compiled path is pinned against: it reuses the per-chain
@@ -89,4 +146,4 @@ def posteriors_oracle(
             counts = np.logaddexp(counts, np.log(run.pairwise.sum(axis=0)))
         evidence[index] = run.log_evidence
         at += len(segment)
-    return gamma, counts, evidence
+    return Posteriors(gamma, counts, evidence)

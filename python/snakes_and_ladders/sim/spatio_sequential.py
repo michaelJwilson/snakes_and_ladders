@@ -27,7 +27,12 @@ import torch
 from snakes_and_ladders.emissions import CategoricalEmission, EmissionFamily
 from snakes_and_ladders.ragged import MINIMUM_LENGTH
 from snakes_and_ladders.sim.factor_graph import FactorGraph, from_coupled
-from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from snakes_and_ladders.sim.graph import (
+    BoundaryCondition,
+    PottsGraph,
+    boundary_from_declared,
+    lattice_graph,
+)
 from snakes_and_ladders.sim.potts import simulate_potts
 
 
@@ -319,7 +324,7 @@ class SpatioSequentialParams:
         return cls(
             graph=lattice_graph(
                 tuple(int(extent) for extent in declared["shape"]),
-                BoundaryCondition(str(declared["boundary"])),
+                boundary_from_declared(path, declared["boundary"]),
                 float(declared["coupling"]),
             ),
             n_classes=n_classes,

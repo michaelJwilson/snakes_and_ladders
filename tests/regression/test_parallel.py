@@ -15,7 +15,8 @@ import math
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.parallel import BACKENDS, Backend, map_tasks
+from snakes_and_ladders import parallel
+from snakes_and_ladders.parallel import BACKENDS, Pool, map_tasks
 
 WORKERS = (1, 4)
 
@@ -42,7 +43,7 @@ def _thread_count(_item: int) -> int:
 
 @pytest.mark.infra
 @pytest.mark.parametrize("backend", list(BACKENDS))
-def test_results_come_back_in_input_order_under_every_backend(backend: Backend) -> None:
+def test_results_come_back_in_input_order_under_every_backend(backend: Pool) -> None:
     # Input order, not completion order: the items are unequal enough in
     # cost that a pool returning as tasks finish would permute them.
     items = list(range(12))
@@ -58,7 +59,7 @@ def test_results_come_back_in_input_order_under_every_backend(backend: Backend) 
 @pytest.mark.oracle
 @pytest.mark.backend
 @pytest.mark.parametrize("backend", ["threads", "processes"])
-def test_four_workers_draw_the_streams_one_worker_draws(backend: Backend) -> None:
+def test_four_workers_draw_the_streams_one_worker_draws(backend: Pool) -> None:
     # The ticket's first rule: a parallel run is bitwise the serial run. Each
     # task's generator is spawned from the caller's, in item order, so what
     # a task draws depends on its index and on nothing about scheduling.
@@ -118,7 +119,7 @@ def test_a_second_call_on_the_same_generator_draws_fresh_children() -> None:
 @pytest.mark.smoke
 @pytest.mark.parametrize("backend", list(BACKENDS))
 def test_a_task_that_raises_propagates_with_the_item_that_raised(
-    backend: Backend,
+    backend: Pool,
 ) -> None:
     workers = 1 if backend == "serial" else 4
 
@@ -154,7 +155,7 @@ def test_no_items_is_an_empty_result_and_spawns_nothing() -> None:
 @pytest.mark.infra
 @pytest.mark.parametrize("backend", ["serial", "threads"])
 def test_the_intra_op_thread_count_is_applied_inside_and_restored_after(
-    backend: Backend,
+    backend: Pool,
 ) -> None:
     # The thread rule DEV.md states: a worker runs at the count the caller
     # named, and the calling process is left as it was found.
@@ -187,7 +188,7 @@ def _square_and_draw(item: int, rng: np.random.Generator) -> tuple[float, float]
 @pytest.mark.backend
 @pytest.mark.parametrize("backend", ["threads", "processes"])
 def test_each_backend_maps_the_seeded_tasks_onto_the_serial_map_bitwise(
-    backend: Backend,
+    backend: Pool,
 ) -> None:
     """The three backends are one map, refereed from outside it (issue #729).
 
@@ -230,3 +231,12 @@ def test_each_backend_maps_the_seeded_tasks_onto_the_serial_map_bitwise(
         _square_and_draw(item, child)
         for item, child in zip(items, children, strict=True)
     ]
+
+
+@pytest.mark.smoke
+def test_the_pool_alias_still_resolves_under_its_old_name() -> None:
+    # #860 renamed this `Pool`, the word `Backend` naming which
+    # implementation runs a kernel. The old name is kept, so an annotation
+    # written before the rename still means the same three values.
+    assert parallel.Backend is parallel.Pool
+    assert set(BACKENDS) == {"serial", "threads", "processes"}

@@ -49,6 +49,7 @@ from snakes_and_ladders.opt.constrain import (
 from snakes_and_ladders.opt.em import em_loop
 from snakes_and_ladders.opt.initialize import Initializer, quantile_locations
 from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.opt.termination import Termination
 
 
 class GaussianMixtureObjective(Objective):
@@ -406,6 +407,10 @@ class MixtureFit:
         :attr:`snakes_and_ladders.opt.emission_mixture.EmissionMixtureFit.at_boundary`
         is. ``False`` for the closed-form Gaussian step, which has no such
         edge; the field carries what a family with one reports (issue #856).
+    termination : Termination | None
+        Whether the loop met its relative tolerance or ran out of iterations,
+        in the form every result states it in (issue #860). ``iterations``
+        stays: it is what this result has always been read by.
     """
 
     weights: torch.Tensor
@@ -413,6 +418,7 @@ class MixtureFit:
     log_likelihood: float
     iterations: int
     at_boundary: bool
+    termination: Termination | None = None
 
 
 def expectation_maximization(
@@ -490,13 +496,20 @@ def expectation_maximization(
         boundary = boundary or reestimated.at_boundary
         return (posterior.mean(dim=0), reestimated.emissions), log_likelihood
 
-    (weights, components), log_likelihood, iterations = em_loop(
+    (weights, components), log_likelihood, termination = em_loop(
         step,
         (weights, components),
         tolerance=tolerance,
         max_iterations=max_iterations,
     )
-    return MixtureFit(weights, components, log_likelihood, iterations, boundary)
+    return MixtureFit(
+        weights,
+        components,
+        log_likelihood,
+        termination.iterations,
+        boundary,
+        termination,
+    )
 
 
 def clustering_cost(observations: np.ndarray, centres: np.ndarray) -> float:

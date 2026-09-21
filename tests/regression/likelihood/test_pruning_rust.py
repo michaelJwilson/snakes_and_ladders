@@ -23,13 +23,15 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.likelihood import pruning, pruning_rust
 from snakes_and_ladders.likelihood.brute_force import brute_force_log_likelihood
 from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
+from snakes_and_ladders.likelihood.patterns import compress
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import Node
 
-from tests._fixtures import FOUR_TAXA, load_fixture
+from tests._fixtures import FOUR_TAXA, SMALL_SITES, load_fixture
 
 # Relative, not absolute. The log-likelihood is a sum over sites, so an
 # absolute bound fixed at one site count does not transfer to another
@@ -184,3 +186,52 @@ def test_relative_tolerance_transfers_to_fixture_scale() -> None:
         f"fixture scale, got {absolute:.3e}; if this no longer holds the "
         "motivating example in issue #111 needs revisiting"
     )
+
+
+@pytest.mark.backend
+@pytest.mark.oracle
+def test_the_enum_reaches_the_rust_kernel_bitwise() -> None:
+    # #860: `Backend.RUST` at the oracle's own entry point is this module's
+    # call and nothing else --- the same float64, bit for bit, not the
+    # relative tolerance the two *implementations* are compared at above.
+    # The weighted route is included because the twin splits a weighted call
+    # into one kernel call per distinct weight, so the keywords have to cross
+    # the door too. Any other member is refused by name.
+    for name in (SMALL_SITES, "tree_search/ci.yaml"):
+        params = load_fixture(name)
+        dataset = simulate_alignment(
+            tau=params.tau,
+            k=params.k,
+            pi=params.pi,
+            rng=np.random.default_rng(params.seed),
+            n_sites=params.n_sites,
+        )
+        patterns = compress(dataset.alignment)
+
+        assert pruning.log_likelihood(
+            params.tau, params.k, params.pi, dataset.alignment, backend=Backend.RUST
+        ) == pruning_rust.log_likelihood(
+            params.tau, params.k, params.pi, dataset.alignment
+        )
+        assert pruning.log_likelihood(
+            params.tau,
+            params.k,
+            params.pi,
+            patterns.alignment,
+            weights=patterns.weights,
+            rescale=False,
+            backend=Backend.RUST,
+        ) == pruning_rust.log_likelihood(
+            params.tau,
+            params.k,
+            params.pi,
+            patterns.alignment,
+            weights=patterns.weights,
+            rescale=False,
+        )
+
+    params = load_fixture(SMALL_SITES)
+    with pytest.raises(ValueError, match="not numba"):
+        pruning.log_likelihood(
+            params.tau, params.k, params.pi, {}, backend=Backend.NUMBA
+        )

@@ -54,6 +54,7 @@ from snakes_and_ladders.opt.constrain import (
 from snakes_and_ladders.opt.em import em_loop
 from snakes_and_ladders.opt.initialize import quantile_locations
 from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.opt.termination import Termination
 from snakes_and_ladders.ragged import Ragged
 
 # How far apart the emission rows start, in unconstrained units. Large
@@ -1095,6 +1096,10 @@ class EmFit:
     emission_at_boundary : bool
         Whether any M step returned a parameter at the edge of the range this
         data identifies it over.
+    termination : Termination | None
+        Whether the outer loop met its relative tolerance and after how many
+        EM iterations (issue #860). An unconverged emission M step is refused
+        rather than reported, and still is: this answers for the outer loop.
     """
 
     log_initial: torch.Tensor
@@ -1102,6 +1107,7 @@ class EmFit:
     emissions: EmissionFamily
     log_likelihood: float
     emission_at_boundary: bool = False
+    termination: Termination | None = None
 
 
 def baum_welch(
@@ -1382,7 +1388,7 @@ def baum_welch_family(
         at_boundary = at_boundary or step.at_boundary
         return (log_initial, log_transition, kernels, step.emissions), log_likelihood
 
-    (log_initial, log_transition, _, emissions), log_likelihood, _ = em_loop(
+    (log_initial, log_transition, _, emissions), log_likelihood, termination = em_loop(
         iterate,
         (log_initial, log_transition, kernels, emissions),
         tolerance=tolerance,
@@ -1394,4 +1400,5 @@ def baum_welch_family(
         emissions=emissions,
         log_likelihood=log_likelihood,
         emission_at_boundary=at_boundary,
+        termination=termination,
     )

@@ -243,7 +243,7 @@ def test_an_unusable_ladder_and_a_ladder_without_temperature_one_are_refused() -
     rng = np.random.default_rng(0)
     with pytest.raises(ValueError, match="at least two temperatures"):
         tempered_factor_graph(graph, (1.0,), rng, 10)
-    with pytest.raises(ValueError, match="must be positive"):
+    with pytest.raises(ValueError, match="positive temperature"):
         tempered_factor_graph(graph, (1.0, 0.0), rng, 10)
     with pytest.raises(ValueError, match="n_sweeps"):
         tempered_factor_graph(graph, (1.0, 2.0), rng, 0)

@@ -96,7 +96,34 @@ class CriticFit:
     n_targets: int
 
 
-def monte_carlo_targets[S, A](
+def state_values[S, A](
+    environment: Environment[S, A], states: Sequence[S], critic: Critic
+) -> list[float]:
+    """``V(s)`` at each state, the critic read without gradient.
+
+    The baseline, the bootstrap and the leaf value are one reading of the
+    critic at a state a caller already holds, and every caller wanted it as
+    a float rather than on the graph: an advantage weights a score function
+    and must not carry the critic's parameters into the policy's gradient.
+    """
+    with torch.no_grad():
+        return [
+            float(critic(state_features(environment, state)[None, :])[0])
+            for state in states
+        ]
+
+
+def _stacked(
+    features: list[torch.Tensor], targets: list[float]
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """The fitting batch, refusing one with no decisions in it."""
+    if not features:
+        msg = "no decisions in the episodes to fit a critic to"
+        raise ValueError(msg)
+    return torch.stack(features), torch.tensor(targets, dtype=torch.float64)
+
+
+def state_targets[S, A](
     environment: Environment[S, A], episodes: Sequence[Episode[S, A]]
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """State features and returns-to-go for every non-final state in ``episodes``.
@@ -104,6 +131,10 @@ def monte_carlo_targets[S, A](
     The return-to-go is an unbiased sample of ``V^pi(s_t)`` under the policy
     that produced the episodes; a truncated episode's tail is biased low by
     what the budget cut off, and ``Episode.terminated`` says which.
+
+    The batch four callers assembled apiece --- the actor-critic's refit,
+    PPO's, expert iteration's, and this module's own Monte Carlo target ---
+    each walking the episodes, each stacking the same two tensors.
     """
     features, targets = [], []
     for episode in episodes:
@@ -111,10 +142,7 @@ def monte_carlo_targets[S, A](
         for step, state in enumerate(episode.states[:-1]):
             features.append(state_features(environment, state))
             targets.append(returns[step])
-    if not features:
-        msg = "no decisions in the episodes to fit a critic to"
-        raise ValueError(msg)
-    return torch.stack(features), torch.tensor(targets, dtype=torch.float64)
+    return _stacked(features, targets)
 
 
 def temporal_difference_targets[S, A](
@@ -126,23 +154,16 @@ def temporal_difference_targets[S, A](
     own error, which is the trade GAE interpolates in ``ppo.py``.
     """
     features, targets = [], []
-    with torch.no_grad():
-        for episode in episodes:
-            for step, state in enumerate(episode.states[:-1]):
-                successor = episode.states[step + 1]
-                bootstrap = (
-                    0.0
-                    if environment.is_terminal(successor)
-                    else float(
-                        critic(state_features(environment, successor)[None, :])[0]
-                    )
-                )
-                features.append(state_features(environment, state))
-                targets.append(episode.rewards[step] + bootstrap)
-    if not features:
-        msg = "no decisions in the episodes to fit a critic to"
-        raise ValueError(msg)
-    return torch.stack(features), torch.tensor(targets, dtype=torch.float64)
+    for episode in episodes:
+        successors = episode.states[1:]
+        values = state_values(environment, successors, critic)
+        for step, state in enumerate(episode.states[:-1]):
+            bootstrap = (
+                0.0 if environment.is_terminal(successors[step]) else values[step]
+            )
+            features.append(state_features(environment, state))
+            targets.append(episode.rewards[step] + bootstrap)
+    return _stacked(features, targets)
 
 
 def fit_critic(
@@ -175,8 +196,9 @@ __all__ = [
     "Critic",
     "CriticFit",
     "fit_critic",
-    "monte_carlo_targets",
     "n_state_features",
     "state_features",
+    "state_targets",
+    "state_values",
     "temporal_difference_targets",
 ]

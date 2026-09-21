@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from functools import cached_property
 from itertools import product
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -35,6 +36,42 @@ class BoundaryCondition(StrEnum):
 
     OPEN = "open"
     PERIODIC = "periodic"
+
+
+def boundary_from_declared(path: Path, raw: object) -> BoundaryCondition:
+    """Parse a yaml boundary field, naming the file when it is unrecognized.
+
+    The five fixture loaders that read a boundary parsed it two ways: two
+    through this check and three through ``BoundaryCondition(str(raw))``,
+    whose message names neither the file nor the recognized values (issue
+    #862). It lives beside the enum so every loader reaches it without
+    reaching into another model's module.
+
+    Parameters
+    ----------
+    path : Path
+        The file being loaded, for the error message.
+    raw : object
+        The yaml value.
+
+    Returns
+    -------
+    BoundaryCondition
+        The parsed boundary.
+
+    Raises
+    ------
+    ValueError
+        If ``raw`` is not one of the recognized boundary conditions. Caught
+        here rather than in :func:`lattice_graph`, which takes the enum and
+        so cannot be handed a bad string at all.
+    """
+    try:
+        return BoundaryCondition(str(raw))
+    except ValueError:
+        recognized = sorted(condition.value for condition in BoundaryCondition)
+        msg = f"{path}: boundary must be one of {recognized}, got {raw!r}"
+        raise ValueError(msg) from None
 
 
 def _read_only(values: np.ndarray) -> np.ndarray:
@@ -324,6 +361,85 @@ class PottsGraph:
         )
 
 
+def _lattice(
+    shape: tuple[int, ...],
+    offsets: tuple[tuple[int, ...], ...],
+    boundary: BoundaryCondition,
+    coupling: float,
+) -> PottsGraph:
+    """A lattice over ``shape``, one edge per offset per site, wrapped or dropped at the edge.
+
+    The core :func:`lattice_graph` and :func:`triangular_lattice_graph` each
+    wrote out (issue #862): the extent guard, the row-major index, the sweep
+    that wraps a target under a periodic boundary and skips it under an open
+    one, and the graph built from what the sweep collected. The two differ in
+    their offsets alone --- the unit vectors for the square lattice, those
+    plus the cell diagonal for the triangular one --- so the offsets are the
+    argument.
+
+    Parameters
+    ----------
+    shape : tuple[int, ...]
+        Extent along each dimension, each ``>= 2``.
+    offsets : tuple[tuple[int, ...], ...]
+        The neighbour each site is joined to, as a displacement per
+        dimension. Applied in the order given, so the edge order is the
+        caller's.
+    boundary : BoundaryCondition
+        ``PERIODIC`` wraps a target that leaves the grid; ``OPEN`` drops it.
+    coupling : float
+        Uniform ``J`` applied to every edge.
+
+    Returns
+    -------
+    PottsGraph
+        Nodes indexed by the row-major unraveling of ``shape``, carrying the
+        shape and the boundary.
+
+    Raises
+    ------
+    ValueError
+        If ``shape`` is empty or any extent is below 2.
+    """
+    if not shape:
+        msg = "shape must have at least one dimension"
+        raise ValueError(msg)
+    if any(extent < 2 for extent in shape):
+        msg = f"every extent in shape must be >= 2, got {shape}"
+        raise ValueError(msg)
+    strides = [1] * len(shape)
+    for dim in range(len(shape) - 2, -1, -1):
+        strides[dim] = strides[dim + 1] * shape[dim + 1]
+
+    def index(coordinate: tuple[int, ...]) -> int:
+        return sum(c * s for c, s in zip(coordinate, strides, strict=True))
+
+    periodic = boundary is BoundaryCondition.PERIODIC
+    edges: list[tuple[int, int]] = []
+    for coordinate in product(*(range(extent) for extent in shape)):
+        for offset in offsets:
+            target = tuple(c + step for c, step in zip(coordinate, offset, strict=True))
+            if periodic:
+                target = tuple(
+                    c % extent for c, extent in zip(target, shape, strict=True)
+                )
+            elif any(c >= extent for c, extent in zip(target, shape, strict=True)):
+                continue
+            edges.append((index(coordinate), index(target)))
+
+    n_nodes = 1
+    for extent in shape:
+        n_nodes *= extent
+
+    return PottsGraph(
+        n_nodes=n_nodes,
+        edges=tuple(edges),
+        coupling=(coupling,) * len(edges),
+        shape=shape,
+        boundary=boundary,
+    )
+
+
 def lattice_graph(
     shape: tuple[int, ...], boundary: BoundaryCondition, coupling: float
 ) -> PottsGraph:
@@ -356,43 +472,11 @@ def lattice_graph(
         :class:`BoundaryCondition`, so an unrecognized one is a type error
         rather than a run-time check.
     """
-    if not shape:
-        msg = "shape must have at least one dimension"
-        raise ValueError(msg)
-    if any(extent < 2 for extent in shape):
-        msg = f"every extent in shape must be >= 2, got {shape}"
-        raise ValueError(msg)
-    strides = [1] * len(shape)
-    for dim in range(len(shape) - 2, -1, -1):
-        strides[dim] = strides[dim + 1] * shape[dim + 1]
-
-    def index(coordinate: tuple[int, ...]) -> int:
-        return sum(c * s for c, s in zip(coordinate, strides, strict=True))
-
-    edges: list[tuple[int, int]] = []
-    for coordinate in product(*(range(extent) for extent in shape)):
-        node = index(coordinate)
-        for dim, extent in enumerate(shape):
-            if boundary is BoundaryCondition.PERIODIC:
-                neighbor = list(coordinate)
-                neighbor[dim] = (coordinate[dim] + 1) % extent
-                edges.append((node, index(tuple(neighbor))))
-            elif coordinate[dim] + 1 < extent:
-                neighbor = list(coordinate)
-                neighbor[dim] += 1
-                edges.append((node, index(tuple(neighbor))))
-
-    n_nodes = 1
-    for extent in shape:
-        n_nodes *= extent
-
-    return PottsGraph(
-        n_nodes=n_nodes,
-        edges=tuple(edges),
-        coupling=(coupling,) * len(edges),
-        shape=shape,
-        boundary=boundary,
+    offsets = tuple(
+        tuple(1 if other == dim else 0 for other in range(len(shape)))
+        for dim in range(len(shape))
     )
+    return _lattice(shape, offsets, boundary, coupling)
 
 
 def erdos_renyi_graph(
@@ -506,30 +590,4 @@ def triangular_lattice_graph(
     ValueError
         If either extent is below 2.
     """
-    rows, columns = shape
-    if rows < 2 or columns < 2:
-        msg = f"every extent in shape must be >= 2, got {shape}"
-        raise ValueError(msg)
-
-    def index(row: int, column: int) -> int:
-        return row * columns + column
-
-    periodic = boundary is BoundaryCondition.PERIODIC
-    offsets = ((0, 1), (1, 0), (1, 1))
-    edges: list[tuple[int, int]] = []
-    for row, column in product(range(rows), range(columns)):
-        for row_step, column_step in offsets:
-            target_row, target_column = row + row_step, column + column_step
-            if periodic:
-                target_row, target_column = target_row % rows, target_column % columns
-            elif target_row >= rows or target_column >= columns:
-                continue
-            edges.append((index(row, column), index(target_row, target_column)))
-
-    return PottsGraph(
-        n_nodes=rows * columns,
-        edges=tuple(edges),
-        coupling=(coupling,) * len(edges),
-        shape=shape,
-        boundary=boundary,
-    )
+    return _lattice(shape, ((0, 1), (1, 0), (1, 1)), boundary, coupling)

@@ -39,7 +39,7 @@ from typing import Any, ClassVar, Self, TypeVar
 import numpy as np
 import torch
 
-from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.emissions import (
     BetaBinomialEmission,
     CovariateNotSupportedError,
@@ -47,7 +47,11 @@ from snakes_and_ladders.emissions import (
     NegativeBinomialEmission,
     Reestimate,
 )
-from snakes_and_ladders.sim.graph import BoundaryCondition, triangular_lattice_graph
+from snakes_and_ladders.fixtures import BinInstance
+from snakes_and_ladders.sim.graph import (
+    boundary_from_declared,
+    triangular_lattice_graph,
+)
 from snakes_and_ladders.sim.spatio_sequential import (
     SpatioSequentialParams,
 )
@@ -316,6 +320,37 @@ class IndependentCountPair(EmissionFamily):
         return named
 
 
+def _bin(params: SpatioSequentialParams, factor: int) -> int:
+    """Positions a bin factor leaves, refusing one that leaves a partial bin.
+
+    The divisibility check three callers wrote out with the same message
+    (issue #862): a partial last bin is a different distribution from every
+    other bin, so a factor that does not divide the positions is not an
+    instance.
+
+    Parameters
+    ----------
+    params : SpatioSequentialParams
+        The fine model.
+    factor : int
+        Positions per bin, ``>= 1``.
+
+    Returns
+    -------
+    int
+        ``params.n_positions // factor``.
+
+    Raises
+    ------
+    ValueError
+        If the factor is below one or does not divide the positions.
+    """
+    if factor < 1 or params.n_positions % factor:
+        msg = f"bin factor {factor} does not divide {params.n_positions} positions"
+        raise ValueError(msg)
+    return params.n_positions // factor
+
+
 def aggregate(family: IndependentCountPair, factor: int) -> IndependentCountPair:
     """The family a sum of ``factor`` consecutive draws is distributed under.
 
@@ -394,9 +429,7 @@ def binned_model(params: SpatioSequentialParams, factor: int) -> SpatioSequentia
         If the factor does not divide the positions, or a family is not the
         two-channel count emission :func:`aggregate` is defined for.
     """
-    if factor < 1 or params.n_positions % factor:
-        msg = f"bin factor {factor} does not divide {params.n_positions} positions"
-        raise ValueError(msg)
+    binned_positions = _bin(params, factor)
     for family in params.emissions:
         if not isinstance(family, IndependentCountPair):
             msg = (
@@ -406,7 +439,7 @@ def binned_model(params: SpatioSequentialParams, factor: int) -> SpatioSequentia
             raise ValueError(msg)
     return replace(
         params,
-        n_positions=params.n_positions // factor,
+        n_positions=binned_positions,
         covariate=_binned_covariate(params.covariate, factor),
         emissions=tuple(
             aggregate(family, factor)
@@ -432,24 +465,10 @@ def _binned_covariate(covariate: np.ndarray | None, factor: int) -> np.ndarray |
     ).sum(axis=1)
 
 
-@dataclass(frozen=True)
-class BinInstance:
-    """One of the instances a count-pair fixture declares.
-
-    Parameters
-    ----------
-    factor : int
-        Positions summed into each bin. ``1`` is the fine instance the file's
-        seed draws; the others are binned from it.
-    marker : str
-        The tier the full test at this factor runs in --- one of
-        :data:`BIN_MARKERS`. Stated in the file rather than in the test,
-        because which factor fits which budget is a measurement of the
-        instance (`DEV.md`, CI & Performance Budget).
-    """
-
-    factor: int
-    marker: str
+#: What one bin of a count-pair fixture holds. The positions are coupled, so
+#: a coarse instance *sums* ``factor`` consecutive ones and
+#: :class:`~snakes_and_ladders.fixtures.BinInstance` carries the word.
+BIN_UNIT = "position"
 
 
 #: The tiers a bin instance may declare. ``key`` names the key instance: the
@@ -516,12 +535,7 @@ class SpatioSequentialCountsParams:
             msg = "a count-pair fixture declares at least one bin factor"
             raise ValueError(msg)
         for entry in self.bins:
-            if entry.factor < 1 or self.model.n_positions % entry.factor:
-                msg = (
-                    f"bin factor {entry.factor} does not divide "
-                    f"{self.model.n_positions} positions"
-                )
-                raise ValueError(msg)
+            _bin(self.model, entry.factor)
             if entry.marker not in BIN_MARKERS:
                 msg = f"bin marker {entry.marker!r} is not one of {list(BIN_MARKERS)}"
                 raise ValueError(msg)
@@ -658,7 +672,7 @@ class SpatioSequentialCountsParams:
         model = SpatioSequentialParams(
             graph=triangular_lattice_graph(
                 (int(declared["shape"][0]), int(declared["shape"][1])),
-                BoundaryCondition(str(declared["boundary"])),
+                boundary_from_declared(path, declared["boundary"]),
                 float(declared["coupling"]),
             ),
             n_classes=n_classes,
@@ -674,7 +688,11 @@ class SpatioSequentialCountsParams:
             model=model,
             seed=int(declared["seed"]),
             bins=tuple(
-                BinInstance(factor=int(entry["factor"]), marker=str(entry["marker"]))
+                BinInstance(
+                    factor=int(entry["factor"]),
+                    unit=BIN_UNIT,
+                    marker=str(entry["marker"]),
+                )
                 for entry in declared["bin"]
             ),
             counts_digest=None if digest is None else str(digest),
@@ -852,9 +870,7 @@ def simulate_count_pairs(
         holds are one statement. A draw that overflows it is a fixture whose
         parameters moved, not a type to widen silently.
     """
-    if backend not in (Backend.PYTHON, Backend.RUST):
-        msg = f"simulate_count_pairs runs on {Backend.PYTHON} or {Backend.RUST}, not {backend}"
-        raise ValueError(msg)
+    refuse_backend("simulate_count_pairs", backend, (Backend.PYTHON, Backend.RUST))
     if backend is Backend.RUST:
         # Local, because the twin imports its labels and chains from here: a
         # module-level import is the cycle.
@@ -919,14 +935,11 @@ def coarsen(fine: CountPairInstance, factor: int) -> CountPairInstance:
     if fine.factor != 1:
         msg = f"bin from the fine instance, not from factor {fine.factor}"
         raise ValueError(msg)
-    n_positions = fine.params.n_positions
-    if factor < 1 or n_positions % factor:
-        msg = f"bin factor {factor} does not divide {n_positions} positions"
-        raise ValueError(msg)
+    binned_positions = _bin(fine.params, factor)
     if factor == 1:
         return fine
     binned = fine.observations.reshape(
-        n_positions // factor, factor, *fine.observations.shape[1:]
+        binned_positions, factor, *fine.observations.shape[1:]
     ).sum(axis=1, dtype=np.int32)
     for family in fine.params.emissions:
         if not isinstance(family, IndependentCountPair):
@@ -944,7 +957,7 @@ def coarsen(fine: CountPairInstance, factor: int) -> CountPairInstance:
         factor=factor,
         params=replace(
             fine.params,
-            n_positions=n_positions // factor,
+            n_positions=binned_positions,
             covariate=_binned_covariate(fine.params.covariate, factor),
             emissions=families,
         ),

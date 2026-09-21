@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from snakes_and_ladders.cost import Cost
 from snakes_and_ladders.opt.budget import Budget
 from snakes_and_ladders.search.projection import (
     CountPairAt,
@@ -39,11 +40,11 @@ SAMPLES = 100
 #: Iterations the fit may run. Above the 134 it converges in, so the run ends
 #: on its own convergence test and not on the budget --- which is the branch
 #: this module exists to reach.
-CONVERGED_BUDGET = Budget("passes", 150)
+CONVERGED_BUDGET = Budget(Cost.PASSES, 150)
 
 #: The short budget `SeededFit` is read at, where what is pinned is that the
 #: method reports the fit rather than how far the fit got.
-SHORT_BUDGET = Budget("passes", 6)
+SHORT_BUDGET = Budget(Cost.PASSES, 6)
 
 #: What the fit must leave, measured on this draw: recovery 0.690 against a
 #: chance of 0.25, and a largest relative error of 0.246 in a component's

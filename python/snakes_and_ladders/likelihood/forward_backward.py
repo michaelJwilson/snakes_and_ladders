@@ -9,11 +9,20 @@ recursion for the gradient it needs; this one exists so the coupled model,
 and any caller that wants a posterior rather than a fit, does not reach into
 an optimizer's internals to get one. Pinned against the path enumeration,
 which shares no recursion with it.
+
+**No `backend` here, and `ragged_rust.posteriors` says why** (issue #860).
+The compiled ragged kernel returns log marginals and the transition counts
+*summed over the segments*; this returns probabilities and the per-step
+pairwise posterior. The sum is not the steps, so no conversion recovers this
+return from that one, and a door onto it would be a second implementation
+rather than a route to the same answer.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
@@ -40,9 +49,34 @@ class ForwardBackward:
     pairwise: np.ndarray
 
 
-def step_kernels(
-    log_transition: np.ndarray, length: int, n_states: int
-) -> tuple[np.ndarray, np.ndarray | None]:
+@dataclass(frozen=True)
+class StepKernels:
+    """A chain's kernels, and the one matrix to read instead where there is one.
+
+    Parameters
+    ----------
+    kernels : np.ndarray
+        ``(T - 1, K, K)``, one matrix per transition. For a constant kernel
+        this is :func:`numpy.broadcast_to` over the caller's matrix: stride
+        zero, not a copy.
+    constant : np.ndarray | None
+        The ``(K, K)`` matrix itself where the kernel does not vary, so the
+        constant path indexes nothing; ``None`` where it does vary.
+    """
+
+    kernels: np.ndarray
+    constant: np.ndarray | None
+
+    def __iter__(self) -> Iterator[Any]:
+        """``(kernels, constant)``: the order callers unpack.
+
+        ``Any`` because only ``constant`` is optional, and the union would
+        mistype ``kernels`` at every unpacking.
+        """
+        yield from (self.kernels, self.constant)
+
+
+def step_kernels(log_transition: np.ndarray, length: int, n_states: int) -> StepKernels:
     """One transition kernel per step, and the matrix to use instead if there is one.
 
     A chain may carry a kernel that is a function of position --- a spacing
@@ -80,9 +114,11 @@ def step_kernels(
         If ``log_transition`` is neither shape.
     """
     if not constant_chain_kernel(log_transition.shape, length, n_states):
-        return log_transition, None
+        return StepKernels(log_transition, None)
     steps = max(length - 1, 0)
-    return np.broadcast_to(log_transition, (steps, n_states, n_states)), log_transition
+    return StepKernels(
+        np.broadcast_to(log_transition, (steps, n_states, n_states)), log_transition
+    )
 
 
 def _forward(
@@ -119,7 +155,11 @@ def _forward(
     if log_initial.shape != (n_states,):
         msg = f"log_initial {log_initial.shape} does not match {n_states} states"
         raise ValueError(msg)
-    kernels, constant = step_kernels(log_transition, length, n_states)
+    # Read by name and bound to locals before the loop: the hoist is what
+    # `step_kernels` returns a `constant` for, and an attribute lookup per
+    # step would spend what it saved.
+    steps = step_kernels(log_transition, length, n_states)
+    kernels, constant = steps.kernels, steps.constant
     alpha = np.empty((length, n_states))
     alpha[0] = log_initial + log_density[0]
     for t in range(1, length):

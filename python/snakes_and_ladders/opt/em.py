@@ -21,6 +21,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from snakes_and_ladders.opt.termination import Termination
+
 
 def em_loop[State](
     step: Callable[[State], tuple[State, float]],
@@ -28,7 +30,7 @@ def em_loop[State](
     *,
     tolerance: float,
     max_iterations: int,
-) -> tuple[State, float, int]:
+) -> tuple[State, float, Termination]:
     """Alternate ``step`` until the log-likelihood settles or the budget runs out.
 
     Parameters
@@ -49,19 +51,23 @@ def em_loop[State](
 
     Returns
     -------
-    tuple[State, float, int]
-        The last state, the last log-likelihood, and the iterations run. The
-        caller builds its own result type from them and reports whatever its
-        M steps said along the way.
+    tuple[State, float, Termination]
+        The last state, the last log-likelihood, and how the loop ended: the
+        iterations run, and :attr:`Stop.CONVERGED` when the relative test
+        stopped it or :attr:`Stop.BUDGET` when ``max_iterations`` did (issue
+        #860). The caller builds its own result type from them and reports
+        whatever its M steps said along the way.
     """
     state = start
     previous = -float("inf")
     log_likelihood = previous
     iterations = 0
+    converged = False
     while iterations < max_iterations:
         iterations += 1
         state, log_likelihood = step(state)
         if abs(log_likelihood - previous) <= tolerance * abs(log_likelihood):
+            converged = True
             break
         previous = log_likelihood
-    return state, log_likelihood, iterations
+    return state, log_likelihood, Termination.after(iterations, converged=converged)

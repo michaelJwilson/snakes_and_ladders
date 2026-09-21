@@ -24,6 +24,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.bound
    :members:
 
+.. automodule:: snakes_and_ladders.cost
+   :members:
+
 .. automodule:: snakes_and_ladders.emissions
    :members:
 
@@ -262,6 +265,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.opt.testfunctions
+   :members:
+
+.. automodule:: snakes_and_ladders.opt.termination
    :members:
 
 .. automodule:: snakes_and_ladders.opt.potts

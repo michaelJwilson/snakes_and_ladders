@@ -22,7 +22,7 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 
-from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.enumeration import (
     configurations,
     refuse_oversized,
@@ -476,12 +476,7 @@ def _refuse_backend(backend: Backend) -> None:
     (#819); the frozen triple of callables this replaced spelled the same
     choice a second way for one problem (#828).
     """
-    if backend is not Backend.PYTHON:
-        msg = (
-            f"the coupled model runs on {Backend.PYTHON} or {Backend.RUST}, "
-            f"not {backend}"
-        )
-        raise ValueError(msg)
+    refuse_backend("the coupled model", backend, (Backend.PYTHON, Backend.RUST))
 
 
 def map_labelling(
