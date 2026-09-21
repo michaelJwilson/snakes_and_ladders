@@ -20,7 +20,7 @@ from snakes_and_ladders.qa.figure import (
     latex_integer,
     state_label,
 )
-from snakes_and_ladders.qa.runner import SIMULATION_PARAMS, Option, figure_main
+from snakes_and_ladders.qa.runner import FIXTURE_PARAMS, Option, figure_main
 from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import SimulatedDataset, simulate_alignment
 from snakes_and_ladders.sim.tree import Node, preorder
@@ -213,7 +213,7 @@ def main(argv: list[str] | None = None) -> QAFigure:
     return figure_main(
         stem="sim_example",
         description=__doc__,
-        params=[SIMULATION_PARAMS],
+        params=[FIXTURE_PARAMS],
         build=build_figure,
         options=[Option("n-sites-shown", int, 10)],
         argv=argv,

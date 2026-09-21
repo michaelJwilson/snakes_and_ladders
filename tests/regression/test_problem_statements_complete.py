@@ -20,12 +20,12 @@ states for citations from code.
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
+import catalogue
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-CATALOGUE = REPO_ROOT / "PROBLEMS.md"
+from tests._paths import REPO_ROOT
+
 TEX = REPO_ROOT / "docs" / "tex"
 TEXTBOOK = TEX / "textbook.tex"
 
@@ -187,13 +187,7 @@ def test_every_shared_catalogue_key_is_covered() -> None:
     # there cannot drift away from the statement that has to state it: every
     # key sharing a section with another is either named in `SHARED_KEYS` or
     # sits in a section whose own sizes paragraph states its instances.
-    by_statement: dict[str, list[str]] = {}
-    for line in CATALOGUE.read_text().splitlines():
-        cells = [cell.strip() for cell in line.split("|")]
-        if len(cells) < 5 or not cells[2].startswith("`"):
-            continue
-        keys = [key.strip(" `") for key in cells[2].split(",")]
-        by_statement.setdefault(cells[3].strip(" `"), []).extend(keys)
+    by_statement = catalogue.statements()
 
     assert by_statement, "no catalogue rows parsed from PROBLEMS.md"
     # The **principal** instance of a statement is the first key of its first

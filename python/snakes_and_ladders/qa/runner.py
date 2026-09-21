@@ -22,30 +22,20 @@ import argparse
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from functools import partial
 from pathlib import Path
 from typing import Any
 
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 
-from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.log import get_logger, phase
-from snakes_and_ladders.opt.testfunctions import TestFunctionSuite
 from snakes_and_ladders.qa.figure import (
     QAFigure,
     QATable,
     write_qa_figure,
     write_qa_table,
 )
-from snakes_and_ladders.sim.canonical import FrustratedLatticeParams
-from snakes_and_ladders.sim.convolutional import TurboParams
-from snakes_and_ladders.sim.hmm import HmmParams
-from snakes_and_ladders.sim.ldpc import LdpcParams
-from snakes_and_ladders.sim.mixture import MixtureParams
-from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.potts_chain import PottsParams
-from snakes_and_ladders.sim.spatio_sequential import SpatioSequentialParams
+from snakes_and_ladders.sim.fixtures import fixture
 
 
 @dataclass(frozen=True)
@@ -250,25 +240,53 @@ def table_main(
     return written
 
 
-# The parameters files the QA scripts read, declared once. A script names the
-# ones it takes rather than restating the flag and its loader, so a figure and
-# its test cannot disagree about which file the figure was rendered from. Every
-# script takes one: a figure whose instance is typed into the module is a
-# figure whose inputs the stamp of issue #372 cannot see (``qa/CLAUDE.md``).
-SIMULATION_PARAMS = ParamsArgument(
-    "params", partial(load_params, kind=SimulationParams)
-)
-POTTS_PARAMS = ParamsArgument("potts-params", partial(load_params, kind=PottsParams))
-HMM_PARAMS = ParamsArgument("hmm-params", partial(load_params, kind=HmmParams))
-MIXTURE_PARAMS = ParamsArgument("params", partial(load_params, kind=MixtureParams))
-FRUSTRATED_LATTICE_PARAMS = ParamsArgument(
-    "params", partial(load_params, kind=FrustratedLatticeParams)
-)
-TEST_FUNCTION_PARAMS = ParamsArgument(
-    "params", partial(load_params, kind=TestFunctionSuite)
-)
-LDPC_PARAMS = ParamsArgument("params", partial(load_params, kind=LdpcParams))
-TURBO_PARAMS = ParamsArgument("params", partial(load_params, kind=TurboParams))
-SPATIO_SEQUENTIAL_PARAMS = ParamsArgument(
-    "params", partial(load_params, kind=SpatioSequentialParams)
-)
+def registry_params(path: Path) -> Any:
+    """The declared truth at ``path``, read through the fixture registry.
+
+    Every argument these scripts take is a registered fixture ---
+    ``tests/regression/fixtures/<problem>/<tier>.yaml`` --- so the file says
+    which model it declares and `snakes_and_ladders.sim.fixtures.PARAMS` says
+    which loader reads that model. Nine constants bound nine loaders to nine
+    flag names instead, which is the registry written a second time: a
+    fixture that changed its model loaded as the type the flag remembered,
+    and the figure was rendered from a truth nobody declared (issue #863).
+
+    Parameters
+    ----------
+    path : Path
+        A fixture file. Its directory is the problem and its stem the tier,
+        which is the registry's own naming and not a convention here.
+
+    Returns
+    -------
+    Any
+        Whatever the declared model's loader returns, as
+        :attr:`~snakes_and_ladders.sim.fixtures.Fixture.params` is.
+    """
+    return fixture(path.parent.name, path.stem, path.parent.parent).params
+
+
+def fixture_params(flag: str = "params", *, repeated: bool = False) -> ParamsArgument:
+    """A parameters-file argument read through the fixture registry.
+
+    Parameters
+    ----------
+    flag : str
+        Long-option name without the leading dashes. A script taking two
+        fixtures names each for what it is --- ``potts-params`` beside
+        ``hmm-params`` --- which is the script's interface and stays its own.
+    repeated : bool
+        Whether the flag may be given more than once.
+
+    Returns
+    -------
+    ParamsArgument
+    """
+    return ParamsArgument(flag, registry_params, repeated=repeated)
+
+
+#: The argument a script taking one fixture declares. A script names what it
+#: takes rather than typing an instance into the module, so a figure and its
+#: test cannot disagree about which file the figure was rendered from, and a
+#: figure's inputs stay visible to the build (``qa/CLAUDE.md``, issue #372).
+FIXTURE_PARAMS = fixture_params()

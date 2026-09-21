@@ -23,13 +23,12 @@ from __future__ import annotations
 import subprocess
 import sys
 import tomllib
-from pathlib import Path
 
 import pytest
 
+from tests._paths import REPO_ROOT
 from tests.conftest import DISTRIBUTED_BENCHMARK, DISTRIBUTED_CAP
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
 BENCHMARKS = REPO_ROOT / "tests" / "benchmarks"
 
 #: One benchmark module, cheap to reach and never reached: the guard fires at

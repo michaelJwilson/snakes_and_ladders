@@ -27,7 +27,7 @@ from matplotlib.figure import Figure
 from snakes_and_ladders.likelihood.objective import SubstitutionModelObjective
 from snakes_and_ladders.opt.fit import constrained_standard_errors, covers, fit
 from snakes_and_ladders.qa.figure import QAFigure
-from snakes_and_ladders.qa.runner import SIMULATION_PARAMS, figure_main
+from snakes_and_ladders.qa.runner import FIXTURE_PARAMS, figure_main
 from snakes_and_ladders.qa.style import (
     INK_MUTED,
     ONE_COLUMN_WIDE,
@@ -221,7 +221,7 @@ def main(argv: list[str] | None = None) -> QAFigure:
     return figure_main(
         stem="opt_model_recovery",
         description=__doc__,
-        params=[SIMULATION_PARAMS],
+        params=[FIXTURE_PARAMS],
         build=_fit_and_build,
         argv=argv,
     )

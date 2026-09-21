@@ -20,7 +20,8 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from tests._paths import REPO_ROOT
+
 DOCUMENTS = tuple(sorted((REPO_ROOT / "docs" / "tex").glob("*.tex")))
 SOURCES = ("python", "src", "tests")
 SUFFIXES = (".py", ".rs")

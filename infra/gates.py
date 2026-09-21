@@ -29,9 +29,8 @@ import argparse
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+from _paths import REPO_ROOT
 
 
 @dataclass(frozen=True)

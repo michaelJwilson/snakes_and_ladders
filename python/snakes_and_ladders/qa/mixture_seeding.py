@@ -36,7 +36,7 @@ from snakes_and_ladders.opt.mixture import (
     uniform_seeds,
 )
 from snakes_and_ladders.qa.figure import QAFigure
-from snakes_and_ladders.qa.runner import MIXTURE_PARAMS, figure_main
+from snakes_and_ladders.qa.runner import FIXTURE_PARAMS, figure_main
 from snakes_and_ladders.qa.style import (
     INK_MUTED,
     ONE_COLUMN_WIDE,
@@ -277,7 +277,7 @@ def main(argv: list[str] | None = None) -> QAFigure:
     return figure_main(
         stem="mixture_seeding",
         description=__doc__,
-        params=(MIXTURE_PARAMS,),
+        params=(FIXTURE_PARAMS,),
         build=build,
         argv=argv,
     )

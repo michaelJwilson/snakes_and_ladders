@@ -27,10 +27,11 @@ import re
 import subprocess
 from pathlib import Path
 
+import catalogue
 import pytest
 from snakes_and_ladders.qa.manifest import FIGURES, cited_stems
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+from tests._paths import REPO_ROOT
 
 #: The sentence in `DEV.md` opening the contract table. Prose around it may be
 #: reworded; this is the anchor, and its loss fails the test rather than
@@ -128,7 +129,7 @@ def _rows() -> list[tuple[list[str], str]]:
         assert stripped.startswith("|"), f"DEV.md's contract table ended at {line!r}"
         if set(stripped) <= set("| -"):
             continue
-        cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+        cells = catalogue.cells(stripped)
         assert len(cells) == 3, f"expected three columns, got {cells}"
         if cells[0] == "path":
             continue

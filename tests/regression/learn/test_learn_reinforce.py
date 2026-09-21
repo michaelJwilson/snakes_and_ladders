@@ -27,7 +27,6 @@ from snakes_and_ladders.learn.exact import (
 )
 from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.potts import (
-    PottsEnvironment,
     enumerate_configurations,
     optimum,
 )
@@ -38,7 +37,8 @@ from snakes_and_ladders.learn.rollout import (
     rollout,
 )
 
-FIELD = np.array([0.4, -0.1, -0.3])
+from tests.regression.learn.conftest import potts_environment
+
 CHAIN_LENGTH = 4
 N_STATES = 3
 
@@ -57,10 +57,6 @@ _GRADIENT_TOLERANCE = 1e-8
 # worst 3.4%. 10% at 6000 leaves room for an unlucky seed without leaving
 # room for a wrong estimator, which would be off by a factor, not a percent.
 _ESTIMATOR_TOLERANCE = 0.10
-
-
-def _environment() -> PottsEnvironment:
-    return PottsEnvironment(0.75, FIELD, CHAIN_LENGTH)
 
 
 def _policy(weights: list[float]) -> LinearPolicy:
@@ -82,7 +78,7 @@ def test_the_enumerated_gradient_matches_finite_differences() -> None:
     # Autodiff against numerical differentiation of the same closed form, which
     # rules out an error in the enumeration's use of autograd and says nothing
     # about the sampled estimator. Realized: 1.5e-11 relative.
-    environment, policy = _environment(), _policy([0.3, -0.6])
+    environment, policy = potts_environment(), _policy([0.3, -0.6])
     start = (2, 1, 1, 0)
     exact = exact_policy_gradient(environment, policy, start, EXACT_HORIZON)
     numerical = finite_difference_gradient(environment, policy, start, EXACT_HORIZON)
@@ -95,7 +91,7 @@ def test_the_sampled_estimator_is_unbiased_for_the_enumerated_gradient() -> None
     # The claim REINFORCE rests on, checked rather than cited. A score-function
     # estimator with a sign error or a missing return-to-go would be wrong by
     # a factor, not by a sampling error. Realized: 9.9e-03 relative.
-    environment, policy = _environment(), _policy([0.3, -0.6])
+    environment, policy = potts_environment(), _policy([0.3, -0.6])
     start = (2, 1, 1, 0)
     exact = exact_policy_gradient(environment, policy, start, EXACT_HORIZON)
 
@@ -115,7 +111,7 @@ def test_the_score_function_has_zero_expectation() -> None:
     # Why subtracting a constant baseline leaves the estimator unbiased: it
     # multiplies this, which is exactly zero because the probabilities sum to
     # one whatever the weights are. An identity, not a tolerance.
-    environment, policy = _environment(), _policy([0.9, -0.4])
+    environment, policy = potts_environment(), _policy([0.9, -0.4])
     state = (1, 2, 0, 1)
     actions = environment.actions(state)
     log_probabilities = policy.log_probabilities(environment.features(state, actions))
@@ -136,7 +132,7 @@ def test_the_baseline_reduces_the_estimator_variance() -> None:
     # are of similar size; the baseline earns its place where the return scale
     # varies. Reported rather than asserted tightly: a threshold tuned to 0.90
     # would be tuned to this environment.
-    environment, policy = _environment(), _policy([0.3, -0.6])
+    environment, policy = potts_environment(), _policy([0.3, -0.6])
     start = (2, 1, 1, 0)
 
     def per_episode_variance(baseline: float) -> float:
@@ -173,7 +169,7 @@ def test_training_raises_the_enumerated_expected_return() -> None:
     # reports: that curve is a Monte Carlo estimate under a moving policy and
     # can rise while the estimator is wrong. Realized on 9 probe starts:
     # -0.6245 before, 1.6550 after.
-    environment = _environment()
+    environment = potts_environment()
     starts = list(enumerate_configurations(N_STATES, CHAIN_LENGTH))[::9]
     policy = LinearPolicy(2)
 
@@ -218,7 +214,7 @@ def test_the_learned_policy_is_at_least_as_good_as_hill_climbing() -> None:
     # matching hill climbing is still a true result, and a threshold tuned to
     # the margin measured here would hide the day it stopped holding --- the
     # reasoning issue #128 applied to the NNI-versus-SPR comparison.
-    environment = _environment()
+    environment = potts_environment()
     starts = list(enumerate_configurations(N_STATES, CHAIN_LENGTH))
     policy = LinearPolicy(2)
     reinforce(
@@ -261,7 +257,7 @@ def test_the_learned_policy_is_at_least_as_good_as_hill_climbing() -> None:
 
 @pytest.mark.smoke
 def test_training_is_reproducible_from_its_seed() -> None:
-    environment = _environment()
+    environment = potts_environment()
     runs = [
         reinforce(
             environment,
@@ -291,7 +287,7 @@ def test_the_gradient_check_would_catch_a_biased_estimator() -> None:
     # the discarded past rewards being uncorrelated with the action. Measured
     # at 1.4e-02 here, inside the sampling tolerance. Return-to-go buys
     # variance, not correctness.
-    environment, policy = _environment(), _policy([0.3, -0.6])
+    environment, policy = potts_environment(), _policy([0.3, -0.6])
     start = (2, 1, 1, 0)
     exact = exact_policy_gradient(environment, policy, start, EXACT_HORIZON)
 
@@ -326,7 +322,7 @@ def test_the_shared_decision_loop_reproduces_the_loop_it_replaced() -> None:
     # written out here: the same neighbourhood, the same distribution, the
     # same index. Bitwise, both the taken entry and the whole vector, since
     # an entropy bonus and a cross-entropy read the vector.
-    environment, policy = _environment(), _policy([0.3, -0.6])
+    environment, policy = potts_environment(), _policy([0.3, -0.6])
     rng = np.random.default_rng(4)
     episodes = [rollout(environment, policy, rng, EPISODE_HORIZON) for _ in range(8)]
 
@@ -366,7 +362,7 @@ def test_a_degenerate_budget_is_rejected(
 ) -> None:
     with pytest.raises(ValueError, match=message):
         reinforce(
-            _environment(),
+            potts_environment(),
             LinearPolicy(2),
             np.random.default_rng(0),
             iterations=iterations,
@@ -378,16 +374,16 @@ def test_a_degenerate_budget_is_rejected(
 @pytest.mark.smoke
 def test_an_estimate_needs_at_least_one_episode() -> None:
     with pytest.raises(ValueError, match="at least one episode"):
-        surrogate_loss(_environment(), LinearPolicy(2), [], 0.0)
+        surrogate_loss(potts_environment(), LinearPolicy(2), [], 0.0)
 
 
 @pytest.mark.smoke
 def test_a_negative_horizon_is_rejected_by_the_oracle() -> None:
     with pytest.raises(ValueError, match="horizon must be >= 0"):
-        exact_expected_return(_environment(), LinearPolicy(2), (0, 1, 0, 1), -1)
+        exact_expected_return(potts_environment(), LinearPolicy(2), (0, 1, 0, 1), -1)
 
 
 @pytest.mark.smoke
 def test_the_oracle_returns_zero_at_a_zero_horizon() -> None:
-    value = exact_expected_return(_environment(), LinearPolicy(2), (0, 1, 2, 0), 0)
+    value = exact_expected_return(potts_environment(), LinearPolicy(2), (0, 1, 2, 0), 0)
     assert float(value.detach()) == 0.0

@@ -18,15 +18,8 @@ break it.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
+import document_orphans
 import pytest
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_ROOT / "infra"))
-
-import document_orphans  # noqa: E402
 
 #: The textbook's own preamble and the sketch files it inputs are LaTeX the
 #: statements read, so a module path in any of them is a module path in a

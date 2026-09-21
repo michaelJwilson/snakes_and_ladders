@@ -9,15 +9,12 @@ would write; and the guard itself catches a file that drifted or ran over.
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
+import experiments
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT / "infra"))
-
-import experiments  # noqa: E402
+from tests._paths import REPO_ROOT
 
 VALID = (
     REPO_ROOT / "docs" / "experiments" / "001-potts-cluster-autocorrelation.md"

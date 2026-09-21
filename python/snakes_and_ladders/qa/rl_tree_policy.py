@@ -35,7 +35,7 @@ from snakes_and_ladders.learn.reinforce import reinforce
 from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
 from snakes_and_ladders.learn.tree import RewardModel, TreeEnvironment
 from snakes_and_ladders.qa.figure import QAFigure, latex_integer
-from snakes_and_ladders.qa.runner import SIMULATION_PARAMS, figure_main
+from snakes_and_ladders.qa.runner import FIXTURE_PARAMS, figure_main
 from snakes_and_ladders.qa.style import (
     INK_MUTED,
     ONE_COLUMN_WIDE,
@@ -314,7 +314,7 @@ def main(argv: list[str] | None = None) -> QAFigure:
     return figure_main(
         stem="rl_tree_policy",
         description=__doc__,
-        params=[SIMULATION_PARAMS],
+        params=[FIXTURE_PARAMS],
         build=lambda params: build_figure(*measure(params), params),
         argv=argv,
     )

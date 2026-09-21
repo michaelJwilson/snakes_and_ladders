@@ -47,16 +47,12 @@ from snakes_and_ladders.sim.factor_graph import (
     from_hmm,
     from_potts,
 )
-from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+
+from tests.regression.likelihood.conftest import FIELD, TREE
 
 #: The field and the tree `test_message_passing.py` runs the same claims on,
 #: so the two files exercise one graph and not two.
-FIELD = np.array([0.3, -0.7, 0.15])
-TREE = PottsGraph(
-    n_nodes=6,
-    edges=((0, 1), (0, 2), (1, 3), (1, 4), (2, 5)),
-    coupling=(0.8, -0.4, 1.2, 0.3, 0.9),
-)
 LOOPY = lattice_graph((3, 3), coupling=0.4, boundary=BoundaryCondition.OPEN)
 
 #: What a marginal is held to against enumeration, as `test_message_passing.py`

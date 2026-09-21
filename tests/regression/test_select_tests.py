@@ -9,13 +9,9 @@ needs nothing, and skipping a run that would have measured different coverage
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "infra"))
-
 from select_tests import (
     ALWAYS,
     ALWAYS_DESELECTED,
@@ -30,7 +26,7 @@ from select_tests import (
     select,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from tests._paths import REPO_ROOT
 
 
 def _modules_of(chosen: dict[str, list[str]]) -> set[str]:

@@ -47,6 +47,8 @@ from snakes_and_ladders.sample.potts_mcmc import (
 from snakes_and_ladders.sample.statistics import chi_square_p_value
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
+from tests._chains import enumerated_law, fit_p_value
+
 # `test_potts_mcmc.py`'s fixture, significance and thinning, so the two routes
 # are held to one standard: 16 configurations, 10,000 sweeps thinned by 5.
 SIGNIFICANCE = 0.001
@@ -277,16 +279,7 @@ def test_the_default_guard_hands_nothing_back_on_a_realistic_pass() -> None:
 def _goodness_of_fit(field: np.ndarray, seed: int) -> float:
     """The Rust pass's chain against the exact enumerated distribution."""
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
-    n_states = int(field.shape[0])
-    configurations = np.array(
-        list(itertools.product(range(n_states), repeat=graph.n_nodes)),
-        dtype=np.int64,
-    )
-    weights = log_weights(graph, field, configurations)
-    weights -= weights.max()
-    probability = np.exp(weights)
-    probability /= probability.sum()
-    index = {tuple(row): position for position, row in enumerate(configurations)}
+    index, probability = enumerated_law(graph, field)
 
     chain = sample_potts(
         graph,
@@ -299,10 +292,7 @@ def _goodness_of_fit(field: np.ndarray, seed: int) -> float:
         cluster_backend=Backend.RUST,
     )
 
-    observed = np.zeros(len(probability))
-    for row in chain.states:
-        observed[index[tuple(row)]] += 1
-    return chi_square_p_value(observed, probability * SWEEPS)
+    return fit_p_value(index, probability, chain.states, SWEEPS)
 
 
 @pytest.mark.oracle

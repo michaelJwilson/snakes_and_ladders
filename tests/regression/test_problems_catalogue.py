@@ -12,39 +12,16 @@ file. That the tree carries no committed copy is
 from __future__ import annotations
 
 import importlib
-import re
-import sys
 from pathlib import Path
 
+import catalogue
+import checks_ledger
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT / "infra"))
+from tests._paths import REPO_ROOT
 
-import checks_ledger  # noqa: E402
-
-PROBLEMS = REPO_ROOT / "PROBLEMS.md"
 FIXTURES = REPO_ROOT / "tests" / "regression" / "fixtures"
 PACKAGE = "snakes_and_ladders."
-#: The two hand-written columns: a bare fixture key, and code under the
-#: package named without its prefix.
-KEY_CELL = re.compile(r"`([a-z_0-9]+)`")
-DEFINES_CELL = re.compile(r"`([a-z_]+\.[A-Za-z0-9_.]+)`")
-
-
-def _rows() -> list[tuple[str, list[str], list[str]]]:
-    """``(problem, keys, defining names)`` per row of the catalogue."""
-    found = []
-    for line in PROBLEMS.read_text().splitlines():
-        if not line.startswith("| ") or line.startswith("| Problem") or "---" in line:
-            continue
-        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-        if len(cells) < 4:
-            continue
-        found.append(
-            (cells[0], KEY_CELL.findall(cells[1]), DEFINES_CELL.findall(cells[3]))
-        )
-    return found
 
 
 def _resolves(symbol: str) -> bool:
@@ -75,7 +52,7 @@ def test_every_defining_name_in_the_catalogue_resolves() -> None:
     # Read from the `Defines` column rather than from every backtick in the
     # file (issue #640): the minimal table backticks a fixture key, a LaTeX
     # label and a column name too, and none of those is a dotted symbol.
-    names = [name for _, _, defines in _rows() for name in defines]
+    names = [name for row in catalogue.rows() for name in row.defines]
     assert len(names) > 40, "the catalogue lost its table"
 
     missing = sorted({name for name in names if not _resolves(f"{PACKAGE}{name}")})
@@ -87,7 +64,12 @@ def test_every_key_in_the_catalogue_declares_a_fixture() -> None:
     # A key is the fixture directory and the marker, which are one name. A key
     # naming no directory is a marker no test can carry.
     missing = sorted(
-        {key for _, keys, _ in _rows() for key in keys if not (FIXTURES / key).is_dir()}
+        {
+            key
+            for row in catalogue.rows()
+            for key in row.keys
+            if not (FIXTURES / key).is_dir()
+        }
     )
     assert missing == [], f"PROBLEMS.md keys name no fixture: {missing}"
 

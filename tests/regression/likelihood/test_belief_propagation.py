@@ -30,17 +30,13 @@ from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import critical_coupling
 
+from tests.regression.likelihood.conftest import FIELD, TREE
+
 RELATIVE_TOLERANCE = 1e-11
 
-FIELD = np.array([0.3, -0.7, 0.15])
 
 # A tree, so that BP is exact on it: six nodes, five edges, no cycle, and
 # couplings of mixed sign so that a test passing by symmetry cannot.
-TREE = PottsGraph(
-    n_nodes=6,
-    edges=((0, 1), (0, 2), (1, 3), (1, 4), (2, 5)),
-    coupling=(0.8, -0.4, 1.2, 0.3, 0.9),
-)
 
 
 def _relative(realized: float, reference: float) -> float:

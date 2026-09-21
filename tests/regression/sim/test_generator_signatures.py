@@ -40,8 +40,8 @@ from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import Node
 
 from tests._objective_checks import AnalyticGaussian
+from tests._paths import REPO_ROOT
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
 PACKAGE = REPO_ROOT / "python" / "snakes_and_ladders"
 
 

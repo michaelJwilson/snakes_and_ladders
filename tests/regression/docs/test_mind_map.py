@@ -7,15 +7,8 @@ and that a module's milestone is one `ROADMAP.md` declares.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import pytest
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_ROOT / "infra"))
-
-from mind_map import (  # noqa: E402
+from mind_map import (
     APPLICATION,
     COLLAPSED,
     NODE_CAP,

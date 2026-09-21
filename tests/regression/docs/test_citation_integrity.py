@@ -17,15 +17,10 @@ would assert against a generated fragment this suite does not write.
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
+import check_citations
 import pytest
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_ROOT / "infra"))
-
-import check_citations  # noqa: E402
 
 CLEAN_BIBLIOGRAPHY = """\
 @book{cited2020,

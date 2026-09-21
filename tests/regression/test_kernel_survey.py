@@ -10,14 +10,8 @@ would fail on a faster host.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "infra"))
-
 import appraise_kernels
+import pytest
 
 
 @pytest.fixture(scope="module")

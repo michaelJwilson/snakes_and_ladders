@@ -14,15 +14,10 @@ what `status --porcelain` reports for each kind of change.
 from __future__ import annotations
 
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT / "infra"))
-
-import reap_worktrees  # noqa: E402
+import reap_worktrees
 
 
 def _git(repository: Path, *arguments: str) -> str:

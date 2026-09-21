@@ -44,9 +44,8 @@ import ast
 import json
 import sys
 from collections.abc import Iterable
-from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+from _paths import REPO_ROOT
 
 # The submodules with their own test directory. `snakes_and_ladders.numerics`,
 # `snakes_and_ladders.emissions` and the scaffolding hot path are covered by

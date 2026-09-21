@@ -30,8 +30,10 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+import tex
+
 #: The repository root, from `infra/`.
-REPO_ROOT = Path(__file__).resolve().parents[1]
+from _paths import REPO_ROOT
 
 #: The package the map is of.
 PACKAGE = REPO_ROOT / "python" / "snakes_and_ladders"
@@ -216,6 +218,9 @@ def _tip(module: Module) -> str:
     tooltip needs; and ``_`` is emitted as ``\string_``, because module names
     are full of it and it is subscript to LaTeX in text mode. Non-ASCII goes:
     the annotation declares no encoding, so a viewer would print mojibake.
+
+    So this is a strip and not `tex.escape`: an escape puts the character on
+    the page, and a tooltip crossing into a PDF literal cannot carry one.
     """
     text = module.summary or "no module docstring"
     claim = f" ({', '.join(module.milestones)})" if module.milestones else ""
@@ -241,7 +246,7 @@ def _label(module: Module) -> str:
     document, and a `\footnotesize` nested inside it printed the tag larger
     than the name it qualifies.
     """
-    leaf = module.name.rsplit(".", 1)[-1].replace("_", r"\_")
+    leaf = tex.escape(module.name.rsplit(".", 1)[-1])
     if module.milestones:
         return rf"{leaf}~\textcolor{{claim}}{{{', '.join(module.milestones)}}}"
     if module.concern == "application":
@@ -339,7 +344,7 @@ def placed(
             first = low + (start / 360.0) * (high - low)
             package_at = len(nodes)
             key = (package or "toplevel").replace("_", "")
-            name = (package or "top level").replace("_", r"\_")
+            name = tex.escape(package or "top level")
             carried = sum(
                 one.package == package and one.concern == concern for one in found
             )

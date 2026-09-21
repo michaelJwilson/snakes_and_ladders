@@ -39,7 +39,7 @@ import tomllib
 from importlib.metadata import PackageNotFoundError, distribution
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+from _paths import REPO_ROOT
 
 #: Where a PEP 508 requirement stops naming a distribution and starts
 #: constraining it. `name`, `name>=1.2`, `name[extra]`, `name @ url` and

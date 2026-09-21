@@ -18,7 +18,8 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from tests._paths import REPO_ROOT
+
 ROOT_CLAUDE_MD = REPO_ROOT / "CLAUDE.md"
 
 # The directories root `CLAUDE.md` names as carrying their own file.

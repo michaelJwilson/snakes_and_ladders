@@ -14,16 +14,11 @@ could cite an experiment a later pull request renumbered or retracted.
 
 from __future__ import annotations
 
-import sys
 from collections import Counter
 from pathlib import Path
 
+import problems_tables
 import pytest
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_ROOT / "infra"))
-
-import problems_tables  # noqa: E402
 
 
 @pytest.fixture(scope="module")

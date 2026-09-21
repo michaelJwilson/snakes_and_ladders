@@ -51,7 +51,8 @@ import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+from _paths import REPO_ROOT
+
 CRATE_ROOT = REPO_ROOT / "src"
 PACKAGE_ROOT = REPO_ROOT / "python" / "snakes_and_ladders"
 TESTS_ROOT = REPO_ROOT / "tests"

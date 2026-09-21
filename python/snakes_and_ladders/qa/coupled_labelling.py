@@ -38,7 +38,7 @@ from matplotlib.figure import Figure
 from snakes_and_ladders.qa.figure import QAFigure
 from snakes_and_ladders.qa.layout import discrete_legend
 from snakes_and_ladders.qa.runner import (
-    SPATIO_SEQUENTIAL_PARAMS,
+    FIXTURE_PARAMS,
     Option,
     figure_main,
 )
@@ -382,7 +382,7 @@ def main(argv: list[str] | None = None) -> QAFigure:
     return figure_main(
         stem="coupled_labelling",
         description=__doc__,
-        params=(SPATIO_SEQUENTIAL_PARAMS,),
+        params=(FIXTURE_PARAMS,),
         build=build_figure,
         options=(
             Option("draw-seed", int, DRAW_SEED),

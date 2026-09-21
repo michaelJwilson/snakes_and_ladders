@@ -25,7 +25,7 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from tests._paths import REPO_ROOT
 
 ROADMAP = REPO_ROOT / "ROADMAP.md"
 STATUS = REPO_ROOT / "STATUS.md"

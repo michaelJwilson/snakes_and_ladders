@@ -58,10 +58,11 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 
+import catalogue
 from snakes_and_ladders.sim.fixtures import FIXTURES_DIR, problems
 
 #: The repository root, from this file: `tests.` imports are resolved under it.
-REPO_ROOT = Path(__file__).resolve().parents[1]
+from tests._paths import REPO_ROOT
 
 #: Calls whose *first* positional argument names the problem.
 #: `snakes_and_ladders.sim.fixtures.fixture` and `path_of`.
@@ -86,12 +87,8 @@ FIXTURE_PATH = re.compile(r"([a-z_0-9]+)/[a-z]+\.yaml$")
 #: `tests/regression/test_problems_catalogue.py` resolves every symbol it names,
 #: so a row cannot outlive its code. Reading it is reading a fact CI already
 #: holds true, which is what a hand-written module-to-problem map is not.
-CATALOGUE = REPO_ROOT / "PROBLEMS.md"
-
-#: A ``| cell | cell |`` row of that table, and the ``` `name` ``` spans inside
-#: a cell. The table is the only part of the file with four columns.
-CATALOGUE_ROW = re.compile(r"^\|(.+)\|\s*$")
-CATALOGUE_CODE = re.compile(r"`([^`]+)`")
+#: Parsed by `infra/catalogue.py`, the one reader of the table (issue #863).
+CATALOGUE = catalogue.CATALOGUE
 
 #: Where `tests/conftest.py` keeps this between sessions, under `.pytest_cache`.
 CACHE_KEY = "problems/fixtures-named"
@@ -274,18 +271,7 @@ def _defining_code() -> tuple[tuple[str, frozenset[str]], ...]:
     module to exercise a different model, forget the constant, and the axis is
     confidently wrong --- worse than visibly empty (issue #622).
     """
-    rows: dict[str, set[str]] = {}
-    for line in CATALOGUE.read_text().splitlines():
-        match = CATALOGUE_ROW.match(line)
-        if match is None:
-            continue
-        cells = [cell.strip() for cell in match.group(1).split("|")]
-        if len(cells) != 4 or cells[0] in ("Problem", "---"):
-            continue
-        keys = frozenset(CATALOGUE_CODE.findall(cells[1]))
-        for name in CATALOGUE_CODE.findall(cells[3]):
-            rows.setdefault(name, set()).update(keys)
-    return tuple((name, frozenset(keys)) for name, keys in sorted(rows.items()))
+    return tuple(catalogue.defines().items())
 
 
 def _imported_code(tree: ast.Module) -> set[str]:

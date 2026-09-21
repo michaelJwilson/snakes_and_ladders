@@ -36,7 +36,7 @@ from snakes_and_ladders.qa.figure import (
     latex_integer,
     pearson_correlation,
 )
-from snakes_and_ladders.qa.runner import SIMULATION_PARAMS, figure_main
+from snakes_and_ladders.qa.runner import FIXTURE_PARAMS, figure_main
 from snakes_and_ladders.qa.style import (
     INK_MUTED,
     ONE_COLUMN_WIDE,
@@ -236,7 +236,7 @@ def main(argv: list[str] | None = None) -> QAFigure:
     return figure_main(
         stem="rl_reward_surface",
         description=__doc__,
-        params=[SIMULATION_PARAMS],
+        params=[FIXTURE_PARAMS],
         build=lambda params: build_figure(*reward_surfaces(params), params),
         argv=argv,
     )

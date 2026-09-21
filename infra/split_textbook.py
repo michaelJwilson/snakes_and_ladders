@@ -20,7 +20,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+from _paths import REPO_ROOT
+
 TOC = REPO_ROOT / "docs" / "textbook.toc"
 OUT = REPO_ROOT / "docs" / "tex" / "generated" / "sections"
 

@@ -22,7 +22,8 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from tests._paths import REPO_ROOT
+
 GUARD = REPO_ROOT / "infra" / "bin" / "uv"
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 

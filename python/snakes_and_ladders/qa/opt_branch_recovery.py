@@ -21,19 +21,16 @@ recursion and no optimizer (`qa/CLAUDE.md`).
 
 from __future__ import annotations
 
-from functools import partial
-
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from matplotlib.figure import Figure
 
-from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.likelihood import pruning_torch
 from snakes_and_ladders.likelihood.objective import BranchLengthObjective
 from snakes_and_ladders.opt.fit import constrained_standard_errors, covers, fit
 from snakes_and_ladders.qa.figure import QAFigure
-from snakes_and_ladders.qa.runner import ParamsArgument, figure_main
+from snakes_and_ladders.qa.runner import figure_main, fixture_params
 from snakes_and_ladders.qa.style import (
     INK_MUTED,
     ONE_COLUMN_WIDE,
@@ -260,15 +257,11 @@ def build_figure(
     return fig, caption
 
 
-# Two alignments through the same loader, so the flags are declared here
-# rather than shared: the figure's claim is about the rooted and unrooted
-# fixtures specifically.
-UNROOTED_PARAMS = ParamsArgument(
-    "unrooted-params", partial(load_params, kind=SimulationParams)
-)
-ROOTED_PARAMS = ParamsArgument(
-    "rooted-params", partial(load_params, kind=SimulationParams)
-)
+# Two alignments through the registry, so the flags are declared here rather
+# than shared: the figure's claim is about the rooted and unrooted fixtures
+# specifically, and the flag names say which is which.
+UNROOTED_PARAMS = fixture_params("unrooted-params")
+ROOTED_PARAMS = fixture_params("rooted-params")
 
 
 def _build_from_params(

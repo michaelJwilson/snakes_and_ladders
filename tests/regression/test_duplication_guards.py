@@ -40,6 +40,16 @@ is a `cumsum` over degrees whatever the line is spelled like --- so it is read
 from the syntax tree, and only the imported `csr_matrix` spelling is read as a
 text.
 
+The sixth and seventh are *derivations* rather than routines, and what they
+guard is that a fact is computed once (issue #863). The repository root was
+counted from each file's own depth fifty-three times, which is right until
+the file moves and wrong silently after; `PROBLEMS.md` was split on its pipes
+by nine readers with nine filters, one of them with no short-row guard, so a
+row that lost a column was read as a row with a missing key rather than
+refused. Two homes carry the root, one per side of the tree, and one reader
+carries the table --- beside the second reading `test_problem_markers.py`
+keeps on purpose and says why.
+
 Each guard is paired with a test that the guard fails on a violating input.
 That pairing is the discipline `tests/regression/docs` established: a check
 that has never been seen to fail is not known to work, and a regex over
@@ -52,6 +62,7 @@ import ast
 import re
 from pathlib import Path
 
+import _paths
 import pytest
 from snakes_and_ladders.likelihood.schedule import (
     SCHEDULES,
@@ -59,7 +70,8 @@ from snakes_and_ladders.likelihood.schedule import (
     MessageScheduleName,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from tests._paths import REPO_ROOT
+
 PACKAGE = REPO_ROOT / "python" / "snakes_and_ladders"
 
 #: `enumeration.argmax` outside its own module. Issue #755 folded the three
@@ -601,6 +613,13 @@ def test_each_guard_fails_on_violating_source() -> None:
         SCHEDULE_NAME_MATCH: '    match plan.name:\n        case "tree":\n',
         # Split for the same reason: this module is inside the search.
         FOREIGN_SPARSE: "matrix = csr" + "_matrix((data, (rows, cols)))\n",
+        # Unsplit: the pattern is anchored at a line start and every literal
+        # in this module is indented, so the module is not its own offender.
+        DERIVED_REPO_ROOT: "REPO_ROOT = Path(__file__).resolve().parents[2]\n",
+        CATALOGUE_FILE: "CATALOGUE = REPO_ROOT / 'PROBLEMS.md'\n",
+        # Split inside the call for the reason the lines above are split: a
+        # whole one here makes this module the reader the guard refuses.
+        PIPE_SPLIT: "cells = line.split(" + '"|")\n',
     }
     clean = {
         PRIVATE_LOGSUMEXP: "from snakes_and_ladders.numerics import logsumexp\n",
@@ -617,6 +636,9 @@ def test_each_guard_fails_on_violating_source() -> None:
         ),
         SCHEDULE_NAME_MATCH: "    for step in plan.steps(layout):\n",
         FOREIGN_SPARSE: "from snakes_and_ladders.incidence import SparseIncidence\n",
+        DERIVED_REPO_ROOT: "from tests._paths import REPO_ROOT\n",
+        CATALOGUE_FILE: "rows = catalogue.rows()\n",
+        PIPE_SPLIT: "cells = catalogue.cells(line)\n",
     }
 
     assert [p for p, text in violating.items() if not p.search(text)] == []
@@ -740,3 +762,84 @@ def test_the_argmax_query_reads_a_parenthesised_import(tmp_path: Path) -> None:
 
     assert _imports_argmax(over_five_lines)
     assert not _imports_argmax(through_the_seam)
+
+
+# --- one home per derivation, issue #863 --------------------------------------
+
+#: The repository root derived from a file's own location. Two homes carry it
+#: --- `infra/_paths.py` and `tests/_paths.py`, one per side of the tree, each
+#: counting from itself --- and every other module imports it. Fifty-three
+#: counted their own parents, so a module moved one directory deeper read a
+#: tree one directory up and failed nowhere.
+DERIVED_REPO_ROOT = re.compile(
+    r"^REPO_ROOT = Path\(__file__\)\.resolve\(\)\.(?:parents\[\d+\]|parent\.parent)",
+    re.MULTILINE,
+)
+
+#: The pieces of a reader of `PROBLEMS.md`: the file, and a split of a row on
+#: its pipes. Both, because the tree is full of each alone --- `DEV.md` has
+#: tables too, and `select_tests.py` names the catalogue without parsing it.
+CATALOGUE_FILE = re.compile(r"PROBLEMS\.md")
+PIPE_SPLIT = re.compile(r"\.split\(\"\|\"\)")
+
+#: The reader `test_problem_markers.py` keeps, and says in its own docstring
+#: why: a guard that imports the thing it checks agrees with it by
+#: construction. One deliberate second reading; `infra/catalogue.py` is the
+#: first.
+CATALOGUE_READERS = {
+    "infra/catalogue.py",
+    "tests/regression/test_problem_markers.py",
+}
+
+#: Where the repository root is derived, and where the catalogue is parsed.
+PATH_OWNERS = {"infra/_paths.py", "tests/_paths.py"}
+
+#: The two sides of the tree a guard over the machinery reads.
+MACHINERY = (REPO_ROOT / "infra", REPO_ROOT / "tests")
+
+
+def _machinery_sources() -> dict[str, str]:
+    """Every module under ``infra/`` and ``tests/``, keyed by repository path."""
+    return {
+        str(path.relative_to(REPO_ROOT)): path.read_text()
+        for root in MACHINERY
+        for path in sorted(root.rglob("*.py"))
+    }
+
+
+@pytest.mark.critical
+@pytest.mark.infra
+def test_the_repository_root_is_derived_in_two_places() -> None:
+    # Fifty-three modules wrote `parents[n]` with `n` counted from where the
+    # file sat (issue #863). The count is the part that cannot be checked by
+    # reading: it is right until the file moves, and wrong silently after.
+    derived = {
+        path
+        for path, source in _machinery_sources().items()
+        if DERIVED_REPO_ROOT.search(source)
+    }
+
+    assert derived == PATH_OWNERS
+
+
+@pytest.mark.critical
+@pytest.mark.infra
+def test_the_two_repository_roots_are_one_path() -> None:
+    # Two homes, because a test reads the tree it is part of and `infra/`
+    # reads the tree it builds; one value, because they are the same tree.
+    assert _paths.REPO_ROOT == REPO_ROOT
+
+
+@pytest.mark.critical
+@pytest.mark.infra
+def test_the_problem_catalogue_has_one_reader() -> None:
+    # Nine readers with nine filters, one of them with no short-row guard, so
+    # a row that lost a column was read as a row with a missing key rather
+    # than refused (issue #863).
+    readers = {
+        path
+        for path, source in _machinery_sources().items()
+        if CATALOGUE_FILE.search(source) and PIPE_SPLIT.search(source)
+    }
+
+    assert readers == CATALOGUE_READERS

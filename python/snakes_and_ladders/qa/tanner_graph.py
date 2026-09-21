@@ -32,7 +32,7 @@ import numpy as np
 from matplotlib.figure import Figure
 
 from snakes_and_ladders.qa.figure import QAFigure
-from snakes_and_ladders.qa.runner import LDPC_PARAMS, figure_main
+from snakes_and_ladders.qa.runner import FIXTURE_PARAMS, figure_main
 from snakes_and_ladders.qa.style import (
     INK,
     INK_MUTED,
@@ -256,7 +256,7 @@ def main(argv: list[str] | None = None) -> QAFigure:
     return figure_main(
         stem="tanner_graph",
         description=__doc__,
-        params=(LDPC_PARAMS,),
+        params=(FIXTURE_PARAMS,),
         build=build_figure,
         argv=argv,
     )

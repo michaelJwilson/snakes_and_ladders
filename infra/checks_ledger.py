@@ -25,7 +25,9 @@ import re
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+from _paths import REPO_ROOT
+from test_kinds import functions_in, markers
+
 TESTS = REPO_ROOT / "tests" / "regression"
 LEDGER = REPO_ROOT / "CHECKS.md"
 SIGNIFICANT = ("oracle", "end2end")
@@ -39,19 +41,6 @@ its data (`DEV.md`, issue #237). `STATUS.md` says what each milestone claims;
 this is what pins it. Generated and not committed (issue #425) -- write it
 with `infra/ledgers.sh`, and do not edit it by hand.
 """
-
-
-def _markers(node: ast.FunctionDef) -> set[str]:
-    found: set[str] = set()
-    for decorator in node.decorator_list:
-        target = decorator.func if isinstance(decorator, ast.Call) else decorator
-        if (
-            isinstance(target, ast.Attribute)
-            and isinstance(target.value, ast.Attribute)
-            and target.value.attr == "mark"
-        ):
-            found.add(target.attr)
-    return found
 
 
 def _claim(node: ast.FunctionDef, lines: list[str]) -> str:
@@ -79,12 +68,8 @@ def rows() -> list[tuple[str, str, str, str]]:
         source = path.read_text()
         tree = ast.parse(source)
         lines = source.splitlines()
-        for node in tree.body:
-            if not (
-                isinstance(node, ast.FunctionDef) and node.name.startswith("test_")
-            ):
-                continue
-            kinds = sorted(_markers(node) & set(SIGNIFICANT))
+        for node in functions_in(tree):
+            kinds = sorted(markers(node) & set(SIGNIFICANT))
             if not kinds:
                 continue
             found.append(

@@ -29,7 +29,7 @@ from snakes_and_ladders.opt.testfunctions import (
     TestFunctionSuite,
 )
 from snakes_and_ladders.qa.figure import QAFigure
-from snakes_and_ladders.qa.runner import TEST_FUNCTION_PARAMS, figure_main
+from snakes_and_ladders.qa.runner import FIXTURE_PARAMS, figure_main
 from snakes_and_ladders.qa.style import (
     INK,
     ONE_COLUMN_SHORT,
@@ -233,7 +233,7 @@ def main(argv: list[str] | None = None) -> QAFigure:
     return figure_main(
         stem="optimizer_landscapes",
         description=__doc__,
-        params=(TEST_FUNCTION_PARAMS,),
+        params=(FIXTURE_PARAMS,),
         build=build,
         argv=argv,
     )

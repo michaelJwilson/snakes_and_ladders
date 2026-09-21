@@ -11,22 +11,19 @@ statement above what the run reaches.
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
+import coverage_recut
 import pytest
 from coverage.sqldata import CoverageData
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT / "infra"))
-
-import coverage_recut  # noqa: E402
-from gates import (  # noqa: E402
+from gates import (
     COVERAGE_GUARDS,
     JUDGED_COVERAGE,
     UNJUDGED_COVERAGE,
     JudgedCoverage,
 )
+
+from tests._paths import REPO_ROOT
 
 #: Eight statements. Five run at import -- the two assignments and the three
 #: `def` lines -- and each body is one statement a test may reach.

@@ -28,7 +28,8 @@ import sys
 import time
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+from _paths import REPO_ROOT
+
 TEX_DIR = REPO_ROOT / "docs" / "tex"
 BIBLIOGRAPHY = "references.bib"
 DEFAULT_DOCUMENTS = (

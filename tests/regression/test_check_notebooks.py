@@ -21,9 +21,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "infra"))
-
 from check_notebooks import (
     differences,
     image_count,
