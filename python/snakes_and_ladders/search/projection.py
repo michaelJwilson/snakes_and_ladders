@@ -53,6 +53,7 @@ from snakes_and_ladders.opt.mixture import (
     GaussianMixtureObjective,
     emission_mixture_plus_plus,
 )
+from snakes_and_ladders.opt.termination import Termination
 from snakes_and_ladders.sample.initialize import FromAnnealing, FromChain, FromTempering
 from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
 from snakes_and_ladders.sim.count_pairs import (
@@ -630,6 +631,9 @@ class Fitted:
         The largest relative error in a component's negative-binomial mean,
         over the matching that renaming gives. The simulated truth the fit is
         refereed against.
+    termination : Termination | None
+        Whether the fit met its relative tolerance or spent the budget, and
+        after how many iterations (issue #860).
     """
 
     name: str
@@ -638,6 +642,7 @@ class Fitted:
     iterations: int
     recovery: float
     mean_error: float
+    termination: Termination | None = None
 
     @property
     def log_likelihood(self) -> float:
@@ -705,6 +710,7 @@ def fit_projection(
     # log-likelihood at the parameters it was given, before the step it takes.
     trace: list[float] = []
     iterations = 0
+    converged = False
     for _ in range(budget.size):
         step = expectation_maximization(
             instance.observations, weights, components, max_iterations=1, tolerance=0.0
@@ -713,6 +719,7 @@ def fit_projection(
         weights, components = step.weights, _count_pair(step.components)
         iterations += 1
         if len(trace) > 1 and abs(trace[-1] - trace[-2]) <= TOLERANCE * abs(trace[-1]):
+            converged = True
             break
     final = expectation_maximization(
         instance.observations, weights, components, max_iterations=1, tolerance=0.0
@@ -730,6 +737,7 @@ def fit_projection(
         iterations=iterations,
         recovery=float(np.mean(columns[assigned] == np.asarray(instance.components))),
         mean_error=float(np.max(np.abs(fitted_mean - true_mean) / true_mean)),
+        termination=Termination.after(iterations, converged=converged),
     )
 
 

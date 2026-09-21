@@ -39,7 +39,7 @@ from typing import Any, ClassVar, Self, TypeVar
 import numpy as np
 import torch
 
-from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.emissions import (
     BetaBinomialEmission,
     CovariateNotSupportedError,
@@ -852,9 +852,7 @@ def simulate_count_pairs(
         holds are one statement. A draw that overflows it is a fixture whose
         parameters moved, not a type to widen silently.
     """
-    if backend not in (Backend.PYTHON, Backend.RUST):
-        msg = f"simulate_count_pairs runs on {Backend.PYTHON} or {Backend.RUST}, not {backend}"
-        raise ValueError(msg)
+    refuse_backend("simulate_count_pairs", backend, (Backend.PYTHON, Backend.RUST))
     if backend is Backend.RUST:
         # Local, because the twin imports its labels and chains from here: a
         # module-level import is the cycle.

@@ -20,6 +20,7 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
+from snakes_and_ladders.cost import Cost
 from snakes_and_ladders.emissions import GaussianEmission, Reestimate
 from snakes_and_ladders.likelihood.mixture_assignments import (
     enumerate_mixture_assignments,
@@ -326,7 +327,7 @@ def test_the_seeding_advantage_does_not_reach_the_mixture_likelihood() -> None:
     result = compare(
         {"seeded": seeded, "uniform": uniform},
         [observations] * 20,
-        Budget("fits", 1),
+        Budget(Cost.FITS, 1),
         seeds=(11,),
         workers=1,
         known=[-best] * 20,

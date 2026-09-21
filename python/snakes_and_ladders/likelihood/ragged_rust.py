@@ -12,12 +12,23 @@ short ones is where the padding is nearly all of the block.
 
 Per root `CLAUDE.md`, the pure-Python route stays as the oracle and the
 regression test pins this against it.
+
+**The selector is here rather than on `forward_backward` (issue #860).** The
+ragged kernel returns *log* gamma, the log transition counts **summed over
+the segments** and one log evidence per segment; `forward_backward` returns
+probabilities on one dense chain, including the per-step pairwise posterior
+`(T - 1, K, K)`. The sum is not the steps, so no conversion recovers a
+`ForwardBackward` from what the kernel returns, and a `backend` on the
+evaluator would have to be a second implementation rather than a door. The
+choice the two do share is this function's --- kernel or oracle, over the
+same inputs and the same return --- and that is where `Backend` names it.
 """
 
 from __future__ import annotations
 
 import numpy as np
 
+from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.likelihood.forward_backward import forward_backward
 from snakes_and_ladders.oxi_snakes_and_ladders import ragged_posteriors
 from snakes_and_ladders.ragged import Ragged
@@ -27,6 +38,8 @@ def posteriors(
     log_density: Ragged,
     log_initial: np.ndarray,
     log_transition: np.ndarray,
+    *,
+    backend: Backend = Backend.RUST,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Marginals, transition counts and per-segment evidence, in Rust.
 
@@ -38,6 +51,12 @@ def posteriors(
         ``(n_states,)``, the distribution each segment restarts at.
     log_transition : np.ndarray
         ``(n_states, n_states)`` in log space.
+    backend : Backend
+        Which implementation runs it. ``RUST`` is the compiled kernel and is
+        the default, this being the compiled module's entry point;
+        ``PYTHON`` is :func:`posteriors_oracle`, the sibling it is pinned
+        against, reached through the enum rather than by naming the function
+        (issue #860). Nothing else.
 
     Returns
     -------
@@ -45,7 +64,15 @@ def posteriors(
         ``gamma`` as ``(total, n_states)``, the log transition counts summed
         over segments as ``(n_states, n_states)``, and one log evidence per
         segment. The pair spanning a boundary is in none of the counts.
+
+    Raises
+    ------
+    ValueError
+        If ``backend`` is neither ``RUST`` nor ``PYTHON``.
     """
+    refuse_backend("ragged posteriors", backend, (Backend.PYTHON, Backend.RUST))
+    if backend is Backend.PYTHON:
+        return posteriors_oracle(log_density, log_initial, log_transition)
     values = np.ascontiguousarray(log_density.values, dtype=np.float64)
     n_states = values.shape[1]
     gamma = np.empty_like(values)

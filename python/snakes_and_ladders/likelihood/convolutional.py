@@ -36,7 +36,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.enumeration import refuse_oversized
 from snakes_and_ladders.numerics import logsumexp
 from snakes_and_ladders.sim.convolutional import (
@@ -162,9 +162,7 @@ def bcjr(
             f"{apriori.shape} must be the same one-dimensional shape"
         )
         raise ValueError(msg)
-    if backend not in (Backend.PYTHON, Backend.RUST):
-        msg = f"bcjr runs on {Backend.PYTHON} or {Backend.RUST}, not {backend}"
-        raise ValueError(msg)
+    refuse_backend("bcjr", backend, (Backend.PYTHON, Backend.RUST))
     if backend is Backend.RUST:
         # Local, because the twin imports `TrellisDecoding` from here: a
         # module-level import is the cycle. The seam itself is

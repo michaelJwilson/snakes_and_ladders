@@ -30,7 +30,7 @@ from __future__ import annotations
 import numpy as np
 
 from snakes_and_ladders import oxi_snakes_and_ladders
-from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.backend import Backend, refuse_backend
 
 
 def sample_rows(
@@ -115,9 +115,7 @@ def sample_rows(
             sampled,
         )
         return sampled
-    if backend is not Backend.PYTHON:
-        msg = f"sample_rows runs on {Backend.PYTHON} or {Backend.RUST}, not {backend}"
-        raise ValueError(msg)
+    refuse_backend("sample_rows", backend, (Backend.PYTHON, Backend.RUST))
     cumulative = np.cumsum(distributions, axis=1)
     cumulative[:, -1] = 1.0
     selected: np.ndarray = np.argmax(draws[:, np.newaxis] < cumulative[rows], axis=1)

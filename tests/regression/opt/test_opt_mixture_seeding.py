@@ -37,6 +37,7 @@ import numpy as np
 import pytest
 import torch
 from scipy.optimize import linear_sum_assignment
+from snakes_and_ladders.cost import Cost
 from snakes_and_ladders.emissions import GaussianEmission, pooled_variance_floor
 from snakes_and_ladders.opt.budget import Budget, Comparison, Method, Outcome, compare
 from snakes_and_ladders.opt.emission_mixture import (
@@ -62,7 +63,7 @@ from snakes_and_ladders.sim.mixture import MixtureParams, simulate_mixture
 #: the observations' per-component log densities, which is what an
 #: expectation-maximization iteration costs; the same unit every seeding's own
 #: cost is reported in.
-BUDGET = Budget("evaluations", 40)
+BUDGET = Budget(Cost.EVALUATIONS, 40)
 
 #: Expectation-maximization iterations one random restart spends, so the
 #: baseline is ``BUDGET.size // RESTART_COST`` restarts of that length rather

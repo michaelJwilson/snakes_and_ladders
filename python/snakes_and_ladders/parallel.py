@@ -36,8 +36,16 @@ from typing import Literal, TypeVar, overload
 
 import numpy as np
 
-Backend = Literal["serial", "threads", "processes"]
-BACKENDS: tuple[Backend, ...] = ("serial", "threads", "processes")
+Pool = Literal["serial", "threads", "processes"]
+"""Which pool runs the tasks. `Pool` and not `Backend` (issue #860): the word
+`Backend` names which *implementation* runs a kernel
+(:class:`snakes_and_ladders.backend.Backend`, an enum in 47 files), and one
+word for two choices had ``search.infer`` annotating a pool with it."""
+
+Backend = Pool
+"""The name this carried until #860, kept so an existing annotation resolves."""
+
+BACKENDS: tuple[Pool, ...] = ("serial", "threads", "processes")
 
 T = TypeVar("T")
 R = TypeVar("R")
@@ -84,7 +92,7 @@ def _call(
     return function(item, generator)
 
 
-def _executor(backend: Backend, workers: int, intra_op_threads: int | None) -> Executor:
+def _executor(backend: Pool, workers: int, intra_op_threads: int | None) -> Executor:
     if backend == "threads":
         return ThreadPoolExecutor(max_workers=workers)
     return ProcessPoolExecutor(
@@ -101,7 +109,7 @@ def map_tasks(
     items: Iterable[T],
     *,
     workers: int,
-    backend: Backend,
+    backend: Pool,
     intra_op_threads: int | None,
     generator: None = None,
 ) -> list[R]: ...
@@ -113,7 +121,7 @@ def map_tasks(
     items: Iterable[T],
     *,
     workers: int,
-    backend: Backend,
+    backend: Pool,
     intra_op_threads: int | None,
     generator: np.random.Generator,
 ) -> list[R]: ...
@@ -124,7 +132,7 @@ def map_tasks(
     items: Iterable[T],
     *,
     workers: int,
-    backend: Backend,
+    backend: Pool,
     intra_op_threads: int | None,
     generator: np.random.Generator | None = None,
 ) -> list[R]:

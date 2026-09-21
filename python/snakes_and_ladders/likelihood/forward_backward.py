@@ -9,6 +9,13 @@ recursion for the gradient it needs; this one exists so the coupled model,
 and any caller that wants a posterior rather than a fit, does not reach into
 an optimizer's internals to get one. Pinned against the path enumeration,
 which shares no recursion with it.
+
+**No `backend` here, and `ragged_rust.posteriors` says why** (issue #860).
+The compiled ragged kernel returns log marginals and the transition counts
+*summed over the segments*; this returns probabilities and the per-step
+pairwise posterior. The sum is not the steps, so no conversion recovers this
+return from that one, and a door onto it would be a second implementation
+rather than a route to the same answer.
 """
 
 from __future__ import annotations
