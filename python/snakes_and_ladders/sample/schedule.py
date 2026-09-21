@@ -257,6 +257,22 @@ def ladder(values: TempSchedule | Sequence[float]) -> tuple[float, ...]:
     return tuple(float(value) for value in values)
 
 
+def beta_ladder(values: TempSchedule | Sequence[float]) -> tuple[float, ...]:
+    """A tuple of inverse temperatures from a schedule or from a sequence.
+
+    :func:`ladder` for a consumer whose rungs are ``beta`` rather than ``T``.
+    A schedule declares temperatures, so it is read step by step and
+    inverted; a sequence is the inverse temperatures as given. The one
+    spelling a schedule cannot carry is ``beta = 0``, the infinite
+    temperature :func:`_check_temperature` refuses, so a consumer anchored
+    there refuses a schedule on its own terms rather than on this one
+    (issue #861).
+    """
+    if isinstance(values, TempSchedule):
+        return tuple(1.0 / temperature for temperature in temperatures(values))
+    return tuple(float(value) for value in values)
+
+
 def temperatures(schedule: TempSchedule) -> list[float]:
     """Every temperature of ``schedule``, in step order.
 
@@ -298,7 +314,7 @@ class AdaptedLadder:
 
 def adapt_ladder(
     measure: Callable[[tuple[float, ...]], Sequence[float]],
-    ladder: tuple[float, ...],
+    start: TempSchedule | Sequence[float],
     band: tuple[float, float],
     max_rounds: int,
     max_replicas: int,
@@ -325,8 +341,9 @@ def adapt_ladder(
     ----------
     measure : Callable[[tuple[float, ...]], Sequence[float]]
         Exchange acceptance per neighbouring pair of a ladder.
-    ladder : tuple[float, ...]
-        The starting ladder, at least two temperatures, strictly monotone in
+    start : TempSchedule | Sequence[float]
+        The starting ladder, in either spelling and read by :func:`ladder`
+        into the same floats: at least two temperatures, strictly monotone in
         either direction. Its two endpoints are the result's.
     band : tuple[float, float]
         ``(low, high)``, the acceptance every pair is driven into, with
@@ -349,7 +366,8 @@ def adapt_ladder(
         monotone or is not positive, the band is not an interval inside
         ``(0, 1)``, or a budget is below 1.
     """
-    _check_ladder(ladder)
+    rungs = ladder(start)
+    _check_ladder(rungs)
     low, high = band
     if not 0.0 < low < high < 1.0:
         msg = f"band must satisfy 0 < low < high < 1, got {band}"
@@ -357,14 +375,14 @@ def adapt_ladder(
     if max_rounds < 1:
         msg = f"max_rounds must be at least 1, got {max_rounds}"
         raise ValueError(msg)
-    if max_replicas < len(ladder):
+    if max_replicas < len(rungs):
         msg = (
             f"max_replicas is {max_replicas} but the starting ladder already has "
-            f"{len(ladder)} temperatures"
+            f"{len(rungs)} temperatures"
         )
         raise ValueError(msg)
 
-    current = tuple(ladder)
+    current = rungs
     replicas_measured = 0
     for round_index in range(1, max_rounds + 1):
         acceptance = tuple(float(value) for value in measure(current))
@@ -501,7 +519,7 @@ class FeedbackLadder:
 
 def adapt_ladder_by_round_trips(
     measure: Callable[[tuple[float, ...]], Sequence[float]],
-    ladder: tuple[float, ...],
+    start: TempSchedule | Sequence[float],
     tolerance: float,
     max_rounds: int,
 ) -> FeedbackLadder:
@@ -533,8 +551,9 @@ def adapt_ladder_by_round_trips(
         finite.
         :func:`snakes_and_ladders.sample.tempered.up_fraction` computes it
         from a walker trace.
-    ladder : tuple[float, ...]
-        The starting ladder, at least three temperatures --- two are the
+    start : TempSchedule | Sequence[float]
+        The starting ladder, in either spelling and read by :func:`ladder`
+        into the same floats: at least three temperatures --- two are the
         endpoints and there is nothing to place --- strictly monotone in
         either direction, all positive.
     tolerance : float
@@ -557,11 +576,12 @@ def adapt_ladder_by_round_trips(
         whole ladder, which is a run in which no walker circulated and so
         carries no placement.
     """
-    _check_ladder(ladder)
-    if len(ladder) < 3:
+    rungs = ladder(start)
+    _check_ladder(rungs)
+    if len(rungs) < 3:
         msg = (
             f"a round-trip placement needs at least three temperatures, got "
-            f"{len(ladder)}: the two endpoints are the caller's"
+            f"{len(rungs)}: the two endpoints are the caller's"
         )
         raise ValueError(msg)
     if not tolerance > 0.0:
@@ -571,7 +591,7 @@ def adapt_ladder_by_round_trips(
         msg = f"max_rounds must be at least 1, got {max_rounds}"
         raise ValueError(msg)
 
-    current = tuple(ladder)
+    current = rungs
     replicas_measured = 0
     for round_index in range(1, max_rounds + 1):
         fraction = tuple(float(value) for value in measure(current))

@@ -12,20 +12,29 @@ referee is equality rather than a tolerance.
 
 from __future__ import annotations
 
+import itertools
+
 import numpy as np
 import pytest
 import torch
 from snakes_and_ladders.opt.testfunctions import Rosenbrock
 from snakes_and_ladders.sample import hmc
-from snakes_and_ladders.sample.annealed import simulated_tempering
-from snakes_and_ladders.sample.potts_mcmc import parallel_tempering
+from snakes_and_ladders.sample.annealed import (
+    annealed_importance_sampling,
+    population_annealing,
+    simulated_tempering,
+)
+from snakes_and_ladders.sample.potts_mcmc import adapt_ladder_potts, parallel_tempering
 from snakes_and_ladders.sample.schedule import (
     ExponentialTempSchedule,
     LadderTempSchedule,
+    adapt_ladder,
+    adapt_ladder_by_round_trips,
     ladder,
     temperatures,
 )
 from snakes_and_ladders.sample.tempered import (
+    adapt_ladder_round_trips,
     tempered_factor_graph,
     tempered_potts_pair,
     tempered_topologies,
@@ -40,10 +49,23 @@ from tests._fixtures import FOUR_TAXA, load_fixture
 LADDER = (1.0, 1.5, 2.25)
 FIELD = np.array([0.3, -0.1])
 SWEEPS = 6
+BAND = (0.2, 0.6)
 
 
 def _graph() -> PottsGraph:
     return lattice_graph((2, 2), BoundaryCondition.OPEN, 0.5)
+
+
+def _acceptance(candidate: tuple[float, ...]) -> list[float]:
+    """Exchange acceptance as the ratio of each neighbouring pair: a measurement, not a model."""
+    return [
+        min(cold, hot) / max(cold, hot) for cold, hot in itertools.pairwise(candidate)
+    ]
+
+
+def _up_fraction(candidate: tuple[float, ...]) -> list[float]:
+    """The up-fraction falling linearly from 1 at rung 0 to 0 at the last."""
+    return [1.0 - rung / (len(candidate) - 1) for rung in range(len(candidate))]
 
 
 @pytest.mark.analytic
@@ -130,6 +152,49 @@ def test_hamiltonian_tempering_reads_both_spellings_to_the_same_positions() -> N
 
     assert torch.equal(runs[0].positions, runs[1].positions)
     assert torch.equal(runs[0].swap_acceptance, runs[1].swap_acceptance)
+
+
+@pytest.mark.analytic
+def test_the_warm_ups_read_both_spellings_and_the_zero_anchor_stays_refused() -> None:
+    """The six ladders #834 left on a bare sequence, read from a schedule (issue #861).
+
+    Four place the same ladder from the same measurement either way. The two
+    anchored at ``beta = 0`` are refused on the anchor rather than by their
+    type: a schedule declares temperatures and the infinite one is not among
+    them, so the rung the estimate is anchored on is one it cannot spell.
+    """
+    graph = _graph()
+    warm_ups = (
+        [
+            adapt_ladder(_acceptance, spelling, BAND, 2, 6)
+            for spelling in (LADDER, LadderTempSchedule(LADDER))
+        ],
+        [
+            adapt_ladder_by_round_trips(_up_fraction, spelling, 1e-3, 2)
+            for spelling in (LADDER, LadderTempSchedule(LADDER))
+        ],
+        [
+            adapt_ladder_potts(
+                graph, FIELD, spelling, np.random.default_rng(6), SWEEPS, BAND, 2, 6
+            )
+            for spelling in (LADDER, LadderTempSchedule(LADDER))
+        ],
+        [
+            adapt_ladder_round_trips(
+                graph, FIELD, spelling, np.random.default_rng(7), SWEEPS, 0.02, 2
+            )
+            for spelling in (LADDER, LadderTempSchedule(LADDER))
+        ],
+    )
+
+    for sequence, schedule in warm_ups:
+        assert sequence == schedule
+
+    for estimator in (annealed_importance_sampling, population_annealing):
+        with pytest.raises(ValueError, match="must start at beta = 0"):
+            estimator(
+                graph, FIELD, LadderTempSchedule(LADDER), np.random.default_rng(8), 2
+            )
 
 
 @pytest.mark.analytic

@@ -639,7 +639,7 @@ def tempered_topologies(
 def adapt_ladder_round_trips(
     graph: PottsGraph,
     field: np.ndarray,
-    ladder: tuple[float, ...],
+    start: TempSchedule | Sequence[float],
     rng: np.random.Generator,
     n_sweeps: int,
     tolerance: float,
@@ -663,8 +663,10 @@ def adapt_ladder_round_trips(
     ----------
     graph, field, rng, backend
         As :func:`~snakes_and_ladders.sample.potts_mcmc.parallel_tempering`.
-    ladder : tuple[float, ...]
-        The starting ladder; its endpoints and its length are the result's.
+    start : TempSchedule | Sequence[float]
+        The starting ladder, in either spelling and read by
+        :func:`~snakes_and_ladders.sample.schedule.ladder` into the same
+        floats; its endpoints and its length are the result's.
     n_sweeps : int
         Sweeps per replica per measurement. The up-fraction is a ratio of
         visit counts over these, so it sets what the placement can resolve.
@@ -682,4 +684,4 @@ def adapt_ladder_round_trips(
         )
         return [float(value) for value in up_fraction(run.walkers)]
 
-    return adapt_ladder_by_round_trips(measure, ladder, tolerance, max_rounds)
+    return adapt_ladder_by_round_trips(measure, ladder(start), tolerance, max_rounds)

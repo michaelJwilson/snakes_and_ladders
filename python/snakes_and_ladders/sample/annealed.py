@@ -57,6 +57,7 @@ from snakes_and_ladders.sample.potts_mcmc import (
 from snakes_and_ladders.sample.schedule import (
     ExponentialTempSchedule,
     TempSchedule,
+    beta_ladder,
     temperatures,
 )
 from snakes_and_ladders.sim.graph import PottsGraph
@@ -252,7 +253,7 @@ def _entropy(labels: np.ndarray, n_replicas: int) -> float:
 def annealed_importance_sampling(
     graph: PottsGraph,
     field: np.ndarray,
-    betas: Sequence[float],
+    betas: TempSchedule | Sequence[float],
     rng: np.random.Generator,
     n_replicas: int,
     *,
@@ -281,9 +282,12 @@ def annealed_importance_sampling(
         refusal.
     field : np.ndarray
         External field ``h``, shape ``(n_states,)`` or ``(n_nodes, n_states)``.
-    betas : Sequence[float]
+    betas : TempSchedule | Sequence[float]
         The ladder of inverse temperatures, starting at ``0.0`` and strictly
-        increasing; :func:`geometric_betas` builds one.
+        increasing; :func:`geometric_betas` builds one. A
+        :class:`~snakes_and_ladders.sample.schedule.TempSchedule` is read as
+        temperatures and inverted, so it carries no ``beta = 0`` rung and is
+        refused on the anchor (issue #861).
     rng : np.random.Generator
         The parent: one child per replica, and nothing else drawn from it
         here.
@@ -308,7 +312,7 @@ def annealed_importance_sampling(
         :func:`~snakes_and_ladders.sample.potts_mcmc.sample_potts` for a
         Fortuin-Kasteleyn cluster move on a negative coupling.
     """
-    ladder = _check_betas(betas, from_zero=True)
+    ladder = _check_betas(beta_ladder(betas), from_zero=True)
     states, children, advance, rows = _population(
         graph, field, rng, n_replicas, move, backend
     )
@@ -378,7 +382,7 @@ def _resampled(
 def population_annealing(
     graph: PottsGraph,
     field: np.ndarray,
-    betas: Sequence[float],
+    betas: TempSchedule | Sequence[float],
     rng: np.random.Generator,
     n_replicas: int,
     *,
@@ -424,7 +428,7 @@ def population_annealing(
     ValueError
         As :func:`annealed_importance_sampling`.
     """
-    ladder = _check_betas(betas, from_zero=True)
+    ladder = _check_betas(beta_ladder(betas), from_zero=True)
     states, children, advance, rows = _population(
         graph, field, rng, n_replicas, move, backend
     )
@@ -574,9 +578,11 @@ def simulated_tempering(
     graph, field, move, backend
         As :func:`annealed_importance_sampling`.
     betas : TempSchedule | Sequence[float]
-        A :class:`~snakes_and_ladders.sample.schedule.TempSchedule` is read as
-        temperatures and inverted, rung by rung (issue #827); a sequence is
-        the inverse temperatures as given.
+        Read by
+        :func:`~snakes_and_ladders.sample.schedule.beta_ladder`: a
+        :class:`~snakes_and_ladders.sample.schedule.TempSchedule` as
+        temperatures inverted rung by rung (issue #827), a sequence as the
+        inverse temperatures given.
         The ladder, at least two rungs, non-negative and strictly increasing.
         It need not start at zero: nothing here is anchored on an exact
         normalizer.
@@ -603,9 +609,7 @@ def simulated_tempering(
         If the ladder is unusable, ``weights`` does not carry one entry per
         rung, or ``n_sweeps`` or ``thin`` is below 1 or ``burn_in`` below 0.
     """
-    if isinstance(betas, TempSchedule):
-        betas = tuple(1.0 / temperature for temperature in temperatures(betas))
-    ladder = _check_betas(betas, from_zero=False)
+    ladder = _check_betas(beta_ladder(betas), from_zero=False)
     g = np.asarray(weights, dtype=float)
     if g.shape != (len(ladder),):
         msg = f"weights must carry one g_k per rung, got {g.shape} for {len(ladder)} rungs"

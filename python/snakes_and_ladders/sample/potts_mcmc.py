@@ -833,7 +833,7 @@ def parallel_tempering(
 def adapt_ladder_potts(
     graph: PottsGraph,
     field: np.ndarray,
-    ladder: tuple[float, ...],
+    start: TempSchedule | Sequence[float],
     rng: np.random.Generator,
     n_sweeps: int,
     band: tuple[float, float],
@@ -855,8 +855,10 @@ def adapt_ladder_potts(
     ----------
     graph, field, rng, backend
         As :func:`parallel_tempering`.
-    ladder : tuple[float, ...]
-        The starting ladder; its endpoints are kept.
+    start : TempSchedule | Sequence[float]
+        The starting ladder, in either spelling and read by
+        :func:`~snakes_and_ladders.sample.schedule.ladder` into the same
+        floats; its endpoints are kept.
     n_sweeps : int
         Sweeps per replica per measurement. Each acceptance is a fraction of
         ``n_sweeps`` proposals, so this sets what the band can resolve.
@@ -874,7 +876,7 @@ def adapt_ladder_potts(
         )
         return [float(value) for value in run.swap_acceptance]
 
-    return adapt_ladder(measure, ladder, band, max_rounds, max_replicas)
+    return adapt_ladder(measure, ladder(start), band, max_rounds, max_replicas)
 
 
 def _sweep_for(
