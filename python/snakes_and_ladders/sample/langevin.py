@@ -53,8 +53,8 @@ from snakes_and_ladders.sample.accept import accept_ratio, acceptance_probabilit
 from snakes_and_ladders.sample.hmc import (
     Adaptation,
     Adapted,
-    _gradient,
-    _run_chain,
+    gradient_at,
+    run_chain,
 )
 
 #: The acceptance a MALA step is adapted toward: the optimal scaling of the
@@ -179,7 +179,7 @@ def mala(
         msg = f"step_size must be positive, got {step_size}"
         raise ValueError(msg)
 
-    draws, acceptance_rate, errors, evaluations, adapted = _run_chain(
+    draws, acceptance_rate, errors, evaluations, adapted = run_chain(
         _LangevinKernel(corrected=corrected),
         GRADIENTS_PER_PROPOSAL,
         objective,
@@ -241,12 +241,12 @@ class _LangevinKernel:
         generator: torch.Generator,
         step_size: float,
     ) -> tuple[torch.Tensor, float, int, float]:
-        gradient = _gradient(objective, position)
+        gradient = gradient_at(objective, position)
         noise = torch.randn(
             position.shape, generator=generator, dtype=torch.float64
         ) * math.sqrt(temperature)
         proposal = position - 0.5 * step_size * step_size * gradient + step_size * noise
-        proposed_gradient = _gradient(objective, proposal)
+        proposed_gradient = gradient_at(objective, proposal)
 
         log_ratio = (
             float(objective(position.detach())) - float(objective(proposal.detach()))

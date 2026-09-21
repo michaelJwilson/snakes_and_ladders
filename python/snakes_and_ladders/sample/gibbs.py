@@ -31,7 +31,7 @@ visiting every one in turn. The first-order estimate Gibbs-with-gradients
 proposes from is **exact here**: the multilinear extension of a sum of factor
 tables is affine in each variable's row, so a single-variable change has no
 second-order term, and :func:`factor_autodiff_log_ratios` pins the tape's
-gradient against the conditional :meth:`_Indexed.conditional` already forms.
+gradient against the conditional :meth:`Indexed.conditional` already forms.
 
 The sweep runs through a ``numba`` kernel over an edge layout -- every
 factor's table in one array, and offsets into it per variable (issue #561) --
@@ -148,7 +148,7 @@ class _EdgeLayout:
     """Every factor's table in one array, and offsets into it per variable.
 
     The layout root ``CLAUDE.md``'s memory rule asks for, replacing
-    :attr:`_Indexed.touching`: a list of lists of tables, walked per site per
+    :attr:`Indexed.touching`: a list of lists of tables, walked per site per
     sweep, becomes contiguous arrays walked in stride order. One *entry* is
     one (factor, axis) pair that touches a variable, and one *term* is one of
     that factor's other axes, which fixes a coordinate of the table.
@@ -170,7 +170,7 @@ class _EdgeLayout:
         Every factor's log table, flattened in C order and concatenated.
     entry_offsets : np.ndarray
         ``entry_offsets[v]:entry_offsets[v + 1]`` are variable ``v``'s
-        entries, in the order :attr:`_Indexed.touching` holds them, so the
+        entries, in the order :attr:`Indexed.touching` holds them, so the
         conditional sums its factors in the order the NumPy path sums them.
     entry_start : np.ndarray
         Where each entry's factor begins in ``tables``.
@@ -201,7 +201,7 @@ class _EdgeLayout:
     factor_stride: np.ndarray
 
 
-class _Indexed:
+class Indexed:
     """A factor graph with its variables numbered and each variable's factors located."""
 
     def __init__(self, graph: FactorGraph) -> None:
@@ -406,7 +406,7 @@ class _Indexed:
 
 
 def _site_update(
-    indexed: _Indexed,
+    indexed: Indexed,
     state: np.ndarray,
     position: int,
     draw: float,
@@ -426,7 +426,7 @@ def _site_update(
 
 
 def gibbs_sweep(
-    graph: FactorGraph | _Indexed,
+    graph: FactorGraph | Indexed,
     state: np.ndarray,
     rng: np.random.Generator,
     *,
@@ -455,7 +455,7 @@ def gibbs_sweep(
     ValueError
         If ``backend`` is one this sweep has no implementation for.
     """
-    indexed = graph if isinstance(graph, _Indexed) else _Indexed(graph)
+    indexed = graph if isinstance(graph, Indexed) else Indexed(graph)
     draws = np.asarray(rng.random(len(indexed.names)))
 
     if backend is Backend.NUMBA:
@@ -495,7 +495,7 @@ def gibbs_sweep(
 
 
 def factor_taylor_log_ratios(
-    graph: FactorGraph | _Indexed, state: np.ndarray, beta: float = 1.0
+    graph: FactorGraph | Indexed, state: np.ndarray, beta: float = 1.0
 ) -> np.ndarray:
     """Gibbs-with-gradients' first-order estimate of every single-variable change.
 
@@ -506,7 +506,7 @@ def factor_taylor_log_ratios(
     variable's row --- no factor carries a variable twice --- so a change of
     one variable has no second-order term, and the gradient at a one-hot is
     that variable's conditional. The closed form is therefore
-    :meth:`_Indexed.conditionals` differenced, which is what this computes;
+    :meth:`Indexed.conditionals` differenced, which is what this computes;
     :func:`factor_autodiff_log_ratios` is the same quantity from the tape and
     pins it.
 
@@ -516,12 +516,12 @@ def factor_taylor_log_ratios(
         Shape ``(n_variables, width)``, ``-inf`` past a variable's own
         cardinality.
     """
-    indexed = graph if isinstance(graph, _Indexed) else _Indexed(graph)
+    indexed = graph if isinstance(graph, Indexed) else Indexed(graph)
     return log_ratios(indexed.conditionals(state, beta), state)
 
 
 def factor_autodiff_log_ratios(
-    graph: FactorGraph | _Indexed, state: np.ndarray, beta: float = 1.0
+    graph: FactorGraph | Indexed, state: np.ndarray, beta: float = 1.0
 ) -> np.ndarray:
     """:func:`factor_taylor_log_ratios` from the tape: the definition, not the route.
 
@@ -537,7 +537,7 @@ def factor_autodiff_log_ratios(
     """
     import torch
 
-    indexed = graph if isinstance(graph, _Indexed) else _Indexed(graph)
+    indexed = graph if isinstance(graph, Indexed) else Indexed(graph)
     labels = np.asarray(state, dtype=np.int64)
     n_variables, width = len(indexed.names), indexed.width
     probabilities = torch.zeros((n_variables, width), dtype=torch.float64)
@@ -571,7 +571,7 @@ def factor_autodiff_log_ratios(
 
 
 def balanced_sweep(
-    graph: FactorGraph | _Indexed,
+    graph: FactorGraph | Indexed,
     state: np.ndarray,
     rng: np.random.Generator,
     *,
@@ -591,7 +591,7 @@ def balanced_sweep(
     never.
 
     **The conditionals are maintained, not rebuilt.** A change at ``v`` moves
-    only the rows of :meth:`_Indexed.companions` of ``v``; those rows are
+    only the rows of :meth:`Indexed.companions` of ``v``; those rows are
     copied before the change and restored on a rejection, so a rejected
     proposal leaves the array it found. They are rebuilt once per sweep, which
     is what lets ``beta`` change between sweeps.
@@ -609,7 +609,7 @@ def balanced_sweep(
         )
         raise ValueError(msg)
 
-    indexed = graph if isinstance(graph, _Indexed) else _Indexed(graph)
+    indexed = graph if isinstance(graph, Indexed) else Indexed(graph)
     gradient_informed = move is GibbsMove.GIBBS_WITH_GRADIENTS
     companions = indexed.companions()
     local = indexed.conditionals(state, beta)
@@ -655,7 +655,7 @@ def balanced_sweep(
 
 
 def _sweep_once(
-    indexed: _Indexed,
+    indexed: Indexed,
     state: np.ndarray,
     rng: np.random.Generator,
     move: GibbsMove,
@@ -722,7 +722,7 @@ def sample_factor_graph(
     if temperature <= 0.0:
         msg = f"temperature must be positive, got {temperature}"
         raise ValueError(msg)
-    indexed = _Indexed(graph)
+    indexed = Indexed(graph)
     beta = 1.0 / temperature
     state = indexed.start(rng, start)
     for _ in range(burn_in):
@@ -752,7 +752,7 @@ def anneal_factor_graph(
     bath is the argmax over each variable's conditional, so the two ends of a
     schedule are single-site descent and free sampling, as there.
     """
-    indexed = _Indexed(graph)
+    indexed = Indexed(graph)
     state = indexed.start(rng, start)
     best_state = state.copy()
     best = indexed.log_density(state, backend)
@@ -788,7 +788,7 @@ def chain_block_sweep(
         If a factor touches two non-consecutive chain variables or more than
         two of them, so the subset is not a chain of this graph.
     """
-    indexed = _Indexed(graph)
+    indexed = Indexed(graph)
     positions = [indexed.index[name] for name in chain]
     where = {position: step for step, position in enumerate(positions)}
     length = len(positions)

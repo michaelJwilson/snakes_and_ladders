@@ -35,7 +35,7 @@ from itertools import combinations
 
 import numpy as np
 
-from snakes_and_ladders.sim.topology import NodeId, _from_adjacency, _leaf_names
+from snakes_and_ladders.sim.topology import NodeId, from_adjacency, leaf_names_of
 from snakes_and_ladders.sim.tree import Node, edges
 
 _MIN_TAXA = 3
@@ -124,7 +124,7 @@ def neighbor_joining(names: Sequence[str], distances: np.ndarray) -> Node:
     connect(a, root, float(0.5 * (matrix[0, 1] + matrix[0, 2] - matrix[1, 2])))
     connect(b, root, float(0.5 * (matrix[0, 1] + matrix[1, 2] - matrix[0, 2])))
     connect(c, root, float(0.5 * (matrix[0, 2] + matrix[1, 2] - matrix[0, 1])))
-    return _with_lengths(_from_adjacency(adjacency, root), adjacency, root, lengths)
+    return _with_lengths(from_adjacency(adjacency, root), adjacency, root, lengths)
 
 
 def _with_lengths(
@@ -133,9 +133,9 @@ def _with_lengths(
     root: NodeId,
     lengths: dict[frozenset[NodeId], float],
 ) -> Node:
-    """Attach the edge lengths to the ``Node`` tree ``_from_adjacency`` built.
+    """Attach the edge lengths to the ``Node`` tree ``from_adjacency`` built.
 
-    ``_from_adjacency`` names an internal node ``n<id>``, so the id is read
+    ``from_adjacency`` names an internal node ``n<id>``, so the id is read
     back from the name to find the edge; a leaf keeps its name as its id.
     """
 
@@ -181,14 +181,14 @@ def split_lengths(tau: Node) -> dict[frozenset[str], float]:
     ValueError
         If a non-root node carries no branch length.
     """
-    all_leaves = _leaf_names(tau)
+    all_leaves = leaf_names_of(tau)
     anchor = min(all_leaves)
     found: dict[frozenset[str], float] = {}
     for _, child in edges(tau):
         if child.branch_length is None:
             msg = f"non-root node {child.name!r} has no branch_length"
             raise ValueError(msg)
-        below = _leaf_names(child)
+        below = leaf_names_of(child)
         split = below if anchor not in below else all_leaves - below
         found[split] = found.get(split, 0.0) + child.branch_length
     return found

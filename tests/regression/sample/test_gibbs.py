@@ -37,7 +37,7 @@ from snakes_and_ladders.numerics import logsumexp
 from snakes_and_ladders.sample import gibbs
 from snakes_and_ladders.sample.gibbs import (
     GibbsMove,
-    _Indexed,
+    Indexed,
     anneal_factor_graph,
     anneal_topology,
     balanced_sweep,
@@ -180,7 +180,7 @@ def test_the_factor_graph_taylor_estimate_is_the_enumerated_density_difference()
     # gradient at the one-hot state, and the graph's own `log_density` of every
     # single-variable change, neither of which is the sweep's arithmetic.
     _, factor_graph = _potts_pair()
-    indexed = _Indexed(factor_graph)
+    indexed = Indexed(factor_graph)
     rng = np.random.default_rng(3)
 
     for _ in range(8):
@@ -207,7 +207,7 @@ def test_the_generic_sweep_reproduces_the_potts_sweep_draw_for_draw() -> None:
     # single such draw does not fail the suite; realized at 100.
     graph, factor_graph = _potts_pair()
     offsets, neighbours, couplings = graph.compressed_adjacency()
-    indexed = _Indexed(factor_graph)
+    indexed = Indexed(factor_graph)
     generic, specialised = np.random.default_rng(5), np.random.default_rng(5)
     state_a = np.zeros(4, dtype=np.int64)
     state_b = state_a.copy()
@@ -265,7 +265,7 @@ def test_the_compiled_sweep_reproduces_the_numpy_one_bitwise(
 @pytest.mark.smoke
 def test_the_log_density_has_no_rust_backend() -> None:
     graph = _lattice_graph(4)
-    indexed = _Indexed(graph)
+    indexed = Indexed(graph)
 
     with pytest.raises(ValueError, match="no rust backend"):
         indexed.log_density(np.zeros(len(indexed.names), dtype=np.int64), Backend.RUST)

@@ -27,12 +27,11 @@ asserts it. Those belong beside the objective they initialize ---
 `opt/mixture.py`'s k-means++ (issue #262), `search/initialize.py`'s
 neighbor-joining and Hadamard starts (issue #364).
 
-**Three of these sample rather than propose.** `FromChain`, `FromAnnealing`
-and `FromTempering` run `sample/hmc.py` on the objective and take a start from
-where the chain went (issue #541). They read the objective and no data, so
-they stay here; each reports what it spent in gradients, because a start
-that costs as much as the fit it seeds is a different proposition from one
-that costs 2% of it.
+**The three that sample are not here.** `FromChain`, `FromAnnealing` and
+`FromTempering` run a chain on the objective and take a start from where it
+went (issue #541); they left with the samplers in issue #830 and are
+`sample/initialize.py`'s. What stays here proposes without drawing, so this
+module imports no sampler.
 """
 
 from __future__ import annotations

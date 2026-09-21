@@ -90,7 +90,20 @@ EDGE_ITERATION_OWNER = "sim/graph.py"
 ADJACENCY_OWNER = "sim/graph.py"
 ENUMERATION_OWNER = "enumeration.py"
 
-PRIVATE_LOGSUMEXP = re.compile(r"^def _logsumexp\(", re.MULTILINE)
+#: A private `logsumexp` outside `numerics`. The pattern read `_logsumexp(`
+#: exactly and so said nothing about `_logsumexp_last`, the one the tree
+#: carries; `\w*` is what a suffix costs it.
+PRIVATE_LOGSUMEXP = re.compile(r"^def _logsumexp\w*\(", re.MULTILINE)
+
+#: The one private `logsumexp` the widened pattern admits, against the
+#: reason, as `ARGMAX_CONSUMERS` admits its one. `message_passing`'s is the
+#: owner's five operations in the owner's order over the last axis, so a row
+#: agrees with `numerics.logsumexp` bitwise and its docstring says which
+#: function it is; what it drops is the general axis handling, a third of the
+#: call where a tree schedule on a chain pays it once per position. Folding
+#: it is row R10 of `docs/reviews/2026-09-20-design.md`, which states a 1e-12
+#: tolerance and is not this ticket.
+LOGSUMEXP_INLINES = {"likelihood/message_passing.py"}
 OPEN_CODED_EDGES = re.compile(r"zip\(\s*\w+\.edges,\s*\w+\.coupling")
 CAP_LITERAL = re.compile(r"^\s*MAX_ENUMERABLE\w* = \d", re.MULTILINE)
 SQUARE_TRANSITION = re.compile(r"log\(\s*1(\.0)?\s*\+\s*(np\.|numpy\.|math\.)?sqrt")
@@ -137,9 +150,21 @@ SCHEDULE_COUNT = 6
 #: and not the enum members it compares.
 SCHEDULE_NAMES = "|".join(str(member) for member in MessageScheduleName)
 SCHEDULE_NAME_BRANCH = re.compile(
-    r"(?:if|elif|while)\b[^\n]*\.name\s*(?:==|!=|in)\s*[^\n]*"
+    r"(?:if|elif|while)\b[^\n]*(?:"
+    r"\.name\s*(?:==|!=|in)\s*[^\n]*"
     rf"""(?:MessageScheduleName\.|["'](?:{SCHEDULE_NAMES})["'])"""
+    r"|\bis(?: not)?\s+MessageScheduleName\."
+    r")"
 )
+
+#: The one module the widened pattern admits, against the reason the comment
+#: above already gives: `message_passing_reference` takes the enum, writes
+#: the two orders that predate the seam and is the oracle the seam is pinned
+#: against, so its `is MessageScheduleName.TREE` is the referee choosing
+#: which order to write out rather than a consumer branching on the base's
+#: name. The `is` form was outside the pattern until issue #864, which is
+#: why it was neither caught nor declared.
+SCHEDULE_NAME_CONSUMERS = {"likelihood/message_passing_reference.py"}
 SCHEDULE_NAME_MATCH = re.compile(r"match\s+[^\n]*\b(?:schedule|plan)\w*\.name\s*:")
 
 
@@ -207,6 +232,11 @@ SEARCHED = (
     REPO_ROOT / "tests",
     REPO_ROOT / "docs" / "nb",
 )
+
+
+def _admitted(path: str, declared: set[str]) -> bool:
+    """Whether a match is one of the sites declared, by path below the package."""
+    return any(path.endswith(f"snakes_and_ladders/{site}") for site in declared)
 
 
 def _offenders(pattern: re.Pattern[str], owner: str) -> list[str]:
@@ -371,7 +401,14 @@ def test_logsumexp_has_one_implementation() -> None:
     # `likelihood.potts` and `likelihood.belief_propagation`. They agreed, so
     # nothing failed; a divergence would have been silent and would have moved
     # a log-partition function rather than raising.
-    assert _offenders(PRIVATE_LOGSUMEXP, LOGSUMEXP_OWNER) == []
+    found = _offenders(PRIVATE_LOGSUMEXP, LOGSUMEXP_OWNER)
+
+    assert [path for path in found if not _admitted(path, LOGSUMEXP_INLINES)] == []
+    # The declaration is an edge and not a wish: the admitted inline is
+    # there, so a fold that removes it takes this entry with it.
+    assert sorted(found) == sorted(
+        f"python/snakes_and_ladders/{p}" for p in LOGSUMEXP_INLINES
+    )
 
 
 @pytest.mark.critical
@@ -523,7 +560,14 @@ def test_no_consumer_branches_on_a_schedules_name() -> None:
     # a plain string compares equal to a `StrEnum` member without being it, so
     # `schedule="tree"` ran flooding. A branch on the name brings the shape
     # back one schedule at a time.
-    assert _offenders(SCHEDULE_NAME_BRANCH, SCHEDULE_OWNER) == []
+    found = _offenders(SCHEDULE_NAME_BRANCH, SCHEDULE_OWNER)
+
+    assert [
+        path for path in found if not _admitted(path, SCHEDULE_NAME_CONSUMERS)
+    ] == []
+    assert sorted(found) == sorted(
+        f"python/snakes_and_ladders/{p}" for p in SCHEDULE_NAME_CONSUMERS
+    )
     assert _offenders(SCHEDULE_NAME_MATCH, SCHEDULE_OWNER) == []
 
 
@@ -599,6 +643,20 @@ def test_each_guard_fails_on_violating_source() -> None:
 
     assert [p for p, text in violating.items() if not p.search(text)] == []
     assert [p for p, text in clean.items() if p.search(text)] == []
+
+    # The two halves issue #864 widened, which one entry per pattern cannot
+    # reach: a suffixed private name, and the identity comparison. Both
+    # matched nothing before, so both guards read the tree and reported
+    # what they could not see.
+    assert PRIVATE_LOGSUMEXP.search("def _logsumexp_last(values):\n    return values\n")
+    assert not PRIVATE_LOGSUMEXP.search(
+        "def logsumexp_last(values):\n    return values\n"
+    )
+    assert SCHEDULE_NAME_BRANCH.search("    if schedule is MessageScheduleName.TREE:\n")
+    assert SCHEDULE_NAME_BRANCH.search(
+        "    if plan is not MessageScheduleName.FLOODING:\n"
+    )
+    assert not SCHEDULE_NAME_BRANCH.search("    if plan.requires_tree:\n")
 
     # The structural guard on the same discipline, since it cannot be written
     # as a pattern: a sixth schedule beside the base and the same class under

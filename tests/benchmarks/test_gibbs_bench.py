@@ -13,7 +13,7 @@ from typing import Any
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.sample.gibbs import _Indexed, gibbs_sweep
+from snakes_and_ladders.sample.gibbs import Indexed, gibbs_sweep
 from snakes_and_ladders.sample.potts_mcmc import anneal_potts
 from snakes_and_ladders.sample.schedule import ConstantTempSchedule
 from snakes_and_ladders.sim.factor_graph import from_potts
@@ -44,7 +44,7 @@ def test_generic_gibbs_sweep_benchmark(
     process, fall outside it.
     """
     graph = lattice_graph(SHAPE, BoundaryCondition.PERIODIC, 0.5)
-    indexed = _Indexed(from_potts(graph, FIELD))
+    indexed = Indexed(from_potts(graph, FIELD))
     rng = np.random.default_rng(1)
     state = rng.integers(0, 3, size=graph.n_nodes)
     gibbs_sweep(indexed, state, rng, backend=backend)
@@ -74,7 +74,7 @@ def test_generic_log_density_benchmark(
     the dictionary one bitwise.
     """
     graph = lattice_graph(DENSITY_SHAPE, BoundaryCondition.PERIODIC, 0.5)
-    indexed = _Indexed(from_potts(graph, FIELD))
+    indexed = Indexed(from_potts(graph, FIELD))
     state = np.random.default_rng(1).integers(0, 3, size=graph.n_nodes)
     expected = indexed.log_density(state, backend)
 

@@ -11,7 +11,7 @@ accept uniform --- what the next draw *is* depends on the last one's outcome,
 so no array replays that stream and the Rust route draws its colours and
 uniforms in bulk instead (``potts_mcmc._cluster_pass_rust``). What *is*
 reachable is the oracle running on the draws the kernel was given:
-:class:`_ScriptedDraws` hands ``_swendsen_wang_sweep`` the same bond uniforms,
+:class:`_ScriptedDraws` hands ``swendsen_wang_sweep`` the same bond uniforms,
 the same colour per cluster and the same uniform per cluster, in the order the
 kernel indexes them. The two then have the same input and the comparison is
 bitwise --- which is the pin, and it is stronger than a second implementation
@@ -41,8 +41,8 @@ from snakes_and_ladders.sample.potts_mcmc import (
     ClusterCounter,
     PottsMove,
     _bond_probability,
-    _swendsen_wang_sweep,
     sample_potts,
+    swendsen_wang_sweep,
 )
 from snakes_and_ladders.sample.statistics import chi_square_p_value
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
@@ -69,7 +69,7 @@ PIN_TEMPERATURES = (0.5, 1.0, 2.0)
 
 
 class _ScriptedDraws:
-    """The generator ``_swendsen_wang_sweep`` draws from, replaying one pass.
+    """The generator ``swendsen_wang_sweep`` draws from, replaying one pass.
 
     The oracle draws in this order: one array of bond uniforms, then per
     cluster in increasing root order one colour and --- where the field
@@ -175,7 +175,7 @@ def test_the_rust_pass_is_the_oracles_pass_bitwise_on_the_same_draws(
 
     theirs = state.copy()
     scripted = _ScriptedDraws(bond, colours, accepts)
-    _swendsen_wang_sweep(
+    swendsen_wang_sweep(
         theirs, graph, rows, cast(np.random.Generator, scripted), None, beta
     )
 
@@ -191,9 +191,9 @@ def test_the_rust_pass_is_the_oracles_pass_bitwise_on_the_same_draws(
 @pytest.mark.backend
 @pytest.mark.parametrize("seed", SEEDS)
 def test_the_labels_are_the_oracles_own_components(seed: int) -> None:
-    """The bond pass and the union-find, against ``_find`` on the same bonds.
+    """The bond pass and the union-find, against ``find_root`` on the same bonds.
 
-    Root identity and not only the partition: the oracle's ``_union`` keeps
+    Root identity and not only the partition: the oracle's ``union_roots`` keeps
     the first edge end's root, and which node labels a component is what puts
     the recolourings in their order --- so a kernel that partitioned the same
     way under another rule would draw a different colour for each cluster.
@@ -210,9 +210,9 @@ def test_the_labels_are_the_oracles_own_components(seed: int) -> None:
     active = (state[first] == state[second]) & (bond < _bond_probability(graph, beta))
     parent = np.arange(graph.n_nodes)
     for edge in np.flatnonzero(active):
-        potts_mcmc._union(parent, int(first[edge]), int(second[edge]))
+        potts_mcmc.union_roots(parent, int(first[edge]), int(second[edge]))
     expected = np.array(
-        [potts_mcmc._find(parent, node) for node in range(graph.n_nodes)]
+        [potts_mcmc.find_root(parent, node) for node in range(graph.n_nodes)]
     )
 
     assert np.array_equal(labels, expected)
@@ -249,7 +249,7 @@ def test_a_guard_that_hands_every_cluster_back_changes_no_recolouring() -> None:
     rebuilt = state.copy()
     bond, colours, accepts = draws
     scripted = _ScriptedDraws(bond, colours, accepts)
-    _swendsen_wang_sweep(
+    swendsen_wang_sweep(
         rebuilt, graph, rows, cast(np.random.Generator, scripted), None, beta
     )
     assert np.array_equal(decided, rebuilt)
@@ -363,7 +363,7 @@ def test_the_rust_route_refuses_a_counter() -> None:
     graph, rows, state = _instance((3, 3), 3, SEEDS[0])
 
     with pytest.raises(ValueError, match="takes no counter"):
-        _swendsen_wang_sweep(
+        swendsen_wang_sweep(
             state,
             graph,
             rows,
@@ -379,7 +379,7 @@ def test_the_pass_refuses_a_backend_it_does_not_have() -> None:
     graph, rows, state = _instance((3, 3), 3, SEEDS[0])
 
     with pytest.raises(ValueError, match="no .* backend"):
-        _swendsen_wang_sweep(
+        swendsen_wang_sweep(
             state, graph, rows, np.random.default_rng(0), None, 1.0, Backend.NUMBA
         )
 

@@ -18,7 +18,6 @@ from snakes_and_ladders.qa.style import (
     RULE,
     letter_style,
     series_style,
-    tolerance_note,
 )
 
 
@@ -80,15 +79,3 @@ def test_letter_style_applies_serif_and_restores_on_exit() -> None:
     # Scoped, not global: importing the module must not change plotting
     # behaviour for anything else in the process.
     assert mpl.rcParams["font.family"] == before
-
-
-@pytest.mark.infra
-def test_tolerance_note_reports_the_realized_maximum() -> None:
-    note = tolerance_note([1e-9, 4.2e-7, 3e-8], 1e-6)
-    assert "4.20e-07" in note
-    assert "1e-06" in note
-
-
-@pytest.mark.smoke
-def test_tolerance_note_handles_no_deviations() -> None:
-    assert "0.00e+00" in tolerance_note([], 1e-6)

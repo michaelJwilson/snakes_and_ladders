@@ -6,7 +6,7 @@ nothing until its declared-schedule control is shown to be the classical
 method itself. Four kinds of claim, in the order of how much they prove:
 
 * **the moves are ``potts_mcmc``'s, not copies.** Above zero temperature
-  ``propose`` and a direct ``_wolff_sweep`` or ``_swendsen_wang_sweep`` call on
+  ``propose`` and a direct ``wolff_sweep`` or ``swendsen_wang_sweep`` call on
   an identically seeded generator return the same labelling **bitwise**. So
   nothing here has to be kept in step with an oracle: the oracle is what runs,
   and the tests below pin the wrapping rather than the physics;
@@ -55,9 +55,9 @@ from snakes_and_ladders.sample.potts_keyed import (
 )
 from snakes_and_ladders.sample.potts_mcmc import (
     MoveKind,
-    _niedermayer_sweep,
-    _swendsen_wang_sweep,
-    _wolff_sweep,
+    niedermayer_sweep,
+    swendsen_wang_sweep,
+    wolff_sweep,
 )
 from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
 from snakes_and_ladders.search.ground_state import (
@@ -213,7 +213,7 @@ def test_a_move_and_a_field_of_different_heights_are_refused() -> None:
 @pytest.mark.oracle
 @pytest.mark.parametrize("temperature", [0.25, 1.0, 4.0])
 def test_a_wolff_step_is_potts_mcmcs_own_sweep_bitwise(temperature: float) -> None:
-    """Above zero temperature the move *is* ``_wolff_sweep``, root and colour aside.
+    """Above zero temperature the move *is* ``wolff_sweep``, root and colour aside.
 
     The claim this file rests on: there is no second Wolff kernel to keep in
     step with an oracle. What the wrapper adds is the root and the colour,
@@ -231,7 +231,7 @@ def test_a_wolff_step_is_potts_mcmcs_own_sweep_bitwise(temperature: float) -> No
         state, temperature=temperature, site=5, label=1, rng=np.random.default_rng(99)
     )
     direct = state.copy()
-    size = _wolff_sweep(
+    size = wolff_sweep(
         direct,
         field,
         offsets,
@@ -256,7 +256,7 @@ def test_a_niedermayer_step_is_potts_mcmcs_own_sweep_bitwise(
 
     Where `WolffMove` writes the zero-temperature limit out --- ``beta = 1/0``
     is not a number its sweep can carry --- this one passes ``math.inf``
-    through, because `_niedermayer_sweep` takes it: a bond of positive energy
+    through, because `niedermayer_sweep` takes it: a bond of positive energy
     margin is certain rather than drawn, and a step that lowers the score is
     refused without a uniform. So there is one kernel at every temperature and
     this asserts it at four, the zero included.
@@ -272,7 +272,7 @@ def test_a_niedermayer_step_is_potts_mcmcs_own_sweep_bitwise(
         state, temperature=temperature, site=5, label=1, rng=np.random.default_rng(99)
     )
     direct = state.copy()
-    size = _niedermayer_sweep(
+    size = niedermayer_sweep(
         direct,
         field,
         offsets,
@@ -311,7 +311,7 @@ def test_a_swendsen_wang_pass_is_potts_mcmcs_own_sweep_bitwise(
         state, temperature=temperature, site=-1, label=-1, rng=np.random.default_rng(7)
     )
     direct = state.copy()
-    _swendsen_wang_sweep(
+    swendsen_wang_sweep(
         direct, graph, field, np.random.default_rng(7), None, 1.0 / temperature, backend
     )
 
@@ -338,7 +338,7 @@ def test_keys_draw_the_same_cluster_size_law_as_seeds() -> None:
     def sizes(generators: list[np.random.Generator]) -> np.ndarray:
         return np.asarray(
             [
-                _wolff_sweep(
+                wolff_sweep(
                     state.copy(),
                     field,
                     offsets,

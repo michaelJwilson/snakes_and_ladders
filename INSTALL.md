@@ -206,7 +206,7 @@ files `latexmk` leaves in `docs/`, and the applicability tables under
 figure under `docs/tex/figures/` — its `.pdf` or `.tex` and its `_caption.txt`
 — is committed by the pull request that changed it. `DEV.md` lists every path,
 and gives the wall clock on the 4-core reference host: **15.8 s** for the
-LaTeX, **3.7 s** for a second run that finds nothing to do, and **431.8 s** for
+LaTeX, **3.7 s** for a second run that finds nothing to do, and **441.3 s** for
 the figures, all 23 in the manifest on every build since issue #490 deleted the
 stamps that used to select them and issue #492 left every entry cited.
 

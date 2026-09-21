@@ -24,6 +24,7 @@ import sys
 
 import pytest
 from snakes_and_ladders.sim.fixtures import Fixture
+from snakes_and_ladders.sim.params import SimulationParams
 
 from tests._durations import key_over_cap, over_cap
 from tests._paths import REPO_ROOT
@@ -127,7 +128,9 @@ def test_at_fixture_runs_one_case_per_declared_tier() -> None:
 
 @pytest.mark.end2end
 @at_fixture("instance", "tree_search")
-def test_at_fixture_hands_the_body_a_loaded_instance(instance: Fixture) -> None:
+def test_at_fixture_hands_the_body_a_loaded_instance(
+    instance: Fixture[SimulationParams],
+) -> None:
     # Exercised end to end: the CI case runs on every pull request, and the
     # other two are deselected there by their markers.
     assert instance.params.k == 4

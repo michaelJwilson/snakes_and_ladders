@@ -457,7 +457,7 @@ def test_niedermayers_kernel_is_reversible_against_the_enumerated_law(
     for position, values in enumerate(configurations):
         for _ in range(KERNEL_TRIALS):
             state = np.array(values, dtype=np.int64)
-            potts_mcmc._niedermayer_sweep(
+            potts_mcmc.niedermayer_sweep(
                 state,
                 rows,
                 offsets,
@@ -523,7 +523,7 @@ def test_the_threshold_at_zero_on_an_antiferromagnet_is_a_single_site_flip() -> 
             - energies(graph, rows, flipped[None])[0]
         )
         after = state.copy()
-        size = potts_mcmc._niedermayer_sweep(
+        size = potts_mcmc.niedermayer_sweep(
             after,
             rows,
             offsets,
@@ -629,7 +629,7 @@ def test_houdayers_move_leaves_the_pairs_energy_where_it_found_it() -> None:
             rng.integers(0, 2, size=graph.n_nodes), dtype=np.int64
         )
         before = float(energies(graph, rows, np.stack([first, second])).sum())
-        size = potts_mcmc._houdayer_move(first, second, offsets, neighbours, rng)
+        size = potts_mcmc.houdayer_move(first, second, offsets, neighbours, rng)
         after = float(energies(graph, rows, np.stack([first, second])).sum())
         worst = max(worst, abs(after - before))
         moved += int(size > 0)
@@ -657,7 +657,7 @@ def test_houdayers_move_alone_never_leaves_the_orbit_of_its_draw() -> None:
     start = np.sort(np.stack([first, second]), axis=0)
 
     for _ in range(200):
-        potts_mcmc._houdayer_move(first, second, offsets, neighbours, rng)
+        potts_mcmc.houdayer_move(first, second, offsets, neighbours, rng)
         assert np.array_equal(np.sort(np.stack([first, second]), axis=0), start)
 
 
@@ -688,7 +688,7 @@ def test_niedermayers_rule_is_wolffs_bitwise_on_a_ferromagnet(
         root, colour = int(rng.integers(graph.n_nodes)), int(rng.integers(3))
         wolff, niedermayer = state.copy(), state.copy()
 
-        theirs = potts_mcmc._wolff_sweep(
+        theirs = potts_mcmc.wolff_sweep(
             wolff,
             rows,
             offsets,
@@ -699,7 +699,7 @@ def test_niedermayers_rule_is_wolffs_bitwise_on_a_ferromagnet(
             root=root,
             proposed=colour,
         )
-        ours = potts_mcmc._niedermayer_sweep(
+        ours = potts_mcmc.niedermayer_sweep(
             niedermayer,
             rows,
             offsets,
@@ -749,11 +749,11 @@ def _cluster_counter(
     counter = ClusterCounter()
     for _ in range(n_clusters):
         if move is PottsMove.WOLFF:
-            potts_mcmc._wolff_sweep(
+            potts_mcmc.wolff_sweep(
                 state, rows, offsets, neighbours, couplings, rng, counter, graph
             )
         else:
-            potts_mcmc._niedermayer_sweep(
+            potts_mcmc.niedermayer_sweep(
                 state,
                 rows,
                 offsets,
@@ -1316,7 +1316,7 @@ def test_omitting_the_exchange_term_is_caught(monkeypatch: pytest.MonkeyPatch) -
     def always_exchange(*_: float) -> float:
         return 0.0
 
-    monkeypatch.setattr(potts_mcmc, "_swap_log_ratio", always_exchange)
+    monkeypatch.setattr(potts_mcmc, "swap_log_ratio", always_exchange)
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
 
     run = parallel_tempering(

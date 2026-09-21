@@ -54,9 +54,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml
-
-from snakes_and_ladders.fixtures import Params, Scale, load_params
+from snakes_and_ladders.fixtures import Params, Scale, load_declared, params_from
 from snakes_and_ladders.inputs import library_versions
 from snakes_and_ladders.opt.testfunctions import TestFunctionSuite
 from snakes_and_ladders.sim.canonical import FrustratedLatticeParams
@@ -136,7 +134,7 @@ def _declares_key(raw: Mapping[str, Any]) -> bool:
 
 
 @dataclass(frozen=True)
-class Fixture:
+class Fixture[P: Params]:
     """One loaded fixture: the instance, and what is known about it.
 
     Parameters
@@ -153,8 +151,12 @@ class Fixture:
         One of :data:`ORACLES`, the independent answer available at this size.
     path : Path
         The file, reported in errors and by any caption rendered from it.
-    params : Any
-        The loaded instance, of whatever type the model's loader returns.
+    params : P
+        The loaded instance, of the type the declared model's loader returns.
+        The class is generic in it, so a caller that knows which problem it
+        asked for writes ``Fixture[HmmParams]`` rather than reading fields
+        off an erased type (issue #864); :func:`fixture` reads the model
+        from the file, so what it returns is ``Fixture[Any]``.
     """
 
     problem: str
@@ -162,7 +164,7 @@ class Fixture:
     model: str
     oracle: str
     path: Path
-    params: Any
+    params: P
 
 
 def _key_path(problem: str, directory: Path) -> Path:
@@ -182,7 +184,7 @@ def _key_path(problem: str, directory: Path) -> Path:
     found = [
         path
         for path in sorted((directory / problem).glob("*.yaml"))
-        if _declares_key(yaml.safe_load(path.read_text()))
+        if _declares_key(load_declared(path, ()))
     ]
     if len(found) == 1:
         return found[0]
@@ -238,7 +240,9 @@ def path_of(problem: str, tier: str | Scale, directory: Path = FIXTURES_DIR) -> 
     return path
 
 
-def fixture(problem: str, tier: str | Scale, directory: Path = FIXTURES_DIR) -> Fixture:
+def fixture(
+    problem: str, tier: str | Scale, directory: Path = FIXTURES_DIR
+) -> Fixture[Any]:
     """Load the instance a problem declares at one tier.
 
     Parameters
@@ -253,8 +257,12 @@ def fixture(problem: str, tier: str | Scale, directory: Path = FIXTURES_DIR) -> 
 
     Returns
     -------
-    Fixture
-        The loaded instance, its model and its oracle. Asked for by
+    Fixture[Any]
+        The loaded instance, its model and its oracle. The model is read
+        from the file, so the registry cannot name the params type for the
+        caller; one that knows which problem it asked for annotates the
+        binding --- ``instance: Fixture[HmmParams] = fixture("hmm", "ci")``
+        --- and reads the fields checked. Asked for by
         :data:`KEY`, its ``tier`` is the file's own: ``key`` says which
         instance a study defaults to, never which budget the file was sized
         for.
@@ -268,12 +276,8 @@ def fixture(problem: str, tier: str | Scale, directory: Path = FIXTURES_DIR) -> 
         knows are registry errors and not model errors.
     """
     path = path_of(problem, tier, directory)
-    raw = yaml.safe_load(path.read_text())
+    raw = load_declared(path, _REQUIRED_FIELDS)
     resolved = Scale(path.stem) if tier == KEY else Scale(tier)
-    missing = _REQUIRED_FIELDS - raw.keys()
-    if missing:
-        msg = f"{path}: missing required field(s) {sorted(missing)}"
-        raise ValueError(msg)
     model = str(raw["model"])
     if model not in PARAMS:
         msg = f"{path}: model {model!r} has no loader; known: {sorted(PARAMS)}"
@@ -288,7 +292,7 @@ def fixture(problem: str, tier: str | Scale, directory: Path = FIXTURES_DIR) -> 
         model=model,
         oracle=oracle,
         path=path,
-        params=load_params(path, PARAMS[model]),
+        params=params_from(raw, path, PARAMS[model]),
     )
 
 
@@ -320,7 +324,9 @@ def tiers(problem: str, directory: Path = FIXTURES_DIR) -> tuple[Scale, ...]:
     return tuple(scale for scale in Scale if scale in present)
 
 
-def fixtures(tier: str | Scale, directory: Path = FIXTURES_DIR) -> tuple[Fixture, ...]:
+def fixtures(
+    tier: str | Scale, directory: Path = FIXTURES_DIR
+) -> tuple[Fixture[Any], ...]:
     """Every problem's instance at one tier, in problem order.
 
     The iteration a parametrized test runs over: a method that applies to a
@@ -336,7 +342,7 @@ def fixtures(tier: str | Scale, directory: Path = FIXTURES_DIR) -> tuple[Fixture
 
     Returns
     -------
-    tuple[Fixture, ...]
+    tuple[Fixture[Any], ...]
         The loaded instances of the problems declaring that tier; a problem
         that declares none is absent rather than an error.
     """
@@ -361,8 +367,7 @@ def declared(
     Mapping[str, Any]
         The parsed mapping, unmodified.
     """
-    loaded = yaml.safe_load(path_of(problem, tier, directory).read_text())
-    return dict(loaded)
+    return dict(load_declared(path_of(problem, tier, directory), ()))
 
 
 # --- baseline records (issue #401) ------------------------------------------

@@ -88,13 +88,15 @@ class FlowNetwork:
         if not self.outgoing:
             self.outgoing = [[] for _ in range(self.n_nodes)]
 
-    def _forget_arrays(self) -> None:
+    def forget_arrays(self) -> None:
         """Drop the contiguous form, because the lists it was derived from moved.
 
         Every write to ``target``, ``capacity`` or ``outgoing`` calls this.
         A cache that outlives its store is the defect this class would be
         trading for the one it fixes, and the two writers --- :meth:`add_edge`
-        and :func:`max_flow`'s in-place push --- are the whole set.
+        and :func:`max_flow`'s in-place push --- are the whole set. Public
+        because the second of those is a module-level function and reaching
+        into a private from there is what issue #864 removes.
         """
         self._arcs = self._forward = self._backward = None
 
@@ -203,7 +205,7 @@ class FlowNetwork:
         if capacity < 0.0 or reverse < 0.0:
             msg = f"capacities must be non-negative, got {capacity} and {reverse}"
             raise ValueError(msg)
-        self._forget_arrays()
+        self.forget_arrays()
         self.outgoing[source].append(len(self.target))
         self.target.append(sink)
         self.capacity.append(capacity)
@@ -290,7 +292,7 @@ def max_flow(network: FlowNetwork, source: int, sink: int) -> MinCut:
     # (issue #642). Dropped here, once per solve, rather than at the push that
     # invalidates it: that push is Dinic's inner loop, where a Python call per
     # arc would cost more than the derivation this whole change avoids.
-    network._forget_arrays()
+    network.forget_arrays()
 
     total = 0.0
     while True:
