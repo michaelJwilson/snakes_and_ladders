@@ -18,6 +18,15 @@ import pytest
 
 PACKAGE = Path(__file__).resolve().parents[2] / "python" / "snakes_and_ladders"
 DIRECTORIES = ("sim", "likelihood", "opt", "search", "sample", "learn", "qa")
+
+#: The two directories the division does not run through, each against its
+#: reason. `sandbox/` is the conserved home: an implementation a measurement
+#: declined, kept to referee the one that replaced it, so it reads the live
+#: module it is the oracle for and a declaration per read would restate
+#: `sandbox/CLAUDE.md` eight times. What holds it is the other direction,
+#: which `tests/regression/test_sandbox.py` asserts: no package directory
+#: imports it. `scripts/` is the command line, which reaches whatever a
+#: command runs.
 EXCLUDED = ("sandbox", "scripts")
 
 #: Every directory-to-directory import edge the tree carries, with the
@@ -79,8 +88,8 @@ ADMITTED: dict[tuple[str, str], str] = {
 }
 
 
-def _directory(path: Path) -> str:
-    relative = path.relative_to(PACKAGE)
+def _directory(path: Path, package: Path = PACKAGE) -> str:
+    relative = path.relative_to(package)
     return relative.parts[0] if len(relative.parts) > 1 else "(root)"
 
 
@@ -110,13 +119,18 @@ def _imported_directories(path: Path) -> set[str]:
     return found
 
 
-def edges() -> dict[tuple[str, str], set[str]]:
-    """Every ``(from, to)`` directory edge, with the modules that make it."""
+def edges(package: Path = PACKAGE) -> dict[tuple[str, str], set[str]]:
+    """Every ``(from, to)`` directory edge, with the modules that make it.
+
+    ``package`` is a parameter so the reader can be run over a tree whose
+    edges are known, which is what the negative control at the end of this
+    module does; every caller here reads the package.
+    """
     realized: dict[tuple[str, str], set[str]] = {}
-    for path in sorted(PACKAGE.rglob("*.py")):
+    for path in sorted(package.rglob("*.py")):
         if path.name == "__init__.py" or any(part in EXCLUDED for part in path.parts):
             continue
-        source = _directory(path)
+        source = _directory(path, package)
         if source == "(root)":
             continue
         for target in _imported_directories(path):
@@ -157,3 +171,86 @@ def test_sim_imports_no_inference_directory() -> None:
     realized = edges()
     assert {edge for edge in realized if edge[0] == "sim"} <= {("sim", "opt")}
     assert realized.get(("sim", "opt"), set()) <= {"fixtures"}
+
+
+def _write(package: Path, module: str, source: str) -> None:
+    """Write one module of a synthetic package, directories and all."""
+    path = package / module
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(source)
+
+
+@pytest.mark.infra
+@pytest.mark.smoke
+def test_the_edge_reader_finds_an_edge_no_sentence_admits(tmp_path: Path) -> None:
+    # The pairing `tests/regression/docs` established, and the failure mode
+    # this guard actually has: a reader that finds nothing reports a divided
+    # tree, and the assertions above pass on an empty dictionary. So the
+    # reader is run over a tree whose edges are known -- `opt -> sim`, which
+    # `opt/CLAUDE.md` admits for no module, written in the four import forms
+    # the package uses -- and `opt -> search` from the function-local one,
+    # which is the form a cycle hides behind -- beside a module that crosses
+    # nothing.
+    package = tmp_path / "snakes_and_ladders"
+    _write(
+        package,
+        "opt/objective.py",
+        "from snakes_and_ladders.sim.graph import PottsGraph\n"
+        "from snakes_and_ladders.sim.potts import (\n    site_field,\n)\n"
+        "import snakes_and_ladders.numerics\n"
+        "def fit() -> None:\n"
+        "    from snakes_and_ladders.search.infer import score_topology\n",
+    )
+    _write(
+        package, "sim/graph.py", "from snakes_and_ladders.numerics import logsumexp\n"
+    )
+    _write(
+        package, "sandbox/declined.py", "from snakes_and_ladders.opt.fit import fit\n"
+    )
+
+    realized = edges(package)
+
+    assert realized == {("opt", "sim"): {"objective"}, ("opt", "search"): {"objective"}}
+    assert {edge for edge in realized if edge not in ADMITTED} == {
+        ("opt", "sim"),
+        ("opt", "search"),
+    }
+    # The package root is read as an edge to nowhere, and `sandbox/` is not
+    # read at all: the two exclusions above, exercised rather than stated.
+    assert _imported_directories(package / "sim" / "graph.py") == {"(root)"}
+    assert not any(edge[0] == "sandbox" for edge in realized)
+
+
+@pytest.mark.infra
+@pytest.mark.smoke
+def test_the_cycle_reader_finds_a_cycle_on_a_tree_that_has_one(tmp_path: Path) -> None:
+    # The same control for the second claim: two directories importing each
+    # other are a cycle, and one importing the other is not.
+    package = tmp_path / "snakes_and_ladders"
+    _write(
+        package,
+        "search/infer.py",
+        "from snakes_and_ladders.sample.gibbs import sweep\n",
+    )
+    _write(
+        package,
+        "sample/gibbs.py",
+        "from snakes_and_ladders.sim.graph import PottsGraph\n",
+    )
+    _write(package, "sim/graph.py", "import numpy as np\n")
+
+    realized = set(edges(package))
+
+    assert {(a, b) for (a, b) in realized if (b, a) in realized} == set()
+
+    _write(
+        package,
+        "sample/tempered.py",
+        "from snakes_and_ladders.search.infer import score\n",
+    )
+    realized = set(edges(package))
+
+    assert {(a, b) for (a, b) in realized if (b, a) in realized} == {
+        ("sample", "search"),
+        ("search", "sample"),
+    }
