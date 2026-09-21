@@ -306,7 +306,7 @@ pub fn single_site_sweeps(
 /// the caller's guard is counted in, as in [`single_site_sweeps_impl`].
 const ULP: f64 = 2.220446049250313e-16;
 
-/// Union-find root, with path compression. The oracle's `_find`.
+/// Union-find root, with path compression. The oracle's `find_root`.
 #[inline]
 fn find(parent: &mut [usize], node: usize) -> usize {
     let mut root = node;
@@ -323,7 +323,7 @@ fn find(parent: &mut [usize], node: usize) -> usize {
 }
 
 /// Merge two components, keeping the first edge end's root. The oracle's
-/// `_union`, whose rule decides *which* node labels the component and so
+/// `union_roots`, whose rule decides *which* node labels the component and so
 /// which root the recolouring order is taken in.
 #[inline]
 fn union(parent: &mut [usize], first: usize, second: usize) {
@@ -336,7 +336,7 @@ fn union(parent: &mut [usize], first: usize, second: usize) {
 
 /// One Swendsen-Wang bond-and-recolour pass over `state`, in place.
 ///
-/// Ported from `search.potts_mcmc._swendsen_wang_sweep` and its `_recolour`,
+/// Ported from `search.potts_mcmc.swendsen_wang_sweep` and its `_recolour`,
 /// which stay as the oracle. The pass activates a bond on each like-coloured
 /// edge whose draw clears the bond probability, joins the active bonds into
 /// clusters, and offers each cluster one colour, accepted on the field
@@ -366,7 +366,7 @@ fn union(parent: &mut [usize], first: usize, second: usize) {
 /// - `accept_draws`: one uniform per cluster, indexed the same way, read only
 ///   where the field difference is negative.
 /// - `labels`: `n_nodes` out: the component root per node, as the oracle's
-///   `_find` reports it. Read rather than written when `first > 0`, so a
+///   `find_root` reports it. Read rather than written when `first > 0`, so a
 ///   resumed pass recolours the clusters it already built instead of
 ///   rebuilding them from a state it has half-changed.
 /// - `guard`: how far from a decision a quantity must sit for this kernel to

@@ -37,8 +37,8 @@ from snakes_and_ladders.sample.hmc import (
     YOSHIDA_WEIGHTS,
     Integrator,
     WithGaussianPrior,
-    _gradient,
     anneal,
+    gradient_at,
     hamiltonian,
     leapfrog,
     parallel_tempering,
@@ -353,12 +353,12 @@ def _hand_written_leapfrog(
     """
     position = theta.detach().clone()
     velocity = momentum.detach().clone()
-    velocity = velocity - 0.5 * step_size * _gradient(objective, position)
+    velocity = velocity - 0.5 * step_size * gradient_at(objective, position)
     for step in range(n_steps):
         position = position + step_size * velocity
         if step < n_steps - 1:
-            velocity = velocity - step_size * _gradient(objective, position)
-    velocity = velocity - 0.5 * step_size * _gradient(objective, position)
+            velocity = velocity - step_size * gradient_at(objective, position)
+    velocity = velocity - 0.5 * step_size * gradient_at(objective, position)
     return position, velocity
 
 

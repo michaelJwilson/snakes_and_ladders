@@ -36,9 +36,9 @@ from snakes_and_ladders.sample.hmc import (
     HmcChain,
     WithGaussianPrior,
     _DualAveraging,
-    _gradient,
     _Scaled,
     effective_sample_size,
+    gradient_at,
     leapfrog,
     sample,
 )
@@ -132,12 +132,12 @@ def _mass_matrix_leapfrog(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Kick-drift-kick with ``K = p' M^-1 p / 2``, as Neal (2011) §5.4.1 writes it."""
     position, velocity = theta.clone(), momentum.clone()
-    velocity = velocity - 0.5 * step_size * _gradient(objective, position)
+    velocity = velocity - 0.5 * step_size * gradient_at(objective, position)
     for step in range(n_steps):
         position = position + step_size * inverse_mass * velocity
         if step < n_steps - 1:
-            velocity = velocity - step_size * _gradient(objective, position)
-    velocity = velocity - 0.5 * step_size * _gradient(objective, position)
+            velocity = velocity - step_size * gradient_at(objective, position)
+    velocity = velocity - 0.5 * step_size * gradient_at(objective, position)
     return position, velocity
 
 

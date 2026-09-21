@@ -23,10 +23,10 @@ from snakes_and_ladders.likelihood.hmm_paths import emission_log_density
 from snakes_and_ladders.likelihood.potts import log_weights
 from snakes_and_ladders.sample.potts_mcmc import (
     PottsMove,
-    _houdayer_move,
-    _sweep_for,
     adapt_ladder_potts,
+    houdayer_move,
     parallel_tempering,
+    sweep_for,
 )
 from snakes_and_ladders.sample.statistics import chi_square_p_value, sign_test_p_value
 from snakes_and_ladders.sample.tempered import (
@@ -423,7 +423,7 @@ def test_the_overlap_defect_percolates_on_the_frustrated_lattice() -> None:
     graph = frustrated_triangular_lattice((12, 12), BoundaryCondition.PERIODIC, -1.0)
     rows = site_field(np.zeros(2), graph.n_nodes)
     offsets, neighbours, couplings = graph.compressed_adjacency()
-    sweep = _sweep_for(
+    sweep = sweep_for(
         PottsMove.SINGLE_SITE, graph, rows, offsets, neighbours, couplings, Backend.RUST
     )
 
@@ -438,7 +438,7 @@ def test_the_overlap_defect_percolates_on_the_frustrated_lattice() -> None:
             for replica in pair:
                 sweep(replica, rng, 1.0 / temperature)
             defect = int((pair[0] != pair[1]).sum())
-            size = _houdayer_move(pair[0], pair[1], offsets, neighbours, rng)
+            size = houdayer_move(pair[0], pair[1], offsets, neighbours, rng)
             if step >= 100:
                 defects.append(defect)
                 clusters.append(size)

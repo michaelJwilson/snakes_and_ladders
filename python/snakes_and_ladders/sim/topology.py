@@ -115,7 +115,7 @@ def enumerate_topologies(leaf_names: Sequence[str]) -> Iterator[Topology]:
         adjacency: dict[NodeId, list[NodeId]], remaining: Sequence[str], next_id: int
     ) -> Iterator[Topology]:
         if not remaining:
-            yield _from_adjacency(adjacency, 0)
+            yield from_adjacency(adjacency, 0)
             return
         name, rest = remaining[0], remaining[1:]
         for first, second in sorted(
@@ -189,7 +189,7 @@ def random_topology(leaf_names: Sequence[str], rng: np.random.Generator) -> Topo
         adjacency[second].append(internal)
         adjacency[name] = [internal]
 
-    return _from_adjacency(adjacency, 0)
+    return from_adjacency(adjacency, 0)
 
 
 def leaf_bipartitions(topology: Topology) -> frozenset[frozenset[str]]:
@@ -216,7 +216,7 @@ def leaf_bipartitions(topology: Topology) -> frozenset[frozenset[str]]:
         side not containing the lexicographically smallest leaf name, so
         that a bipartition and its complement collapse to one entry.
     """
-    all_leaves = _leaf_names(topology)
+    all_leaves = leaf_names_of(topology)
     anchor = min(all_leaves)
     splits: set[frozenset[str]] = set()
     _collect_splits(topology, all_leaves, anchor, splits)
@@ -229,7 +229,7 @@ def branch_splits(topology: Topology) -> list[frozenset[str]]:
     A branch *is* the bipartition of the leaf set it separates, canonicalized as
     :func:`leaf_bipartitions` canonicalizes it, so a branch matches between a
     topology and its neighbour by what it separates rather than by the name of
-    the node below it -- and the names are synthetic (``_from_adjacency``
+    the node below it -- and the names are synthetic (``from_adjacency``
     numbers them), so nothing else would match. This lets a fitted length carry
     from a parent topology to every neighbour that still has the branch (issue
     #289).
@@ -245,7 +245,7 @@ def branch_splits(topology: Topology) -> list[frozenset[str]]:
         One split per non-root node, aligned with ``branch_order(topology)``
         and therefore with a ``branch_lengths`` tensor.
     """
-    all_leaves = _leaf_names(topology)
+    all_leaves = leaf_names_of(topology)
     anchor = min(all_leaves)
     below: dict[str, frozenset[str]] = {}
 
@@ -267,12 +267,18 @@ def branch_splits(topology: Topology) -> list[frozenset[str]]:
     ]
 
 
-def _leaf_names(node: Node) -> frozenset[str]:
+def leaf_names_of(node: Node) -> frozenset[str]:
+    """The names of the leaves below ``node``, itself included where it is one.
+
+    Named ``leaf_names_of`` rather than ``leaf_names``: two public
+    signatures in this module already bind that word as a parameter
+    (:func:`enumerate_topologies`, :func:`random_topology`).
+    """
     if node.is_leaf:
         return frozenset((node.name,))
     result: frozenset[str] = frozenset()
     for child in node.children:
-        result |= _leaf_names(child)
+        result |= leaf_names_of(child)
     return result
 
 
@@ -368,7 +374,15 @@ def _to_adjacency(topology: Topology) -> tuple[dict[NodeId, list[NodeId]], int]:
     return adjacency, root_id
 
 
-def _from_adjacency(adjacency: dict[NodeId, list[NodeId]], root_id: NodeId) -> Node:
+def from_adjacency(adjacency: dict[NodeId, list[NodeId]], root_id: NodeId) -> Node:
+    """The tree the adjacency holds, rooted at ``root_id``.
+
+    An internal node is named ``n<id>`` from its integer id and a leaf
+    keeps its own name, which is the contract
+    :func:`snakes_and_ladders.search.neighbor_joining.neighbor_joining`
+    reads the id back through.
+    """
+
     def build(node_id: NodeId, parent_id: NodeId | None) -> Node:
         if isinstance(node_id, str):
             return Node(name=node_id, branch_length=None)
@@ -434,7 +448,7 @@ def nni_neighbours(topology: Topology) -> Iterator[Topology]:
             new_adjacency = _rewired(
                 adjacency, drop=[(u, a1), (v, b)], add=[(v, a1), (u, b)]
             )
-            yield _from_adjacency(new_adjacency, root_id)
+            yield from_adjacency(new_adjacency, root_id)
 
 
 def spr_neighbours(
@@ -501,7 +515,7 @@ def spr_neighbours(
                 if key in seen:
                     continue
                 seen.add(key)
-                yield _from_adjacency(candidate_adjacency, new_id)
+                yield from_adjacency(candidate_adjacency, new_id)
 
 
 def _regraft_distances(
@@ -622,7 +636,7 @@ def robinson_foulds(first: Topology, second: Topology) -> int:
         If the two topologies do not carry the same leaves. A distance
         between trees over different taxa is not defined.
     """
-    if _leaf_names(first) != _leaf_names(second):
+    if leaf_names_of(first) != leaf_names_of(second):
         msg = "cannot compare topologies over different leaf sets"
         raise ValueError(msg)
     return len(leaf_bipartitions(first) ^ leaf_bipartitions(second))
@@ -654,7 +668,7 @@ def normalized_robinson_foulds(first: Topology, second: Topology) -> float:
         1
         for topology in (first, second)
         for split in leaf_bipartitions(topology)
-        if 1 < len(split) < len(_leaf_names(topology)) - 1
+        if 1 < len(split) < len(leaf_names_of(topology)) - 1
     )
     if internal == 0:
         return 0.0

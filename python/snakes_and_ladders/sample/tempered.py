@@ -38,19 +38,19 @@ import numpy as np
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.sample.accept import accept
 from snakes_and_ladders.sample.gibbs import (
-    _Indexed,
+    Indexed,
     cached_topology_score,
     gibbs_sweep,
     topology_step,
 )
 from snakes_and_ladders.sample.potts_mcmc import (
     PottsMove,
-    _houdayer_move,
-    _refuse_negative_coupling,
-    _swap_log_ratio,
-    _sweep_for,
     energies,
+    houdayer_move,
     parallel_tempering,
+    refuse_negative_coupling,
+    swap_log_ratio,
+    sweep_for,
 )
 from snakes_and_ladders.sample.schedule import (
     FeedbackLadder,
@@ -326,7 +326,7 @@ def _exchange(
                 children[replica],
             )
         for pair in range(n_replicas - 1):
-            log_ratio = _swap_log_ratio(
+            log_ratio = swap_log_ratio(
                 betas[pair], betas[pair + 1], -values[pair], -values[pair + 1]
             )
             proposed[pair] += 1
@@ -422,7 +422,7 @@ def tempered_factor_graph(
     """
     temperatures = ladder(temperatures)
     _check_ladder(temperatures, n_sweeps, thin, burn_in)
-    indexed = _Indexed(graph)
+    indexed = Indexed(graph)
     children = rng.spawn(len(temperatures))
     states = [indexed.start(child, start) for child in children]
     values = [indexed.log_density(state) for state in states]
@@ -472,7 +472,7 @@ def tempered_potts_pair(
     Nothing here is a new sampler. The within-replica sweep is
     :func:`~snakes_and_ladders.sample.potts_mcmc.sample_potts`'s own, through
     the one dispatch
-    :func:`~snakes_and_ladders.sample.potts_mcmc._sweep_for` holds, and the
+    :func:`~snakes_and_ladders.sample.potts_mcmc.sweep_for` holds, and the
     exchange is the loop the factor graph and the topologies already run.
 
     Parameters
@@ -516,7 +516,7 @@ def tempered_potts_pair(
     """
     temperatures = ladder(temperatures)
     _check_ladder(temperatures, n_sweeps, thin, burn_in)
-    _refuse_negative_coupling(move, graph)
+    refuse_negative_coupling(move, graph)
     rows = site_field(np.asarray(field, dtype=float), graph.n_nodes)
     n_states = int(rows.shape[1])
     if houdayer and n_states != 2:
@@ -528,7 +528,7 @@ def tempered_potts_pair(
         raise ValueError(msg)
 
     offsets, neighbours, couplings = graph.compressed_adjacency()
-    advance = _sweep_for(move, graph, rows, offsets, neighbours, couplings, backend)
+    advance = sweep_for(move, graph, rows, offsets, neighbours, couplings, backend)
     children = rng.spawn(len(temperatures))
 
     def start(child: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
@@ -557,7 +557,7 @@ def tempered_potts_pair(
         for replica in pair:
             advance(replica, child, beta)
         if houdayer:
-            _houdayer_move(pair[0], pair[1], offsets, neighbours, child)
+            houdayer_move(pair[0], pair[1], offsets, neighbours, child)
         return pair, density(pair)
 
     return _exchange(

@@ -32,7 +32,7 @@ same quantity from the tape, and the three agree to ``1e-12``.
 **Two of the six run where the Fortuin-Kasteleyn construction cannot.** Its
 bond probability ``1 - exp(-J)`` is not a probability below zero, so Wolff and
 Swendsen-Wang are refused on an antiferromagnet --- the instance a cluster move
-is wanted for. :func:`_niedermayer_sweep` activates a bond on its energy
+is wanted for. :func:`niedermayer_sweep` activates a bond on its energy
 relative to a threshold ``E_0`` instead (Niedermayer 1988), which is a
 probability for either sign and is Wolff's own where Wolff runs;
 :func:`sample_potts_pair` runs two replicas at one temperature and moves them
@@ -116,14 +116,24 @@ __all__ = [
     "adapt_ladder_potts",
     "anneal_potts",
     "autodiff_log_ratios",
+    "cluster_members",
     "energies",
+    "find_root",
     "houdayer_cluster",
+    "houdayer_move",
+    "niedermayer_sweep",
     "niedermayer_threshold",
     "parallel_tempering",
+    "refuse_negative_coupling",
     "sample_potts",
     "sample_potts_pair",
+    "swap_log_ratio",
+    "sweep_for",
+    "swendsen_wang_sweep",
     "taylor_log_ratios",
     "tempered",
+    "union_roots",
+    "wolff_sweep",
 ]
 
 
@@ -186,7 +196,7 @@ class MoveKind(StrEnum):
     NIEDERMAYER = "niedermayer"
 
 
-def _refuse_negative_coupling(move: PottsMove, graph: PottsGraph) -> None:
+def refuse_negative_coupling(move: PottsMove, graph: PottsGraph) -> None:
     """Refuse a Fortuin-Kasteleyn cluster move on a graph with a negative coupling.
 
     One message for every entry point that runs one, rather than a copy of
@@ -372,7 +382,7 @@ def sample_potts(
         Recorded sweeps. A sweep is ``n_nodes`` heat-bath updates, ``n_nodes``
         gradient-informed proposals, one Swendsen-Wang bond-and-recolour pass
         over the whole lattice, or *one* Wolff or Niedermayer cluster step ---
-        see :func:`_wolff_sweep` for why a single-cluster sweep cannot be
+        see :func:`wolff_sweep` for why a single-cluster sweep cannot be
         sized to match the others.
     burn_in : int
         Sweeps run and discarded before recording starts.
@@ -415,7 +425,7 @@ def sample_potts(
         bond probability ``1 - exp(-J)`` is not a probability there, and an
         antiferromagnet has no like-spin clusters to flip.
     """
-    _refuse_negative_coupling(move, graph)
+    refuse_negative_coupling(move, graph)
 
     graph, field = tempered(graph, field, temperature)
     rows = site_field(field, graph.n_nodes)
@@ -427,7 +437,7 @@ def sample_potts(
         rng.integers(0, n_states, size=graph.n_nodes), dtype=np.int64
     )
     offsets, neighbours, couplings = graph.compressed_adjacency()
-    advance = _sweep_for(
+    advance = sweep_for(
         move, graph, rows, offsets, neighbours, couplings, backend, cluster_backend
     )
 
@@ -537,7 +547,7 @@ def anneal_potts(
     -------
     AnnealedPotts
     """
-    _refuse_negative_coupling(move, graph)
+    refuse_negative_coupling(move, graph)
 
     rows = site_field(np.asarray(field, dtype=float), graph.n_nodes)
     state = np.ascontiguousarray(
@@ -577,11 +587,11 @@ def anneal_potts(
             counter = ClusterCounter()
             beta = 1.0 / temperature
             if move is PottsMove.SWENDSEN_WANG:
-                _swendsen_wang_sweep(state, graph, rows, rng, counter, beta)
+                swendsen_wang_sweep(state, graph, rows, rng, counter, beta)
                 visits += per_sweep
             else:
                 if move is PottsMove.NIEDERMAYER:
-                    _niedermayer_sweep(
+                    niedermayer_sweep(
                         state,
                         rows,
                         offsets,
@@ -594,7 +604,7 @@ def anneal_potts(
                         niedermayer_threshold(couplings),
                     )
                 else:
-                    _wolff_sweep(
+                    wolff_sweep(
                         state,
                         rows,
                         offsets,
@@ -675,7 +685,7 @@ class TemperedChains:
     walkers: np.ndarray
 
 
-def _swap_log_ratio(
+def swap_log_ratio(
     beta_low: float, beta_high: float, energy_low: float, energy_high: float
 ) -> float:
     """Log acceptance of exchanging the configurations at two temperatures.
@@ -705,7 +715,7 @@ def parallel_tempering(
 
     Each replica runs one heat-bath sweep per step at its own temperature,
     then every adjacent pair proposes to exchange configurations and accepts
-    on :func:`_swap_log_ratio`. The hot replicas cross barriers the cold one
+    on :func:`swap_log_ratio`. The hot replicas cross barriers the cold one
     cannot, and an exchange carries what they find down the ladder (Swendsen &
     Wang, 1986; Geyer, 1991; Earl & Deem, 2005).
 
@@ -798,7 +808,7 @@ def parallel_tempering(
             sweep(states[replica], children[replica], betas[replica])
         current = energies(graph, rows, states)
         for pair in range(n_replicas - 1):
-            log_ratio = _swap_log_ratio(
+            log_ratio = swap_log_ratio(
                 betas[pair], betas[pair + 1], current[pair], current[pair + 1]
             )
             proposed[pair] += 1
@@ -877,7 +887,7 @@ def adapt_ladder_potts(
     return adapt_ladder(measure, ladder, band, max_rounds, max_replicas)
 
 
-def _sweep_for(
+def sweep_for(
     move: PottsMove,
     graph: PottsGraph,
     rows: np.ndarray,
@@ -924,7 +934,7 @@ def _sweep_for(
         def bond_pass(
             state: np.ndarray, rng: np.random.Generator, beta: float = 1.0
         ) -> int:
-            _swendsen_wang_sweep(
+            swendsen_wang_sweep(
                 state, graph, rows, rng, None, beta, backend=cluster_backend
             )
             return 0
@@ -937,7 +947,7 @@ def _sweep_for(
         def generalized(
             state: np.ndarray, rng: np.random.Generator, beta: float = 1.0
         ) -> int:
-            return _niedermayer_sweep(
+            return niedermayer_sweep(
                 state,
                 rows,
                 offsets,
@@ -953,7 +963,7 @@ def _sweep_for(
     def one_cluster(
         state: np.ndarray, rng: np.random.Generator, beta: float = 1.0
     ) -> int:
-        return _wolff_sweep(state, rows, offsets, neighbours, couplings, rng, beta=beta)
+        return wolff_sweep(state, rows, offsets, neighbours, couplings, rng, beta=beta)
 
     return one_cluster
 
@@ -974,7 +984,7 @@ def sample_potts_pair(
     """Two replicas at one temperature, joined by Houdayer's isoenergetic move.
 
     Each recorded step is one sweep of ``move`` on each replica, then --- where
-    ``houdayer`` --- one :func:`_houdayer_move` on the pair. The two replicas
+    ``houdayer`` --- one :func:`houdayer_move` on the pair. The two replicas
     are the *pair* Houdayer (2001) defines the move on, so this is where the
     move lives rather than in :func:`sample_potts`, which has one chain and
     nothing to exchange with.
@@ -1020,7 +1030,7 @@ def sample_potts_pair(
         Fortuin-Kasteleyn cluster move on a graph with a negative coupling, as
         :func:`sample_potts` refuses it.
     """
-    _refuse_negative_coupling(move, graph)
+    refuse_negative_coupling(move, graph)
 
     graph, field = tempered(graph, field, temperature)
     rows = site_field(field, graph.n_nodes)
@@ -1041,7 +1051,7 @@ def sample_potts_pair(
         for child in children
     ]
     offsets, neighbours, couplings = graph.compressed_adjacency()
-    advance = _sweep_for(move, graph, rows, offsets, neighbours, couplings, backend)
+    advance = sweep_for(move, graph, rows, offsets, neighbours, couplings, backend)
 
     recorded = [np.empty((n_sweeps, graph.n_nodes), dtype=np.int64) for _ in range(2)]
     totals, counts = [0, 0], [0, 0]
@@ -1052,7 +1062,7 @@ def sample_potts_pair(
                 totals[replica] += size
                 counts[replica] += 1
         if houdayer:
-            _houdayer_move(states[0], states[1], offsets, neighbours, rng)
+            houdayer_move(states[0], states[1], offsets, neighbours, rng)
         if step >= 0 and (step + 1) % thin == 0:
             for replica in range(2):
                 recorded[replica][step // thin] = states[replica]
@@ -1257,7 +1267,7 @@ def _site_update(
     state[node] = np.searchsorted(cumulative, draw * cumulative[-1])
 
 
-def _cluster_members(labels: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def cluster_members(labels: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Group a labelling into its clusters: the members, and where each starts.
 
     ``labels[order[bounds[k]:bounds[k + 1]]]`` is the ``k``-th root in
@@ -1477,7 +1487,7 @@ def _apply_flip(
     state[node] = colour
 
 
-def _swendsen_wang_sweep(
+def swendsen_wang_sweep(
     state: np.ndarray,
     graph: PottsGraph,
     rows: np.ndarray,
@@ -1535,15 +1545,15 @@ def _swendsen_wang_sweep(
 
     parent = np.arange(graph.n_nodes)
     for edge in np.flatnonzero(active):
-        _union(parent, int(first[edge]), int(second[edge]))
+        union_roots(parent, int(first[edge]), int(second[edge]))
 
-    labels = np.array([_find(parent, node) for node in range(graph.n_nodes)])
+    labels = np.array([find_root(parent, node) for node in range(graph.n_nodes)])
     # Scaled once rather than per cluster: the multiply is over the whole
     # field and there are as many clusters as sites at the transition, which
     # made it 10.5 ms of the same 41.2 ms pass. Every entry is the value the
     # per-cluster form produced, so no recolouring moves.
     scaled = beta * rows
-    order, bounds = _cluster_members(labels)
+    order, bounds = cluster_members(labels)
     for cluster in range(bounds.size - 1):
         members = order[bounds[cluster] : bounds[cluster + 1]]
         outcome = _recolour(state, members, scaled, rng)
@@ -1570,7 +1580,7 @@ def _cluster_pass_rust(
     rng: np.random.Generator,
     beta: float,
 ) -> None:
-    """:func:`_swendsen_wang_sweep`'s pass, on the extension.
+    """:func:`swendsen_wang_sweep`'s pass, on the extension.
 
     **The same law, in a different order of draws.** The oracle draws a
     cluster's colour and then, only where the field difference is negative,
@@ -1631,7 +1641,7 @@ def _cluster_pass_rust(
         )
         if cluster >= n_clusters:
             return
-        order, bounds = _cluster_members(labels)
+        order, bounds = cluster_members(labels)
         members = order[bounds[cluster] : bounds[cluster + 1]]
         # The draw behind a call rather than as a value, for the reason
         # `_recolour_drawn` gives: it is read only where the field difference
@@ -1647,7 +1657,7 @@ def _cluster_pass_rust(
         cluster += 1
 
 
-def _wolff_sweep(
+def wolff_sweep(
     state: np.ndarray,
     rows: np.ndarray,
     offsets: np.ndarray,
@@ -1717,7 +1727,7 @@ def niedermayer_threshold(couplings: np.ndarray) -> float:
     """Niedermayer's ``E_0`` for a graph, in the energy units of :func:`energies`.
 
     ``max(0, -min J)``: the smallest threshold at which every bond probability
-    of :func:`_niedermayer_sweep` is defined on this graph. On a ferromagnet it
+    of :func:`niedermayer_sweep` is defined on this graph. On a ferromagnet it
     is 0 and the rule *is* Wolff's, bond for bond and to the last bit; on the
     uniform antiferromagnet it is ``|J|``, where bonds form between unlike
     sites --- which is what an antiferromagnet's satisfied bonds are --- and
@@ -1746,7 +1756,7 @@ def niedermayer_threshold(couplings: np.ndarray) -> float:
     return max(0.0, -float(np.min(couplings))) if couplings.size else 0.0
 
 
-def _niedermayer_sweep(
+def niedermayer_sweep(
     state: np.ndarray,
     rows: np.ndarray,
     offsets: np.ndarray,
@@ -1774,7 +1784,7 @@ def _niedermayer_sweep(
     the ``max`` being what keeps it a probability for any ``E_0`` and any sign
     of ``J``. **Wolff is the case ``E_0 = 0`` on a ferromagnet**: the unlike
     bonds get ``p = 0`` and the like ones ``1 - exp(-beta J)``, which is
-    :func:`_wolff_sweep`'s own probability.
+    :func:`wolff_sweep`'s own probability.
 
     ``E_0`` is the one knob, and it runs between two algorithms. At or above
     :func:`niedermayer_threshold` every ``max`` is on its linear branch, the
@@ -1813,7 +1823,7 @@ def _niedermayer_sweep(
     Parameters
     ----------
     state, rows, offsets, neighbours, couplings, rng, counter, graph
-        As :func:`_wolff_sweep`. ``rows`` is the field at one row per site,
+        As :func:`wolff_sweep`. ``rows`` is the field at one row per site,
         untempered; ``beta`` scales it here rather than at the call site,
         because the bond rule and the accept step must carry the same one.
     beta : float
@@ -1931,7 +1941,7 @@ def houdayer_cluster(
     one array answers both questions a caller has --- which sites are in the
     defect region, and which component each of them is in.
 
-    Uses :func:`_find` and :func:`_union`, so the components are not a second
+    Uses :func:`find_root` and :func:`union_roots`, so the components are not a second
     reading of what a component is, and walks the compressed rows rather than
     the graph's edge tuples (root `CLAUDE.md`'s layout rule).
 
@@ -1947,7 +1957,7 @@ def houdayer_cluster(
     Returns
     -------
     np.ndarray
-        ``(n_nodes,)`` of component roots, as :func:`_find` reports them.
+        ``(n_nodes,)`` of component roots, as :func:`find_root` reports them.
     """
     n_nodes = int(offsets.shape[0]) - 1
     parent = np.arange(n_nodes)
@@ -1959,11 +1969,11 @@ def houdayer_cluster(
         for position in range(bounds[node], bounds[node + 1]):
             neighbour = incident[position]
             if neighbour > node and defect[neighbour]:
-                _union(parent, node, neighbour)
-    return np.array([_find(parent, node) for node in range(n_nodes)])
+                union_roots(parent, node, neighbour)
+    return np.array([find_root(parent, node) for node in range(n_nodes)])
 
 
-def _houdayer_move(
+def houdayer_move(
     first: np.ndarray,
     second: np.ndarray,
     offsets: np.ndarray,
@@ -2085,7 +2095,7 @@ def _recolour_drawn(
     return Recolour(proposed=True, accepted=False)
 
 
-def _find(parent: np.ndarray, node: int) -> int:
+def find_root(parent: np.ndarray, node: int) -> int:
     """Union-find root, with path compression."""
     root = node
     while parent[root] != root:
@@ -2095,8 +2105,8 @@ def _find(parent: np.ndarray, node: int) -> int:
     return root
 
 
-def _union(parent: np.ndarray, first: int, second: int) -> None:
+def union_roots(parent: np.ndarray, first: int, second: int) -> None:
     """Merge two components."""
-    first_root, second_root = _find(parent, first), _find(parent, second)
+    first_root, second_root = find_root(parent, first), find_root(parent, second)
     if first_root != second_root:
         parent[second_root] = first_root

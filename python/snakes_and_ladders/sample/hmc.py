@@ -443,10 +443,10 @@ class Integrator:
         velocity = momentum.detach().clone()
         kicks, drifts = _coefficients(self.weights, n_steps)
 
-        velocity = velocity - kicks[0] * step_size * _gradient(objective, position)
+        velocity = velocity - kicks[0] * step_size * gradient_at(objective, position)
         for drift, kick in zip(drifts, kicks[1:], strict=True):
             position = position + drift * step_size * velocity
-            velocity = velocity - kick * step_size * _gradient(objective, position)
+            velocity = velocity - kick * step_size * gradient_at(objective, position)
         return position, velocity
 
 
@@ -556,7 +556,7 @@ def sample(
         every diagnostic.
     """
     _check_trajectory(step_size, n_steps)
-    draws, acceptance_rate, errors, evaluations, adapted = _run_chain(
+    draws, acceptance_rate, errors, evaluations, adapted = run_chain(
         _HamiltonianKernel(n_steps=n_steps, integrator=integrator),
         integrator.force_evaluations(n_steps),
         objective,
@@ -577,7 +577,7 @@ def sample(
     )
 
 
-def _run_chain(
+def run_chain(
     kernel: Kernel,
     per_proposal: int,
     objective: Objective,
@@ -1088,7 +1088,7 @@ def _transition(
     return position, error, 0, probability
 
 
-def _gradient(objective: Objective, theta: torch.Tensor) -> torch.Tensor:
+def gradient_at(objective: Objective, theta: torch.Tensor) -> torch.Tensor:
     """``dU/dtheta``, by autograd through the objective."""
     point = theta.detach().clone().requires_grad_(True)
     value = objective(point)

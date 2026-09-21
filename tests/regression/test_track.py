@@ -694,7 +694,7 @@ def test_the_slice_and_langevin_chains_record_the_unit_each_is_counted_in() -> N
     with track() as tracked:
         chain = _mala()
     run = _memory(tracked.run)
-    # `mala` runs `hmc._run_chain`, so the hook is the chain's and the unit is
+    # `mala` runs `hmc.run_chain`, so the hook is the chain's and the unit is
     # gradients, one per proposal.
     assert run.last("acceptance_so_far") == chain.acceptance_rate
     assert run.last("force_evaluations") == float(chain.force_evaluations)

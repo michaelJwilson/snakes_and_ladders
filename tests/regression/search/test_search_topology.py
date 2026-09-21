@@ -257,9 +257,7 @@ def _spr_by_definition(start: Topology) -> list[frozenset[frozenset[str]]]:
             remainder, pruned, _ = topology_module._prune(adjacency, u, v)
             for x, y in topology_module._edges(remainder):
                 grafted, new_id = topology_module._regraft(remainder, pruned, v, x, y)
-                key = leaf_bipartitions(
-                    topology_module._from_adjacency(grafted, new_id)
-                )
+                key = leaf_bipartitions(topology_module.from_adjacency(grafted, new_id))
                 if key in seen:
                     continue
                 seen.add(key)

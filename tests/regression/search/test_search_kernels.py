@@ -31,7 +31,7 @@ import pytest
 from numpy.testing import assert_allclose
 from snakes_and_ladders.likelihood.potts import enumerate_potts, log_weights
 from snakes_and_ladders.numerics import logsumexp
-from snakes_and_ladders.sample.gibbs import _GUARD, _Indexed
+from snakes_and_ladders.sample.gibbs import _GUARD, Indexed
 from snakes_and_ladders.sample.kernels import (
     factor_graph_log_density,
     gibbs_sweep_sites,
@@ -63,10 +63,10 @@ SWEEPS = 10_000
 THIN = 5
 
 
-def _lattice() -> tuple[PottsGraph, _Indexed]:
+def _lattice() -> tuple[PottsGraph, Indexed]:
     """The 2x2 instance and its edge layout."""
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
-    return graph, _Indexed(from_potts(graph, FIELD))
+    return graph, Indexed(from_potts(graph, FIELD))
 
 
 def _configurations(n_nodes: int, n_states: int) -> np.ndarray:
@@ -259,7 +259,7 @@ def test_the_descent_kernel_reproduces_a_sweep_stepped_by_hand() -> None:
 
 
 def _sweep(
-    indexed: _Indexed,
+    indexed: Indexed,
     state: np.ndarray,
     draws: np.ndarray,
     *,

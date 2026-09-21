@@ -3,7 +3,7 @@
 Three estimators on one ladder of inverse temperatures, from ``beta = 0`` ---
 where ``log Z_0 = n log q`` is exact, the uniform law over ``q ** n``
 configurations --- to the target. Each steps the shipped kernel
-:func:`~snakes_and_ladders.sample.potts_mcmc._sweep_for` once per rung, so
+:func:`~snakes_and_ladders.sample.potts_mcmc.sweep_for` once per rung, so
 every move set :class:`~snakes_and_ladders.sample.potts_mcmc.PottsMove`
 declares is admissible here and no second physics enters. What is new is the
 bookkeeping around the sweep, never the sweep.
@@ -50,9 +50,9 @@ from snakes_and_ladders.numerics import logsumexp
 from snakes_and_ladders.sample.accept import accept
 from snakes_and_ladders.sample.potts_mcmc import (
     PottsMove,
-    _refuse_negative_coupling,
-    _sweep_for,
     energies,
+    refuse_negative_coupling,
+    sweep_for,
 )
 from snakes_and_ladders.sample.schedule import (
     ExponentialTempSchedule,
@@ -216,7 +216,7 @@ def _population(
     :func:`~snakes_and_ladders.sim.potts.energies` scores the population in
     one call and each row is still a buffer the kernel can borrow.
     """
-    _refuse_negative_coupling(move, graph)
+    refuse_negative_coupling(move, graph)
     if n_replicas < 2:
         msg = (
             f"a standard error needs at least two replicas, got {n_replicas}: "
@@ -233,7 +233,7 @@ def _population(
         dtype=np.int64,
     )
     offsets, neighbours, couplings = graph.compressed_adjacency()
-    advance = _sweep_for(move, graph, rows, offsets, neighbours, couplings, backend)
+    advance = sweep_for(move, graph, rows, offsets, neighbours, couplings, backend)
     return states, children, advance, rows
 
 
@@ -621,8 +621,8 @@ def simulated_tempering(
         rng.integers(0, n_states, size=graph.n_nodes), dtype=np.int64
     )
     offsets, neighbours, couplings = graph.compressed_adjacency()
-    _refuse_negative_coupling(move, graph)
-    advance = _sweep_for(move, graph, rows, offsets, neighbours, couplings, backend)
+    refuse_negative_coupling(move, graph)
+    advance = sweep_for(move, graph, rows, offsets, neighbours, couplings, backend)
 
     rung = 0
     accepted = 0

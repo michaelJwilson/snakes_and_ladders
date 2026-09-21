@@ -482,7 +482,7 @@ def test_a_cluster_move_on_a_negative_coupling_is_refused_by_every_estimator() -
 
     Wolff's bond probability is not a probability below zero, and an
     estimator that ran it there would return a number rather than fail ---
-    which is the reason `potts_mcmc._refuse_negative_coupling` is one
+    which is the reason `potts_mcmc.refuse_negative_coupling` is one
     function and every entry point calls it.
     """
     graph, _, field = _enumerable()["frustrated-triangular"]
