@@ -35,7 +35,14 @@ COMPARISON_FIXTURE = FIXTURES_DIR / "tree_search/ci.yaml"
 # only has to produce a file and a caption is cheap for both. Written per test
 # rather than added as a fixture file: nothing is asserted against its truth,
 # and the repository's fixtures are for data that is.
+#
+# It declares its model and its oracle and is written at a problem's tier,
+# because a QA script reads its parameters through the registry (issue #863):
+# the file says which truth it declares and the registry says which loader
+# reads it, so a file shaped like anything else is a file no script can name.
 _SMALL_PARAMS = """
+model: jukes-cantor
+oracle: enumeration
 seed: 20260906
 n_sites: 400
 tolerance: 0.01
@@ -64,7 +71,8 @@ tau:
 
 
 def _small_fixture(tmp_path: Path) -> Path:
-    path = tmp_path / "params.yaml"
+    path = tmp_path / "tree_search" / "ci.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(_SMALL_PARAMS)
     return path
 

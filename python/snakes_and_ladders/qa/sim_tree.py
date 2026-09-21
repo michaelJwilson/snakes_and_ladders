@@ -17,7 +17,7 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
 from snakes_and_ladders.qa.figure import QAFigure, state_label
-from snakes_and_ladders.qa.runner import SIMULATION_PARAMS, figure_main
+from snakes_and_ladders.qa.runner import FIXTURE_PARAMS, figure_main
 from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import Node, edges, preorder
@@ -236,7 +236,7 @@ def main(argv: list[str] | None = None) -> QAFigure:
     return figure_main(
         stem="sim_tree",
         description=__doc__,
-        params=[SIMULATION_PARAMS],
+        params=[FIXTURE_PARAMS],
         build=build_figure,
         argv=argv,
     )

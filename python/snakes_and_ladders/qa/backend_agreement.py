@@ -24,7 +24,7 @@ from matplotlib.figure import Figure
 from snakes_and_ladders.likelihood import pruning, pruning_rust, pruning_torch
 from snakes_and_ladders.likelihood.brute_force import brute_force_log_likelihood
 from snakes_and_ladders.qa.figure import QAFigure
-from snakes_and_ladders.qa.runner import SIMULATION_PARAMS, figure_main
+from snakes_and_ladders.qa.runner import FIXTURE_PARAMS, figure_main
 from snakes_and_ladders.qa.style import (
     INK_MUTED,
     ONE_COLUMN,
@@ -167,7 +167,7 @@ def main(argv: list[str] | None = None) -> QAFigure:
     return figure_main(
         stem="backend_agreement",
         description=__doc__,
-        params=[SIMULATION_PARAMS],
+        params=[FIXTURE_PARAMS],
         build=lambda params: build_figure(agreement(params), params),
         argv=argv,
     )

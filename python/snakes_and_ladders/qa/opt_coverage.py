@@ -28,7 +28,7 @@ from snakes_and_ladders.opt.fit import constrained_standard_errors, covers, fit
 from snakes_and_ladders.opt.hmm import HmmObjective, align_states
 from snakes_and_ladders.opt.potts import PottsObjective
 from snakes_and_ladders.qa.figure import QAFigure
-from snakes_and_ladders.qa.runner import HMM_PARAMS, POTTS_PARAMS, figure_main
+from snakes_and_ladders.qa.runner import figure_main, fixture_params
 from snakes_and_ladders.qa.style import (
     INK_MUTED,
     ONE_COLUMN,
@@ -321,7 +321,7 @@ def main(argv: list[str] | None = None) -> QAFigure:
     return figure_main(
         stem="opt_coverage",
         description=__doc__,
-        params=[POTTS_PARAMS, HMM_PARAMS],
+        params=[fixture_params("potts-params"), fixture_params("hmm-params")],
         build=_sweep_and_build,
         argv=argv,
     )

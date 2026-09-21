@@ -29,7 +29,7 @@ from matplotlib.figure import Figure
 
 from snakes_and_ladders.likelihood.parsimony import fitch_score
 from snakes_and_ladders.qa.figure import QAFigure, latex_integer
-from snakes_and_ladders.qa.runner import SIMULATION_PARAMS, figure_main
+from snakes_and_ladders.qa.runner import FIXTURE_PARAMS, figure_main
 from snakes_and_ladders.qa.style import (
     INK_MUTED,
     ONE_COLUMN_WIDE,
@@ -301,7 +301,7 @@ def main(argv: list[str] | None = None) -> QAFigure:
     return figure_main(
         stem="parsimony_zones",
         description=__doc__,
-        params=[SIMULATION_PARAMS],
+        params=[FIXTURE_PARAMS],
         build=lambda params: build_figure(
             zone_gaps(np.random.default_rng(params.seed)), ranking(params), params
         ),

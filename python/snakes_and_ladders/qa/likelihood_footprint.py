@@ -36,7 +36,7 @@ import numpy as np
 from snakes_and_ladders.learn.tree import with_uniform_branch_lengths
 from snakes_and_ladders.likelihood import pruning
 from snakes_and_ladders.qa.figure import QATable, latex_integer
-from snakes_and_ladders.qa.runner import SIMULATION_PARAMS, table_main
+from snakes_and_ladders.qa.runner import FIXTURE_PARAMS, table_main
 from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.topology import Topology
@@ -268,7 +268,7 @@ def main(argv: list[str] | None = None) -> QATable:
     return table_main(
         stem="likelihood_footprint",
         description=__doc__,
-        params=(SIMULATION_PARAMS,),
+        params=(FIXTURE_PARAMS,),
         build=build_table,
         argv=argv,
     )

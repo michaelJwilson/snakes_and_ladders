@@ -10,9 +10,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.qa.figure import QATable, latex_escape, latex_integer
-from snakes_and_ladders.qa.runner import ParamsArgument, table_main
+from snakes_and_ladders.qa.runner import ParamsArgument, registry_params, table_main
 from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.tree import preorder
 
@@ -93,17 +92,21 @@ def build_caption(fixture_names: list[str]) -> str:
 
 
 def _load_named(path: Path) -> tuple[str, SimulationParams]:
-    """Load one fixture, keeping the filename the caption reports.
+    """Load one fixture through the registry, keeping the name the caption reports.
 
-    The caption names every fixture it tabulates, so the name is part of
-    what this table reports and cannot be recovered from the loaded params.
+    The caption names every fixture it tabulates, so the name is part of what
+    this table reports and cannot be recovered from the loaded params. The
+    loading is `runner.registry_params`, which reads the model the file
+    declares rather than the one this table expects (issue #863); the
+    annotation is what this table then reads off it.
 
     Returns
     -------
     tuple[str, SimulationParams]
         The fixture's problem and tier, and its loaded contents.
     """
-    return f"{path.parent.name}/{path.name}", load_params(path, SimulationParams)
+    params: SimulationParams = registry_params(path)
+    return f"{path.parent.name}/{path.name}", params
 
 
 # Repeated, because the table is one row per fixture and the row order is the

@@ -34,7 +34,7 @@ from snakes_and_ladders.likelihood.turbo import (
     uncoded_bit_error_rate,
 )
 from snakes_and_ladders.qa.figure import QAFigure, latex_integer
-from snakes_and_ladders.qa.runner import TURBO_PARAMS, figure_main
+from snakes_and_ladders.qa.runner import FIXTURE_PARAMS, figure_main
 from snakes_and_ladders.qa.style import INK, INK_MUTED, ONE_COLUMN_WIDE, letter_style
 from snakes_and_ladders.sim.convolutional import TurboParams
 
@@ -227,7 +227,7 @@ def main(argv: list[str] | None = None) -> QAFigure:
     return figure_main(
         stem="turbo_waterfall",
         description=__doc__,
-        params=(TURBO_PARAMS,),
+        params=(FIXTURE_PARAMS,),
         build=build_figure,
         argv=argv,
     )

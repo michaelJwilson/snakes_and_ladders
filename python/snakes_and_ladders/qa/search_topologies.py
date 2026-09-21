@@ -19,7 +19,7 @@ from matplotlib.figure import Figure
 from snakes_and_ladders.likelihood.objective import BranchLengthObjective
 from snakes_and_ladders.opt.fit import fit
 from snakes_and_ladders.qa.figure import QAFigure, latex_integer
-from snakes_and_ladders.qa.runner import SIMULATION_PARAMS, figure_main
+from snakes_and_ladders.qa.runner import FIXTURE_PARAMS, figure_main
 from snakes_and_ladders.qa.sim_tree import render_sim_tree
 from snakes_and_ladders.qa.style import ONE_COLUMN_WIDE, letter_style
 from snakes_and_ladders.search.infer import infer
@@ -186,7 +186,7 @@ def main(argv: list[str] | None = None) -> QAFigure:
     return figure_main(
         stem="search_topologies",
         description=__doc__,
-        params=[SIMULATION_PARAMS],
+        params=[FIXTURE_PARAMS],
         build=lambda params: build_figure(*found_and_runner_up(params), params),
         argv=argv,
     )

@@ -26,7 +26,7 @@ import torch
 from matplotlib.figure import Figure
 
 from snakes_and_ladders.qa.figure import QAFigure
-from snakes_and_ladders.qa.runner import SIMULATION_PARAMS, figure_main
+from snakes_and_ladders.qa.runner import FIXTURE_PARAMS, figure_main
 from snakes_and_ladders.qa.style import INK_MUTED, ONE_COLUMN_WIDE, letter_style
 from snakes_and_ladders.sandbox.tropical import (
     corner,
@@ -267,7 +267,7 @@ def main(argv: list[str] | None = None) -> QAFigure:
     return figure_main(
         stem="tropical_relaxation",
         description=__doc__,
-        params=[SIMULATION_PARAMS],
+        params=[FIXTURE_PARAMS],
         build=build,
         argv=argv,
     )

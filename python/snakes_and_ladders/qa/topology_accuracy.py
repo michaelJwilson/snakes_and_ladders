@@ -31,7 +31,7 @@ import numpy as np
 from matplotlib.figure import Figure
 
 from snakes_and_ladders.qa.figure import QAFigure, latex_integer
-from snakes_and_ladders.qa.runner import SIMULATION_PARAMS, figure_main
+from snakes_and_ladders.qa.runner import FIXTURE_PARAMS, figure_main
 from snakes_and_ladders.qa.style import (
     INK_MUTED,
     ONE_COLUMN,
@@ -180,7 +180,7 @@ def main(argv: list[str] | None = None) -> QAFigure:
     return figure_main(
         stem="topology_accuracy",
         description=__doc__,
-        params=[SIMULATION_PARAMS],
+        params=[FIXTURE_PARAMS],
         build=lambda params: build_figure(accuracy(params), params),
         argv=argv,
     )
