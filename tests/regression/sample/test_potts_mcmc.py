@@ -1463,7 +1463,7 @@ def test_a_ladder_of_one_or_a_cold_temperature_is_refused() -> None:
 
     with pytest.raises(ValueError, match="at least two temperatures"):
         parallel_tempering(graph, NO_FIELD, (1.0,), np.random.default_rng(SEED), 10)
-    with pytest.raises(ValueError, match="must be positive"):
+    with pytest.raises(ValueError, match="positive temperature"):
         parallel_tempering(graph, NO_FIELD, (1.0, 0.0), np.random.default_rng(SEED), 10)
 
 
