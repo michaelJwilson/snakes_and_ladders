@@ -563,7 +563,7 @@ class MessageSchedule(ABC):
         """
 
     def log_partition(
-        self, layout: Layout, to_variable: np.ndarray, bethe: float, scale: float
+        self, layout: Layout, to_variable: np.ndarray, bethe: float, scale: float | None
     ) -> float:
         """``log Z``, from whichever of the two routes this schedule has.
 
@@ -571,6 +571,11 @@ class MessageSchedule(ABC):
         beliefs, which is exact on a tree and the approximation elsewhere. A
         schedule that does not leave every belief correct cannot use it, and
         says here what it can use instead.
+
+        ``scale`` is ``None`` where the route that produced the messages
+        accumulated none, which today is the compiled tree pass. A schedule
+        that reads it answers ``False`` to :attr:`compiled` and so is never
+        handed one (issue #865).
         """
         del layout, to_variable, scale
         return bethe
@@ -634,7 +639,7 @@ class UpwardMessageSchedule(MessageSchedule):
         yield from layout.tree_passes()[0]
 
     def log_partition(
-        self, layout: Layout, to_variable: np.ndarray, bethe: float, scale: float
+        self, layout: Layout, to_variable: np.ndarray, bethe: float, scale: float | None
     ) -> float:
         """``scale`` plus the root's own normalizer: exactly what pruning returns.
 
@@ -645,8 +650,21 @@ class UpwardMessageSchedule(MessageSchedule):
         ``Z``. This is Felsenstein's algorithm with the usual scaling, so it
         agrees with :func:`snakes_and_ladders.likelihood.pruning.log_likelihood`
         and with the two-pass schedule, and the tests assert both.
+
+        Raises
+        ------
+        ValueError
+            If ``scale`` is ``None``. The scale is this schedule's whole
+            route to ``log Z``, so a run that accumulated none leaves it
+            nothing to return (issue #865).
         """
         del bethe
+        if scale is None:
+            msg = (
+                f"the {self.name} schedule reads the scale, "
+                "which the compiled route does not accumulate"
+            )
+            raise ValueError(msg)
         c = layout.cardinality[layout.root]
         total = np.zeros(c)
         for edge in layout.variable_edges[layout.root]:
@@ -684,7 +702,7 @@ class DownwardMessageSchedule(MessageSchedule):
         yield from layout.tree_passes()[1]
 
     def log_partition(
-        self, layout: Layout, to_variable: np.ndarray, bethe: float, scale: float
+        self, layout: Layout, to_variable: np.ndarray, bethe: float, scale: float | None
     ) -> float:
         """Not available, and reported as ``nan`` rather than guessed.
 

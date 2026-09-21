@@ -42,7 +42,8 @@ the features they read are assembled in :mod:`snakes_and_ladders.likelihood.feat
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import dataclass
 
 import numpy as np
 import torch
@@ -457,9 +458,29 @@ def saturated_log_partition(graph: PottsGraph, field: torch.Tensor) -> torch.Ten
     return graph.n_nodes * torch.log(n_states) - decoupled_ground_energy(graph, field)
 
 
+@dataclass(frozen=True)
+class EnergyBounds:
+    """A bracket on the ground-state energy.
+
+    Parameters
+    ----------
+    lower : float
+        ``-U / beta``, from the upper bound ``U`` on ``log Z(beta)``.
+    upper : float
+        ``(N log q - L) / beta``, from the lower bound ``L``.
+    """
+
+    lower: float
+    upper: float
+
+    def __iter__(self) -> Iterator[float]:
+        """``(lower, upper)``: the order callers unpack."""
+        yield from (self.lower, self.upper)
+
+
 def ground_state_energy_bounds(
     graph: PottsGraph, field: np.ndarray, beta: float
-) -> tuple[float, float]:
+) -> EnergyBounds:
     """``[-U/beta, (N log q - L)/beta]`` brackets the ground-state energy, from ``L <= log Z(beta) <= U``.
 
     ``Z(beta) >= exp(-beta E_min)`` gives the lower end and
@@ -482,10 +503,13 @@ def ground_state_energy_bounds(
         spanning_tree_log_partition(graph, scaled_field, couplings=scaled_couplings)
     )
     q = int(scaled_field.shape[1])
-    return -upper_log_z / beta, (graph.n_nodes * np.log(q) - lower_log_z) / beta
+    return EnergyBounds(
+        -upper_log_z / beta, (graph.n_nodes * np.log(q) - lower_log_z) / beta
+    )
 
 
 __all__ = [
+    "EnergyBounds",
     "ParsimonyUpperBound",
     "PlugInLikelihood",
     "decoupled_ground_energy",

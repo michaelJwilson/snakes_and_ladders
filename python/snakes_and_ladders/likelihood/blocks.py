@@ -44,7 +44,7 @@ the right tool is :mod:`snakes_and_ladders.likelihood.patterns`.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 
 import numpy as np
@@ -149,6 +149,27 @@ class Interval:
         return float(self.lower) <= value + slack and float(self.upper) >= value - slack
 
 
+@dataclass(frozen=True)
+class Extremes:
+    """The two ends :func:`site_log_likelihood_extremes` returns.
+
+    Parameters
+    ----------
+    lower : torch.Tensor
+        0-dimensional; at most every column's ``log Pr(x)``. ``-inf`` where
+        a branch of length zero makes some column impossible.
+    upper : torch.Tensor
+        0-dimensional; at least every column's.
+    """
+
+    lower: torch.Tensor
+    upper: torch.Tensor
+
+    def __iter__(self) -> Iterator[torch.Tensor]:
+        """``(lower, upper)``: the order callers unpack."""
+        yield from (self.lower, self.upper)
+
+
 def site_log_likelihood_extremes(
     tau: Node,
     k: int,
@@ -156,7 +177,7 @@ def site_log_likelihood_extremes(
     branch_lengths: torch.Tensor,
     *,
     rate_matrix: torch.Tensor | None = None,
-) -> tuple[torch.Tensor, torch.Tensor]:
+) -> Extremes:
     """Bounds on ``log Pr(x)`` holding for every column ``x``, in one pass over the tree.
 
     The pruning recursion in the log domain with the leaf messages replaced
@@ -182,9 +203,9 @@ def site_log_likelihood_extremes(
 
     Returns
     -------
-    tuple[torch.Tensor, torch.Tensor]
-        ``(lower, upper)``, both 0-dimensional. ``lower`` is ``-inf`` where
-        a branch of length zero makes some column impossible, which is
+    Extremes
+        The two ends, both 0-dimensional. ``lower`` is ``-inf`` where a
+        branch of length zero makes some column impossible, which is
         correct rather than a failure: such a column has log-likelihood
         ``-inf``.
 
@@ -228,7 +249,7 @@ def site_log_likelihood_extremes(
 
     root_lower, root_upper = _partial(tau)
     log_pi = torch.log(pi_t)
-    return (
+    return Extremes(
         torch.logsumexp(log_pi + root_lower, dim=0),
         torch.logsumexp(log_pi + root_upper, dim=0),
     )
@@ -371,12 +392,12 @@ def block_frequency_interval(
         evaluated_columns = 0
 
     bounded_sites = n_sites - exact_sites
-    lower, upper = site_log_likelihood_extremes(
+    extremes = site_log_likelihood_extremes(
         tau, k, pi, branch_lengths, rate_matrix=rate_matrix
     )
     return Interval(
-        lower=exact + bounded_sites * lower,
-        upper=exact + bounded_sites * upper,
+        lower=exact + bounded_sites * extremes.lower,
+        upper=exact + bounded_sites * extremes.upper,
         exact=exact,
         exact_sites=exact_sites,
         bounded_sites=bounded_sites,
@@ -492,6 +513,7 @@ class BlockFrequencyBound(Surrogate):
 
 __all__ = [
     "BlockFrequencyBound",
+    "Extremes",
     "Interval",
     "block_frequency_interval",
     "site_log_likelihood_extremes",
