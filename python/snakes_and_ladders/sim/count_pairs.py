@@ -31,10 +31,10 @@ parameter.
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, ClassVar, Self, TypeVar
+from typing import Any, ClassVar, Generic, Self, TypeVar
 
 import numpy as np
 import torch
@@ -69,9 +69,34 @@ SUCCESSES = 1
 CovariateT = TypeVar("CovariateT", np.ndarray, torch.Tensor)
 
 
+@dataclass(frozen=True)
+class ChannelCovariates(Generic[CovariateT]):
+    """One covariate per channel, in the type the caller handed in.
+
+    Generic over the two forms a covariate is held in --- the model's NumPy
+    array and the tensor a family scores against --- so a caller keeps the
+    type it passed rather than reading it back as :class:`object`.
+
+    Parameters
+    ----------
+    exposure : np.ndarray | torch.Tensor | None
+        Channel ``TOTAL``'s: the exposure the count is scored against.
+    trials : np.ndarray | torch.Tensor | None
+        Channel ``SUCCESSES``'s: the trial count the successes are out of.
+        ``None`` for both when the caller passed none.
+    """
+
+    exposure: CovariateT | None
+    trials: CovariateT | None
+
+    def __iter__(self) -> Iterator[CovariateT | None]:
+        """``(exposure, trials)``: the order callers unpack."""
+        yield from (self.exposure, self.trials)
+
+
 def split_covariate(
     family: object, covariate: CovariateT | None
-) -> tuple[CovariateT | None, CovariateT | None]:
+) -> ChannelCovariates[CovariateT]:
     """One covariate per channel, from the axis the observation already has.
 
     #631 refused a covariate on a pair family because "the two channels would
@@ -118,9 +143,10 @@ def split_covariate(
 
     Returns
     -------
-    tuple
-        The total's and the successes', in ``covariate``'s own type, or
-        ``(None, None)`` for ``None``.
+    ChannelCovariates
+        The total's and the successes', in ``covariate``'s own type, or both
+        ``None`` for ``None``. It iterates in that order, so a caller
+        unpacking it is unchanged.
 
     Raises
     ------
@@ -129,7 +155,7 @@ def split_covariate(
         one leading axis.
     """
     if covariate is None:
-        return None, None
+        return ChannelCovariates(None, None)
     if covariate.ndim < 2 or covariate.shape[-1] != 2:
         name = family.__name__ if isinstance(family, type) else type(family).__name__
         msg = (
@@ -140,7 +166,9 @@ def split_covariate(
             "channel -- the tensor that cannot be both (#631, #658, #856)."
         )
         raise CovariateNotSupportedError(msg)
-    return covariate[..., TOTAL, None], covariate[..., SUCCESSES, None]
+    return ChannelCovariates(
+        covariate[..., TOTAL, None], covariate[..., SUCCESSES, None]
+    )
 
 
 class IndependentCountPair(EmissionFamily):
@@ -223,11 +251,11 @@ class IndependentCountPair(EmissionFamily):
         trial count, so a planted instance can be drawn under a varying one
         (issue #658).
         """
-        exposure, trials = split_covariate(self, covariate)
+        channels = split_covariate(self, covariate)
         return np.stack(
             [
-                self._total.sample(states, rng, covariate=exposure),
-                self._successes.sample(states, rng, covariate=trials),
+                self._total.sample(states, rng, covariate=channels.exposure),
+                self._successes.sample(states, rng, covariate=channels.trials),
             ],
             axis=-1,
         )
@@ -241,10 +269,12 @@ class IndependentCountPair(EmissionFamily):
         (:func:`split_covariate`), so each channel is scored against its own
         (issue #658).
         """
-        exposure, trials = split_covariate(self, covariate)
+        channels = split_covariate(self, covariate)
         return self._total.log_density(
-            observations[..., TOTAL], covariate=exposure
-        ) + self._successes.log_density(observations[..., SUCCESSES], covariate=trials)
+            observations[..., TOTAL], covariate=channels.exposure
+        ) + self._successes.log_density(
+            observations[..., SUCCESSES], covariate=channels.trials
+        )
 
     def bregman_divergence(self, observations: torch.Tensor) -> torch.Tensor:
         """The pair's divergence under every state: the two channels' sum.
@@ -289,12 +319,12 @@ class IndependentCountPair(EmissionFamily):
         exposure and re-estimates without it is fitting two different models
         (issue #658).
         """
-        exposure, trials = split_covariate(self, covariate)
+        channels = split_covariate(self, covariate)
         first = self._total.reestimate(
-            observations[..., TOTAL], posterior, covariate=exposure
+            observations[..., TOTAL], posterior, covariate=channels.exposure
         )
         second = self._successes.reestimate(
-            observations[..., SUCCESSES], posterior, covariate=trials
+            observations[..., SUCCESSES], posterior, covariate=channels.trials
         )
         return Reestimate(
             emissions=IndependentCountPair(first.emissions, second.emissions),

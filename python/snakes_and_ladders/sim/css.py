@@ -32,7 +32,7 @@ Correlated ``X`` and ``Z`` errors and non-CSS codes are named in
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar, Self
@@ -260,9 +260,29 @@ def _quotient_representatives(
     return np.asarray(np.vstack(kept), dtype=np.uint8)
 
 
+@dataclass(frozen=True)
+class XError:
+    """One draw of the CSS sector's error, and the ratios it gives a decoder.
+
+    Parameters
+    ----------
+    error : np.ndarray
+        ``(n,)`` ``uint8``, one where the qubit carries ``X``.
+    llr : np.ndarray
+        ``(n,)``, the ratios of ``eq:ldpc-llr`` the decoder is given.
+    """
+
+    error: np.ndarray
+    llr: np.ndarray
+
+    def __iter__(self) -> Iterator[np.ndarray]:
+        """``(error, llr)``: the order callers unpack."""
+        yield from (self.error, self.llr)
+
+
 def sample_x_error(
     code: CssCode, channel: BinarySymmetricChannel, rng: np.random.Generator
-) -> tuple[np.ndarray, np.ndarray]:
+) -> XError:
     """An ``X`` error on every qubit independently, and the ratios it gives.
 
     The CSS sector's error model is one independent bit flip per qubit, which
@@ -283,13 +303,11 @@ def sample_x_error(
 
     Returns
     -------
-    error : np.ndarray
-        ``(n,)`` ``uint8``, one where the qubit carries ``X``.
-    llr : np.ndarray
-        ``(n,)``, the ratios of ``eq:ldpc-llr`` a decoder is given.
+    XError
+        The error and the ratios, in that order under an unpacking.
     """
     llr = channel.log_likelihood_ratios(np.zeros(code.n_qubits, dtype=np.uint8), rng)
-    return (llr < 0.0).astype(np.uint8), llr
+    return XError((llr < 0.0).astype(np.uint8), llr)
 
 
 _CSS_FIELDS = frozenset(

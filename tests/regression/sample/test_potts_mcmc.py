@@ -731,7 +731,7 @@ def test_the_threshold_is_where_the_antiferromagnets_bonds_become_a_probability(
     ferromagnet = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
 
     assert niedermayer_threshold(couplings) == 1.0
-    assert niedermayer_threshold(ferromagnet.compressed_adjacency()[2]) == 0.0
+    assert niedermayer_threshold(ferromagnet.compressed_adjacency().couplings) == 0.0
     # The like bond at the threshold: margin zero, so no bond and no draw.
     assert max(0.0, 1.0 + float(couplings.min())) == 0.0
     # The unlike bond at the threshold: the antiferromagnet's own 1 - exp(-b|J|).

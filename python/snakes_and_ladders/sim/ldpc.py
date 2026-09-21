@@ -37,7 +37,7 @@ non-trivial codewords too.
 from __future__ import annotations
 
 from abc import abstractmethod
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar, Protocol, Self
@@ -445,7 +445,37 @@ def all_zero_transmission(
 # --- encoding: GF(2) elimination at small sizes --------------------------------
 
 
-def _reduced_row_echelon(matrix: np.ndarray) -> tuple[np.ndarray, list[int]]:
+@dataclass(frozen=True)
+class _RowEchelon:
+    """A Gauss--Jordan reduction over GF(2), the pivot columns beside it.
+
+    Private, and named rather than left a pair (issue #865) because its three
+    callers read the two halves apart: :func:`gf2_rank` counts the pivots,
+    :func:`gf2_inverse` checks them against ``range(size)`` and reads the
+    reduced matrix's right half, and :func:`null_space` indexes the reduced
+    matrix by them.
+
+    Parameters
+    ----------
+    reduced : np.ndarray
+        The input in reduced row echelon form over GF(2), ``uint8``.
+    pivots : list[int]
+        The pivot columns, ascending; their count is the rank.
+    """
+
+    reduced: np.ndarray
+    pivots: list[int]
+
+    def __iter__(self) -> Iterator[Any]:
+        """``(reduced, pivots)``: the order callers unpack.
+
+        ``Any`` and not a union: an unpacking gives both names the element
+        type, so a union would mistype each of them.
+        """
+        yield from (self.reduced, self.pivots)
+
+
+def _reduced_row_echelon(matrix: np.ndarray) -> _RowEchelon:
     """Gauss--Jordan over GF(2): the reduced matrix and its pivot columns."""
     reduced = np.array(matrix, dtype=np.uint8)
     pivots: list[int] = []
@@ -464,7 +494,7 @@ def _reduced_row_echelon(matrix: np.ndarray) -> tuple[np.ndarray, list[int]]:
         reduced[others] ^= reduced[row]
         pivots.append(column)
         row += 1
-    return reduced, pivots
+    return _RowEchelon(reduced, pivots)
 
 
 def gf2_rank(matrix: np.ndarray) -> int:
@@ -480,7 +510,7 @@ def gf2_rank(matrix: np.ndarray) -> int:
     matrix : np.ndarray
         A 0/1 array; it is not modified.
     """
-    return len(_reduced_row_echelon(matrix)[1])
+    return len(_reduced_row_echelon(matrix).pivots)
 
 
 def gf2_inverse(matrix: np.ndarray) -> np.ndarray:
@@ -507,13 +537,11 @@ def gf2_inverse(matrix: np.ndarray) -> np.ndarray:
         msg = f"an inverse needs a square matrix, got shape {square.shape}"
         raise ValueError(msg)
     size = square.shape[0]
-    reduced, pivots = _reduced_row_echelon(
-        np.hstack([square, np.eye(size, dtype=np.uint8)])
-    )
-    if pivots != list(range(size)):
+    echelon = _reduced_row_echelon(np.hstack([square, np.eye(size, dtype=np.uint8)]))
+    if echelon.pivots != list(range(size)):
         msg = f"the {size} x {size} matrix is singular over GF(2)"
         raise ValueError(msg)
-    return np.asarray(reduced[:, size:])
+    return np.asarray(echelon.reduced[:, size:])
 
 
 def null_space(matrix: np.ndarray) -> np.ndarray:
@@ -540,13 +568,14 @@ def null_space(matrix: np.ndarray) -> np.ndarray:
     np.ndarray
         ``uint8`` of shape ``(columns - rank, columns)``.
     """
-    reduced, pivots = _reduced_row_echelon(matrix)
-    n_columns = reduced.shape[1]
+    echelon = _reduced_row_echelon(matrix)
+    n_columns = echelon.reduced.shape[1]
+    pivots = echelon.pivots
     free = [column for column in range(n_columns) if column not in set(pivots)]
     basis = np.zeros((len(free), n_columns), dtype=np.uint8)
     for r, column in enumerate(free):
         basis[r, column] = 1
-        basis[r, pivots] = reduced[: len(pivots), column]
+        basis[r, pivots] = echelon.reduced[: len(pivots), column]
     return basis
 
 

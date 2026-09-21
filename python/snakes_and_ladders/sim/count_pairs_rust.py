@@ -87,19 +87,21 @@ def _channels(
     this twin carried a second check that refused what the NumPy draw accepted
     (issue #856). What is left here is the flatten the kernel's
     one-dimensional arguments take; a covariate of the wrong length is the
-    kernel's own refusal.
+    kernel's own refusal. The pair stays a pair (issue #865): it is one
+    caller's two kernel arguments, and the split it wraps is named by
+    :class:`~snakes_and_ladders.sim.count_pairs.ChannelCovariates`.
 
     Raises
     ------
     CovariateNotSupportedError
         If the covariate names no channel.
     """
-    exposure, trials = split_covariate(IndependentCountPair, covariate)
-    if exposure is None or trials is None:
+    channels = split_covariate(IndependentCountPair, covariate)
+    if channels.exposure is None or channels.trials is None:
         return None, None
     return (
-        np.ascontiguousarray(exposure, dtype=np.float64).reshape(-1),
-        np.ascontiguousarray(trials, dtype=np.float64).reshape(-1),
+        np.ascontiguousarray(channels.exposure, dtype=np.float64).reshape(-1),
+        np.ascontiguousarray(channels.trials, dtype=np.float64).reshape(-1),
     )
 
 

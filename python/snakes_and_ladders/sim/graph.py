@@ -93,6 +93,63 @@ def _read_only(values: np.ndarray) -> np.ndarray:
 
 
 @dataclass(frozen=True)
+class CompressedAdjacency:
+    """A graph's neighbour rows in compressed-row form, couplings beside them.
+
+    The package's one neighbour structure (issue #277), carried by name
+    rather than as three positional arrays (issue #865). Built once per
+    graph, not once per call: :attr:`PottsGraph.incidence` caches it and
+    :meth:`PottsGraph.compressed_adjacency` returns that instance, so the
+    Potts cluster move issue #586 measured at 2.755 ms of 3.425 ms allocates
+    nothing it did not before and reads a field where it unpacked a tuple.
+
+    Parameters
+    ----------
+    offsets : np.ndarray
+        ``int64`` of length ``n_nodes + 1``. Node ``i``'s neighbours are
+        ``neighbours[offsets[i]:offsets[i + 1]]``.
+    neighbours : np.ndarray
+        ``int64`` of length ``2 * n_edges``, each node's neighbours in the
+        graph's edge order.
+    couplings : np.ndarray
+        ``float64`` of length ``2 * n_edges``, the coupling on the edge the
+        entry of ``neighbours`` at the same position names.
+    """
+
+    offsets: np.ndarray
+    neighbours: np.ndarray
+    couplings: np.ndarray
+
+    def __iter__(self) -> Iterator[np.ndarray]:
+        """``(offsets, neighbours, couplings)``: the order callers unpack."""
+        yield from (self.offsets, self.neighbours, self.couplings)
+
+
+@dataclass(frozen=True)
+class Endpoints:
+    """The edges as three columns in edge order: the coordinate form.
+
+    The companion to :class:`CompressedAdjacency` for the consumer that
+    scores every edge at once rather than walking one node's row.
+
+    Parameters
+    ----------
+    first, second : np.ndarray
+        ``int64`` of length ``n_edges``, the two ends of each edge.
+    coupling : np.ndarray
+        ``float64`` of length ``n_edges``, the coupling on that edge.
+    """
+
+    first: np.ndarray
+    second: np.ndarray
+    coupling: np.ndarray
+
+    def __iter__(self) -> Iterator[np.ndarray]:
+        """``(first, second, coupling)``: the order callers unpack."""
+        yield from (self.first, self.second, self.coupling)
+
+
+@dataclass(frozen=True)
 class PottsGraph:
     """An undirected graph carrying a per-edge Potts coupling.
 
@@ -191,7 +248,7 @@ class PottsGraph:
         """
         yield from zip(self.edges, self.coupling, strict=True)
 
-    def compressed_adjacency(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def compressed_adjacency(self) -> CompressedAdjacency:
         """The adjacency in compressed-row form: offsets, neighbours, couplings.
 
         Neighbour ``j`` of node ``i`` sits at ``neighbours[offsets[i]:offsets[i + 1]]``
@@ -214,16 +271,16 @@ class PottsGraph:
 
         Returns
         -------
-        tuple[np.ndarray, np.ndarray, np.ndarray]
+        CompressedAdjacency
             ``offsets`` (``int64``, length ``n_nodes + 1``), ``neighbours``
             (``int64``) and ``couplings`` (``float64``), the last two of length
-            ``2 * n_edges``. Read-only, and the same arrays on every call.
+            ``2 * n_edges``. Read-only, and the same arrays on every call; it
+            iterates in that order, so a caller unpacking it is unchanged.
         """
-        offsets, neighbours, couplings = self.incidence
-        return offsets, neighbours, couplings
+        return self.incidence
 
     @cached_property
-    def incidence(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def incidence(self) -> CompressedAdjacency:
         """The compressed adjacency, derived once per graph and then reused.
 
         Each edge contributes its two directed entries in edge order, so a
@@ -251,10 +308,10 @@ class PottsGraph:
         arrays = (incidence.offsets, incidence.indices, couplings)
         for array in arrays:
             array.flags.writeable = False
-        return arrays
+        return CompressedAdjacency(*arrays)
 
     @cached_property
-    def endpoints(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def endpoints(self) -> Endpoints:
         """The edges as three arrays in edge order: first, second, coupling.
 
         The coordinate form beside :attr:`incidence`'s compressed one, and
@@ -273,9 +330,10 @@ class PottsGraph:
 
         Returns
         -------
-        tuple[np.ndarray, np.ndarray, np.ndarray]
+        Endpoints
             ``first`` and ``second`` of dtype ``int64`` and ``coupling`` of
-            ``float64``, each of length ``len(self.edges)``.
+            ``float64``, each of length ``len(self.edges)``. It iterates in
+            that order, so a caller unpacking it is unchanged.
         """
         ends = np.asarray(self.edges, dtype=np.int64).reshape(-1, 2)
         arrays = (
@@ -285,7 +343,7 @@ class PottsGraph:
         )
         for array in arrays:
             array.flags.writeable = False
-        return arrays
+        return Endpoints(*arrays)
 
     def to_rustworkx(self) -> rustworkx.PyGraph:
         """This graph as a ``rustworkx.PyGraph``: one node per site, the coupling as edge data.
