@@ -149,6 +149,19 @@ def test_the_only_cycle_is_the_declared_one() -> None:
     assert cycles == {("sample", "search"), ("search", "sample")}, cycles
 
 
+@pytest.mark.critical
+@pytest.mark.infra
+def test_python_holds_only_the_declared_package() -> None:
+    # `pyproject.toml` builds one package from `python/`. The rename (#252)
+    # left `python/phylo/` behind: a symlink to an extension on one
+    # developer's host, resolving nowhere, that nothing imported and nothing
+    # named from 2026-09-05 until #873. A directory beside the package is a
+    # second package nothing declares, or a rename's remainder; either fails
+    # here rather than surviving.
+    entries = sorted(entry.name for entry in PACKAGE.parent.iterdir())
+    assert entries == ["snakes_and_ladders"], entries
+
+
 @pytest.mark.smoke
 def test_sim_imports_no_inference_directory() -> None:
     # `sim/CLAUDE.md`: "Nothing here performs inference". The fixture registry
