@@ -40,7 +40,7 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 
-from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.opt.termination import Termination
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import energy, site_field
@@ -231,9 +231,7 @@ def simulated_bifurcation(
     if dt <= 0.0:
         msg = f"dt must be > 0, got {dt}"
         raise ValueError(msg)
-    if backend not in (Backend.PYTHON, Backend.TORCH):
-        msg = f"simulated_bifurcation runs on {Backend.PYTHON} or {Backend.TORCH}, not {backend}"
-        raise ValueError(msg)
+    refuse_backend("simulated_bifurcation", backend, (Backend.PYTHON, Backend.TORCH))
     rows = site_field(
         np.asarray(field_values, dtype=np.float64), graph.n_nodes, n_states=n_states
     )

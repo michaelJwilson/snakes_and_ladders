@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.likelihood.forward_backward import forward_backward
 from snakes_and_ladders.oxi_snakes_and_ladders import ragged_posteriors
 from snakes_and_ladders.ragged import Ragged
@@ -70,12 +70,7 @@ def posteriors(
     ValueError
         If ``backend`` is neither ``RUST`` nor ``PYTHON``.
     """
-    if backend not in (Backend.PYTHON, Backend.RUST):
-        msg = (
-            f"ragged posteriors runs on {Backend.PYTHON} or {Backend.RUST}, "
-            f"not {backend}"
-        )
-        raise ValueError(msg)
+    refuse_backend("ragged posteriors", backend, (Backend.PYTHON, Backend.RUST))
     if backend is Backend.PYTHON:
         return posteriors_oracle(log_density, log_initial, log_transition)
     values = np.ascontiguousarray(log_density.values, dtype=np.float64)

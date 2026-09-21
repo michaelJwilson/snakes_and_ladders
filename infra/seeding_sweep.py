@@ -19,7 +19,7 @@ import torch
 from snakes_and_ladders.cost import Cost
 from snakes_and_ladders.opt.budget import Budget, Method, compare, restarts
 from snakes_and_ladders.opt.mixture import mixture_log_likelihood, responsibilities
-from snakes_and_ladders.parallel import Backend, map_tasks
+from snakes_and_ladders.parallel import Pool, map_tasks
 from snakes_and_ladders.search.projection import (
     SEEDINGS,
     CountPairAt,
@@ -189,7 +189,7 @@ def main() -> None:
     methods["restart"] = restarts(SeededFit("prior", at), BUDGET.size // N_RESTARTS)
 
     comparison = compare(methods, drawn, BUDGET, [0], workers=workers)
-    backend: Backend = "processes"
+    backend: Pool = "processes"
     detail = map_tasks(
         _detail,
         [(drawn[0], name, at, 0) for name in methods if name != "restart"],

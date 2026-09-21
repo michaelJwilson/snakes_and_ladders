@@ -60,7 +60,7 @@ from snakes_and_ladders.likelihood.pruning_torch import (
 from snakes_and_ladders.opt.fit import fit
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.opt.termination import Termination
-from snakes_and_ladders.parallel import Backend, map_tasks
+from snakes_and_ladders.parallel import Pool, map_tasks
 from snakes_and_ladders.sim.topology import (
     Model,
     MoveSet,
@@ -380,7 +380,7 @@ def infer(
     radius: int | None = None,
     partial_reoptimization: bool = False,
     workers: int = 1,
-    backend: Backend = "serial",
+    backend: Pool = "serial",
     intra_op_threads: int | None = None,
 ) -> Inference:
     """Hill-climb over topologies, fitting continuous parameters per candidate.
@@ -452,7 +452,7 @@ def infer(
         their results are combined in input order, so a parallel search is
         bitwise equal to the serial one, candidate for candidate. ``1``, the
         default, is the loop this had.
-    backend : Backend
+    backend : Pool
         Which pool ``workers`` come from, per
         :func:`snakes_and_ladders.parallel.map_tasks`. ``"serial"``, the
         default, refuses ``workers > 1`` rather than ignoring it, so asking

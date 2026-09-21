@@ -25,7 +25,7 @@ import torch
 from snakes_and_ladders.opt.initialize import Initializer
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.opt.termination import Termination
-from snakes_and_ladders.parallel import Backend, map_tasks
+from snakes_and_ladders.parallel import Pool, map_tasks
 from snakes_and_ladders.track import TrackedOptimization, current
 
 _log = logging.getLogger(__name__)
@@ -48,7 +48,7 @@ _RCOND = 1e-6
 # slowed the serial fit 2.9x, because torch's intra-op parallelism over the
 # sites is the parallelism that pays here, and no pool reached 2x at 4
 # workers. STATUS.md carries the measurement (issue #344).
-_MULTI_START_BACKEND: Backend = "processes"
+_MULTI_START_BACKEND: Pool = "processes"
 _MULTI_START_INTRA_OP_THREADS: int | None = None
 
 

@@ -29,7 +29,7 @@ from typing import Any, Generic, TypeVar
 import numpy as np
 
 from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.parallel import Backend, map_tasks
+from snakes_and_ladders.parallel import Pool, map_tasks
 
 InstanceT = TypeVar("InstanceT")
 
@@ -40,7 +40,7 @@ InstanceT = TypeVar("InstanceT")
 # machine. Each cell already seeds its own generator, so the cells are
 # independent by construction. No pool reached 2x at 4 workers at the
 # mid-size tier; STATUS.md carries the measurement (issue #344).
-_COMPARE_BACKEND: Backend = "processes"
+_COMPARE_BACKEND: Pool = "processes"
 _COMPARE_INTRA_OP_THREADS: int | None = None
 
 
