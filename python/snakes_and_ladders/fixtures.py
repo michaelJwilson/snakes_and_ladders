@@ -21,6 +21,7 @@ the sizes live in one place rather than in each test's literals.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, ClassVar, Protocol, Self, TypeVar
@@ -47,6 +48,51 @@ class Scale(StrEnum):
     CI = "ci"
     STRESS = "stress"
     RELEASE = "release"
+
+
+@dataclass(frozen=True)
+class BinInstance:
+    """One coarser instance a fixture declares: a factor, what it counts, and its tier.
+
+    The declaration is the same yaml block for every model that carries one
+    --- ``bin: [{factor: 5, marker: key}]`` --- and it was read into two
+    classes with two validations (issue #862). What differed is the only
+    thing that varies with the model, so it is a field: **what one bin
+    holds**. A spatio-sequential fixture sums ``factor`` consecutive
+    positions, because the positions are coupled and a sum is the coarser
+    observation; a mixture's observations are independent, so there is
+    nothing to sum and the coarse instance is ``n_samples // factor`` draws
+    from the same parameters, distributed exactly as a subsample of the fine
+    draw.
+
+    Parameters
+    ----------
+    factor : int
+        Units of the fine instance per unit of this one, ``>= 1``. ``1`` is
+        the fine instance the file declares.
+    unit : str
+        What one bin holds --- ``draw`` or ``position`` --- naming the
+        reduction and reported when a factor is refused.
+    marker : str
+        The tier the full test at this factor runs in, measured rather than
+        assumed (``DEV.md``, CI & Performance Budget). Which markers a model
+        admits is that model's own check, since a fixture with one instance
+        per tier and one naming a key instance declare different sets.
+
+    Raises
+    ------
+    ValueError
+        If the factor is below one.
+    """
+
+    factor: int
+    unit: str
+    marker: str
+
+    def __post_init__(self) -> None:
+        if self.factor < 1:
+            msg = f"a bin holds at least one {self.unit}, got {self.factor}"
+            raise ValueError(msg)
 
 
 def load_declared(path: Path, required: Iterable[str]) -> Mapping[str, Any]:

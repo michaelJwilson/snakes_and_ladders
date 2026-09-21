@@ -21,12 +21,12 @@ import torch
 from snakes_and_ladders.learn.critic import (
     Critic,
     fit_critic,
-    monte_carlo_targets,
-    state_features,
+    state_targets,
+    state_values,
 )
 from snakes_and_ladders.learn.environment import Environment, Episode
 from snakes_and_ladders.learn.policy import TrainablePolicy
-from snakes_and_ladders.learn.rollout import rollout
+from snakes_and_ladders.learn.rollout import log_probabilities_of, rollout
 
 
 @dataclass(frozen=True)
@@ -59,17 +59,11 @@ def advantage_surrogate_loss[S, A](
         msg = "need at least one episode to form an estimate"
         raise ValueError(msg)
     total = torch.zeros((), dtype=policy.dtype)
-    for episode, episode_advantages in zip(episodes, advantages, strict=True):
-        for step, action in enumerate(episode.actions):
-            state = episode.states[step]
-            available = environment.actions(state)
-            log_probabilities = policy.log_probabilities(
-                environment.features(state, available)
-            )
-            total = (
-                total
-                + log_probabilities[available.index(action)] * episode_advantages[step]
-            )
+    for decisions, episode_advantages in zip(
+        log_probabilities_of(policy, environment, episodes), advantages, strict=True
+    ):
+        for step, decision in enumerate(decisions):
+            total = total + decision.taken * episode_advantages[step]
     return -total / len(episodes)
 
 
@@ -78,14 +72,10 @@ def critic_advantages[S, A](
 ) -> list[list[float]]:
     """``G_t - V(s_t)`` per step per episode, the critic read without gradient."""
     advantages = []
-    with torch.no_grad():
-        for episode in episodes:
-            returns = episode.returns_to_go()
-            values = [
-                float(critic(state_features(environment, state)[None, :])[0])
-                for state in episode.states[:-1]
-            ]
-            advantages.append([g - v for g, v in zip(returns, values, strict=True)])
+    for episode in episodes:
+        returns = episode.returns_to_go()
+        values = state_values(environment, episode.states[:-1], critic)
+        advantages.append([g - v for g, v in zip(returns, values, strict=True)])
     return advantages
 
 
@@ -128,7 +118,7 @@ def actor_critic[S, A](
             )
             for _ in range(batch)
         ]
-        features, targets = monte_carlo_targets(environment, episodes)
+        features, targets = state_targets(environment, episodes)
         critic_losses.append(
             fit_critic(critic, features, targets, steps=critic_steps).losses[-1]
         )

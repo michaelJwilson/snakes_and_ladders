@@ -30,6 +30,7 @@ from snakes_and_ladders.numerics import logsumexp, sample_rows
 from snakes_and_ladders.sim.graph import (
     BoundaryCondition,
     PottsGraph,
+    boundary_from_declared,
     lattice_graph,
     triangular_lattice_graph,
 )
@@ -499,7 +500,7 @@ class PottsLatticeParams:
 
         return cls(
             shape=shape,
-            boundary=_boundary(path, declared["boundary"]),
+            boundary=boundary_from_declared(path, declared["boundary"]),
             n_states=n_states,
             coupling=_coupling(path, declared["coupling"], n_states),
             field=field,
@@ -508,36 +509,6 @@ class PottsLatticeParams:
             burn_in=int(declared["burn_in"]),
             tolerance=float(declared["tolerance"]),
         )
-
-
-def _boundary(path: Path, raw: object) -> BoundaryCondition:
-    """Parse a yaml boundary field, naming the file when it is unrecognized.
-
-    Parameters
-    ----------
-    path : Path
-        The file being loaded, for the error message.
-    raw : object
-        The yaml value.
-
-    Returns
-    -------
-    BoundaryCondition
-        The parsed boundary.
-
-    Raises
-    ------
-    ValueError
-        If ``raw`` is not one of the recognized boundary conditions. Caught
-        here rather than in :func:`snakes_and_ladders.sim.graph.lattice_graph`, which
-        takes the enum and so cannot be handed a bad string at all.
-    """
-    try:
-        return BoundaryCondition(str(raw))
-    except ValueError:
-        recognized = sorted(condition.value for condition in BoundaryCondition)
-        msg = f"{path}: boundary must be one of {recognized}, got {raw!r}"
-        raise ValueError(msg) from None
 
 
 def _coupling(path: Path, raw: object, n_states: int) -> float:
@@ -823,7 +794,9 @@ class SpatioOnlyParams:
             raise ValueError(msg)
         shape = tuple(int(extent) for extent in declared["shape"])
         graph = _GEOMETRIES[geometry](
-            shape, _boundary(path, declared["boundary"]), float(declared["coupling"])
+            shape,
+            boundary_from_declared(path, declared["boundary"]),
+            float(declared["coupling"]),
         )
 
         n_classes = int(declared["n_classes"])

@@ -28,45 +28,13 @@ from typing import Any, ClassVar, Self
 
 import numpy as np
 
-from snakes_and_ladders.emissions import GaussianEmission
+from snakes_and_ladders.emissions import EmissionFamily, GaussianEmission
+from snakes_and_ladders.fixtures import BinInstance
 
-
-@dataclass(frozen=True)
-class BinInstance:
-    """One declared instance of a fixture: a decimation factor and its tier.
-
-    The counterpart of :class:`snakes_and_ladders.sim.count_pairs.BinInstance`,
-    and it is the same declaration the registry reads to find a problem's key
-    instance. **What a coarse instance is differs with the model.** A
-    spatio-sequential fixture *sums* ``factor`` consecutive positions, because
-    the positions are coupled and a sum is the coarser observation. A mixture's
-    observations are independent, so there is nothing to sum: the coarse
-    instance is ``n_samples // factor`` draws from the same generating
-    parameters, which is distributed exactly as a subsample of the fine draw
-    and costs a fraction of it.
-
-    Parameters
-    ----------
-    factor : int
-        Draws of the fine instance per draw of this one, ``>= 1``. ``1`` is
-        the fine instance the file declares.
-    marker : str
-        The tier the full test at this factor runs in, measured rather than
-        assumed (``DEV.md``, CI & Performance Budget).
-
-    Raises
-    ------
-    ValueError
-        If the factor is below one.
-    """
-
-    factor: int
-    marker: str
-
-    def __post_init__(self) -> None:
-        if self.factor < 1:
-            msg = f"a bin holds at least one draw, got {self.factor}"
-            raise ValueError(msg)
+#: What one bin of a mixture fixture holds. A mixture's observations are
+#: independent, so a coarse instance is a subsample rather than a sum, and
+#: :class:`~snakes_and_ladders.fixtures.BinInstance` carries the word.
+BIN_UNIT = "draw"
 
 
 _REQUIRED_FIELDS = frozenset(
@@ -75,8 +43,15 @@ _REQUIRED_FIELDS = frozenset(
 
 
 @dataclass(frozen=True)
-class MixtureParams:
-    """Fully-specified truth for a Gaussian mixture fixture.
+class MixtureParamsBase[F: EmissionFamily]:
+    """The mixture a component family is a parameter of: weights, a family, a size.
+
+    Two fixtures declare a mixture --- this module's Gaussian one and
+    :mod:`snakes_and_ladders.sim.emission_mixture`'s count one --- and the
+    mixture itself never asks what its components are, so the fields and
+    the weight check are here and the family is the type parameter (issue
+    #862). What is *not* shared is the dataset each draw returns: a rung's
+    declared output is its own type.
 
     Parameters
     ----------
@@ -85,20 +60,16 @@ class MixtureParams:
         strictly positive --- a component with zero weight is not a component
         of the model, and leaving it in would make the fitted parameter for it
         undefined rather than merely uncertain.
-    components : GaussianEmission
-        The per-component mean and scale. A family carrying a channel axis
-        makes every observation a vector, and the mixture is then over that
-        many dimensions (issue #548).
+    components : F
+        The per-component emission, one state per component.
     n_samples : int
         Observations to draw.
     seed : int
         Seed for ``np.random.default_rng``.
     tolerance : float
-        Absolute tolerance a validation test checks simulated frequencies
-        against their analytic counterpart within.
-    bins : tuple[BinInstance, ...]
-        The coarser instances the file declares, coarsest last; empty where
-        the file declares one size only.
+        Tolerance a validation test reads a recovered quantity within; which
+        quantity, and whether the tolerance is absolute or relative, is the
+        fixture's own statement.
 
     Raises
     ------
@@ -108,11 +79,10 @@ class MixtureParams:
     """
 
     weights: np.ndarray
-    components: GaussianEmission
+    components: F
     n_samples: int
     seed: int
     tolerance: float
-    bins: tuple[BinInstance, ...] = ()
 
     def __post_init__(self) -> None:
         weights = np.asarray(self.weights, dtype=np.float64)
@@ -133,6 +103,61 @@ class MixtureParams:
     def n_components(self) -> int:
         """Components in the mixture."""
         return self.components.n_states
+
+
+def draw_mixture(
+    params: MixtureParamsBase[Any], rng: np.random.Generator | None
+) -> tuple[np.ndarray, np.ndarray]:
+    """Ancestral sampling from a mixture: a component per observation, then the observation.
+
+    The body both simulators ran (issue #862). Each wraps it in the dataset
+    type its rung declares.
+
+    Parameters
+    ----------
+    params : MixtureParamsBase[Any]
+        The generating truth.
+    rng : np.random.Generator | None
+        Generator to draw from. ``None`` builds one from ``params.seed``,
+        which is what a single-dataset fixture wants; an ensemble passes its
+        own, since seeding inside the call would make every draw identical
+        (``sim/CLAUDE.md``).
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        The component labels, shape ``(n_samples,)``, and the observations
+        the components drew for them.
+    """
+    generator = np.random.default_rng(params.seed) if rng is None else rng
+    labels = generator.choice(
+        params.n_components, size=params.n_samples, p=params.weights
+    )
+    return labels, params.components.sample(labels, generator)
+
+
+@dataclass(frozen=True)
+class MixtureParams(MixtureParamsBase[GaussianEmission]):
+    """Fully-specified truth for a Gaussian mixture fixture.
+
+    :class:`MixtureParamsBase`'s fields, with the component family the
+    Gaussian one and the declared coarser instances beside them.
+
+    Parameters
+    ----------
+    components : GaussianEmission
+        The per-component mean and scale. A family carrying a channel axis
+        makes every observation a vector, and the mixture is then over that
+        many dimensions (issue #548).
+    tolerance : float
+        Absolute tolerance a validation test checks simulated frequencies
+        against their analytic counterpart within.
+    bins : tuple[BinInstance, ...]
+        The coarser instances the file declares, coarsest last; empty where
+        the file declares one size only.
+    """
+
+    bins: tuple[BinInstance, ...] = ()
 
     @property
     def n_channels(self) -> int:
@@ -194,7 +219,11 @@ class MixtureParams:
             msg = f"{path}: means have shape {means.shape}, scales {scales.shape}"
             raise ValueError(msg)
         bins = tuple(
-            BinInstance(factor=int(entry["factor"]), marker=str(entry["marker"]))
+            BinInstance(
+                factor=int(entry["factor"]),
+                unit=BIN_UNIT,
+                marker=str(entry["marker"]),
+            )
             for entry in declared.get("bin", ())
         )
 
@@ -256,13 +285,10 @@ def simulate_mixture(
     SimulatedMixtureDataset
         The labels, the observations, and the generating truth.
     """
-    generator = np.random.default_rng(params.seed) if rng is None else rng
-    labels = generator.choice(
-        params.n_components, size=params.n_samples, p=params.weights
-    )
+    labels, observations = draw_mixture(params, rng)
     return SimulatedMixtureDataset(
         labels=labels,
-        observations=params.components.sample(labels, generator),
+        observations=observations,
         weights=params.weights,
         components=params.components,
         seed=params.seed,
