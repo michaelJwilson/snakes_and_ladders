@@ -35,7 +35,9 @@ See Goemans & Williamson (1995); Burer & Monteiro (2003).
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import torch
@@ -79,6 +81,35 @@ class MaxCutResult:
     termination: Termination | None = None
 
 
+@dataclass(frozen=True)
+class MaxCut:
+    """A cut and its weight, with no certificate: this one is exact.
+
+    :class:`MaxCutResult` is the rounded cut's, which carries the relaxation
+    it is certified against. An enumerated cut needs none --- it *is* the
+    maximum --- so the two are separate types rather than one with fields a
+    caller must know to ignore.
+
+    Parameters
+    ----------
+    assignment : np.ndarray
+        Side per node, 0 or 1.
+    value : float
+        Total weight of edges whose endpoints differ.
+    """
+
+    assignment: np.ndarray
+    value: float
+
+    def __iter__(self) -> Iterator[Any]:
+        """``(assignment, value)``: the order callers unpack.
+
+        ``Any`` and not a union: an unpacking gives both names the element
+        type, so a union would mistype each of them.
+        """
+        yield from (self.assignment, self.value)
+
+
 def cut_value(graph: PottsGraph, assignment: np.ndarray) -> float:
     """Total weight of the edges this assignment separates."""
     total = 0.0
@@ -88,9 +119,7 @@ def cut_value(graph: PottsGraph, assignment: np.ndarray) -> float:
     return total
 
 
-def enumerate_max_cut(
-    graph: PottsGraph, *, max_nodes: int = 20
-) -> tuple[np.ndarray, float]:
+def enumerate_max_cut(graph: PottsGraph, *, max_nodes: int = 20) -> MaxCut:
     """The true maximum cut, by trying every assignment.
 
     Exponential and deliberately so --- this is the reference the rounded
@@ -121,7 +150,7 @@ def enumerate_max_cut(
         value = cut_value(graph, assignment)
         if value > best_value:
             best_value, best = value, assignment
-    return best, best_value
+    return MaxCut(best, best_value)
 
 
 def goemans_williamson(

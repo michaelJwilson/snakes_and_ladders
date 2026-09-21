@@ -27,7 +27,7 @@ from snakes_and_ladders import oxi_snakes_and_ladders
 from snakes_and_ladders.sandbox import maxflow_declined
 from snakes_and_ladders.sandbox.maxflow_declined import DeclinedKernel
 from snakes_and_ladders.search import maxflow_rust
-from snakes_and_ladders.search.maxflow import ising_ground_state
+from snakes_and_ladders.search.maxflow import GroundState, ising_ground_state
 from snakes_and_ladders.sim import fixtures
 from snakes_and_ladders.sim.graph import PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import site_field
@@ -117,15 +117,20 @@ KERNELS = ["boykov-kolmogorov", *(str(kernel) for kernel in DeclinedKernel)]
 
 def _ground_state(
     kernel: str,
-) -> Callable[[PottsGraph, np.ndarray], tuple[np.ndarray, float]]:
+) -> Callable[[PottsGraph, np.ndarray], GroundState]:
     if kernel == "boykov-kolmogorov":
         return maxflow_rust.ising_ground_state
     if not maxflow_declined.AVAILABLE:
         pytest.skip("the extension was built without the sandbox feature")
     declined = DeclinedKernel(kernel)
 
-    def solve(graph: PottsGraph, field_values: np.ndarray) -> tuple[np.ndarray, float]:
-        return maxflow_declined.ising_ground_state(graph, field_values, declined)
+    def solve(graph: PottsGraph, field_values: np.ndarray) -> GroundState:
+        # The declined kernels are `sandbox`'s and still report a pair, so the
+        # name is put on here. Both rows of the table then construct one
+        # result inside the timed call and the comparison stays like for like.
+        return GroundState(
+            *maxflow_declined.ising_ground_state(graph, field_values, declined)
+        )
 
     return solve
 

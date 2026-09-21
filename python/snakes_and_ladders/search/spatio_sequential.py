@@ -252,7 +252,7 @@ def label_step(
         # deltas rather than off a full energy per candidate, which is
         # `O(k * degree)` per site against `O(k * n_edges)`; the labelling is
         # pinned against the recomputing loop this replaced.
-        current, _ = iterated_conditional_modes(
+        return iterated_conditional_modes(
             graph,
             potential,
             params.n_classes,
@@ -260,8 +260,7 @@ def label_step(
             start=labels,
             sweep_order=SweepOrder.RANDOM,
             backend=Backend.PYTHON,
-        )
-        return current
+        ).labelling
     if wolff_schedule is None:
         msg = "the Wolff solver needs a schedule"
         raise ValueError(msg)

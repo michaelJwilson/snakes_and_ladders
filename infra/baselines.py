@@ -425,7 +425,7 @@ def planted_glass_baseline(loaded: Fixture[Any]) -> dict[str, Measurement]:
     for offset in range(GLASS_RESTART_SEEDS):
         generator = np.random.default_rng(params.seed + offset)
         found = [
-            iterated_conditional_modes(glass.graph, GLASS_FIELD, 2, generator)[1]
+            iterated_conditional_modes(glass.graph, GLASS_FIELD, 2, generator).energy
             for _ in range(params.glass_restarts)
         ]
         hits = [abs(energy - best) < 1e-9 for energy in found]

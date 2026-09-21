@@ -58,9 +58,9 @@ def test_every_writer_drops_the_kept_form() -> None:
     assert forward.size == backward.size == len(network.capacity) // 2
 
     solved = _network()
-    before = solved.as_arrays()[1].copy()
+    before = solved.as_arrays().capacity.copy()
     max_flow(solved, 0, 1)
-    after = solved.as_arrays()[1]
+    after = solved.as_arrays().capacity
     # The residual capacities are what a second call sees, which is only true
     # if the solve dropped the form built from the originals.
     assert not np.array_equal(before, after)

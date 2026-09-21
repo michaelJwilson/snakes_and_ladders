@@ -155,7 +155,7 @@ def test_expansion_beats_single_site_descent_past_enumeration() -> None:
         descent = min(
             iterated_conditional_modes(
                 graph, field_values, 4, np.random.default_rng(seed)
-            )[1]
+            ).energy
             for seed in range(8)
         )
 
@@ -263,8 +263,8 @@ def test_the_numba_descent_reproduces_the_python_one_bitwise(seed: int) -> None:
         graph, field, 3, np.random.default_rng(seed), backend=Backend.NUMBA
     )
 
-    assert np.array_equal(python[0], compiled[0])
-    assert python[1] == compiled[1]
+    assert np.array_equal(python.labelling, compiled.labelling)
+    assert python.energy == compiled.energy
 
 
 @pytest.mark.smoke
