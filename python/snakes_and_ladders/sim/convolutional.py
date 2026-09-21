@@ -27,7 +27,7 @@ unchanged: ``L_i = log p(y_i | c_i = 0) - log p(y_i | c_i = 1)``.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar, Self
@@ -212,9 +212,28 @@ def recursive_systematic_trellis(
     )
 
 
-def encode_stream(
-    trellis: Trellis, inputs: np.ndarray
-) -> tuple[np.ndarray, np.ndarray]:
+@dataclass(frozen=True)
+class Encoded:
+    """One run of the register: the parity it emitted and the path it took.
+
+    Parameters
+    ----------
+    parity : np.ndarray
+        ``(len(inputs),)`` ``uint8``, one parity bit per step.
+    states : np.ndarray
+        ``(len(inputs) + 1,)`` ``int64``, the state before the first step and
+        after each one, starting at the zero state.
+    """
+
+    parity: np.ndarray
+    states: np.ndarray
+
+    def __iter__(self) -> Iterator[np.ndarray]:
+        """``(parity, states)``: the order callers unpack."""
+        yield from (self.parity, self.states)
+
+
+def encode_stream(trellis: Trellis, inputs: np.ndarray) -> Encoded:
     """Run the register over ``inputs`` from the zero state.
 
     Parameters
@@ -225,10 +244,8 @@ def encode_stream(
 
     Returns
     -------
-    tuple[np.ndarray, np.ndarray]
-        The parity bits, one per step, and the state visited after each
-        step -- ``(len(inputs),)`` and ``(len(inputs) + 1,)``, the latter
-        starting at the zero state.
+    Encoded
+        The parity bits and the states, in that order under an unpacking.
     """
     bits = np.asarray(inputs, dtype=np.uint8)
     parity = np.empty(bits.size, dtype=np.uint8)
@@ -237,7 +254,7 @@ def encode_stream(
     for t, u in enumerate(bits):
         parity[t] = trellis.parity[states[t], u]
         states[t + 1] = trellis.next_state[states[t], u]
-    return parity, states
+    return Encoded(parity, states)
 
 
 def terminate(trellis: Trellis, message: np.ndarray) -> np.ndarray:
@@ -260,8 +277,7 @@ def terminate(trellis: Trellis, message: np.ndarray) -> np.ndarray:
         ``K + m`` input bits.
     """
     bits = np.asarray(message, dtype=np.uint8)
-    _, states = encode_stream(trellis, bits)
-    state = int(states[-1])
+    state = int(encode_stream(trellis, bits).states[-1])
     tail = np.empty(trellis.memory, dtype=np.uint8)
     for step in range(trellis.memory):
         tail[step] = trellis.tail_input[state]
@@ -450,8 +466,8 @@ def turbo_encode(code: TurboCode, message: np.ndarray) -> np.ndarray:
         raise ValueError(msg)
     first_inputs = terminate(code.trellis, bits)
     second_inputs = terminate(code.trellis, bits[code.interleaver])
-    first_parity, _ = encode_stream(code.trellis, first_inputs)
-    second_parity, _ = encode_stream(code.trellis, second_inputs)
+    first_parity = encode_stream(code.trellis, first_inputs).parity
+    second_parity = encode_stream(code.trellis, second_inputs).parity
     return np.concatenate(
         [
             first_inputs,

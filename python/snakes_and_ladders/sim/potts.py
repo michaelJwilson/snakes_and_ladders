@@ -256,7 +256,8 @@ def heat_bath_log_weights(
         ``(n_chains, n_nodes)`` for a block of independent chains. The
         returned shape follows it.
     neighbours : Sequence[int]
-        The compressed neighbour rows, ``compressed_adjacency()[1].tolist()``.
+        The compressed neighbour rows,
+        ``compressed_adjacency().neighbours.tolist()``.
     couplings : Sequence[float]
         The coupling per entry of ``neighbours``, in the same order.
     start, stop : int
@@ -659,9 +660,10 @@ def _simulate_gibbs(
     than a list of Python tuples per node (issue #277).
     """
     n_states = field.shape[1]
-    offsets, neighbour_index, edge_couplings = graph.compressed_adjacency()
-    bounds = offsets.tolist()
-    neighbours, couplings = neighbour_index.tolist(), edge_couplings.tolist()
+    adjacency = graph.compressed_adjacency()
+    bounds = adjacency.offsets.tolist()
+    neighbours = adjacency.neighbours.tolist()
+    couplings = adjacency.couplings.tolist()
 
     state = rng.integers(0, n_states, size=(n_samples, graph.n_nodes))
     chain_index = np.arange(n_samples)

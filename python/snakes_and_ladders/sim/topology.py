@@ -40,7 +40,9 @@ held to the enumerated optimum rather than to the count.
 from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
+from dataclasses import dataclass
 from enum import StrEnum
+from typing import Any
 
 import numpy as np
 
@@ -502,15 +504,17 @@ def spr_neighbours(
         if not isinstance(u, int):
             continue
         for v in list(adjacency[u]):
-            remainder, pruned, vacated = _prune(adjacency, u, v)
-            targets = list(_edges(remainder))
+            cut = _prune(adjacency, u, v)
+            targets = list(_edges(cut.remainder))
             if radius is not None:
-                distance = _regraft_distances(remainder, vacated)
+                distance = _regraft_distances(cut.remainder, cut.vacated)
                 targets = [
                     edge for edge in targets if distance[frozenset(edge)] <= radius
                 ]
             for x, y in targets:
-                candidate_adjacency, new_id = _regraft(remainder, pruned, v, x, y)
+                candidate_adjacency, new_id = _regraft(
+                    cut.remainder, cut.pruned, v, x, y
+                )
                 key = _split_key(candidate_adjacency, new_id, bit_of)
                 if key in seen:
                     continue
@@ -546,16 +550,42 @@ def _regraft_distances(
     }
 
 
-def _prune(
-    adjacency: dict[NodeId, list[NodeId]], u: int, v: NodeId
-) -> tuple[
-    dict[NodeId, list[NodeId]], dict[NodeId, list[NodeId]], tuple[NodeId, NodeId]
-]:
-    """Remove edge ``(u, v)``: the ``u``-side component, with ``u``
-    suppressed (now degree 2), is the remainder; the ``v``-side component,
-    unchanged but for the removed edge, is the pruned subtree. The third
-    return is the edge suppressing ``u`` left behind --- the pruning point a
-    bounded regraft measures its radius from.
+@dataclass(frozen=True)
+class _Pruned:
+    """A tree cut at one edge: the two components and the point they parted.
+
+    Private, and named rather than left a triple (issue #865) because two of
+    its three fields are adjacency maps of the same type and the third is an
+    edge; positionally they read alike, and :func:`spr_neighbours` passes
+    each to a different call.
+
+    Parameters
+    ----------
+    remainder : dict[NodeId, list[NodeId]]
+        The ``u``-side component with ``u``, now degree 2, suppressed.
+    pruned : dict[NodeId, list[NodeId]]
+        The ``v``-side component, unchanged but for the removed edge.
+    vacated : tuple[NodeId, NodeId]
+        The edge suppressing ``u`` left behind --- the pruning point a
+        bounded regraft measures its radius from.
+    """
+
+    remainder: dict[NodeId, list[NodeId]]
+    pruned: dict[NodeId, list[NodeId]]
+    vacated: tuple[NodeId, NodeId]
+
+    def __iter__(self) -> Iterator[Any]:
+        """``(remainder, pruned, vacated)``: the order callers unpack.
+
+        ``Any`` and not a union: an unpacking gives every name the element
+        type, so a union would mistype each of them.
+        """
+        yield from (self.remainder, self.pruned, self.vacated)
+
+
+def _prune(adjacency: dict[NodeId, list[NodeId]], u: int, v: NodeId) -> _Pruned:
+    """Remove edge ``(u, v)``, giving the remainder, the pruned subtree and
+    the vacated edge :class:`_Pruned` documents.
     """
     cut = _rewired(adjacency, drop=[(u, v)], add=[])
     remainder = {node_id: list(cut[node_id]) for node_id in _component(cut, u)}
@@ -567,7 +597,7 @@ def _prune(
     remainder[y].remove(u)
     remainder[x].append(y)
     remainder[y].append(x)
-    return remainder, pruned, (x, y)
+    return _Pruned(remainder, pruned, (x, y))
 
 
 def _component(adjacency: dict[NodeId, list[NodeId]], start: NodeId) -> set[NodeId]:

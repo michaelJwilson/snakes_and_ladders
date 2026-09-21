@@ -406,7 +406,7 @@ def test_the_trellis_returns_the_planted_message_and_fails_inside_the_union_boun
     trellis = recursive_systematic_trellis(FEEDBACK, FEEDFORWARD, MEMORY)
     weights = np.array(
         [
-            int(inputs.sum() + encode_stream(trellis, inputs)[0].sum())
+            int(inputs.sum() + encode_stream(trellis, inputs).parity.sum())
             for inputs in (
                 terminate(trellis, message)
                 for message in enumerate_messages(END2END_LENGTH)
