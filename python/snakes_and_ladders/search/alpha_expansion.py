@@ -35,7 +35,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import numpy as np
 
@@ -55,6 +55,35 @@ from snakes_and_ladders.sim.potts import energy, site_field
 UNIFORM_POTTS_BOUND = 2.0
 
 DEFAULT_MAX_CYCLES = 50
+
+
+@dataclass(frozen=True)
+class Labelling:
+    """A state per node, and the energy it scores.
+
+    One type for the three moves: :func:`expand`, :func:`swap` and
+    :func:`iterated_conditional_modes` report the same two quantities with
+    the same meaning, so a caller that exchanges one for another reads the
+    same fields (issue #865).
+
+    Parameters
+    ----------
+    labelling : np.ndarray
+        One state per node.
+    energy : float
+        Its energy under :func:`~snakes_and_ladders.sim.potts.energy`.
+    """
+
+    labelling: np.ndarray
+    energy: float
+
+    def __iter__(self) -> Iterator[Any]:
+        """``(labelling, energy)``: the order callers unpack.
+
+        ``Any`` and not a union: an unpacking gives both names the element
+        type, so a union would mistype each of them.
+        """
+        yield from (self.labelling, self.energy)
 
 
 @dataclass(frozen=True)
@@ -151,7 +180,7 @@ def _lowest_by_cut(
     labelling: np.ndarray,
     build: Callable[[np.ndarray], _CutMove | None],
     backend: Backend,
-) -> tuple[np.ndarray, float]:
+) -> Labelling:
     """A binary move by one minimum cut, taken only where it lowers the energy.
 
     The body :func:`expand` and :func:`swap` share (issue #858): widen the
@@ -163,7 +192,7 @@ def _lowest_by_cut(
     values = site_field(np.asarray(field_values, dtype=float), graph.n_nodes)
     built = build(values)
     if built is None:
-        return labelling, energy(graph, values, labelling)
+        return Labelling(labelling, energy(graph, values, labelling))
 
     cut = (
         min_cut(built.network, built.source, built.sink)
@@ -177,8 +206,8 @@ def _lowest_by_cut(
         energy(graph, values, proposed),
     )
     if candidate < current:
-        return proposed, candidate
-    return labelling, current
+        return Labelling(proposed, candidate)
+    return Labelling(labelling, current)
 
 
 @dataclass(frozen=True)
@@ -195,7 +224,7 @@ class _Move:
     label_sets : Callable[[int], Iterator[tuple[int, ...]]]
         The label sets one cycle offers, in the order it offers them: one
         label per move for the expansion, an unordered pair for the swap.
-    apply : Callable[..., tuple[np.ndarray, float]]
+    apply : Callable[..., Labelling]
         The move itself, as :func:`expand` and :func:`swap` implement it.
     """
 
@@ -204,7 +233,7 @@ class _Move:
     label_sets: Callable[[int], Iterator[tuple[int, ...]]]
     apply: Callable[
         [PottsGraph, np.ndarray, np.ndarray, tuple[int, ...], Backend],
-        tuple[np.ndarray, float],
+        Labelling,
     ]
 
 
@@ -241,9 +270,10 @@ def _cycle_to_a_local_minimum(
     for cycle in range(1, max_cycles + 1):
         improved = False
         for labels in move.label_sets(n_states):
-            labelling, candidate = move.apply(graph, values, labelling, labels, backend)
-            if candidate < current - 1e-12:
-                current = candidate
+            moved = move.apply(graph, values, labelling, labels, backend)
+            labelling = moved.labelling
+            if moved.energy < current - 1e-12:
+                current = moved.energy
                 improved = True
                 moves += 1
         if not improved:
@@ -362,7 +392,7 @@ def expand(
     alpha: int,
     *,
     backend: Backend = Backend.PYTHON,
-) -> tuple[np.ndarray, float]:
+) -> Labelling:
     """The optimal ``alpha``-expansion of ``labelling``, by one minimum cut.
 
     Every node chooses between keeping its current label and taking ``alpha``.
@@ -406,7 +436,7 @@ def expand(
 
     Returns
     -------
-    tuple[np.ndarray, float]
+    Labelling
         The expanded labelling and its energy. When no expansion helps, the
         input is returned unchanged.
 
@@ -442,7 +472,7 @@ def _apply_expansion(
     labelling: np.ndarray,
     labels: tuple[int, ...],
     backend: Backend,
-) -> tuple[np.ndarray, float]:
+) -> Labelling:
     """:func:`expand` in the shape :func:`_cycle_to_a_local_minimum` calls."""
     return expand(graph, values, labelling, labels[0], backend=backend)
 
@@ -539,7 +569,7 @@ def iterated_conditional_modes(
     sweep_order: SweepOrder = SweepOrder.INDEX,
     stop_when_clean: bool = True,
     backend: Backend = Backend.NUMBA,
-) -> tuple[np.ndarray, float]:
+) -> Labelling:
     """Single-site descent: the baseline alpha expansion has to beat.
 
     Each site takes the label minimizing the energy given its neighbours,
@@ -601,7 +631,7 @@ def iterated_conditional_modes(
 
     Returns
     -------
-    tuple[np.ndarray, float]
+    Labelling
         The labelling it settles on, and its energy.
 
     Raises
@@ -636,7 +666,7 @@ def iterated_conditional_modes(
             couplings,
             max_sweeps,
         )
-        return labelling, energy(graph, values, labelling)
+        return Labelling(labelling, energy(graph, values, labelling))
     if backend is not Backend.PYTHON:
         msg = f"iterated conditional modes has no {backend} backend"
         raise ValueError(msg)
@@ -672,7 +702,7 @@ def iterated_conditional_modes(
             break
     labelling[:] = labels
 
-    return labelling, energy(graph, values, labelling)
+    return Labelling(labelling, energy(graph, values, labelling))
 
 
 def _infinite_capacity(graph: PottsGraph, values: np.ndarray) -> float:
@@ -693,7 +723,7 @@ def swap(
     beta: int,
     *,
     backend: Backend = Backend.PYTHON,
-) -> tuple[np.ndarray, float]:
+) -> Labelling:
     """The optimal ``alpha``-``beta`` swap of ``labelling``, by one minimum cut.
 
     Only the sites currently labelled ``alpha`` or ``beta`` move, and each
@@ -712,7 +742,7 @@ def swap(
 
     Returns
     -------
-    tuple[np.ndarray, float]
+    Labelling
         The swapped labelling and its energy; the input unchanged where no
         swap lowers it.
 
@@ -783,7 +813,7 @@ def _apply_swap(
     labelling: np.ndarray,
     labels: tuple[int, ...],
     backend: Backend,
-) -> tuple[np.ndarray, float]:
+) -> Labelling:
     """:func:`swap` in the shape :func:`_cycle_to_a_local_minimum` calls."""
     return swap(graph, values, labelling, labels[0], labels[1], backend=backend)
 

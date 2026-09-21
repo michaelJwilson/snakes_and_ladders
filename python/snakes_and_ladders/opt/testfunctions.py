@@ -30,7 +30,7 @@ Wright use the first as the standing example for quasi-Newton methods.
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar, Self
@@ -152,6 +152,32 @@ HIMMELBLAU_MINIMA = (
 
 
 @dataclass(frozen=True)
+class NearestMinimum:
+    """Which minimizer a point landed on, and how far off it is.
+
+    Parameters
+    ----------
+    index : int
+        Index into :data:`HIMMELBLAU_MINIMA`. Which of the four a start
+        reaches is the fact the basin tests read, so it is named rather
+        than discarded by every caller that wants only the distance.
+    distance : float
+        The Euclidean distance to that minimizer. Zero exactly at one.
+    """
+
+    index: int
+    distance: float
+
+    def __iter__(self) -> Iterator[Any]:
+        """``(index, distance)``: the order callers unpack.
+
+        ``Any`` and not a union: an unpacking gives both names the element
+        type, so a union would mistype each of them.
+        """
+        yield from (self.index, self.distance)
+
+
+@dataclass(frozen=True)
 class Himmelblau(Objective):
     """``(x^2 + y - 11)^2 + (x + y^2 - 7)^2``, with four equal global minima (``eq:himmelblau``).
 
@@ -184,12 +210,12 @@ class Himmelblau(Objective):
         )
 
     @staticmethod
-    def nearest_minimum(point: torch.Tensor) -> tuple[int, float]:
+    def nearest_minimum(point: torch.Tensor) -> NearestMinimum:
         """Which of the four minima ``point`` landed on, and how far off it is.
 
         Returns
         -------
-        tuple[int, float]
+        NearestMinimum
             Index into :data:`HIMMELBLAU_MINIMA`, and the Euclidean distance.
         """
         distances = [
@@ -197,7 +223,7 @@ class Himmelblau(Objective):
             for minimum in HIMMELBLAU_MINIMA
         ]
         best = min(range(len(distances)), key=distances.__getitem__)
-        return best, distances[best]
+        return NearestMinimum(best, distances[best])
 
 
 @dataclass(frozen=True)
@@ -231,7 +257,7 @@ class TestFunctionMetrics:
         """The value at ``state`` and its distance to the nearest known minimizer."""
         with torch.no_grad():
             if isinstance(self.objective, Himmelblau):
-                _, distance = Himmelblau.nearest_minimum(state)
+                distance = Himmelblau.nearest_minimum(state).distance
             else:
                 distance = float(
                     torch.linalg.vector_norm(state - self.objective.minimizer())

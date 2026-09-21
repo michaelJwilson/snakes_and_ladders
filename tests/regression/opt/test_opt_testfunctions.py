@@ -132,7 +132,7 @@ def test_all_four_himmelblau_minima_are_reachable() -> None:
     starts = [(1.0, 1.0), (-3.0, 2.0), (-3.0, -3.0), (3.0, -2.0)]
 
     found = {
-        Himmelblau.nearest_minimum(fit(Himmelblau(start=s)).theta)[0] for s in starts
+        Himmelblau.nearest_minimum(fit(Himmelblau(start=s)).theta).index for s in starts
     }
 
     assert found == set(range(len(HIMMELBLAU_MINIMA)))

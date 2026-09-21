@@ -26,7 +26,9 @@ See Cormen et al. ch. 26; Boykov, Veksler & Zabih (2001) for the reduction.
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Iterator
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 
@@ -34,6 +36,33 @@ from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.incidence import SparseIncidence
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import energy, site_field
+
+
+@dataclass(frozen=True)
+class PairedArcs:
+    """A network's arcs and both capacities, in the layout the FFI takes.
+
+    Parameters
+    ----------
+    arcs : np.ndarray
+        ``2 * n_edges`` flattened ``(from, to)`` pairs.
+    capacity : np.ndarray
+        The forward capacity of each edge, one per pair.
+    reverse : np.ndarray
+        The back arc's capacity of each edge, one per pair.
+    """
+
+    arcs: np.ndarray
+    capacity: np.ndarray
+    reverse: np.ndarray
+
+    def __iter__(self) -> Iterator[Any]:
+        """``(arcs, capacity, reverse)``: the order callers unpack.
+
+        ``Any`` and not ``np.ndarray``: the three are one type here, and a
+        narrower annotation would still be widened by the next field added.
+        """
+        yield from (self.arcs, self.capacity, self.reverse)
 
 
 @dataclass
@@ -213,7 +242,7 @@ class FlowNetwork:
         self.target.append(source)
         self.capacity.append(reverse)
 
-    def as_arrays(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def as_arrays(self) -> PairedArcs:
         """The paired arcs as ``(arcs, capacity, reverse)``, one row per edge.
 
         ``arcs`` is ``2 * n_edges`` flattened ``(from, to)`` pairs, and the
@@ -231,13 +260,13 @@ class FlowNetwork:
         if self._arcs is not None and self._forward is not None:
             # The three are set and cleared together, never singly.
             assert self._backward is not None
-            return self._arcs, self._forward, self._backward
+            return PairedArcs(self._arcs, self._forward, self._backward)
         target = np.asarray(self.target, dtype=np.int64).reshape(-1, 2)
         capacity = np.asarray(self.capacity, dtype=np.float64).reshape(-1, 2)
         # Column 0 of a row is the head (`add_edge` appends the sink first),
         # column 1 the tail, so the `(from, to)` order the binding takes is
         # the reversed row.
-        return (
+        return PairedArcs(
             np.ascontiguousarray(target[:, ::-1]).reshape(-1),
             np.ascontiguousarray(capacity[:, 0]),
             np.ascontiguousarray(capacity[:, 1]),
@@ -260,6 +289,36 @@ class MinCut:
 
     value: float
     source_side: np.ndarray
+
+
+@dataclass(frozen=True)
+class GroundState:
+    """The exact minimum-energy configuration of a two-state ferromagnet.
+
+    One type for both implementations: :func:`ising_ground_state` and
+    :func:`snakes_and_ladders.search.maxflow_rust.ising_ground_state` are an
+    oracle pair on the ladder, so a test that swaps one for the other reads
+    the same fields (issue #865).
+
+    Parameters
+    ----------
+    configuration : np.ndarray
+        State per node, 0 or 1.
+    energy : float
+        Its energy under :func:`~snakes_and_ladders.sim.potts.energy`, which
+        is the global minimum.
+    """
+
+    configuration: np.ndarray
+    energy: float
+
+    def __iter__(self) -> Iterator[Any]:
+        """``(configuration, energy)``: the order callers unpack.
+
+        ``Any`` and not a union: an unpacking gives both names the element
+        type, so a union would mistype each of them.
+        """
+        yield from (self.configuration, self.energy)
 
 
 def max_flow(network: FlowNetwork, source: int, sink: int) -> MinCut:
@@ -389,7 +448,7 @@ def check_non_negative_couplings(graph: PottsGraph, reason: str) -> None:
 
 def ising_ground_state(
     graph: PottsGraph, field_values: np.ndarray, *, backend: Backend = Backend.PYTHON
-) -> tuple[np.ndarray, float]:
+) -> GroundState:
     """The exact minimum-energy configuration of a two-state ferromagnet.
 
     **The construction.** Writing agreement as ``1 - disagreement`` turns the
@@ -426,7 +485,7 @@ def ising_ground_state(
 
     Returns
     -------
-    tuple[np.ndarray, float]
+    GroundState
         The ground-state configuration and its energy.
 
     Raises
@@ -466,7 +525,7 @@ def ising_ground_state(
 
     cut = max_flow(network, source, sink)
     configuration = (~cut.source_side[: graph.n_nodes]).astype(np.int64)
-    return configuration, energy(graph, values, configuration)
+    return GroundState(configuration, energy(graph, values, configuration))
 
 
 def cut_energy(graph: PottsGraph, field_values: np.ndarray, cut_value: float) -> float:

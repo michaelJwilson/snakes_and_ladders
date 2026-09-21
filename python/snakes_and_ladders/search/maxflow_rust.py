@@ -45,14 +45,12 @@ from __future__ import annotations
 import numpy as np
 
 from snakes_and_ladders import oxi_snakes_and_ladders
-from snakes_and_ladders.search.maxflow import FlowNetwork, MinCut
+from snakes_and_ladders.search.maxflow import FlowNetwork, GroundState, MinCut
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import energy, site_field
 
 
-def ising_ground_state(
-    graph: PottsGraph, field_values: np.ndarray
-) -> tuple[np.ndarray, float]:
+def ising_ground_state(graph: PottsGraph, field_values: np.ndarray) -> GroundState:
     """The exact two-state ferromagnetic ground state, computed in Rust.
 
     Parameters
@@ -64,7 +62,7 @@ def ising_ground_state(
 
     Returns
     -------
-    tuple[np.ndarray, float]
+    GroundState
         The ground-state configuration and its energy, the latter evaluated
         in Python on the returned configuration rather than read back from
         the cut. That keeps the reduction's arithmetic and the energy
@@ -84,7 +82,7 @@ def ising_ground_state(
         graph.edge_coupling,
     )
     configuration = np.asarray(states, dtype=np.int64)
-    return configuration, energy(graph, values, configuration)
+    return GroundState(configuration, energy(graph, values, configuration))
 
 
 def ising_ground_states(
@@ -152,8 +150,13 @@ def min_cut(network: FlowNetwork, source: int, sink: int) -> MinCut:
     side, so :mod:`snakes_and_ladders.search.alpha_expansion`, which needs
     the cut rather than the value, could not use it at all.
     """
-    arcs, capacity, reverse = network.as_arrays()
+    paired = network.as_arrays()
     value, side = oxi_snakes_and_ladders.max_flow(
-        network.n_nodes, arcs, capacity, source, sink, reverse
+        network.n_nodes,
+        paired.arcs,
+        paired.capacity,
+        source,
+        sink,
+        paired.reverse,
     )
     return MinCut(value=float(value), source_side=np.asarray(side, dtype=bool))

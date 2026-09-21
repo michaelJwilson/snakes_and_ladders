@@ -24,9 +24,10 @@ helper a recovery test needs.
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from itertools import permutations
+from typing import Any
 
 import numpy as np
 import torch
@@ -1110,6 +1111,47 @@ class EmFit:
     termination: Termination | None = None
 
 
+@dataclass(frozen=True)
+class CategoricalFit:
+    """What :func:`baum_welch` fitted, as log-probabilities.
+
+    :class:`EmFit` is the general form, carrying a family rather than a
+    matrix and two fields a categorical M step cannot fill: no categorical
+    re-estimate sits at a boundary, and the outer loop's termination is
+    :class:`EmFit`'s to report. This is the narrowing, and it carries what
+    the four-tuple carried and nothing else (issue #865).
+
+    Parameters
+    ----------
+    log_initial : torch.Tensor
+        Shape ``(m,)``, the fitted initial distribution.
+    log_transition : torch.Tensor
+        Shape ``(m, m)``, the fitted transition kernel.
+    log_emission : torch.Tensor
+        Shape ``(m, n_symbols)``, the fitted emission matrix.
+    log_likelihood : float
+        The final log-likelihood.
+    """
+
+    log_initial: torch.Tensor
+    log_transition: torch.Tensor
+    log_emission: torch.Tensor
+    log_likelihood: float
+
+    def __iter__(self) -> Iterator[Any]:
+        """The order callers unpack: the three parameters, then the value.
+
+        ``Any`` and not a union: an unpacking gives every name the element
+        type, so a union would mistype each of them.
+        """
+        yield from (
+            self.log_initial,
+            self.log_transition,
+            self.log_emission,
+            self.log_likelihood,
+        )
+
+
 def baum_welch(
     observations: np.ndarray,
     log_initial: torch.Tensor,
@@ -1117,7 +1159,7 @@ def baum_welch(
     log_emission: torch.Tensor,
     max_iterations: int = 500,
     tolerance: float = 1e-12,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, float]:
+) -> CategoricalFit:
     """Fit an HMM by expectation-maximization, with no autodiff involved.
 
     Baum-Welch is an independent fitting algorithm for the same model, so a
@@ -1140,7 +1182,7 @@ def baum_welch(
 
     Returns
     -------
-    tuple[torch.Tensor, torch.Tensor, torch.Tensor, float]
+    CategoricalFit
         Fitted log initial, log transition and log emission, and the final
         log-likelihood.
     """
@@ -1156,7 +1198,7 @@ def baum_welch(
     if not isinstance(family, CategoricalEmission):  # pragma: no cover
         msg = f"expected a categorical M step, got {type(family).__name__}"
         raise TypeError(msg)
-    return (
+    return CategoricalFit(
         result.log_initial,
         result.log_transition,
         family.log_matrix,

@@ -113,13 +113,13 @@ def test_restarts_reach_every_himmelblau_basin_and_one_start_reaches_one() -> No
     from_one = {
         Himmelblau.nearest_minimum(
             fit_from(objective, FromObjective(), workers=1).best.theta
-        )[0]
+        ).index
         for _ in range(8)
     }
     assert len(from_one) == 1, "a deterministic start reached more than one basin"
 
     from_many = {
-        Himmelblau.nearest_minimum(result.theta)[0]
+        Himmelblau.nearest_minimum(result.theta).index
         for trial in range(8)
         for result in fit_from(
             objective, RandomRestart(4, 3.0, np.random.default_rng(trial)), workers=1
@@ -198,7 +198,7 @@ def test_the_spread_reports_that_the_starts_disagreed() -> None:
         Himmelblau(), RandomRestart(4, 3.0, np.random.default_rng(0)), workers=1
     )
     assert flat.spread == pytest.approx(0.0, abs=1e-6)
-    assert len({Himmelblau.nearest_minimum(f.theta)[0] for f in flat.all_fits}) > 1
+    assert len({Himmelblau.nearest_minimum(f.theta).index for f in flat.all_fits}) > 1
 
     rugged = fit_from(
         Rastrigin(), RandomRestart(6, 2.0, np.random.default_rng(0)), workers=1

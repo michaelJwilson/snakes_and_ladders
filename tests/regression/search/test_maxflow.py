@@ -353,7 +353,10 @@ def test_the_batch_entry_point_returns_each_instance_s_own_ground_state() -> Non
     fields = np.random.default_rng(715).normal(size=(5, graph.n_nodes, 2))
 
     expected = np.stack(
-        [maxflow_rust.ising_ground_state(graph, field)[0] for field in fields]
+        [
+            maxflow_rust.ising_ground_state(graph, field).configuration
+            for field in fields
+        ]
     )
 
     for threads in (None, 1, 3):

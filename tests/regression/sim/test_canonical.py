@@ -366,7 +366,7 @@ def test_past_enumeration_the_planted_state_is_a_reference_not_a_hard_case() -> 
         best = min(
             iterated_conditional_modes(
                 instance.graph, field, 2, rng=np.random.default_rng(seed)
-            )[1]
+            ).energy
             for seed in range(20)
         )
         reachable.append(best - instance.planted_energy)

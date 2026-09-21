@@ -31,6 +31,7 @@ import numpy as np
 import pytest
 from snakes_and_ladders.fixtures import Scale
 from snakes_and_ladders.search.alpha_expansion import (
+    Labelling,
     iterated_conditional_modes,
 )
 from snakes_and_ladders.sim.canonical import FrustratedLatticeParams, PlantedSpinGlass
@@ -58,9 +59,7 @@ def glass() -> PlantedSpinGlass:
     return params.glass(frustration, np.random.default_rng(params.seed))
 
 
-def _descents(
-    instance: PlantedSpinGlass, seed: int, restarts: int
-) -> list[tuple[np.ndarray, float]]:
+def _descents(instance: PlantedSpinGlass, seed: int, restarts: int) -> list[Labelling]:
     generator = np.random.default_rng(seed)
     return [
         iterated_conditional_modes(instance.graph, FIELD, 2, generator)

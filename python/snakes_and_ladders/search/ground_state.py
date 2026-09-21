@@ -51,8 +51,9 @@ from __future__ import annotations
 
 import functools
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
+from typing import Any
 
 import numpy as np
 
@@ -257,9 +258,33 @@ def lattice_rung(
     )
 
 
-def rung_field(
-    params: SpatioOnlyParams, n_states: int
-) -> tuple[np.ndarray, np.ndarray]:
+@dataclass(frozen=True)
+class RungField:
+    """A rung's per-site field, and the class ladder it was built from.
+
+    Parameters
+    ----------
+    field : np.ndarray
+        Shape ``(n_nodes, n_states)``, as
+        :func:`~snakes_and_ladders.sim.potts.spatio_only_field` builds it.
+    alpha : np.ndarray
+        The ladder, length ``n_states``, ascending. The field's columns are
+        read against it, so the two travel together.
+    """
+
+    field: np.ndarray
+    alpha: np.ndarray
+
+    def __iter__(self) -> Iterator[Any]:
+        """``(field, alpha)``: the order callers unpack.
+
+        ``Any`` and not ``np.ndarray``: the two are one type here, and a
+        narrower annotation would still be widened by the next field added.
+        """
+        yield from (self.field, self.alpha)
+
+
+def rung_field(params: SpatioOnlyParams, n_states: int) -> RungField:
     """The field and class ladder of a rung at ``n_states``, from one fixture.
 
     The ladder is taken from the fixture's own ``alpha`` --- its two extremes
@@ -276,10 +301,10 @@ def rung_field(
         fixture declares.
     """
     if n_states == params.n_classes:
-        return params.field, params.alpha
+        return RungField(params.field, params.alpha)
     if n_states == 2:
         alpha = np.array([params.alpha[0], params.alpha[-1]])
-        return spatio_only_field(alpha, params.sizes), alpha
+        return RungField(spatio_only_field(alpha, params.sizes), alpha)
     msg = (
         f"a rung is built at 2 states or the fixture's {params.n_classes}, "
         f"got {n_states}: any other truncation reads the structural checks "
@@ -354,7 +379,27 @@ def structure(alpha: np.ndarray, sizes: np.ndarray, labelling: np.ndarray) -> St
     )
 
 
-def expansion_bracket(rung: Rung, expansion_energy: float) -> tuple[float, float]:
+@dataclass(frozen=True)
+class Bracket:
+    """The interval an optimum lies in.
+
+    Parameters
+    ----------
+    lower : float
+        The largest energy the optimum cannot be above.
+    upper : float
+        The smallest it cannot be below, which is the method's own energy.
+    """
+
+    lower: float
+    upper: float
+
+    def __iter__(self) -> Iterator[Any]:
+        """``(lower, upper)``: the order callers unpack."""
+        yield from (self.lower, self.upper)
+
+
+def expansion_bracket(rung: Rung, expansion_energy: float) -> Bracket:
     """The interval the optimum lies in, from the expansion's factor-2 bound.
 
     **The bound is on the non-negative form of the energy, and saying so is
@@ -367,15 +412,13 @@ def expansion_bracket(rung: Rung, expansion_energy: float) -> tuple[float, float
 
     Returns
     -------
-    tuple[float, float]
-        ``(lower, upper)``: the largest energy the optimum cannot be above,
-        and the smallest it cannot be below. ``upper`` is the expansion's own
-        energy, which the optimum is at most.
+    Bracket
+        ``upper`` is the expansion's own energy, which the optimum is at most.
     """
     offset = float(rung.field.max(axis=1).sum()) + float(
         np.asarray(rung.graph.coupling).sum()
     )
-    return expansion_energy / 2.0 - offset / 2.0, expansion_energy
+    return Bracket(expansion_energy / 2.0 - offset / 2.0, expansion_energy)
 
 
 @dataclass(frozen=True)
@@ -473,7 +516,7 @@ def run_icm(rung: Rung, budget: Budget, rng: np.random.Generator) -> MethodRun:
     """Iterated conditional modes: single-site descent in index order."""
     steps = max(1, budget.size // rung.visits_per_sweep)
     start = time.perf_counter()
-    labelling, value = iterated_conditional_modes(
+    settled = iterated_conditional_modes(
         rung.graph,
         rung.field,
         rung.n_states,
@@ -481,8 +524,8 @@ def run_icm(rung: Rung, budget: Budget, rng: np.random.Generator) -> MethodRun:
         max_sweeps=steps,
     )
     return MethodRun(
-        labelling=labelling,
-        energy=value,
+        labelling=settled.labelling,
+        energy=settled.energy,
         spent=steps * rung.visits_per_sweep,
         seconds=time.perf_counter() - start,
     )
@@ -504,7 +547,7 @@ def run_gibbs_zero(rung: Rung, budget: Budget, rng: np.random.Generator) -> Meth
     """
     steps = max(1, budget.size // rung.visits_per_sweep)
     start = time.perf_counter()
-    labelling, value = iterated_conditional_modes(
+    settled = iterated_conditional_modes(
         rung.graph,
         rung.field,
         rung.n_states,
@@ -515,8 +558,8 @@ def run_gibbs_zero(rung: Rung, budget: Budget, rng: np.random.Generator) -> Meth
         backend=Backend.PYTHON,
     )
     return MethodRun(
-        labelling=labelling,
-        energy=value,
+        labelling=settled.labelling,
+        energy=settled.energy,
         spent=steps * rung.visits_per_sweep,
         seconds=time.perf_counter() - start,
     )
