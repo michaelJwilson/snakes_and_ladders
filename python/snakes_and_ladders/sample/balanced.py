@@ -29,7 +29,10 @@ papers.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from dataclasses import dataclass
 from enum import StrEnum
+from typing import Any
 
 import numpy as np
 
@@ -37,6 +40,7 @@ from snakes_and_ladders.numerics import logsumexp
 
 __all__ = [
     "BalancingFunction",
+    "Change",
     "draw_change",
     "log_balanced_weights",
     "log_metropolis_ratio",
@@ -141,9 +145,34 @@ def log_normalizer(log_weights: np.ndarray) -> float:
     return float(logsumexp(log_weights.reshape(-1), axis=0))
 
 
+@dataclass(frozen=True)
+class Change:
+    """One single-site move: which variable changes, and to what.
+
+    Parameters
+    ----------
+    variable : int
+        Row of the weight matrix the draw landed in --- the variable the
+        move sets.
+    value : int
+        Column it landed in --- the value that variable takes.
+    """
+
+    variable: int
+    value: int
+
+    def __iter__(self) -> Iterator[Any]:
+        """``(variable, value)``: the order callers unpack.
+
+        ``Any`` and not a union: an unpacking gives every name the element
+        type, so a union would mistype each of them.
+        """
+        yield from (self.variable, self.value)
+
+
 def draw_change(
     log_weights: np.ndarray, total: float, rng: np.random.Generator
-) -> tuple[int, int]:
+) -> Change:
     """One ``(variable, value)`` drawn proportional to ``exp(log_weights)``.
 
     One uniform and a search of the cumulative sum, the arithmetic every
@@ -156,7 +185,7 @@ def draw_change(
     cumulative = np.cumsum(probabilities)
     position = int(np.searchsorted(cumulative, rng.random() * cumulative[-1]))
     variable, value = divmod(position, log_weights.shape[1])
-    return variable, value
+    return Change(variable=variable, value=value)
 
 
 def log_metropolis_ratio(

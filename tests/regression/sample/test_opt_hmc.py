@@ -383,8 +383,8 @@ def test_the_composition_reproduces_the_hand_written_leapfrog_exactly(
     composed = leapfrog(GAUSSIAN, theta, momentum, step_size, n_steps)
     written = _hand_written_leapfrog(GAUSSIAN, theta, momentum, step_size, n_steps)
 
-    assert torch.equal(composed[0], written[0])
-    assert torch.equal(composed[1], written[1])
+    assert torch.equal(composed.position, written[0])
+    assert torch.equal(composed.momentum, written[1])
 
 
 @pytest.mark.analytic

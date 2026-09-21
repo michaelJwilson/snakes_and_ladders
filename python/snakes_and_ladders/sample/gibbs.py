@@ -45,9 +45,10 @@ is the one for the model none of them can express.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Any
 
 import numpy as np
 
@@ -623,7 +624,8 @@ def balanced_sweep(
         )
         forward_weights = log_balanced_weights(estimate, state)
         forward_total = log_normalizer(forward_weights)
-        position, value = draw_change(forward_weights, forward_total, rng)
+        change = draw_change(forward_weights, forward_total, rng)
+        position, value = change.variable, change.value
 
         previous = int(state[position])
         log_ratio = float(exact[position, value])
@@ -903,10 +905,9 @@ def anneal_topology(
     trajectory = [value]
     accepted = 0
     for step in range(schedule.n_steps):
-        current, value, moved = topology_step(
-            current, value, schedule(step), rng, score, moves=moves
-        )
-        if moved:
+        taken = topology_step(current, value, schedule(step), rng, score, moves=moves)
+        current, value = taken.topology, taken.log_likelihood
+        if taken.moved:
             accepted += 1
             if value > best_value:
                 best, best_value = current, value
@@ -939,6 +940,36 @@ def cached_topology_score(
     return score
 
 
+@dataclass(frozen=True)
+class TopologyStep:
+    """Where one Metropolis step over topologies left the chain.
+
+    Parameters
+    ----------
+    topology : Topology
+        The topology after the step: the proposal if it was accepted, the
+        current one if it was not.
+    log_likelihood : float
+        The fitted log-likelihood there, so a caller that accepts does not
+        refit what the step already scored.
+    moved : bool
+        Whether the proposal was accepted. Summed over a walk, it is the
+        acceptance rate.
+    """
+
+    topology: Topology
+    log_likelihood: float
+    moved: bool
+
+    def __iter__(self) -> Iterator[Any]:
+        """``(topology, log_likelihood, moved)``: the order callers unpack.
+
+        ``Any`` and not a union: an unpacking gives every name the element
+        type, so a union would mistype each of them.
+        """
+        yield from (self.topology, self.log_likelihood, self.moved)
+
+
 def topology_step(
     current: Topology,
     value: float,
@@ -947,7 +978,7 @@ def topology_step(
     score: Callable[[Topology], float],
     *,
     moves: MoveSet = MoveSet.NNI,
-) -> tuple[Topology, float, bool]:
+) -> TopologyStep:
     """One Metropolis step over topologies at ``temperature``.
 
     A uniform neighbour under ``moves`` is proposed and accepted with
@@ -958,7 +989,7 @@ def topology_step(
 
     Returns
     -------
-    tuple[Topology, float, bool]
+    TopologyStep
         The topology and fitted log-likelihood after the step, and whether
         the proposal was accepted.
     """
@@ -968,5 +999,5 @@ def topology_step(
     proposed = score(proposal)
     difference = (proposed - value) / temperature
     if accept(difference, rng):
-        return proposal, proposed, True
-    return current, value, False
+        return TopologyStep(topology=proposal, log_likelihood=proposed, moved=True)
+    return TopologyStep(topology=current, log_likelihood=value, moved=False)

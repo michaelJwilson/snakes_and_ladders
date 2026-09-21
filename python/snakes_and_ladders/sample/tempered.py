@@ -638,10 +638,8 @@ def tempered_topologies(
     def step(
         state: Topology, current: float, temperature: float, child: np.random.Generator
     ) -> tuple[Topology, float]:
-        topology, moved_to, _ = topology_step(
-            state, current, temperature, child, score, moves=moves
-        )
-        return topology, moved_to
+        taken = topology_step(state, current, temperature, child, score, moves=moves)
+        return taken.topology, taken.log_likelihood
 
     return _exchange(
         step,
