@@ -35,22 +35,18 @@ itself. The file that runs the gate wins; the module is corrected to match it.
 from __future__ import annotations
 
 import re
-import sys
 import tomllib
 from pathlib import Path
 
+# `infra/` is on `mypy_path` and is how the guards already reach their shared
+# names (see `infra/test_kinds.py`).
+import catalogue
+import gates
 import pytest
+import test_kinds
 import yaml
 
 from tests._paths import REPO_ROOT
-
-# `infra/` is on `mypy_path` and is how the guards already reach their shared
-# names (see `infra/test_kinds.py`).
-sys.path.insert(0, str(REPO_ROOT / "infra"))
-
-import catalogue
-import gates
-import test_kinds
 
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"

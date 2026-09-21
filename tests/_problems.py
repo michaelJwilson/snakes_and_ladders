@@ -54,19 +54,15 @@ from __future__ import annotations
 
 import ast
 import re
-import sys
 from functools import cache
 from pathlib import Path
 from typing import Any
 
+import catalogue
 from snakes_and_ladders.sim.fixtures import FIXTURES_DIR, problems
 
 #: The repository root, from this file: `tests.` imports are resolved under it.
 from tests._paths import REPO_ROOT
-
-sys.path.insert(0, str(REPO_ROOT / "infra"))
-
-import catalogue
 
 #: Calls whose *first* positional argument names the problem.
 #: `snakes_and_ladders.sim.fixtures.fixture` and `path_of`.

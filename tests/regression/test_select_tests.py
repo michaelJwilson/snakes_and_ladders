@@ -9,13 +9,9 @@ needs nothing, and skipping a run that would have measured different coverage
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "infra"))
-
 from select_tests import (
     ALWAYS,
     ALWAYS_DESELECTED,

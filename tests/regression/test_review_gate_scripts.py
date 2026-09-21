@@ -15,19 +15,15 @@ re-adding one is the way this change is silently undone (issue #425).
 from __future__ import annotations
 
 import subprocess
-import sys
 from pathlib import Path
-
-import pytest
-
-from tests._paths import REPO_ROOT
-
-sys.path.insert(0, str(REPO_ROOT / "infra"))
 
 import checks_ledger
 import gate_changed_tests
 import gate_new_seams
 import problems_tables
+import pytest
+
+from tests._paths import REPO_ROOT
 
 #: What ``infra/ledgers.sh`` writes, and what must therefore never be tracked.
 DERIVED = (checks_ledger.LEDGER, problems_tables.GENERATED)

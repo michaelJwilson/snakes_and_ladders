@@ -32,12 +32,14 @@ from __future__ import annotations
 import ast
 import json
 import shutil
-import sys
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+import baselines as baseline_script
+import catalogue
 import numpy as np
+import problems_tables
 import pytest
 from snakes_and_ladders.emissions import CategoricalEmission
 from snakes_and_ladders.fixtures import Scale
@@ -60,12 +62,6 @@ from snakes_and_ladders.sim.fixtures import (
 from snakes_and_ladders.sim.spatio_sequential import canonical_spatio_sequential
 
 from tests._paths import REPO_ROOT
-
-sys.path.insert(0, str(REPO_ROOT / "infra"))
-
-import baselines as baseline_script
-import catalogue
-import problems_tables
 
 #: The applicability table column each stated oracle fills. ``none`` fills
 #: none, which is the point of stating it: the size is past every oracle.

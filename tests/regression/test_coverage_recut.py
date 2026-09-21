@@ -11,23 +11,19 @@ statement above what the run reaches.
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
+import coverage_recut
 import pytest
 from coverage.sqldata import CoverageData
-
-from tests._paths import REPO_ROOT
-
-sys.path.insert(0, str(REPO_ROOT / "infra"))
-
-import coverage_recut
 from gates import (
     COVERAGE_GUARDS,
     JUDGED_COVERAGE,
     UNJUDGED_COVERAGE,
     JudgedCoverage,
 )
+
+from tests._paths import REPO_ROOT
 
 #: Eight statements. Five run at import -- the two assignments and the three
 #: `def` lines -- and each body is one statement a test may reach.
@@ -162,7 +158,7 @@ def test_the_collection_names_the_markers_the_hook_adds(tmp_path: Path) -> None:
     """
     (tmp_path / "conftest.py").write_text(
         f"import sys\n\nsys.path.insert(0, {str(REPO_ROOT)!r})\n"
-        "from tests.conftest import (  # noqa: E402,F401\n"
+        "from tests.conftest import (,F401\n"
         "    pytest_collection_modifyitems,\n"
         "    pytest_configure,\n"
         ")\n"

@@ -17,19 +17,13 @@ satisfied by a `conftest.py` applying markers invisibly.
 
 from __future__ import annotations
 
-import sys
 import tomllib
 from pathlib import Path
 
 import pytest
 
-from tests._paths import REPO_ROOT
-from tests._problems import fixtures_named_in
-
 # The names live in `infra/test_kinds.py`, which the merge gate also reads:
 # one definition, and `infra/` is already on `mypy_path`. See that module.
-sys.path.insert(0, str(REPO_ROOT / "infra"))
-
 from test_kinds import (
     EXCLUDED_DIRECTORY,
     FINDINGS,
@@ -39,6 +33,9 @@ from test_kinds import (
     functions_of,
     markers,
 )
+
+from tests._paths import REPO_ROOT
+from tests._problems import fixtures_named_in
 
 
 def _marked_test_files() -> list[Path]:

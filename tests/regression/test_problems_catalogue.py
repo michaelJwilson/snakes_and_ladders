@@ -12,17 +12,13 @@ file. That the tree carries no committed copy is
 from __future__ import annotations
 
 import importlib
-import sys
 from pathlib import Path
-
-import pytest
-
-from tests._paths import REPO_ROOT
-
-sys.path.insert(0, str(REPO_ROOT / "infra"))
 
 import catalogue
 import checks_ledger
+import pytest
+
+from tests._paths import REPO_ROOT
 
 FIXTURES = REPO_ROOT / "tests" / "regression" / "fixtures"
 PACKAGE = "snakes_and_ladders."

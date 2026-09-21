@@ -25,17 +25,13 @@ from __future__ import annotations
 
 import re
 import subprocess
-import sys
 from pathlib import Path
 
+import catalogue
 import pytest
 from snakes_and_ladders.qa.manifest import FIGURES, cited_stems
 
 from tests._paths import REPO_ROOT
-
-sys.path.insert(0, str(REPO_ROOT / "infra"))
-
-import catalogue
 
 #: The sentence in `DEV.md` opening the contract table. Prose around it may be
 #: reworded; this is the anchor, and its loss fails the test rather than

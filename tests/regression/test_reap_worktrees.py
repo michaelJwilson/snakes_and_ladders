@@ -14,15 +14,9 @@ what `status --porcelain` reports for each kind of change.
 from __future__ import annotations
 
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
-
-from tests._paths import REPO_ROOT
-
-sys.path.insert(0, str(REPO_ROOT / "infra"))
-
 import reap_worktrees
 
 

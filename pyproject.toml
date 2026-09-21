@@ -275,6 +275,15 @@ showcontent = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# `infra/` is a directory of scripts and not an importable package, and the
+# guards over the build import them. Nineteen modules put it on `sys.path`
+# themselves, each with a `# noqa: E402` for the imports that then followed
+# the call, and one loaded a generator by path through `importlib` because it
+# could not rely on the others having run first --- an import order that
+# depends on collection order is an import that works until a narrow
+# selection runs alone (issue #863). `pytest` adds this before conftest
+# collection, so a module imports `infra/` the way it imports anything.
+pythonpath = ["infra"]
 # Two axes, and they are independent (issue #237). A *kind* says what a test is
 # checked against; `critical` says whether it gates early. A test is critical
 # *and* an oracle test, never instead of one, so folding them into one flat set

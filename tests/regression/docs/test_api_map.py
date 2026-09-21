@@ -16,30 +16,15 @@ the refusal fires on a tree that does.
 from __future__ import annotations
 
 import ast
-import importlib.util
-import sys
 from pathlib import Path
-from types import ModuleType
 
+import api_map
 import pytest
 
 from tests._paths import REPO_ROOT
 
 PACKAGE = REPO_ROOT / "python" / "snakes_and_ladders"
 GENERATED = REPO_ROOT / "docs" / "tex" / "generated" / "api_map.tex"
-
-
-def _api_map() -> ModuleType:
-    """`infra/api_map.py`, loaded by path: `infra/` is not an importable package."""
-    spec = importlib.util.spec_from_file_location(
-        "api_map", REPO_ROOT / "infra" / "api_map.py"
-    )
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules["api_map"] = module
-    spec.loader.exec_module(module)
-    return module
 
 
 def _second_walk() -> dict[str, int]:
@@ -89,9 +74,7 @@ def test_the_map_counts_what_a_second_walk_finds() -> None:
     # The claim the document makes about itself, checked against a walk that
     # shares no line with the generator's. A module dropped for any reason --
     # a parse that raised, a filter that widened -- moves one of these four.
-    generator = _api_map()
-
-    assert generator.counts(generator.modules()) == _second_walk()
+    assert api_map.counts(api_map.modules()) == _second_walk()
 
 
 @pytest.mark.infra
@@ -100,10 +83,9 @@ def test_every_module_reaches_the_rendered_map() -> None:
     # rendered. Each one's label is asserted in the output, so a module the
     # layout skipped fails here rather than being absent from a 64-page PDF
     # nobody reads end to end.
-    generator = _api_map()
-    found = generator.modules()
+    found = api_map.modules()
 
-    rendered = generator.render(found)
+    rendered = api_map.render(found)
     for module in found:
         label = f"\\label{{sec:api:{module.path.replace('/', ':')}}}"
         assert label in rendered, module.path
@@ -114,22 +96,19 @@ def test_no_public_function_would_be_typeset_as_a_blank() -> None:
     # The guard the ticket asks for, in the direction that matters: the tree
     # has none today, and `--write` refuses one rather than printing an empty
     # cell in a document that states the surface.
-    generator = _api_map()
-
-    assert generator.without_summary(generator.modules()) == []
+    assert api_map.without_summary(api_map.modules()) == []
 
 
 @pytest.mark.smoke
 def test_the_refusal_fires_on_a_function_without_a_summary(tmp_path: Path) -> None:
     # Guarding the guard: the check above passes on a clean tree whether or
     # not the detector works, so the detector is shown a tree that is not.
-    generator = _api_map()
     module = tmp_path / "blank.py"
     module.write_text('"""A module."""\n\n\ndef public():\n    pass\n')
 
-    found = generator.modules(tmp_path)
+    found = api_map.modules(tmp_path)
 
-    assert generator.without_summary(found) == ["blank/public"]
+    assert api_map.without_summary(found) == ["blank/public"]
 
 
 @pytest.mark.infra

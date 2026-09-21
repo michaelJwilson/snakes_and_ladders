@@ -29,23 +29,19 @@ from __future__ import annotations
 import ast
 import io
 import re
-import sys
 import tokenize
 from collections.abc import Mapping
 from functools import cache
 from pathlib import Path
 
+import catalogue as catalogue_reader
 import pytest
 
 from tests._paths import REPO_ROOT
 from tests._problems import fixtures_named_in, problem_names
 
 TESTS = REPO_ROOT / "tests" / "regression"
-CATALOGUE = REPO_ROOT / "PROBLEMS.md"
-
-sys.path.insert(0, str(REPO_ROOT / "infra"))
-
-import catalogue as catalogue_reader  # noqa: E402
+CATALOGUE = catalogue_reader.CATALOGUE
 
 #: Every problem key, which is every marker the hook can add.
 DECLARED = frozenset(problem_names())

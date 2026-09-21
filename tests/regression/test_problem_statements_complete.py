@@ -20,15 +20,11 @@ states for citations from code.
 from __future__ import annotations
 
 import re
-import sys
 
+import catalogue
 import pytest
 
 from tests._paths import REPO_ROOT
-
-sys.path.insert(0, str(REPO_ROOT / "infra"))
-
-import catalogue
 
 TEX = REPO_ROOT / "docs" / "tex"
 TEXTBOOK = TEX / "textbook.tex"

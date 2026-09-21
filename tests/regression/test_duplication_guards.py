@@ -60,9 +60,9 @@ from __future__ import annotations
 
 import ast
 import re
-import sys
 from pathlib import Path
 
+import _paths
 import pytest
 from snakes_and_ladders.likelihood.schedule import (
     SCHEDULES,
@@ -71,10 +71,6 @@ from snakes_and_ladders.likelihood.schedule import (
 )
 
 from tests._paths import REPO_ROOT
-
-sys.path.insert(0, str(REPO_ROOT / "infra"))
-
-import _paths
 
 PACKAGE = REPO_ROOT / "python" / "snakes_and_ladders"
 

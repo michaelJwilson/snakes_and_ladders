@@ -20,9 +20,8 @@ guard refuses is one the escaper neutralises.
 
 from __future__ import annotations
 
-import sys
-
 import pytest
+import tex
 from snakes_and_ladders.qa.figure import (
     _LATEX_SPECIALS,
     _THOUSANDS,
@@ -30,12 +29,6 @@ from snakes_and_ladders.qa.figure import (
     check_latex_safe,
     latex_escape,
 )
-
-from tests._paths import REPO_ROOT
-
-sys.path.insert(0, str(REPO_ROOT / "infra"))
-
-import tex
 
 
 @pytest.mark.critical
