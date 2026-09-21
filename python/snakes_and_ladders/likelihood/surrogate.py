@@ -508,41 +508,10 @@ def ground_state_energy_bounds(
     )
 
 
-class MeanFieldLogPartition(Surrogate):
-    """The mean-field bound as a :class:`Surrogate` over ``(graph, field)``."""
-
-    kind = Bound.LOWER
-
-    def __call__(self, structure: object, data: object) -> torch.Tensor:
-        graph, field = _lattice_arguments(structure, data)
-        return mean_field_log_partition(graph, field)
-
-
-class SpanningTreeLogPartition(Surrogate):
-    """The spanning-tree bound as a :class:`Surrogate` over ``(graph, field)``."""
-
-    kind = Bound.UPPER
-
-    def __call__(self, structure: object, data: object) -> torch.Tensor:
-        graph, field = _lattice_arguments(structure, data)
-        return spanning_tree_log_partition(graph, field)
-
-
-def _lattice_arguments(
-    structure: object, data: object
-) -> tuple[PottsGraph, torch.Tensor]:
-    if not isinstance(structure, PottsGraph):
-        msg = "a lattice surrogate takes a PottsGraph and a field"
-        raise TypeError(msg)
-    return structure, torch.as_tensor(np.asarray(data, dtype=float))
-
-
 __all__ = [
     "EnergyBounds",
-    "MeanFieldLogPartition",
     "ParsimonyUpperBound",
     "PlugInLikelihood",
-    "SpanningTreeLogPartition",
     "decoupled_ground_energy",
     "decoupled_log_partition",
     "ground_state_energy_bounds",

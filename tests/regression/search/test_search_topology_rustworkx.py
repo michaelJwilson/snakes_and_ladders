@@ -86,7 +86,7 @@ def test_two_topologies_our_code_calls_equal_are_isomorphic(n_taxa: int) -> None
 def test_a_topology_is_isomorphic_to_itself_however_it_was_built() -> None:
     # The positive half at a size the enumeration above does not reach: a
     # topology drawn twice from the same seed, and every NNI neighbour of it
-    # against itself, each rebuilt through `_from_adjacency` and therefore
+    # against itself, each rebuilt through `from_adjacency` and therefore
     # carrying different synthetic internal names.
     first = random_topology(NAMES, np.random.default_rng(376))
     second = random_topology(NAMES, np.random.default_rng(376))

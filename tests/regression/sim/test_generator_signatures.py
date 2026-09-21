@@ -44,13 +44,6 @@ from tests._objective_checks import AnalyticGaussian
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PACKAGE = REPO_ROOT / "python" / "snakes_and_ladders"
 
-#: The fixture parameter objects a yaml declares. Their `seed` field is how a
-#: run is declared reproducible and stays: only the boundary at which it
-#: becomes a generator moved, which is the caller.
-DECLARED_PARAMS = frozenset(
-    {"SimulationParams", "PottsLatticeParams", "HmmParams", "PottsParams"}
-)
-
 
 def _tree() -> Node:
     """A four-taxon tree, the smallest an alignment is drawn on."""

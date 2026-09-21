@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.likelihood.distance import DistanceKind, distance_matrix
 from snakes_and_ladders.search.infer import infer, score_topology
 from snakes_and_ladders.search.neighbor_joining import neighbor_joining
@@ -44,8 +43,10 @@ _BUDGET = 12
 _LAZY_TOP = 4
 
 
-def _dataset(instance: Fixture) -> tuple[Node, dict[str, np.ndarray], int]:
-    params = load_params(instance.path, SimulationParams)
+def _dataset(
+    instance: Fixture[SimulationParams],
+) -> tuple[Node, dict[str, np.ndarray], int]:
+    params = instance.params
     dataset = simulate_alignment(
         tau=params.tau,
         k=params.k,
@@ -58,7 +59,9 @@ def _dataset(instance: Fixture) -> tuple[Node, dict[str, np.ndarray], int]:
 
 @pytest.mark.end2end
 @at_fixture("instance", "tree_scale")
-def test_neighbour_joining_recovers_the_declared_topology(instance: Fixture) -> None:
+def test_neighbour_joining_recovers_the_declared_topology(
+    instance: Fixture[SimulationParams],
+) -> None:
     # The step 1 result, pinned rather than remembered: this is the
     # measurement that says leaf count is a cost axis, so if it ever stops
     # holding the ladder's premise has changed and the fixtures are wrong.
@@ -73,7 +76,7 @@ def test_neighbour_joining_recovers_the_declared_topology(instance: Fixture) -> 
 @pytest.mark.end2end
 @at_fixture("instance", "tree_scale")
 def test_a_budgeted_search_reaches_its_own_maximum_at_this_size(
-    instance: Fixture,
+    instance: Fixture[SimulationParams],
 ) -> None:
     # What the optimizations are exercised by. The leaf-partial cache and the
     # post-order's dropped allocations are always on, `lazy_top` is the knob

@@ -50,7 +50,7 @@ def test_as_arrays_kept_benchmark(benchmark: BenchmarkFixture) -> None:
 def test_as_arrays_derived_benchmark(benchmark: BenchmarkFixture) -> None:
     """The same value rebuilt from the lists: the before number."""
     network = _network()
-    network._forget_arrays()
+    network.forget_arrays()
 
     result = benchmark(network.as_arrays)
 

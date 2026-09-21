@@ -1,9 +1,9 @@
-"""The shared layouts and colour utilities, pinned on structure and arithmetic (issue #312).
+"""The shared layout and the colour utilities, pinned on structure and arithmetic (issue #312).
 
-A layout is checked for what it promises -- how many axes, where the gaps
-fall, which axes are switched off, one legend handle per category -- and a
-colour utility for the arithmetic it states; that a figure renders is not
-asserted (root ``CLAUDE.md``'s no-coverage-theatre rule).
+A layout is checked for what it promises -- one legend handle per category
+-- and a colour utility for the arithmetic it states; that a figure renders
+is not asserted (root ``CLAUDE.md``'s no-coverage-theatre rule). The four
+layouts no figure called went with their tests in issue #864.
 """
 
 from __future__ import annotations
@@ -13,16 +13,9 @@ import matplotlib as mpl
 mpl.use("Agg")
 
 import matplotlib.pyplot as plt
-import numpy as np
 import pytest
 from snakes_and_ladders.qa.layout import (
-    TRACK_GAP,
     discrete_legend,
-    format_track_axis,
-    grouped_tracks,
-    joint_distribution,
-    marker_size,
-    spatial_grid,
 )
 from snakes_and_ladders.qa.style import (
     INK,
@@ -32,7 +25,6 @@ from snakes_and_ladders.qa.style import (
     discrete_palette,
     letter_style,
     notebook_style,
-    with_opacity,
 )
 
 
@@ -45,16 +37,6 @@ def test_blend_with_white_interpolates_between_white_and_the_colour() -> None:
     assert half == (0.5, 0.5, 0.5, 1.0)
     with pytest.raises(ValueError, match="alpha must be in"):
         blend_with_white("#000000", 1.5)
-
-
-@pytest.mark.analytic
-def test_with_opacity_keeps_the_colour_and_clips_the_alpha() -> None:
-    rgba = with_opacity(["#000000", "#FFFFFF", "#0072B2"], [-0.5, 0.25, 7.0])
-    np.testing.assert_allclose(rgba[:, 3], [0.0, 0.25, 1.0])
-    np.testing.assert_allclose(rgba[0, :3], [0.0, 0.0, 0.0])
-    np.testing.assert_allclose(rgba[1, :3], [1.0, 1.0, 1.0])
-    with pytest.raises(ValueError, match="colours but"):
-        with_opacity(["#000000"], [0.1, 0.2])
 
 
 @pytest.mark.infra
@@ -80,91 +62,6 @@ def test_notebook_style_lowers_the_dpi_and_keeps_the_letter_face() -> None:
         assert mpl.rcParams["figure.dpi"] == 150
         assert mpl.rcParams["font.family"] == ["serif"]
     assert letter_dpi == 200
-
-
-@pytest.mark.analytic
-def test_marker_size_shrinks_with_density_inside_its_clamps() -> None:
-    assert marker_size(1) == 25.0
-    assert marker_size(1_200) == pytest.approx(10.0)
-    assert marker_size(10**8) == 0.1
-    with pytest.raises(ValueError, match="positive"):
-        marker_size(0)
-
-
-@pytest.mark.infra
-def test_spatial_grid_gives_one_panel_per_feature_and_switches_the_rest_off() -> None:
-    coords = np.array([[x, y] for x in range(3) for y in range(3)], dtype=float)
-    features = {
-        "a": np.arange(9.0),
-        "b": np.zeros(9),
-        "c": np.ones(9),
-        "d": np.arange(9.0),
-    }
-    fig, axes = spatial_grid(coords, features, max_cols=3)
-    try:
-        assert len(axes) == 6
-        assert [ax.get_title() for ax in axes[:4]] == ["a", "b", "c", "d"]
-        assert not axes[4].axison
-        assert not axes[5].axison
-        # "b" is all zeros: hollow markers, no colourbar; every other panel has one.
-        assert len(fig.axes) == 6 + 3
-    finally:
-        plt.close(fig)
-    with pytest.raises(ValueError, match="expected \\(9,\\)"):
-        spatial_grid(coords, {"short": np.zeros(4)})
-    with pytest.raises(ValueError, match="at least one feature"):
-        spatial_grid(coords, {})
-
-
-@pytest.mark.infra
-def test_grouped_tracks_stacks_groups_with_a_gap_between_them() -> None:
-    fig, axes = grouped_tracks(3, 2, title="tracks")
-    try:
-        assert len(axes) == 6
-        tops = [ax.get_position().y1 for ax in axes]
-        bottoms = [ax.get_position().y0 for ax in axes]
-        assert tops == sorted(tops, reverse=True)
-        within = bottoms[0] - tops[1]
-        between = bottoms[1] - tops[2]
-        assert within == pytest.approx(0.0, abs=1e-9)
-        assert between == pytest.approx(TRACK_GAP * (tops[0] - bottoms[0]), rel=1e-6)
-        format_track_axis(axes[0], "p", (0.0, 1.0), [0.0, 0.5, 1.0], max_x=10.0)
-        assert axes[0].get_ylabel() == "p"
-        assert axes[0].get_xlim() == (0.0, 10.0)
-        assert list(axes[0].get_xticks()) == []
-        assert len(axes[0].lines) == 3
-    finally:
-        plt.close(fig)
-    with pytest.raises(ValueError, match="positive counts"):
-        grouped_tracks(0, 2)
-
-
-@pytest.mark.infra
-def test_joint_distribution_has_a_joint_panel_two_marginals_and_a_handle_per_group() -> (
-    None
-):
-    rng = np.random.default_rng(0)
-    x = rng.normal(size=200)
-    y = 2.0 * x + rng.normal(size=200)
-    groups = np.repeat([0, 1], 100)
-    x[3] = np.nan
-    fig, axes = joint_distribution(
-        x, y, groups, discrete_palette(2), x_label="exact", y_label="surrogate"
-    )
-    try:
-        assert set(axes) == {"joint", "top", "right"}
-        assert len(fig.axes) == 3
-        assert axes["joint"].get_xlabel() == "exact"
-        legend = axes["joint"].get_legend()
-        assert legend is not None
-        assert [text.get_text() for text in legend.get_texts()] == ["0", "1"]
-        assert not axes["top"].axison
-    finally:
-        plt.close(fig)
-    with pytest.raises(ValueError, match="share a shape"):
-        joint_distribution(x, y[:10], groups, {})
-    with pytest.raises(ValueError, match="finite point"):
-        joint_distribution(np.full(3, np.nan), np.zeros(3), np.zeros(3), {})
 
 
 @pytest.mark.infra

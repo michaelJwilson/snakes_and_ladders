@@ -9,8 +9,8 @@ Wolff step and a Swendsen-Wang pass reach
 module knowing this one exists.
 
 **These are the moves ``potts_mcmc`` already runs, not second copies of them.**
-Above zero temperature each delegates to ``_wolff_sweep`` or
-``_swendsen_wang_sweep``, which is why this module adds no kernel to keep in
+Above zero temperature each delegates to ``wolff_sweep`` or
+``swendsen_wang_sweep``, which is why this module adds no kernel to keep in
 step with an oracle --- the oracle *is* what runs. What it adds is two things
 those functions did not have: the choice of root and colour moved out of the
 sweep's generator and into the action (#706's Wolff action names both), and the
@@ -37,13 +37,13 @@ import numpy as np
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.sample.potts_mcmc import (
     MoveKind,
-    _cluster_members,
-    _find,
-    _niedermayer_sweep,
-    _swendsen_wang_sweep,
-    _union,
-    _wolff_sweep,
+    cluster_members,
+    find_root,
+    niedermayer_sweep,
     niedermayer_threshold,
+    swendsen_wang_sweep,
+    union_roots,
+    wolff_sweep,
 )
 from snakes_and_ladders.sim.graph import PottsGraph
 
@@ -74,7 +74,7 @@ def monochrome_partition(
     Returns
     -------
     np.ndarray
-        ``(n_nodes,)`` of component roots, as :func:`_find` reports them.
+        ``(n_nodes,)`` of component roots, as :func:`find_root` reports them.
     """
     n_nodes = int(offsets.shape[0]) - 1
     parent = np.arange(n_nodes)
@@ -83,8 +83,8 @@ def monochrome_partition(
         for position in range(bounds[node], bounds[node + 1]):
             neighbour = incident[position]
             if neighbour > node and labels[neighbour] == labels[node]:
-                _union(parent, node, neighbour)
-    return np.array([_find(parent, node) for node in range(n_nodes)])
+                union_roots(parent, node, neighbour)
+    return np.array([find_root(parent, node) for node in range(n_nodes)])
 
 
 def _recolour_at_zero(
@@ -183,7 +183,7 @@ class WolffMove:
             _recolour_at_zero(labels, members, self._field, label)
             size = int(members.size)
         else:
-            size = _wolff_sweep(
+            size = wolff_sweep(
                 labels,
                 self._field,
                 self._offsets,
@@ -201,7 +201,7 @@ class NiedermayerMove:
     """One cluster grown under Niedermayer's bond rule, two colours transposed on it.
 
     Wolff's arm generalized (issue #756):
-    :func:`~snakes_and_ladders.sample.potts_mcmc._niedermayer_sweep` activates a
+    :func:`~snakes_and_ladders.sample.potts_mcmc.niedermayer_sweep` activates a
     bond on its energy relative to a threshold ``E_0`` rather than on its
     endpoints agreeing, so the arm runs on a coupling of either sign, and at
     :func:`~snakes_and_ladders.sample.potts_mcmc.niedermayer_threshold`'s value
@@ -282,7 +282,7 @@ class NiedermayerMove:
     ) -> tuple[np.ndarray, int]:
         """Grow the cluster at ``site``, transpose its colour with ``label``, charge it."""
         labels = np.ascontiguousarray(state, dtype=np.int64).copy()
-        size = _niedermayer_sweep(
+        size = niedermayer_sweep(
             labels,
             self._field,
             self._offsets,
@@ -311,7 +311,7 @@ class SwendsenWangMove:
         As :class:`WolffMove`.
     backend : Backend
         Which implementation runs the ``T > 0`` pass, as
-        ``potts_mcmc._swendsen_wang_sweep`` takes it.
+        ``potts_mcmc.swendsen_wang_sweep`` takes it.
         :data:`~snakes_and_ladders.backend.Backend.PYTHON` is the oracle and
         the default: the Rust pass draws the same uniforms in a different
         order, so it is a chain of the same law and not the same chain
@@ -378,16 +378,16 @@ class SwendsenWangMove:
         if temperature == 0.0:
             partition = monochrome_partition(labels, self._offsets, self._neighbours)
             # Grouped in one pass rather than a comparison of the whole
-            # partition per cluster, which `potts_mcmc._cluster_members`
+            # partition per cluster, which `potts_mcmc.cluster_members`
             # measures: the members and their order are the same
             # (issue #754).
-            order, bounds = _cluster_members(partition)
+            order, bounds = cluster_members(partition)
             for cluster in range(bounds.size - 1):
                 members = order[bounds[cluster] : bounds[cluster + 1]]
                 proposed = int(rng.integers(self.n_states))
                 _recolour_at_zero(labels, members, self._field, proposed)
         else:
-            _swendsen_wang_sweep(
+            swendsen_wang_sweep(
                 labels,
                 self._graph,
                 self._field,

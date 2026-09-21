@@ -258,9 +258,6 @@ def table_main(
 SIMULATION_PARAMS = ParamsArgument(
     "params", partial(load_params, kind=SimulationParams)
 )
-SIMULATION_PARAMS_REPEATED = ParamsArgument(
-    "params", partial(load_params, kind=SimulationParams), repeated=True
-)
 POTTS_PARAMS = ParamsArgument("potts-params", partial(load_params, kind=PottsParams))
 HMM_PARAMS = ParamsArgument("hmm-params", partial(load_params, kind=HmmParams))
 MIXTURE_PARAMS = ParamsArgument("params", partial(load_params, kind=MixtureParams))

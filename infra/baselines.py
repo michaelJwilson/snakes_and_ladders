@@ -52,6 +52,7 @@ import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from snakes_and_ladders.fixtures import Scale
@@ -187,7 +188,7 @@ def _rate(built: TreeEnvironment, endpoints: Sequence[Topology], best: float) ->
     )
 
 
-def tree_policy_baseline(loaded: Fixture) -> dict[str, Measurement]:
+def tree_policy_baseline(loaded: Fixture[Any]) -> dict[str, Measurement]:
     """The enumerated maximum and the two reference rates on a tree fixture.
 
     The three numbers a policy is judged against: what the best topology
@@ -253,7 +254,7 @@ def tree_policy_baseline(loaded: Fixture) -> dict[str, Measurement]:
     }
 
 
-def tree_surrogate_baseline(loaded: Fixture) -> dict[str, Measurement]:
+def tree_surrogate_baseline(loaded: Fixture[Any]) -> dict[str, Measurement]:
     """The maximized log-likelihood of every topology of every training alignment.
 
     The exact targets a learned surrogate is fitted against and scored on. One
@@ -295,7 +296,7 @@ def tree_surrogate_baseline(loaded: Fixture) -> dict[str, Measurement]:
     }
 
 
-def potts_environment(loaded: Fixture) -> PottsEnvironment:
+def potts_environment(loaded: Fixture[Any]) -> PottsEnvironment:
     """The declared Potts chain as a single-flip search, at an enumerable length."""
     params = loaded.params
     return PottsEnvironment(
@@ -303,7 +304,7 @@ def potts_environment(loaded: Fixture) -> PottsEnvironment:
     )
 
 
-def potts_environment_baseline(loaded: Fixture) -> dict[str, Measurement]:
+def potts_environment_baseline(loaded: Fixture[Any]) -> dict[str, Measurement]:
     """What an untrained policy achieves on the enumerable Potts chain.
 
     The optimum is a sum over every configuration and so is the expected
@@ -403,7 +404,7 @@ def glass_ground_energy(graph: PottsGraph) -> float:
     return best
 
 
-def planted_glass_baseline(loaded: Fixture) -> dict[str, Measurement]:
+def planted_glass_baseline(loaded: Fixture[Any]) -> dict[str, Measurement]:
     """The ground state of the declared glass, and how often descent reaches it.
 
     The instance is hard *and* refereed, which is the conjunction issue #406
@@ -495,14 +496,14 @@ class BaselineSpec:
         *computing* modules, not this script and not the registry that reads
         the record: a change to the search being measured must invalidate
         the number, and a change to the reader must not.
-    compute : Callable[[Fixture], dict[str, Measurement]]
+    compute : Callable[[Fixture[Any]], dict[str, Measurement]]
         The measurement, given the loaded instance.
     """
 
     problem: str
     tier: Scale
     modules: tuple[str, ...]
-    compute: Callable[[Fixture], dict[str, Measurement]]
+    compute: Callable[[Fixture[Any]], dict[str, Measurement]]
 
 
 #: What the tree policy measurements reach: the environment, the rollouts and

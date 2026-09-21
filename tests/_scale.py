@@ -101,7 +101,9 @@ def at_fixture(argument: str, problem: str) -> pytest.MarkDecorator:
     ----------
     argument : str
         Name of the test argument receiving the
-        :class:`~snakes_and_ladders.sim.fixtures.Fixture`.
+        :class:`~snakes_and_ladders.sim.fixtures.Fixture`. The body names
+        the params type the problem declares, which is what the class is
+        generic in (issue #864).
     problem : str
         The registry problem, which is the fixture directory's name.
 
@@ -115,7 +117,9 @@ def at_fixture(argument: str, problem: str) -> pytest.MarkDecorator:
     Examples
     --------
     >>> @at_fixture("instance", "potts_lattice")
-    ... def test_marginals_match_enumeration(instance: Fixture) -> None:
+    ... def test_marginals_match_enumeration(
+    ...     instance: Fixture[PottsLatticeParams],
+    ... ) -> None:
     ...     assert instance.oracle == "enumeration"
     """
     return pytest.mark.parametrize(

@@ -18,7 +18,8 @@ bound --- and the tests assert exactly that, at every iteration, against
 exhaustive enumeration.
 
 **Kikuchi is not this.** A region-based free energy
-(:mod:`snakes_and_ladders.likelihood.region_graph`) approximates ``log Z`` and
+(:mod:`snakes_and_ladders.sandbox.region_graph`, declined and conserved)
+approximates ``log Z`` and
 is not a bound in either direction; this approximates nothing and bounds the
 maximum from above. Two objects, two questions, and the measurement in #689
 argues the difference: Kikuchi's advantage over Bethe *decays* as the coupling

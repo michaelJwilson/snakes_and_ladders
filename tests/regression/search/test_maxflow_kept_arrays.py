@@ -35,7 +35,7 @@ def test_the_kept_form_is_the_derived_form_bitwise() -> None:
     """Keeping is a shortcut to a value the lists would have produced, not a new one."""
     kept = _network()
     derived = _network()
-    derived._forget_arrays()
+    derived.forget_arrays()
 
     for left, right in zip(kept.as_arrays(), derived.as_arrays(), strict=True):
         assert np.array_equal(left, right)

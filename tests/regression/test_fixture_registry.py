@@ -577,3 +577,22 @@ def test_the_guard_catches_a_constructed_instance() -> None:
     assert _constructions("code = ldpc.gallager_code(12, 3, 6, rng)") == {
         "gallager_code"
     }
+
+
+@pytest.mark.smoke
+def test_a_fixture_file_that_is_not_a_mapping_is_refused_as_one(
+    tmp_path: Path,
+) -> None:
+    # `fixture` read the file with its own `yaml.safe_load` and asked what
+    # came back for its keys, so a list-valued file failed as an
+    # `AttributeError` from inside the registry. The one parse is
+    # `load_declared`'s and the refusal is its message, naming the file and
+    # what the yaml parsed to (issue #864).
+    directory = tmp_path / "fixtures"
+    (directory / "listed").mkdir(parents=True)
+    (directory / "listed" / "ci.yaml").write_text(
+        "- model: jukes-cantor\n- oracle: enumeration\n"
+    )
+
+    with pytest.raises(ValueError, match="expected a mapping of fields, got list"):
+        fixture("listed", Scale.CI, directory)

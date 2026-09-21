@@ -299,16 +299,11 @@ ORACLES: dict[str, str] = {
     "sim.canonical.PlantedSpinGlass": "planted truth",
 }
 
-_SYMBOL = re.compile(r"`([^`]+)`")
 #: The two cells the tables read. A key is a bare fixture directory; a
 #: defining name carries a dot and no package prefix, since the catalogue
 #: names code under the package and says so once rather than per cell.
 _KEY_CELL = re.compile(r"`([a-z_0-9]+)`")
 _DEFINES_CELL = re.compile(r"`([a-z_]+\.[A-Za-z0-9_.]+)`")
-#: A fixture named by a catalogue row: the problem, then the tier.
-_CATALOGUE_FIXTURE = re.compile(
-    r"tests/regression/fixtures/([a-z_0-9]+)/([a-z]+)\.yaml"
-)
 
 
 class UnnamedSymbolError(ValueError):
@@ -1168,25 +1163,6 @@ def _method_table(cells: list[tuple[str, str, str, str, str]]) -> list[str]:
             "",
         ]
     return lines[:-1]
-
-
-def truth_only(catalogue: Path = CATALOGUE) -> list[tuple[str, str]]:
-    """``(problem, algorithm column)`` cells pinned by the simulated truth or by neither kind.
-
-    The list ``STATUS.md`` reports and the follow-up tickets name an oracle
-    for.
-    """
-    pins = referees()
-    found: list[tuple[str, str]] = []
-    for problem, symbols in rows(catalogue):
-        for column in ALGORITHM_COLUMNS:
-            here = [s for s in symbols if ALGORITHMS.get(s) == column]
-            if not here:
-                continue
-            mark = _mark(pin for s in here for pin in pins.get(s, ()))
-            if mark != ORACLE_MARK:
-                found.append((problem, column))
-    return found
 
 
 def render(catalogue: Path = CATALOGUE) -> str:
