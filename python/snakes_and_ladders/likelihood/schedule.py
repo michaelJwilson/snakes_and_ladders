@@ -36,12 +36,16 @@ its name: :class:`MessageSchedule` and :class:`TreeMessageSchedule` here,
 ``TempSchedule`` and ``LinearTempSchedule`` there. The name says which thing
 is being ordered, which is the question a reader of either actually has.
 
-**Why a base class and not a `Protocol`.** Five modules call through this ---
-``message_passing``, ``message_passing_reference``, ``belief_propagation``,
-``ldpc`` and ``search.ground_state`` --- which is past root ``CLAUDE.md``'s
-three-consumer rule, and the five schedules share the group builders and the
-guarantee. Sharing those by inheritance beats restating them five times, and
-root ``CLAUDE.md`` admits a contract becoming a base class.
+**Why a base class and not a `Protocol`.** One module calls through the
+base --- ``message_passing``, which reads ``requires_tree``, ``bounded``,
+``guarantee`` and ``steps`` off whatever schedule it holds. Three more read
+this module without it: ``message_passing_rust`` takes :class:`Layout`, and
+``message_passing_reference`` and ``search.ground_state`` take
+:class:`MessageScheduleName` through ``message_passing``'s re-export. What
+earns the base class is the six schedules under it, which share the group
+builders and the guarantee: sharing those by inheritance beats restating
+them six times, and root ``CLAUDE.md`` admits a contract becoming a base
+class.
 """
 
 from __future__ import annotations

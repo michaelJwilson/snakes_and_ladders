@@ -21,8 +21,9 @@ of the renderer's import closure, and a figure whose stamp matched the tree was
 skipped. Over 476 decisions the stamps never skipped a figure whose bytes would
 have moved and never let one through: every stale call was a false positive, at
 ~48 minutes in one day. Rendering the selection unconditionally costs the cited
-set's declared time --- since issue #492 the whole manifest, 431.8 s over the 23
-entries `snakes_and_ladders.qa.manifest` states --- on the push to ``main``
+set's declared time --- since issue #492 the whole manifest, 441.3 s over the 23
+entries `snakes_and_ladders.qa.manifest` states, summed from their declared
+``seconds`` --- on the push to ``main``
 where the documents job runs, and answers with the bytes rather than a hash of
 their inputs.
 
