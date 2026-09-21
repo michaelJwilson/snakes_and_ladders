@@ -143,6 +143,44 @@ class Episode[S, A]:
     rewards: tuple[float, ...]
     terminated: bool
 
+    @classmethod
+    def from_rollout(
+        cls,
+        states: Sequence[S],
+        actions: Sequence[A],
+        rewards: Sequence[float],
+        environment: Environment[S, A],
+        /,
+    ) -> Episode[S, A]:
+        """The episode a loop just walked, ``terminated`` read from the environment.
+
+        Four loops built this record field by field and each decided
+        ``terminated`` for itself; it is a property of the last state, not of
+        the loop, so it is read here from the state the walk ended in.
+
+        Parameters
+        ----------
+        states : Sequence[S]
+            Visited states, starting with the initial one and ending with the
+            state the walk stopped in.
+        actions : Sequence[A]
+            Actions taken, in order; one fewer than ``states``.
+        rewards : Sequence[float]
+            Reward of each action, aligned with ``actions``.
+        environment : Environment[S, A]
+            The environment walked, asked whether the final state is terminal.
+
+        Returns
+        -------
+        Episode[S, A]
+        """
+        return cls(
+            states=tuple(states),
+            actions=tuple(actions),
+            rewards=tuple(rewards),
+            terminated=environment.is_terminal(states[-1]),
+        )
+
     @property
     def total_reward(self) -> float:
         """The undiscounted return.

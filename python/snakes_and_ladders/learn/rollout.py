@@ -19,10 +19,14 @@ produced it.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from dataclasses import dataclass
+
 import numpy as np
+import torch
 
 from snakes_and_ladders.learn.environment import Environment, Episode
-from snakes_and_ladders.learn.policy import Policy
+from snakes_and_ladders.learn.policy import EpsilonGreedyPolicy, Policy, TrainablePolicy
 
 
 def rollout[S, A](
@@ -102,12 +106,7 @@ def rollout[S, A](
         states.append(state)
         terminated = environment.is_terminal(state)
 
-    return Episode(
-        states=tuple(states),
-        actions=tuple(actions),
-        rewards=tuple(rewards),
-        terminated=terminated,
-    )
+    return Episode.from_rollout(states, actions, rewards, environment)
 
 
 def greedy_rollout[S, A](
@@ -166,12 +165,7 @@ def greedy_rollout[S, A](
         states.append(state)
         terminated = environment.is_terminal(state)
 
-    return Episode(
-        states=tuple(states),
-        actions=tuple(actions),
-        rewards=tuple(rewards),
-        terminated=terminated,
-    )
+    return Episode.from_rollout(states, actions, rewards, environment)
 
 
 def greedy_restarts[S, A](
@@ -228,3 +222,76 @@ def greedy_restarts[S, A](
         spent += max(len(episode.actions), 1)
         state = environment.reset(rng)
     return tuple(runs)
+
+
+@dataclass(frozen=True)
+class Decision:
+    """One recorded decision, scored again under a policy.
+
+    Parameters
+    ----------
+    log_probabilities : torch.Tensor
+        ``log pi(. | s_t)`` over the neighbourhood of the state the decision
+        was taken in, shape ``(len(actions(s_t)),)``, on the current graph.
+    chosen : int
+        Index of the action the episode took, into ``log_probabilities``.
+    """
+
+    log_probabilities: torch.Tensor
+    chosen: int
+
+    @property
+    def taken(self) -> torch.Tensor:
+        """``log pi(a_t | s_t)``: the entry the episode's action sits at."""
+        return self.log_probabilities[self.chosen]
+
+
+def log_probabilities_of[S, A](
+    policy: TrainablePolicy | EpsilonGreedyPolicy,
+    environment: Environment[S, A],
+    episodes: Sequence[Episode[S, A]],
+) -> list[list[Decision]]:
+    """Score every recorded decision under ``policy``, one list per episode.
+
+    The five estimators walked this loop apiece --- episode, step, the
+    neighbourhood the state offers, the policy's distribution over it, the
+    index the taken action sits at --- and three of them wanted the whole
+    distribution rather than the entry: an entropy bonus and a
+    cross-entropy against a planner's visit counts read all of it. So a
+    :class:`Decision` carries the vector and the index, and
+    :attr:`Decision.taken` is the score-function term.
+
+    **Recomputed, not cached from the rollout.** The rollout samples under
+    ``no_grad``, and a graph cached there would tie an estimator to the
+    policy that *collected* the data rather than the one being updated ---
+    which is the difference between REINFORCE and the importance-weighted
+    objective :mod:`snakes_and_ladders.learn.ppo` forms.
+
+    Parameters
+    ----------
+    policy : TrainablePolicy | EpsilonGreedyPolicy
+        The policy to score under; the behaviour policy where the ratio's
+        denominator is wanted.
+    environment : Environment[S, A]
+        The environment the episodes were collected in.
+    episodes : Sequence[Episode[S, A]]
+        The trajectories to replay.
+
+    Returns
+    -------
+    list[list[Decision]]
+        One list per episode, one :class:`Decision` per action it took, in
+        order.
+    """
+    out = []
+    for episode in episodes:
+        decisions = []
+        for step, action in enumerate(episode.actions):
+            state = episode.states[step]
+            available = environment.actions(state)
+            log_probabilities = policy.log_probabilities(
+                environment.features(state, available)
+            )
+            decisions.append(Decision(log_probabilities, available.index(action)))
+        out.append(decisions)
+    return out

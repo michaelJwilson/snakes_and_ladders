@@ -43,6 +43,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "infra"))
 
 from profile_harness import format_table, self_time_table
 from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.cost import Cost
 from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.potts import PottsEnvironment
 from snakes_and_ladders.learn.ranking import fixed_length_target, tree_examples
@@ -283,7 +284,7 @@ def opt_sections(mid: bool) -> list[Section]:
         compare(
             {"a": _method, "b": _method},
             [0, 1],
-            Budget("sweeps", 10),
+            Budget(Cost.SWEEPS, 10),
             range(40),
             workers=1,
         )

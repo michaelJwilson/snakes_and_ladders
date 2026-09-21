@@ -15,6 +15,7 @@ import numpy as np
 import pytest
 import torch
 from snakes_and_ladders.learn.critic import Critic, n_state_features
+from snakes_and_ladders.learn.environment import Episode
 from snakes_and_ladders.learn.exact import exact_action_values, exact_optimal_value
 from snakes_and_ladders.learn.planning import (
     SearchResult,
@@ -200,3 +201,90 @@ def test_the_search_refuses_a_non_positive_budget_and_handles_a_terminal_root() 
             horizon=1,
             n_simulations=1,
         )
+
+
+@pytest.mark.smoke
+@pytest.mark.patch
+def test_a_planned_episode_is_an_episode_and_its_returns_are_the_recomputed_ones() -> (
+    None
+):
+    # `PlannedEpisode` was a second episode type without `terminated` or
+    # `returns_to_go`, so `expert_iteration` recomputed the returns it fits
+    # its critic against (issue #862). It is an `Episode` now, and its
+    # returns are bitwise the reversed cumulative sum that stood in for
+    # them.
+    environment = _environment()
+    critic = Critic(
+        n_state_features(environment),
+        hidden=None,
+        generator=torch.Generator().manual_seed(0),
+    )
+    rng = np.random.default_rng(2)
+    planned = [
+        plan_episode(
+            environment,
+            _policy(),
+            state,
+            rng,
+            horizon=5,
+            n_simulations=12,
+            leaf_value=critic_leaf_value(environment, critic),
+        )
+        for state in _states(environment)[::9]
+    ]
+
+    assert any(episode.actions for episode in planned)
+    for episode in planned:
+        assert isinstance(episode, Episode)
+        assert episode.terminated == environment.is_terminal(episode.states[-1])
+        assert len(episode.distributions) == len(episode.actions)
+        recomputed = (
+            np.cumsum(episode.rewards[::-1])[::-1] if episode.rewards else np.zeros(0)
+        )
+        assert list(episode.returns_to_go()) == [float(g) for g in recomputed]
+        assert episode.total_reward == float(sum(episode.rewards))
+
+
+@pytest.mark.smoke
+@pytest.mark.snapshot
+def test_the_expert_iteration_curve_is_the_one_a_fixed_seed_produces() -> None:
+    # The curve the fold is pinned against (issue #862), seed for seed. A
+    # diagnostic and not a result --- `learn/CLAUDE.md` says a sampled
+    # return is never one --- so what is asserted is reproduction, to the
+    # last bit, of the numbers the same seed produced before the planner's
+    # episode became an `Episode`.
+    environment = _environment()
+
+    def curve() -> tuple[tuple[float, ...], tuple[float, ...], int]:
+        policy = LinearPolicy(2)
+        policy.set_weights(torch.tensor([0.3, -0.6], dtype=torch.float64))
+        training = expert_iteration(
+            environment,
+            policy,
+            Critic(
+                n_state_features(environment),
+                hidden=None,
+                generator=torch.Generator().manual_seed(7),
+            ),
+            np.random.default_rng(29),
+            iterations=3,
+            batch=4,
+            horizon=5,
+            n_simulations=12,
+            critic_steps=10,
+        )
+        return (
+            training.mean_returns,
+            training.policy_losses,
+            training.evaluations,
+        )
+
+    first = curve()
+    assert first == curve()
+    assert first[0] == (0.8, 1.0875000000000001, 1.25)
+    assert first[1] == (
+        1.5623207809304243,
+        1.4617507081664243,
+        1.4698711582623099,
+    )
+    assert first[2] == 139

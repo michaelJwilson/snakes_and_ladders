@@ -26,10 +26,15 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 
-from snakes_and_ladders.learn.critic import Critic, fit_critic, state_features
+from snakes_and_ladders.learn.critic import (
+    Critic,
+    fit_critic,
+    state_targets,
+    state_values,
+)
 from snakes_and_ladders.learn.environment import Environment, Episode
 from snakes_and_ladders.learn.policy import EpsilonGreedyPolicy, TrainablePolicy
-from snakes_and_ladders.learn.rollout import rollout
+from snakes_and_ladders.learn.rollout import log_probabilities_of, rollout
 from snakes_and_ladders.sample.schedule import TempSchedule
 
 
@@ -81,17 +86,13 @@ def episode_advantages[S, A](
 ) -> list[list[float]]:
     """GAE per episode, the critic read without gradient."""
     advantages = []
-    with torch.no_grad():
-        for episode in episodes:
-            values = [
-                float(critic(state_features(environment, state)[None, :])[0])
-                for state in episode.states
-            ]
-            advantages.append(
-                generalized_advantages(
-                    episode.rewards, values, lam=lam, terminated=episode.terminated
-                )
+    for episode in episodes:
+        values = state_values(environment, episode.states, critic)
+        advantages.append(
+            generalized_advantages(
+                episode.rewards, values, lam=lam, terminated=episode.terminated
             )
+        )
     return advantages
 
 
@@ -100,19 +101,19 @@ def _log_probabilities[S, A](
     policy: TrainablePolicy | EpsilonGreedyPolicy,
     episodes: Sequence[Episode[S, A]],
 ) -> list[torch.Tensor]:
-    """``log pi(a_t | s_t)`` for every decision, one tensor per episode, on the current graph."""
-    out = []
-    for episode in episodes:
-        steps = []
-        for step, action in enumerate(episode.actions):
-            state = episode.states[step]
-            available = environment.actions(state)
-            log_probabilities = policy.log_probabilities(
-                environment.features(state, available)
-            )
-            steps.append(log_probabilities[available.index(action)])
-        out.append(torch.stack(steps) if steps else torch.zeros(0, dtype=torch.float64))
-    return out
+    """``log pi(a_t | s_t)`` for every decision, one tensor per episode, on the current graph.
+
+    The ratio's two sides are stacked per episode because
+    :func:`ppo_loss` clips them per episode;
+    :func:`~snakes_and_ladders.learn.rollout.log_probabilities_of` walks the
+    decisions.
+    """
+    return [
+        torch.stack([decision.taken for decision in decisions])
+        if decisions
+        else torch.zeros(0, dtype=torch.float64)
+        for decisions in log_probabilities_of(policy, environment, episodes)
+    ]
 
 
 def ppo_loss(
@@ -212,12 +213,7 @@ def ppo[S, A](
             )
             for _ in range(batch)
         ]
-        features = torch.stack(
-            [state_features(environment, s) for e in episodes for s in e.states[:-1]]
-        )
-        targets = torch.tensor(
-            [g for e in episodes for g in e.returns_to_go()], dtype=torch.float64
-        )
+        features, targets = state_targets(environment, episodes)
         critic_losses.append(
             fit_critic(critic, features, targets, steps=critic_steps).losses[-1]
         )
@@ -257,12 +253,10 @@ def _entropy[S, A](
     """Mean policy entropy over the visited decisions."""
     total = torch.zeros((), dtype=policy.dtype)
     count = 0
-    for episode in episodes:
-        for state in episode.states[:-1]:
-            log_probabilities = policy.log_probabilities(
-                environment.features(state, environment.actions(state))
-            )
-            total = total - (torch.exp(log_probabilities) * log_probabilities).sum()
+    for decisions in log_probabilities_of(policy, environment, episodes):
+        for decision in decisions:
+            scores = decision.log_probabilities
+            total = total - (torch.exp(scores) * scores).sum()
             count += 1
     return total / max(count, 1)
 

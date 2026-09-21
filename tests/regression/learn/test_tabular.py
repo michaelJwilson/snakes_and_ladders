@@ -322,3 +322,27 @@ def test_a_terminal_start_costs_nothing_and_teaches_nothing() -> None:
     assert learned.updates == 0
     assert learned.value(grid.goal) == 0.0
     assert learned.greedy_actions(grid.goal) == []
+
+
+@pytest.mark.smoke
+@pytest.mark.patch
+def test_both_table_episodes_read_terminated_from_the_state_they_ended_in() -> None:
+    # The other two of the four tails `Episode.from_rollout` replaced (issue
+    # #862): a greedy route that reaches the goal, and one the budget cuts
+    # off before it does.
+    grid, corner = GridWorld(), (0, 0)
+    learned = q_learning(grid, np.random.default_rng(0), episodes=200, epsilon=EPSILON)
+    episodes = [
+        learned.greedy_episode(grid, corner, max_steps=budget) for budget in (0, 1, 100)
+    ]
+    episodes += [
+        learned.behaviour_episode(
+            grid, corner, np.random.default_rng(1), epsilon=EPSILON, max_steps=budget
+        )
+        for budget in (0, 100)
+    ]
+
+    for episode in episodes:
+        assert episode.terminated == grid.is_terminal(episode.states[-1])
+        assert len(episode.states) == len(episode.actions) + 1
+        assert len(episode.rewards) == len(episode.actions)

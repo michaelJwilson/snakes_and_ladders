@@ -40,7 +40,8 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 
-from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.backend import Backend, refuse_backend
+from snakes_and_ladders.opt.termination import Termination
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import energy, site_field
 
@@ -70,12 +71,16 @@ class BifurcationResult:
         Integration steps each replica ran.
     n_replicas : int
         Independent starts run; the labelling is the best of them.
+    termination : Termination | None
+        The integration's: it runs its declared steps and tests no criterion,
+        so it ends on the count (issue #860).
     """
 
     labelling: np.ndarray
     energy: float
     steps: int
     n_replicas: int
+    termination: Termination | None = None
 
 
 def _coupling_scale(graph: PottsGraph, rows: np.ndarray) -> float:
@@ -226,9 +231,7 @@ def simulated_bifurcation(
     if dt <= 0.0:
         msg = f"dt must be > 0, got {dt}"
         raise ValueError(msg)
-    if backend not in (Backend.PYTHON, Backend.TORCH):
-        msg = f"simulated_bifurcation runs on {Backend.PYTHON} or {Backend.TORCH}, not {backend}"
-        raise ValueError(msg)
+    refuse_backend("simulated_bifurcation", backend, (Backend.PYTHON, Backend.TORCH))
     rows = site_field(
         np.asarray(field_values, dtype=np.float64), graph.n_nodes, n_states=n_states
     )
@@ -275,7 +278,13 @@ def simulated_bifurcation(
             best_energy, best_labelling = value, labelling
     assert best_labelling is not None
     return BifurcationResult(
-        labelling=best_labelling, energy=best_energy, steps=steps, n_replicas=n_replicas
+        labelling=best_labelling,
+        energy=best_energy,
+        steps=steps,
+        n_replicas=n_replicas,
+        # The integration runs its declared steps and tests nothing, so it
+        # ends on the count, never on a criterion (issue #860).
+        termination=Termination.after(steps, converged=False),
     )
 
 

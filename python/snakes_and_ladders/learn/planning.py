@@ -32,9 +32,15 @@ from dataclasses import dataclass, field
 import numpy as np
 import torch
 
-from snakes_and_ladders.learn.critic import Critic, fit_critic, state_features
-from snakes_and_ladders.learn.environment import Environment
+from snakes_and_ladders.learn.critic import (
+    Critic,
+    fit_critic,
+    state_targets,
+    state_values,
+)
+from snakes_and_ladders.learn.environment import Environment, Episode
 from snakes_and_ladders.learn.policy import TrainablePolicy
+from snakes_and_ladders.learn.rollout import log_probabilities_of
 
 LeafValue = Callable[[object, int], float]
 
@@ -96,8 +102,7 @@ def critic_leaf_value[S, A](
         typed: S = state  # type: ignore[assignment]
         if remaining <= 0 or environment.is_terminal(typed):
             return 0.0
-        with torch.no_grad():
-            return float(critic(state_features(environment, typed)[None, :])[0])
+        return state_values(environment, [typed], critic)[0]
 
     return value
 
@@ -191,18 +196,26 @@ def puct_search[S, A](
 
 
 @dataclass(frozen=True)
-class PlannedEpisode[S, A]:
-    """One episode played by the planner: states, chosen actions, rewards, and the root distributions."""
+class PlannedEpisode[S, A](Episode[S, A]):
+    """An :class:`~snakes_and_ladders.learn.environment.Episode` the planner played, and what each move cost.
 
-    states: tuple[S, ...]
-    actions: tuple[A, ...]
-    rewards: tuple[float, ...]
+    An episode with two fields added, not a second episode type: it carried
+    neither ``terminated`` nor ``returns_to_go`` before, so
+    :func:`expert_iteration` recomputed the returns its critic fits against
+    (issue #862).
+
+    Parameters
+    ----------
+    distributions : tuple[np.ndarray, ...]
+        The root visit distribution each move was chosen from, aligned with
+        ``actions``; the target the policy is fitted to.
+    evaluations : int
+        Successor rewards the episode spent, the searches' and the moves'
+        together.
+    """
+
     distributions: tuple[np.ndarray, ...]
     evaluations: int
-
-    @property
-    def total_reward(self) -> float:
-        return float(sum(self.rewards))
 
 
 def plan_episode[S, A](
@@ -249,7 +262,12 @@ def plan_episode[S, A](
         distributions.append(result.distribution)
         state = successor
     return PlannedEpisode(
-        tuple(states), tuple(actions), tuple(rewards), tuple(distributions), evaluations
+        tuple(states),
+        tuple(actions),
+        tuple(rewards),
+        environment.is_terminal(state),
+        tuple(distributions),
+        evaluations,
     )
 
 
@@ -299,38 +317,22 @@ def expert_iteration[S, A](
             for _ in range(batch)
         ]
         evaluations += sum(e.evaluations for e in episodes)
-        features, targets = [], []
-        for episode in episodes:
-            returns = (
-                np.cumsum(episode.rewards[::-1])[::-1]
-                if episode.rewards
-                else np.zeros(0)
-            )
-            for step, state in enumerate(episode.states[:-1]):
-                features.append(state_features(environment, state))
-                targets.append(float(returns[step]))
-        if features:
+        if any(episode.actions for episode in episodes):
+            features, targets = state_targets(environment, episodes)
             critic_losses.append(
-                fit_critic(
-                    critic,
-                    torch.stack(features),
-                    torch.tensor(targets, dtype=torch.float64),
-                    steps=critic_steps,
-                ).losses[-1]
+                fit_critic(critic, features, targets, steps=critic_steps).losses[-1]
             )
         optimizer.zero_grad()
         loss = torch.zeros((), dtype=policy.dtype)
         count = 0
-        for episode in episodes:
-            for step, state in enumerate(episode.states[:-1]):
-                available = environment.actions(state)
-                log_probabilities = policy.log_probabilities(
-                    environment.features(state, available)
-                )
+        for episode, decisions in zip(
+            episodes, log_probabilities_of(policy, environment, episodes), strict=True
+        ):
+            for step, decision in enumerate(decisions):
                 target = torch.as_tensor(
                     episode.distributions[step], dtype=policy.dtype
                 )
-                loss = loss - (target * log_probabilities).sum()
+                loss = loss - (target * decision.log_probabilities).sum()
                 count += 1
         if count:
             (loss / count).backward()  # type: ignore[no-untyped-call]

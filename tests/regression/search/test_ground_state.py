@@ -26,6 +26,7 @@ import itertools
 import numpy as np
 import pytest
 from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.cost import Cost
 from snakes_and_ladders.likelihood.message_passing import (
     MessageScheduleName,
     max_product,
@@ -246,7 +247,7 @@ def test_no_entry_spends_more_than_its_budget() -> None:
     # 60 sweep-equivalents, which is the comparison's own budget and enough
     # for flooding to settle at nine sites -- so the converging branch of
     # max-product is exercised here and the refusing one in the test below.
-    budget = Budget("site-visits", 60 * rung.visits_per_sweep)
+    budget = Budget(Cost.SITE_VISITS, 60 * rung.visits_per_sweep)
 
     for name, method in ground_state.METHODS.items():
         run = method(rung, budget, np.random.default_rng(9))
@@ -387,7 +388,7 @@ def test_the_runners_record_the_energy_their_kernels_return() -> None:
     # equality -- because the kernel is called with the same generator state
     # and the arithmetic is the same arithmetic.
     rung = _rung(CI, 3)
-    budget = Budget("site-visits", 60 * rung.visits_per_sweep)
+    budget = Budget(Cost.SITE_VISITS, 60 * rung.visits_per_sweep)
     seed = 11
 
     tempering = ground_state.run_tempering(rung, budget, np.random.default_rng(seed))
@@ -445,7 +446,7 @@ def test_the_comparison_records_the_labelling_each_entry_returned() -> None:
     from snakes_and_ladders.opt.budget import compare
 
     rung = _rung(CI, 3)
-    budget = Budget("site-visits", 20 * rung.visits_per_sweep)
+    budget = Budget(Cost.SITE_VISITS, 20 * rung.visits_per_sweep)
 
     comparison = compare(ground_state.entries(), [rung] * 2, budget, [551], workers=1)
     records = ground_state.recorded(comparison)
@@ -468,7 +469,7 @@ def test_every_cell_is_recorded_on_a_worker_pool() -> None:
     from snakes_and_ladders.opt.budget import compare
 
     rung = _rung(CI, 3)
-    budget = Budget("site-visits", 20 * rung.visits_per_sweep)
+    budget = Budget(Cost.SITE_VISITS, 20 * rung.visits_per_sweep)
 
     serial = compare(ground_state.entries(), [rung] * 2, budget, [551], workers=1)
     pooled = compare(ground_state.entries(), [rung] * 2, budget, [551], workers=2)
@@ -490,7 +491,7 @@ def test_max_product_that_does_not_settle_reports_no_answer() -> None:
     rung = _rung(CI, 3)
 
     run = ground_state.run_max_product(
-        rung, Budget("site-visits", 1), np.random.default_rng(1)
+        rung, Budget(Cost.SITE_VISITS, 1), np.random.default_rng(1)
     )
 
     assert not run.converged

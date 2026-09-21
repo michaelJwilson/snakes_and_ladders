@@ -40,6 +40,7 @@ from typing import NamedTuple
 import numpy as np
 
 from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.opt.termination import Termination
 from snakes_and_ladders.search.maxflow import (
     FlowNetwork,
     check_non_negative_couplings,
@@ -73,12 +74,18 @@ class ExpansionResult:
         Expansions that strictly lowered the energy. Zero means the starting
         labelling was already expansion-optimal, which is information rather
         than a failure.
+    termination : Termination | None
+        Always converged, after ``cycles`` of them: the loop returns on the
+        cycle that lowers nothing and raises on the cap, monotonicity over a
+        finite state space making the cap a defect rather than a budget
+        (issue #860).
     """
 
     labelling: np.ndarray
     energy: float
     cycles: int
     moves: int
+    termination: Termination | None = None
 
 
 class _CutMove(NamedTuple):
@@ -241,7 +248,11 @@ def _cycle_to_a_local_minimum(
                 moves += 1
         if not improved:
             return ExpansionResult(
-                labelling=labelling, energy=current, cycles=cycle, moves=moves
+                labelling=labelling,
+                energy=current,
+                cycles=cycle,
+                moves=moves,
+                termination=Termination.after(cycle, converged=True),
             )
 
     msg = (

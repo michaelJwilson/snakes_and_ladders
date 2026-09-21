@@ -70,7 +70,7 @@ from typing import Any
 
 import numpy as np
 
-from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.likelihood.schedule import (
     FactorSends,
     Guarantee,
@@ -315,11 +315,7 @@ def _run(
     :attr:`~snakes_and_ladders.likelihood.schedule.MessageSchedule.compiled`,
     which is the schedule's own answer and not a branch on its name.
     """
-    if backend not in (Backend.PYTHON, Backend.RUST):
-        msg = (
-            f"message passing runs on {Backend.PYTHON} or {Backend.RUST}, not {backend}"
-        )
-        raise ValueError(msg)
+    refuse_backend("message passing", backend, (Backend.PYTHON, Backend.RUST))
     plan = resolve(schedule)
     layout = Layout(graph)
     if plan.requires_tree and not graph.is_tree():

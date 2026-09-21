@@ -7,9 +7,36 @@ shapes and both boundary conditions.
 
 from __future__ import annotations
 
+from itertools import product
+from pathlib import Path
+from typing import Any
+
 import numpy as np
 import pytest
-from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+import yaml
+from snakes_and_ladders.fixtures import Params, load_params
+from snakes_and_ladders.sim.canonical import FrustratedLatticeParams
+from snakes_and_ladders.sim.count_pairs import SpatioSequentialCountsParams
+from snakes_and_ladders.sim.fixtures import fixture
+from snakes_and_ladders.sim.graph import (
+    BoundaryCondition,
+    PottsGraph,
+    lattice_graph,
+    triangular_lattice_graph,
+)
+from snakes_and_ladders.sim.potts import PottsLatticeParams, SpatioOnlyParams
+from snakes_and_ladders.sim.spatio_sequential import SpatioSequentialParams
+
+#: Every fixture that declares a boundary, with the class that reads it. The
+#: five parse sites issue #862 put behind one parser; two named the file and
+#: three did not.
+BOUNDARY_FIXTURES: tuple[tuple[str, type[Params]], ...] = (
+    ("potts_lattice", PottsLatticeParams),
+    ("spatio_only", SpatioOnlyParams),
+    ("frustrated_lattice", FrustratedLatticeParams),
+    ("spatio_sequential", SpatioSequentialParams),
+    ("spatio_sequential_counts", SpatioSequentialCountsParams),
+)
 
 
 @pytest.mark.oracle
@@ -173,3 +200,95 @@ def test_the_arrays_are_derived_once_and_handed_back() -> None:
 
     assert graph.edge_index is graph.edge_index
     assert graph.edge_coupling is graph.edge_coupling
+
+
+def _reference_lattice(
+    shape: tuple[int, ...],
+    offsets: tuple[tuple[int, ...], ...],
+    boundary: BoundaryCondition,
+    coupling: float,
+) -> tuple[int, tuple[tuple[int, int], ...], tuple[float, ...]]:
+    """The sweep the two builders each wrote out, written out once more here.
+
+    A second implementation, so the fold is read against something other
+    than itself: the row-major index by hand, the wrap under a periodic
+    boundary and the skip under an open one, in the caller's offset order.
+    """
+    nodes = list(product(*(range(extent) for extent in shape)))
+    edges = []
+    for coordinate in nodes:
+        for offset in offsets:
+            target = [c + step for c, step in zip(coordinate, offset, strict=True)]
+            if boundary is BoundaryCondition.PERIODIC:
+                target = [c % extent for c, extent in zip(target, shape, strict=True)]
+            elif any(c >= extent for c, extent in zip(target, shape, strict=True)):
+                continue
+            edges.append((nodes.index(coordinate), nodes.index(tuple(target))))
+    return len(nodes), tuple(edges), (coupling,) * len(edges)
+
+
+@pytest.mark.smoke
+@pytest.mark.patch
+@pytest.mark.parametrize("boundary", list(BoundaryCondition))
+@pytest.mark.parametrize(
+    "shape", [(4,), (8,), (2, 2), (3, 3), (4, 5), (2, 3, 4), (3, 3, 3)]
+)
+def test_the_square_lattice_is_edge_for_edge_the_sweep_it_folded(
+    shape: tuple[int, ...], boundary: BoundaryCondition
+) -> None:
+    # `_lattice` is the core both builders wrote out (issue #862). The square
+    # one joins each site to its successor along every dimension, so its
+    # offsets are the unit vectors, in dimension order.
+    offsets = tuple(
+        tuple(1 if other == dim else 0 for other in range(len(shape)))
+        for dim in range(len(shape))
+    )
+    graph = lattice_graph(shape, boundary, -0.75)
+    n_nodes, edges, coupling = _reference_lattice(shape, offsets, boundary, -0.75)
+
+    assert graph.n_nodes == n_nodes
+    assert graph.edges == edges
+    assert graph.coupling == coupling
+    assert graph.shape == shape
+    assert graph.boundary is boundary
+
+
+@pytest.mark.smoke
+@pytest.mark.patch
+@pytest.mark.parametrize("boundary", list(BoundaryCondition))
+@pytest.mark.parametrize("shape", [(2, 2), (3, 3), (4, 6), (8, 8)])
+def test_the_triangular_lattice_is_edge_for_edge_the_sweep_it_folded(
+    shape: tuple[int, int], boundary: BoundaryCondition
+) -> None:
+    # The same core at the offsets that add the cell diagonal, which is what
+    # makes the graph non-bipartite.
+    graph = triangular_lattice_graph(shape, boundary, -1.0)
+    n_nodes, edges, coupling = _reference_lattice(
+        shape, ((0, 1), (1, 0), (1, 1)), boundary, -1.0
+    )
+
+    assert graph.n_nodes == n_nodes
+    assert graph.edges == edges
+    assert graph.coupling == coupling
+    assert graph.shape == shape
+    assert graph.boundary is boundary
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize(("problem", "kind"), BOUNDARY_FIXTURES)
+def test_a_misspelt_boundary_names_the_file_at_every_parse_site(
+    tmp_path: Path, problem: str, kind: type[Params]
+) -> None:
+    # Three of the five loaders parsed the field bare, so a misspelling
+    # raised `'perodic' is not a valid BoundaryCondition` --- naming neither
+    # the file nor what is recognized (issue #862). One parser now, and the
+    # refusal is read at every site.
+    raw: dict[str, Any] = yaml.safe_load(fixture(problem, "ci").path.read_text())
+    raw["boundary"] = "perodic"
+    path = tmp_path / "ci.yaml"
+    path.write_text(yaml.safe_dump(raw))
+
+    with pytest.raises(ValueError, match="boundary must be one of") as refusal:
+        load_params(path, kind)
+    assert str(path) in str(refusal.value)
+    assert "'perodic'" in str(refusal.value)
