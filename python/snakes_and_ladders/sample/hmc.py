@@ -69,7 +69,12 @@ from snakes_and_ladders.sample.accept import (
     accept_with,
     acceptance_probability,
 )
-from snakes_and_ladders.sample.schedule import TempSchedule, ladder
+from snakes_and_ladders.sample.schedule import (
+    Monotone,
+    TempSchedule,
+    check_ladder,
+    ladder,
+)
 
 # `current` is aliased: `_coefficients` already binds that name to a
 # sub-step length, and one of the two has to give.
@@ -906,20 +911,11 @@ def parallel_tempering(
         or the ladder is not increasing, or if ``n_rounds`` is below one.
     """
     _check_trajectory(step_size, n_steps)
-    temperatures = ladder(temperatures)
-    if len(temperatures) < 2:
-        msg = (
-            f"parallel tempering needs at least two temperatures, got "
-            f"{len(temperatures)}: a ladder of one has nothing to exchange"
-        )
-        raise ValueError(msg)
-    for cold, hot in itertools.pairwise(temperatures):
-        if not 0.0 < cold < hot:
-            msg = (
-                f"temperatures must be positive and increasing, coldest first, "
-                f"got {temperatures}"
-            )
-            raise ValueError(msg)
+    temperatures = check_ladder(
+        ladder(temperatures),
+        needed_by="parallel tempering",
+        monotone=Monotone.INCREASING,
+    )
     if n_rounds < 1:
         msg = f"n_rounds must be at least 1, got {n_rounds}"
         raise ValueError(msg)

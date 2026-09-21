@@ -36,7 +36,6 @@ configures the sampler. Its walker trace is a one-column
 
 from __future__ import annotations
 
-import itertools
 import math
 import time
 from collections.abc import Callable, Sequence
@@ -56,8 +55,11 @@ from snakes_and_ladders.sample.potts_mcmc import (
 )
 from snakes_and_ladders.sample.schedule import (
     ExponentialTempSchedule,
+    Monotone,
+    Quantity,
     TempSchedule,
     beta_ladder,
+    check_ladder,
     temperatures,
 )
 from snakes_and_ladders.sim.graph import PottsGraph
@@ -172,26 +174,22 @@ def geometric_betas(beta: float, n_rungs: int, *, beta_min: float) -> tuple[floa
     return (0.0, *temperatures(ExponentialTempSchedule(beta_min, beta, n_rungs - 1)))
 
 
-def _check_betas(betas: Sequence[float], *, from_zero: bool) -> tuple[float, ...]:
-    """The ladder, validated: increasing, non-negative, and anchored at zero where it must be."""
-    ladder = tuple(float(value) for value in betas)
-    least = 1 if from_zero else 2
-    if len(ladder) < least:
-        msg = f"a ladder needs at least {least} rungs, got {len(ladder)}"
-        raise ValueError(msg)
-    if from_zero and ladder[0] != 0.0:
-        msg = (
-            f"the ladder must start at beta = 0, got {ladder[0]}: that rung is "
-            "where log Z = n log q is exact, and the estimate is anchored on it"
-        )
-        raise ValueError(msg)
-    if ladder[0] < 0.0:
-        msg = f"every inverse temperature must be >= 0, got {ladder[0]}"
-        raise ValueError(msg)
-    if any(later <= earlier for earlier, later in itertools.pairwise(ladder)):
-        msg = f"the ladder must be strictly increasing in beta, got {ladder}"
-        raise ValueError(msg)
-    return ladder
+def _check_rungs(
+    betas: TempSchedule | Sequence[float], *, from_zero: bool
+) -> tuple[float, ...]:
+    """The ladder in ``beta``, read from either spelling and validated as one.
+
+    A ladder anchored at ``beta = 0`` needs only that rung to carry an
+    estimate; one that is not needs two to have a move between them.
+    """
+    return check_ladder(
+        beta_ladder(betas),
+        needed_by="a ladder",
+        minimum=1 if from_zero else 2,
+        monotone=Monotone.INCREASING,
+        quantity=Quantity.BETA,
+        from_zero=from_zero,
+    )
 
 
 def _population(
@@ -312,7 +310,7 @@ def annealed_importance_sampling(
         :func:`~snakes_and_ladders.sample.potts_mcmc.sample_potts` for a
         Fortuin-Kasteleyn cluster move on a negative coupling.
     """
-    ladder = _check_betas(beta_ladder(betas), from_zero=True)
+    ladder = _check_rungs(betas, from_zero=True)
     states, children, advance, rows = _population(
         graph, field, rng, n_replicas, move, backend
     )
@@ -428,7 +426,7 @@ def population_annealing(
     ValueError
         As :func:`annealed_importance_sampling`.
     """
-    ladder = _check_betas(beta_ladder(betas), from_zero=True)
+    ladder = _check_rungs(betas, from_zero=True)
     states, children, advance, rows = _population(
         graph, field, rng, n_replicas, move, backend
     )
@@ -609,7 +607,7 @@ def simulated_tempering(
         If the ladder is unusable, ``weights`` does not carry one entry per
         rung, or ``n_sweeps`` or ``thin`` is below 1 or ``burn_in`` below 0.
     """
-    ladder = _check_betas(beta_ladder(betas), from_zero=False)
+    ladder = _check_rungs(betas, from_zero=False)
     g = np.asarray(weights, dtype=float)
     if g.shape != (len(ladder),):
         msg = f"weights must carry one g_k per rung, got {g.shape} for {len(ladder)} rungs"

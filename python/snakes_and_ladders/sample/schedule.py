@@ -52,6 +52,7 @@ import math
 from abc import abstractmethod
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Protocol, runtime_checkable
 
 
@@ -273,6 +274,152 @@ def beta_ladder(values: TempSchedule | Sequence[float]) -> tuple[float, ...]:
     return tuple(float(value) for value in values)
 
 
+class Monotone(StrEnum):
+    """What order a ladder's rungs must be in.
+
+    An order is a requirement of the consumer and not of the ladder: an
+    exchange between neighbouring pairs is the same law whichever end is
+    cold, so a tempering states :data:`ANY`, a warm-up that bisects a gap
+    states :data:`EITHER`, and a consumer that reads ``temperatures[0]`` as
+    the coldest states :data:`INCREASING`.
+    """
+
+    #: Any order; which pairs are neighbours is what the ladder fixes.
+    ANY = "any"
+    #: Strictly monotone, in either direction.
+    EITHER = "either"
+    #: Strictly increasing, coldest first.
+    INCREASING = "increasing"
+
+
+class Quantity(StrEnum):
+    """What a rung carries, which is what its sign is checked against."""
+
+    #: A temperature, strictly positive.
+    TEMPERATURE = "temperature"
+    #: An inverse temperature, non-negative: ``beta = 0`` is a rung.
+    BETA = "beta"
+
+
+#: The count a refusal spells in words. Each of the five validators #861
+#: folded spelled its own, and a test reads each, so the temperature ladders
+#: keep the word and the beta ladders the digit they were written with.
+_COUNTS = {1: "one", 2: "two", 3: "three"}
+
+
+def check_ladder(
+    values: Sequence[float],
+    *,
+    needed_by: str,
+    minimum: int = 2,
+    monotone: Monotone = Monotone.ANY,
+    quantity: Quantity = Quantity.TEMPERATURE,
+    from_zero: bool = False,
+) -> tuple[float, ...]:
+    """The one validator of a ladder: its length, its sign, its order, its anchor (issue #861).
+
+    Five validators checked four requirements in four combinations ---
+    ``schedule``'s and ``tempered``'s ``_check_ladder``, the two temperings'
+    inline copies and ``annealed``'s ``_check_betas`` --- and a requirement a
+    site did not state was a requirement nothing held it to. Each is an
+    argument here, so a consumer says what it needs and reads the refusal
+    its need earns.
+
+    Parameters
+    ----------
+    values : Sequence[float]
+        The ladder, already read from its spelling by :func:`ladder` or
+        :func:`beta_ladder`.
+    needed_by : str
+        What refuses a ladder too short, named in that refusal.
+    minimum : int
+        Rungs the consumer needs. Two, where a ladder is exchanged across;
+        one, where the ladder is a sequence of distributions and the first
+        is the answer.
+    monotone : Monotone
+        The order required, as :class:`Monotone` states it.
+    quantity : Quantity
+        Temperature or inverse temperature, which is the sign required.
+    from_zero : bool
+        Whether the first rung must be ``beta = 0`` exactly --- the rung
+        where ``log Z_0 = n log q`` is exact and an estimate is anchored.
+
+    Returns
+    -------
+    tuple[float, ...]
+        The ladder as floats, in the order given.
+
+    Raises
+    ------
+    ValueError
+        On any requirement the ladder does not meet, naming the requirement
+        and the ladder.
+    """
+    rungs = tuple(float(value) for value in values)
+    if len(rungs) < minimum:
+        if quantity is Quantity.BETA:
+            msg = f"{needed_by} needs at least {minimum} rungs, got {len(rungs)}"
+        else:
+            count = _COUNTS.get(minimum, str(minimum))
+            msg = (
+                f"{needed_by} needs at least {count} temperatures, got "
+                f"{len(rungs)}: a ladder of one has nothing to exchange"
+            )
+        raise ValueError(msg)
+    if quantity is Quantity.BETA:
+        _check_betas(rungs, from_zero=from_zero, monotone=monotone)
+        return rungs
+    if monotone is Monotone.INCREASING:
+        # The sign and the order in one refusal: a consumer that reads the
+        # first rung as the coldest is told which of the two it broke by the
+        # ladder printed beside them.
+        for cold, hot in itertools.pairwise(rungs):
+            if not 0.0 < cold < hot:
+                msg = (
+                    f"temperatures must be positive and increasing, coldest first, "
+                    f"got {rungs}"
+                )
+                raise ValueError(msg)
+        return rungs
+    for temperature in rungs:
+        # The sign of a temperature is checked where every schedule in this
+        # module checks it, rather than a sixth time here.
+        _check_temperature("every rung", temperature)
+    if monotone is Monotone.EITHER:
+        differences = [b - a for a, b in itertools.pairwise(rungs)]
+        if not (all(d > 0 for d in differences) or all(d < 0 for d in differences)):
+            msg = (
+                f"a ladder must be strictly monotone so its neighbouring pairs are "
+                f"its exchanges, got {rungs}"
+            )
+            raise ValueError(msg)
+    return rungs
+
+
+def _check_betas(
+    rungs: tuple[float, ...], *, from_zero: bool, monotone: Monotone
+) -> None:
+    """The sign, the anchor and the order of a ladder in ``beta``.
+
+    ``beta = 0`` is the infinite temperature: a rung, and the one a
+    :class:`TempSchedule` cannot carry.
+    """
+    if from_zero and rungs[0] != 0.0:
+        msg = (
+            f"the ladder must start at beta = 0, got {rungs[0]}: that rung is "
+            "where log Z = n log q is exact, and the estimate is anchored on it"
+        )
+        raise ValueError(msg)
+    if rungs[0] < 0.0:
+        msg = f"every inverse temperature must be >= 0, got {rungs[0]}"
+        raise ValueError(msg)
+    if monotone is Monotone.INCREASING and any(
+        later <= earlier for earlier, later in itertools.pairwise(rungs)
+    ):
+        msg = f"the ladder must be strictly increasing in beta, got {rungs}"
+        raise ValueError(msg)
+
+
 def temperatures(schedule: TempSchedule) -> list[float]:
     """Every temperature of ``schedule``, in step order.
 
@@ -366,8 +513,7 @@ def adapt_ladder(
         monotone or is not positive, the band is not an interval inside
         ``(0, 1)``, or a budget is below 1.
     """
-    rungs = ladder(start)
-    _check_ladder(rungs)
+    rungs = check_ladder(ladder(start), needed_by="a ladder", monotone=Monotone.EITHER)
     low, high = band
     if not 0.0 < low < high < 1.0:
         msg = f"band must satisfy 0 < low < high < 1, got {band}"
@@ -462,21 +608,6 @@ def _revise(
         if index < n - 1 and insert[index]:
             revised.append(math.sqrt(ladder[index] * ladder[index + 1]))
     return tuple(revised)
-
-
-def _check_ladder(ladder: tuple[float, ...]) -> None:
-    if len(ladder) < 2:
-        msg = f"a ladder needs at least two temperatures, got {len(ladder)}"
-        raise ValueError(msg)
-    for temperature in ladder:
-        _check_temperature("every temperature", temperature)
-    differences = [b - a for a, b in itertools.pairwise(ladder)]
-    if not (all(d > 0 for d in differences) or all(d < 0 for d in differences)):
-        msg = (
-            f"a ladder must be strictly monotone so its neighbouring pairs are "
-            f"its exchanges, got {ladder}"
-        )
-        raise ValueError(msg)
 
 
 @dataclass(frozen=True)
@@ -576,8 +707,7 @@ def adapt_ladder_by_round_trips(
         whole ladder, which is a run in which no walker circulated and so
         carries no placement.
     """
-    rungs = ladder(start)
-    _check_ladder(rungs)
+    rungs = check_ladder(ladder(start), needed_by="a ladder", monotone=Monotone.EITHER)
     if len(rungs) < 3:
         msg = (
             f"a round-trip placement needs at least three temperatures, got "

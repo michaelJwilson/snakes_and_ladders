@@ -56,6 +56,7 @@ from snakes_and_ladders.sample.schedule import (
     FeedbackLadder,
     TempSchedule,
     adapt_ladder_by_round_trips,
+    check_ladder,
     ladder,
 )
 from snakes_and_ladders.sim.factor_graph import FactorGraph
@@ -261,19 +262,8 @@ def up_fraction(walkers: np.ndarray) -> np.ndarray:
         return np.where(total > 0.0, up / total, np.nan)
 
 
-def _check_ladder(
-    temperatures: Sequence[float], n_sweeps: int, thin: int, burn_in: int
-) -> None:
-    if len(temperatures) < 2:
-        msg = (
-            f"a tempered ensemble needs at least two temperatures, got "
-            f"{len(temperatures)}: a ladder of one has nothing to exchange"
-        )
-        raise ValueError(msg)
-    for temperature in temperatures:
-        if not temperature > 0.0:
-            msg = f"every temperature must be positive, got {temperature}"
-            raise ValueError(msg)
+def _check_budget(n_sweeps: int, thin: int, burn_in: int) -> None:
+    """What a run is asked for, beside what its ladder is."""
     if n_sweeps < 1 or thin < 1 or burn_in < 0:
         msg = f"n_sweeps {n_sweeps} and thin {thin} must be >= 1 and burn_in {burn_in} >= 0"
         raise ValueError(msg)
@@ -420,8 +410,8 @@ def tempered_factor_graph(
         the ladder has fewer than two temperatures or one that is not
         positive.
     """
-    temperatures = ladder(temperatures)
-    _check_ladder(temperatures, n_sweeps, thin, burn_in)
+    temperatures = check_ladder(ladder(temperatures), needed_by="a tempered ensemble")
+    _check_budget(n_sweeps, thin, burn_in)
     indexed = _Indexed(graph)
     children = rng.spawn(len(temperatures))
     states = [indexed.start(child, start) for child in children]
@@ -514,8 +504,8 @@ def tempered_potts_pair(
         Fortuin-Kasteleyn cluster move on a graph with a negative coupling, as
         :func:`~snakes_and_ladders.sample.potts_mcmc.sample_potts` refuses it.
     """
-    temperatures = ladder(temperatures)
-    _check_ladder(temperatures, n_sweeps, thin, burn_in)
+    temperatures = check_ladder(ladder(temperatures), needed_by="a tempered ensemble")
+    _check_budget(n_sweeps, thin, burn_in)
     _refuse_negative_coupling(move, graph)
     rows = site_field(np.asarray(field, dtype=float), graph.n_nodes)
     n_states = int(rows.shape[1])
@@ -607,8 +597,8 @@ def tempered_topologies(
         If the ladder has fewer than two temperatures or one that is not
         positive, or ``n_sweeps``, ``thin`` or ``burn_in`` is unusable.
     """
-    temperatures = ladder(temperatures)
-    _check_ladder(temperatures, n_sweeps, thin, burn_in)
+    temperatures = check_ladder(ladder(temperatures), needed_by="a tempered ensemble")
+    _check_budget(n_sweeps, thin, burn_in)
     cache = {} if scores is None else scores
     score = cached_topology_score(alignment, k, cache, model=model)
     children = rng.spawn(len(temperatures))

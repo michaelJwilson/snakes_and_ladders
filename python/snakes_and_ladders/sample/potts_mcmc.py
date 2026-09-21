@@ -85,6 +85,7 @@ from snakes_and_ladders.sample.schedule import (
     AdaptedLadder,
     TempSchedule,
     adapt_ladder,
+    check_ladder,
     ladder,
 )
 from snakes_and_ladders.sim.graph import PottsGraph
@@ -747,17 +748,7 @@ def parallel_tempering(
         nothing to exchange and is :func:`sample_potts` --- or any is not
         positive.
     """
-    temperatures = ladder(temperatures)
-    if len(temperatures) < 2:
-        msg = (
-            f"parallel tempering needs at least two temperatures, got "
-            f"{len(temperatures)}: a ladder of one has nothing to exchange"
-        )
-        raise ValueError(msg)
-    for temperature in temperatures:
-        if not temperature > 0.0:
-            msg = f"every temperature must be positive, got {temperature}"
-            raise ValueError(msg)
+    temperatures = check_ladder(ladder(temperatures), needed_by="parallel tempering")
 
     rows = site_field(np.asarray(field, dtype=float), graph.n_nodes)
     n_replicas = len(temperatures)
