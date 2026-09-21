@@ -37,6 +37,7 @@ import pytest
 from numpy.testing import assert_allclose
 from scipy import stats
 from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.cost import Cost
 from snakes_and_ladders.learn.keyed import KeyedMove, keyed_generator
 from snakes_and_ladders.learn.potts_nd import (
     CLUSTER_KINDS,
@@ -733,7 +734,7 @@ def _declared_control(
         n_states=n_states,
         optimum=None,
     )
-    budget = Budget(unit="site visits", size=200 * rung.visits_per_sweep)
+    budget = Budget(unit=Cost.SITE_VISITS, size=200 * rung.visits_per_sweep)
     steps = budget.size // rung.visits_per_sweep
     schedule = ExponentialTempSchedule(ANNEAL_START, ANNEAL_END, steps)
     ladder = tuple(sorted({float(schedule(step)) for step in range(steps)}))

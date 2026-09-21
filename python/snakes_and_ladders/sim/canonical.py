@@ -42,6 +42,7 @@ from snakes_and_ladders.emissions import CategoricalEmission
 from snakes_and_ladders.sim.graph import (
     BoundaryCondition,
     PottsGraph,
+    boundary_from_declared,
     erdos_renyi_graph,
     triangular_lattice_graph,
 )
@@ -439,7 +440,7 @@ class FrustratedLatticeParams:
             raise ValueError(msg)
         return cls(
             shape=(shape[0], shape[1]),
-            boundary=BoundaryCondition(str(declared["boundary"])),
+            boundary=boundary_from_declared(path, declared["boundary"]),
             coupling=float(declared["coupling"]),
             glass_nodes=int(declared["glass_nodes"]),
             glass_mean_degree=float(declared["glass_mean_degree"]),

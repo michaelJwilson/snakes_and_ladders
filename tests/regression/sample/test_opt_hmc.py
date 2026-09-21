@@ -49,6 +49,11 @@ from snakes_and_ladders.sample.schedule import (
     ConstantTempSchedule,
     ExponentialTempSchedule,
 )
+from snakes_and_ladders.sample.tempered import (
+    round_trip_time,
+    round_trips,
+    up_fraction,
+)
 from snakes_and_ladders.sim.potts_chain import PottsParams, simulate_chains
 
 from tests._objective_checks import AnalyticGaussian, Counted
@@ -686,6 +691,38 @@ def test_tempering_costs_what_its_accounting_says_and_is_reproducible() -> None:
     assert torch.equal(run.positions, again.positions)
     assert torch.equal(run.theta, again.theta)
     assert run.positions.shape == (25, 4, 2)
+
+
+@pytest.mark.analytic
+def test_the_walker_trace_counts_the_round_trips_a_two_rung_ladder_makes() -> None:
+    # The trace the discrete temperings carry, now on the continuous ladder
+    # (issue #861). Two rungs make every statement about it exact: the two
+    # walkers are a permutation of the two rungs at every round, a rung
+    # change is an accepted exchange and nothing else, and a round trip is a
+    # return to rung 0 from the rung above -- counted here from the trace and
+    # by `tempered.round_trips`, which the discrete ensembles are read with.
+    rounds = 200
+    run = parallel_tempering(
+        GAUSSIAN,
+        (1.0, 4.0),
+        generator=torch.Generator().manual_seed(12),
+        n_rounds=rounds,
+        step_size=0.3,
+        n_steps=5,
+    )
+    trace = run.walkers
+
+    assert trace.shape == (rounds, 2)
+    np.testing.assert_array_equal(trace.sum(axis=1), np.ones(rounds, dtype=np.int64))
+    changed = int((np.diff(trace[:, 0]) != 0).sum()) + int(trace[0, 0] != 0)
+    assert float(run.swap_acceptance[0]) == changed / rounds
+    returned = ((trace[1:] == 0) & (trace[:-1] == 1)).sum(axis=0)
+    np.testing.assert_array_equal(round_trips(trace), returned)
+    assert returned.sum() > 0, trace
+    # Rung 0 is where the ascent is labelled and the last rung is where the
+    # descent is: on a ladder of two there is no rung between them.
+    np.testing.assert_array_equal(up_fraction(trace), np.array([1.0, 0.0]))
+    assert round_trip_time(trace) == rounds * 2 / float(returned.sum())
 
 
 @pytest.mark.smoke

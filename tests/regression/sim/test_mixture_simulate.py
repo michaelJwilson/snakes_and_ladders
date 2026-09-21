@@ -17,11 +17,8 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 from snakes_and_ladders.emissions import GaussianEmission
-from snakes_and_ladders.sim.mixture import (
-    BinInstance,
-    MixtureParams,
-    simulate_mixture,
-)
+from snakes_and_ladders.fixtures import BinInstance
+from snakes_and_ladders.sim.mixture import BIN_UNIT, MixtureParams, simulate_mixture
 
 WEIGHTS = np.array([0.3, 0.7])
 MEAN = np.array([-3.0, 3.0])
@@ -165,7 +162,7 @@ def test_a_declared_instance_is_found_by_its_marker_and_refused_without_one() ->
         1000,
         1,
         1e-12,
-        bins=(BinInstance(factor=10, marker="ci"),),
+        bins=(BinInstance(factor=10, unit=BIN_UNIT, marker="ci"),),
     )
 
     assert params.at("ci").n_samples == 100
@@ -173,4 +170,4 @@ def test_a_declared_instance_is_found_by_its_marker_and_refused_without_one() ->
     with pytest.raises(KeyError, match="no instance marked 'key'"):
         params.at("key")
     with pytest.raises(ValueError, match="a bin holds at least one draw"):
-        BinInstance(factor=0, marker="ci")
+        BinInstance(factor=0, unit=BIN_UNIT, marker="ci")

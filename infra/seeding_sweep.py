@@ -16,9 +16,10 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from snakes_and_ladders.cost import Cost
 from snakes_and_ladders.opt.budget import Budget, Method, compare, restarts
 from snakes_and_ladders.opt.mixture import mixture_log_likelihood, responsibilities
-from snakes_and_ladders.parallel import Backend, map_tasks
+from snakes_and_ladders.parallel import Pool, map_tasks
 from snakes_and_ladders.search.projection import (
     SEEDINGS,
     CountPairAt,
@@ -45,7 +46,7 @@ N_INSTANCES = 6
 #: Iterations of the projected fit every candidate is held to. Six, because a
 #: seeding is a claim about where a fit starts and the key model's 100
 #: components cost ten seconds an iteration.
-BUDGET = Budget("passes", 6)
+BUDGET = Budget(Cost.PASSES, 6)
 
 #: Restarts the baseline spends its budget on.
 N_RESTARTS = 2
@@ -188,7 +189,7 @@ def main() -> None:
     methods["restart"] = restarts(SeededFit("prior", at), BUDGET.size // N_RESTARTS)
 
     comparison = compare(methods, drawn, BUDGET, [0], workers=workers)
-    backend: Backend = "processes"
+    backend: Pool = "processes"
     detail = map_tasks(
         _detail,
         [(drawn[0], name, at, 0) for name in methods if name != "restart"],

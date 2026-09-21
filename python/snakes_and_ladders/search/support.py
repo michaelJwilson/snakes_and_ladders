@@ -62,7 +62,7 @@ from snakes_and_ladders.enumeration import (
     refuse_oversized,
 )
 from snakes_and_ladders.numerics import logsumexp
-from snakes_and_ladders.parallel import Backend, map_tasks
+from snakes_and_ladders.parallel import Pool, map_tasks
 from snakes_and_ladders.sample.statistics import integrated_autocorrelation_time
 from snakes_and_ladders.sample.tempered import TemperedEnsemble
 from snakes_and_ladders.search.infer import infer, score_topology
@@ -82,7 +82,7 @@ from snakes_and_ladders.sim.topology import (
 # default in workers and serial alike, so the two runs reduce in the same order
 # on one machine. No pool reached 2x at 4 workers at the mid-size tier;
 # STATUS.md carries the measurement (issue #344).
-_BOOTSTRAP_BACKEND: Backend = "processes"
+_BOOTSTRAP_BACKEND: Pool = "processes"
 _BOOTSTRAP_INTRA_OP_THREADS: int | None = None
 
 

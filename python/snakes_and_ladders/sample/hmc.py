@@ -61,6 +61,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
+import numpy as np
 import torch
 
 from snakes_and_ladders.opt.objective import Objective
@@ -69,7 +70,13 @@ from snakes_and_ladders.sample.accept import (
     accept_with,
     acceptance_probability,
 )
-from snakes_and_ladders.sample.schedule import TempSchedule, ladder
+from snakes_and_ladders.sample.schedule import (
+    Monotone,
+    TempSchedule,
+    check_ladder,
+    ladder,
+)
+from snakes_and_ladders.sample.tempered import _exchange
 
 # `current` is aliased: `_coefficients` already binds that name to a
 # sub-step length, and one of the two has to give.
@@ -824,6 +831,17 @@ class Tempered:
     force_evaluations : int
         Gradients spent over every replica, so the run is comparable to any
         other optimizer at equal evaluations.
+    walkers : np.ndarray
+        ``walkers[t, w]`` is the rung walker ``w`` sat at, at round ``t``,
+        shape ``(n_rounds, n_replicas)``. The other reading of the same run:
+        a *replica* is a temperature positions pass through, a *walker* is a
+        position followed through the exchanges, and a round trip is a
+        statement about the second.
+        :func:`snakes_and_ladders.sample.tempered.round_trips` and
+        :func:`snakes_and_ladders.sample.tempered.up_fraction` read it, as
+        they read the trace the discrete temperings carry --- an integer
+        trace rather than a tensor, because it is bookkeeping and nothing
+        differentiates it (issue #861).
     """
 
     theta: torch.Tensor
@@ -832,20 +850,7 @@ class Tempered:
     acceptance_rate: torch.Tensor
     swap_acceptance: torch.Tensor
     force_evaluations: int
-
-
-def _swap_log_ratio(
-    temperature_cold: float, temperature_hot: float, value_cold: float, value_hot: float
-) -> float:
-    """Log acceptance of exchanging the positions at two temperatures.
-
-    The joint target is the product of the tempered marginals, so the ratio
-    is ``(1/T_cold - 1/T_hot)(U_cold - U_hot)``: an exchange that hands the
-    colder replica the lower value is always accepted. The same expression
-    :func:`snakes_and_ladders.sample.potts_mcmc.parallel_tempering` accepts
-    on, with the objective where that has an energy.
-    """
-    return (1.0 / temperature_cold - 1.0 / temperature_hot) * (value_cold - value_hot)
+    walkers: np.ndarray
 
 
 def parallel_tempering(
@@ -863,11 +868,20 @@ def parallel_tempering(
 
     Each round is one :func:`sample` transition per replica at its own
     temperature, then every adjacent pair proposes to exchange positions and
-    accepts on :func:`_swap_log_ratio`. The hot replicas cross barriers the
-    cold one cannot, and an exchange carries what they find down the ladder
-    (Swendsen & Wang, 1986; Geyer, 1991; Earl & Deem, 2005). The continuous
-    counterpart of :func:`snakes_and_ladders.sample.potts_mcmc.parallel_tempering`,
-    which ``opt`` cannot import and which moves spins rather than a vector.
+    accepts on ``(beta_i - beta_j)(U_i - U_j)``. The hot replicas cross
+    barriers the cold one cannot, and an exchange carries what they find
+    down the ladder (Swendsen & Wang, 1986; Geyer, 1991; Earl & Deem, 2005).
+
+    **The exchange is one loop, and this is one of its instantiations**:
+    :func:`snakes_and_ladders.sample.tempered._exchange` runs the rounds,
+    the swaps and the walker trace, and what is supplied here is the step
+    --- one Hamiltonian transition per replica --- and the draw the swap
+    uniform comes from, which is this module's torch stream (issue #861).
+    The discrete counterpart,
+    :func:`snakes_and_ladders.sample.potts_mcmc.parallel_tempering`, stays
+    its own entry point over the same loop: it moves spins rather than a
+    vector and is refereed against enumeration where this is refereed
+    against quadrature.
 
     **The replicas must not share a stream and must be reproducible from one
     generator.** The caller's ``generator`` draws a seed per replica and then
@@ -906,20 +920,11 @@ def parallel_tempering(
         or the ladder is not increasing, or if ``n_rounds`` is below one.
     """
     _check_trajectory(step_size, n_steps)
-    temperatures = ladder(temperatures)
-    if len(temperatures) < 2:
-        msg = (
-            f"parallel tempering needs at least two temperatures, got "
-            f"{len(temperatures)}: a ladder of one has nothing to exchange"
-        )
-        raise ValueError(msg)
-    for cold, hot in itertools.pairwise(temperatures):
-        if not 0.0 < cold < hot:
-            msg = (
-                f"temperatures must be positive and increasing, coldest first, "
-                f"got {temperatures}"
-            )
-            raise ValueError(msg)
+    temperatures = check_ladder(
+        ladder(temperatures),
+        needed_by="parallel tempering",
+        monotone=Monotone.INCREASING,
+    )
     if n_rounds < 1:
         msg = f"n_rounds must be at least 1, got {n_rounds}"
         raise ValueError(msg)
@@ -932,56 +937,62 @@ def parallel_tempering(
     ]
     start = _start(objective, theta0)
     positions = [start.clone() for _ in range(n_replicas)]
-    values = [float(objective(start))] * n_replicas
-    best, best_value = start.clone(), values[0]
+    value = float(objective(start))
+    best, best_value = start.clone(), value
     accepted = torch.zeros(n_replicas, dtype=torch.float64)
-    swapped = torch.zeros(n_replicas - 1, dtype=torch.float64)
     recorded = torch.empty((n_rounds, n_replicas, start.shape[0]), dtype=torch.float64)
-
-    # `swap_acceptance` is the mean over adjacent pairs of the fraction
-    # accepted so far -- the mean of the vector `Tempered.swap_acceptance`
-    # returns -- and `energy` the best value so far, which is `Tempered.value`.
-    # Neither is a new definition; a per-replica energy series is not
-    # recorded because the result reports the minimum over replicas.
+    # The ladder is strictly increasing, so a replica's temperature names it:
+    # the loop hands the step a temperature and a generator, not an index.
+    rung = {temperature: index for index, temperature in enumerate(temperatures)}
+    round_index = 0
+    # `energy` is the best value so far, which is `Tempered.value`; the rest
+    # of the series is the exchange loop's, recorded where it runs. A
+    # per-replica energy series is not recorded because the result reports
+    # the minimum over replicas.
     tracked: TrackedOptimization = current_tracked()
-    for round_index in range(n_rounds):
-        for replica in range(n_replicas):
-            positions[replica], _, was_accepted, _ = _transition(
-                objective,
-                positions[replica],
-                temperatures[replica],
-                children[replica],
-                step_size,
-                n_steps,
-                integrator,
-            )
-            accepted[replica] += was_accepted
-            values[replica] = float(objective(positions[replica]))
-        for pair in range(n_replicas - 1):
-            log_ratio = _swap_log_ratio(
-                temperatures[pair],
-                temperatures[pair + 1],
-                values[pair],
-                values[pair + 1],
-            )
-            uniform = float(torch.rand(1, generator=parent))
-            if accept_with(log_ratio, uniform):
-                swapped[pair] += 1
-                positions[pair], positions[pair + 1] = (
-                    positions[pair + 1],
-                    positions[pair],
-                )
-                values[pair], values[pair + 1] = values[pair + 1], values[pair]
-        lowest = min(range(n_replicas), key=values.__getitem__)
-        if values[lowest] < best_value:
-            best, best_value = positions[lowest].clone(), values[lowest]
-        recorded[round_index] = torch.stack(positions)
-        tracked.record(
-            round_index,
-            state=best,
-            swap_acceptance=float(swapped.mean()) / (round_index + 1),
-            energy=best_value,
+
+    def transition(
+        position: torch.Tensor,
+        _: float,
+        temperature: float,
+        child: torch.Generator,
+    ) -> tuple[torch.Tensor, float]:
+        """One Hamiltonian transition, and the log-density where it landed."""
+        moved, _unused, was_accepted, _also = _transition(
+            objective, position, temperature, child, step_size, n_steps, integrator
         )
+        accepted[rung[temperature]] += was_accepted
+        return moved, -float(objective(moved))
+
+    def observe(states: Sequence[torch.Tensor], densities: Sequence[float]) -> None:
+        """The round the exchange closed: the positions it left, and the best point seen."""
+        nonlocal best, best_value, round_index
+        recorded[round_index] = torch.stack(list(states))
+        lowest = max(range(n_replicas), key=densities.__getitem__)
+        if -densities[lowest] < best_value:
+            best, best_value = states[lowest].clone(), -densities[lowest]
+        tracked.record(round_index, energy=best_value)
+        round_index += 1
+
+    def swap(log_ratio: float) -> bool:
+        """The exchange's accept step on this module's stream: one torch uniform, always drawn."""
+        return accept_with(log_ratio, float(torch.rand(1, generator=parent)))
+
+    ensemble = _exchange(
+        transition,
+        None,
+        positions,
+        [-value] * n_replicas,
+        temperatures,
+        children,
+        swap,
+        n_rounds,
+        0,
+        1,
+        observe,
+    )
+    # The loop records the ensemble it built; the tempering records the
+    # positions it returns, which is the state its result holds.
     tracked.record_cost(max(n_rounds - 1, 0), recorded.nbytes)
 
     return Tempered(
@@ -989,8 +1000,9 @@ def parallel_tempering(
         value=best_value,
         positions=recorded,
         acceptance_rate=accepted / n_rounds,
-        swap_acceptance=swapped / n_rounds,
+        swap_acceptance=torch.tensor(ensemble.swap_acceptance, dtype=torch.float64),
         force_evaluations=n_rounds * n_replicas * integrator.force_evaluations(n_steps),
+        walkers=ensemble.walkers,
     )
 
 

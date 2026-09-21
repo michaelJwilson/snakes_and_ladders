@@ -18,6 +18,13 @@ is refused past its cap. The hot replicas are there to move it: a chain at
 temperature one alone stays where it starts on a rugged surface, and an
 exchange carries what the hot replicas find down the ladder.
 
+**The exchange loop below is not this module's alone.**
+:func:`snakes_and_ladders.sample.hmc.parallel_tempering` runs it too, supplying
+one Hamiltonian transition per replica as its step and its own torch stream as
+the swap's draw (issue #861). The two temperings stay two entry points with two
+referees --- enumeration for the lattice, quadrature for the posterior --- and
+what they share is the loop, not the rung.
+
 **Every replica draws from its own generator**, spawned from the parent that
 then draws only the exchange uniforms, as ``potts_mcmc.parallel_tempering``
 does and for the reason it gives. And the estimate is a Monte Carlo one:
@@ -56,6 +63,7 @@ from snakes_and_ladders.sample.schedule import (
     FeedbackLadder,
     TempSchedule,
     adapt_ladder_by_round_trips,
+    check_ladder,
     ladder,
 )
 from snakes_and_ladders.sim.factor_graph import FactorGraph
@@ -65,6 +73,7 @@ from snakes_and_ladders.sim.topology import Model, MoveSet, Topology, leaf_bipar
 from snakes_and_ladders.track import TrackedOptimization, current
 
 S = TypeVar("S")
+G = TypeVar("G")
 
 
 @dataclass(frozen=True)
@@ -261,41 +270,50 @@ def up_fraction(walkers: np.ndarray) -> np.ndarray:
         return np.where(total > 0.0, up / total, np.nan)
 
 
-def _check_ladder(
-    temperatures: Sequence[float], n_sweeps: int, thin: int, burn_in: int
-) -> None:
-    if len(temperatures) < 2:
-        msg = (
-            f"a tempered ensemble needs at least two temperatures, got "
-            f"{len(temperatures)}: a ladder of one has nothing to exchange"
-        )
-        raise ValueError(msg)
-    for temperature in temperatures:
-        if not temperature > 0.0:
-            msg = f"every temperature must be positive, got {temperature}"
-            raise ValueError(msg)
+def _swap_drawn(rng: np.random.Generator) -> Callable[[float], bool]:
+    """The exchange's accept step on a NumPy stream: one uniform, and only where the ratio is negative."""
+    return lambda log_ratio: accept(log_ratio, rng)
+
+
+def _check_budget(n_sweeps: int, thin: int, burn_in: int) -> None:
+    """What a run is asked for, beside what its ladder is."""
     if n_sweeps < 1 or thin < 1 or burn_in < 0:
         msg = f"n_sweeps {n_sweeps} and thin {thin} must be >= 1 and burn_in {burn_in} >= 0"
         raise ValueError(msg)
 
 
 def _exchange(
-    step: Callable[[S, float, float, np.random.Generator], tuple[S, float]],
-    key: Callable[[S], Hashable],
+    step: Callable[[S, float, float, G], tuple[S, float]],
+    key: Callable[[S], Hashable] | None,
     states: list[S],
     values: list[float],
     temperatures: Sequence[float],
-    children: Sequence[np.random.Generator],
-    rng: np.random.Generator,
+    children: Sequence[G],
+    swap: Callable[[float], bool],
     n_sweeps: int,
     burn_in: int,
     thin: int,
+    record: Callable[[Sequence[S], Sequence[float]], None] | None = None,
 ) -> TemperedEnsemble:
     """The replica-exchange loop, over any structure with a step and a key.
 
     ``step(state, value, temperature, generator)`` advances one replica one
     sweep and returns its new state and log-density at temperature one; the
     exchange ratio takes the energy ``-value``.
+
+    **The draw is the caller's and the test is here**, which is
+    :mod:`snakes_and_ladders.sample.accept`'s own division: ``swap`` is
+    handed the log ratio and answers whether the pair exchanges, so a site
+    that draws one NumPy uniform only where the ratio is negative and one
+    that draws a torch uniform every time are the same loop on their own
+    streams (issue #861).
+
+    ``key`` is ``None`` where a state has no canonical key --- a continuous
+    position is a point, not a structure --- and the ensemble then carries
+    no keys and no scores. ``record`` is called at every recorded sweep with
+    the states and their log-densities after the exchanges, for a caller
+    whose result carries the states themselves; the ensemble carries the
+    keys of them.
     """
     n_replicas = len(temperatures)
     betas = [1.0 / temperature for temperature in temperatures]
@@ -330,16 +348,19 @@ def _exchange(
                 betas[pair], betas[pair + 1], -values[pair], -values[pair + 1]
             )
             proposed[pair] += 1
-            if accept(log_ratio, rng):
+            if swap(log_ratio):
                 accepted[pair] += 1
                 states[pair], states[pair + 1] = states[pair + 1], states[pair]
                 values[pair], values[pair + 1] = values[pair + 1], values[pair]
                 at_rung[pair], at_rung[pair + 1] = at_rung[pair + 1], at_rung[pair]
         if sweep >= burn_in and (sweep - burn_in) % thin == 0:
-            for replica in range(n_replicas):
-                name = key(states[replica])
-                scores[name] = values[replica]
-                recorded_keys[replica].append(name)
+            if record is not None:
+                record(states, values)
+            if key is not None:
+                for replica in range(n_replicas):
+                    name = key(states[replica])
+                    scores[name] = values[replica]
+                    recorded_keys[replica].append(name)
             densities.append(list(values))
             rungs = [0] * n_replicas
             for rung, walker in enumerate(at_rung):
@@ -420,8 +441,8 @@ def tempered_factor_graph(
         the ladder has fewer than two temperatures or one that is not
         positive.
     """
-    temperatures = ladder(temperatures)
-    _check_ladder(temperatures, n_sweeps, thin, burn_in)
+    temperatures = check_ladder(ladder(temperatures), needed_by="a tempered ensemble")
+    _check_budget(n_sweeps, thin, burn_in)
     indexed = Indexed(graph)
     children = rng.spawn(len(temperatures))
     states = [indexed.start(child, start) for child in children]
@@ -440,7 +461,7 @@ def tempered_factor_graph(
         values,
         temperatures,
         children,
-        rng,
+        _swap_drawn(rng),
         n_sweeps,
         burn_in,
         thin,
@@ -514,8 +535,8 @@ def tempered_potts_pair(
         Fortuin-Kasteleyn cluster move on a graph with a negative coupling, as
         :func:`~snakes_and_ladders.sample.potts_mcmc.sample_potts` refuses it.
     """
-    temperatures = ladder(temperatures)
-    _check_ladder(temperatures, n_sweeps, thin, burn_in)
+    temperatures = check_ladder(ladder(temperatures), needed_by="a tempered ensemble")
+    _check_budget(n_sweeps, thin, burn_in)
     refuse_negative_coupling(move, graph)
     rows = site_field(np.asarray(field, dtype=float), graph.n_nodes)
     n_states = int(rows.shape[1])
@@ -567,7 +588,7 @@ def tempered_potts_pair(
         values,
         temperatures,
         children,
-        rng,
+        _swap_drawn(rng),
         n_sweeps,
         burn_in,
         thin,
@@ -607,8 +628,8 @@ def tempered_topologies(
         If the ladder has fewer than two temperatures or one that is not
         positive, or ``n_sweeps``, ``thin`` or ``burn_in`` is unusable.
     """
-    temperatures = ladder(temperatures)
-    _check_ladder(temperatures, n_sweeps, thin, burn_in)
+    temperatures = check_ladder(ladder(temperatures), needed_by="a tempered ensemble")
+    _check_budget(n_sweeps, thin, burn_in)
     cache = {} if scores is None else scores
     score = cached_topology_score(alignment, k, cache, model=model)
     children = rng.spawn(len(temperatures))
@@ -629,7 +650,7 @@ def tempered_topologies(
         [value] * len(temperatures),
         temperatures,
         children,
-        rng,
+        _swap_drawn(rng),
         n_sweeps,
         burn_in,
         thin,
@@ -639,7 +660,7 @@ def tempered_topologies(
 def adapt_ladder_round_trips(
     graph: PottsGraph,
     field: np.ndarray,
-    ladder: tuple[float, ...],
+    start: TempSchedule | Sequence[float],
     rng: np.random.Generator,
     n_sweeps: int,
     tolerance: float,
@@ -663,8 +684,10 @@ def adapt_ladder_round_trips(
     ----------
     graph, field, rng, backend
         As :func:`~snakes_and_ladders.sample.potts_mcmc.parallel_tempering`.
-    ladder : tuple[float, ...]
-        The starting ladder; its endpoints and its length are the result's.
+    start : TempSchedule | Sequence[float]
+        The starting ladder, in either spelling and read by
+        :func:`~snakes_and_ladders.sample.schedule.ladder` into the same
+        floats; its endpoints and its length are the result's.
     n_sweeps : int
         Sweeps per replica per measurement. The up-fraction is a ratio of
         visit counts over these, so it sets what the placement can resolve.
@@ -682,4 +705,4 @@ def adapt_ladder_round_trips(
         )
         return [float(value) for value in up_fraction(run.walkers)]
 
-    return adapt_ladder_by_round_trips(measure, ladder, tolerance, max_rounds)
+    return adapt_ladder_by_round_trips(measure, ladder(start), tolerance, max_rounds)

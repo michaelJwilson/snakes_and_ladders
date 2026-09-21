@@ -41,6 +41,7 @@ import numpy as np
 import torch
 
 from snakes_and_ladders.enumeration import refuse_oversized
+from snakes_and_ladders.opt.termination import Termination
 from snakes_and_ladders.sim.graph import PottsGraph
 
 # The Goemans-Williamson constant: the expected ratio of the rounded cut to
@@ -66,12 +67,16 @@ class MaxCutResult:
         ``value / relaxation``. Compared against
         :data:`GOEMANS_WILLIAMSON_RATIO`, this is a computable certificate at
         sizes where the true optimum is unknown.
+    termination : Termination | None
+        The ascent's: it runs the steps it was given and tests no criterion,
+        so it ends on the count (issue #860). How far it got is ``relaxation``.
     """
 
     assignment: np.ndarray
     value: float
     relaxation: float
     ratio: float
+    termination: Termination | None = None
 
 
 def cut_value(graph: PottsGraph, assignment: np.ndarray) -> float:
@@ -199,6 +204,11 @@ def goemans_williamson(
         value=best_value,
         relaxation=relaxation,
         ratio=best_value / relaxation if relaxation > 0.0 else 1.0,
+        # The ascent runs the steps it was given and tests nothing, so it
+        # ends on the count every time: an under-solved relaxation is
+        # reported through `relaxation`, which is where a caller reads how
+        # far it got (issue #860).
+        termination=Termination.after(iterations, converged=False),
     )
 
 

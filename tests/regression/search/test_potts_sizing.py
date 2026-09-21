@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from snakes_and_ladders.cost import Cost
 from snakes_and_ladders.learn.failure import probe_failure
 from snakes_and_ladders.opt.budget import Budget, restarts
 from snakes_and_ladders.search.ground_state import (
@@ -55,7 +56,7 @@ DESCENT = 8
 
 def _budget(rung: object) -> Budget:
     """The matched budget at this rung, in site visits."""
-    return Budget(size=SWEEPS * rung.visits_per_sweep, unit="site visits")  # type: ignore[attr-defined]
+    return Budget(size=SWEEPS * rung.visits_per_sweep, unit=Cost.SITE_VISITS)  # type: ignore[attr-defined]
 
 
 @pytest.mark.oracle
@@ -309,7 +310,7 @@ def test_icm_s_shortfall_is_flat_in_the_budget() -> None:
 
     shortfall = {}
     for sweeps in (SWEEPS, 25 * SWEEPS):
-        budget = Budget(size=sweeps * rung.visits_per_sweep, unit="site visits")
+        budget = Budget(size=sweeps * rung.visits_per_sweep, unit=Cost.SITE_VISITS)
         for name, method in (
             ("icm", Entry("icm")),
             (

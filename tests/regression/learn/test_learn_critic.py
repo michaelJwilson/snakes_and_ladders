@@ -23,9 +23,9 @@ from snakes_and_ladders.learn.actor_critic import (
 from snakes_and_ladders.learn.critic import (
     Critic,
     fit_critic,
-    monte_carlo_targets,
     n_state_features,
     state_features,
+    state_targets,
     temporal_difference_targets,
 )
 from snakes_and_ladders.learn.exact import (
@@ -174,7 +174,7 @@ def test_targets_and_advantages_line_up_with_the_decisions() -> None:
     rng = np.random.default_rng(1)
     episodes = [rollout(environment, policy, rng, HORIZON) for _ in range(5)]
     n_decisions = sum(len(e.actions) for e in episodes)
-    features, targets = monte_carlo_targets(environment, episodes)
+    features, targets = state_targets(environment, episodes)
     assert features.shape == (n_decisions, n_state_features(environment))
     assert targets.tolist() == [g for e in episodes for g in e.returns_to_go()]
     critic = Critic(
@@ -345,7 +345,7 @@ def test_the_bootstrapped_targets_telescope_to_the_closed_form_return() -> None:
       starts below that take an action: 4.4e-16 absolute at worst against a
       declared 1e-12, on returns of 2.65 to 3.65.
 
-    `monte_carlo_targets` is read against the same closed form, where the
+    `state_targets` is read against the same closed form, where the
     agreement is term by term rather than in the sum.
     """
     environment = _environment()
@@ -371,7 +371,7 @@ def test_the_bootstrapped_targets_telescope_to_the_closed_form_return() -> None:
             closed, abs=1e-12
         )
 
-        _, returns = monte_carlo_targets(environment, [episode])
+        _, returns = state_targets(environment, [episode])
         for step, state in enumerate(episode.states[:-1]):
             assert float(returns[step]) == pytest.approx(
                 environment.energy(episode.states[-1]) - environment.energy(state),
