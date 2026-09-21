@@ -42,14 +42,15 @@ from pathlib import Path
 import pytest
 import yaml
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from tests._paths import REPO_ROOT
 
 # `infra/` is on `mypy_path` and is how the guards already reach their shared
 # names (see `infra/test_kinds.py`).
 sys.path.insert(0, str(REPO_ROOT / "infra"))
 
-import gates  # noqa: E402
-import test_kinds  # noqa: E402
+import catalogue
+import gates
+import test_kinds
 
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
@@ -163,7 +164,7 @@ def _tier_budgets(path: Path) -> dict[str, str]:
         pytest.fail("DEV.md carries no tier table")
     next(rows)  # the `| --- |` separator
     for line in rows:
-        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        cells = catalogue.cells(line)
         if len(cells) < 5:
             return budgets
         budgets[cells[0]] = cells[3]

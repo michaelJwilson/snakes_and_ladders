@@ -17,11 +17,12 @@ from pathlib import Path
 import pytest
 from coverage.sqldata import CoverageData
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from tests._paths import REPO_ROOT
+
 sys.path.insert(0, str(REPO_ROOT / "infra"))
 
-import coverage_recut  # noqa: E402
-from gates import (  # noqa: E402
+import coverage_recut
+from gates import (
     COVERAGE_GUARDS,
     JUDGED_COVERAGE,
     UNJUDGED_COVERAGE,

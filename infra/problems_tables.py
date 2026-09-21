@@ -36,11 +36,14 @@ from collections.abc import Iterable
 from functools import cache
 from pathlib import Path
 
+import catalogue as problem_catalogue
 import checks_ledger
 import ladder
+import test_kinds
+import tex
 import yaml
+from _paths import REPO_ROOT
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
 CATALOGUE = REPO_ROOT / "PROBLEMS.md"
 GENERATED = REPO_ROOT / "docs" / "tex" / "generated" / "problems_tables.tex"
 #: The one hand-written input: a sentence per pairing on when the method wins.
@@ -300,11 +303,6 @@ ORACLES: dict[str, str] = {
 }
 
 _SYMBOL = re.compile(r"`([^`]+)`")
-#: The two cells the tables read. A key is a bare fixture directory; a
-#: defining name carries a dot and no package prefix, since the catalogue
-#: names code under the package and says so once rather than per cell.
-_KEY_CELL = re.compile(r"`([a-z_0-9]+)`")
-_DEFINES_CELL = re.compile(r"`([a-z_]+\.[A-Za-z0-9_.]+)`")
 #: A fixture named by a catalogue row: the problem, then the tier.
 _CATALOGUE_FIXTURE = re.compile(
     r"tests/regression/fixtures/([a-z_0-9]+)/([a-z]+)\.yaml"
@@ -541,15 +539,11 @@ def referees(
         named = fixtures_named(source)
         references = _references_by_function(tree)
         relative = str(path.relative_to(REPO_ROOT))
-        for node in tree.body:
-            if not (
-                isinstance(node, ast.FunctionDef) and node.name.startswith("test_")
-            ):
-                continue
+        for node in test_kinds.functions_in(tree):
             kinds = significant.get((relative, node.name))
             if kinds is None:
                 continue
-            tier = tier_of(checks_ledger._markers(node), named)
+            tier = tier_of(test_kinds.markers(node), named)
             for symbol in references[node.name]:
                 for kind in kinds:
                     found.setdefault(symbol, set()).add((kind, tier))
@@ -614,15 +608,20 @@ def _referee_at(pins: Iterable[tuple[str, str]], tier: str) -> str:
 
 
 def _tex_text(text: str) -> str:
-    """Escape a problem name for LaTeX text mode."""
-    return (
-        text.replace("&", r"\&")
-        .replace("%", r"\%")
-        .replace("#", r"\#")
-        .replace("_", r"\_")
-        .replace("\u2013", "--")
-        .replace("\u2014", "---")
-    )
+    """Escape a cell of these tables for LaTeX text mode.
+
+    `tex.escape_authored` and not `tex.escape`, and the difference is the
+    fourth column: the notes are the one hand-written input here and they are
+    written as LaTeX --- ``$\\times$``, ``5{,}041`` --- so neutralising
+    ``$``, ``\\``, ``{`` and ``}`` would typeset the markup instead of
+    reading it. What is escaped is what a note never means as syntax and the
+    tabular does (issue #863).
+
+    Returns
+    -------
+    str
+    """
+    return tex.escape_authored(text)
 
 
 #: Fixture keys that are not the instance's shape. A seed and a tolerance say
@@ -938,32 +937,22 @@ def catalogue_rows(
 ) -> list[tuple[str, list[str], list[str]]]:
     """``(problem, fixture keys, defining code)`` per row of the catalogue.
 
-    The two hand-written columns the tables need. **Key** is the fixture
-    directory and the marker, which are one name; a row with two keys is one
-    problem declared at two instances. **Defines** is the code that is this
-    problem and no other, which the tables do not place in a column --- a
-    simulator is not a method --- and which is read here so one reader parses
-    the table.
+    The two hand-written columns the tables need, deduplicated and sorted for
+    the cells they are printed into. **Key** is the fixture directory and the
+    marker, which are one name; a row with two keys is one problem declared at
+    two instances. **Defines** is the code that is this problem and no other,
+    which the tables do not place in a column --- a simulator is not a method.
+    The table itself is parsed by `infra/catalogue.py`, the one reader
+    (issue #863).
 
     Returns
     -------
     list[tuple[str, list[str], list[str]]]
     """
-    found: list[tuple[str, list[str], list[str]]] = []
-    for line in catalogue.read_text().splitlines():
-        if not line.startswith("| ") or line.startswith("| Problem") or "---" in line:
-            continue
-        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-        if len(cells) < 4:
-            continue
-        found.append(
-            (
-                cells[0],
-                sorted(set(_KEY_CELL.findall(cells[1]))),
-                sorted(set(_DEFINES_CELL.findall(cells[3]))),
-            )
-        )
-    return found
+    return [
+        (row.title, sorted(set(row.keys)), sorted(set(row.defines)))
+        for row in problem_catalogue.rows(catalogue)
+    ]
 
 
 @cache

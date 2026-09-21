@@ -14,14 +14,14 @@ from __future__ import annotations
 
 import re
 import sys
-from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from tests._paths import REPO_ROOT
+
 sys.path.insert(0, str(REPO_ROOT / "infra"))
 
-import check_pr_body  # noqa: E402
+import check_pr_body
 
 CAP = check_pr_body.BODY_LINE_CAP
 DEV = REPO_ROOT / "DEV.md"

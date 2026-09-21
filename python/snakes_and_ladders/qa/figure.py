@@ -26,6 +26,49 @@ _LATEX_SPECIALS = "\\_%&#"
 # project's Python; ``\_`` is the escaped form LaTeX text mode needs.
 _THOUSANDS = "\\_"
 
+#: Characters LaTeX reads as syntax, and what each becomes in text mode.
+#:
+#: A copy of `infra/tex.py`'s table and not an import of it: ``infra/`` holds
+#: no application reference and the package depends on nothing in it
+#: (``infra/CLAUDE.md``), so the direction that would make this one object is
+#: the one direction the layout refuses. Two texts are one definition only
+#: while something says so, and
+#: `tests/regression/docs/test_latex_escaping.py` is what says so --- it
+#: fails on a character the two disagree about (issue #863).
+LATEX_ESCAPES = {
+    "\\": r"\textbackslash{}",
+    "&": r"\&",
+    "%": r"\%",
+    "$": r"\$",
+    "#": r"\#",
+    "_": r"\_",
+    "{": r"\{",
+    "}": r"\}",
+    "~": r"\textasciitilde{}",
+    "^": r"\textasciicircum{}",
+    "|": r"\textbar{}",
+    "<": r"\textless{}",
+    ">": r"\textgreater{}",
+    "\u2013": "--",
+    "\u2014": "---",
+}
+
+
+def latex_escape(text: str) -> str:
+    """``text`` with every LaTeX-significant character neutralised.
+
+    Parameters
+    ----------
+    text : str
+        A fixture name, a label, or any other text a generated table sets.
+
+    Returns
+    -------
+    str
+        e.g. ``tree_search`` becomes ``tree\\_search``.
+    """
+    return "".join(LATEX_ESCAPES.get(character, character) for character in text)
+
 
 def latex_integer(value: int) -> str:
     """Format an integer with underscore separators, escaped for LaTeX.

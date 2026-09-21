@@ -17,52 +17,28 @@ satisfied by a `conftest.py` applying markers invisibly.
 
 from __future__ import annotations
 
-import ast
 import sys
 import tomllib
 from pathlib import Path
 
 import pytest
 
+from tests._paths import REPO_ROOT
 from tests._problems import fixtures_named_in
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # The names live in `infra/test_kinds.py`, which the merge gate also reads:
 # one definition, and `infra/` is already on `mypy_path`. See that module.
 sys.path.insert(0, str(REPO_ROOT / "infra"))
 
-from test_kinds import (  # noqa: E402
+from test_kinds import (
     EXCLUDED_DIRECTORY,
     FINDINGS,
     KINDS,
     SCHEDULING,
     SUBJECTS,
+    functions_of,
+    markers,
 )
-
-
-def _test_functions(path: Path) -> list[ast.FunctionDef]:
-    """Every top-level ``test_`` function in one file."""
-    tree = ast.parse(path.read_text())
-    return [
-        node
-        for node in tree.body
-        if isinstance(node, ast.FunctionDef) and node.name.startswith("test_")
-    ]
-
-
-def _markers(node: ast.FunctionDef) -> set[str]:
-    """The ``pytest.mark.<name>`` markers decorating ``node``."""
-    found: set[str] = set()
-    for decorator in node.decorator_list:
-        target = decorator.func if isinstance(decorator, ast.Call) else decorator
-        if (
-            isinstance(target, ast.Attribute)
-            and isinstance(target.value, ast.Attribute)
-            and target.value.attr == "mark"
-        ):
-            found.add(target.attr)
-    return found
 
 
 def _marked_test_files() -> list[Path]:
@@ -87,8 +63,8 @@ def test_every_test_says_what_it_is_checked_against() -> None:
     unmarked = [
         f"{path.relative_to(REPO_ROOT)}::{node.name}"
         for path in _marked_test_files()
-        for node in _test_functions(path)
-        if not _markers(node) & set(KINDS)
+        for node in functions_of(path)
+        if not markers(node) & set(KINDS)
     ]
     assert not unmarked, (
         f"{len(unmarked)} tests carry no kind marker: {unmarked[:10]}. "
@@ -115,8 +91,8 @@ def test_the_guard_fails_on_an_unmarked_test(tmp_path: Path) -> None:
         "def test_something() -> None:\n    assert True\n"
     )
 
-    assert not _markers(_test_functions(unmarked)[0]) & set(KINDS)
-    assert _markers(_test_functions(marked)[0]) & set(KINDS) == {"smoke"}
+    assert not markers(functions_of(unmarked)[0]) & set(KINDS)
+    assert markers(functions_of(marked)[0]) & set(KINDS) == {"smoke"}
 
 
 @pytest.mark.critical
@@ -149,12 +125,12 @@ def test_critical_is_a_second_axis_and_not_a_kind() -> None:
     critical = [
         (path, node)
         for path in _marked_test_files()
-        for node in _test_functions(path)
-        if "critical" in _markers(node)
+        for node in functions_of(path)
+        if "critical" in markers(node)
     ]
     assert critical, "nothing is marked critical, so the early gate selects nothing"
     for path, node in critical:
-        assert _markers(node) & set(KINDS), (
+        assert markers(node) & set(KINDS), (
             f"{path.relative_to(REPO_ROOT)}::{node.name} gates early but does not "
             "say what it is checked against"
         )
@@ -172,8 +148,8 @@ def test_every_kind_is_used(kind: str) -> None:
     carriers = sum(
         1
         for path in _marked_test_files()
-        for node in _test_functions(path)
-        if kind in _markers(node)
+        for node in functions_of(path)
+        if kind in markers(node)
     )
     assert carriers > 0, f"no test carries {kind!r}"
 
@@ -193,8 +169,8 @@ def test_a_written_infra_sits_in_a_module_naming_no_problem() -> None:
         f"{path.relative_to(REPO_ROOT)}::{node.name}"
         for path in _marked_test_files()
         if fixtures_named_in(path)
-        for node in _test_functions(path)
-        if "infra" in _markers(node)
+        for node in functions_of(path)
+        if "infra" in markers(node)
     ]
 
     assert misplaced == [], (
@@ -216,8 +192,8 @@ def test_a_finding_is_carried_beside_a_kind() -> None:
     without_a_kind = [
         f"{path.relative_to(REPO_ROOT)}::{node.name}"
         for path in _marked_test_files()
-        for node in _test_functions(path)
-        if _markers(node) & set(FINDINGS) and not _markers(node) & set(KINDS)
+        for node in functions_of(path)
+        if markers(node) & set(FINDINGS) and not markers(node) & set(KINDS)
     ]
 
     assert without_a_kind == []

@@ -45,10 +45,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+from _paths import REPO_ROOT
 from coverage.numbits import numbits_to_nums
 from coverage.parser import PythonParser
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = REPO_ROOT / "python" / "snakes_and_ladders"
 
 # `infra/` is on `mypy_path` and is how the guards reach their shared names.

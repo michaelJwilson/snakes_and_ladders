@@ -29,7 +29,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+from _paths import REPO_ROOT
+
 PACKAGE_ROOT = REPO_ROOT / "python" / "snakes_and_ladders"
 #: Consuming modules at or above which a seam earns its place, per root
 #: `CLAUDE.md`. Below it the seam needs a reason.

@@ -54,6 +54,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+from _paths import REPO_ROOT
 from snakes_and_ladders.fixtures import Scale
 from snakes_and_ladders.inputs import library_versions, module_closure
 from snakes_and_ladders.learn.exact import exact_expected_return
@@ -86,8 +87,6 @@ from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.topology import MoveSet, Topology, enumerate_topologies
 from snakes_and_ladders.sim.tree import edges
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # The relative tolerance a recorded value from an iterative optimiser is
 # recomputed to (issue #527). `maximized_log_likelihood` is 45 L-BFGS fits, and

@@ -24,12 +24,12 @@ from __future__ import annotations
 import re
 import shlex
 import subprocess
-from pathlib import Path
 
 import pytest
 from snakes_and_ladders.qa.manifest import FIGURES
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from tests._paths import REPO_ROOT
+
 RELEASE_GATE = REPO_ROOT / "infra" / "release.sh"
 BUILD_DOCUMENTS = REPO_ROOT / "infra" / "build_documents.sh"
 

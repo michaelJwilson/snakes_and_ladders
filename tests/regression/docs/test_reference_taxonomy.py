@@ -39,11 +39,11 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+from tests._paths import REPO_ROOT
+
 #: The reference routing table moved out of `CLAUDE.md` into its own
 #: document, which is where the table is now checked against.
 REFERENCES_MD = REPO_ROOT / "REFERENCES.md"

@@ -21,15 +21,13 @@ from __future__ import annotations
 
 import subprocess
 import sys
-from pathlib import Path
 
 import pytest
 from snakes_and_ladders.sim.fixtures import Fixture
 
 from tests._durations import key_over_cap, over_cap
+from tests._paths import REPO_ROOT
 from tests._scale import at_fixture, at_scale
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _collected(selector: str) -> int:

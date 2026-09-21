@@ -31,7 +31,6 @@ from __future__ import annotations
 
 import ast
 import json
-import re
 import shutil
 import sys
 from dataclasses import replace
@@ -60,18 +59,13 @@ from snakes_and_ladders.sim.fixtures import (
 )
 from snakes_and_ladders.sim.spatio_sequential import canonical_spatio_sequential
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from tests._paths import REPO_ROOT
+
 sys.path.insert(0, str(REPO_ROOT / "infra"))
 
-import baselines as baseline_script  # noqa: E402
-import problems_tables  # noqa: E402
-
-CATALOGUE = REPO_ROOT / "PROBLEMS.md"
-#: A fixture key in the catalogue's Key column: the fixture directory name,
-#: which is also the marker its tests carry. The column held full fixture
-#: paths until #640 made the catalogue minimal; a row names the key and the
-#: registry resolves it to a file, so the path is stated in one place.
-_FIXTURE_KEY = re.compile(r"`([a-z][a-z_0-9]*)`")
+import baselines as baseline_script
+import catalogue
+import problems_tables
 
 #: The applicability table column each stated oracle fills. ``none`` fills
 #: none, which is the point of stating it: the size is past every oracle.
@@ -82,22 +76,11 @@ ORACLE_COLUMNS = {
 }
 
 
-def _catalogue_fixtures() -> dict[str, list[str]]:
-    """``row title -> fixture keys`` for every row of the catalogue."""
-    found: dict[str, list[str]] = {}
-    for line in CATALOGUE.read_text().splitlines():
-        if not line.startswith("| ") or line.startswith("| Problem") or "---" in line:
-            continue
-        cells = line.strip().strip("|").split("|")
-        found[cells[0].strip()] = _FIXTURE_KEY.findall(cells[1])
-    return found
-
-
 @pytest.mark.smoke
 def test_every_catalogue_row_names_a_ci_fixture_that_loads() -> None:
     # The claim the column makes: this problem has an instance, at the size
     # the per-pull-request suite runs.
-    rows = _catalogue_fixtures()
+    rows = catalogue.keys()
     assert len(rows) > 8, "the catalogue lost its table"
 
     for title, keys in rows.items():
@@ -113,7 +96,7 @@ def test_every_catalogue_row_names_a_ci_fixture_that_loads() -> None:
 def test_every_fixture_is_named_by_the_catalogue() -> None:
     # The other direction: an instance the catalogue does not claim is one
     # no row is answerable for.
-    named = {key for keys in _catalogue_fixtures().values() for key in keys}
+    named = {key for keys in catalogue.keys().values() for key in keys}
 
     assert set(problems()) == named
 

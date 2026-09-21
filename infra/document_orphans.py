@@ -31,7 +31,8 @@ import re
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+from _paths import REPO_ROOT
+
 TEX_DIR = REPO_ROOT / "docs" / "tex"
 TEXTBOOK = TEX_DIR / "textbook.tex"
 DOCUMENTS = (TEX_DIR / "paper.tex", TEXTBOOK)

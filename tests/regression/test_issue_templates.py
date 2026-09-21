@@ -10,13 +10,13 @@ properties fails here and not at filing time.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from tests._paths import REPO_ROOT
+
 TEMPLATES = REPO_ROOT / ".github" / "ISSUE_TEMPLATE"
 LABELS = REPO_ROOT / ".github" / "labels.yml"
 

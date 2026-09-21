@@ -20,10 +20,11 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+from tests._paths import REPO_ROOT
+
 sys.path.insert(0, str(REPO_ROOT / "infra"))
 
-import problems_tables  # noqa: E402
+import problems_tables
 
 
 @pytest.fixture(scope="module")

@@ -19,11 +19,11 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from tests._paths import REPO_ROOT
 
 sys.path.insert(0, str(REPO_ROOT / "infra"))
 
-import repair_environment  # noqa: E402
+import repair_environment
 
 #: Every tool the agent briefs, `DEV.md` and `infra/*.sh` assume is present.
 #: `uv sync --locked --all-extras` installs all of them; a narrower sync does

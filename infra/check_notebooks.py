@@ -60,7 +60,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+from _paths import REPO_ROOT
+
 NOTEBOOK_DIR = REPO_ROOT / "docs" / "nb"
 
 # Generous: `potts_chain.ipynb` trains eight policies. A timeout here would

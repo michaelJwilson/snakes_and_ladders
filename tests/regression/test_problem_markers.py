@@ -28,6 +28,7 @@ from typing import Any
 
 import pytest
 
+from tests._paths import REPO_ROOT
 from tests._problems import (
     NAMES_FIRST,
     NAMES_SECOND,
@@ -39,7 +40,6 @@ from tests._problems import (
     snapshot,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
 TESTS = REPO_ROOT / "tests"
 
 #: Every problem, which is every marker the hook can add.
@@ -102,8 +102,11 @@ def _imports_defining(path: Path, names: tuple[str, ...]) -> bool:
 def _catalogue_defines() -> dict[str, tuple[str, ...]]:
     """``problem -> defining names``, re-read from `PROBLEMS.md` here.
 
-    Deliberately a second reader rather than `tests._problems._defining_code`:
-    a guard that imports the thing it checks agrees with it by construction.
+    Deliberately a second reader, and the only one: everything else reads the
+    table through `infra/catalogue.py`, including `tests._problems`, which is
+    the module this guard judges (issue #863). A guard that imports the thing
+    it checks agrees with it by construction, so the second reading is what
+    makes this a check rather than a restatement.
     """
     defines: dict[str, list[str]] = {}
     for line in (REPO_ROOT / "PROBLEMS.md").read_text().splitlines():

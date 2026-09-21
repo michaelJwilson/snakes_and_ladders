@@ -42,7 +42,9 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+from _paths import REPO_ROOT
+from tex import escape, escape_code
+
 PACKAGE_ROOT = REPO_ROOT / "python" / "snakes_and_ladders"
 GENERATED = REPO_ROOT / "docs" / "tex" / "generated" / "api_map.tex"
 
@@ -64,25 +66,6 @@ _MARKUP = re.compile(
     r"|``(?P<double>.+?)``"
     r"|(?<!`)`(?P<single>[^`]+)`(?!`)"
 )
-
-#: Characters LaTeX reads as syntax, and what each becomes in text mode.
-_ESCAPES = {
-    "\\": r"\textbackslash{}",
-    "&": r"\&",
-    "%": r"\%",
-    "$": r"\$",
-    "#": r"\#",
-    "_": r"\_",
-    "{": r"\{",
-    "}": r"\}",
-    "~": r"\textasciitilde{}",
-    "^": r"\textasciicircum{}",
-    "|": r"\textbar{}",
-    "<": r"\textless{}",
-    ">": r"\textgreater{}",
-    "\u2013": "--",
-    "\u2014": "---",
-}
 
 
 @dataclass(frozen=True)
@@ -267,32 +250,6 @@ def overruns(found: tuple[Module, ...]) -> list[tuple[str, int]]:
         if len(module.summary) > SUMMARY_WIDTH
     ]
     return sorted(over, key=lambda pair: (-pair[1], pair[0]))
-
-
-def escape(text: str) -> str:
-    """``text`` with every LaTeX-significant character neutralised."""
-    return "".join(_ESCAPES.get(character, character) for character in text)
-
-
-#: Inside ``\\texttt`` the five characters below are set from the typewriter
-#: font itself, which carries them at their ASCII slots. ``\\textbar``,
-#: ``\\textless``, ``\\textgreater`` and the brace commands ask for the OMS
-#: symbol font in the typewriter family, which has no such shape, so LaTeX
-#: substitutes ``cmsy`` and pdfTeX's font expansion refuses it at the shipout
-#: of whichever page the line lands on (#770's build).
-_CODE_ESCAPES = {
-    **_ESCAPES,
-    "{": r"\char`\{{}",
-    "}": r"\char`\}{}",
-    "|": r"\char`\|{}",
-    "<": r"\char`\<{}",
-    ">": r"\char`\>{}",
-}
-
-
-def escape_code(text: str) -> str:
-    """``text`` as it is set inside ``\texttt``: as :func:`escape`, braces from the font."""
-    return "".join(_CODE_ESCAPES.get(character, character) for character in text)
 
 
 def tex_text(text: str) -> str:

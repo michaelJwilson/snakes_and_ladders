@@ -17,16 +17,16 @@ from __future__ import annotations
 
 import importlib
 import sys
-from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from tests._paths import REPO_ROOT
+
 sys.path.insert(0, str(REPO_ROOT / "infra"))
 
-import coverage_recut  # noqa: E402
-import ladder  # noqa: E402
-from ladder import LADDER, PROBLEMS, Cost, Rung  # noqa: E402
+import coverage_recut
+import ladder
+from ladder import LADDER, PROBLEMS, Cost, Rung
 
 #: What issue #734 counts as unpinned today: none. The Potts five (step 2),
 #: the tree four (step 3), the HMM four (step 4), the codes five (step 5) and

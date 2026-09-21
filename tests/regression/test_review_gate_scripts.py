@@ -20,13 +20,14 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from tests._paths import REPO_ROOT
+
 sys.path.insert(0, str(REPO_ROOT / "infra"))
 
-import checks_ledger  # noqa: E402
-import gate_changed_tests  # noqa: E402
-import gate_new_seams  # noqa: E402
-import problems_tables  # noqa: E402
+import checks_ledger
+import gate_changed_tests
+import gate_new_seams
+import problems_tables
 
 #: What ``infra/ledgers.sh`` writes, and what must therefore never be tracked.
 DERIVED = (checks_ledger.LEDGER, problems_tables.GENERATED)

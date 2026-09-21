@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.qa.figure import QATable, latex_integer
+from snakes_and_ladders.qa.figure import QATable, latex_escape, latex_integer
 from snakes_and_ladders.qa.runner import ParamsArgument, table_main
 from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.tree import preorder
@@ -19,11 +19,6 @@ from snakes_and_ladders.sim.tree import preorder
 
 def _n_taxa(params: SimulationParams) -> int:
     return sum(1 for node in preorder(params.tau) if node.is_leaf)
-
-
-def _escape(text: str) -> str:
-    """Escape the LaTeX specials a fixture filename can contain."""
-    return text.replace("_", "\\_")
 
 
 def render_problem_sizes(
@@ -51,7 +46,7 @@ def render_problem_sizes(
     rows = [
         " & ".join(
             [
-                f"\\texttt{{{_escape(fixture_name)}}}",
+                f"\\texttt{{{latex_escape(fixture_name)}}}",
                 str(_n_taxa(params_by_fixture[fixture_name])),
                 latex_integer(params_by_fixture[fixture_name].n_sites),
                 # A seed is an identifier, not a magnitude: separators would

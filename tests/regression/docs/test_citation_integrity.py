@@ -22,10 +22,11 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+from tests._paths import REPO_ROOT
+
 sys.path.insert(0, str(REPO_ROOT / "infra"))
 
-import check_citations  # noqa: E402
+import check_citations
 
 CLEAN_BIBLIOGRAPHY = """\
 @book{cited2020,

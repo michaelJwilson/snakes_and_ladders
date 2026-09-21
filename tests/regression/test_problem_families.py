@@ -37,23 +37,18 @@ from pathlib import Path
 
 import pytest
 
+from tests._paths import REPO_ROOT
 from tests._problems import fixtures_named_in, problem_names
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
 TESTS = REPO_ROOT / "tests" / "regression"
 CATALOGUE = REPO_ROOT / "PROBLEMS.md"
 
 sys.path.insert(0, str(REPO_ROOT / "infra"))
 
-import problems_tables  # noqa: E402
+import catalogue as catalogue_reader  # noqa: E402
 
 #: Every problem key, which is every marker the hook can add.
 DECLARED = frozenset(problem_names())
-
-#: A ``` `name` ``` span inside a catalogue cell. The **Key** and **Defines**
-#: columns are read by `problems_tables.catalogue_rows`; this reads the
-#: **Statement** column beside it, which carries a LaTeX label and not a name.
-STATEMENT = re.compile(r"`([^`]+)`")
 
 #: The three modules that name a family and exercise none, with the word and
 #: what it means there. None is a gap: the first names notebooks in the map
@@ -100,19 +95,6 @@ def _stem_pattern(stem: str) -> re.Pattern[str]:
     return re.compile(_EDGE + re.escape(stem) + r"_[0-9A-Za-z]")
 
 
-def _statements(catalogue: Path = CATALOGUE) -> list[list[str]]:
-    """The **Statement** labels of each catalogue row, in row order."""
-    found: list[list[str]] = []
-    for line in catalogue.read_text().splitlines():
-        if not line.startswith("| ") or line.startswith("| Problem") or "---" in line:
-            continue
-        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-        if len(cells) < 4:
-            continue
-        found.append(STATEMENT.findall(cells[2]))
-    return found
-
-
 @cache
 def families(catalogue: Path = CATALOGUE) -> dict[str, frozenset[str]]:
     """``statement label -> the fixture keys stated by it``.
@@ -131,17 +113,15 @@ def families(catalogue: Path = CATALOGUE) -> dict[str, frozenset[str]]:
 
     Notes
     -----
-    The keys come from `problems_tables.catalogue_rows`, the reader the
-    textbook's tables use, and only the column it drops is read here. The
-    ``strict`` zip holds the two readings to the same rows: a row one sees and
-    the other does not is a family map built from the wrong table.
+    Read through `infra/catalogue.py`, which the textbook's tables read too.
+    Two readings of the table used to be zipped ``strict`` here to hold them
+    to the same rows; one reader is the stronger form of that check, so the
+    zip went with the second reader (issue #863).
     """
-    rows = problems_tables.catalogue_rows(catalogue)
-    found: dict[str, set[str]] = {}
-    for (_, keys, _), labels in zip(rows, _statements(catalogue), strict=True):
-        for label in labels:
-            found.setdefault(label, set()).update(keys)
-    return {label: frozenset(keys) for label, keys in sorted(found.items())}
+    return {
+        label: frozenset(keys)
+        for label, keys in sorted(catalogue_reader.statements(catalogue).items())
+    }
 
 
 def stems(label: str, keys: frozenset[str]) -> frozenset[str]:

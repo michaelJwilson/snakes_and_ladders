@@ -23,7 +23,8 @@ from types import ModuleType
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+from tests._paths import REPO_ROOT
+
 PACKAGE = REPO_ROOT / "python" / "snakes_and_ladders"
 GENERATED = REPO_ROOT / "docs" / "tex" / "generated" / "api_map.tex"
 

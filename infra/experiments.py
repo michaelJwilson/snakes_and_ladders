@@ -23,7 +23,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+from _paths import REPO_ROOT
+
 EXPERIMENTS_DIR = REPO_ROOT / "docs" / "experiments"
 FIXTURES_DIR = REPO_ROOT / "tests" / "regression" / "fixtures"
 TEMPLATE = "TEMPLATE.md"

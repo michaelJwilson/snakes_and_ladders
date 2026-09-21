@@ -25,7 +25,7 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from tests._paths import REPO_ROOT
 
 #: The retired name in every spelling it was written in: prose, the build
 #: script's filename, and the CI job's id. `\s` rather than a literal space, so

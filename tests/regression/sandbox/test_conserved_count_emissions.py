@@ -22,14 +22,14 @@ from __future__ import annotations
 
 import ast
 import hashlib
-from pathlib import Path
 
 import pytest
 import torch
 from snakes_and_ladders import emissions as live
 from snakes_and_ladders.sandbox import count_emissions as conserved
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+from tests._paths import REPO_ROOT
+
 CONSERVED = (
     REPO_ROOT / "python" / "snakes_and_ladders" / "sandbox" / "count_emissions.py"
 )

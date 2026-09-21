@@ -30,7 +30,7 @@ from select_tests import (
     select,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from tests._paths import REPO_ROOT
 
 
 def _modules_of(chosen: dict[str, list[str]]) -> set[str]:

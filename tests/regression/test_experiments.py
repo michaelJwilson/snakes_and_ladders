@@ -14,10 +14,11 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from tests._paths import REPO_ROOT
+
 sys.path.insert(0, str(REPO_ROOT / "infra"))
 
-import experiments  # noqa: E402
+import experiments
 
 VALID = (
     REPO_ROOT / "docs" / "experiments" / "001-potts-cluster-autocorrelation.md"
