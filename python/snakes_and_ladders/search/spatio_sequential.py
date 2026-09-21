@@ -54,6 +54,7 @@ from snakes_and_ladders.likelihood.spatio_sequential import (
     labelled_log_likelihood,
 )
 from snakes_and_ladders.opt.mixture import emission_mixture_plus_plus
+from snakes_and_ladders.opt.termination import Termination
 from snakes_and_ladders.sample.accept import accept
 from snakes_and_ladders.sample.schedule import TempSchedule
 from snakes_and_ladders.search.alpha_expansion import (
@@ -94,12 +95,16 @@ class SpatioSequentialFit:
         the start, then after each EM half and each label half. Non-decreasing.
     field : np.ndarray
         The external field at the fitted labels and parameters, ``(n_nodes, M)``.
+    termination : Termination | None
+        The block loop's: every block runs, so it ends on the count it was
+        given rather than on a criterion (issue #860).
     """
 
     params: SpatioSequentialParams
     labels: np.ndarray
     log_likelihoods: np.ndarray
     field: np.ndarray
+    termination: Termination | None = None
 
 
 def m_step(
@@ -357,7 +362,15 @@ def fit_spatio_sequential(
         else:
             values.append(values[-1])
     field = field_of(params, observations, current, None)
-    return SpatioSequentialFit(params, current, np.array(values), field)
+    # Every block runs: the loop tests nothing and ends on the count it was
+    # given (issue #860).
+    return SpatioSequentialFit(
+        params,
+        current,
+        np.array(values),
+        field,
+        Termination.after(n_blocks, converged=False),
+    )
 
 
 def label_accuracy(fitted: np.ndarray, planted: np.ndarray, n_classes: int) -> float:
@@ -486,4 +499,10 @@ def graph_burn_in(
         posteriors = class_posteriors(params, observations, labels)
         field = external_field(params, observations, labels, posteriors.posterior)
         values.append(labelled_log_likelihood(params, observations, labels))
-    return SpatioSequentialFit(params, labels, np.array(values), field)
+    return SpatioSequentialFit(
+        params,
+        labels,
+        np.array(values),
+        field,
+        Termination.after(schedule.n_steps, converged=False),
+    )

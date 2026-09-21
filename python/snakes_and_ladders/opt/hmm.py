@@ -45,6 +45,7 @@ from snakes_and_ladders.emissions import (
 from snakes_and_ladders.numerics import constant_chain_kernel
 from snakes_and_ladders.opt.constrain import free_from_log_simplex, log_simplex
 from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.opt.termination import Termination
 from snakes_and_ladders.ragged import Ragged
 
 # How far apart the emission rows start, in unconstrained units. Large
@@ -1080,6 +1081,10 @@ class EmFit:
     emission_at_boundary : bool
         Whether any M step returned a parameter at the edge of the range this
         data identifies it over.
+    termination : Termination | None
+        Whether the outer loop met its relative tolerance and after how many
+        EM iterations (issue #860). An unconverged emission M step is refused
+        rather than reported, and still is: this answers for the outer loop.
     """
 
     log_initial: torch.Tensor
@@ -1087,6 +1092,7 @@ class EmFit:
     emissions: EmissionFamily
     log_likelihood: float
     emission_at_boundary: bool = False
+    termination: Termination | None = None
 
 
 def baum_welch(
@@ -1279,7 +1285,9 @@ def baum_welch_family(
     previous = -float("inf")
     log_likelihood = previous
     at_boundary = False
-    for _ in range(max_iterations):
+    converged = False
+    iterations = 0
+    for iteration in range(max_iterations):
         # --- E step: forward and backward messages in log space ----------
         emit = emissions.log_density(data, covariate=exposure)
         # A padded position scores log 1, so it adds nothing wherever it is
@@ -1356,7 +1364,9 @@ def baum_welch_family(
         emissions = step.emissions
         at_boundary = at_boundary or step.at_boundary
 
+        iterations = iteration + 1
         if abs(log_likelihood - previous) <= tolerance * abs(log_likelihood):
+            converged = True
             break
         previous = log_likelihood
 
@@ -1366,4 +1376,5 @@ def baum_welch_family(
         emissions=emissions,
         log_likelihood=log_likelihood,
         emission_at_boundary=at_boundary,
+        termination=Termination.after(iterations, converged=converged),
     )

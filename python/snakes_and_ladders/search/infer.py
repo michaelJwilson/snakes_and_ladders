@@ -59,6 +59,7 @@ from snakes_and_ladders.likelihood.pruning_torch import (
 )
 from snakes_and_ladders.opt.fit import fit
 from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.opt.termination import Termination
 from snakes_and_ladders.parallel import Backend, map_tasks
 from snakes_and_ladders.sim.topology import (
     Model,
@@ -105,6 +106,10 @@ class Inference:
         Forward passes spent, inside fits and on lazy scores together: the
         unit a budget-matched comparison between two ways of searching is
         stated in (issue #289).
+    termination : Termination | None
+        The same answer as ``converged``, with the hill-climbing rounds the
+        search took, in the form every result states it in (issue #860). The
+        rounds are not ``evaluations``: a round scores a whole neighbourhood.
     """
 
     topology: Topology
@@ -115,6 +120,7 @@ class Inference:
     converged: bool
     fits: int = 0
     likelihood_evaluations: int = 0
+    termination: Termination | None = None
 
 
 @dataclass(frozen=True)
@@ -580,6 +586,10 @@ def infer(
         converged=converged,
         fits=fits,
         likelihood_evaluations=likelihood_evaluations,
+        # The trace opens at the starting topology, so a round that accepted
+        # a move is an entry after it: the hill-climbing rounds are its
+        # length less one.
+        termination=Termination.after(len(trace) - 1, converged=converged),
     )
 
 
@@ -633,6 +643,10 @@ class ParsimonyInference:
     converged : bool
         Whether the search stopped because no neighbour improved rather than
         because the budget ran out, on the same terms as :class:`Inference`.
+    termination : Termination | None
+        The same answer as ``converged``, with the hill-climbing rounds the
+        search took, in the form every result states it in (issue #860). The
+        rounds are not ``evaluations``: a round scores a whole neighbourhood.
     """
 
     topology: Topology
@@ -640,6 +654,7 @@ class ParsimonyInference:
     evaluations: int
     trace: tuple[float, ...]
     converged: bool
+    termination: Termination | None = None
 
 
 def _metric_step_matrix(step_matrix: np.ndarray, k: int) -> np.ndarray:
@@ -778,4 +793,5 @@ def parsimony_search(
         evaluations=evaluations,
         trace=tuple(trace),
         converged=converged,
+        termination=Termination.after(len(trace) - 1, converged=converged),
     )

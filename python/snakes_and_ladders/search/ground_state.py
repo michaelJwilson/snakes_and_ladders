@@ -63,6 +63,7 @@ from snakes_and_ladders.likelihood.message_passing import (
     max_product,
 )
 from snakes_and_ladders.opt.budget import Budget, Comparison, Outcome
+from snakes_and_ladders.opt.termination import Stop, Termination
 from snakes_and_ladders.sample.potts_mcmc import (
     ClusterCounter,
     PottsMove,
@@ -400,6 +401,16 @@ class MethodRun:
         infinite energy rather than a fallback labelling's, so it ranks last
         and a reader is told it failed instead of being shown another
         method's numbers under its name.
+    termination : Termination | None
+        Why the method's own loop ended, where the method says (issue #860).
+        Not a restatement of ``converged``: that field answers *did this
+        return an answer*, and a sweep loop that answers it with ``True``
+        still ran to its budget and met no criterion. So the rows carrying
+        one are the two that know --- the cut-based moves, which return on a
+        cycle that lowers nothing, and max-product, which converges or
+        refuses. The Monte Carlo and descent rows leave it ``None``: their
+        kernels report a labelling and an energy and not which branch ended
+        the loop.
     """
 
     labelling: np.ndarray
@@ -408,6 +419,7 @@ class MethodRun:
     seconds: float
     trace: tuple[ClusterCounter, ...] = ()
     converged: bool = True
+    termination: Termination | None = None
 
 
 def _anneal(
@@ -568,6 +580,7 @@ def run_alpha_expansion(
         energy=run.energy,
         spent=run.cycles * rung.n_states * rung.visits_per_sweep,
         seconds=time.perf_counter() - start,
+        termination=run.termination,
     )
 
 
@@ -598,6 +611,7 @@ def run_alpha_beta_swap(
         labelling=run.labelling,
         energy=run.energy,
         spent=run.cycles * per_cycle,
+        termination=run.termination,
         seconds=time.perf_counter() - start,
     )
 
@@ -620,7 +634,7 @@ def run_max_product(rung: Rung, budget: Budget, rng: np.random.Generator) -> Met
     graph = from_potts(rung.graph, rung.field)
     start = time.perf_counter()
     try:
-        assignment, _ = max_product(
+        assignment, marginals = max_product(
             graph, schedule=MessageScheduleName.FLOODING, max_iterations=iterations
         )
     except ConvergenceError:
@@ -630,6 +644,9 @@ def run_max_product(rung: Rung, budget: Budget, rng: np.random.Generator) -> Met
             spent=iterations * rung.visits_per_sweep,
             seconds=time.perf_counter() - start,
             converged=False,
+            termination=Termination(
+                converged=False, iterations=iterations, reason=Stop.REFUSED
+            ),
         )
     labelling = np.array(
         [assignment[f"s{node}"] for node in range(rung.n_nodes)], dtype=np.int64
@@ -639,6 +656,9 @@ def run_max_product(rung: Rung, budget: Budget, rng: np.random.Generator) -> Met
         energy=energy(rung.graph, rung.field, labelling),
         spent=iterations * rung.visits_per_sweep,
         seconds=time.perf_counter() - start,
+        # Flooding refuses rather than truncating, so a return is a settled
+        # fixed point and the sweeps it took are the marginals' own count.
+        termination=Termination.after(marginals.iterations, converged=True),
     )
 
 
@@ -659,6 +679,7 @@ def run_bifurcation(rung: Rung, budget: Budget, rng: np.random.Generator) -> Met
         energy=result.energy,
         spent=steps * rung.visits_per_sweep,
         seconds=time.perf_counter() - start,
+        termination=result.termination,
     )
 
 

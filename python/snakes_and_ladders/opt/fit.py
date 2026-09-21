@@ -24,6 +24,7 @@ import torch
 
 from snakes_and_ladders.opt.initialize import Initializer
 from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.opt.termination import Termination
 from snakes_and_ladders.parallel import Backend, map_tasks
 from snakes_and_ladders.track import TrackedOptimization, current
 
@@ -74,6 +75,10 @@ class FitResult:
         Delta-method standard errors at ``theta`` under :meth:`constrain`'s
         keys, when ``include_intervals`` asked for them. ``None`` means *not
         requested*, never *refused*: a singular information raises instead.
+    termination : Termination | None
+        The same answer as ``converged`` and ``iterations``, in the form every
+        result states it in (issue #860). The two fields stay: they are what
+        this result has always been read by.
     """
 
     theta: torch.Tensor
@@ -82,6 +87,7 @@ class FitResult:
     iterations: int
     converged: bool
     standard_errors: Mapping[str, torch.Tensor] | None = None
+    termination: Termination | None = None
 
 
 def fit(
@@ -187,6 +193,7 @@ def fit(
         gradient_norm=_relative_gradient_norm(objective, theta),
         iterations=iterations,
         converged=converged,
+        termination=Termination.after(iterations, converged=converged),
     )
     # The closing record is the result's own numbers, so the series ends
     # where the fit does: the entries above are the objective and the norm
@@ -424,11 +431,16 @@ class MultiStartResult:
         ``max(value) - min(value)`` over the fits. Zero means every start
         agreed, which is the evidence that one start would have sufficed;
         anything else is the amount a single fit could have been wrong by.
+    termination : Termination | None
+        ``best``'s, since the best fit is what a single-start caller reads
+        (issue #860). Every start's own is on its own :class:`FitResult`,
+        which is where a multimodal surface is read from.
     """
 
     best: FitResult
     all_fits: tuple[FitResult, ...]
     spread: float
+    termination: Termination | None = None
 
 
 def _fit_start(task: tuple[Objective, torch.Tensor, int, float]) -> FitResult:
@@ -500,4 +512,6 @@ def fit_from(
     ordered = tuple(sorted(results, key=lambda result: result.value))
     spread = float(ordered[-1].value - ordered[0].value)
     best = _with_intervals(objective, ordered[0]) if include_intervals else ordered[0]
-    return MultiStartResult(best=best, all_fits=ordered, spread=spread)
+    return MultiStartResult(
+        best=best, all_fits=ordered, spread=spread, termination=best.termination
+    )

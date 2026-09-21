@@ -258,6 +258,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.opt.testfunctions
    :members:
 
+.. automodule:: snakes_and_ladders.opt.termination
+   :members:
+
 .. automodule:: snakes_and_ladders.opt.potts
    :members:
 
