@@ -27,12 +27,11 @@ for. A ninth state is a facet, as a fifth series is.
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator
 from contextlib import contextmanager
 
 import matplotlib as mpl
 import matplotlib.colors as mcolors
-import numpy as np
 from matplotlib.typing import ColorType
 
 # Okabe-Ito, fixed order. See the module docstring for the validation result.
@@ -112,22 +111,6 @@ def blend_with_white(
         raise ValueError(msg)
     r, g, b, _ = mcolors.to_rgba(color)
     return (1 - alpha * (1 - r), 1 - alpha * (1 - g), 1 - alpha * (1 - b), 1.0)
-
-
-def with_opacity(colors: Sequence[ColorType], opacities: Sequence[float]) -> np.ndarray:
-    """One RGBA row per colour, its alpha the matching opacity clipped to ``[0, 1]``.
-
-    For a scatter whose points carry a weight -- a posterior probability, a
-    support -- as opacity, with the colour carrying the state.
-    """
-    if len(colors) != len(opacities):
-        msg = f"{len(colors)} colours but {len(opacities)} opacities"
-        raise ValueError(msg)
-    rgba = np.zeros((len(colors), 4))
-    for row, (color, alpha) in enumerate(zip(colors, opacities, strict=True)):
-        rgba[row, :3] = mcolors.to_rgb(color)
-        rgba[row, 3] = float(np.clip(alpha, 0.0, 1.0))
-    return rgba
 
 
 def discrete_palette(
@@ -228,24 +211,3 @@ def letter_style() -> Iterator[None]:
         }
     ):
         yield
-
-
-def tolerance_note(values: Sequence[float], tolerance: float) -> str:
-    """State the largest deviation against the tolerance it was checked at.
-
-    Parameters
-    ----------
-    values : Sequence[float]
-        Absolute deviations from a reference.
-    tolerance : float
-        The tolerance the deviations are checked against.
-
-    Returns
-    -------
-    str
-        A caption fragment giving the realized maximum and the tolerance --
-        the PR template's "realized value alongside the reference and
-        tolerance" rule, in figure form.
-    """
-    worst = max(values) if values else 0.0
-    return f"largest deviation {worst:.2e}, checked at {tolerance:.0e}"

@@ -54,9 +54,6 @@ SECTION = re.compile(r"^##\s+", re.M)
 #: A backticked dotted name, as `STATUS.md` writes one.
 CODE_SPAN = re.compile(r"`([A-Za-z_][\w.]*)`")
 
-#: What a node's label may run to before it stops being readable on one page.
-LABEL_WIDTH = 34
-
 #: The page holds this many nodes. Over it, the guard fails rather than the
 #: figure printing something unreadable (issue #664).
 NODE_CAP = 200
