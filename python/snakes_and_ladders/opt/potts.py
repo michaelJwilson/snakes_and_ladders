@@ -33,7 +33,9 @@ issue #171 moved ``snakes_and_ladders.opt.hmm``'s truth type into
 from __future__ import annotations
 
 import itertools
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import torch
@@ -200,9 +202,36 @@ def log_partition(
     return log_partition_by_recursion(coupling, field, length)
 
 
+@dataclass(frozen=True)
+class GraphStatistics:
+    """Every configuration's sufficient statistics, enumerated once.
+
+    The two travel together: they are read row for row against one
+    enumeration order, and :func:`log_partition_graph` takes both.
+
+    Parameters
+    ----------
+    agreements : torch.Tensor
+        Shape ``(q ** n_nodes,)``, agreeing edges per configuration.
+    counts : torch.Tensor
+        Shape ``(q ** n_nodes, q)``, sites per state per configuration.
+    """
+
+    agreements: torch.Tensor
+    counts: torch.Tensor
+
+    def __iter__(self) -> Iterator[Any]:
+        """``(agreements, counts)``: the order callers unpack.
+
+        ``Any`` and not ``torch.Tensor``: the two are one type here, and a
+        narrower annotation would still be widened by the next field added.
+        """
+        yield from (self.agreements, self.counts)
+
+
 def graph_statistics(
     n_states: int, edges: Sequence[tuple[int, int]], n_nodes: int
-) -> tuple[torch.Tensor, torch.Tensor]:
+) -> GraphStatistics:
     """Enumerate every configuration's sufficient statistics for a Potts graph.
 
     The energy is ``J * agreement(s) + sum_i h[s_i]``, so a configuration
@@ -229,7 +258,7 @@ def graph_statistics(
 
     Returns
     -------
-    tuple[torch.Tensor, torch.Tensor]
+    GraphStatistics
         Agreeing-edge count per configuration, shape ``(q ** n_nodes,)``, and
         state counts per configuration, shape ``(q ** n_nodes, q)``.
     """
@@ -246,7 +275,7 @@ def graph_statistics(
     ).scatter_add_(
         1, configurations, torch.ones_like(configurations, dtype=torch.float64)
     )
-    return agreements, counts
+    return GraphStatistics(agreements, counts)
 
 
 def log_partition_graph(
@@ -422,9 +451,9 @@ class PottsLatticeObjective(_PottsObjectiveBase):
         self._counts.scatter_add_(
             0, observed.reshape(-1), torch.ones(observed.numel(), dtype=dtype)
         )
-        self._agreements, self._configuration_counts = graph_statistics(
-            n_states, edges, n_nodes
-        )
+        statistics = graph_statistics(n_states, edges, n_nodes)
+        self._agreements = statistics.agreements
+        self._configuration_counts = statistics.counts
 
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         """Negative log-likelihood of every observed configuration."""
