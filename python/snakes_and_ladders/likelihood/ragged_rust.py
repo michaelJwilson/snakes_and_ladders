@@ -26,6 +26,9 @@ same inputs and the same return --- and that is where `Backend` names it.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from dataclasses import dataclass
+
 import numpy as np
 
 from snakes_and_ladders.backend import Backend, refuse_backend
@@ -34,13 +37,37 @@ from snakes_and_ladders.oxi_snakes_and_ladders import ragged_posteriors
 from snakes_and_ladders.ragged import Ragged
 
 
+@dataclass(frozen=True)
+class Posteriors:
+    """What one ragged forward--backward pass returns, in the log domain.
+
+    Parameters
+    ----------
+    gamma : np.ndarray
+        ``(total, n_states)``, the log marginal at every position.
+    counts : np.ndarray
+        ``(n_states, n_states)``, the log transition counts summed over
+        segments. The pair spanning a boundary is in none of them.
+    evidence : np.ndarray
+        One log evidence per segment.
+    """
+
+    gamma: np.ndarray
+    counts: np.ndarray
+    evidence: np.ndarray
+
+    def __iter__(self) -> Iterator[np.ndarray]:
+        """``(gamma, counts, evidence)``: the order callers unpack."""
+        yield from (self.gamma, self.counts, self.evidence)
+
+
 def posteriors(
     log_density: Ragged,
     log_initial: np.ndarray,
     log_transition: np.ndarray,
     *,
     backend: Backend = Backend.RUST,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> Posteriors:
     """Marginals, transition counts and per-segment evidence, in Rust.
 
     Parameters
@@ -60,10 +87,13 @@ def posteriors(
 
     Returns
     -------
-    tuple[np.ndarray, np.ndarray, np.ndarray]
-        ``gamma`` as ``(total, n_states)``, the log transition counts summed
-        over segments as ``(n_states, n_states)``, and one log evidence per
-        segment. The pair spanning a boundary is in none of the counts.
+    Posteriors
+        The three arrays the kernel writes: ``gamma`` as ``(total,
+        n_states)``, the log transition counts summed over segments as
+        ``(n_states, n_states)``, and one log evidence per segment; the pair
+        spanning a boundary is in none of the counts. On ``RUST`` they are the
+        extension's own buffers, wrapped here and not copied, so a pin reads
+        what the kernel wrote.
 
     Raises
     ------
@@ -87,14 +117,14 @@ def posteriors(
         counts,
         evidence,
     )
-    return gamma, counts, evidence
+    return Posteriors(gamma, counts, evidence)
 
 
 def posteriors_oracle(
     log_density: Ragged,
     log_initial: np.ndarray,
     log_transition: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> Posteriors:
     """The same, one segment at a time through `forward_backward`.
 
     The oracle the compiled path is pinned against: it reuses the per-chain
@@ -116,4 +146,4 @@ def posteriors_oracle(
             counts = np.logaddexp(counts, np.log(run.pairwise.sum(axis=0)))
         evidence[index] = run.log_evidence
         at += len(segment)
-    return gamma, counts, evidence
+    return Posteriors(gamma, counts, evidence)

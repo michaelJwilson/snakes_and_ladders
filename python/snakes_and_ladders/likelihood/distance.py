@@ -28,9 +28,10 @@ distance and is refused rather than clamped, per ``likelihood/CLAUDE.md``.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Any
 
 import numpy as np
 
@@ -233,11 +234,61 @@ def log_det_distance(first: np.ndarray, second: np.ndarray, k: int) -> Distance:
     )
 
 
+@dataclass(frozen=True)
+class DistanceMatrix:
+    """Every pair's distance and variance, over the taxa in sorted order.
+
+    Parameters
+    ----------
+    names : list[str]
+        The taxon names in sorted order, which index both matrices.
+    distances : np.ndarray
+        Shape ``(n, n)``, symmetric with a zero diagonal.
+    variances : np.ndarray
+        Shape ``(n, n)``, the delta-method variance of each entry.
+    """
+
+    names: list[str]
+    distances: np.ndarray
+    variances: np.ndarray
+
+    def __iter__(self) -> Iterator[Any]:
+        """``(names, distances, variances)``: the order callers unpack.
+
+        ``Any`` and not a union: an unpacking gives every name the element
+        type, so a union would mistype each of them.
+        """
+        yield from (self.names, self.distances, self.variances)
+
+
+@dataclass(frozen=True)
+class TreeDistances:
+    """The path lengths a tree implies, leaf to leaf.
+
+    Parameters
+    ----------
+    names : list[str]
+        The leaf names in sorted order, which index the matrix.
+    distances : np.ndarray
+        Shape ``(n, n)``, symmetric with a zero diagonal.
+    """
+
+    names: list[str]
+    distances: np.ndarray
+
+    def __iter__(self) -> Iterator[Any]:
+        """``(names, distances)``: the order callers unpack.
+
+        ``Any`` for :meth:`DistanceMatrix.__iter__`'s reason.
+        """
+        yield from (self.names, self.distances)
+
+
 def distance_matrix(
     alignment: Mapping[str, np.ndarray],
     k: int,
     kind: DistanceKind = DistanceKind.JUKES_CANTOR,
-) -> tuple[list[str], np.ndarray, np.ndarray]:
+) -> DistanceMatrix:
     """Every pair's distance and variance, over the taxa in sorted order.
 
     Parameters
@@ -252,7 +303,7 @@ def distance_matrix(
 
     Returns
     -------
-    tuple[list[str], np.ndarray, np.ndarray]
+    DistanceMatrix
         The taxon names in sorted order, the symmetric distance matrix with a
         zero diagonal, and the matrix of variances, both of shape
         ``(n, n)``.
@@ -277,10 +328,10 @@ def distance_matrix(
             estimate = estimator(alignment[first], alignment[names[column]], k)
             distances[row, column] = distances[column, row] = estimate.value
             variances[row, column] = variances[column, row] = estimate.variance
-    return names, distances, variances
+    return DistanceMatrix(names, distances, variances)
 
 
-def tree_distances(tau: Node) -> tuple[list[str], np.ndarray]:
+def tree_distances(tau: Node) -> TreeDistances:
     """The additive distances a tree's branch lengths imply, leaf to leaf.
 
     The expected value every estimator above converges to, and the input on
@@ -295,7 +346,7 @@ def tree_distances(tau: Node) -> tuple[list[str], np.ndarray]:
 
     Returns
     -------
-    tuple[list[str], np.ndarray]
+    TreeDistances
         The leaf names in sorted order and the ``(n, n)`` matrix of path
         lengths.
 
@@ -335,4 +386,4 @@ def tree_distances(tau: Node) -> tuple[list[str], np.ndarray]:
             ancestor = height[lineage[first][shared - 1]]
             length = height[first] + height[second] - 2.0 * ancestor
             matrix[row, column] = matrix[column, row] = length
-    return names, matrix
+    return TreeDistances(names, matrix)

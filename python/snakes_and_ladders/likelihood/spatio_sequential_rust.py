@@ -40,6 +40,9 @@ written into arrays allocated here.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from dataclasses import dataclass
+
 import numpy as np
 import torch
 
@@ -132,9 +135,63 @@ def _channel_rows(
     return np.ascontiguousarray(table), rows
 
 
+@dataclass(frozen=True)
+class EmissionTables:
+    """One tabulated log-density per channel.
+
+    Parameters
+    ----------
+    total : np.ndarray
+        The first channel's table, ``(row, M, K)`` contiguous ``float64``.
+    successes : np.ndarray
+        The second channel's, the same shape.
+    """
+
+    total: np.ndarray
+    successes: np.ndarray
+
+    def __iter__(self) -> Iterator[np.ndarray]:
+        """``(total, successes)``: the order callers unpack."""
+        yield from (self.total, self.successes)
+
+
+@dataclass(frozen=True)
+class EmissionRows:
+    """The tables and the row each observation falls in.
+
+    A row index is only interpretable against the table it was built with,
+    so the two travel together (issue #658).
+
+    Parameters
+    ----------
+    total_rows : np.ndarray
+        The first channel's rows, ``(S, n_nodes)`` contiguous ``uint32``.
+    success_rows : np.ndarray
+        The second channel's, the same shape.
+    total_table : np.ndarray
+        The first channel's table, as :class:`EmissionTables` carries it.
+    success_table : np.ndarray
+        The second channel's.
+    """
+
+    total_rows: np.ndarray
+    success_rows: np.ndarray
+    total_table: np.ndarray
+    success_table: np.ndarray
+
+    def __iter__(self) -> Iterator[np.ndarray]:
+        """The rows then the tables, each channel in turn: the order callers unpack."""
+        yield from (
+            self.total_rows,
+            self.success_rows,
+            self.total_table,
+            self.success_table,
+        )
+
+
 def emission_tables(
     params: SpatioSequentialParams, observations: np.ndarray
-) -> tuple[np.ndarray, np.ndarray]:
+) -> EmissionTables:
     """Both channels' log-density for every class, state and table row.
 
     Parameters
@@ -147,17 +204,18 @@ def emission_tables(
 
     Returns
     -------
-    tuple[np.ndarray, np.ndarray]
-        The first channel's table and the second's, each ``(row, M, K)``
-        contiguous ``float64``. :func:`emission_rows` returns these with the
-        row indices, which is how the two entry points take them.
+    EmissionTables
+        The first channel's table and the second's. :func:`emission_rows`
+        returns these with the row indices, which is how the two entry
+        points take them.
     """
-    return emission_rows(params, observations)[2:]
+    rows = emission_rows(params, observations)
+    return EmissionTables(rows.total_table, rows.success_table)
 
 
 def emission_rows(
     params: SpatioSequentialParams, observations: np.ndarray
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> EmissionRows:
     """The rows and the tables together, since neither is meaningful alone.
 
     A row index is only interpretable against the table it was built with, so
@@ -166,7 +224,7 @@ def emission_rows(
 
     Returns
     -------
-    tuple of four np.ndarray
+    EmissionRows
         The total's rows, the successes' rows, the total's table and the
         successes' table.
     """
@@ -182,7 +240,7 @@ def emission_rows(
             channel,
         )
         out.append((np.ascontiguousarray(rows, dtype=np.uint32), table))
-    return out[0][0], out[1][0], out[0][1], out[1][1]
+    return EmissionRows(out[0][0], out[1][0], out[0][1], out[1][1])
 
 
 def class_posteriors(
@@ -209,7 +267,7 @@ def class_posteriors(
         The posterior ``(M, S, K)``, the pairwise ``(M, S - 1, K, K)`` and the
         per-class log evidence ``(M,)``.
     """
-    totals, successes, total_table, success_table = emission_rows(params, observations)
+    rows = emission_rows(params, observations)
     n_positions, n_nodes = observations.shape[:2]
     posterior = np.empty((params.n_classes, n_positions, params.n_states))
     pairwise = np.empty(
@@ -228,11 +286,11 @@ def class_posteriors(
         )
     )
     oxi_snakes_and_ladders.class_posteriors(
-        totals.reshape(-1),
-        successes.reshape(-1),
+        rows.total_rows.reshape(-1),
+        rows.success_rows.reshape(-1),
         np.ascontiguousarray(labels, dtype=np.int64),
-        total_table.reshape(-1),
-        success_table.reshape(-1),
+        rows.total_table.reshape(-1),
+        rows.success_table.reshape(-1),
         np.ascontiguousarray(np.log(params.initial)).reshape(-1),
         log_transition.reshape(-1),
         n_positions,
@@ -265,17 +323,17 @@ def external_field(
     """
     if posterior is None:
         posterior = class_posteriors(params, observations, labels).posterior
-    totals, successes, total_table, success_table = emission_rows(params, observations)
+    rows = emission_rows(params, observations)
     n_positions, n_nodes = observations.shape[:2]
     field = np.empty((n_nodes, params.n_classes))
     # (M, S, K) to (S, M, K): the kernel wants one position's weights
     # contiguous beside the tables' rows, which are count-major.
     weights = np.ascontiguousarray(np.moveaxis(posterior, 0, 1))
     oxi_snakes_and_ladders.external_field(
-        totals.reshape(-1),
-        successes.reshape(-1),
-        total_table.reshape(-1),
-        success_table.reshape(-1),
+        rows.total_rows.reshape(-1),
+        rows.success_rows.reshape(-1),
+        rows.total_table.reshape(-1),
+        rows.success_table.reshape(-1),
         weights.reshape(-1),
         n_positions,
         n_nodes,

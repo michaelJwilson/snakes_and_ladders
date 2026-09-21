@@ -29,7 +29,9 @@ children; ``tests/regression/likelihood/test_surrogate.py`` pins that.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import torch
@@ -194,7 +196,31 @@ def lattice_tokens(graph: PottsGraph, field: np.ndarray) -> torch.Tensor:
     return torch.as_tensor(tokens)
 
 
-def tree_adjacency(topology: Topology) -> tuple[list[str], np.ndarray]:
+@dataclass(frozen=True)
+class Adjacency:
+    """A topology as a graph model reads it.
+
+    Parameters
+    ----------
+    names : list[str]
+        Node names in preorder; a row of a token matrix is a node here.
+    edges : np.ndarray
+        Shape ``(n_edges, 2)`` of ``int64``, each row a pair of indices into
+        ``names``, undirected.
+    """
+
+    names: list[str]
+    edges: np.ndarray
+
+    def __iter__(self) -> Iterator[Any]:
+        """``(names, edges)``: the order callers unpack.
+
+        ``Any`` because an unpacking gives both names the element type.
+        """
+        yield from (self.names, self.edges)
+
+
+def tree_adjacency(topology: Topology) -> Adjacency:
     """Node names and the undirected edge list of the topology, by index into the names.
 
     The rooted spelling's edges, which is the unrooted tree's edges plus a
@@ -212,7 +238,7 @@ def tree_adjacency(topology: Topology) -> tuple[list[str], np.ndarray]:
         return index
 
     visit(topology)
-    return names, np.array(pairs, dtype=np.int64).reshape(-1, 2)
+    return Adjacency(names, np.array(pairs, dtype=np.int64).reshape(-1, 2))
 
 
 __all__ = [
@@ -221,6 +247,7 @@ __all__ = [
     "MEAN_FIELD_ITERATIONS",
     "TREE_FEATURE_NAMES",
     "TREE_TOKEN_NAMES",
+    "Adjacency",
     "lattice_features",
     "lattice_tokens",
     "tree_adjacency",

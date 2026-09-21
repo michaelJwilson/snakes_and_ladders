@@ -35,7 +35,9 @@ at the cap, and every doubling of ``n`` squares it.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
@@ -132,9 +134,37 @@ def recoding_scale(k: int) -> float:
     return k / (2.0 * (k - 1))
 
 
+@dataclass(frozen=True)
+class Spectrum:
+    """A spectrum and the names its subset index is read against.
+
+    One type for both ends of the conjugation: :func:`sequence_spectrum`
+    fills it with pattern frequencies and :func:`edge_spectrum` with branch
+    lengths, and an index means the same subset in either.
+
+    Parameters
+    ----------
+    names : list[str]
+        The taxon names in sorted order. Bit ``i`` of an index is taxon
+        ``i``; the last name is the reference and carries no bit.
+    values : np.ndarray
+        Length ``2 ** (len(names) - 1)``, indexed by that mask.
+    """
+
+    names: list[str]
+    values: np.ndarray
+
+    def __iter__(self) -> Iterator[Any]:
+        """``(names, values)``: the order callers unpack.
+
+        ``Any`` because an unpacking gives both names the element type.
+        """
+        yield from (self.names, self.values)
+
+
 def sequence_spectrum(
     alignment: Mapping[str, np.ndarray],
-) -> tuple[list[str], np.ndarray]:
+) -> Spectrum:
     """The pattern frequencies of a two-state alignment, indexed by subset.
 
     Taxa are taken in sorted order; the last is the reference. A site's
@@ -148,7 +178,7 @@ def sequence_spectrum(
 
     Returns
     -------
-    tuple[list[str], np.ndarray]
+    Spectrum
         The sorted names and the spectrum of length ``2^(n-1)``, summing
         to 1.
 
@@ -168,7 +198,7 @@ def sequence_spectrum(
     weights = 1 << np.arange(len(names) - 1)
     index = (differs * weights[:, np.newaxis]).sum(axis=0)
     counts = np.bincount(index, minlength=1 << (len(names) - 1))
-    return names, counts / states.shape[1]
+    return Spectrum(names, counts / states.shape[1])
 
 
 def hadamard_conjugation(spectrum: np.ndarray) -> np.ndarray:
@@ -215,7 +245,7 @@ def _split_index(split: frozenset[str], names: list[str]) -> int:
     return sum(1 << names.index(name) for name in side)
 
 
-def edge_spectrum(tau: Node) -> tuple[list[str], np.ndarray]:
+def edge_spectrum(tau: Node) -> Spectrum:
     """A tree's branch lengths as an edge spectrum, zero on every split it lacks.
 
     Parameters
@@ -226,7 +256,7 @@ def edge_spectrum(tau: Node) -> tuple[list[str], np.ndarray]:
 
     Returns
     -------
-    tuple[list[str], np.ndarray]
+    Spectrum
         The sorted leaf names and the spectrum, ``q_empty = -sum`` of the
         rest. The two branches below a rooted binary root induce one split
         and are summed.
@@ -246,7 +276,7 @@ def edge_spectrum(tau: Node) -> tuple[list[str], np.ndarray]:
             raise ValueError(msg)
         spectrum[_split_index(_leaves(child), names)] += child.branch_length
     spectrum[0] = -spectrum[1:].sum()
-    return names, spectrum
+    return Spectrum(names, spectrum)
 
 
 def split_weights(
