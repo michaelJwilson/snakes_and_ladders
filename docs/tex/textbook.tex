@@ -61,6 +61,8 @@ the logarithm being natural throughout.
     $m_{a \to i},\ m_{i \to a}$ & a message from factor to variable, and from variable to factor \\
     $b_i,\ b_a$    & a belief: the marginal of a variable or a factor, exact on a tree \\
     $Z$            & a partition function; $\ln Z$ the evidence \\
+    $F$            & a free energy, $F = -\ln Z$; a subscript names an approximation of it \\
+    $q(\cdot)$     & a variational distribution over the latent variables \\
     $\graph$       & a general undirected graph \\
     $\tree$        & a tree topology \\
     $\rootnode$    & the root of a tree \\
@@ -76,6 +78,7 @@ the logarithm being natural throughout.
     \midrule
     \multicolumn{2}{l}{\emph{Statistical physics: spins on a graph} (Sections~\ref{sec:potts}, \ref{sec:frustrated})} \\
     $\sigma_i$     & a spin, the variable of a Potts graph: $x_i \equiv \sigma_i$ \\
+    $q$            & the number of Potts states \\
     $J_{ij}$       & the coupling on the edge $\langle i, j \rangle$ \\
     $h_i$          & the external field at node $i$ \\
     $\transfer$    & the transfer matrix between adjacent columns of a lattice \\
@@ -92,6 +95,7 @@ the logarithm being natural throughout.
     $\bpi$         & a stationary or initial distribution \\
     $\branch$      & branch lengths, in expected substitutions per site \\
     $\hadamard$    & the Sylvester--Hadamard matrix, italic \\
+    $F(\tree),\ F_s$ & a parsimony score: the changes a topology implies, over the alignment and at one site \\
     \addlinespace
     \multicolumn{2}{l}{\emph{Error correction: a code and its channel} (Sections~\ref{sec:ldpc}, \ref{sec:turbo})} \\
     $\parity$      & a parity-check matrix, bold; the codewords are the $c$ with $\parity c = 0$ \\
@@ -104,9 +108,356 @@ the logarithm being natural throughout.
   variable $x_i$ is identified with the name that application's readers arrive
   with. Three symbols share the letter $H$ and are kept apart by their face: a
   Hamiltonian is script, a parity-check matrix bold, and the
-  Sylvester--Hadamard matrix italic.}
+  Sylvester--Hadamard matrix italic. Two more carry a second meaning in one
+  application and are listed below the rule where they do: $q$ is the Potts
+  state count and $F$ a parsimony score.}
   \label{tab:notation}
 \end{table}
+
+\section{Graphical Models, Likelihood and the Partition Function}
+\label{sec:foundations}
+
+Every problem stated below is a distribution over discrete variables with
+parameters attached, and everything asked of one --- a likelihood, an evidence,
+an expectation step, a bound, a sample --- is read off a single sum. This
+section states that sum once and reads the rest off it, so that a problem
+statement says what its own sum runs over and assumes the remainder. Nothing
+here is new \citep{koller2009, wainwright2008, bishop2006, mackay2003}; stating
+it once is what lets the sections after it be short.
+
+\subsection{Graphical models}
+
+A directed model factorizes over conditionals and an undirected one over
+potentials on the cliques of a graph,
+\[
+  \Prob(x) = \prod_i \Prob\big(x_i \mid x_{\mathrm{pa}(i)}\big),
+  \qquad
+  \Prob(x) = \frac{1}{Z} \prod_c \psi_c(x_c),
+\]
+the first normalized by construction, every conditional summing to one over its
+own variable, and the second only through $Z$. The distinction does not survive
+conditioning: fixing an observed child leaves its parents coupled by a product
+that no longer sums to one, so a directed model with data in it is an
+undirected problem with a normalizer to find. Hammersley--Clifford closes the
+other direction --- a strictly positive distribution whose conditional
+independences are those of $\graph$ factorizes over the cliques of $\graph$
+\citep{koller2009}.
+
+Both forms are products of non-negative functions of subsets of the variables,
+which is the factor graph of Equation~\ref{eq:factor-graph}, and it is the one
+form this document works in. Six constructions carry the problems below onto
+it: a Potts graph in a field, a hidden Markov chain, a rooted tree under a
+substitution model, the coupled spatio-sequential model, a parity-check matrix
+with its channel likelihoods, and a convolutional trellis. Each problem
+section's \emph{As a factor graph} says which factors it has, and that
+statement is the whole of its structure; what follows here is true of all six
+at once.
+
+\subsection{The partition function}
+
+Writing the factors' dependence on the parameters makes the sum of
+Equation~\ref{eq:factor-graph} a function of them:
+\begin{equation}
+  Z(\params) = \sum_x \tilde{p}(x; \params),
+  \qquad
+  \tilde{p}(x; \params) = \prod_a \psi_a(x_{\partial a}; \params),
+  \qquad
+  F(\params) = -\ln Z(\params),
+  \label{eq:partition}
+\end{equation}
+with $\tilde{p}$ the unnormalized measure and $F$ the free energy. It is
+Equation~\ref{eq:factor-graph}'s normalizer with the parameters written in, and
+it is the object the rest of this section differentiates, bounds and
+interpolates.
+
+Where the factors are exponential in the parameters,
+$\psi_a(x_{\partial a}; \params)
+ = \exp\big(\params^{\top} s_a(x_{\partial a})\big)$, $\ln Z$ is the cumulant
+generating function of the sufficient statistics $s = \sum_a s_a$: its first
+derivative is $\mathbb{E}[s]$, its second the covariance of $s$, and $\ln Z$ is
+convex in $\params$ because a covariance is positive semi-definite
+\citep{wainwright2008}. The first derivative needs no exponential form,
+\begin{equation}
+  \frac{\partial \ln Z(\params)}{\partial \params}
+    = \sum_a \mathbb{E}_{p(x_{\partial a})}
+      \Big[ \frac{\partial \ln \psi_a(x_{\partial a}; \params)}
+                 {\partial \params} \Big],
+  \label{eq:logz-gradient}
+\end{equation}
+the sum over factors of the derivative of a factor's own log-potential averaged
+under the belief at that factor (Appendix~\ref{app:logz}). One marginalization
+therefore serves the inference and the fit alike, which is what
+Section~\ref{sec:factor-graph} builds the mixed optimization on.
+
+\paragraph{Where the sum is available.}
+Three structures give $Z$ exactly and one common structure gives none of them.
+On a chain the sum collapses into a product of matrices, which is the transfer
+matrix of Equation~\ref{eq:transfer} at a column of one site and the forward
+recursion of Equation~\ref{eq:forward} written out. On a tree one leaf-to-root
+pass of Equation~\ref{eq:sum-product} does the same, which is pruning,
+Equation~\ref{eq:pruning}. On a graph small enough the sum is taken term by
+term, which is the base rung of Section~\ref{sec:ladder} and is refused past
+200,000 states. A lattice is none of the three: computing $Z$ on a general
+graph is \#P-hard \citep{koller2009}, so what is reported there is a bracket
+--- Equation~\ref{eq:mean-field-bound} below and
+Equation~\ref{eq:spanning-tree-bound} above --- or a stationary point of an
+approximate free energy, Equation~\ref{eq:bethe}, reported as one.
+
+\subsection{Maximum likelihood}
+
+Equation~\ref{eq:partition} splits the log-probability of a configuration into
+a term that is local and a term that is not,
+\[
+  \ln \Prob(x \mid \params)
+    = \ln \tilde{p}(x; \params) - \ln Z(\params),
+\]
+the first a sum over the factors $x$ touches and the second a sum over every
+configuration there is. Maximum likelihood maximizes this over $\params$; its
+cost is entirely in the second term, and every algorithm here that fits
+parameters is an arrangement for not paying that cost twice.
+
+Differentiating $\sum_x \Prob(x \mid \params) = 1$ under the sum gives the
+score identity
+\begin{equation}
+  \mathbb{E}_{\Prob(\cdot \mid \params)}
+    \big[ \nabla_{\params} \ln \Prob(x \mid \params) \big] = 0,
+  \label{eq:score}
+\end{equation}
+which holds at every $\params$ and not only at the generating one: a fitted
+gradient at zero is evidence of a stationary point and never of correctness.
+The score's variance is the Fisher information
+$I(\params)
+ = \mathbb{E}\big[\nabla \ln \Prob \; \nabla \ln \Prob^{\top}\big]
+ = -\,\mathbb{E}\big[\nabla^2 \ln \Prob\big]$,
+the second equality being the information identity, and it is what makes the
+observed information at an optimum an estimate of the curvature
+Section~\ref{sec:abstraction} pushes through $\constrained$.
+
+Misspecification breaks that identity. For an objective that is not the data's
+own log-likelihood the two sides differ and the estimator's asymptotic variance
+is the sandwich, or Godambe, form $A^{-1} B A^{-1}$ --- $A$ the expected
+Hessian of the objective, $B$ the variance of its gradient --- which collapses
+to $I^{-1}$ exactly when $A = -B$. Every fit stated below maximizes the model's
+own likelihood, with one structural exception: on a loopy graph the quantity
+maximized is an approximate evidence (Section~\ref{sec:factor-graph}), nothing
+makes $A = -B$ there, and an interval read from the observed information alone
+is not justified by Equation~\ref{eq:score}.
+
+\subsection{Bayesian inference}
+
+A prior $\Prob(\params)$ and a likelihood $\Prob(\data \mid \params)$ give a
+posterior $\Prob(\params \mid \data) \propto \Prob(\data \mid \params)\,
+\Prob(\params)$, and the constant of proportionality is a partition function
+again. Write the prior as an unnormalized measure $\tilde{p}_0$ with normalizer
+$Z_{\mathrm{prior}} = \int \tilde{p}_0(\params)\, \mathrm{d}\params$ and the
+posterior's measure as $\tilde{p}_0\, \Prob(\data \mid \cdot)$ with normalizer
+$Z_{\mathrm{post}}$; then
+\begin{equation}
+  \Prob(\data) = \frac{Z_{\mathrm{post}}}{Z_{\mathrm{prior}}},
+  \label{eq:evidence-ratio}
+\end{equation}
+so the evidence is one object taken twice and every statement above about $Z$
+applies to it. The marginal likelihood of a latent-variable model is the same
+ratio with the latent variables summed rather than the parameters integrated,
+which is why one section states both.
+
+Raising a posterior to a power $\beta$ and letting $\beta \to \infty$
+concentrates it on its mode, so a maximum a posteriori configuration is the
+zero-temperature limit of the same measure --- the limit in which sum-product
+becomes max-product (Section~\ref{sec:factor-graph}) and the heat bath becomes
+iterated conditional modes (Section~\ref{sec:tempering}). A weight over
+structures is not a posterior over them until the prior is stated:
+Section~\ref{sec:phylo:extensions} is where that matters, contrasting a
+posterior over topologies with the flat-prior weight over maximized likelihoods
+that Equation~\ref{eq:tempered-weight} estimates.
+
+\subsection{Latent variables and expectation--maximization}
+
+Where part of a configuration is unobserved, the complete-data likelihood
+$\Prob(x, \data \mid \params)$ is the product of the factors and the
+observed-data likelihood is its sum over the latent $x$ --- a $\ln Z$ again,
+with the observations folded into the factors as
+Section~\ref{sec:factor-graph} folds them. Expectation--maximization alternates
+on that sum \citep{dempster1977}. The E step forms
+\[
+  Q(\params \mid \params')
+    = \mathbb{E}_{\Prob(x \mid \data, \params')}
+      \big[ \ln \Prob(x, \data \mid \params) \big],
+\]
+an expectation under the posterior at the current parameters, which is what one
+marginalization returns; the M step maximizes $Q$ over $\params$, and by
+Equation~\ref{eq:logz-gradient} its gradient is the posterior-weighted sum that
+marginalization has already computed. The two steps therefore share one pass
+and not two.
+
+Monotonicity is Jensen's inequality and nothing more: the change in the
+observed-data log-likelihood over a round is the gain in $Q$ plus a
+Kullback--Leibler divergence between the old posterior and the new, both
+non-negative, so a step that does not decrease $Q$ does not decrease the
+likelihood. That is an ascent and not a convergence result --- the fixed point
+is stationary and need not be the maximum --- which is why every alternation
+below is held to monotonicity at each iterate \emph{and} has its fixed point
+checked against an independent gradient fit of the same likelihood.
+
+Replacing the posterior expectation by its mode is hard, or classification,
+expectation--maximization. It ascends the complete-data likelihood rather than
+the marginal, and the two agree only where the posterior is nearly degenerate.
+Section~\ref{sec:coupled:algorithms} runs that limit, and runs it in one block
+only: the labels are maximized, as the ground state of
+Equation~\ref{eq:label-ground-state} under iterated conditional modes or alpha
+expansion, while the chain states stay summed. A hard step in a block whose
+posterior is not degenerate is a different objective and not a cheaper E step.
+
+\subsection{The evidence lower bound}
+
+For any distribution $q$ over the latent variables,
+\begin{equation}
+  \ln \Prob(\data) \;\ge\;
+    \mathbb{E}_q \big[ \ln \Prob(\data, x) \big]
+    - \mathbb{E}_q \big[ \ln q(x) \big],
+  \label{eq:elbo}
+\end{equation}
+the gap being the Kullback--Leibler divergence from $q$ to the posterior and
+the equality holding exactly at $q = \Prob(x \mid \data)$.
+Expectation--maximization is coordinate ascent on Equation~\ref{eq:elbo}: the E
+step maximizes over $q$ and closes the gap, the M step maximizes over $\params$
+\citep{neal1998}. Reading it that way is what admits the variants --- a partial
+E step, an incremental one over part of the data --- each still an ascent of
+one bound, and it is why an approximate E step returns a bound rather than an
+evidence.
+
+Restricting $q$ to a family makes the inequality strict and the gap a bias
+rather than an error. Under a factorized $q = \prod_i q_i$,
+Equation~\ref{eq:elbo} is the mean-field bound of
+Equation~\ref{eq:mean-field-bound}, tightest at its fixed point and below
+$\ln Z$ everywhere. The Bethe free energy of Equation~\ref{eq:bethe} relaxes
+further, from a distribution to a set of locally consistent beliefs, and loses
+the inequality with it: a loopy fixed point is a stationary point of an
+approximate free energy and is reported as one, never as a bound
+(Appendix~\ref{app:bethe}). The upper end comes from convexity instead,
+Equation~\ref{eq:spanning-tree-bound}. Section~\ref{sec:surrogates} states the
+three with what each costs, and nothing here re-derives them.
+
+\subsection{The correspondence}
+
+Table~\ref{tab:partition-functions} is the same sum read once per problem: what
+$Z$ is, whether it is available exactly, and which rung of
+Section~\ref{sec:ladder}'s ladder referees it. A row saying \emph{bounded} is a
+row where the number reported carries a bracket or an approximation and is
+reported as such, never as the sum.
+
+\begin{longtable}{@{}p{0.20\textwidth}p{0.31\textwidth}p{0.17\textwidth}p{0.21\textwidth}@{}}
+  \caption{The partition function of each problem this document states, what it
+  is a sum over, whether it is exact at the supported sizes, and the rung of
+  the validation ladder that referees it. The rungs are named as
+  Section~\ref{sec:ladder} orders them, an exact enumeration at the base and
+  the capable algorithm above it; where a row names two, the first is the
+  oracle and the second the referee that carries past
+  it.}\label{tab:partition-functions}\\
+  \toprule
+  Problem & What $Z$ is & Exact or bounded & Rung that referees it \\
+  \midrule
+  \endfirsthead
+  \toprule
+  Problem & What $Z$ is & Exact or bounded & Rung that referees it \\
+  \midrule
+  \endhead
+  \bottomrule
+  \endfoot
+
+  Phylogenetic tree, Jukes--Cantor
+  & One site's likelihood; the alignment's evidence is the product over $L$
+    sites
+  & Exact: the graph is a tree
+  & pruning \\
+  Phylogenetic tree, general time-reversible
+  & The same sum with a fitted rate matrix in the branch factors
+  & Exact
+  & pruning \\
+  Phylogenetic tree, parsimony
+  & No sum: the score counts changes, the zero-temperature limit of the same
+    marginalization
+  & Exact
+  & parsimony, Fitch \\
+  Potts chain in a field
+  & The Boltzmann normalizer over $q^{|V|}$ configurations
+  & Exact
+  & enumeration; transfer matrix \\
+  Potts lattice and Markov random field
+  & The same normalizer on a loopy graph
+  & Bounded
+  & enumeration; variational bounds \\
+  Potts lattice in a per-site field
+  & The same, the field varying by site
+  & Exact to the strip width, bounded above it
+  & transfer matrix \\
+  Frustrated Potts, triangular antiferromagnet
+  & $Z(\beta)$, whose $\beta \to \infty$ limit carries the ground-state energy
+  & Bounded past enumeration
+  & enumeration \\
+  Planted spin glass
+  & The same, with the ground state fixed by construction
+  & Bounded past enumeration
+  & enumeration \\
+  Low-density parity-check code, Gallager
+  & The sum over codewords of the channel likelihood; per bit, the normalizer
+    of that bit's posterior
+  & Exact where the graph is cycle-free
+  & brute-force ML \\
+  Low-density parity-check code, bicycle
+  & The same sum on a graph constructed to carry cycles
+  & Bounded: a Bethe fixed point
+  & brute-force ML \\
+  Calderbank--Shor--Steane code over a bicycle matrix
+  & The sum over an error coset of one syndrome
+  & Bounded: a Bethe fixed point
+  & CSS / syndrome \\
+  Turbo code, two $(7,5)$ encoders
+  & Per constituent, the trellis sum the forward recursion normalizes
+  & Exact per constituent, iterative jointly
+  & BCJR \\
+  Polar code
+  & The sum over inputs consistent with the frozen set, taken by the recursive
+    transform
+  & Exact per decision, bounded by the list
+  & polar SC / SCL \\
+  Hidden Markov model
+  & The forward recursion's normalizer, $Z = \Prob(\data)$
+  & Exact: the chain is a tree
+  & path enumeration \\
+  Coupled spatio-sequential model
+  & The joint normalizer over $M^{N} K^{SM}$ states, neither marginal tractable
+    alone
+  & Exact at the enumerable instance, bounded above it
+  & coupled model, exact \\
+  Count-pair coupled spatio-sequential model
+  & The same with a count-pair emission
+  & Exact at the enumerable instance, bounded above it
+  & coupled model, exact \\
+  Gaussian mixture
+  & The responsibilities' normalizer, $\sum_k w_k\,
+    \mathcal{N}(y_i; \mu_k, \sigma_k^2)$, per observation
+  & Exact
+  & assignment enumeration \\
+  Mixture of two-channel count emissions
+  & The same with the count family in place of the Gaussian
+  & Exact
+  & assignment enumeration \\
+  Continuous test functions
+  & None: the objective is evaluated and nothing is marginalized
+  & Not applicable
+  & --- \\
+\end{longtable}
+
+Two readings of the table are used throughout and are worth naming here. A
+temperature turns one of these sums into a path of them, $Z(\beta)$ from a
+normalizer that can be counted to the one that is wanted, and the annealed
+estimators of Section~\ref{sec:tempering} read $\ln Z$ off the work done along
+that path \citep{neal2001} --- Equation~\ref{eq:evidence-ratio} being the same
+ratio taken in a single step. And sampling is the other reading of the same
+object: every chain below draws from the measure $Z$ normalizes and never needs
+$Z$ itself, which is why a sampler reaches sizes at which no evaluator of the
+sum does.
 
 \section{Mixed Discrete and Continuous Optimization}
 \label{sec:shape}
@@ -164,16 +515,9 @@ Equation~\ref{eq:factor-graph} is the marginal likelihood of the observations
 folded into them, $Z(\params) = \Prob(\data \mid \params)$, so maximum
 likelihood over a model with latent variables \emph{is} maximization of
 $\ln Z$ --- the mixed case in which the discrete variables are summed out and
-the continuous ones fitted. Its gradient is a posterior expectation,
-\begin{equation}
-  \frac{\partial \ln Z(\params)}{\partial \params}
-    = \sum_a \mathbb{E}_{p(x_{\partial a})}
-      \Big[ \frac{\partial \ln \psi_a(x_{\partial a}; \params)}
-                 {\partial \params} \Big],
-  \label{eq:logz-gradient}
-\end{equation}
-the sum over factors of the derivative of a factor's own log-potential
-averaged under the belief at that factor (Appendix~\ref{app:logz}). Two things
+the continuous ones fitted. Its gradient is the posterior expectation of
+Equation~\ref{eq:logz-gradient}, stated with the rest of the foundations in
+Section~\ref{sec:foundations}. Two things
 follow, and both are used throughout. The marginalization that
 Equation~\ref{eq:sum-product} performs is what an optimizer of the continuous
 parameters needs, so one pass serves both --- the expectation step of an
@@ -2322,12 +2666,18 @@ correction by the decision already made,
 
 \subsection{Extensions, and what is not attempted}
 \label{sec:polar:extensions}
-\paragraph{What it would take to go further.}
+\paragraph{The check, and what it would take to go further.}
 A cyclic redundancy check appended to the message and carried through the list
 turns the metric's best survivor into the best \emph{passing} survivor, which
-is what makes list decoding competitive in practice; the check is polynomial
-division over $\mathrm{GF}(2)$, which the elementary codes carry, and the
-combination is the next step here.
+is what makes list decoding competitive in practice \citep{tal2015}; the check
+is polynomial division over $\mathrm{GF}(2)$, which the elementary codes carry.
+The combination is built: at $N = 16$ with a three-bit check and the exhaustive
+list it returns the maximum-likelihood codeword of the outer code, enumerated,
+and it falls back to the metric's best survivor when no survivor passes. What
+it buys at $N = 256$ is measured rather than assumed: lists of eight and of
+thirty-two fail by pruning the sent path, never by ranking it second, so the
+check rescues nothing there and the gain waits on a list the pruning does not
+reach first.
 Beyond it: a systematic encoder, so the message is readable off the codeword
 without inverting anything; puncturing and shortening, which is how a length
 that is not a power of two is reached; and the Gaussian approximation against
@@ -2641,7 +2991,8 @@ subsample that claims nothing.
 
 For a lattice the partition function is bracketed by two variational
 quantities. The naive mean-field bound is Gibbs' inequality at a product
-distribution $q = \prod_i q_i$, tightest at its fixed point:
+distribution $q = \prod_i q_i$ --- Equation~\ref{eq:elbo} under a factorized
+$q$ --- tightest at its fixed point:
 \begin{equation}
   \log Z \;\ge\; \sum_i \sum_\sigma q_i(\sigma)\, h_i(\sigma)
     + \sum_{\langle i,j \rangle} J_{ij} \sum_\sigma q_i(\sigma)\, q_j(\sigma)

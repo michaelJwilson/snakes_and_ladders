@@ -68,6 +68,7 @@ from snakes_and_ladders.sim.hmm import HmmParams
 from snakes_and_ladders.sim.ldpc import BicycleParams, LdpcParams
 from snakes_and_ladders.sim.mixture import MixtureParams
 from snakes_and_ladders.sim.params import SimulationParams
+from snakes_and_ladders.sim.polar import PolarParams
 from snakes_and_ladders.sim.potts import (
     PottsLatticeParams,
     SpatioOnlyParams,
@@ -104,6 +105,7 @@ PARAMS: dict[str, type[Params]] = {
     "frustrated-lattice": FrustratedLatticeParams,
     "test-functions": TestFunctionSuite,
     "turbo": TurboParams,
+    "polar": PolarParams,
 }
 
 #: The oracles a fixture may state: an exhaustive sum over the instance, the

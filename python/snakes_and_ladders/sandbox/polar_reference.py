@@ -1,6 +1,6 @@
 """Successive cancellation, written the way the textbook states it.
 
-Issue #593. The oracle for :mod:`snakes_and_ladders.sandbox.polar_decoding`, kept
+Issue #593. The oracle for :mod:`snakes_and_ladders.likelihood.polar`, kept
 per root `CLAUDE.md`'s rule that an accelerated loop keeps the implementation
 it stands in for. The difference is only the layout: this recurses over
 subvectors with one Python call per node and no path axis, decoding a single
@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from snakes_and_ladders.sandbox.polar import PolarCode
+from snakes_and_ladders.sim.polar import PolarCode
 
 
 def _decode(llr: np.ndarray, frozen: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -94,7 +94,7 @@ def decode_sc_reference(code: PolarCode, llr: np.ndarray) -> np.ndarray:
     np.ndarray
         The ``N`` pre-transform bits, frozen positions included, so the
         comparison against
-        :func:`snakes_and_ladders.sandbox.polar_decoding.decode_sc` covers what the
+        :func:`snakes_and_ladders.likelihood.polar.decode_sc` covers what the
         decoder believed everywhere and not only where the message sat.
 
     Raises

@@ -14,7 +14,7 @@ cancellation leaves against maximum likelihood at ``N = 16``, and the list that
 closes part of it --- and no search, learner or figure calls them; the fourth
 step, CRC-aided list decoding, is not taken. The three modules are conserved
 rather than deleted with the tests that referee them (``sandbox/CLAUDE.md``):
-:mod:`snakes_and_ladders.sandbox.polar_decoding` carries the decoders and
+:mod:`snakes_and_ladders.likelihood.polar` carries the decoders and
 :mod:`snakes_and_ladders.sandbox.polar_reference` the naive recursion they are
 pinned to bitwise. Only ``tests/`` imports them, and the declared instance is
 the file beside those tests rather than a row of the fixture registry.
