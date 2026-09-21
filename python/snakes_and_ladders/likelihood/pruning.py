@@ -19,12 +19,20 @@ fewer columns. The identity is exact; ``weights=None`` is every column once.
 This module is written to be obviously correct, not fast: it is the reference
 every accelerated backend (Rust, PyTorch, CUDA, Metal) is validated against,
 per ``likelihood/CLAUDE.md``.
+
+``log_likelihood`` takes a ``backend``, which is a **door and not a rung**
+(issue #860): ``Backend.RUST`` calls ``pruning_rust``'s own entry point with
+the arguments it was given and returns what it returns, and the recursion
+below is reached on ``Backend.PYTHON``, the default. No arithmetic moved and
+no rung merged --- ``pruning_rust`` keeps its entry point and its bitwise
+pin, and this oracle gained no code from the route it referees.
 """
 
 from __future__ import annotations
 
 import numpy as np
 
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.likelihood.patterns import check_weights
 from snakes_and_ladders.sim.jc import jc_transition_probabilities
 from snakes_and_ladders.sim.tree import Node, preorder
@@ -38,6 +46,7 @@ def log_likelihood(
     *,
     weights: np.ndarray | None = None,
     rescale: bool = True,
+    backend: Backend = Backend.PYTHON,
 ) -> float:
     """Total log-likelihood of an alignment under the k-state Jukes-Cantor model.
 
@@ -65,6 +74,14 @@ def log_likelihood(
         Disabling this underflows for realistic (site, taxa) sizes; it exists
         so tests can check the two paths agree on small problems where both
         run.
+    backend : Backend
+        Which implementation runs it. ``PYTHON`` is this module's own
+        recursion, the oracle, and is the default: a caller who does not ask
+        gets the reference (issue #860). ``RUST`` is
+        ``snakes_and_ladders.likelihood.pruning_rust``'s call, the one the
+        caller made by importing that module, reached through the enum every
+        other twin is reached through. Nothing else: the twin is the only
+        other implementation of *this* signature.
 
     Returns
     -------
@@ -77,7 +94,27 @@ def log_likelihood(
     ValueError
         If ``pi`` does not have shape ``(k,)``, ``alignment`` is missing a
         leaf of ``tau``, or ``weights`` does not have one entry per column.
+        Or if ``backend`` is neither ``PYTHON`` nor ``RUST``.
     """
+    # A door, before any arithmetic: the recursion below is the oracle and
+    # gains nothing from the route it referees.
+    if backend not in (Backend.PYTHON, Backend.RUST):
+        msg = (
+            f"pruning log_likelihood runs on {Backend.PYTHON} or {Backend.RUST}, "
+            f"not {backend}"
+        )
+        raise ValueError(msg)
+    if backend is Backend.RUST:
+        # Local, because a module-level import would put the compiled
+        # extension behind every import of the oracle: the seam is
+        # `convolutional`/`convolutional_rust`'s and
+        # `maxflow`/`maxflow_rust`'s.
+        from snakes_and_ladders.likelihood import pruning_rust
+
+        return pruning_rust.log_likelihood(
+            tau, k, pi, alignment, weights=weights, rescale=rescale
+        )
+
     if pi.shape != (k,):
         msg = f"pi has shape {pi.shape}, expected ({k},)"
         raise ValueError(msg)
