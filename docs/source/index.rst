@@ -402,6 +402,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.search.projection
    :members:
 
+.. automodule:: snakes_and_ladders.search.mixture_starts
+   :members:
+
 .. automodule:: snakes_and_ladders.search.ground_state
    :members:
 
@@ -561,6 +564,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.qa.forney
+   :members:
+
+.. automodule:: snakes_and_ladders.qa.starts_table
    :members:
 
 .. automodule:: snakes_and_ladders.qa.hmc_warmup

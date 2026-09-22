@@ -14,11 +14,14 @@ matplotlib builds, and comparing them would reproduce the `SOURCE_DATE_EPOCH`
 problem `docs/CLAUDE.md` records for `docs/tex/`, for a weaker payoff. What is
 checked for a figure is that the cell still produced one.
 
-**A cell tagged ``wall-clock`` is executed and its text is not compared.** A
-wall clock belongs to the host and its load, so no rerun reproduces it; a cell
-printing one carries the tag in its metadata, still runs, and is still checked
-for its figures (issue #891). Every other number stays under the comparison,
-so a notebook keeps its seeded numbers out of the tagged cells.
+**A cell tagged ``host-dependent`` is executed and its text is not compared.**
+Two kinds of reading belong to the host and not to the seeds: a wall clock,
+which moves with the machine and its load, and a quantity discontinuous in
+floating point, such as a recovery read through a permutation match whose
+near-ties flip when a reduction is ordered differently (issue #891: every
+log-likelihood agreed on the CI runner while a recovery moved from 0.048 to
+0.046). A cell printing either carries the tag, still runs, and is still
+checked for its figures; every other number stays under the comparison.
 
 **The Further Work section is checked for shape, not only presence.** Root
 `CLAUDE.md` makes it load-bearing: the last cell of every notebook names, with
@@ -134,13 +137,14 @@ def text_outputs(cell: dict[str, Any]) -> list[str]:
 
 
 #: The cell tag exempting a code cell's text from the comparison: what it
-#: prints is a wall clock, which no rerun reproduces (issue #891).
-WALL_CLOCK_TAG = "wall-clock"
+#: prints belongs to the host --- a wall clock, or a quantity discontinuous in
+#: floating point --- and no rerun on another machine reproduces it (issue #891).
+HOST_DEPENDENT_TAG = "host-dependent"
 
 
-def is_wall_clock(cell: dict[str, Any]) -> bool:
-    """Whether ``cell`` carries the :data:`WALL_CLOCK_TAG` tag in its metadata."""
-    return WALL_CLOCK_TAG in cell.get("metadata", {}).get("tags", [])
+def is_host_dependent(cell: dict[str, Any]) -> bool:
+    """Whether ``cell`` carries the :data:`HOST_DEPENDENT_TAG` tag in its metadata."""
+    return HOST_DEPENDENT_TAG in cell.get("metadata", {}).get("tags", [])
 
 
 def image_count(cell: dict[str, Any]) -> int:
@@ -175,7 +179,9 @@ def structure_problems(name: str, cells: Sequence[dict[str, Any]]) -> list[str]:
     -------
     list[str]
         Human-readable problems; empty when the last cell is a markdown cell
-        headed ``## Further work`` whose every bullet names an issue.
+        headed ``## Further work`` whose every bullet names an issue, and no
+        code cell's metadata sets ``scrolled: true``, which boxes a figure
+        into a scroll pane (issue #891).
     """
     if not cells:
         return [f"{name}: has no cells"]
@@ -188,7 +194,14 @@ def structure_problems(name: str, cells: Sequence[dict[str, Any]]) -> list[str]:
             f"{name}: the last cell is not a markdown cell headed '## Further work'"
         ]
 
-    problems = []
+    problems = [
+        f"{name}: code cell {index} is set to scroll its output; a figure or a "
+        f"table is shown whole (`--write` sets scrolled: false)"
+        for index, cell in enumerate(
+            (cell for cell in cells if cell.get("cell_type") == "code"), start=1
+        )
+        if cell.get("metadata", {}).get("scrolled") is True
+    ]
     for bullet in re.split(r"^- ", text[heading.end() :], flags=re.MULTILINE)[1:]:
         if not NAMES_A_TICKET.search(bullet):
             first_line = bullet.strip().splitlines()[0] if bullet.strip() else ""
@@ -205,7 +218,7 @@ def differences(
 ) -> list[str]:
     """Report where two runs of the same notebook disagree.
 
-    A code cell tagged :data:`WALL_CLOCK_TAG` has its text exempted and its
+    A code cell tagged :data:`HOST_DEPENDENT_TAG` has its text exempted and its
     figures still counted.
 
     Separated from execution so it can be tested without a kernel, which is
@@ -234,8 +247,8 @@ def differences(
     for index, (before, after) in enumerate(code_cells, start=1):
         expected, realized = text_outputs(before), text_outputs(after)
         # The committed cell declares the tag: it is the notebook's statement
-        # of which outputs are a clock, and a rerun preserves the metadata.
-        if expected != realized and not is_wall_clock(before):
+        # of which outputs belong to the host, and a rerun preserves the metadata.
+        if expected != realized and not is_host_dependent(before):
             diff = difflib.unified_diff(
                 "".join(expected).splitlines(keepends=True),
                 "".join(realized).splitlines(keepends=True),
@@ -318,7 +331,14 @@ def rewrite(path: Path) -> None:
     """
     import nbformat
 
-    nbformat.write(execute(path), path)
+    notebook = execute(path)
+    # Every output shown whole: a front end that honours the two keys never
+    # boxes a tall figure or a long table into a scroll pane (issue #891).
+    for cell in notebook.cells:
+        if cell.cell_type == "code":
+            cell.metadata["scrolled"] = False
+            cell.metadata["collapsed"] = False
+    nbformat.write(notebook, path)
 
 
 def compare(path: Path) -> list[str]:
