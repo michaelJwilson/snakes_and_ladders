@@ -65,6 +65,7 @@ from snakes_and_ladders.search.alpha_expansion import (
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import energy
 from snakes_and_ladders.sim.spatio_sequential import SpatioSequentialParams
+from snakes_and_ladders.track import current as current_tracked
 
 
 class LabelSolver(StrEnum):
@@ -292,6 +293,12 @@ def fit_spatio_sequential(
 ) -> SpatioSequentialFit:
     """Block-coordinate ascent on ``log p(x, l | theta)``.
 
+    Inside a :func:`snakes_and_ladders.track.track` block it records
+    ``log_likelihood`` once per block, and ``objective`` as its negative: the
+    entries of :attr:`SpatioSequentialFit.log_likelihoods` the blocks end on,
+    so the series is that field's history and not a second definition of it
+    (issue #887).
+
     Parameters
     ----------
     params : SpatioSequentialParams
@@ -338,7 +345,9 @@ def fit_spatio_sequential(
     field_of = partial(external_field, backend=backend)
     log_likelihood_of = partial(labelled_log_likelihood, backend=backend)
     values = [log_likelihood_of(params, observations, current)]
-    for _ in range(n_blocks):
+    tracked = current_tracked()
+    tracked.record(0, objective=-values[0], log_likelihood=values[0])
+    for block in range(n_blocks):
         posteriors = posteriors_of(params, observations, current)
         if fit_parameters:
             params = m_step(params, observations, current, posteriors)
@@ -360,6 +369,8 @@ def fit_spatio_sequential(
             values.append(candidate)
         else:
             values.append(values[-1])
+        tracked.record(block + 1, objective=-values[-1], log_likelihood=values[-1])
+    tracked.record_cost(n_blocks, current.nbytes)
     field = field_of(params, observations, current, None)
     # Every block runs: the loop tests nothing and ends on the count it was
     # given (issue #860).

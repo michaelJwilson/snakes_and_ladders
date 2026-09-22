@@ -62,6 +62,7 @@ from snakes_and_ladders.sim.count_pairs import (
     planted_labels,
 )
 from snakes_and_ladders.sim.spatio_sequential import SpatioSequentialParams
+from snakes_and_ladders.track import current
 
 #: Passes charged to one gradient of the surrogate objective: the forward
 #: evaluation and the backward sweep over the same ``N x C`` densities.
@@ -481,12 +482,69 @@ def _nearest(instance: ProjectedCounts, means: torch.Tensor) -> np.ndarray:
     return np.asarray(np.abs(totals[None, :] - located[:, None]).argmin(axis=1))
 
 
+def seed_at_means(
+    instance: ProjectedCounts, means: torch.Tensor, at: ComponentsAt
+) -> IndependentCountPair:
+    """The family seeded on the observation nearest each mean in the first channel.
+
+    The step between a candidate that returns *locations* --- a chain on the
+    surrogate, an initializer of it, a Gaussian mixture fitted to the first
+    channel --- and the seam every candidate ends at. The three chain-based
+    candidates reach it through :func:`_from_theta`, which is this function
+    with the ``theta`` of :func:`surrogate` read first; a caller holding means
+    already calls this one (issue #887).
+
+    Parameters
+    ----------
+    instance : ProjectedCounts
+        The projected data the locations are realized on.
+    means : torch.Tensor
+        One location per component, in the first channel's units.
+    at : ComponentsAt
+        The seam.
+
+    Returns
+    -------
+    IndependentCountPair
+    """
+    return _at_indices(instance.observations, _nearest(instance, means), at)
+
+
 def _from_theta(
     instance: ProjectedCounts, theta: torch.Tensor, at: ComponentsAt
 ) -> IndependentCountPair:
     """The family seeded where a surrogate's ``theta`` puts its component means."""
-    means = surrogate(instance).components(theta).mean
-    return _at_indices(instance.observations, _nearest(instance, means), at)
+    return seed_at_means(instance, surrogate(instance).components(theta).mean, at)
+
+
+def state_bytes(weights: torch.Tensor, components: IndependentCountPair) -> int:
+    """What the projected fit's state holds: its weights and its component parameters.
+
+    The quantity :meth:`snakes_and_ladders.track.TrackedOptimization.record_cost`
+    takes, written here because the state is a family and a weight vector
+    rather than one array with an ``nbytes``.
+
+    Parameters
+    ----------
+    weights : torch.Tensor
+        The mixing weights.
+    components : IndependentCountPair
+        The fitted family.
+
+    Returns
+    -------
+    int
+        Bytes.
+    """
+    tensors = (
+        weights,
+        components.total.dispersion,
+        components.total.mean,
+        components.successes.trials,
+        components.successes.alpha,
+        components.successes.beta,
+    )
+    return sum(int(tensor.element_size() * tensor.nelement()) for tensor in tensors)
 
 
 def _count_pair(family: object) -> IndependentCountPair:
@@ -673,15 +731,23 @@ def fit_projection(
     at: ComponentsAt,
     budget: Budget,
     rng: np.random.Generator,
+    *,
+    seeding: Seeding | None = None,
 ) -> Fitted:
     """Seed by one candidate, then fit the projected mixture within the budget.
+
+    Inside a :func:`snakes_and_ladders.track.track` block it records
+    ``log_likelihood`` once per iteration, and ``objective`` as its negative:
+    :attr:`Fitted.log_likelihoods` entry by entry, so a caller comparing
+    candidates reads one curve per fit from the run rather than from a second
+    loop of its own (issue #887).
 
     Parameters
     ----------
     instance : ProjectedCounts
         The projected data and its truth.
     name : str
-        A key of :data:`SEEDINGS`.
+        A key of :data:`SEEDINGS`, or the label ``seeding`` is reported under.
     at : ComponentsAt
         The seam every candidate ends at.
     budget : Budget
@@ -689,6 +755,11 @@ def fit_projection(
         run, one pass each.
     rng : np.random.Generator
         Passed in.
+    seeding : Seeding | None
+        A seeding produced elsewhere, so a start that is not one of
+        :data:`SEEDINGS` is fitted through this same loop at this same budget
+        rather than through a second one beside it (issue #887). ``None`` runs
+        the candidate ``name`` names.
 
     Returns
     -------
@@ -697,9 +768,9 @@ def fit_projection(
     Raises
     ------
     KeyError
-        If ``name`` is not a candidate.
+        If ``name`` is not a candidate and no ``seeding`` is given.
     """
-    seeding = SEEDINGS[name](instance, at, rng)
+    seeding = SEEDINGS[name](instance, at, rng) if seeding is None else seeding
     weights = torch.full(
         (instance.n_components,), 1.0 / instance.n_components, dtype=torch.float64
     )
@@ -711,11 +782,17 @@ def fit_projection(
     trace: list[float] = []
     iterations = 0
     converged = False
+    tracked = current()
     for _ in range(budget.size):
         step = expectation_maximization(
             instance.observations, weights, components, max_iterations=1, tolerance=0.0
         )
         trace.append(step.log_likelihood)
+        tracked.record(
+            len(trace) - 1,
+            objective=-step.log_likelihood,
+            log_likelihood=step.log_likelihood,
+        )
         weights, components = step.weights, _count_pair(step.components)
         iterations += 1
         if len(trace) > 1 and abs(trace[-1] - trace[-2]) <= TOLERANCE * abs(trace[-1]):
@@ -725,6 +802,12 @@ def fit_projection(
         instance.observations, weights, components, max_iterations=1, tolerance=0.0
     )
     trace.append(final.log_likelihood)
+    tracked.record(
+        len(trace) - 1,
+        objective=-final.log_likelihood,
+        log_likelihood=final.log_likelihood,
+    )
+    tracked.record_cost(len(trace) - 1, state_bytes(weights, components))
 
     assigned = np.asarray(final.responsibilities.argmax(dim=1).numpy())
     columns = _matching(components, instance.truth)
@@ -752,13 +835,20 @@ class SeededFit:
     Parameters
     ----------
     name : str
-        A key of :data:`SEEDINGS`.
+        A key of :data:`SEEDINGS`, or the label ``seeding`` is compared under.
     at : ComponentsAt
         The seam every candidate ends at.
+    seeding : Callable | None
+        A rule of :data:`SEEDINGS`'s own signature, so a start outside that
+        set is compared at the same budget through the same loop (issue
+        #887). ``None`` runs the candidate ``name`` names. Under
+        :func:`~snakes_and_ladders.opt.budget.compare` on a process pool it
+        must be importable by name, as every method there must.
     """
 
     name: str
     at: ComponentsAt
+    seeding: Callable[..., Seeding] | None = None
 
     def __call__(
         self, instance: ProjectedCounts, budget: Budget, rng: np.random.Generator
@@ -769,5 +859,14 @@ class SeededFit:
         -------
         Outcome
         """
-        fitted = fit_projection(instance, self.name, self.at, budget, rng)
+        fitted = fit_projection(
+            instance,
+            self.name,
+            self.at,
+            budget,
+            rng,
+            seeding=None
+            if self.seeding is None
+            else self.seeding(instance, self.at, rng),
+        )
         return Outcome(-fitted.log_likelihood, fitted.iterations)

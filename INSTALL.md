@@ -56,7 +56,9 @@ plugins, NumPy), `docs` (Sphinx), `notebooks` (a kernel, for re-executing
 `docs/nb/`), `frameworks` (Gymnasium, rustworkx, TorchRL and PyTorch
 Geometric: the external implementations the suite pins its own against), and
 `track` (Aim, the run store). `--all-extras` installs all six; sync a single
-one with `uv sync --locked --extra test`. Nothing in the core install needs
+one with `uv sync --locked --extra test`. `notebooks` carries Jupyter
+Notebook itself, so a notebook opens where it is edited:
+`uv run --extra notebooks jupyter notebook docs/nb/`. Nothing in the core install needs
 `frameworks`: every test using one of its packages skips without it, and
 `snakes_and_ladders.learn.gym` is the only module that imports one at module
 level.

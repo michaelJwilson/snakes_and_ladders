@@ -34,6 +34,7 @@ from snakes_and_ladders.sim.spatio_sequential import (
     SpatioSequentialParams,
     simulate_spatio_sequential,
 )
+from snakes_and_ladders.track import MemoryRun, track
 
 WOLFF = ExponentialTempSchedule(2.0, 0.2, 12)
 
@@ -302,3 +303,78 @@ def test_the_wolff_solver_needs_a_schedule_and_a_block_count_is_positive() -> No
         emission_mixture_plus_plus(
             np.zeros(3), 4, lambda _c, v: v * 0, np.random.default_rng(0)
         )
+
+
+@pytest.mark.smoke
+def test_the_tracked_curve_is_the_block_s_own_joint() -> None:
+    # One entry per block, each the value that block ended on: the series is
+    # `log_likelihoods` read at the blocks, so the notebook comparing starts
+    # reads what the fit already reports (issue #887).
+    params = fixture("spatio_sequential", "ci").params
+    data = simulate_spatio_sequential(params, np.random.default_rng(1))
+    blocks = 4
+
+    with track(MemoryRun()) as tracked:
+        fit = fit_spatio_sequential(
+            params, data.observations, np.random.default_rng(0), n_blocks=blocks
+        )
+    run = tracked.run
+    assert isinstance(run, MemoryRun)
+
+    recorded = run.series("log_likelihood")
+    assert [step for step, _ in recorded] == list(range(blocks + 1))
+    assert [value for _, value in recorded] == [
+        fit.log_likelihoods[0],
+        *fit.log_likelihoods[2::2].tolist(),
+    ]
+    assert run.last("state_bytes") == float(fit.labels.nbytes)
+
+
+@pytest.mark.smoke
+@pytest.mark.patch
+def test_an_untracked_block_ascent_is_the_fit_before_the_hook() -> None:
+    # The seam moves no number: outside a `track` block the binding is
+    # `track.NULL` and `record` returns on its first line.
+    params = fixture("spatio_sequential", "ci").params
+    data = simulate_spatio_sequential(params, np.random.default_rng(1))
+
+    outside = fit_spatio_sequential(
+        params, data.observations, np.random.default_rng(0), n_blocks=4
+    )
+    with track(MemoryRun()):
+        inside = fit_spatio_sequential(
+            params, data.observations, np.random.default_rng(0), n_blocks=4
+        )
+
+    assert outside.log_likelihoods.tolist() == inside.log_likelihoods.tolist()
+
+
+@pytest.mark.end2end
+def test_the_seeded_start_recovers_planted_labels_at_the_enumerable_size() -> None:
+    # What `docs/nb/spatio_sequential_starts.ipynb` section (g) states: on the
+    # instance the enumeration referees, block ascent from Emission_Mixture++
+    # labels the planted stripes above the 0.5 chance of two classes, and its
+    # fitted joint is not below the evidence at the generating parameters ---
+    # at four nodes and six positions the fit has more parameters than the
+    # draw constrains. Measured 0.792 and -7.0 nats over these six draws.
+    params = fixture("spatio_sequential", "ci").params
+    planted = (np.arange(params.graph.n_nodes) % params.n_classes == 0).astype(np.int64)
+    accuracies = []
+    gaps = []
+    for index in range(6):
+        draw = simulate_spatio_sequential(
+            params, np.random.default_rng([887, 2, index]), labels=planted
+        )
+        seeded = seed_emissions(params, draw.observations, np.random.default_rng(index))
+
+        fit = fit_spatio_sequential(
+            seeded, draw.observations, np.random.default_rng(index), n_blocks=6
+        )
+
+        accuracies.append(label_accuracy(fit.labels, planted, params.n_classes))
+        gaps.append(
+            enumerate_spatio_sequential(params, draw.observations).log_evidence
+            - fit.log_likelihoods[-1]
+        )
+    assert float(np.mean(accuracies)) > 0.5, accuracies
+    assert max(gaps) < 0.0, gaps
