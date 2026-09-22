@@ -27,12 +27,15 @@ from pathlib import Path
 #: `edge_case`, renamed `simulated_truth` to `end2end` and `mathematical` to
 #: `analytic`; only `end2end` and `oracle` count toward coverage. `infra` is a kind an
 #: author writes on a test of the repository's own machinery, and the subject
-#: the collection hook adds where a module names no problem.
+#: the collection hook adds where a module names no problem. `experiment`
+#: (issue #902) pins a measured comparison of two runs of the package, and
+#: counts toward nothing.
 KINDS = (
     "oracle",
     "end2end",
     "analytic",
     "smoke",
+    "experiment",
     "infra",
 )
 
