@@ -27,8 +27,16 @@ from snakes_and_ladders.opt.testfunctions import (
     Rastrigin,
     Rosenbrock,
 )
-from snakes_and_ladders.sample.initialize import FromAnnealing, FromChain, FromTempering
+from snakes_and_ladders.sample import hmc
+from snakes_and_ladders.sample.initialize import (
+    CHAIN_ADAPTATION,
+    FromAnnealing,
+    FromChain,
+    FromTempering,
+)
 from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
+
+from tests._objective_checks import AnalyticGaussian
 
 #: Distance within which a fit counts as having reached a named minimum.
 TOLERANCE = 0.1
@@ -370,10 +378,63 @@ def _lowest(objective: Rastrigin, points: list[torch.Tensor]) -> float:
 
 
 def _chain_start(seed: int) -> FromChain:
-    """Six draws of a short chain, at the step the surface accepts."""
+    """Six draws of a short chain, at the step the surface accepts.
+
+    Fixed-parameter, ``adaptation=None``: the comparison below is at the
+    chain's 286 gradients, and FromChain's default warm-up (issue #898) would
+    add 300 proposals of 11 gradients each to it alone.
+    """
     return FromChain(
-        6, 0.05, torch.Generator().manual_seed(seed), n_steps=10, burn_in=20
+        6,
+        0.05,
+        torch.Generator().manual_seed(seed),
+        n_steps=10,
+        burn_in=20,
+        adaptation=None,
     )
+
+
+@pytest.mark.patch
+def test_a_chain_start_warms_up_by_default_and_none_is_the_chain_it_drew_before() -> (
+    None
+):
+    # Issue #898 made the warm-up FromChain's default. The referee is
+    # `hmc.sample` called directly: the default is that call with
+    # CHAIN_ADAPTATION, bitwise, charging the warm-up's 300 proposals; and
+    # `adaptation=None` is that call without one, bitwise the pre-#898 chain.
+    # The acceptance these values reach is pinned where they were measured,
+    # `tests/regression/sample/test_opt_hmc_adaptive.py`'s ADAPTATION.
+    objective = AnalyticGaussian([1.0, -2.0], [[2.0, 0.6], [0.6, 0.5]])
+    draws, step, steps, burn_in = 4, 0.1, 5, 3
+    per_proposal = hmc.leapfrog.force_evaluations(steps)
+
+    def chain(adaptation: hmc.Adaptation | None) -> hmc.HmcChain:
+        return hmc.sample(
+            objective,
+            torch.Generator().manual_seed(898),
+            draws,
+            step_size=step,
+            n_steps=steps,
+            burn_in=burn_in,
+            adaptation=adaptation,
+        )
+
+    warmed = FromChain(
+        draws, step, torch.Generator().manual_seed(898), steps, burn_in
+    ).chain(objective)
+    assert torch.equal(warmed.theta, chain(CHAIN_ADAPTATION).theta)
+    assert warmed.adapted is not None
+    assert (
+        warmed.force_evaluations
+        == (CHAIN_ADAPTATION.warmup + burn_in + draws) * per_proposal
+    )
+
+    fixed = FromChain(
+        draws, step, torch.Generator().manual_seed(898), steps, burn_in, None
+    ).chain(objective)
+    assert torch.equal(fixed.theta, chain(None).theta)
+    assert fixed.adapted is None
+    assert fixed.force_evaluations == (burn_in + draws) * per_proposal
 
 
 def _annealed_start(seed: int) -> FromAnnealing:

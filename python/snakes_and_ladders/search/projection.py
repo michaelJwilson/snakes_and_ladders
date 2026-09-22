@@ -601,12 +601,16 @@ def chain_seeding(
         because a seed drawn from a chain that has not mixed is a random
         restart with a longer bill.
     """
+    # No warm-up: the three chain candidates are matched at 72 gradients, and
+    # FromChain's default 300-proposal warm-up would add 2,700 to this one
+    # alone (issue #898).
     initializer = FromChain(
         CHAIN_DRAWS,
         CHAIN_STEP,
         _generator(rng),
         n_steps=CHAIN_TRAJECTORY,
         burn_in=CHAIN_BURN_IN,
+        adaptation=None,
     )
     chain = initializer.chain(surrogate(instance))
     return Seeding(
