@@ -134,6 +134,12 @@ class MemoryRun:
     per-replica series recorded under a context reads back under that context
     rather than merged into the series of the same name.
 
+    Each entry is stamped with :func:`time.perf_counter` as it arrives, so a
+    caller reads when an iteration was recorded beside what it recorded
+    (:meth:`stamps`) without the loop that recorded it computing a clock of
+    its own (issue #894). The stamp is the store's, not a series: nothing a
+    hook writes changes, and a store that only writes need not keep one.
+
     Attributes
     ----------
     params : dict[str, Any]
@@ -143,6 +149,7 @@ class MemoryRun:
     def __init__(self) -> None:
         self.params: dict[str, Any] = {}
         self._series: dict[tuple[Any, ...], list[tuple[int, Any]]] = {}
+        self._stamps: dict[tuple[Any, ...], list[float]] = {}
 
     def track(
         self,
@@ -160,8 +167,10 @@ class MemoryRun:
         discarded: the signature is Aim's, no hook passes one, and a referee
         that stored it would be refereeing a field nothing writes.
         """
-        entries = self._series.setdefault(_key(name, context), [])
+        key = _key(name, context)
+        entries = self._series.setdefault(key, [])
         entries.append((len(entries) if step is None else step, value))
+        self._stamps.setdefault(key, []).append(time.perf_counter())
 
     def __setitem__(self, key: str, value: Any) -> None:
         """Record the parameter ``key``."""
@@ -182,6 +191,31 @@ class MemoryRun:
             series that was never written is a test that passes on nothing.
         """
         return self._series[_key(name, context)]
+
+    def names(self, context: Mapping[str, Any] | None = None) -> tuple[str, ...]:
+        """The series recorded under ``context``, in the order each was first written."""
+        frozen = _key(None, context)[1]
+        return tuple(
+            str(key[0])
+            for key in self._series
+            if key[1] == frozen and key[0] is not None
+        )
+
+    def stamps(
+        self, name: str, context: Mapping[str, Any] | None = None
+    ) -> list[float]:
+        """When each entry of ``(name, context)`` arrived, by :func:`time.perf_counter`.
+
+        One stamp per entry of :meth:`series`, in the same order, so the two
+        zip. Subtract :attr:`TrackedOptimization.started` for the seconds
+        since the enclosing :func:`track` block opened.
+
+        Raises
+        ------
+        KeyError
+            If nothing was recorded under that key, as :meth:`series` does.
+        """
+        return list(self._stamps[_key(name, context)])
 
     def last(self, name: str, context: Mapping[str, Any] | None = None) -> Any:
         """The last value of the sequence ``(name, context)``."""
