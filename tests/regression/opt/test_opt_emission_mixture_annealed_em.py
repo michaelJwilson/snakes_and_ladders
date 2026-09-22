@@ -106,15 +106,21 @@ def data_start() -> tuple[np.ndarray, CountPairEmission]:
     return observations, start
 
 
+@pytest.fixture(scope="module")
+def plain(data_start: tuple[np.ndarray, CountPairEmission]) -> EmissionMixtureFit:
+    """Plain EM from the `data` start, read by two tests."""
+    observations, start = data_start
+    return expectation_maximization(
+        observations, _uniform(start.n_states), start, tolerance=EM_TOLERANCE
+    )
+
+
 @pytest.mark.patch
 def test_no_schedule_and_one_step_at_one_are_the_plain_fit_bitwise(
-    data_start: tuple[np.ndarray, CountPairEmission],
+    data_start: tuple[np.ndarray, CountPairEmission], plain: EmissionMixtureFit
 ) -> None:
     observations, start = data_start
     k = start.n_states
-    plain = expectation_maximization(
-        observations, _uniform(k), start, tolerance=EM_TOLERANCE
-    )
     unset = expectation_maximization(
         observations, _uniform(k), start, tolerance=EM_TOLERANCE, temperatures=None
     )
@@ -203,7 +209,7 @@ def test_the_free_energy_does_not_fall_within_a_temperature(
 
 @pytest.mark.end2end
 def test_annealing_from_the_data_start_is_read_against_plain_em(
-    data_start: tuple[np.ndarray, CountPairEmission],
+    data_start: tuple[np.ndarray, CountPairEmission], plain: EmissionMixtureFit
 ) -> None:
     # The `data` start, the notebook's worst row, under both polishes, read
     # against the generating parameters' value on the draw (-7847.92) and
@@ -220,9 +226,6 @@ def test_annealing_from_the_data_start_is_read_against_plain_em(
     log_weight = torch.log(torch.as_tensor(params.weights, dtype=torch.float64))
     reference = float(mixture_log_likelihood(values, log_weight, params.components))
     labels = simulate_emission_mixture(params).labels
-    plain = expectation_maximization(
-        observations, _uniform(k), start, tolerance=EM_TOLERANCE
-    )
     annealed = expectation_maximization(
         observations,
         _uniform(k),
