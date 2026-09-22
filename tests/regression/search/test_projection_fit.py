@@ -114,3 +114,22 @@ def test_the_budget_method_reports_the_fit_it_runs() -> None:
     assert outcome.value == -fitted.log_likelihood
     assert outcome.spent == fitted.iterations == SHORT_BUDGET.size
     assert fitted.recovery > 0.25, fitted.recovery
+
+
+@pytest.mark.patch
+def test_the_last_value_is_the_one_a_further_iteration_would_report() -> None:
+    # Issue #891: the value and posterior at the last parameters were read
+    # off one more EM iteration whose M step was discarded, 4.6 s of a 5.0 s
+    # iteration at 100 components. They are now the E step alone. What that
+    # iteration reported is what a fit one pass longer records at the same
+    # entry, so the two curves agree bitwise on every entry they share.
+    instance, at = _instance(), _seam()
+    short = fit_projection(instance, "kmeans++", at, SHORT_BUDGET, rng())
+    longer = fit_projection(
+        instance, "kmeans++", at, Budget(Cost.PASSES, SHORT_BUDGET.size + 1), rng()
+    )
+
+    assert short.iterations == SHORT_BUDGET.size
+    np.testing.assert_array_equal(
+        short.log_likelihoods, longer.log_likelihoods[: SHORT_BUDGET.size + 1]
+    )

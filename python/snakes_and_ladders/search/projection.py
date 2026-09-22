@@ -52,6 +52,8 @@ from snakes_and_ladders.opt.emission_mixture import (
 from snakes_and_ladders.opt.mixture import (
     GaussianMixtureObjective,
     emission_mixture_plus_plus,
+    mixture_log_likelihood,
+    responsibilities,
 )
 from snakes_and_ladders.opt.termination import Termination
 from snakes_and_ladders.sample.initialize import FromAnnealing, FromChain, FromTempering
@@ -798,18 +800,23 @@ def fit_projection(
         if len(trace) > 1 and abs(trace[-1] - trace[-2]) <= TOLERANCE * abs(trace[-1]):
             converged = True
             break
-    final = expectation_maximization(
-        instance.observations, weights, components, max_iterations=1, tolerance=0.0
-    )
-    trace.append(final.log_likelihood)
+    # The value and the posterior at the last parameters: the E step the loop
+    # above runs, without the M step a further EM iteration would take and
+    # discard. The M step was 4.6 s of a 5.0 s iteration at 100 components
+    # (issue #891); the two numbers are the same calls on the same inputs.
+    values = torch.as_tensor(instance.observations, dtype=torch.float64)
+    log_weight = torch.log(weights)
+    final_log_likelihood = float(mixture_log_likelihood(values, log_weight, components))
+    trace.append(final_log_likelihood)
     tracked.record(
         len(trace) - 1,
-        objective=-final.log_likelihood,
-        log_likelihood=final.log_likelihood,
+        objective=-final_log_likelihood,
+        log_likelihood=final_log_likelihood,
     )
     tracked.record_cost(len(trace) - 1, state_bytes(weights, components))
 
-    assigned = np.asarray(final.responsibilities.argmax(dim=1).numpy())
+    posterior = responsibilities(values, log_weight, components)
+    assigned = np.asarray(posterior.argmax(dim=1).numpy())
     columns = _matching(components, instance.truth)
     fitted_mean = components.total.mean.numpy()
     true_mean = instance.truth.total.mean.numpy()[columns]
