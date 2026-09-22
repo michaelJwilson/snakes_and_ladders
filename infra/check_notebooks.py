@@ -179,7 +179,9 @@ def structure_problems(name: str, cells: Sequence[dict[str, Any]]) -> list[str]:
     -------
     list[str]
         Human-readable problems; empty when the last cell is a markdown cell
-        headed ``## Further work`` whose every bullet names an issue.
+        headed ``## Further work`` whose every bullet names an issue, and no
+        code cell's metadata sets ``scrolled: true``, which boxes a figure
+        into a scroll pane (issue #891).
     """
     if not cells:
         return [f"{name}: has no cells"]
@@ -192,7 +194,14 @@ def structure_problems(name: str, cells: Sequence[dict[str, Any]]) -> list[str]:
             f"{name}: the last cell is not a markdown cell headed '## Further work'"
         ]
 
-    problems = []
+    problems = [
+        f"{name}: code cell {index} is set to scroll its output; a figure or a "
+        f"table is shown whole (`--write` sets scrolled: false)"
+        for index, cell in enumerate(
+            (cell for cell in cells if cell.get("cell_type") == "code"), start=1
+        )
+        if cell.get("metadata", {}).get("scrolled") is True
+    ]
     for bullet in re.split(r"^- ", text[heading.end() :], flags=re.MULTILINE)[1:]:
         if not NAMES_A_TICKET.search(bullet):
             first_line = bullet.strip().splitlines()[0] if bullet.strip() else ""
@@ -322,7 +331,14 @@ def rewrite(path: Path) -> None:
     """
     import nbformat
 
-    nbformat.write(execute(path), path)
+    notebook = execute(path)
+    # Every output shown whole: a front end that honours the two keys never
+    # boxes a tall figure or a long table into a scroll pane (issue #891).
+    for cell in notebook.cells:
+        if cell.cell_type == "code":
+            cell.metadata["scrolled"] = False
+            cell.metadata["collapsed"] = False
+    nbformat.write(notebook, path)
 
 
 def compare(path: Path) -> list[str]:

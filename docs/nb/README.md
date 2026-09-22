@@ -93,6 +93,11 @@ against the tolerance the regression suite pins that same comparison at, so
 the notebook states the claim the suite pins rather than the sample that
 carried it (#480).
 
+**Every output is shown whole.** `--write` sets `scrolled: false` and
+`collapsed: false` on every code cell, and the checker fails a code cell whose
+metadata sets `scrolled: true`, so no figure or table is boxed into a scroll
+pane (issue #891).
+
 Install the kernel with `uv sync --extra notebooks`; a normal `pip install .`
 does not need it.
 

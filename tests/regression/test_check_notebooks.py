@@ -357,3 +357,19 @@ def test_a_notebook_over_the_budget_fails_and_one_under_it_passes(
     assert "300 s budget" in over[0]
     assert over_budget("n.ipynb", 299.8) == []
     assert over_budget("n.ipynb", 300.0) == []
+
+
+@pytest.mark.infra
+def test_a_code_cell_set_to_scroll_is_reported() -> None:
+    # Issue #891: `--write` sets `scrolled: false` on every code cell, so a
+    # figure shows whole; a cell whose metadata scrolls fails the structure
+    # check, and one that does not scroll, or says nothing, passes.
+    further = {"cell_type": "markdown", "source": "## Further work\n\n- one #1\n"}
+    scrolled = {**_cell(_stream("x\n")), "metadata": {"scrolled": True}}
+    whole = {**_cell(_stream("x\n")), "metadata": {"scrolled": False}}
+
+    reported = structure_problems("n.ipynb", [scrolled, whole, further])
+
+    assert len(reported) == 1
+    assert "code cell 1" in reported[0]
+    assert structure_problems("n.ipynb", [whole, _cell(), further]) == []
