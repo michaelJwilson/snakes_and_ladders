@@ -480,7 +480,7 @@ def test_the_adapted_chains_marginals_are_the_exact_gaussians_within_three_error
     None
 ):
     """The warm-up's own chain against the closed-form marginals, at three
-    Monte Carlo standard errors, with the energy error read beside them.
+    Monte Carlo standard errors.
 
     The referee is the target: `AnalyticGaussian` carries the mean and the
     covariance, so each marginal mean and each marginal variance has an exact
@@ -503,18 +503,15 @@ def test_the_adapted_chains_marginals_are_the_exact_gaussians_within_three_error
     Sampled mean (1.0596, -1.9990) against (1, -2); sampled variance (2.0621,
     0.5211) against (2.0, 0.5).
 
-    **The energy error, not the acceptance rate, is what says the step is
-    safe** (`opt/CLAUDE.md`). At a target of 0.80 the adapted step sits below
-    the stability limit and the largest energy error over the chain is
-    **27.78**, median 0.1162. At 0.65 --- the target the rest of this module
-    runs --- dual averaging lands on 1.1819, on the cliff `Adaptation`
-    documents: the acceptance is **0.665**, exactly where it was asked to be,
-    while the largest energy error is **1.190e+05**, 4,283 times the safe
-    chain's. That ratio is asserted below. What is not asserted is either
-    chain's rate against its target --- a single 1,200-draw rate carries a
-    binomial standard deviation of 0.011 before the adapted step's own spread
-    across seeds, which is what `_pooled_acceptance` above pools 20 seeds for;
-    realized 0.871 and 0.665, both healthy, separating nothing.
+    Those figures are the reference host's. The chain is seeded, but its
+    last bits follow the code path MKL picks for the CPU --- ``MKL_CBWR``
+    alone moves them --- and one bit of an acceptance probability moves the
+    dual-averaged step and from there every trajectory. Under
+    ``MKL_CBWR=COMPATIBLE``, which reproduces a GitHub runner's chain bitwise
+    (#895), the step is 1.1013, the warm-up acceptance 0.770, and the
+    deviations 0.04 and 1.16 for the means and 0.33 and 0.73 for the
+    variances; under ``MKL_CBWR=AVX2``, 1.0562, 0.769, 0.78 and 0.62, 0.94
+    and 0.70. The same claim, on three chains.
     """
     below_the_cliff = sample(
         GAUSSIAN,
@@ -557,22 +554,78 @@ def test_the_adapted_chains_marginals_are_the_exact_gaussians_within_three_error
     # order of 1 / (2.0, 0.5), which is what the metric is for.
     assert float(adapted.mass_diagonal[1]) > float(adapted.mass_diagonal[0])
 
-    on_the_cliff = sample(
-        GAUSSIAN,
-        generator=torch.Generator().manual_seed(729),
-        n_samples=1200,
-        step_size=0.05,
-        n_steps=5,
-        adaptation=Adaptation(warmup=300, target_acceptance=TARGET, step_jitter=0.4),
-    )
-    safe = float(below_the_cliff.energy_error.max())
-    diverging = float(on_the_cliff.energy_error.max())
-    print(f"largest energy error: {safe:.2f} below the cliff, {diverging:.3e} on it")
 
-    assert safe < 100.0
-    assert diverging > 1000.0 * safe
-    # Both rates are what a practitioner would call healthy, and one chain's
-    # proposals carry an energy error five orders of magnitude larger than
-    # the other's. That is the whole of the module's rule.
-    assert below_the_cliff.acceptance_rate > 0.65
-    assert on_the_cliff.acceptance_rate > 0.65
+#: The seeds the energy-error claim is pooled over: the marginal test's 729
+#: and the four after it, fixed before any of them was run.
+ENERGY_SEEDS = range(729, 734)
+
+
+def _largest_energy_errors(target: float) -> tuple[list[float], float]:
+    """Each seed's largest energy error at ``target``, and the pooled acceptance."""
+    chains = [
+        sample(
+            GAUSSIAN,
+            generator=torch.Generator().manual_seed(seed),
+            n_samples=1200,
+            step_size=0.05,
+            n_steps=5,
+            adaptation=Adaptation(
+                warmup=300, target_acceptance=target, step_jitter=0.4
+            ),
+        )
+        for seed in ENERGY_SEEDS
+    ]
+    largest = [float(chain.energy_error.max()) for chain in chains]
+    return largest, float(np.mean([chain.acceptance_rate for chain in chains]))
+
+
+@pytest.mark.analytic
+def test_the_energy_error_and_not_the_acceptance_rate_says_the_step_is_safe() -> None:
+    """Two warm-ups that each land where they were asked, one on the cliff.
+
+    **The energy error, not the acceptance rate, is what says the step is
+    safe** (`opt/CLAUDE.md`). At a target of 0.80 the adapted step sits below
+    the stability limit; at 0.65 --- the target the rest of this module runs
+    --- dual averaging lands on the cliff `Adaptation` documents, and the
+    chain's largest energy error is three orders of magnitude larger while
+    its acceptance is where it was asked to be.
+
+    **Pooled over five seeds, because one chain's largest energy error is
+    one draw from a heavy tail** (#895). The claim was a single chain's,
+    seed 729, where the reference host measured 27.78 and 1.190e+05. A GitHub
+    runner measured 426.85 on the same seed, reproduced bitwise here under
+    ``MKL_CBWR=COMPATIBLE``: MKL's code path moves the chain's last bits, and
+    the chain's largest error is a function of all of them. Across the five
+    seeds the 0.80 chain's largest error exceeds 100 on one under
+    ``MKL_CBWR=COMPATIBLE`` (426.85) and one under ``MKL_CBWR=AVX2`` (153),
+    and the single-chain ratio falls to 617 and 372, so neither was a
+    property of the sampler; the median over the five is.
+
+    Medians of the largest energy error, 0.80 against 0.65: 20.88 against
+    9.367e+04 on the reference host (ratio 4,486), 37.98 against 1.123e+05
+    under ``MKL_CBWR=COMPATIBLE`` (2,957), 23.55 against 7.513e+04 under
+    ``MKL_CBWR=AVX2`` (3,190). The rates are judged as
+    `test_the_adapted_acceptance_lands_at_its_target_on_the_gaussian` judges
+    one, pooled and within 0.05 of the target: 0.841 and 0.621 on the
+    reference host, 0.825 and 0.609 under ``COMPATIBLE``, 0.822 and 0.627
+    under ``AVX2``. A single chain's rate at 0.65 ran 0.555 to 0.665 across
+    the fifteen chains, so the ``> 0.65`` the single-chain claim asserted
+    held on one of them.
+    """
+    safe, safe_rate = _largest_energy_errors(0.80)
+    diverging, diverging_rate = _largest_energy_errors(TARGET)
+    safe_median = float(np.median(safe))
+    diverging_median = float(np.median(diverging))
+    print(
+        f"\nlargest energy error per seed: {np.round(safe, 2)} below the cliff, "
+        f"{[f'{value:.3e}' for value in diverging]} on it; medians {safe_median:.2f} and "
+        f"{diverging_median:.3e}; pooled acceptance {safe_rate:.3f} and "
+        f"{diverging_rate:.3f}"
+    )
+
+    assert safe_median < 100.0, safe
+    assert diverging_median > 1000.0 * safe_median, (safe, diverging)
+    # Both rates land where they were asked to: the acceptance rate does not
+    # tell the chain on the cliff from the one below it.
+    assert abs(safe_rate - 0.80) < 0.05, safe_rate
+    assert abs(diverging_rate - TARGET) < 0.05, diverging_rate
