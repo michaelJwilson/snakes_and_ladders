@@ -11,6 +11,8 @@ them, with the start's path before the handover.
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pytest
 from snakes_and_ladders.cost import Cost
@@ -18,12 +20,14 @@ from snakes_and_ladders.opt.budget import Budget, compare
 from snakes_and_ladders.opt.emission_mixture import CountPairSeeding
 from snakes_and_ladders.search.mixture_starts import (
     DETERMINISTIC,
+    POLISH_TOLERANCE,
     STARTS,
     MixtureInstance,
     StartRow,
     TimedStart,
     Trial,
     instance_from,
+    polish,
 )
 from snakes_and_ladders.sim.emission_mixture import simulate_emission_mixture
 from snakes_and_ladders.sim.fixtures import fixture
@@ -31,8 +35,13 @@ from snakes_and_ladders.sim.fixtures import fixture
 #: The polish's budget: experiment 009's six passes.
 PASSES = Budget(Cost.PASSES, 6)
 
-#: The initialization's ceiling, which no start on the ci draw approaches.
+#: The initialization's ceiling, which no start on the ci draw approaches;
+#: under the one budget, the whole cell's (issue #898).
 CEILING = Budget(Cost.SECONDS, 120)
+
+#: Starts the one-budget test runs: two rules over the pairs, each measured
+#: converging in 13 to 23 iterations, 2 s or less, on the ci draw.
+CONVERGING = ("data", "emission++")
 
 #: What every start that reads the pairs leaves at six passes, measured on
 #: this draw: 0.911 (the uniform draw) to 0.953, against the 0.50 of the
@@ -116,12 +125,64 @@ def test_a_deterministic_start_reads_no_generator() -> None:
 def test_a_row_reads_its_trials_against_the_reference(
     trials: dict[str, Trial],
 ) -> None:
-    # The gap is the reference less the reached value, entry by entry, and
-    # the seeding's seconds are the handover's.
+    # The gaps are the reference less the handover's and the reached value,
+    # entry by entry, and the seeding's seconds are the handover's.
     reference = _instance().reference
     for name, trial in trials.items():
         row = StartRow.from_trials(name, [trial], reference)
         assert row.trials == 1
         assert row.gap == (reference - float(trial.polished.log_likelihoods[-1]),)
+        assert row.seeded_gap == (reference - float(trial.polished.log_likelihoods[0]),)
+        assert row.iterations == (trial.polished.iterations,)
+        assert row.converged == (trial.polished.converged,)
         assert row.seeding_seconds == (trial.curve[trial.handover][0],)
         assert row.deterministic == (name in DETERMINISTIC)
+
+
+@pytest.mark.analytic
+def test_the_one_budget_polishes_to_the_tolerance_and_charges_the_whole_cell() -> None:
+    # Issue #898: one budget in seconds covers the start and its polish. The
+    # referee is the stopping rule itself, read off the trace: the polish
+    # stops at the *first* iteration whose relative change in the
+    # log-likelihood is at most the tolerance, EM never lowers the
+    # likelihood, and the spend compare checks is the cell's whole seconds.
+    instance = _instance()
+    comparison = compare(
+        {name: TimedStart(name) for name in CONVERGING},
+        [instance],
+        CEILING,
+        [0],
+        workers=1,
+    )
+    for name, outcome in zip(comparison.methods, comparison.outcomes, strict=True):
+        trial = outcome.detail
+        assert isinstance(trial, Trial)
+        assert trial.polished.converged, name
+        # The trace's last entry is the closing E step at the components the
+        # last iteration left; the change the rule read is between the two
+        # entries before it.
+        visited = trial.polished.log_likelihoods[:-1]
+        change = np.abs(np.diff(visited)) / np.abs(visited[:-1])
+        assert change[-1] <= POLISH_TOLERANCE, name
+        assert bool((change[:-1] > POLISH_TOLERANCE).all()), name
+        assert bool((np.diff(trial.polished.log_likelihoods) >= 0.0).all()), name
+        assert outcome.spent == math.ceil(trial.seconds) <= CEILING.size, name
+
+
+@pytest.mark.smoke
+def test_a_polish_stops_at_one_of_its_two_stops_and_a_timed_start_is_in_seconds() -> (
+    None
+):
+    instance = _instance()
+    seeded = STARTS["data"](instance, np.random.default_rng(0)).components
+    # No seconds left: no iteration, the handover's E step alone.
+    spent = polish(instance, seeded, seconds=0.0)
+    assert spent.iterations == 0
+    assert not spent.converged
+    assert polish(instance, seeded, passes=2).iterations == 2
+    with pytest.raises(ValueError, match="exactly one"):
+        polish(instance, seeded)
+    with pytest.raises(ValueError, match="exactly one"):
+        polish(instance, seeded, passes=2, seconds=1.0)
+    with pytest.raises(ValueError, match="budgeted in seconds"):
+        TimedStart("data")(instance, PASSES, np.random.default_rng(0))

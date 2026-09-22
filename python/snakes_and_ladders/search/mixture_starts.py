@@ -23,7 +23,7 @@ them at the observations nearest them.
 **A start that iterates records its iterations.** The Gaussian EM records its
 surrogate log-likelihood per iteration and keeps the components it would hand
 over every :data:`PATH_STRIDE` iterations; the burn-in keeps each of its
-iterations and ``FromChain`` each draw. The
+iterations and ``FromChain`` each draw it keeps after its warm-up. The
 annealing and tempering runs return their best point and not the path to it,
 so they carry no path. :class:`TimedStart` evaluates each path entry's
 count-pair log-likelihood after the clock stops, so the evaluation costs the
@@ -32,17 +32,26 @@ start nothing.
 **Cost is counted in passes and in seconds.** A pass is every observation
 scored under every component, one per EM iteration and two per surrogate
 gradient; the seconds are what ``track`` records.
+
+**One budget in seconds covers a start and its polish** (issue #898). The
+polish runs until the log-likelihood's relative change between two iterations
+is at most :data:`POLISH_TOLERANCE` or until its next iteration would pass
+the seconds the start left, and :class:`TimedStart` reports the cell's whole
+seconds against the budget. A polish of a fixed number of passes remains, for
+a comparison that holds the passes equal instead.
 """
 
 from __future__ import annotations
 
 import math
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
 import torch
 
+from snakes_and_ladders.cost import Cost
 from snakes_and_ladders.emissions import EmissionFamily
 from snakes_and_ladders.opt.budget import Budget, Outcome
 from snakes_and_ladders.opt.emission_mixture import (
@@ -360,7 +369,7 @@ def restart_initializer(rng: np.random.Generator) -> RandomRestart:
 
 
 def chain_initializer(rng: np.random.Generator) -> FromChain:
-    """The chain :func:`chain_seeding` runs, its stream derived from ``rng``."""
+    """The chain :func:`chain_seeding` runs, its stream derived from ``rng``, at ``FromChain``'s default warm-up."""
     return FromChain(
         CHAIN_DRAWS,
         CHAIN_STEP,
@@ -449,7 +458,11 @@ def quantile_seeding(instance: MixtureInstance, _rng: np.random.Generator) -> Se
 
 
 def chain_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded:
-    """``FromChain``: a short Hamiltonian chain on the surrogate; its last draw seeds.
+    """``FromChain``: a short Hamiltonian chain on the surrogate, warmed up; its last draw seeds.
+
+    The warm-up is ``FromChain``'s default,
+    :data:`~snakes_and_ladders.sample.initialize.CHAIN_ADAPTATION` (issue
+    #898), and its gradients are in the passes charged.
 
     Returns
     -------
@@ -465,7 +478,12 @@ def chain_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded
     return Seeded(
         path[-1][1],
         PASSES_PER_GRADIENT * chain.force_evaluations,
-        f"acceptance {chain.acceptance_rate:.2f}",
+        f"acceptance {chain.acceptance_rate:.2f}"
+        + (
+            f", adapted step {chain.adapted.step_size:.3g}"
+            if chain.adapted is not None
+            else ""
+        ),
         path,
     )
 
@@ -527,9 +545,22 @@ STARTS: dict[str, Callable[[MixtureInstance, np.random.Generator], Seeded]] = {
 DETERMINISTIC = frozenset({"objective", "perturbed", "quantile"})
 
 
+#: Relative change in the log-likelihood between two EM iterations at which
+#: the polish stops: ``|L_i - L_{i-1}| <= POLISH_TOLERANCE * |L_{i-1}|``. On
+#: the stress draw, whose generating parameters reach -28,268.1 nats, 1e-6 is
+#: a change of 0.028 nats an iteration, under the 0.1 nat the notebook prints
+#: a log-likelihood to (issue #898). Measured at seed 0 on the 4-core host, one
+#: process a core at a 1-minute load of 3 to 6: at 1e-6, 7 of 8 starts stop
+#: inside 120 s, `restart` and `quantile` at iteration 133 within 0.2 nats of
+#: where an unstopped run is at 120 s; at 1e-7, 4 of the 8 do. The rule reads a
+#: slowdown, not a maximum: `prior` passes 1e-6 at iteration 136 at a gap of
+#: -9.7 nats and reaches -23.0 by iteration 270.
+POLISH_TOLERANCE = 1e-6
+
+
 @dataclass(frozen=True)
 class Polished:
-    """The EM fit a start hands over to, at one budget.
+    """The EM fit a start hands over to.
 
     Parameters
     ----------
@@ -539,51 +570,101 @@ class Polished:
         The fitted mixing weights.
     log_likelihoods : np.ndarray
         The log-likelihood at the handover and after every iteration, shape
-        ``(budget + 1,)``.
+        ``(iterations + 1,)``.
+    converged : bool
+        Whether the polish stopped at its tolerance rather than at its budget.
     """
 
     components: EmissionFamily
     weights: torch.Tensor
     log_likelihoods: np.ndarray
+    converged: bool = False
+
+    @property
+    def iterations(self) -> int:
+        """EM iterations run, one pass each."""
+        return int(self.log_likelihoods.shape[0]) - 1
 
 
 def polish(
-    instance: MixtureInstance, components: EmissionFamily, budget: Budget
+    instance: MixtureInstance,
+    components: EmissionFamily,
+    *,
+    passes: int | None = None,
+    seconds: float | None = None,
+    tolerance: float = POLISH_TOLERANCE,
 ) -> Polished:
-    """``budget.size`` EM iterations from ``components`` at equal weights, one pass each.
+    """EM iterations from ``components`` at equal weights, one pass each, to one of two stops.
+
+    Given ``passes``, exactly that many iterations. Given ``seconds``, the
+    iterations run until the log-likelihood's relative change between two of
+    them is at most ``tolerance`` or until the next would pass ``seconds``:
+    an iteration starts only while the seconds spent, plus twice the longest
+    iteration so far --- the iteration and the closing E step, each bounded
+    by it --- fit in ``seconds``. The first iteration's cost is unknown until
+    it has run, so it runs whenever ``seconds`` is positive, and a caller
+    holding a ceiling checks the whole spend.
 
     Each iteration is one call of
     :func:`~snakes_and_ladders.opt.emission_mixture.expectation_maximization`,
     recorded into the enclosing run as ``log_likelihood`` at step ``i``: the
     value at the components iteration ``i`` was handed, recorded once that
     iteration has produced the next. The value at the last components is the
-    E step alone, recorded at step ``budget.size``.
+    E step alone, recorded at the step after the last iteration.
 
     Returns
     -------
     Polished
+
+    Raises
+    ------
+    ValueError
+        Unless exactly one of ``passes`` and ``seconds`` is given.
     """
+    if (passes is None) == (seconds is None):
+        msg = "a polish stops at passes or at seconds, exactly one of them"
+        raise ValueError(msg)
+    opened = time.perf_counter()
     values = torch.as_tensor(instance.observations, dtype=torch.float64)
     weights = torch.full(
         (instance.n_components,), 1.0 / instance.n_components, dtype=torch.float64
     )
     tracked = current()
     trace: list[float] = []
-    for iteration in range(budget.size):
+    longest = 0.0
+    converged = False
+    iteration = 0
+    while True:
+        if passes is not None and iteration >= passes:
+            break
+        if seconds is not None and (
+            time.perf_counter() - opened + 2.0 * longest > seconds
+        ):
+            break
+        began = time.perf_counter()
         step = expectation_maximization(
             instance.observations, weights, components, max_iterations=1, tolerance=0.0
         )
+        longest = max(longest, time.perf_counter() - began)
         trace.append(step.log_likelihood)
         tracked.record(iteration, log_likelihood=step.log_likelihood)
         weights, components = step.weights, step.components
+        iteration += 1
+        if (
+            seconds is not None
+            and len(trace) > 1
+            and abs(trace[-1] - trace[-2]) <= tolerance * abs(trace[-2])
+        ):
+            converged = True
+            break
     final = float(mixture_log_likelihood(values, torch.log(weights), components))
     trace.append(final)
-    tracked.record(budget.size, log_likelihood=final)
+    tracked.record(iteration, log_likelihood=final)
     tensors = [weights, *components.named_parameters().values()]
     tracked.record_cost(
-        budget.size, sum(int(t.element_size() * t.nelement()) for t in tensors)
+        iteration, sum(int(t.element_size() * t.nelement()) for t in tensors)
     )
-    return Polished(components, weights, np.asarray(trace))
+    return Polished(components, weights, np.asarray(trace), converged)
 
 
 @dataclass(frozen=True)
@@ -638,42 +719,70 @@ def _first_per_step(series: list[tuple[int, float]]) -> dict[int, float]:
 
 @dataclass(frozen=True)
 class TimedStart:
-    """One start as an :mod:`snakes_and_ladders.opt.budget` method whose spend is seconds.
+    """One start and its polish as an :mod:`snakes_and_ladders.opt.budget` method whose spend is seconds.
 
     The start runs in a ``track`` block nested in the block the polish runs
     in, so its own samples carry its own clock, offset to the outer one; the
-    handover is one sample of the outer run. The polish spends ``passes``.
-    The budget :func:`~snakes_and_ladders.opt.budget.compare` hands in is the
-    initialization's ceiling in :attr:`~snakes_and_ladders.cost.Cost.SECONDS`,
-    and the spend reported against it is the seconds to the handover, rounded
-    up: a start over it is refused by ``compare``.
+    handover is one sample of the outer run.
+
+    **One budget covers the cell** (issue #898). The budget
+    :func:`~snakes_and_ladders.opt.budget.compare` hands in is in
+    :attr:`~snakes_and_ladders.cost.Cost.SECONDS` and covers the start and
+    its polish: the polish is handed the seconds the start left and stops at
+    ``tolerance`` or before it would pass them, and the spend reported is the
+    cell's whole seconds rounded up, so ``compare`` refuses a cell over it.
+    Given ``passes``, the polish runs exactly that many iterations instead,
+    and the spend reported against the seconds budget is the start's alone,
+    to the handover.
 
     Parameters
     ----------
     name : str
         A key of :data:`STARTS`.
-    passes : Budget
-        The polish's budget.
+    passes : Budget | None
+        A polish of fixed length in :attr:`~snakes_and_ladders.cost.Cost.PASSES`;
+        ``None`` for the one budget.
+    tolerance : float
+        The polish's stop under the one budget, :data:`POLISH_TOLERANCE`.
     """
 
     name: str
-    passes: Budget
+    passes: Budget | None = None
+    tolerance: float = POLISH_TOLERANCE
 
     def __call__(
         self, instance: MixtureInstance, budget: Budget, rng: np.random.Generator
     ) -> Outcome:
-        """The negative log-likelihood reached, the seconds to the handover, and the :class:`Trial`.
+        """The negative log-likelihood reached, the seconds spent, and the :class:`Trial`.
 
         Returns
         -------
         Outcome
+
+        Raises
+        ------
+        ValueError
+            If ``budget`` is not in seconds, or ``passes`` is not in passes.
         """
-        del budget  # the initialization's ceiling, which compare checks
+        if budget.unit is not Cost.SECONDS:
+            msg = f"a timed start is budgeted in seconds, not {budget.unit}"
+            raise ValueError(msg)
+        if self.passes is not None and self.passes.unit is not Cost.PASSES:
+            msg = f"a fixed polish is counted in passes, not {self.passes.unit}"
+            raise ValueError(msg)
         with track(MemoryRun()) as outer:
             with track(MemoryRun()) as inner:
                 seeded = STARTS[self.name](instance, rng)
             outer.record(0, context=HANDOVER, handed_over=1.0)
-            polished = polish(instance, seeded.components, self.passes)
+            if self.passes is None:
+                polished = polish(
+                    instance,
+                    seeded.components,
+                    seconds=budget.size - (time.perf_counter() - outer.started),
+                    tolerance=self.tolerance,
+                )
+            else:
+                polished = polish(instance, seeded.components, passes=self.passes.size)
         inner_run, outer_run = inner.run, outer.run
         if not isinstance(inner_run, MemoryRun) or not isinstance(
             outer_run, MemoryRun
@@ -728,7 +837,8 @@ class TimedStart:
             recovery=float(np.mean(columns[assigned] == instance.labels)),
             mean_error=float(np.max(np.abs(fitted_mean - true_mean) / true_mean)),
         )
-        return Outcome(-float(polished.log_likelihoods[-1]), math.ceil(handed), trial)
+        spent = math.ceil(seconds if self.passes is None else handed)
+        return Outcome(-float(polished.log_likelihoods[-1]), spent, trial)
 
 
 @dataclass(frozen=True)
@@ -745,8 +855,11 @@ class StartRow:
         Whether the start reads no generator, so one trial is every trial.
     seeded : tuple[float, ...]
         The log-likelihood at the handover.
+    seeded_gap : tuple[float, ...]
+        The reference less ``seeded``, in nats.
     reached : tuple[float, ...]
-        The log-likelihood at the polish's budget.
+        The log-likelihood where the polish stopped: at its tolerance, at its
+        budget, or after its fixed passes.
     gap : tuple[float, ...]
         The reference less ``reached``, in nats.
     passes : float
@@ -761,11 +874,16 @@ class StartRow:
         Fraction of pairs assigned to their generating component.
     mean_error : tuple[float, ...]
         Largest relative error in a component's first-channel mean.
+    converged : tuple[bool, ...]
+        Whether the polish stopped at its tolerance.
+    iterations : tuple[int, ...]
+        EM iterations the polish ran.
     """
 
     start: str
     deterministic: bool
     seeded: tuple[float, ...]
+    seeded_gap: tuple[float, ...]
     reached: tuple[float, ...]
     gap: tuple[float, ...]
     passes: float
@@ -774,6 +892,8 @@ class StartRow:
     seeding_seconds: tuple[float, ...]
     recovery: tuple[float, ...]
     mean_error: tuple[float, ...]
+    converged: tuple[bool, ...]
+    iterations: tuple[int, ...]
 
     @property
     def trials(self) -> int:
@@ -788,11 +908,13 @@ class StartRow:
         -------
         StartRow
         """
+        seeded = tuple(float(t.polished.log_likelihoods[0]) for t in trials)
         reached = tuple(float(t.polished.log_likelihoods[-1]) for t in trials)
         return cls(
             start=start,
             deterministic=start in DETERMINISTIC,
-            seeded=tuple(float(t.polished.log_likelihoods[0]) for t in trials),
+            seeded=seeded,
+            seeded_gap=tuple(reference - value for value in seeded),
             reached=reached,
             gap=tuple(reference - value for value in reached),
             passes=float(np.mean([t.seeded.passes for t in trials])),
@@ -801,4 +923,6 @@ class StartRow:
             seeding_seconds=tuple(t.curve[t.handover][0] for t in trials),
             recovery=tuple(t.recovery for t in trials),
             mean_error=tuple(t.mean_error for t in trials),
+            converged=tuple(t.polished.converged for t in trials),
+            iterations=tuple(t.polished.iterations for t in trials),
         )
