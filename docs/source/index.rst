@@ -285,6 +285,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.opt.emission_mixture
    :members:
 
+.. automodule:: snakes_and_ladders.opt.split_merge
+   :members:
+
 .. automodule:: snakes_and_ladders.sample
    :members:
 

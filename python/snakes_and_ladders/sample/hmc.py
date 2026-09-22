@@ -57,7 +57,7 @@ from __future__ import annotations
 import itertools
 import math
 import time
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -971,6 +971,7 @@ def parallel_tempering(
     n_steps: int = DEFAULT_STEPS,
     theta0: torch.Tensor | None = None,
     integrator: Integrator = leapfrog,
+    deadline: float | None = None,
 ) -> Tempered:
     """Replicas at fixed temperatures, exchanging positions by Metropolis.
 
@@ -1015,6 +1016,15 @@ def parallel_tempering(
         is the budget in gradients.
     step_size, n_steps, theta0, integrator
         As :func:`sample`; every replica starts at ``theta0``.
+    deadline : float | None
+        A :func:`time.perf_counter` reading. A round after the first starts
+        only if the longest round so far would end by it, so ``n_rounds`` is
+        a ceiling and the result's ``positions`` and ``force_evaluations``
+        count the rounds run (issue #902). The first round always runs: a
+        start is a point, and no round has yet been measured to predict it.
+        A wall clock reads no replica's state, which is what makes it a stop
+        a sweep may take. ``None`` runs ``n_rounds``, bitwise as before it
+        existed.
 
     Returns
     -------
@@ -1048,7 +1058,9 @@ def parallel_tempering(
     value = float(objective(start))
     best, best_value = start.clone(), value
     accepted = torch.zeros(n_replicas, dtype=torch.float64)
-    recorded = torch.empty((n_rounds, n_replicas, start.shape[0]), dtype=torch.float64)
+    # A list rather than a tensor sized to `n_rounds`: under a deadline that
+    # count is a ceiling, and the stacked rounds are the same values.
+    recorded: list[torch.Tensor] = []
     # The ladder is strictly increasing, so a replica's temperature names it:
     # the loop hands the step a temperature and a generator, not an index.
     rung = {temperature: index for index, temperature in enumerate(temperatures)}
@@ -1075,7 +1087,7 @@ def parallel_tempering(
     def observe(states: Sequence[torch.Tensor], densities: Sequence[float]) -> None:
         """The round the exchange closed: the positions it left, and the best point seen."""
         nonlocal best, best_value, round_index
-        recorded[round_index] = torch.stack(list(states))
+        recorded.append(torch.stack(list(states)))
         lowest = max(range(n_replicas), key=densities.__getitem__)
         if -densities[lowest] < best_value:
             best, best_value = states[lowest].clone(), -densities[lowest]
@@ -1098,20 +1110,44 @@ def parallel_tempering(
         0,
         1,
         observe,
+        None if deadline is None else _before(deadline),
     )
+    rounds = torch.stack(recorded)
     # The loop records the ensemble it built; the tempering records the
     # positions it returns, which is the state its result holds.
-    tracked.record_cost(max(n_rounds - 1, 0), recorded.nbytes)
+    tracked.record_cost(max(round_index - 1, 0), rounds.nbytes)
 
     return Tempered(
         theta=best,
         value=best_value,
-        positions=recorded,
-        acceptance_rate=accepted / n_rounds,
+        positions=rounds,
+        acceptance_rate=accepted / round_index,
         swap_acceptance=torch.tensor(ensemble.swap_acceptance, dtype=torch.float64),
-        force_evaluations=n_rounds * n_replicas * integrator.force_evaluations(n_steps),
+        force_evaluations=round_index
+        * n_replicas
+        * integrator.force_evaluations(n_steps),
         walkers=ensemble.walkers,
     )
+
+
+def _before(deadline: float) -> Callable[[], bool]:
+    """A stop that ends the rounds when the longest so far would pass ``deadline``.
+
+    Asked between rounds, so the interval between two askings is one round
+    and the first is timed from here, which the caller builds just before
+    the loop starts.
+    """
+    mark = time.perf_counter()
+    longest = 0.0
+
+    def stop() -> bool:
+        nonlocal mark, longest
+        now = time.perf_counter()
+        longest = max(longest, now - mark)
+        mark = now
+        return now + longest > deadline
+
+    return stop
 
 
 def _check_trajectory(step_size: float, n_steps: int) -> None:

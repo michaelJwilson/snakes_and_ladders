@@ -178,6 +178,15 @@ KIND_MARKERS: Mapping[str, str] = {
         "checked against itself -- reachability, a shape, the absence of an "
         "exception, a boundary, a refusal, an invariant the implementation chose"
     ),
+    # Issue #902: a comparison of two methods, starts or settings on a
+    # declared instance, pinned where it was measured. Its referee is another
+    # run of the package, so it is not `smoke`, whose referee is the
+    # implementation's own contract, and it counts toward no coverage.
+    "experiment": (
+        "compares two runs of the package -- methods, starts or settings on a "
+        "declared instance at a stated cost -- and pins which reached further "
+        "where it was measured; a finding recorded, not a referee"
+    ),
     "infra": (
         "exercises no single problem -- shared machinery, a document guard, "
         "or the build; written on a test of that machinery, added at collection "
