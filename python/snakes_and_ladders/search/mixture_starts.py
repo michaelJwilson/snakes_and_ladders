@@ -926,3 +926,68 @@ class StartRow:
             converged=tuple(t.polished.converged for t in trials),
             iterations=tuple(t.polished.iterations for t in trials),
         )
+
+
+@dataclass(frozen=True)
+class GapBand:
+    """One start's gap over its trials on a common grid of seconds (issue #898).
+
+    Parameters
+    ----------
+    seconds : np.ndarray
+        The grid, shape ``(n,)``.
+    mean : np.ndarray
+        The mean gap over the trials at each grid time, ``nan`` before every
+        trial has recorded a point.
+    std : np.ndarray
+        The sample standard deviation over the trials, ``nan`` where ``mean``
+        is and everywhere at one trial.
+    handover : tuple[float, float]
+        The mean seconds and the mean gap at the handover.
+    """
+
+    seconds: np.ndarray
+    mean: np.ndarray
+    std: np.ndarray
+    handover: tuple[float, float]
+
+
+def gap_band(trials: list[Trial], reference: float, seconds: np.ndarray) -> GapBand:
+    """Each trial's gap below ``reference`` held from each point to the next, read on ``seconds``.
+
+    A trial's curve is a sequence of states, so between two samples the gap
+    is the earlier one's, and after the last it is the last: the fit the cell
+    ended on. The mean and the band are taken over trials at the same wall
+    clock, which is what a reader of a runtime axis compares.
+
+    Returns
+    -------
+    GapBand
+
+    Raises
+    ------
+    ValueError
+        If ``trials`` is empty.
+    """
+    if not trials:
+        msg = "a band needs at least one trial"
+        raise ValueError(msg)
+    held = np.full((len(trials), seconds.shape[0]), np.nan)
+    for row, trial in enumerate(trials):
+        times = np.asarray([point[0] for point in trial.curve])
+        gaps = reference - np.asarray([point[1] for point in trial.curve])
+        # The last sample at or before each grid time; -1 before the first.
+        index = np.searchsorted(times, seconds, side="right") - 1
+        known = index >= 0
+        held[row, known] = gaps[index[known]]
+    started = ~np.isnan(held).any(axis=0)
+    mean = np.full(seconds.shape[0], np.nan)
+    std = np.full(seconds.shape[0], np.nan)
+    mean[started] = held[:, started].mean(axis=0)
+    if len(trials) > 1:
+        std[started] = held[:, started].std(axis=0, ddof=1)
+    handover = (
+        float(np.mean([t.curve[t.handover][0] for t in trials])),
+        float(np.mean([reference - t.curve[t.handover][1] for t in trials])),
+    )
+    return GapBand(seconds, mean, std, handover)

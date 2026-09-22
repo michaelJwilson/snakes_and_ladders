@@ -26,6 +26,7 @@ from snakes_and_ladders.search.mixture_starts import (
     StartRow,
     TimedStart,
     Trial,
+    gap_band,
     instance_from,
     polish,
 )
@@ -186,3 +187,32 @@ def test_a_polish_stops_at_one_of_its_two_stops_and_a_timed_start_is_in_seconds(
         polish(instance, seeded, passes=2, seconds=1.0)
     with pytest.raises(ValueError, match="budgeted in seconds"):
         TimedStart("data")(instance, PASSES, np.random.default_rng(0))
+
+
+@pytest.mark.analytic
+def test_a_band_holds_each_trial_between_its_samples_and_averages_across_trials(
+    trials: dict[str, Trial],
+) -> None:
+    # Issue #898's figure: the referee is the curve itself. At a sample's own
+    # time the band is that sample's gap; between samples it is the earlier
+    # one's; before a trial's first sample the band is undefined; at one
+    # trial there is no spread; over two copies of one trial the mean is the
+    # trial and the spread zero.
+    reference = _instance().reference
+    trial = trials["hmc"]
+    times = np.asarray([point[0] for point in trial.curve])
+    gaps = reference - np.asarray([point[1] for point in trial.curve])
+    grid = np.concatenate([[times[0] / 2.0], times, [times[-1] * 2.0]])
+    band = gap_band([trial], reference, grid)
+    assert math.isnan(band.mean[0])
+    # Samples recorded at one clock reading: the band reads the last of them.
+    last = dict(zip(times, gaps, strict=True))
+    assert band.mean[1:-1].tolist() == [last[t] for t in times]
+    assert band.mean[-1] == gaps[-1]
+    assert bool(np.isnan(band.std).all())
+    assert band.handover == (times[trial.handover], gaps[trial.handover])
+    twice = gap_band([trial, trial], reference, grid)
+    assert np.array_equal(twice.mean[1:], band.mean[1:])
+    assert bool((twice.std[1:] == 0.0).all())
+    with pytest.raises(ValueError, match="at least one"):
+        gap_band([], reference, grid)
