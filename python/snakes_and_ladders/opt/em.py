@@ -30,6 +30,7 @@ def em_loop[State](
     *,
     tolerance: float,
     max_iterations: int,
+    previous: float = -float("inf"),
 ) -> tuple[State, float, Termination]:
     """Alternate ``step`` until the log-likelihood settles or the budget runs out.
 
@@ -47,7 +48,13 @@ def em_loop[State](
         Stop when the log-likelihood changes by less than this *relative* to
         its magnitude.
     max_iterations : int
-        Maximum iterations. Zero runs no step and reports ``-inf``.
+        Maximum iterations. Zero runs no step and reports ``previous``.
+    previous : float
+        The log-likelihood at the state before ``start``, which the first
+        step's value is tested against. ``-inf`` for a loop that begins at
+        ``start``; a caller that has already stepped once (the tempered steps
+        of issue #903) hands over its last value, so the loop tests the same
+        change it would have tested had it run that step itself.
 
     Returns
     -------
@@ -59,7 +66,6 @@ def em_loop[State](
         whatever its M steps said along the way.
     """
     state = start
-    previous = -float("inf")
     log_likelihood = previous
     iterations = 0
     converged = False
