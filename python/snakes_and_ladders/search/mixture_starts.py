@@ -615,7 +615,7 @@ def polish(
     from 2.6e-7 at iteration 156 to 1.5e-231 at 179, the likelihood climbing
     a nat an iteration, and the next E step underflows its responsibilities
     to zero, where the family's M step has no data to solve on and refuses.
-    The polish stops there, :attr:`Polished.emptied`, and hands over the fit
+    The polish stops there, :attr:`~snakes_and_ladders.search.mixture_starts.Polished.emptied`, and hands over the fit
     of the iteration before: the refusal is caught only when the E step at
     that fit leaves some component no responsibility at all, and raised
     otherwise. A small weight is not by itself the stop: from the same start

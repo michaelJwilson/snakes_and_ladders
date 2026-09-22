@@ -1348,9 +1348,10 @@ def polish_projected(
 
     Returns
     -------
-    Polished
+    snakes_and_ladders.opt.starts.Polished
         The last parameters, the negative log-likelihood there, and how the
-        loop ended.
+        loop ended. Named in full: `search.mixture_starts` has a `Polished`
+        of its own, and a bare name is two targets to Sphinx.
     """
     projected = _projected(objective)
     with torch.no_grad():
