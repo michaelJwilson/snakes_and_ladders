@@ -1,0 +1,69 @@
+model: spatio-sequential-counts
+oracle: none
+
+# The coupled model between the ci instance and the key one: the stress
+# file's M = 10 classes, K = 10 hidden states and emission ladders, on a 10x10
+# open triangular lattice of 100 vertices over S = 1,000 sequential positions.
+# Every field is required -- see python/snakes_and_ladders/sim/count_pairs.py.
+#
+# 100,000 count pairs, and M x K = 100 (class, state) components: the
+# component count experiment 009 fitted in projection, on a lattice whose
+# planted labelling (sim.count_pairs.planted_labels) is one row per class.
+# `docs/nb/spatio_sequential_starts.ipynb` reads it, and issue #555 names it
+# as the instance missing between the two others.
+#
+# The stated oracle is none: at 100 vertices there is no exact evidence. What
+# referees a result here is the generating parameters and the planted
+# labelling the draw is conditioned on, as at the stress file.
+seed: 20260908
+
+# What the counts hash to, so a changed simulator fails here rather than in a
+# recovery number three tests later. Written by `sim.count_pairs.counts_digest`
+# over the draw `sim.count_pairs_rust.simulate_count_pairs` makes of this file:
+# 0.06 s on the 4-core reference host, the largest count 695 in the first channel and 40 in the second.
+counts_digest: 8891ea830217f7c0
+shape: [10, 10]
+boundary: open
+coupling: 1.0
+n_classes: 10
+n_states: 10
+n_positions: 1000
+beta: 1.0
+self_transition: 0.7
+
+# The stress file's initial distribution: class m starts in state m with
+# probability 0.19 and in each other state with 0.09, so the M chains are not
+# exchangeable at s = 0.
+initial:
+  - [0.19, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09]
+  - [0.09, 0.19, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09]
+  - [0.09, 0.09, 0.19, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09]
+  - [0.09, 0.09, 0.09, 0.19, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09]
+  - [0.09, 0.09, 0.09, 0.09, 0.19, 0.09, 0.09, 0.09, 0.09, 0.09]
+  - [0.09, 0.09, 0.09, 0.09, 0.09, 0.19, 0.09, 0.09, 0.09, 0.09]
+  - [0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.19, 0.09, 0.09, 0.09]
+  - [0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.19, 0.09, 0.09]
+  - [0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.19, 0.09]
+  - [0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.19]
+
+# One instance, the fine one. No test runs at this size; the marker is the
+# file's tier, so a test written over the declared instances later carries the
+# release marker until a measurement moves it.
+bin:
+  - factor: 1
+    marker: release
+
+# The stress file's ladders over the K = 10 states and its two per-class
+# vectors over the M = 10 classes, unchanged: 5K + 2M = 70 numbers.
+emissions:
+  form: independent
+  mean: [20.0, 40.0, 60.0, 80.0, 100.0, 120.0, 140.0, 160.0, 180.0, 200.0]
+  dispersion: [4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0]
+  # Constant across the states: the beta-binomial's support is {0, ..., n},
+  # so a ladder that varied would put a count drawn in one state outside
+  # another's support, where the log-density is NaN and not small.
+  trials: [40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0]
+  rate: [0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65]
+  concentration: [12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0, 30.0]
+  class_mean_scale: [0.60, 0.70, 0.80, 0.90, 1.00, 1.10, 1.20, 1.30, 1.40, 1.50]
+  class_rate_shift: [-0.14, -0.11, -0.08, -0.05, -0.02, 0.01, 0.04, 0.07, 0.10, 0.13]

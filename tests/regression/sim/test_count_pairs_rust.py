@@ -151,11 +151,13 @@ def test_the_draw_is_a_function_of_the_seed_and_the_vertex_alone() -> None:
 
 
 @pytest.mark.smoke
-def test_the_declared_digest_is_the_draw_the_file_names() -> None:
+@pytest.mark.parametrize("tier", ["ci", "release"])
+def test_the_declared_digest_is_the_draw_the_file_names(tier: str) -> None:
     # The fixture records what its counts hash to, so a changed simulator is
     # a red test at the fixture rather than a drift in whatever was measured
-    # on it three tests later.
-    entry = fixture(PROBLEM, "ci")
+    # on it three tests later. The release file draws in 0.06 s, so both
+    # tiers are checked per pull request (issue #891).
+    entry = fixture(PROBLEM, tier)
 
     assert entry.params.counts_digest is not None
     assert counts_digest(fine_instance(entry.path)) == entry.params.counts_digest
