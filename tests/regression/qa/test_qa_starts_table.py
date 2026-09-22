@@ -31,6 +31,7 @@ def _row(start: str, gaps: tuple[float, ...], *, deterministic: bool) -> StartRo
         recovery=tuple(0.5 for _ in gaps),
         mean_error=tuple(0.1 for _ in gaps),
         converged=tuple(True for _ in gaps),
+        emptied=tuple(False for _ in gaps),
         iterations=tuple(10 for _ in gaps),
     )
 
@@ -69,6 +70,13 @@ def test_the_table_has_five_columns_one_row_per_start_in_order_and_a_safe_captio
     assert "120 s" in caption
     assert "2 seeds" in caption
     assert "host" in caption
+    # At one seed there is no spread to state, and the caption says so.
+    _, alone = build_table(
+        ROWS, instance="emission mixture stress", seconds=120, seeds=1
+    )
+    check_latex_safe(alone)
+    assert "one seed's" in alone
+    assert "standard deviation" not in alone
 
 
 @pytest.mark.smoke

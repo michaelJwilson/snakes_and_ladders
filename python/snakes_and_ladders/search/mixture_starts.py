@@ -573,12 +573,16 @@ class Polished:
         ``(iterations + 1,)``.
     converged : bool
         Whether the polish stopped at its tolerance rather than at its budget.
+    emptied : bool
+        Whether the polish stopped because a component's weight fell below
+        one pair's share, :func:`polish`'s third stop.
     """
 
     components: EmissionFamily
     weights: torch.Tensor
     log_likelihoods: np.ndarray
     converged: bool = False
+    emptied: bool = False
 
     @property
     def iterations(self) -> int:
@@ -604,6 +608,17 @@ def polish(
     by it --- fit in ``seconds``. The first iteration's cost is unknown until
     it has run, so it runs whenever ``seconds`` is positive, and a caller
     holding a ceiling checks the whole spend.
+
+    **A component that owns less than one pair stops the polish** under
+    ``seconds``. EM can empty a component while the log-likelihood still
+    rises: from the ``prior`` start at seed 3 on the stress draw, one weight
+    falls from 2.6e-7 at iteration 156 to 1.5e-231 at 179, the likelihood
+    climbing a nat an iteration, and the next E step underflows it to zero,
+    where the family's M step has no data to solve on and refuses. The
+    polish stops at the first weight times the pair count below one,
+    :attr:`Polished.emptied`, and hands over the fit it has; a fit with a
+    component on no pair is a fit of fewer components, and continuing it is
+    a different model.
 
     Each iteration is one call of
     :func:`~snakes_and_ladders.opt.emission_mixture.expectation_maximization`,
@@ -633,6 +648,7 @@ def polish(
     trace: list[float] = []
     longest = 0.0
     converged = False
+    emptied = False
     iteration = 0
     while True:
         if passes is not None and iteration >= passes:
@@ -650,6 +666,9 @@ def polish(
         tracked.record(iteration, log_likelihood=step.log_likelihood)
         weights, components = step.weights, step.components
         iteration += 1
+        if seconds is not None and float(weights.min()) * instance.n_samples < 1.0:
+            emptied = True
+            break
         if (
             seconds is not None
             and len(trace) > 1
@@ -664,7 +683,7 @@ def polish(
     tracked.record_cost(
         iteration, sum(int(t.element_size() * t.nelement()) for t in tensors)
     )
-    return Polished(components, weights, np.asarray(trace), converged)
+    return Polished(components, weights, np.asarray(trace), converged, emptied)
 
 
 @dataclass(frozen=True)
@@ -876,6 +895,8 @@ class StartRow:
         Largest relative error in a component's first-channel mean.
     converged : tuple[bool, ...]
         Whether the polish stopped at its tolerance.
+    emptied : tuple[bool, ...]
+        Whether the polish stopped at an emptied component.
     iterations : tuple[int, ...]
         EM iterations the polish ran.
     """
@@ -893,6 +914,7 @@ class StartRow:
     recovery: tuple[float, ...]
     mean_error: tuple[float, ...]
     converged: tuple[bool, ...]
+    emptied: tuple[bool, ...]
     iterations: tuple[int, ...]
 
     @property
@@ -924,5 +946,71 @@ class StartRow:
             recovery=tuple(t.recovery for t in trials),
             mean_error=tuple(t.mean_error for t in trials),
             converged=tuple(t.polished.converged for t in trials),
+            emptied=tuple(t.polished.emptied for t in trials),
             iterations=tuple(t.polished.iterations for t in trials),
         )
+
+
+@dataclass(frozen=True)
+class GapBand:
+    """One start's gap over its trials on a common grid of seconds (issue #898).
+
+    Parameters
+    ----------
+    seconds : np.ndarray
+        The grid, shape ``(n,)``.
+    mean : np.ndarray
+        The mean gap over the trials at each grid time, ``nan`` before every
+        trial has recorded a point.
+    std : np.ndarray
+        The sample standard deviation over the trials, ``nan`` where ``mean``
+        is and everywhere at one trial.
+    handover : tuple[float, float]
+        The mean seconds and the mean gap at the handover.
+    """
+
+    seconds: np.ndarray
+    mean: np.ndarray
+    std: np.ndarray
+    handover: tuple[float, float]
+
+
+def gap_band(trials: list[Trial], reference: float, seconds: np.ndarray) -> GapBand:
+    """Each trial's gap below ``reference`` held from each point to the next, read on ``seconds``.
+
+    A trial's curve is a sequence of states, so between two samples the gap
+    is the earlier one's, and after the last it is the last: the fit the cell
+    ended on. The mean and the band are taken over trials at the same wall
+    clock, which is what a reader of a runtime axis compares.
+
+    Returns
+    -------
+    GapBand
+
+    Raises
+    ------
+    ValueError
+        If ``trials`` is empty.
+    """
+    if not trials:
+        msg = "a band needs at least one trial"
+        raise ValueError(msg)
+    held = np.full((len(trials), seconds.shape[0]), np.nan)
+    for row, trial in enumerate(trials):
+        times = np.asarray([point[0] for point in trial.curve])
+        gaps = reference - np.asarray([point[1] for point in trial.curve])
+        # The last sample at or before each grid time; -1 before the first.
+        index = np.searchsorted(times, seconds, side="right") - 1
+        known = index >= 0
+        held[row, known] = gaps[index[known]]
+    started = ~np.isnan(held).any(axis=0)
+    mean = np.full(seconds.shape[0], np.nan)
+    std = np.full(seconds.shape[0], np.nan)
+    mean[started] = held[:, started].mean(axis=0)
+    if len(trials) > 1:
+        std[started] = held[:, started].std(axis=0, ddof=1)
+    handover = (
+        float(np.mean([t.curve[t.handover][0] for t in trials])),
+        float(np.mean([reference - t.curve[t.handover][1] for t in trials])),
+    )
+    return GapBand(seconds, mean, std, handover)
