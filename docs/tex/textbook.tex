@@ -3331,6 +3331,22 @@ up to the permutation of components, with the alignment part of the test. A
 component whose variance reaches the floor of Section~\ref{sec:properties}
 is a refusal, in either algorithm.
 
+\paragraph{Split and merge.}
+A converged alternation can hold one component across two generating ones and
+two on a third: moving a component between them lowers the likelihood on the
+way, so no iterate takes the move. Split-and-merge takes it in one step
+\citep{ueda2000}: merge a pair ranked by the cosine of their responsibility
+columns, split a component ranked by the local Kullback--Leibler divergence
+between the data it owns, $f_k(y_i) = r_{ik} / \sum_{i'} r_{i'k}$, and its own
+density, run partial expectation--maximization on the three with their total
+responsibility held fixed, then the full alternation, and keep the result only
+if the likelihood rose. The likelihood therefore never falls. Here a move is
+a re-weighting of the responsibility columns, the merged one their sum and the
+split one divided by a two-component seeding at two of its observations, so
+the family's own M step realizes it. Two identical components receive
+identical responsibilities and stay identical under the alternation; that
+fixed point is the one the test plants, and the first move repairs it.
+
 \subsection{Choosing among these at the supported sizes}
 \label{sec:mixture:discussion}
 Three algorithms are assumed: the alternation of

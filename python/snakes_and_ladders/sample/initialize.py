@@ -46,6 +46,16 @@ from snakes_and_ladders.sample.schedule import (
 )
 from snakes_and_ladders.sample.tempered import up_fraction
 
+#: The warm-up :class:`FromChain` runs unless told otherwise (issue #898): 300
+#: proposals driving the acceptance to 0.65 with the step jittered by 0.4.
+#: These are the values :data:`~snakes_and_ladders.sample.hmc.DUAL_AVERAGING_GAMMA`
+#: was measured at --- the drawn chain's acceptance 0.643 against the 0.65
+#: target over 10 seeds on the analytic Gaussian --- and 0.65 is Hoffman &
+#: Gelman's target for HMC. :mod:`~snakes_and_ladders.sample.hmc` states no
+#: default warm-up, since one right for one target is too short for the next,
+#: so this one is the start's and is stated here.
+CHAIN_ADAPTATION = hmc.Adaptation(warmup=300, target_acceptance=0.65, step_jitter=0.4)
+
 
 class FromChain(Initializer):
     """A start drawn from a short Hamiltonian chain on the objective itself.
@@ -55,6 +65,17 @@ class FromChain(Initializer):
     under a flat prior, which `opt/CLAUDE.md` records is improper for most
     models --- so what is taken from it is a *start*, never a posterior
     summary.
+
+    **The chain is warmed up by default.** Unless ``adaptation`` says
+    otherwise the chain runs :data:`CHAIN_ADAPTATION` first: the step size
+    and a diagonal mass are set by
+    :class:`~snakes_and_ladders.sample.hmc.Adaptation`, ``step_size`` is the
+    warm-up's starting point, and the ``burn_in`` and the draws run at the
+    values it ended on. Without it the chain runs at the caller's step and
+    unit mass whatever the objective's scale; ``adaptation=None`` is that
+    fixed-parameter chain at unit mass, bitwise what this class drew before
+    issue #898, and its cost is its proposals alone. The warm-up's gradients
+    are in ``force_evaluations``, so a caller charging the chain charges them.
 
     **Label switching is the hazard, not the step size.** A mixture
     likelihood is invariant under permuting its components, so a chain that
@@ -76,6 +97,9 @@ class FromChain(Initializer):
         Leapfrog steps per proposal.
     burn_in : int
         Proposals discarded before the kept draws.
+    adaptation : hmc.Adaptation | None
+        The warm-up run before the burn-in, :data:`CHAIN_ADAPTATION` by
+        default; ``None`` runs no warm-up.
 
     Raises
     ------
@@ -90,6 +114,7 @@ class FromChain(Initializer):
         generator: torch.Generator,
         n_steps: int = hmc.DEFAULT_STEPS,
         burn_in: int = 0,
+        adaptation: hmc.Adaptation | None = CHAIN_ADAPTATION,
     ) -> None:
         if n_samples < 1:
             msg = f"n_samples must be at least 1, got {n_samples}"
@@ -99,9 +124,10 @@ class FromChain(Initializer):
         self.generator = generator
         self.n_steps = n_steps
         self.burn_in = burn_in
+        self.adaptation = adaptation
 
     def chain(self, objective: Objective) -> hmc.HmcChain:
-        """The chain itself: the draws, the acceptance rate and what it cost.
+        """The chain itself: the draws, the acceptance rate, what it cost and what the warm-up set.
 
         Returns
         -------
@@ -114,6 +140,7 @@ class FromChain(Initializer):
             step_size=self.step_size,
             n_steps=self.n_steps,
             burn_in=self.burn_in,
+            adaptation=self.adaptation,
         )
 
     def starts(self, objective: Objective) -> list[torch.Tensor]:

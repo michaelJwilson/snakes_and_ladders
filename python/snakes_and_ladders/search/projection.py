@@ -44,7 +44,6 @@ from snakes_and_ladders.emissions import (
     EmissionFamily,
     NegativeBinomialEmission,
 )
-from snakes_and_ladders.opt import starts as opt_starts
 from snakes_and_ladders.opt.budget import Budget, Outcome
 from snakes_and_ladders.opt.constrain import (
     free_from_log_simplex,
@@ -76,6 +75,7 @@ from snakes_and_ladders.opt.mixture import (
     expectation_maximization as gaussian_expectation_maximization,
 )
 from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.opt.starts import Polished
 from snakes_and_ladders.opt.termination import Termination
 from snakes_and_ladders.sample.initialize import FromAnnealing, FromChain, FromTempering
 from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
@@ -610,12 +610,16 @@ def chain_seeding(
         because a seed drawn from a chain that has not mixed is a random
         restart with a longer bill.
     """
+    # No warm-up: the three chain candidates are matched at 72 gradients, and
+    # FromChain's default 300-proposal warm-up would add 2,700 to this one
+    # alone (issue #898).
     initializer = FromChain(
         CHAIN_DRAWS,
         CHAIN_STEP,
         _generator(rng),
         n_steps=CHAIN_TRAJECTORY,
         burn_in=CHAIN_BURN_IN,
+        adaptation=None,
     )
     chain = initializer.chain(surrogate(instance))
     return Seeding(
@@ -1339,21 +1343,22 @@ def _projected(objective: Objective) -> ProjectedObjective:
 
 def polish_projected(
     objective: Objective, theta: torch.Tensor, budget: Budget
-) -> opt_starts.Polished:
+) -> Polished:
     """:func:`fit_projection`'s loop from ``theta``: the seam's polisher of experiment 009.
 
     Returns
     -------
-    ~snakes_and_ladders.opt.starts.Polished
+    snakes_and_ladders.opt.starts.Polished
         The last parameters, the negative log-likelihood there, and how the
-        loop ended.
+        loop ended. Named in full: `search.mixture_starts` has a `Polished`
+        of its own, and a bare name is two targets to Sphinx.
     """
     projected = _projected(objective)
     with torch.no_grad():
         weights = torch.exp(projected.constrain(theta)["log_weight"])
         components = projected.components(theta)
     run = _projected_em(projected.instance, weights, components, budget)
-    return opt_starts.Polished(
+    return Polished(
         projected.theta_at(run.components, run.weights), -run.trace[-1], run.termination
     )
 
