@@ -2855,10 +2855,12 @@ beats restarts of descent at an equal budget of sweeps is a property of the
 instance and is measured on Section~\ref{sec:frustrated}'s, never asserted in
 general.
 
-A fifth kind is available and deliberately not used as a start: a tempered
-ensemble estimates a \emph{distribution} rather than a point, so its cold
-replica's weights, Equation~\ref{eq:tempered-weight}, are an answer and not a
-starting point. Reading one as the other is the standing error about
+A fifth kind separates two readings of one run. A tempered ensemble
+estimates a \emph{distribution}, so its cold replica's weights,
+Equation~\ref{eq:tempered-weight}, are an answer and not a starting point;
+the lowest-valued point the ensemble visits is a start, and
+\texttt{FromTempering} hands over that point and nothing of the weights.
+Reading the weights as a start is the standing error about
 Appendix~\ref{app:tempering}.
 
 \section{Relaxing a Discrete Decision}
