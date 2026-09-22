@@ -574,8 +574,8 @@ class Polished:
     converged : bool
         Whether the polish stopped at its tolerance rather than at its budget.
     emptied : bool
-        Whether the polish stopped because a component's weight fell below
-        one pair's share, :func:`polish`'s third stop.
+        Whether the polish stopped because EM emptied a component and its M
+        step refused, :func:`polish`'s third stop.
     """
 
     components: EmissionFamily
@@ -609,16 +609,18 @@ def polish(
     it has run, so it runs whenever ``seconds`` is positive, and a caller
     holding a ceiling checks the whole spend.
 
-    **A component that owns less than one pair stops the polish** under
-    ``seconds``. EM can empty a component while the log-likelihood still
-    rises: from the ``prior`` start at seed 3 on the stress draw, one weight
-    falls from 2.6e-7 at iteration 156 to 1.5e-231 at 179, the likelihood
-    climbing a nat an iteration, and the next E step underflows it to zero,
-    where the family's M step has no data to solve on and refuses. The
-    polish stops at the first weight times the pair count below one,
-    :attr:`Polished.emptied`, and hands over the fit it has; a fit with a
-    component on no pair is a fit of fewer components, and continuing it is
-    a different model.
+    **A component EM has emptied stops the polish** under ``seconds``. EM
+    can drive a weight to underflow while the log-likelihood still rises:
+    from the ``prior`` start at seed 3 on the stress draw, one weight falls
+    from 2.6e-7 at iteration 156 to 1.5e-231 at 179, the likelihood climbing
+    a nat an iteration, and the next E step underflows its responsibilities
+    to zero, where the family's M step has no data to solve on and refuses.
+    The polish stops there, :attr:`Polished.emptied`, and hands over the fit
+    of the iteration before: the refusal is caught only when the E step at
+    that fit leaves some component no responsibility at all, and raised
+    otherwise. A small weight is not by itself the stop: from the same start
+    at seed 0 one dips under one pair's share by iteration 18 and recovers,
+    and EM converges 9.7 nats past the generating parameters.
 
     Each iteration is one call of
     :func:`~snakes_and_ladders.opt.emission_mixture.expectation_maximization`,
@@ -658,17 +660,27 @@ def polish(
         ):
             break
         began = time.perf_counter()
-        step = expectation_maximization(
-            instance.observations, weights, components, max_iterations=1, tolerance=0.0
-        )
+        try:
+            step = expectation_maximization(
+                instance.observations,
+                weights,
+                components,
+                max_iterations=1,
+                tolerance=0.0,
+            )
+        except ValueError:
+            # The one refusal this stop reads: a component the E step leaves
+            # no responsibility on, whose M step has nothing to solve on.
+            owned = responsibilities(values, torch.log(weights), components).sum(dim=0)
+            if seconds is None or float(owned.min()) > 0.0:
+                raise
+            emptied = True
+            break
         longest = max(longest, time.perf_counter() - began)
         trace.append(step.log_likelihood)
         tracked.record(iteration, log_likelihood=step.log_likelihood)
         weights, components = step.weights, step.components
         iteration += 1
-        if seconds is not None and float(weights.min()) * instance.n_samples < 1.0:
-            emptied = True
-            break
         if (
             seconds is not None
             and len(trace) > 1
