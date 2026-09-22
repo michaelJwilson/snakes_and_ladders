@@ -41,6 +41,7 @@ from scipy.optimize import linear_sum_assignment
 
 from snakes_and_ladders.emissions import (
     BetaBinomialEmission,
+    EmissionFamily,
     NegativeBinomialEmission,
 )
 from snakes_and_ladders.opt.budget import Budget, Outcome
@@ -851,7 +852,7 @@ class Fitted:
         return float(self.log_likelihoods[-1])
 
 
-def _matching(fitted: IndependentCountPair, truth: IndependentCountPair) -> np.ndarray:
+def match_components(fitted: EmissionFamily, truth: EmissionFamily) -> np.ndarray:
     """Which true component each fitted one stands for, by linear assignment.
 
     Both families' :meth:`alignment_key` are in observation units, so the cost
@@ -958,7 +959,7 @@ def fit_projection(
 
     posterior = responsibilities(values, log_weight, components)
     assigned = np.asarray(posterior.argmax(dim=1).numpy())
-    columns = _matching(components, instance.truth)
+    columns = match_components(components, instance.truth)
     fitted_mean = components.total.mean.numpy()
     true_mean = instance.truth.total.mean.numpy()[columns]
     return Fitted(
