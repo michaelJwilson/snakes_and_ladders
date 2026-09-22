@@ -35,13 +35,17 @@ InstanceT = TypeVar("InstanceT")
 
 # How the (method, instance, seed) cells of a comparison run beside each
 # other: processes, because a method is a fit or a sweep loop in Python that
-# holds the GIL. The intra-op thread count is left at the process default in
-# workers and serial alike, so the two runs reduce in the same order on one
-# machine. Each cell already seeds its own generator, so the cells are
+# holds the GIL. Each cell already seeds its own generator, so the cells are
 # independent by construction. No pool reached 2x at 4 workers at the
 # mid-size tier; STATUS.md carries the measurement (issue #344).
 _COMPARE_BACKEND: Pool = "processes"
-_COMPARE_INTRA_OP_THREADS: int | None = None
+
+# The intra-op thread count of a pooled worker: one, so a pool of one worker
+# per core uses the cores and no more (DEV.md, the thread rule). A spawned
+# worker otherwise starts torch at every core: four workers of the projected
+# fit held a 4-core host at a 1-minute load of 15 and did not finish 70 cells
+# in 900 s (issue #891). The serial loop keeps the process's own setting.
+_COMPARE_POOLED_INTRA_OP_THREADS = 1
 
 
 class OverspendError(ValueError):
@@ -281,7 +285,8 @@ def compare(
         At least one. The best over seeds is what each method is scored on.
     workers : int
         Cells run at once, through :func:`snakes_and_ladders.parallel.map_tasks` on
-        a process pool; ``1`` is the serial loop. Explicit rather than
+        a process pool, each worker at one intra-op thread; ``1`` is the serial
+        loop, at the process's own thread count. Explicit rather than
         defaulted, so a comparison does not change with the machine; bitwise
         equal at every count because each cell seeds itself. Measured under
         2x at 4 workers at the mid-size tier (``STATUS.md`` §0), so callers
@@ -327,7 +332,7 @@ def compare(
         ],
         workers=workers,
         backend=_COMPARE_BACKEND,
-        intra_op_threads=_COMPARE_INTRA_OP_THREADS,
+        intra_op_threads=None if workers == 1 else _COMPARE_POOLED_INTRA_OP_THREADS,
     )
     for (row, index, _seed), outcome in zip(cells, outcomes, strict=True):
         if outcome.spent > budget.size:

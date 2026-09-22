@@ -373,7 +373,14 @@ go through it, each taking `workers=` explicitly — `opt.fit.fit_from` (starts)
   multi-start fit 2.9× (1.40 s against 0.49 s at 8 taxa × 1000 sites),
   because torch's intra-op parallelism over the sites is the parallelism that
   pays there, and no pool reached 2×. Serial and workers then run at the
-  same count on one machine, which keeps the two bitwise equal. A
+  same count on one machine, which keeps the two bitwise equal.
+  `opt.budget.compare` is the exception: a pooled worker runs at one thread
+  and the serial loop at the process's own count, because a spawned worker
+  starts torch at every core --- four workers of the 100-component projected
+  fit held the 4-core host at a 1-minute load of 15 and did not finish 70
+  cells in 900 s, where at one thread each 17 cells took 176 s at a load
+  under 4 (issue #891). Its serial and pooled runs agree bitwise where the
+  process runs at one thread, as the suite's does (`tests/conftest.py`). A
   site whose task body is a `torch` op above the parallel grain, or a Rust
   kernel with the GIL released, is the case for `backend="threads"` — and
   every kernel of `oxi_snakes_and_ladders` releases it (`Python::detach`,
