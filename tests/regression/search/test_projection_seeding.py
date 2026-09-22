@@ -33,9 +33,17 @@ import pytest
 import torch
 from scipy.optimize import minimize_scalar
 from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.opt.budget import Budget
-from snakes_and_ladders.opt.initialize import Initializer
-from snakes_and_ladders.opt.mixture import kmeans_plus_plus, uniform_seeds
+from snakes_and_ladders.opt.budget import Budget, compare
+from snakes_and_ladders.opt.initialize import (
+    FromObjective,
+    Initializer,
+    quantile_locations,
+)
+from snakes_and_ladders.opt.mixture import (
+    GaussianMixtureObjective,
+    kmeans_plus_plus,
+    uniform_seeds,
+)
 from snakes_and_ladders.sample.initialize import FromAnnealing, FromChain, FromTempering
 from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
 from snakes_and_ladders.sample.statistics import chi_square_p_value
@@ -44,12 +52,16 @@ from snakes_and_ladders.search.projection import (
     SEEDINGS,
     CountPairAt,
     ProjectedCounts,
+    SeededFit,
+    Seeding,
     data_seeding,
     emission_seeding,
     euclidean_seeding,
     fit_projection,
     flatten,
     project,
+    seed_at_means,
+    state_bytes,
 )
 from snakes_and_ladders.sim.count_pairs import (
     SUCCESSES,
@@ -59,6 +71,7 @@ from snakes_and_ladders.sim.count_pairs import (
     planted_labels,
 )
 from snakes_and_ladders.sim.fixtures import KEY, fixture
+from snakes_and_ladders.track import MemoryRun, track
 
 PROBLEM = "spatio_sequential_counts"
 
@@ -701,3 +714,146 @@ def test_the_non_euclidean_seedings_draw_the_law_of_the_metric_they_declare() ->
     law = law / law.sum()
     assert float(law.max()) > 3.0 / rows.shape[0], float(law.max())
     assert 0.5 * float(np.abs(law - 1.0 / rows.shape[0]).sum()) > 0.3
+
+
+@pytest.mark.smoke
+def test_the_tracked_curve_is_the_fit_s_own_log_likelihoods() -> None:
+    # The run's series is the field's history, not a second definition of it
+    # (`track.py`), so the notebook that plots one curve per candidate reads
+    # what the fit already reports (issue #887).
+    instance = _projection("ci", CI_SAMPLES, 0)
+
+    with track(MemoryRun()) as tracked:
+        fitted = fit_projection(
+            instance, "emission++", _seam("ci"), CI_BUDGET, np.random.default_rng(0)
+        )
+    run = tracked.run
+    assert isinstance(run, MemoryRun)
+
+    recorded = run.series("log_likelihood")
+    assert [step for step, _ in recorded] == list(range(len(fitted.log_likelihoods)))
+    assert [value for _, value in recorded] == fitted.log_likelihoods.tolist()
+    assert [value for _, value in run.series("objective")] == [
+        -value for value in fitted.log_likelihoods
+    ]
+    assert run.last("state_bytes") == float(
+        state_bytes(
+            torch.full(
+                (instance.n_components,),
+                1.0 / instance.n_components,
+                dtype=torch.float64,
+            ),
+            instance.truth,
+        )
+    )
+
+
+@pytest.mark.smoke
+@pytest.mark.patch
+def test_an_untracked_fit_is_the_fit_before_the_hook() -> None:
+    # The seam costs a returned call an iteration and moves no number: the
+    # default binding is `track.NULL` (`track.py`).
+    instance = _projection("ci", CI_SAMPLES, 0)
+    arguments = (instance, "kmeans++", _seam("ci"), CI_BUDGET)
+
+    outside = fit_projection(*arguments, np.random.default_rng(0))
+    with track(MemoryRun()):
+        inside = fit_projection(*arguments, np.random.default_rng(0))
+
+    assert outside.log_likelihoods.tolist() == inside.log_likelihoods.tolist()
+
+
+@pytest.mark.smoke
+def test_a_seeding_made_elsewhere_is_fitted_through_the_same_loop() -> None:
+    # The seam a start outside `SEEDINGS` reaches the fit by: the loop, the
+    # budget and the referee are the candidates' own, so what separates it
+    # from them is the seeding and nothing after it (issue #887).
+    instance = _projection("ci", CI_SAMPLES, 0)
+    at = _seam("ci")
+    made = emission_seeding(instance, at, np.random.default_rng(0))
+
+    named = fit_projection(
+        instance, "emission++", at, CI_BUDGET, np.random.default_rng(0)
+    )
+    given = fit_projection(
+        instance, "given", at, CI_BUDGET, np.random.default_rng(1), seeding=made
+    )
+
+    assert given.name == "given"
+    assert given.log_likelihoods.tolist() == named.log_likelihoods.tolist()
+    with pytest.raises(KeyError):
+        fit_projection(instance, "given", at, CI_BUDGET, np.random.default_rng(0))
+
+
+@pytest.mark.smoke
+def test_locations_reach_the_seam_through_the_observations_nearest_them() -> None:
+    # `seed_at_means` is what the chain-based candidates already went through,
+    # exposed for a start that holds means rather than a surrogate's `theta`
+    # (issue #887): the seeded family is the seam's on those observations.
+    instance = _projection("ci", CI_SAMPLES, 0)
+    at = _seam("ci")
+    totals = np.asarray(instance.observations, dtype=np.float64)[:, TOTAL]
+    means = torch.as_tensor(np.sort(totals[[3, 17, 91, 402]]))
+
+    seeded = seed_at_means(instance, means, at)
+
+    nearest = np.abs(totals[None, :] - means.numpy()[:, None]).argmin(axis=1)
+    assert _same_components(seeded, at(instance.observations[nearest]))
+
+
+@pytest.mark.smoke
+def test_a_start_outside_the_candidate_set_compares_at_the_same_budget() -> None:
+    # `compare` holds the budget equal; a start reaching the seam by another
+    # rule enters the same comparison rather than a second one beside it.
+    instance = _projection("ci", CI_SAMPLES, 0)
+    at = _seam("ci")
+
+    comparison = compare(
+        {
+            "emission++": SeededFit("emission++", at),
+            "given": SeededFit("given", at, emission_seeding),
+        },
+        [instance],
+        CI_BUDGET,
+        [0],
+        workers=1,
+    )
+
+    assert comparison.best[0, 0] == comparison.best[1, 0]
+    assert comparison.spent.max() <= CI_BUDGET.size
+
+
+@pytest.mark.end2end
+def test_a_start_built_from_the_surrogate_s_locations_recovers_the_truth() -> None:
+    # What `docs/nb/spatio_sequential_starts.ipynb` rows (d) and (e) state: a
+    # start that reaches the seam from locations rather than from a rule over
+    # the pairs leaves a fit that assigns the observations to their generating
+    # component as the candidates do. The referee is the draw's own truth, and
+    # the bound is the one every candidate is held to.
+    instance = _projection("ci", CI_SAMPLES, 0)
+    at = _seam("ci")
+    objective = GaussianMixtureObjective(
+        np.asarray(instance.observations, dtype=np.float64)[:, TOTAL],
+        instance.n_components,
+    )
+    nominated = objective.components(FromObjective().starts(objective)[0]).mean
+    quantiles = quantile_locations(objective.observations, instance.n_components)
+
+    for label, means in (("objective", nominated), ("quantile", quantiles)):
+        fitted = fit_projection(
+            instance,
+            label,
+            at,
+            CI_BUDGET,
+            np.random.default_rng([887, 0]),
+            seeding=Seeding(seed_at_means(instance, means, at), 0.0),
+        )
+        assert fitted.recovery >= CI_RECOVERY, (
+            f"{label} reached {fitted.recovery:.3f}, below {CI_RECOVERY}"
+        )
+
+    # And the notebook's one structural finding there: the surrogate's own
+    # nominated point *is* the quantile placement, so the two starts are one.
+    assert _same_components(
+        seed_at_means(instance, nominated, at), seed_at_means(instance, quantiles, at)
+    )

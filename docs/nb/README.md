@@ -14,6 +14,7 @@ code with what it checks.
 | [`classical_codes.ipynb`](classical_codes.ipynb) | Classical error-correcting codes: Gallager's (3,6) ensemble and the bicycle construction at matched length and degrees, and the algebraic codes whose decoder is closed form --- repetition, single parity check, Hamming, Golay, Reed--Solomon over `GF(8)` | The general sum-product on the parity-check factor graph; enumeration of all 32,768 codewords of a cycle-free code, and of the 64 of the bicycle fixture; the density-evolution threshold 0.4294; the two exact decodings, which bound the decoder on the quantity each minimizes; the binomial tail, which is a bounded-distance decoder's block error rate exactly; the channel capacity, which bounds every rate from above |
 | [`turbo.ipynb`](turbo.ipynb) | Turbo code, two memory-2 (7,5) recursive systematic encoders through a seeded interleaver | Enumeration of all 4,096 messages of the `K = 12` instance; the tree schedule of the general sum-product on the trellis factor graph; a parity-check matrix built by GF(2) nullspace; the uncoded closed form `Q(sqrt(2 E_b / N_0))` |
 | [`spatio_sequential.ipynb`](spatio_sequential.ipynb) | Coupled spatio-sequential model: a Potts prior over class labels gating one hidden chain per class | Enumeration over all 65,536 joint states of the CI fixture; the per-class forward recursion as a second route to the evidence; planted labels on a 10x10 lattice |
+| [`spatio_sequential_starts.ipynb`](spatio_sequential_starts.ipynb) | Where the coupled fit starts: the thirteen seedings of the emission parameters in projection, and `Emission_Mixture++` on the enumerable coupled instance | Enumeration over all 65,536 joint states of the CI fixture, and the per-class forward recursion beside it; the generating parameters' own value and generating component, which `tests/regression/search/test_projection_seeding.py` records as the only exact statements a projected fit has; the published k-means++ guarantee against the exact one-dimensional optimum |
 
 Each ends with a **Further Work** section naming what it could not demonstrate
 and the issue that carries it: a notebook that quietly skipped the unbuilt half
@@ -39,7 +40,7 @@ request whose re-executed output disagrees with the committed one
 standard the figures in `docs/tex/` are.
 
 **Every notebook here is re-executed, on every run.** Which ones a run checks
-is its arguments and nothing else — the notebooks named, or all six when none
+is its arguments and nothing else — the notebooks named, or all seven when none
 is — and the run states the set before executing any of it. A digest decided
 it until issue #480: `<name>.inputs` beside each notebook recorded a hash of
 its code cells, the modules they import and the fixtures they name (#372),

@@ -59,6 +59,9 @@ notebooks = [
     "nbclient>=0.10",
     "nbformat>=5.10",
     "ipykernel>=6.29",
+    # Jupyter Notebook, so a notebook under docs/nb/ opens where it is edited
+    # (issue #887). BSD-3-Clause, above the 1,000-star bar.
+    "notebook>=7.2",
 ]
 # External frameworks that front or referee a hand-rolled implementation
 # (issue #322). An extra rather than a core dependency: the core install and
