@@ -1,0 +1,6 @@
+# A notebook's committed outputs are compared by infra/check_notebooks.py, so
+# the file carries them and its pull-request diff is JSON with base64 images
+# that no reviewer reads (issue #889). GitHub folds a generated file behind
+# "Load diff" and leaves it out of the language statistics; git itself reads
+# nothing here, so `git diff` and `git log -p` still show the JSON when wanted.
+docs/nb/*.ipynb linguist-generated=true
