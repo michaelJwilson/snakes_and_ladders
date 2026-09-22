@@ -825,7 +825,8 @@ def test_a_start_outside_the_candidate_set_compares_at_the_same_budget() -> None
 
 @pytest.mark.end2end
 def test_a_start_built_from_the_surrogate_s_locations_recovers_the_truth() -> None:
-    # What `docs/nb/spatio_sequential_starts.ipynb` rows (d) and (e) state: a
+    # What the issue #887 notebook stated of its location starts, before issue
+    # #891 moved it to the emission mixture alone: a
     # start that reaches the seam from locations rather than from a rule over
     # the pairs leaves a fit that assigns the observations to their generating
     # component as the candidates do. The referee is the draw's own truth, and

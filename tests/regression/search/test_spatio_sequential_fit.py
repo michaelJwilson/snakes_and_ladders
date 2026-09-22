@@ -351,8 +351,9 @@ def test_an_untracked_block_ascent_is_the_fit_before_the_hook() -> None:
 
 @pytest.mark.end2end
 def test_the_seeded_start_recovers_planted_labels_at_the_enumerable_size() -> None:
-    # What `docs/nb/spatio_sequential_starts.ipynb` section (g) states: on the
-    # instance the enumeration referees, block ascent from Emission_Mixture++
+    # What the issue #887 notebook stated at its enumerable size, before issue
+    # #891 moved it to the emission mixture alone: on the instance the
+    # enumeration referees, block ascent from Emission_Mixture++
     # labels the planted stripes above the 0.5 chance of two classes, and its
     # fitted joint is not below the evidence at the generating parameters ---
     # at four nodes and six positions the fit has more parameters than the

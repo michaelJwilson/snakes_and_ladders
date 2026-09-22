@@ -9,7 +9,8 @@ oracle: none
 # 100,000 count pairs, and M x K = 100 (class, state) components: the
 # component count experiment 009 fitted in projection, on a lattice whose
 # planted labelling (sim.count_pairs.planted_labels) is one row per class.
-# `docs/nb/spatio_sequential_starts.ipynb` reads it, and issue #555 names it
+# No notebook reads it since issue #891 moved the starts notebook to the
+# emission mixture alone; issue #555 names it
 # as the instance missing between the two others.
 #
 # The stated oracle is none: at 100 vertices there is no exact evidence. What
