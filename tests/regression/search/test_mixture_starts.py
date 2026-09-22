@@ -15,6 +15,7 @@ import math
 
 import numpy as np
 import pytest
+import torch
 from snakes_and_ladders.cost import Cost
 from snakes_and_ladders.opt.budget import Budget, compare
 from snakes_and_ladders.opt.emission_mixture import CountPairSeeding
@@ -216,3 +217,22 @@ def test_a_band_holds_each_trial_between_its_samples_and_averages_across_trials(
     assert bool((twice.std[1:] == 0.0).all())
     with pytest.raises(ValueError, match="at least one"):
         gap_band([], reference, grid)
+
+
+@pytest.mark.analytic
+def test_a_polish_stops_where_a_component_owns_less_than_one_pair() -> None:
+    # Issue #898: EM can drive a weight to underflow while the likelihood
+    # rises, and the M step then refuses a component with no data. A
+    # component seeded at (2000, 1000), far past every pair of the ci draw,
+    # owns 1.4e-6 of it after one iteration; the polish stops there under
+    # its seconds and says so, and a fixed polish of passes has no such stop.
+    instance = _instance()
+    rows = np.array([[30.0, 5.0], [200.0, 160.0], [2000.0, 1000.0]])
+    polished = polish(instance, instance.at(rows), seconds=CEILING.size)
+    assert polished.emptied
+    assert not polished.converged
+    assert polished.iterations == 1
+    assert float(polished.weights.min()) * instance.n_samples < 1.0
+    fixed = polish(instance, instance.at(rows), passes=1)
+    assert not fixed.emptied
+    assert torch.equal(fixed.weights, polished.weights)

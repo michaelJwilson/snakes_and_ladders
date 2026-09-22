@@ -31,6 +31,7 @@ def _row(start: str, gaps: tuple[float, ...], *, deterministic: bool) -> StartRo
         recovery=tuple(0.5 for _ in gaps),
         mean_error=tuple(0.1 for _ in gaps),
         converged=tuple(True for _ in gaps),
+        emptied=tuple(False for _ in gaps),
         iterations=tuple(10 for _ in gaps),
     )
 
