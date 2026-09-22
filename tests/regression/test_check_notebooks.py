@@ -20,11 +20,13 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import check_notebooks
 import pytest
 from check_notebooks import (
     differences,
     image_count,
     main,
+    over_budget,
     structure_problems,
     text_outputs,
 )
@@ -69,6 +71,46 @@ def test_a_printed_number_is_compared() -> None:
     assert len(reported) == 1
     assert "-11678.1596" in reported[0]
     assert "-11679.1596" in reported[0]
+
+
+def _tagged(cell: dict[str, Any], *tags: str) -> dict[str, Any]:
+    return {**cell, "metadata": {"tags": list(tags)}}
+
+
+@pytest.mark.critical
+@pytest.mark.infra
+def test_a_wall_clock_cell_is_not_compared_and_an_untagged_one_is() -> None:
+    # Issue #891: a printed wall clock differs on every run, so the tag
+    # exempts that cell's text. The same outputs untagged, or under another
+    # tag, are still a disagreement.
+    committed = _cell(_stream("prior  12.31 s\n"))
+    executed = _cell(_stream("prior  12.87 s\n"))
+
+    tagged = differences(
+        "n.ipynb", [_tagged(committed, "wall-clock")], [_tagged(executed, "wall-clock")]
+    )
+    untagged = differences("n.ipynb", [committed], [executed])
+    other = differences(
+        "n.ipynb", [_tagged(committed, "slow")], [_tagged(executed, "slow")]
+    )
+
+    assert tagged == []
+    assert len(untagged) == 1
+    assert "12.87" in untagged[0]
+    assert len(other) == 1
+
+
+@pytest.mark.critical
+@pytest.mark.infra
+def test_a_wall_clock_cell_that_lost_its_figure_is_still_reported() -> None:
+    # The tag exempts a clock's text and nothing else: a figure is not a clock.
+    committed = [_tagged(_cell(_stream("1.2 s\n"), _figure()), "wall-clock")]
+    executed = [_tagged(_cell(_stream("1.9 s\n")), "wall-clock")]
+
+    reported = differences("n.ipynb", committed, executed)
+
+    assert len(reported) == 1
+    assert "figure" in reported[0]
 
 
 @pytest.mark.critical
@@ -295,3 +337,20 @@ def test_every_committed_notebook_passes_the_structural_check() -> None:
     for path in notebooks:
         cells = json.loads(path.read_text())["cells"]
         assert structure_problems(path.name, cells) == []
+
+
+@pytest.mark.infra
+def test_a_notebook_over_the_budget_fails_and_one_under_it_passes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Issue #891: the budget is stated, so the check is against the constant
+    # and not a slow notebook. The message names the time and the budget.
+    monkeypatch.setattr(check_notebooks, "NOTEBOOK_BUDGET", 300)
+
+    over = over_budget("n.ipynb", 301.2)
+
+    assert len(over) == 1
+    assert "301 s" in over[0]
+    assert "300 s budget" in over[0]
+    assert over_budget("n.ipynb", 299.8) == []
+    assert over_budget("n.ipynb", 300.0) == []

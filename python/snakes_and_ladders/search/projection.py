@@ -31,6 +31,7 @@ identical one whatever seeded it. A gradient is two, forward and backward.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -49,9 +50,21 @@ from snakes_and_ladders.opt.emission_mixture import (
     plus_plus_start,
     uniform_start,
 )
+from snakes_and_ladders.opt.initialize import (
+    FromObjective,
+    Perturbed,
+    RandomRestart,
+    quantile_locations,
+)
 from snakes_and_ladders.opt.mixture import (
     GaussianMixtureObjective,
+    KMeansPlusPlus,
     emission_mixture_plus_plus,
+    mixture_log_likelihood,
+    responsibilities,
+)
+from snakes_and_ladders.opt.mixture import (
+    expectation_maximization as gaussian_expectation_maximization,
 )
 from snakes_and_ladders.opt.termination import Termination
 from snakes_and_ladders.sample.initialize import FromAnnealing, FromChain, FromTempering
@@ -62,7 +75,7 @@ from snakes_and_ladders.sim.count_pairs import (
     planted_labels,
 )
 from snakes_and_ladders.sim.spatio_sequential import SpatioSequentialParams
-from snakes_and_ladders.track import current
+from snakes_and_ladders.track import MemoryRun, current, track
 
 #: Passes charged to one gradient of the surrogate objective: the forward
 #: evaluation and the backward sweep over the same ``N x C`` densities.
@@ -667,6 +680,132 @@ SEEDINGS: dict[str, Callable[..., Seeding]] = {
 }
 
 
+#: Iterations the Gaussian-mixture start runs on the first channel: the
+#: ceiling `qa.mixture_seeding` fits experiment 010's control at.
+GAUSSIAN_EM_ITERATIONS = 500
+
+#: Restarts :func:`restart_seeding` draws, and the spread it draws them at in
+#: unconstrained coordinates. A restart costs one surrogate evaluation, which
+#: is charged as one pass.
+RESTARTS = 4
+RESTART_SCALE = 0.5
+
+
+def gaussian_em_seeding(
+    instance: ProjectedCounts, at: ComponentsAt, rng: np.random.Generator
+) -> Seeding:
+    """The Gaussian mixture fitted to the first channel, its means the locations.
+
+    Experiment 010's control: expectation--maximization of
+    :class:`~snakes_and_ladders.opt.mixture.GaussianMixtureObjective` from one
+    k-means++ start, for :data:`GAUSSIAN_EM_ITERATIONS` iterations, one pass
+    each --- the calls :func:`snakes_and_ladders.qa.mixture_seeding.fitted`
+    makes, here so a process pool can run it (issues #887, #891).
+
+    Returns
+    -------
+    Seeding
+        Its diagnostics carry how the Gaussian fit ended.
+    """
+    channel = np.asarray(instance.observations, dtype=np.float64)[:, TOTAL]
+    objective = GaussianMixtureObjective(channel, instance.n_components)
+    start = KMeansPlusPlus(1, rng).starts(objective)[0]
+    fitted = gaussian_expectation_maximization(
+        channel,
+        torch.exp(objective.constrain(start)["log_weight"]).detach(),
+        objective.components(start),
+        max_iterations=GAUSSIAN_EM_ITERATIONS,
+    )
+    ended = fitted.termination
+    return Seeding(
+        seed_at_means(instance, fitted.components.mean, at),
+        float(fitted.iterations),
+        "" if ended is None else f"{ended.reason.value} after {ended.iterations}",
+    )
+
+
+def objective_seeding(
+    instance: ProjectedCounts, at: ComponentsAt, _rng: np.random.Generator
+) -> Seeding:
+    """The surrogate's own nominated point, through :class:`FromObjective`.
+
+    Returns
+    -------
+    Seeding
+    """
+    objective = surrogate(instance)
+    theta = FromObjective().starts(objective)[0]
+    return Seeding(seed_at_means(instance, objective.components(theta).mean, at), 0.0)
+
+
+def perturbed_seeding(
+    instance: ProjectedCounts, at: ComponentsAt, _rng: np.random.Generator
+) -> Seeding:
+    """That point, tilted off a symmetry it may be stationary at, through :class:`Perturbed`.
+
+    Returns
+    -------
+    Seeding
+    """
+    objective = surrogate(instance)
+    theta = Perturbed().starts(objective)[0]
+    return Seeding(seed_at_means(instance, objective.components(theta).mean, at), 0.0)
+
+
+def restart_seeding(
+    instance: ProjectedCounts, at: ComponentsAt, rng: np.random.Generator
+) -> Seeding:
+    """The best by surrogate value of :data:`RESTARTS` points drawn by :class:`RandomRestart`.
+
+    Returns
+    -------
+    Seeding
+    """
+    objective = surrogate(instance)
+    thetas = RandomRestart(RESTARTS, RESTART_SCALE, rng).starts(objective)
+    best = min(thetas, key=lambda theta: float(objective(theta)))
+    return Seeding(
+        seed_at_means(instance, objective.components(best).mean, at),
+        float(len(thetas)),
+    )
+
+
+def quantile_seeding(
+    instance: ProjectedCounts, at: ComponentsAt, _rng: np.random.Generator
+) -> Seeding:
+    """Evenly spaced quantiles of the first channel, through :func:`quantile_locations`.
+
+    Returns
+    -------
+    Seeding
+    """
+    channel = torch.as_tensor(
+        np.asarray(instance.observations, dtype=np.float64)[:, TOTAL]
+    )
+    return Seeding(
+        seed_at_means(instance, quantile_locations(channel, instance.n_components), at),
+        0.0,
+    )
+
+
+#: The starts that produce *locations* rather than observations: the
+#: Gaussian-mixture control and the four of :mod:`snakes_and_ladders.opt.initialize`,
+#: each realized at the seam by :func:`seed_at_means`. Held apart from
+#: :data:`SEEDINGS`, which is experiment 009's candidate set and what the
+#: suite parametrizes over; module-level, so a process pool can run them
+#: (issue #891).
+LOCATION_SEEDINGS: dict[str, Callable[..., Seeding]] = {
+    "gaussian-em": gaussian_em_seeding,
+    "objective": objective_seeding,
+    "perturbed": perturbed_seeding,
+    "restart": restart_seeding,
+    "quantile": quantile_seeding,
+}
+
+#: The starts that read no generator: one run of each is every run.
+DETERMINISTIC = frozenset({"objective", "perturbed", "quantile"})
+
+
 @dataclass(frozen=True)
 class Fitted:
     """One seeding, and the fit it started.
@@ -692,6 +831,9 @@ class Fitted:
     termination : Termination | None
         Whether the fit met its relative tolerance or spent the budget, and
         after how many iterations (issue #860).
+    components : IndependentCountPair | None
+        The fitted family, so a caller draws where the fit left the
+        components beside where the seeding put them (issue #891).
     """
 
     name: str
@@ -701,6 +843,7 @@ class Fitted:
     recovery: float
     mean_error: float
     termination: Termination | None = None
+    components: IndependentCountPair | None = None
 
     @property
     def log_likelihood(self) -> float:
@@ -798,18 +941,23 @@ def fit_projection(
         if len(trace) > 1 and abs(trace[-1] - trace[-2]) <= TOLERANCE * abs(trace[-1]):
             converged = True
             break
-    final = expectation_maximization(
-        instance.observations, weights, components, max_iterations=1, tolerance=0.0
-    )
-    trace.append(final.log_likelihood)
+    # The value and the posterior at the last parameters: the E step the loop
+    # above runs, without the M step a further EM iteration would take and
+    # discard. The M step was 4.6 s of a 5.0 s iteration at 100 components
+    # (issue #891); the two numbers are the same calls on the same inputs.
+    values = torch.as_tensor(instance.observations, dtype=torch.float64)
+    log_weight = torch.log(weights)
+    final_log_likelihood = float(mixture_log_likelihood(values, log_weight, components))
+    trace.append(final_log_likelihood)
     tracked.record(
         len(trace) - 1,
-        objective=-final.log_likelihood,
-        log_likelihood=final.log_likelihood,
+        objective=-final_log_likelihood,
+        log_likelihood=final_log_likelihood,
     )
     tracked.record_cost(len(trace) - 1, state_bytes(weights, components))
 
-    assigned = np.asarray(final.responsibilities.argmax(dim=1).numpy())
+    posterior = responsibilities(values, log_weight, components)
+    assigned = np.asarray(posterior.argmax(dim=1).numpy())
     columns = _matching(components, instance.truth)
     fitted_mean = components.total.mean.numpy()
     true_mean = instance.truth.total.mean.numpy()[columns]
@@ -821,6 +969,7 @@ def fit_projection(
         recovery=float(np.mean(columns[assigned] == np.asarray(instance.components))),
         mean_error=float(np.max(np.abs(fitted_mean - true_mean) / true_mean)),
         termination=Termination.after(iterations, converged=converged),
+        components=components,
     )
 
 
@@ -870,3 +1019,91 @@ class SeededFit:
             else self.seeding(instance, self.at, rng),
         )
         return Outcome(-fitted.log_likelihood, fitted.iterations)
+
+
+@dataclass(frozen=True)
+class Trial:
+    """One timed run of a start and its fit, as :class:`TimedFit` reports it.
+
+    Parameters
+    ----------
+    fitted : Fitted
+        The fit, its seeding and its fitted components.
+    seconds : float
+        Wall clock of the seeding and the fit together, read from the run's
+        ``seconds`` series (:meth:`snakes_and_ladders.track.TrackedOptimization.record_cost`).
+    state_bytes : int
+        What the fit's state held, from the same record.
+    curve : tuple[float, ...]
+        The ``log_likelihood`` series the run recorded, one value per
+        iteration and one at the end.
+    """
+
+    fitted: Fitted
+    seconds: float
+    state_bytes: int
+    curve: tuple[float, ...]
+
+
+@dataclass(frozen=True)
+class TimedFit:
+    """One start as an :mod:`snakes_and_ladders.opt.budget` method whose spend is seconds.
+
+    The fit runs at ``passes``, the budget the starts are compared at; the
+    budget :func:`~snakes_and_ladders.opt.budget.compare` hands in is a
+    ceiling in :attr:`~snakes_and_ladders.cost.Cost.SECONDS`, and the spend
+    reported against it is the wall clock rounded up. The seeding and the fit
+    run inside one :func:`~snakes_and_ladders.track.track` block, so the
+    seconds cover both, and the whole record rides back on
+    :attr:`~snakes_and_ladders.opt.budget.Outcome.detail` as a :class:`Trial`
+    --- a process-pool cell records nowhere else (issue #891).
+
+    Parameters
+    ----------
+    name : str
+        The label the start is reported under.
+    at : ComponentsAt
+        The seam every candidate ends at.
+    seeding : Callable
+        A rule of :data:`SEEDINGS`'s signature; module-level where the cell
+        runs on a process pool.
+    passes : Budget
+        The fit's own budget, in :attr:`~snakes_and_ladders.cost.Cost.PASSES`.
+    """
+
+    name: str
+    at: ComponentsAt
+    seeding: Callable[..., Seeding]
+    passes: Budget
+
+    def __call__(
+        self, instance: ProjectedCounts, budget: Budget, rng: np.random.Generator
+    ) -> Outcome:
+        """The negative log-likelihood reached, the whole seconds spent, and the :class:`Trial`.
+
+        Returns
+        -------
+        Outcome
+        """
+        del budget  # a ceiling compare checks the spend against, not an input
+        with track(MemoryRun()) as tracked:
+            fitted = fit_projection(
+                instance,
+                self.name,
+                self.at,
+                self.passes,
+                rng,
+                seeding=self.seeding(instance, self.at, rng),
+            )
+        run = tracked.run
+        if not isinstance(run, MemoryRun):  # pragma: no cover - bound above
+            msg = "the timed fit records into the MemoryRun it opened"
+            raise TypeError(msg)
+        seconds = float(run.last("seconds"))
+        trial = Trial(
+            fitted=fitted,
+            seconds=seconds,
+            state_bytes=int(run.last("state_bytes")),
+            curve=tuple(float(value) for _, value in run.series("log_likelihood")),
+        )
+        return Outcome(-fitted.log_likelihood, math.ceil(seconds), trial)

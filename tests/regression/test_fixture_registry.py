@@ -120,6 +120,28 @@ def test_every_problem_declares_the_ci_tier() -> None:
     assert {entry.problem for entry in fixtures(Scale.CI)} == set(problems())
 
 
+@pytest.mark.smoke
+def test_the_count_release_fixture_is_the_stress_model_on_a_smaller_lattice() -> None:
+    # `spatio_sequential_counts/release` states that it carries the stress
+    # file's classes, states and emission ladders on a 10x10 lattice over
+    # 1,000 positions (issue #891). A ladder edited in one file and not the
+    # other would leave the notebook reading a model no other file declares.
+    release = fixture("spatio_sequential_counts", Scale.RELEASE).params.model
+    stress = fixture("spatio_sequential_counts", Scale.STRESS).params.model
+
+    assert release.graph.n_nodes == 100
+    assert (release.n_classes, release.n_states, release.n_positions) == (10, 10, 1000)
+    assert (release.n_classes, release.n_states) == (stress.n_classes, stress.n_states)
+    assert (release.beta, release.self_transition) == (
+        stress.beta,
+        stress.self_transition,
+    )
+    np.testing.assert_array_equal(release.initial, stress.initial)
+    for ours, theirs in zip(release.emissions, stress.emissions, strict=True):
+        for name, value in ours.named_parameters().items():
+            np.testing.assert_array_equal(value, theirs.named_parameters()[name])
+
+
 @pytest.mark.oracle
 def test_the_coupled_fixture_is_the_canonical_instance() -> None:
     # The file restates `canonical_spatio_sequential`, whose enumerable size is

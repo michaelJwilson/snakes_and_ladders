@@ -11,6 +11,8 @@ Guidance for Claude Code when working in this repository.
 6.  **CLAUDE.md edits are rare** Do not add technical details to CLAUDE.md files, but principles.  These edits are rare, as (lack of) principles become apparent.
 7.  **Maintain tone** maintain tone of this document throughout the repository and associated work.
 8.  **Open with a TL;DR:** every ticket, pull request, plan and review opens with the result — the number, the decision, or what broke — in O(1) lines before any context, so the opening does not grow with the body.
+9.  **A document does not certify itself:** it states what it shows and names where each number is checked; it claims nothing about its own completeness.
+10. **A notebook teaches:** every call in it carries a comment naming what the step does and why it is there.
  
 These rules are paramount for this repository: e.g. every document, `CLAUDE.md`, docstring, comment, commit message, PR, and plan or comment posted to thread. They are stated here, rarely repeated elsewhere.
 

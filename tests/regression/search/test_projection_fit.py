@@ -20,11 +20,16 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.opt.budget import Budget
+from snakes_and_ladders.opt.budget import Budget, compare
 from snakes_and_ladders.search.projection import (
+    DETERMINISTIC,
+    LOCATION_SEEDINGS,
+    SEEDINGS,
     CountPairAt,
     ProjectedCounts,
     SeededFit,
+    TimedFit,
+    Trial,
     fit_projection,
     flatten,
     project,
@@ -114,3 +119,65 @@ def test_the_budget_method_reports_the_fit_it_runs() -> None:
     assert outcome.value == -fitted.log_likelihood
     assert outcome.spent == fitted.iterations == SHORT_BUDGET.size
     assert fitted.recovery > 0.25, fitted.recovery
+
+
+@pytest.mark.patch
+def test_the_last_value_is_the_one_a_further_iteration_would_report() -> None:
+    # Issue #891: the value and posterior at the last parameters were read
+    # off one more EM iteration whose M step was discarded, 4.6 s of a 5.0 s
+    # iteration at 100 components. They are now the E step alone. What that
+    # iteration reported is what a fit one pass longer records at the same
+    # entry, so the two curves agree bitwise on every entry they share.
+    instance, at = _instance(), _seam()
+    short = fit_projection(instance, "kmeans++", at, SHORT_BUDGET, rng())
+    longer = fit_projection(
+        instance, "kmeans++", at, Budget(Cost.PASSES, SHORT_BUDGET.size + 1), rng()
+    )
+
+    assert short.iterations == SHORT_BUDGET.size
+    np.testing.assert_array_equal(
+        short.log_likelihoods, longer.log_likelihoods[: SHORT_BUDGET.size + 1]
+    )
+    assert short.components is not None
+    assert short.components.n_states == instance.n_components
+
+
+@pytest.mark.end2end
+def test_the_timed_method_reports_the_fit_and_the_seconds_it_ran() -> None:
+    # The method the starts notebook compares through `opt.budget.compare` in
+    # seconds (issue #891): its value is the fit's, bitwise, on the same seed;
+    # its spend is the recorded wall clock rounded up, which `compare` holds
+    # under the ceiling; and the `Trial` it carries back is that fit, judged
+    # against the planted truth as the fit beside it is.
+    instance, at = _instance(), _seam()
+    method = TimedFit("kmeans++", at, SEEDINGS["kmeans++"], SHORT_BUDGET)
+    comparison = compare(
+        {"kmeans++": method},
+        [instance],
+        Budget(Cost.SECONDS, 600),
+        [0, 1],
+        workers=1,
+    )
+    fitted = fit_projection(
+        instance, "kmeans++", at, SHORT_BUDGET, np.random.default_rng([0, 0])
+    )
+
+    first = comparison.outcomes[0]
+    assert isinstance(first.detail, Trial)
+    assert first.value == -fitted.log_likelihood
+    assert first.detail.fitted.recovery == fitted.recovery > 0.25
+    assert 0.0 < first.detail.seconds <= first.spent <= 600
+    assert first.detail.curve == tuple(float(v) for v in fitted.log_likelihoods)
+    assert comparison.budget.unit is Cost.SECONDS
+
+
+@pytest.mark.smoke
+def test_a_deterministic_location_start_reads_no_generator() -> None:
+    # `DETERMINISTIC` is what lets a caller run those starts once: two
+    # generators give one seeding.
+    instance, at = _instance(), _seam()
+    for name in DETERMINISTIC:
+        first = LOCATION_SEEDINGS[name](instance, at, np.random.default_rng(0))
+        second = LOCATION_SEEDINGS[name](instance, at, np.random.default_rng(1))
+        for key, value in first.components.named_parameters().items():
+            assert bool((value == second.components.named_parameters()[key]).all())

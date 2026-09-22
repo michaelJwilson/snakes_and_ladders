@@ -14,7 +14,7 @@ code with what it checks.
 | [`classical_codes.ipynb`](classical_codes.ipynb) | Classical error-correcting codes: Gallager's (3,6) ensemble and the bicycle construction at matched length and degrees, and the algebraic codes whose decoder is closed form --- repetition, single parity check, Hamming, Golay, Reed--Solomon over `GF(8)` | The general sum-product on the parity-check factor graph; enumeration of all 32,768 codewords of a cycle-free code, and of the 64 of the bicycle fixture; the density-evolution threshold 0.4294; the two exact decodings, which bound the decoder on the quantity each minimizes; the binomial tail, which is a bounded-distance decoder's block error rate exactly; the channel capacity, which bounds every rate from above |
 | [`turbo.ipynb`](turbo.ipynb) | Turbo code, two memory-2 (7,5) recursive systematic encoders through a seeded interleaver | Enumeration of all 4,096 messages of the `K = 12` instance; the tree schedule of the general sum-product on the trellis factor graph; a parity-check matrix built by GF(2) nullspace; the uncoded closed form `Q(sqrt(2 E_b / N_0))` |
 | [`spatio_sequential.ipynb`](spatio_sequential.ipynb) | Coupled spatio-sequential model: a Potts prior over class labels gating one hidden chain per class | Enumeration over all 65,536 joint states of the CI fixture; the per-class forward recursion as a second route to the evidence; planted labels on a 10x10 lattice |
-| [`spatio_sequential_starts.ipynb`](spatio_sequential_starts.ipynb) | Where the coupled fit starts: the thirteen seedings of the emission parameters in projection, and `Emission_Mixture++` on the enumerable coupled instance | Enumeration over all 65,536 joint states of the CI fixture, and the per-class forward recursion beside it; the generating parameters' own value and generating component, which `tests/regression/search/test_projection_seeding.py` records as the only exact statements a projected fit has; the published k-means++ guarantee against the exact one-dimensional optimum |
+| [`spatio_sequential_starts.ipynb`](spatio_sequential_starts.ipynb) | Where the coupled fit starts: the thirteen seedings of the emission parameters in projection, on `spatio_sequential_counts/release` (100 vertices, `M = K = 10`, `S = 1,000`), ten trials each | The generating parameters' own value and generating component on the draw, the reference `tests/regression/search/test_projection_seeding.py` states for a projected fit; the published k-means++ guarantee against the exact one-dimensional optimum |
 
 Each ends with a **Further Work** section naming what it could not demonstrate
 and the issue that carries it: a notebook that quietly skipped the unbuilt half
@@ -51,12 +51,25 @@ merge moved the hash. A set too expensive to run whole would be cut by a budget
 `DEV.md` states, never by a hash. Issue #490 deleted the stamps and the digest
 behind them.
 
+**Each notebook's execution has a budget of 600 s of wall clock.**
+`infra/check_notebooks.py` states it as `NOTEBOOK_BUDGET` and fails a notebook
+that takes longer, with its time beside the budget in the message (issue
+#891). A notebook over it is cut --- fewer trials, a smaller instance --- and
+the cut is stated in the notebook; it is never skipped.
+
 **Text is compared; images are not.** Every number a notebook prints is
 determined by its seeds, so a re-executed stream output must match exactly.
 Rendered figures embed metadata that is not stable across matplotlib builds,
 and comparing them would reproduce the `SOURCE_DATE_EPOCH` problem
 `docs/CLAUDE.md` records for `docs/tex/`. What is checked for a figure is that
 the cell still produced one.
+
+**A cell tagged `wall-clock` is executed and its text is not compared.** A wall
+clock belongs to the host and its load, so no rerun reproduces it. A code cell
+printing one carries `"tags": ["wall-clock"]` in its metadata; the checker runs
+it, still counts its figures, and skips its text (issue #891). A tagged cell
+prints the clock and the host and load it was read under, and nothing seeded:
+a seeded number printed there would leave the comparison with it.
 
 A notebook's printed numbers are therefore subject to the rule
 `docs/CLAUDE.md` states for a generated caption: **only quantities continuous
@@ -95,4 +108,5 @@ kernel would write a notebook the checker then rejects. Running it when nothing
 has moved rewrites nothing — the wall-clock timestamps nbclient records per
 cell are stripped.
 
-Nothing here may state a result the regression suite does not also pin.
+A notebook names the test that pins a number beside the number, where one
+does, and says what it has not checked in its Further Work section.

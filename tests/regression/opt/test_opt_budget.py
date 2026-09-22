@@ -39,6 +39,15 @@ def _reaches_every_instance(
     return Outcome(instance, 1)
 
 
+def _thread_count(
+    _instance: float, _budget: Budget, _rng: np.random.Generator
+) -> Outcome:
+    """The intra-op thread count the cell ran at, carried back on the detail."""
+    import torch
+
+    return Outcome(0.0, 1, torch.get_num_threads())
+
+
 def _misses_above_one(
     instance: float, _budget: Budget, _rng: np.random.Generator
 ) -> Outcome:
@@ -332,3 +341,23 @@ def test_four_workers_report_the_comparison_one_worker_reports() -> None:
     np.testing.assert_array_equal(pooled.spent, serial.spent)
     np.testing.assert_array_equal(pooled.reference, serial.reference)
     assert pooled.methods == serial.methods
+
+
+@pytest.mark.infra
+def test_a_pooled_worker_runs_torch_at_one_intra_op_thread(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Four workers on four cores use four threads, not sixteen (issue #891).
+
+    A spawned worker reads ``OMP_NUM_THREADS`` and ``MKL_NUM_THREADS`` when it
+    imports torch, and the suite pins both to one, so they are widened here:
+    without the pin in :func:`compare` each worker reports the four it was
+    started at, which this test did before the pin.
+    """
+    for variable in ("OMP_NUM_THREADS", "MKL_NUM_THREADS"):
+        monkeypatch.setenv(variable, "4")
+    budget = Budget(Cost.EVALUATIONS, 1)
+
+    pooled = compare({"threads": _thread_count}, [0.0], budget, (0, 1), workers=2)
+
+    assert [outcome.detail for outcome in pooled.outcomes] == [1, 1]

@@ -14,6 +14,12 @@ matplotlib builds, and comparing them would reproduce the `SOURCE_DATE_EPOCH`
 problem `docs/CLAUDE.md` records for `docs/tex/`, for a weaker payoff. What is
 checked for a figure is that the cell still produced one.
 
+**A cell tagged ``wall-clock`` is executed and its text is not compared.** A
+wall clock belongs to the host and its load, so no rerun reproduces it; a cell
+printing one carries the tag in its metadata, still runs, and is still checked
+for its figures (issue #891). Every other number stays under the comparison,
+so a notebook keeps its seeded numbers out of the tagged cells.
+
 **The Further Work section is checked for shape, not only presence.** Root
 `CLAUDE.md` makes it load-bearing: the last cell of every notebook names, with
 an issue number, what the notebook could not demonstrate. All three carried a
@@ -25,6 +31,10 @@ Whether that issue is still open is the release gate's question.
 
 Exits 0 when every notebook agrees, 1 on the first that does not, printing a
 unified diff of the cell's output.
+
+**A notebook's execution is held to a stated budget**, :data:`NOTEBOOK_BUDGET`
+seconds of wall clock, and one over it fails with its time beside the budget
+(issue #891). A run too expensive to make whole is cut by that budget.
 
 **Every notebook this is given is executed.** Which ones a run checks is a
 property of its arguments alone: the notebooks named, or every one under
@@ -67,6 +77,12 @@ NOTEBOOK_DIR = REPO_ROOT / "docs" / "nb"
 # Generous: `potts_chain.ipynb` trains eight policies. A timeout here would
 # read as a rotted notebook, which is the one failure this must not invent.
 CELL_TIMEOUT = 900
+
+#: Seconds of wall clock one notebook's execution may take, the budget
+#: `DEV.md` states for the `notebooks` job. Stated, not measured: a notebook
+#: over it fails the check with its time beside the budget, and is cut ---
+#: fewer trials, a smaller instance --- rather than skipped (issue #891).
+NOTEBOOK_BUDGET = 600
 
 
 def text_outputs(cell: dict[str, Any]) -> list[str]:
@@ -115,6 +131,16 @@ def text_outputs(cell: dict[str, Any]) -> list[str]:
             collected.append("".join(plain) if isinstance(plain, list) else str(plain))
             collected_names.append(None)
     return collected
+
+
+#: The cell tag exempting a code cell's text from the comparison: what it
+#: prints is a wall clock, which no rerun reproduces (issue #891).
+WALL_CLOCK_TAG = "wall-clock"
+
+
+def is_wall_clock(cell: dict[str, Any]) -> bool:
+    """Whether ``cell`` carries the :data:`WALL_CLOCK_TAG` tag in its metadata."""
+    return WALL_CLOCK_TAG in cell.get("metadata", {}).get("tags", [])
 
 
 def image_count(cell: dict[str, Any]) -> int:
@@ -179,6 +205,9 @@ def differences(
 ) -> list[str]:
     """Report where two runs of the same notebook disagree.
 
+    A code cell tagged :data:`WALL_CLOCK_TAG` has its text exempted and its
+    figures still counted.
+
     Separated from execution so it can be tested without a kernel, which is
     what `tests/regression/test_check_notebooks.py` does --- the figure-repr
     exclusion in :func:`text_outputs` was a real bug and a 92-second test
@@ -204,7 +233,9 @@ def differences(
     ]
     for index, (before, after) in enumerate(code_cells, start=1):
         expected, realized = text_outputs(before), text_outputs(after)
-        if expected != realized:
+        # The committed cell declares the tag: it is the notebook's statement
+        # of which outputs are a clock, and a rerun preserves the metadata.
+        if expected != realized and not is_wall_clock(before):
             diff = difflib.unified_diff(
                 "".join(expected).splitlines(keepends=True),
                 "".join(realized).splitlines(keepends=True),
@@ -218,6 +249,29 @@ def differences(
                 f"figure(s), re-executed produced {image_count(after)}"
             )
     return problems
+
+
+def over_budget(name: str, seconds: float) -> list[str]:
+    """Report a notebook whose execution took longer than :data:`NOTEBOOK_BUDGET`.
+
+    Parameters
+    ----------
+    name : str
+        The notebook's filename, for the message.
+    seconds : float
+        Wall clock of its execution.
+
+    Returns
+    -------
+    list[str]
+        One message naming the measured time and the budget, or nothing.
+    """
+    if seconds <= NOTEBOOK_BUDGET:
+        return []
+    return [
+        f"{name} executed in {seconds:.0f} s, over the {NOTEBOOK_BUDGET} s budget "
+        f"a notebook may spend (DEV.md, notebooks); cut what it runs"
+    ]
 
 
 def execute(path: Path) -> Any:
@@ -286,6 +340,7 @@ def compare(path: Path) -> list[str]:
 
     committed = nbformat.read(path, as_version=4)
     problems = structure_problems(path.name, committed.cells)
+    started = time.perf_counter()
     try:
         executed = execute(path)
     except CellExecutionError as failure:
@@ -295,7 +350,11 @@ def compare(path: Path) -> list[str]:
         # `hmm.ipynb`'s import outright, which is exactly this case.
         return [*problems, f"{path.name} did not execute:\n{failure}"]
 
-    return [*problems, *differences(path.name, committed.cells, executed.cells)]
+    return [
+        *problems,
+        *over_budget(path.name, time.perf_counter() - started),
+        *differences(path.name, committed.cells, executed.cells),
+    ]
 
 
 def main(argv: list[str] | None = None) -> int:
