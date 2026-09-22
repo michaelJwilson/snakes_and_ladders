@@ -20,11 +20,13 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import check_notebooks
 import pytest
 from check_notebooks import (
     differences,
     image_count,
     main,
+    over_budget,
     structure_problems,
     text_outputs,
 )
@@ -335,3 +337,20 @@ def test_every_committed_notebook_passes_the_structural_check() -> None:
     for path in notebooks:
         cells = json.loads(path.read_text())["cells"]
         assert structure_problems(path.name, cells) == []
+
+
+@pytest.mark.infra
+def test_a_notebook_over_the_budget_fails_and_one_under_it_passes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Issue #891: the budget is stated, so the check is against the constant
+    # and not a slow notebook. The message names the time and the budget.
+    monkeypatch.setattr(check_notebooks, "NOTEBOOK_BUDGET", 300)
+
+    over = over_budget("n.ipynb", 301.2)
+
+    assert len(over) == 1
+    assert "301 s" in over[0]
+    assert "300 s budget" in over[0]
+    assert over_budget("n.ipynb", 299.8) == []
+    assert over_budget("n.ipynb", 300.0) == []
