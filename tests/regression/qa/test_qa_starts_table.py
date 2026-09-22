@@ -10,13 +10,11 @@ from __future__ import annotations
 import pytest
 from snakes_and_ladders.qa.figure import check_latex_safe
 from snakes_and_ladders.qa.starts_table import build_table
-from snakes_and_ladders.search.mixture_starts import SolverComparison
+from snakes_and_ladders.search.mixture_starts import StartRow
 
 
-def _row(
-    start: str, gaps: tuple[float, ...], *, deterministic: bool
-) -> SolverComparison:
-    return SolverComparison(
+def _row(start: str, gaps: tuple[float, ...], *, deterministic: bool) -> StartRow:
+    return StartRow(
         start=start,
         deterministic=deterministic,
         seeded=tuple(-1.0 for _ in gaps),

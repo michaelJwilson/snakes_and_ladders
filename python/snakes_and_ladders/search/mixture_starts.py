@@ -510,8 +510,8 @@ def tempered_seeding(instance: MixtureInstance, rng: np.random.Generator) -> See
 STARTS: dict[str, Callable[[MixtureInstance, np.random.Generator], Seeded]] = {
     "prior": prior_seeding,
     "data": data_seeding,
-    "emission++": emission_seeding,
     "kmeans++": kmeans_seeding,
+    "emission++": emission_seeding,
     "gaussian-em": gaussian_em_seeding,
     "objective": objective_seeding,
     "perturbed": perturbed_seeding,
@@ -732,7 +732,7 @@ class TimedStart:
 
 
 @dataclass(frozen=True)
-class SolverComparison:
+class StartRow:
     """One start's row: what its trials reached, what they cost, and what they recovered.
 
     Every tuple carries one entry per trial, in seed order.
@@ -781,14 +781,12 @@ class SolverComparison:
         return len(self.reached)
 
     @classmethod
-    def from_trials(
-        cls, start: str, trials: list[Trial], reference: float
-    ) -> SolverComparison:
+    def from_trials(cls, start: str, trials: list[Trial], reference: float) -> StartRow:
         """The row of one start's trials, read against the reference.
 
         Returns
         -------
-        SolverComparison
+        StartRow
         """
         reached = tuple(float(t.polished.log_likelihoods[-1]) for t in trials)
         return cls(

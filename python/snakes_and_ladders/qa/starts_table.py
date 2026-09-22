@@ -3,7 +3,7 @@
 One row per start, in the order given: the start's name, its trials, the gap
 below the generating parameters' log-likelihood in nats, and the seconds of
 the start and its polish. Built from the
-:class:`~snakes_and_ladders.search.mixture_starts.SolverComparison` rows the
+:class:`~snakes_and_ladders.search.mixture_starts.StartRow` rows the
 starts notebook reads, in the ``tabular`` shape
 :func:`snakes_and_ladders.qa.figure.write_qa_table` writes, so a document can
 ``\\input`` it. The builder returns the body and the caption and writes
@@ -20,7 +20,7 @@ from collections.abc import Sequence
 import numpy as np
 
 from snakes_and_ladders.qa.figure import check_latex_safe, latex_escape
-from snakes_and_ladders.search.mixture_starts import SolverComparison
+from snakes_and_ladders.search.mixture_starts import StartRow
 
 
 def _cell(values: Sequence[float]) -> str:
@@ -32,13 +32,13 @@ def _cell(values: Sequence[float]) -> str:
 
 
 def build_table(
-    rows: Sequence[SolverComparison], *, instance: str, passes: int
+    rows: Sequence[StartRow], *, instance: str, passes: int
 ) -> tuple[str, str]:
     """The ``tabular`` of gap and seconds per start, and its caption.
 
     Parameters
     ----------
-    rows : Sequence[SolverComparison]
+    rows : Sequence[StartRow]
         One per start, in the order the table takes them.
     instance : str
         The fixture the starts ran on, as the caption names it.

@@ -20,7 +20,7 @@ from snakes_and_ladders.search.mixture_starts import (
     DETERMINISTIC,
     STARTS,
     MixtureInstance,
-    SolverComparison,
+    StartRow,
     TimedStart,
     Trial,
     instance_from,
@@ -120,7 +120,7 @@ def test_a_row_reads_its_trials_against_the_reference(
     # the seeding's seconds are the handover's.
     reference = _instance().reference
     for name, trial in trials.items():
-        row = SolverComparison.from_trials(name, [trial], reference)
+        row = StartRow.from_trials(name, [trial], reference)
         assert row.trials == 1
         assert row.gap == (reference - float(trial.polished.log_likelihoods[-1]),)
         assert row.seeding_seconds == (trial.curve[trial.handover][0],)
