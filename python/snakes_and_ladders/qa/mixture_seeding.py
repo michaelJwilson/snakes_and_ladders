@@ -11,7 +11,10 @@ expectation of the first.
 
 Renders what `snakes_and_ladders.sim.mixture` and
 `snakes_and_ladders.opt.mixture` computed; it reimplements no density, no
-seeding and no M step (`qa/CLAUDE.md`). The textbook cites it as ``fig:mixture-seeding``.
+seeding and no M step (`qa/CLAUDE.md`). Panel (b)'s seedings are the seeding
+phase of one :class:`snakes_and_ladders.opt.starts.StartsBenchmark` on the
+k-means cost, read off its curves (issue #894). The textbook cites it as
+``fig:mixture-seeding``.
 """
 
 from __future__ import annotations
@@ -23,18 +26,20 @@ import numpy as np
 import torch
 from matplotlib.figure import Figure
 
+from snakes_and_ladders.cost import Cost
 from snakes_and_ladders.emissions import GaussianEmission
+from snakes_and_ladders.opt.budget import Budget
 from snakes_and_ladders.opt.mixture import (
+    ClusteringObjective,
     GaussianMixtureObjective,
     KMeansPlusPlus,
     MixtureFit,
-    clustering_cost,
+    UniformSeeds,
     expectation_maximization,
-    kmeans_plus_plus,
     optimal_clustering_cost,
     seeding_guarantee,
-    uniform_seeds,
 )
+from snakes_and_ladders.opt.starts import StartsBenchmark, polish_by_fit
 from snakes_and_ladders.qa.figure import QAFigure
 from snakes_and_ladders.qa.runner import FIXTURE_PARAMS, figure_main
 from snakes_and_ladders.qa.style import (
@@ -79,6 +84,14 @@ def seeding_ratios(
 ) -> SeedingRatios:
     """Seed the observations `SEEDINGS` times each way and cost every seeding.
 
+    One benchmark of the two starts on the k-means cost, through
+    :class:`~snakes_and_ladders.opt.starts.StartsBenchmark`: each start offers
+    `SEEDINGS` points, the seam scores each as the seeding phase of its curve,
+    and those values over the exact optimum are the ratios. The polish, one
+    L-BFGS iteration a point, is the seam's and is not drawn: the guarantee is
+    a statement before any refinement. One worker, because both initializers
+    draw from ``rng`` in the order the cells run.
+
     Parameters
     ----------
     observations : np.ndarray
@@ -94,23 +107,30 @@ def seeding_ratios(
     SeedingRatios
     """
     optimal = optimal_clustering_cost(observations, n_centres)
-    plus_plus = np.array(
-        [
-            clustering_cost(
-                observations, kmeans_plus_plus(observations, n_centres, rng)
-            )
-            / optimal
-            for _ in range(SEEDINGS)
-        ]
+    curves = (
+        StartsBenchmark(
+            ClusteringObjective(observations, n_centres),
+            {
+                "k-means++": KMeansPlusPlus(SEEDINGS, rng),
+                "uniform": UniformSeeds(SEEDINGS, rng),
+            },
+            polish_by_fit,
+            seeding_budget=Budget(Cost.EVALUATIONS, SEEDINGS),
+            polish_budget=Budget(Cost.ITERATIONS, SEEDINGS),
+            seeds=[0],
+            workers=1,
+            reference=[optimal],
+        )
+        .run()
+        .curves()
     )
-    uniform = np.array(
-        [
-            clustering_cost(observations, uniform_seeds(observations, n_centres, rng))
-            / optimal
-            for _ in range(SEEDINGS)
-        ]
+    seeded = {
+        name: curve.values[: curve.handover + 1] / optimal
+        for name, (curve,) in curves.items()
+    }
+    return SeedingRatios(
+        kmeans_plus_plus=seeded["k-means++"], uniform=seeded["uniform"], optimal=optimal
     )
-    return SeedingRatios(kmeans_plus_plus=plus_plus, uniform=uniform, optimal=optimal)
 
 
 def fitted(

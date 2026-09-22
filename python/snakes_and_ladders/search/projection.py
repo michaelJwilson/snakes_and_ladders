@@ -32,7 +32,7 @@ identical one whatever seeded it. A gradient is two, forward and backward.
 from __future__ import annotations
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 import numpy as np
@@ -44,6 +44,12 @@ from snakes_and_ladders.emissions import (
     NegativeBinomialEmission,
 )
 from snakes_and_ladders.opt.budget import Budget, Outcome
+from snakes_and_ladders.opt.constrain import (
+    free_from_log_simplex,
+    free_from_positive,
+    log_simplex,
+    positive,
+)
 from snakes_and_ladders.opt.emission_mixture import (
     ComponentsAt,
     expectation_maximization,
@@ -52,6 +58,7 @@ from snakes_and_ladders.opt.emission_mixture import (
 )
 from snakes_and_ladders.opt.initialize import (
     FromObjective,
+    Initializer,
     Perturbed,
     RandomRestart,
     quantile_locations,
@@ -66,6 +73,8 @@ from snakes_and_ladders.opt.mixture import (
 from snakes_and_ladders.opt.mixture import (
     expectation_maximization as gaussian_expectation_maximization,
 )
+from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.opt.starts import Polished
 from snakes_and_ladders.opt.termination import Termination
 from snakes_and_ladders.sample.initialize import FromAnnealing, FromChain, FromTempering
 from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
@@ -917,8 +926,42 @@ def fit_projection(
     weights = torch.full(
         (instance.n_components,), 1.0 / instance.n_components, dtype=torch.float64
     )
-    components = seeding.components
+    projected = _projected_em(instance, weights, seeding.components, budget)
+    recovery, mean_error = _scored(instance, projected.weights, projected.components)
+    return Fitted(
+        name=name,
+        seeding=seeding,
+        log_likelihoods=np.array(projected.trace),
+        iterations=projected.termination.iterations,
+        recovery=recovery,
+        mean_error=mean_error,
+        termination=projected.termination,
+        components=projected.components,
+    )
 
+
+@dataclass(frozen=True)
+class _ProjectedRun:
+    """What the projected loop ends at: the curve, the parameters, and how it ended."""
+
+    trace: list[float]
+    weights: torch.Tensor
+    components: IndependentCountPair
+    termination: Termination
+
+
+def _projected_em(
+    instance: ProjectedCounts,
+    weights: torch.Tensor,
+    components: IndependentCountPair,
+    budget: Budget,
+) -> _ProjectedRun:
+    """Expectation-maximization of the projected mixture within the budget, one iteration a pass.
+
+    The loop :func:`fit_projection` and :func:`polish_projected` share, so a
+    fit through :mod:`snakes_and_ladders.opt.starts` is this arithmetic from
+    the point it is handed (issue #894).
+    """
     # One iteration at a time, so the curve is the fit's own E step and not a
     # second pass over the data: `expectation_maximization` reports the
     # log-likelihood at the parameters it was given, before the step it takes.
@@ -941,13 +984,14 @@ def fit_projection(
         if len(trace) > 1 and abs(trace[-1] - trace[-2]) <= TOLERANCE * abs(trace[-1]):
             converged = True
             break
-    # The value and the posterior at the last parameters: the E step the loop
-    # above runs, without the M step a further EM iteration would take and
-    # discard. The M step was 4.6 s of a 5.0 s iteration at 100 components
-    # (issue #891); the two numbers are the same calls on the same inputs.
+    # The value at the last parameters: the E step the loop above runs,
+    # without the M step a further EM iteration would take and discard. The M
+    # step was 4.6 s of a 5.0 s iteration at 100 components (issue #891); the
+    # two numbers are the same calls on the same inputs.
     values = torch.as_tensor(instance.observations, dtype=torch.float64)
-    log_weight = torch.log(weights)
-    final_log_likelihood = float(mixture_log_likelihood(values, log_weight, components))
+    final_log_likelihood = float(
+        mixture_log_likelihood(values, torch.log(weights), components)
+    )
     trace.append(final_log_likelihood)
     tracked.record(
         len(trace) - 1,
@@ -955,21 +999,32 @@ def fit_projection(
         log_likelihood=final_log_likelihood,
     )
     tracked.record_cost(len(trace) - 1, state_bytes(weights, components))
+    return _ProjectedRun(
+        trace, weights, components, Termination.after(iterations, converged=converged)
+    )
 
-    posterior = responsibilities(values, log_weight, components)
+
+def _scored(
+    instance: ProjectedCounts, weights: torch.Tensor, components: IndependentCountPair
+) -> tuple[float, float]:
+    """The recovery and the mean error at these parameters, against the draw's truth.
+
+    Returns
+    -------
+    tuple[float, float]
+        The fraction of observations assigned their generating component, up
+        to the best renaming, and the largest relative error in a
+        component's negative-binomial mean over that renaming.
+    """
+    values = torch.as_tensor(instance.observations, dtype=torch.float64)
+    posterior = responsibilities(values, torch.log(weights), components)
     assigned = np.asarray(posterior.argmax(dim=1).numpy())
     columns = _matching(components, instance.truth)
     fitted_mean = components.total.mean.numpy()
     true_mean = instance.truth.total.mean.numpy()[columns]
-    return Fitted(
-        name=name,
-        seeding=seeding,
-        log_likelihoods=np.array(trace),
-        iterations=iterations,
-        recovery=float(np.mean(columns[assigned] == np.asarray(instance.components))),
-        mean_error=float(np.max(np.abs(fitted_mean - true_mean) / true_mean)),
-        termination=Termination.after(iterations, converged=converged),
-        components=components,
+    return (
+        float(np.mean(columns[assigned] == np.asarray(instance.components))),
+        float(np.max(np.abs(fitted_mean - true_mean) / true_mean)),
     )
 
 
@@ -1107,3 +1162,222 @@ class TimedFit:
             curve=tuple(float(value) for _, value in run.series("log_likelihood")),
         )
         return Outcome(-fitted.log_likelihood, math.ceil(seconds), trial)
+
+
+class ProjectedObjective(Objective):
+    """One projected instance as an :class:`~snakes_and_ladders.opt.objective.Objective`.
+
+    What :class:`~snakes_and_ladders.opt.starts.StartsBenchmark` needs of an
+    instance to hand a start to a polisher (issue #894). ``theta`` is the
+    ``M K - 1`` free weights of
+    :func:`~snakes_and_ladders.opt.constrain.log_simplex`, then the logs of
+    every component's negative-binomial dispersion and mean and beta-binomial
+    ``alpha`` and ``beta``, ``M K`` each; the trial count is the assay's and is
+    held fixed. The value is the projected negative log-likelihood.
+
+    Parameters
+    ----------
+    instance : ProjectedCounts
+        The projected data and its truth.
+    at : CountPairAt
+        The seam every candidate ends at; :meth:`initial` places a component
+        on the observations nearest the first channel's quantiles through it.
+    """
+
+    def __init__(self, instance: ProjectedCounts, at: CountPairAt) -> None:
+        self._instance = instance
+        self._at = at
+        self._values = torch.as_tensor(instance.observations, dtype=torch.float64)
+
+    @property
+    def instance(self) -> ProjectedCounts:
+        """The projected data and its truth."""
+        return self._instance
+
+    @property
+    def observations(self) -> torch.Tensor:
+        """The drawn pairs, shape ``(n_samples, 2)``."""
+        return self._values
+
+    def _blocks(self, theta: torch.Tensor) -> tuple[torch.Tensor, ...]:
+        """``theta`` split into the free weights and the four log-parameter blocks."""
+        size = self._instance.n_components
+        return tuple(torch.split(theta, [size - 1, size, size, size, size]))
+
+    def components(self, theta: torch.Tensor) -> IndependentCountPair:
+        """The component family ``theta`` encodes."""
+        _, dispersion, mean, alpha, beta = (
+            positive(block) for block in self._blocks(theta)
+        )
+        return IndependentCountPair(
+            NegativeBinomialEmission(dispersion, mean),
+            BetaBinomialEmission(
+                torch.full_like(alpha, self._instance.trials), alpha, beta
+            ),
+        )
+
+    def theta_at(
+        self, components: IndependentCountPair, weights: torch.Tensor | None = None
+    ) -> torch.Tensor:
+        """``theta`` for these components, at uniform weights unless ``weights`` are given."""
+        if weights is None:
+            weights = torch.full(
+                (self._instance.n_components,),
+                1.0 / self._instance.n_components,
+                dtype=torch.float64,
+            )
+        return self.theta_from(
+            {"log_weight": torch.log(weights), **components.named_parameters()}
+        )
+
+    def initial(self) -> torch.Tensor:
+        """Uniform weights, and a component on the observation nearest each quantile of the totals."""
+        return self.theta_at(
+            seed_at_means(
+                self._instance,
+                quantile_locations(self._values[:, TOTAL], self._instance.n_components),
+                self._at,
+            )
+        )
+
+    def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
+        """The log weights, and the family's parameters under its own keys."""
+        return {
+            "log_weight": log_simplex(self._blocks(theta)[0]),
+            **self.components(theta).named_parameters(),
+        }
+
+    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        """The unconstrained vector whose :meth:`constrain` is ``named``."""
+        return torch.cat(
+            [
+                free_from_log_simplex(named["log_weight"].to(torch.float64)),
+                *(
+                    free_from_positive(named[key].reshape(-1).to(torch.float64))
+                    for key in _PROJECTED_KEYS
+                ),
+            ]
+        )
+
+    def __call__(self, theta: torch.Tensor) -> torch.Tensor:
+        """The projected negative log-likelihood."""
+        return -mixture_log_likelihood(
+            self._values, log_simplex(self._blocks(theta)[0]), self.components(theta)
+        )
+
+
+#: The keys :meth:`IndependentCountPair.named_parameters` returns, in the
+#: order :class:`ProjectedObjective` lays them out in ``theta``.
+_PROJECTED_KEYS = (
+    "total.dispersion",
+    "total.mean",
+    "successes.alpha",
+    "successes.beta",
+)
+
+
+@dataclass(frozen=True)
+class SeedingStart(Initializer):
+    """A seeding rule of this module as an initializer of the projected objective.
+
+    Each start draws the rule from ``rng``, one after another, so ``n_starts``
+    starts are the draws :func:`~snakes_and_ladders.opt.budget.restarts` of
+    :class:`SeededFit` makes (issue #894). Records the passes the rule
+    charged as ``seeding_passes``, which the seam keeps as a diagnostic.
+
+    Parameters
+    ----------
+    name : str
+        A key of :data:`SEEDINGS` or :data:`LOCATION_SEEDINGS`.
+    at : CountPairAt
+        The seam every candidate ends at.
+    rng : np.random.Generator
+        The cell's generator.
+    n_starts : int
+        Draws of the rule, each a start.
+    """
+
+    name: str
+    at: CountPairAt
+    rng: np.random.Generator
+    n_starts: int = 1
+
+    def starts(self, objective: Objective) -> list[torch.Tensor]:
+        """``n_starts`` seedings of the objective's instance, at uniform weights.
+
+        Returns
+        -------
+        list[torch.Tensor]
+
+        Raises
+        ------
+        TypeError
+            If the objective is not a :class:`ProjectedObjective`.
+        """
+        if not isinstance(objective, ProjectedObjective):
+            msg = (
+                f"a projected seeding seeds a ProjectedObjective, not "
+                f"{type(objective).__name__}"
+            )
+            raise TypeError(msg)
+        rule = {**SEEDINGS, **LOCATION_SEEDINGS}[self.name]
+        drawn = [
+            rule(objective.instance, self.at, self.rng) for _ in range(self.n_starts)
+        ]
+        current().record(0, seeding_passes=sum(seeding.passes for seeding in drawn))
+        return [objective.theta_at(seeding.components) for seeding in drawn]
+
+
+def _projected(objective: Objective) -> ProjectedObjective:
+    """``objective`` as the projected objective, refusing anything else."""
+    if not isinstance(objective, ProjectedObjective):
+        msg = f"expected a ProjectedObjective, got {type(objective).__name__}"
+        raise TypeError(msg)
+    return objective
+
+
+def polish_projected(
+    objective: Objective, theta: torch.Tensor, budget: Budget
+) -> Polished:
+    """:func:`fit_projection`'s loop from ``theta``: the seam's polisher of experiment 009.
+
+    Returns
+    -------
+    Polished
+        The last parameters, the negative log-likelihood there, and how the
+        loop ended.
+    """
+    projected = _projected(objective)
+    with torch.no_grad():
+        weights = torch.exp(projected.constrain(theta)["log_weight"])
+        components = projected.components(theta)
+    run = _projected_em(projected.instance, weights, components, budget)
+    return Polished(
+        projected.theta_at(run.components, run.weights), -run.trace[-1], run.termination
+    )
+
+
+def projected_recovery(objective: Objective, theta: torch.Tensor) -> float:
+    """The fraction of observations assigned their generating component, up to renaming.
+
+    Returns
+    -------
+    float
+    """
+    projected = _projected(objective)
+    with torch.no_grad():
+        weights = torch.exp(projected.constrain(theta)["log_weight"])
+        return _scored(projected.instance, weights, projected.components(theta))[0]
+
+
+def projected_mean_error(objective: Objective, theta: torch.Tensor) -> float:
+    """The largest relative error in a component's negative-binomial mean, over that renaming.
+
+    Returns
+    -------
+    float
+    """
+    projected = _projected(objective)
+    with torch.no_grad():
+        weights = torch.exp(projected.constrain(theta)["log_weight"])
+        return _scored(projected.instance, weights, projected.components(theta))[1]
