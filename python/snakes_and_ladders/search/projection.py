@@ -44,6 +44,7 @@ from snakes_and_ladders.emissions import (
     EmissionFamily,
     NegativeBinomialEmission,
 )
+from snakes_and_ladders.opt import starts as opt_starts
 from snakes_and_ladders.opt.budget import Budget, Outcome
 from snakes_and_ladders.opt.constrain import (
     free_from_log_simplex,
@@ -75,7 +76,6 @@ from snakes_and_ladders.opt.mixture import (
     expectation_maximization as gaussian_expectation_maximization,
 )
 from snakes_and_ladders.opt.objective import Objective
-from snakes_and_ladders.opt.starts import Polished
 from snakes_and_ladders.opt.termination import Termination
 from snakes_and_ladders.sample.initialize import FromAnnealing, FromChain, FromTempering
 from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
@@ -1339,12 +1339,12 @@ def _projected(objective: Objective) -> ProjectedObjective:
 
 def polish_projected(
     objective: Objective, theta: torch.Tensor, budget: Budget
-) -> Polished:
+) -> opt_starts.Polished:
     """:func:`fit_projection`'s loop from ``theta``: the seam's polisher of experiment 009.
 
     Returns
     -------
-    Polished
+    ~snakes_and_ladders.opt.starts.Polished
         The last parameters, the negative log-likelihood there, and how the
         loop ended.
     """
@@ -1353,7 +1353,7 @@ def polish_projected(
         weights = torch.exp(projected.constrain(theta)["log_weight"])
         components = projected.components(theta)
     run = _projected_em(projected.instance, weights, components, budget)
-    return Polished(
+    return opt_starts.Polished(
         projected.theta_at(run.components, run.weights), -run.trace[-1], run.termination
     )
 
