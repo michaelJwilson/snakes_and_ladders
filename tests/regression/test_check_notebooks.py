@@ -79,7 +79,7 @@ def _tagged(cell: dict[str, Any], *tags: str) -> dict[str, Any]:
 
 @pytest.mark.critical
 @pytest.mark.infra
-def test_a_wall_clock_cell_is_not_compared_and_an_untagged_one_is() -> None:
+def test_a_host_dependent_cell_is_not_compared_and_an_untagged_one_is() -> None:
     # Issue #891: a printed wall clock differs on every run, so the tag
     # exempts that cell's text. The same outputs untagged, or under another
     # tag, are still a disagreement.
@@ -87,7 +87,9 @@ def test_a_wall_clock_cell_is_not_compared_and_an_untagged_one_is() -> None:
     executed = _cell(_stream("prior  12.87 s\n"))
 
     tagged = differences(
-        "n.ipynb", [_tagged(committed, "wall-clock")], [_tagged(executed, "wall-clock")]
+        "n.ipynb",
+        [_tagged(committed, "host-dependent")],
+        [_tagged(executed, "host-dependent")],
     )
     untagged = differences("n.ipynb", [committed], [executed])
     other = differences(
@@ -102,10 +104,11 @@ def test_a_wall_clock_cell_is_not_compared_and_an_untagged_one_is() -> None:
 
 @pytest.mark.critical
 @pytest.mark.infra
-def test_a_wall_clock_cell_that_lost_its_figure_is_still_reported() -> None:
-    # The tag exempts a clock's text and nothing else: a figure is not a clock.
-    committed = [_tagged(_cell(_stream("1.2 s\n"), _figure()), "wall-clock")]
-    executed = [_tagged(_cell(_stream("1.9 s\n")), "wall-clock")]
+def test_a_host_dependent_cell_that_lost_its_figure_is_still_reported() -> None:
+    # The tag exempts a host-dependent text and nothing else: a figure's
+    # presence is not host-dependent.
+    committed = [_tagged(_cell(_stream("1.2 s\n"), _figure()), "host-dependent")]
+    executed = [_tagged(_cell(_stream("1.9 s\n")), "host-dependent")]
 
     reported = differences("n.ipynb", committed, executed)
 
@@ -354,3 +357,19 @@ def test_a_notebook_over_the_budget_fails_and_one_under_it_passes(
     assert "300 s budget" in over[0]
     assert over_budget("n.ipynb", 299.8) == []
     assert over_budget("n.ipynb", 300.0) == []
+
+
+@pytest.mark.infra
+def test_a_code_cell_set_to_scroll_is_reported() -> None:
+    # Issue #891: `--write` sets `scrolled: false` on every code cell, so a
+    # figure shows whole; a cell whose metadata scrolls fails the structure
+    # check, and one that does not scroll, or says nothing, passes.
+    further = {"cell_type": "markdown", "source": "## Further work\n\n- one #1\n"}
+    scrolled = {**_cell(_stream("x\n")), "metadata": {"scrolled": True}}
+    whole = {**_cell(_stream("x\n")), "metadata": {"scrolled": False}}
+
+    reported = structure_problems("n.ipynb", [scrolled, whole, further])
+
+    assert len(reported) == 1
+    assert "code cell 1" in reported[0]
+    assert structure_problems("n.ipynb", [whole, _cell(), further]) == []

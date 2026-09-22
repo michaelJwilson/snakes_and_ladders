@@ -123,6 +123,7 @@ def test_the_budget_method_reports_the_fit_it_runs() -> None:
 
 @pytest.mark.smoke
 @pytest.mark.patch
+@pytest.mark.analytic
 def test_the_last_value_is_the_one_a_further_iteration_would_report() -> None:
     # Issue #891: the value and posterior at the last parameters were read
     # off one more EM iteration whose M step was discarded, 4.6 s of a 5.0 s

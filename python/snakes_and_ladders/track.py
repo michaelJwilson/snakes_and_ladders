@@ -320,6 +320,12 @@ class TrackedOptimization:
         the whole cost of the seam on an untracked run is this call and its
         first line.
 
+        Every call also records ``seconds``, the wall clock since the
+        enclosing :func:`track` block opened, at the same step and context,
+        unless ``diagnostics`` names ``seconds`` itself: each sample of a run
+        then carries the time it was taken, so a caller plots a series against
+        seconds from the run alone (issue #891).
+
         Parameters
         ----------
         step : int
@@ -338,6 +344,8 @@ class TrackedOptimization:
         """
         if self.run is NULL_RUN:
             return
+        if "seconds" not in diagnostics:
+            diagnostics["seconds"] = time.perf_counter() - self.started
         if objective is not None:
             self.run.track(
                 float(objective), name="objective", step=step, context=context
@@ -364,7 +372,6 @@ class TrackedOptimization:
             step,
             peak_rss_bytes=float(peak_rss_bytes()),
             state_bytes=float(state_bytes),
-            seconds=time.perf_counter() - self.started,
         )
 
 

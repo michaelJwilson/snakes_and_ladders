@@ -261,6 +261,24 @@ def test_every_entry_is_stamped_in_order_inside_the_block() -> None:
 
 
 @pytest.mark.smoke
+def test_every_record_carries_the_seconds_it_was_taken_at() -> None:
+    # Issue #891: a curve against wall clock is read from the run, so every
+    # sample carries its time, at its own step, non-decreasing, and one named
+    # explicitly is kept rather than overwritten.
+    with track() as tracked:
+        _chain()
+        tracked.record(99, seconds=-1.0)
+
+    run = _memory(tracked.run)
+    times = [value for _, value in run.series("seconds")]
+    assert [step for step, _ in run.series("energy_error")] == [
+        step for step, _ in run.series("seconds")[:N_SAMPLES]
+    ]
+    assert times[:-1] == sorted(times[:-1])
+    assert times[-1] == -1.0
+
+
+@pytest.mark.smoke
 def test_the_annealer_records_one_energy_per_sweep_ending_at_the_result() -> None:
     with track() as tracked:
         annealed = _annealed()
