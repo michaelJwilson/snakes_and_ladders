@@ -24,7 +24,10 @@ from snakes_and_ladders.cost import Cost
 from snakes_and_ladders.opt.budget import Budget
 from snakes_and_ladders.opt.constrain import log_simplex
 from snakes_and_ladders.opt.emission_mixture import CountPairSeeding
-from snakes_and_ladders.opt.mixture import GaussianMixtureObjective
+from snakes_and_ladders.opt.mixture import (
+    GaussianMixtureObjective,
+    mixture_log_likelihood,
+)
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.sample import hmc
 from snakes_and_ladders.sample.initialize import (
@@ -343,13 +346,19 @@ def _handover(
 ) -> float:
     """The count-pair log-likelihood at the components a surrogate point seeds, as `TimedStart` hands over."""
     seeded = mixture_starts.at_locations(instance, objective.components(theta).mean)
+    # The polish's first recorded value: the E step at equal weights, read
+    # here without the polish, whose signature is #898's to change.
+    k = instance.n_components
     return float(
-        mixture_starts.polish(instance, seeded, Budget(Cost.PASSES, 1)).log_likelihoods[
-            0
-        ]
+        mixture_log_likelihood(
+            torch.as_tensor(instance.observations, dtype=torch.float64),
+            torch.log(torch.full((k,), 1.0 / k, dtype=torch.float64)),
+            seeded,
+        )
     )
 
 
+@pytest.mark.experiment
 @pytest.mark.snapshot
 @pytest.mark.warning
 def test_on_the_mixture_the_calibration_buys_no_handover_at_equal_transitions() -> None:
