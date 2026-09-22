@@ -1,0 +1,804 @@
+"""Starts of a count-pair emission mixture, each polished by EM and timed through ``track`` (issue #891).
+
+The joint count-pair mixture of :mod:`snakes_and_ladders.sim.emission_mixture`
+alone --- no lattice, no chain --- started every way the package can start it,
+then polished by :func:`snakes_and_ladders.opt.emission_mixture.expectation_maximization`
+at one budget. Every start ends at the same seam, the instance's
+:data:`~snakes_and_ladders.opt.emission_mixture.ComponentsAt`, so what
+separates two starts is where they place the components and nothing after.
+
+**Four kinds of start.** A prior draw reads no pair. Rules over the pairs
+place a component on each of ``C`` chosen observations: the uniform draw,
+``Emission_Mixture++``, k-means++ on the raw pair, and a short EM burn-in on a
+subsample from the uniform draw. Starts that take an ``Objective`` run on a
+surrogate, the Gaussian mixture over both channels, because the count-pair
+mixture has no ``theta`` and is not an ``Objective``: the four of
+:mod:`snakes_and_ladders.opt.initialize` and the three of
+:mod:`snakes_and_ladders.sample.initialize`. The Gaussian-mixture EM start runs
+on the first channel alone, since
+:func:`snakes_and_ladders.opt.mixture.expectation_maximization` fits one
+channel. A surrogate start yields locations, and :func:`at_locations` realizes
+them at the observations nearest them.
+
+**A start that iterates records its iterations.** The Gaussian EM records its
+surrogate log-likelihood per iteration and keeps the components it would hand
+over every :data:`PATH_STRIDE` iterations; the burn-in keeps each of its
+iterations and ``FromChain`` each draw. The
+annealing and tempering runs return their best point and not the path to it,
+so they carry no path. :class:`TimedStart` evaluates each path entry's
+count-pair log-likelihood after the clock stops, so the evaluation costs the
+start nothing.
+
+**Cost is counted in passes and in seconds.** A pass is every observation
+scored under every component, one per EM iteration and two per surrogate
+gradient; the seconds are what ``track`` records.
+"""
+
+from __future__ import annotations
+
+import math
+from collections.abc import Callable
+from dataclasses import dataclass
+
+import numpy as np
+import torch
+
+from snakes_and_ladders.emissions import EmissionFamily
+from snakes_and_ladders.opt.budget import Budget, Outcome
+from snakes_and_ladders.opt.emission_mixture import (
+    ComponentsAt,
+    expectation_maximization,
+    plus_plus_start,
+    uniform_start,
+)
+from snakes_and_ladders.opt.initialize import (
+    FromObjective,
+    Perturbed,
+    RandomRestart,
+    quantile_locations,
+)
+from snakes_and_ladders.opt.mixture import (
+    GaussianMixtureObjective,
+    KMeansPlusPlus,
+    kmeans_plus_plus,
+    mixture_log_likelihood,
+    responsibilities,
+)
+from snakes_and_ladders.opt.mixture import (
+    expectation_maximization as gaussian_expectation_maximization,
+)
+from snakes_and_ladders.sample.initialize import FromAnnealing, FromChain, FromTempering
+from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
+from snakes_and_ladders.search.projection import (
+    ANNEAL_STEPS,
+    CHAIN_BURN_IN,
+    CHAIN_DRAWS,
+    CHAIN_STEP,
+    CHAIN_TRAJECTORY,
+    GAUSSIAN_EM_ITERATIONS,
+    PASSES_PER_GRADIENT,
+    RESTART_SCALE,
+    RESTARTS,
+    TEMPERATURES,
+    TEMPERING_ROUNDS,
+    match_components,
+)
+from snakes_and_ladders.sim.emission_mixture import SimulatedEmissionMixtureDataset
+from snakes_and_ladders.track import MemoryRun, current, track
+
+#: Iterations of the Gaussian EM between two entries of its path: 20 entries
+#: over its 500 iterations.
+PATH_STRIDE = 25
+
+#: The context the handover is recorded under, so its one sample is a series
+#: of its own beside the polish's.
+HANDOVER = {"phase": "handover"}
+
+
+@dataclass(frozen=True)
+class MixtureInstance:
+    """One drawn mixture, its truth, and the seam every start ends at.
+
+    Parameters
+    ----------
+    observations : np.ndarray
+        The pairs, shape ``(n_samples, 2)``.
+    labels : np.ndarray
+        The generating component of each pair, shape ``(n_samples,)``.
+    weights : np.ndarray
+        The generating mixing weights.
+    truth : EmissionFamily
+        The generating components.
+    at : ComponentsAt
+        Places a component on each of a set of pairs.
+    """
+
+    observations: np.ndarray
+    labels: np.ndarray
+    weights: np.ndarray
+    truth: EmissionFamily
+    at: ComponentsAt
+
+    @property
+    def n_components(self) -> int:
+        """Components the truth carries, which every start seeds."""
+        return self.truth.n_states
+
+    @property
+    def n_samples(self) -> int:
+        """Pairs drawn."""
+        return int(self.observations.shape[0])
+
+    @property
+    def reference(self) -> float:
+        """The log-likelihood the generating parameters reach on this draw."""
+        values = torch.as_tensor(self.observations, dtype=torch.float64)
+        log_weight = torch.log(torch.as_tensor(self.weights, dtype=torch.float64))
+        return float(mixture_log_likelihood(values, log_weight, self.truth))
+
+
+def instance_from(
+    dataset: SimulatedEmissionMixtureDataset, at: ComponentsAt
+) -> MixtureInstance:
+    """The instance a simulated dataset and a seam make.
+
+    Returns
+    -------
+    MixtureInstance
+    """
+    return MixtureInstance(
+        observations=np.asarray(dataset.observations),
+        labels=np.asarray(dataset.labels),
+        weights=np.asarray(dataset.weights, dtype=np.float64),
+        truth=dataset.components,
+        at=at,
+    )
+
+
+@dataclass(frozen=True)
+class Seeded:
+    """What one start produced, what it charged, and the path it took there.
+
+    Parameters
+    ----------
+    components : EmissionFamily
+        The seeded components.
+    passes : float
+        The start's own cost, in passes over the data.
+    diagnostics : str
+        Empty for a rule; for a chain or a fit, what says how it ended.
+    path : tuple[tuple[int, EmissionFamily], ...]
+        For a start that iterates, the step of its run at which it held each
+        of these components; empty for one that does not.
+    """
+
+    components: EmissionFamily
+    passes: float
+    diagnostics: str = ""
+    path: tuple[tuple[int, EmissionFamily], ...] = ()
+
+
+def surrogate(instance: MixtureInstance) -> GaussianMixtureObjective:
+    """The Gaussian mixture over both channels: the ``Objective`` a surrogate start reads.
+
+    Returns
+    -------
+    GaussianMixtureObjective
+    """
+    return GaussianMixtureObjective(
+        np.asarray(instance.observations, dtype=np.float64), instance.n_components
+    )
+
+
+def at_locations(instance: MixtureInstance, locations: torch.Tensor) -> EmissionFamily:
+    """The components seeded on the observation nearest each location.
+
+    ``locations`` is ``(C, 2)`` for a location in both channels, where
+    nearest is Euclidean over the pair, or ``(C,)`` for one in the first
+    channel alone, where it is nearest in that channel.
+
+    Returns
+    -------
+    EmissionFamily
+    """
+    rows = np.asarray(instance.observations, dtype=np.float64)
+    located = np.asarray(locations.detach().numpy(), dtype=np.float64)
+    if located.ndim == 1:
+        distance = np.abs(rows[None, :, 0] - located[:, None])
+    else:
+        distance = ((rows[None, :, :] - located[:, None, :]) ** 2).sum(axis=-1)
+    return instance.at(rows[distance.argmin(axis=1)])
+
+
+def _generator(rng: np.random.Generator) -> torch.Generator:
+    """A torch stream derived from the caller's generator, so one seed runs the start."""
+    return torch.Generator().manual_seed(int(rng.integers(0, 2**31 - 1)))
+
+
+def prior_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded:
+    """Components drawn from a prior over the observed range, reading no pair.
+
+    A total log-uniform on the observed range of totals and an allele fraction
+    uniform on ``(0, 1)``, the family's own support, each handed to the seam
+    as the pair ``(total, fraction * total)``: the control that says whether
+    reading the data earns its cost.
+
+    Returns
+    -------
+    Seeded
+    """
+    totals = np.asarray(instance.observations, dtype=np.float64)[:, 0]
+    low, high = float(max(totals.min(), 1.0)), float(max(totals.max(), 2.0))
+    means = np.exp(rng.uniform(np.log(low), np.log(high), size=instance.n_components))
+    rates = rng.uniform(0.0, 1.0, size=instance.n_components)
+    return Seeded(instance.at(np.stack([means, rates * means], axis=1)), 0.0)
+
+
+def data_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded:
+    """``uniform_start``: components on pairs drawn uniformly without replacement.
+
+    Returns
+    -------
+    Seeded
+    """
+    return Seeded(
+        uniform_start(instance.observations, instance.n_components, instance.at, rng),
+        0.0,
+    )
+
+
+def emission_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded:
+    """``plus_plus_start``: D-squared sampling under the family's Bregman divergence.
+
+    Returns
+    -------
+    Seeded
+    """
+    return Seeded(
+        plus_plus_start(instance.observations, instance.n_components, instance.at, rng),
+        1.0,
+    )
+
+
+def kmeans_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded:
+    """``kmeans_plus_plus`` on the raw pair, its centres handed to the seam.
+
+    Returns
+    -------
+    Seeded
+    """
+    centres = kmeans_plus_plus(
+        np.asarray(instance.observations, dtype=np.float64), instance.n_components, rng
+    )
+    return Seeded(instance.at(centres), 1.0)
+
+
+def gaussian_em_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded:
+    """The Gaussian mixture fitted to the first channel from k-means++, its means the locations.
+
+    One EM iteration per call, so each is recorded into the enclosing run,
+    with the components its means would seed every :data:`PATH_STRIDE`
+    iterations and at the last.
+
+    Returns
+    -------
+    Seeded
+    """
+    channel = np.asarray(instance.observations, dtype=np.float64)[:, 0]
+    objective = GaussianMixtureObjective(channel, instance.n_components)
+    start = KMeansPlusPlus(1, rng).starts(objective)[0]
+    weights = torch.exp(objective.constrain(start)["log_weight"]).detach()
+    components = objective.components(start)
+    tracked = current()
+    path: list[tuple[int, EmissionFamily]] = []
+    for iteration in range(GAUSSIAN_EM_ITERATIONS):
+        fitted = gaussian_expectation_maximization(
+            channel, weights, components, max_iterations=1, tolerance=0.0
+        )
+        weights, components = fitted.weights, fitted.components
+        tracked.record(iteration, surrogate_log_likelihood=fitted.log_likelihood)
+        last = iteration == GAUSSIAN_EM_ITERATIONS - 1
+        if iteration % PATH_STRIDE == 0 or last:
+            path.append((iteration, at_locations(instance, components.mean)))
+    return Seeded(
+        path[-1][1],
+        float(GAUSSIAN_EM_ITERATIONS),
+        f"budget after {GAUSSIAN_EM_ITERATIONS}",
+        tuple(path),
+    )
+
+
+#: Fraction of the pairs the burn-in fits on, and the iterations it runs.
+BURN_IN_FRACTION = 0.2
+BURN_IN_ITERATIONS = 3
+
+
+def burn_in_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded:
+    """A short EM fit on a subsample, started from the data draw.
+
+    :data:`BURN_IN_ITERATIONS` iterations on a :data:`BURN_IN_FRACTION`
+    subsample, each charged its fraction of a pass; each iteration's
+    components are an entry of the path.
+
+    Returns
+    -------
+    Seeded
+    """
+    components = data_seeding(instance, rng).components
+    size = max(instance.n_components, int(BURN_IN_FRACTION * instance.n_samples))
+    subsample = instance.observations[
+        rng.choice(instance.n_samples, size=size, replace=False)
+    ]
+    weights = torch.full(
+        (instance.n_components,), 1.0 / instance.n_components, dtype=torch.float64
+    )
+    tracked = current()
+    path: list[tuple[int, EmissionFamily]] = []
+    for iteration in range(BURN_IN_ITERATIONS):
+        fitted = expectation_maximization(
+            subsample, weights, components, max_iterations=1, tolerance=0.0
+        )
+        weights, components = fitted.weights, fitted.components
+        tracked.record(iteration, subsample_log_likelihood=fitted.log_likelihood)
+        path.append((iteration, components))
+    return Seeded(
+        components,
+        BURN_IN_ITERATIONS * size / instance.n_samples,
+        f"{size} pairs, {BURN_IN_ITERATIONS} iterations",
+        tuple(path),
+    )
+
+
+def perturbation() -> Perturbed:
+    """The tilt :func:`perturbed_seeding` applies: ``Perturbed`` at its declared magnitude."""
+    return Perturbed()
+
+
+def restart_initializer(rng: np.random.Generator) -> RandomRestart:
+    """The restart set :func:`restart_seeding` draws: :data:`RESTARTS` points at :data:`RESTART_SCALE`."""
+    return RandomRestart(RESTARTS, RESTART_SCALE, rng)
+
+
+def chain_initializer(rng: np.random.Generator) -> FromChain:
+    """The chain :func:`chain_seeding` runs, its stream derived from ``rng``."""
+    return FromChain(
+        CHAIN_DRAWS,
+        CHAIN_STEP,
+        _generator(rng),
+        n_steps=CHAIN_TRAJECTORY,
+        burn_in=CHAIN_BURN_IN,
+    )
+
+
+def annealing_initializer(rng: np.random.Generator) -> FromAnnealing:
+    """The annealing run :func:`annealed_seeding` makes: hottest rung to 1 over :data:`ANNEAL_STEPS`."""
+    return FromAnnealing(
+        ExponentialTempSchedule(float(TEMPERATURES[-1]), 1.0, ANNEAL_STEPS),
+        CHAIN_STEP,
+        _generator(rng),
+        n_steps=CHAIN_TRAJECTORY,
+    )
+
+
+def tempering_initializer(rng: np.random.Generator) -> FromTempering:
+    """The ladder :func:`tempered_seeding` runs: :data:`TEMPERATURES`, :data:`TEMPERING_ROUNDS` rounds."""
+    return FromTempering(
+        TEMPERATURES,
+        TEMPERING_ROUNDS,
+        CHAIN_STEP,
+        _generator(rng),
+        n_steps=CHAIN_TRAJECTORY,
+    )
+
+
+def objective_seeding(instance: MixtureInstance, _rng: np.random.Generator) -> Seeded:
+    """``FromObjective``: the surrogate's own nominated point.
+
+    Returns
+    -------
+    Seeded
+    """
+    objective = surrogate(instance)
+    theta = FromObjective().starts(objective)[0]
+    return Seeded(at_locations(instance, objective.components(theta).mean), 0.0)
+
+
+def perturbed_seeding(instance: MixtureInstance, _rng: np.random.Generator) -> Seeded:
+    """``Perturbed``: that point, tilted off a symmetry it may be stationary at.
+
+    Returns
+    -------
+    Seeded
+    """
+    objective = surrogate(instance)
+    theta = perturbation().starts(objective)[0]
+    return Seeded(at_locations(instance, objective.components(theta).mean), 0.0)
+
+
+def restart_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded:
+    """``RandomRestart``: the best by surrogate value of points drawn around it.
+
+    Returns
+    -------
+    Seeded
+    """
+    objective = surrogate(instance)
+    thetas = restart_initializer(rng).starts(objective)
+    best = min(thetas, key=lambda theta: float(objective(theta)))
+    return Seeded(
+        at_locations(instance, objective.components(best).mean), float(len(thetas))
+    )
+
+
+def quantile_seeding(instance: MixtureInstance, _rng: np.random.Generator) -> Seeded:
+    """``quantile_locations``: each channel's evenly spaced quantiles, paired in order.
+
+    Returns
+    -------
+    Seeded
+    """
+    values = torch.as_tensor(
+        np.asarray(instance.observations, dtype=np.float64), dtype=torch.float64
+    )
+    return Seeded(
+        at_locations(
+            instance, quantile_locations(values, instance.n_components, dim=0)
+        ),
+        0.0,
+    )
+
+
+def chain_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded:
+    """``FromChain``: a short Hamiltonian chain on the surrogate; its last draw seeds.
+
+    Returns
+    -------
+    Seeded
+        Its path is every kept draw, at the step the chain recorded it.
+    """
+    objective = surrogate(instance)
+    chain = chain_initializer(rng).chain(objective)
+    path = tuple(
+        (draw, at_locations(instance, objective.components(theta).mean))
+        for draw, theta in enumerate(chain.theta)
+    )
+    return Seeded(
+        path[-1][1],
+        PASSES_PER_GRADIENT * chain.force_evaluations,
+        f"acceptance {chain.acceptance_rate:.2f}",
+        path,
+    )
+
+
+def annealed_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded:
+    """``FromAnnealing``: the best point of a falling temperature.
+
+    Returns
+    -------
+    Seeded
+    """
+    objective = surrogate(instance)
+    run = annealing_initializer(rng).run(objective)
+    return Seeded(
+        at_locations(instance, objective.components(run.theta).mean),
+        PASSES_PER_GRADIENT * run.force_evaluations,
+        f"acceptance {run.acceptance_rate:.2f}",
+    )
+
+
+def tempered_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded:
+    """``FromTempering``: the best point at any temperature of a ladder.
+
+    Returns
+    -------
+    Seeded
+    """
+    objective = surrogate(instance)
+    run = tempering_initializer(rng).run(objective)
+    return Seeded(
+        at_locations(instance, objective.components(run.theta).mean),
+        PASSES_PER_GRADIENT * run.force_evaluations,
+        f"cold acceptance {float(run.acceptance_rate[0]):.2f}, lowest swap "
+        f"{float(run.swap_acceptance.min()):.2f}",
+    )
+
+
+#: Every start, in the order the notebook takes them: the prior control, the
+#: three rules over the pairs, the Gaussian EM, the four of `opt.initialize`,
+#: the burn-in and the three of `sample.initialize`. Module-level, so a
+#: process pool can run each.
+STARTS: dict[str, Callable[[MixtureInstance, np.random.Generator], Seeded]] = {
+    "prior": prior_seeding,
+    "data": data_seeding,
+    "kmeans++": kmeans_seeding,
+    "emission++": emission_seeding,
+    "gaussian-em": gaussian_em_seeding,
+    "objective": objective_seeding,
+    "perturbed": perturbed_seeding,
+    "restart": restart_seeding,
+    "quantile": quantile_seeding,
+    "burn-in": burn_in_seeding,
+    "hmc": chain_seeding,
+    "anneal": annealed_seeding,
+    "tempering": tempered_seeding,
+}
+
+#: The starts that read no generator: one run of each is every run.
+DETERMINISTIC = frozenset({"objective", "perturbed", "quantile"})
+
+
+@dataclass(frozen=True)
+class Polished:
+    """The EM fit a start hands over to, at one budget.
+
+    Parameters
+    ----------
+    components : EmissionFamily
+        The fitted components.
+    weights : torch.Tensor
+        The fitted mixing weights.
+    log_likelihoods : np.ndarray
+        The log-likelihood at the handover and after every iteration, shape
+        ``(budget + 1,)``.
+    """
+
+    components: EmissionFamily
+    weights: torch.Tensor
+    log_likelihoods: np.ndarray
+
+
+def polish(
+    instance: MixtureInstance, components: EmissionFamily, budget: Budget
+) -> Polished:
+    """``budget.size`` EM iterations from ``components`` at equal weights, one pass each.
+
+    Each iteration is one call of
+    :func:`~snakes_and_ladders.opt.emission_mixture.expectation_maximization`,
+    recorded into the enclosing run as ``log_likelihood`` at step ``i``: the
+    value at the components iteration ``i`` was handed, recorded once that
+    iteration has produced the next. The value at the last components is the
+    E step alone, recorded at step ``budget.size``.
+
+    Returns
+    -------
+    Polished
+    """
+    values = torch.as_tensor(instance.observations, dtype=torch.float64)
+    weights = torch.full(
+        (instance.n_components,), 1.0 / instance.n_components, dtype=torch.float64
+    )
+    tracked = current()
+    trace: list[float] = []
+    for iteration in range(budget.size):
+        step = expectation_maximization(
+            instance.observations, weights, components, max_iterations=1, tolerance=0.0
+        )
+        trace.append(step.log_likelihood)
+        tracked.record(iteration, log_likelihood=step.log_likelihood)
+        weights, components = step.weights, step.components
+    final = float(mixture_log_likelihood(values, torch.log(weights), components))
+    trace.append(final)
+    tracked.record(budget.size, log_likelihood=final)
+    tensors = [weights, *components.named_parameters().values()]
+    tracked.record_cost(
+        budget.size, sum(int(t.element_size() * t.nelement()) for t in tensors)
+    )
+    return Polished(components, weights, np.asarray(trace))
+
+
+@dataclass(frozen=True)
+class Trial:
+    """One timed start and its polish, as :class:`TimedStart` reports it.
+
+    Parameters
+    ----------
+    name : str
+        The start.
+    seeded : Seeded
+        What the start produced, without its path.
+    polished : Polished
+        The fit it handed over to.
+    curve : tuple[tuple[float, float], ...]
+        ``(seconds, log_likelihood)`` for every entry of the start's path and
+        every state of the polish, seconds from the start's first call, each
+        read from a ``track`` sample.
+    handover : int
+        The index in ``curve`` of the seeded components.
+    seconds : float
+        Wall clock of the start and its polish; ``curve[handover][0]`` is the
+        start's alone.
+    state_bytes : int
+        What the polished state holds.
+    recovery : float
+        Fraction of pairs the fit assigns to their generating component, up to
+        the best renaming of the components.
+    mean_error : float
+        Largest relative error in a component's first-channel mean over that
+        renaming.
+    """
+
+    name: str
+    seeded: Seeded
+    polished: Polished
+    curve: tuple[tuple[float, float], ...]
+    handover: int
+    seconds: float
+    state_bytes: int
+    recovery: float
+    mean_error: float
+
+
+def _first_per_step(series: list[tuple[int, float]]) -> dict[int, float]:
+    """The first value recorded at each step."""
+    first: dict[int, float] = {}
+    for step, value in series:
+        first.setdefault(step, float(value))
+    return first
+
+
+@dataclass(frozen=True)
+class TimedStart:
+    """One start as an :mod:`snakes_and_ladders.opt.budget` method whose spend is seconds.
+
+    The start runs in a ``track`` block nested in the block the polish runs
+    in, so its own samples carry its own clock, offset to the outer one; the
+    handover is one sample of the outer run. The polish spends ``passes``.
+    The budget :func:`~snakes_and_ladders.opt.budget.compare` hands in is the
+    initialization's ceiling in :attr:`~snakes_and_ladders.cost.Cost.SECONDS`,
+    and the spend reported against it is the seconds to the handover, rounded
+    up: a start over it is refused by ``compare``.
+
+    Parameters
+    ----------
+    name : str
+        A key of :data:`STARTS`.
+    passes : Budget
+        The polish's budget.
+    """
+
+    name: str
+    passes: Budget
+
+    def __call__(
+        self, instance: MixtureInstance, budget: Budget, rng: np.random.Generator
+    ) -> Outcome:
+        """The negative log-likelihood reached, the seconds to the handover, and the :class:`Trial`.
+
+        Returns
+        -------
+        Outcome
+        """
+        del budget  # the initialization's ceiling, which compare checks
+        with track(MemoryRun()) as outer:
+            with track(MemoryRun()) as inner:
+                seeded = STARTS[self.name](instance, rng)
+            outer.record(0, context=HANDOVER, handed_over=1.0)
+            polished = polish(instance, seeded.components, self.passes)
+        inner_run, outer_run = inner.run, outer.run
+        if not isinstance(inner_run, MemoryRun) or not isinstance(
+            outer_run, MemoryRun
+        ):  # pragma: no cover - bound above
+            msg = "a timed start records into the MemoryRuns it opened"
+            raise TypeError(msg)
+
+        # The path's values, computed now that the clock has stopped.
+        values = torch.as_tensor(instance.observations, dtype=torch.float64)
+        uniform = torch.full(
+            (instance.n_components,),
+            -math.log(instance.n_components),
+            dtype=torch.float64,
+        )
+        offset = inner.started - outer.started
+        start_seconds = (
+            _first_per_step(inner_run.series("seconds")) if seeded.path else {}
+        )
+        curve = [
+            (
+                offset + start_seconds[step],
+                float(mixture_log_likelihood(values, uniform, family)),
+            )
+            for step, family in seeded.path
+        ]
+        handover = len(curve)
+        handed = float(outer_run.last("seconds", HANDOVER))
+        polish_seconds = _first_per_step(outer_run.series("seconds"))
+        curve.append((handed, float(polished.log_likelihoods[0])))
+        curve.extend(
+            (polish_seconds[index - 1], float(value))
+            for index, value in enumerate(polished.log_likelihoods)
+            if index > 0
+        )
+
+        posterior = responsibilities(
+            values, torch.log(polished.weights), polished.components
+        )
+        columns = match_components(polished.components, instance.truth)
+        assigned = np.asarray(posterior.argmax(dim=1).numpy())
+        fitted_mean = polished.components.alignment_key()[:, 0].numpy()
+        true_mean = instance.truth.alignment_key()[:, 0].numpy()[columns]
+        seconds = float(outer_run.last("seconds"))
+        trial = Trial(
+            name=self.name,
+            seeded=Seeded(seeded.components, seeded.passes, seeded.diagnostics),
+            polished=polished,
+            curve=tuple(curve),
+            handover=handover,
+            seconds=seconds,
+            state_bytes=int(outer_run.last("state_bytes")),
+            recovery=float(np.mean(columns[assigned] == instance.labels)),
+            mean_error=float(np.max(np.abs(fitted_mean - true_mean) / true_mean)),
+        )
+        return Outcome(-float(polished.log_likelihoods[-1]), math.ceil(handed), trial)
+
+
+@dataclass(frozen=True)
+class StartRow:
+    """One start's row: what its trials reached, what they cost, and what they recovered.
+
+    Every tuple carries one entry per trial, in seed order.
+
+    Parameters
+    ----------
+    start : str
+        The start.
+    deterministic : bool
+        Whether the start reads no generator, so one trial is every trial.
+    seeded : tuple[float, ...]
+        The log-likelihood at the handover.
+    reached : tuple[float, ...]
+        The log-likelihood at the polish's budget.
+    gap : tuple[float, ...]
+        The reference less ``reached``, in nats.
+    passes : float
+        The start's own cost in passes, the mean over the trials.
+    state_bytes : int
+        What the polished state holds.
+    seconds : tuple[float, ...]
+        Wall clock of the start and its polish.
+    seeding_seconds : tuple[float, ...]
+        Wall clock of the start alone, to the handover.
+    recovery : tuple[float, ...]
+        Fraction of pairs assigned to their generating component.
+    mean_error : tuple[float, ...]
+        Largest relative error in a component's first-channel mean.
+    """
+
+    start: str
+    deterministic: bool
+    seeded: tuple[float, ...]
+    reached: tuple[float, ...]
+    gap: tuple[float, ...]
+    passes: float
+    state_bytes: int
+    seconds: tuple[float, ...]
+    seeding_seconds: tuple[float, ...]
+    recovery: tuple[float, ...]
+    mean_error: tuple[float, ...]
+
+    @property
+    def trials(self) -> int:
+        """Trials run."""
+        return len(self.reached)
+
+    @classmethod
+    def from_trials(cls, start: str, trials: list[Trial], reference: float) -> StartRow:
+        """The row of one start's trials, read against the reference.
+
+        Returns
+        -------
+        StartRow
+        """
+        reached = tuple(float(t.polished.log_likelihoods[-1]) for t in trials)
+        return cls(
+            start=start,
+            deterministic=start in DETERMINISTIC,
+            seeded=tuple(float(t.polished.log_likelihoods[0]) for t in trials),
+            reached=reached,
+            gap=tuple(reference - value for value in reached),
+            passes=float(np.mean([t.seeded.passes for t in trials])),
+            state_bytes=trials[0].state_bytes,
+            seconds=tuple(t.seconds for t in trials),
+            seeding_seconds=tuple(t.curve[t.handover][0] for t in trials),
+            recovery=tuple(t.recovery for t in trials),
+            mean_error=tuple(t.mean_error for t in trials),
+        )

@@ -14,7 +14,7 @@ code with what it checks.
 | [`classical_codes.ipynb`](classical_codes.ipynb) | Classical error-correcting codes: Gallager's (3,6) ensemble and the bicycle construction at matched length and degrees, and the algebraic codes whose decoder is closed form --- repetition, single parity check, Hamming, Golay, Reed--Solomon over `GF(8)` | The general sum-product on the parity-check factor graph; enumeration of all 32,768 codewords of a cycle-free code, and of the 64 of the bicycle fixture; the density-evolution threshold 0.4294; the two exact decodings, which bound the decoder on the quantity each minimizes; the binomial tail, which is a bounded-distance decoder's block error rate exactly; the channel capacity, which bounds every rate from above |
 | [`turbo.ipynb`](turbo.ipynb) | Turbo code, two memory-2 (7,5) recursive systematic encoders through a seeded interleaver | Enumeration of all 4,096 messages of the `K = 12` instance; the tree schedule of the general sum-product on the trellis factor graph; a parity-check matrix built by GF(2) nullspace; the uncoded closed form `Q(sqrt(2 E_b / N_0))` |
 | [`spatio_sequential.ipynb`](spatio_sequential.ipynb) | Coupled spatio-sequential model: a Potts prior over class labels gating one hidden chain per class | Enumeration over all 65,536 joint states of the CI fixture; the per-class forward recursion as a second route to the evidence; planted labels on a 10x10 lattice |
-| [`spatio_sequential_starts.ipynb`](spatio_sequential_starts.ipynb) | Where the coupled fit starts: the thirteen seedings of the emission parameters in projection, on `spatio_sequential_counts/release` (100 vertices, `M = K = 10`, `S = 1,000`), ten trials each | The generating parameters' own value and generating component on the draw, the reference `tests/regression/search/test_projection_seeding.py` states for a projected fit; the published k-means++ guarantee against the exact one-dimensional optimum |
+| [`spatio_sequential_starts.ipynb`](spatio_sequential_starts.ipynb) | Where a mixture fit starts: thirteen seedings of the joint count-pair emission mixture on `emission_mixture/stress` (10 components, 3,000 pairs), each polished by EM at six passes, timed through `track` | The generating parameters' own value on the draw, stated as the reference; the generating component of each pair, for the recovery |
 
 Each ends with a **Further Work** section naming what it could not demonstrate
 and the issue that carries it: a notebook that quietly skipped the unbuilt half
@@ -64,12 +64,17 @@ and comparing them would reproduce the `SOURCE_DATE_EPOCH` problem
 `docs/CLAUDE.md` records for `docs/tex/`. What is checked for a figure is that
 the cell still produced one.
 
-**A cell tagged `wall-clock` is executed and its text is not compared.** A wall
-clock belongs to the host and its load, so no rerun reproduces it. A code cell
-printing one carries `"tags": ["wall-clock"]` in its metadata; the checker runs
-it, still counts its figures, and skips its text (issue #891). A tagged cell
-prints the clock and the host and load it was read under, and nothing seeded:
-a seeded number printed there would leave the comparison with it.
+**A cell tagged `host-dependent` is executed and its text is not compared.**
+Two kinds of reading belong to the host and not to the seeds: a wall clock,
+and a quantity discontinuous in floating point. The second is a recovery or a
+largest error read through a permutation match: at near-ties the match flips
+when a reduction is ordered differently, so on the CI runner every
+log-likelihood agreed while a recovery moved from 0.048 to 0.046 (issue #891).
+A code cell printing either carries `"tags": ["host-dependent"]` in its
+metadata; the checker runs it, still counts its figures, and skips its text.
+A compared cell prints only what is continuous in the seeds --- a
+log-likelihood to 0.1 nat, a gap, a pass count, a byte count --- and a tagged
+cell states the host and the load a clock was read under.
 
 A notebook's printed numbers are therefore subject to the rule
 `docs/CLAUDE.md` states for a generated caption: **only quantities continuous
@@ -87,6 +92,11 @@ decimal that is the order 200 site terms were summed in; `potts_chain.ipynb` a
 against the tolerance the regression suite pins that same comparison at, so
 the notebook states the claim the suite pins rather than the sample that
 carried it (#480).
+
+**Every output is shown whole.** `--write` sets `scrolled: false` and
+`collapsed: false` on every code cell, and the checker fails a code cell whose
+metadata sets `scrolled: true`, so no figure or table is boxed into a scroll
+pane (issue #891).
 
 Install the kernel with `uv sync --extra notebooks`; a normal `pip install .`
 does not need it.
