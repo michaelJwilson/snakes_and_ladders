@@ -115,6 +115,7 @@ def plain(data_start: tuple[np.ndarray, CountPairEmission]) -> EmissionMixtureFi
     )
 
 
+@pytest.mark.smoke
 @pytest.mark.patch
 def test_no_schedule_and_one_step_at_one_are_the_plain_fit_bitwise(
     data_start: tuple[np.ndarray, CountPairEmission], plain: EmissionMixtureFit
