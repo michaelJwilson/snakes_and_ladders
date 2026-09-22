@@ -59,3 +59,10 @@ class Cost(StrEnum):
     """Passes over every observation: what a fit on data spends, counted by the data."""
     CANDIDATES = "candidates"
     """Candidates a search scores, where scoring one is itself a fit."""
+    SECONDS = "seconds"
+    """Wall clock, on the host that ran the method (issue #891).
+
+    The one unit that is not a count: it belongs to the machine and its load
+    as much as to the method, so a number in it is quoted with the host and
+    the load it was read under, and never byte-compared against a rerun.
+    """

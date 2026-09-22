@@ -27,6 +27,7 @@ store.
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import matplotlib as mpl
@@ -225,6 +226,21 @@ def test_the_chain_records_the_counters_the_chain_returns() -> None:
     ]
     assert run.last("state_bytes") == float(chain.theta.nbytes)
     assert run.last("peak_rss_bytes") > 0.0
+
+
+@pytest.mark.smoke
+def test_the_cost_record_carries_the_seconds_since_the_block_opened() -> None:
+    # Issue #891: a fit's wall clock is read from the run, as its bytes are,
+    # so a caller times a start and its fit by opening one block around both.
+    # The clock is bracketed by the caller's own reading of the same counter.
+    opened = time.perf_counter()
+    with track() as tracked:
+        _chain()
+        closed = time.perf_counter()
+
+    seconds = _memory(tracked.run).last("seconds")
+    assert 0.0 < seconds <= closed - opened
+    assert tracked.started >= opened
 
 
 @pytest.mark.smoke

@@ -71,6 +71,46 @@ def test_a_printed_number_is_compared() -> None:
     assert "-11679.1596" in reported[0]
 
 
+def _tagged(cell: dict[str, Any], *tags: str) -> dict[str, Any]:
+    return {**cell, "metadata": {"tags": list(tags)}}
+
+
+@pytest.mark.critical
+@pytest.mark.infra
+def test_a_wall_clock_cell_is_not_compared_and_an_untagged_one_is() -> None:
+    # Issue #891: a printed wall clock differs on every run, so the tag
+    # exempts that cell's text. The same outputs untagged, or under another
+    # tag, are still a disagreement.
+    committed = _cell(_stream("prior  12.31 s\n"))
+    executed = _cell(_stream("prior  12.87 s\n"))
+
+    tagged = differences(
+        "n.ipynb", [_tagged(committed, "wall-clock")], [_tagged(executed, "wall-clock")]
+    )
+    untagged = differences("n.ipynb", [committed], [executed])
+    other = differences(
+        "n.ipynb", [_tagged(committed, "slow")], [_tagged(executed, "slow")]
+    )
+
+    assert tagged == []
+    assert len(untagged) == 1
+    assert "12.87" in untagged[0]
+    assert len(other) == 1
+
+
+@pytest.mark.critical
+@pytest.mark.infra
+def test_a_wall_clock_cell_that_lost_its_figure_is_still_reported() -> None:
+    # The tag exempts a clock's text and nothing else: a figure is not a clock.
+    committed = [_tagged(_cell(_stream("1.2 s\n"), _figure()), "wall-clock")]
+    executed = [_tagged(_cell(_stream("1.9 s\n")), "wall-clock")]
+
+    reported = differences("n.ipynb", committed, executed)
+
+    assert len(reported) == 1
+    assert "figure" in reported[0]
+
+
 @pytest.mark.critical
 @pytest.mark.infra
 def test_an_unchanged_notebook_reports_nothing() -> None:

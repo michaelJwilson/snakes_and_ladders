@@ -48,10 +48,11 @@ from __future__ import annotations
 
 import resource
 import sys
+import time
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, runtime_checkable
 
 if TYPE_CHECKING:  # pragma: no cover - the import is for the annotation only
@@ -255,10 +256,15 @@ class TrackedOptimization:
         What the state means, or ``None`` for the counters alone. Evaluated
         only inside a :func:`track` block and only where a hook passes a
         ``state``, so an untracked run never computes one.
+    started : float
+        :func:`time.perf_counter` when the object was bound, which
+        :func:`track` does on entering its block: the origin of the
+        ``seconds`` :meth:`record_cost` records (issue #891).
     """
 
     run: Run
     metrics: Metrics[Any] | None = None
+    started: float = field(default_factory=time.perf_counter)
 
     @property
     def is_null(self) -> bool:
@@ -309,10 +315,14 @@ class TrackedOptimization:
             self.run.track(float(value), name=name, step=step, context=context)
 
     def record_cost(self, step: int, state_bytes: int) -> None:
-        """Record what the run cost the machine: peak resident bytes, and the bytes its state holds.
+        """Record what the run cost the machine: peak resident bytes, the bytes its state holds, and seconds.
 
         Called once, at the end of a run, at the step its last series entry
-        carries, so the two land beside the last number rather than past it.
+        carries, so the three land beside the last number rather than past it.
+        ``seconds`` is the wall clock since the enclosing :func:`track` block
+        was entered, so it covers whatever the block ran before the hook ---
+        a seeding, a burn-in --- as well as the loop that records it; a block
+        holding two runs reports the second's as the sum (issue #891).
         """
         if self.run is NULL_RUN:
             return
@@ -320,6 +330,7 @@ class TrackedOptimization:
             step,
             peak_rss_bytes=float(peak_rss_bytes()),
             state_bytes=float(state_bytes),
+            seconds=time.perf_counter() - self.started,
         )
 
 

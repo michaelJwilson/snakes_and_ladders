@@ -58,6 +58,13 @@ and comparing them would reproduce the `SOURCE_DATE_EPOCH` problem
 `docs/CLAUDE.md` records for `docs/tex/`. What is checked for a figure is that
 the cell still produced one.
 
+**A cell tagged `wall-clock` is executed and its text is not compared.** A wall
+clock belongs to the host and its load, so no rerun reproduces it. A code cell
+printing one carries `"tags": ["wall-clock"]` in its metadata; the checker runs
+it, still counts its figures, and skips its text (issue #891). A tagged cell
+prints the clock and the host and load it was read under, and nothing seeded:
+a seeded number printed there would leave the comparison with it.
+
 A notebook's printed numbers are therefore subject to the rule
 `docs/CLAUDE.md` states for a generated caption: **only quantities continuous
 in their inputs**. A near-zero residual is not one. The check's first run
