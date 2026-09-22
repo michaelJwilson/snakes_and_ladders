@@ -107,6 +107,22 @@ class _HmmObjective(Objective):
         )
 
     @property
+    def observations(self) -> torch.Tensor:
+        """The sequences being fitted, in the dtype the family scores them in.
+
+        Public so an expectation-maximization run started from a ``theta`` of
+        this objective fits the same data the gradient does
+        (:func:`snakes_and_ladders.opt.starts.polish_by_baum_welch`, issue
+        #894).
+        """
+        return self._observations
+
+    @property
+    def covariate(self) -> torch.Tensor | None:
+        """The per-site covariate the family conditions on, or ``None``."""
+        return self._covariate
+
+    @property
     def _n_emission_parameters(self) -> int:
         """Free values the emission family occupies in ``theta``."""
         raise NotImplementedError  # pragma: no cover
