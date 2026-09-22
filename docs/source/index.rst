@@ -261,6 +261,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.opt.budget
    :members:
 
+.. automodule:: snakes_and_ladders.opt.starts
+   :members:
+
 .. automodule:: snakes_and_ladders.learn.failure
    :members:
 
@@ -546,6 +549,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.qa.mixture_seeding
+   :members:
+
+.. automodule:: snakes_and_ladders.qa.starts
    :members:
 
 .. automodule:: snakes_and_ladders.qa.optimizer_landscapes
