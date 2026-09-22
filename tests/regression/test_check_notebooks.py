@@ -79,7 +79,7 @@ def _tagged(cell: dict[str, Any], *tags: str) -> dict[str, Any]:
 
 @pytest.mark.critical
 @pytest.mark.infra
-def test_a_wall_clock_cell_is_not_compared_and_an_untagged_one_is() -> None:
+def test_a_host_dependent_cell_is_not_compared_and_an_untagged_one_is() -> None:
     # Issue #891: a printed wall clock differs on every run, so the tag
     # exempts that cell's text. The same outputs untagged, or under another
     # tag, are still a disagreement.
@@ -87,7 +87,9 @@ def test_a_wall_clock_cell_is_not_compared_and_an_untagged_one_is() -> None:
     executed = _cell(_stream("prior  12.87 s\n"))
 
     tagged = differences(
-        "n.ipynb", [_tagged(committed, "wall-clock")], [_tagged(executed, "wall-clock")]
+        "n.ipynb",
+        [_tagged(committed, "host-dependent")],
+        [_tagged(executed, "host-dependent")],
     )
     untagged = differences("n.ipynb", [committed], [executed])
     other = differences(
@@ -102,10 +104,11 @@ def test_a_wall_clock_cell_is_not_compared_and_an_untagged_one_is() -> None:
 
 @pytest.mark.critical
 @pytest.mark.infra
-def test_a_wall_clock_cell_that_lost_its_figure_is_still_reported() -> None:
-    # The tag exempts a clock's text and nothing else: a figure is not a clock.
-    committed = [_tagged(_cell(_stream("1.2 s\n"), _figure()), "wall-clock")]
-    executed = [_tagged(_cell(_stream("1.9 s\n")), "wall-clock")]
+def test_a_host_dependent_cell_that_lost_its_figure_is_still_reported() -> None:
+    # The tag exempts a host-dependent text and nothing else: a figure's
+    # presence is not host-dependent.
+    committed = [_tagged(_cell(_stream("1.2 s\n"), _figure()), "host-dependent")]
+    executed = [_tagged(_cell(_stream("1.9 s\n")), "host-dependent")]
 
     reported = differences("n.ipynb", committed, executed)
 
