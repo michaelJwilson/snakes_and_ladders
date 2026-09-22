@@ -5457,6 +5457,22 @@ spread the temperature sets, the acceptance is a function of the ratio of
 neighbours. The endpoints are the caller's and never move; the warm-up's cost
 in sweeps is charged to any comparison against a ladder set by hand.
 
+The Hamiltonian ladder a tempering start runs is set the same way. A
+measurement is a short run of Algorithm~\ref{alg:parallel-tempering} whose
+step is one Hamiltonian transition per replica (Appendix~\ref{app:hmc}), $n$
+rounds on a candidate of $R$ rungs costing $nR$ transitions, read either for
+the exchange acceptance of every pair against the band or for the fraction of
+visits made by walkers on their way up, which the feedback placement
+of~\citet{katzgraber2006} redistributes at fixed $R$. Every measurement
+draws from the start's one stream and begins at the lowest-valued point the
+warm-up has visited, and so does the run on the settled ladder: the warm-up's
+positions are discarded and its transitions are not. A budget
+in seconds bounds the run as a ceiling, a round admitted only if the longest
+round so far would end inside it. What the settled ladder buys is a
+measurement at equal transitions, warm-up included, and not a consequence of
+the band: on a three-component count mixture it was no better a start than
+the hand ladder given the same transitions.
+
 \subsection{Tempering against a sampler, and against restarts}
 \label{app:tempering:comparison}
 Three ways to spend a budget on a multimodal continuous objective, and they are
