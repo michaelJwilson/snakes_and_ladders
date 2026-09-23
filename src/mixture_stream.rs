@@ -22,7 +22,7 @@ use rayon::prelude::*;
 
 /// Draws per parallel chunk of [`gaussian_gradient`]: the partial sums are
 /// reduced in chunk order, so the result does not depend on the pool.
-const CHUNK: usize = 8192;
+const CHUNK: usize = 4096;
 
 /// New weights, means and variances, and the log-likelihood at the parameters given.
 pub struct Step {
@@ -131,14 +131,19 @@ pub fn gaussian_gradient(
             let mut z = vec![0.0; k];
             for &x in chunk {
                 let mut high = f64::NEG_INFINITY;
+                let mut top = 0;
                 for c in 0..k {
                     z[c] = (x - mean[c]) * precision[c];
                     joint[c] = offset[c] - 0.5 * z[c] * z[c];
-                    high = high.max(joint[c]);
+                    if joint[c] > high {
+                        high = joint[c];
+                        top = c;
+                    }
                 }
+                // The largest term is exp(0): one exponential fewer per draw.
                 let mut total = 0.0;
-                for value in &mut joint {
-                    *value = (*value - high).exp();
+                for (c, value) in joint.iter_mut().enumerate() {
+                    *value = if c == top { 1.0 } else { (*value - high).exp() };
                     total += *value;
                 }
                 sums[0] += high + total.ln();
