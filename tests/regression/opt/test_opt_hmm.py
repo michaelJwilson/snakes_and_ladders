@@ -10,7 +10,7 @@ recursion checked only against itself is checked against nothing.
 from __future__ import annotations
 
 from dataclasses import replace
-from itertools import permutations, product
+from itertools import pairwise, permutations, product
 
 import numpy as np
 import pytest
@@ -20,6 +20,7 @@ from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.emissions import (
     BetaBinomialEmission,
     BinomialEmission,
+    CategoricalEmission,
     EmissionFamily,
     GaussianEmission,
     NegativeBinomialEmission,
@@ -34,6 +35,7 @@ from snakes_and_ladders.opt.hmm import (
     baum_welch,
     baum_welch_family,
     forward_log_likelihood,
+    viterbi,
 )
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
@@ -699,3 +701,75 @@ def test_real_valued_counts_take_the_batched_route() -> None:
         for backend in (Backend.PYTHON, Backend.RUST)
     ]
     assert fits[1].log_likelihood == fits[0].log_likelihood
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize(
+    "name", ["gaussian", "poisson", "negative_binomial", "binomial", "beta_binomial"]
+)
+def test_the_compiled_viterbi_is_the_numpy_one(name: str) -> None:
+    # Issue #997: the compiled route decodes sequences in parallel; the NumPy
+    # recursion is its oracle, path for path and in the total log-probability.
+    observations, family, _ = _streamed_case(name, covariate=False)
+    initial = torch.log(torch.tensor([0.4, 0.3, 0.3], dtype=torch.float64))
+    transition = torch.log(
+        torch.tensor(
+            [[0.8, 0.1, 0.1], [0.1, 0.8, 0.1], [0.1, 0.1, 0.8]], dtype=torch.float64
+        )
+    )
+    ours, theirs = (
+        viterbi(observations, initial, transition, family, backend=backend)
+        for backend in (Backend.RUST, Backend.PYTHON)
+    )
+    assert_allclose(ours[1], theirs[1], rtol=1e-12)
+    # The compiled lgamma differs from torch's in the last bits, which can
+    # flip a tie between two paths: a path that differs must score, under
+    # the oracle's own densities, what the oracle's path scores.
+    emit = family.log_density(
+        torch.as_tensor(observations, dtype=family.observation_dtype)
+    ).numpy()
+    for row in np.flatnonzero((ours[0] != theirs[0]).any(axis=1)):
+        scored = [
+            float(
+                initial[path[0]]
+                + emit[row, np.arange(path.size), path].sum()
+                + transition.numpy()[path[:-1], path[1:]].sum()
+            )
+            for path in (ours[0][row], theirs[0][row])
+        ]
+        assert_allclose(scored[0], scored[1], rtol=1e-12)
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("backend", [Backend.RUST, Backend.PYTHON])
+def test_viterbi_is_the_enumerated_best_path(backend: Backend) -> None:
+    # Every path of four sequences of five over three states, scored by the
+    # model directly: the decoded path is the argmax and its score the max.
+    params = load_params(FIXTURES_DIR / "hmm" / "ci.yaml", HmmParams)
+    observations = simulate_sequences(replace(params, lengths=(5,) * 4)).observations
+    log_initial = torch.log(torch.as_tensor(params.initial))
+    log_transition = torch.log(torch.as_tensor(params.transition))
+    log_emission = torch.log(torch.as_tensor(params.emission))
+    states, total = viterbi(
+        observations,
+        log_initial,
+        log_transition,
+        CategoricalEmission.from_log(log_emission),
+        backend=backend,
+    )
+    best_total = 0.0
+    for row, path in zip(observations, states, strict=True):
+        scores = {
+            candidate: float(
+                log_initial[candidate[0]]
+                + sum(log_transition[a, b] for a, b in pairwise(candidate))
+                + sum(
+                    log_emission[s, int(x)] for s, x in zip(candidate, row, strict=True)
+                )
+            )
+            for candidate in product(range(3), repeat=5)
+        }
+        best = max(scores, key=lambda c: (scores[c], [-s for s in c]))
+        assert tuple(path) == best
+        best_total += scores[best]
+    assert_allclose(total, best_total, rtol=1e-12)

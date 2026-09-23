@@ -466,6 +466,39 @@ HMMLEARN_FAMILY_BAUM_WELCH_MEMORY = {
     )
 }
 
+#: hmmlearn's Viterbi (`decode`, `algorithm="viterbi"`) at the start
+#: parameters on the same sequences: the medians of three subprocess runs,
+#: seconds and peak added resident bytes (#997).
+HMMLEARN_VITERBI = {
+    (family, n_sequences): Goal(
+        "hmmlearn",
+        f"{family} Viterbi at {100 * n_sequences:,} positions",
+        seconds,
+        "2026-09-23, 4-core reference host at a 1-minute load of 1.3, #997",
+    )
+    for family, n_sequences, seconds in (
+        ("gaussian", 1_000, 0.035513),
+        ("gaussian", 10_000, 0.264086),
+        ("poisson", 1_000, 0.151608),
+        ("poisson", 10_000, 1.546611),
+    )
+}
+
+HMMLEARN_VITERBI_MEMORY = {
+    (family, n_sequences): MemoryGoal(
+        "hmmlearn",
+        f"{family} Viterbi at {100 * n_sequences:,} positions",
+        peak_bytes,
+        "2026-09-23, 4-core reference host, #997",
+    )
+    for family, n_sequences, peak_bytes in (
+        ("gaussian", 1_000, 2_142_208),
+        ("gaussian", 10_000, 19_349_504),
+        ("poisson", 1_000, 2_457_600),
+        ("poisson", 10_000, 19_689_472),
+    )
+}
+
 #: The start both sides fit from: probabilities, and each family's parameters.
 _FAMILY_START: dict[str, dict[str, np.ndarray]] = {
     "gaussian": {
@@ -533,6 +566,29 @@ def test_family_baum_welch_fits_hmmlearns_memory(family: str, n_sequences: int) 
         int(np.median(peaks)),
         HMMLEARN_FAMILY_BAUM_WELCH_MEMORY[(family, n_sequences)],
     )
+
+
+def _viterbi_inputs(family: str, n_sequences: int) -> dict[str, np.ndarray]:
+    """The harness's inputs for one decode, at the fits' start."""
+    inputs = _family_inputs(family, n_sequences)
+    del inputs["n_iter"]
+    return inputs
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize(("family", "n_sequences"), sorted(HMMLEARN_VITERBI))
+def test_viterbi_meets_hmmlearns_runtime(family: str, n_sequences: int) -> None:
+    inputs = _viterbi_inputs(family, n_sequences)
+    seconds = [package("viterbi", inputs).seconds for _ in range(3)]
+    assert_meets(float(np.median(seconds)), HMMLEARN_VITERBI[(family, n_sequences)])
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize(("family", "n_sequences"), sorted(HMMLEARN_VITERBI_MEMORY))
+def test_viterbi_fits_hmmlearns_memory(family: str, n_sequences: int) -> None:
+    inputs = _viterbi_inputs(family, n_sequences)
+    peaks = [package("viterbi", inputs).peak_bytes or 0 for _ in range(3)]
+    assert_fits(int(np.median(peaks)), HMMLEARN_VITERBI_MEMORY[(family, n_sequences)])
 
 
 #: BlackJAX's peak added resident memory for the same compiled chain with no

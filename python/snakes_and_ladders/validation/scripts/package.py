@@ -176,6 +176,40 @@ def _family_baum_welch(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs
     return call
 
 
+def _viterbi(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
+    """Viterbi paths at the given parameters, as hmmlearn's ``decode`` runs (#997).
+
+    ``family`` is ``gaussian`` (``mean``, ``variance``) or ``poisson``
+    (``rate``); ``initial`` and ``transition`` are probabilities.
+    """
+    import torch
+
+    from snakes_and_ladders.emissions import (
+        EmissionFamily,
+        GaussianEmission,
+        PoissonEmission,
+    )
+    from snakes_and_ladders.opt.hmm import viterbi
+
+    observations = inputs["observations"]
+    initial, transition = (
+        torch.log(torch.as_tensor(inputs[name])) for name in ("initial", "transition")
+    )
+    family: EmissionFamily = (
+        PoissonEmission(inputs["rate"])
+        if str(inputs["family"]) == "poisson"
+        else GaussianEmission(inputs["mean"], np.sqrt(inputs["variance"]), 1e-12)
+    )
+    # Outside the measured call, as `_family_baum_welch`'s warm-up.
+    viterbi(np.ascontiguousarray(observations[:2, :2]), initial, transition, family)
+
+    def call() -> Outputs:
+        states, log_probability = viterbi(observations, initial, transition, family)
+        return {"states": states, "log_probability": np.asarray(log_probability)}
+
+    return call
+
+
 def _mixture_em(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     """Ten mixture EM iterations from the given start, as the scikit-learn pair runs (#975)."""
     import torch
@@ -321,6 +355,7 @@ CALLS: dict[str, Build] = {
     "alpha_expansion": _alpha_expansion,
     "baum_welch": _baum_welch,
     "family_baum_welch": _family_baum_welch,
+    "viterbi": _viterbi,
     "mixture_em": _mixture_em,
     "hmc_sample": _hmc_sample,
     "cluster_labels": _cluster_labels,

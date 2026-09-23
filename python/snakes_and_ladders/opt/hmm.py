@@ -1488,6 +1488,92 @@ def _streamed_family(
     )
 
 
+def viterbi(
+    observations: np.ndarray,
+    log_initial: torch.Tensor,
+    log_transition: torch.Tensor,
+    emissions: EmissionFamily,
+    backend: Backend = Backend.RUST,
+) -> tuple[np.ndarray, float]:
+    """The most probable hidden path of every sequence, and their total log-probability.
+
+    Parameters
+    ----------
+    observations : np.ndarray
+        Shape ``(n_sequences, length)``: symbols, real values or counts, as
+        ``emissions`` scores them.
+    log_initial, log_transition : torch.Tensor
+        Log-probabilities, ``(m,)`` and ``(m, m)``.
+    emissions : EmissionFamily
+        The emission family.
+    backend : Backend
+        :data:`~snakes_and_ladders.backend.Backend.RUST`, the default,
+        decodes the sequences in parallel in ``oxi_snakes_and_ladders.
+        hmm_viterbi`` where ``emissions`` is exactly a categorical, a
+        one-channel Gaussian or a count family; any other family, and
+        :data:`~snakes_and_ladders.backend.Backend.PYTHON`, take the NumPy
+        recursion here, which is the oracle (issue #997).
+
+    Returns
+    -------
+    tuple[np.ndarray, float]
+        The paths, ``(n_sequences, length)`` ``int64``, and the sum over
+        sequences of each path's joint log-probability. A tie goes to the
+        lower state.
+    """
+    refuse_backend("viterbi", backend, (Backend.PYTHON, Backend.RUST))
+    values = np.asarray(observations)
+    compiled = _viterbi_family(emissions)
+    if backend is Backend.RUST and compiled is not None and values.ndim == 2:
+        name, parameters = compiled
+        # Symbols and counts are read as the int64 NumPy holds them.
+        dtype = np.int64 if np.issubdtype(values.dtype, np.integer) else np.float64
+        states, log_probability = oxi_snakes_and_ladders.hmm_viterbi(
+            np.ascontiguousarray(values, dtype=dtype),
+            np.ascontiguousarray(log_initial.detach().numpy(), dtype=np.float64),
+            np.ascontiguousarray(
+                log_transition.detach().numpy(), dtype=np.float64
+            ).reshape(-1),
+            name,
+            parameters,
+        )
+        return states.reshape(values.shape), float(log_probability)
+    emit = emissions.log_density(
+        torch.as_tensor(values, dtype=emissions.observation_dtype)
+    ).numpy()
+    kernel = log_transition.detach().numpy()
+    n_sequences, length = values.shape
+    delta = log_initial.detach().numpy() + emit[:, 0]
+    back = np.empty((n_sequences, length, delta.shape[1]), dtype=np.int64)
+    for t in range(1, length):
+        scores = delta[:, :, None] + kernel[None]
+        back[:, t] = np.argmax(scores, axis=1)
+        delta = np.take_along_axis(scores, back[:, t][:, None, :], axis=1)[:, 0]
+        delta = delta + emit[:, t]
+    states = np.empty((n_sequences, length), dtype=np.int64)
+    states[:, -1] = np.argmax(delta, axis=1)
+    for t in range(length - 1, 0, -1):
+        states[:, t - 1] = np.take_along_axis(back[:, t], states[:, t, None], axis=1)[
+            :, 0
+        ]
+    return states, float(delta.max(axis=1).sum())
+
+
+def _viterbi_family(emissions: EmissionFamily) -> tuple[str, np.ndarray] | None:
+    """The compiled Viterbi's name and parameters for ``emissions``, or ``None``."""
+    if type(emissions) is CategoricalEmission:
+        return "categorical", np.ascontiguousarray(
+            emissions.log_matrix.detach().numpy(), dtype=np.float64
+        ).reshape(-1)
+    if type(emissions) is GaussianEmission and emissions.n_channels == 1:
+        stacked = torch.cat([emissions.mean, emissions.scale]).detach().numpy()
+        return "gaussian", np.ascontiguousarray(stacked, dtype=np.float64)
+    if type(emissions) in _TABLED:
+        scoring = _direct_scoring(emissions)
+        return str(scoring["family"]), scoring["parameters"]
+    return None
+
+
 def baum_welch_family(
     observations: np.ndarray | Ragged,
     log_initial: torch.Tensor,

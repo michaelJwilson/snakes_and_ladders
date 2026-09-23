@@ -109,6 +109,13 @@ def count_em_step(
     approx: bool = False,
     stirling_from: float = 10.0,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]: ...
+def hmm_viterbi(
+    observations: np.ndarray,
+    log_initial: np.ndarray,
+    log_transition: np.ndarray,
+    family: str,
+    parameters: np.ndarray,
+) -> tuple[np.ndarray, float]: ...
 def gaussian_mixture_em_step(
     values: np.ndarray,
     log_weight: np.ndarray,

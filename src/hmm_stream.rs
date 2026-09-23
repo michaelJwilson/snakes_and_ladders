@@ -771,7 +771,7 @@ impl<'a> CountFamily<'a> {
 
     /// The `m` log-densities of the count `y`, given the covariate `c` if any.
     #[inline]
-    fn log_density(&self, y: f64, c: Option<f64>, out: &mut [f64]) {
+    pub fn log_density(&self, y: f64, c: Option<f64>, out: &mut [f64]) {
         if self.approx {
             self.score::<true>(y, c, out);
         } else {
@@ -998,7 +998,7 @@ pub fn count_cells<'py>(
 }
 
 /// A `CountFamily` from its name and its parameters stacked per state.
-fn count_family<'a>(
+pub fn count_family<'a>(
     name: &str,
     parameters: &'a [f64],
     m: usize,

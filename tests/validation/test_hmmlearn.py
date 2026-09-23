@@ -8,7 +8,9 @@ recursion. Referees:
   within the same, so the agreement is per step and not a shared fixed point;
 - ten iterations of the streamed Gaussian and Poisson steps against
   `GaussianHMM` and `PoissonHMM` with every prior and floor zero: every
-  parameter within 1e-9 relative (issue #997).
+  parameter within 1e-9 relative (issue #997);
+- the compiled Viterbi against `decode`: every path position, and the total
+  log-probability within 1e-11 (issue #997).
 
 The runtime goal hmmlearn sets is in `test_goals.py`.
 """
@@ -22,7 +24,7 @@ import pytest
 import torch
 from snakes_and_ladders.emissions import GaussianEmission, PoissonEmission
 from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.opt.hmm import baum_welch, baum_welch_family
+from snakes_and_ladders.opt.hmm import baum_welch, baum_welch_family, viterbi
 from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
 from snakes_and_ladders.validation import hmmlearn
 from snakes_and_ladders.validation.runner import available
@@ -155,3 +157,32 @@ def test_the_streamed_family_fit_is_hmmlearns(family: str) -> None:
         np.testing.assert_allclose(
             fitted["mean"].numpy(), theirs.emission["rate"], rtol=1e-9
         )
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("family", ["gaussian", "poisson"])
+def test_viterbi_is_hmmlearns(family: str) -> None:
+    # Issue #997: the compiled Viterbi against hmmlearn's `decode`: every
+    # path position equal and the total joint log-probability within 1e-11.
+    observations = _family_sequences(family)
+    initial = np.array([0.4, 0.3, 0.3])
+    transition = np.array([[0.8, 0.1, 0.1], [0.1, 0.8, 0.1], [0.1, 0.1, 0.8]])
+    start = (
+        {"mean": np.array([-1.5, 0.5, 2.5]), "variance": np.array([1.2, 1.0, 1.8])}
+        if family == "gaussian"
+        else {"rate": np.array([2.0, 4.0, 10.0])}
+    )
+    family_start = (
+        GaussianEmission(start["mean"], np.sqrt(start["variance"]), 1e-12)
+        if family == "gaussian"
+        else PoissonEmission(start["rate"])
+    )
+    states, log_probability = viterbi(
+        observations,
+        torch.log(torch.as_tensor(initial)),
+        torch.log(torch.as_tensor(transition)),
+        family_start,
+    )
+    theirs = hmmlearn.viterbi(observations, initial, transition, start)
+    np.testing.assert_array_equal(states, theirs.states)
+    np.testing.assert_allclose(log_probability, theirs.log_probability, rtol=1e-11)
