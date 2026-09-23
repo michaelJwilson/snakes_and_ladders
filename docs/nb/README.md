@@ -15,7 +15,7 @@ code with what it checks.
 | [`turbo.ipynb`](turbo.ipynb) | Turbo code, two memory-2 (7,5) recursive systematic encoders through a seeded interleaver | Enumeration of all 4,096 messages of the `K = 12` instance; the tree schedule of the general sum-product on the trellis factor graph; a parity-check matrix built by GF(2) nullspace; the uncoded closed form `Q(sqrt(2 E_b / N_0))` |
 | [`spatio_sequential.ipynb`](spatio_sequential.ipynb) | Coupled spatio-sequential model: a Potts prior over class labels gating one hidden chain per class | Enumeration over all 65,536 joint states of the CI fixture; the per-class forward recursion as a second route to the evidence; planted labels on a 10x10 lattice |
 | [`emission_mixture_starts.ipynb`](emission_mixture_starts.ipynb) | Where a mixture fit starts: fourteen seedings of the joint count-pair emission mixture on `emission_mixture/stress` (10 components, 3,000 pairs), each start and its EM polish to a 1e-6 relative change under one 120 s budget, gap against runtime on a log axis, timed through `track` | The generating parameters' own value on the draw, stated as the reference; the generating component of each pair, for the recovery |
-| [`potts_starts.ipynb`](potts_starts.ipynb) | Where a ground state starts: every solver of `search.ground_state` on `potts_lattice/release` (50x50, q = 3, critical coupling, size-tilted field) and its q = 2 sibling, each polished by ICM through the `opt.starts` seam, five seeds, gap against runtime | The alpha-expansion bracket at q = 3 and the exact graph-cut optimum at q = 2; the structure of the generating ladder and sizes |
+| [`potts_starts.ipynb`](potts_starts.ipynb) | Where a ground state starts: every solver of `search.ground_state` on `spatio_only/release` (71x71 triangular, q = 10, J = 0.7, size-tilted field), each polished by ICM through `opt.starts.StartsBenchmark` at five seeds, gap against runtime through `qa.starts.gap_panels` | The alpha-expansion bracket, stated as the reference; the generating ladder and sizes, for the structure |
 
 Each ends with a **Further Work** section naming what it could not demonstrate
 and the issue that carries it: a notebook that quietly skipped the unbuilt half
@@ -52,7 +52,7 @@ merge moved the hash. A set too expensive to run whole would be cut by a budget
 `DEV.md` states, never by a hash. Issue #490 deleted the stamps and the digest
 behind them.
 
-**Each notebook's execution has a budget of 600 s of wall clock.**
+**Each notebook's execution has a budget of 900 s of wall clock** (600 s until #909).
 `infra/check_notebooks.py` states it as `NOTEBOOK_BUDGET` and fails a notebook
 that takes longer, with its time beside the budget in the message (issue
 #891). A notebook over it is cut --- fewer trials, a smaller instance --- and

@@ -28,6 +28,7 @@ from snakes_and_ladders.search.ground_state import (
     expansion_bracket,
     lattice_rung,
     run_alpha_expansion,
+    rung_field,
 )
 from snakes_and_ladders.search.potts_starts import (
     PottsObjective,
@@ -36,9 +37,10 @@ from snakes_and_ladders.search.potts_starts import (
     describe,
     polish_by_icm,
     rung_of,
+    spatio_rung,
 )
 from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.potts import PottsLatticeParams, energy
+from snakes_and_ladders.sim.potts import PottsLatticeParams, SpatioOnlyParams, energy
 
 #: A small rung of the same family: 8x8 at three states in the size tilt.
 SIDE = 8
@@ -190,3 +192,43 @@ def test_the_adapter_refuses_what_it_cannot_read(tmp_path: Path) -> None:
     broken.write_text(text.replace("  size_seed: 906\n", ""))
     with pytest.raises(ValueError, match="size-tilted field declares exactly"):
         PottsLatticeParams.from_declared(yaml.safe_load(broken.read_text()), broken)
+
+
+@pytest.mark.smoke
+def test_the_q10_rung_is_the_spatio_only_release_fixture_bitwise() -> None:
+    # Issue #927: the notebook's instance is the declared spatio_only/release,
+    # at its own ten classes, read through the one field builder the ground
+    # state tests use.
+    params = fixture("spatio_only", "release").params
+    assert isinstance(params, SpatioOnlyParams)
+    rung = spatio_rung(params, "release-q10")
+    field, alpha = rung_field(params, params.n_classes)
+    assert rung.n_states == params.n_classes == 10
+    assert rung.n_nodes == 71 * 71
+    assert np.array_equal(rung.field, field)
+    assert np.array_equal(rung.alpha, alpha)
+    assert np.array_equal(rung.sizes, params.sizes)
+    assert rung.graph is params.graph
+    assert rung.optimum is None
+
+
+@pytest.mark.end2end
+def test_at_ten_states_the_polish_never_rises_and_nothing_ends_below_the_bracket() -> (
+    None
+):
+    # The q = 10 notebook's claims on its own rung at a short budget: ICM
+    # never raises the solver's energy, and no labelling ends below the
+    # expansion bracket's lower end.
+    rung = spatio_rung(fixture("spatio_only", "release").params, "release-q10")
+    budget = Budget(Cost.SITE_VISITS, 50 * rung.visits_per_sweep)
+    expansion = run_alpha_expansion(rung, budget, np.random.default_rng(0)).energy
+    bracket = expansion_bracket(rung, expansion)
+    objective = PottsObjective(rung)
+    for name in ("greedy", "anneal", "alpha-expansion"):
+        (seeded,) = SolverStart(name, budget, np.random.default_rng(1)).starts(
+            objective
+        )
+        start = float(objective(seeded))
+        polished = polish_by_icm(objective, seeded, POLISH)
+        assert polished.value <= start, name
+        assert polished.value >= bracket.lower, name
