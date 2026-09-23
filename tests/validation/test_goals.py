@@ -128,6 +128,30 @@ SCIKIT_LEARN_EM = {
     for n_samples, seconds in ((100_000, 0.30038), (1_000_000, 3.86556))
 }
 
+#: hmmlearn's peak added resident memory for the same ten iterations, the
+#: medians of three subprocess runs (#987). It works one sequence at a time.
+HMMLEARN_BAUM_WELCH_MEMORY = {
+    n_sequences: MemoryGoal(
+        "hmmlearn",
+        f"ten Baum-Welch iterations at {100 * n_sequences:,} positions",
+        peak_bytes,
+        "2026-09-23, 4-core reference host, #987",
+    )
+    for n_sequences, peak_bytes in ((1_000, 372_736), (10_000, 1_196_032))
+}
+
+#: scikit-learn's peak added resident memory for the same ten iterations at
+#: 10^5 draws (#987). At 10^6 the package's is the lower, 163 MB against
+#: 184 MB, and sets no goal.
+SCIKIT_LEARN_EM_MEMORY = {
+    100_000: MemoryGoal(
+        "scikit_learn",
+        "ten mixture EM iterations at 100,000 draws",
+        18_132_992,
+        "2026-09-23, 4-core reference host, #987",
+    )
+}
+
 
 @pytest.mark.experiment
 @pytest.mark.parametrize("side", sorted(PYMAXFLOW_CUT))
@@ -238,3 +262,36 @@ def test_mixture_em_meets_scikit_learns_runtime(n_samples: int) -> None:
         repeats=3,
     )
     assert_meets(ours, SCIKIT_LEARN_EM[n_samples])
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("n_sequences", sorted(HMMLEARN_BAUM_WELCH_MEMORY))
+def test_baum_welch_fits_hmmlearns_memory(n_sequences: int) -> None:
+    params = dataclasses.replace(
+        load_params(FIXTURES_DIR / "hmm" / "ci.yaml", HmmParams),
+        lengths=(100,) * n_sequences,
+    )
+    initial, transition, emission = _hmm_start()
+    inputs = {
+        "observations": simulate_sequences(params).observations,
+        "initial": initial,
+        "transition": transition,
+        "emission": emission,
+        "n_iter": np.asarray(10),
+    }
+    peaks = [package("baum_welch", inputs).peak_bytes or 0 for _ in range(3)]
+    assert_fits(int(np.median(peaks)), HMMLEARN_BAUM_WELCH_MEMORY[n_sequences])
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("n_samples", sorted(SCIKIT_LEARN_EM_MEMORY))
+def test_mixture_em_fits_scikit_learns_memory(n_samples: int) -> None:
+    inputs = {
+        "observations": _mixture_draws(n_samples),
+        "weights": np.array([0.3, 0.3, 0.4]),
+        "mean": np.array([-3.0, 0.5, 4.0]),
+        "scale": np.array([1.2, 1.0, 1.3]),
+        "n_iter": np.asarray(10),
+    }
+    peaks = [package("mixture_em", inputs).peak_bytes or 0 for _ in range(3)]
+    assert_fits(int(np.median(peaks)), SCIKIT_LEARN_EM_MEMORY[n_samples])

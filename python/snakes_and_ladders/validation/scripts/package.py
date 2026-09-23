@@ -72,11 +72,61 @@ def _alpha_expansion(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     return call
 
 
+def _baum_welch(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
+    """Ten Baum--Welch iterations from the given start, as the hmmlearn pair runs (#975)."""
+    import torch
+
+    from snakes_and_ladders.opt.hmm import baum_welch
+
+    observations = inputs["observations"]
+    initial, transition, emission = (
+        torch.log(torch.as_tensor(inputs[name]))
+        for name in ("initial", "transition", "emission")
+    )
+    n_iter = int(inputs["n_iter"])
+
+    def call() -> Outputs:
+        fit = baum_welch(
+            observations,
+            initial,
+            transition,
+            emission,
+            max_iterations=n_iter,
+            tolerance=-np.inf,
+        )
+        return {"emission": fit.log_emission.exp().numpy()}
+
+    return call
+
+
+def _mixture_em(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
+    """Ten mixture EM iterations from the given start, as the scikit-learn pair runs (#975)."""
+    import torch
+
+    from snakes_and_ladders.emissions import GaussianEmission
+    from snakes_and_ladders.opt.mixture import expectation_maximization
+
+    observations = inputs["observations"]
+    weights = torch.as_tensor(inputs["weights"])
+    start = GaussianEmission(inputs["mean"], inputs["scale"], 1e-12)
+    n_iter = int(inputs["n_iter"])
+
+    def call() -> Outputs:
+        fit = expectation_maximization(
+            observations, weights, start, max_iterations=n_iter, tolerance=-np.inf
+        )
+        return {"weights": fit.weights.numpy()}
+
+    return call
+
+
 #: The calls this script measures, by name.
 CALLS: dict[str, Build] = {
     "allocate": _allocate,
     "ising_cut": _ising_cut,
     "alpha_expansion": _alpha_expansion,
+    "baum_welch": _baum_welch,
+    "mixture_em": _mixture_em,
 }
 
 
