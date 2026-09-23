@@ -201,6 +201,32 @@ def beta_binomial_parameters(
     margin: float,
     out: np.ndarray,
 ) -> None: ...
+
+class LatticeCut:
+    def __init__(
+        self,
+        n_nodes: int,
+        first: np.ndarray,
+        second: np.ndarray,
+        coupling: np.ndarray,
+    ) -> None: ...
+    def expansion_source_side(
+        self,
+        values: np.ndarray,
+        n_states: int,
+        labels: np.ndarray,
+        alpha: int,
+        pinned: float,
+    ) -> np.ndarray: ...
+    def swap_source_side(
+        self,
+        values: np.ndarray,
+        n_states: int,
+        labels: np.ndarray,
+        alpha: int,
+        beta: int,
+    ) -> np.ndarray: ...
+
 def ragged_posteriors(
     log_density: np.ndarray,
     lengths: np.ndarray,
