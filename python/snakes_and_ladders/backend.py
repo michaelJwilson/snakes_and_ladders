@@ -76,6 +76,11 @@ class Backend(StrEnum):
     elementwise over sites and earns the GPU rule, or is measured against it
     (issue #823); a kernel whose loop is over an adjacency belongs to Rust."""
 
+    JAX = "jax"
+    """A ``jax`` route: an objective's value and gradient under
+    ``jit(value_and_grad)``, the autodiff backend issue #1000 benchmarks
+    against PyTorch's and keeps only where it wins by 2x."""
+
 
 def refuse_backend(name: str, backend: Backend, allowed: tuple[Backend, ...]) -> None:
     """Refuse a member ``name`` has no implementation for, in the one sentence.
