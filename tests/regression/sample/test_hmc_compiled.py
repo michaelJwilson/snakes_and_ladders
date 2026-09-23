@@ -94,3 +94,20 @@ def test_the_compiled_chain_is_reproducible_and_routes_what_it_cannot_run() -> N
         tempered.theta, run(temperature=2.0, backend=Backend.PYTHON).theta
     )
     assert not torch.equal(run().theta, run(backend=Backend.PYTHON).theta)
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("dense", [False, True], ids=["diagonal", "dense"])
+def test_a_declared_gradient_is_autograd_s(dense: bool) -> None:
+    # `gradient_at` reads a DeclaredGradient's own closed form (issue #986);
+    # it must be the gradient autograd takes through `__call__`.
+    rng = np.random.default_rng(9862)
+    precision = dense_precision(15, rng) if dense else diagonal_precision(15)
+    target = GaussianTarget(precision)
+    assert isinstance(target, hmc.DeclaredGradient)
+    theta = torch.as_tensor(rng.normal(size=15))
+    point = theta.clone().requires_grad_(True)
+    (autograd,) = torch.autograd.grad(target(point), point)
+    np.testing.assert_allclose(
+        hmc.gradient_at(target, theta).numpy(), autograd.numpy(), rtol=0, atol=1e-13
+    )

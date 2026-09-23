@@ -91,6 +91,21 @@ DEFAULT_STEPS = 20
 
 
 @runtime_checkable
+class DeclaredGradient(Protocol):
+    """An objective that states its own gradient, which :func:`gradient_at` then reads.
+
+    Autograd records and replays a graph per call, 57 µs at d = 10 where the
+    closed form of a Gaussian takes 1.7 µs (issue #991); an objective whose
+    gradient has a closed form states it here (issue #986). It must equal
+    autograd's through ``__call__``, which each implementation's test pins.
+    """
+
+    def gradient(self, theta: torch.Tensor) -> torch.Tensor:
+        """``dU/dtheta`` at ``theta``, detached."""
+        ...
+
+
+@runtime_checkable
 class DeclaredGaussian(Protocol):
     """An objective that declares itself ``U(x) = x' P x / 2``, a zero-mean Gaussian.
 
@@ -1371,7 +1386,9 @@ def _transition(
 
 
 def gradient_at(objective: Objective, theta: torch.Tensor) -> torch.Tensor:
-    """``dU/dtheta``, by autograd through the objective."""
+    """``dU/dtheta``: the objective's own where it is a :class:`DeclaredGradient`, else by autograd."""
+    if isinstance(objective, DeclaredGradient):
+        return objective.gradient(theta.detach())
     point = theta.detach().clone().requires_grad_(True)
     value = objective(point)
     (grad,) = torch.autograd.grad(value, point)

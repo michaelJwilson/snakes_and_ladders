@@ -203,13 +203,18 @@ def _gradient(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     def call() -> Outputs:
         one(points[0])
         seconds = []
-        rows = []
-        for point in points:
+        # One block for every gradient, as JAX's script returns them, rather
+        # than a kept row per point stacked into a second copy (issue #986).
+        # Written through NumPy: a torch indexing op first used here would
+        # charge its lazy set-up to the call.
+        gradients = np.empty(tuple(points.shape))
+        for row, point in enumerate(points):
             start = time.perf_counter()
-            rows.append(one(point))
+            gradient = one(point)
             seconds.append(time.perf_counter() - start)
+            gradients[row] = gradient.numpy()
         return {
-            "gradients": torch.stack(rows).numpy(),
+            "gradients": gradients,
             "per_point": np.asarray(statistics.median(seconds)),
         }
 

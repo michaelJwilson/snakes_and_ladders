@@ -44,6 +44,12 @@ class GaussianTarget(Objective):
         """The vector behind ``named``."""
         return named["x"]
 
+    def gradient(self, theta: torch.Tensor) -> torch.Tensor:
+        """``P theta``, the closed form ``hmc.gradient_at`` reads (issue #986)."""
+        if self.precision.ndim == 1:
+            return self.precision * theta
+        return self.precision @ theta
+
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         """The negative log density at ``theta``."""
         if self.precision.ndim == 1:
