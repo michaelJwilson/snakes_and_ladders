@@ -350,6 +350,112 @@ class IndependentCountPair(EmissionFamily):
         return named
 
 
+def rate_space(
+    observations: np.ndarray, covariate: np.ndarray, trials: float
+) -> np.ndarray:
+    """Pairs brought to unit exposure and a common trial count, for seeding (issue #933).
+
+    A seed placed on a raw pair under an exposure would take its count for a
+    rate: a deep observation seeds a high-rate component whatever its rate.
+    Row ``i`` becomes ``(y_i / e_i, s_i / n_i * trials)``: the total at unit
+    exposure, and the successes at the fraction they are of their own trials,
+    expressed over ``trials``, which is what
+    :class:`IndependentCountPairSeeding` reads a pair as. The result is a
+    location, not a count, so it need not be integral.
+
+    Parameters
+    ----------
+    observations : np.ndarray
+        Pairs, shape ``(n, 2)``.
+    covariate : np.ndarray
+        One exposure and one trial count per pair, shape ``(n, 2)``, as
+        :func:`split_covariate` reads it.
+    trials : float
+        The trial count the successes are expressed over.
+
+    Returns
+    -------
+    np.ndarray
+        Shape ``(n, 2)``.
+
+    Raises
+    ------
+    ValueError
+        If the shapes differ or a covariate is not strictly positive: a
+        channel with nothing observed has no rate to seed at.
+    """
+    pairs = np.asarray(observations, dtype=np.float64)
+    offsets = np.asarray(covariate, dtype=np.float64)
+    if pairs.shape != offsets.shape or pairs.ndim != 2 or pairs.shape[1] != 2:
+        msg = (
+            f"observations and covariate must both be (n, 2), got "
+            f"{pairs.shape} and {offsets.shape}"
+        )
+        raise ValueError(msg)
+    if bool((offsets <= 0.0).any()):
+        msg = "rate space needs every exposure and trial count strictly positive"
+        raise ValueError(msg)
+    return np.stack(
+        [
+            pairs[:, TOTAL] / offsets[:, TOTAL],
+            pairs[:, SUCCESSES] / offsets[:, SUCCESSES] * trials,
+        ],
+        axis=1,
+    )
+
+
+@dataclass(frozen=True)
+class IndependentCountPairSeeding:
+    """Places an :class:`IndependentCountPair` component on a pair in rate space (issue #933).
+
+    The independent form's counterpart of
+    :class:`~snakes_and_ladders.opt.emission_mixture.CountPairSeeding`, read
+    the same way: a row ``(total, successes)`` seeds the negative-binomial
+    mean at the total and the beta-binomial rate at the Jeffreys-smoothed
+    fraction ``(successes + 1/2) / (trials + 1)``. Given :func:`rate_space`'s
+    rows, the mean is a rate per unit exposure and the fraction the
+    successes' own, which is what a component under a covariate is stated in.
+    A total of zero seeds a mean of ``1e-6``, the family needing a positive
+    one. The dispersion and concentration start at declared values shared by every
+    component, since one row carries no shape.
+
+    Parameters
+    ----------
+    dispersion : float
+        Starting negative-binomial ``r``.
+    concentration : float
+        Starting beta-binomial ``a + b``.
+    trials : float
+        The trial count rows are expressed over, and the family's declared
+        one: a covariate overrides it per observation.
+    """
+
+    dispersion: float
+    concentration: float
+    trials: float
+
+    def __call__(self, rows: np.ndarray) -> IndependentCountPair:
+        """The family seeded on these rows, one component per row.
+
+        Returns
+        -------
+        IndependentCountPair
+        """
+        pairs = np.asarray(rows, dtype=np.float64).reshape(-1, 2)
+        n = pairs.shape[0]
+        rate = (pairs[:, SUCCESSES] + 0.5) / (self.trials + 1.0)
+        return IndependentCountPair(
+            NegativeBinomialEmission(
+                np.full(n, self.dispersion), np.maximum(pairs[:, TOTAL], 1e-6)
+            ),
+            BetaBinomialEmission(
+                np.full(n, self.trials),
+                rate * self.concentration,
+                (1.0 - rate) * self.concentration,
+            ),
+        )
+
+
 def _bin(params: SpatioSequentialParams, factor: int) -> int:
     """Positions a bin factor leaves, refusing one that leaves a partial bin.
 
