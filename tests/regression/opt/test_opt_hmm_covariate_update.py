@@ -142,15 +142,13 @@ def test_two_iterations_are_the_enumerated_plug_in_fit() -> None:
     assert abs(two.log_likelihood - expected_two) <= 1e-10 * abs(expected_two)
 
 
-@pytest.mark.release
 @pytest.mark.end2end
 def test_the_rate_ratios_of_a_normalized_chain_are_recovered() -> None:
     # Planted: rates mu = (1, 2, 4) per unit of lambda, 60 sequences of 120
     # positions, each drawn at exposure N_c lambda_g mu_s / Z_c with Z_c
     # the sequence's own sum over its path. Only the ratios are identified;
-    # measured 2.017 and 4.146 in 34 iterations (22 s, so release-gated; the
-    # enumeration pins above gate a merge). With the exposure held fixed and
-    # no normalizer the same fit lands at 1.876 and 3.331.
+    # measured 2.017 and 4.146 in 34 iterations, 1.1 s. With the exposure
+    # held fixed and no normalizer the same fit lands at 1.876 and 3.331.
     rng = np.random.default_rng(933)
     n, length, m = 60, 120, 3
     lam = rng.uniform(0.5, 1.5, length)
