@@ -45,7 +45,7 @@ from __future__ import annotations
 
 import math
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -78,6 +78,7 @@ from snakes_and_ladders.opt.mixture import (
 from snakes_and_ladders.opt.mixture import (
     expectation_maximization as gaussian_expectation_maximization,
 )
+from snakes_and_ladders.opt.starts import Curve
 from snakes_and_ladders.parallel import Pool, map_tasks
 from snakes_and_ladders.sample.initialize import FromAnnealing, FromChain, FromTempering
 from snakes_and_ladders.sample.schedule import ExponentialTempSchedule, ladder
@@ -1430,13 +1431,73 @@ class GapBand:
     handover: tuple[float, float]
 
 
-def gap_band(trials: list[Trial], reference: float, seconds: np.ndarray) -> GapBand:
-    """Each trial's gap below ``reference`` held from each point to the next, read on ``seconds``.
+def curve_band(curves: Sequence[Curve], seconds: np.ndarray) -> GapBand:
+    """Each trial's gap held from each entry to the next, read on ``seconds``.
 
     A trial's curve is a sequence of states, so between two samples the gap
     is the earlier one's, and after the last it is the last: the fit the cell
-    ended on. The mean and the band are taken over trials at the same wall
-    clock, which is what a reader of a runtime axis compares.
+    ended on. The mean and the sample standard deviation are taken over
+    trials at the same wall clock, where every trial has an entry, which is
+    what a reader of a runtime axis compares; the handover is the mean over
+    trials of each one's. The one band reader both starts notebooks draw
+    through (issue #926): :func:`gap_band` reads a mixture trial as a
+    :class:`~snakes_and_ladders.opt.starts.Curve` and calls this.
+
+    Returns
+    -------
+    GapBand
+
+    Raises
+    ------
+    ValueError
+        If ``curves`` is empty.
+    """
+    if not curves:
+        msg = "a band needs at least one trial"
+        raise ValueError(msg)
+    held = np.full((len(curves), seconds.shape[0]), np.nan)
+    for row, curve in enumerate(curves):
+        # The last sample at or before each grid time; -1 before the first.
+        index = np.searchsorted(curve.seconds, seconds, side="right") - 1
+        known = index >= 0
+        held[row, known] = curve.gaps[index[known]]
+    started = ~np.isnan(held).any(axis=0)
+    mean = np.full(seconds.shape[0], np.nan)
+    std = np.full(seconds.shape[0], np.nan)
+    mean[started] = held[:, started].mean(axis=0)
+    if len(curves) > 1:
+        std[started] = held[:, started].std(axis=0, ddof=1)
+    handover = (
+        float(np.mean([c.seconds[c.handover] for c in curves])),
+        float(np.mean([c.gaps[c.handover] for c in curves])),
+    )
+    return GapBand(seconds, mean, std, handover)
+
+
+def trial_curve(trial: Trial, reference: float, index: int = 0) -> Curve:
+    """A mixture trial as the :class:`~snakes_and_ladders.opt.starts.Curve` :func:`curve_band` reads.
+
+    Its samples' times, values, and gaps below ``reference``; its handover
+    index as it is. ``index`` fills the curve's trial slot, which a band
+    does not read.
+
+    Returns
+    -------
+    Curve
+    """
+    values = np.asarray([point[1] for point in trial.curve])
+    return Curve(
+        0,
+        index,
+        np.asarray([point[0] for point in trial.curve]),
+        values,
+        reference - values,
+        trial.handover,
+    )
+
+
+def gap_band(trials: list[Trial], reference: float, seconds: np.ndarray) -> GapBand:
+    """Each trial's gap below ``reference``, read on ``seconds`` by :func:`curve_band`.
 
     Returns
     -------
@@ -1447,25 +1508,7 @@ def gap_band(trials: list[Trial], reference: float, seconds: np.ndarray) -> GapB
     ValueError
         If ``trials`` is empty.
     """
-    if not trials:
-        msg = "a band needs at least one trial"
-        raise ValueError(msg)
-    held = np.full((len(trials), seconds.shape[0]), np.nan)
-    for row, trial in enumerate(trials):
-        times = np.asarray([point[0] for point in trial.curve])
-        gaps = reference - np.asarray([point[1] for point in trial.curve])
-        # The last sample at or before each grid time; -1 before the first.
-        index = np.searchsorted(times, seconds, side="right") - 1
-        known = index >= 0
-        held[row, known] = gaps[index[known]]
-    started = ~np.isnan(held).any(axis=0)
-    mean = np.full(seconds.shape[0], np.nan)
-    std = np.full(seconds.shape[0], np.nan)
-    mean[started] = held[:, started].mean(axis=0)
-    if len(trials) > 1:
-        std[started] = held[:, started].std(axis=0, ddof=1)
-    handover = (
-        float(np.mean([t.curve[t.handover][0] for t in trials])),
-        float(np.mean([reference - t.curve[t.handover][1] for t in trials])),
+    return curve_band(
+        [trial_curve(trial, reference, index) for index, trial in enumerate(trials)],
+        seconds,
     )
-    return GapBand(seconds, mean, std, handover)
