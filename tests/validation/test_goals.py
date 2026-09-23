@@ -27,6 +27,7 @@ from snakes_and_ladders.search.ground_state import lattice_rung
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
 from snakes_and_ladders.sim.potts import critical_coupling, site_field
+from snakes_and_ladders.validation.gaussian import GaussianTarget, diagonal_precision
 from snakes_and_ladders.validation.runner import package
 
 from tests._fixtures import FIXTURES_DIR
@@ -37,7 +38,6 @@ from tests.validation._goals import (
     assert_meets,
     median_seconds,
 )
-from tests.validation._targets import GaussianTarget, diagonal_precision
 
 pytestmark = pytest.mark.goal
 
@@ -199,6 +199,23 @@ BLACKJAX_HMC = {
     for dimension, seconds in ((100, 0.0141), (1_000, 0.0868), (10_000, 0.5839))
 }
 
+#: BlackJAX's peak added resident memory for the same compiled chain, the
+#: medians of three subprocess runs (#987). At d = 10^4 most of it is the
+#: 1,000 x 10^4 draws both sides keep.
+BLACKJAX_HMC_MEMORY = {
+    dimension: MemoryGoal(
+        "blackjax",
+        f"1,000 HMC transitions of ten leapfrog steps at d = {dimension:,}",
+        peak_bytes,
+        "2026-09-23, 4-core reference host, #987",
+    )
+    for dimension, peak_bytes in (
+        (100, 798_720),
+        (1_000, 8_085_504),
+        (10_000, 80_031_744),
+    )
+}
+
 
 @pytest.mark.experiment
 @pytest.mark.parametrize("side", sorted(PYMAXFLOW_CUT_MEMORY))
@@ -330,3 +347,17 @@ def test_mixture_em_fits_scikit_learns_memory(n_samples: int) -> None:
     }
     peaks = [package("mixture_em", inputs).peak_bytes or 0 for _ in range(3)]
     assert_fits(int(np.median(peaks)), SCIKIT_LEARN_EM_MEMORY[n_samples])
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("dimension", sorted(BLACKJAX_HMC_MEMORY))
+def test_hmc_fits_blackjaxs_memory(dimension: int) -> None:
+    inputs = {
+        "precision": diagonal_precision(dimension),
+        "step_size": np.asarray(0.9 / (2.0 * dimension**0.25)),
+        "n_steps": np.asarray(10),
+        "n_draws": np.asarray(1_000),
+        "seed": np.asarray(963),
+    }
+    peaks = [package("hmc_sample", inputs).peak_bytes or 0 for _ in range(3)]
+    assert_fits(int(np.median(peaks)), BLACKJAX_HMC_MEMORY[dimension])
