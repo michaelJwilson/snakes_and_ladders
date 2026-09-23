@@ -24,7 +24,7 @@ from pathlib import Path
 
 import numpy as np
 
-from snakes_and_ladders.validation.protocol import SECONDS, load, save
+from snakes_and_ladders.validation.protocol import PEAK_BYTES, SECONDS, load, save
 
 #: Where the scripts live, as a module path.
 SCRIPTS = "snakes_and_ladders.validation.scripts"
@@ -41,6 +41,8 @@ class Run:
     outputs: dict[str, np.ndarray]
     #: Wall seconds around the framework's own call, measured in the script.
     seconds: float
+    #: Resident bytes the call added at its peak, where the script measured it.
+    peak_bytes: int | None = None
 
 
 def available(module: str) -> bool:
@@ -80,4 +82,16 @@ def run(
             raise ScriptError(message)
         outputs = load(returned)
     seconds = float(outputs.pop(SECONDS))
-    return Run(outputs=outputs, seconds=seconds)
+    peak = outputs.pop(PEAK_BYTES, None)
+    return Run(
+        outputs=outputs,
+        seconds=seconds,
+        peak_bytes=None if peak is None else int(peak),
+    )
+
+
+def package(
+    call: str, inputs: Mapping[str, np.ndarray], *, timeout: float = 600.0
+) -> Run:
+    """Run the package's ``call`` in ``scripts/package.py``, measured as a framework is."""
+    return run("package", {**inputs, "call": np.asarray(call)}, timeout=timeout)
