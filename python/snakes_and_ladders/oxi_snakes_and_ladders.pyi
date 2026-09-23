@@ -108,6 +108,7 @@ def gaussian_leapfrog(
     step_size: float,
     n_steps: int,
 ) -> tuple[np.ndarray, np.ndarray]: ...
+def bond_roots(n_nodes: int, first: np.ndarray, second: np.ndarray) -> np.ndarray: ...
 def ising_ground_states(
     n_nodes: int,
     fields: np.ndarray,

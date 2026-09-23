@@ -2194,6 +2194,50 @@ def _recolour_drawn(
     return Recolour(proposed=True, accepted=False)
 
 
+def bond_roots(
+    n_nodes: int, bonds: np.ndarray, *, backend: Backend = Backend.RUST
+) -> np.ndarray:
+    """Every node's union-find root once ``bonds`` are merged in order.
+
+    The labelling the Swendsen--Wang pass forms: two nodes share a root
+    exactly when a chain of bonds joins them, and which node is the root is
+    :func:`union_roots`' rule, keeping the first bond end's. Issue #986:
+    :data:`~snakes_and_ladders.backend.Backend.RUST`, the default, is
+    ``oxi_snakes_and_ladders.bond_roots``, the same :func:`find_root` and
+    :func:`union_roots` compiled; :data:`~snakes_and_ladders.backend.Backend.PYTHON`
+    is the loop over them and the oracle that pins the roots bitwise.
+
+    Parameters
+    ----------
+    n_nodes : int
+        Nodes, labelled ``0 .. n_nodes - 1``.
+    bonds : np.ndarray
+        ``(n_bonds, 2)`` node pairs, merged in row order.
+    backend : Backend
+        Which implementation merges them.
+
+    Returns
+    -------
+    np.ndarray
+        ``(n_nodes,)`` ``int64`` roots.
+    """
+    pairs = np.asarray(bonds, dtype=np.int64).reshape(-1, 2)
+    if backend is Backend.RUST:
+        from snakes_and_ladders import oxi_snakes_and_ladders
+
+        return oxi_snakes_and_ladders.bond_roots(
+            n_nodes,
+            np.ascontiguousarray(pairs[:, 0]),
+            np.ascontiguousarray(pairs[:, 1]),
+        )
+    parent = np.arange(n_nodes)
+    for first, second in pairs.tolist():
+        union_roots(parent, first, second)
+    return np.array(
+        [find_root(parent, node) for node in range(n_nodes)], dtype=np.int64
+    )
+
+
 def find_root(parent: np.ndarray, node: int) -> int:
     """Union-find root, with path compression."""
     root = node

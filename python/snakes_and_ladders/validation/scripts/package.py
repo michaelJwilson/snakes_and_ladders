@@ -152,17 +152,13 @@ def _hmc_sample(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
 
 def _cluster_labels(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     """The Swendsen--Wang pass's union-find on a bond mask, as the rustworkx pair runs (#976)."""
-    from snakes_and_ladders.sample.potts_mcmc import find_root, union_roots
+    from snakes_and_ladders.sample.potts_mcmc import bond_roots
 
     n_nodes = int(inputs["n_nodes"])
-    bonds = np.stack([inputs["first"], inputs["second"]], axis=1).tolist()
+    bonds = np.stack([inputs["first"], inputs["second"]], axis=1)
 
     def call() -> Outputs:
-        parent = np.arange(n_nodes)
-        for first, second in bonds:
-            union_roots(parent, first, second)
-        roots = np.array([find_root(parent, node) for node in range(n_nodes)])
-        return {"roots": roots}
+        return {"roots": bond_roots(n_nodes, bonds)}
 
     return call
 
