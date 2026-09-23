@@ -14,6 +14,7 @@ import numpy as np
 import pytest
 from snakes_and_ladders.opt.starts import Curve
 from snakes_and_ladders.qa.starts import (
+    RUNTIME_FLOOR,
     START_PALETTE,
     curve_band,
     gap_panels,
@@ -65,14 +66,14 @@ class _FakeTrial:
 
 
 @pytest.mark.analytic
-def test_styles_take_ten_colours_solid_then_repeat_dashed() -> None:
-    names = [f"s{i}" for i in range(12)]
+def test_styles_take_one_colour_each_and_refuse_to_repeat_one() -> None:
+    names = [f"s{i}" for i in range(len(START_PALETTE))]
     styles = start_styles(names)
-    assert len(set(START_PALETTE)) == 10
-    assert [styles[n][0] for n in names[:10]] == list(START_PALETTE)
-    assert {styles[n][1] for n in names[:10]} == {"-"}
-    assert styles["s10"] == (START_PALETTE[0], "--")
-    assert styles["s11"] == (START_PALETTE[1], "--")
+    assert len(set(START_PALETTE)) == len(START_PALETTE) == 14
+    assert [styles[n][0] for n in names] == list(START_PALETTE)
+    assert {styles[n][1] for n in names} == {"-"}
+    with pytest.raises(ValueError, match="split the figure"):
+        start_styles([*names, "one more"])
 
 
 @pytest.mark.smoke
@@ -105,4 +106,6 @@ def test_panels_order_their_legends_by_final_gap_and_hold_a_start_style() -> Non
     assert colour[(0, "a")] == colour[(1, "a")] == styles["a"][0]
     # Bands are off by default: no filled region is drawn.
     assert not left.collections
+    # The runtime axis starts at the floor.
+    assert left.get_xlim()[0] == RUNTIME_FLOOR
     plt.close(figure)

@@ -21,8 +21,9 @@ Renders what the seam computed and recomputes nothing (`qa/CLAUDE.md`).
 
 :func:`gap_panels` is the gap-against-runtime figure both starts notebooks draw
 (`emission_mixture_starts`, `potts_starts`): panels side by side on shared
-axes, one colour and line style per start from :data:`START_PALETTE` held
-across panels, a diamond at the mean handover, the gap on a symmetric-log axis,
+axes, one colour per start from :data:`START_PALETTE` held across panels and
+every line solid, the runtime from :data:`RUNTIME_FLOOR`, a diamond at the
+mean handover, the gap on a symmetric-log axis,
 spread bands off unless asked for, and each panel's legend bottom left in one
 column from the lowest final gap to the highest. :func:`curve_band` reads the
 trials of an :class:`~snakes_and_ladders.opt.starts.SolverComparison` onto the
@@ -60,14 +61,26 @@ GRID_POINTS = 100
 #: Sized to sit whole in a notebook cell.
 FIGSIZE = (10.0, 3.8)
 
-#: Ten colours for starts traced along a runtime axis: the eight of
-#: Okabe--Ito with black (`qa.style.STATE_PALETTE` and the ink it omits), and
-#: wine from Tol's muted set. Past ten a colour repeats dashed, so a start is
-#: its (colour, line style) pair.
-START_PALETTE: tuple[str, ...] = ("#000000", *STATE_PALETTE, "#882255")
+#: Fourteen colours for starts traced along a runtime axis, one per start and
+#: no line style doing a colour's work: the eight of Okabe--Ito with black
+#: (`qa.style.STATE_PALETTE` and the ink it omits), then wine, olive, teal,
+#: indigo and rose from Tol's muted set.
+START_PALETTE: tuple[str, ...] = (
+    "#000000",
+    *STATE_PALETTE,
+    "#882255",
+    "#999933",
+    "#44AA99",
+    "#332288",
+    "#CC6677",
+)
 
-#: The runtime figure's size: two panels side by side.
-GAP_FIGSIZE = (12.0, 4.8)
+#: The runtime axis starts here, in seconds: what hands over sooner is drawn
+#: from this point on.
+RUNTIME_FLOOR = 0.01
+
+#: The runtime figure's size per panel.
+PANEL_SIZE = (6.0, 4.8)
 
 
 def _encoding(n_starts: int) -> list[tuple[str, str]]:
@@ -439,19 +452,25 @@ def gap_table(result: SolverComparison, *, unit: str) -> tuple[str, str, str]:
 
 
 def start_styles(names: Sequence[str]) -> dict[str, tuple[str, str]]:
-    """``(colour, linestyle)`` per start, in ``names``' order: the ten colours of :data:`START_PALETTE` solid, then again dashed.
+    """``(colour, linestyle)`` per start, in ``names``' order: one colour of :data:`START_PALETTE` each, every line solid.
 
     Returns
     -------
     dict[str, tuple[str, str]]
+
+    Raises
+    ------
+    ValueError
+        If there are more starts than colours: split the figure rather than
+        repeat a colour.
     """
-    return {
-        name: (
-            START_PALETTE[index % len(START_PALETTE)],
-            LINESTYLES[(index // len(START_PALETTE)) % len(LINESTYLES)],
+    if len(names) > len(START_PALETTE):
+        msg = (
+            f"{len(names)} starts outside the {len(START_PALETTE)}-colour start "
+            "palette; split the figure rather than repeat a colour"
         )
-        for index, name in enumerate(names)
-    }
+        raise ValueError(msg)
+    return {name: (START_PALETTE[i], "-") for i, name in enumerate(names)}
 
 
 def curve_band(curves: Sequence[Curve], seconds: np.ndarray) -> GapBand:
@@ -497,6 +516,7 @@ def gap_panels(
     *,
     ylabel: str,
     show_bands: bool = False,
+    titled: bool = True,
 ) -> Figure:
     """The gap against runtime, one panel per entry of ``panels``, side by side on shared axes.
 
@@ -514,6 +534,8 @@ def gap_panels(
         The gap's name and unit.
     show_bands : bool
         Draw one sample standard deviation either side of each mean.
+    titled : bool
+        Title each legend with its panel's heading.
 
     Returns
     -------
@@ -522,7 +544,7 @@ def gap_panels(
     figure, axes = plt.subplots(
         1,
         len(panels),
-        figsize=GAP_FIGSIZE,
+        figsize=(PANEL_SIZE[0] * len(panels), PANEL_SIZE[1]),
         sharex=True,
         sharey=True,
         constrained_layout=True,
@@ -561,10 +583,18 @@ def gap_panels(
             )
         axis.axhline(0.0, color="0.2", linewidth=0.9, linestyle="--")
         axis.set_xscale("log")
+        axis.set_xlim(left=RUNTIME_FLOOR)
         # Logarithmic both sides of zero, linear within one unit of it: a gap
         # below zero passed the reference, which a plain log axis cannot draw.
         axis.set_yscale("symlog", linthresh=1.0)
+        # Room above the highest handover, so no diamond sits on the frame.
+        axis.margins(y=0.05)
         axis.set_xlabel("runtime [s]")
-        axis.legend(fontsize=6, loc="lower left", title=heading, title_fontsize=7)
+        axis.legend(
+            fontsize=6,
+            loc="lower left",
+            title=heading if titled else None,
+            title_fontsize=7,
+        )
     axes[0][0].set_ylabel(ylabel)
     return figure
