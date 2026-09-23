@@ -227,7 +227,7 @@ def _rung(objective: Objective, who: str) -> Rung:
 
 def polish_by_icm(
     objective: Objective, theta: torch.Tensor, budget: Budget
-) -> opt_starts.Polished:
+) -> opt_starts.PolishedPoint:
     """Iterated conditional modes from ``theta`` until a sweep changes nothing, one sweep a unit.
 
     One index-order sweep at a time, recorded into the enclosing ``track``
@@ -237,7 +237,7 @@ def polish_by_icm(
 
     Returns
     -------
-    snakes_and_ladders.opt.starts.Polished
+    snakes_and_ladders.opt.starts.PolishedPoint
 
     Raises
     ------
@@ -271,8 +271,8 @@ def polish_by_icm(
             converged = True
             break
         labelling, value = settled.labelling, settled.energy
-    return opt_starts.Polished(
-        torch.as_tensor(labelling),
-        float(value),
-        Termination.after(sweeps, converged=converged),
+    return opt_starts.PolishedPoint(
+        value=float(value),
+        termination=Termination.after(sweeps, converged=converged),
+        theta=torch.as_tensor(labelling),
     )
