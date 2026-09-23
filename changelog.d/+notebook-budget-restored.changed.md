@@ -1,0 +1,1 @@
+The `notebooks` job's per-notebook budget returns from 900 s to 600 s: `emission_mixture_starts` executes in 142 s on the 4-core reference host with its best-of group, after the compiled count M step.

@@ -47,6 +47,7 @@ import math
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from enum import StrEnum
 
 import numpy as np
 import torch
@@ -77,6 +78,7 @@ from snakes_and_ladders.opt.mixture import (
 from snakes_and_ladders.opt.mixture import (
     expectation_maximization as gaussian_expectation_maximization,
 )
+from snakes_and_ladders.parallel import Pool, map_tasks
 from snakes_and_ladders.sample.initialize import FromAnnealing, FromChain, FromTempering
 from snakes_and_ladders.sample.schedule import ExponentialTempSchedule, ladder
 from snakes_and_ladders.search.projection import (
@@ -585,6 +587,322 @@ STARTS: dict[str, Callable[[MixtureInstance, np.random.Generator], Seeded]] = {
 DETERMINISTIC = frozenset({"objective", "perturbed", "quantile"})
 
 
+@dataclass(frozen=True)
+class _Seeding:
+    """One seeding of a :class:`BestOf`: the start, and its polish when asked.
+
+    Module-level and frozen, so the process pool can pickle it and a thread
+    pool can share it: every task reads it and none writes to it.
+    """
+
+    name: str
+    instance: MixtureInstance
+    passes: int | None = None
+    seconds: float | None = None
+    tolerance: float = 0.0
+
+
+@dataclass(frozen=True)
+class _Seeded:
+    """What one seeding produced: the start, its score at equal weights, and its fit."""
+
+    seeded: Seeded
+    score: float
+    fit: Polished | None
+
+
+def _run_seeding(task: _Seeding, generator: np.random.Generator) -> _Seeded:
+    """Run one seeding on its own generator, and polish it when ``task`` says so.
+
+    Thread-safe: the start draws only from ``generator``, which no other task
+    holds; it records into a ``track`` block of its own, whose run is a
+    :class:`contextvars.ContextVar` and so private to the thread; and the
+    instance is read, never written.
+    """
+    opened = time.perf_counter()
+    values = torch.as_tensor(task.instance.observations, dtype=torch.float64)
+    uniform = torch.full(
+        (task.instance.n_components,),
+        -math.log(task.instance.n_components),
+        dtype=torch.float64,
+    )
+    with track(MemoryRun()):
+        seeded = lookup(task.name)(task.instance, generator)
+    score = float(mixture_log_likelihood(values, uniform, seeded.components))
+    fit: Polished | None = None
+    if task.passes is not None:
+        with track(MemoryRun()):
+            fit = polish(task.instance, seeded.components, passes=task.passes)
+    elif task.seconds is not None:
+        left = task.seconds - (time.perf_counter() - opened)
+        with track(MemoryRun()):
+            fit = polish(
+                task.instance,
+                seeded.components,
+                seconds=max(left, 0.0),
+                tolerance=task.tolerance,
+            )
+    return _Seeded(seeded, score, fit)
+
+
+class Selection(StrEnum):
+    """What a :class:`BestOf` selects on: the seedings, or their EM fits.
+
+    ``SEEDED`` scores each seeding at equal weights and polishes the best
+    once. ``POLISHED`` polishes every seeding by EM and keeps the fit of
+    highest log-likelihood: ``n`` polishes where ``SEEDED`` runs one, since
+    the seeding that scores best is not always the one EM ends best from
+    (#912: ``gibbs-anneal``'s best of five ended 16.9 nats below the
+    reference where one seeding ended 0.7 above).
+    """
+
+    SEEDED = "seeded"
+    POLISHED = "polished"
+
+
+@dataclass(frozen=True)
+class BestOf:
+    """A stochastic start run ``n`` times, the seeding of highest log-likelihood handed over (issue #905).
+
+    Seeding ``i`` draws from the ``i``-th generator spawned from the cell's
+    (:meth:`numpy.random.Generator.spawn`), so the seedings are independent
+    tasks and run through :func:`snakes_and_ladders.parallel.map_tasks`: the
+    result is the same, bitwise, at every worker count and on every pool, and
+    one seed reproduces all ``n``. Each seeding runs in a ``track`` block of
+    its own and is scored at equal weights, the value the polish would begin
+    from; the scored seedings are the path, one entry per seeding in order,
+    recorded once all have returned, so the curve shows the selection. The
+    charge is the ``n`` seedings' passes and one scoring pass each; the
+    seconds are the whole call's, since :class:`TimedStart` times it.
+    :func:`~snakes_and_ladders.opt.initialize.RandomRestart` does this on the
+    surrogate; this is the same policy at the seam.
+
+    With ``select=Selection.POLISHED`` every seeding is polished instead and
+    the best fit kept (:meth:`polished`); :class:`TimedStart` runs it under
+    the cell's one budget, shared evenly over the rounds of seedings the
+    workers run.
+
+    Parameters
+    ----------
+    name : str
+        A key of :data:`STARTS` that reads its generator.
+    n : int
+        Seedings, at least 1.
+    select : Selection
+        What is selected on; the seedings by default.
+    workers : int
+        Seedings run at once; ``1``, the default, runs them in the calling
+        thread. Measured on ``emission_mixture/stress`` at five seedings and
+        one intra-op thread (#912): four processes take the polished
+        selection from 6.35 to 4.56 s (``emission++``), 12.2 to 7.0 s
+        (``gibbs-anneal``) and 42.8 to 19.6 s (``hmc``), and lose where the
+        seedings are cheaper than the pool's 2.5 s (``emission++`` seeded,
+        0.96 against 2.86 s). Inside :func:`~snakes_and_ladders.opt.budget.compare`'s
+        four workers the pools nest, and the polished group took 69.8 s
+        against 54.8 s at one worker, which is why one is the default.
+    pool : Pool
+        ``"processes"``, the default, or ``"threads"``, when ``workers > 1``.
+        Every task is thread-safe (:func:`_run_seeding`), and both pools are
+        pinned bitwise to one worker; threads did not pay here, 1.62 against
+        0.96 s and 6.97 against 6.35 s for ``emission++``, since the starts
+        hold the GIL.
+
+    Raises
+    ------
+    ValueError
+        If ``name`` is deterministic or not a start, ``n`` or ``workers`` is
+        below 1, or ``pool`` is not a pool.
+    """
+
+    name: str
+    n: int
+    select: Selection = Selection.SEEDED
+    workers: int = 1
+    pool: Pool = "processes"
+
+    def __post_init__(self) -> None:
+        if self.name not in STARTS or self.name in DETERMINISTIC:
+            msg = f"best-of takes a stochastic start, got {self.name!r}"
+            raise ValueError(msg)
+        if self.n < 1:
+            msg = f"best-of needs at least one seeding, got {self.n}"
+            raise ValueError(msg)
+        if self.workers < 1:
+            msg = f"best-of runs at least one worker, got {self.workers}"
+            raise ValueError(msg)
+        if self.pool not in ("threads", "processes"):
+            msg = f"best-of runs on threads or processes, got {self.pool!r}"
+            raise ValueError(msg)
+
+    @property
+    def key(self) -> str:
+        """The start's name: ``f"{name}x{n}"``, and ``+em`` after it when every seeding is polished."""
+        suffix = "+em" if self.select is Selection.POLISHED else ""
+        return f"{self.name}x{self.n}{suffix}"
+
+    def _seedings(
+        self, task: _Seeding, rng: np.random.Generator
+    ) -> tuple[list[_Seeded], tuple[tuple[int, EmissionFamily], ...], float]:
+        """Every seeding on its spawned generator, the path, and the passes charged."""
+        results = map_tasks(
+            _run_seeding,
+            [task] * self.n,
+            workers=self.workers,
+            backend=self.pool if self.workers > 1 else "serial",
+            intra_op_threads=1,
+            generator=rng,
+        )
+        tracked = current()
+        for index, result in enumerate(results):
+            tracked.record(index, seeding_log_likelihood=result.score)
+        path = tuple((index, r.seeded.components) for index, r in enumerate(results))
+        passes = sum(
+            r.seeded.passes + (1.0 if r.fit is None else float(r.fit.iterations))
+            for r in results
+        )
+        return results, path, passes
+
+    def __call__(self, instance: MixtureInstance, rng: np.random.Generator) -> Seeded:
+        """The best of ``n`` seedings, each scored at equal weights.
+
+        Returns
+        -------
+        Seeded
+
+        Raises
+        ------
+        ValueError
+            If every seeding is to be polished: that runs through
+            :meth:`polished`, which is handed the seconds or passes.
+        """
+        if self.select is Selection.POLISHED:
+            msg = f"{self.key} polishes every seeding: call polished() with its budget"
+            raise ValueError(msg)
+        results, path, passes = self._seedings(_Seeding(self.name, instance), rng)
+        best = int(np.argmax([r.score for r in results]))
+        return Seeded(
+            results[best].seeded.components,
+            passes,
+            f"best of {self.n}: seeding {best}",
+            path,
+        )
+
+    def polished(
+        self,
+        instance: MixtureInstance,
+        rng: np.random.Generator,
+        *,
+        seconds: float | None = None,
+        passes: int | None = None,
+        tolerance: float | None = None,
+    ) -> tuple[Seeded, Polished]:
+        """Every seeding polished by EM, and the fit of highest log-likelihood.
+
+        Given ``seconds``, the seedings run in ``ceil(n / workers)`` rounds
+        and each is handed the round's share, its start and its polish
+        together; given ``passes``, each polish runs exactly that many
+        iterations. ``tolerance`` is the polish's stop,
+        :data:`POLISH_TOLERANCE` when omitted. Ties go to the earlier
+        seeding. The charge is the seedings' passes and every polish's
+        iterations, one pass each.
+
+        Returns
+        -------
+        tuple[Seeded, Polished]
+            The chosen seeding, as :meth:`__call__` returns one, and its fit.
+
+        Raises
+        ------
+        ValueError
+            Unless exactly one of ``seconds`` and ``passes`` is given.
+        """
+        if (seconds is None) == (passes is None):
+            msg = "a polished best-of stops at seconds or at passes, exactly one"
+            raise ValueError(msg)
+        rounds = math.ceil(self.n / min(self.workers, self.n))
+        task = _Seeding(
+            self.name,
+            instance,
+            passes=passes,
+            seconds=None if seconds is None else seconds / rounds,
+            tolerance=POLISH_TOLERANCE if tolerance is None else tolerance,
+        )
+        results, path, charged = self._seedings(task, rng)
+        fits = [r.fit for r in results]
+        finals = [float(f.log_likelihoods[-1]) for f in fits if f is not None]
+        best = int(np.argmax(finals))
+        chosen = fits[best]
+        if chosen is None:  # pragma: no cover - every task above polishes
+            msg = "a polished best-of polishes every seeding"
+            raise TypeError(msg)
+        return (
+            Seeded(
+                results[best].seeded.components,
+                charged,
+                f"best of {self.n} after EM: seeding {best}",
+                path,
+            ),
+            chosen,
+        )
+
+
+def best_of(
+    name: str,
+    n: int,
+    select: Selection = Selection.SEEDED,
+    *,
+    workers: int = 1,
+    pool: Pool = "processes",
+) -> BestOf:
+    """The start that runs ``name`` ``n`` times and hands over the best seeding or fit.
+
+    Returns
+    -------
+    BestOf
+    """
+    return BestOf(name, n, select, workers, pool)
+
+
+#: Seedings per best-of start in the notebook's group (issue #905).
+BEST_OF = 5
+
+#: The best-of group: every stochastic start at :data:`BEST_OF` seedings, in
+#: :data:`STARTS`' order, keyed ``f"{name}x{BEST_OF}"``.
+BEST_OF_STARTS: dict[str, BestOf] = {
+    start.key: start
+    for start in (
+        best_of(name, BEST_OF) for name in STARTS if name not in DETERMINISTIC
+    )
+}
+
+
+#: The best-of group polished throughout: every stochastic start at
+#: :data:`BEST_OF` seedings, each seeding polished by EM, keyed
+#: ``f"{name}x{BEST_OF}+em"`` (#912).
+BEST_OF_EM_STARTS: dict[str, BestOf] = {
+    start.key: start
+    for start in (
+        best_of(name, BEST_OF, Selection.POLISHED)
+        for name in STARTS
+        if name not in DETERMINISTIC
+    )
+}
+
+
+def lookup(name: str) -> Callable[[MixtureInstance, np.random.Generator], Seeded]:
+    """A start by name, from :data:`STARTS`, :data:`BEST_OF_STARTS` or :data:`BEST_OF_EM_STARTS`.
+
+    Returns
+    -------
+    Callable[[MixtureInstance, np.random.Generator], Seeded]
+    """
+    if name in STARTS:
+        return STARTS[name]
+    if name in BEST_OF_STARTS:
+        return BEST_OF_STARTS[name]
+    return BEST_OF_EM_STARTS[name]
+
+
 #: Relative change in the log-likelihood between two EM iterations at which
 #: the polish stops: ``|L_i - L_{i-1}| <= POLISH_TOLERANCE * |L_{i-1}|``. On
 #: the stress draw, whose generating parameters reach -28,268.1 nats, 1e-6 is
@@ -809,7 +1127,7 @@ class TimedStart:
     Parameters
     ----------
     name : str
-        A key of :data:`STARTS`.
+        A key of :data:`STARTS` or :data:`BEST_OF_STARTS`.
     passes : Budget | None
         A polish of fixed length in :attr:`~snakes_and_ladders.cost.Cost.PASSES`;
         ``None`` for the one budget.
@@ -841,11 +1159,38 @@ class TimedStart:
         if self.passes is not None and self.passes.unit is not Cost.PASSES:
             msg = f"a fixed polish is counted in passes, not {self.passes.unit}"
             raise ValueError(msg)
+        start = lookup(self.name)
+        every = isinstance(start, BestOf) and start.select is Selection.POLISHED
+        chosen: Polished | None = None
         with track(MemoryRun()) as outer:
             with track(MemoryRun()) as inner:
-                seeded = STARTS[self.name](instance, rng)
+                if isinstance(start, BestOf) and every:
+                    seeded, chosen = start.polished(
+                        instance,
+                        rng,
+                        seconds=None
+                        if self.passes is not None
+                        else budget.size - (time.perf_counter() - outer.started),
+                        passes=None if self.passes is None else self.passes.size,
+                        tolerance=self.tolerance,
+                    )
+                else:
+                    seeded = start(instance, rng)
             outer.record(0, context=HANDOVER, handed_over=1.0)
-            if self.passes is None:
+            if chosen is not None:
+                # Every seeding was polished inside the start; the handover
+                # is the best fit, and nothing is left to polish. One sample
+                # and its cost close the cell's clock, as a polish's do.
+                polished = chosen
+                outer.record(0, log_likelihood=float(chosen.log_likelihoods[-1]))
+                tensors = [
+                    chosen.weights,
+                    *chosen.components.named_parameters().values(),
+                ]
+                outer.record_cost(
+                    0, sum(int(t.element_size() * t.nelement()) for t in tensors)
+                )
+            elif self.passes is None:
                 polished = polish(
                     instance,
                     seeded.components,
@@ -882,12 +1227,17 @@ class TimedStart:
         handover = len(curve)
         handed = float(outer_run.last("seconds", HANDOVER))
         polish_seconds = _first_per_step(outer_run.series("seconds"))
-        curve.append((handed, float(polished.log_likelihoods[0])))
-        curve.extend(
-            (polish_seconds[index - 1], float(value))
-            for index, value in enumerate(polished.log_likelihoods)
-            if index > 0
-        )
+        if chosen is not None:
+            # The polishes ran inside the start, each in a block of its own,
+            # so the curve holds the chosen fit's value from the handover.
+            curve.append((handed, float(polished.log_likelihoods[-1])))
+        else:
+            curve.append((handed, float(polished.log_likelihoods[0])))
+            curve.extend(
+                (polish_seconds[index - 1], float(value))
+                for index, value in enumerate(polished.log_likelihoods)
+                if index > 0
+            )
 
         posterior = responsibilities(
             values, torch.log(polished.weights), polished.components

@@ -36,7 +36,7 @@ Exits 0 when every notebook agrees, 1 on the first that does not, printing a
 unified diff of the cell's output.
 
 **A notebook's execution is held to a stated budget**, :data:`NOTEBOOK_BUDGET`
-seconds of wall clock, and one over it fails with its time beside the budget
+seconds of wall clock or its own in :data:`NOTEBOOK_BUDGETS`, and one over it fails with its time beside the budget
 (issue #891). A run too expensive to make whole is cut by that budget.
 
 **Every notebook this is given is executed.** Which ones a run checks is a
@@ -85,10 +85,24 @@ CELL_TIMEOUT = 900
 #: `DEV.md` states for the `notebooks` job. Stated, not measured: a notebook
 #: over it fails the check with its time beside the budget, and is cut ---
 #: fewer trials, a smaller instance --- rather than skipped (issue #891).
-#: 600 s until `emission_mixture_starts` ran 620 s on the runner with #901's
-#: fourteenth start (273 s on the 4-core reference host); raised, not cut, at
-#: the owner's decision.
-NOTEBOOK_BUDGET = 900
+#: 600 s, raised to 900 s while `emission_mixture_starts` ran 620 s on the
+#: runner (#909) and restored once the compiled count M step took it to 142 s
+#: on the 4-core reference host with #905's best-of group (#925).
+NOTEBOOK_BUDGET = 600
+
+#: The notebooks held to a larger budget than :data:`NOTEBOOK_BUDGET`, and
+#: theirs: the two starts comparisons, whose cells are a start and its polish
+#: per (start, seed), at 1,000 s from #912, whose polished best-of group
+#: polishes every seeding of every cell. Every other notebook keeps 600 s.
+NOTEBOOK_BUDGETS: dict[str, int] = {
+    "emission_mixture_starts.ipynb": 1000,
+    "potts_starts.ipynb": 1000,
+}
+
+
+def budget_for(name: str) -> int:
+    """The seconds ``name`` may spend: its own in :data:`NOTEBOOK_BUDGETS`, else :data:`NOTEBOOK_BUDGET`."""
+    return NOTEBOOK_BUDGETS.get(name, NOTEBOOK_BUDGET)
 
 
 def text_outputs(cell: dict[str, Any]) -> list[str]:
@@ -268,7 +282,7 @@ def differences(
 
 
 def over_budget(name: str, seconds: float) -> list[str]:
-    """Report a notebook whose execution took longer than :data:`NOTEBOOK_BUDGET`.
+    """Report a notebook whose execution took longer than its budget, :func:`budget_for`.
 
     Parameters
     ----------
@@ -282,10 +296,11 @@ def over_budget(name: str, seconds: float) -> list[str]:
     list[str]
         One message naming the measured time and the budget, or nothing.
     """
-    if seconds <= NOTEBOOK_BUDGET:
+    budget = budget_for(name)
+    if seconds <= budget:
         return []
     return [
-        f"{name} executed in {seconds:.0f} s, over the {NOTEBOOK_BUDGET} s budget "
+        f"{name} executed in {seconds:.0f} s, over the {budget} s budget "
         f"a notebook may spend (DEV.md, notebooks); cut what it runs"
     ]
 

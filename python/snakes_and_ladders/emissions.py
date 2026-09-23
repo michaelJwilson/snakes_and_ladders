@@ -146,6 +146,17 @@ class Reestimate(Generic[FamilyT_co]):
     residual: float = 0.0
 
 
+class ParameterDomainError(ValueError):
+    """A family was given a parameter outside its domain: a scale, a rate or a shape not positive.
+
+    A ``ValueError``, so every caller that refused one before still does. It
+    has its own type because one caller reads it as information rather than
+    a mistake: a Hamiltonian trajectory that drives a parameter out of its
+    domain has diverged, and :mod:`snakes_and_ladders.sample.hmc` rejects that
+    proposal rather than stopping the chain (#912).
+    """
+
+
 class CovariateNotSupportedError(TypeError):
     """A family was given a per-observation covariate it cannot condition on.
 
@@ -229,9 +240,11 @@ def exposure(covariate: torch.Tensor, declared: torch.Tensor) -> torch.Tensor:
 def validated_exposure(covariate: torch.Tensor, declared: torch.Tensor) -> torch.Tensor:
     """``covariate`` as exposures, in ``declared``'s dtype.
 
-    The positivity check alone, without :func:`exposure`'s trailing-axis rule,
+    The support check alone, without :func:`exposure`'s trailing-axis rule,
     for the M step --- which flattens over sequences and positions and never
-    broadcasts along the states.
+    broadcasts along the states. A zero exposure marks the channel
+    **unobserved** at that observation (issue #933): it scores log 1 and the
+    M step drops it, whatever count it carries.
 
     Returns
     -------
@@ -240,11 +253,11 @@ def validated_exposure(covariate: torch.Tensor, declared: torch.Tensor) -> torch
     Raises
     ------
     ValueError
-        If an exposure is not strictly positive.
+        If an exposure is negative or not a number.
     """
     offsets = covariate.to(declared.dtype)
-    if bool((offsets <= 0.0).any()):
-        msg = "every exposure must be strictly positive"
+    if bool(((offsets < 0.0) | offsets.isnan()).any()):
+        msg = "every exposure must be non-negative; zero marks the channel unobserved"
         raise ValueError(msg)
     return offsets
 
@@ -257,6 +270,9 @@ def validated_trials(covariate: torch.Tensor, declared: torch.Tensor) -> torch.T
     broadcasts it along the states, so that rule would refuse the shape the
     protocol documents for :meth:`EmissionFamily.reestimate`.
 
+    A trial count of zero marks the channel **unobserved** at that
+    observation (issue #933), as a zero exposure does the total's.
+
     Returns
     -------
     torch.Tensor
@@ -264,11 +280,14 @@ def validated_trials(covariate: torch.Tensor, declared: torch.Tensor) -> torch.T
     Raises
     ------
     ValueError
-        If a count is not a positive integer.
+        If a count is not a non-negative integer.
     """
     counts = covariate.to(declared.dtype)
-    if bool(((counts < 1) | (counts != counts.floor())).any()):
-        msg = "every trial count must be a positive integer"
+    if bool(((counts < 0) | (counts != counts.floor())).any()):
+        msg = (
+            "every trial count must be a non-negative integer; zero marks the "
+            "channel unobserved"
+        )
         raise ValueError(msg)
     return counts
 
@@ -694,7 +713,7 @@ class GaussianEmission(EmissionFamily):
             raise ValueError(msg)
         if bool((self._scale <= 0.0).any()):
             msg = f"every scale must be positive, got {self._scale.tolist()}"
-            raise ValueError(msg)
+            raise ParameterDomainError(msg)
         if variance_floor <= 0.0:
             msg = f"variance_floor must be positive, got {variance_floor}"
             raise ValueError(msg)
@@ -995,7 +1014,7 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
         ):
             if bool((values <= 0.0).any()):
                 msg = f"every {name} must be positive, got {values.tolist()}"
-                raise ValueError(msg)
+                raise ParameterDomainError(msg)
 
     @classmethod
     def from_probability(
@@ -1108,20 +1127,34 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
         broadcasts along the state axis; the rate scored at is ``e_i mu_k``.
         Where the exposure is constant the two models are the same model,
         absorbing it as ``log mu - log(c)``, which is what makes the conserved
-        family a referee for this one (issue #631).
+        family a referee for this one (issue #631). A zero exposure marks the
+        count unobserved: it scores log 1 under every state (issue #933).
         """
         counts = observations.unsqueeze(-1).to(self._mean.dtype)
         rate = self._mean
+        unobserved = None
         if covariate is not None:
-            rate = exposure(covariate, self._mean) * self._mean
+            offsets = exposure(covariate, self._mean)
+            unobserved = offsets == 0.0
+            if bool(unobserved.any()):
+                # Scored at a unit exposure and then replaced, so neither
+                # branch of the `where` holds the `0 * log 0` a zero rate
+                # gives, which would reach a gradient as `nan`.
+                offsets = torch.where(unobserved, 1.0, offsets)
+            else:
+                unobserved = None
+            rate = offsets * self._mean
         total = self._dispersion + rate
-        return (
+        scores = (
             _lgamma_shifted(counts, self._dispersion)
             - torch.lgamma(self._dispersion)
             - torch.lgamma(counts + 1.0)
             + self._dispersion * torch.log(self._dispersion / total)
             + counts * torch.log(rate / total)
         )
+        if unobserved is None:
+            return scores
+        return torch.where(unobserved, torch.zeros_like(scores), scores)
 
     def bregman_divergence(self, observations: torch.Tensor) -> torch.Tensor:
         """``r log((r + mu) / (r + y)) + y log(y (r + mu) / (mu (r + y)))``.
@@ -1181,6 +1214,15 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
             if covariate is None
             else validated_exposure(covariate, self._mean).reshape(-1)
         )
+        if offsets is not None and bool((offsets == 0.0).any()):
+            # An unobserved total carries no information about the state:
+            # the fit is the fit without it (issue #933).
+            observed = offsets > 0.0
+            values, weights, offsets = (
+                values[observed],
+                weights[observed],
+                offsets[observed],
+            )
         # Both sums are matmuls: the same numbers as
         # `(weights * v.unsqueeze(-1)).sum(0)` with no `(n_obs, n_states)`
         # temporary, BLAS-backed. At the coupled model's declared scale that
@@ -1271,7 +1313,7 @@ class PoissonEmission(EmissionFamily, CountEmissionFamily):
         self._mean = torch.as_tensor(mean, dtype=torch.float64).reshape(-1)
         if bool((self._mean <= 0.0).any()):
             msg = f"every mean must be positive, got {self._mean.tolist()}"
-            raise ValueError(msg)
+            raise ParameterDomainError(msg)
 
     @property
     def n_states(self) -> int:
@@ -1595,7 +1637,7 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
         for name, values in (("alpha", self._alpha), ("beta", self._beta)):
             if bool((values <= 0.0).any()):
                 msg = f"every {name} must be positive, got {values.tolist()}"
-                raise ValueError(msg)
+                raise ParameterDomainError(msg)
 
     @property
     def n_states(self) -> int:
@@ -1681,12 +1723,26 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
         observation above its own trial count scores ``-inf`` rather than
         raising, on the joint form's precedent: the support is a property of
         the pair, and a sequence carrying one impossible site is scored, not
-        refused.
+        refused. A trial count of zero marks the successes unobserved: they
+        score log 1 under every state, whatever count they carry (issue #933).
         """
         trials = trial_count(covariate, self._trials)
         counts = observations.unsqueeze(-1).to(self._trials.dtype)
+        unobserved = trials == 0.0 if covariate is not None else None
+        if unobserved is not None and bool(unobserved.any()):
+            # An unobserved channel scores log 1 whatever count it carries
+            # (issue #933); scored at zero successes first, so the discarded
+            # branch is finite.
+            counts = torch.where(unobserved, 0.0, counts)
+        else:
+            unobserved = None
         scores = _beta_binomial_log_density(counts, trials, self._alpha, self._beta)
-        return torch.where(counts > trials, torch.full_like(scores, -torch.inf), scores)
+        scores = torch.where(
+            counts > trials, torch.full_like(scores, -torch.inf), scores
+        )
+        if unobserved is None:
+            return scores
+        return torch.where(unobserved, torch.zeros_like(scores), scores)
 
     def bregman_divergence(self, observations: torch.Tensor) -> torch.Tensor:
         """The log-density gap to the best rate at this concentration.
@@ -1739,6 +1795,14 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
             if covariate is not None
             else self._trials
         )
+        if per_observation and bool((supplied == 0.0).any()):
+            # Dropped, as the negative binomial drops an unobserved total.
+            observed = supplied > 0.0
+            values, weights, supplied = (
+                values[observed],
+                weights[observed],
+                supplied[observed],
+            )
 
         alpha = torch.empty(self.n_states, dtype=torch.float64)
         beta = torch.empty(self.n_states, dtype=torch.float64)

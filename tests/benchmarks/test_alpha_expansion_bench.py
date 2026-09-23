@@ -19,6 +19,7 @@ from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.search.alpha_expansion import (
     _expansion_network,
+    alpha_beta_swap,
     alpha_expansion,
     iterated_conditional_modes,
 )
@@ -96,3 +97,20 @@ def test_the_expansion_network_build_benchmark(
     built = benchmark(_expansion_network, graph, field, labelling, 0)
 
     assert built.n_nodes >= graph.n_nodes + 2
+
+
+@pytest.mark.parametrize("name", ["expansion", "swap"])
+@pytest.mark.parametrize("extent", [71, 142])
+def test_the_rust_cut_moves_at_large_site_counts(
+    benchmark: BenchmarkFixture, extent: int, name: str
+) -> None:
+    """The whole Rust route at ten labels on the reused lattice network (issue #935).
+
+    Measured one run each at 71 and 142, against the per-move network the
+    route built before: expansion 0.246 -> 0.077 s and 1.227 -> 0.356 s,
+    swap 0.216 -> 0.143 s and 1.078 -> 0.742 s, the same labellings.
+    """
+    graph, values = _problem(extent, 10)
+    solve = alpha_expansion if name == "expansion" else alpha_beta_swap
+    result = benchmark(solve, graph, values, 10, backend=Backend.RUST)
+    assert np.isfinite(result.energy)
