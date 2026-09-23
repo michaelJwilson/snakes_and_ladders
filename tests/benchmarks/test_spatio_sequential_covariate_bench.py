@@ -47,7 +47,7 @@ def test_emission_rows_by_count_benchmark(benchmark: BenchmarkFixture) -> None:
     rows = benchmark(rust.emission_rows, instance.params, instance.observations)
 
     # Benchmarks assert finiteness only; correctness is pinned in the regression suite.
-    assert np.isfinite(rows[2]).any()
+    assert np.isfinite(rows.total_table).any()
 
 
 def test_emission_rows_by_pair_benchmark(benchmark: BenchmarkFixture) -> None:
@@ -57,7 +57,7 @@ def test_emission_rows_by_pair_benchmark(benchmark: BenchmarkFixture) -> None:
 
     rows = benchmark(rust.emission_rows, params, instance.observations)
 
-    assert np.isfinite(rows[2]).any()
+    assert np.isfinite(rows.total_table).any()
 
 
 def test_class_posteriors_uncovaried_benchmark(benchmark: BenchmarkFixture) -> None:

@@ -1,0 +1,1 @@
+Four benchmarks that indexed `search.maxflow.PairedArcs` and `likelihood.spatio_sequential_rust.EmissionRows` as tuples read their named fields; both became dataclasses and the benchmarks failed with `TypeError`.

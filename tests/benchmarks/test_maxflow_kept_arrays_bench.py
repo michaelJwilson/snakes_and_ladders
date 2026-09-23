@@ -44,7 +44,7 @@ def test_as_arrays_kept_benchmark(benchmark: BenchmarkFixture) -> None:
     result = benchmark(network.as_arrays)
 
     # Benchmarks assert finiteness only; correctness is pinned in the regression suite.
-    assert result[1].size == _EDGES
+    assert result.capacity.size == _EDGES
 
 
 def test_as_arrays_derived_benchmark(benchmark: BenchmarkFixture) -> None:
@@ -54,7 +54,7 @@ def test_as_arrays_derived_benchmark(benchmark: BenchmarkFixture) -> None:
 
     result = benchmark(network.as_arrays)
 
-    assert result[1].size == _EDGES
+    assert result.capacity.size == _EDGES
 
 
 def _expansion(backend: Backend) -> float:
