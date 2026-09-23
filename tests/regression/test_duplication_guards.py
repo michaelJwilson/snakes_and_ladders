@@ -595,6 +595,18 @@ def test_no_module_builds_a_scipy_sparse_store() -> None:
 
 @pytest.mark.critical
 @pytest.mark.infra
+def test_a_latex_table_has_one_scaffold() -> None:
+    # Issue #926: four QA modules opened `tabular` and `array` by hand.
+    assert _offenders(TABULAR_LITERAL, TABULAR_OWNER) == []
+    # The owner builds the environment from its specification, so it holds
+    # no literal; what it holds is the two scaffolds.
+    owner = (PACKAGE / TABULAR_OWNER).read_text()
+    assert "def booktabs_tabular(" in owner
+    assert "def mathjax_array(" in owner
+
+
+@pytest.mark.critical
+@pytest.mark.infra
 def test_each_guard_fails_on_violating_source() -> None:
     # The guards exercised. Each searches source text, so each passes
     # vacuously if the pattern is wrong -- which is the failure mode a guard
@@ -620,6 +632,8 @@ def test_each_guard_fails_on_violating_source() -> None:
         # Split inside the call for the reason the lines above are split: a
         # whole one here makes this module the reader the guard refuses.
         PIPE_SPLIT: "cells = line.split(" + '"|")\n',
+        # Unsplit: the guard reads the package, not this suite.
+        TABULAR_LITERAL: '            r"\\begin{tabular}{lrrrr}",\n',
     }
     clean = {
         PRIVATE_LOGSUMEXP: "from snakes_and_ladders.numerics import logsumexp\n",
@@ -639,6 +653,7 @@ def test_each_guard_fails_on_violating_source() -> None:
         DERIVED_REPO_ROOT: "from tests._paths import REPO_ROOT\n",
         CATALOGUE_FILE: "rows = catalogue.rows()\n",
         PIPE_SPLIT: "cells = catalogue.cells(line)\n",
+        TABULAR_LITERAL: 'table = booktabs_tabular("lrrrr", HEADER, rows)\n',
     }
 
     assert [p for p, text in violating.items() if not p.search(text)] == []
@@ -779,6 +794,12 @@ DERIVED_REPO_ROOT = re.compile(
 #: The pieces of a reader of `PROBLEMS.md`: the file, and a split of a row on
 #: its pipes. Both, because the tree is full of each alone --- `DEV.md` has
 #: tables too, and `select_tests.py` names the catalogue without parsing it.
+#: A LaTeX table environment opened by hand: the one scaffold is
+#: `qa.figure.booktabs_tabular` and `mathjax_array` (issue #926), where four
+#: modules wrote the frame line for line.
+TABULAR_OWNER = "qa/figure.py"
+TABULAR_LITERAL = re.compile(r"\\begin\{(?:tabular|array)\}")
+
 CATALOGUE_FILE = re.compile(r"PROBLEMS\.md")
 PIPE_SPLIT = re.compile(r"\.split\(\"\|\"\)")
 
