@@ -30,13 +30,14 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from itertools import accumulate
 
 import numpy as np
 import torch
 
 from snakes_and_ladders.learn.environment import Environment, Episode
 from snakes_and_ladders.learn.policy import LinearPolicy
-from snakes_and_ladders.learn.rollout import log_probabilities_of, rollout
+from snakes_and_ladders.learn.rollout import rollout, taken_log_probabilities
 
 # Adam rather than plain SGD, for the reason the baseline exists: the
 # gradient's scale is set by the objective's units, which differ between
@@ -107,14 +108,15 @@ def surrogate_loss[S, A](
         msg = "need at least one episode to form an estimate"
         raise ValueError(msg)
 
-    total = torch.zeros((), dtype=policy.weights.dtype)
-    for episode, decisions in zip(
-        episodes, log_probabilities_of(policy, environment, episodes), strict=True
-    ):
-        advantages = [value - baseline for value in episode.returns_to_go()]
-        for step, decision in enumerate(decisions):
-            total = total + decision.taken * advantages[step]
-    return -total / len(episodes)
+    taken = taken_log_probabilities(policy, environment, episodes)
+    # `Episode.returns_to_go`, summed in its order, for every episode at once.
+    returns = [
+        value
+        for episode in episodes
+        for value in reversed(list(accumulate(reversed(episode.rewards))))
+    ]
+    advantages = torch.tensor(returns, dtype=taken.dtype) - baseline
+    return -(taken @ advantages) / len(episodes)
 
 
 def reinforce[S, A](
