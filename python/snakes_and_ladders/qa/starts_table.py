@@ -1,9 +1,10 @@
 """QA table: each initializer's gap and wall clock at the handover and at the end (issue #891).
 
-One row per start, in the order given, in five columns (issue #898): the
-initializer, the gap below the generating parameters' log-likelihood at the
-handover and the seconds to it, and the gap where the polish stopped and the
-seconds of the start and its polish under their one budget. Built from the
+One row per start, from the lowest mean final gap to the highest, in five
+columns: the initializer, the seconds to the handover and the gap below the
+generating parameters' log-likelihood there, and the seconds of the start and
+its polish under their one budget and the gap where the polish stopped (issue
+#898; each time before its gap, and the rows by final gap, since #909). Built from the
 :class:`~snakes_and_ladders.search.mixture_starts.StartRow` rows the starts
 notebook reads, in the ``tabular`` shape
 :func:`snakes_and_ladders.qa.figure.write_qa_table` writes, so a document can
@@ -26,10 +27,10 @@ from snakes_and_ladders.search.mixture_starts import StartRow
 #: The header of both forms, one entry per column.
 HEADER = (
     "initializer",
-    "init. gap [nats]",
     "init time [s]",
-    "final gap [nats]",
+    "init. gap [nats]",
     "final time [s]",
+    "final gap [nats]",
 )
 
 
@@ -42,16 +43,16 @@ def _cell(values: Sequence[float], plus_minus: str) -> str:
 
 
 def _body(rows: Sequence[StartRow], plus_minus: str) -> list[list[str]]:
-    """Each row's five cells, with ``plus_minus`` as the form sets the sign."""
+    """Each row's five cells, lowest mean final gap first, with ``plus_minus`` as the form sets the sign."""
     return [
         [
             f"\\texttt{{{latex_escape(row.start)}}}",
-            _cell(row.seeded_gap, plus_minus),
             _cell(row.seeding_seconds, plus_minus),
-            _cell(row.gap, plus_minus),
+            _cell(row.seeded_gap, plus_minus),
             _cell(row.seconds, plus_minus),
+            _cell(row.gap, plus_minus),
         ]
-        for row in rows
+        for row in sorted(rows, key=lambda row: float(np.mean(row.gap)))
     ]
 
 
@@ -63,7 +64,7 @@ def build_table(
     Parameters
     ----------
     rows : Sequence[StartRow]
-        One per start, in the order the table takes them.
+        One per start; the table orders them by mean final gap, lowest first.
     instance : str
         The fixture the starts ran on, as the caption names it.
     seconds : int

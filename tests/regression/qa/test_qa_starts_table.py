@@ -46,9 +46,7 @@ ROWS = [
 
 
 @pytest.mark.smoke
-def test_the_table_has_five_columns_one_row_per_start_in_order_and_a_safe_caption() -> (
-    None
-):
+def test_the_table_has_five_columns_rows_by_final_gap_and_a_safe_caption() -> None:
     body, caption = build_table(
         ROWS, instance="emission mixture stress", seconds=120, seeds=2
     )
@@ -56,14 +54,15 @@ def test_the_table_has_five_columns_one_row_per_start_in_order_and_a_safe_captio
     lines = body.splitlines()
     assert lines[0] == r"\begin{tabular}{lrrrr}"
     assert lines[2] == (
-        r"  initializer & init. gap [nats] & init time [s] & final gap [nats] "
-        r"& final time [s] \\"
+        r"  initializer & init time [s] & init. gap [nats] & final time [s] "
+        r"& final gap [nats] \\"
     )
+    # Each time before its gap, and the rows from the lowest mean final gap.
     assert lines[4:7] == [
-        r"  \texttt{emission++} & 101.2 & 0.1 & 1.2 & 3.2 \\",
-        r"  \texttt{burn-in} & 102.0 $\pm$ 1.4 & 0.1 $\pm$ 0.0 & 2.0 $\pm$ 1.4 "
-        r"& 4.0 $\pm$ 1.4 \\",
-        r"  \texttt{quantile} & 98.0 & 0.1 & -2.0 & 0.0 \\",
+        r"  \texttt{quantile} & 0.1 & 98.0 & 0.0 & -2.0 \\",
+        r"  \texttt{emission++} & 0.1 & 101.2 & 3.2 & 1.2 \\",
+        r"  \texttt{burn-in} & 0.1 $\pm$ 0.0 & 102.0 $\pm$ 1.4 & 4.0 $\pm$ 1.4 "
+        r"& 2.0 $\pm$ 1.4 \\",
     ]
     assert lines[-1] == r"\end{tabular}"
     check_latex_safe(caption)
@@ -91,8 +90,8 @@ def test_the_array_sets_the_tabular_s_cells_in_the_form_mathjax_renders() -> Non
     lines = build_array(ROWS).splitlines()
     assert lines[0] == r"\begin{array}{lrrrr}"
     assert lines[2] == (
-        r"  \text{initializer} & \text{init. gap [nats]} & \text{init time [s]} "
-        r"& \text{final gap [nats]} & \text{final time [s]} \\"
+        r"  \text{initializer} & \text{init time [s]} & \text{init. gap [nats]} "
+        r"& \text{final time [s]} & \text{final gap [nats]} \\"
     )
     assert lines[4:7] == [
         line.replace(r"$\pm$", r"\pm") for line in tabular.splitlines()[4:7]
