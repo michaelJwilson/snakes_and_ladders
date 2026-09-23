@@ -550,6 +550,7 @@ def test_the_graph_surrogate_meets_pygs_runtime(side: int) -> None:
     assert_meets(seconds, TORCH_GEOMETRIC_FORWARD[side])
 
 
+@pytest.mark.experiment
 @pytest.mark.parametrize("case", sorted(JAX_GRADIENT))
 def test_the_gradient_meets_jaxs_runtime(case: str) -> None:
     inputs = _gradient_inputs(case)
