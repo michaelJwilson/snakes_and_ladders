@@ -1116,7 +1116,7 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
             rate = exposure(covariate, self._mean) * self._mean
         total = self._dispersion + rate
         return (
-            torch.lgamma(counts + self._dispersion)
+            _lgamma_shifted(counts, self._dispersion)
             - torch.lgamma(self._dispersion)
             - torch.lgamma(counts + 1.0)
             + self._dispersion * torch.log(self._dispersion / total)
@@ -2207,13 +2207,39 @@ def _beta_binomial_log_density(
         torch.lgamma(trials + 1.0)
         - torch.lgamma(counts + 1.0)
         - torch.lgamma(trials - counts + 1.0)
-        + torch.lgamma(counts + alpha)
-        + torch.lgamma(trials - counts + beta)
-        - torch.lgamma(trials + total)
+        + _lgamma_shifted(counts, alpha)
+        + _lgamma_shifted(trials - counts, beta)
+        - _lgamma_shifted(trials, total)
         + torch.lgamma(total)
         - torch.lgamma(alpha)
         - torch.lgamma(beta)
     )
+
+
+def _lgamma_shifted(counts: torch.Tensor, shift: torch.Tensor) -> torch.Tensor:
+    """``lgamma(counts + shift)``, broadcast, with ``lgamma`` taken on the distinct counts only (issue #924).
+
+    ``counts`` holds a few hundred distinct integers across thousands of
+    observations, and the sum is formed per (observation, state), so
+    evaluating on the distinct counts and gathering by index is the same
+    number from far fewer ``lgamma`` calls: elementwise, so bitwise. Counts
+    that do not broadcast against one ``shift`` per state take the direct
+    form, and so
+    does a ``shift`` autodiff is tracking: the gather's backward sums the
+    gradient in another order, and an observed-information Hessian would no
+    longer be the one it was.
+    """
+    if (
+        counts.dim() == 0
+        or counts.shape[-1] != 1
+        or counts.numel() < 64
+        or shift.dim() != 1
+        or (shift.requires_grad and torch.is_grad_enabled())
+    ):
+        return torch.lgamma(counts + shift)
+    distinct, inverse = torch.unique(counts, return_inverse=True)
+    table = torch.lgamma(distinct.unsqueeze(-1) + shift.reshape(-1))
+    return table[inverse.reshape(-1)].reshape(*counts.shape[:-1], -1)
 
 
 def _clamped_deviance(saturated: torch.Tensor, scored: torch.Tensor) -> torch.Tensor:
