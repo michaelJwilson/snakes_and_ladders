@@ -164,6 +164,8 @@ def _cluster_labels(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
         roots = np.array([find_root(parent, node) for node in range(n_nodes)])
         return {"roots": roots}
 
+    return call
+
 
 def _gradient(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     """``gradient_at`` at every point, as the JAX pair differentiates them (#991).
