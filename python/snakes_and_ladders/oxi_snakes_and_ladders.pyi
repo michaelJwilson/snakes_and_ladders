@@ -85,6 +85,12 @@ def categorical_em_step(
     log_transition: np.ndarray,
     log_emission: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]: ...
+def gaussian_mixture_em_step(
+    values: np.ndarray,
+    log_weight: np.ndarray,
+    mean: np.ndarray,
+    scale: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]: ...
 def ising_ground_states(
     n_nodes: int,
     fields: np.ndarray,
