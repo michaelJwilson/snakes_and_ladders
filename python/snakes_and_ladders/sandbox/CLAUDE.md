@@ -53,3 +53,4 @@ pull request that made the move, and `STATUS.md` where they are evidence.
 | `region_graph` | declined | the Bethe region graph, where the Kikuchi free energy is `message_passing`'s Bethe value and its fixed point; the plaquettes settle at weak coupling on the strip and at strong coupling not at all (#689) |
 | `polar_reference` | oracle | the naive successive-cancellation recursion that pins `likelihood.polar.decode_sc` bitwise; the construction and the decoders it referees were promoted to `sim.polar` and `likelihood.polar` when the code got its row (#826) |
 | `maxflow_declined` | declined | the minimal minimum cut, arc for arc against the Python Dinic and the package kernel, by three algorithms the kept one is not; the parallel one bitwise across thread counts (#715) |
+| `annealed_em` | declined | plain EM, which an empty schedule and one step at one reproduce bitwise; on `emission_mixture/ci` both reach one maximum from every `data` start tried (#903, #916) |

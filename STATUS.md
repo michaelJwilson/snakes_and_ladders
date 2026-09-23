@@ -564,6 +564,18 @@ Alternating bisection in `(p, a + b)` settles in 3 to 9 iterations at a
 residual of exactly zero. An M step that does not settle is refused, per
 `likelihood/CLAUDE.md`.
 
+**The beta-binomial solve runs every component at once, on distinct values**
+(#892, PR #917). Within one solve the weights are fixed, so each score's sum
+over the observations is a sum over each channel's distinct values weighted by
+the responsibility summed there, and one alternating bisection runs over every
+component in lockstep. One EM iteration on the `spatio_sequential_counts/release`
+projection (K = 100, 4,000 pairs) drops from 5.9 s to 0.65 s and on
+`emission_mixture/stress` from 0.61 s to 0.124 s, one thread; the fitted
+parameters are bitwise the per-component solve's, which stays as the oracle.
+Batching over the observations alone bought 1.18x: the cost was `digamma`
+evaluations, not calls. The negative-binomial dispersion solve is now half of
+an iteration (#918).
+
 **The flat-likelihood hazard is the mirror of the Gaussian's.** Where a
 Gaussian likelihood is *unbounded* as a variance falls, a count likelihood goes
 *flat* as the dispersion rises toward its Poisson or binomial limit. The bound
@@ -1843,7 +1855,7 @@ and `tree_search/ci`, identical before and after.
 
 ## Milestone 1.3 — Continuous Optimization via Autodiff
 
-**Modules.** The optimization interface and what is fitted through it: `opt.objective`, `opt.constrain`, and `opt.testfunctions`, whose functions are the problem a fit is checked on before any model is. `sample.langevin` and `sample.slice`: the two samplers an HMC number is read against, one module each, both over the same `Objective` (#756; under `opt` until #777, with `sample.hmc` and `sample.schedule`). `opt.em`: the E step, M step alternation and the relative stopping rule the three expectation-maximization entry points ran a copy of each, which no oracle is pinned against (#859). `cost`: the unit a method spends, declared once for the oracle ladder and for `opt.budget.Budget`, which took a bare string until #860. `opt.termination`: whether a loop finished and why, one answer on fourteen results that carried five encodings between them (#860).
+**Modules.** The optimization interface and what is fitted through it: `opt.objective`, `opt.constrain`, and `opt.testfunctions`, whose functions are the problem a fit is checked on before any model is. `sample.langevin` and `sample.slice`: the two samplers an HMC number is read against, one module each, both over the same `Objective` (#756; under `opt` until #777, with `sample.hmc` and `sample.schedule`). `opt.em`: the E step, M step alternation and the relative stopping rule the three expectation-maximization entry points ran a copy of each, which no oracle is pinned against (#859). `cost`: the unit a method spends, declared once for the oracle ladder and for `opt.budget.Budget`, which took a bare string until #860. `opt.termination`: whether a loop finished and why, one answer on fourteen results that carried five encodings between them (#860). `opt.starts`: one loop that seeds every start, polishes it at a held budget and records its curve, which four consumers wrote by hand (#894). `opt.split_merge`: split-and-merge moves on a converged mixture fit, kept only where the log-likelihood rises; the planted fixed point on `emission_mixture/ci` gains 165.7 nats on its first move (#904).
 
 **The interface is model-agnostic, and that is measured rather than asserted.**
 An `Objective` is an unconstrained parameter vector, a differentiable scalar,
@@ -2327,7 +2339,7 @@ since the hand ladder hits 18/20 at 100 sweeps. NUTS remains out of scope.
 
 ## Milestone 1.4 — Discrete Move Sets & Classical Baselines
 
-**Modules.** The discrete solvers and their compiled counterparts: `search.ground_state`, `search.projection`, `sim.topology` and `sample.kernels` (`search.topology` and `search.kernels` until #830, which also put the chain's params in `sim.potts_chain`, the sampler-built initializers in `sample.initialize` and the algebraic decoders in `likelihood.algebraic`) (`search.potts_mcmc_rust`, a one-line twin, folded by #717). `search.decoding`: two estimators of a labelling, and which loss each one minimizes (#696). `search.tightening`: a dual bound on a Potts ground state, and the plaquettes that tighten it (#696). `sample.potts_keyed`: the cluster moves, as something a deterministic ``step`` can call (#706). `sample.balanced`: the locally balanced proposal kernel the Potts lattice and the factor graph share (#756). Those two, `sample.potts_mcmc`, `sample.gibbs`, `sample.tempered`, `sample.annealed` and `sample.statistics` were under `search` until #777. `search.mixture_starts`: the joint count-pair mixture started every way the package can start it, each start polished by EM at one budget and timed through `track` (#891).
+**Modules.** The discrete solvers and their compiled counterparts: `search.ground_state`, `search.projection`, `sim.topology` and `sample.kernels` (`search.topology` and `search.kernels` until #830, which also put the chain's params in `sim.potts_chain`, the sampler-built initializers in `sample.initialize` and the algebraic decoders in `likelihood.algebraic`) (`search.potts_mcmc_rust`, a one-line twin, folded by #717). `search.decoding`: two estimators of a labelling, and which loss each one minimizes (#696). `search.tightening`: a dual bound on a Potts ground state, and the plaquettes that tighten it (#696). `sample.potts_keyed`: the cluster moves, as something a deterministic ``step`` can call (#706). `sample.balanced`: the locally balanced proposal kernel the Potts lattice and the factor graph share (#756). Those two, `sample.potts_mcmc`, `sample.gibbs`, `sample.tempered`, `sample.annealed` and `sample.statistics` were under `search` until #777. `search.mixture_starts`: the joint count-pair mixture started every way the package can start it, each start polished by EM at one budget and timed through `track` (#891). `search.potts_starts`: every ground-state solver as a start of the `opt.starts` seam on a size-tilted lattice, the energy an `Objective` over labellings and ICM the polish; at `potts_lattice/release`, q = 3, the graph cuts hand over the q = 2 sibling's exact optimum (#906).
 
 **NNI and SPR: landed and counted.** Both neighbourhoods sit behind one
 `Topology -> Iterator[Topology]` interface and are verified exhaustively

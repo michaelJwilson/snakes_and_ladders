@@ -747,10 +747,10 @@ class KMeansPlusPlus(Initializer):
         TypeError
             If the objective is not one this initializer knows how to seed.
         """
-        if not isinstance(objective, GaussianMixtureObjective):
+        if not isinstance(objective, GaussianMixtureObjective | ClusteringObjective):
             msg = (
-                f"k-means++ seeds a Gaussian mixture and does not know what "
-                f"{type(objective).__name__}'s parameters mean"
+                f"k-means++ seeds a Gaussian mixture or a clustering and does not "
+                f"know what {type(objective).__name__}'s parameters mean"
             )
             raise TypeError(msg)
         observations = objective.observations.numpy()
@@ -764,6 +764,150 @@ class KMeansPlusPlus(Initializer):
             )
             for _ in range(self.n_starts)
         ]
+
+
+class UniformSeeds(Initializer):
+    """Starting points on distinct observations drawn uniformly: :func:`uniform_seeds` as an initializer.
+
+    The baseline :class:`KMeansPlusPlus` is measured against, drawing from its
+    generator the stream :func:`uniform_seeds` draws, so a benchmark of the
+    two through `opt.starts` reproduces the seedings drawn by hand
+    (issue #894).
+
+    Parameters
+    ----------
+    n_starts : int
+        Seedings to draw, at least 1.
+    rng : np.random.Generator
+        Generator, passed in rather than seeded here.
+
+    Raises
+    ------
+    ValueError
+        If fewer than one start is asked for.
+    """
+
+    def __init__(self, n_starts: int, rng: np.random.Generator) -> None:
+        if n_starts < 1:
+            msg = f"n_starts must be >= 1, got {n_starts}"
+            raise ValueError(msg)
+        self.n_starts = n_starts
+        self.rng = rng
+
+    def starts(self, objective: Objective) -> list[torch.Tensor]:
+        """Seed each start on uniformly drawn observations.
+
+        Returns
+        -------
+        list[torch.Tensor]
+            ``n_starts`` points, in unconstrained coordinates.
+
+        Raises
+        ------
+        TypeError
+            If the objective is not one this initializer knows how to seed.
+        """
+        if not isinstance(objective, GaussianMixtureObjective | ClusteringObjective):
+            msg = (
+                f"uniform seeding places centres of a Gaussian mixture or a "
+                f"clustering and does not know what {type(objective).__name__}'s "
+                f"parameters mean"
+            )
+            raise TypeError(msg)
+        observations = objective.observations.numpy()
+        return [
+            objective.theta_from_centres(
+                torch.as_tensor(
+                    canonical_order(
+                        uniform_seeds(observations, objective.n_components, self.rng)
+                    )
+                )
+            )
+            for _ in range(self.n_starts)
+        ]
+
+
+class ClusteringObjective(Objective):
+    """The k-means cost of ``k`` centres: what the k-means++ guarantee is stated against.
+
+    ``theta`` is the centres themselves, unconstrained, one row per centre
+    flattened; the value is :func:`clustering_cost`'s
+    ``sum_i min_k ||y_i - c_k|| ** 2``, differentiable wherever the nearest
+    centre of every observation is unique. The objective a seeding is scored
+    on when the claim is the seeding's and not the mixture's
+    (`qa.mixture_seeding`'s panel (b), issue #894).
+
+    Parameters
+    ----------
+    observations : np.ndarray
+        Observations, shape ``(n_samples,)`` or ``(n_samples, n_channels)``.
+    n_components : int
+        Centres, at least 1.
+
+    Raises
+    ------
+    ValueError
+        If fewer than one centre is asked for.
+    """
+
+    def __init__(self, observations: np.ndarray, n_components: int) -> None:
+        if n_components < 1:
+            msg = f"n_components must be >= 1, got {n_components}"
+            raise ValueError(msg)
+        self._observations = torch.as_tensor(observations, dtype=torch.float64)
+        self._rows = self._observations.reshape(self._observations.shape[0], -1)
+        self._n_components = n_components
+
+    @property
+    def n_components(self) -> int:
+        """Centres."""
+        return self._n_components
+
+    @property
+    def observations(self) -> torch.Tensor:
+        """The observations, of the shape they were given in."""
+        return self._observations
+
+    def _centres(self, theta: torch.Tensor) -> torch.Tensor:
+        return theta.reshape(self._n_components, self._rows.shape[1])
+
+    def initial(self) -> torch.Tensor:
+        """Centres at evenly spaced quantiles of each channel."""
+        return self.theta_from_centres(
+            quantile_locations(self._rows, self._n_components, dim=0)
+        )
+
+    def theta_from_centres(self, centres: torch.Tensor) -> torch.Tensor:
+        """The point whose centres are ``centres``.
+
+        Raises
+        ------
+        ValueError
+            If there is not one centre per component.
+        """
+        located = torch.as_tensor(centres, dtype=torch.float64).reshape(-1)
+        if located.shape[0] != self._n_components * self._rows.shape[1]:
+            msg = (
+                f"expected {self._n_components} centres of {self._rows.shape[1]} "
+                f"channel(s), got {located.shape[0]} values"
+            )
+            raise ValueError(msg)
+        return located
+
+    def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
+        """The centres, one row each."""
+        return {"centres": self._centres(theta)}
+
+    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        """The unconstrained vector whose :meth:`constrain` is ``named``."""
+        return self.theta_from_centres(named["centres"])
+
+    def __call__(self, theta: torch.Tensor) -> torch.Tensor:
+        """The summed squared distance of every observation to its nearest centre."""
+        squared = (
+            (self._rows[:, None, :] - self._centres(theta)[None, :, :]) ** 2
+        ).sum(dim=-1)
+        return squared.min(dim=1).values.sum()
 
 
 def canonical_order(centres: np.ndarray) -> np.ndarray:

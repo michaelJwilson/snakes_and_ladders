@@ -1,0 +1,34 @@
+model: potts-lattice
+oracle: none
+
+# The lattice the ground-state starts are read on (issue #906,
+# `docs/nb/potts_starts.ipynb`). A 50x50 open square, 2,500 sites, at 3
+# states and the exact critical coupling `J_c = ln(1 + sqrt(3)) = 1.005`, in
+# a size-tilted field: every site carries a size drawn lognormally at spread
+# 0.6 and the field is `alpha[m] * log(size / mean size)` over the ladder
+# (-1, 0, 1), `sim.potts.spatio_only_field`. This is the instance
+# `search.ground_state.lattice_rung(50, 3, seed=906)` builds, declared here so
+# the notebook reads a fixture rather than constructing one.
+#
+# 3**2500 labellings is past enumeration and no graph cut is exact at three
+# states, so the stated oracle is none. What referees a labelling here is the
+# alpha-expansion bracket --- its energy and the lower end its factor-2 bound
+# gives --- and the structure of the parameters that built the field: the size
+# tilt, the null class and the per-class occupancy. The same sizes at two
+# states, the ladder's ends (-1, 1), are exact by graph cut; the notebook reads
+# that sibling for one exact gap beside the bracketed one.
+seed: 906
+shape: [50, 50]
+boundary: open
+n_states: 3
+coupling: critical
+field:
+  alpha: [-1.0, 0.0, 1.0]
+  size_spread: 0.6
+  size_seed: 906
+
+# The instance is minimized, not sampled: one configuration and no burn-in
+# are the smallest values the loader admits, and no test draws from it.
+n_samples: 1
+burn_in: 0
+tolerance: 0.10

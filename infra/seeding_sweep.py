@@ -1,9 +1,11 @@
 """The seeding sweep of issue #541, run once and reported.
 
-Not collected by ``pytest``: it is the experiment's own run, over more
-instances than the release-tier test reproduces at. Writes one JSON that
-``docs/experiments/009-projection-emission-seedings.md``, ``STATUS.md`` and the
-pull-request body quote.
+Not collected by ``pytest``: it is the experiment's own run. Writes one JSON
+that ``docs/experiments/009-projection-emission-seedings.md``, ``STATUS.md``
+and the pull-request body quote. The comparison runs through
+`snakes_and_ladders.opt.starts.StartsBenchmark` (issue #894), and
+`tests/regression/opt/test_opt_starts.py` re-derives the experiment's rows
+from :func:`benchmark` at release.
 
     python infra/seeding_sweep.py --out <path> [--workers N]
 """
@@ -12,22 +14,28 @@ from __future__ import annotations
 
 import argparse
 import json
+from functools import partial
 from pathlib import Path
 
 import numpy as np
 import torch
 from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.opt.budget import Budget, Method, compare, restarts
+from snakes_and_ladders.opt.budget import Budget
 from snakes_and_ladders.opt.mixture import mixture_log_likelihood, responsibilities
-from snakes_and_ladders.parallel import Pool, map_tasks
+from snakes_and_ladders.opt.starts import SolverComparison, Start, StartsBenchmark
+from snakes_and_ladders.parallel import map_tasks
 from snakes_and_ladders.search.projection import (
     SEEDINGS,
     CountPairAt,
     ProjectedCounts,
-    SeededFit,
+    ProjectedObjective,
+    SeedingStart,
     fit_projection,
     flatten,
+    polish_projected,
     project,
+    projected_mean_error,
+    projected_recovery,
 )
 from snakes_and_ladders.sim.count_pairs import binned_model
 from snakes_and_ladders.sim.fixtures import KEY, fixture
@@ -135,6 +143,67 @@ def _detail(task: tuple[ProjectedCounts, str, CountPairAt, int]) -> dict[str, ob
     }
 
 
+def benchmark(
+    drawn: list[ProjectedCounts], at: CountPairAt, workers: int
+) -> StartsBenchmark:
+    """Every candidate and the restart baseline, through `opt.starts` (issue #894).
+
+    The restart baseline is ``prior`` drawn :data:`N_RESTARTS` times, each
+    polished at ``BUDGET.size // N_RESTARTS`` and the best kept: the
+    arithmetic of `opt.budget.restarts`, which the seam applies to any start
+    offering more than one point.
+
+    Returns
+    -------
+    StartsBenchmark
+    """
+    starts: dict[str, Start] = {
+        name: partial(SeedingStart, name, at) for name in SEEDINGS
+    }
+    starts["restart"] = partial(SeedingStart, "prior", at, n_starts=N_RESTARTS)
+    return StartsBenchmark(
+        [ProjectedObjective(instance, at) for instance in drawn],
+        starts,
+        polish_projected,
+        seeding_budget=Budget(Cost.EVALUATIONS, N_RESTARTS),
+        polish_budget=BUDGET,
+        seeds=[0],
+        workers=workers,
+    )
+
+
+def detail(result: SolverComparison) -> list[dict[str, object]]:
+    """Instance 0's fit per candidate, read off the trials the comparison ran.
+
+    The trial on instance 0 at seed 0 is the fit the objective comparison
+    scored there, so its curve, recovery and charge belong to that fit.
+
+    Returns
+    -------
+    list[dict[str, object]]
+    """
+    rows: list[dict[str, object]] = []
+    objective = result.objectives[0]
+    for name in result.names:
+        if name == "restart":
+            continue
+        trial = result.trials(name)[0]
+        rows.append(
+            {
+                "name": name,
+                "instance": 0,
+                "log_likelihoods": [
+                    -value for value in trial.values[trial.handover + 1 : -1]
+                ],
+                "iterations": trial.termination.iterations,
+                "recovery": projected_recovery(objective, trial.theta),
+                "mean_error": projected_mean_error(objective, trial.theta),
+                "passes": trial.diagnostics["seeding_passes"],
+            }
+        )
+    return rows
+
+
 def main() -> None:
     """Run the sweep and write the JSON."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -183,21 +252,8 @@ def main() -> None:
         )
         return
 
-    methods: dict[str, Method[ProjectedCounts]] = {
-        name: SeededFit(name, at) for name in SEEDINGS
-    }
-    methods["restart"] = restarts(SeededFit("prior", at), BUDGET.size // N_RESTARTS)
-
-    comparison = compare(methods, drawn, BUDGET, [0], workers=workers)
-    backend: Pool = "processes"
-    detail = map_tasks(
-        _detail,
-        [(drawn[0], name, at, 0) for name in methods if name != "restart"],
-        workers=workers,
-        backend=backend,
-        intra_op_threads=None,
-    )
-
+    benchmarked = benchmark(drawn, at, workers).run()
+    comparison = benchmarked.comparison
     gaps = comparison.mean_gap()
     winner = min(gaps, key=lambda name: gaps[name])
     result = {
@@ -215,7 +271,7 @@ def main() -> None:
         "mean_gap": gaps,
         "table": comparison.table(),
         "bayes": bayes(drawn[0]),
-        "detail": list(detail),
+        "detail": detail(benchmarked),
         "winner": winner,
         "paired_p": {
             name: comparison.paired_p(winner, name, TOLERANCE, relative=True)

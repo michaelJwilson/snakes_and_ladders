@@ -442,6 +442,12 @@ class PottsLatticeParams:
         :data:`CRITICAL` for :func:`critical_coupling`.
     field : np.ndarray
         External field ``h``, shape ``(n_states,)`` or ``(n_nodes, n_states)``.
+        A fixture may declare it as a size tilt instead of a table (issue
+        #906): a mapping of ``alpha`` (one per state), ``size_spread`` and
+        ``size_seed``, the per-site sizes drawn lognormally at that spread
+        from ``np.random.default_rng(size_seed)`` and the field built by
+        :func:`spatio_only_field`, as
+        :func:`snakes_and_ladders.search.ground_state.lattice_rung` builds it.
     seed : int
         Seed for ``np.random.default_rng``.
     n_samples : int
@@ -453,6 +459,12 @@ class PottsLatticeParams:
     tolerance : float
         Monte Carlo tolerance a validation test checks simulated frequencies
         against their exact counterpart within.
+    alpha : np.ndarray | None
+        The class ladder of a size-tilted field, shape ``(n_states,)``;
+        ``None`` for a field declared as a table.
+    sizes : np.ndarray | None
+        The per-site sizes of a size-tilted field, shape ``(n_nodes,)``;
+        ``None`` for a field declared as a table.
     """
 
     shape: tuple[int, ...]
@@ -464,6 +476,8 @@ class PottsLatticeParams:
     n_samples: int
     burn_in: int
     tolerance: float
+    alpha: np.ndarray | None = None
+    sizes: np.ndarray | None = None
 
     #: The fields :func:`snakes_and_ladders.fixtures.load_params` checks are present before
     #: calling :meth:`from_declared`.
@@ -490,8 +504,15 @@ class PottsLatticeParams:
             msg = f"{path}: n_states must be >= 2, got {n_states}"
             raise ValueError(msg)
 
-        field = np.asarray(declared["field"], dtype=np.float64)
         n_nodes = int(np.prod(shape))
+        alpha: np.ndarray | None = None
+        sizes: np.ndarray | None = None
+        raw = declared["field"]
+        if isinstance(raw, Mapping):
+            alpha, sizes = _size_tilt(path, raw, n_states, n_nodes)
+            field = spatio_only_field(alpha, sizes)
+        else:
+            field = np.asarray(raw, dtype=np.float64)
         if field.shape not in {(n_states,), (n_nodes, n_states)}:
             msg = (
                 f"{path}: field has shape {field.shape}, expected ({n_states},) "
@@ -509,7 +530,44 @@ class PottsLatticeParams:
             n_samples=int(declared["n_samples"]),
             burn_in=int(declared["burn_in"]),
             tolerance=float(declared["tolerance"]),
+            alpha=alpha,
+            sizes=sizes,
         )
+
+
+#: The keys a size-tilted field declares.
+SIZE_TILT = frozenset({"alpha", "size_spread", "size_seed"})
+
+
+def _size_tilt(
+    path: Path, raw: Mapping[str, Any], n_states: int, n_nodes: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """The class ladder and the per-site sizes a size-tilted field declares.
+
+    Raises
+    ------
+    ValueError
+        If a key is missing or unknown, the ladder is not one per state, or
+        the spread is not positive.
+    """
+    if set(raw) != SIZE_TILT:
+        msg = (
+            f"{path}: a size-tilted field declares exactly {sorted(SIZE_TILT)}, "
+            f"got {sorted(raw)}"
+        )
+        raise ValueError(msg)
+    alpha = np.asarray(raw["alpha"], dtype=np.float64)
+    if alpha.shape != (n_states,):
+        msg = f"{path}: alpha has shape {alpha.shape}, expected ({n_states},)"
+        raise ValueError(msg)
+    spread = float(raw["size_spread"])
+    if not spread > 0.0:
+        msg = f"{path}: size_spread must be positive, got {spread}"
+        raise ValueError(msg)
+    sizes = np.random.default_rng(int(raw["size_seed"])).lognormal(
+        0.0, spread, size=n_nodes
+    )
+    return alpha, sizes
 
 
 def _coupling(path: Path, raw: object, n_states: int) -> float:
