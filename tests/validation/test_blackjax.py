@@ -25,9 +25,8 @@ import pytest
 import torch
 from snakes_and_ladders.sample import hmc
 from snakes_and_ladders.validation import blackjax
+from snakes_and_ladders.validation.gaussian import GaussianTarget, dense_precision
 from snakes_and_ladders.validation.runner import available
-
-from tests.validation._targets import GaussianTarget, dense_precision
 
 pytestmark = [
     pytest.mark.validation,

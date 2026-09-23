@@ -1,7 +1,9 @@
-"""The zero-mean Gaussian targets the BlackJAX comparisons share (issue #963).
+"""The zero-mean Gaussian target the BlackJAX comparisons share (issues #963, #987).
 
 One objective, dense or diagonal by the precision's shape, so the oracle, the
-goal and the benchmark pair score the same density BlackJAX's script builds.
+goal, the benchmark pair and `scripts/package.py` score the density BlackJAX's
+script builds. Here rather than under `tests/` because `scripts/package.py`
+runs it in a fresh interpreter, which imports the package and not the tests.
 """
 
 from __future__ import annotations
@@ -10,6 +12,7 @@ from collections.abc import Mapping
 
 import numpy as np
 import torch
+
 from snakes_and_ladders.opt.objective import Objective
 
 

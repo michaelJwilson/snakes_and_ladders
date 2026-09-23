@@ -14,7 +14,7 @@ Outputs ``draws`` and ``acceptance``, the mean acceptance probability.
 
 Each mode is compiled on one call first; the measured seconds are the second
 call, to ``block_until_ready``, so compilation is not charged. It is reported
-as ``compile_seconds``.
+as ``compile_seconds``. The peak resident memory is the second call's too.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from typing import Any
 
 import numpy as np
 
-from snakes_and_ladders.validation.protocol import dump, load, paths
+from snakes_and_ladders.validation.protocol import dump, load, paths, peaked
 
 #: What ``mode`` selects.
 INTEGRATE, SAMPLE = 0, 1
@@ -91,9 +91,13 @@ def main() -> None:
     start = time.perf_counter()
     jax.block_until_ready(run(*arguments))
     compile_seconds = time.perf_counter() - start
-    start = time.perf_counter()
-    result = jax.block_until_ready(run(*arguments))
-    seconds = time.perf_counter() - start
+
+    def timed_run() -> tuple[Any, float]:
+        start = time.perf_counter()
+        result = jax.block_until_ready(run(*arguments))
+        return result, time.perf_counter() - start
+
+    (result, seconds), peak_bytes = peaked(timed_run)
 
     if int(inputs["mode"]) == INTEGRATE:
         outputs = {
@@ -107,7 +111,7 @@ def main() -> None:
             "acceptance": np.asarray(np.mean(np.asarray(acceptance))),
         }
     outputs["compile_seconds"] = np.asarray(compile_seconds - seconds)
-    dump(returned, outputs, seconds)
+    dump(returned, outputs, seconds, peak_bytes)
 
 
 if __name__ == "__main__":

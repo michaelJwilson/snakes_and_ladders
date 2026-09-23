@@ -4,15 +4,15 @@ Inputs: ``observations``, ``(n_sequences, length)`` symbols; ``initial``,
 ``transition``, ``emission``, the start as probabilities; ``n_iter``. The
 fit runs exactly ``n_iter`` iterations in log space from that start
 (``init_params=""``, ``tol=-inf``). Outputs: the fitted ``initial``,
-``transition``, ``emission`` and ``iterations``. The measured seconds are
-``fit`` alone.
+``transition``, ``emission`` and ``iterations``. The measured seconds and
+peak resident memory are ``fit`` alone.
 """
 
 from __future__ import annotations
 
 import numpy as np
 
-from snakes_and_ladders.validation.protocol import dump, load, paths, timed
+from snakes_and_ladders.validation.protocol import dump, load, paths, peaked, timed
 
 
 def main() -> None:
@@ -37,7 +37,9 @@ def main() -> None:
     model.transmat_ = inputs["transition"]
     model.emissionprob_ = emission
     column = observations.reshape(-1, 1)
-    _, seconds = timed(lambda: model.fit(column, lengths=[length] * n_sequences))
+    (_, seconds), peak_bytes = peaked(
+        lambda: timed(lambda: model.fit(column, lengths=[length] * n_sequences))
+    )
     dump(
         returned,
         {
@@ -47,6 +49,7 @@ def main() -> None:
             "iterations": np.asarray(model.monitor_.iter, dtype=np.int64),
         },
         seconds,
+        peak_bytes,
     )
 
 

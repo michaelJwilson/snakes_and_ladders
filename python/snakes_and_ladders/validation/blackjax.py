@@ -47,6 +47,8 @@ class Chain:
     acceptance: float
     #: Wall seconds of the compiled chain, compilation excluded.
     seconds: float
+    #: Peak resident bytes the compiled chain added, compilation excluded.
+    peak_bytes: int
 
 
 def coefficients(weights: tuple[float, ...]) -> np.ndarray:
@@ -110,4 +112,9 @@ def sample(
         },
     )
     out = result.outputs
-    return Chain(out["draws"], float(out["acceptance"]), result.seconds)
+    return Chain(
+        out["draws"],
+        float(out["acceptance"]),
+        result.seconds,
+        int(result.peak_bytes or 0),
+    )

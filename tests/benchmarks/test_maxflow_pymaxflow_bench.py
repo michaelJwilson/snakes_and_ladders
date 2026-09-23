@@ -6,7 +6,9 @@ and the cut, in one call --- and records beside it what PyMaxflow's script
 measured on the same capacities: `pymaxflow_build_s` for its graph and
 `pymaxflow_cut_s` for `maxflow()`, each the median of `REPEATS` subprocess
 runs. The fair pair is the kernel against their sum; the cut alone is the
-bound a faster build could reach. The Python oracle is timed at the smallest
+bound a faster build could reach. Beside them, `pymaxflow_peak_bytes` and
+`package_peak_bytes`: the peak resident memory each side's build and cut add,
+each read in a fresh interpreter (#987). The Python oracle is timed at the smallest
 stress size only, where it is still the baseline a port is judged by.
 
 Sizes: 16² is the gate size, and 71², 142² and 284² the stress sizes a
@@ -24,7 +26,7 @@ from snakes_and_ladders.search.ground_state import lattice_rung
 from snakes_and_ladders.search.maxflow import ising_ground_state
 from snakes_and_ladders.sim.potts import site_field
 from snakes_and_ladders.validation import pymaxflow
-from snakes_and_ladders.validation.runner import available
+from snakes_and_ladders.validation.runner import available, package
 
 pytestmark = pytest.mark.skipif(
     not available("maxflow"), reason="PyMaxflow is the validation-pymaxflow extra"
@@ -36,7 +38,7 @@ REPEATS = 5
 SIDES = [16, 71, 142, 284]
 
 
-def _pymaxflow_seconds(side: int) -> tuple[float, float]:
+def _pymaxflow_measures(side: int) -> tuple[float, float, float]:
     rung = lattice_rung(side, 2, seed=973)
     cuts = [
         pymaxflow.ising_ground_state(rung.graph, rung.field)[1] for _ in range(REPEATS)
@@ -44,6 +46,7 @@ def _pymaxflow_seconds(side: int) -> tuple[float, float]:
     return (
         float(np.median([cut.build_seconds for cut in cuts])),
         float(np.median([cut.seconds for cut in cuts])),
+        float(np.median([cut.peak_bytes for cut in cuts])),
     )
 
 
@@ -57,9 +60,21 @@ def test_rust_cut_beside_pymaxflow_benchmark(
     ).reshape(-1)
     edges = rung.graph.edge_index.reshape(-1)
     coupling = rung.graph.edge_coupling
-    build, cut = _pymaxflow_seconds(side)
+    build, cut, peak = _pymaxflow_measures(side)
     benchmark.extra_info["pymaxflow_build_s"] = build
     benchmark.extra_info["pymaxflow_cut_s"] = cut
+    benchmark.extra_info["pymaxflow_peak_bytes"] = peak
+    inputs = {
+        "n_nodes": np.asarray(rung.graph.n_nodes),
+        "field": field,
+        "edges": edges,
+        "coupling": coupling,
+    }
+    benchmark.extra_info["package_peak_bytes"] = float(
+        np.median(
+            [package("ising_cut", inputs).peak_bytes or 0 for _ in range(REPEATS)]
+        )
+    )
 
     states = benchmark(
         oxi_snakes_and_ladders.ising_ground_state,

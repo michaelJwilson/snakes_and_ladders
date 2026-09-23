@@ -4,7 +4,9 @@ The integrators are pinned in `tests/validation/test_blackjax.py`, and the
 runtime goals in `test_goals.py`. Each row times 1,000 transitions of the
 package's HMC at unit mass, ten leapfrog steps each, and records beside it
 BlackJAX's compiled chain on the same target at the same step and length,
-compilation excluded, the median of `REPEATS` subprocess runs. The work per
+compilation excluded, the median of `REPEATS` subprocess runs, and the peak
+resident memory each side's chain adds, each read in a fresh interpreter
+(#987). The work per
 transition is identical by construction, so the pair is a runtime ratio.
 
 The target is a diagonal Gaussian with precisions from 1 to 4 at every size;
@@ -21,9 +23,8 @@ import torch
 from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders.sample import hmc
 from snakes_and_ladders.validation import blackjax
-from snakes_and_ladders.validation.runner import available
-
-from tests.validation._targets import GaussianTarget, diagonal_precision
+from snakes_and_ladders.validation.gaussian import GaussianTarget, diagonal_precision
+from snakes_and_ladders.validation.runner import available, package
 
 pytestmark = pytest.mark.skipif(
     not available("blackjax"), reason="BlackJAX is the validation-blackjax extra"
@@ -53,6 +54,21 @@ def test_hmc_beside_blackjax_benchmark(
     ]
     benchmark.extra_info["blackjax_s"] = float(np.median([run.seconds for run in runs]))
     benchmark.extra_info["blackjax_acceptance"] = runs[0].acceptance
+    benchmark.extra_info["blackjax_peak_bytes"] = float(
+        np.median([run.peak_bytes for run in runs])
+    )
+    inputs = {
+        "precision": precision,
+        "step_size": np.asarray(step),
+        "n_steps": np.asarray(N_STEPS),
+        "n_draws": np.asarray(N_DRAWS),
+        "seed": np.asarray(963),
+    }
+    benchmark.extra_info["package_peak_bytes"] = float(
+        np.median(
+            [package("hmc_sample", inputs).peak_bytes or 0 for _ in range(REPEATS)]
+        )
+    )
 
     chain = benchmark.pedantic(  # type: ignore[no-untyped-call]
         lambda: hmc.sample(
