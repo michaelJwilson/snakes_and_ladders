@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import itertools
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -32,12 +32,20 @@ import torch
 
 from snakes_and_ladders.emissions import CountPairEmission, EmissionFamily
 from snakes_and_ladders.enumeration import refuse_oversized
+from snakes_and_ladders.opt.constrain import (
+    free_from_log_simplex,
+    free_from_positive,
+    log_simplex,
+    positive,
+)
 from snakes_and_ladders.opt.em import em_loop
 from snakes_and_ladders.opt.mixture import (
     e_step,
     emission_mixture_plus_plus,
+    mixture_log_likelihood,
     uniform_seeds,
 )
+from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.opt.termination import Termination
 from snakes_and_ladders.track import current
 
@@ -574,3 +582,112 @@ def uniform_start(
     indices = np.arange(rows.shape[0], dtype=np.float64)
     chosen = uniform_seeds(indices, n_components, rng)
     return at(rows[chosen.astype(np.int64)])
+
+
+class EmissionMixtureObjective(Objective):
+    """Negative log-likelihood of a mixture of any family whose parameters are positive (issue #964).
+
+    ``theta`` is ``K - 1`` free weights, then for each parameter name the
+    family states, ``K`` log values: the weights through
+    :func:`~snakes_and_ladders.opt.constrain.log_simplex` and every
+    parameter through :func:`~snakes_and_ladders.opt.constrain.positive`.
+    ``build`` turns the named parameters back into a family, so the
+    objective is differentiable in ``theta`` wherever the family's
+    ``log_density`` is, and a Hamiltonian or Langevin chain can sample a
+    count mixture the Gaussian :class:`~snakes_and_ladders.opt.mixture.GaussianMixtureObjective`
+    cannot express.
+
+    Parameters
+    ----------
+    observations : np.ndarray
+        Shape ``(n,)`` or ``(n, channels)``, in the family's dtype.
+    start : EmissionFamily
+        The family :meth:`initial` starts at, with uniform weights; its
+        :meth:`~snakes_and_ladders.emissions.EmissionFamily.named_parameters`
+        name the blocks of ``theta``, every one positive.
+    build : Callable[[Mapping[str, torch.Tensor]], EmissionFamily]
+        The family at named parameters of shape ``(K,)`` each; constants the
+        family carries (a trial count, the joint form) are the closure's.
+
+    Raises
+    ------
+    ValueError
+        If ``start`` has fewer than two states or a parameter is not positive.
+    """
+
+    def __init__(
+        self,
+        observations: np.ndarray,
+        start: EmissionFamily,
+        build: Callable[[Mapping[str, torch.Tensor]], EmissionFamily],
+    ) -> None:
+        if start.n_states < 2:
+            msg = f"a mixture has at least two components, got {start.n_states}"
+            raise ValueError(msg)
+        named = {
+            name: torch.as_tensor(value, dtype=torch.float64).reshape(-1)
+            for name, value in start.named_parameters().items()
+        }
+        if any(bool((value <= 0).any()) for value in named.values()):
+            msg = "every parameter of the family must be positive"
+            raise ValueError(msg)
+        self._observations = torch.as_tensor(
+            observations, dtype=start.observation_dtype
+        )
+        self._start = named
+        self._names = tuple(named)
+        self._k = start.n_states
+        self._build = build
+
+    @property
+    def observations(self) -> torch.Tensor:
+        """The observations being fitted."""
+        return self._observations
+
+    @property
+    def n_components(self) -> int:
+        """``K``."""
+        return self._k
+
+    @property
+    def n_parameters(self) -> int:
+        """``K - 1`` free weights and ``K`` per named parameter."""
+        return self._k - 1 + self._k * len(self._names)
+
+    def _blocks(self, theta: torch.Tensor) -> dict[str, torch.Tensor]:
+        offset = self._k - 1
+        blocks: dict[str, torch.Tensor] = {}
+        for name in self._names:
+            blocks[name] = positive(theta[offset : offset + self._k])
+            offset += self._k
+        return blocks
+
+    def components(self, theta: torch.Tensor) -> EmissionFamily:
+        """The family ``theta`` encodes, differentiable in ``theta``."""
+        return self._build(self._blocks(theta))
+
+    def initial(self) -> torch.Tensor:
+        """Uniform weights at ``start``'s parameters."""
+        uniform = torch.full((self._k,), -math.log(self._k), dtype=torch.float64)
+        return self.theta_from({"log_weight": uniform, **self._start})
+
+    def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
+        """The log weights and every named parameter."""
+        return {"log_weight": log_simplex(theta[: self._k - 1]), **self._blocks(theta)}
+
+    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        """The unconstrained vector whose :meth:`constrain` is ``named``."""
+        parts = [free_from_log_simplex(torch.as_tensor(named["log_weight"]))]
+        parts += [
+            free_from_positive(torch.as_tensor(named[name], dtype=torch.float64))
+            for name in self._names
+        ]
+        return torch.cat(parts)
+
+    def __call__(self, theta: torch.Tensor) -> torch.Tensor:
+        """The negative mixture log-likelihood at ``theta``."""
+        return -mixture_log_likelihood(
+            self._observations,
+            log_simplex(theta[: self._k - 1]),
+            self.components(theta),
+        )

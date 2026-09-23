@@ -481,12 +481,27 @@ def stephens(
         if start is None
         else np.asarray(start, dtype=np.int64)
     )
+    m, n = values.shape[:2]
+    # Two layouts built once, so each pass is two matrix products: the draws
+    # side by side, (n, m K), for the mean, and each draw transposed,
+    # (m, K, n), for the cost.
+    side_by_side = np.ascontiguousarray(values.transpose(1, 0, 2)).reshape(
+        n, m * n_components
+    )
+    transposed = np.ascontiguousarray(values.transpose(0, 2, 1))
+    rows = np.arange(m)[:, None]
+    labels = np.arange(n_components)[None, :]
     history: list[float] = []
     converged = False
     for _ in range(max_iterations):
-        log_mean = np.log(permute_probabilities(values, orders).mean(axis=0))
+        # q = mean over draws of p[t, :, orders[t]]: each draw's permutation
+        # as a one-hot (K, K) block, stacked into one (m K, K) selector.
+        selector = np.zeros((m, n_components, n_components))
+        selector[rows, orders, labels] = 1.0
+        mean = side_by_side @ selector.reshape(m * n_components, n_components) / m
         # cost[t, k, l]: draw t's component l given label k.
-        cost = entropy[:, None, :] - np.einsum("til,ik->tkl", values, log_mean)
+        cross = np.matmul(transposed, np.log(mean))
+        cost = entropy[:, None, :] - cross.transpose(0, 2, 1)
         proposed = _assign(-cost)
         value = -_achieved(-cost, proposed)
         unchanged = np.array_equal(proposed, orders)

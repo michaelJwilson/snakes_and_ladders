@@ -174,9 +174,8 @@ def test_every_method_undoes_the_planted_permutations(method: RelabelMethod) -> 
     def scores(estimate: np.ndarray) -> np.ndarray:
         family = GaussianEmission(estimate[:, 0], np.ones(K), 1e-12)
         weight = np.log(np.clip(estimate[:, 1], 1e-12, None))
-        return (
-            family.log_density(torch.as_tensor(data["observations"])).numpy() + weight
-        )
+        density = family.log_density(torch.as_tensor(data["observations"])).numpy()
+        return np.asarray(density + weight)
 
     result = relabel(
         method,
@@ -210,9 +209,8 @@ def test_the_default_is_stephens_and_sjw_weights_are_a_distribution() -> None:
 
     def scores(estimate: np.ndarray) -> np.ndarray:
         family = GaussianEmission(estimate[:, 0], np.ones(K), 1e-12)
-        return family.log_density(
-            torch.as_tensor(data["observations"])
-        ).numpy() + np.log(np.clip(estimate[:, 1], 1e-12, None))
+        density = family.log_density(torch.as_tensor(data["observations"])).numpy()
+        return np.asarray(density + np.log(np.clip(estimate[:, 1], 1e-12, None)))
 
     result = sjw(data["parameters"], data["allocations"], scores)
     assert result.weights is not None
