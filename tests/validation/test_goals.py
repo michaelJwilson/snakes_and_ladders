@@ -499,6 +499,60 @@ HMMLEARN_VITERBI_MEMORY = {
     )
 }
 
+#: hmmlearn's `score`, the summed log-likelihood at the start parameters on
+#: the same sequences: medians of three subprocess runs (#997).
+HMMLEARN_SCORE = {
+    (family, n_sequences): Goal(
+        "hmmlearn",
+        f"{family} HMM log-likelihood at {100 * n_sequences:,} positions",
+        seconds,
+        "2026-09-23, 4-core reference host at a 1-minute load of 1.2, #997",
+    )
+    for family, n_sequences, seconds in (
+        ("gaussian", 1_000, 0.046337),
+        ("gaussian", 10_000, 0.332986),
+        ("poisson", 1_000, 0.156309),
+        ("poisson", 10_000, 1.427731),
+    )
+}
+
+HMMLEARN_SCORE_MEMORY = {
+    (family, n_sequences): MemoryGoal(
+        "hmmlearn",
+        f"{family} HMM log-likelihood at {100 * n_sequences:,} positions",
+        peak_bytes,
+        "2026-09-23, 4-core reference host, #997",
+    )
+    for family, n_sequences, peak_bytes in (
+        ("gaussian", 1_000, 442_368),
+        ("gaussian", 10_000, 2_084_864),
+        ("poisson", 1_000, 774_144),
+        ("poisson", 10_000, 2_387_968),
+    )
+}
+
+#: scikit-learn's `score_samples`, summed, at the mixture EM goal's start on
+#: `_mixture_draws`: medians of three subprocess runs (#997).
+SCIKIT_LEARN_SCORE = {
+    n_samples: Goal(
+        "scikit_learn",
+        f"mixture log-likelihood at {n_samples:,} draws",
+        seconds,
+        "2026-09-23, 4-core reference host at a 1-minute load of 1.2, #997",
+    )
+    for n_samples, seconds in ((100_000, 0.04040), (1_000_000, 0.63677))
+}
+
+SCIKIT_LEARN_SCORE_MEMORY = {
+    n_samples: MemoryGoal(
+        "scikit_learn",
+        f"mixture log-likelihood at {n_samples:,} draws",
+        peak_bytes,
+        "2026-09-23, 4-core reference host, #997",
+    )
+    for n_samples, peak_bytes in ((100_000, 13_111_296), (1_000_000, 131_989_504))
+}
+
 #: The start both sides fit from: probabilities, and each family's parameters.
 _FAMILY_START: dict[str, dict[str, np.ndarray]] = {
     "gaussian": {
@@ -589,6 +643,52 @@ def test_viterbi_fits_hmmlearns_memory(family: str, n_sequences: int) -> None:
     inputs = _viterbi_inputs(family, n_sequences)
     peaks = [package("viterbi", inputs).peak_bytes or 0 for _ in range(3)]
     assert_fits(int(np.median(peaks)), HMMLEARN_VITERBI_MEMORY[(family, n_sequences)])
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize(("family", "n_sequences"), sorted(HMMLEARN_SCORE))
+def test_hmm_log_likelihood_meets_hmmlearns_runtime(
+    family: str, n_sequences: int
+) -> None:
+    inputs = {**_viterbi_inputs(family, n_sequences), "score": np.asarray(True)}
+    seconds = [package("viterbi", inputs).seconds for _ in range(3)]
+    assert_meets(float(np.median(seconds)), HMMLEARN_SCORE[(family, n_sequences)])
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize(("family", "n_sequences"), sorted(HMMLEARN_SCORE_MEMORY))
+def test_hmm_log_likelihood_fits_hmmlearns_memory(
+    family: str, n_sequences: int
+) -> None:
+    inputs = {**_viterbi_inputs(family, n_sequences), "score": np.asarray(True)}
+    peaks = [package("viterbi", inputs).peak_bytes or 0 for _ in range(3)]
+    assert_fits(int(np.median(peaks)), HMMLEARN_SCORE_MEMORY[(family, n_sequences)])
+
+
+def _score_inputs(n_samples: int) -> dict[str, np.ndarray]:
+    """The mixture EM goal's start and draws, for a log-likelihood alone."""
+    return {
+        "observations": _mixture_draws(n_samples),
+        "weights": np.array([0.3, 0.3, 0.4]),
+        "mean": np.array([-3.0, 0.5, 4.0]),
+        "scale": np.array([1.2, 1.0, 1.3]),
+    }
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("n_samples", sorted(SCIKIT_LEARN_SCORE))
+def test_mixture_log_likelihood_meets_scikit_learns_runtime(n_samples: int) -> None:
+    inputs = _score_inputs(n_samples)
+    seconds = [package("mixture_score", inputs).seconds for _ in range(3)]
+    assert_meets(float(np.median(seconds)), SCIKIT_LEARN_SCORE[n_samples])
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("n_samples", sorted(SCIKIT_LEARN_SCORE_MEMORY))
+def test_mixture_log_likelihood_fits_scikit_learns_memory(n_samples: int) -> None:
+    inputs = _score_inputs(n_samples)
+    peaks = [package("mixture_score", inputs).peak_bytes or 0 for _ in range(3)]
+    assert_fits(int(np.median(peaks)), SCIKIT_LEARN_SCORE_MEMORY[n_samples])
 
 
 #: BlackJAX's peak added resident memory for the same compiled chain with no

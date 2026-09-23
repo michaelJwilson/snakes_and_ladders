@@ -176,3 +176,42 @@ def _family_inputs(
         },
         "family": np.asarray(family),
     }
+
+
+@dataclass(frozen=True)
+class Score:
+    """hmmlearn's summed log-likelihood at given parameters."""
+
+    log_likelihood: float
+    #: Wall seconds of ``score`` alone.
+    seconds: float
+    #: Peak resident bytes ``score`` added.
+    peak_bytes: int
+
+
+def score(
+    observations: np.ndarray,
+    initial: np.ndarray,
+    transition: np.ndarray,
+    emission: dict[str, np.ndarray],
+) -> Score:
+    """hmmlearn's ``score`` at the given parameters (issue #997); ``emission`` as :func:`viterbi` takes it."""
+    family = (
+        "categorical"
+        if "emission" in emission
+        else "poisson"
+        if "rate" in emission
+        else "gaussian"
+    )
+    result = run(
+        SCRIPT,
+        {
+            **_family_inputs(observations, initial, transition, emission, family),
+            "call": np.asarray("score"),
+        },
+    )
+    return Score(
+        float(result.outputs["log_likelihood"]),
+        result.seconds,
+        int(result.peak_bytes or 0),
+    )

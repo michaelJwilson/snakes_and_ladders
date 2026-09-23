@@ -313,6 +313,7 @@ def mixture_log_likelihood(
     observations: torch.Tensor,
     log_weight: torch.Tensor,
     components: EmissionFamily,
+    backend: Backend = Backend.RUST,
 ) -> torch.Tensor:
     """``sum_i log sum_k w_k N(y_i; mu_k, s_k)``, in log space throughout (``eq:mixture``).
 
@@ -328,6 +329,19 @@ def mixture_log_likelihood(
         :mod:`snakes_and_ladders.opt.emission_mixture` fit a mixture of count
         emissions through this function unchanged.
 
+    backend : Backend
+        :data:`~snakes_and_ladders.backend.Backend.RUST`, the default since
+        issue #997, streams the sum in
+        ``oxi_snakes_and_ladders.gaussian_mixture_gradient`` where no
+        gradient is to be taken --- autograd off, or nothing here requiring
+        one --- and the components are exactly a one-channel ``float64``
+        :class:`~snakes_and_ladders.emissions.GaussianEmission` over a
+        one-dimensional array: no ``(n_samples, n_components)`` array is
+        formed. At 10^6 draws of three components the torch route peaked at
+        71.9 MB. Any other case, and
+        :data:`~snakes_and_ladders.backend.Backend.PYTHON`, take torch, which
+        is the oracle and the route a gradient needs.
+
     Returns
     -------
     torch.Tensor
@@ -336,9 +350,37 @@ def mixture_log_likelihood(
         probability where they are discrete. The mixture inherits which from
         its components.
     """
+    refuse_backend("mixture_log_likelihood", backend, (Backend.PYTHON, Backend.RUST))
+    if backend is Backend.RUST and _streams_score(observations, log_weight, components):
+        assert isinstance(components, GaussianEmission)
+        negative, _ = oxi_snakes_and_ladders.gaussian_mixture_gradient(
+            np.ascontiguousarray(observations.numpy()),
+            np.ascontiguousarray(log_weight.numpy(), dtype=np.float64),
+            np.ascontiguousarray(components.mean.numpy()),
+            np.ascontiguousarray(components.scale.numpy()),
+        )
+        return torch.tensor(-negative, dtype=torch.float64)
     return torch.logsumexp(
         log_weight + components.log_density(observations), dim=-1
     ).sum()
+
+
+def _streams_score(
+    observations: torch.Tensor, log_weight: torch.Tensor, components: EmissionFamily
+) -> bool:
+    """Whether :func:`mixture_log_likelihood` has a streamed, gradient-free route (issue #997)."""
+    if type(components) is not GaussianEmission or components.n_channels != 1:
+        return False
+    tracked = torch.is_grad_enabled() and any(
+        tensor.requires_grad
+        for tensor in (observations, log_weight, components.mean, components.scale)
+    )
+    return (
+        not tracked
+        and observations.dim() == 1
+        and observations.dtype == torch.float64
+        and log_weight.dtype == torch.float64
+    )
 
 
 def responsibilities(

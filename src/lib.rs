@@ -42,7 +42,7 @@ pub use count_mstep::{beta_binomial_parameters, negative_binomial_dispersions};
 pub use count_pairs::simulate_count_pairs;
 pub use coupled::{class_posteriors, external_field};
 pub use hmc_gaussian::{gaussian_hmc, gaussian_leapfrog};
-pub use hmm_decode::hmm_viterbi;
+pub use hmm_decode::{hmm_score, hmm_viterbi};
 pub use hmm_stream::{categorical_em_step, count_cells, count_em_step, gaussian_em_step};
 pub use lattice_cut::LatticeCut;
 pub use maxflow::{ising_ground_state, ising_ground_states, max_flow};
@@ -100,6 +100,7 @@ fn oxi_snakes_and_ladders(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(gaussian_em_step, m)?)?;
     m.add_function(wrap_pyfunction!(count_cells, m)?)?;
     m.add_function(wrap_pyfunction!(hmm_viterbi, m)?)?;
+    m.add_function(wrap_pyfunction!(hmm_score, m)?)?;
     m.add_function(wrap_pyfunction!(count_em_step, m)?)?;
     m.add_function(wrap_pyfunction!(gaussian_mixture_em_step, m)?)?;
     m.add_function(wrap_pyfunction!(gaussian_mixture_gradient, m)?)?;

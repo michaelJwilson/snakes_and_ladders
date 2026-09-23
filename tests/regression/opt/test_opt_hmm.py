@@ -35,6 +35,7 @@ from snakes_and_ladders.opt.hmm import (
     baum_welch,
     baum_welch_family,
     forward_log_likelihood,
+    hmm_log_likelihood,
     viterbi,
 )
 from snakes_and_ladders.sim.fixtures import fixture
@@ -773,3 +774,24 @@ def test_viterbi_is_the_enumerated_best_path(backend: Backend) -> None:
         assert tuple(path) == best
         best_total += scores[best]
     assert_allclose(total, best_total, rtol=1e-12)
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize(
+    "name", ["gaussian", "poisson", "negative_binomial", "binomial", "beta_binomial"]
+)
+def test_the_compiled_hmm_score_is_the_forward_recursion(name: str) -> None:
+    # Issue #997: the scaled forward pass over sequences in parallel against
+    # the log-space recursion in torch, at the declared float64 tolerance.
+    observations, family, _ = _streamed_case(name, covariate=False)
+    initial = torch.log(torch.tensor([0.4, 0.3, 0.3], dtype=torch.float64))
+    transition = torch.log(
+        torch.tensor(
+            [[0.8, 0.1, 0.1], [0.1, 0.8, 0.1], [0.1, 0.1, 0.8]], dtype=torch.float64
+        )
+    )
+    ours, oracle = (
+        hmm_log_likelihood(observations, initial, transition, family, backend=backend)
+        for backend in (Backend.RUST, Backend.PYTHON)
+    )
+    assert_allclose(ours, oracle, rtol=1e-12)

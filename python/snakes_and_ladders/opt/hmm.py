@@ -1559,6 +1559,69 @@ def viterbi(
     return states, float(delta.max(axis=1).sum())
 
 
+def hmm_log_likelihood(
+    observations: np.ndarray,
+    log_initial: torch.Tensor,
+    log_transition: torch.Tensor,
+    emissions: EmissionFamily,
+    backend: Backend = Backend.RUST,
+) -> float:
+    """The summed log-likelihood of every sequence at given parameters, with no gradient.
+
+    The number hmmlearn's ``score`` and :func:`forward_log_likelihood_from_density`
+    report. Returned as a ``float``, since no gradient is taken: a caller that
+    needs one differentiates :func:`forward_log_likelihood_from_density`.
+
+    Parameters
+    ----------
+    observations : np.ndarray
+        Shape ``(n_sequences, length)``, as ``emissions`` scores them.
+    log_initial, log_transition : torch.Tensor
+        Log-probabilities, ``(m,)`` and ``(m, m)``.
+    emissions : EmissionFamily
+        The emission family.
+    backend : Backend
+        :data:`~snakes_and_ladders.backend.Backend.RUST`, the default, runs
+        the scaled forward pass over the sequences in parallel in
+        ``oxi_snakes_and_ladders.hmm_score`` for the families :func:`viterbi`
+        compiles, and forms no ``(n_sequences, length, m)`` array;
+        :data:`~snakes_and_ladders.backend.Backend.PYTHON`, and any other
+        family, take :func:`forward_log_likelihood_from_density`, the oracle
+        (issue #997).
+
+    Returns
+    -------
+    float
+    """
+    refuse_backend("hmm_log_likelihood", backend, (Backend.PYTHON, Backend.RUST))
+    values = np.asarray(observations)
+    compiled = _viterbi_family(emissions)
+    if backend is Backend.RUST and compiled is not None and values.ndim == 2:
+        name, parameters = compiled
+        dtype = np.int64 if np.issubdtype(values.dtype, np.integer) else np.float64
+        return float(
+            oxi_snakes_and_ladders.hmm_score(
+                np.ascontiguousarray(values, dtype=dtype),
+                np.ascontiguousarray(log_initial.detach().numpy(), dtype=np.float64),
+                np.ascontiguousarray(
+                    log_transition.detach().numpy(), dtype=np.float64
+                ).reshape(-1),
+                name,
+                parameters,
+            )
+        )
+    with torch.no_grad():
+        return float(
+            forward_log_likelihood_from_density(
+                emissions.log_density(
+                    torch.as_tensor(values, dtype=emissions.observation_dtype)
+                ),
+                log_initial,
+                log_transition,
+            )
+        )
+
+
 def _viterbi_family(emissions: EmissionFamily) -> tuple[str, np.ndarray] | None:
     """The compiled Viterbi's name and parameters for ``emissions``, or ``None``."""
     if type(emissions) is CategoricalEmission:

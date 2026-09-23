@@ -1,4 +1,5 @@
-//! Viterbi over a batch of equal-length sequences, sequences in parallel (issue #997).
+//! Viterbi and the forward log-likelihood over a batch of equal-length
+//! sequences, sequences in parallel (issue #997).
 //!
 //! hmmlearn's `decode` sets the goal: 0.26 s for 10^6 positions of a
 //! three-state Gaussian HMM. Each sequence's path is independent given the
@@ -152,6 +153,131 @@ pub fn decode<T: Observation>(
     Ok((states, scores.iter().sum()))
 }
 
+/// One sequence's log-likelihood by the scaled forward pass.
+///
+/// Each position's densities are shifted by their maximum before they are
+/// exponentiated, and each forward vector normalized to sum to one, so the
+/// log-likelihood is the shifts plus the log-normalizers and nothing
+/// underflows; the pass `baum_welch_family`'s streamed step makes, with no
+/// backward half.
+fn score_one<T: Observation>(
+    row: &[T],
+    m: usize,
+    initial: &[f64],
+    transition: &[f64],
+    emission: &Emission<'_>,
+) -> f64 {
+    let mut alpha = vec![0.0; m];
+    let mut next = vec![0.0; m];
+    let mut emitted = vec![0.0; m];
+    let mut log_likelihood = 0.0;
+    for (t, &x) in row.iter().enumerate() {
+        emission.log_density(x.value(), &mut emitted);
+        let high = emitted.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        for value in emitted.iter_mut() {
+            *value = (*value - high).exp();
+        }
+        let mut total = 0.0;
+        for j in 0..m {
+            let reach = if t == 0 {
+                initial[j]
+            } else {
+                (0..m).map(|i| alpha[i] * transition[i * m + j]).sum()
+            };
+            next[j] = reach * emitted[j];
+            total += next[j];
+        }
+        for (a, &v) in alpha.iter_mut().zip(next.iter()) {
+            *a = v / total;
+        }
+        log_likelihood += high + total.ln();
+    }
+    log_likelihood
+}
+
+/// The summed log-likelihood of every sequence, sequences in parallel and
+/// summed in order.
+pub fn score<T: Observation>(
+    observations: &[T],
+    length: usize,
+    log_initial: &[f64],
+    log_transition: &[f64],
+    emission: &Emission<'_>,
+) -> Result<f64, String> {
+    let m = log_initial.len();
+    if m == 0 || log_transition.len() != m * m {
+        return Err(format!(
+            "{m} states need a {m}x{m} transition, got {} entries",
+            log_transition.len()
+        ));
+    }
+    if length == 0 || !observations.len().is_multiple_of(length) {
+        return Err(format!(
+            "{} observations are not rows of {length}",
+            observations.len()
+        ));
+    }
+    let initial: Vec<f64> = log_initial.iter().map(|v| v.exp()).collect();
+    let transition: Vec<f64> = log_transition.iter().map(|v| v.exp()).collect();
+    let scores: Vec<f64> = observations
+        .par_chunks(length)
+        .map(|row| score_one(row, m, &initial, &transition, emission))
+        .collect();
+    Ok(scores.iter().sum())
+}
+
+/// An `Emission` from its name and parameters, as `hmm_viterbi` takes them.
+fn emission_of<'a>(family: &str, parameters: &'a [f64], m: usize) -> PyResult<Emission<'a>> {
+    Ok(match family {
+        "categorical" => Emission::Categorical(parameters),
+        "gaussian" if parameters.len() == 2 * m => Emission::Gaussian {
+            mean: &parameters[..m],
+            scale: &parameters[m..],
+        },
+        "gaussian" => {
+            return Err(PyValueError::new_err(format!(
+                "a Gaussian takes {m} means and {m} scales, got {} values",
+                parameters.len()
+            )))
+        }
+        name => Emission::Count(
+            count_family(name, parameters, m, false, STIRLING_FROM)
+                .map_err(PyValueError::new_err)?,
+        ),
+    })
+}
+
+/// The summed log-likelihood of a batch by the forward pass; the family and
+/// observations as `hmm_viterbi` takes them.
+#[pyfunction]
+#[pyo3(signature = (observations, log_initial, log_transition, family, parameters))]
+pub fn hmm_score<'py>(
+    py: Python<'py>,
+    observations: &Bound<'py, PyAny>,
+    log_initial: PyReadonlyArray1<'py, f64>,
+    log_transition: PyReadonlyArray1<'py, f64>,
+    family: &str,
+    parameters: PyReadonlyArray1<'py, f64>,
+) -> PyResult<f64> {
+    let (log_initial, log_transition, parameters) = (
+        log_initial.as_slice()?,
+        log_transition.as_slice()?,
+        parameters.as_slice()?,
+    );
+    let emission = emission_of(family, parameters, log_initial.len())?;
+    let result = if let Ok(values) = observations.extract::<PyReadonlyArray2<'py, i64>>() {
+        let length = values.shape()[1];
+        let values = values.as_slice()?;
+        py.detach(|| score(values, length, log_initial, log_transition, &emission))
+    } else {
+        let values = observations.extract::<PyReadonlyArray2<'py, f64>>()?;
+        let length = values.shape()[1];
+        let values = values.as_slice()?;
+        py.detach(|| score(values, length, log_initial, log_transition, &emission))
+    };
+    result.map_err(PyValueError::new_err)
+}
+
 /// Viterbi paths for a batch; see the module docs.
 ///
 /// `family` is `categorical` (`parameters` the `m * n_symbols` log
@@ -174,24 +300,7 @@ pub fn hmm_viterbi<'py>(
         log_transition.as_slice()?,
         parameters.as_slice()?,
     );
-    let m = log_initial.len();
-    let emission = match family {
-        "categorical" => Emission::Categorical(parameters),
-        "gaussian" if parameters.len() == 2 * m => Emission::Gaussian {
-            mean: &parameters[..m],
-            scale: &parameters[m..],
-        },
-        "gaussian" => {
-            return Err(PyValueError::new_err(format!(
-                "a Gaussian takes {m} means and {m} scales, got {} values",
-                parameters.len()
-            )))
-        }
-        name => Emission::Count(
-            count_family(name, parameters, m, false, STIRLING_FROM)
-                .map_err(PyValueError::new_err)?,
-        ),
-    };
+    let emission = emission_of(family, parameters, log_initial.len())?;
     let result = if let Ok(values) = observations.extract::<PyReadonlyArray2<'py, i64>>() {
         let length = values.shape()[1];
         let values = values.as_slice()?;
@@ -243,5 +352,35 @@ mod tests {
         assert!((score - best).abs() < 1e-12);
         let arg: Vec<i64> = arg.iter().map(|&s| s as i64).collect();
         assert_eq!(path, arg);
+    }
+
+    /// The forward score is the log of the enumerated evidence.
+    #[test]
+    fn the_score_is_the_enumerated_evidence() {
+        let (m, length) = (3usize, 4usize);
+        let ln = |v: &[f64]| v.iter().map(|x| x.ln()).collect::<Vec<_>>();
+        let initial = ln(&[0.5, 0.3, 0.2]);
+        let transition = ln(&[0.7, 0.2, 0.1, 0.1, 0.8, 0.1, 0.2, 0.2, 0.6]);
+        let (mean, scale) = ([-1.0, 0.5, 2.0], [1.0, 0.7, 1.3]);
+        let row = [0.3, -1.2, 2.2, 0.9];
+        let emission = Emission::Gaussian {
+            mean: &mean,
+            scale: &scale,
+        };
+        let got = score(&row, length, &initial, &transition, &emission).unwrap();
+        let density = |x: f64, s: usize| {
+            let z = (x - mean[s]) / scale[s];
+            (-0.5 * z * z).exp() / (scale[s] * (2.0 * std::f64::consts::PI).sqrt())
+        };
+        let mut evidence = 0.0;
+        for code in 0..m.pow(length as u32) {
+            let states: Vec<usize> = (0..length).map(|t| (code / m.pow(t as u32)) % m).collect();
+            let mut p = initial[states[0]].exp() * density(row[0], states[0]);
+            for t in 1..length {
+                p *= transition[states[t - 1] * m + states[t]].exp() * density(row[t], states[t]);
+            }
+            evidence += p;
+        }
+        assert!((got - evidence.ln()).abs() < 1e-12);
     }
 }

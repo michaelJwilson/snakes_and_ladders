@@ -4,7 +4,8 @@ Inputs: ``observations``, ``(n_sequences, length)``; ``initial`` and
 ``transition``, the start as probabilities; ``n_iter``; and ``family``, one
 of ``categorical`` (the default), ``gaussian`` or ``poisson``, with its
 start: ``emission`` as probabilities, ``mean`` and ``variance`` per state,
-or ``rate`` per state. ``call`` is ``fit`` (the default) or ``decode``.
+or ``rate`` per state. ``call`` is ``fit`` (the default), ``decode`` or
+``score``, the summed log-likelihood at the given parameters.
 
 ``fit`` runs exactly ``n_iter`` iterations in log space from that start
 (``init_params=""``, ``tol=-inf``), with every prior and floor hmmlearn
@@ -91,7 +92,12 @@ def main() -> None:
     model = _model(inputs, family)
     column = observations.reshape(-1, 1)
     lengths = [length] * n_sequences
-    if call == "decode":
+    if call == "score":
+        (log_likelihood, seconds), peak_bytes = peaked(
+            lambda: timed(lambda: model.score(column, lengths))
+        )
+        outputs = {"log_likelihood": np.asarray(log_likelihood, dtype=np.float64)}
+    elif call == "decode":
         ((log_probability, states), seconds), peak_bytes = peaked(
             lambda: timed(lambda: model.decode(column, lengths, algorithm="viterbi"))
         )

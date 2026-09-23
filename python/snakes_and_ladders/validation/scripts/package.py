@@ -180,7 +180,8 @@ def _viterbi(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     """Viterbi paths at the given parameters, as hmmlearn's ``decode`` runs (#997).
 
     ``family`` is ``gaussian`` (``mean``, ``variance``) or ``poisson``
-    (``rate``); ``initial`` and ``transition`` are probabilities.
+    (``rate``); ``initial`` and ``transition`` are probabilities. With
+    ``score`` set, the summed log-likelihood instead, as hmmlearn's ``score``.
     """
     import torch
 
@@ -189,7 +190,7 @@ def _viterbi(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
         GaussianEmission,
         PoissonEmission,
     )
-    from snakes_and_ladders.opt.hmm import viterbi
+    from snakes_and_ladders.opt.hmm import hmm_log_likelihood, viterbi
 
     observations = inputs["observations"]
     initial, transition = (
@@ -202,10 +203,37 @@ def _viterbi(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     )
     # Outside the measured call, as `_family_baum_welch`'s warm-up.
     viterbi(np.ascontiguousarray(observations[:2, :2]), initial, transition, family)
+    if bool(inputs.get("score", np.asarray(False))):
+
+        def scored() -> Outputs:
+            value = hmm_log_likelihood(observations, initial, transition, family)
+            return {"log_likelihood": np.asarray(value)}
+
+        return scored
 
     def call() -> Outputs:
         states, log_probability = viterbi(observations, initial, transition, family)
         return {"states": states, "log_probability": np.asarray(log_probability)}
+
+    return call
+
+
+def _mixture_score(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
+    """The summed mixture log-likelihood at given parameters, as scikit-learn's ``score_samples`` (#997)."""
+    import torch
+
+    from snakes_and_ladders.emissions import GaussianEmission
+    from snakes_and_ladders.opt.mixture import mixture_log_likelihood
+
+    observations = torch.from_numpy(np.ascontiguousarray(inputs["observations"]))
+    log_weight = torch.log(torch.as_tensor(inputs["weights"]))
+    components = GaussianEmission(inputs["mean"], inputs["scale"], 1e-12)
+    # Outside the measured call: torch's first operations set up state.
+    mixture_log_likelihood(observations[:2], log_weight, components)
+
+    def call() -> Outputs:
+        value = mixture_log_likelihood(observations, log_weight, components)
+        return {"log_likelihood": np.asarray(float(value))}
 
     return call
 
@@ -357,6 +385,7 @@ CALLS: dict[str, Build] = {
     "family_baum_welch": _family_baum_welch,
     "viterbi": _viterbi,
     "mixture_em": _mixture_em,
+    "mixture_score": _mixture_score,
     "hmc_sample": _hmc_sample,
     "cluster_labels": _cluster_labels,
     "gradient": _gradient,

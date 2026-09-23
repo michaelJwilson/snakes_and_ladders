@@ -116,6 +116,13 @@ def hmm_viterbi(
     family: str,
     parameters: np.ndarray,
 ) -> tuple[np.ndarray, float]: ...
+def hmm_score(
+    observations: np.ndarray,
+    log_initial: np.ndarray,
+    log_transition: np.ndarray,
+    family: str,
+    parameters: np.ndarray,
+) -> float: ...
 def gaussian_mixture_em_step(
     values: np.ndarray,
     log_weight: np.ndarray,
