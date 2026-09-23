@@ -30,7 +30,14 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 
-from snakes_and_ladders.emissions import CountPairEmission, EmissionFamily
+from snakes_and_ladders.emissions import (
+    BetaBinomialEmission,
+    BinomialEmission,
+    CountPairEmission,
+    EmissionFamily,
+    NegativeBinomialEmission,
+    PoissonEmission,
+)
 from snakes_and_ladders.enumeration import refuse_oversized
 from snakes_and_ladders.opt.em import em_loop
 from snakes_and_ladders.opt.mixture import (
@@ -135,7 +142,29 @@ def expectation_maximization(
         If a component's M step did not converge. A number read off an inner
         solve that never settled is not an estimate, and returning it here
         would surface several iterations later as a non-monotone likelihood.
+
+    Notes
+    -----
+    Integer counts in one channel, under a Poisson, binomial, negative
+    binomial or beta-binomial family, are fitted on their distinct values
+    (issue #997): a responsibility is a function of the value alone, so the
+    E step scores each distinct count once and the M step reads the counts
+    weighted by how many observations hold them. The responsibilities are
+    gathered back to every observation once, after the last step. At 10^6
+    draws of a three-component negative binomial, 20 iterations took 2.1 s
+    per observation, 43% of it the `torch.unique` each log-density repeated.
+    A float array of the same counts takes the per-observation route, which
+    is the oracle.
     """
+    distinct = _distinct_counts(observations, components)
+    if distinct is not None:
+        return _cell_expectation_maximization(
+            *distinct,
+            weights,
+            components,
+            max_iterations=max_iterations,
+            tolerance=tolerance,
+        )
     values = torch.as_tensor(observations, dtype=torch.float64)
     boundary = False
     attempt = 0
@@ -177,6 +206,106 @@ def expectation_maximization(
         weights=weights,
         components=components,
         responsibilities=posterior,
+        log_likelihood=log_likelihood,
+        iterations=termination.iterations,
+        at_boundary=boundary,
+        termination=termination,
+    )
+
+
+#: The count families whose M step reads only weighted counts, so a fit on
+#: the distinct values with their multiplicities is the per-observation fit.
+_COUNTED = (
+    PoissonEmission,
+    BinomialEmission,
+    NegativeBinomialEmission,
+    BetaBinomialEmission,
+)
+
+
+def _distinct_counts(
+    observations: np.ndarray | torch.Tensor, components: EmissionFamily
+) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+    """The distinct counts, their multiplicities and each observation's index, or ``None``."""
+    if type(components) not in _COUNTED:
+        return None
+    values = (
+        observations.detach().numpy()
+        if isinstance(observations, torch.Tensor)
+        else np.asarray(observations)
+    )
+    if (
+        values.ndim != 1
+        or values.size == 0
+        or not np.issubdtype(values.dtype, np.integer)
+    ):
+        return None
+    if int(values.min()) < 0:
+        return None
+    cells, inverse, multiplicity = np.unique(
+        values, return_inverse=True, return_counts=True
+    )
+    return cells, multiplicity, inverse
+
+
+def _cell_expectation_maximization(
+    cells: np.ndarray,
+    multiplicity: np.ndarray,
+    inverse: np.ndarray,
+    weights: torch.Tensor,
+    components: EmissionFamily,
+    *,
+    max_iterations: int,
+    tolerance: float,
+) -> EmissionMixtureFit:
+    """:func:`expectation_maximization` on the distinct counts (issue #997)."""
+    support = torch.from_numpy(cells.astype(np.float64))
+    held = torch.from_numpy(multiplicity.astype(np.float64))
+    n_samples = float(multiplicity.sum())
+    boundary = False
+    attempt = 0
+
+    def step(
+        state: tuple[torch.Tensor, EmissionFamily, torch.Tensor],
+    ) -> tuple[tuple[torch.Tensor, EmissionFamily, torch.Tensor], float]:
+        nonlocal boundary, attempt
+        attempt += 1
+        current, family, _ = state
+        joint = torch.log(current) + family.log_density(support)
+        normalizer = torch.logsumexp(joint, dim=1, keepdim=True)
+        log_likelihood = float((held * normalizer[:, 0]).sum())
+        posterior = torch.exp(joint - normalizer)
+        weighted = posterior * held[:, None]
+        reestimated = family.reestimate(support, weighted)
+        if not reestimated.converged:
+            msg = (
+                f"a component's M step did not settle at EM iteration "
+                f"{attempt}: residual {reestimated.residual:.3e} after "
+                f"{reestimated.iterations} inner iterations"
+            )
+            raise ValueError(msg)
+        boundary = boundary or reestimated.at_boundary
+        return (weighted.sum(dim=0) / n_samples, reestimated.emissions, posterior), (
+            log_likelihood
+        )
+
+    start = (
+        weights,
+        components,
+        torch.empty((0, components.n_states), dtype=torch.float64),
+    )
+    (weights, components, posterior), log_likelihood, termination = em_loop(
+        step, start, tolerance=tolerance, max_iterations=max_iterations
+    )
+    responsibilities = (
+        posterior[torch.from_numpy(inverse)]
+        if posterior.shape[0]
+        else torch.empty((inverse.size, components.n_states), dtype=torch.float64)
+    )
+    return EmissionMixtureFit(
+        weights=weights,
+        components=components,
+        responsibilities=responsibilities,
         log_likelihood=log_likelihood,
         iterations=termination.iterations,
         at_boundary=boundary,
