@@ -383,6 +383,107 @@ def fit_spatio_sequential(
     )
 
 
+@dataclass(frozen=True)
+class Merge:
+    """What one :func:`merge_step` tried and what it kept.
+
+    Parameters
+    ----------
+    params : SpatioSequentialParams
+        The parameters after the kept merge, or the input where none was.
+    labels : np.ndarray
+        The labels after the kept merge, or the input.
+    criterion : float
+        :func:`~snakes_and_ladders.likelihood.spatio_sequential.labelled_log_likelihood`
+        less ``penalty`` per occupied class, at what was kept.
+    merged : tuple[int, int] | None
+        ``(kept, emptied)``: the class that absorbed the other, or ``None``.
+    tried : tuple[tuple[int, int, float], ...]
+        Every pair tried and its criterion, in the order tried.
+    """
+
+    params: SpatioSequentialParams
+    labels: np.ndarray
+    criterion: float
+    merged: tuple[int, int] | None
+    tried: tuple[tuple[int, int, float], ...]
+
+
+def merge_step(
+    params: SpatioSequentialParams,
+    observations: np.ndarray,
+    labels: np.ndarray,
+    *,
+    penalty: float = 0.0,
+) -> Merge:
+    """Merge the pair of classes that most raises the labelled joint, if any does (issue #933).
+
+    No other move lowers the number of classes a labelling occupies: the
+    label solvers keep every class they are given, and ``opt.split_merge``
+    acts on mixture components. For every pair ``a < b`` of occupied
+    classes, ``b``'s sites take ``a`` and one :func:`m_step` refits the
+    parameters on the merged labels; the criterion is the labelled joint
+    less ``penalty`` per occupied class. The best merge is kept when its
+    criterion is at least the input's, so a block ascent that interleaves
+    this step stays non-decreasing in the criterion. The emptied class keeps
+    its parameters, as :func:`m_step` keeps an empty class's, and a later
+    label step may repopulate it.
+
+    Parameters
+    ----------
+    params : SpatioSequentialParams
+        The current parameters.
+    observations : np.ndarray
+        ``(S, n_nodes, ...)``.
+    labels : np.ndarray
+        The current class per node.
+    penalty : float
+        The criterion's cost per occupied class, non-negative; ``0``, the
+        default, merges only where the joint itself does not fall.
+
+    Returns
+    -------
+    Merge
+
+    Raises
+    ------
+    ValueError
+        If ``penalty`` is negative.
+    """
+    if penalty < 0.0:
+        msg = f"a class penalty is non-negative, got {penalty}"
+        raise ValueError(msg)
+    labels = np.asarray(labels, dtype=np.int64)
+
+    def criterion(candidate: SpatioSequentialParams, labelled: np.ndarray) -> float:
+        occupied = int(np.unique(labelled).size)
+        return (
+            labelled_log_likelihood(candidate, observations, labelled)
+            - penalty * occupied
+        )
+
+    current = criterion(params, labels)
+    best: Merge | None = None
+    tried: list[tuple[int, int, float]] = []
+    occupied = [int(m) for m in np.unique(labels)]
+    for index, kept in enumerate(occupied):
+        for emptied in occupied[index + 1 :]:
+            merged = np.where(labels == emptied, kept, labels)
+            refit = m_step(
+                params,
+                observations,
+                merged,
+                class_posteriors(params, observations, merged),
+            )
+            value = criterion(refit, merged)
+            tried.append((kept, emptied, value))
+            if value >= current and (best is None or value > best.criterion):
+                best = Merge(refit, merged, value, (kept, emptied), ())
+    if best is None:
+        return Merge(params, labels, current, None, tuple(tried))
+    return replace(best, tried=tuple(tried))
+
+
 def label_accuracy(fitted: np.ndarray, planted: np.ndarray, n_classes: int) -> float:
     """The fraction of nodes labelled as planted, up to the best permutation of classes.
 
