@@ -41,10 +41,15 @@ from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.opt.starts import refuse_start
 from snakes_and_ladders.opt.termination import Termination
 from snakes_and_ladders.search.alpha_expansion import iterated_conditional_modes
-from snakes_and_ladders.search.ground_state import METHODS, Rung
+from snakes_and_ladders.search.ground_state import METHODS, Rung, rung_field
 from snakes_and_ladders.search.maxflow import ising_ground_state
 from snakes_and_ladders.sim.graph import lattice_graph
-from snakes_and_ladders.sim.potts import PottsLatticeParams, energy, spatio_only_field
+from snakes_and_ladders.sim.potts import (
+    PottsLatticeParams,
+    SpatioOnlyParams,
+    energy,
+    spatio_only_field,
+)
 from snakes_and_ladders.track import current
 
 
@@ -87,6 +92,30 @@ def rung_of(params: PottsLatticeParams, name: str) -> Rung:
         alpha=params.alpha,
         sizes=params.sizes,
         n_states=params.n_states,
+        optimum=None,
+    )
+
+
+def spatio_rung(params: SpatioOnlyParams, name: str) -> Rung:
+    """The :class:`~snakes_and_ladders.search.ground_state.Rung` a ``spatio_only`` fixture declares, at its own class count (issue #927).
+
+    The field and the ladder are
+    :func:`~snakes_and_ladders.search.ground_state.rung_field`'s at the
+    fixture's ``n_classes``, so the rung is the declared instance and not a
+    re-derivation of it; no exact optimum is known above two states.
+
+    Returns
+    -------
+    Rung
+    """
+    field, alpha = rung_field(params, params.n_classes)
+    return Rung(
+        name=name,
+        graph=params.graph,
+        field=field,
+        alpha=alpha,
+        sizes=params.sizes,
+        n_states=params.n_classes,
         optimum=None,
     )
 
