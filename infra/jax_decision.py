@@ -47,7 +47,7 @@ objective = {
 }[family]()
 theta = objective.initial()
 if backend == "jax":
-    from snakes_and_ladders.sandbox.jax_hmm import value_and_grad
+    from snakes_and_ladders.opt.hmm_jax import value_and_grad
     twin = value_and_grad(objective)
     point = theta.numpy()
     one = lambda: twin(point)

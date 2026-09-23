@@ -34,6 +34,9 @@ here so it is read once rather than off 46 signatures.
     `sample.gibbs` and
     `search.alpha_expansion.iterated_conditional_modes`: arithmetic that is
     NumPy's operation for operation.
+``JAX``
+    the gradient of `opt.hmm`'s objectives (issue #1000), pinned to the
+    ``TORCH`` autograd route at 1e-10.
 ``PYTHON``
     everything else that takes the enum --- `likelihood.pruning`,
     `likelihood.spatio_sequential`, `search.maxflow`,
@@ -78,8 +81,10 @@ class Backend(StrEnum):
 
     JAX = "jax"
     """A ``jax`` route: an objective's value and gradient under
-    ``jit(value_and_grad)``, the autodiff backend issue #1000 benchmarks
-    against PyTorch's and keeps only where it wins by 2x."""
+    ``jit(value_and_grad)``. The HMM objectives' default gradient since issue
+    #1000 measured it at 0.07x--0.18x PyTorch autograd's runtime at
+    10^4--10^5 positions; ``TORCH`` there is the autograd oracle it is pinned
+    to."""
 
 
 def refuse_backend(name: str, backend: Backend, allowed: tuple[Backend, ...]) -> None:

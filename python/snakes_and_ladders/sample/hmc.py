@@ -65,7 +65,7 @@ import numpy as np
 import torch
 
 from snakes_and_ladders.emissions import ParameterDomainError
-from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.opt.objective import Objective, value_and_gradient
 from snakes_and_ladders.sample.accept import (
     accept_ratio,
     accept_with,
@@ -1260,11 +1260,8 @@ def _transition(
 
 
 def gradient_at(objective: Objective, theta: torch.Tensor) -> torch.Tensor:
-    """``dU/dtheta``, by autograd through the objective."""
-    point = theta.detach().clone().requires_grad_(True)
-    value = objective(point)
-    (grad,) = torch.autograd.grad(value, point)
-    return grad.detach()
+    """``dU/dtheta``: the objective's declared gradient, or autograd through it (issue #1000)."""
+    return value_and_gradient(objective, theta)[1]
 
 
 @dataclass(frozen=True)
@@ -1296,6 +1293,14 @@ class _Scaled(Objective):
 
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         return self.objective(theta * self.scale)
+
+    def value_and_gradient(
+        self, theta: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        # The chain rule through `theta * scale`, so a declared gradient
+        # survives the change of coordinates.
+        value, gradient = value_and_gradient(self.objective, theta * self.scale)
+        return value, gradient * self.scale
 
 
 class _DualAveraging:

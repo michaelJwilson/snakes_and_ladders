@@ -111,3 +111,33 @@ class Objective(Protocol):
             Scalar tensor.
         """
         ...  # pragma: no cover
+
+
+@runtime_checkable
+class DeclaredGradient(Protocol):
+    """An objective that states its own value and gradient (issue #1000).
+
+    Optional beside :class:`Objective`: a consumer that reads a gradient ---
+    the L-BFGS closure, the convergence test, a Hamiltonian kick --- takes it
+    from :meth:`value_and_gradient` where the objective declares one, and by
+    autograd through ``__call__`` otherwise. An HMM objective declares one so
+    its gradient can come from a compiled backend rather than the graph.
+    """
+
+    def value_and_gradient(
+        self, theta: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """``(U(theta), dU/dtheta)``, both detached."""
+        ...  # pragma: no cover
+
+
+def value_and_gradient(
+    objective: Objective, theta: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """``(U(theta), dU/dtheta)`` detached: declared where the objective declares it, autograd otherwise."""
+    if isinstance(objective, DeclaredGradient):
+        return objective.value_and_gradient(theta)
+    point = theta.detach().clone().requires_grad_(True)
+    value = objective(point)
+    (gradient,) = torch.autograd.grad(value, point)
+    return value.detach(), gradient

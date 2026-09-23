@@ -1,4 +1,4 @@
-"""The sandboxed JAX twins of the HMM objectives against PyTorch's autograd (issue #1000).
+"""The HMM objectives' JAX gradient, their default, against PyTorch's autograd (issue #1000).
 
 Referee: each objective's value and its autograd gradient through
 ``__call__``, at three points away from the start, within 1e-10 relative:
@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
+from snakes_and_ladders.opt import hmm_jax
 from snakes_and_ladders.opt.hmm import (
     BetaBinomialHmmObjective,
     BinomialHmmObjective,
@@ -19,13 +20,9 @@ from snakes_and_ladders.opt.hmm import (
     NegativeBinomialHmmObjective,
     PoissonHmmObjective,
 )
-from snakes_and_ladders.sandbox import jax_hmm
-
-# The twins import JAX when they build; the module itself does not.
-pytest.importorskip("jax")
 
 
-def _objectives() -> list[jax_hmm.Twinned]:
+def _objectives() -> list[hmm_jax.Twinned]:
     rng = np.random.default_rng(1000)
     counts = rng.poisson(6.0, size=(8, 25))
     return [
@@ -56,7 +53,7 @@ def _objectives() -> list[jax_hmm.Twinned]:
 @pytest.mark.parametrize("index", range(8))
 def test_the_jax_twin_is_autograd(index: int) -> None:
     objective = _objectives()[index]
-    twin = jax_hmm.value_and_grad(objective)
+    twin = hmm_jax.value_and_grad(objective)
     rng = np.random.default_rng(index)
     for _ in range(3):
         theta = objective.initial() + 0.2 * torch.as_tensor(
@@ -83,17 +80,17 @@ def test_the_count_table_is_the_per_position_density(
     # Referee: the same twin with the table refused, scored per position.
     objective = _objectives()[index]
     theta = objective.initial().numpy() + 0.1
-    tabled = jax_hmm.value_and_grad(objective)(theta)
-    assert jax_hmm._prepared(objective)[0].tabled
-    monkeypatch.setattr(jax_hmm, "TABLE_SHARE", 0.0)
-    assert not jax_hmm._prepared(objective)[0].tabled
-    whole = jax_hmm.value_and_grad(objective)(theta)
+    tabled = hmm_jax.value_and_grad(objective)(theta)
+    assert hmm_jax._prepared(objective)[0].tabled
+    monkeypatch.setattr(hmm_jax, "TABLE_SHARE", 0.0)
+    assert not hmm_jax._prepared(objective)[0].tabled
+    whole = hmm_jax.value_and_grad(objective)(theta)
     # The scatter-add sums the posteriors in another order: a tolerance.
     assert_allclose(tabled[0], whole[0], rtol=1e-12)
     assert_allclose(tabled[1], whole[1], rtol=1e-10, atol=1e-10)
 
 
-@pytest.mark.patch
+@pytest.mark.smoke
 def test_one_structure_compiles_once() -> None:
     # Two objectives of one structure and shape share the program; the table
     # is padded to a power of two, so a table of another length does too.
@@ -102,10 +99,47 @@ def test_one_structure_compiles_once() -> None:
         BetaBinomialHmmObjective(rng.binomial(20, p, size=(8, 25)), 3, np.full(3, 20.0))
         for p in (0.3, 0.6)
     )
-    shapes = [jax_hmm._prepared(o)[1]["y"].shape for o in (first, second)]
+    shapes = [hmm_jax._prepared(o)[1]["y"].shape for o in (first, second)]
     assert shapes[0] == shapes[1]
-    jax_hmm.value_and_grad(first)(first.initial().numpy())
-    compiled = jax_hmm._compiled(jax_hmm._prepared(first)[0])
+    hmm_jax.value_and_grad(first)(first.initial().numpy())
+    compiled = hmm_jax._compiled(hmm_jax._prepared(first)[0])
     before = compiled._cache_size()
-    jax_hmm.value_and_grad(second)(second.initial().numpy())
+    hmm_jax.value_and_grad(second)(second.initial().numpy())
     assert compiled._cache_size() == before
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("index", range(8))
+def test_the_default_gradient_is_the_torch_backend(index: int) -> None:
+    # Referee: the same objective built with Backend.TORCH, autograd.
+    from snakes_and_ladders.backend import Backend
+    from snakes_and_ladders.opt.objective import value_and_gradient
+
+    objective = _objectives()[index]
+    theta = objective.initial() + 0.1
+    value, gradient = value_and_gradient(objective, theta)
+    objective._backend = Backend.TORCH
+    torch_value, torch_gradient = value_and_gradient(objective, theta)
+    assert_allclose(float(value), float(torch_value), rtol=1e-10)
+    assert_allclose(
+        gradient.numpy(),
+        torch_gradient.numpy(),
+        rtol=1e-10,
+        atol=1e-10 * float(torch_gradient.abs().max()),
+    )
+
+
+@pytest.mark.oracle
+def test_a_fit_under_either_backend_reaches_one_optimum() -> None:
+    # Referee: the L-BFGS fit under Backend.TORCH from the same start.
+    from snakes_and_ladders.backend import Backend
+    from snakes_and_ladders.opt.fit import fit
+
+    rng = np.random.default_rng(3)
+    counts = rng.poisson(np.repeat([2.0, 9.0], 50), size=(4, 100))
+    fits = [
+        fit(PoissonHmmObjective(counts, 2, backend=backend), max_iterations=200)
+        for backend in (Backend.JAX, Backend.TORCH)
+    ]
+    assert all(f.converged for f in fits)
+    assert_allclose(fits[0].value, fits[1].value, rtol=1e-9)

@@ -4200,6 +4200,7 @@ wheels = [
 name = "snakes-and-ladders"
 source = { editable = "." }
 dependencies = [
+    { name = "jax" },
     { name = "matplotlib" },
     { name = "numba" },
     { name = "numpy" },
@@ -4209,9 +4210,6 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-backend-jax = [
-    { name = "jax" },
-]
 dev = [
     { name = "mypy" },
     { name = "pip-audit" },
@@ -4250,7 +4248,7 @@ requires-dist = [
     { name = "aim", marker = "extra == 'track'", specifier = ">=3.29,<4" },
     { name = "gymnasium", marker = "extra == 'frameworks'", specifier = ">=1.0" },
     { name = "ipykernel", marker = "extra == 'notebooks'", specifier = ">=6.29" },
-    { name = "jax", marker = "extra == 'backend-jax'", specifier = ">=0.7.2" },
+    { name = "jax", specifier = ">=0.7.2" },
     { name = "matplotlib", specifier = ">=3.9.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0.0" },
     { name = "nbclient", marker = "extra == 'notebooks'", specifier = ">=0.10" },
@@ -4275,7 +4273,7 @@ requires-dist = [
     { name = "towncrier", marker = "extra == 'dev'", specifier = ">=24.8.0" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0" },
 ]
-provides-extras = ["backend-jax", "dev", "docs", "frameworks", "notebooks", "test", "track"]
+provides-extras = ["dev", "docs", "frameworks", "notebooks", "test", "track"]
 
 [[package]]
 name = "snowballstemmer"

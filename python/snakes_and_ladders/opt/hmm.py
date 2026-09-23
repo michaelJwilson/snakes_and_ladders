@@ -24,7 +24,7 @@ helper a recovery test needs.
 from __future__ import annotations
 
 import math
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from itertools import permutations
 from typing import Any, Protocol
@@ -93,7 +93,13 @@ class _HmmObjective(Objective):
         observation_dtype: torch.dtype,
         dtype: torch.dtype,
         covariate: np.ndarray | None = None,
+        backend: Backend = Backend.JAX,
     ) -> None:
+        refuse_backend(
+            "an HMM objective's gradient", backend, (Backend.JAX, Backend.TORCH)
+        )
+        self._backend = backend
+        self._jax: Callable[[np.ndarray], tuple[float, np.ndarray]] | None = None
         self._observations = torch.as_tensor(observations, dtype=observation_dtype)
         self._n_states = n_states
         self._dtype = dtype
@@ -212,6 +218,33 @@ class _HmmObjective(Objective):
             ),
         }
 
+    def value_and_gradient(
+        self, theta: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """The negative log-likelihood at ``theta`` and its gradient, detached (issue #1000).
+
+        Under :data:`~snakes_and_ladders.backend.Backend.JAX`, the default,
+        the compiled twin of :mod:`snakes_and_ladders.opt.hmm_jax` takes both
+        at 0.07x--0.18x autograd's runtime at 10^4--10^5 positions; under
+        :data:`~snakes_and_ladders.backend.Backend.TORCH` autograd through
+        :meth:`__call__` does, and is the oracle the twin is pinned to at
+        1e-10.
+        """
+        if self._backend is Backend.TORCH:
+            point = theta.detach().clone().requires_grad_(True)
+            value = self(point)
+            (gradient,) = torch.autograd.grad(value, point)
+            return value.detach(), gradient
+        if self._jax is None:
+            from snakes_and_ladders.opt.hmm_jax import value_and_grad
+
+            self._jax = value_and_grad(self)
+        value_, gradient_ = self._jax(theta.detach().cpu().numpy())
+        return (
+            torch.tensor(value_, dtype=theta.dtype),
+            torch.as_tensor(np.array(gradient_), dtype=theta.dtype),
+        )
+
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         """Negative log-likelihood of every observed sequence."""
         transitions = self._transition_parameters(theta)
@@ -261,8 +294,9 @@ class HmmObjective(_HmmObjective):
         n_symbols: int,
         dtype: torch.dtype = torch.float64,
         covariate: np.ndarray | None = None,
+        backend: Backend = Backend.JAX,
     ) -> None:
-        super().__init__(observations, n_states, torch.long, dtype, covariate)
+        super().__init__(observations, n_states, torch.long, dtype, covariate, backend)
         self._n_symbols = n_symbols
 
     @property
@@ -382,8 +416,11 @@ class GaussianHmmObjective(_HmmObjective):
         n_states: int,
         dtype: torch.dtype = torch.float64,
         covariate: np.ndarray | None = None,
+        backend: Backend = Backend.JAX,
     ) -> None:
-        super().__init__(observations, n_states, torch.float64, dtype, covariate)
+        super().__init__(
+            observations, n_states, torch.float64, dtype, covariate, backend
+        )
         self._variance_floor = pooled_variance_floor(observations)
 
     @property
@@ -508,8 +545,11 @@ class _CountHmmObjective(_HmmObjective):
         n_states: int,
         dtype: torch.dtype = torch.float64,
         covariate: np.ndarray | None = None,
+        backend: Backend = Backend.JAX,
     ) -> None:
-        super().__init__(observations, n_states, torch.float64, dtype, covariate)
+        super().__init__(
+            observations, n_states, torch.float64, dtype, covariate, backend
+        )
 
     def _location_quantiles(self) -> torch.Tensor:
         """Evenly spaced quantiles of the pooled observations, one per state."""
@@ -602,8 +642,9 @@ class BinomialHmmObjective(_CountHmmObjective):
         trials: np.ndarray,
         dtype: torch.dtype = torch.float64,
         covariate: np.ndarray | None = None,
+        backend: Backend = Backend.JAX,
     ) -> None:
-        super().__init__(observations, n_states, dtype, covariate)
+        super().__init__(observations, n_states, dtype, covariate, backend)
         self._trials = torch.as_tensor(trials, dtype=torch.float64).reshape(-1)
 
     @property
@@ -668,8 +709,9 @@ class BetaBinomialHmmObjective(_CountHmmObjective):
         trials: np.ndarray,
         dtype: torch.dtype = torch.float64,
         covariate: np.ndarray | None = None,
+        backend: Backend = Backend.JAX,
     ) -> None:
-        super().__init__(observations, n_states, dtype, covariate)
+        super().__init__(observations, n_states, dtype, covariate, backend)
         self._trials = torch.as_tensor(trials, dtype=torch.float64).reshape(-1)
 
     @property
@@ -772,8 +814,11 @@ class NegativeBinomialHmmObjective(_HmmObjective):
         n_states: int,
         dtype: torch.dtype = torch.float64,
         covariate: np.ndarray | None = None,
+        backend: Backend = Backend.JAX,
     ) -> None:
-        super().__init__(observations, n_states, torch.float64, dtype, covariate)
+        super().__init__(
+            observations, n_states, torch.float64, dtype, covariate, backend
+        )
 
     @property
     def _n_emission_parameters(self) -> int:

@@ -34,6 +34,11 @@ dependencies = [
     # on the continuous test functions), declared by the release audit of
     # issue #376 when the maintainer approved it.
     "scipy>=1.13.0",
+    # Apache-2.0, far above the 1,000-star bar, approved on #1000: the HMM
+    # objectives' default gradient, 0.07x-0.18x autograd's runtime at
+    # 1e4-1e5 positions. CPU wheels on linux-64 and osx-arm64; jax-metal is
+    # experimental and not pulled.
+    "jax>=0.7.2",
     "torch>=2.4.0",
 ]
 
@@ -86,14 +91,6 @@ frameworks = [
 # query handler), both in the server `aim up` runs; the audit job syncs
 # `dev` and so does not install it, and DEV.md says what a reader who does
 # install it is taking on.
-# JAX as an autodiff backend beside PyTorch (issue #1000): each
-# gradient-taking entry point gains a JAX route, benchmarked against
-# PyTorch's and kept where it is 2x the faster at comparable memory, or 2x
-# the lighter at comparable runtime; sandboxed otherwise. Apache-2.0, far
-# above the 1,000-star bar, approved on #1000. CPU wheels on linux-64 and
-# osx-arm64; jax-metal, the Apple GPU plug-in, is experimental and not
-# pulled.
-backend-jax = ["jax>=0.7.2"]
 track = [
     "aim>=3.29,<4",
 ]

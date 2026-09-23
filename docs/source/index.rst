@@ -279,6 +279,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.opt.hmm
    :members:
 
+.. automodule:: snakes_and_ladders.opt.hmm_jax
+   :members:
+
 .. automodule:: snakes_and_ladders.opt.mixture
    :members:
 

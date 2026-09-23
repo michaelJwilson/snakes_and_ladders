@@ -1,11 +1,12 @@
-"""JAX twins of the HMM objectives' negative log-likelihood, for issue #1000's decision.
+"""The HMM objectives' negative log-likelihood and gradient under JAX, their default route (issue #1000).
 
 Each twin reads the objective's own ``theta`` layout and constraint maps --- a
 simplex row is ``log_softmax([0, free])``, a positive parameter ``exp``, a
 probability the logistic --- and scores the observations by the scaled
 forward recursion, whose reverse pass is the backward recursion (see
 :func:`_forward`), so ``jit(value_and_grad)`` of it is the gradient PyTorch's
-autograd takes through ``__call__``. PyTorch is the oracle.
+autograd takes through ``__call__``. PyTorch autograd, asked for as
+:data:`~snakes_and_ladders.backend.Backend.TORCH`, is the oracle.
 
 What is compiled depends on the objective's structure alone --- family,
 state and symbol counts, ``theta`` layout, covariate and table --- and is
@@ -31,6 +32,7 @@ from snakes_and_ladders.opt.hmm import (
     HmmObjective,
     NegativeBinomialHmmObjective,
     PoissonHmmObjective,
+    _HmmObjective,
 )
 
 #: The objectives a twin is written for.
@@ -61,7 +63,7 @@ class _Structure:
 
 
 def value_and_grad(
-    objective: Twinned,
+    objective: _HmmObjective,
 ) -> Callable[[np.ndarray], tuple[float, np.ndarray]]:
     """``theta -> (U(theta), dU/dtheta)`` under ``jit``, the objective's negative log-likelihood.
 
@@ -94,7 +96,7 @@ def _span(block: slice) -> tuple[int, int]:
     return int(block.start), int(block.stop)
 
 
-def _prepared(objective: Twinned) -> tuple[_Structure, dict[str, np.ndarray]]:
+def _prepared(objective: _HmmObjective) -> tuple[_Structure, dict[str, np.ndarray]]:
     """The objective's structure, and its data in NumPy with the terms free of ``theta`` read once."""
     observations = objective.observations.numpy()
     y = observations.astype(np.float64)[..., None]
