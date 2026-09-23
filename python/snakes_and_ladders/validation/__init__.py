@@ -97,5 +97,13 @@ FRAMEWORKS: Mapping[str, Framework] = {
             source="https://github.com/scikit-learn/scikit-learn",
             ticket=975,
         ),
+        Framework(
+            name="blackjax",
+            distribution="blackjax",
+            module="blackjax",
+            licence="Apache-2.0",
+            source="https://github.com/blackjax-devs/blackjax",
+            ticket=963,
+        ),
     )
 }

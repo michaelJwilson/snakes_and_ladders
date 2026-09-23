@@ -527,6 +527,12 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.validation.scripts.scikit_learn
    :members:
 
+.. automodule:: snakes_and_ladders.validation.blackjax
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.scripts.blackjax
+   :members:
+
 .. automodule:: snakes_and_ladders.qa
    :members:
 

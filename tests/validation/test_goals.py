@@ -21,6 +21,7 @@ from snakes_and_ladders.emissions import GaussianEmission
 from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.opt.hmm import baum_welch
 from snakes_and_ladders.opt.mixture import expectation_maximization
+from snakes_and_ladders.sample import hmc
 from snakes_and_ladders.search.alpha_expansion import alpha_expansion
 from snakes_and_ladders.search.ground_state import lattice_rung
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
@@ -29,6 +30,7 @@ from snakes_and_ladders.sim.potts import critical_coupling, site_field
 
 from tests._fixtures import FIXTURES_DIR
 from tests.validation._goals import Goal, assert_meets, median_seconds
+from tests.validation._targets import GaussianTarget, diagonal_precision
 
 pytestmark = pytest.mark.goal
 
@@ -115,6 +117,21 @@ def test_the_expansion_meets_gcos_runtime(side: int) -> None:
     assert_meets(ours, GCO_EXPANSION[side])
 
 
+#: BlackJAX's compiled HMC chain, compilation excluded: 1,000 transitions of
+#: ten leapfrog steps at unit mass on the diagonal Gaussian with precisions
+#: from 1 to 4, step 0.9 / (2 d^(1/4)), the medians of three subprocess runs
+#: in `test_hmc_blackjax_bench.py`.
+BLACKJAX_HMC = {
+    dimension: Goal(
+        "blackjax",
+        f"1,000 HMC transitions of ten leapfrog steps at d = {dimension:,}",
+        seconds,
+        "2026-09-23, 4-core reference host at a 1-minute load of 0.8, #963",
+    )
+    for dimension, seconds in ((100, 0.0141), (1_000, 0.0868), (10_000, 0.5839))
+}
+
+
 def _hmm_start() -> tuple[np.ndarray, ...]:
     """The benchmark's start: each row a perturbed uniform, seed 975."""
     rng = np.random.default_rng(975)
@@ -172,3 +189,21 @@ def test_mixture_em_meets_scikit_learns_runtime(n_samples: int) -> None:
         repeats=3,
     )
     assert_meets(ours, SCIKIT_LEARN_EM[n_samples])
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("dimension", sorted(BLACKJAX_HMC))
+def test_hmc_meets_blackjaxs_runtime(dimension: int) -> None:
+    target = GaussianTarget(diagonal_precision(dimension))
+    step = 0.9 / (2.0 * dimension**0.25)
+    ours = median_seconds(
+        lambda: hmc.sample(
+            target,
+            torch.Generator().manual_seed(963),
+            1_000,
+            step_size=step,
+            n_steps=10,
+        ),
+        repeats=3,
+    )
+    assert_meets(ours, BLACKJAX_HMC[dimension])

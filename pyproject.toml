@@ -100,6 +100,12 @@ validation-gco = [
 # scikit-learn, so its extra installs both; each is still one framework.
 validation-hmmlearn = ["hmmlearn>=0.3.3"]
 validation-scikit-learn = ["scikit-learn>=1.9.1"]
+#
+# BlackJAX, with JAX beneath it: Apache-2.0, about 1,000 stars (flagged in
+# #938), approved on #963. A second autodiff stack, which is why it runs only
+# in a subprocess: autodiff in the package stays PyTorch. Wheels for linux-64
+# and osx-arm64.
+validation-blackjax = ["blackjax>=1.6.2"]
 # The run store behind `snakes_and_ladders.track` (issue #778). An extra
 # rather than a core dependency: `track.Run` is a Protocol written with
 # `aim.Run`'s own signatures, so the package imports, records and tests
@@ -264,8 +270,17 @@ module = [
     "gco.*",
     "hmmlearn.*",
     "sklearn.*",
+    "blackjax.*",
+    "jax.*",
 ]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# JAX types its arrays but leaves `config.update` and `block_until_ready`
+# untyped, so --strict rejects a correct call where JAX is installed. Narrowed
+# to the one script that imports it (issue #963).
+module = "snakes_and_ladders.validation.scripts.blackjax"
+disallow_untyped_calls = false
 
 [[tool.mypy.overrides]]
 # `aim` is the optional store behind `snakes_and_ladders.track.Run` (issue
