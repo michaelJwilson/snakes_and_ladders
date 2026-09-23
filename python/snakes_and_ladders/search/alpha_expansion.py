@@ -624,10 +624,12 @@ def iterated_conditional_modes(
         every sweep of ``max_sweeps``, which is what a method charged a fixed
         budget spends.
     backend : Backend
-        The sweep's implementation. The compiled kernel walks the sites in
-        index order and stops on a clean sweep, so any other setting of the
-        two needs :data:`~snakes_and_ladders.backend.Backend.PYTHON` and is
-        refused here rather than quietly run in the wrong order.
+        The sweep's implementation. The compiled kernel runs index order
+        either way, and a random order when every sweep runs, its
+        permutations drawn up front in the Python sweep's order (issue #923).
+        A random order that stops on a clean sweep would spend the generator
+        past the stop, so it needs
+        :data:`~snakes_and_ladders.backend.Backend.PYTHON` and is refused.
 
     Returns
     -------
@@ -648,24 +650,42 @@ def iterated_conditional_modes(
     )
 
     if backend is Backend.NUMBA:
-        if sweep_order is not SweepOrder.INDEX or not stop_when_clean:
+        if sweep_order is SweepOrder.RANDOM and stop_when_clean:
             msg = (
-                f"the compiled sweep visits the sites in {SweepOrder.INDEX} order "
-                f"and stops on a clean sweep; {sweep_order} order or "
-                f"stop_when_clean={stop_when_clean} needs {Backend.PYTHON}"
+                f"the compiled sweep takes every sweep's order drawn up front, "
+                f"which spends the generator past a clean sweep the Python sweep "
+                f"stops at; {sweep_order} order with stop_when_clean=True needs "
+                f"{Backend.PYTHON}"
             )
             raise ValueError(msg)
-        from snakes_and_ladders.sample.kernels import icm_sweeps
+        from snakes_and_ladders.sample.kernels import icm_sweeps, icm_sweeps_ordered
 
         offsets, neighbour_index, couplings = graph.compressed_adjacency()
-        icm_sweeps(
-            labelling,
-            np.ascontiguousarray(values, dtype=np.float64),
-            offsets,
-            neighbour_index,
-            couplings,
-            max_sweeps,
-        )
+        contiguous = np.ascontiguousarray(values, dtype=np.float64)
+        if sweep_order is SweepOrder.INDEX and stop_when_clean:
+            icm_sweeps(
+                labelling, contiguous, offsets, neighbour_index, couplings, max_sweeps
+            )
+        else:
+            # The permutations the Python sweep draws, one per sweep and in
+            # its order (issue #923): with every sweep run, the same stream.
+            orders = (
+                np.arange(graph.n_nodes, dtype=np.int64).reshape(1, -1)
+                if sweep_order is SweepOrder.INDEX
+                else np.stack(
+                    [rng.permutation(graph.n_nodes) for _ in range(max_sweeps)]
+                ).astype(np.int64)
+            )
+            icm_sweeps_ordered(
+                labelling,
+                contiguous,
+                offsets,
+                neighbour_index,
+                couplings,
+                orders,
+                max_sweeps,
+                stop_when_clean,
+            )
         return Labelling(labelling, energy(graph, values, labelling))
     if backend is not Backend.PYTHON:
         msg = f"iterated conditional modes has no {backend} backend"
