@@ -359,12 +359,11 @@ impl<'a> Solver<'a> {
                 self.set_active(head);
             } else if neighbour.is_sink != is_sink {
                 return Some(if is_sink { sister } else { arc as u32 });
-            } else if neighbour.stamp <= stamp && neighbour.distance > distance {
-                // A shorter path to the terminal through `node`.
-                neighbour.parent = sister;
-                neighbour.stamp = stamp;
-                neighbour.distance = distance + 1;
             }
+            // The reference also re-parents a same-tree neighbour onto a
+            // shorter path here; measured without it (issue #986) the 142x142
+            // cut solves 6% faster and 284x284 7%, and adoption still takes
+            // the nearest parent.
         }
         None
     }
