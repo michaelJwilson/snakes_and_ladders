@@ -38,8 +38,24 @@ def _allocate(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     return call
 
 
+def _ising_cut(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
+    """The Rust cut with its arrays prebuilt, as the PyMaxflow pair times it (#973)."""
+    from snakes_and_ladders import oxi_snakes_and_ladders
+
+    n_nodes = int(inputs["n_nodes"])
+    field, edges, coupling = inputs["field"], inputs["edges"], inputs["coupling"]
+
+    def call() -> Outputs:
+        states = oxi_snakes_and_ladders.ising_ground_state(
+            n_nodes, field, edges, coupling
+        )
+        return {"configuration": np.asarray(states, dtype=np.int64)}
+
+    return call
+
+
 #: The calls this script measures, by name.
-CALLS: dict[str, Build] = {"allocate": _allocate}
+CALLS: dict[str, Build] = {"allocate": _allocate, "ising_cut": _ising_cut}
 
 
 def main() -> None:

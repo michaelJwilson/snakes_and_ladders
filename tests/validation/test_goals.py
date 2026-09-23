@@ -15,8 +15,15 @@ import pytest
 from snakes_and_ladders import oxi_snakes_and_ladders
 from snakes_and_ladders.search.ground_state import lattice_rung
 from snakes_and_ladders.sim.potts import site_field
+from snakes_and_ladders.validation.runner import package
 
-from tests.validation._goals import Goal, assert_meets, median_seconds
+from tests.validation._goals import (
+    Goal,
+    MemoryGoal,
+    assert_fits,
+    assert_meets,
+    median_seconds,
+)
 
 pytestmark = pytest.mark.goal
 
@@ -31,6 +38,30 @@ PYMAXFLOW_CUT = {
     )
     for side, seconds in ((142, 15.491e-3), (284, 68.667e-3))
 }
+
+#: PyMaxflow's peak added resident memory for the same build and cut, the
+#: medians of three subprocess runs (#987).
+PYMAXFLOW_CUT_MEMORY = {
+    side: MemoryGoal(
+        "pymaxflow",
+        f"the Rust cut on lattice_rung({side}, 2, seed=973)",
+        peak_bytes,
+        "2026-09-23, 4-core reference host, #987",
+    )
+    for side, peak_bytes in ((142, 4_874_240), (284, 20_439_040))
+}
+
+
+def _cut_inputs(side: int) -> dict[str, np.ndarray]:
+    """The Rust cut's arrays for `lattice_rung(side, 2, seed=973)`."""
+    rung = lattice_rung(side, 2, seed=973)
+    field = site_field(rung.field, rung.graph.n_nodes, n_states=2)
+    return {
+        "n_nodes": np.asarray(rung.graph.n_nodes),
+        "field": np.ascontiguousarray(field, dtype=np.float64).reshape(-1),
+        "edges": rung.graph.edge_index.reshape(-1),
+        "coupling": rung.graph.edge_coupling,
+    }
 
 
 @pytest.mark.experiment
@@ -50,3 +81,12 @@ def test_the_rust_cut_meets_pymaxflows_runtime(side: int) -> None:
         )
     )
     assert_meets(ours, PYMAXFLOW_CUT[side])
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("side", sorted(PYMAXFLOW_CUT_MEMORY))
+def test_the_rust_cut_fits_pymaxflows_memory(side: int) -> None:
+    # Read in a fresh interpreter by `scripts/package.py`, as PyMaxflow's was.
+    inputs = _cut_inputs(side)
+    peaks = [package("ising_cut", inputs).peak_bytes or 0 for _ in range(3)]
+    assert_fits(int(np.median(peaks)), PYMAXFLOW_CUT_MEMORY[side])
