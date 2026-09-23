@@ -94,10 +94,15 @@ def build_table(
         f"of {seconds} s: the gap below the log-likelihood the generating "
         f"parameters reach, in nats, and the wall clock, at the handover and "
         f"where the polish stopped. A negative gap is a fit that passed the "
-        f"generating parameters. Values are means over {seeds} seeds with the "
-        f"sample standard deviation beside them; a start that reads no "
-        f"generator ran once and shows its one value. The times are those of "
-        f"the host the table was built on."
+        f"generating parameters. "
+        + (
+            f"Values are means over {seeds} seeds with the sample standard "
+            f"deviation beside them; a start that reads no generator ran once "
+            f"and shows its one value. "
+            if seeds > 1
+            else "Values are one seed's. "
+        )
+        + "The times are those of the host the table was built on."
     )
     check_latex_safe(caption)
     return table, caption

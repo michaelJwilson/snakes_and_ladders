@@ -261,6 +261,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.opt.budget
    :members:
 
+.. automodule:: snakes_and_ladders.opt.starts
+   :members:
+
 .. automodule:: snakes_and_ladders.learn.failure
    :members:
 
@@ -280,6 +283,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.opt.emission_mixture
+   :members:
+
+.. automodule:: snakes_and_ladders.opt.split_merge
    :members:
 
 .. automodule:: snakes_and_ladders.sample
@@ -405,6 +411,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.search.mixture_starts
    :members:
 
+.. automodule:: snakes_and_ladders.search.potts_starts
+   :members:
+
 .. automodule:: snakes_and_ladders.search.ground_state
    :members:
 
@@ -445,6 +454,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.sandbox
+   :members:
+
+.. automodule:: snakes_and_ladders.sandbox.annealed_em
    :members:
 
 .. automodule:: snakes_and_ladders.sandbox.tropical
@@ -549,6 +561,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.qa.mixture_seeding
+   :members:
+
+.. automodule:: snakes_and_ladders.qa.starts
    :members:
 
 .. automodule:: snakes_and_ladders.qa.optimizer_landscapes

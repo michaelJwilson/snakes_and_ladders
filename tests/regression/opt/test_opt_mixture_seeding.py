@@ -20,6 +20,10 @@ this scores once: there is no spatial term to restore.
 cost is reported beside it, in the fit's unit and as a fraction of it.
 :data:`SEEDING_COST` states how each is counted.
 
+The comparison runs through `opt.starts.StartsBenchmark` (issue #894): each
+candidate is a :class:`SeedingStart`, the fit is :func:`polish`, and the
+columns `opt.budget.Comparison` drops ride back on each cell's trial.
+
 Two rungs. `mixture/ci.yaml` is one-dimensional and small enough that
 `opt.mixture.optimal_clustering_cost` still referees a seeding exactly;
 `mixture/release.yaml` is the two-channel instance sized to what #541
@@ -32,6 +36,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 
 import numpy as np
 import pytest
@@ -39,11 +44,12 @@ import torch
 from scipy.optimize import linear_sum_assignment
 from snakes_and_ladders.cost import Cost
 from snakes_and_ladders.emissions import GaussianEmission, pooled_variance_floor
-from snakes_and_ladders.opt.budget import Budget, Comparison, Method, Outcome, compare
+from snakes_and_ladders.opt.budget import Budget, Comparison
 from snakes_and_ladders.opt.emission_mixture import (
     expectation_maximization,
     plus_plus_start,
 )
+from snakes_and_ladders.opt.initialize import Initializer
 from snakes_and_ladders.opt.mixture import (
     GaussianMixtureObjective,
     canonical_order,
@@ -54,10 +60,19 @@ from snakes_and_ladders.opt.mixture import (
     responsibilities,
     uniform_seeds,
 )
+from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.opt.starts import (
+    Polished,
+    SolverComparison,
+    StartsBenchmark,
+    polish_by_emission_em,
+)
+from snakes_and_ladders.opt.termination import Stop, Termination
 from snakes_and_ladders.sample.hmc import anneal, leapfrog, parallel_tempering, sample
 from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.mixture import MixtureParams, simulate_mixture
+from snakes_and_ladders.track import current
 
 #: Evaluations the fit is held to, per start. One evaluation is one pass over
 #: the observations' per-component log densities, which is what an
@@ -561,54 +576,87 @@ def label_recovery(instance: Instance, posterior: torch.Tensor) -> float:
     return float(agreements[rows, columns].sum() / instance.labels.size)
 
 
+@dataclass(frozen=True)
+class SeedingStart(Initializer):
+    """One candidate seeding as an initializer of the instance's Gaussian mixture.
+
+    Each start is the candidate drawn from ``rng`` and placed at uniform
+    weights; ``random-restart`` offers ``BUDGET.size // RESTART_COST`` of
+    them, which the seam polishes at ``RESTART_COST`` each and keeps the best
+    of --- the baseline's count derived from the declared cost rather than
+    chosen. What the seeding charged, and a chain's acceptance, are recorded
+    for the trial.
+    """
+
+    instance: Instance
+    name: str
+    rng: np.random.Generator
+
+    def starts(self, objective: Objective) -> list[torch.Tensor]:
+        """The candidate's seedings, in unconstrained coordinates."""
+        assert isinstance(objective, GaussianMixtureObjective)
+        count = BUDGET.size // RESTART_COST if self.name == "random-restart" else 1
+        drawn = [SEEDINGS[self.name](self.instance, self.rng) for _ in range(count)]
+        current().record(
+            0,
+            seeding=drawn[0].evaluations(),
+            acceptance=drawn[0].acceptance,
+            swap_acceptance=drawn[0].swap_acceptance,
+        )
+        return [
+            _theta_at(self.instance, objective, seeding.components) for seeding in drawn
+        ]
+
+
+def polish(objective: Objective, theta: torch.Tensor, budget: Budget) -> Polished:
+    """Expectation--maximization from ``theta``, or an infinite value where it is refused.
+
+    A component collapsed onto a point: the Gaussian likelihood is unbounded
+    there, so the fit is refused and charged what it was given.
+    """
+    try:
+        return polish_by_emission_em(objective, theta, budget)
+    except ValueError:
+        return Polished(
+            theta, float("inf"), Termination(False, budget.size, Stop.REFUSED)
+        )
+
+
+def recovered(instance: Instance, objective: Objective, theta: torch.Tensor) -> float:
+    """Label recovery at a polished point, from the responsibilities there."""
+    assert isinstance(objective, GaussianMixtureObjective)
+    named = objective.constrain(theta)
+    return label_recovery(
+        instance,
+        responsibilities(
+            objective.observations, named["log_weight"], objective.components(theta)
+        ),
+    )
+
+
 class Ledger:
-    """The best run each method had, over the seeds it was given.
+    """The best run each method had over its starts, read off the seam's trials.
 
     `opt.budget.Comparison` carries the value and the spend, which is what a
     budget comparison needs; the seeding cost, the label recovery and a
-    chain's diagnostics are this experiment's own columns and are kept here.
-    Sound only at ``workers=1``, which is what :func:`measure` passes.
+    chain's diagnostics are this experiment's own columns and ride back on
+    each cell's `opt.starts.StartTrial`.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, instance: Instance, result: SolverComparison) -> None:
         self.best: dict[str, Fitted] = {}
-
-    def record(self, name: str, fitted: Fitted) -> Fitted:
-        """Keep ``fitted`` if it is the lowest-valued run this method has had."""
-        held = self.best.get(name)
-        if held is None or fitted.value < held.value:
-            self.best[name] = fitted
-        return fitted
-
-
-def method_for(name: str, ledger: Ledger) -> Method[Instance]:
-    """The budgeted method that seeds one way and fits at the shared budget.
-
-    The baseline is the one method that spends its budget on more than one
-    start: ``BUDGET.size // RESTART_COST`` restarts of ``RESTART_COST``
-    evaluations each, the count derived from the declared cost rather than
-    chosen (`opt.budget.restarts`, whose loop this is with the seeding cost
-    accounted).
-    """
-
-    def run(instance: Instance, budget: Budget, rng: np.random.Generator) -> Outcome:
-        if name != "random-restart":
-            fitted = ledger.record(
-                name, fit_from(instance, SEEDINGS[name](instance, rng), budget.size)
+        for name in result.names:
+            trial = min(result.trials(name), key=lambda one: one.value)
+            self.best[name] = Fitted(
+                trial.value,
+                trial.spent,
+                trial.diagnostics["seeding"],
+                recovered(instance, result.objectives[0], trial.theta)
+                if math.isfinite(trial.value)
+                else 0.0,
+                trial.diagnostics["acceptance"],
+                trial.diagnostics["swap_acceptance"],
             )
-            return Outcome(fitted.value, fitted.evaluations)
-        best: Fitted | None = None
-        spent = 0
-        for _ in range(budget.size // RESTART_COST):
-            fitted = fit_from(instance, seed_uniform(instance, rng), RESTART_COST)
-            spent += fitted.evaluations
-            if best is None or fitted.value < best.value:
-                best = fitted
-        assert best is not None
-        ledger.record(name, best)
-        return Outcome(best.value, spent)
-
-    return run
 
 
 @dataclass(frozen=True)
@@ -687,16 +735,17 @@ def measure(instance: Instance, n_starts: int) -> Measurement:
         Seeding(instance.truth.components, 0.0),
         BUDGET.size,
     ).value
-    ledger = Ledger()
-    comparison = compare(
-        {name: method_for(name, ledger) for name in METHODS},
-        [instance] * n_starts,
-        BUDGET,
+    result = StartsBenchmark(
+        [_objective(instance)] * n_starts,
+        {name: partial(SeedingStart, instance, name) for name in METHODS},
+        polish,
+        seeding_budget=Budget(Cost.EVALUATIONS, BUDGET.size // RESTART_COST),
+        polish_budget=BUDGET,
         seeds=(0,),
         workers=1,
-        known=[from_truth] * n_starts,
-    )
-    return Measurement(comparison, from_truth, ledger)
+        reference=[from_truth] * n_starts,
+    ).run()
+    return Measurement(result.comparison, from_truth, Ledger(instance, result))
 
 
 def bregman_d2(instance: Instance, rng: np.random.Generator) -> Seeding:

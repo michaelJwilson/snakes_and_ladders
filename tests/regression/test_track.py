@@ -244,6 +244,23 @@ def test_the_cost_record_carries_the_seconds_since_the_block_opened() -> None:
 
 
 @pytest.mark.smoke
+def test_every_entry_is_stamped_in_order_inside_the_block() -> None:
+    # Issue #894: the per-iteration seconds `opt.starts` reads are the
+    # store's stamps, one per entry and in the order the entries arrived,
+    # bracketed by the caller's own reading of the same counter.
+    with track() as tracked:
+        _chain()
+        closed = time.perf_counter()
+
+    run = _memory(tracked.run)
+    stamps = run.stamps("energy_error")
+    assert len(stamps) == len(run.series("energy_error")) == N_SAMPLES
+    assert stamps == sorted(stamps)
+    assert tracked.started <= stamps[0]
+    assert stamps[-1] <= closed
+
+
+@pytest.mark.smoke
 def test_every_record_carries_the_seconds_it_was_taken_at() -> None:
     # Issue #891: a curve against wall clock is read from the run, so every
     # sample carries its time, at its own step, non-decreasing, and one named

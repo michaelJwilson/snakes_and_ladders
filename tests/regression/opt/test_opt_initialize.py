@@ -394,6 +394,7 @@ def _chain_start(seed: int) -> FromChain:
     )
 
 
+@pytest.mark.smoke
 @pytest.mark.patch
 def test_a_chain_start_warms_up_by_default_and_none_is_the_chain_it_drew_before() -> (
     None

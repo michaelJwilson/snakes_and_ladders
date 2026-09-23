@@ -310,6 +310,7 @@ markers = [
     "end2end: drives a real path -- simulate, fit, decode -- and checks a scientific output against the truth that generated the data, to a stated tolerance",
     "analytic: judges against a mathematical property the model must satisfy whatever the implementation does -- conservation, a limit, a symmetry, a monotonicity, a calibration",
     "smoke: checked against itself -- reachability, a shape, the absence of an exception, a boundary, a refusal, an invariant the implementation chose",
+    "experiment: compares two runs of the package -- methods, starts or settings on a declared instance at a stated cost -- and pins which reached further where it was measured; a finding recorded, not a referee",
     "critical: gates early; fast, and its failure means the rest is not worth running -- structurally, or because the science it rests on is wrong",
     "stress: same claim at a size the 5-minute CI budget cannot hold; run with `-m stress` inside the 10-minute developer budget (DEV.md CI & Performance Budget)",
     "key: the key fixture's full test -- the largest declared instance whose simulate-fit-assert run fits SAL_KEY_DURATION_CAP, 120 s; run in CI's full tier and selected locally only when its inputs change (DEV.md CI & Performance Budget)",
