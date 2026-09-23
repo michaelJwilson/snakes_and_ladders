@@ -1,13 +1,13 @@
-"""Transition kernels per sequence, and states mirrored in their success rate (issue #933, R9).
+"""Transition kernels per sequence, and states reflected in their success rate (issue #933, R9).
 
 `baum_welch_family` takes ``log_transition`` of shape ``(n_sequences,
 length - 1, m, m)``, one kernel per step of each sequence, held fixed as the
-per-step kernel is. `MirroredEmission` doubles a beta-binomial or count-pair
+per-step kernel is. `ReflectedEmission` doubles a beta-binomial or count-pair
 family into ``2K`` states whose second half emits at rate ``1 - p``. Referees:
 identical per-sequence kernels are the shared per-step kernel bitwise, and
-distinct ones score each sequence as its own chain; a mirror scores as the
+distinct ones score each sequence as its own chain; a reflection scores as the
 exchanged family and its M step maximizes the unfolded likelihood, found by
-`scipy.optimize`; and a planted mirrored chain is recovered.
+`scipy.optimize`; and a planted reflected chain is recovered.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ import torch
 from scipy.optimize import minimize
 from snakes_and_ladders.emissions import BetaBinomialEmission, NegativeBinomialEmission
 from snakes_and_ladders.opt.hmm import baum_welch_family
-from snakes_and_ladders.sim.count_pairs import IndependentCountPair, MirroredEmission
+from snakes_and_ladders.sim.count_pairs import IndependentCountPair, ReflectedEmission
 
 TRIALS = 40.0
 
@@ -32,7 +32,7 @@ def _kernel(stay: float, m: int) -> torch.Tensor:
 
 
 def _chains(
-    family: BetaBinomialEmission | MirroredEmission, n: int, length: int, seed: int
+    family: BetaBinomialEmission | ReflectedEmission, n: int, length: int, seed: int
 ) -> tuple[np.ndarray, np.ndarray]:
     """Sticky chains over the family's states, and their draws."""
     rng = np.random.default_rng([933, 9, seed])
@@ -86,11 +86,11 @@ def test_distinct_kernels_score_each_sequence_as_its_own_chain() -> None:
 
 @pytest.mark.critical
 @pytest.mark.analytic
-def test_a_mirrored_state_scores_as_the_exchanged_family() -> None:
+def test_a_reflected_state_scores_as_the_exchanged_family() -> None:
     base = BetaBinomialEmission([TRIALS] * 2, [2.0, 5.0], [9.0, 3.0])
-    mirror = MirroredEmission(base)
+    reflection = ReflectedEmission(base)
     counts = torch.arange(0.0, TRIALS + 1.0)
-    scores = mirror.log_density(counts)
+    scores = reflection.log_density(counts)
     exchanged = BetaBinomialEmission([TRIALS] * 2, [9.0, 3.0], [2.0, 5.0])
     assert torch.equal(scores[:, :2], base.log_density(counts))
     torch.testing.assert_close(
@@ -103,7 +103,7 @@ def test_a_mirrored_state_scores_as_the_exchanged_family() -> None:
 
 @pytest.mark.critical
 @pytest.mark.oracle
-def test_the_mirror_m_step_maximizes_the_unfolded_likelihood() -> None:
+def test_the_reflected_m_step_maximizes_the_unfolded_likelihood() -> None:
     # The referee maximizes the 4-state expected log-likelihood over the two
     # base states' (a, b) through `log_density` of the unfolded family, with
     # the tie imposed by construction and no reflection in sight.
@@ -112,13 +112,15 @@ def test_the_mirror_m_step_maximizes_the_unfolded_likelihood() -> None:
         rng.binomial(40, rng.beta(3.0, 7.0, 2_000)), dtype=torch.float64
     )
     posterior = torch.as_tensor(rng.dirichlet(np.ones(4), 2_000))
-    start = MirroredEmission(BetaBinomialEmission([TRIALS] * 2, [2.0, 5.0], [5.0, 2.0]))
+    start = ReflectedEmission(
+        BetaBinomialEmission([TRIALS] * 2, [2.0, 5.0], [5.0, 2.0])
+    )
     fitted = start.reestimate(counts, posterior).emissions
-    assert isinstance(fitted, MirroredEmission)
+    assert isinstance(fitted, ReflectedEmission)
 
     def negative(point: np.ndarray) -> float:
         a, b = np.exp(point[:2]), np.exp(point[2:])
-        family = MirroredEmission(BetaBinomialEmission([TRIALS] * 2, a, b))
+        family = ReflectedEmission(BetaBinomialEmission([TRIALS] * 2, a, b))
         return -float((posterior * family.log_density(counts)).sum())
 
     best = minimize(
@@ -135,19 +137,19 @@ def test_the_mirror_m_step_maximizes_the_unfolded_likelihood() -> None:
 
 
 @pytest.mark.end2end
-def test_a_planted_mirrored_count_pair_chain_is_recovered() -> None:
+def test_a_planted_reflected_count_pair_chain_is_recovered() -> None:
     # Two base states at depth 30 and 90 with allele rates 0.2 and 0.35, each
-    # mirrored: four states over 40 chains of 150. Fitted from a perturbed
+    # reflected: four states over 40 chains of 150. Fitted from a perturbed
     # start with a sticky kernel per sequence, each base state's rate lands
     # within 0.02 and its depth within 5%.
-    truth = MirroredEmission(
+    truth = ReflectedEmission(
         IndependentCountPair(
             NegativeBinomialEmission([8.0, 8.0], [30.0, 90.0]),
             BetaBinomialEmission([TRIALS] * 2, [4.0, 7.0], [16.0, 13.0]),
         )
     )
     draws, _ = _chains(truth, 40, 150, 2)
-    start = MirroredEmission(
+    start = ReflectedEmission(
         IndependentCountPair(
             NegativeBinomialEmission([3.0, 3.0], [20.0, 120.0]),
             BetaBinomialEmission([TRIALS] * 2, [3.0, 4.0], [7.0, 6.0]),
@@ -165,11 +167,11 @@ def test_a_planted_mirrored_count_pair_chain_is_recovered() -> None:
 
 
 @pytest.mark.smoke
-def test_a_mirror_without_a_common_trial_count_is_refused() -> None:
-    mirror = MirroredEmission(
+def test_a_reflection_without_a_common_trial_count_is_refused() -> None:
+    reflection = ReflectedEmission(
         BetaBinomialEmission([10.0, 20.0], [1.0, 1.0], [1.0, 1.0])
     )
     with pytest.raises(ValueError, match="reflects successes"):
-        mirror.reestimate(
+        reflection.reestimate(
             torch.tensor([1.0, 2.0]), torch.full((2, 4), 0.25, dtype=torch.float64)
         )

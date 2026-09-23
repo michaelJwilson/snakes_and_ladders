@@ -350,11 +350,11 @@ class IndependentCountPair(EmissionFamily):
         return named
 
 
-type Mirrorable = BetaBinomialEmission | IndependentCountPair
+type Reflectable = BetaBinomialEmission | IndependentCountPair
 
 
-class MirroredEmission(EmissionFamily):
-    """``2K`` states over a ``K``-state family: ``k + K`` is ``k`` with its success rate mirrored (issue #933).
+class ReflectedEmission(EmissionFamily):
+    """``2K`` states over a ``K``-state family: ``k + K`` is ``k`` with its success rate reflected (issue #933).
 
     State ``k`` emits from the base family's state ``k``; state ``k + K`` from
     the same parameters with the success channel's ``a`` and ``b`` exchanged,
@@ -363,7 +363,7 @@ class MirroredEmission(EmissionFamily):
 
     **The M step is the base family's, on the data and its reflection.** A
     beta-binomial with ``a`` and ``b`` exchanged scores ``y`` exactly as the
-    unexchanged one scores ``n - y``, so the mirrored half's expected
+    unexchanged one scores ``n - y``, so the reflected half's expected
     log-likelihood is the base's on the successes reflected about their trial
     count. The base family re-estimates once, on the observations weighted by
     ``gamma[..., :K]`` stacked on the reflected observations weighted by
@@ -372,21 +372,21 @@ class MirroredEmission(EmissionFamily):
     Parameters
     ----------
     base : BetaBinomialEmission | IndependentCountPair
-        The ``K`` unmirrored states.
+        The ``K`` unreflected states.
     """
 
-    def __init__(self, base: Mirrorable) -> None:
+    def __init__(self, base: Reflectable) -> None:
         self._base = base
         self._unfolded = _unfolded(base)
 
     @property
-    def base(self) -> Mirrorable:
-        """The ``K`` unmirrored states, which carry every parameter."""
+    def base(self) -> Reflectable:
+        """The ``K`` unreflected states, which carry every parameter."""
         return self._base
 
     @property
     def n_states(self) -> int:
-        """``2K``: each base state and its mirror."""
+        """``2K``: each base state and its reflection."""
         return 2 * self._base.n_states
 
     @property
@@ -419,7 +419,7 @@ class MirroredEmission(EmissionFamily):
         return self._unfolded.bregman_divergence(observations)
 
     def validate(self, observations: np.ndarray) -> None:
-        """The base family's check: a mirror reads the same support."""
+        """The base family's check: a reflection reads the same support."""
         self._base.validate(observations)
 
     def reestimate(
@@ -427,7 +427,7 @@ class MirroredEmission(EmissionFamily):
         observations: torch.Tensor,
         posterior: torch.Tensor,
         covariate: torch.Tensor | None = None,
-    ) -> Reestimate[MirroredEmission]:
+    ) -> Reestimate[ReflectedEmission]:
         """The base family's M step on the observations and their reflection.
 
         Returns
@@ -464,7 +464,7 @@ class MirroredEmission(EmissionFamily):
             )
             if not bool((declared == declared[0]).all()):
                 msg = (
-                    "a mirror reflects successes about their trial count, and "
+                    "a reflection maps successes about their trial count, and "
                     f"without a per-observation one the states' differ: "
                     f"{declared.tolist()}"
                 )
@@ -484,7 +484,7 @@ class MirroredEmission(EmissionFamily):
             else torch.cat([conditioned, conditioned]),
         )
         return Reestimate(
-            MirroredEmission(step.emissions),
+            ReflectedEmission(step.emissions),
             converged=step.converged,
             at_boundary=step.at_boundary,
             iterations=step.iterations,
@@ -492,16 +492,16 @@ class MirroredEmission(EmissionFamily):
         )
 
     def alignment_key(self) -> torch.Tensor:
-        """The unfolded family's, so a mirror aligns as the state it emits as."""
+        """The unfolded family's, so a reflection aligns as the state it emits as."""
         return self._unfolded.alignment_key()
 
     def named_parameters(self) -> Mapping[str, torch.Tensor]:
-        """The base family's: the mirror adds no parameter."""
+        """The base family's: the reflection adds no parameter."""
         return self._base.named_parameters()
 
 
-def _unfolded(base: Mirrorable) -> Mirrorable:
-    """The ``2K``-state family a mirror stands for: each state, then each with ``a`` and ``b`` exchanged."""
+def _unfolded(base: Reflectable) -> Reflectable:
+    """The ``2K``-state family a reflection stands for: each state, then each with ``a`` and ``b`` exchanged."""
     if isinstance(base, IndependentCountPair):
         successes = _unfolded(base.successes)
         assert isinstance(successes, BetaBinomialEmission)
