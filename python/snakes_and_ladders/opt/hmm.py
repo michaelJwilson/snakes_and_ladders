@@ -27,7 +27,7 @@ import math
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from itertools import permutations
-from typing import Any
+from typing import Any, Protocol
 
 import numpy as np
 import torch
@@ -1222,6 +1222,84 @@ def baum_welch(
     )
 
 
+class CovariateUpdate(Protocol):
+    """A covariate that depends on the parameters, recomputed before every E step (issue #933).
+
+    Called with the current emission family, the posterior of the previous E
+    step --- shape ``(n_sequences, length, m)``, zero at padded positions,
+    and uniform over the states before the first --- and the covariate as
+    :func:`baum_welch_family` holds it. It returns the covariate the next E
+    step scores against and the M step after it conditions on, in the same
+    layout. A normalizer that is a function of the parameters, as
+    :class:`ExpectedRateNormalizer` is, enters the fit this way.
+    """
+
+    def __call__(
+        self,
+        emissions: EmissionFamily,
+        posterior: torch.Tensor,
+        covariate: torch.Tensor,
+    ) -> torch.Tensor:
+        """The covariate to score the next E step against."""
+        ...
+
+
+@dataclass(frozen=True)
+class ExpectedRateNormalizer:
+    """Divide each sequence's exposure by ``Z_c = sum_g lambda_g E[mu_{s_c(g)}]`` (issue #933).
+
+    A consumer whose rate at position ``g`` of sequence ``c`` is ``lambda_g
+    mu_s / Z_c`` normalizes each sequence to one: ``Z_c`` sums the unnormalized
+    rates over the sequence's positions, and it depends on the states the
+    sequence takes, so no fixed covariate can hold it. This is its plug-in
+    form: the state at each position is averaged over the previous E step's
+    posterior, so ``Z_c`` moves with the parameters and the posterior and the
+    fit is expectation--conditional-maximization around it, the emission M
+    step conditioning on ``Z`` held at its current value.
+
+    ``mu_k`` is the family's first alignment coordinate: the mean, in
+    observation units, of every count family and of a count pair's total
+    channel. The rates are unchanged by scaling every ``mu_k`` together,
+    since ``Z_c`` scales with them, so only their ratios are identified.
+
+    Parameters
+    ----------
+    weights : torch.Tensor
+        ``lambda``, shape ``(length,)`` for one per position or
+        ``(n_sequences, length)`` for one per position of each sequence.
+    channel : int | None
+        The covariate channel holding the exposure, for a family whose
+        covariate carries one per channel (a count pair's is channel 0);
+        ``None`` for a single-channel family.
+    """
+
+    weights: torch.Tensor
+    channel: int | None = None
+
+    def normalizer(
+        self, emissions: EmissionFamily, posterior: torch.Tensor
+    ) -> torch.Tensor:
+        """``Z_c`` per sequence, shape ``(n_sequences,)``."""
+        means = emissions.alignment_key()[:, 0].to(posterior.dtype)
+        expected = posterior @ means  # (n_sequences, length)
+        return (self.weights.to(posterior.dtype) * expected).sum(dim=-1)
+
+    def __call__(
+        self,
+        emissions: EmissionFamily,
+        posterior: torch.Tensor,
+        covariate: torch.Tensor,
+    ) -> torch.Tensor:
+        """``covariate`` with its exposure divided by each sequence's ``Z_c``."""
+        divisor = self.normalizer(emissions, posterior)[:, None]
+        updated = covariate.clone()
+        if self.channel is None:
+            updated[..., 0] = covariate[..., 0] / divisor
+        else:
+            updated[..., self.channel] = covariate[..., self.channel] / divisor
+        return updated
+
+
 def baum_welch_family(
     observations: np.ndarray | Ragged,
     log_initial: torch.Tensor,
@@ -1230,6 +1308,8 @@ def baum_welch_family(
     max_iterations: int = 500,
     tolerance: float = 1e-12,
     covariate: np.ndarray | Ragged | None = None,
+    *,
+    update: CovariateUpdate | None = None,
 ) -> EmFit:
     """Baum-Welch over any emission family, with no autodiff involved.
 
@@ -1285,6 +1365,13 @@ def baum_welch_family(
         against an exposure and re-estimates without it is fitting two
         different models. ``None`` is the model this function had before.
         The family broadcasts a covariate along the states, so it wants a trailing singleton axis; the covariate is stored with the observations' own axes and the singleton is added here, where the observation layout is known. A caller should not have to carry a shape that exists for the family's broadcast.
+    update : CovariateUpdate | None
+        A covariate that depends on the parameters (issue #933): before every
+        E step it maps the family, the previous posterior and ``covariate`` to
+        the covariate that E step and the next M step use. It needs a
+        ``covariate`` to update. The reported log-likelihood is each E step's,
+        at the covariate it was scored against, so it is the objective of the
+        plug-in fit and need not rise monotonically.
 
     Returns
     -------
@@ -1370,6 +1457,12 @@ def baum_welch_family(
         exposure = torch.as_tensor(given, dtype=torch.float64)
         if exposure.ndim == data.ndim == 2:
             exposure = exposure[..., None]
+    if update is not None and exposure is None:
+        msg = "a covariate update needs a covariate to update"
+        raise ValueError(msg)
+    # The posterior an update reads before the first E step: uniform over the
+    # states, and zero at padded positions as every later one is.
+    previous = mask.unsqueeze(2).expand(-1, -1, m).to(torch.float64) / m
 
     at_boundary = False
 
@@ -1382,10 +1475,15 @@ def baum_welch_family(
         per-step kernels it is expanded to and the emission family --- every
         parameter the recursion below reads and the M step rewrites.
         """
-        nonlocal at_boundary
+        nonlocal at_boundary, previous
         log_initial, log_transition, kernels, emissions = state
+        scored = (
+            exposure
+            if update is None or exposure is None
+            else update(emissions, previous, exposure)
+        )
         # --- E step: forward and backward messages in log space ----------
-        emit = emissions.log_density(data, covariate=exposure)
+        emit = emissions.log_density(data, covariate=scored)
         # A padded position scores log 1, so it adds nothing wherever it is
         # reached. Its `alpha` beyond the segment's end is still nonsense, which
         # is why the evidence is gathered at each segment's own last position
@@ -1454,7 +1552,8 @@ def baum_welch_family(
                 transition_counts, dim=1, keepdim=True
             )
             kernels = log_transition.expand(max(length - 1, 0), m, m)
-        step = emissions.reestimate(data, torch.exp(gamma), covariate=exposure)
+        previous = torch.exp(gamma)
+        step = emissions.reestimate(data, previous, covariate=scored)
         if not step.converged:
             msg = (
                 f"the emission M step did not settle after {step.iterations} "
