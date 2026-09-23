@@ -411,6 +411,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.search.mixture_starts
    :members:
 
+.. automodule:: snakes_and_ladders.search.potts_starts
+   :members:
+
 .. automodule:: snakes_and_ladders.search.ground_state
    :members:
 
