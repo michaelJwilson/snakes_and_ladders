@@ -22,7 +22,12 @@ from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.ppo import generalized_advantages
 from snakes_and_ladders.learn.reinforce import surrogate_loss
-from snakes_and_ladders.learn.surrogate import Examples, GraphSurrogate, _Batch
+from snakes_and_ladders.learn.surrogate import (
+    Examples,
+    GraphSurrogate,
+    SetSurrogate,
+    _Batch,
+)
 from snakes_and_ladders.opt.hmm import baum_welch
 from snakes_and_ladders.opt.mixture import expectation_maximization
 from snakes_and_ladders.sample import hmc
@@ -169,6 +174,45 @@ def test_the_advantages_meet_torchrls_gae_runtime(n_episodes: int) -> None:
             generalized_advantages(rewards, values, lam=0.95, terminated=terminated)
 
     assert_meets(median_seconds(every, repeats=3), TORCHRL_GAE[n_episodes])
+
+
+#: PyG's twin of `SetSurrogate` (hidden 8): its encoder and decoder around
+#: `global_add_pool`, one example of `side^2` tokens, the median of five
+#: subprocess runs of the median of nine warm forwards, at one intra-op
+#: thread as the suite runs (`tests/conftest.py`) (#997). At 142^2 the twin
+#: is level with the package after two attempts --- pooling before the
+#: encoder's last affine map (6.2 to 3.6 ms at 284^2 on four threads) and the
+#: body run in place --- since both run the same encoder over 20,164 rows.
+TORCH_GEOMETRIC_SET = {
+    side: Goal(
+        "torch_geometric",
+        f"SetSurrogate forward on {side}x{side} tokens",
+        seconds,
+        "2026-09-23, 4-core reference host, one thread, load 0.8, #997",
+    )
+    for side, seconds in ((142, 2.714e-3), (284, 12.576e-3))
+}
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("side", sorted(TORCH_GEOMETRIC_SET))
+def test_the_set_surrogate_meets_pygs_runtime(side: int) -> None:
+    graph = lattice_graph((side, side), BoundaryCondition.OPEN, 1.0)
+    rng = np.random.default_rng(977)
+    examples = Examples(
+        features=torch.as_tensor(rng.normal(size=(1, 3))),
+        targets=torch.zeros(1, dtype=torch.float64),
+        groups=np.zeros(1, dtype=np.int64),
+        tokens=(torch.as_tensor(rng.normal(size=(graph.n_nodes, 4))),),
+        adjacency=(np.asarray(graph.edge_index, dtype=np.int64),),
+    )
+    batch = _Batch(examples)
+    torch.manual_seed(977)
+    model = SetSurrogate(3, 4, hidden=8)
+    with torch.no_grad():
+        model(batch)  # warm-up
+        seconds = median_seconds(lambda: model(batch))
+    assert_meets(seconds, TORCH_GEOMETRIC_SET[side])
 
 
 #: JAX's per-point gradient under `jit` and its peak added memory over 100
