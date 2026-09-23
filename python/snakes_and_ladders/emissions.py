@@ -53,6 +53,7 @@ to draw a sequence.
 
 from __future__ import annotations
 
+import functools
 import math
 from abc import abstractmethod
 from collections.abc import Callable, Mapping, Sequence
@@ -1728,15 +1729,23 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
         converged = True
         iterations = 0
         residual = 0.0
-        for state in range(self.n_states):
-            total = float(self._alpha[state] + self._beta[state])
-            solved = _solve_beta_binomial(
-                values,
-                weights[:, state],
-                supplied if per_observation else float(self._trials[state]),
-                float(self._alpha[state]) / total,
-                total,
-            )
+        totals = [
+            float(self._alpha[state] + self._beta[state])
+            for state in range(self.n_states)
+        ]
+        batch = _solve_beta_binomial_batched(
+            values,
+            weights,
+            supplied
+            if per_observation
+            else [float(self._trials[state]) for state in range(self.n_states)],
+            [
+                float(self._alpha[state]) / totals[state]
+                for state in range(self.n_states)
+            ],
+            totals,
+        )
+        for state, solved in enumerate(batch):
             alpha[state] = solved.alpha
             beta[state] = solved.beta
             boundary = boundary or solved.at_boundary
@@ -2104,15 +2113,21 @@ class CountPairEmission(EmissionFamily, CountEmissionFamily):
         converged = depth.converged
         iterations = depth.iterations
         residual = depth.residual
-        for state in range(self.n_states):
-            concentration = float(self._alpha[state] + self._beta[state])
-            solved = _solve_beta_binomial(
-                successes,
-                weights[:, state],
-                totals,
-                float(self._alpha[state]) / concentration,
-                concentration,
-            )
+        concentrations = [
+            float(self._alpha[state] + self._beta[state])
+            for state in range(self.n_states)
+        ]
+        batch = _solve_beta_binomial_batched(
+            successes,
+            weights,
+            totals,
+            [
+                float(self._alpha[state]) / concentrations[state]
+                for state in range(self.n_states)
+            ],
+            concentrations,
+        )
+        for state, solved in enumerate(batch):
             alpha[state] = solved.alpha
             beta[state] = solved.beta
             boundary = boundary or solved.at_boundary
@@ -2453,6 +2468,227 @@ def _solve_beta_binomial(
         iterations=iterations,
         residual=residual,
     )
+
+
+def _weighted_histogram(
+    values: torch.Tensor, columns: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """The distinct entries of ``values`` and, per row of ``columns``, the weight summed at each.
+
+    Parameters
+    ----------
+    values : torch.Tensor
+        Shape ``(n,)``.
+    columns : torch.Tensor
+        Shape ``(K, n)``.
+
+    Returns
+    -------
+    tuple[torch.Tensor, torch.Tensor]
+        The distinct values, shape ``(U,)``, and the weights, shape ``(K, U)``.
+    """
+    distinct, inverse = torch.unique(values, return_inverse=True)
+    summed = torch.zeros(
+        (columns.shape[0], distinct.shape[0]), dtype=columns.dtype
+    ).index_add_(1, inverse, columns)
+    return distinct, summed
+
+
+def _solve_beta_binomial_batched(
+    values: torch.Tensor,
+    weights: torch.Tensor,
+    trials: torch.Tensor | Sequence[float],
+    rates: Sequence[float],
+    concentrations: Sequence[float],
+    *,
+    tolerance: float = 1e-10,
+    max_iterations: int = 60,
+) -> list[_SolvedBetaBinomial]:
+    """:func:`_solve_beta_binomial` for every component at once, in lockstep (issue #892).
+
+    Two cuts. **Less work:** within one solve the weights are fixed, so each
+    score's sum over the observations is a sum over each channel's distinct
+    values --- the successes, the failures and the depths --- weighted by the
+    responsibility summed there, and a bisection step evaluates ``digamma``
+    on those alone: 846 values against 9,000 terms per component on
+    ``emission_mixture/stress``. **One call:** the per-component solves are
+    independent and identically shaped, so one alternating bisection runs
+    over all of them on ``(components, values)`` tensors. Every component
+    keeps its own bracket, its own count of outer iterations and its own
+    stop, and one that has stopped is carried unchanged while the others
+    move. The scalars :func:`_solve_beta_binomial` takes through :mod:`math`
+    --- the bound's logarithm, the concentration's exponential --- are taken
+    through :mod:`math` here too. That function stays as the oracle this is
+    pinned against; the sums are reordered, so the pin is a tolerance, not
+    bitwise.
+
+    Parameters
+    ----------
+    values : torch.Tensor
+        Success counts, shape ``(n,)``.
+    weights : torch.Tensor
+        Posterior weights, shape ``(n, K)``.
+    trials : torch.Tensor | Sequence[float]
+        One count per observation, shape ``(n,)``, shared by every component;
+        or one per component, length ``K``.
+    rates, concentrations : Sequence[float]
+        Each component's starting mean rate and concentration.
+
+    Returns
+    -------
+    list[_SolvedBetaBinomial]
+        One per component, in order.
+    """
+    n_components = weights.shape[1]
+    shared = isinstance(trials, torch.Tensor)
+    if shared:
+        assert isinstance(trials, torch.Tensor)
+        per: list[float | torch.Tensor] = [trials] * n_components
+    else:
+        per = [float(t) for t in trials]
+    # Within one solve the weights are fixed, so each score's sum over the
+    # observations is a sum over each channel's distinct values, weighted by
+    # the responsibility summed at that value: the digammas are evaluated on
+    # the distinct values only (issue #892).
+    columns = weights.T.contiguous()
+    total_weight = columns.sum(dim=1)
+    counts, count_weight = _weighted_histogram(values, columns)
+    if shared:
+        assert isinstance(trials, torch.Tensor)
+        grid_trials = trials.to(values.dtype)
+        rest, rest_weight = _weighted_histogram(grid_trials - values, columns)
+        depth, depth_weight = _weighted_histogram(grid_trials, columns)
+        rest_grid = rest.reshape(1, -1)
+        depth_grid = depth.reshape(1, -1)
+    else:
+        depth_column = torch.tensor(per, dtype=values.dtype).reshape(-1, 1)
+        # A fixed trial count per component: the remainder's distinct values
+        # are that count less the success's, one row per component.
+        rest_grid = depth_column - counts.reshape(1, -1)
+        rest_weight = count_weight
+        depth_grid = depth_column
+        depth_weight = total_weight.reshape(-1, 1)
+    count_grid = counts.reshape(1, -1)
+    bounds = [
+        identifiable_concentration_bound(
+            _effective_trials(per[k], weights[:, k]), float(weights[:, k].sum())
+        )
+        for k in range(n_components)
+    ]
+    rate = torch.tensor(list(rates), dtype=values.dtype)
+    concentration = torch.tensor(
+        [min(c, b) for c, b in zip(concentrations, bounds, strict=True)],
+        dtype=values.dtype,
+    )
+    bound = torch.tensor(bounds, dtype=values.dtype)
+    log_bound = [math.log(b) for b in bounds]
+    log_low = torch.tensor(
+        [lb + math.log(_CONCENTRATION_BRACKET_RATIO) for lb in log_bound],
+        dtype=values.dtype,
+    )
+    log_high = torch.tensor(log_bound, dtype=values.dtype)
+
+    def success_term(alpha: torch.Tensor) -> torch.Tensor:
+        """``sum_i w_i (digamma(y_i + a) - digamma(a))`` per component."""
+        return (count_weight * torch.digamma(count_grid + alpha.reshape(-1, 1))).sum(
+            dim=1
+        ) - total_weight * torch.digamma(alpha)
+
+    def failure_term(beta: torch.Tensor) -> torch.Tensor:
+        """``sum_i w_i (digamma(n_i - y_i + b) - digamma(b))`` per component."""
+        return (rest_weight * torch.digamma(rest_grid + beta.reshape(-1, 1))).sum(
+            dim=1
+        ) - total_weight * torch.digamma(beta)
+
+    def rate_score(at_rate: torch.Tensor, *, held: torch.Tensor) -> torch.Tensor:
+        return success_term(at_rate * held) - failure_term((1.0 - at_rate) * held)
+
+    def concentration_score(held: torch.Tensor, total: torch.Tensor) -> torch.Tensor:
+        depth_term = (
+            depth_weight * torch.digamma(depth_grid + total.reshape(-1, 1))
+        ).sum(dim=1) - total_weight * torch.digamma(total)
+        return (
+            held * success_term(held * total)
+            + (1.0 - held) * failure_term((1.0 - held) * total)
+            - depth_term
+        )
+
+    def _at_log(
+        score: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+        exponent: Callable[[torch.Tensor], torch.Tensor],
+        held: torch.Tensor,
+        log_total: torch.Tensor,
+    ) -> torch.Tensor:
+        return score(held, exponent(log_total))
+
+    def exp_each(log_values: torch.Tensor) -> torch.Tensor:
+        return torch.tensor(
+            [math.exp(v) for v in log_values.tolist()], dtype=values.dtype
+        )
+
+    def bisect(
+        score: Callable[[torch.Tensor], torch.Tensor],
+        low: torch.Tensor,
+        high: torch.Tensor,
+        moving: torch.Tensor,
+    ) -> torch.Tensor:
+        low, high = low.clone(), high.clone()
+        for _ in range(_MAX_BISECTIONS):
+            step = moving & (high - low > tolerance)
+            if not bool(step.any()):
+                break
+            middle = 0.5 * (low + high)
+            above = score(middle) > 0.0
+            low = torch.where(step & above, middle, low)
+            high = torch.where(step & ~above, middle, high)
+        return 0.5 * (low + high)
+
+    active = torch.ones(n_components, dtype=torch.bool)
+    at_boundary = torch.zeros(n_components, dtype=torch.bool)
+    residual = torch.full((n_components,), float("inf"), dtype=values.dtype)
+    iterations = torch.zeros(n_components, dtype=torch.int64)
+    lows = torch.full((n_components,), _PROBABILITY_MARGIN, dtype=values.dtype)
+    highs = torch.full((n_components,), 1.0 - _PROBABILITY_MARGIN, dtype=values.dtype)
+    for _ in range(max_iterations):
+        if not bool(active.any()):
+            break
+        iterations = iterations + active.to(torch.int64)
+        previous_rate, previous_concentration = rate, concentration
+        held = concentration
+        new_rate = bisect(functools.partial(rate_score, held=held), lows, highs, active)
+        rate = torch.where(active, new_rate, rate)
+        pinned = concentration_score(rate, bound) > 0.0
+        solving = active & ~pinned
+        at_rate = rate
+        solved = exp_each(
+            bisect(
+                functools.partial(_at_log, concentration_score, exp_each, at_rate),
+                log_low,
+                log_high,
+                solving,
+            )
+        )
+        concentration = torch.where(
+            active, torch.where(pinned, bound, solved), concentration
+        )
+        at_boundary = torch.where(active, pinned, at_boundary)
+        moved = torch.maximum(
+            (rate - previous_rate).abs(),
+            (concentration - previous_concentration).abs() / concentration,
+        )
+        residual = torch.where(active, moved, residual)
+        active = active & (residual > tolerance)
+    return [
+        _SolvedBetaBinomial(
+            alpha=float(rate[k]) * float(concentration[k]),
+            beta=(1.0 - float(rate[k])) * float(concentration[k]),
+            at_boundary=bool(at_boundary[k]),
+            converged=float(residual[k]) <= tolerance,
+            iterations=int(iterations[k]),
+            residual=float(residual[k]),
+        )
+        for k in range(n_components)
+    ]
 
 
 def _effective_trials(trials: float | torch.Tensor, weights: torch.Tensor) -> float:
