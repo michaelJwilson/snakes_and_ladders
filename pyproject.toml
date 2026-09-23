@@ -75,6 +75,16 @@ frameworks = [
     "torchrl>=0.6",
     "torch_geometric>=2.5",
 ]
+# External frameworks the package is validated or benchmarked against, one
+# extra each and each run in a subprocess by `snakes_and_ladders.validation`
+# (issue #972); `infra/validation_extras.py` reads the list for CI's
+# `validation` job. Each entry records its licence, its stars and the ticket
+# that approved it.
+#
+# PyMaxflow (Kolmogorov's Boykov-Kolmogorov max flow): GPL-3.0, OSI-approved
+# and run only in a subprocess; stars under the 1,000 bar, flagged in #938 and
+# approved on #973. Wheels for linux-64 and osx-arm64 at 3.12.
+validation-pymaxflow = ["PyMaxflow>=1.3.2"]
 # The run store behind `snakes_and_ladders.track` (issue #778). An extra
 # rather than a core dependency: `track.Run` is a Protocol written with
 # `aim.Run`'s own signatures, so the package imports, records and tests
@@ -224,6 +234,14 @@ module = [
     "torch_geometric.*",
     "networkx.*",
 ]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# The validation frameworks (issue #972) are imported only by their scripts
+# under `snakes_and_ladders/validation/scripts/`, installed only by their
+# `validation-*` extras and absent where the `lint` job runs; PyMaxflow ships
+# no type information where it is present.
+module = ["maxflow", "maxflow.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

@@ -503,6 +503,12 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.validation.scripts.selftest
    :members:
 
+.. automodule:: snakes_and_ladders.validation.pymaxflow
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.scripts.pymaxflow
+   :members:
+
 .. automodule:: snakes_and_ladders.qa
    :members:
 
