@@ -53,8 +53,8 @@ states.
 
 The extras are `dev` (ruff, mypy, pre-commit, pip-audit), `test` (pytest and
 plugins, NumPy), `docs` (Sphinx), `notebooks` (a kernel, for re-executing
-`docs/nb/`), `frameworks` (Gymnasium, rustworkx, TorchRL and PyTorch
-Geometric: the external implementations the suite pins its own against), and
+`docs/nb/`), `frameworks` (Gymnasium, TorchRL and PyTorch Geometric: the external
+implementations the suite pins its own against in-process, until #977), and
 `track` (Aim, the run store). `--all-extras` installs all six; sync a single
 one with `uv sync --locked --extra test`. `notebooks` carries Jupyter
 Notebook itself, so a notebook opens where it is edited:

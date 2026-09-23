@@ -105,5 +105,13 @@ FRAMEWORKS: Mapping[str, Framework] = {
             source="https://github.com/blackjax-devs/blackjax",
             ticket=963,
         ),
+        Framework(
+            name="rustworkx",
+            distribution="rustworkx",
+            module="rustworkx",
+            licence="Apache-2.0",
+            source="https://github.com/Qiskit/rustworkx",
+            ticket=976,
+        ),
     )
 }

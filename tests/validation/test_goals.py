@@ -22,6 +22,7 @@ from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.opt.hmm import baum_welch
 from snakes_and_ladders.opt.mixture import expectation_maximization
 from snakes_and_ladders.sample import hmc
+from snakes_and_ladders.sample.potts_mcmc import _bond_probability
 from snakes_and_ladders.search.alpha_expansion import alpha_expansion
 from snakes_and_ladders.search.ground_state import lattice_rung
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
@@ -63,6 +64,20 @@ PYMAXFLOW_CUT_MEMORY = {
         "2026-09-23, 4-core reference host, #987",
     )
     for side, peak_bytes in ((142, 4_874_240), (284, 20_439_040))
+}
+
+
+#: rustworkx's graph build and `connected_components` on one Swendsen--Wang
+#: bond mask at beta = 1, the medians of three subprocess runs (#976). Its
+#: peak memory is above the union-find's at every size and sets no goal.
+RUSTWORKX_COMPONENTS = {
+    side: Goal(
+        "rustworkx",
+        f"the union-find labelling of one bond mask, {side}x{side}",
+        seconds,
+        "2026-09-23, 4-core reference host, #976",
+    )
+    for side, seconds in ((142, 11.176e-3), (284, 46.366e-3))
 }
 
 
@@ -361,3 +376,23 @@ def test_hmc_fits_blackjaxs_memory(dimension: int) -> None:
     }
     peaks = [package("hmc_sample", inputs).peak_bytes or 0 for _ in range(3)]
     assert_fits(int(np.median(peaks)), BLACKJAX_HMC_MEMORY[dimension])
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("side", sorted(RUSTWORKX_COMPONENTS))
+def test_the_union_find_meets_rustworkxs_runtime(side: int) -> None:
+    # Timed in a fresh interpreter by `scripts/package.py`, as the pair was.
+    graph = lattice_graph((side, side), BoundaryCondition.OPEN, critical_coupling(3))
+    rng = np.random.default_rng(976)
+    state = rng.integers(0, 3, graph.n_nodes)
+    first, second = graph.edge_index[:, 0], graph.edge_index[:, 1]
+    like = state[first] == state[second]
+    active = like & (rng.random(len(graph.edges)) < _bond_probability(graph, 1.0))
+    bonds = graph.edge_index[active]
+    inputs = {
+        "n_nodes": np.asarray(graph.n_nodes),
+        "first": np.ascontiguousarray(bonds[:, 0]),
+        "second": np.ascontiguousarray(bonds[:, 1]),
+    }
+    seconds = [package("cluster_labels", inputs).seconds for _ in range(3)]
+    assert_meets(float(np.median(seconds)), RUSTWORKX_COMPONENTS[side])

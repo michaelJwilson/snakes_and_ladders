@@ -12,7 +12,8 @@ ends ``first`` and ``second`` (with ``weight`` where the query reads one):
   ``first``, ``second``, ``weight`` in edge-index order and ``degree``.
 - ``"components"``: ``connected_components`` of the unweighted graph; outputs
   ``labels``, the smallest node of each node's component. The measured
-  seconds are the call alone and ``build_seconds`` the graph's construction.
+  seconds are the call alone and ``build_seconds`` the graph's construction;
+  ``peak_bytes`` is the build and the call together.
 - ``"isomorphic"``: ``is_isomorphic`` on node-labelled graphs, ``node_label``
   per node (``-1`` matches only ``-1``) and ``node_offset`` / ``edge_offset``
   splitting the concatenated graphs, for each row of ``pairs``; outputs
@@ -25,13 +26,15 @@ from typing import Any
 
 import numpy as np
 
-from snakes_and_ladders.validation.protocol import dump, load, paths, timed
+from snakes_and_ladders.validation.protocol import dump, load, paths, peaked, timed
 
 
 def _graph(rustworkx: Any, n_nodes: int, first: np.ndarray, second: np.ndarray) -> Any:
     graph = rustworkx.PyGraph(multigraph=True)
     graph.add_nodes_from(range(n_nodes))
-    graph.add_edges_from_no_data(list(zip(first.tolist(), second.tolist(), strict=True)))
+    graph.add_edges_from_no_data(
+        list(zip(first.tolist(), second.tolist(), strict=True))
+    )
     return graph
 
 
@@ -83,16 +86,22 @@ def main() -> None:
         )
     elif mode == "components":
         n_nodes = int(inputs["n_nodes"])
-        graph, build_seconds = timed(
-            lambda: _graph(rustworkx, n_nodes, inputs["first"], inputs["second"])
-        )
-        components, seconds = timed(lambda: rustworkx.connected_components(graph))
+
+        def build_and_label() -> tuple[Any, float, float]:
+            graph, build_seconds = timed(
+                lambda: _graph(rustworkx, n_nodes, inputs["first"], inputs["second"])
+            )
+            found, seconds = timed(lambda: rustworkx.connected_components(graph))
+            return found, seconds, build_seconds
+
+        (components, seconds, build_seconds), peak_bytes = peaked(build_and_label)
         labels = np.empty(n_nodes, dtype=np.int64)
         for component in components:
             members = np.fromiter(component, dtype=np.int64)
             labels[members] = members.min()
         outputs["labels"] = labels
         outputs["build_seconds"] = np.asarray(build_seconds)
+        outputs["peak_bytes"] = np.asarray(peak_bytes)
     elif mode == "isomorphic":
         node_offset, edge_offset = inputs["node_offset"], inputs["edge_offset"]
         labels, first, second = inputs["node_label"], inputs["first"], inputs["second"]

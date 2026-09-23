@@ -44,6 +44,8 @@ class Components:
     seconds: float
     #: Wall seconds building the ``PyGraph``.
     build_seconds: float
+    #: Peak resident bytes the build and the call added.
+    peak_bytes: int
 
 
 def _ends(outputs: dict[str, np.ndarray]) -> np.ndarray:
@@ -110,6 +112,7 @@ def components(n_nodes: int, edges: np.ndarray) -> Components:
         result.outputs["labels"],
         result.seconds,
         float(result.outputs["build_seconds"]),
+        int(result.outputs["peak_bytes"]),
     )
 
 
