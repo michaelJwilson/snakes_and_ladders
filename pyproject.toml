@@ -277,10 +277,13 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 # JAX types its arrays but leaves `config.update` and `block_until_ready`
-# untyped, so --strict rejects a correct call where JAX is installed. Narrowed
-# to the one script that imports it (issue #963).
+# untyped, so --strict rejects a correct call where JAX is installed; where it
+# is absent its decorators are `Any`. Narrowed to the one script that imports
+# it (issue #963).
 module = "snakes_and_ladders.validation.scripts.blackjax"
 disallow_untyped_calls = false
+# Where JAX is absent, as in the `lint` job, `jax.jit` is `Any`.
+disallow_untyped_decorators = false
 
 [[tool.mypy.overrides]]
 # `aim` is the optional store behind `snakes_and_ladders.track.Run` (issue
