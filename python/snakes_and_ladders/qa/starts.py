@@ -299,3 +299,119 @@ def starts_latex(result: SolverComparison) -> tuple[str, str]:
     )
     check_latex_safe(caption)
     return "\n".join(lines) + "\n", caption
+
+
+#: The five columns of :func:`gap_table`, the order issue #898 set for the
+#: emission mixture's table, with the gap's unit left to the caller.
+GAP_COLUMNS = (
+    "initializer",
+    "init. gap",
+    "init time [s]",
+    "final gap",
+    "final time [s]",
+)
+
+
+def _spread(values: list[float], plus_minus: str) -> str:
+    """The mean to two decimals, and over more than one trial the sample standard deviation beside it."""
+    mean = f"{np.mean(values):.2f}"
+    if len(values) == 1:
+        return mean
+    return f"{mean} {plus_minus} {np.std(values, ddof=1):.2f}"
+
+
+def _gap_cells(result: SolverComparison, plus_minus: str) -> list[list[str]]:
+    """Per start, the five cells of :func:`gap_table`."""
+    rows = []
+    for name in result.names:
+        trials = result.trials(name)
+        references = [
+            float(result.comparison.reference[index // len(result.seeds)])
+            for index in range(len(trials))
+        ]
+        rows.append(
+            [
+                f"\\texttt{{{latex_escape(name)}}}",
+                _spread(
+                    [
+                        one.seeded_value - ref
+                        for one, ref in zip(trials, references, strict=True)
+                    ],
+                    plus_minus,
+                ),
+                _spread([one.seconds[one.handover] for one in trials], plus_minus),
+                _spread(
+                    [
+                        one.value - ref
+                        for one, ref in zip(trials, references, strict=True)
+                    ],
+                    plus_minus,
+                ),
+                _spread([one.seconds[-1] for one in trials], plus_minus),
+            ]
+        )
+    return rows
+
+
+def gap_table(result: SolverComparison, *, unit: str) -> tuple[str, str, str]:
+    """The five-column table of a benchmark of starts: the gap and the seconds at the handover and at the end.
+
+    The columns are :data:`GAP_COLUMNS`, the gap in ``unit`` above the
+    reference the benchmark was read against, each cell the mean over the
+    trials with the sample standard deviation beside it where there is more
+    than one. Returned as the ``tabular`` a document inputs, its caption,
+    and the same cells as the ``array`` MathJax sets in a notebook, where
+    ``booktabs`` rules and ``$\\pm$`` are not available.
+
+    Returns
+    -------
+    tuple[str, str, str]
+        The ``tabular``, a caption
+        :func:`~snakes_and_ladders.qa.figure.check_latex_safe` passes, and
+        the ``array``.
+    """
+    header = [
+        f"{column} [{unit}]" if "gap" in column else column for column in GAP_COLUMNS
+    ]
+    tabular = "\n".join(
+        [
+            r"\begin{tabular}{lrrrr}",
+            r"  \toprule",
+            "  " + " & ".join(header) + r" \\",
+            r"  \midrule",
+            *(
+                "  " + " & ".join(cells) + r" \\"
+                for cells in _gap_cells(result, r"$\pm$")
+            ),
+            r"  \bottomrule",
+            r"\end{tabular}",
+        ]
+    )
+    array = "\n".join(
+        [
+            r"\begin{array}{lrrrr}",
+            r"  \hline",
+            "  " + " & ".join(rf"\text{{{name}}}" for name in header) + r" \\",
+            r"  \hline",
+            *(
+                "  " + " & ".join(cells) + r" \\"
+                for cells in _gap_cells(result, r"\pm")
+            ),
+            r"  \hline",
+            r"\end{array}",
+        ]
+    )
+    trials = max(len(result.trials(name)) for name in result.names)
+    caption = (
+        f"Per initializer, the gap in {unit} above the reference and the wall "
+        f"seconds, at the handover to the polish and where the polish ended, "
+        f"over {trials} trial(s); "
+        + (
+            "mean and sample standard deviation. "
+            if trials > 1
+            else "one trial, no spread. "
+        )
+        + "Seconds are the host's and are not reproduced by a rerun."
+    )
+    check_latex_safe(caption)
+    return tabular, caption, array
