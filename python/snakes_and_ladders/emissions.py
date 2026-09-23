@@ -146,6 +146,17 @@ class Reestimate(Generic[FamilyT_co]):
     residual: float = 0.0
 
 
+class ParameterDomainError(ValueError):
+    """A family was given a parameter outside its domain: a scale, a rate or a shape not positive.
+
+    A ``ValueError``, so every caller that refused one before still does. It
+    has its own type because one caller reads it as information rather than
+    a mistake: a Hamiltonian trajectory that drives a parameter out of its
+    domain has diverged, and :mod:`snakes_and_ladders.sample.hmc` rejects that
+    proposal rather than stopping the chain (#912).
+    """
+
+
 class CovariateNotSupportedError(TypeError):
     """A family was given a per-observation covariate it cannot condition on.
 
@@ -694,7 +705,7 @@ class GaussianEmission(EmissionFamily):
             raise ValueError(msg)
         if bool((self._scale <= 0.0).any()):
             msg = f"every scale must be positive, got {self._scale.tolist()}"
-            raise ValueError(msg)
+            raise ParameterDomainError(msg)
         if variance_floor <= 0.0:
             msg = f"variance_floor must be positive, got {variance_floor}"
             raise ValueError(msg)
@@ -995,7 +1006,7 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
         ):
             if bool((values <= 0.0).any()):
                 msg = f"every {name} must be positive, got {values.tolist()}"
-                raise ValueError(msg)
+                raise ParameterDomainError(msg)
 
     @classmethod
     def from_probability(
@@ -1271,7 +1282,7 @@ class PoissonEmission(EmissionFamily, CountEmissionFamily):
         self._mean = torch.as_tensor(mean, dtype=torch.float64).reshape(-1)
         if bool((self._mean <= 0.0).any()):
             msg = f"every mean must be positive, got {self._mean.tolist()}"
-            raise ValueError(msg)
+            raise ParameterDomainError(msg)
 
     @property
     def n_states(self) -> int:
@@ -1595,7 +1606,7 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
         for name, values in (("alpha", self._alpha), ("beta", self._beta)):
             if bool((values <= 0.0).any()):
                 msg = f"every {name} must be positive, got {values.tolist()}"
-                raise ValueError(msg)
+                raise ParameterDomainError(msg)
 
     @property
     def n_states(self) -> int:
