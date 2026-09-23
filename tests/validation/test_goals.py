@@ -91,6 +91,48 @@ RUSTWORKX_COMPONENTS = {
 }
 
 
+#: rustworkx's cost of one Swendsen--Wang sweep's clusters at q = 3 on an
+#: open lattice at the critical coupling: building the `PyGraph` from that
+#: sweep's bonds and `connected_components` on it, the medians of three
+#: subprocess runs, and their peak added memory (#997). The package's figure
+#: is the whole sweep on the compiled pass, bonds and recolouring included.
+RUSTWORKX_SWEEP = {
+    side: Goal(
+        "rustworkx",
+        f"one Swendsen-Wang sweep's clusters, {side}x{side}, q = 3",
+        seconds,
+        "2026-09-23, 4-core reference host at a 1-minute load of 1.3, #997",
+    )
+    for side, seconds in ((142, 11.285e-3), (284, 42.542e-3))
+}
+
+RUSTWORKX_SWEEP_MEMORY = {
+    side: MemoryGoal(
+        "rustworkx",
+        f"one Swendsen-Wang sweep's clusters, {side}x{side}, q = 3",
+        peak_bytes,
+        "2026-09-23, 4-core reference host, #997",
+    )
+    for side, peak_bytes in ((142, 6_078_464), (284, 18_046_976))
+}
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("side", sorted(RUSTWORKX_SWEEP))
+def test_the_sweep_meets_rustworkxs_runtime(side: int) -> None:
+    inputs = {"side": np.asarray(side), "seed": np.asarray(976)}
+    seconds = [package("swendsen_wang", inputs).seconds for _ in range(5)]
+    assert_meets(float(np.median(seconds)), RUSTWORKX_SWEEP[side])
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("side", sorted(RUSTWORKX_SWEEP_MEMORY))
+def test_the_sweep_fits_rustworkxs_memory(side: int) -> None:
+    inputs = {"side": np.asarray(side), "seed": np.asarray(976)}
+    peaks = [package("swendsen_wang", inputs).peak_bytes or 0 for _ in range(3)]
+    assert_fits(int(np.median(peaks)), RUSTWORKX_SWEEP_MEMORY[side])
+
+
 #: JAX's per-point gradient under `jit` and its peak added memory over 100
 #: points, the medians of three subprocess runs (#991): the diagonal Gaussian
 #: at d = 10, 10^3 and 10^4, and the three-component mixture at n = 10^5.

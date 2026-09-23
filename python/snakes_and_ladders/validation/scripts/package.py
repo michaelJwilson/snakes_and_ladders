@@ -271,6 +271,35 @@ def _mala_sample(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     return call
 
 
+def _swendsen_wang(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
+    """One Swendsen--Wang sweep on the compiled pass, at q = 3 on an open lattice (#997).
+
+    rustworkx's figure for a sweep is its graph build and
+    ``connected_components`` over that sweep's bonds; this is the whole
+    sweep, the bond draw and the recolouring included.
+    """
+    from snakes_and_ladders.backend import Backend
+    from snakes_and_ladders.sample.potts_mcmc import swendsen_wang_sweep
+    from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+    from snakes_and_ladders.sim.potts import critical_coupling, site_field
+
+    side = int(inputs["side"])
+    graph = lattice_graph((side, side), BoundaryCondition.OPEN, critical_coupling(3))
+    rng = np.random.default_rng(int(inputs["seed"]))
+    state = rng.integers(0, 3, graph.n_nodes)
+    rows = site_field(np.zeros(3), graph.n_nodes)
+    # Outside the measured call: three sweeps toward equilibrium, which also
+    # pay any one-time set-up.
+    for _ in range(3):
+        swendsen_wang_sweep(state, graph, rows, rng, backend=Backend.RUST)
+
+    def call() -> Outputs:
+        swendsen_wang_sweep(state, graph, rows, rng, backend=Backend.RUST)
+        return {"state": state}
+
+    return call
+
+
 def _mixture_em(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     """Ten mixture EM iterations from the given start, as the scikit-learn pair runs (#975)."""
     import torch
@@ -422,6 +451,7 @@ CALLS: dict[str, Build] = {
     "hmc_sample": _hmc_sample,
     "mala_sample": _mala_sample,
     "cluster_labels": _cluster_labels,
+    "swendsen_wang": _swendsen_wang,
     "gradient": _gradient,
 }
 
