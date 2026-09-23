@@ -115,6 +115,7 @@ def test_the_curve_is_the_path_then_the_polish_in_the_order_it_was_sampled(
         "gaussian-em",
         "burn-in",
         "hmc",
+        "gibbs-anneal",
     }
 
 

@@ -56,6 +56,7 @@ from snakes_and_ladders.emissions import EmissionFamily
 from snakes_and_ladders.opt.budget import Budget, Outcome
 from snakes_and_ladders.opt.emission_mixture import (
     ComponentsAt,
+    anneal_assignments,
     expectation_maximization,
     plus_plus_start,
     uniform_start,
@@ -77,7 +78,7 @@ from snakes_and_ladders.opt.mixture import (
     expectation_maximization as gaussian_expectation_maximization,
 )
 from snakes_and_ladders.sample.initialize import FromAnnealing, FromChain, FromTempering
-from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
+from snakes_and_ladders.sample.schedule import ExponentialTempSchedule, ladder
 from snakes_and_ladders.search.projection import (
     ANNEAL_STEPS,
     CHAIN_BURN_IN,
@@ -521,9 +522,47 @@ def tempered_seeding(instance: MixtureInstance, rng: np.random.Generator) -> See
     )
 
 
+def gibbs_schedule() -> tuple[float, ...]:
+    """The temperatures :func:`annealed_gibbs_seeding` sweeps at: ``anneal``'s schedule, hottest rung to 1 over :data:`ANNEAL_STEPS`."""
+    return ladder(ExponentialTempSchedule(float(TEMPERATURES[-1]), 1.0, ANNEAL_STEPS))
+
+
+def annealed_gibbs_seeding(
+    instance: MixtureInstance, rng: np.random.Generator
+) -> Seeded:
+    """``anneal_assignments``: heat-bath sweeps over the assignments at a falling temperature, on the count-pair likelihood itself.
+
+    Starts at the data draw, sweeps once per temperature of
+    :func:`gibbs_schedule` --- the schedule ``anneal`` runs on the surrogate
+    --- re-estimating the components at each sweep's hard assignments, and
+    hands over the best state visited (issue #901). Each sweep scores every
+    pair once, and the start scores the data draw once, so it charges one
+    pass more than it sweeps; each sweep's components are an entry of the
+    path.
+
+    Returns
+    -------
+    Seeded
+    """
+    components = data_seeding(instance, rng).components
+    weights = torch.full(
+        (instance.n_components,), 1.0 / instance.n_components, dtype=torch.float64
+    )
+    run = anneal_assignments(
+        instance.observations, weights, components, gibbs_schedule(), rng
+    )
+    return Seeded(
+        run.components,
+        float(len(run.temperatures) + 1),
+        f"best at sweep {run.best_step} of {len(run.temperatures)}",
+        tuple(enumerate(run.path)),
+    )
+
+
 #: Every start, in the order the notebook takes them: the prior control, the
 #: three rules over the pairs, the Gaussian EM, the four of `opt.initialize`,
-#: the burn-in and the three of `sample.initialize`. Module-level, so a
+#: the burn-in and the three of `sample.initialize` with the annealed Gibbs
+#: start after `anneal`, the one schedule read two ways. Module-level, so a
 #: process pool can run each.
 STARTS: dict[str, Callable[[MixtureInstance, np.random.Generator], Seeded]] = {
     "prior": prior_seeding,
@@ -538,6 +577,7 @@ STARTS: dict[str, Callable[[MixtureInstance, np.random.Generator], Seeded]] = {
     "burn-in": burn_in_seeding,
     "hmc": chain_seeding,
     "anneal": annealed_seeding,
+    "gibbs-anneal": annealed_gibbs_seeding,
     "tempering": tempered_seeding,
 }
 
