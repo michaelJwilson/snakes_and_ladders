@@ -1278,7 +1278,25 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
                 residual=max(one.residual for one in batched),
             )
         # Under an exposure the rate differs per observation, so there is no
-        # histogram to take, and each state is solved over every observation.
+        # histogram to take for the log half. The compiled kernel sums the
+        # digamma half on the tails and the rest per observation (issue #933);
+        # the per-state torch solve below stays as its oracle.
+        if M_STEP_BACKEND is Backend.RUST:
+            try:
+                exposed = _solve_dispersion_exposed_rust(
+                    values, weights, [float(m) for m in mean], offsets
+                )
+            except _NoTails:
+                exposed = None
+            if exposed is not None:
+                for state, solved in enumerate(exposed):
+                    dispersion[state] = solved.value
+                return Reestimate(
+                    NegativeBinomialEmission(dispersion, mean),
+                    at_boundary=any(one.at_boundary for one in exposed),
+                    iterations=max(one.iterations for one in exposed),
+                    residual=max(one.residual for one in exposed),
+                )
         for state in range(self.n_states):
             # Formed once per state, outside the bisection: the solve is at
             # fixed `mu`, so `e * mu` does not move across its ~50 steps.
@@ -3435,6 +3453,88 @@ def _solve_dispersion_rust(
     residual = np.empty(n_states)
     oxi.negative_binomial_dispersions(
         _weight_tails(values, columns).reshape(-1),
+        columns.sum(dim=1).numpy().astype(np.float64),
+        np.asarray(means, dtype=np.float64),
+        np.asarray([u * _DISPERSION_BRACKET_RATIO for u in uppers]),
+        np.asarray(uppers, dtype=np.float64),
+        tolerance,
+        value,
+        at_boundary,
+        iterations,
+        residual,
+    )
+    return [
+        _SolvedDispersion(
+            float(value[k]),
+            at_boundary=bool(at_boundary[k]),
+            iterations=int(iterations[k]),
+            residual=float(residual[k]),
+        )
+        for k in range(n_states)
+    ]
+
+
+#: The widest tails, as a multiple of the observations, the exposed kernel
+#: takes before the oracle's per-observation digamma is cheaper (issue #933).
+EXPOSED_TAIL_RATIO = 8.0
+
+
+def _solve_dispersion_exposed_rust(
+    values: torch.Tensor,
+    weights: torch.Tensor,
+    means: Sequence[float],
+    offsets: torch.Tensor,
+    *,
+    tolerance: float = 1e-12,
+) -> list[_SolvedDispersion]:
+    """:func:`_solve_dispersion` under an exposure, every state in the compiled kernel (issue #933).
+
+    The digamma half by the reciprocal-sum identity on the tails, as
+    :func:`_solve_dispersion_rust`; the log half and the term a varying
+    exposure keeps per observation. Each state's bracket is the oracle's.
+
+    **The tails are as wide as the largest count, and past a width of**
+    :data:`EXPOSED_TAIL_RATIO` **times the observations they cost more than
+    the digamma calls they replace**, so the solve falls back to the oracle
+    there. Measured at four states, 2,000 observations and exposures in
+    [0.5, 2], best of three: 5.4-5.9x the torch solve at widths under one
+    observation, 2.2x at 8.3, 1.3x at 16.7, parity at 23.7 and 0.4x at 59.
+    The cap is where the kernel still clears the 2x root ``CLAUDE.md`` keeps
+    a compiled path for.
+
+    Returns
+    -------
+    list[_SolvedDispersion]
+
+    Raises
+    ------
+    _NoTails
+        Where a weighted count has no tails, as :func:`_weight_tails` says,
+        or they are wider than the cap.
+    """
+    from snakes_and_ladders import oxi_snakes_and_ladders as oxi
+
+    if values.numel() and float(values.max()) > EXPOSED_TAIL_RATIO * values.numel():
+        raise _NoTails
+    n_states = weights.shape[1]
+    columns = weights.T.contiguous().to(torch.float64)
+    exposures = offsets.to(torch.float64)
+    uppers = [
+        identifiable_dispersion_bound(
+            _effective_rate(exposures * float(means[k]), weights[:, k]),
+            float(weights[:, k].sum()),
+        )
+        for k in range(n_states)
+    ]
+    value = np.empty(n_states)
+    at_boundary = np.empty(n_states, dtype=np.uint8)
+    iterations = np.empty(n_states, dtype=np.uint32)
+    residual = np.empty(n_states)
+    oxi.negative_binomial_dispersions_exposed(
+        _weight_tails(values, columns).reshape(-1),
+        np.ascontiguousarray(columns.numpy()).reshape(-1),
+        np.ascontiguousarray(exposures.numpy()),
+        np.ascontiguousarray(values.to(torch.float64).numpy()),
         columns.sum(dim=1).numpy().astype(np.float64),
         np.asarray(means, dtype=np.float64),
         np.asarray([u * _DISPERSION_BRACKET_RATIO for u in uppers]),

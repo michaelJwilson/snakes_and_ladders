@@ -186,6 +186,21 @@ def negative_binomial_dispersions(
     iterations: np.ndarray,
     residual: np.ndarray,
 ) -> None: ...
+def negative_binomial_dispersions_exposed(
+    tails: np.ndarray,
+    weights: np.ndarray,
+    exposures: np.ndarray,
+    counts: np.ndarray,
+    total: np.ndarray,
+    mean: np.ndarray,
+    lower: np.ndarray,
+    upper: np.ndarray,
+    tolerance: float,
+    value: np.ndarray,
+    at_boundary: np.ndarray,
+    iterations: np.ndarray,
+    residual: np.ndarray,
+) -> None: ...
 def beta_binomial_parameters(
     success: np.ndarray,
     failure: np.ndarray,
