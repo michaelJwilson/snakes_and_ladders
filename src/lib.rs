@@ -16,6 +16,7 @@
 use pyo3::prelude::*;
 
 pub mod bcjr;
+pub mod bk;
 pub mod count_mstep;
 pub mod count_pairs;
 pub mod coupled;
