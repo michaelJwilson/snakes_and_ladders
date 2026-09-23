@@ -440,9 +440,15 @@ BLACKJAX_HMC_CHAIN_FREE_MEMORY = {
         "blackjax",
         f"1,000 HMC transitions of ten leapfrog steps at d = {dimension:,}, no draws kept",
         peak_bytes,
-        "2026-09-23, 4-core reference host, #997",
+        "2026-09-23, 4-core reference host, first call, compilation included, #997",
     )
-    for dimension, peak_bytes in ((100, 8_192), (1_000, 77_824), (10_000, 32_768))
+    # BlackJAX's first call: its compilation and the buffers XLA keeps
+    # after it are charged, as every allocation of ours is charged per call.
+    for dimension, peak_bytes in (
+        (100, 30_777_344),
+        (1_000, 30_580_736),
+        (10_000, 31_281_152),
+    )
 }
 
 

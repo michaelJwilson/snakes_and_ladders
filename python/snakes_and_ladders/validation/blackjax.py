@@ -49,6 +49,9 @@ class Chain:
     seconds: float
     #: Peak resident bytes the compiled chain added, compilation excluded.
     peak_bytes: int
+    #: Peak resident bytes of the first call: compilation, and the buffers
+    #: XLA allocates then and reuses after, included (issue #997).
+    first_peak_bytes: int = 0
 
 
 def coefficients(weights: tuple[float, ...]) -> np.ndarray:
@@ -128,4 +131,5 @@ def sample(
         float(out["acceptance"]),
         result.seconds,
         int(result.peak_bytes or 0),
+        int(out["first_peak_bytes"]),
     )

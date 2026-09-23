@@ -17,7 +17,9 @@ transition's acceptance, so no draw is stacked and ``draws`` is empty
 
 Each mode is compiled on one call first; the measured seconds are the second
 call, to ``block_until_ready``, so compilation is not charged. It is reported
-as ``compile_seconds``. The peak resident memory is the second call's too.
+as ``compile_seconds``. The peak resident memory is the second call's too;
+``first_peak_bytes`` is the first call's, compilation and the buffers XLA
+keeps for later calls included (issue #997).
 """
 
 from __future__ import annotations
@@ -96,7 +98,7 @@ def main() -> None:
         arguments = (jnp.asarray(inputs["position"]), keys)
 
     start = time.perf_counter()
-    jax.block_until_ready(run(*arguments))
+    _, first_peak_bytes = peaked(lambda: jax.block_until_ready(run(*arguments)))
     compile_seconds = time.perf_counter() - start
 
     def timed_run() -> tuple[Any, float]:
@@ -118,6 +120,7 @@ def main() -> None:
             "acceptance": np.asarray(np.mean(np.asarray(acceptance))),
         }
     outputs["compile_seconds"] = np.asarray(compile_seconds - seconds)
+    outputs["first_peak_bytes"] = np.asarray(first_peak_bytes)
     dump(returned, outputs, seconds, peak_bytes)
 
 
