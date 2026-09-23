@@ -9,7 +9,7 @@ momentum and position updates, palindromic), built by
 ``generate_euclidean_integrator``. Outputs ``position`` and ``momentum``.
 
 ``mode`` 1 samples: ``blackjax.hmc`` from ``position`` with ``step_size`` and
-``n_steps`` leapfrog steps, ``n_draws`` transitions keyed from ``seed``.
+``n_steps`` leapfrog steps, ``n_draws`` transitions keyed from ``key``.
 Outputs ``draws`` and ``acceptance``, the mean acceptance probability.
 
 Each mode is compiled on one call first; the measured seconds are the second
@@ -75,7 +75,7 @@ def main() -> None:
             num_integration_steps=n_steps,
         )
         keys = jax.random.split(
-            jax.random.key(int(inputs["seed"])), int(inputs["n_draws"])
+            jax.random.key(int(inputs["key"])), int(inputs["n_draws"])
         )
 
         @jax.jit

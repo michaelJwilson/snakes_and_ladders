@@ -42,7 +42,7 @@ DIMENSION, SEED = 10, 963
 @pytest.mark.oracle
 @pytest.mark.parametrize("integrator", [hmc.leapfrog, hmc.yoshida], ids=str)
 def test_the_integrator_is_blackjaxs_step_for_step(integrator: hmc.Integrator) -> None:
-    precision = dense_precision(DIMENSION, SEED)
+    precision = dense_precision(DIMENSION, np.random.default_rng(SEED))
     rng = np.random.default_rng(SEED)
     position, momentum = rng.normal(size=DIMENSION), rng.normal(size=DIMENSION)
     ours = integrator(
@@ -62,7 +62,7 @@ def test_the_integrator_is_blackjaxs_step_for_step(integrator: hmc.Integrator) -
 
 @pytest.mark.experiment
 def test_both_chains_centre_on_the_mean_and_accept_alike() -> None:
-    precision = dense_precision(DIMENSION, SEED)
+    precision = dense_precision(DIMENSION, np.random.default_rng(SEED))
     variance = np.diag(np.linalg.inv(precision))
     ours = hmc.sample(
         GaussianTarget(precision),
