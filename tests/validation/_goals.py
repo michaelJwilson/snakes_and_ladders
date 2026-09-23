@@ -1,28 +1,46 @@
-"""Runtime goals: the package against an external framework's time, one run (issue #972).
+"""Runtime goals: the package against an external framework's measured time (issue #972).
 
-A goal test times the package's call with :func:`median_seconds` and the
-framework's with its adapter, which reports the seconds its script measured
-around the framework's own call, each the median of :data:`REPEATS` runs on
-one host in one session. :func:`assert_meets` fails when the package's median
-exceeds the framework's times :data:`GOAL_RATIO`, and says by how much.
+A :class:`Goal` is an external framework's runtime on a declared fixture,
+measured once on the 4-core reference host and written here as a number, so
+a goal test needs the package alone: it times the package's call with
+:func:`median_seconds` and :func:`assert_meets` fails when the median exceeds
+the goal times :data:`GOAL_RATIO`, saying by how much. The framework is not
+installed to run it; it is installed to re-measure the number, by the
+benchmark pair in `tests/benchmarks/`, and the row records when and where it
+was measured.
 
-The goal is the framework's runtime and nothing looser: a ratio of one. A
-goal test carries the `goal` marker and runs in a step of CI's `validation`
-job that reports and does not block, since a goal fails until it is met.
+A goal test carries the `goal` marker and runs in a step of CI's
+`validation` job that reports and does not block, since a goal fails until it
+is met. Measured on a different host, the ratio moves with the hardware.
 """
 
 from __future__ import annotations
 
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
+from dataclasses import dataclass
 
 import numpy as np
 
-#: Runs whose median each side's figure is.
+#: Runs whose median the package's figure is.
 REPEATS = 5
 
-#: The package's median over the framework's, at most.
+#: The package's median over the framework's runtime, at most.
 GOAL_RATIO = 1.0
+
+
+@dataclass(frozen=True)
+class Goal:
+    """One external framework's runtime on one declared fixture."""
+
+    #: The framework, as `snakes_and_ladders.validation.FRAMEWORKS` names it.
+    framework: str
+    #: The fixture and the call timed, in words a reader can rebuild.
+    what: str
+    #: The framework's runtime, in seconds.
+    seconds: float
+    #: When, where and by which ticket it was measured.
+    measured: str
 
 
 def median_seconds(call: Callable[[], object], repeats: int = REPEATS) -> float:
@@ -35,10 +53,11 @@ def median_seconds(call: Callable[[], object], repeats: int = REPEATS) -> float:
     return float(np.median(seconds))
 
 
-def assert_meets(ours: float, theirs: Sequence[float], what: str) -> None:
-    """Fail when ``ours`` exceeds the median of ``theirs`` times the goal ratio."""
-    goal = float(np.median(theirs)) * GOAL_RATIO
-    assert ours <= goal, (
-        f"{what}: the package takes {ours * 1e3:.2f} ms against the goal of "
-        f"{goal * 1e3:.2f} ms, {ours / goal:.2f}x the external framework"
+def assert_meets(ours: float, goal: Goal) -> None:
+    """Fail when ``ours`` exceeds the goal's runtime times the goal ratio."""
+    limit = goal.seconds * GOAL_RATIO
+    assert ours <= limit, (
+        f"{goal.what}: the package takes {ours * 1e3:.2f} ms against "
+        f"{goal.framework}'s {limit * 1e3:.2f} ms ({goal.measured}), "
+        f"{ours / limit:.2f}x"
     )

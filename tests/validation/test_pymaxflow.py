@@ -11,24 +11,20 @@ PyMaxflow wraps Kolmogorov's own Boykov--Kolmogorov code and shares none with
   against the Python Dinic and the Rust kernel;
 - a control: every capacity doubled doubles PyMaxflow's value exactly, and
   the back arcs dropped lowers it to the Rust kernel's value on the same
-  network, so the adapter reads both capacities it is handed;
-- the goal: the Rust kernel meets PyMaxflow's build and cut at 142² and 284²
-  (`goal`, failing until it does).
+  network, so the adapter reads both capacities it is handed.
+
+The runtime goal PyMaxflow sets is in `test_goals.py`.
 """
 
 from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders import oxi_snakes_and_ladders
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.search import maxflow, maxflow_rust
 from snakes_and_ladders.search.ground_state import lattice_rung
-from snakes_and_ladders.sim.potts import site_field
 from snakes_and_ladders.validation import pymaxflow
 from snakes_and_ladders.validation.runner import available
-
-from tests.validation._goals import REPEATS, assert_meets, median_seconds
 
 pytestmark = [
     pytest.mark.validation,
@@ -114,30 +110,3 @@ def test_the_adapter_reads_the_capacities_it_is_given() -> None:
         maxflow_rust.min_cut(one_way, 0, 1).value, rel=FLOW_RTOL
     )
     assert theirs < before
-
-
-@pytest.mark.goal
-@pytest.mark.experiment
-@pytest.mark.parametrize("side", [142, 284])
-def test_the_rust_cut_meets_pymaxflows_runtime(side: int) -> None:
-    # The goal: the Rust kernel, arrays prebuilt, against PyMaxflow's graph
-    # build and cut on the same capacities. 1.30x and 1.40x off on
-    # 2026-09-23 (#973), so this fails until the kernel closes that.
-    rung = lattice_rung(side, 2, seed=973)
-    field = np.ascontiguousarray(
-        site_field(rung.field, rung.graph.n_nodes, n_states=2), dtype=np.float64
-    ).reshape(-1)
-    edges = rung.graph.edge_index.reshape(-1)
-    coupling = rung.graph.edge_coupling
-    theirs = [
-        cut.seconds + cut.build_seconds
-        for _, cut in (
-            pymaxflow.ising_ground_state(rung.graph, rung.field) for _ in range(REPEATS)
-        )
-    ]
-    ours = median_seconds(
-        lambda: oxi_snakes_and_ladders.ising_ground_state(
-            rung.graph.n_nodes, field, edges, coupling
-        )
-    )
-    assert_meets(ours, theirs, f"the Rust cut at {side}x{side}")
