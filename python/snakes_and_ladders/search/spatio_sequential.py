@@ -55,15 +55,14 @@ from snakes_and_ladders.likelihood.spatio_sequential import (
 )
 from snakes_and_ladders.opt.mixture import emission_mixture_plus_plus
 from snakes_and_ladders.opt.termination import Termination
-from snakes_and_ladders.sample.accept import accept
+from snakes_and_ladders.sample.potts_mcmc import adjacency_lists, wolff_sweep
 from snakes_and_ladders.sample.schedule import TempSchedule
 from snakes_and_ladders.search.alpha_expansion import (
     SweepOrder,
     alpha_expansion,
     iterated_conditional_modes,
 )
-from snakes_and_ladders.sim.graph import PottsGraph
-from snakes_and_ladders.sim.potts import energy
+from snakes_and_ladders.sim.potts import SiteField, energy
 from snakes_and_ladders.sim.spatio_sequential import SpatioSequentialParams
 from snakes_and_ladders.track import current as current_tracked
 
@@ -178,47 +177,6 @@ def m_step(
     )
 
 
-def _wolff_update(
-    labels: np.ndarray,
-    graph: PottsGraph,
-    field: np.ndarray,
-    beta: float,
-    rng: np.random.Generator,
-) -> None:
-    """One cluster grown on ``1 - exp(-beta J)`` and recoloured on the field alone (the textbook's Wolff-in-a-field algorithm).
-
-    ``field`` is ``-H`` per node and class, so the accept step is Metropolis
-    on ``beta * sum_C (H[n, new] - H[n, old])``.
-    """
-    n_nodes = labels.shape[0]
-    offsets, neighbour_index, edge_couplings = graph.compressed_adjacency()
-    bounds = offsets.tolist()
-    neighbours, couplings = neighbour_index.tolist(), edge_couplings.tolist()
-    root = int(rng.integers(n_nodes))
-    colour = int(labels[root])
-    members = [root]
-    inside = np.zeros(n_nodes, dtype=bool)
-    inside[root] = True
-    frontier = [root]
-    while frontier:
-        node = frontier.pop()
-        for position in range(bounds[node], bounds[node + 1]):
-            neighbour, coupling = neighbours[position], couplings[position]
-            if inside[neighbour] or labels[neighbour] != colour:
-                continue
-            if rng.random() < 1.0 - np.exp(-beta * coupling):
-                inside[neighbour] = True
-                members.append(neighbour)
-                frontier.append(neighbour)
-    proposed = int(rng.integers(field.shape[1]))
-    if proposed == colour:
-        return
-    cluster = np.array(members, dtype=np.int64)
-    difference = beta * float((field[cluster, proposed] - field[cluster, colour]).sum())
-    if accept(difference, rng):
-        labels[cluster] = proposed
-
-
 def label_step(
     params: SpatioSequentialParams,
     observations: np.ndarray,
@@ -267,11 +225,22 @@ def label_step(
         raise ValueError(msg)
     best_labels = labels.copy()
     best_value = energy(graph, potential, labels)
+    # The field declared as the energy it is: the move reads -H (#921).
+    declared = SiteField.from_energy(field)
+    offsets, neighbours, couplings = params.graph.compressed_adjacency()
+    lists = adjacency_lists(offsets, neighbours, couplings)
     for step in range(wolff_schedule.n_steps):
         temperature = wolff_schedule(step)
         for _ in range(wolff_moves_per_step):
-            _wolff_update(
-                labels, params.graph, potential, params.beta / temperature, rng
+            wolff_sweep(
+                labels,
+                declared,
+                offsets,
+                neighbours,
+                couplings,
+                rng,
+                beta=params.beta / temperature,
+                lists=lists,
             )
         value = energy(graph, potential, labels)
         if value < best_value:
@@ -493,10 +462,22 @@ def graph_burn_in(
     labels = rng.integers(0, params.n_classes, size=params.graph.n_nodes)
     field = external_field(params, observations, labels)
     values = [labelled_log_likelihood(params, observations, labels)]
+    offsets, neighbours, couplings = params.graph.compressed_adjacency()
+    lists = adjacency_lists(offsets, neighbours, couplings)
     for step in range(schedule.n_steps):
         beta = params.beta / schedule(step)
+        declared = SiteField.from_energy(field)
         for _ in range(wolff_moves_per_step):
-            _wolff_update(labels, params.graph, -field, beta, rng)
+            wolff_sweep(
+                labels,
+                declared,
+                offsets,
+                neighbours,
+                couplings,
+                rng,
+                beta=beta,
+                lists=lists,
+            )
         density = class_log_density(params, observations, labels)
         for m in range(
             params.n_classes

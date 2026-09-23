@@ -48,7 +48,7 @@ from snakes_and_ladders.search.maxflow import (
 )
 from snakes_and_ladders.search.maxflow_rust import min_cut
 from snakes_and_ladders.sim.graph import PottsGraph
-from snakes_and_ladders.sim.potts import energy, site_field
+from snakes_and_ladders.sim.potts import SiteField, energy, log_weight_of, site_field
 
 # The bound is `2 * c_max / c_min` for a metric pairwise term; with a uniform
 # coupling the ratio is 1 and the factor is exactly 2.
@@ -491,7 +491,7 @@ EXPANSION = _Move(
 
 def alpha_expansion(
     graph: PottsGraph,
-    field_values: np.ndarray,
+    field_values: SiteField | np.ndarray,
     n_states: int,
     *,
     start: np.ndarray | None = None,
@@ -511,7 +511,7 @@ def alpha_expansion(
     graph : PottsGraph
         Every coupling must be non-negative --- the metric condition the
         bound rests on.
-    field_values : np.ndarray
+    field_values : SiteField | np.ndarray
         ``(n_states,)`` or ``(n_nodes, n_states)``.
     n_states : int
         Label count.
@@ -531,6 +531,7 @@ def alpha_expansion(
     ValueError
         If a coupling is negative, or the cap is reached.
     """
+    field_values = log_weight_of(field_values)
     return _cycle_to_a_local_minimum(
         graph,
         field_values,
@@ -560,7 +561,7 @@ class SweepOrder(StrEnum):
 
 def iterated_conditional_modes(
     graph: PottsGraph,
-    field_values: np.ndarray,
+    field_values: SiteField | np.ndarray,
     n_states: int,
     rng: np.random.Generator,
     *,
@@ -606,7 +607,7 @@ def iterated_conditional_modes(
     ----------
     graph : PottsGraph
         The lattice, read through its compressed adjacency.
-    field_values : np.ndarray
+    field_values : SiteField | np.ndarray
         External field, ``(n_states,)`` or ``(n_nodes, n_states)``.
     n_states : int
         Labels available at each site.
@@ -642,6 +643,7 @@ def iterated_conditional_modes(
         If ``backend`` names no sweep, or names the compiled one for a
         descent it does not implement.
     """
+    field_values = log_weight_of(field_values)
     values = site_field(np.asarray(field_values, dtype=float), graph.n_nodes)
     labelling = (
         rng.integers(0, n_states, size=graph.n_nodes)

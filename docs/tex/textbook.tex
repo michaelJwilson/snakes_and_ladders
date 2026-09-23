@@ -4514,7 +4514,13 @@ probability on the field energy alone,
   \label{eq:cluster-accept}
 \end{equation}
 for a cluster $\mathcal{C}$ recoloured from $\mu$ to $\nu$, which restores
-detailed balance (Appendix~\ref{app:detailed-balance}).
+detailed balance (Appendix~\ref{app:detailed-balance}). \textbf{Two sign
+conventions.} Here, as in Equation~\ref{eq:potts}, $h$ is a log-weight: the
+energy is $-\sum_i h_i - J\sum[\text{agree}]$. A field defined as an energy
+the labels minimize, as the coupled model's $H$ of
+Equation~\ref{eq:external-field} is, enters every sampler and solver here as
+$h = -H$, and the convention a field is in is declared where the field is
+built, so the negation is made once.
 Algorithm~\ref{alg:cluster-move} is the construction and
 Algorithm~\ref{alg:parallel-tempering} the replica exchange of
 Section~\ref{sec:tempering} over it.
@@ -4721,7 +4727,8 @@ per-node, per-class external field,
       \log p(x_{sn} \mid k_{s,m}, \theta),
   \label{eq:external-field}
 \end{equation}
-and the label update is the ground state of a Potts model in that field,
+an energy, which the samplers take negated
+(Section~\ref{sec:potts-sampling}); and the label update is the ground state of a Potts model in that field,
 \begin{equation}
   \ell^\star = \arg\min_{\ell}\ \beta \Big[
       \sum_{\langle n,n' \rangle} J_{nn'}\,\indicator[\ell_n \ne \ell_{n'}]
@@ -4742,11 +4749,10 @@ iterated conditional modes freezes into spurious disjoint clusters, and
 single-site annealing slows critically for the same reason. The Wolff move of
 Section~\ref{sec:potts-sampling} recolours a whole cluster at once, and
 Algorithm~\ref{alg:wolff-field} is that move with the field of
-Equation~\ref{eq:external-field} in its accept step. Its $H_{nm}$ is that
-equation's field, an energy the labels minimize, so the step accepts on
-$e^{-\beta \Delta H}$; the samplers of Section~\ref{sec:potts-sampling} take
-a log-weight $h$ and accept on Equation~\ref{eq:cluster-accept}, so they are
-handed $h = -H$, and the two acceptances are one. At $\beta \to 0$ no bond
+Equation~\ref{eq:external-field} in its accept step. That $H_{nm}$ is an
+energy, so it enters the move as $h = -H$ under the conventions of
+Section~\ref{sec:potts-sampling}, and the step's $e^{-\beta \Delta H}$ is
+Equation~\ref{eq:cluster-accept}. At $\beta \to 0$ no bond
 forms, so the cluster is the root alone and the move is a single-site
 Metropolis update with a uniform proposal, not a heat-bath draw; the two
 coincide only at $\beta = 0$, where both relabel uniformly. At finite $\beta$

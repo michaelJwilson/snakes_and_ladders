@@ -23,7 +23,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.search.spatio_sequential import _wolff_update
+from snakes_and_ladders.sample.potts_mcmc import wolff_sweep
 from snakes_and_ladders.sim.factor_graph import Factor, FactorGraph, Variable
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 from snakes_and_ladders.sim.ldpc import gallager_code
@@ -52,7 +52,14 @@ def test_wolff_cluster_move_benchmark(benchmark: BenchmarkFixture, extent: int) 
     labels = rng.integers(0, 3, size=graph.n_nodes)
     field = rng.normal(size=(graph.n_nodes, 3))
 
-    benchmark(lambda: _wolff_update(labels, graph, field, 0.2, rng))
+    # The coupled model's move since #921: `wolff_sweep`, reading the
+    # adjacency the graph caches and the field as a log-weight.
+    offsets, neighbours, couplings = graph.compressed_adjacency()
+    benchmark(
+        lambda: wolff_sweep(
+            labels, field, offsets, neighbours, couplings, rng, beta=0.2
+        )
+    )
 
     assert set(np.unique(labels)) <= {0, 1, 2}
 

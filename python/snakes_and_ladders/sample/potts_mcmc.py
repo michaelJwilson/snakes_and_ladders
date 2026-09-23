@@ -90,9 +90,11 @@ from snakes_and_ladders.sample.schedule import (
 )
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import (
+    SiteField,
     energies,
     heat_bath_log_weights,
     local_fields,
+    log_weight_of,
     owner_rows,
     site_field,
 )
@@ -381,7 +383,7 @@ def tempered(graph: PottsGraph, field: np.ndarray, temperature: float) -> Temper
 
 def sample_potts(
     graph: PottsGraph,
-    field: np.ndarray,
+    field: SiteField | np.ndarray,
     move: PottsMove,
     rng: np.random.Generator,
     n_sweeps: int,
@@ -398,7 +400,7 @@ def sample_potts(
     ----------
     graph : PottsGraph
         The lattice. Couplings may vary per edge.
-    field : np.ndarray
+    field : SiteField | np.ndarray
         External field ``h``, shape ``(n_states,)``.
     move : PottsMove
         The move set. All six leave the same Boltzmann distribution
@@ -454,6 +456,7 @@ def sample_potts(
         bond probability ``1 - exp(-J)`` is not a probability there, and an
         antiferromagnet has no like-spin clusters to flip.
     """
+    field = log_weight_of(field)
     refuse_negative_coupling(move, graph)
 
     model = tempered(graph, field, temperature)
@@ -524,7 +527,7 @@ class AnnealedPotts:
 
 def anneal_potts(
     graph: PottsGraph,
-    field: np.ndarray,
+    field: SiteField | np.ndarray,
     schedule: TempSchedule,
     rng: np.random.Generator,
     *,
@@ -559,7 +562,7 @@ def anneal_potts(
     ----------
     graph : PottsGraph
         The instance. Couplings of either sign.
-    field : np.ndarray
+    field : SiteField | np.ndarray
         External field, shape ``(n_states,)``.
     schedule : TempSchedule
         Temperature per sweep. Its length is the budget.
@@ -585,6 +588,7 @@ def anneal_potts(
     -------
     AnnealedPotts
     """
+    field = log_weight_of(field)
     refuse_negative_coupling(move, graph)
 
     rows = site_field(np.asarray(field, dtype=float), graph.n_nodes)
@@ -1593,7 +1597,7 @@ def _apply_flip(
 def swendsen_wang_sweep(
     state: np.ndarray,
     graph: PottsGraph,
-    rows: np.ndarray,
+    rows: SiteField | np.ndarray,
     rng: np.random.Generator,
     counter: ClusterCounter | None = None,
     beta: float = 1.0,
@@ -1628,6 +1632,7 @@ def swendsen_wang_sweep(
     of a 42.2 ms pass against 0.001 ms to read the store (#754). Recompute or
     store, decided as store, and the same ``int64`` indices either way.
     """
+    rows = log_weight_of(rows)
     if backend is Backend.RUST:
         if counter is not None:
             msg = (
@@ -1799,7 +1804,7 @@ def adjacency_lists(
 
 def wolff_sweep(
     state: np.ndarray,
-    rows: np.ndarray,
+    rows: SiteField | np.ndarray,
     offsets: np.ndarray,
     neighbours: np.ndarray,
     couplings: np.ndarray,
@@ -1844,6 +1849,7 @@ def wolff_sweep(
     int
         The size of the cluster this step built.
     """
+    rows = log_weight_of(rows)
     walk = adjacency_lists(offsets, neighbours, couplings) if lists is None else lists
     bounds, incident, weights = walk.bounds, walk.incident, walk.weights
     seed_node = int(rng.integers(state.shape[0])) if root is None else int(root)
@@ -1904,7 +1910,7 @@ def niedermayer_threshold(couplings: np.ndarray) -> float:
 
 def niedermayer_sweep(
     state: np.ndarray,
-    rows: np.ndarray,
+    rows: SiteField | np.ndarray,
     offsets: np.ndarray,
     neighbours: np.ndarray,
     couplings: np.ndarray,
@@ -1996,6 +2002,7 @@ def niedermayer_sweep(
     int
         The size of the cluster this step built.
     """
+    rows = log_weight_of(rows)
     n_nodes = int(state.shape[0])
     n_states = int(rows.shape[1])
     walk = adjacency_lists(offsets, neighbours, couplings) if lists is None else lists
