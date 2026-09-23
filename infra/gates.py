@@ -265,6 +265,15 @@ SCHEDULING_MARKERS: Mapping[str, str] = {
         "where its validation-<framework> extra is absent, and runs in CI's "
         "validation job (issue #972)"
     ),
+    # A runtime the package has to meet, set by an external framework on a
+    # declared fixture. It fails until the package meets it, so CI's
+    # `validation` job runs it in a step of its own that reports and does not
+    # block: a goal is a target, and a red one says how far off it is.
+    "goal": (
+        "a runtime the package must meet -- an external framework's on a "
+        "declared fixture, both timed in one run; fails until it is met, and "
+        "runs in a non-blocking step of CI's validation job (issue #972)"
+    ),
 }
 
 #: What a test's subject is, where it is not one of the declared problems: the
@@ -291,6 +300,7 @@ MARKER_REGISTRATION_ORDER: tuple[str, ...] = (
     "stress",
     "key",
     "validation",
+    "goal",
     *SUBJECT_MARKERS,
     *FINDING_MARKERS,
 )
