@@ -46,7 +46,7 @@ pub use maxflow::{ising_ground_state, ising_ground_states, max_flow};
 #[cfg(feature = "sandbox")]
 pub use maxflow_declined::{ising_ground_state_declined, max_flow_declined};
 pub use message_passing::tree_message_passing;
-pub use mixture_stream::gaussian_mixture_em_step;
+pub use mixture_stream::{gaussian_mixture_em_step, gaussian_mixture_gradient};
 pub use potts::{bond_roots, single_site_sweeps, swendsen_wang_sweep};
 pub use pruning::pruning_log_likelihood;
 #[cfg(feature = "sandbox")]
@@ -95,6 +95,7 @@ fn oxi_snakes_and_ladders(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tree_message_passing, m)?)?;
     m.add_function(wrap_pyfunction!(categorical_em_step, m)?)?;
     m.add_function(wrap_pyfunction!(gaussian_mixture_em_step, m)?)?;
+    m.add_function(wrap_pyfunction!(gaussian_mixture_gradient, m)?)?;
     m.add_function(wrap_pyfunction!(gaussian_hmc, m)?)?;
     m.add_function(wrap_pyfunction!(gaussian_leapfrog, m)?)?;
     m.add_function(wrap_pyfunction!(bond_roots, m)?)?;

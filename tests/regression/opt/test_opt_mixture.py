@@ -800,3 +800,25 @@ def test_the_streamed_mixture_em_is_the_tensor_one() -> None:
     )
     assert_allclose(streamed.log_likelihood, oracle.log_likelihood, rtol=1e-12)
     assert streamed.iterations == oracle.iterations == 10
+
+
+@pytest.mark.oracle
+def test_the_mixture_gradient_is_autograd_s() -> None:
+    # Issue #986: `GaussianMixtureObjective.gradient` streams responsibilities
+    # into three sums per component; autograd through `__call__` pins it.
+    rng = np.random.default_rng(9863)
+    draws = np.concatenate(
+        [
+            rng.normal(-3.0, 1.0, 4_000),
+            rng.normal(0.0, 1.5, 3_000),
+            rng.normal(4.0, 1.0, 3_000),
+        ]
+    )
+    objective = GaussianMixtureObjective(draws, 3)
+    for _ in range(3):
+        theta = torch.as_tensor(rng.normal(size=objective.n_parameters) * 0.5)
+        point = theta.clone().requires_grad_(True)
+        (autograd,) = torch.autograd.grad(objective(point), point)
+        assert_allclose(
+            objective.gradient(theta).numpy(), autograd.numpy(), rtol=1e-12, atol=1e-9
+        )

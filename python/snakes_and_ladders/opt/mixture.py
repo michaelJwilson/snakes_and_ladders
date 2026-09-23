@@ -224,6 +224,27 @@ class GaussianMixtureObjective(Objective):
             **self.components(theta).named_parameters(),
         }
 
+    def gradient(self, theta: torch.Tensor) -> torch.Tensor:
+        """``d/dtheta`` of :meth:`__call__`, which ``hmc.gradient_at`` reads (issue #986).
+
+        One-channel ``float64`` mixtures stream every draw's responsibilities
+        into the three per-component sums the gradient needs in
+        ``oxi_snakes_and_ladders.gaussian_mixture_gradient``, pinned to
+        autograd; any other takes autograd through :meth:`__call__`.
+        """
+        if self._n_channels != 1 or self._dtype != torch.float64:
+            point = theta.detach().clone().requires_grad_(True)
+            (grad,) = torch.autograd.grad(self(point), point)
+            return grad
+        padded = np.concatenate(([0.0], theta[self._weight_slice].detach().numpy()))
+        _, gradient = oxi_snakes_and_ladders.gaussian_mixture_gradient(
+            np.ascontiguousarray(self._observations.numpy()).reshape(-1),
+            padded - np.logaddexp.reduce(padded),
+            np.ascontiguousarray(theta[self._mean_slice()].detach().numpy()),
+            np.exp(theta[self._log_scale_slice()].detach().numpy()),
+        )
+        return torch.from_numpy(gradient)
+
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         """Negative log-likelihood, marginalizing the component of each point."""
         return -mixture_log_likelihood(

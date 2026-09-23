@@ -91,6 +91,12 @@ def gaussian_mixture_em_step(
     mean: np.ndarray,
     scale: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]: ...
+def gaussian_mixture_gradient(
+    values: np.ndarray,
+    log_weight: np.ndarray,
+    mean: np.ndarray,
+    scale: np.ndarray,
+) -> tuple[float, np.ndarray]: ...
 def gaussian_hmc(
     precision: np.ndarray,
     theta0: np.ndarray,

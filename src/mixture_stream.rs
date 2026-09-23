@@ -18,6 +18,11 @@
 use numpy::{PyArray1, PyReadonlyArray1};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use rayon::prelude::*;
+
+/// Draws per parallel chunk of [`gaussian_gradient`]: the partial sums are
+/// reduced in chunk order, so the result does not depend on the pool.
+const CHUNK: usize = 8192;
 
 /// New weights, means and variances, and the log-likelihood at the parameters given.
 pub struct Step {
@@ -87,6 +92,106 @@ pub fn gaussian_step(
         mean: located,
         log_likelihood,
     })
+}
+
+/// The mixture's negative log-likelihood and its gradient in
+/// `theta = (k - 1 free weights, k means, k log scales)`, streamed.
+///
+/// `GaussianMixtureObjective.gradient` (issue #986): autograd through the
+/// objective took 20.4 ms at 10^5 draws where JAX's compiled gradient took
+/// 2.84. With responsibilities `r_ik`, `R_k = sum_i r_ik` and the weights
+/// `w = softmax([0, free])`, the gradient is
+/// `-(R_c - n w_c)` for the free weight of component `c >= 1`,
+/// `-sum_i r_ik (x_i - mu_k) / s_k^2` for a mean and
+/// `-sum_i r_ik ((x_i - mu_k)^2 / s_k^2 - 1)` for a log scale.
+pub fn gaussian_gradient(
+    values: &[f64],
+    log_weight: &[f64],
+    mean: &[f64],
+    scale: &[f64],
+) -> Result<(f64, Vec<f64>), String> {
+    let k = log_weight.len();
+    if k == 0 || mean.len() != k || scale.len() != k {
+        return Err(format!(
+            "{k} weights need {k} means and scales, got {} and {}",
+            mean.len(),
+            scale.len()
+        ));
+    }
+    let offset: Vec<f64> = (0..k)
+        .map(|c| log_weight[c] - scale[c].ln() - 0.5 * (2.0 * std::f64::consts::PI).ln())
+        .collect();
+    let precision: Vec<f64> = scale.iter().map(|s| 1.0 / s).collect();
+    // Per chunk: the log-likelihood, then R, the first and the second sums.
+    let partial: Vec<Vec<f64>> = values
+        .par_chunks(CHUNK)
+        .map(|chunk| {
+            let mut sums = vec![0.0; 1 + 3 * k];
+            let mut joint = vec![0.0; k];
+            let mut z = vec![0.0; k];
+            for &x in chunk {
+                let mut high = f64::NEG_INFINITY;
+                for c in 0..k {
+                    z[c] = (x - mean[c]) * precision[c];
+                    joint[c] = offset[c] - 0.5 * z[c] * z[c];
+                    high = high.max(joint[c]);
+                }
+                let mut total = 0.0;
+                for value in &mut joint {
+                    *value = (*value - high).exp();
+                    total += *value;
+                }
+                sums[0] += high + total.ln();
+                for c in 0..k {
+                    let r = joint[c] / total;
+                    sums[1 + c] += r;
+                    sums[1 + k + c] += r * z[c] * precision[c];
+                    sums[1 + 2 * k + c] += r * z[c] * z[c];
+                }
+            }
+            sums
+        })
+        .collect();
+    let mut sums = vec![0.0; 1 + 3 * k];
+    for chunk in &partial {
+        for (total, value) in sums.iter_mut().zip(chunk) {
+            *total += value;
+        }
+    }
+    let n = values.len() as f64;
+    let mut gradient = Vec::with_capacity(3 * k - 1);
+    for c in 1..k {
+        gradient.push(-(sums[1 + c] - n * log_weight[c].exp()));
+    }
+    for c in 0..k {
+        gradient.push(-sums[1 + k + c]);
+    }
+    for c in 0..k {
+        gradient.push(-(sums[1 + 2 * k + c] - sums[1 + c]));
+    }
+    Ok((-sums[0], gradient))
+}
+
+/// The mixture's negative log-likelihood and gradient; see [`gaussian_gradient`].
+#[pyfunction]
+#[pyo3(signature = (values, log_weight, mean, scale))]
+pub fn gaussian_mixture_gradient<'py>(
+    py: Python<'py>,
+    values: PyReadonlyArray1<'py, f64>,
+    log_weight: PyReadonlyArray1<'py, f64>,
+    mean: PyReadonlyArray1<'py, f64>,
+    scale: PyReadonlyArray1<'py, f64>,
+) -> PyResult<(f64, Bound<'py, PyArray1<f64>>)> {
+    let (values, log_weight, mean, scale) = (
+        values.as_slice()?,
+        log_weight.as_slice()?,
+        mean.as_slice()?,
+        scale.as_slice()?,
+    );
+    let (value, gradient) = py
+        .detach(|| gaussian_gradient(values, log_weight, mean, scale))
+        .map_err(PyValueError::new_err)?;
+    Ok((value, PyArray1::from_vec(py, gradient)))
 }
 
 /// One Gaussian mixture EM step; see the module docs.
