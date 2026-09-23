@@ -20,6 +20,7 @@ pub mod bk;
 pub mod count_mstep;
 pub mod count_pairs;
 pub mod coupled;
+pub mod hmm_stream;
 pub mod lattice_cut;
 pub mod maxflow;
 #[cfg(feature = "sandbox")]
@@ -36,6 +37,7 @@ pub use bcjr::bcjr_forward_backward;
 pub use count_mstep::{beta_binomial_parameters, negative_binomial_dispersions};
 pub use count_pairs::simulate_count_pairs;
 pub use coupled::{class_posteriors, external_field};
+pub use hmm_stream::categorical_em_step;
 pub use lattice_cut::LatticeCut;
 pub use maxflow::{ising_ground_state, ising_ground_states, max_flow};
 #[cfg(feature = "sandbox")]
@@ -87,6 +89,7 @@ fn oxi_snakes_and_ladders(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(beta_binomial_parameters, m)?)?;
     m.add_function(wrap_pyfunction!(bcjr_forward_backward, m)?)?;
     m.add_function(wrap_pyfunction!(tree_message_passing, m)?)?;
+    m.add_function(wrap_pyfunction!(categorical_em_step, m)?)?;
     Ok(())
 }
 

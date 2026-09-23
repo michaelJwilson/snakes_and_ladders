@@ -79,6 +79,12 @@ def ising_ground_state(
     edges: np.ndarray,
     coupling: np.ndarray,
 ) -> np.ndarray: ...
+def categorical_em_step(
+    observations: np.ndarray,
+    log_initial: np.ndarray,
+    log_transition: np.ndarray,
+    log_emission: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]: ...
 def ising_ground_states(
     n_nodes: int,
     fields: np.ndarray,

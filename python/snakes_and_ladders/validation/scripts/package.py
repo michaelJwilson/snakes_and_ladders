@@ -94,7 +94,7 @@ def _baum_welch(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
             max_iterations=n_iter,
             tolerance=-np.inf,
         )
-        return {"emission": fit.log_emission.exp().numpy()}
+        return {"emission": np.exp(fit.log_emission.numpy())}
 
     return call
 
