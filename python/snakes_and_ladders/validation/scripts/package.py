@@ -99,6 +99,72 @@ def _baum_welch(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     return call
 
 
+def _family_baum_welch(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
+    """Ten Baum--Welch iterations of a Gaussian or count HMM (#997).
+
+    ``family`` names it: ``gaussian`` (``mean``, ``variance``), ``poisson``
+    (``rate``), ``negative_binomial`` (``dispersion``, ``mean``) or
+    ``beta_binomial`` (``trials``, ``alpha``, ``beta``); read from the
+    parameters when absent. ``backend`` is ``rust`` (the default) or
+    ``python``.
+    """
+    import torch
+
+    from snakes_and_ladders.backend import Backend
+    from snakes_and_ladders.emissions import (
+        BetaBinomialEmission,
+        EmissionFamily,
+        GaussianEmission,
+        NegativeBinomialEmission,
+        PoissonEmission,
+    )
+    from snakes_and_ladders.opt.hmm import baum_welch_family
+
+    observations = inputs["observations"]
+    initial, transition = (
+        torch.log(torch.as_tensor(inputs[name])) for name in ("initial", "transition")
+    )
+    default = "poisson" if "rate" in inputs else "gaussian"
+    name = str(inputs.get("family", np.asarray(default)))
+    family: EmissionFamily
+    if name == "gaussian":
+        family = GaussianEmission(inputs["mean"], np.sqrt(inputs["variance"]), 1e-12)
+    elif name == "poisson":
+        family = PoissonEmission(inputs["rate"])
+    elif name == "negative_binomial":
+        family = NegativeBinomialEmission(inputs["dispersion"], inputs["mean"])
+    else:
+        family = BetaBinomialEmission(inputs["trials"], inputs["alpha"], inputs["beta"])
+    backend = Backend(str(inputs.get("backend", np.asarray("rust"))))
+    n_iter = int(inputs["n_iter"])
+    # One iteration on the first two positions of two sequences, outside the
+    # measured call: torch's first operations in a process set up state that
+    # stays, as `_hmc_sample`'s warm-up does for the sampler.
+    baum_welch_family(
+        np.ascontiguousarray(observations[:2, :2]),
+        initial,
+        transition,
+        family,
+        max_iterations=1,
+        tolerance=-np.inf,
+        backend=backend,
+    )
+
+    def call() -> Outputs:
+        fit = baum_welch_family(
+            observations,
+            initial,
+            transition,
+            family,
+            max_iterations=n_iter,
+            tolerance=-np.inf,
+            backend=backend,
+        )
+        return {"log_likelihood": np.asarray(fit.log_likelihood)}
+
+    return call
+
+
 def _mixture_em(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     """Ten mixture EM iterations from the given start, as the scikit-learn pair runs (#975)."""
     import torch
@@ -243,6 +309,7 @@ CALLS: dict[str, Build] = {
     "ising_cut": _ising_cut,
     "alpha_expansion": _alpha_expansion,
     "baum_welch": _baum_welch,
+    "family_baum_welch": _family_baum_welch,
     "mixture_em": _mixture_em,
     "hmc_sample": _hmc_sample,
     "cluster_labels": _cluster_labels,

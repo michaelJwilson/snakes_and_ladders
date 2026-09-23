@@ -431,6 +431,110 @@ def test_mixture_em_fits_scikit_learns_memory(n_samples: int) -> None:
     assert_fits(int(np.median(peaks)), SCIKIT_LEARN_EM_MEMORY[n_samples])
 
 
+#: hmmlearn's ten Baum--Welch iterations of a three-state Gaussian (diagonal)
+#: and a Poisson HMM at sequences of 100, every prior and floor zero, from the
+#: start `_FAMILY_START` gives, on `_family_observations`: the medians of
+#: three subprocess runs (#997).
+HMMLEARN_FAMILY_BAUM_WELCH = {
+    (family, n_sequences): Goal(
+        "hmmlearn",
+        f"ten {family} Baum-Welch iterations at {100 * n_sequences:,} positions",
+        seconds,
+        "2026-09-23, 4-core reference host at a 1-minute load of 1.3, #997",
+    )
+    for family, n_sequences, seconds in (
+        ("gaussian", 1_000, 2.10545),
+        ("gaussian", 10_000, 21.29643),
+        ("poisson", 1_000, 3.68399),
+        ("poisson", 10_000, 36.13588),
+    )
+}
+
+#: hmmlearn's peak added resident memory for the same fits (#997).
+HMMLEARN_FAMILY_BAUM_WELCH_MEMORY = {
+    (family, n_sequences): MemoryGoal(
+        "hmmlearn",
+        f"ten {family} Baum-Welch iterations at {100 * n_sequences:,} positions",
+        peak_bytes,
+        "2026-09-23, 4-core reference host, #997",
+    )
+    for family, n_sequences, peak_bytes in (
+        ("gaussian", 1_000, 684_032),
+        ("gaussian", 10_000, 2_109_440),
+        ("poisson", 1_000, 1_843_200),
+        ("poisson", 10_000, 8_105_984),
+    )
+}
+
+#: The start both sides fit from: probabilities, and each family's parameters.
+_FAMILY_START: dict[str, dict[str, np.ndarray]] = {
+    "gaussian": {
+        "mean": np.array([-1.5, 0.5, 2.5]),
+        "variance": np.array([1.2, 1.0, 1.8]),
+    },
+    "poisson": {"rate": np.array([2.0, 4.0, 10.0])},
+}
+_FAMILY_INITIAL = np.array([0.4, 0.3, 0.3])
+_FAMILY_TRANSITION = np.array([[0.8, 0.1, 0.1], [0.1, 0.8, 0.1], [0.1, 0.1, 0.8]])
+
+
+def _family_observations(family: str, n_sequences: int) -> np.ndarray:
+    """Sequences of 100 from a sticky three-state chain, seed 997."""
+    rng = np.random.default_rng(997)
+    transition = np.array([[0.9, 0.05, 0.05], [0.1, 0.8, 0.1], [0.05, 0.15, 0.8]])
+    states = np.empty((n_sequences, 100), dtype=np.int64)
+    states[:, 0] = rng.choice(3, size=n_sequences, p=[0.5, 0.3, 0.2])
+    cumulative = transition.cumsum(axis=1)
+    for t in range(1, 100):
+        above = rng.random(n_sequences)[:, None] > cumulative[states[:, t - 1]]
+        states[:, t] = above.sum(axis=1)
+    if family == "gaussian":
+        return np.asarray(
+            rng.normal(
+                np.array([-2.0, 0.0, 3.0])[states], np.array([1.0, 0.5, 1.5])[states]
+            )
+        )
+    return np.asarray(rng.poisson(np.array([1.0, 5.0, 12.0])[states]))
+
+
+def _family_inputs(family: str, n_sequences: int) -> dict[str, np.ndarray]:
+    """The harness's inputs for one family fit."""
+    return {
+        "observations": _family_observations(family, n_sequences),
+        "initial": _FAMILY_INITIAL,
+        "transition": _FAMILY_TRANSITION,
+        "family": np.asarray(family),
+        **_FAMILY_START[family],
+        "n_iter": np.asarray(10),
+    }
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize(("family", "n_sequences"), sorted(HMMLEARN_FAMILY_BAUM_WELCH))
+def test_family_baum_welch_meets_hmmlearns_runtime(
+    family: str, n_sequences: int
+) -> None:
+    inputs = _family_inputs(family, n_sequences)
+    seconds = [package("family_baum_welch", inputs).seconds for _ in range(3)]
+    assert_meets(
+        float(np.median(seconds)),
+        HMMLEARN_FAMILY_BAUM_WELCH[(family, n_sequences)],
+    )
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize(
+    ("family", "n_sequences"), sorted(HMMLEARN_FAMILY_BAUM_WELCH_MEMORY)
+)
+def test_family_baum_welch_fits_hmmlearns_memory(family: str, n_sequences: int) -> None:
+    inputs = _family_inputs(family, n_sequences)
+    peaks = [package("family_baum_welch", inputs).peak_bytes or 0 for _ in range(3)]
+    assert_fits(
+        int(np.median(peaks)),
+        HMMLEARN_FAMILY_BAUM_WELCH_MEMORY[(family, n_sequences)],
+    )
+
+
 #: BlackJAX's peak added resident memory for the same compiled chain with no
 #: draw kept: its scan carries the state and emits only the acceptance, the
 #: medians of three subprocess runs (#997). Kept, the draws were 1.0x

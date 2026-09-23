@@ -883,21 +883,7 @@ class GaussianEmission(EmissionFamily):
         else:
             mean = torch.stack([moments[0] for moments in located], dim=1)
             variance = torch.stack([moments[1] for moments in located], dim=1)
-        collapsed = variance <= self._variance_floor
-        if bool(collapsed.any()):
-            states = (
-                torch.nonzero(collapsed.reshape(self.n_states, -1).any(dim=1))
-                .reshape(-1)
-                .tolist()
-            )
-            msg = (
-                f"state(s) {states} re-estimated to variance "
-                f"{variance[collapsed].tolist()}, at or below the floor "
-                f"{self._variance_floor:.6g}: the Gaussian likelihood is "
-                f"unbounded as a variance goes to zero, so this fit is "
-                f"heading to a degenerate optimum rather than converging"
-            )
-            raise ValueError(msg)
+        refuse_collapsed(variance, self._variance_floor)
         return Reestimate(
             GaussianEmission(mean, torch.sqrt(variance), self._variance_floor)
         )
@@ -909,6 +895,36 @@ class GaussianEmission(EmissionFamily):
     def named_parameters(self) -> Mapping[str, torch.Tensor]:
         """``mean`` and ``scale``, the parameters the model is stated in."""
         return {"mean": self._mean, "scale": self._scale}
+
+
+def refuse_collapsed(variance: torch.Tensor, floor: float) -> None:
+    """Raise if a re-estimated variance is at or below ``floor``.
+
+    Shared by :meth:`GaussianEmission.reestimate` and the streamed M step of
+    :func:`snakes_and_ladders.opt.hmm.baum_welch_family` (issue #997), so the
+    two routes refuse the same fits in the same words.
+
+    Raises
+    ------
+    ValueError
+        If any entry of ``variance``, per state or per state and channel, is
+        at or below ``floor``.
+    """
+    collapsed = variance <= floor
+    if bool(collapsed.any()):
+        states = (
+            torch.nonzero(collapsed.reshape(variance.shape[0], -1).any(dim=1))
+            .reshape(-1)
+            .tolist()
+        )
+        msg = (
+            f"state(s) {states} re-estimated to variance "
+            f"{variance[collapsed].tolist()}, at or below the floor "
+            f"{floor:.6g}: the Gaussian likelihood is "
+            f"unbounded as a variance goes to zero, so this fit is "
+            f"heading to a degenerate optimum rather than converging"
+        )
+        raise ValueError(msg)
 
 
 def _one_axis_at_least(values: torch.Tensor) -> torch.Tensor:

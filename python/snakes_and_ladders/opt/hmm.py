@@ -44,6 +44,7 @@ from snakes_and_ladders.emissions import (
     PoissonEmission,
     identifiable_dispersion_bound,
     pooled_variance_floor,
+    refuse_collapsed,
 )
 from snakes_and_ladders.numerics import constant_chain_kernel
 from snakes_and_ladders.opt.constrain import (
@@ -1288,6 +1289,168 @@ def _streamed_baum_welch(
     )
 
 
+#: The count families :func:`baum_welch_family` streams through a table: one
+#: channel, no covariate, and an M step that reads only weighted counts.
+_TABLED = (
+    PoissonEmission,
+    BinomialEmission,
+    NegativeBinomialEmission,
+    BetaBinomialEmission,
+)
+
+
+#: The most cells a count table may span, ``(max count + 1) * (max covariate
+#: + 1)``: its row lookup is four bytes a cell, so 4 MB at most.
+_MOST_CELLS = 1 << 20
+
+
+def _streams(
+    observations: np.ndarray | Ragged,
+    log_transition: torch.Tensor,
+    emissions: EmissionFamily,
+    covariate: np.ndarray | Ragged | None,
+) -> bool:
+    """Whether :func:`baum_welch_family` has a streamed step for this case (issue #997)."""
+    m = emissions.n_states
+    if (
+        not isinstance(observations, np.ndarray)
+        or observations.ndim != 2
+        or observations.size == 0
+        or log_transition.shape != (m, m)
+    ):
+        return False
+    if type(emissions) is GaussianEmission:
+        return covariate is None and emissions.n_channels == 1
+    # Integer counts and an integer covariate: the table is indexed by them.
+    if type(emissions) not in _TABLED or not _whole(observations):
+        return False
+    stride = 1
+    if covariate is not None:
+        if not (
+            isinstance(covariate, np.ndarray)
+            and covariate.shape == observations.shape
+            and _whole(covariate)
+        ):
+            return False
+        stride = int(covariate.max()) + 1
+    return (int(observations.max()) + 1) * stride <= _MOST_CELLS
+
+
+def _whole(values: np.ndarray) -> bool:
+    """Whether ``values`` is an integer array with nothing below zero."""
+    return np.issubdtype(values.dtype, np.integer) and int(values.min()) >= 0
+
+
+def _streamed_family(
+    observations: np.ndarray,
+    log_initial: torch.Tensor,
+    log_transition: torch.Tensor,
+    emissions: EmissionFamily,
+    *,
+    max_iterations: int,
+    tolerance: float,
+    covariate: np.ndarray | None = None,
+) -> EmFit:
+    """:func:`baum_welch_family` on a compiled step that streams (issue #997).
+
+    A one-channel Gaussian is scored and re-estimated in
+    ``oxi_snakes_and_ladders.gaussian_em_step``. A count family is scored from
+    a table of its own ``log_density`` over the cells the data occupies ---
+    each distinct count, or each distinct pair of a count and its covariate
+    --- and ``count_em_step`` returns each state's posterior weight on each
+    cell; the family's own ``reestimate`` then runs on those weighted cells,
+    which is its M step exactly, the order of summation aside.
+    """
+    m = emissions.n_states
+    at_boundary = False
+
+    def flat(tensor: torch.Tensor) -> np.ndarray:
+        return np.ascontiguousarray(tensor.detach().numpy(), dtype=np.float64).reshape(
+            -1
+        )
+
+    if isinstance(emissions, GaussianEmission):
+        values = np.ascontiguousarray(observations, dtype=np.float64)
+        floor = emissions.variance_floor
+
+        def gaussian(
+            state: tuple[np.ndarray, np.ndarray, EmissionFamily],
+        ) -> tuple[tuple[np.ndarray, np.ndarray, EmissionFamily], float]:
+            initial, transition, family = state
+            assert isinstance(family, GaussianEmission)
+            initial, transition, mean, variance, log_likelihood = (
+                oxi_snakes_and_ladders.gaussian_em_step(
+                    values, initial, transition, flat(family.mean), flat(family.scale)
+                )
+            )
+            refuse_collapsed(torch.from_numpy(variance), floor)
+            fitted = GaussianEmission(mean, np.sqrt(variance), floor)
+            return (initial, transition, fitted), log_likelihood
+
+        step = gaussian
+    else:
+        # Borrowed where NumPy already holds int64 rows; a copy only otherwise.
+        counts = np.ascontiguousarray(observations, dtype=np.int64)
+        given = (
+            None
+            if covariate is None
+            else np.ascontiguousarray(covariate, dtype=np.int64)
+        )
+        stride = 1 if given is None else int(given.max()) + 1
+        cells = oxi_snakes_and_ladders.count_cells(counts, given, stride)
+        rows = np.zeros((int(counts.max()) + 1) * stride, dtype=np.uint32)
+        rows[cells] = np.arange(cells.size, dtype=np.uint32)
+        support = torch.from_numpy((cells // stride).astype(np.float64))
+        # The family broadcasts a covariate along its states, as
+        # `baum_welch_family` hands it one.
+        exposure = (
+            None
+            if given is None
+            else torch.from_numpy((cells % stride).astype(np.float64)).unsqueeze(1)
+        )
+
+        def tabled(
+            state: tuple[np.ndarray, np.ndarray, EmissionFamily],
+        ) -> tuple[tuple[np.ndarray, np.ndarray, EmissionFamily], float]:
+            nonlocal at_boundary
+            initial, transition, family = state
+            table = flat(family.log_density(support, covariate=exposure))
+            initial, transition, histogram, log_likelihood = (
+                oxi_snakes_and_ladders.count_em_step(
+                    counts, given, stride, rows, initial, transition, table
+                )
+            )
+            reestimate = family.reestimate(
+                support, torch.from_numpy(histogram.reshape(-1, m)), covariate=exposure
+            )
+            if not reestimate.converged:
+                msg = (
+                    f"the emission M step did not settle after "
+                    f"{reestimate.iterations} iterations, at a relative change "
+                    f"of {reestimate.residual:.3e}"
+                )
+                raise ValueError(msg)
+            at_boundary = at_boundary or reestimate.at_boundary
+            return (initial, transition, reestimate.emissions), log_likelihood
+
+        step = tabled
+
+    (initial, transition, fitted), log_likelihood, termination = em_loop(
+        step,
+        (flat(log_initial), flat(log_transition), emissions),
+        tolerance=tolerance,
+        max_iterations=max_iterations,
+    )
+    return EmFit(
+        log_initial=torch.from_numpy(initial),
+        log_transition=torch.from_numpy(transition.reshape(m, m)),
+        emissions=fitted,
+        log_likelihood=log_likelihood,
+        emission_at_boundary=at_boundary,
+        termination=termination,
+    )
+
+
 def baum_welch_family(
     observations: np.ndarray | Ragged,
     log_initial: torch.Tensor,
@@ -1296,6 +1459,7 @@ def baum_welch_family(
     max_iterations: int = 500,
     tolerance: float = 1e-12,
     covariate: np.ndarray | Ragged | None = None,
+    backend: Backend = Backend.RUST,
 ) -> EmFit:
     """Baum-Welch over any emission family, with no autodiff involved.
 
@@ -1349,6 +1513,19 @@ def baum_welch_family(
         different models. ``None`` is the model this function had before.
         The family broadcasts a covariate along the states, so it wants a trailing singleton axis; the covariate is stored with the observations' own axes and the singleton is added here, where the observation layout is known. A caller should not have to carry a shape that exists for the family's broadcast.
 
+    backend : Backend
+        :data:`~snakes_and_ladders.backend.Backend.RUST`, the default since
+        issue #997, streams the E step one sequence at a time into
+        sufficient statistics, where the family is exactly a one-channel
+        :class:`GaussianEmission`, or a :class:`PoissonEmission`,
+        :class:`BinomialEmission`, :class:`NegativeBinomialEmission` or
+        :class:`BetaBinomialEmission` over integer counts with no covariate or
+        an integer one, the observations are a rectangular array, and the
+        kernel is one ``(m, m)`` matrix. Ten iterations at 10^6 positions of three states
+        peaked at 429 MB on the batched route. Any other case, and
+        :data:`~snakes_and_ladders.backend.Backend.PYTHON`, runs the batched
+        route below, which is the oracle that pins the streamed one.
+
     Returns
     -------
     EmFit
@@ -1363,6 +1540,21 @@ def baum_welch_family(
         degenerate optimum rather than a convergence, and is reported as such
         rather than clamped away.
     """
+    refuse_backend("baum_welch_family", backend, (Backend.PYTHON, Backend.RUST))
+    if backend is Backend.RUST and _streams(
+        observations, log_transition, emissions, covariate
+    ):
+        assert isinstance(observations, np.ndarray)
+        assert covariate is None or isinstance(covariate, np.ndarray)
+        return _streamed_family(
+            observations,
+            log_initial,
+            log_transition,
+            emissions,
+            max_iterations=max_iterations,
+            tolerance=tolerance,
+            covariate=covariate,
+        )
     # One batch form, and a rectangular argument converts to it (issue #666).
     # The segments are padded to the longest and masked; the mask is not a
     # convenience but the whole of the claim that padding never reaches a

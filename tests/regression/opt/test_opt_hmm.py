@@ -17,6 +17,14 @@ import pytest
 import torch
 from numpy.testing import assert_allclose
 from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.emissions import (
+    BetaBinomialEmission,
+    BinomialEmission,
+    EmissionFamily,
+    GaussianEmission,
+    NegativeBinomialEmission,
+    PoissonEmission,
+)
 from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.likelihood.hmm_paths import enumerate_hidden_paths
 from snakes_and_ladders.opt.hmm import (
@@ -542,3 +550,127 @@ def test_the_streamed_baum_welch_is_the_batched_one(n_sequences: int) -> None:
             atol=1e-10,
         )
     assert_allclose(fits[1].log_likelihood, fits[0].log_likelihood, rtol=1e-12)
+
+
+def _count_chain(
+    n_sequences: int, length: int, seed: int
+) -> tuple[np.random.Generator, np.ndarray]:
+    """Hidden states of a sticky three-state chain, for the streamed-family pins."""
+    rng = np.random.default_rng(seed)
+    cumulative = np.array(
+        [[0.9, 0.05, 0.05], [0.1, 0.8, 0.1], [0.05, 0.15, 0.8]]
+    ).cumsum(axis=1)
+    states = np.empty((n_sequences, length), dtype=np.int64)
+    states[:, 0] = rng.choice(3, size=n_sequences)
+    for t in range(1, length):
+        above = rng.random(n_sequences)[:, None] > cumulative[states[:, t - 1]]
+        states[:, t] = above.sum(axis=1)
+    return rng, states
+
+
+def _streamed_case(
+    name: str, covariate: bool
+) -> tuple[np.ndarray, EmissionFamily, np.ndarray | None]:
+    """Observations, a start and any covariate for one family (issue #997)."""
+    rng, states = _count_chain(40, 60, 997)
+    depth = rng.integers(5, 40, size=states.shape) if covariate else None
+    if name == "gaussian":
+        values = rng.normal(np.array([-2.0, 0.0, 3.0])[states], 1.0)
+        return values, GaussianEmission([-1.5, 0.5, 2.5], [1.2, 1.0, 1.4], 1e-12), None
+    if name == "poisson":
+        family: EmissionFamily = PoissonEmission([2.0, 4.0, 10.0])
+        return rng.poisson(np.array([1.0, 5.0, 12.0])[states]), family, None
+    if name == "negative_binomial":
+        r, mu = np.array([2.0, 5.0, 10.0])[states], np.array([1.0, 5.0, 12.0])[states]
+        mu = mu if depth is None else mu * depth / 20.0
+        family = NegativeBinomialEmission([1.0, 3.0, 5.0], [2.0, 4.0, 10.0])
+        return rng.negative_binomial(r, r / (r + mu)), family, depth
+    if name == "binomial":
+        family = BinomialEmission([30.0] * 3, [0.3, 0.5, 0.7])
+        return rng.binomial(30, np.array([0.2, 0.5, 0.8])[states]), family, None
+    p = rng.beta(np.array([2.0, 5.0, 8.0])[states], np.array([8.0, 5.0, 2.0])[states])
+    trials = 30 if depth is None else depth
+    family = BetaBinomialEmission([30.0] * 3, [1.5, 4.0, 6.0], [6.0, 4.0, 1.5])
+    return rng.binomial(trials, p), family, depth
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize(
+    ("name", "covariate"),
+    [
+        ("gaussian", False),
+        ("poisson", False),
+        ("negative_binomial", False),
+        ("negative_binomial", True),
+        ("binomial", False),
+        ("beta_binomial", False),
+        ("beta_binomial", True),
+    ],
+)
+def test_the_streamed_family_step_is_the_batched_one(
+    name: str, covariate: bool
+) -> None:
+    # Issue #997: a one-channel Gaussian streams moments, a count family
+    # streams its posterior weight on each occupied (count, covariate) cell
+    # and re-estimates on those; the batched log-space route is the oracle
+    # over ten iterations from a start away from the truth.
+    observations, family, depth = _streamed_case(name, covariate)
+    initial = torch.log(torch.tensor([0.4, 0.3, 0.3], dtype=torch.float64))
+    transition = torch.log(
+        torch.tensor(
+            [[0.8, 0.1, 0.1], [0.1, 0.8, 0.1], [0.1, 0.1, 0.8]], dtype=torch.float64
+        )
+    )
+    fits = [
+        baum_welch_family(
+            observations,
+            initial,
+            transition,
+            family,
+            max_iterations=10,
+            tolerance=-np.inf,
+            covariate=depth,
+            backend=backend,
+        )
+        for backend in (Backend.PYTHON, Backend.RUST)
+    ]
+    assert type(fits[1].emissions) is type(family)
+    for name_ in ("log_initial", "log_transition"):
+        assert_allclose(
+            getattr(fits[1], name_).numpy(),
+            getattr(fits[0], name_).numpy(),
+            rtol=0.0,
+            atol=1e-10,
+        )
+    for key, value in fits[0].emissions.named_parameters().items():
+        assert_allclose(
+            fits[1].emissions.named_parameters()[key].numpy(),
+            value.numpy(),
+            rtol=1e-9,
+            err_msg=key,
+        )
+    assert_allclose(fits[1].log_likelihood, fits[0].log_likelihood, rtol=1e-12)
+    assert fits[1].emission_at_boundary == fits[0].emission_at_boundary
+
+
+@pytest.mark.oracle
+def test_real_valued_counts_take_the_batched_route() -> None:
+    # The table is indexed by integer counts: a float array of the same
+    # counts is scored on the batched route, so the two backends agree
+    # bitwise there (issue #997).
+    observations, family, _ = _streamed_case("poisson", covariate=False)
+    initial = torch.log(torch.full((3,), 1.0 / 3.0, dtype=torch.float64))
+    transition = torch.log(torch.full((3, 3), 1.0 / 3.0, dtype=torch.float64))
+    fits = [
+        baum_welch_family(
+            observations.astype(np.float64),
+            initial,
+            transition,
+            family,
+            max_iterations=3,
+            tolerance=-np.inf,
+            backend=backend,
+        )
+        for backend in (Backend.PYTHON, Backend.RUST)
+    ]
+    assert fits[1].log_likelihood == fits[0].log_likelihood

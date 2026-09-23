@@ -85,6 +85,25 @@ def categorical_em_step(
     log_transition: np.ndarray,
     log_emission: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]: ...
+def gaussian_em_step(
+    observations: np.ndarray,
+    log_initial: np.ndarray,
+    log_transition: np.ndarray,
+    mean: np.ndarray,
+    scale: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]: ...
+def count_cells(
+    observations: np.ndarray, covariate: np.ndarray | None, stride: int
+) -> np.ndarray: ...
+def count_em_step(
+    observations: np.ndarray,
+    covariate: np.ndarray | None,
+    stride: int,
+    rows: np.ndarray,
+    log_initial: np.ndarray,
+    log_transition: np.ndarray,
+    table: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]: ...
 def gaussian_mixture_em_step(
     values: np.ndarray,
     log_weight: np.ndarray,

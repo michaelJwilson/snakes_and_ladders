@@ -1,4 +1,4 @@
-"""hmmlearn as an oracle and a timing reference for Baum--Welch (issue #975).
+"""hmmlearn as an oracle and a timing reference for Baum--Welch and Viterbi (issues #975, #997).
 
 hmmlearn's ``CategoricalHMM`` is an independent implementation of the
 recursion :func:`snakes_and_ladders.opt.hmm.baum_welch` runs, and runs only
@@ -61,3 +61,118 @@ def baum_welch(
         result.seconds,
         int(result.peak_bytes or 0),
     )
+
+
+@dataclass(frozen=True)
+class FamilyFit:
+    """hmmlearn's parameters after ``iterations`` for a Gaussian or Poisson HMM."""
+
+    initial: np.ndarray
+    transition: np.ndarray
+    #: The family's parameters: ``mean`` and ``variance``, or ``rate``.
+    emission: dict[str, np.ndarray]
+    iterations: int
+    #: Wall seconds of ``fit`` alone.
+    seconds: float
+    #: Peak resident bytes ``fit`` added.
+    peak_bytes: int
+
+
+def family_baum_welch(
+    observations: np.ndarray,
+    initial: np.ndarray,
+    transition: np.ndarray,
+    emission: dict[str, np.ndarray],
+    n_iter: int,
+) -> FamilyFit:
+    """``n_iter`` hmmlearn iterations of a Gaussian or Poisson HMM (issue #997).
+
+    ``emission`` is ``{"mean", "variance"}`` for a one-channel Gaussian and
+    ``{"rate"}`` for a Poisson; the family is read from which it is. Every
+    prior and floor hmmlearn applies is zero, so the update is the
+    maximum-likelihood one.
+    """
+    family = "poisson" if "rate" in emission else "gaussian"
+    result = run(
+        SCRIPT,
+        {
+            **_family_inputs(observations, initial, transition, emission, family),
+            "n_iter": np.asarray(n_iter, dtype=np.int64),
+        },
+    )
+    out = result.outputs
+    return FamilyFit(
+        out["initial"],
+        out["transition"],
+        {name: out[name] for name in emission},
+        int(out["iterations"]),
+        result.seconds,
+        int(result.peak_bytes or 0),
+    )
+
+
+@dataclass(frozen=True)
+class Decoding:
+    """hmmlearn's Viterbi path and its joint log-probability."""
+
+    states: np.ndarray
+    log_probability: float
+    #: Wall seconds of ``decode`` alone.
+    seconds: float
+    #: Peak resident bytes ``decode`` added.
+    peak_bytes: int
+
+
+def viterbi(
+    observations: np.ndarray,
+    initial: np.ndarray,
+    transition: np.ndarray,
+    emission: dict[str, np.ndarray],
+) -> Decoding:
+    """hmmlearn's Viterbi at the given parameters (issue #997).
+
+    ``emission`` is as :func:`family_baum_welch` takes it, or
+    ``{"emission": probabilities}`` for a categorical HMM.
+    """
+    family = (
+        "categorical"
+        if "emission" in emission
+        else "poisson"
+        if "rate" in emission
+        else "gaussian"
+    )
+    result = run(
+        SCRIPT,
+        {
+            **_family_inputs(observations, initial, transition, emission, family),
+            "call": np.asarray("decode"),
+        },
+    )
+    out = result.outputs
+    return Decoding(
+        out["states"],
+        float(out["log_probability"]),
+        result.seconds,
+        int(result.peak_bytes or 0),
+    )
+
+
+def _family_inputs(
+    observations: np.ndarray,
+    initial: np.ndarray,
+    transition: np.ndarray,
+    emission: dict[str, np.ndarray],
+    family: str,
+) -> dict[str, np.ndarray]:
+    """The script's inputs for ``family``, every array contiguous."""
+    dtype = np.float64 if family == "gaussian" else np.int64
+    return {
+        "observations": np.ascontiguousarray(observations, dtype=dtype),
+        "initial": np.ascontiguousarray(initial, dtype=np.float64),
+        "transition": np.ascontiguousarray(transition, dtype=np.float64),
+        **{
+            name: np.ascontiguousarray(value, dtype=np.float64)
+            for name, value in emission.items()
+        },
+        "family": np.asarray(family),
+    }
