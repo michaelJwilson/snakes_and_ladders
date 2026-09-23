@@ -52,7 +52,7 @@ merge moved the hash. A set too expensive to run whole would be cut by a budget
 `DEV.md` states, never by a hash. Issue #490 deleted the stamps and the digest
 behind them.
 
-**Each notebook's execution has a budget of 600 s of wall clock** (900 s from #909 to #912).
+**Each notebook's execution has a budget of 600 s of wall clock** (900 s from #909 to #912), and `emission_mixture_starts` and `potts_starts` have 1,000 s (`NOTEBOOK_BUDGETS`, from #912's polished best-of group).
 `infra/check_notebooks.py` states it as `NOTEBOOK_BUDGET` and fails a notebook
 that takes longer, with its time beside the budget in the message (issue
 #891). A notebook over it is cut --- fewer trials, a smaller instance --- and

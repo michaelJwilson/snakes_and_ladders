@@ -360,6 +360,19 @@ def test_a_notebook_over_the_budget_fails_and_one_under_it_passes(
 
 
 @pytest.mark.infra
+def test_a_notebook_named_in_the_budgets_is_held_to_its_own() -> None:
+    # Issue #912: the two starts notebooks spend up to 1,000 s, every other
+    # one the default.
+    for name, budget in check_notebooks.NOTEBOOK_BUDGETS.items():
+        assert check_notebooks.budget_for(name) == budget
+        assert over_budget(name, budget - 0.5) == []
+        assert f"{budget} s budget" in over_budget(name, budget + 1.0)[0]
+    default = check_notebooks.NOTEBOOK_BUDGET
+    assert check_notebooks.budget_for("hmm.ipynb") == default
+    assert over_budget("hmm.ipynb", default + 1.0) != []
+
+
+@pytest.mark.infra
 def test_a_code_cell_set_to_scroll_is_reported() -> None:
     # Issue #891: `--write` sets `scrolled: false` on every code cell, so a
     # figure shows whole; a cell whose metadata scrolls fails the structure
