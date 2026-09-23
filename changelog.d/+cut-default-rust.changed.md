@@ -1,0 +1,1 @@
+The minimum-cut solvers read the cut's side at one relative saturation floor, `search.maxflow.SATURATED` (1e-9), so the Python and Rust cuts return one labelling; `alpha_expansion`, `alpha_beta_swap`, `expand` and `swap` default to the Rust cut.
