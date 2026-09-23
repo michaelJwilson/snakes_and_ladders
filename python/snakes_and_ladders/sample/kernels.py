@@ -83,6 +83,50 @@ def icm_sweeps(
 
 
 @njit(cache=True)
+def icm_sweeps_ordered(
+    labelling: np.ndarray,
+    values: np.ndarray,
+    offsets: np.ndarray,
+    neighbours: np.ndarray,
+    couplings: np.ndarray,
+    orders: np.ndarray,
+    max_sweeps: int,
+    stop_when_clean: bool,
+) -> int:
+    """:func:`icm_sweeps` in a given site order per sweep; returns the sweeps run (issue #923).
+
+    ``orders`` is ``(max_sweeps, n_nodes)``, one visiting order per sweep,
+    or ``(1, n_nodes)``, one order every sweep. The caller draws the
+    permutations the Python sweep would draw, in its order, so the update,
+    the order and the first-minimum tie rule are the oracle's and the
+    labelling is its labelling bitwise.
+    """
+    n_states = values.shape[1]
+    local = np.empty(n_states, dtype=np.float64)
+    shared = orders.shape[0] == 1
+    sweeps = 0
+    for sweep in range(max_sweeps):
+        sweeps += 1
+        order = orders[0] if shared else orders[sweep]
+        changed = False
+        for node in order:
+            for state in range(n_states):
+                local[state] = -values[node, state]
+            for position in range(offsets[node], offsets[node + 1]):
+                local[labelling[neighbours[position]]] -= couplings[position]
+            best = 0
+            for state in range(1, n_states):
+                if local[state] < local[best]:
+                    best = state
+            if best != labelling[node]:
+                labelling[node] = best
+                changed = True
+        if stop_when_clean and not changed:
+            break
+    return sweeps
+
+
+@njit(cache=True)
 def gibbs_sweep_sites(
     state: np.ndarray,
     draws: np.ndarray,

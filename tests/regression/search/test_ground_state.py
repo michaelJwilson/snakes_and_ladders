@@ -540,3 +540,31 @@ def test_the_swap_refuses_rather_than_looping_past_its_cycle_cap() -> None:
 
     with pytest.raises(ValueError, match="did not settle in 1 cycles"):
         alpha_beta_swap(rung.graph, rung.field, 3, start=start, max_cycles=1)
+
+
+@pytest.mark.smoke
+def test_the_compiled_swendsen_wang_anneal_keeps_no_counter() -> None:
+    # Issue #923: the comparison anneals Swendsen-Wang on the compiled pass,
+    # a chain of the same law on another order of draws (its law is pinned in
+    # test_potts_mcmc_cluster_rust.py); it reads no cluster, so the trace is
+    # empty, and the Python pass still records every accept step.
+    rung = _rung(CI, 3)
+    schedule = ExponentialTempSchedule(2.0, 0.05, 40)
+    compiled = anneal_potts(
+        rung.graph,
+        rung.field,
+        schedule,
+        np.random.default_rng(923),
+        move=PottsMove.SWENDSEN_WANG,
+        cluster_backend=Backend.RUST,
+    )
+    oracle = anneal_potts(
+        rung.graph,
+        rung.field,
+        schedule,
+        np.random.default_rng(923),
+        move=PottsMove.SWENDSEN_WANG,
+    )
+    assert compiled.trace == ()
+    assert len(oracle.trace) == schedule.n_steps
+    assert compiled.energy == energy(rung.graph, rung.field, compiled.labelling)

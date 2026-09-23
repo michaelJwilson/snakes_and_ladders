@@ -530,6 +530,7 @@ def anneal_potts(
     *,
     move: PottsMove = PottsMove.SINGLE_SITE,
     backend: Backend = Backend.RUST,
+    cluster_backend: Backend = Backend.PYTHON,
 ) -> AnnealedPotts:
     """Simulated annealing by heat-bath sweeps on a temperature schedule.
 
@@ -572,6 +573,13 @@ def anneal_potts(
         :data:`~snakes_and_ladders.backend.Backend.PYTHON` runs the
         oracle that pins it. The two produce the same chain state for state,
         on the same uniforms in the same order (:func:`_sweep_at`).
+    cluster_backend : Backend
+        Which implementation runs the Swendsen-Wang pass.
+        :data:`~snakes_and_ladders.backend.Backend.PYTHON`, the default,
+        records every cluster's accept step in ``trace``;
+        :data:`~snakes_and_ladders.backend.Backend.RUST` is a chain of the
+        same law on another order of draws (:func:`_cluster_pass_rust`) and
+        keeps no counter, so its steps leave ``trace`` empty (issue #923).
 
     Returns
     -------
@@ -615,10 +623,23 @@ def anneal_potts(
             visits += graph.n_nodes * per_sweep
         else:
             counter = ClusterCounter()
+            kept = True
             beta = 1.0 / temperature
             if move is PottsMove.SWENDSEN_WANG:
-                swendsen_wang_sweep(state, graph, rows, rng, counter, beta)
+                # The compiled pass reads no cluster's members, so it keeps
+                # no counter, and its step is not in the trace (issue #923).
+                compiled = cluster_backend is Backend.RUST
+                swendsen_wang_sweep(
+                    state,
+                    graph,
+                    rows,
+                    rng,
+                    None if compiled else counter,
+                    beta,
+                    backend=cluster_backend,
+                )
                 visits += per_sweep
+                kept = not compiled
             else:
                 if move is PottsMove.NIEDERMAYER:
                     niedermayer_sweep(
@@ -651,7 +672,8 @@ def anneal_potts(
                 visits += sum(counter.sizes) * (
                     1 + 2 * len(graph.edges) // graph.n_nodes
                 )
-            trace.append(counter)
+            if kept:
+                trace.append(counter)
         energy = float(energies(graph, rows, state[None])[0])
         if energy < best_energy:
             best_state, best_energy = state.copy(), energy

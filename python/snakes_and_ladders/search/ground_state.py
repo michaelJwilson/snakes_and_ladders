@@ -478,12 +478,17 @@ def _anneal(
     """
     steps = max(1, budget.size // rung.visits_per_sweep)
     start = time.perf_counter()
+    # Swendsen-Wang on the compiled pass: the same law on another order of
+    # draws, and the comparison reads no cluster counter (issue #923).
     run = anneal_potts(
         rung.graph,
         rung.field,
         ExponentialTempSchedule(ANNEAL_START, ANNEAL_END, steps),
         rng,
         move=move,
+        cluster_backend=Backend.RUST
+        if move is PottsMove.SWENDSEN_WANG
+        else Backend.PYTHON,
     )
     return MethodRun(
         labelling=run.labelling,
@@ -531,8 +536,8 @@ def run_icm(rung: Rung, budget: Budget, rng: np.random.Generator) -> MethodRun:
     )
 
 
-def run_gibbs_zero(rung: Rung, budget: Budget, rng: np.random.Generator) -> MethodRun:
-    """Gibbs at T = 0 in a random sweep order, which is ICM under a permutation.
+def run_icm_random(rung: Rung, budget: Budget, rng: np.random.Generator) -> MethodRun:
+    """ICM in a random sweep order: the heat bath at T = 0, every sweep of the budget run.
 
     Reported on ICM's axis rather than beside it. The heat bath at ``T -> 0``
     is the argmin over each site's conditional, which is ICM's update, so the
@@ -542,8 +547,10 @@ def run_gibbs_zero(rung: Rung, budget: Budget, rng: np.random.Generator) -> Meth
 
     That is why this is :func:`run_icm`'s call under two parameters rather
     than a second sweep written beside it (issue #858): a random order, and
-    every sweep of the budget run whether or not one changes nothing. The
-    compiled kernel walks in index order, so this is the Python sweep.
+    every sweep of the budget run whether or not one changes nothing. Named
+    for what it runs, ICM under a permutation, and `gibbs-T0` until #923,
+    which also moved it onto the compiled sweep: the permutations are drawn
+    in the Python sweep's order, and the labelling is that sweep's bitwise.
     """
     steps = max(1, budget.size // rung.visits_per_sweep)
     start = time.perf_counter()
@@ -555,7 +562,7 @@ def run_gibbs_zero(rung: Rung, budget: Budget, rng: np.random.Generator) -> Meth
         max_sweeps=steps,
         sweep_order=SweepOrder.RANDOM,
         stop_when_clean=False,
-        backend=Backend.PYTHON,
+        backend=Backend.NUMBA,
     )
     return MethodRun(
         labelling=settled.labelling,
@@ -731,7 +738,7 @@ def run_bifurcation(rung: Rung, budget: Budget, rng: np.random.Generator) -> Met
 METHODS: dict[str, Method] = {
     "greedy": run_greedy,
     "icm": run_icm,
-    "gibbs-T0": run_gibbs_zero,
+    "icm-random": run_icm_random,
     "anneal": run_anneal,
     "swendsen-wang": run_swendsen_wang,
     "wolff": run_wolff,
@@ -744,7 +751,7 @@ METHODS: dict[str, Method] = {
 
 #: The two rows that are one axis, so a reader of the table is told rather
 #: than left to notice.
-ONE_AXIS = ("icm", "gibbs-T0")
+ONE_AXIS = ("icm", "icm-random")
 
 
 def outcome(run: MethodRun) -> Outcome:
