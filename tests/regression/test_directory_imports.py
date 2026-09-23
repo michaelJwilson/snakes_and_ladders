@@ -26,8 +26,10 @@ DIRECTORIES = ("sim", "likelihood", "opt", "search", "sample", "learn", "qa")
 #: `sandbox/CLAUDE.md` eight times. What holds it is the other direction,
 #: which `tests/regression/test_sandbox.py` asserts: no package directory
 #: imports it. `scripts/` is the command line, which reaches whatever a
-#: command runs.
-EXCLUDED = ("sandbox", "scripts")
+#: command runs. `validation/` is `sandbox/`'s counterpart for external
+#: frameworks (issue #972): it reads what it checks, and
+#: `tests/regression/test_validation.py` asserts the other direction.
+EXCLUDED = ("sandbox", "scripts", "validation")
 
 #: Every directory-to-directory import edge the tree carries, with the
 #: sentence that admits it. ``(root)`` is the package root: seams and
