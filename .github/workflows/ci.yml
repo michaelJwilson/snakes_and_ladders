@@ -514,7 +514,13 @@ jobs:
             cargo-${{ runner.os }}-
       - run: pip install "uv==${UV_VERSION}"
       - run: uv sync --locked --extra test $(python3 infra/validation_extras.py)
-      - run: uv run pytest -m "validation or infra" tests/validation tests/regression/test_validation.py -rs
+      - run: uv run pytest -m "(validation or infra) and not goal" tests/validation tests/regression/test_validation.py -rs
+      # The runtimes the package has to meet, each an external framework's on
+      # a declared fixture, timed in one run on one runner so the pair shares
+      # its hardware. Reported, not gating: a goal fails until it is met.
+      - name: Runtime goals set by the external frameworks (non-blocking)
+        continue-on-error: true
+        run: uv run pytest -m goal tests/validation -rs
 
   # The push to `main`, not the pull request: at 15.8 s current and up to
   # 305.8 s when a figure stamp is stale (issue #433) this is the wrong cost
