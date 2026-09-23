@@ -112,7 +112,7 @@ def test_every_validation_extra_is_one_registered_framework_with_a_test() -> Non
     assert set(extras) == set(registered)
     for extra, requirements in extras.items():
         framework = registered[extra]
-        assert extra == PREFIX + framework.name
+        assert extra == PREFIX + framework.name.replace("_", "-")
         assert FRAMEWORKS[framework.name] is framework
         assert len(requirements) == 1, (extra, requirements)
         assert _distribution(requirements[0]).lower() == (
