@@ -171,7 +171,7 @@ def test_a_reflection_without_a_common_trial_count_is_refused() -> None:
     reflection = ReflectedEmission(
         BetaBinomialEmission([10.0, 20.0], [1.0, 1.0], [1.0, 1.0])
     )
-    with pytest.raises(ValueError, match="reflects successes"):
+    with pytest.raises(ValueError, match="maps successes"):
         reflection.reestimate(
             torch.tensor([1.0, 2.0]), torch.full((2, 4), 0.25, dtype=torch.float64)
         )
