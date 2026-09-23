@@ -573,8 +573,17 @@ projection (K = 100, 4,000 pairs) drops from 5.9 s to 0.65 s and on
 `emission_mixture/stress` from 0.61 s to 0.124 s, one thread; the fitted
 parameters are bitwise the per-component solve's, which stays as the oracle.
 Batching over the observations alone bought 1.18x: the cost was `digamma`
-evaluations, not calls. The negative-binomial dispersion solve is now half of
-an iteration (#918).
+evaluations, not calls.
+
+**The negative-binomial dispersion solve takes the same cut** (#918). One
+lockstep bisection on `log r` over every state, on the distinct counts: the
+dispersion solve at the release projection's size goes from 324 ms to 24.8 ms
+(13.1x, `test_negative_binomial_batched_bench.py`, one thread), the joint M
+step from 543 ms to 235 ms (2.3x), and one `emission_mixture/stress` EM
+iteration from 112 ms to 96 ms, where the beta-binomial solve is now 84 ms of
+it (#925). Against the per-state solve, kept as the oracle: bitwise on
+`emission_mixture/ci`, and on `/stress` 7 of 10 states bitwise and the rest
+within a relative 5.9e-13 of #648's 2e-06 floor.
 
 **The flat-likelihood hazard is the mirror of the Gaussian's.** Where a
 Gaussian likelihood is *unbounded* as a variance falls, a count likelihood goes
