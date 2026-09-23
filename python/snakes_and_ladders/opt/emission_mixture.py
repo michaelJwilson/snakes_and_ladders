@@ -34,9 +34,8 @@ from snakes_and_ladders.emissions import CountPairEmission, EmissionFamily
 from snakes_and_ladders.enumeration import refuse_oversized
 from snakes_and_ladders.opt.em import em_loop
 from snakes_and_ladders.opt.mixture import (
+    e_step,
     emission_mixture_plus_plus,
-    mixture_log_likelihood,
-    responsibilities,
     uniform_seeds,
 )
 from snakes_and_ladders.opt.termination import Termination
@@ -149,8 +148,8 @@ def expectation_maximization(
         attempt += 1
         current, family, _ = state
         log_weight = torch.log(current)
-        log_likelihood = float(mixture_log_likelihood(values, log_weight, family))
-        posterior = responsibilities(values, log_weight, family)
+        evidence, posterior = e_step(values, log_weight, family)
+        log_likelihood = float(evidence)
         reestimated = family.reestimate(values, posterior)
         if not reestimated.converged:
             msg = (
