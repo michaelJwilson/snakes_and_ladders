@@ -19,6 +19,7 @@ from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.search.alpha_expansion import (
     _expansion_network,
+    alpha_beta_swap,
     alpha_expansion,
     iterated_conditional_modes,
 )
@@ -96,3 +97,20 @@ def test_the_expansion_network_build_benchmark(
     built = benchmark(_expansion_network, graph, field, labelling, 0)
 
     assert built.n_nodes >= graph.n_nodes + 2
+
+
+@pytest.mark.parametrize("name", ["expansion", "swap"])
+@pytest.mark.parametrize("extent", [71, 142])
+def test_the_rust_cut_moves_at_large_site_counts(
+    benchmark: BenchmarkFixture, extent: int, name: str
+) -> None:
+    """The whole Rust route at ten labels, network arrays to cut (issue #935).
+
+    The sizes the ticket measured, where the network build rather than the
+    cut was the cost: 0.39 -> 0.16 s and 1.67 -> 0.79 s for the expansion,
+    0.26 -> 0.06 s and 1.24 -> 0.28 s for the swap.
+    """
+    graph, values = _problem(extent, 10)
+    solve = alpha_expansion if name == "expansion" else alpha_beta_swap
+    result = benchmark(solve, graph, values, 10, backend=Backend.RUST)
+    assert np.isfinite(result.energy)

@@ -26,10 +26,13 @@ from snakes_and_ladders.search.alpha_expansion import (
     SweepOrder,
     _expansion_network,
     _infinite_capacity,
+    _swap_arcs,
+    _terminal_capacities,
     alpha_beta_swap,
     alpha_expansion,
     expand,
     iterated_conditional_modes,
+    swap,
 )
 from snakes_and_ladders.search.maxflow import FlowNetwork, ising_ground_state
 from snakes_and_ladders.sim.graph import (
@@ -591,3 +594,47 @@ def test_the_one_coupling_guard_keeps_each_move_its_own_reason() -> None:
         "a negative coupling makes the energy non-submodular, the ground "
         "state NP-hard, and this construction inapplicable rather than slow"
     )
+
+
+def _swap_network_by_loop(
+    graph: PottsGraph, values: np.ndarray, labelling: np.ndarray, alpha: int, beta: int
+) -> FlowNetwork:
+    """The ``add_edge`` loop the swap's arcs replace (issue #935), kept as their oracle."""
+    moving = np.flatnonzero((labelling == alpha) | (labelling == beta))
+    position = {int(node): index for index, node in enumerate(moving)}
+    source, sink = moving.size, moving.size + 1
+    network = FlowNetwork(n_nodes=moving.size + 2)
+    from_source, to_sink = _terminal_capacities(
+        -values[moving, alpha].astype(float), -values[moving, beta].astype(float)
+    )
+    for index in range(moving.size):
+        network.add_edge(source, index, float(from_source[index]))
+        network.add_edge(index, sink, float(to_sink[index]))
+    for (first, second), coupling in graph.weighted_edges():
+        if first in position and second in position:
+            network.add_edge(
+                position[first], position[second], coupling, reverse=coupling
+            )
+    return network
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("seed", range(4))
+def test_the_swap_arcs_are_the_add_edge_loop_arc_for_arc(seed: int) -> None:
+    # Issue #935: the swap network is built as arrays, in the order the loop
+    # appended its arcs, since a minimum cut need not be unique and the two
+    # solvers are pinned to one labelling through one network.
+    graph = lattice_graph((8, 8), BoundaryCondition.PERIODIC, 0.5)
+    rng = np.random.default_rng(935 + seed)
+    values = rng.normal(size=(graph.n_nodes, 4))
+    labelling = rng.integers(0, 4, graph.n_nodes)
+    moving = np.flatnonzero((labelling == 1) | (labelling == 3))
+    network = _swap_arcs(graph, values, moving, 1, 3).network()
+    loop = _swap_network_by_loop(graph, values, labelling, 1, 3)
+    assert network.target == loop.target
+    assert network.capacity == loop.capacity
+    assert network.outgoing == loop.outgoing
+    python = swap(graph, values, labelling, 1, 3, backend=Backend.PYTHON)
+    compiled = swap(graph, values, labelling, 1, 3, backend=Backend.RUST)
+    assert np.array_equal(python.labelling, compiled.labelling)
+    assert python.energy == compiled.energy

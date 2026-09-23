@@ -39,6 +39,7 @@ from typing import Any, NamedTuple
 
 import numpy as np
 
+from snakes_and_ladders import oxi_snakes_and_ladders
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.opt.termination import Termination
 from snakes_and_ladders.search.maxflow import (
@@ -46,7 +47,6 @@ from snakes_and_ladders.search.maxflow import (
     check_non_negative_couplings,
     max_flow,
 )
-from snakes_and_ladders.search.maxflow_rust import min_cut
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import energy, site_field
 
@@ -117,12 +117,34 @@ class ExpansionResult:
     termination: Termination | None = None
 
 
+class _Arcs(NamedTuple):
+    """A move's network as arrays, one row per edge, in ``add_edge`` order (issue #935).
+
+    :meth:`~snakes_and_ladders.search.maxflow.FlowNetwork.from_arcs` builds
+    the Python solver's list store from these; the Rust cut takes them as
+    they are, so the route that never reads the lists does not build them.
+    The arc order is the contract either way: both solvers see one network.
+    """
+
+    n_nodes: int
+    tail: np.ndarray
+    head: np.ndarray
+    capacity: np.ndarray
+    reverse: np.ndarray
+
+    def network(self) -> FlowNetwork:
+        """The same network as a :class:`FlowNetwork`, for the Python solver."""
+        return FlowNetwork.from_arcs(
+            self.n_nodes, self.tail, self.head, self.capacity, self.reverse
+        )
+
+
 class _CutMove(NamedTuple):
     """One binary move, built: the network, its terminals and where a cut lands.
 
     Parameters
     ----------
-    network : FlowNetwork
+    arcs : _Arcs
         The move's network, whose arc order is part of the contract: a
         minimum cut need not be unique, so the two solvers are pinned to one
         labelling by building one network.
@@ -133,10 +155,30 @@ class _CutMove(NamedTuple):
         The cut's source-side mask to the labelling it proposes.
     """
 
-    network: FlowNetwork
+    arcs: _Arcs
     source: int
     sink: int
     place: Callable[[np.ndarray], np.ndarray]
+
+
+def _rust_source_side(arcs: _Arcs, source: int, sink: int) -> np.ndarray:
+    """The Rust cut's source side, from the arrays with no list store (issue #935).
+
+    What :func:`~snakes_and_ladders.search.maxflow_rust.min_cut` passes for
+    a network :meth:`FlowNetwork.from_arcs` built: the ``(tail, head)``
+    pairs interleaved, and the two capacity arrays as they are.
+    """
+    pairs = np.empty(2 * arcs.tail.size, dtype=np.int64)
+    pairs[0::2], pairs[1::2] = arcs.tail, arcs.head
+    _, side = oxi_snakes_and_ladders.max_flow(
+        arcs.n_nodes,
+        pairs,
+        np.ascontiguousarray(arcs.capacity, dtype=np.float64),
+        source,
+        sink,
+        np.ascontiguousarray(arcs.reverse, dtype=np.float64),
+    )
+    return np.asarray(side, dtype=bool)
 
 
 def _check_cut_backend(backend: Backend, move: str) -> None:
@@ -194,12 +236,12 @@ def _lowest_by_cut(
     if built is None:
         return Labelling(labelling, energy(graph, values, labelling))
 
-    cut = (
-        min_cut(built.network, built.source, built.sink)
+    source_side = (
+        _rust_source_side(built.arcs, built.source, built.sink)
         if backend is Backend.RUST
-        else max_flow(built.network, built.source, built.sink)
+        else max_flow(built.arcs.network(), built.source, built.sink).source_side
     )
-    proposed = built.place(cut.source_side)
+    proposed = built.place(source_side)
 
     current, candidate = (
         energy(graph, values, labelling),
@@ -296,6 +338,13 @@ def _cycle_to_a_local_minimum(
 def _expansion_network(
     graph: PottsGraph, values: np.ndarray, labelling: np.ndarray, alpha: int
 ) -> FlowNetwork:
+    """:func:`_expansion_arcs` as a :class:`FlowNetwork`, the Python solver's form."""
+    return _expansion_arcs(graph, values, labelling, alpha).network()
+
+
+def _expansion_arcs(
+    graph: PottsGraph, values: np.ndarray, labelling: np.ndarray, alpha: int
+) -> _Arcs:
     """The expansion network of :func:`expand`, built without a call per arc.
 
     Arc for arc and in the same order as the ``add_edge`` loop it replaces,
@@ -376,7 +425,7 @@ def _expansion_network(
     edge_tail[at + 2], edge_head[at + 2] = auxiliary, sink
     edge_capacity[at + 2] = coupling[split]
 
-    return FlowNetwork.from_arcs(
+    return _Arcs(
         n_nodes + 2 + n_auxiliary,
         np.concatenate((node_tail, edge_tail)),
         np.concatenate((node_head, edge_head)),
@@ -449,7 +498,7 @@ def expand(
 
     def build(values: np.ndarray) -> _CutMove | None:
         return _CutMove(
-            network=_expansion_network(graph, values, labelling, alpha),
+            arcs=_expansion_arcs(graph, values, labelling, alpha),
             source=graph.n_nodes,
             sink=graph.n_nodes + 1,
             # The sink side switched, so it takes alpha and the rest is held.
@@ -735,6 +784,62 @@ def _infinite_capacity(graph: PottsGraph, values: np.ndarray) -> float:
     return 1.0 + float(np.abs(values).sum()) + float(graph.edge_coupling.sum())
 
 
+def _swap_arcs(
+    graph: PottsGraph,
+    values: np.ndarray,
+    moving: np.ndarray,
+    alpha: int,
+    beta: int,
+) -> _Arcs:
+    """The network of :func:`swap` over the ``moving`` sites, built without a call per arc (issue #935).
+
+    Arc for arc and in the order of the ``add_edge`` loop it replaces, which
+    `tests/regression/search/test_alpha_expansion.py` asserts against a
+    transcription of that loop. At 80,656 sites and ten labels that loop was
+    18.8 s of a 20.8 s swap under ``cProfile``, the cut itself 0.7 s.
+
+    The data term of a moving site is its own field and nothing else. A
+    *held* neighbour carries neither alpha nor beta --- those are exactly the
+    labels that move --- so it agrees with the moving site under neither
+    choice and contributes the same constant to both. That is why this move
+    needs no auxiliary node and why the expansion does: there, a held
+    neighbour can already be alpha.
+
+    Returns
+    -------
+    _Arcs
+        Spanning the moving sites plus a source at ``moving.size`` and a sink
+        after it.
+    """
+    source, sink = moving.size, moving.size + 1
+    # Cut source -> index when the site lands on the sink side, taking beta,
+    # so that arc carries the cost of beta.
+    from_source, to_sink = _terminal_capacities(
+        -values[moving, alpha].astype(float), -values[moving, beta].astype(float)
+    )
+    # Each site's source and sink arc in turn, then every edge with both ends
+    # moving, in edge order, at its coupling both ways.
+    indices = np.arange(moving.size, dtype=np.int64)
+    node_tail = np.empty(2 * moving.size, dtype=np.int64)
+    node_head = np.empty(2 * moving.size, dtype=np.int64)
+    node_capacity = np.empty(2 * moving.size, dtype=np.float64)
+    node_tail[0::2], node_tail[1::2] = source, indices
+    node_head[0::2], node_head[1::2] = indices, sink
+    node_capacity[0::2], node_capacity[1::2] = from_source, to_sink
+    position = np.full(graph.n_nodes, -1, dtype=np.int64)
+    position[moving] = indices
+    first, second, coupling = graph.endpoints
+    inside = (position[first] >= 0) & (position[second] >= 0)
+    edge_capacity = np.asarray(coupling[inside], dtype=np.float64)
+    return _Arcs(
+        moving.size + 2,
+        np.concatenate((node_tail, position[first[inside]])),
+        np.concatenate((node_head, position[second[inside]])),
+        np.concatenate((node_capacity, edge_capacity)),
+        np.concatenate((np.zeros(2 * moving.size), edge_capacity)),
+    )
+
+
 def swap(
     graph: PottsGraph,
     field_values: np.ndarray,
@@ -782,38 +887,15 @@ def swap(
         moving = np.flatnonzero((labelling == alpha) | (labelling == beta))
         if moving.size == 0:
             return None
-        position = {int(node): index for index, node in enumerate(moving)}
-
+        arcs = _swap_arcs(graph, values, moving, alpha, beta)
         source, sink = moving.size, moving.size + 1
-        network = FlowNetwork(n_nodes=moving.size + 2)
-
-        # The data term of a moving site is its own field and nothing else. A
-        # *held* neighbour carries neither alpha nor beta --- those are exactly
-        # the labels that move --- so it agrees with the moving site under
-        # neither choice and contributes the same constant to both. That is why
-        # this move needs no auxiliary node and why the expansion does: there,
-        # a held neighbour can already be alpha.
-        to_alpha = -values[moving, alpha].astype(float)
-        to_beta = -values[moving, beta].astype(float)
-        # Cut source -> index when the site lands on the sink side, taking
-        # beta, so that arc carries the cost of beta.
-        from_source, to_sink = _terminal_capacities(to_alpha, to_beta)
-        for index in range(moving.size):
-            network.add_edge(source, index, float(from_source[index]))
-            network.add_edge(index, sink, float(to_sink[index]))
-
-        for (first, second), coupling in graph.weighted_edges():
-            if first in position and second in position:
-                network.add_edge(
-                    position[first], position[second], coupling, reverse=coupling
-                )
 
         def place(source_side: np.ndarray) -> np.ndarray:
             proposed = labelling.copy()
             proposed[moving] = np.where(source_side[: moving.size], alpha, beta)
             return proposed
 
-        return _CutMove(network=network, source=source, sink=sink, place=place)
+        return _CutMove(arcs=arcs, source=source, sink=sink, place=place)
 
     return _lowest_by_cut(graph, field_values, labelling, build, backend)
 
