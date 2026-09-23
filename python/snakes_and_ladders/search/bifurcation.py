@@ -116,15 +116,27 @@ def _integrate_numpy(
     c0: float,
     discrete: bool,
 ) -> np.ndarray:
-    """The ballistic update over NumPy arrays; ``x`` is ``(n_nodes, n_states)`` and returned."""
+    """The ballistic update over NumPy arrays; ``x`` is ``(n_nodes, n_states)`` and returned.
+
+    The coupling sum is one product with the symmetric weighted adjacency,
+    built once per call in compressed rows (issue #997): the two `np.add.at`
+    scatters it replaces were 8.1 s of a 16.0 s run at 142^2.
+    """
+    from scipy.sparse import csr_matrix
+
+    n_nodes = rows.shape[0]
+    adjacency = csr_matrix(
+        (
+            np.concatenate([couplings, couplings]),
+            (np.concatenate([first, second]), np.concatenate([second, first])),
+        ),
+        shape=(n_nodes, n_nodes),
+    )
     y = np.zeros_like(x)
-    weights = couplings[:, None]
     for step in range(steps):
         ramp = A_END * step / steps
-        force = rows.copy()
         drive = np.sign(x) if discrete else x
-        np.add.at(force, first, weights * drive[second])
-        np.add.at(force, second, weights * drive[first])
+        force = rows + adjacency @ drive
         y += dt * (-(A_END - ramp) * x + c0 * force)
         x += dt * A_END * y
         outside = np.abs(x) > 1.0
