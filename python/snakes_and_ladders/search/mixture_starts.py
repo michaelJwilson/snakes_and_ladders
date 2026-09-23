@@ -123,6 +123,14 @@ class MixtureInstance:
         The generating components.
     at : ComponentsAt
         Places a component on each of a set of pairs.
+    covariate : np.ndarray | None
+        Per-pair covariate, shape ``(n_samples, 2)``: every fit and every
+        likelihood conditions on it (issue #933).
+    seeding_rows : np.ndarray | None
+        Where the starts read the pairs from, when that is not the pairs
+        themselves: under a covariate,
+        :func:`~snakes_and_ladders.sim.count_pairs.rate_space`'s rows, so a
+        start places components at rates rather than at raw counts.
     """
 
     observations: np.ndarray
@@ -130,6 +138,20 @@ class MixtureInstance:
     weights: np.ndarray
     truth: EmissionFamily
     at: ComponentsAt
+    covariate: np.ndarray | None = None
+    seeding_rows: np.ndarray | None = None
+
+    @property
+    def rows(self) -> np.ndarray:
+        """The pairs a start seeds from: :attr:`seeding_rows`, or the observations."""
+        return self.observations if self.seeding_rows is None else self.seeding_rows
+
+    @property
+    def conditioned(self) -> torch.Tensor | None:
+        """:attr:`covariate` as the tensor the fits take."""
+        if self.covariate is None:
+            return None
+        return torch.as_tensor(self.covariate, dtype=torch.float64)
 
     @property
     def n_components(self) -> int:
@@ -146,7 +168,11 @@ class MixtureInstance:
         """The log-likelihood the generating parameters reach on this draw."""
         values = torch.as_tensor(self.observations, dtype=torch.float64)
         log_weight = torch.log(torch.as_tensor(self.weights, dtype=torch.float64))
-        return float(mixture_log_likelihood(values, log_weight, self.truth))
+        return float(
+            mixture_log_likelihood(
+                values, log_weight, self.truth, covariate=self.conditioned
+            )
+        )
 
 
 def instance_from(
@@ -198,7 +224,7 @@ def surrogate(instance: MixtureInstance) -> GaussianMixtureObjective:
     GaussianMixtureObjective
     """
     return GaussianMixtureObjective(
-        np.asarray(instance.observations, dtype=np.float64), instance.n_components
+        np.asarray(instance.rows, dtype=np.float64), instance.n_components
     )
 
 
@@ -213,7 +239,7 @@ def at_locations(instance: MixtureInstance, locations: torch.Tensor) -> Emission
     -------
     EmissionFamily
     """
-    rows = np.asarray(instance.observations, dtype=np.float64)
+    rows = np.asarray(instance.rows, dtype=np.float64)
     located = np.asarray(locations.detach().numpy(), dtype=np.float64)
     if located.ndim == 1:
         distance = np.abs(rows[None, :, 0] - located[:, None])
@@ -239,7 +265,7 @@ def prior_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded
     -------
     Seeded
     """
-    totals = np.asarray(instance.observations, dtype=np.float64)[:, 0]
+    totals = np.asarray(instance.rows, dtype=np.float64)[:, 0]
     low, high = float(max(totals.min(), 1.0)), float(max(totals.max(), 2.0))
     means = np.exp(rng.uniform(np.log(low), np.log(high), size=instance.n_components))
     rates = rng.uniform(0.0, 1.0, size=instance.n_components)
@@ -254,7 +280,7 @@ def data_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded:
     Seeded
     """
     return Seeded(
-        uniform_start(instance.observations, instance.n_components, instance.at, rng),
+        uniform_start(instance.rows, instance.n_components, instance.at, rng),
         0.0,
     )
 
@@ -267,7 +293,7 @@ def emission_seeding(instance: MixtureInstance, rng: np.random.Generator) -> See
     Seeded
     """
     return Seeded(
-        plus_plus_start(instance.observations, instance.n_components, instance.at, rng),
+        plus_plus_start(instance.rows, instance.n_components, instance.at, rng),
         1.0,
     )
 
@@ -280,7 +306,7 @@ def kmeans_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seede
     Seeded
     """
     centres = kmeans_plus_plus(
-        np.asarray(instance.observations, dtype=np.float64), instance.n_components, rng
+        np.asarray(instance.rows, dtype=np.float64), instance.n_components, rng
     )
     return Seeded(instance.at(centres), 1.0)
 
@@ -296,7 +322,7 @@ def gaussian_em_seeding(instance: MixtureInstance, rng: np.random.Generator) -> 
     -------
     Seeded
     """
-    channel = np.asarray(instance.observations, dtype=np.float64)[:, 0]
+    channel = np.asarray(instance.rows, dtype=np.float64)[:, 0]
     objective = GaussianMixtureObjective(channel, instance.n_components)
     start = KMeansPlusPlus(1, rng).starts(objective)[0]
     weights = torch.exp(objective.constrain(start)["log_weight"]).detach()
@@ -338,9 +364,9 @@ def burn_in_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seed
     """
     components = data_seeding(instance, rng).components
     size = max(instance.n_components, int(BURN_IN_FRACTION * instance.n_samples))
-    subsample = instance.observations[
-        rng.choice(instance.n_samples, size=size, replace=False)
-    ]
+    chosen = rng.choice(instance.n_samples, size=size, replace=False)
+    subsample = instance.observations[chosen]
+    covariate = None if instance.covariate is None else instance.covariate[chosen]
     weights = torch.full(
         (instance.n_components,), 1.0 / instance.n_components, dtype=torch.float64
     )
@@ -348,7 +374,12 @@ def burn_in_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seed
     path: list[tuple[int, EmissionFamily]] = []
     for iteration in range(BURN_IN_ITERATIONS):
         fitted = expectation_maximization(
-            subsample, weights, components, max_iterations=1, tolerance=0.0
+            subsample,
+            weights,
+            components,
+            max_iterations=1,
+            tolerance=0.0,
+            covariate=covariate,
         )
         weights, components = fitted.weights, fitted.components
         tracked.record(iteration, subsample_log_likelihood=fitted.log_likelihood)
@@ -450,7 +481,7 @@ def quantile_seeding(instance: MixtureInstance, _rng: np.random.Generator) -> Se
     Seeded
     """
     values = torch.as_tensor(
-        np.asarray(instance.observations, dtype=np.float64), dtype=torch.float64
+        np.asarray(instance.rows, dtype=np.float64), dtype=torch.float64
     )
     return Seeded(
         at_locations(
@@ -551,7 +582,12 @@ def annealed_gibbs_seeding(
         (instance.n_components,), 1.0 / instance.n_components, dtype=torch.float64
     )
     run = anneal_assignments(
-        instance.observations, weights, components, gibbs_schedule(), rng
+        instance.observations,
+        weights,
+        components,
+        gibbs_schedule(),
+        rng,
+        covariate=instance.covariate,
     )
     return Seeded(
         run.components,
@@ -1025,11 +1061,17 @@ def polish(
                 components,
                 max_iterations=1,
                 tolerance=0.0,
+                covariate=instance.covariate,
             )
         except ValueError:
             # The one refusal this stop reads: a component the E step leaves
             # no responsibility on, whose M step has nothing to solve on.
-            owned = responsibilities(values, torch.log(weights), components).sum(dim=0)
+            owned = responsibilities(
+                values,
+                torch.log(weights),
+                components,
+                covariate=instance.conditioned,
+            ).sum(dim=0)
             if seconds is None or float(owned.min()) > 0.0:
                 raise
             emptied = True
@@ -1046,7 +1088,11 @@ def polish(
         ):
             converged = True
             break
-    final = float(mixture_log_likelihood(values, torch.log(weights), components))
+    final = float(
+        mixture_log_likelihood(
+            values, torch.log(weights), components, covariate=instance.conditioned
+        )
+    )
     trace.append(final)
     tracked.record(iteration, log_likelihood=final)
     tensors = [weights, *components.named_parameters().values()]
@@ -1220,7 +1266,11 @@ class TimedStart:
         curve = [
             (
                 offset + start_seconds[step],
-                float(mixture_log_likelihood(values, uniform, family)),
+                float(
+                    mixture_log_likelihood(
+                        values, uniform, family, covariate=instance.conditioned
+                    )
+                ),
             )
             for step, family in seeded.path
         ]
@@ -1240,7 +1290,10 @@ class TimedStart:
             )
 
         posterior = responsibilities(
-            values, torch.log(polished.weights), polished.components
+            values,
+            torch.log(polished.weights),
+            polished.components,
+            covariate=instance.conditioned,
         )
         columns = match_components(polished.components, instance.truth)
         assigned = np.asarray(posterior.argmax(dim=1).numpy())
