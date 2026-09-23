@@ -1,10 +1,11 @@
-"""Deterministic annealing EM for the count-pair mixture (issue #903).
+"""Deterministic annealing EM for the count-pair mixture, conserved in the sandbox (issues #903, #916).
 
-`opt.emission_mixture.expectation_maximization` takes `temperatures`: one E
-and one M step at each, the responsibilities `softmax((log w + log p) / T)`,
-then plain EM at one. Four referees, from the strongest: at `T = 1` the
-tempered step is plain EM's step, so `None` and `[1.0]` reproduce the plain
-fit bitwise; at `T -> inf` every responsibility is `1/K` and the M step is
+`sandbox.annealed_em.annealed_expectation_maximization` runs one E and one M
+step at each temperature, the responsibilities `softmax((log w + log p) / T)`,
+then plain EM at one. Declined on `emission_mixture/ci`, where it reaches the
+maximum plain EM reaches, and kept for these referees, from the strongest: at
+`T = 1` the tempered step is plain EM's step, so an empty schedule and `[1.0]`
+reproduce `opt.emission_mixture.expectation_maximization` bitwise; at `T -> inf` every responsibility is `1/K` and the M step is
 the one-component fit to the pooled pairs; within one temperature the free
 energy the tempered step ascends does not fall (Ueda & Nakano, 1998); and
 from the `data` start on `emission_mixture/ci` the annealed fit is read
@@ -24,11 +25,14 @@ from snakes_and_ladders.opt.emission_mixture import (
     CountPairSeeding,
     EmissionMixtureFit,
     expectation_maximization,
-    free_energy,
     uniform_start,
 )
 from snakes_and_ladders.opt.mixture import mixture_log_likelihood
 from snakes_and_ladders.sample.schedule import ExponentialTempSchedule, ladder
+from snakes_and_ladders.sandbox.annealed_em import (
+    annealed_expectation_maximization,
+    free_energy,
+)
 from snakes_and_ladders.sim.emission_mixture import (
     EmissionMixtureParams,
     simulate_emission_mixture,
@@ -122,17 +126,17 @@ def test_no_schedule_and_one_step_at_one_are_the_plain_fit_bitwise(
 ) -> None:
     observations, start = data_start
     k = start.n_states
-    unset = expectation_maximization(
-        observations, _uniform(k), start, tolerance=EM_TOLERANCE, temperatures=None
+    unset = annealed_expectation_maximization(
+        observations, _uniform(k), start, [], tolerance=EM_TOLERANCE
     )
-    at_one = expectation_maximization(
-        observations, _uniform(k), start, tolerance=EM_TOLERANCE, temperatures=[1.0]
+    at_one = annealed_expectation_maximization(
+        observations, _uniform(k), start, [1.0], tolerance=EM_TOLERANCE
     )
-    assert _same(plain, unset)
-    assert _same(plain, at_one)
-    # The plain fit carries no tempered step; the one at one carries its
-    # free energy, which at one is the log-likelihood at the start.
-    assert plain.temperatures == plain.free_energies == ()
+    assert _same(plain, unset.fit)
+    assert _same(plain, at_one.fit)
+    # No schedule carries no tempered step; the one at one carries its free
+    # energy, which at one is the log-likelihood at the start.
+    assert unset.temperatures == unset.free_energies == ()
     values = torch.as_tensor(observations, dtype=torch.float64)
     assert at_one.free_energies == (
         float(mixture_log_likelihood(values, torch.log(_uniform(k)), start)),
@@ -150,9 +154,9 @@ def test_a_hot_step_spreads_every_pair_evenly_and_fits_the_pooled_pairs(
     observations, start = data_start
     _, _, at = _instance()
     k = start.n_states
-    hot = expectation_maximization(
-        observations, _uniform(k), start, max_iterations=1, temperatures=[HOT]
-    )
+    hot = annealed_expectation_maximization(
+        observations, _uniform(k), start, [HOT], max_iterations=1
+    ).fit
     assert hot.iterations == 1
     assert float((hot.responsibilities - 1.0 / k).abs().max()) < 1e-12
     assert float((hot.weights - 1.0 / k).abs().max()) < 1e-12
@@ -181,12 +185,8 @@ def test_the_free_energy_does_not_fall_within_a_temperature(
     observations, start = data_start
     k = start.n_states
     steps = [8.0] * 10 + [4.0] * 10 + [2.0] * 10 + [1.0] * 10
-    fit = expectation_maximization(
-        observations,
-        _uniform(k),
-        start,
-        max_iterations=len(steps),
-        temperatures=steps,
+    fit = annealed_expectation_maximization(
+        observations, _uniform(k), start, steps, max_iterations=len(steps)
     )
     assert fit.temperatures == tuple(steps)
     energies = np.asarray(fit.free_energies)
@@ -196,13 +196,9 @@ def test_the_free_energy_does_not_fall_within_a_temperature(
         assert bool((falls >= -1e-10 * np.abs(values[1:])).all()), (block, falls)
     # The free energy at T is the free_energy of the joint at the state each
     # step was handed; at the last step's state and temperature, recomputed.
-    last = expectation_maximization(
-        observations,
-        _uniform(k),
-        start,
-        max_iterations=len(steps) - 1,
-        temperatures=steps[:-1],
-    )
+    last = annealed_expectation_maximization(
+        observations, _uniform(k), start, steps[:-1], max_iterations=len(steps) - 1
+    ).fit
     values_t = torch.as_tensor(observations, dtype=torch.float64)
     joint = torch.log(last.weights) + last.components.log_density(values_t)
     assert free_energy(joint, steps[-1]) == pytest.approx(energies[-1], rel=1e-12)
@@ -227,14 +223,11 @@ def test_annealing_from_the_data_start_is_read_against_plain_em(
     log_weight = torch.log(torch.as_tensor(params.weights, dtype=torch.float64))
     reference = float(mixture_log_likelihood(values, log_weight, params.components))
     labels = simulate_emission_mixture(params).labels
-    annealed = expectation_maximization(
-        observations,
-        _uniform(k),
-        start,
-        tolerance=EM_TOLERANCE,
-        temperatures=SCHEDULE,
+    run = annealed_expectation_maximization(
+        observations, _uniform(k), start, SCHEDULE, tolerance=EM_TOLERANCE
     )
-    assert annealed.temperatures == SCHEDULE
+    assert run.temperatures == SCHEDULE
+    annealed = run.fit
     assert annealed.log_likelihood >= plain.log_likelihood - EM_TOLERANCE * abs(
         plain.log_likelihood
     )
@@ -253,10 +246,8 @@ def test_a_temperature_is_positive_and_the_schedule_fits_the_budget(
     k = start.n_states
     for bad in (0.0, -1.0, float("inf"), float("nan")):
         with pytest.raises(ValueError, match="positive and finite"):
-            expectation_maximization(
-                observations, _uniform(k), start, temperatures=[bad]
-            )
+            annealed_expectation_maximization(observations, _uniform(k), start, [bad])
     with pytest.raises(ValueError, match="do not fit"):
-        expectation_maximization(
-            observations, _uniform(k), start, max_iterations=1, temperatures=[2.0, 1.0]
+        annealed_expectation_maximization(
+            observations, _uniform(k), start, [2.0, 1.0], max_iterations=1
         )

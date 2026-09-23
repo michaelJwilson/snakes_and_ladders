@@ -23,8 +23,7 @@ Ground truth and data generation live in
 from __future__ import annotations
 
 import itertools
-import math
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -40,7 +39,6 @@ from snakes_and_ladders.opt.mixture import (
     uniform_seeds,
 )
 from snakes_and_ladders.opt.termination import Termination
-from snakes_and_ladders.track import current
 
 #: Builds a ``k``-state family centred on ``k`` observations, one per row. The
 #: seam an initializer needs from a model whose parameters it cannot otherwise
@@ -79,12 +77,6 @@ class EmissionMixtureFit:
         Whether the loop met its relative tolerance or ran out of iterations,
         in the form every result states it in (issue #860). ``iterations``
         stays: it is what this result has always been read by.
-    temperatures : tuple[float, ...]
-        The tempered steps' temperatures, in order; empty for plain EM (issue
-        #903).
-    free_energies : tuple[float, ...]
-        :func:`free_energy` at each tempered step's temperature, at the state
-        that step was handed, one per entry of ``temperatures``.
     """
 
     weights: torch.Tensor
@@ -94,25 +86,6 @@ class EmissionMixtureFit:
     iterations: int
     at_boundary: bool
     termination: Termination | None = None
-    temperatures: tuple[float, ...] = ()
-    free_energies: tuple[float, ...] = ()
-
-
-def free_energy(joint: torch.Tensor, temperature: float) -> float:
-    """``F_T = sum_i T log sum_k (w_k p_k(x_i))^(1/T)``, the value a tempered EM step ascends.
-
-    ``joint`` is ``log w_k + log p_k(x_i)``, shape ``(n_samples,
-    n_components)``. At ``T = 1`` it is the mixture log-likelihood. At fixed
-    ``T`` it is ``max_q sum_i [sum_k q_ik log(w_k p_k(x_i)) + T H(q_i)]``, the
-    maximum over ``q`` attained at the tempered responsibilities, so a
-    tempered E step followed by an M step that maximizes the expected
-    complete-data term cannot lower it (Ueda & Nakano, 1998).
-
-    Returns
-    -------
-    float
-    """
-    return float(temperature * torch.logsumexp(joint / temperature, dim=-1).sum())
 
 
 def expectation_maximization(
@@ -121,9 +94,8 @@ def expectation_maximization(
     components: EmissionFamily,
     max_iterations: int = 200,
     tolerance: float = 1e-10,
-    temperatures: Sequence[float] | None = None,
 ) -> EmissionMixtureFit:
-    """Fit a mixture of count emissions by EM, optionally annealed first.
+    """Fit a mixture of count emissions by EM.
 
     The E step is :func:`snakes_and_ladders.opt.mixture.responsibilities` and
     the M step is the family's own :meth:`reestimate`: independent
@@ -149,19 +121,6 @@ def expectation_maximization(
         Stop when the log-likelihood improves by less than this *relative* to
         its magnitude --- absolute would not transfer across data sizes
         (``DEV.md``, issue #111).
-    temperatures : Sequence[float] | None
-        Deterministic annealing (Ueda & Nakano, 1998; issue #903): one E and
-        one M step at each temperature in turn, the responsibilities
-        ``softmax((log w_k + log p_k(x)) / T)``, before the tolerance loop
-        runs at ``T = 1``. A schedule ends at one; a caller holding a
-        :class:`~snakes_and_ladders.sample.schedule.TempSchedule` passes
-        :func:`~snakes_and_ladders.sample.schedule.ladder` of it, since
-        ``opt`` importing ``sample`` would be a cycle. The steps count
-        against ``max_iterations`` and are not tested for convergence;
-        ``None`` is plain EM, bitwise, and so is ``[1.0]``, whose one step is
-        plain EM's first. Each step is recorded into the enclosing ``track``
-        run at its index: its temperature, the log-likelihood and
-        :func:`free_energy` at the state it was handed.
 
     Returns
     -------
@@ -175,40 +134,21 @@ def expectation_maximization(
         If a component's M step did not converge. A number read off an inner
         solve that never settled is not an estimate, and returning it here
         would surface several iterations later as a non-monotone likelihood.
-        Also if a temperature is not positive and finite, or there are more
-        of them than ``max_iterations``.
     """
-    schedule = [] if temperatures is None else [float(t) for t in temperatures]
-    for value in schedule:
-        if not (math.isfinite(value) and value > 0.0):
-            msg = f"a temperature is positive and finite, got {value}"
-            raise ValueError(msg)
-    if len(schedule) > max_iterations:
-        msg = (
-            f"{len(schedule)} tempered steps do not fit in "
-            f"max_iterations={max_iterations}"
-        )
-        raise ValueError(msg)
     values = torch.as_tensor(observations, dtype=torch.float64)
     boundary = False
     attempt = 0
 
     def step(
         state: tuple[torch.Tensor, EmissionFamily, torch.Tensor],
-        temperature: float = 1.0,
     ) -> tuple[tuple[torch.Tensor, EmissionFamily, torch.Tensor], float]:
-        """One E step at ``temperature``, one M step, and the log-likelihood at the state given."""
+        """One E step, one M step, and the log-likelihood at the state given."""
         nonlocal boundary, attempt
         attempt += 1
-        present, family, _ = state
-        log_weight = torch.log(present)
+        current, family, _ = state
+        log_weight = torch.log(current)
         log_likelihood = float(mixture_log_likelihood(values, log_weight, family))
-        if temperature == 1.0:
-            posterior = responsibilities(values, log_weight, family)
-        else:
-            joint = log_weight + family.log_density(values)
-            free_energies.append(free_energy(joint, temperature))
-            posterior = torch.softmax(joint / temperature, dim=-1)
+        posterior = responsibilities(values, log_weight, family)
         reestimated = family.reestimate(values, posterior)
         if not reestimated.converged:
             msg = (
@@ -229,33 +169,9 @@ def expectation_maximization(
         components,
         torch.empty((values.shape[0], components.n_states), dtype=torch.float64),
     )
-    # The tempered steps, then the tolerance loop from where they left off,
-    # tested against the last of their values as it would have tested its own.
-    free_energies: list[float] = []
-    tracked = current()
-    previous = -float("inf")
-    for index, temperature in enumerate(schedule):
-        start, previous = step(start, temperature)
-        if temperature == 1.0:
-            # At one the free energy is the log-likelihood, the same sum.
-            free_energies.append(previous)
-        tracked.record(
-            index,
-            log_likelihood=previous,
-            free_energy=free_energies[-1],
-            temperature=temperature,
-        )
     (weights, components, posterior), log_likelihood, termination = em_loop(
-        step,
-        start,
-        tolerance=tolerance,
-        max_iterations=max_iterations - len(schedule),
-        previous=previous,
+        step, start, tolerance=tolerance, max_iterations=max_iterations
     )
-    if schedule:
-        termination = Termination.after(
-            termination.iterations + len(schedule), converged=termination.converged
-        )
     return EmissionMixtureFit(
         weights=weights,
         components=components,
@@ -264,8 +180,6 @@ def expectation_maximization(
         iterations=termination.iterations,
         at_boundary=boundary,
         termination=termination,
-        temperatures=tuple(schedule),
-        free_energies=tuple(free_energies),
     )
 
 
