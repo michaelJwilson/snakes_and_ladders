@@ -3282,6 +3282,25 @@ iterate stopped at a count sits above its basin's optimum by an amount a
 gradient polish removes, and an equal-budget comparison charges the polish to
 every method.
 
+\paragraph{Deterministic annealing.}
+The alternation may be tempered first \citep{ueda1998}: at temperature $T$
+the E step takes $r_{ik} \propto (w_k\,p_k(y_i))^{1/T}$, and the M step is
+unchanged. At fixed $T$ the pair ascends the free energy
+\begin{equation}
+  F_T(\theta) = \sum_i T \log \sum_k \big(w_k\,p_k(y_i)\big)^{1/T}
+  = \max_{q}\, \sum_i \Big[\sum_k q_{ik} \log\big(w_k\,p_k(y_i)\big) + T\,H(q_i)\Big],
+  \label{eq:da-em}
+\end{equation}
+the maximum attained at the tempered responsibilities, which is the monotone
+claim a fixed temperature is held to; at $T = 1$ it is the log-likelihood and
+the step is expectation--maximization's own, and as $T \to \infty$ every
+responsibility is $1/K$ and one M step fits each component to the pooled data.
+A schedule falling to one ends in the plain alternation. Whether it reaches a
+higher optimum than the plain alternation from the same start is measured,
+not assumed: on the three-component count-pair instance of
+Section~\ref{sec:mixture} both reach one maximum from every start tried,
+so the route is declined and conserved beside the package rather than in it.
+
 \subsection{The $k$-means$++$ start}
 The first initializer here that reads the data, Algorithm~\ref{alg:kmeanspp}. The first centre is an
 observation drawn uniformly; each subsequent one is an observation $y$ drawn

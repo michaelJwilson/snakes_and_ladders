@@ -564,6 +564,18 @@ Alternating bisection in `(p, a + b)` settles in 3 to 9 iterations at a
 residual of exactly zero. An M step that does not settle is refused, per
 `likelihood/CLAUDE.md`.
 
+**The beta-binomial solve runs every component at once, on distinct values**
+(#892, PR #917). Within one solve the weights are fixed, so each score's sum
+over the observations is a sum over each channel's distinct values weighted by
+the responsibility summed there, and one alternating bisection runs over every
+component in lockstep. One EM iteration on the `spatio_sequential_counts/release`
+projection (K = 100, 4,000 pairs) drops from 5.9 s to 0.65 s and on
+`emission_mixture/stress` from 0.61 s to 0.124 s, one thread; the fitted
+parameters are bitwise the per-component solve's, which stays as the oracle.
+Batching over the observations alone bought 1.18x: the cost was `digamma`
+evaluations, not calls. The negative-binomial dispersion solve is now half of
+an iteration (#918).
+
 **The flat-likelihood hazard is the mirror of the Gaussian's.** Where a
 Gaussian likelihood is *unbounded* as a variance falls, a count likelihood goes
 *flat* as the dispersion rises toward its Poisson or binomial limit. The bound

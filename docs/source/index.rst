@@ -456,6 +456,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sandbox
    :members:
 
+.. automodule:: snakes_and_ladders.sandbox.annealed_em
+   :members:
+
 .. automodule:: snakes_and_ladders.sandbox.tropical
    :members:
 
