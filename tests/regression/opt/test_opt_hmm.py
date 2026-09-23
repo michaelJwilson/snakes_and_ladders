@@ -634,23 +634,48 @@ def test_the_streamed_family_step_is_the_batched_one(
         )
         for backend in (Backend.PYTHON, Backend.RUST)
     ]
+    if name != "gaussian":
+        # Every observation scored rather than each cell, the three cells
+        # that repeat most tabled and the rest scored, and each with the
+        # Stirling lgamma from 10 (#997).
+        fits.extend(
+            baum_welch_family(
+                observations,
+                initial,
+                transition,
+                family,
+                max_iterations=10,
+                tolerance=-np.inf,
+                covariate=depth,
+                with_table=with_table,
+                table_size=size,
+                approx=approx,
+            )
+            for with_table, size, approx in (
+                (False, None, False),
+                (True, 3, False),
+                (True, None, True),
+                (False, None, True),
+            )
+        )
     assert type(fits[1].emissions) is type(family)
-    for name_ in ("log_initial", "log_transition"):
-        assert_allclose(
-            getattr(fits[1], name_).numpy(),
-            getattr(fits[0], name_).numpy(),
-            rtol=0.0,
-            atol=1e-10,
-        )
-    for key, value in fits[0].emissions.named_parameters().items():
-        assert_allclose(
-            fits[1].emissions.named_parameters()[key].numpy(),
-            value.numpy(),
-            rtol=1e-9,
-            err_msg=key,
-        )
-    assert_allclose(fits[1].log_likelihood, fits[0].log_likelihood, rtol=1e-12)
-    assert fits[1].emission_at_boundary == fits[0].emission_at_boundary
+    for streamed in fits[1:]:
+        for name_ in ("log_initial", "log_transition"):
+            assert_allclose(
+                getattr(streamed, name_).numpy(),
+                getattr(fits[0], name_).numpy(),
+                rtol=0.0,
+                atol=1e-10,
+            )
+        for key, value in fits[0].emissions.named_parameters().items():
+            assert_allclose(
+                streamed.emissions.named_parameters()[key].numpy(),
+                value.numpy(),
+                rtol=1e-9,
+                err_msg=key,
+            )
+        assert_allclose(streamed.log_likelihood, fits[0].log_likelihood, rtol=1e-12)
+        assert streamed.emission_at_boundary == fits[0].emission_at_boundary
 
 
 @pytest.mark.oracle

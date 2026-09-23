@@ -106,7 +106,8 @@ def _family_baum_welch(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs
     (``rate``), ``negative_binomial`` (``dispersion``, ``mean``) or
     ``beta_binomial`` (``trials``, ``alpha``, ``beta``); read from the
     parameters when absent. ``backend`` is ``rust`` (the default) or
-    ``python``.
+    ``python``; ``with_table``, ``table_size`` (``-1`` for every cell) and ``approx`` are
+    passed through.
     """
     import torch
 
@@ -136,6 +137,10 @@ def _family_baum_welch(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs
     else:
         family = BetaBinomialEmission(inputs["trials"], inputs["alpha"], inputs["beta"])
     backend = Backend(str(inputs.get("backend", np.asarray("rust"))))
+    with_table = bool(inputs.get("with_table", np.asarray(True)))
+    approx = bool(inputs.get("approx", np.asarray(False)))
+    size = int(inputs.get("table_size", np.asarray(-1)))
+    table_size = None if size < 0 else size
     n_iter = int(inputs["n_iter"])
     # One iteration on the first two positions of two sequences, outside the
     # measured call: torch's first operations in a process set up state that
@@ -148,6 +153,9 @@ def _family_baum_welch(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs
         max_iterations=1,
         tolerance=-np.inf,
         backend=backend,
+        with_table=with_table,
+        table_size=table_size,
+        approx=approx,
     )
 
     def call() -> Outputs:
@@ -159,6 +167,9 @@ def _family_baum_welch(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs
             max_iterations=n_iter,
             tolerance=-np.inf,
             backend=backend,
+            with_table=with_table,
+            table_size=table_size,
+            approx=approx,
         )
         return {"log_likelihood": np.asarray(fit.log_likelihood)}
 

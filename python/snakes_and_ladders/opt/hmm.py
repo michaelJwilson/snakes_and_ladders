@@ -1341,6 +1341,22 @@ def _whole(values: np.ndarray) -> bool:
     return np.issubdtype(values.dtype, np.integer) and int(values.min()) >= 0
 
 
+def _direct_scoring(family: EmissionFamily) -> dict[str, Any]:
+    """The compiled step's name and stacked parameters for ``family`` (issue #997)."""
+    rows: list[torch.Tensor]
+    if isinstance(family, PoissonEmission):
+        name, rows = "poisson", [family.mean]
+    elif isinstance(family, BinomialEmission):
+        name, rows = "binomial", [family.trials, family.probability]
+    elif isinstance(family, NegativeBinomialEmission):
+        name, rows = "negative_binomial", [family.dispersion, family.mean]
+    else:
+        assert isinstance(family, BetaBinomialEmission)
+        name, rows = "beta_binomial", [family.trials, family.alpha, family.beta]
+    parameters = np.concatenate([row.detach().numpy().reshape(-1) for row in rows])
+    return {"family": name, "parameters": parameters.astype(np.float64)}
+
+
 def _streamed_family(
     observations: np.ndarray,
     log_initial: torch.Tensor,
@@ -1350,16 +1366,23 @@ def _streamed_family(
     max_iterations: int,
     tolerance: float,
     covariate: np.ndarray | None = None,
+    with_table: bool = True,
+    table_size: int | None = None,
+    approx: bool = False,
+    stirling_from: float = 10.0,
 ) -> EmFit:
     """:func:`baum_welch_family` on a compiled step that streams (issue #997).
 
     A one-channel Gaussian is scored and re-estimated in
-    ``oxi_snakes_and_ladders.gaussian_em_step``. A count family is scored from
-    a table of its own ``log_density`` over the cells the data occupies ---
-    each distinct count, or each distinct pair of a count and its covariate
-    --- and ``count_em_step`` returns each state's posterior weight on each
-    cell; the family's own ``reestimate`` then runs on those weighted cells,
-    which is its M step exactly, the order of summation aside.
+    ``oxi_snakes_and_ladders.gaussian_em_step``. A count family is scored in
+    ``count_em_step``, term for term its ``log_density`` with a compiled
+    ``lgamma``: once per cell for the ``table_size`` cells the data repeats
+    most --- a cell is a distinct count, or a distinct pair of a count and its
+    covariate --- and at every observation for the rest. The step returns each state's posterior
+    weight on each cell, and the family's own ``reestimate`` runs on those,
+    which is its M step exactly, the order of summation aside. No gradient is
+    taken here, so torch's ``log_density`` is not needed on this route; it
+    stays the batched oracle and the autodiff objectives' density.
     """
     m = emissions.n_states
     at_boundary = False
@@ -1397,9 +1420,14 @@ def _streamed_family(
             else np.ascontiguousarray(covariate, dtype=np.int64)
         )
         stride = 1 if given is None else int(given.max()) + 1
-        cells = oxi_snakes_and_ladders.count_cells(counts, given, stride)
+        cells, multiplicity = oxi_snakes_and_ladders.count_cells(counts, given, stride)
         rows = np.zeros((int(counts.max()) + 1) * stride, dtype=np.uint32)
         rows[cells] = np.arange(cells.size, dtype=np.uint32)
+        # The table holds the `table_size` cells that repeat most; ties go to
+        # the lower cell, so the choice depends on the data alone.
+        size = 0 if not with_table else cells.size if table_size is None else table_size
+        in_table = np.zeros(cells.size, dtype=bool)
+        in_table[np.argsort(-multiplicity, kind="stable")[: max(size, 0)]] = True
         support = torch.from_numpy((cells // stride).astype(np.float64))
         # The family broadcasts a covariate along its states, as
         # `baum_welch_family` hands it one.
@@ -1414,10 +1442,19 @@ def _streamed_family(
         ) -> tuple[tuple[np.ndarray, np.ndarray, EmissionFamily], float]:
             nonlocal at_boundary
             initial, transition, family = state
-            table = flat(family.log_density(support, covariate=exposure))
             initial, transition, histogram, log_likelihood = (
                 oxi_snakes_and_ladders.count_em_step(
-                    counts, given, stride, rows, initial, transition, table
+                    counts,
+                    given,
+                    stride,
+                    cells,
+                    rows,
+                    initial,
+                    transition,
+                    **_direct_scoring(family),
+                    tabled=in_table,
+                    approx=approx,
+                    stirling_from=stirling_from,
                 )
             )
             reestimate = family.reestimate(
@@ -1460,6 +1497,10 @@ def baum_welch_family(
     tolerance: float = 1e-12,
     covariate: np.ndarray | Ragged | None = None,
     backend: Backend = Backend.RUST,
+    with_table: bool = True,
+    table_size: int | None = None,
+    approx: bool = False,
+    stirling_from: float = 10.0,
 ) -> EmFit:
     """Baum-Welch over any emission family, with no autodiff involved.
 
@@ -1521,10 +1562,28 @@ def baum_welch_family(
         :class:`BinomialEmission`, :class:`NegativeBinomialEmission` or
         :class:`BetaBinomialEmission` over integer counts with no covariate or
         an integer one, the observations are a rectangular array, and the
-        kernel is one ``(m, m)`` matrix. Ten iterations at 10^6 positions of three states
-        peaked at 429 MB on the batched route. Any other case, and
-        :data:`~snakes_and_ladders.backend.Backend.PYTHON`, runs the batched
-        route below, which is the oracle that pins the streamed one.
+        kernel is one ``(m, m)`` matrix.
+    with_table : bool
+        How the streamed count step scores an observation, read only there.
+        ``True``, the default, scores each occupied (count, covariate) cell
+        once and gathers, which pays where counts repeat. ``False`` scores
+        every observation, which pays where they do not. Both hand the same
+        weighted cells to the family's M step.
+    table_size : int | None
+        How many cells the table holds under ``with_table``: the ones the
+        data repeats most, which for counts are mostly the low ones; every
+        other observation is scored where it stands. ``None``, the default,
+        tables every occupied cell; ``0`` is ``with_table=False``.
+    approx : bool
+        Whether the streamed count step takes ``lgamma`` from the Stirling
+        series at ``stirling_from`` and above --- one logarithm and one
+        division, where the Lanczos sum below takes fourteen divisions --- and
+        is read only there. ``False`` by default: the Lanczos sum throughout,
+        within 1e-13 of the exact log-factorials (issue #999).
+    stirling_from : float
+        Where the Stirling series takes over under ``approx``. At the default
+        10 it is within 4e-15 relative of the Lanczos sum; its first omitted
+        term is ``3617 / (122400 x^13)``, 2.4e-11 absolute at 5.
 
     Returns
     -------
@@ -1554,6 +1613,10 @@ def baum_welch_family(
             max_iterations=max_iterations,
             tolerance=tolerance,
             covariate=covariate,
+            with_table=with_table,
+            table_size=table_size,
+            approx=approx,
+            stirling_from=stirling_from,
         )
     # One batch form, and a rectangular argument converts to it (issue #666).
     # The segments are padded to the longest and masked; the mask is not a

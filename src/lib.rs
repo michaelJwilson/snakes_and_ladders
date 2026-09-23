@@ -34,6 +34,7 @@ pub mod pruning;
 pub mod pruning_burn;
 pub mod ragged;
 pub mod sampling;
+pub mod special;
 
 pub use bcjr::bcjr_forward_backward;
 pub use count_mstep::{beta_binomial_parameters, negative_binomial_dispersions};

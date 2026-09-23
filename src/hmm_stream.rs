@@ -26,6 +26,9 @@
 use numpy::{PyArray1, PyReadonlyArray1, PyReadonlyArray2, PyUntypedArrayMethods};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use rayon::prelude::*;
+
+use crate::special::{ln_gamma, ln_gamma_approx, STIRLING_FROM};
 
 /// New log parameters and the log-likelihood at the parameters given.
 pub struct Step {
@@ -223,28 +226,66 @@ pub fn categorical_em_step<'py>(
     ))
 }
 
-/// Expected counts from one streamed E step over any per-position density.
+/// What an E step adds up besides the chain counts: moments or a histogram.
 ///
-/// `log_density(index, out)` writes the `m` log-densities of the observation
-/// at flat `index`; `accumulate(index, posterior)` receives its `m` posterior
-/// weights. Each position's densities are shifted by their maximum before
-/// they are exponentiated and the shift is added back to the log-likelihood,
-/// so an observation far from every state underflows nothing: the
-/// categorical step needs no shift because its densities are probabilities.
+/// One is made per block of sequences and the blocks' are merged in block
+/// order, so the sums are the same whatever the number of threads.
+pub trait Statistics: Send {
+    fn add(&mut self, index: usize, posterior: &[f64]);
+    fn merge(&mut self, other: Self);
+}
+
+/// Expected chain counts from one streamed E step.
 struct Counts {
     first: Vec<f64>,
     pairs: Vec<f64>,
     log_likelihood: f64,
 }
 
-fn stream_counts(
+impl Counts {
+    fn merge(&mut self, other: Counts) {
+        for (a, b) in self.first.iter_mut().zip(other.first) {
+            *a += b;
+        }
+        for (a, b) in self.pairs.iter_mut().zip(other.pairs) {
+            *a += b;
+        }
+        self.log_likelihood += other.log_likelihood;
+    }
+}
+
+/// The most blocks of sequences an E step is split into: fixed, so the
+/// partition and with it every sum depend on the data alone.
+const BLOCKS: usize = 16;
+
+/// The bytes the blocks' statistics may take together before fewer are used.
+const BLOCK_BYTES: usize = 4 << 20;
+
+/// One streamed E step over any per-position density, over sequence blocks.
+///
+/// `log_density(index, out)` writes the `m` log-densities of the observation
+/// at flat `index`; each block's `S` receives every posterior. Each
+/// position's densities are shifted by their maximum before they are
+/// exponentiated and the shift is added back to the log-likelihood, so an
+/// observation far from every state underflows nothing. `key(index)` names
+/// what the density depends on --- the cell of a count, `usize::MAX` for "no
+/// two alike" --- and a position whose key is the previous one's copies its
+/// densities rather than scoring again: counts repeat along a sticky chain.
+/// The sequences are
+/// independent given the parameters, so blocks run on `rayon` and are
+/// merged in order; `statistics_bytes` is one block's `S`, which sets how
+/// many blocks the memory allows.
+#[allow(clippy::too_many_arguments)]
+fn stream_counts<S: Statistics>(
     n_positions: usize,
     length: usize,
     log_initial: &[f64],
     log_transition: &[f64],
-    mut log_density: impl FnMut(usize, &mut [f64]),
-    mut accumulate: impl FnMut(usize, &[f64]),
-) -> Result<Counts, String> {
+    log_density: impl Fn(usize, &mut [f64]) + Sync,
+    key: impl Fn(usize) -> usize + Sync,
+    fresh: impl Fn() -> S + Sync,
+    statistics_bytes: usize,
+) -> Result<(Counts, S), String> {
     let m = log_initial.len();
     if m == 0 || log_transition.len() != m * m {
         return Err(format!(
@@ -257,8 +298,47 @@ fn stream_counts(
             "{n_positions} observations are not rows of {length}"
         ));
     }
+    let n_sequences = n_positions / length;
+    let blocks = BLOCKS
+        .min(n_sequences)
+        .min((BLOCK_BYTES / statistics_bytes.max(1)).max(1))
+        .max(1);
     let initial: Vec<f64> = log_initial.iter().map(|v| v.exp()).collect();
     let transition: Vec<f64> = log_transition.iter().map(|v| v.exp()).collect();
+    let block = |b: usize| -> (Counts, S) {
+        let sequences = (b * n_sequences / blocks)..((b + 1) * n_sequences / blocks);
+        let mut statistics = fresh();
+        let counts = stream_block(
+            sequences,
+            length,
+            &initial,
+            &transition,
+            &log_density,
+            &key,
+            &mut statistics,
+        );
+        (counts, statistics)
+    };
+    let mut parts: Vec<(Counts, S)> = (0..blocks).into_par_iter().map(block).collect();
+    let (mut counts, mut statistics) = parts.remove(0);
+    for (more, extra) in parts {
+        counts.merge(more);
+        statistics.merge(extra);
+    }
+    Ok((counts, statistics))
+}
+
+/// The forward--backward pass over a range of sequences, in order.
+fn stream_block<S: Statistics>(
+    sequences: std::ops::Range<usize>,
+    length: usize,
+    initial: &[f64],
+    transition: &[f64],
+    log_density: &impl Fn(usize, &mut [f64]),
+    key: &impl Fn(usize) -> usize,
+    statistics: &mut S,
+) -> Counts {
+    let m = initial.len();
     let mut first = vec![0.0; m];
     let mut pairs = vec![0.0; m * m];
     let mut alpha = vec![0.0; length * m];
@@ -267,13 +347,23 @@ fn stream_counts(
     let mut beta = vec![1.0; m];
     let mut onward = vec![0.0; m];
     let mut posterior = vec![0.0; m];
+    let mut last = vec![0.0; m];
+    let mut last_key = usize::MAX;
     let mut log_likelihood = 0.0;
 
-    for start in (0..n_positions).step_by(length) {
+    for sequence in sequences {
+        let start = sequence * length;
         // Densities, shifted per position, and the shifts into the evidence.
         for t in 0..length {
             let b = &mut emitted[t * m..][..m];
-            log_density(start + t, b);
+            let here = key(start + t);
+            if here != usize::MAX && here == last_key {
+                b.copy_from_slice(&last);
+            } else {
+                log_density(start + t, b);
+                last.copy_from_slice(b);
+                last_key = here;
+            }
             let high = b.iter().copied().fold(f64::NEG_INFINITY, f64::max);
             for value in b.iter_mut() {
                 *value = (*value - high).exp();
@@ -318,7 +408,7 @@ fn stream_counts(
             for state in 0..m {
                 posterior[state] = a[state] * beta[state];
             }
-            accumulate(start + t, &posterior);
+            statistics.add(start + t, &posterior);
             if t == 0 {
                 for state in 0..m {
                     first[state] += posterior[state];
@@ -342,11 +432,11 @@ fn stream_counts(
             }
         }
     }
-    Ok(Counts {
+    Counts {
         first,
         pairs,
         log_likelihood,
-    })
+    }
 }
 
 /// The initial and transition M step from expected counts: the mean first
@@ -378,6 +468,32 @@ pub struct FamilyStep {
     pub log_likelihood: f64,
 }
 
+/// Posterior moments about each state's old mean: `S0`, `S1`, `S2` per state.
+struct Moments<'a> {
+    observations: &'a [f64],
+    mean: &'a [f64],
+    sums: Vec<f64>,
+}
+
+impl Statistics for Moments<'_> {
+    #[inline]
+    fn add(&mut self, index: usize, posterior: &[f64]) {
+        let x = self.observations[index];
+        for (state, &w) in posterior.iter().enumerate() {
+            let d = x - self.mean[state];
+            self.sums[3 * state] += w;
+            self.sums[3 * state + 1] += w * d;
+            self.sums[3 * state + 2] += w * d * d;
+        }
+    }
+
+    fn merge(&mut self, other: Self) {
+        for (a, b) in self.sums.iter_mut().zip(other.sums) {
+            *a += b;
+        }
+    }
+}
+
 /// One streamed step of a one-channel Gaussian HMM.
 ///
 /// The variance is the posterior-weighted second moment about the new mean,
@@ -404,8 +520,7 @@ pub fn gaussian_step(
         .iter()
         .map(|s| -0.5 * (2.0 * std::f64::consts::PI).ln() - s.ln())
         .collect();
-    let mut moments = vec![0.0; 3 * m];
-    let counts = stream_counts(
+    let (counts, moments) = stream_counts(
         observations.len(),
         length,
         log_initial,
@@ -417,27 +532,21 @@ pub fn gaussian_step(
                 out[state] = offset[state] - 0.5 * z * z;
             }
         },
-        |index, posterior| {
-            let x = observations[index];
-            for state in 0..m {
-                let (w, d) = (posterior[state], x - mean[state]);
-                moments[3 * state] += w;
-                moments[3 * state + 1] += w * d;
-                moments[3 * state + 2] += w * d * d;
-            }
+        |_| usize::MAX,
+        || Moments {
+            observations,
+            mean,
+            sums: vec![0.0; 3 * m],
         },
+        24 * m,
     )?;
     let (log_initial, log_transition) = chain_m_step(&counts, observations.len() / length);
     let (mut new_mean, mut variance) = (vec![0.0; m], vec![0.0; m]);
     for state in 0..m {
-        let (s0, s1, s2) = (
-            moments[3 * state],
-            moments[3 * state + 1],
-            moments[3 * state + 2],
-        );
-        let shift = s1 / s0;
+        let s = &moments.sums[3 * state..][..3];
+        let shift = s[1] / s[0];
         new_mean[state] = mean[state] + shift;
-        variance[state] = s2 / s0 - shift * shift;
+        variance[state] = s[2] / s[0] - shift * shift;
     }
     Ok(FamilyStep {
         log_initial,
@@ -448,11 +557,11 @@ pub fn gaussian_step(
     })
 }
 
-/// Where one observation's row of the table is.
+/// Where one observation's row of the histogram is.
 ///
 /// A count `y` with covariate `c` is the cell `y * stride + c` (`c = 0`,
-/// `stride = 1` without a covariate), and `rows[cell]` is that cell's row of
-/// the table: only the cells the data occupies have one.
+/// `stride = 1` without a covariate), and `rows[cell]` is that cell's row:
+/// only the cells the data occupies have one.
 pub struct Cells<'a> {
     pub covariate: Option<&'a [i64]>,
     pub stride: usize,
@@ -472,98 +581,343 @@ impl Cells<'_> {
     }
 }
 
-/// The cells the data occupies, ascending; the rows `table_step` reads.
+/// The cells the data occupies, ascending, and how many observations each
+/// holds: the rows a count step reads, and which of them repeat most.
 pub fn occupied_cells(
     observations: &[i64],
     covariate: Option<&[i64]>,
     stride: usize,
-) -> Result<Vec<i64>, String> {
+) -> Result<(Vec<i64>, Vec<i64>), String> {
     if covariate.is_some_and(|c| c.len() != observations.len()) {
         return Err("the covariate is not one per observation".to_string());
     }
-    let bad = |v: &i64, bound: usize| *v < 0 || *v as usize >= bound;
-    if let Some(&v) = observations.iter().find(|v| bad(v, usize::MAX >> 1)) {
+    if let Some(&v) = observations.iter().find(|v| **v < 0) {
         return Err(format!("count {v} is negative"));
     }
-    if let Some(&v) = covariate.and_then(|c| c.iter().find(|v| bad(v, stride))) {
+    if let Some(&v) = covariate.and_then(|c| c.iter().find(|v| **v < 0 || **v as usize >= stride)) {
         return Err(format!("covariate {v} outside [0, {stride})"));
     }
     let top = observations.iter().copied().max().unwrap_or(0) as usize;
-    let mut seen = vec![false; (top + 1) * stride];
+    let mut seen = vec![0i64; (top + 1) * stride];
     let cells = Cells {
         covariate,
         stride,
         rows: &[],
     };
     for index in 0..observations.len() {
-        seen[cells.cell(observations, index)] = true;
+        seen[cells.cell(observations, index)] += 1;
     }
     Ok(seen
         .iter()
         .enumerate()
-        .filter_map(|(cell, &hit)| hit.then_some(cell as i64))
-        .collect())
+        .filter(|(_, &n)| n > 0)
+        .map(|(cell, &n)| (cell as i64, n))
+        .unzip())
 }
 
-/// One streamed step of an HMM over integer counts, scored from a table.
+/// Each state's posterior weight on each occupied cell, `n_rows * m`.
+struct Histogram<'a> {
+    observations: &'a [i64],
+    cells: &'a Cells<'a>,
+    m: usize,
+    values: Vec<f64>,
+}
+
+impl Statistics for Histogram<'_> {
+    #[inline]
+    fn add(&mut self, index: usize, posterior: &[f64]) {
+        let row = self.cells.row(self.observations, index);
+        for (h, &w) in self.values[row * self.m..][..self.m]
+            .iter_mut()
+            .zip(posterior)
+        {
+            *h += w;
+        }
+    }
+
+    fn merge(&mut self, other: Self) {
+        for (a, b) in self.values.iter_mut().zip(other.values) {
+            *a += b;
+        }
+    }
+}
+
+/// A count family's parameters, each per state, for scoring without a table.
 ///
-/// `table` is `n_rows * m`, each row the `m` log-densities of one occupied
-/// cell, which the caller evaluates once per step with the family's own
-/// `log_density`: every observation is a gather, where the batched route
-/// scores every position under every state. The E step hands back
-/// `histogram`, `n_rows * m`, each state's posterior weight on each cell:
-/// the data a count family's M step reads, since each of its sums over
-/// observations is a sum over the occupied cells weighted by these.
-pub fn table_step(
+/// Each log-density is the family's `log_density` term for term, with
+/// `ln_gamma` for `torch.lgamma`. A covariate is the exposure a negative
+/// binomial's rate is scaled by, or the trial count a binomial or
+/// beta-binomial count is out of. `constants` holds, per state, every term
+/// that does not depend on the observation, so each is evaluated once per
+/// step rather than once per observation; under a covariate the terms that
+/// depend on it are evaluated per observation.
+pub struct CountFamily<'a> {
+    kind: Kind<'a>,
+    constants: Vec<f64>,
+    /// Whether `ln_gamma_approx` scores the observations, and from where.
+    approx: bool,
+    stirling_from: f64,
+}
+
+/// `ln Gamma`, the Lanczos sum or with the Stirling series from 10.
+#[inline]
+fn lgamma<const APPROX: bool>(x: f64, from: f64) -> f64 {
+    if APPROX {
+        ln_gamma_approx(x, from)
+    } else {
+        ln_gamma(x)
+    }
+}
+
+enum Kind<'a> {
+    Poisson {
+        rate: &'a [f64],
+    },
+    Binomial {
+        trials: &'a [f64],
+        probability: &'a [f64],
+    },
+    NegativeBinomial {
+        dispersion: &'a [f64],
+        mean: &'a [f64],
+    },
+    BetaBinomial {
+        trials: &'a [f64],
+        alpha: &'a [f64],
+        beta: &'a [f64],
+    },
+}
+
+/// Constants per state, `CONSTANTS` of them, in a fixed order per family.
+const CONSTANTS: usize = 3;
+
+impl<'a> CountFamily<'a> {
+    fn new(kind: Kind<'a>, approx: bool, stirling_from: f64) -> Self {
+        let m = match &kind {
+            Kind::Poisson { rate } => rate.len(),
+            Kind::Binomial { trials, .. } | Kind::BetaBinomial { trials, .. } => trials.len(),
+            Kind::NegativeBinomial { mean, .. } => mean.len(),
+        };
+        let mut constants = vec![0.0; CONSTANTS * m];
+        for (state, row) in constants.chunks_exact_mut(CONSTANTS).enumerate() {
+            match &kind {
+                // ln(rate).
+                Kind::Poisson { rate } => row[0] = rate[state].ln(),
+                // ln(n!), ln(p), ln(1 - p).
+                Kind::Binomial {
+                    trials,
+                    probability,
+                } => {
+                    let p = probability[state];
+                    row[0] = ln_gamma(trials[state] + 1.0);
+                    row[1] = p.ln();
+                    row[2] = (-p).ln_1p();
+                }
+                // ln Gamma(r), r ln(r / (r + mu)), ln(mu / (r + mu)).
+                Kind::NegativeBinomial { dispersion, mean } => {
+                    let (r, mu) = (dispersion[state], mean[state]);
+                    let total = r + mu;
+                    row[0] = ln_gamma(r);
+                    row[1] = r * (r / total).ln();
+                    row[2] = (mu / total).ln();
+                }
+                // ln(n!) - ln Gamma(n + a + b), ln Gamma(a + b) - ln Gamma(a) - ln Gamma(b).
+                Kind::BetaBinomial {
+                    trials,
+                    alpha,
+                    beta,
+                } => {
+                    let (n, a, b) = (trials[state], alpha[state], beta[state]);
+                    row[0] = ln_gamma(n + 1.0) - ln_gamma(n + a + b);
+                    row[1] = ln_gamma(a + b) - ln_gamma(a) - ln_gamma(b);
+                }
+            }
+        }
+        CountFamily {
+            kind,
+            constants,
+            approx,
+            stirling_from,
+        }
+    }
+
+    fn n_states(&self) -> usize {
+        self.constants.len() / CONSTANTS
+    }
+
+    /// A row per occupied cell, `cells.len() * m`, filled where `tabled`:
+    /// the table `Scoring` reads.
+    pub fn table(
+        &self,
+        cells: &[i64],
+        tabled: &[bool],
+        stride: usize,
+        covariate: bool,
+    ) -> Vec<f64> {
+        let m = self.n_states();
+        let mut table = vec![0.0; cells.len() * m];
+        for ((row, &cell), _) in table
+            .chunks_exact_mut(m)
+            .zip(cells)
+            .zip(tabled)
+            .filter(|(_, &keep)| keep)
+        {
+            let cell = cell as usize;
+            let c = covariate.then_some((cell % stride) as f64);
+            self.log_density((cell / stride) as f64, c, row);
+        }
+        table
+    }
+
+    /// The `m` log-densities of the count `y`, given the covariate `c` if any.
+    #[inline]
+    fn log_density(&self, y: f64, c: Option<f64>, out: &mut [f64]) {
+        if self.approx {
+            self.score::<true>(y, c, out);
+        } else {
+            self.score::<false>(y, c, out);
+        }
+    }
+
+    #[inline]
+    fn score<const APPROX: bool>(&self, y: f64, c: Option<f64>, out: &mut [f64]) {
+        let from = self.stirling_from;
+        let ln_gamma = |x: f64| lgamma::<APPROX>(x, from);
+        let log_factorial = ln_gamma(y + 1.0);
+        let rows = self.constants.chunks_exact(CONSTANTS);
+        match &self.kind {
+            Kind::Poisson { rate } => {
+                for ((o, &r), k) in out.iter_mut().zip(rate.iter()).zip(rows) {
+                    *o = y * k[0] - r - log_factorial;
+                }
+            }
+            Kind::Binomial { trials, .. } => {
+                for (state, (o, k)) in out.iter_mut().zip(rows).enumerate() {
+                    let n = c.unwrap_or(trials[state]);
+                    let choose = c.map_or(k[0], |n| ln_gamma(n + 1.0));
+                    *o = choose - log_factorial - ln_gamma(n - y + 1.0) + y * k[1] + (n - y) * k[2];
+                }
+            }
+            Kind::NegativeBinomial { dispersion, mean } => {
+                for (state, (o, k)) in out.iter_mut().zip(rows).enumerate() {
+                    let r = dispersion[state];
+                    let rising = ln_gamma(y + r) - k[0] - log_factorial;
+                    *o = match c {
+                        None => rising + k[1] + y * k[2],
+                        Some(e) => {
+                            let rate = e * mean[state];
+                            let total = r + rate;
+                            rising + r * (r / total).ln() + y * (rate / total).ln()
+                        }
+                    };
+                }
+            }
+            Kind::BetaBinomial {
+                trials,
+                alpha,
+                beta,
+            } => {
+                for (state, (o, k)) in out.iter_mut().zip(rows).enumerate() {
+                    let n = c.unwrap_or(trials[state]);
+                    if y > n {
+                        *o = f64::NEG_INFINITY;
+                        continue;
+                    }
+                    let (a, b) = (alpha[state], beta[state]);
+                    let outer = c.map_or(k[0], |n| ln_gamma(n + 1.0) - ln_gamma(n + a + b));
+                    *o = outer - log_factorial - ln_gamma(n - y + 1.0)
+                        + ln_gamma(y + a)
+                        + ln_gamma(n - y + b)
+                        + k[1];
+                }
+            }
+        }
+    }
+}
+
+/// How a count step scores an observation: from `table` where its cell's
+/// row is tabled, by `family` otherwise.
+pub struct Scoring<'a> {
+    /// `n_rows * m`; only the tabled rows are read.
+    pub table: &'a [f64],
+    /// Per row, whether `table` holds it.
+    pub tabled: &'a [bool],
+    pub family: &'a CountFamily<'a>,
+}
+
+/// One streamed step of an HMM over integer counts.
+///
+/// The E step hands back `histogram`, `n_rows * m`, each state's posterior
+/// weight on each occupied cell: the data a count family's M step reads,
+/// since each of its sums over observations is a sum over the occupied cells
+/// weighted by these. A tabled cell is scored once per step, which pays
+/// where its count repeats; any other observation is scored where it
+/// stands, which pays where counts do not.
+pub fn count_step(
     observations: &[i64],
     length: usize,
     log_initial: &[f64],
     log_transition: &[f64],
     cells: &Cells<'_>,
-    table: &[f64],
+    n_rows: usize,
+    scoring: &Scoring<'_>,
 ) -> Result<TableStep, String> {
     let m = log_initial.len();
-    if m == 0 || !table.len().is_multiple_of(m) {
+    if scoring.family.n_states() != m {
         return Err(format!(
-            "a table of {} entries is not rows of {m} states",
-            table.len()
+            "{m} states and a family of {}",
+            scoring.family.n_states()
         ));
     }
-    let n_rows = table.len() / m;
+    if scoring.table.len() != n_rows * m || scoring.tabled.len() != n_rows {
+        return Err(format!(
+            "a table of {} entries and {} flags for {n_rows} rows of {m} states",
+            scoring.table.len(),
+            scoring.tabled.len()
+        ));
+    }
     let out_of_table = (0..observations.len()).find(|&index| {
         let cell = cells.cell(observations, index);
         cell >= cells.rows.len() || cells.rows[cell] as usize >= n_rows
     });
     if let Some(index) = out_of_table {
-        return Err(format!("observation {index} has no row in the table"));
+        return Err(format!("observation {index} has no row in the histogram"));
     }
-    let mut histogram = vec![0.0; n_rows * m];
-    let counts = stream_counts(
+    let (counts, histogram) = stream_counts(
         observations.len(),
         length,
         log_initial,
         log_transition,
         |index, out| {
             let row = cells.row(observations, index);
-            out.copy_from_slice(&table[row * m..][..m]);
-        },
-        |index, posterior| {
-            let row = cells.row(observations, index);
-            for (h, &w) in histogram[row * m..][..m].iter_mut().zip(posterior) {
-                *h += w;
+            if scoring.tabled[row] {
+                out.copy_from_slice(&scoring.table[row * m..][..m]);
+            } else {
+                let c = cells.covariate.map(|c| c[index] as f64);
+                scoring
+                    .family
+                    .log_density(observations[index] as f64, c, out);
             }
         },
+        |index| cells.cell(observations, index),
+        || Histogram {
+            observations,
+            cells,
+            m,
+            values: vec![0.0; n_rows * m],
+        },
+        8 * n_rows * m,
     )?;
     let (log_initial, log_transition) = chain_m_step(&counts, observations.len() / length);
     Ok(TableStep {
         log_initial,
         log_transition,
-        histogram,
+        histogram: histogram.values,
         log_likelihood: counts.log_likelihood,
     })
 }
 
-/// A table step's chain parameters, histogram and log-likelihood.
+/// A count step's chain parameters, histogram and log-likelihood.
 pub struct TableStep {
     pub log_initial: Vec<f64>,
     pub log_transition: Vec<f64>,
@@ -578,16 +932,6 @@ type FamilyOut<'py> = (
     Bound<'py, PyArray1<f64>>,
     f64,
 );
-
-fn family_out<'py>(py: Python<'py>, step: FamilyStep) -> FamilyOut<'py> {
-    (
-        PyArray1::from_vec(py, step.log_initial),
-        PyArray1::from_vec(py, step.log_transition),
-        PyArray1::from_vec(py, step.mean),
-        PyArray1::from_vec(py, step.variance),
-        step.log_likelihood,
-    )
-}
 
 /// One Gaussian Baum--Welch step; see `gaussian_step`.
 ///
@@ -622,42 +966,107 @@ pub fn gaussian_em_step<'py>(
             )
         })
         .map_err(PyValueError::new_err)?;
-    Ok(family_out(py, step))
+    Ok((
+        PyArray1::from_vec(py, step.log_initial),
+        PyArray1::from_vec(py, step.log_transition),
+        PyArray1::from_vec(py, step.mean),
+        PyArray1::from_vec(py, step.variance),
+        step.log_likelihood,
+    ))
 }
 
-/// The occupied cells of a count HMM's data; see `occupied_cells`.
+/// The occupied cells of a count HMM's data and their multiplicities; see
+/// `occupied_cells`.
 #[pyfunction]
 #[pyo3(signature = (observations, covariate, stride))]
+#[allow(clippy::type_complexity)]
 pub fn count_cells<'py>(
     py: Python<'py>,
     observations: PyReadonlyArray2<'py, i64>,
     covariate: Option<PyReadonlyArray2<'py, i64>>,
     stride: usize,
-) -> PyResult<Bound<'py, PyArray1<i64>>> {
+) -> PyResult<(Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<i64>>)> {
     let observations = observations.as_slice()?;
     let covariate = covariate.as_ref().map(|c| c.as_slice()).transpose()?;
-    let cells = py
+    let (cells, multiplicity) = py
         .detach(|| occupied_cells(observations, covariate, stride))
         .map_err(PyValueError::new_err)?;
-    Ok(PyArray1::from_vec(py, cells))
+    Ok((
+        PyArray1::from_vec(py, cells),
+        PyArray1::from_vec(py, multiplicity),
+    ))
 }
 
-/// One count-family Baum--Welch E step; see `table_step`.
+/// A `CountFamily` from its name and its parameters stacked per state.
+fn count_family<'a>(
+    name: &str,
+    parameters: &'a [f64],
+    m: usize,
+    approx: bool,
+    stirling_from: f64,
+) -> Result<CountFamily<'a>, String> {
+    let row = |k: usize| &parameters[k * m..][..m];
+    let wanted = match name {
+        "poisson" => 1,
+        "binomial" | "negative_binomial" => 2,
+        "beta_binomial" => 3,
+        _ => return Err(format!("no direct density for {name:?}")),
+    };
+    if parameters.len() != wanted * m {
+        return Err(format!(
+            "{name} takes {wanted} rows of {m} parameters, got {}",
+            parameters.len()
+        ));
+    }
+    Ok(CountFamily::new(
+        match name {
+            "poisson" => Kind::Poisson { rate: row(0) },
+            "binomial" => Kind::Binomial {
+                trials: row(0),
+                probability: row(1),
+            },
+            "negative_binomial" => Kind::NegativeBinomial {
+                dispersion: row(0),
+                mean: row(1),
+            },
+            _ => Kind::BetaBinomial {
+                trials: row(0),
+                alpha: row(1),
+                beta: row(2),
+            },
+        },
+        approx,
+        stirling_from,
+    ))
+}
+
+/// One count-family Baum--Welch E step; see `count_step`.
 ///
-/// Returns `(log_initial, log_transition, histogram, log_likelihood)`, the
-/// histogram flattened `n_rows * m`.
+/// `cells` are the occupied cells, ascending, and `rows` their inverse.
+/// `family` and its `parameters` stacked per state (`rate`; `trials,
+/// probability`; `dispersion, mean`; `trials, alpha, beta`) are scored here,
+/// term for term the family's `log_density`: once per cell into a table for
+/// the rows `tabled` flags, at every observation for the rest, with
+/// `ln_gamma_approx` from `stirling_from` where `approx` is set. Returns `(log_initial,
+/// log_transition, histogram, log_likelihood)`, the histogram flattened
+/// `cells.len() * m`.
 #[pyfunction]
-#[pyo3(signature = (observations, covariate, stride, rows, log_initial, log_transition, table))]
+#[pyo3(signature = (observations, covariate, stride, cells, rows, log_initial, log_transition, family, parameters, tabled, approx=false, stirling_from=STIRLING_FROM))]
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub fn count_em_step<'py>(
     py: Python<'py>,
     observations: PyReadonlyArray2<'py, i64>,
     covariate: Option<PyReadonlyArray2<'py, i64>>,
     stride: usize,
+    cells: PyReadonlyArray1<'py, i64>,
     rows: PyReadonlyArray1<'py, u32>,
     log_initial: PyReadonlyArray1<'py, f64>,
     log_transition: PyReadonlyArray1<'py, f64>,
-    table: PyReadonlyArray1<'py, f64>,
+    family: &str,
+    parameters: PyReadonlyArray1<'py, f64>,
+    tabled: PyReadonlyArray1<'py, bool>,
+    approx: bool,
+    stirling_from: f64,
 ) -> PyResult<(
     Bound<'py, PyArray1<f64>>,
     Bound<'py, PyArray1<f64>>,
@@ -665,14 +1074,18 @@ pub fn count_em_step<'py>(
     f64,
 )> {
     let length = observations.shape()[1];
-    let (observations, rows, log_initial, log_transition, table) = (
+    let (observations, occupied, rows, log_initial, log_transition, parameters) = (
         observations.as_slice()?,
+        cells.as_slice()?,
         rows.as_slice()?,
         log_initial.as_slice()?,
         log_transition.as_slice()?,
-        table.as_slice()?,
+        parameters.as_slice()?,
     );
+    let tabled = tabled.as_slice()?;
     let covariate = covariate.as_ref().map(|c| c.as_slice()).transpose()?;
+    let family = count_family(family, parameters, log_initial.len(), approx, stirling_from)
+        .map_err(PyValueError::new_err)?;
     let cells = Cells {
         covariate,
         stride,
@@ -680,13 +1093,20 @@ pub fn count_em_step<'py>(
     };
     let step = py
         .detach(|| {
-            table_step(
+            let table = family.table(occupied, tabled, stride, covariate.is_some());
+            let scoring = Scoring {
+                table: &table,
+                tabled,
+                family: &family,
+            };
+            count_step(
                 observations,
                 length,
                 log_initial,
                 log_transition,
                 &cells,
-                table,
+                occupied.len(),
+                &scoring,
             )
         })
         .map_err(PyValueError::new_err)?;
@@ -844,10 +1264,30 @@ mod tests {
         };
         assert_eq!(
             occupied_cells(&observations, None, 1).unwrap(),
-            vec![0, 1, 2]
+            (vec![0, 1, 2], vec![2, 3, 3])
         );
-        let by_table =
-            table_step(&observations, length, &initial, &transition, &cells, &table).unwrap();
+        let family_parameters = [30.0, 30.0];
+        let family = CountFamily::new(
+            Kind::Poisson {
+                rate: &family_parameters,
+            },
+            false,
+            STIRLING_FROM,
+        );
+        let by_table = count_step(
+            &observations,
+            length,
+            &initial,
+            &transition,
+            &cells,
+            3,
+            &Scoring {
+                table: &table,
+                tabled: &[true; 3],
+                family: &family,
+            },
+        )
+        .unwrap();
         let by_symbol =
             categorical_step(&observations, length, &initial, &transition, &emission).unwrap();
         assert!((by_table.log_likelihood - by_symbol.log_likelihood).abs() < 1e-12);
