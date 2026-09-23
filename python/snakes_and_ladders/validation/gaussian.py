@@ -47,9 +47,12 @@ class GaussianTarget(Objective):
         return value
 
 
-def dense_precision(dimension: int, seed: int) -> np.ndarray:
-    """``A Aᵀ / d + I`` for a standard normal ``A``: eigenvalues from 1 to about 3.5 at d = 10."""
-    draw = np.random.default_rng(seed).normal(size=(dimension, dimension))
+def dense_precision(dimension: int, rng: np.random.Generator) -> np.ndarray:
+    """``A Aᵀ / d + I`` for a standard normal ``A`` drawn from ``rng``.
+
+    At d = 10 from ``default_rng(963)`` its eigenvalues run from 1.01 to 3.50.
+    """
+    draw = rng.normal(size=(dimension, dimension))
     return np.asarray(draw @ draw.T / dimension + np.eye(dimension))
 
 

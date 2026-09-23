@@ -96,9 +96,13 @@ def sample(
     step_size: float,
     n_steps: int,
     n_draws: int,
-    seed: int,
+    key: int,
 ) -> Chain:
-    """``n_draws`` BlackJAX HMC transitions at unit mass, keyed from ``seed``."""
+    """``n_draws`` BlackJAX HMC transitions at unit mass, from ``jax.random.key(key)``.
+
+    ``key`` is the integer JAX builds its own PRNG key from, in the
+    subprocess; no NumPy or torch generator crosses the boundary.
+    """
     result = run(
         SCRIPT,
         {
@@ -108,7 +112,7 @@ def sample(
             "step_size": np.asarray(step_size, dtype=np.float64),
             "n_steps": np.asarray(n_steps, dtype=np.int64),
             "n_draws": np.asarray(n_draws, dtype=np.int64),
-            "seed": np.asarray(seed, dtype=np.int64),
+            "key": np.asarray(key, dtype=np.int64),
         },
     )
     out = result.outputs
