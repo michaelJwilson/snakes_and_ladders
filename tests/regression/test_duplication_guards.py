@@ -595,6 +595,18 @@ def test_no_module_builds_a_scipy_sparse_store() -> None:
 
 @pytest.mark.critical
 @pytest.mark.infra
+def test_a_latex_table_has_one_scaffold() -> None:
+    # Issue #926: four QA modules opened `tabular` and `array` by hand.
+    assert _offenders(TABULAR_LITERAL, TABULAR_OWNER) == []
+    # The owner builds the environment from its specification, so it holds
+    # no literal; what it holds is the two scaffolds.
+    owner = (PACKAGE / TABULAR_OWNER).read_text()
+    assert "def booktabs_tabular(" in owner
+    assert "def mathjax_array(" in owner
+
+
+@pytest.mark.critical
+@pytest.mark.infra
 def test_the_runtime_band_has_one_reader() -> None:
     # Issue #926: `gap_band` and `qa.starts.curve_band` were the same loop
     # written twice; the second is now an adapter onto the first.
@@ -630,6 +642,7 @@ def test_each_guard_fails_on_violating_source() -> None:
         # whole one here makes this module the reader the guard refuses.
         PIPE_SPLIT: "cells = line.split(" + '"|")\n',
         # Unsplit: the guard reads the package, not this suite.
+        TABULAR_LITERAL: '            r"\\begin{tabular}{lrrrr}",\n',
         HELD_BAND: (
             '        index = np.searchsorted(times, grid, side="right") - 1\n'
             "        known = index >= 0\n"
@@ -654,6 +667,7 @@ def test_each_guard_fails_on_violating_source() -> None:
         DERIVED_REPO_ROOT: "from tests._paths import REPO_ROOT\n",
         CATALOGUE_FILE: "rows = catalogue.rows()\n",
         PIPE_SPLIT: "cells = catalogue.cells(line)\n",
+        TABULAR_LITERAL: 'table = booktabs_tabular("lrrrr", HEADER, rows)\n',
         HELD_BAND: "band = curve_band(curves, grid)\n",
     }
 
@@ -795,6 +809,12 @@ DERIVED_REPO_ROOT = re.compile(
 #: The pieces of a reader of `PROBLEMS.md`: the file, and a split of a row on
 #: its pipes. Both, because the tree is full of each alone --- `DEV.md` has
 #: tables too, and `select_tests.py` names the catalogue without parsing it.
+#: A LaTeX table environment opened by hand: the one scaffold is
+#: `qa.figure.booktabs_tabular` and `mathjax_array` (issue #926), where four
+#: modules wrote the frame line for line.
+TABULAR_OWNER = "qa/figure.py"
+TABULAR_LITERAL = re.compile(r"\\begin\{(?:tabular|array)\}")
+
 #: A runtime band read by holding each trial's gap forward to a grid: the
 #: one reader is `search.mixture_starts.curve_band` (issue #926), where two
 #: copies of the loop sat in `search.mixture_starts` and `qa.starts`.

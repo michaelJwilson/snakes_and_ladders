@@ -21,7 +21,12 @@ from collections.abc import Sequence
 
 import numpy as np
 
-from snakes_and_ladders.qa.figure import check_latex_safe, latex_escape
+from snakes_and_ladders.qa.figure import (
+    booktabs_tabular,
+    check_latex_safe,
+    latex_escape,
+    mathjax_array,
+)
 from snakes_and_ladders.search.mixture_starts import StartRow
 
 #: The header of both forms, one entry per column.
@@ -78,17 +83,7 @@ def build_table(
         A complete ``tabular`` environment, and a caption that
         :func:`~snakes_and_ladders.qa.figure.check_latex_safe` accepts.
     """
-    table = "\n".join(
-        [
-            r"\begin{tabular}{lrrrr}",
-            r"  \toprule",
-            "  " + " & ".join(HEADER) + r" \\",
-            r"  \midrule",
-            *("  " + " & ".join(cells) + r" \\" for cells in _body(rows, r"$\pm$")),
-            r"  \bottomrule",
-            r"\end{tabular}",
-        ]
-    )
+    table = booktabs_tabular("lrrrr", HEADER, _body(rows, r"$\pm$"))
     caption = (
         f"Each initializer of the count-pair mixture of {instance}, polished by "
         f"expectation-maximization, the start and its polish under one budget "
@@ -122,14 +117,4 @@ def build_array(rows: Sequence[StartRow]) -> str:
     -------
     str
     """
-    return "\n".join(
-        [
-            r"\begin{array}{lrrrr}",
-            r"  \hline",
-            "  " + " & ".join(rf"\text{{{name}}}" for name in HEADER) + r" \\",
-            r"  \hline",
-            *("  " + " & ".join(cells) + r" \\" for cells in _body(rows, r"\pm")),
-            r"  \hline",
-            r"\end{array}",
-        ]
-    )
+    return mathjax_array("lrrrr", HEADER, _body(rows, r"\pm"))

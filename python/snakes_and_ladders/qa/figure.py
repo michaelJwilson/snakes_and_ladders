@@ -7,6 +7,7 @@ enforces that once rather than per script.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -88,6 +89,78 @@ def latex_integer(value: int) -> str:
     if abs(value) < 10_000:
         return str(value)
     return f"{value:,}".replace(",", _THOUSANDS)
+
+
+def booktabs_tabular(
+    spec: str,
+    header: Sequence[str],
+    rows: Sequence[Sequence[str]],
+    *,
+    rule_before_last: bool = False,
+) -> str:
+    """A ``tabular`` with ``booktabs`` rules: the one scaffold every QA table sets its cells in (issue #926).
+
+    Four modules wrote this environment out line for line; the cells are
+    theirs and the frame is this. Each line is indented two spaces, cells are
+    joined by `` & `` and a row ends in ``\\\\``.
+
+    Parameters
+    ----------
+    spec : str
+        The column specification, e.g. ``"lrrrr"``.
+    header : Sequence[str]
+        One entry per column, already LaTeX.
+    rows : Sequence[Sequence[str]]
+        The body, one list of cells per row, already LaTeX.
+    rule_before_last : bool
+        A ``\\midrule`` above the last row, which sets a declared value apart
+        from the measured ones above it.
+
+    Returns
+    -------
+    str
+        The environment, with no trailing newline.
+    """
+    body = ["  " + " & ".join(cells) + r" \\" for cells in rows]
+    if rule_before_last and body:
+        body = [*body[:-1], r"  \midrule", body[-1]]
+    return "\n".join(
+        [
+            rf"\begin{{tabular}}{{{spec}}}",
+            r"  \toprule",
+            "  " + " & ".join(header) + r" \\",
+            r"  \midrule",
+            *body,
+            r"  \bottomrule",
+            r"\end{tabular}",
+        ]
+    )
+
+
+def mathjax_array(
+    spec: str, header: Sequence[str], rows: Sequence[Sequence[str]]
+) -> str:
+    """:func:`booktabs_tabular`'s cells as the ``array`` MathJax sets in a notebook (issue #926).
+
+    MathJax sets math and not a ``tabular``: the environment is ``array``,
+    the rules are ``\\hline`` and the header is ``\\text``, since a word in
+    math mode is set as a product of italic symbols.
+
+    Returns
+    -------
+    str
+    """
+    return "\n".join(
+        [
+            rf"\begin{{array}}{{{spec}}}",
+            r"  \hline",
+            "  " + " & ".join(rf"\text{{{name}}}" for name in header) + r" \\",
+            r"  \hline",
+            *("  " + " & ".join(cells) + r" \\" for cells in rows),
+            r"  \hline",
+            r"\end{array}",
+        ]
+    )
 
 
 def check_latex_safe(text: str) -> None:
