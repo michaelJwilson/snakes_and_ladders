@@ -35,7 +35,7 @@ from snakes_and_ladders.validation.runner import ScriptError, available, run
 from validation_extras import PREFIX, validation_extras
 
 from tests._paths import REPO_ROOT
-from tests.validation._goals import assert_meets, median_seconds
+from tests.validation._goals import Goal, assert_meets, median_seconds
 
 PACKAGE = Path(snakes_and_ladders.__file__).parent
 VALIDATION = "snakes_and_ladders.validation"
@@ -177,8 +177,9 @@ def test_the_home_states_its_rules_where_its_docstring_says() -> None:
 
 @pytest.mark.infra
 def test_a_goal_fails_by_how_far_the_package_is_off() -> None:
-    assert_meets(0.9e-3, [1.0e-3, 1.2e-3, 0.8e-3], "met")
-    assert_meets(1.0e-3, [1.0e-3], "met exactly")
-    with pytest.raises(AssertionError, match=r"1\.50x the external framework"):
-        assert_meets(1.5e-3, [1.0e-3], "missed")
+    goal = Goal("selftest", "a call", 1.0e-3, "a hardcoded figure")
+    assert_meets(0.9e-3, goal)
+    assert_meets(1.0e-3, goal)
+    with pytest.raises(AssertionError, match=r"1\.50x"):
+        assert_meets(1.5e-3, goal)
     assert median_seconds(lambda: None, repeats=3) >= 0.0

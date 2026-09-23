@@ -516,8 +516,10 @@ jobs:
       - run: uv sync --locked --extra test $(python3 infra/validation_extras.py)
       - run: uv run pytest -m "(validation or infra) and not goal" tests/validation tests/regression/test_validation.py -rs
       # The runtimes the package has to meet, each an external framework's on
-      # a declared fixture, timed in one run on one runner so the pair shares
-      # its hardware. Reported, not gating: a goal fails until it is met.
+      # a declared fixture, measured on the reference host and hardcoded in
+      # `tests/validation/test_goals.py`, so no framework is needed to run
+      # them. Reported, not gating: a goal fails until it is met, and a
+      # runner is not the host the figure was measured on.
       - name: Runtime goals set by the external frameworks (non-blocking)
         continue-on-error: true
         run: uv run pytest -m goal tests/validation -rs
