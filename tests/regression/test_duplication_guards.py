@@ -607,6 +607,15 @@ def test_a_latex_table_has_one_scaffold() -> None:
 
 @pytest.mark.critical
 @pytest.mark.infra
+def test_the_runtime_band_has_one_reader() -> None:
+    # Issue #926: `gap_band` and `qa.starts.curve_band` were the same loop
+    # written twice; the second is now an adapter onto the first.
+    assert _offenders(HELD_BAND, BAND_OWNER) == []
+    assert HELD_BAND.search((PACKAGE / BAND_OWNER).read_text())
+
+
+@pytest.mark.critical
+@pytest.mark.infra
 def test_each_guard_fails_on_violating_source() -> None:
     # The guards exercised. Each searches source text, so each passes
     # vacuously if the pattern is wrong -- which is the failure mode a guard
@@ -634,6 +643,11 @@ def test_each_guard_fails_on_violating_source() -> None:
         PIPE_SPLIT: "cells = line.split(" + '"|")\n',
         # Unsplit: the guard reads the package, not this suite.
         TABULAR_LITERAL: '            r"\\begin{tabular}{lrrrr}",\n',
+        HELD_BAND: (
+            '        index = np.searchsorted(times, grid, side="right") - 1\n'
+            "        known = index >= 0\n"
+            "        held[row, known] = gaps[index[known]]\n"
+        ),
     }
     clean = {
         PRIVATE_LOGSUMEXP: "from snakes_and_ladders.numerics import logsumexp\n",
@@ -654,6 +668,7 @@ def test_each_guard_fails_on_violating_source() -> None:
         CATALOGUE_FILE: "rows = catalogue.rows()\n",
         PIPE_SPLIT: "cells = catalogue.cells(line)\n",
         TABULAR_LITERAL: 'table = booktabs_tabular("lrrrr", HEADER, rows)\n',
+        HELD_BAND: "band = curve_band(curves, grid)\n",
     }
 
     assert [p for p, text in violating.items() if not p.search(text)] == []
@@ -799,6 +814,14 @@ DERIVED_REPO_ROOT = re.compile(
 #: modules wrote the frame line for line.
 TABULAR_OWNER = "qa/figure.py"
 TABULAR_LITERAL = re.compile(r"\\begin\{(?:tabular|array)\}")
+
+#: A runtime band read by holding each trial's gap forward to a grid: the
+#: one reader is `search.mixture_starts.curve_band` (issue #926), where two
+#: copies of the loop sat in `search.mixture_starts` and `qa.starts`.
+BAND_OWNER = "search/mixture_starts.py"
+HELD_BAND = re.compile(
+    r"searchsorted\([^\n]*side=\"right\"\)\s*-\s*1\n(?:.*\n){0,2}\s*held\["
+)
 
 CATALOGUE_FILE = re.compile(r"PROBLEMS\.md")
 PIPE_SPLIT = re.compile(r"\.split\(\"\|\"\)")

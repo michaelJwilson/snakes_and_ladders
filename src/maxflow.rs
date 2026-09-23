@@ -21,9 +21,10 @@
 //! breadth-first search over the residual graph on termination, which is the
 //! minimal minimum cut every maximum flow shares.
 //!
-//! Capacities are `f64` and the termination test is `> 0.0` rather than a
-//! tolerance, matching the reference exactly so the two cannot disagree on
-//! which arcs are saturated.
+//! Capacities are `f64`. The flow's termination test is `> 0.0`, and the
+//! cut's side is read at a relative floor of `SATURATED` shared with the
+//! reference (issue #935), so rounding in the two flows' sums cannot put one
+//! arc on different sides.
 //!
 //! As in `pruning.rs`, the kernel is a plain function returning `Result` and
 //! the `#[pyfunction]` is a thin wrapper, so `cargo test` exercises the
@@ -38,6 +39,10 @@ use rayon::prelude::*;
 
 const NONE: usize = usize::MAX;
 
+/// The relative residual at or below which the cut's side reads an arc as
+/// saturated; `search.maxflow.SATURATED` is the same number (issue #935).
+pub const SATURATED: f64 = 1e-9;
+
 /// A flow network as paired residual arcs.
 ///
 /// Arc `2 * e` and `2 * e + 1` are the two directions of one edge, so an
@@ -48,7 +53,14 @@ pub struct FlowNetwork {
     pub(crate) n_nodes: usize,
     pub(crate) target: Vec<usize>,
     pub(crate) capacity: Vec<f64>,
-    pub(crate) outgoing: Vec<Vec<usize>>,
+    /// The node each arc leaves, in arc order: what [`Self::compress`] sorts.
+    tail: Vec<usize>,
+    /// Compressed rows: node `n`'s arcs are `adjacency[start[n]..start[n + 1]]`,
+    /// in the order they were added. Empty until [`Self::compress`] runs, and
+    /// emptied by every [`Self::add_edge`] (issue #935: one array in place of
+    /// a `Vec` per node, which was 86% of a cut's call at 611,336 arcs).
+    start: Vec<usize>,
+    adjacency: Vec<usize>,
 }
 
 impl FlowNetwork {
@@ -58,8 +70,82 @@ impl FlowNetwork {
             n_nodes,
             target: Vec::new(),
             capacity: Vec::new(),
-            outgoing: vec![Vec::new(); n_nodes],
+            tail: Vec::new(),
+            start: Vec::new(),
+            adjacency: Vec::new(),
         }
+    }
+
+    /// Sort the arcs into compressed rows by a stable counting pass, so each
+    /// node's arcs keep the order they were added in: the adjacency a
+    /// `Vec` per node would have held, as one array.
+    pub(crate) fn compress(&mut self) {
+        if self.start.len() == self.n_nodes + 1 {
+            return;
+        }
+        let mut start = vec![0_usize; self.n_nodes + 1];
+        for &node in &self.tail {
+            start[node + 1] += 1;
+        }
+        for node in 0..self.n_nodes {
+            start[node + 1] += start[node];
+        }
+        let mut next = start.clone();
+        let mut adjacency = vec![0_usize; self.tail.len()];
+        for (arc, &node) in self.tail.iter().enumerate() {
+            adjacency[next[node]] = arc;
+            next[node] += 1;
+        }
+        self.start = start;
+        self.adjacency = adjacency;
+    }
+
+    /// The arcs leaving `node`, in the order they were added. The network
+    /// must have been compressed.
+    #[inline]
+    pub(crate) fn outgoing(&self, node: usize) -> &[usize] {
+        &self.adjacency[self.start[node]..self.start[node + 1]]
+    }
+
+    /// Every edge at once, as [`Self::add_edge`] would append them in order
+    /// (issue #935). `arcs` holds `(from, to)` pairs. Each node's list is
+    /// sized by a counting pass before any arc is placed, so the build makes
+    /// one allocation per node and none per arc; the arc order, and so the
+    /// flow and the cut, are the one-at-a-time build's exactly.
+    pub fn from_arcs(
+        n_nodes: usize,
+        arcs: &[usize],
+        capacity: &[f64],
+        reverse: Option<&[f64]>,
+    ) -> Result<Self, String> {
+        let n_edges = capacity.len();
+        let mut network = Self::new(n_nodes);
+        network.target.reserve(2 * n_edges);
+        network.capacity.reserve(2 * n_edges);
+        network.tail.reserve(2 * n_edges);
+        for edge in 0..n_edges {
+            let (from, to) = (arcs[2 * edge], arcs[2 * edge + 1]);
+            if from >= n_nodes || to >= n_nodes {
+                return Err(format!(
+                    "edge ({from}, {to}) names a node outside [0, {n_nodes})"
+                ));
+            }
+            let back = reverse.map_or(0.0, |r| r[edge]);
+            if capacity[edge] < 0.0 || back < 0.0 {
+                return Err(format!(
+                    "capacities must be non-negative, got {} and {back}",
+                    capacity[edge]
+                ));
+            }
+            network.target.push(to);
+            network.capacity.push(capacity[edge]);
+            network.tail.push(from);
+            network.target.push(from);
+            network.capacity.push(back);
+            network.tail.push(to);
+        }
+        network.compress();
+        Ok(network)
     }
 
     /// Add `source -> sink`, with `reverse` capacity on the back arc.
@@ -81,25 +167,33 @@ impl FlowNetwork {
                 self.n_nodes
             ));
         }
-        self.outgoing[source].push(self.target.len());
+        self.start.clear();
+        self.tail.push(source);
         self.target.push(sink);
         self.capacity.push(capacity);
-        self.outgoing[sink].push(self.target.len());
+        self.tail.push(sink);
         self.target.push(source);
         self.capacity.push(reverse);
         Ok(())
     }
 
     /// Breadth-first distances in the residual graph; `usize::MAX` if unreached.
+    /// Read by the declined kernels of `maxflow_declined.rs` alone.
+    #[cfg_attr(not(feature = "sandbox"), allow(dead_code))]
     pub(crate) fn levels(&self, source: usize) -> Vec<usize> {
+        self.levels_above(source, 0.0)
+    }
+
+    /// [`Self::levels`] through arcs whose residual exceeds `floor` only.
+    pub(crate) fn levels_above(&self, source: usize, floor: f64) -> Vec<usize> {
         let mut level = vec![usize::MAX; self.n_nodes];
         level[source] = 0;
         let mut queue = VecDeque::new();
         queue.push_back(source);
         while let Some(node) = queue.pop_front() {
-            for &arc in &self.outgoing[node] {
+            for &arc in self.outgoing(node) {
                 let neighbour = self.target[arc];
-                if self.capacity[arc] > 0.0 && level[neighbour] == usize::MAX {
+                if self.capacity[arc] > floor && level[neighbour] == usize::MAX {
                     level[neighbour] = level[node] + 1;
                     queue.push_back(neighbour);
                 }
@@ -131,8 +225,14 @@ pub fn max_flow_impl(
             network.n_nodes
         ));
     }
+    // The side is read at `SATURATED` times the largest built capacity, as
+    // `search.maxflow.max_flow` reads it (issue #935): two solvers summing the
+    // same flow in different orders can leave one arc at exactly zero and at
+    // 1e-16, and read at `> 0.0` the two sides would differ.
+    network.compress();
+    let floor = SATURATED * network.capacity.iter().fold(0.0_f64, |a, &c| a.max(c));
     let total = boykov_kolmogorov(network, source, sink);
-    let level = network.levels(source);
+    let level = network.levels_above(source, floor);
     Ok((total, level.iter().map(|&d| d != usize::MAX).collect()))
 }
 
@@ -185,8 +285,8 @@ impl BoykovKolmogorov<'_> {
                 continue;
             }
             let tree = self.tree[node];
-            for position in 0..self.network.outgoing[node].len() {
-                let arc = self.network.outgoing[node][position];
+            for position in 0..self.network.outgoing(node).len() {
+                let arc = self.network.outgoing(node)[position];
                 // Residual in the tree's direction of travel.
                 let travel = if tree == Tree::Source { arc } else { arc ^ 1 };
                 if self.network.capacity[travel] <= 0.0 {
@@ -297,8 +397,8 @@ impl BoykovKolmogorov<'_> {
             let tree = self.tree[orphan];
             let mut best_arc = NONE;
             let mut best_distance = NONE;
-            for position in 0..self.network.outgoing[orphan].len() {
-                let arc = self.network.outgoing[orphan][position];
+            for position in 0..self.network.outgoing(orphan).len() {
+                let arc = self.network.outgoing(orphan)[position];
                 let neighbour = self.network.target[arc];
                 if self.tree[neighbour] != tree {
                     continue;
@@ -325,8 +425,8 @@ impl BoykovKolmogorov<'_> {
             // No parent: the orphan leaves the tree, its children become
             // orphans, and every same-tree neighbour with residual toward it
             // is reactivated.
-            for position in 0..self.network.outgoing[orphan].len() {
-                let arc = self.network.outgoing[orphan][position];
+            for position in 0..self.network.outgoing(orphan).len() {
+                let arc = self.network.outgoing(orphan)[position];
                 let neighbour = self.network.target[arc];
                 if self.tree[neighbour] != tree {
                     continue;
@@ -520,21 +620,79 @@ pub fn max_flow<'py>(
             )));
         }
     }
-    let mut network = FlowNetwork::new(n_nodes);
-    for (position, &weight) in capacity.iter().enumerate() {
-        network
-            .add_edge(
-                arcs[2 * position],
-                arcs[2 * position + 1],
-                weight,
-                back.map_or(0.0, |back| back[position]),
-            )
-            .map_err(PyValueError::new_err)?;
-    }
+    let mut network =
+        FlowNetwork::from_arcs(n_nodes, &arcs, capacity, back).map_err(PyValueError::new_err)?;
     let (value, side) = py
         .detach(|| max_flow_impl(&mut network, source, sink))
         .map_err(PyValueError::new_err)?;
     Ok((value, PyArray1::from_vec(py, side)))
+}
+
+/// One alpha-expansion move's network with an auxiliary node per
+/// disagreeing edge: the arcs `search.alpha_expansion._expansion_arcs` lays
+/// out, in its order. `lattice_cut.rs`'s tests pin its auxiliary-free
+/// network against this one's cut (issue #935). `values` is the `(n_nodes, n_states)` field
+/// row-major, `pinned` the capacity that makes a node already at `alpha`
+/// unable to keep its label.
+#[allow(clippy::too_many_arguments)]
+pub fn expansion_network(
+    first: &[usize],
+    second: &[usize],
+    coupling: &[f64],
+    values: &[f64],
+    n_states: usize,
+    labels: &[usize],
+    alpha: usize,
+    pinned: f64,
+) -> FlowNetwork {
+    let n_nodes = labels.len();
+    let (source, sink) = (n_nodes, n_nodes + 1);
+    let n_auxiliary = first
+        .iter()
+        .zip(second)
+        .filter(|(&a, &b)| labels[a] != labels[b])
+        .count();
+    let mut network = FlowNetwork::new(n_nodes + 2 + n_auxiliary);
+    let n_arcs = 2 * (2 * n_nodes + first.len() + 2 * n_auxiliary);
+    network.target.reserve(n_arcs);
+    network.capacity.reserve(n_arcs);
+    network.tail.reserve(n_arcs);
+    let mut edge = |from: usize, to: usize, forward: f64, back: f64| {
+        network.tail.push(from);
+        network.target.push(to);
+        network.capacity.push(forward);
+        network.tail.push(to);
+        network.target.push(from);
+        network.capacity.push(back);
+    };
+    for node in 0..n_nodes {
+        let label = labels[node];
+        let switch = -values[node * n_states + alpha];
+        let keep = if label == alpha {
+            pinned
+        } else {
+            -values[node * n_states + label]
+        };
+        let offset = keep.min(switch);
+        edge(source, node, switch - offset, 0.0);
+        edge(node, sink, keep - offset, 0.0);
+    }
+    let mut auxiliary = n_nodes + 2;
+    for position in 0..first.len() {
+        let (a, b, weight) = (first[position], second[position], coupling[position]);
+        let a_differs = if labels[a] == alpha { 0.0 } else { weight };
+        if labels[a] == labels[b] {
+            edge(a, b, a_differs, a_differs);
+        } else {
+            let b_differs = if labels[b] == alpha { 0.0 } else { weight };
+            edge(a, auxiliary, a_differs, a_differs);
+            edge(b, auxiliary, b_differs, b_differs);
+            edge(auxiliary, sink, weight, 0.0);
+            auxiliary += 1;
+        }
+    }
+    network.compress();
+    network
 }
 
 /// The exact ground state of a two-state ferromagnetic Ising model.

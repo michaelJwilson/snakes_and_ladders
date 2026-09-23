@@ -352,6 +352,7 @@ def max_flow(network: FlowNetwork, source: int, sink: int) -> MinCut:
     # invalidates it: that push is Dinic's inner loop, where a Python call per
     # arc would cost more than the derivation this whole change avoids.
     network.forget_arrays()
+    floor = SATURATED * max(network.capacity, default=0.0)
 
     total = 0.0
     while True:
@@ -365,11 +366,22 @@ def max_flow(network: FlowNetwork, source: int, sink: int) -> MinCut:
                 break
             total += pushed
 
-    return MinCut(value=total, source_side=_levels(network, source) >= 0)
+    return MinCut(value=total, source_side=_levels(network, source, floor) >= 0)
 
 
-def _levels(network: FlowNetwork, source: int) -> np.ndarray:
-    """Breadth-first distances in the residual graph; ``-1`` where unreachable."""
+#: The residual capacity, relative to the largest capacity the network was
+#: built with, at or below which the minimum cut's side reads an arc as
+#: saturated (issue #935). The source side is the set reachable in the
+#: residual graph, the minimal minimum cut every maximum flow shares; but two
+#: solvers reach the same flow by different sums, and on a field of decimal
+#: values an arc one leaves at exactly zero the other leaves at 1e-16, which
+#: moved 7 of 120 cut-move labellings between the two. Read at this floor,
+#: both return one side. The flow itself is computed at ``> 0`` as before.
+SATURATED = 1e-9
+
+
+def _levels(network: FlowNetwork, source: int, floor: float = 0.0) -> np.ndarray:
+    """Breadth-first distances through arcs with residual above ``floor``; ``-1`` where unreachable."""
     level = np.full(network.n_nodes, -1, dtype=np.int64)
     level[source] = 0
     queue = deque([source])
@@ -377,7 +389,7 @@ def _levels(network: FlowNetwork, source: int) -> np.ndarray:
         node = queue.popleft()
         for arc in network.outgoing[node]:
             neighbour = network.target[arc]
-            if network.capacity[arc] > 0.0 and level[neighbour] < 0:
+            if network.capacity[arc] > floor and level[neighbour] < 0:
                 level[neighbour] = level[node] + 1
                 queue.append(neighbour)
     return level
