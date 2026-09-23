@@ -37,6 +37,7 @@ import numpy as np
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.sample.potts_mcmc import (
     MoveKind,
+    adjacency_lists,
     cluster_members,
     find_root,
     niedermayer_sweep,
@@ -146,6 +147,7 @@ class WolffMove:
         self._offsets = offsets
         self._neighbours = neighbours
         self._couplings = couplings
+        self._lists = adjacency_lists(offsets, neighbours, couplings)
         # `potts_mcmc._anneal`'s charge, to the integer division: a cluster
         # member's neighbours are read and the member is written, and the mean
         # degree is what a heat-bath sweep is charged per site.
@@ -193,6 +195,7 @@ class WolffMove:
                 beta=1.0 / temperature,
                 root=site,
                 proposed=label,
+                lists=self._lists,
             )
         return labels, size * self._per_member
 
@@ -248,6 +251,7 @@ class NiedermayerMove:
         self._offsets = offsets
         self._neighbours = neighbours
         self._couplings = couplings
+        self._lists = adjacency_lists(offsets, neighbours, couplings)
         self._threshold = niedermayer_threshold(couplings)
         self._per_member = 1 + 2 * len(graph.edges) // graph.n_nodes
 
@@ -293,6 +297,7 @@ class NiedermayerMove:
             threshold=self._threshold,
             root=site,
             partner=label,
+            lists=self._lists,
         )
         return labels, size * self._per_member
 
