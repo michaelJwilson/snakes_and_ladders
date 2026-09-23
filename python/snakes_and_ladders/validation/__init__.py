@@ -21,7 +21,9 @@ Only ``tests/`` imports from here, never ``sim``, ``likelihood``, ``opt``,
 
 :data:`FRAMEWORKS` is the registry: one :class:`Framework` per
 ``validation-*`` extra, naming the module its script imports, so the guard
-knows which imports to refuse outside ``scripts/``.
+knows which imports to refuse outside ``scripts/``. The adapter, the script,
+the test module and the extra share the framework's name, which need not be
+the module it imports: PyMaxflow imports as ``maxflow``.
 """
 
 from __future__ import annotations
@@ -38,8 +40,9 @@ __getattr__ = _submodules(__name__)
 class Framework:
     """One external framework: its extra, what its script imports, where it comes from."""
 
-    #: The ``pyproject.toml`` extra that installs it, ``validation-<name>``.
-    extra: str
+    #: The adapter's name: ``validation/<name>.py``, ``scripts/<name>.py`` and
+    #: ``tests/validation/test_<name>.py``, and the extra ``validation-<name>``.
+    name: str
     #: The distribution the extra names, as PyPI spells it.
     distribution: str
     #: The top-level module its script imports; refused everywhere else.
@@ -51,6 +54,11 @@ class Framework:
     #: The ticket that approved it.
     ticket: int
 
+    @property
+    def extra(self) -> str:
+        """The ``pyproject.toml`` extra that installs it."""
+        return f"validation-{self.name}"
 
-#: Every framework the package is validated or benchmarked against, by extra.
+
+#: Every framework the package is validated or benchmarked against, by name.
 FRAMEWORKS: Mapping[str, Framework] = {}

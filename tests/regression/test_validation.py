@@ -8,8 +8,8 @@ so a lazy import inside a function is caught too:
 - no module under `python/` or `tests/` imports a registered framework except
   the scripts under `validation/scripts/`, which run in their own interpreter;
 - every `validation-*` extra names exactly one distribution, is registered in
-  `FRAMEWORKS` under the module its script imports, and has a test module
-  under `tests/validation/`.
+  `FRAMEWORKS` with the module its script imports, and has an adapter, a
+  script and a test module under the framework's name.
 
 The runner is checked against `scripts/selftest.py`, which imports NumPy
 alone: arrays come back bitwise, the time is the script's, and a failing
@@ -107,16 +107,19 @@ def test_only_the_scripts_import_a_framework() -> None:
 @pytest.mark.infra
 def test_every_validation_extra_is_one_registered_framework_with_a_test() -> None:
     extras = _declared_extras()
-    assert set(extras) == set(FRAMEWORKS)
-    for name, requirements in extras.items():
-        framework = FRAMEWORKS[name]
-        assert name.startswith(PREFIX)
-        assert framework.extra == name
-        assert len(requirements) == 1, (name, requirements)
+    registered = {framework.extra: framework for framework in FRAMEWORKS.values()}
+    assert set(extras) == set(registered)
+    for extra, requirements in extras.items():
+        framework = registered[extra]
+        assert extra == PREFIX + framework.name
+        assert FRAMEWORKS[framework.name] is framework
+        assert len(requirements) == 1, (extra, requirements)
         assert _distribution(requirements[0]).lower() == (
             framework.distribution.lower()
         )
-        assert (TESTS / "validation" / f"test_{framework.module}.py").exists()
+        assert (PACKAGE / "validation" / f"{framework.name}.py").exists()
+        assert (SCRIPTS / f"{framework.name}.py").exists()
+        assert (TESTS / "validation" / f"test_{framework.name}.py").exists()
         assert framework.source.startswith("https://")
 
 

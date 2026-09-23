@@ -23,8 +23,8 @@ module. It is referenced here, never restated. What follows is local.
   are not charged to the framework in a benchmark pair.
 - **One framework, one extra, one module, one test file.** A framework arrives
   as a `validation-<name>` extra in `pyproject.toml`, a `Framework` entry in
-  `FRAMEWORKS`, an adapter here, a script under `scripts/` and
-  `tests/validation/test_<module>.py`. The extra is added by the framework's
+  `FRAMEWORKS`, an adapter `<name>.py` here, a script `scripts/<name>.py` and
+  `tests/validation/test_<name>.py`. The extra is added by the framework's
   own ticket, with the permission root `CLAUDE.md` requires.
 - **Only `tests/` imports from here.**
 - **A test here skips where its framework is absent** and carries the
