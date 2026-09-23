@@ -71,8 +71,9 @@ moves to `python/snakes_and_ladders/sandbox/` and referees it from there
 (`sandbox/CLAUDE.md`). Until that measurement exists a framework is a
 referee, not a replacement — a second implementation our numbers are pinned
 against, reached through an adapter that leaves the interface it wraps
-unchanged. Every such package lives in the `frameworks` extra, and every test
-that needs one skips without it, so the core install carries none of them.
+unchanged. Every such package is a `validation-<framework>` extra run in a subprocess
+(issues #972, #977), and every test that needs one skips without it, so the
+core install carries none of them.
 
 ## Tickets and the approval flow
 

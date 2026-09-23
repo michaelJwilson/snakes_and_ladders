@@ -113,5 +113,29 @@ FRAMEWORKS: Mapping[str, Framework] = {
             source="https://github.com/Qiskit/rustworkx",
             ticket=976,
         ),
+        Framework(
+            name="gymnasium",
+            distribution="gymnasium",
+            module="gymnasium",
+            licence="MIT",
+            source="https://github.com/Farama-Foundation/Gymnasium",
+            ticket=977,
+        ),
+        Framework(
+            name="torchrl",
+            distribution="torchrl",
+            module="torchrl",
+            licence="MIT",
+            source="https://github.com/pytorch/rl",
+            ticket=977,
+        ),
+        Framework(
+            name="torch_geometric",
+            distribution="torch_geometric",
+            module="torch_geometric",
+            licence="MIT",
+            source="https://github.com/pyg-team/pytorch_geometric",
+            ticket=977,
+        ),
     )
 }
