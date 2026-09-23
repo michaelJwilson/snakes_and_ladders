@@ -85,10 +85,10 @@ CELL_TIMEOUT = 900
 #: `DEV.md` states for the `notebooks` job. Stated, not measured: a notebook
 #: over it fails the check with its time beside the budget, and is cut ---
 #: fewer trials, a smaller instance --- rather than skipped (issue #891).
-#: 600 s until `emission_mixture_starts` ran 620 s on the runner with #901's
-#: fourteenth start (273 s on the 4-core reference host); raised, not cut, at
-#: the owner's decision.
-NOTEBOOK_BUDGET = 900
+#: 600 s, raised to 900 s while `emission_mixture_starts` ran 620 s on the
+#: runner (#909) and restored once the compiled count M step took it to 142 s
+#: on the 4-core reference host with #905's best-of group (#925).
+NOTEBOOK_BUDGET = 600
 
 
 def text_outputs(cell: dict[str, Any]) -> list[str]:
