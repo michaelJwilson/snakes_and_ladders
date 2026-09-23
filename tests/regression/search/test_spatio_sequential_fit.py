@@ -27,6 +27,7 @@ from snakes_and_ladders.search.spatio_sequential import (
     fit_spatio_sequential,
     graph_burn_in,
     label_accuracy,
+    redraw_small_labels,
     seed_emissions,
 )
 from snakes_and_ladders.sim.fixtures import fixture
@@ -379,3 +380,60 @@ def test_the_seeded_start_recovers_planted_labels_at_the_enumerable_size() -> No
         )
     assert float(np.mean(accuracies)) > 0.5, accuracies
     assert max(gaps) < 0.0, gaps
+
+
+# --- a class too small to fit, relabelled (issue #933, R11) --------------------
+
+
+@pytest.mark.analytic
+def test_a_class_under_the_minimum_is_relabelled_onto_the_others() -> None:
+    # Class 2 holds 3 sites and class 3 none; at a minimum of 4 exactly
+    # class 2's sites move, each onto a class that is not under it (the
+    # empty class 3 included), and one seed reproduces the draw.
+    labels = np.array([0] * 10 + [1] * 8 + [2] * 3, dtype=np.int64)
+    first = redraw_small_labels(labels, 4, 4, np.random.default_rng(933))
+    again = redraw_small_labels(labels, 4, 4, np.random.default_rng(933))
+    assert np.array_equal(first, again)
+    moved = labels == 2
+    assert np.array_equal(first[~moved], labels[~moved])
+    assert set(first[moved].tolist()) <= {0, 1, 3}
+    assert np.bincount(first, minlength=4)[2] == 0
+
+
+@pytest.mark.analytic
+def test_the_default_minimum_leaves_the_labels_and_the_generator_alone() -> None:
+    labels = np.array([0, 0, 1, 2], dtype=np.int64)
+    stream, reference = np.random.default_rng(1), np.random.default_rng(1)
+    assert redraw_small_labels(labels, 3, 0, stream) is labels
+    # Every occupied class under the minimum: nowhere to move a site to.
+    assert redraw_small_labels(labels, 3, 5, stream) is labels
+    assert stream.integers(1 << 62) == reference.integers(1 << 62)
+
+
+@pytest.mark.smoke
+def test_the_fit_redraws_small_classes_ahead_of_each_block() -> None:
+    # The default is the fit as it was, bitwise; a minimum above every class
+    # but one is reproducible on a seed and still ends on a labelling whose
+    # joint is the recorded one.
+    params = fixture("spatio_sequential", "ci").params
+    data = simulate_spatio_sequential(params, np.random.default_rng(3))
+
+    def fit(minimum: int | None) -> np.ndarray:
+        rng = np.random.default_rng(0)
+        if minimum is None:
+            run = fit_spatio_sequential(
+                params, data.observations, rng, solver=LabelSolver.ICM, n_blocks=4
+            )
+        else:
+            run = fit_spatio_sequential(
+                params,
+                data.observations,
+                rng,
+                solver=LabelSolver.ICM,
+                n_blocks=4,
+                min_label_sites=minimum,
+            )
+        return run.log_likelihoods
+
+    assert np.array_equal(fit(None), fit(0))
+    assert np.array_equal(fit(4), fit(4))

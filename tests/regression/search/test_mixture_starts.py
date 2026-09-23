@@ -15,17 +15,25 @@ import math
 
 import numpy as np
 import pytest
+import torch
 from snakes_and_ladders.cost import Cost
+from snakes_and_ladders.emissions import EmissionFamily
 from snakes_and_ladders.opt.budget import Budget, compare
 from snakes_and_ladders.opt.emission_mixture import CountPairSeeding
+from snakes_and_ladders.opt.mixture import mixture_log_likelihood
 from snakes_and_ladders.search.mixture_starts import (
+    BEST_OF,
+    BEST_OF_EM_STARTS,
+    BEST_OF_STARTS,
     DETERMINISTIC,
     POLISH_TOLERANCE,
     STARTS,
     MixtureInstance,
+    Selection,
     StartRow,
     TimedStart,
     Trial,
+    best_of,
     gap_band,
     instance_from,
     polish,
@@ -247,3 +255,164 @@ def test_a_polish_stops_where_em_empties_a_component() -> None:
     )
     assert not recovered.emptied
     assert recovered.converged
+
+
+def _equal(first: EmissionFamily, second: EmissionFamily) -> bool:
+    """Every parameter tensor equal bitwise."""
+    return all(
+        torch.equal(a, b)
+        for a, b in zip(
+            first.named_parameters().values(),
+            second.named_parameters().values(),
+            strict=True,
+        )
+    )
+
+
+@pytest.mark.analytic
+def test_best_of_one_is_the_start_and_best_of_five_is_the_best_of_its_seedings() -> (
+    None
+):
+    # Issues #905, #912. The referee is the start run directly on the
+    # generators spawned from the cell's: best-of-one hands over what the
+    # start does on the first child, bitwise; best-of-five's five seedings are
+    # the start on each of five children, and it hands over the one of
+    # highest log-likelihood at equal weights, never below any of them.
+    # Passes are the seedings' and one scoring pass each.
+    instance = _instance()
+    values = torch.as_tensor(instance.observations, dtype=torch.float64)
+    uniform = torch.full((instance.n_components,), 1.0 / instance.n_components)
+    uniform = torch.log(uniform.to(torch.float64))
+    for name in ("data", "emission++", "burn-in"):
+        (child,) = np.random.default_rng(7).spawn(1)
+        alone = STARTS[name](instance, child)
+        one = best_of(name, 1)(instance, np.random.default_rng(7))
+        assert _equal(one.components, alone.components), name
+        assert one.passes == alone.passes + 1.0
+        seedings = [
+            STARTS[name](instance, child) for child in np.random.default_rng(7).spawn(5)
+        ]
+        scores = [
+            float(mixture_log_likelihood(values, uniform, s.components))
+            for s in seedings
+        ]
+        five = best_of(name, 5)(instance, np.random.default_rng(7))
+        assert [step for step, _ in five.path] == [0, 1, 2, 3, 4]
+        for (_, family), seeded in zip(five.path, seedings, strict=True):
+            assert _equal(family, seeded.components), name
+        handed = float(mixture_log_likelihood(values, uniform, five.components))
+        assert handed == max(scores), name
+        assert five.passes == sum(s.passes for s in seedings) + 5.0
+        again = best_of(name, 5)(instance, np.random.default_rng(7))
+        assert _equal(again.components, five.components), name
+
+
+@pytest.mark.smoke
+@pytest.mark.backend
+def test_a_parallel_best_of_is_the_serial_one_bitwise() -> None:
+    # Issue #912: every seeding draws from its own spawned generator and
+    # records into a run private to its thread, so four threads, and four
+    # processes, hand over exactly what one worker does, polished or not.
+    instance = _instance()
+    serial = best_of("emission++", 5)(instance, np.random.default_rng(11))
+    for pool in ("threads", "processes"):
+        parallel = best_of("emission++", 5, workers=4, pool=pool)(
+            instance, np.random.default_rng(11)
+        )
+        assert _equal(parallel.components, serial.components), pool
+        assert parallel.passes == serial.passes, pool
+        for (_, a), (_, b) in zip(parallel.path, serial.path, strict=True):
+            assert _equal(a, b), pool
+    one, fit_one = best_of("data", 5, Selection.POLISHED).polished(
+        instance, np.random.default_rng(12), passes=PASSES.size
+    )
+    four, fit_four = best_of("data", 5, Selection.POLISHED, workers=4).polished(
+        instance, np.random.default_rng(12), passes=PASSES.size
+    )
+    assert _equal(one.components, four.components)
+    assert np.array_equal(fit_one.log_likelihoods, fit_four.log_likelihoods)
+
+
+@pytest.mark.analytic
+def test_a_timed_best_of_charges_its_seedings_and_draws_their_scores() -> None:
+    # Through TimedStart: the curve before the handover is the five scored
+    # seedings in order, and the seconds to the handover cover all five.
+    instance = _instance()
+    trial = TimedStart(BEST_OF_STARTS["data" + f"x{BEST_OF}"].key, PASSES)(
+        instance, CEILING, np.random.default_rng(0)
+    ).detail
+    assert isinstance(trial, Trial)
+    assert trial.handover == BEST_OF
+    scores = [value for _, value in trial.curve[: trial.handover]]
+    assert trial.curve[trial.handover][1] == max(scores)
+    assert trial.curve[trial.handover - 1][0] <= trial.curve[trial.handover][0]
+
+
+@pytest.mark.smoke
+def test_best_of_refuses_a_deterministic_start_or_no_seeding() -> None:
+    assert set(BEST_OF_STARTS) == {
+        f"{name}x{BEST_OF}" for name in STARTS if name not in DETERMINISTIC
+    }
+    with pytest.raises(ValueError, match="stochastic"):
+        best_of("quantile", 5)
+    with pytest.raises(ValueError, match="stochastic"):
+        best_of("nothing", 5)
+    with pytest.raises(ValueError, match="at least one seeding"):
+        best_of("data", 0)
+    with pytest.raises(ValueError, match="at least one worker"):
+        best_of("data", 2, workers=0)
+    with pytest.raises(ValueError, match="threads or processes"):
+        best_of("data", 2, pool="serial")
+
+
+@pytest.mark.analytic
+def test_a_polished_best_of_keeps_the_best_of_its_polished_seedings() -> None:
+    # Issue #912. The referee polishes the same five seedings directly, on
+    # the same spawned generators and at the same fixed passes: the polished best-of
+    # hands over the seeding whose fit ends highest, with that fit, and
+    # charges the seedings' passes and every polish's iterations.
+    instance = _instance()
+    for name in ("data", "emission++"):
+        seedings = [
+            STARTS[name](instance, child) for child in np.random.default_rng(3).spawn(5)
+        ]
+        fits = [polish(instance, s.components, passes=PASSES.size) for s in seedings]
+        finals = [float(fit.log_likelihoods[-1]) for fit in fits]
+        start = best_of(name, 5, Selection.POLISHED)
+        seeded, chosen = start.polished(
+            instance, np.random.default_rng(3), passes=PASSES.size
+        )
+        best = int(np.argmax(finals))
+        assert _equal(seeded.components, seedings[best].components), name
+        assert float(chosen.log_likelihoods[-1]) == max(finals), name
+        assert seeded.passes == sum(s.passes for s in seedings) + 5 * PASSES.size
+        for (_, family), drawn in zip(seeded.path, seedings, strict=True):
+            assert _equal(family, drawn.components), name
+
+
+@pytest.mark.analytic
+def test_a_timed_polished_best_of_hands_over_its_chosen_fit() -> None:
+    # Through TimedStart under the one seconds budget: the trial's fit is
+    # the chosen one, reached at the handover, and the cell stays inside it.
+    instance = _instance()
+    key = f"datax{BEST_OF}+em"
+    outcome = TimedStart(key)(instance, CEILING, np.random.default_rng(0))
+    trial = outcome.detail
+    assert isinstance(trial, Trial)
+    assert trial.handover == BEST_OF
+    assert trial.curve[-1][1] == float(trial.polished.log_likelihoods[-1])
+    assert outcome.spent <= CEILING.size
+    assert -outcome.value == float(trial.polished.log_likelihoods[-1])
+
+
+@pytest.mark.smoke
+def test_a_polished_best_of_is_keyed_and_refuses_a_call_without_its_budget() -> None:
+    assert set(BEST_OF_EM_STARTS) == {
+        f"{name}x{BEST_OF}+em" for name in STARTS if name not in DETERMINISTIC
+    }
+    start = best_of("data", 2, Selection.POLISHED)
+    assert start.key == "datax2+em"
+    with pytest.raises(ValueError, match="call polished"):
+        start(_instance(), np.random.default_rng(0))
+    with pytest.raises(ValueError, match="exactly one"):
+        start.polished(_instance(), np.random.default_rng(0))

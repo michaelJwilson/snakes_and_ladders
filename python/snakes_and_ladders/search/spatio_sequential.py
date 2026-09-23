@@ -279,6 +279,42 @@ def label_step(
     return best_labels
 
 
+def redraw_small_labels(
+    labels: np.ndarray,
+    n_classes: int,
+    min_label_sites: int,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """Every site of a class holding fewer than ``min_label_sites`` sites, relabelled uniformly (issue #933, R11).
+
+    A class the label step leaves with a handful of sites fits its emissions
+    to noise. Each site of a class holding at least one and fewer than
+    ``min_label_sites`` sites takes a label drawn uniformly from the classes
+    that are not so small, empty ones included, from ``rng``. At
+    ``min_label_sites <= 0``, or with no class that small, the labels are
+    returned as given and ``rng`` is not drawn from, so the default leaves a
+    fit bitwise what it was. Where every occupied class is that small there
+    is nowhere to move a site to, and the labels are returned as given.
+
+    Returns
+    -------
+    np.ndarray
+    """
+    if min_label_sites <= 0:
+        return labels
+    counts = np.bincount(labels, minlength=n_classes)
+    small = (counts > 0) & (counts < min_label_sites)
+    if not bool(small.any()):
+        return labels
+    kept = np.flatnonzero(~small)
+    if kept.size == 0:
+        return labels
+    moved = small[labels]
+    redrawn = labels.copy()
+    redrawn[moved] = kept[rng.integers(0, kept.size, size=int(moved.sum()))]
+    return redrawn
+
+
 def fit_spatio_sequential(
     params: SpatioSequentialParams,
     observations: np.ndarray,
@@ -290,6 +326,7 @@ def fit_spatio_sequential(
     fit_parameters: bool = True,
     wolff_schedule: TempSchedule | None = None,
     backend: Backend = Backend.PYTHON,
+    min_label_sites: int = 0,
 ) -> SpatioSequentialFit:
     """Block-coordinate ascent on ``log p(x, l | theta)``.
 
@@ -326,6 +363,12 @@ def fit_spatio_sequential(
         kernel of :mod:`snakes_and_ladders.likelihood.spatio_sequential_rust`,
         chosen inside :mod:`snakes_and_ladders.likelihood.spatio_sequential`
         so the three cannot be mixed (#828).
+    min_label_sites : int
+        At the start of every block, the sites of a class holding fewer than
+        this many are relabelled uniformly from the other classes
+        (:func:`redraw_small_labels`), so the block's M step fits no class to
+        a handful of sites. ``0``, the default, redraws nothing and draws
+        nothing from ``rng``.
 
     Raises
     ------
@@ -348,6 +391,7 @@ def fit_spatio_sequential(
     tracked = current_tracked()
     tracked.record(0, objective=-values[0], log_likelihood=values[0])
     for block in range(n_blocks):
+        current = redraw_small_labels(current, params.n_classes, min_label_sites, rng)
         posteriors = posteriors_of(params, observations, current)
         if fit_parameters:
             params = m_step(params, observations, current, posteriors)
