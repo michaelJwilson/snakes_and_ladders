@@ -20,6 +20,7 @@ from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.emissions import GaussianEmission
 from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.learn.policy import LinearPolicy
+from snakes_and_ladders.learn.ppo import generalized_advantages
 from snakes_and_ladders.learn.reinforce import surrogate_loss
 from snakes_and_ladders.learn.surrogate import Examples, GraphSurrogate, _Batch
 from snakes_and_ladders.opt.hmm import baum_welch
@@ -131,6 +132,43 @@ def test_the_sweep_fits_rustworkxs_memory(side: int) -> None:
     inputs = {"side": np.asarray(side), "seed": np.asarray(976)}
     peaks = [package("swendsen_wang", inputs).peak_bytes or 0 for _ in range(3)]
     assert_fits(int(np.median(peaks)), RUSTWORKX_SWEEP_MEMORY[side])
+
+
+#: TorchRL's `GAE` at `gamma = 1`, `lmbda = 0.95`, one call per episode of
+#: 100 decisions, `_gae_rollouts`' rewards and values with every other
+#: episode terminated: the summed per-episode seconds, the median of three
+#: subprocess runs (#997). TD(0)'s target is GAE at `lmbda = 0`, the same
+#: recursion, and sets no goal of its own.
+TORCHRL_GAE = {
+    n_episodes: Goal(
+        "torchrl",
+        f"GAE over {n_episodes:,} episodes of 100",
+        seconds,
+        "2026-09-23, 4-core reference host at a 1-minute load of 1.3, #997",
+    )
+    for n_episodes, seconds in ((100, 0.12086), (1_000, 1.24487))
+}
+
+
+def _gae_rollouts(n_episodes: int) -> list[tuple[list[float], list[float], bool]]:
+    """Rewards, values and the end flag of each episode, seed 997."""
+    rng = np.random.default_rng(997)
+    return [
+        (rng.normal(size=100).tolist(), rng.normal(size=101).tolist(), bool(i % 2))
+        for i in range(n_episodes)
+    ]
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("n_episodes", sorted(TORCHRL_GAE))
+def test_the_advantages_meet_torchrls_gae_runtime(n_episodes: int) -> None:
+    rollouts = _gae_rollouts(n_episodes)
+
+    def every() -> None:
+        for rewards, values, terminated in rollouts:
+            generalized_advantages(rewards, values, lam=0.95, terminated=terminated)
+
+    assert_meets(median_seconds(every, repeats=3), TORCHRL_GAE[n_episodes])
 
 
 #: JAX's per-point gradient under `jit` and its peak added memory over 100
