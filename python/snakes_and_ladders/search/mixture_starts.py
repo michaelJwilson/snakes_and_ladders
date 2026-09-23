@@ -1071,11 +1071,12 @@ def curve_band(curves: Sequence[Curve], seconds: np.ndarray) -> GapBand:
     return GapBand(seconds, mean, std, handover)
 
 
-def trial_curve(trial: Trial, reference: float, seed: int = 0) -> Curve:
+def trial_curve(trial: Trial, reference: float, index: int = 0) -> Curve:
     """A mixture trial as the :class:`~snakes_and_ladders.opt.starts.Curve` :func:`curve_band` reads.
 
     Its samples' times, values, and gaps below ``reference``; its handover
-    index as it is.
+    index as it is. ``index`` fills the curve's trial slot, which a band
+    does not read.
 
     Returns
     -------
@@ -1084,7 +1085,7 @@ def trial_curve(trial: Trial, reference: float, seed: int = 0) -> Curve:
     values = np.asarray([point[1] for point in trial.curve])
     return Curve(
         0,
-        seed,
+        index,
         np.asarray([point[0] for point in trial.curve]),
         values,
         reference - values,
@@ -1105,6 +1106,6 @@ def gap_band(trials: list[Trial], reference: float, seconds: np.ndarray) -> GapB
         If ``trials`` is empty.
     """
     return curve_band(
-        [trial_curve(trial, reference, seed) for seed, trial in enumerate(trials)],
+        [trial_curve(trial, reference, index) for index, trial in enumerate(trials)],
         seconds,
     )
