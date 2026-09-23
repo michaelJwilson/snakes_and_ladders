@@ -47,7 +47,7 @@ pub fn categorical_step(
     log_emission: &[f64],
 ) -> Result<Step, String> {
     let m = log_initial.len();
-    if m == 0 || log_transition.len() != m * m || log_emission.len() % m != 0 {
+    if m == 0 || log_transition.len() != m * m || !log_emission.len().is_multiple_of(m) {
         return Err(format!(
             "{m} states need a {m}x{m} transition and an {m}-row emission, got {} and {} entries",
             log_transition.len(),
@@ -55,7 +55,7 @@ pub fn categorical_step(
         ));
     }
     let n_symbols = log_emission.len() / m;
-    if length == 0 || observations.len() % length != 0 {
+    if length == 0 || !observations.len().is_multiple_of(length) {
         return Err(format!(
             "{} observations are not rows of {length}",
             observations.len()
