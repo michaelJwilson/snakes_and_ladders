@@ -30,6 +30,7 @@ from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.likelihood.hmm_paths import enumerate_hidden_paths
 from snakes_and_ladders.opt.hmm import (
     EmFit,
+    GaussianHmmObjective,
     HmmObjective,
     align_states,
     baum_welch,
@@ -795,3 +796,25 @@ def test_the_compiled_hmm_score_is_the_forward_recursion(name: str) -> None:
         for backend in (Backend.RUST, Backend.PYTHON)
     )
     assert_allclose(ours, oracle, rtol=1e-12)
+
+
+@pytest.mark.oracle
+def test_the_gaussian_hmm_gradient_is_autograds() -> None:
+    # Issue #997: `GaussianHmmObjective.gradient` by Fisher's identity from
+    # one streamed pass of expected statistics; autograd through `__call__`
+    # is the oracle, at points away from the start in every coordinate.
+    observations, _, _ = _streamed_case("gaussian", covariate=False)
+    objective = GaussianHmmObjective(observations, 3)
+    rng = np.random.default_rng(997)
+    for _ in range(3):
+        theta = objective.initial() + 0.3 * torch.as_tensor(
+            rng.normal(size=objective.n_parameters)
+        )
+        point = theta.clone().requires_grad_(True)
+        (autograd,) = torch.autograd.grad(objective(point), point)
+        assert_allclose(
+            objective.gradient(theta).numpy(),
+            autograd.numpy(),
+            rtol=1e-10,
+            atol=1e-10 * float(autograd.abs().max()),
+        )

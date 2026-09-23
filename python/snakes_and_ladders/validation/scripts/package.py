@@ -402,6 +402,11 @@ def _gradient(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     if "precision" in inputs:
         target: object = GaussianTarget(inputs["precision"])
         precision = torch.as_tensor(inputs["precision"])
+    elif "n_states" in inputs:
+        from snakes_and_ladders.opt.hmm import GaussianHmmObjective
+
+        target = GaussianHmmObjective(inputs["observations"], int(inputs["n_states"]))
+        precision = None
     else:
         target = GaussianMixtureObjective(
             inputs["observations"], int(inputs["n_components"])

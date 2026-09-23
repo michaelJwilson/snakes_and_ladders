@@ -425,6 +425,61 @@ class GaussianHmmObjective(_HmmObjective):
             ]
         )
 
+    def gradient(self, theta: torch.Tensor) -> torch.Tensor:
+        """``d/dtheta`` of :meth:`__call__` by Fisher's identity, which ``hmc.gradient_at`` reads (issue #997).
+
+        The score of the log-likelihood is the posterior expectation of the
+        complete-data score, so with ``gamma`` and ``xi`` the posteriors of a
+        state and of a pair, ``pi`` and ``A`` the initial distribution and
+        the transitions, and ``N`` sequences:
+
+        - an initial logit ``k >= 1``: ``sum gamma_1(k) - N pi_k``;
+        - a transition logit ``(i, j >= 1)``: ``sum xi(i, j) - sum_j' xi(i, j') A_ij``;
+        - a mean: ``sum_t gamma_t(s) (x_t - mu_s) / s_s^2``;
+        - a log scale: ``sum_t gamma_t(s) ((x_t - mu_s)^2 / s_s^2 - 1)``;
+
+        each summed in one streamed pass in
+        ``oxi_snakes_and_ladders.gaussian_hmm_statistics``, negated for the
+        negative log-likelihood. Autograd through :meth:`__call__` is the
+        oracle; a covariate, or any dtype but ``float64``, takes it.
+        """
+        m = self._n_states
+        if (
+            self._covariate is not None
+            or self._dtype != torch.float64
+            or self._observations.dim() != 2
+        ):
+            point = theta.detach().clone().requires_grad_(True)
+            (grad,) = torch.autograd.grad(self(point), point)
+            return grad
+        free = theta.detach()
+        transitions = self._transition_parameters(free)
+        mean = free[self._mean_slice()].numpy()
+        scale = np.exp(free[self._log_scale_slice()].numpy())
+        first, pairs, moments, _ = oxi_snakes_and_ladders.gaussian_hmm_statistics(
+            np.ascontiguousarray(self._observations.numpy()),
+            np.ascontiguousarray(transitions["log_initial"].numpy()),
+            np.ascontiguousarray(transitions["log_transition"].numpy()).reshape(-1),
+            np.ascontiguousarray(mean),
+            np.ascontiguousarray(scale),
+        )
+        n_sequences = self._observations.shape[0]
+        pairs = pairs.reshape(m, m)
+        initial = np.exp(transitions["log_initial"].numpy())
+        transition = np.exp(transitions["log_transition"].numpy())
+        s0, s1, s2 = moments.reshape(m, 3).T
+        score = np.concatenate(
+            [
+                (first - n_sequences * initial)[1:],
+                (pairs - pairs.sum(axis=1, keepdims=True) * transition)[:, 1:].reshape(
+                    -1
+                ),
+                s1 / scale**2,
+                s2 / scale**2 - s0,
+            ]
+        )
+        return torch.from_numpy(-score)
+
     def initial(self) -> torch.Tensor:
         """A start that is uninformative but **not** symmetric.
 

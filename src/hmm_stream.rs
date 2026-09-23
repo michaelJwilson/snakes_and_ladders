@@ -557,6 +557,111 @@ pub fn gaussian_step(
     })
 }
 
+/// A Gaussian HMM's expected statistics at the parameters given: the
+/// first-state posteriors summed over sequences (`m`), the expected pair
+/// counts (`m * m`), per state `S0 = sum gamma`, `S1 = sum gamma (x - mu)`,
+/// `S2 = sum gamma (x - mu)^2` (`3 * m`), and the log-likelihood.
+///
+/// By Fisher's identity the gradient of the log-likelihood is the posterior
+/// expectation of the complete-data score, and these are every term of it
+/// (issue #997): `GaussianHmmObjective.gradient` assembles it from them.
+#[allow(clippy::type_complexity)]
+pub fn gaussian_statistics(
+    observations: &[f64],
+    length: usize,
+    log_initial: &[f64],
+    log_transition: &[f64],
+    mean: &[f64],
+    scale: &[f64],
+) -> Result<(Vec<f64>, Vec<f64>, Vec<f64>, f64), String> {
+    let m = log_initial.len();
+    if mean.len() != m || scale.len() != m {
+        return Err(format!(
+            "{m} states need {m} means and scales, got {} and {}",
+            mean.len(),
+            scale.len()
+        ));
+    }
+    let offset: Vec<f64> = scale
+        .iter()
+        .map(|s| -0.5 * (2.0 * std::f64::consts::PI).ln() - s.ln())
+        .collect();
+    let (counts, moments) = stream_counts(
+        observations.len(),
+        length,
+        log_initial,
+        log_transition,
+        |index, out| {
+            let x = observations[index];
+            for state in 0..m {
+                let z = (x - mean[state]) / scale[state];
+                out[state] = offset[state] - 0.5 * z * z;
+            }
+        },
+        |_| usize::MAX,
+        || Moments {
+            observations,
+            mean,
+            sums: vec![0.0; 3 * m],
+        },
+        24 * m,
+    )?;
+    Ok((
+        counts.first,
+        counts.pairs,
+        moments.sums,
+        counts.log_likelihood,
+    ))
+}
+
+/// A Gaussian HMM's expected statistics; see `gaussian_statistics`.
+///
+/// Returns `(first, pairs, moments, log_likelihood)`, `pairs` row-major and
+/// `moments` `(S0, S1, S2)` per state.
+#[pyfunction]
+#[pyo3(signature = (observations, log_initial, log_transition, mean, scale))]
+#[allow(clippy::type_complexity)]
+pub fn gaussian_hmm_statistics<'py>(
+    py: Python<'py>,
+    observations: PyReadonlyArray2<'py, f64>,
+    log_initial: PyReadonlyArray1<'py, f64>,
+    log_transition: PyReadonlyArray1<'py, f64>,
+    mean: PyReadonlyArray1<'py, f64>,
+    scale: PyReadonlyArray1<'py, f64>,
+) -> PyResult<(
+    Bound<'py, PyArray1<f64>>,
+    Bound<'py, PyArray1<f64>>,
+    Bound<'py, PyArray1<f64>>,
+    f64,
+)> {
+    let length = observations.shape()[1];
+    let (observations, log_initial, log_transition, mean, scale) = (
+        observations.as_slice()?,
+        log_initial.as_slice()?,
+        log_transition.as_slice()?,
+        mean.as_slice()?,
+        scale.as_slice()?,
+    );
+    let (first, pairs, moments, log_likelihood) = py
+        .detach(|| {
+            gaussian_statistics(
+                observations,
+                length,
+                log_initial,
+                log_transition,
+                mean,
+                scale,
+            )
+        })
+        .map_err(PyValueError::new_err)?;
+    Ok((
+        PyArray1::from_vec(py, first),
+        PyArray1::from_vec(py, pairs),
+        PyArray1::from_vec(py, moments),
+        log_likelihood,
+    ))
+}
+
 /// Where one observation's row of the histogram is.
 ///
 /// A count `y` with covariate `c` is the cell `y * stride + c` (`c = 0`,

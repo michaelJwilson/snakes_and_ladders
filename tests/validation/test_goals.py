@@ -28,7 +28,7 @@ from snakes_and_ladders.learn.surrogate import (
     SetSurrogate,
     _Batch,
 )
-from snakes_and_ladders.opt.hmm import baum_welch
+from snakes_and_ladders.opt.hmm import GaussianHmmObjective, baum_welch
 from snakes_and_ladders.opt.mixture import expectation_maximization
 from snakes_and_ladders.sample import hmc
 from snakes_and_ladders.sample.potts_mcmc import _bond_probability
@@ -894,6 +894,60 @@ def test_mala_without_its_chain_fits_blackjaxs_memory(dimension: int) -> None:
     inputs = _mala_inputs(dimension, store_chain=False)
     peaks = [package("mala_sample", inputs).peak_bytes or 0 for _ in range(3)]
     assert_fits(int(np.median(peaks)), BLACKJAX_MALA_CHAIN_FREE_MEMORY[dimension])
+
+
+#: JAX's `jit(value_and_grad)` of `GaussianHmmObjective`'s negative
+#: log-likelihood (three states, sequences of 100) at 20 points about its
+#: `initial()`, the per-point median, and the loop's peak added memory,
+#: medians of three subprocess runs (#997).
+JAX_HMM_GRADIENT = {
+    n_sequences: Goal(
+        "jax",
+        f"Gaussian HMM gradient at {100 * n_sequences:,} positions",
+        seconds,
+        "2026-09-23, 4-core reference host at a 1-minute load of 1.0, #997",
+    )
+    for n_sequences, seconds in ((100, 2.58e-3), (1_000, 16.61e-3))
+}
+
+JAX_HMM_GRADIENT_MEMORY = {
+    n_sequences: MemoryGoal(
+        "jax",
+        f"Gaussian HMM gradient at {100 * n_sequences:,} positions",
+        peak_bytes,
+        "2026-09-23, 4-core reference host, #997",
+    )
+    for n_sequences, peak_bytes in ((100, 49_197_056), (1_000, 60_833_792))
+}
+
+
+def _hmm_gradient_inputs(n_sequences: int) -> dict[str, np.ndarray]:
+    """The gradient harness's inputs: the family fits' Gaussian sequences, 20 points."""
+    observations = _family_observations("gaussian", n_sequences)
+    start = GaussianHmmObjective(observations, 3).initial().numpy()
+    rng = np.random.default_rng(997)
+    return {
+        "points": start + 0.1 * rng.normal(size=(20, start.size)),
+        "observations": observations,
+        "n_states": np.asarray(3),
+    }
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("n_sequences", sorted(JAX_HMM_GRADIENT))
+def test_the_hmm_gradient_meets_jaxs_runtime(n_sequences: int) -> None:
+    inputs = _hmm_gradient_inputs(n_sequences)
+    runs = [package("gradient", inputs) for _ in range(3)]
+    per_point = float(np.median([float(r.outputs["per_point"]) for r in runs]))
+    assert_meets(per_point, JAX_HMM_GRADIENT[n_sequences])
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("n_sequences", sorted(JAX_HMM_GRADIENT_MEMORY))
+def test_the_hmm_gradient_fits_jaxs_memory(n_sequences: int) -> None:
+    inputs = _hmm_gradient_inputs(n_sequences)
+    peaks = [package("gradient", inputs).peak_bytes or 0 for _ in range(3)]
+    assert_fits(int(np.median(peaks)), JAX_HMM_GRADIENT_MEMORY[n_sequences])
 
 
 #: BlackJAX's peak added resident memory for the same compiled chain with no

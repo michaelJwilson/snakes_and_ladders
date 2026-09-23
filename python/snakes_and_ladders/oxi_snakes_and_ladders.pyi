@@ -123,6 +123,13 @@ def hmm_score(
     family: str,
     parameters: np.ndarray,
 ) -> float: ...
+def gaussian_hmm_statistics(
+    observations: np.ndarray,
+    log_initial: np.ndarray,
+    log_transition: np.ndarray,
+    mean: np.ndarray,
+    scale: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]: ...
 def gaussian_mixture_em_step(
     values: np.ndarray,
     log_weight: np.ndarray,

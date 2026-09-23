@@ -47,11 +47,13 @@ def gradients(
     precision: np.ndarray | None = None,
     observations: np.ndarray | None = None,
     n_components: int | None = None,
+    n_states: int | None = None,
 ) -> Gradients:
     """JAX's value and gradient at each row of ``points``.
 
-    Give ``precision`` for the Gaussian target, or ``observations`` and
-    ``n_components`` for the mixture.
+    Give ``precision`` for the Gaussian target, ``observations`` and
+    ``n_components`` for the mixture, or ``observations``, ``(n_sequences,
+    length)``, and ``n_states`` for the Gaussian HMM (issue #997).
     """
     inputs: dict[str, np.ndarray] = {
         "points": np.ascontiguousarray(points, dtype=np.float64)
@@ -59,12 +61,16 @@ def gradients(
     if precision is not None:
         inputs["target"] = np.asarray("gaussian")
         inputs["precision"] = np.ascontiguousarray(precision, dtype=np.float64)
+    elif observations is not None and n_states is not None:
+        inputs["target"] = np.asarray("hmm")
+        inputs["observations"] = np.ascontiguousarray(observations, dtype=np.float64)
+        inputs["n_states"] = np.asarray(n_states, dtype=np.int64)
     elif observations is not None and n_components is not None:
         inputs["target"] = np.asarray("mixture")
         inputs["observations"] = np.ascontiguousarray(observations, dtype=np.float64)
         inputs["n_components"] = np.asarray(n_components, dtype=np.int64)
     else:
-        msg = "give a precision, or observations and n_components"
+        msg = "give a precision, or observations and n_components or n_states"
         raise ValueError(msg)
     result = run(SCRIPT, inputs)
     out = result.outputs
