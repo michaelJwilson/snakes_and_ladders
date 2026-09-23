@@ -55,8 +55,13 @@ def alpha_expansion(
     n_states: int,
     *,
     start: np.ndarray | None = None,
+    move: str = "expansion",
 ) -> Expansion:
-    """gco's expansion to convergence on the package's Potts model."""
+    """gco's expansion to convergence on the package's Potts model.
+
+    ``move="swap"`` runs gco's alpha-beta swap to convergence instead
+    (issue #997).
+    """
     values = site_field(np.asarray(field_values, dtype=float), graph.n_nodes)
     if values.shape[1] != n_states:
         msg = f"the field has {values.shape[1]} states, not {n_states}"
@@ -72,6 +77,8 @@ def alpha_expansion(
     }
     if start is not None:
         inputs["start"] = np.ascontiguousarray(start, dtype=np.int64)
+    if move != "expansion":
+        inputs["move"] = np.asarray(move)
     result = run(SCRIPT, inputs)
     labelling = result.outputs["labels"]
     return Expansion(

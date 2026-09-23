@@ -239,10 +239,33 @@ def _lowest_by_cut(
 
     proposed = built.place(built.source_side())
 
-    candidate = energy(graph, values, proposed)
+    # Only the changed sites' terms move, so the proposal is scored by their
+    # difference: a full `energy` was 0.18 s of a 0.92 s swap at 142^2
+    # (issue #997). The cycle re-scores its result in full once.
+    candidate = current + _energy_change(graph, values, labelling, proposed)
     if candidate < current:
         return Labelling(proposed, candidate)
     return Labelling(labelling, current)
+
+
+def _energy_change(
+    graph: PottsGraph,
+    values: np.ndarray,
+    before: np.ndarray,
+    after: np.ndarray,
+) -> float:
+    """``energy(after) - energy(before)`` from the sites that differ and their edges."""
+    changed = before != after
+    sites = np.flatnonzero(changed)
+    if sites.size == 0:
+        return 0.0
+    field = values[sites, after[sites]].sum() - values[sites, before[sites]].sum()
+    first, second = graph.edge_index[:, 0], graph.edge_index[:, 1]
+    touched = np.flatnonzero(changed[first] | changed[second])
+    a, b = first[touched], second[touched]
+    coupling = graph.edge_coupling[touched]
+    agree = (after[a] == after[b]).astype(float) - (before[a] == before[b])
+    return float(-field - coupling @ agree)
 
 
 @dataclass(frozen=True)
@@ -326,7 +349,8 @@ def _cycle_to_a_local_minimum(
         if not improved:
             return ExpansionResult(
                 labelling=labelling,
-                energy=current,
+                # In full: the moves carried it by differences (issue #997).
+                energy=energy(graph, values, labelling),
                 cycles=cycle,
                 moves=moves,
                 termination=Termination.after(cycle, converged=True),

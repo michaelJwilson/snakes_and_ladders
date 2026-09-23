@@ -55,9 +55,15 @@ def _ising_cut(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
 
 
 def _alpha_expansion(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
-    """Expansion on the Rust cut to convergence, as the gco pair times it (#974)."""
+    """Expansion on the Rust cut to convergence, as the gco pair times it (#974).
+
+    With ``move`` set to ``swap``, the alpha-beta swap instead (#997).
+    """
     from snakes_and_ladders.backend import Backend
-    from snakes_and_ladders.search.alpha_expansion import alpha_expansion
+    from snakes_and_ladders.search.alpha_expansion import (
+        alpha_beta_swap,
+        alpha_expansion,
+    )
     from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 
     shape = tuple(int(extent) for extent in inputs["shape"])
@@ -65,8 +71,14 @@ def _alpha_expansion(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     field = inputs["field"]
     n_states = int(field.shape[1])
 
+    solver = (
+        alpha_beta_swap
+        if str(inputs.get("move", np.asarray("expansion"))) == "swap"
+        else alpha_expansion
+    )
+
     def call() -> Outputs:
-        result = alpha_expansion(graph, field, n_states, backend=Backend.RUST)
+        result = solver(graph, field, n_states, backend=Backend.RUST)
         return {"labelling": result.labelling, "energy": np.asarray(result.energy)}
 
     return call

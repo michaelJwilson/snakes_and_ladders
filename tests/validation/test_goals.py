@@ -391,6 +391,60 @@ def test_the_expansion_meets_gcos_runtime(side: int) -> None:
     assert_meets(ours, GCO_EXPANSION[side])
 
 
+#: gco's alpha-beta `swap()` to convergence on the expansion goals' instance
+#: (q = 10, `critical_coupling(10)`, field seed 974), graph build excluded,
+#: and its peak added memory with the build: medians of three subprocess
+#: runs (#997). The package's swap stood at 1.57x / 1.12x after two attempts
+#: --- a proposal scored by its energy change (0.92 to 0.76 s at 142^2) and
+#: each cut built on the moving sites alone (to 0.63 s) --- and at 1.27x /
+#: 0.89x the memory.
+GCO_SWAP = {
+    side: Goal(
+        "gco",
+        f"alpha-beta swap on the Rust cut, {side}x{side}, q = 10",
+        seconds,
+        "2026-09-23, 4-core reference host at a 1-minute load of 1.2, #997",
+    )
+    for side, seconds in ((71, 0.0964), (142, 0.5556))
+}
+
+GCO_SWAP_MEMORY = {
+    side: MemoryGoal(
+        "gco",
+        f"alpha-beta swap on the Rust cut, {side}x{side}, q = 10",
+        peak_bytes,
+        "2026-09-23, 4-core reference host, #997",
+    )
+    for side, peak_bytes in ((71, 2_572_288), (142, 9_568_256))
+}
+
+
+def _swap_inputs(side: int) -> dict[str, np.ndarray]:
+    """The expansion goals' instance, run as a swap."""
+    return {
+        "shape": np.asarray([side, side]),
+        "coupling": np.asarray(critical_coupling(10)),
+        "field": np.random.default_rng(974).normal(size=(side * side, 10)),
+        "move": np.asarray("swap"),
+    }
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("side", sorted(GCO_SWAP))
+def test_the_swap_meets_gcos_runtime(side: int) -> None:
+    seconds = [package("alpha_expansion", _swap_inputs(side)).seconds for _ in range(3)]
+    assert_meets(float(np.median(seconds)), GCO_SWAP[side])
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("side", sorted(GCO_SWAP_MEMORY))
+def test_the_swap_fits_gcos_memory(side: int) -> None:
+    peaks = [
+        package("alpha_expansion", _swap_inputs(side)).peak_bytes or 0 for _ in range(3)
+    ]
+    assert_fits(int(np.median(peaks)), GCO_SWAP_MEMORY[side])
+
+
 #: BlackJAX's compiled HMC chain, compilation excluded: 1,000 transitions of
 #: ten leapfrog steps at unit mass on the diagonal Gaussian with precisions
 #: from 1 to 4, step 0.9 / (2 d^(1/4)), the medians of three subprocess runs
