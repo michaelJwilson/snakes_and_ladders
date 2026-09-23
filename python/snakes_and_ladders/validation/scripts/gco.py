@@ -6,14 +6,15 @@ Inputs: ``unary``, the ``(n_nodes, n_states)`` data cost; ``first``,
 The smooth cost is Potts, ``[a != b]``. gco's float mode scales each term to
 an integer and truncates it; the adapter re-scores the labelling in the
 package's own energy. Outputs: ``labels``; ``gco_energy``, gco's own figure;
-``build_seconds``. The measured seconds are ``expansion()`` alone.
+``build_seconds``. The measured seconds are ``expansion()`` alone; the peak
+resident memory is the build and the expansion together.
 """
 
 from __future__ import annotations
 
 import numpy as np
 
-from snakes_and_ladders.validation.protocol import dump, load, paths, timed
+from snakes_and_ladders.validation.protocol import dump, load, paths, peaked, timed
 
 
 def main() -> None:
@@ -36,8 +37,12 @@ def main() -> None:
                 graph.init_label_at_site(site, int(label))
         return graph
 
-    graph, build_seconds = timed(build)
-    _, seconds = timed(lambda: graph.expansion(-1))  # type: ignore[attr-defined]
+    def build_and_expand() -> tuple[object, float, float]:
+        graph, build_seconds = timed(build)
+        _, seconds = timed(lambda: graph.expansion(-1))  # type: ignore[attr-defined]
+        return graph, seconds, build_seconds
+
+    (graph, seconds, build_seconds), peak_bytes = peaked(build_and_expand)
     labels = np.array(graph.get_labels(), dtype=np.int64)  # type: ignore[attr-defined]
     gco_energy = float(graph.compute_energy())  # type: ignore[attr-defined]
     graph.destroy_graph()  # type: ignore[attr-defined]
@@ -49,6 +54,7 @@ def main() -> None:
             "build_seconds": np.asarray(build_seconds, dtype=np.float64),
         },
         seconds,
+        peak_bytes,
     )
 
 

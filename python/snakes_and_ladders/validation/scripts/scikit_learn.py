@@ -13,7 +13,7 @@ import warnings
 
 import numpy as np
 
-from snakes_and_ladders.validation.protocol import dump, load, paths, timed
+from snakes_and_ladders.validation.protocol import dump, load, paths, peaked, timed
 
 
 def main() -> None:
@@ -38,7 +38,7 @@ def main() -> None:
     with warnings.catch_warnings():
         # A fixed iteration count is asked for; "not converged" is expected.
         warnings.simplefilter("ignore", ConvergenceWarning)
-        _, seconds = timed(lambda: model.fit(column))
+        (_, seconds), peak_bytes = peaked(lambda: timed(lambda: model.fit(column)))
     dump(
         returned,
         {
@@ -48,6 +48,7 @@ def main() -> None:
             "iterations": np.asarray(model.n_iter_, dtype=np.int64),
         },
         seconds,
+        peak_bytes,
     )
 
 

@@ -4,7 +4,8 @@ Agreement is pinned in `tests/validation/test_hmmlearn.py` and
 `test_scikit_learn.py`, and the runtime goals there. Each row times ten
 iterations of the package's EM from one start and records beside it the
 framework's `fit` time for the same ten on the same data, the median of
-`REPEATS` subprocess runs.
+`REPEATS` subprocess runs, and the peak resident memory each side's fit adds,
+each read in a fresh interpreter (#987).
 
 Sizes: Baum--Welch at the gate fixture (`hmm/ci.yaml`, 9,000 positions) and at
 10⁵ and 10⁶ positions, sequences of 100 from the fixture's model; mixture EM
@@ -26,7 +27,7 @@ from snakes_and_ladders.opt.hmm import baum_welch
 from snakes_and_ladders.opt.mixture import expectation_maximization
 from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
 from snakes_and_ladders.validation import hmmlearn, scikit_learn
-from snakes_and_ladders.validation.runner import available
+from snakes_and_ladders.validation.runner import available, package
 
 from tests._fixtures import FIXTURES_DIR
 
@@ -60,13 +61,22 @@ def test_baum_welch_beside_hmmlearn_benchmark(
         _simplex(rng, params.n_states, params.n_states),
         _simplex(rng, params.n_states, params.n_symbols),
     )
+    fits = [hmmlearn.baum_welch(observations, *start, N_ITER) for _ in range(REPEATS)]
     benchmark.extra_info["hmmlearn_fit_s"] = float(
-        np.median(
-            [
-                hmmlearn.baum_welch(observations, *start, N_ITER).seconds
-                for _ in range(REPEATS)
-            ]
-        )
+        np.median([fit.seconds for fit in fits])
+    )
+    benchmark.extra_info["hmmlearn_peak_bytes"] = float(
+        np.median([fit.peak_bytes for fit in fits])
+    )
+    ours = {
+        "observations": observations,
+        "initial": start[0],
+        "transition": start[1],
+        "emission": start[2],
+        "n_iter": np.asarray(N_ITER),
+    }
+    benchmark.extra_info["package_peak_bytes"] = float(
+        np.median([package("baum_welch", ours).peak_bytes or 0 for _ in range(REPEATS)])
     )
     logs = [torch.log(torch.as_tensor(p)) for p in start]
 
@@ -93,15 +103,27 @@ def test_mixture_em_beside_scikit_learn_benchmark(
     weights = np.array([0.3, 0.3, 0.4])
     mean = np.array([-3.0, 0.5, 4.0])
     scale = np.array([1.2, 1.0, 1.3])
-    benchmark.extra_info["scikit_learn_fit_s"] = float(
-        np.median(
-            [
-                scikit_learn.expectation_maximization(
-                    observations, weights, mean, scale, N_ITER
-                ).seconds
-                for _ in range(REPEATS)
-            ]
+    fits = [
+        scikit_learn.expectation_maximization(
+            observations, weights, mean, scale, N_ITER
         )
+        for _ in range(REPEATS)
+    ]
+    benchmark.extra_info["scikit_learn_fit_s"] = float(
+        np.median([fit.seconds for fit in fits])
+    )
+    benchmark.extra_info["scikit_learn_peak_bytes"] = float(
+        np.median([fit.peak_bytes for fit in fits])
+    )
+    ours = {
+        "observations": observations,
+        "weights": weights,
+        "mean": mean,
+        "scale": scale,
+        "n_iter": np.asarray(N_ITER),
+    }
+    benchmark.extra_info["package_peak_bytes"] = float(
+        np.median([package("mixture_em", ours).peak_bytes or 0 for _ in range(REPEATS)])
     )
 
     fit = benchmark(

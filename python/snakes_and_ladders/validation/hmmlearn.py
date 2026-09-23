@@ -30,6 +30,8 @@ class Fit:
     iterations: int
     #: Wall seconds of ``fit`` alone.
     seconds: float
+    #: Peak resident bytes ``fit`` added.
+    peak_bytes: int
 
 
 def baum_welch(
@@ -57,4 +59,5 @@ def baum_welch(
         out["emission"],
         int(out["iterations"]),
         result.seconds,
+        int(result.peak_bytes or 0),
     )

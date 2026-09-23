@@ -31,11 +31,17 @@ import pytest
 import snakes_and_ladders
 from snakes_and_ladders.validation import FRAMEWORKS
 from snakes_and_ladders.validation.protocol import SECONDS
-from snakes_and_ladders.validation.runner import ScriptError, available, run
+from snakes_and_ladders.validation.runner import ScriptError, available, package, run
 from validation_extras import PREFIX, validation_extras
 
 from tests._paths import REPO_ROOT
-from tests.validation._goals import Goal, assert_meets, median_seconds
+from tests.validation._goals import (
+    Goal,
+    MemoryGoal,
+    assert_fits,
+    assert_meets,
+    median_seconds,
+)
 
 PACKAGE = Path(snakes_and_ladders.__file__).parent
 VALIDATION = "snakes_and_ladders.validation"
@@ -183,3 +189,21 @@ def test_a_goal_fails_by_how_far_the_package_is_off() -> None:
     with pytest.raises(AssertionError, match=r"1\.50x"):
         assert_meets(1.5e-3, goal)
     assert median_seconds(lambda: None, repeats=3) >= 0.0
+    memory = MemoryGoal("selftest", "a call", 2_000_000, "a hardcoded figure")
+    assert_fits(1_000_000, memory)
+    with pytest.raises(AssertionError, match=r"1\.50x"):
+        assert_fits(3_000_000, memory)
+
+
+@pytest.mark.infra
+def test_the_peak_reads_back_a_known_allocation() -> None:
+    # 10^7 float64 values are 8e7 bytes; the kernel's high-water mark reads
+    # them back within 5 per cent, and a call that allocates nothing, the
+    # selftest's doubling of 51 values, reads under 1 MB.
+    allocated = package("allocate", {"n": np.asarray(10_000_000)})
+    assert allocated.peak_bytes is not None
+    assert allocated.peak_bytes == pytest.approx(8e7, rel=0.05)
+    assert float(allocated.outputs["total"]) == 0.0
+    small = run("selftest", {"values": np.zeros(51)})
+    assert small.peak_bytes is not None
+    assert small.peak_bytes < 1_000_000

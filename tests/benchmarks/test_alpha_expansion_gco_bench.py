@@ -4,7 +4,9 @@ The properties both must satisfy are pinned in `tests/validation/test_gco.py`.
 Each row times the package's expansion on the Rust cut to convergence and
 records beside it what gco's script measured on the same model: `gco_build_s`
 for its graph, `gco_expand_s` for `expansion()`, the median of `REPEATS`
-subprocess runs, and both energies under `sim.potts.energy`. The lattice is
+subprocess runs, and both energies under `sim.potts.energy`. Beside them,
+`gco_peak_bytes` and `package_peak_bytes`: the peak resident memory each
+side's build and expansion add, each read in a fresh interpreter (#987). The lattice is
 open at q = 10's critical coupling under a standard normal field, the case
 #952's spike measured.
 
@@ -23,7 +25,7 @@ from snakes_and_ladders.search.alpha_expansion import alpha_expansion
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 from snakes_and_ladders.sim.potts import critical_coupling
 from snakes_and_ladders.validation import gco
-from snakes_and_ladders.validation.runner import available
+from snakes_and_ladders.validation.runner import available, package
 
 pytestmark = pytest.mark.skipif(
     not available("gco"), reason="gco is the validation-gco extra"
@@ -59,6 +61,19 @@ def test_rust_expansion_beside_gco_benchmark(
         np.median([one.seconds for one in runs])
     )
     benchmark.extra_info["gco_energy"] = runs[0].energy
+    benchmark.extra_info["gco_peak_bytes"] = float(
+        np.median([one.peak_bytes for one in runs])
+    )
+    inputs = {
+        "shape": np.asarray([side, side]),
+        "coupling": np.asarray(critical_coupling(N_STATES)),
+        "field": field,
+    }
+    benchmark.extra_info["package_peak_bytes"] = float(
+        np.median(
+            [package("alpha_expansion", inputs).peak_bytes or 0 for _ in range(REPEATS)]
+        )
+    )
 
     result = benchmark.pedantic(  # type: ignore[no-untyped-call]
         alpha_expansion,

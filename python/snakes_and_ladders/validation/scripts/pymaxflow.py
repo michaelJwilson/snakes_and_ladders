@@ -4,14 +4,15 @@ Inputs: ``n_nodes``; ``tail``, ``head``, ``capacity``, ``reverse`` for the
 edges between non-terminal nodes; ``source`` and ``sink``, each node's
 terminal capacity. Outputs: ``value``, the maximum flow; ``sink_side``, each
 node's segment; ``build_seconds``, the graph construction. The measured
-seconds are ``maxflow()`` alone.
+seconds are ``maxflow()`` alone; the peak resident memory is the build and
+the cut together.
 """
 
 from __future__ import annotations
 
 import numpy as np
 
-from snakes_and_ladders.validation.protocol import dump, load, paths, timed
+from snakes_and_ladders.validation.protocol import dump, load, paths, peaked, timed
 
 
 def main() -> None:
@@ -31,8 +32,12 @@ def main() -> None:
         graph.add_grid_tedges(nodes, inputs["source"], inputs["sink"])
         return graph, nodes
 
-    (graph, nodes), build_seconds = timed(build)
-    value, seconds = timed(graph.maxflow)  # type: ignore[attr-defined]
+    def build_and_cut() -> tuple[object, np.ndarray, float, float, float]:
+        (graph, nodes), build_seconds = timed(build)
+        value, seconds = timed(graph.maxflow)  # type: ignore[attr-defined]
+        return graph, nodes, value, seconds, build_seconds
+
+    (graph, nodes, value, seconds, build_seconds), peak_bytes = peaked(build_and_cut)
     segments = graph.get_grid_segments(nodes)  # type: ignore[attr-defined]
     sink_side = np.array(segments, dtype=np.bool_)
     dump(
@@ -43,6 +48,7 @@ def main() -> None:
             "build_seconds": np.asarray(build_seconds, dtype=np.float64),
         },
         seconds,
+        peak_bytes,
     )
 
 

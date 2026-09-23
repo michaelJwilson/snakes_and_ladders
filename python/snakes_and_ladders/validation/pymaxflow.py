@@ -47,6 +47,8 @@ class Cut:
     seconds: float
     #: Wall seconds building the graph in PyMaxflow.
     build_seconds: float
+    #: Peak resident bytes the build and the cut added.
+    peak_bytes: int
 
 
 def _cut(
@@ -57,7 +59,7 @@ def _cut(
     reverse: np.ndarray,
     source: np.ndarray,
     sink: np.ndarray,
-) -> tuple[float, np.ndarray, float, float]:
+) -> tuple[float, np.ndarray, float, float, int]:
     """Run the script on non-terminal nodes ``0 .. n_nodes - 1``."""
     result = run(
         SCRIPT,
@@ -76,6 +78,7 @@ def _cut(
         result.outputs["sink_side"].astype(bool),
         result.seconds,
         float(result.outputs["build_seconds"]),
+        int(result.peak_bytes or 0),
     )
 
 
@@ -114,7 +117,7 @@ def min_cut(network: FlowNetwork, source: int, sink: int) -> Cut:
         np.add.at(to_sink, position[first[enters]], capacity[enters])
         direct += float(capacity[(first == source) & (second == sink)].sum())
     internal = (position[tails] >= 0) & (position[heads] >= 0)
-    value, sink_side, seconds, build_seconds = _cut(
+    value, sink_side, seconds, build_seconds, peak_bytes = _cut(
         int(inner.size),
         position[tails[internal]],
         position[heads[internal]],
@@ -126,7 +129,7 @@ def min_cut(network: FlowNetwork, source: int, sink: int) -> Cut:
     side = np.zeros(network.n_nodes, dtype=bool)
     side[inner] = ~sink_side
     side[source] = True
-    return Cut(value + direct, side, seconds, build_seconds)
+    return Cut(value + direct, side, seconds, build_seconds, peak_bytes)
 
 
 def ising_ground_state(
@@ -146,7 +149,7 @@ def ising_ground_state(
     cost = -values
     offsets = cost.min(axis=1)
     edges = graph.edge_index
-    value, sink_side, seconds, build_seconds = _cut(
+    value, sink_side, seconds, build_seconds, peak_bytes = _cut(
         graph.n_nodes,
         edges[:, 0],
         edges[:, 1],
@@ -157,4 +160,4 @@ def ising_ground_state(
     )
     configuration = sink_side.astype(np.int64)
     state = GroundState(configuration, energy(graph, values, configuration))
-    return state, Cut(value, ~sink_side, seconds, build_seconds)
+    return state, Cut(value, ~sink_side, seconds, build_seconds, peak_bytes)
