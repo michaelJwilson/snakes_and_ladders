@@ -585,6 +585,19 @@ it (#925). Against the per-state solve, kept as the oracle: bitwise on
 `emission_mixture/ci`, and on `/stress` 7 of 10 states bitwise and the rest
 within a relative 5.9e-13 of #648's 2e-06 floor.
 
+**Both count solves are compiled** (#922). `src/count_mstep.rs` runs each
+state's bisection in Rust and evaluates every `sum_u w_u (digamma(u + x) -
+digamma(x))` as `sum_j T_j / (x + j)` over the tails of the weights, an
+identity for integer counts that needs no special function. One thread, the
+kernel against the batched torch solves: the beta-binomial solve 13.5x on
+`emission_mixture/stress` (87.3 to 6.5 ms) and 19.5x on the release
+projection (209.9 to 10.8 ms), the dispersion solve 9.5x and 3.9x; the joint
+M step at the release projection 235 to 19.7 ms, and one stress EM iteration
+96 to 12.7 ms. The beta-binomial results are bitwise the oracle's, since a
+bisection's answer is set by its scores' signs; the dispersion within 1.2e-12
+relative. `emission_mixture_starts` executes in 56 s, from 277 to 302 s, its
+compared text unchanged; the E step is now 41% of an iteration (#924).
+
 **The flat-likelihood hazard is the mirror of the Gaussian's.** Where a
 Gaussian likelihood is *unbounded* as a variance falls, a count likelihood goes
 *flat* as the dispersion rises toward its Poisson or binomial limit. The bound

@@ -63,6 +63,7 @@ from typing import Generic, Protocol, TypeVar, runtime_checkable
 import numpy as np
 import torch
 
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.numerics import sample_rows
 
 #: What a family accepts for a parameter vector. A plain list is admitted
@@ -1198,7 +1199,7 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
         if offsets is None:
             # No exposure: one lockstep bisection over every state on the
             # distinct counts (issue #918), as the beta-binomial's (#892).
-            batched = _solve_dispersion_batched(
+            batched = _solve_dispersion_m_step(
                 values, weights, [float(m) for m in mean]
             )
             for state, solved in enumerate(batched):
@@ -1749,7 +1750,7 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
             float(self._alpha[state] + self._beta[state])
             for state in range(self.n_states)
         ]
-        batch = _solve_beta_binomial_batched(
+        batch = _solve_beta_binomial_m_step(
             values,
             weights,
             supplied
@@ -2133,7 +2134,7 @@ class CountPairEmission(EmissionFamily, CountEmissionFamily):
             float(self._alpha[state] + self._beta[state])
             for state in range(self.n_states)
         ]
-        batch = _solve_beta_binomial_batched(
+        batch = _solve_beta_binomial_m_step(
             successes,
             weights,
             totals,
@@ -2963,6 +2964,224 @@ def _solve_dispersion_batched(
             residual=float(residual[k]),
         )
         for k in range(n_states)
+    ]
+
+
+#: Where the count families' M-step solves run (issue #922). The compiled
+#: kernel is the default: on one thread it measured 12.3x the batched torch
+#: beta-binomial solve on `emission_mixture/stress` and 19.7x on the
+#: `spatio_sequential_counts/release` projection, and 7.2x and 3.7x the
+#: negative-binomial one, agreeing with them bitwise and to 1.2e-12 relative.
+#: ``Backend.PYTHON`` runs the batched torch solves, which stay as its oracle.
+M_STEP_BACKEND: Backend = Backend.RUST
+
+
+def _solve_dispersion_m_step(
+    values: torch.Tensor, weights: torch.Tensor, means: Sequence[float]
+) -> list[_SolvedDispersion]:
+    """The dispersion solve on :data:`M_STEP_BACKEND`.
+
+    Returns
+    -------
+    list[_SolvedDispersion]
+    """
+    if M_STEP_BACKEND is Backend.RUST:
+        try:
+            return _solve_dispersion_rust(values, weights, means)
+        except _NoTails:
+            pass
+    return _solve_dispersion_batched(values, weights, means)
+
+
+def _solve_beta_binomial_m_step(
+    values: torch.Tensor,
+    weights: torch.Tensor,
+    trials: torch.Tensor | Sequence[float],
+    rates: Sequence[float],
+    concentrations: Sequence[float],
+) -> list[_SolvedBetaBinomial]:
+    """The beta-binomial solve on :data:`M_STEP_BACKEND`.
+
+    Returns
+    -------
+    list[_SolvedBetaBinomial]
+    """
+    if M_STEP_BACKEND is Backend.RUST:
+        try:
+            return _solve_beta_binomial_rust(
+                values, weights, trials, rates, concentrations
+            )
+        except _NoTails:
+            pass
+    return _solve_beta_binomial_batched(values, weights, trials, rates, concentrations)
+
+
+class _NoTails(Exception):
+    """A weighted count outside the support, which has no tails to sum."""
+
+
+def _weight_tails(counts: torch.Tensor, columns: torch.Tensor) -> np.ndarray:
+    """``T[k, j] = sum_{u > j} w[k, u]``: the tails of each row's weights over integer counts (issue #922).
+
+    ``sum_u w_u (digamma(u + x) - digamma(x))`` is ``sum_j T_j / (x + j)`` for
+    integer ``u``, which is what the compiled M step evaluates in place of
+    ``digamma``.
+
+    Parameters
+    ----------
+    counts : torch.Tensor
+        Integer-valued, shape ``(n,)`` shared by every row, or ``(K, n)``.
+    columns : torch.Tensor
+        The weights, shape ``(K, n)``.
+
+    Returns
+    -------
+    np.ndarray
+        Shape ``(K, max count)``, C-contiguous ``float64``.
+
+    Raises
+    ------
+    _NoTails
+        If a count below zero carries weight.
+    """
+    index = counts.to(torch.int64)
+    weights = columns.to(torch.float64)
+    # A count below zero is a success above its own trial count: outside the
+    # support, so the E step gave it no weight, and it is dropped. One that
+    # carries weight has no tail, and the caller solves by the oracle.
+    outside = index < 0
+    if bool(outside.any()):
+        if bool((weights * outside).any()):
+            raise _NoTails
+        weights = weights * ~outside
+        index = index.clamp(min=0)
+    width = int(index.max()) + 1 if index.numel() else 1
+    dense = torch.zeros((columns.shape[0], width), dtype=torch.float64)
+    if index.dim() == 1:
+        dense.index_add_(1, index, weights)
+    else:
+        dense.scatter_add_(1, index.expand_as(weights), weights)
+    tails = torch.flip(torch.cumsum(torch.flip(dense, [1]), dim=1), [1])[:, 1:]
+    return np.ascontiguousarray(tails.numpy())
+
+
+def _solve_dispersion_rust(
+    values: torch.Tensor,
+    weights: torch.Tensor,
+    means: Sequence[float],
+    *,
+    tolerance: float = 1e-12,
+) -> list[_SolvedDispersion]:
+    """:func:`_solve_dispersion_batched` in the compiled kernel, each score by the reciprocal-sum identity (issue #922).
+
+    Returns
+    -------
+    list[_SolvedDispersion]
+    """
+    from snakes_and_ladders import oxi_snakes_and_ladders as oxi
+
+    n_states = weights.shape[1]
+    columns = weights.T.contiguous()
+    uppers = [
+        identifiable_dispersion_bound(float(means[k]), float(weights[:, k].sum()))
+        for k in range(n_states)
+    ]
+    value = np.empty(n_states)
+    at_boundary = np.empty(n_states, dtype=np.uint8)
+    iterations = np.empty(n_states, dtype=np.uint32)
+    residual = np.empty(n_states)
+    oxi.negative_binomial_dispersions(
+        _weight_tails(values, columns).reshape(-1),
+        columns.sum(dim=1).numpy().astype(np.float64),
+        np.asarray(means, dtype=np.float64),
+        np.asarray([u * _DISPERSION_BRACKET_RATIO for u in uppers]),
+        np.asarray(uppers, dtype=np.float64),
+        tolerance,
+        value,
+        at_boundary,
+        iterations,
+        residual,
+    )
+    return [
+        _SolvedDispersion(
+            float(value[k]),
+            at_boundary=bool(at_boundary[k]),
+            iterations=int(iterations[k]),
+            residual=float(residual[k]),
+        )
+        for k in range(n_states)
+    ]
+
+
+def _solve_beta_binomial_rust(
+    values: torch.Tensor,
+    weights: torch.Tensor,
+    trials: torch.Tensor | Sequence[float],
+    rates: Sequence[float],
+    concentrations: Sequence[float],
+    *,
+    tolerance: float = 1e-10,
+    max_iterations: int = 60,
+) -> list[_SolvedBetaBinomial]:
+    """:func:`_solve_beta_binomial_batched` in the compiled kernel, each score by the reciprocal-sum identity (issue #922).
+
+    Returns
+    -------
+    list[_SolvedBetaBinomial]
+    """
+    from snakes_and_ladders import oxi_snakes_and_ladders as oxi
+
+    n_components = weights.shape[1]
+    columns = weights.T.contiguous()
+    total = columns.sum(dim=1)
+    if isinstance(trials, torch.Tensor):
+        depth_counts = trials.to(values.dtype)
+        per: list[float | torch.Tensor] = [trials] * n_components
+        failure = _weight_tails(depth_counts - values, columns)
+        depth = _weight_tails(depth_counts, columns)
+    else:
+        per = [float(t) for t in trials]
+        fixed = torch.tensor(per, dtype=values.dtype).reshape(-1, 1)
+        failure = _weight_tails(fixed - values.reshape(1, -1), columns)
+        depth = _weight_tails(fixed.to(torch.int64), total.reshape(-1, 1))
+    bounds = [
+        identifiable_concentration_bound(
+            _effective_trials(per[k], weights[:, k]), float(weights[:, k].sum())
+        )
+        for k in range(n_components)
+    ]
+    out = np.empty(6 * n_components)
+    oxi.beta_binomial_parameters(
+        _weight_tails(values, columns).reshape(-1),
+        failure.reshape(-1),
+        depth.reshape(-1),
+        total.numpy().astype(np.float64),
+        np.asarray(list(rates), dtype=np.float64),
+        np.asarray(
+            [min(c, b) for c, b in zip(concentrations, bounds, strict=True)],
+            dtype=np.float64,
+        ),
+        np.asarray(bounds, dtype=np.float64),
+        np.asarray(
+            [math.log(b) + math.log(_CONCENTRATION_BRACKET_RATIO) for b in bounds]
+        ),
+        tolerance,
+        max_iterations,
+        _MAX_BISECTIONS,
+        _PROBABILITY_MARGIN,
+        out,
+    )
+    rows = out.reshape(n_components, 6)
+    return [
+        _SolvedBetaBinomial(
+            alpha=float(row[0]),
+            beta=float(row[1]),
+            at_boundary=bool(row[2]),
+            converged=bool(row[3]),
+            iterations=int(row[4]),
+            residual=float(row[5]),
+        )
+        for row in rows
     ]
 
 
