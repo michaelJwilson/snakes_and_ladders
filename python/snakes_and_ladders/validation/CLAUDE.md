@@ -26,6 +26,11 @@ module. It is referenced here, never restated. What follows is local.
   `FRAMEWORKS`, an adapter `<name>.py` here, a script `scripts/<name>.py` and
   `tests/validation/test_<name>.py`. The extra is added by the framework's
   own ticket, with the permission root `CLAUDE.md` requires.
+- **A framework that is faster sets a goal.** Where a benchmark pair shows
+  the framework ahead on a declared fixture, a `goal` test in
+  `tests/validation/` times both in one run and fails until the package meets
+  the framework's runtime (`tests/validation/_goals.py`). It runs in a
+  non-blocking step of the `validation` job.
 - **Only `tests/` imports from here.**
 - **A test here skips where its framework is absent** and carries the
   `validation` marker beside its kind. CI's `validation` job installs every
