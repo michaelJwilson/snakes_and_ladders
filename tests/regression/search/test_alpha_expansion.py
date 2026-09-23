@@ -638,3 +638,23 @@ def test_the_swap_arcs_are_the_add_edge_loop_arc_for_arc(seed: int) -> None:
     compiled = swap(graph, values, labelling, 1, 3, backend=Backend.RUST)
     assert np.array_equal(python.labelling, compiled.labelling)
     assert python.energy == compiled.energy
+
+
+@pytest.mark.critical
+@pytest.mark.oracle
+@pytest.mark.parametrize("seed", range(8))
+def test_the_cut_moves_agree_across_solvers_on_tied_fields(seed: int) -> None:
+    # Issue #935: fields rounded to one decimal, which binary cannot hold
+    # exactly, make ties and leave residuals of 1e-16 where the other solver
+    # leaves 0. Read at the shared saturation floor both cuts are the minimal
+    # one, so the labellings agree bitwise, which is what lets Rust be the
+    # default. Before the floor 7 of 120 such moves split.
+    rng = np.random.default_rng(935 + seed)
+    graph = lattice_graph((12, 12), BoundaryCondition.OPEN, 0.7)
+    n_states = int(rng.choice([2, 3, 5]))
+    field = np.round(rng.normal(size=(graph.n_nodes, n_states)), 1)
+    for solve in (alpha_expansion, alpha_beta_swap):
+        python = solve(graph, field, n_states, backend=Backend.PYTHON)
+        compiled = solve(graph, field, n_states, backend=Backend.RUST)
+        assert np.array_equal(python.labelling, compiled.labelling), solve.__name__
+        assert python.energy == compiled.energy

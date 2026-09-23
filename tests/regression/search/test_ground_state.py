@@ -96,6 +96,20 @@ def _enumerated(rung: ground_state.Rung) -> tuple[np.ndarray, float]:
     return configurations[best], float(values[best])
 
 
+def _enumerated_minimizers(
+    rung: ground_state.Rung, exact: float
+) -> set[tuple[int, ...]]:
+    """Every labelling at the enumerated minimum, to :data:`_EXACT`."""
+    return {
+        configuration
+        for configuration in itertools.product(
+            range(rung.n_states), repeat=rung.n_nodes
+        )
+        if abs(energy(rung.graph, rung.field, np.asarray(configuration)) - exact)
+        <= _EXACT
+    }
+
+
 # --- rung 1: nine sites, enumeration ----------------------------------------
 
 
@@ -106,16 +120,24 @@ def test_the_graph_cut_is_the_enumerated_ground_state_at_two_states() -> None:
     # a ferromagnet in an arbitrary per-site field is submodular, so the cut
     # is exact and not merely good. Both implementations, since the Rust one
     # is what the 5,041-site rung runs.
+    #
+    # This instance's ground state is degenerate: all-0 and all-1 score
+    # -7.2 bitwise. A cut returns *a* minimizer, and since the shared
+    # saturation floor (#935) the Python cut returns the other one from the
+    # enumeration's first; so the claim is the energy, and membership of the
+    # enumerated set of minimizers, not one labelling of the tie.
     rung = _rung(CI, 2)
-    labelling, exact = _enumerated(rung)
+    _, exact = _enumerated(rung)
+    minimizers = _enumerated_minimizers(rung, exact)
 
     python_state, python_energy = ising_ground_state(rung.graph, rung.field)
     rust_state, rust_energy = rust_ground_state(rung.graph, rung.field)
 
     assert python_energy == pytest.approx(exact, abs=_EXACT)
     assert rust_energy == pytest.approx(exact, abs=_EXACT)
-    assert np.array_equal(python_state, labelling)
-    assert np.array_equal(rust_state, labelling)
+    assert tuple(python_state.tolist()) in minimizers
+    assert tuple(rust_state.tolist()) in minimizers
+    assert np.array_equal(python_state, rust_state)
 
 
 @pytest.mark.oracle

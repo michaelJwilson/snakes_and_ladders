@@ -21,9 +21,10 @@
 //! breadth-first search over the residual graph on termination, which is the
 //! minimal minimum cut every maximum flow shares.
 //!
-//! Capacities are `f64` and the termination test is `> 0.0` rather than a
-//! tolerance, matching the reference exactly so the two cannot disagree on
-//! which arcs are saturated.
+//! Capacities are `f64`. The flow's termination test is `> 0.0`, and the
+//! cut's side is read at a relative floor of `SATURATED` shared with the
+//! reference (issue #935), so rounding in the two flows' sums cannot put one
+//! arc on different sides.
 //!
 //! As in `pruning.rs`, the kernel is a plain function returning `Result` and
 //! the `#[pyfunction]` is a thin wrapper, so `cargo test` exercises the
@@ -37,6 +38,10 @@ use pyo3::prelude::*;
 use rayon::prelude::*;
 
 const NONE: usize = usize::MAX;
+
+/// The relative residual at or below which the cut's side reads an arc as
+/// saturated; `search.maxflow.SATURATED` is the same number (issue #935).
+pub const SATURATED: f64 = 1e-9;
 
 /// A flow network as paired residual arcs.
 ///
@@ -91,7 +96,14 @@ impl FlowNetwork {
     }
 
     /// Breadth-first distances in the residual graph; `usize::MAX` if unreached.
+    /// Read by the declined kernels of `maxflow_declined.rs` alone.
+    #[cfg_attr(not(feature = "sandbox"), allow(dead_code))]
     pub(crate) fn levels(&self, source: usize) -> Vec<usize> {
+        self.levels_above(source, 0.0)
+    }
+
+    /// [`Self::levels`] through arcs whose residual exceeds `floor` only.
+    pub(crate) fn levels_above(&self, source: usize, floor: f64) -> Vec<usize> {
         let mut level = vec![usize::MAX; self.n_nodes];
         level[source] = 0;
         let mut queue = VecDeque::new();
@@ -99,7 +111,7 @@ impl FlowNetwork {
         while let Some(node) = queue.pop_front() {
             for &arc in &self.outgoing[node] {
                 let neighbour = self.target[arc];
-                if self.capacity[arc] > 0.0 && level[neighbour] == usize::MAX {
+                if self.capacity[arc] > floor && level[neighbour] == usize::MAX {
                     level[neighbour] = level[node] + 1;
                     queue.push_back(neighbour);
                 }
@@ -131,8 +143,13 @@ pub fn max_flow_impl(
             network.n_nodes
         ));
     }
+    // The side is read at `SATURATED` times the largest built capacity, as
+    // `search.maxflow.max_flow` reads it (issue #935): two solvers summing the
+    // same flow in different orders can leave one arc at exactly zero and at
+    // 1e-16, and read at `> 0.0` the two sides would differ.
+    let floor = SATURATED * network.capacity.iter().fold(0.0_f64, |a, &c| a.max(c));
     let total = boykov_kolmogorov(network, source, sink);
-    let level = network.levels(source);
+    let level = network.levels_above(source, floor);
     Ok((total, level.iter().map(|&d| d != usize::MAX).collect()))
 }
 

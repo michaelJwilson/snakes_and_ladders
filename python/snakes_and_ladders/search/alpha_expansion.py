@@ -440,7 +440,7 @@ def expand(
     labelling: np.ndarray,
     alpha: int,
     *,
-    backend: Backend = Backend.PYTHON,
+    backend: Backend = Backend.RUST,
 ) -> Labelling:
     """The optimal ``alpha``-expansion of ``labelling``, by one minimum cut.
 
@@ -475,13 +475,15 @@ def expand(
     is built here either way. :data:`~snakes_and_ladders.backend.Backend.RUST`
     runs :func:`snakes_and_ladders.search.maxflow_rust.min_cut`, which issue
     #528 measured at 49.0% of this function's caller by `cProfile` self time.
-    It is **opt-in**, unlike the `numba` sweep of
-    :func:`iterated_conditional_modes`: a minimum cut is a combinatorial
-    minimum whose *value* both solvers must report exactly, but the cut
-    attaining it need not be unique, and a degenerate network could hand back
-    a different labelling of the same energy. The tests pin both routes to the
-    same labelling on the seeded fixtures; the default does not move on the
-    strength of that.
+    It is the **default** since #935. A minimum cut need not be unique, but
+    both solvers read the *minimal* one --- the set reachable from the source
+    in the residual graph, which every maximum flow shares --- at one
+    saturation floor (:data:`~snakes_and_ladders.search.maxflow.SATURATED`),
+    so rounding in their different sums cannot move an arc across the cut.
+    Before that floor 7 of 120 random cut moves on decimal-valued fields
+    split between the two; with it, 120 of 120 agree bitwise
+    (`test_the_cut_moves_agree_across_solvers_on_tied_fields`), and
+    :data:`~snakes_and_ladders.backend.Backend.PYTHON` stays as the oracle.
 
     Returns
     -------
@@ -545,7 +547,7 @@ def alpha_expansion(
     *,
     start: np.ndarray | None = None,
     max_cycles: int = DEFAULT_MAX_CYCLES,
-    backend: Backend = Backend.PYTHON,
+    backend: Backend = Backend.RUST,
 ) -> ExpansionResult:
     """Cycle over labels until a full sweep lowers nothing.
 
@@ -573,7 +575,7 @@ def alpha_expansion(
         is a bug report rather than a tuning knob.
     backend : Backend
         Which minimum-cut solver each :func:`expand` runs, and nothing else.
-        See :func:`expand` for why the Rust one is opt-in.
+        See :func:`expand` for why the Rust one is the default.
 
     Raises
     ------
@@ -847,7 +849,7 @@ def swap(
     alpha: int,
     beta: int,
     *,
-    backend: Backend = Backend.PYTHON,
+    backend: Backend = Backend.RUST,
 ) -> Labelling:
     """The optimal ``alpha``-``beta`` swap of ``labelling``, by one minimum cut.
 
@@ -936,7 +938,7 @@ def alpha_beta_swap(
     *,
     start: np.ndarray | None = None,
     max_cycles: int = DEFAULT_MAX_CYCLES,
-    backend: Backend = Backend.PYTHON,
+    backend: Backend = Backend.RUST,
 ) -> ExpansionResult:
     """Cycle over every label pair until a full sweep lowers nothing.
 
