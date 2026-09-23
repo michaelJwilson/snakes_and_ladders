@@ -23,6 +23,11 @@ class GaussianTarget(Objective):
         self.precision = torch.as_tensor(precision, dtype=torch.float64)
 
     @property
+    def gaussian_precision(self) -> torch.Tensor:
+        """``P``, which declares this a :class:`~snakes_and_ladders.sample.hmc.DeclaredGaussian`."""
+        return self.precision
+
+    @property
     def dimension(self) -> int:
         """``d``."""
         return int(self.precision.shape[0])

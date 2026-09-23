@@ -59,11 +59,13 @@ import math
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 import numpy as np
 import torch
 
+from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.sample.accept import (
     accept_ratio,
@@ -81,10 +83,27 @@ from snakes_and_ladders.sample.tempered import _exchange
 
 # `current` is aliased: `_coefficients` already binds that name to a
 # sub-step length, and one of the two has to give.
+from snakes_and_ladders.track import NULL as UNTRACKED
 from snakes_and_ladders.track import TrackedOptimization
 from snakes_and_ladders.track import current as current_tracked
 
 DEFAULT_STEPS = 20
+
+
+@runtime_checkable
+class DeclaredGaussian(Protocol):
+    """An objective that declares itself ``U(x) = x' P x / 2``, a zero-mean Gaussian.
+
+    What :func:`sample` compiles (issue #986): a torch closure cannot cross
+    the FFI boundary, so the compiled chain runs a declared family, and an
+    objective opts in by stating its precision rather than by being
+    recognized. ``P`` is ``(d,)`` for a diagonal or ``(d, d)`` symmetric.
+    """
+
+    @property
+    def gaussian_precision(self) -> torch.Tensor:
+        """``P``."""
+        ...
 
 
 @dataclass(frozen=True)
@@ -576,6 +595,7 @@ def sample(
     adaptation: Adaptation | None = None,
     store_chain: bool = True,
     operators: Mapping[str, Callable[[torch.Tensor], torch.Tensor]] | None = None,
+    backend: Backend = Backend.RUST,
 ) -> HmcChain:
     """Draw ``n_samples`` from the density ``exp(-objective / temperature)``.
 
@@ -624,6 +644,17 @@ def sample(
         :class:`~snakes_and_ladders.sample.expectation.KalmanMean` at every
         recorded draw; the burn-in's are not observed. ``None`` observes
         nothing, the chain as it was.
+    backend : Backend
+        :data:`~snakes_and_ladders.backend.Backend.RUST`, the default since
+        issue #986, runs the whole chain in
+        ``oxi_snakes_and_ladders.gaussian_hmc`` when the objective is a
+        :class:`DeclaredGaussian` and the chain is the plain one: leapfrog,
+        unit temperature, no adaptation, no operators, and no enclosing
+        :func:`snakes_and_ladders.track.track`. Its momenta and uniforms come
+        from ChaCha8 seeded by one draw from ``generator``, so it is its own
+        stream: reproducible from the generator, not the torch route's draws.
+        Any other chain, and :data:`~snakes_and_ladders.backend.Backend.PYTHON`
+        always, is the torch route, whose integrator pins the compiled one.
 
     Returns
     -------
@@ -641,6 +672,26 @@ def sample(
         every diagnostic.
     """
     _check_trajectory(step_size, n_steps)
+    refuse_backend("hmc.sample", backend, (Backend.PYTHON, Backend.RUST))
+    if (
+        backend is Backend.RUST
+        and isinstance(objective, DeclaredGaussian)
+        and integrator is leapfrog
+        and temperature == 1.0
+        and adaptation is None
+        and not operators
+        and current_tracked() is UNTRACKED
+    ):
+        return _compiled_gaussian_chain(
+            objective,
+            generator,
+            n_samples,
+            step_size=step_size,
+            n_steps=n_steps,
+            theta0=_start(objective, theta0),
+            burn_in=burn_in,
+            store_chain=store_chain,
+        )
     chain = run_chain(
         _HamiltonianKernel(n_steps=n_steps, integrator=integrator),
         integrator.force_evaluations(n_steps),
@@ -1207,6 +1258,40 @@ def _start(objective: Objective, theta0: torch.Tensor | None) -> torch.Tensor:
         if theta0 is None
         else theta0.detach().clone()
     ).to(torch.float64)
+
+
+def _compiled_gaussian_chain(
+    objective: DeclaredGaussian,
+    generator: torch.Generator,
+    n_samples: int,
+    *,
+    step_size: float,
+    n_steps: int,
+    theta0: torch.Tensor,
+    burn_in: int,
+    store_chain: bool,
+) -> HmcChain:
+    """:func:`sample`'s plain chain on a :class:`DeclaredGaussian`, in one compiled call."""
+    precision = objective.gaussian_precision.detach().numpy()
+    dimension = int(theta0.shape[0])
+    seed = int(torch.randint(0, 2**62, (1,), generator=generator))
+    draws, accepted, errors = oxi_snakes_and_ladders.gaussian_hmc(
+        np.ascontiguousarray(precision, dtype=np.float64).reshape(-1),
+        np.ascontiguousarray(theta0.detach().numpy(), dtype=np.float64),
+        n_samples,
+        burn_in,
+        step_size,
+        n_steps,
+        seed,
+        store_chain,
+    )
+    return HmcChain(
+        theta=torch.from_numpy(draws.reshape(-1, dimension)),
+        acceptance_rate=accepted / n_samples if n_samples else 0.0,
+        energy_error=torch.from_numpy(errors),
+        force_evaluations=(n_samples + burn_in) * leapfrog.force_evaluations(n_steps),
+        adapted=None,
+    )
 
 
 @dataclass(frozen=True)

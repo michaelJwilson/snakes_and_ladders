@@ -91,6 +91,23 @@ def gaussian_mixture_em_step(
     mean: np.ndarray,
     scale: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]: ...
+def gaussian_hmc(
+    precision: np.ndarray,
+    theta0: np.ndarray,
+    n_samples: int,
+    burn_in: int,
+    step_size: float,
+    n_steps: int,
+    seed: int,
+    store_chain: bool,
+) -> tuple[np.ndarray, int, np.ndarray]: ...
+def gaussian_leapfrog(
+    precision: np.ndarray,
+    theta: np.ndarray,
+    momentum: np.ndarray,
+    step_size: float,
+    n_steps: int,
+) -> tuple[np.ndarray, np.ndarray]: ...
 def ising_ground_states(
     n_nodes: int,
     fields: np.ndarray,
