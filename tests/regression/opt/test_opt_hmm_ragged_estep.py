@@ -1,12 +1,13 @@
 """The Baum-Welch E step in the compiled ragged kernel, and a held transition (issue #933, R5).
 
-`baum_welch_family(backend=Backend.RUST)` walks each sequence in
-`src/ragged.rs` instead of the padded torch recursion, which stays as the
-oracle; `fit_transition=False` holds a single ``(m, m)`` transition as a
+`baum_welch_family` walks each sequence in `src/ragged.rs` by default
+instead of the padded torch recursion, which `backend=Backend.PYTHON` keeps as
+the oracle; `fit_transition=False` holds a single ``(m, m)`` transition as a
 per-step kernel is always held. Referees: the compiled route is the torch
 route at the repository's float64 tolerance on ragged batches, a per-step
 kernel keeps the torch recursion under either backend bitwise, and a held
-transition is the same fit as that transition expanded per step, bitwise.
+transition is the same fit as that transition expanded per step, bitwise
+under the torch recursion and at the tolerance under the compiled one.
 """
 
 from __future__ import annotations
@@ -95,9 +96,6 @@ def test_the_compiled_e_step_is_the_torch_recursion(seed: int) -> None:
 def test_a_held_transition_is_that_transition_expanded_per_step() -> None:
     batch, start, kernel = _batch(2, n=6)
     initial = torch.full((4,), -math.log(4.0), dtype=torch.float64)
-    held = baum_welch_family(
-        batch, initial, kernel, start, max_iterations=5, fit_transition=False
-    )
     per_step = baum_welch_family(
         batch,
         initial,
@@ -105,10 +103,36 @@ def test_a_held_transition_is_that_transition_expanded_per_step() -> None:
         start,
         max_iterations=5,
     )
-    assert torch.equal(held.log_transition, kernel)
-    assert held.log_likelihood == per_step.log_likelihood
-    for name, value in held.emissions.named_parameters().items():
-        assert torch.equal(value, per_step.emissions.named_parameters()[name])
+    # The torch recursion on both sides is bitwise; the default compiled E
+    # step measured 1.3e-15 relative on the likelihood and 5.2e-13 on the
+    # emission parameters, held to TOLERANCE.
+    for backend in (Backend.PYTHON, Backend.RUST):
+        held = baum_welch_family(
+            batch,
+            initial,
+            kernel,
+            start,
+            max_iterations=5,
+            fit_transition=False,
+            backend=backend,
+        )
+        assert torch.equal(held.log_transition, kernel)
+        fitted = held.emissions.named_parameters()
+        if backend is Backend.PYTHON:
+            assert held.log_likelihood == per_step.log_likelihood
+            for name, value in fitted.items():
+                assert torch.equal(value, per_step.emissions.named_parameters()[name])
+        else:
+            assert abs(
+                held.log_likelihood - per_step.log_likelihood
+            ) <= TOLERANCE * abs(per_step.log_likelihood)
+            for name, value in fitted.items():
+                torch.testing.assert_close(
+                    value,
+                    per_step.emissions.named_parameters()[name],
+                    rtol=TOLERANCE,
+                    atol=0.0,
+                )
 
 
 @pytest.mark.smoke
