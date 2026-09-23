@@ -314,6 +314,7 @@ markers = [
     "critical: gates early; fast, and its failure means the rest is not worth running -- structurally, or because the science it rests on is wrong",
     "stress: same claim at a size the 5-minute CI budget cannot hold; run with `-m stress` inside the 10-minute developer budget (DEV.md CI & Performance Budget)",
     "key: the key fixture's full test -- the largest declared instance whose simulate-fit-assert run fits SAL_KEY_DURATION_CAP, 120 s; run in CI's full tier and selected locally only when its inputs change (DEV.md CI & Performance Budget)",
+    "validation: checked against an external framework run in a subprocess; skips where its validation-<framework> extra is absent, and runs in CI's validation job (issue #972)",
     "infra: exercises no single problem -- shared machinery, a document guard, or the build; written on a test of that machinery, added at collection where the problem scan finds none, and checked against what the module imports (issues #622, #729)",
     "patch: a change reproduces the sal call it replaces, bitwise or to a stated tolerance",
     "backend: the same algorithm, or the same oracle, on another backend -- Rust, Numba, Torch, a vectorized path -- reproduced bitwise or to a stated tolerance",
@@ -325,6 +326,10 @@ markers = [
 
 [tool.coverage.run]
 source = ["snakes_and_ladders"]
+# The validation scripts (issue #972) run in their own interpreter, which
+# coverage does not follow, and import frameworks the tier does not install;
+# what they return is judged in the parent, in `tests/validation/`.
+omit = ["*/snakes_and_ladders/validation/scripts/*"]
 
 [tool.coverage.report]
 exclude_lines = [

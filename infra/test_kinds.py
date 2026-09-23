@@ -46,8 +46,9 @@ FINDINGS = ("patch", "backend", "bug", "warning", "snapshot")
 
 #: The second axis. Not a kind: it says when a test runs, not what it checks.
 #: `stress` (#232) is the same axis as `release`: a size, not a claim, and so
-#: is `key` (#399), which names one declared instance's own budget.
-SCHEDULING = ("critical", "release", "stress", "key")
+#: is `key` (#399), which names one declared instance's own budget, and so
+#: is `validation` (#972), which names where a test's framework is installed.
+SCHEDULING = ("critical", "release", "stress", "key", "validation")
 
 #: The third axis: what a test's subject is, where it is not one of the
 #: declared problems. Added at collection like the problem markers, never by

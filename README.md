@@ -97,7 +97,8 @@ Ten required checks run on every pull request: a title naming the base
 branch, `ruff` and `mypy --strict`, `clippy` and `cargo fmt`, the Rust and
 Python suites, the Sphinx build with warnings as errors, the build of the
 paper and the textbook, the re-execution of every committed notebook, and
-dependency audits. Three further rules constrain what the suite may contain:
+dependency audits. An eleventh job, not required, runs the checks against
+external frameworks, each in a subprocess (`tests/validation/`). Three further rules constrain what the suite may contain:
 
 - **No coverage theatre.** A test asserting only shapes, or only that nothing
   raised, is forbidden. Gaps are left unwritten and tracked as issues.

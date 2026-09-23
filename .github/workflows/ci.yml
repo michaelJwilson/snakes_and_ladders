@@ -481,6 +481,41 @@ jobs:
       # there until a release.
       - run: uv run python infra/check_notebooks.py
 
+  # External frameworks as referees (issue #972). Each is one
+  # `validation-<framework>` extra, installed here and in no other job, and
+  # runs in a subprocess the package process never imports it into; the
+  # extras are read from `pyproject.toml` by `infra/validation_extras.py`, so a
+  # framework's ticket adds its extra and this job follows. Elsewhere its
+  # tests skip. `tests/regression/test_validation.py` rides along so the job
+  # always has the runner's own subject, whatever the extras hold.
+  validation:
+    name: Validation (external frameworks, subprocess)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Cache the uv environment
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+      - name: Cache Cargo registry and the oxi_snakes_and_ladders build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-
+      - run: pip install "uv==${UV_VERSION}"
+      - run: uv sync --locked --extra test $(python3 infra/validation_extras.py)
+      - run: uv run pytest -m "validation or infra" tests/validation tests/regression/test_validation.py -rs
+
   # The push to `main`, not the pull request: at 15.8 s current and up to
   # 305.8 s when a figure stamp is stale (issue #433) this is the wrong cost
   # on the path a merge waits for, and a document that only built at a

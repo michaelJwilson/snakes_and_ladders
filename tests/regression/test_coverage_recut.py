@@ -194,7 +194,7 @@ def test_the_counting_set_is_end2end_and_oracle_alone() -> None:
     assert counting < set(KIND_MARKERS)
     assert not counting & set(FINDING_MARKERS)
     assert not counting & set(SCHEDULING_MARKERS)
-    assert JUDGED_COVERAGE.exempt_packages == ("qa",)
+    assert JUDGED_COVERAGE.exempt_packages == ("qa", "validation")
     assert 0.0 < JUDGED_COVERAGE.floor <= 100.0
     assert JUDGED_COVERAGE.package_floors["search"] > JUDGED_COVERAGE.floor
 

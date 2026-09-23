@@ -44,7 +44,7 @@ This file is authoritative. Each of the remainder has a defined task:
 | `docs/nb/` | One worked notebook per problem, from the fixture (of given size) to likelihood, optimization and learned policy |
 | `docs/reviews/` | Dated reviews of the whole between releases: what is established, where the documents and the code disagree, what is missing, and what is worth doing next; each fixes what is stale and tickets the rest |
 
-Submodules include `infra/`, `sim/`, `likelihood/`, `opt/`, `search/`, learn/`, `qa/`, `sandbox/`, and `docs/` with each carrying their own `CLAUDE.md` of specific details.  All are subject to the same **writing style, and rules** as defined in this doc.  `ROADMAP.md` and `STATUS.md` plan and track at a higher level; open work is in the issue tracker, not a file (#804). `DEV.md` and `INSTALL.md` are detailed, e.g. step by step.  There may be some light repetion betwen the two then.
+Submodules include `infra/`, `sim/`, `likelihood/`, `opt/`, `search/`, learn/`, `qa/`, `sandbox/`, `validation/`, and `docs/` with each carrying their own `CLAUDE.md` of specific details.  All are subject to the same **writing style, and rules** as defined in this doc.  `ROADMAP.md` and `STATUS.md` plan and track at a higher level; open work is in the issue tracker, not a file (#804). `DEV.md` and `INSTALL.md` are detailed, e.g. step by step.  There may be some light repetion betwen the two then.
 
 ## Environment & Tooling
 *   **Python (3.12):** Manage via `uv`. Run `uv sync --locked --all-extras`. Regenerate locks with `uv lock` and commit `uv.lock` in the same PR.

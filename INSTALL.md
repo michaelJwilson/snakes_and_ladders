@@ -63,6 +63,15 @@ Notebook itself, so a notebook opens where it is edited:
 `snakes_and_ladders.learn.gym` is the only module that imports one at module
 level.
 
+The `validation-<framework>` extras (issue #972) each install one external
+framework the package is checked or timed against, and nothing imports one
+into the package process: its script under
+`python/snakes_and_ladders/validation/scripts/` runs in a subprocess. Sync one
+with `uv sync --locked --extra test --extra validation-<name>`, or every one
+with `uv sync --locked --extra test $(python3 infra/validation_extras.py)`,
+then run `uv run pytest -m validation tests/validation`. Without its extra a
+test there skips.
+
 `track` is the one extra with an advisory against it, and the one to sync
 deliberately. It installs `aim`, the optional store behind
 `snakes_and_ladders.track.Run` (issue #778). Nothing in the package imports
