@@ -85,6 +85,15 @@ frameworks = [
 # and run only in a subprocess; stars under the 1,000 bar, flagged in #938 and
 # approved on #973. Wheels for linux-64 and osx-arm64 at 3.12.
 validation-pymaxflow = ["PyMaxflow>=1.3.2"]
+#
+# gco-wrapper (pyGCO, over Veksler and Delong's gco-v3.0): the wrapper is MIT,
+# gco itself research-use, which the subprocess keeps out of the package
+# process; stars under the 1,000 bar, flagged in #938 and approved on #974.
+# Wheels for linux x86-64 and macOS x86-64 only; none for osx-arm64, so the
+# extra is empty elsewhere and its tests skip.
+validation-gco = [
+    "gco-wrapper>=3.0.9; sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
 # The run store behind `snakes_and_ladders.track` (issue #778). An extra
 # rather than a core dependency: `track.Run` is a Protocol written with
 # `aim.Run`'s own signatures, so the package imports, records and tests
@@ -239,9 +248,9 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 # The validation frameworks (issue #972) are imported only by their scripts
 # under `snakes_and_ladders/validation/scripts/`, installed only by their
-# `validation-*` extras and absent where the `lint` job runs; PyMaxflow ships
-# no type information where it is present.
-module = ["maxflow", "maxflow.*"]
+# `validation-*` extras and absent where the `lint` job runs; PyMaxflow and
+# gco-wrapper ship no type information where they are present.
+module = ["maxflow", "maxflow.*", "gco", "gco.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
