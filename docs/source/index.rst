@@ -297,6 +297,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sample.hmc
    :members:
 
+.. automodule:: snakes_and_ladders.sample.expectation
+   :members:
+
 .. automodule:: snakes_and_ladders.sample.langevin
    :members:
 
@@ -537,6 +540,12 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.validation.scripts.rustworkx
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.jax
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.scripts.jax
    :members:
 
 .. automodule:: snakes_and_ladders.validation.scripts.blackjax

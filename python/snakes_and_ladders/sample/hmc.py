@@ -58,7 +58,7 @@ import itertools
 import math
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 import numpy as np
@@ -70,6 +70,7 @@ from snakes_and_ladders.sample.accept import (
     accept_with,
     acceptance_probability,
 )
+from snakes_and_ladders.sample.expectation import Expectation, KalmanMean
 from snakes_and_ladders.sample.schedule import (
     Monotone,
     TempSchedule,
@@ -357,6 +358,10 @@ class HmcChain:
     adapted : Adapted | None
         What the warm-up settled on, when :func:`sample` was given an
         :class:`Adaptation`; ``None`` for a fixed-parameter chain.
+    expectations : Mapping[str, Expectation]
+        Each operator's expectation over the recorded draws, by the Kalman
+        filter of :mod:`snakes_and_ladders.sample.expectation`, keyed as the
+        ``operators`` given to :func:`sample`; empty when none were.
     """
 
     theta: torch.Tensor
@@ -364,6 +369,7 @@ class HmcChain:
     energy_error: torch.Tensor
     force_evaluations: int
     adapted: Adapted | None
+    expectations: Mapping[str, Expectation] = field(default_factory=dict)
 
 
 #: The cube root that Yoshida's fourth-order composition is built from.
@@ -568,6 +574,8 @@ def sample(
     integrator: Integrator = leapfrog,
     temperature: float = 1.0,
     adaptation: Adaptation | None = None,
+    store_chain: bool = True,
+    operators: Mapping[str, Callable[[torch.Tensor], torch.Tensor]] | None = None,
 ) -> HmcChain:
     """Draw ``n_samples`` from the density ``exp(-objective / temperature)``.
 
@@ -606,12 +614,23 @@ def sample(
         ``burn_in`` and the draws, both of which then run at fixed values.
         ``None`` runs the fixed-parameter chain at unit mass, bitwise what it
         was before adaptation existed.
+    store_chain : bool
+        Keep the draws (issue #988). ``False`` keeps none --- ``theta`` has
+        zero rows --- and the chain holds memory of the order of one draw
+        rather than ``n_samples`` of them; what it was for is then
+        ``operators``' expectations.
+    operators : Mapping[str, Callable[[torch.Tensor], torch.Tensor]] | None
+        Functions of a draw, in the caller's coordinates, each fed to a
+        :class:`~snakes_and_ladders.sample.expectation.KalmanMean` at every
+        recorded draw; the burn-in's are not observed. ``None`` observes
+        nothing, the chain as it was.
 
     Returns
     -------
     HmcChain
         The draws, the acceptance rate, the per-proposal energy error, the
-        gradients spent, and what the warm-up settled on if there was one.
+        gradients spent, what the warm-up settled on if there was one, and
+        the operators' expectations.
 
     Raises
     ------
@@ -633,6 +652,8 @@ def sample(
         burn_in=burn_in,
         temperature=temperature,
         adaptation=adaptation,
+        store_chain=store_chain,
+        operators=operators,
     )
     return HmcChain(
         theta=chain.draws,
@@ -640,6 +661,7 @@ def sample(
         energy_error=chain.energy_error,
         force_evaluations=chain.force_evaluations,
         adapted=chain.adapted,
+        expectations=chain.expectations,
     )
 
 
@@ -674,9 +696,11 @@ class Chain:
     energy_error: torch.Tensor
     force_evaluations: int
     adapted: Adapted | None
+    #: Each operator's expectation over the recorded draws (issue #988).
+    expectations: Mapping[str, Expectation] = field(default_factory=dict)
 
     def __iter__(self) -> Iterator[Any]:
-        """``(draws, acceptance_rate, energy_error, force_evaluations, adapted)``.
+        """``(draws, acceptance_rate, energy_error, force_evaluations, adapted, expectations)``.
 
         The order callers unpack. ``Any`` for :meth:`Transition.__iter__`'s
         reason.
@@ -687,6 +711,7 @@ class Chain:
             self.energy_error,
             self.force_evaluations,
             self.adapted,
+            self.expectations,
         )
 
 
@@ -702,6 +727,8 @@ def run_chain(
     burn_in: int,
     temperature: float,
     adaptation: Adaptation | None,
+    store_chain: bool = True,
+    operators: Mapping[str, Callable[[torch.Tensor], torch.Tensor]] | None = None,
 ) -> Chain:
     """The warm-up, the burn-in and the recorded draws, for any :class:`Kernel`.
 
@@ -722,6 +749,8 @@ def run_chain(
         :func:`snakes_and_ladders.sample.langevin.mala`.
     objective, generator, n_samples, step_size, theta0, burn_in, temperature, adaptation
         As :func:`sample`.
+    store_chain, operators
+        As :func:`sample` (issue #988).
 
     Returns
     -------
@@ -760,7 +789,10 @@ def run_chain(
         target = _Scaled(objective, scale)
         position = position / scale
 
-    draws = torch.empty((n_samples, position.shape[0]), dtype=torch.float64)
+    draws = torch.empty(
+        (n_samples if store_chain else 0, position.shape[0]), dtype=torch.float64
+    )
+    filters = {name: KalmanMean() for name in (operators or {})}
     errors = torch.empty(n_samples + burn_in, dtype=torch.float64)
     accepted = 0
 
@@ -786,7 +818,12 @@ def run_chain(
         if index >= burn_in:
             drawn = index - burn_in
             accepted += step.accepted
-            draws[drawn] = position
+            if store_chain:
+                draws[drawn] = position
+            if filters:
+                drawn_at = position * scale if scale is not None else position
+                for name, kalman in filters.items():
+                    kalman.update(operators[name](drawn_at))  # type: ignore[index]
             tracked.record(
                 drawn,
                 state=position,
@@ -805,6 +842,7 @@ def run_chain(
         energy_error=errors[burn_in:],
         force_evaluations=(n_samples + burn_in) * per_proposal + warmup_evaluations,
         adapted=adapted,
+        expectations={name: kalman.estimate() for name, kalman in filters.items()},
     )
 
 
