@@ -130,6 +130,19 @@ def gaussian_hmm_statistics(
     mean: np.ndarray,
     scale: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]: ...
+def bifurcation_integrate(
+    rows: np.ndarray,
+    offsets: np.ndarray,
+    neighbours: np.ndarray,
+    couplings: np.ndarray,
+    x: np.ndarray,
+    n_states: int,
+    steps: int,
+    dt: float,
+    c0: float,
+    a_end: float,
+    discrete: bool,
+) -> None: ...
 def gaussian_mixture_em_step(
     values: np.ndarray,
     log_weight: np.ndarray,

@@ -16,6 +16,7 @@
 use pyo3::prelude::*;
 
 pub mod bcjr;
+pub mod bifurcation;
 pub mod bk;
 pub mod count_mstep;
 pub mod count_pairs;
@@ -38,6 +39,7 @@ pub mod sampling;
 pub mod special;
 
 pub use bcjr::bcjr_forward_backward;
+pub use bifurcation::bifurcation_integrate;
 pub use count_mstep::{beta_binomial_parameters, negative_binomial_dispersions};
 pub use count_pairs::simulate_count_pairs;
 pub use coupled::{class_posteriors, external_field};
@@ -103,6 +105,7 @@ fn oxi_snakes_and_ladders(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(count_cells, m)?)?;
     m.add_function(wrap_pyfunction!(gaussian_hmm_statistics, m)?)?;
     m.add_function(wrap_pyfunction!(hmm_viterbi, m)?)?;
+    m.add_function(wrap_pyfunction!(bifurcation_integrate, m)?)?;
     m.add_function(wrap_pyfunction!(hmm_score, m)?)?;
     m.add_function(wrap_pyfunction!(count_em_step, m)?)?;
     m.add_function(wrap_pyfunction!(gaussian_mixture_em_step, m)?)?;

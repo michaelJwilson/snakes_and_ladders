@@ -17,11 +17,14 @@ import itertools
 
 import numpy as np
 import pytest
+from snakes_and_ladders import oxi_snakes_and_ladders
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.fixtures import Scale
 from snakes_and_ladders.search import ground_state
 from snakes_and_ladders.search.bifurcation import (
+    A_END,
     BifurcationResult,
+    _integrate_numpy,
     simulated_bifurcation,
 )
 from snakes_and_ladders.search.maxflow import ising_ground_state
@@ -197,4 +200,39 @@ def test_the_relaxation_refuses_what_it_cannot_answer_for() -> None:
     with pytest.raises(ValueError, match="dt"):
         simulated_bifurcation(graph, field, 2, rng, dt=0.0)
     with pytest.raises(ValueError, match="runs on"):
-        simulated_bifurcation(graph, field, 2, rng, backend=Backend.RUST)
+        simulated_bifurcation(graph, field, 2, rng, backend=Backend.NUMBA)
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("discrete", [True, False])
+def test_the_compiled_integration_is_the_numpy_one_bitwise(discrete: bool) -> None:
+    # Issue #997: the same update in the same order over the graph's
+    # compressed rows, whose per-row sums NumPy forms sequentially below
+    # eight terms: the oscillators agree bit for bit, not only the labelling.
+    graph = lattice_graph((9, 9), BoundaryCondition.PERIODIC, 0.4)
+    rows = np.random.default_rng(997).normal(size=(graph.n_nodes, 3))
+    start = np.random.default_rng(998).uniform(-0.1, 0.1, size=rows.shape)
+    numpy_end = _integrate_numpy(
+        rows,
+        graph.incidence,
+        start.copy(),
+        steps=150,
+        dt=0.2,
+        c0=0.3,
+        discrete=discrete,
+    )
+    compiled = start.copy()
+    oxi_snakes_and_ladders.bifurcation_integrate(
+        rows.reshape(-1),
+        graph.incidence.offsets,
+        graph.incidence.neighbours,
+        graph.incidence.couplings,
+        compiled.reshape(-1),
+        3,
+        150,
+        0.2,
+        0.3,
+        A_END,
+        discrete,
+    )
+    assert np.array_equal(compiled, numpy_end)
