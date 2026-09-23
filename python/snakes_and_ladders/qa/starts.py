@@ -18,9 +18,20 @@ as horizontal bars in the table's order, with one standard deviation at more
 than one trial.
 
 Renders what the seam computed and recomputes nothing (`qa/CLAUDE.md`).
+
+:func:`gap_panels` is the gap-against-runtime figure both starts notebooks draw
+(`emission_mixture_starts`, `potts_starts`): panels side by side on shared
+axes, one colour and line style per start from :data:`START_PALETTE` held
+across panels, a diamond at the mean handover, the gap on a symmetric-log axis,
+spread bands off unless asked for, and each panel's legend bottom left in one
+column from the lowest final gap to the highest. :func:`curve_band` reads the
+trials of an :class:`~snakes_and_ladders.opt.starts.SolverComparison` onto the
+:class:`~snakes_and_ladders.search.mixture_starts.GapBand` the figure takes.
 """
 
 from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -36,6 +47,7 @@ from snakes_and_ladders.qa.style import (
     discrete_palette,
     notebook_style,
 )
+from snakes_and_ladders.search.mixture_starts import GapBand
 
 #: The smallest gap drawn, in nats: a log axis has no zero, and a start that
 #: reaches the reference or passes it is drawn here.
@@ -47,6 +59,15 @@ GRID_POINTS = 100
 
 #: Sized to sit whole in a notebook cell.
 FIGSIZE = (10.0, 3.8)
+
+#: Ten colours for starts traced along a runtime axis: the eight of
+#: Okabe--Ito with black (`qa.style.STATE_PALETTE` and the ink it omits), and
+#: wine from Tol's muted set. Past ten a colour repeats dashed, so a start is
+#: its (colour, line style) pair.
+START_PALETTE: tuple[str, ...] = ("#000000", *STATE_PALETTE, "#882255")
+
+#: The runtime figure's size: two panels side by side.
+GAP_FIGSIZE = (12.0, 4.8)
 
 
 def _encoding(n_starts: int) -> list[tuple[str, str]]:
@@ -415,3 +436,135 @@ def gap_table(result: SolverComparison, *, unit: str) -> tuple[str, str, str]:
     )
     check_latex_safe(caption)
     return tabular, caption, array
+
+
+def start_styles(names: Sequence[str]) -> dict[str, tuple[str, str]]:
+    """``(colour, linestyle)`` per start, in ``names``' order: the ten colours of :data:`START_PALETTE` solid, then again dashed.
+
+    Returns
+    -------
+    dict[str, tuple[str, str]]
+    """
+    return {
+        name: (
+            START_PALETTE[index % len(START_PALETTE)],
+            LINESTYLES[(index // len(START_PALETTE)) % len(LINESTYLES)],
+        )
+        for index, name in enumerate(names)
+    }
+
+
+def curve_band(curves: Sequence[Curve], seconds: np.ndarray) -> GapBand:
+    """Each trial's gap held from each entry to the next, read on ``seconds``, as :func:`~snakes_and_ladders.search.mixture_starts.gap_band` reads a mixture trial.
+
+    The mean and the sample standard deviation are taken where every trial
+    has an entry; the handover is the mean over trials of each one's.
+
+    Returns
+    -------
+    GapBand
+
+    Raises
+    ------
+    ValueError
+        If ``curves`` is empty.
+    """
+    if not curves:
+        msg = "a band needs at least one trial"
+        raise ValueError(msg)
+    held = np.full((len(curves), seconds.shape[0]), np.nan)
+    for row, curve in enumerate(curves):
+        index = np.searchsorted(curve.seconds, seconds, side="right") - 1
+        known = index >= 0
+        held[row, known] = curve.gaps[index[known]]
+    started = ~np.isnan(held).any(axis=0)
+    mean = np.full(seconds.shape[0], np.nan)
+    std = np.full(seconds.shape[0], np.nan)
+    mean[started] = held[:, started].mean(axis=0)
+    if len(curves) > 1:
+        std[started] = held[:, started].std(axis=0, ddof=1)
+    handover = (
+        float(np.mean([c.seconds[c.handover] for c in curves])),
+        float(np.mean([c.gaps[c.handover] for c in curves])),
+    )
+    return GapBand(seconds, mean, std, handover)
+
+
+def gap_panels(
+    panels: Mapping[str, Mapping[str, GapBand]],
+    final: Mapping[str, Mapping[str, float]],
+    styles: Mapping[str, tuple[str, str]],
+    *,
+    ylabel: str,
+    show_bands: bool = False,
+) -> Figure:
+    """The gap against runtime, one panel per entry of ``panels``, side by side on shared axes.
+
+    Parameters
+    ----------
+    panels : Mapping[str, Mapping[str, GapBand]]
+        Per panel heading, each start's band; the heading titles the panel's
+        legend.
+    final : Mapping[str, Mapping[str, float]]
+        Per panel, each start's mean final gap: the legend's order, lowest first.
+    styles : Mapping[str, tuple[str, str]]
+        Each start's colour and line style, :func:`start_styles`, so a start
+        reads the same in every panel.
+    ylabel : str
+        The gap's name and unit.
+    show_bands : bool
+        Draw one sample standard deviation either side of each mean.
+
+    Returns
+    -------
+    Figure
+    """
+    figure, axes = plt.subplots(
+        1,
+        len(panels),
+        figsize=GAP_FIGSIZE,
+        sharex=True,
+        sharey=True,
+        constrained_layout=True,
+        squeeze=False,
+    )
+    for axis, (heading, bands) in zip(axes[0], panels.items(), strict=True):
+        for name in sorted(bands, key=final[heading].__getitem__):
+            band = bands[name]
+            colour, linestyle = styles[name]
+            axis.plot(
+                band.seconds,
+                band.mean,
+                linewidth=1.2,
+                alpha=0.7,
+                color=colour,
+                linestyle=linestyle,
+                label=name,
+            )
+            if show_bands:
+                axis.fill_between(
+                    band.seconds,
+                    band.mean - band.std,
+                    band.mean + band.std,
+                    color=colour,
+                    alpha=0.25,
+                    linewidth=0.0,
+                )
+            axis.plot(
+                *band.handover,
+                marker="D",
+                markersize=5,
+                color=colour,
+                markeredgecolor="0.1",
+                alpha=0.7,
+                linestyle="none",
+            )
+        axis.axhline(0.0, color="0.2", linewidth=0.9, linestyle="--")
+        axis.set_xscale("log")
+        # Logarithmic both sides of zero, linear within one unit of it: a gap
+        # below zero passed the reference, which a plain log axis cannot draw.
+        axis.set_yscale("symlog", linthresh=1.0)
+        axis.set_xlabel("runtime [s]")
+        axis.legend(fontsize=6, loc="lower left", title=heading, title_fontsize=7)
+    axes[0][0].set_ylabel(ylabel)
+    return figure

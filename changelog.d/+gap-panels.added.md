@@ -1,0 +1,1 @@
+`qa.starts.gap_panels`, `curve_band` and `start_styles`: the gap-against-runtime figure `emission_mixture_starts` and `potts_starts` both draw, side-by-side panels with one of ten colours per start held across them, legends ordered by final gap, and spread bands off by default.
