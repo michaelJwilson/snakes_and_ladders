@@ -16,6 +16,7 @@
 use pyo3::prelude::*;
 
 pub mod bcjr;
+pub mod count_mstep;
 pub mod count_pairs;
 pub mod coupled;
 pub mod maxflow;
@@ -30,6 +31,7 @@ pub mod ragged;
 pub mod sampling;
 
 pub use bcjr::bcjr_forward_backward;
+pub use count_mstep::{beta_binomial_parameters, negative_binomial_dispersions};
 pub use count_pairs::simulate_count_pairs;
 pub use coupled::{class_posteriors, external_field};
 pub use maxflow::{ising_ground_state, ising_ground_states, max_flow};
@@ -77,6 +79,8 @@ fn oxi_snakes_and_ladders(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(class_posteriors, m)?)?;
     m.add_function(wrap_pyfunction!(external_field, m)?)?;
     m.add_function(wrap_pyfunction!(simulate_count_pairs, m)?)?;
+    m.add_function(wrap_pyfunction!(negative_binomial_dispersions, m)?)?;
+    m.add_function(wrap_pyfunction!(beta_binomial_parameters, m)?)?;
     m.add_function(wrap_pyfunction!(bcjr_forward_backward, m)?)?;
     m.add_function(wrap_pyfunction!(tree_message_passing, m)?)?;
     Ok(())
