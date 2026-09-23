@@ -70,6 +70,7 @@ PRE_FOLD: dict[str, str] = {
 
 
 @pytest.mark.critical
+@pytest.mark.smoke
 @pytest.mark.snapshot
 def test_the_folded_tables_are_the_text_main_emitted() -> None:
     built = {
