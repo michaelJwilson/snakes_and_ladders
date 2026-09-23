@@ -13,9 +13,9 @@ checked instead:
   3^16 = 43,046,721 labellings, the energy written with non-negative terms;
   on this instance both reach the minimum, within 1e-12;
 - at 71² the two energies agree within 1 per cent, the spread #938's spike
-  measured at 0.13 per cent at q = 10;
-- the goal: the package's expansion meets gco's build and expansion at 71²
-  and 142², q = 10 (`goal`, failing until it does).
+  measured at 0.13 per cent at q = 10.
+
+The runtime goal gco sets is in `test_goals.py`.
 """
 
 from __future__ import annotations
@@ -29,8 +29,6 @@ from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_
 from snakes_and_ladders.sim.potts import critical_coupling, energies, energy
 from snakes_and_ladders.validation import gco
 from snakes_and_ladders.validation.runner import available
-
-from tests.validation._goals import REPEATS, assert_meets, median_seconds
 
 pytestmark = [
     pytest.mark.validation,
@@ -101,21 +99,3 @@ def test_the_two_energies_agree_within_one_per_cent_at_71(n_states: int) -> None
     ours = alpha_expansion(graph, field, n_states, backend=Backend.RUST)
     theirs = gco.alpha_expansion(graph, field, n_states)
     assert theirs.energy == pytest.approx(ours.energy, rel=1e-2)
-
-
-@pytest.mark.goal
-@pytest.mark.experiment
-@pytest.mark.parametrize("side", [71, 142])
-def test_the_package_expansion_meets_gcos_runtime(side: int) -> None:
-    # The goal: the package's expansion to convergence on the Rust cut
-    # against gco's build and expansion, q = 10 as #952's spike. 4.4x and
-    # 6.5x off on 2026-09-23 (#974), the gap #937 is aimed at.
-    graph, field = _potts(side, 10, 974)
-    theirs = [
-        one.seconds + one.build_seconds
-        for one in (gco.alpha_expansion(graph, field, 10) for _ in range(REPEATS))
-    ]
-    ours = median_seconds(
-        lambda: alpha_expansion(graph, field, 10, backend=Backend.RUST)
-    )
-    assert_meets(ours, theirs, f"alpha expansion at {side}x{side}, q = 10")

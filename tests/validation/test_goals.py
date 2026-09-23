@@ -13,8 +13,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.search.alpha_expansion import alpha_expansion
 from snakes_and_ladders.search.ground_state import lattice_rung
-from snakes_and_ladders.sim.potts import site_field
+from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+from snakes_and_ladders.sim.potts import critical_coupling, site_field
 
 from tests.validation._goals import Goal, assert_meets, median_seconds
 
@@ -30,6 +33,20 @@ PYMAXFLOW_CUT = {
         "2026-09-23, 4-core reference host at a 1-minute load of 2.2, #973",
     )
     for side, seconds in ((142, 15.491e-3), (284, 68.667e-3))
+}
+
+#: gco's graph build and expansion to convergence, q = 10, on an open lattice
+#: at `critical_coupling(10)` under a standard normal field drawn with seed
+#: 974: the medians of three subprocess runs in
+#: `test_alpha_expansion_gco_bench.py`.
+GCO_EXPANSION = {
+    side: Goal(
+        "gco",
+        f"alpha expansion on the Rust cut, {side}x{side}, q = 10",
+        seconds,
+        "2026-09-23, 4-core reference host at a 1-minute load of 1.0, #974",
+    )
+    for side, seconds in ((71, 0.1402), (142, 0.6258))
 }
 
 
@@ -50,3 +67,14 @@ def test_the_rust_cut_meets_pymaxflows_runtime(side: int) -> None:
         )
     )
     assert_meets(ours, PYMAXFLOW_CUT[side])
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("side", sorted(GCO_EXPANSION))
+def test_the_expansion_meets_gcos_runtime(side: int) -> None:
+    graph = lattice_graph((side, side), BoundaryCondition.OPEN, critical_coupling(10))
+    field = np.random.default_rng(974).normal(size=(graph.n_nodes, 10))
+    ours = median_seconds(
+        lambda: alpha_expansion(graph, field, 10, backend=Backend.RUST), repeats=3
+    )
+    assert_meets(ours, GCO_EXPANSION[side])
