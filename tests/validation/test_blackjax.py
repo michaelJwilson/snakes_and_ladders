@@ -78,3 +78,17 @@ def test_both_chains_centre_on_the_mean_and_accept_alike() -> None:
         error = np.sqrt(variance / size)
         assert np.abs(draws.mean(axis=0)).max() < 4.0 * error.max()
     assert abs(ours.acceptance_rate - theirs.acceptance) < 0.01
+
+
+@pytest.mark.smoke
+def test_blackjax_s_chain_free_run_is_the_same_chain_unstored() -> None:
+    # Issue #997: with no draw kept the scan runs the same transitions on the
+    # same keys, so the acceptance is the stored run's exactly.
+    precision = np.linspace(1.0, 4.0, 20)
+    stored, free = (
+        blackjax.sample(precision, np.zeros(20), 0.3, 5, 200, 997, store_chain=keep)
+        for keep in (True, False)
+    )
+    assert stored.draws.shape == (200, 20)
+    assert free.draws.shape == (0, 20)
+    assert free.acceptance == stored.acceptance

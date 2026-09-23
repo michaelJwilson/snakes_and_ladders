@@ -431,6 +431,40 @@ def test_mixture_em_fits_scikit_learns_memory(n_samples: int) -> None:
     assert_fits(int(np.median(peaks)), SCIKIT_LEARN_EM_MEMORY[n_samples])
 
 
+#: BlackJAX's peak added resident memory for the same compiled chain with no
+#: draw kept: its scan carries the state and emits only the acceptance, the
+#: medians of three subprocess runs (#997). Kept, the draws were 1.0x
+#: `BLACKJAX_HMC_MEMORY`, so like is compared with like only with both off.
+BLACKJAX_HMC_CHAIN_FREE_MEMORY = {
+    dimension: MemoryGoal(
+        "blackjax",
+        f"1,000 HMC transitions of ten leapfrog steps at d = {dimension:,}, no draws kept",
+        peak_bytes,
+        "2026-09-23, 4-core reference host, #997",
+    )
+    for dimension, peak_bytes in ((100, 8_192), (1_000, 77_824), (10_000, 32_768))
+}
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("dimension", sorted(BLACKJAX_HMC_CHAIN_FREE_MEMORY))
+def test_hmc_without_its_chain_fits_blackjaxs_memory(dimension: int) -> None:
+    # Issue #997: the chain with its draws switched off on both sides
+    # (`store_chain=False` here, no operators; a scan emitting only the
+    # acceptance in BlackJAX's script).
+    inputs = {
+        "precision": diagonal_precision(dimension),
+        "step_size": np.asarray(0.9 / (2.0 * dimension**0.25)),
+        "n_steps": np.asarray(10),
+        "n_draws": np.asarray(1_000),
+        "seed": np.asarray(963),
+        "store_chain": np.asarray(False),
+        "observe": np.asarray(False),
+    }
+    peaks = [package("hmc_sample", inputs).peak_bytes or 0 for _ in range(3)]
+    assert_fits(int(np.median(peaks)), BLACKJAX_HMC_CHAIN_FREE_MEMORY[dimension])
+
+
 @pytest.mark.experiment
 @pytest.mark.parametrize("dimension", sorted(BLACKJAX_HMC_MEMORY))
 def test_hmc_fits_blackjaxs_memory(dimension: int) -> None:

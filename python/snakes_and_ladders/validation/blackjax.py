@@ -97,11 +97,15 @@ def sample(
     n_steps: int,
     n_draws: int,
     key: int,
+    *,
+    store_chain: bool = True,
 ) -> Chain:
     """``n_draws`` BlackJAX HMC transitions at unit mass, from ``jax.random.key(key)``.
 
     ``key`` is the integer JAX builds its own PRNG key from, in the
-    subprocess; no NumPy or torch generator crosses the boundary.
+    subprocess; no NumPy or torch generator crosses the boundary. With
+    ``store_chain`` false no draw is kept and ``draws`` has zero rows
+    (issue #997).
     """
     result = run(
         SCRIPT,
@@ -113,11 +117,14 @@ def sample(
             "n_steps": np.asarray(n_steps, dtype=np.int64),
             "n_draws": np.asarray(n_draws, dtype=np.int64),
             "key": np.asarray(key, dtype=np.int64),
+            "store_chain": np.asarray(store_chain),
         },
     )
     out = result.outputs
     return Chain(
-        out["draws"],
+        out["draws"].reshape(-1, position.shape[0])
+        if store_chain
+        else out["draws"].reshape(0, position.shape[0]),
         float(out["acceptance"]),
         result.seconds,
         int(result.peak_bytes or 0),

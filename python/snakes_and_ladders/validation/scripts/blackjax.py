@@ -10,7 +10,10 @@ momentum and position updates, palindromic), built by
 
 ``mode`` 1 samples: ``blackjax.hmc`` from ``position`` with ``step_size`` and
 ``n_steps`` leapfrog steps, ``n_draws`` transitions keyed from ``key``.
-Outputs ``draws`` and ``acceptance``, the mean acceptance probability.
+Outputs ``draws`` and ``acceptance``, the mean acceptance probability. With
+``store_chain`` false the scan carries the state and emits only each
+transition's acceptance, so no draw is stacked and ``draws`` is empty
+(issue #997).
 
 Each mode is compiled on one call first; the measured seconds are the second
 call, to ``block_until_ready``, so compilation is not charged. It is reported
@@ -78,11 +81,15 @@ def main() -> None:
             jax.random.key(int(inputs["key"])), int(inputs["n_draws"])
         )
 
+        store_chain = bool(inputs.get("store_chain", np.asarray(True)))
+
         @jax.jit
         def run(position: Any, keys: Any) -> Any:
             def transition(state: Any, key: Any) -> tuple[Any, Any]:
                 state, info = kernel.step(key, state)
-                return state, (state.position, info.acceptance_rate)
+                if store_chain:
+                    return state, (state.position, info.acceptance_rate)
+                return state, (jnp.zeros((0,)), info.acceptance_rate)
 
             return jax.lax.scan(transition, kernel.init(position), keys)[1]
 

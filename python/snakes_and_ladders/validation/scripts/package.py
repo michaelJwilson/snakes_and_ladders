@@ -133,7 +133,23 @@ def _hmc_sample(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     # Issue #988: with ``store_chain`` false the chain keeps no draws and
     # estimates the mean of ``x`` instead.
     store_chain = bool(inputs.get("store_chain", np.asarray(True)))
-    operators = None if store_chain else {"x": lambda x: x}
+    # With ``observe`` false a chain-free run keeps nothing but its counters,
+    # which the compiled route runs (issue #997); true observes ``x``.
+    observe = bool(inputs.get("observe", np.asarray(True)))
+    operators = None if store_chain or not observe else {"x": lambda x: x}
+    # One-time set-up paid outside the measured call, as the JAX scripts
+    # exclude compilation (issue #997): a two-draw chain at d = 2 on the same
+    # route, since torch's first operations in a process cost 10.9 MB whatever
+    # the chain's size.
+    hmc.sample(
+        GaussianTarget(np.ones(2)),
+        torch.Generator().manual_seed(0),
+        2,
+        step_size=step_size,
+        n_steps=1,
+        store_chain=store_chain,
+        operators=operators,
+    )
 
     def call() -> Outputs:
         chain = hmc.sample(
