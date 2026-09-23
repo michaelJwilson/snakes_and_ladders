@@ -34,6 +34,7 @@ from snakes_and_ladders.emissions import CountPairEmission, EmissionFamily
 from snakes_and_ladders.enumeration import refuse_oversized
 from snakes_and_ladders.opt.em import em_loop
 from snakes_and_ladders.opt.mixture import (
+    component_log_density,
     e_step,
     emission_mixture_plus_plus,
     uniform_seeds,
@@ -95,6 +96,8 @@ def expectation_maximization(
     components: EmissionFamily,
     max_iterations: int = 200,
     tolerance: float = 1e-10,
+    *,
+    covariate: np.ndarray | torch.Tensor | None = None,
 ) -> EmissionMixtureFit:
     """Fit a mixture of count emissions by EM.
 
@@ -122,6 +125,10 @@ def expectation_maximization(
         Stop when the log-likelihood improves by less than this *relative* to
         its magnitude --- absolute would not transfer across data sizes
         (``DEV.md``, issue #111).
+    covariate : np.ndarray | torch.Tensor | None
+        Per-observation covariate, scored in the E step and conditioned on in
+        the M step alike (issue #933): an exposure, a trial count, or one of
+        each per channel for a pair. ``None`` fits as before, bitwise.
 
     Returns
     -------
@@ -137,6 +144,9 @@ def expectation_maximization(
         would surface several iterations later as a non-monotone likelihood.
     """
     values = torch.as_tensor(observations, dtype=torch.float64)
+    conditioned = (
+        None if covariate is None else torch.as_tensor(covariate, dtype=torch.float64)
+    )
     boundary = False
     attempt = 0
 
@@ -148,9 +158,13 @@ def expectation_maximization(
         attempt += 1
         current, family, _ = state
         log_weight = torch.log(current)
-        evidence, posterior = e_step(values, log_weight, family)
+        evidence, posterior = e_step(values, log_weight, family, covariate=conditioned)
         log_likelihood = float(evidence)
-        reestimated = family.reestimate(values, posterior)
+        reestimated = (
+            family.reestimate(values, posterior)
+            if conditioned is None
+            else family.reestimate(values, posterior, conditioned)
+        )
         if not reestimated.converged:
             msg = (
                 f"a component's M step did not settle at EM iteration "
@@ -256,6 +270,8 @@ def anneal_assignments(
     components: EmissionFamily,
     temperatures: Sequence[float],
     rng: np.random.Generator,
+    *,
+    covariate: np.ndarray | torch.Tensor | None = None,
 ) -> AnnealedAssignments:
     """Simulated annealing over the component assignments, the components re-estimated at each sweep's.
 
@@ -276,6 +292,9 @@ def anneal_assignments(
     responsibility instead of the empty indicator, and its weight is that
     column's mean, so it survives the sweep and is not frozen at zero weight.
 
+    ``covariate`` is :func:`expectation_maximization`'s: scored at every
+    sweep and conditioned on in every M step (issue #933).
+
     Returns
     -------
     AnnealedAssignments
@@ -295,9 +314,12 @@ def anneal_assignments(
             msg = f"a temperature is positive and finite, got {value}"
             raise ValueError(msg)
     values = torch.as_tensor(observations, dtype=torch.float64)
+    conditioned = (
+        None if covariate is None else torch.as_tensor(covariate, dtype=torch.float64)
+    )
     n_components = components.n_states
     tracked = current()
-    joint = torch.log(weights) + components.log_density(values)
+    joint = torch.log(weights) + component_log_density(components, values, conditioned)
     best: tuple[torch.Tensor, EmissionFamily, float, int] | None = None
     trace: list[float] = []
     path: list[EmissionFamily] = []
@@ -310,13 +332,19 @@ def anneal_assignments(
         if bool(empty.any()):
             soft = torch.softmax(joint / temperature, dim=-1)
             posterior[:, empty] = soft[:, empty]
-        reestimated = components.reestimate(values, posterior)
+        reestimated = (
+            components.reestimate(values, posterior)
+            if conditioned is None
+            else components.reestimate(values, posterior, conditioned)
+        )
         if not reestimated.converged:
             msg = f"a component's M step did not settle at sweep {step}"
             raise ValueError(msg)
         components = reestimated.emissions
         weights = posterior.sum(dim=0) / posterior.sum()
-        joint = torch.log(weights) + components.log_density(values)
+        joint = torch.log(weights) + component_log_density(
+            components, values, conditioned
+        )
         log_likelihood = float(torch.logsumexp(joint, dim=-1).sum())
         tracked.record(step, log_likelihood=log_likelihood, temperature=temperature)
         trace.append(log_likelihood)

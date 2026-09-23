@@ -22,10 +22,12 @@ from __future__ import annotations
 
 import itertools
 import math
+from collections.abc import Mapping
 
 import numpy as np
 import pytest
 import torch
+from snakes_and_ladders.emissions import ParameterDomainError
 from snakes_and_ladders.likelihood.mixture_assignments import (
     enumerate_mixture_assignments,
 )
@@ -33,6 +35,7 @@ from snakes_and_ladders.opt.constrain import log_simplex
 from snakes_and_ladders.opt.mixture import responsibilities
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.opt.potts import PottsObjective
+from snakes_and_ladders.sample import hmc
 from snakes_and_ladders.sample.hmc import (
     YOSHIDA_WEIGHTS,
     Integrator,
@@ -863,3 +866,36 @@ def test_the_chain_recovers_the_enumerated_assignment_posterior_of_a_mixture() -
         np.abs(drawn_marginal.mean(axis=0) - quadrature_marginal).max()
         < marginal_tolerance
     ), np.abs(drawn_marginal.mean(axis=0) - quadrature_marginal).max()
+
+
+class _Bounded(Objective):
+    """A standard Gaussian on ``|theta| < 1`` whose family refuses outside it."""
+
+    def initial(self) -> torch.Tensor:
+        return torch.zeros(2, dtype=torch.float64)
+
+    def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
+        return {"theta": theta}
+
+    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        return named["theta"]
+
+    def __call__(self, theta: torch.Tensor) -> torch.Tensor:
+        if bool((theta.abs() >= 1.0).any()):
+            msg = "every coordinate must lie inside the unit box"
+            raise ParameterDomainError(msg)
+        return 0.5 * (theta * theta).sum()
+
+
+@pytest.mark.smoke
+def test_a_divergent_trajectory_is_a_rejected_proposal() -> None:
+    # Issue #912: a trajectory that leaves the objective's domain, where its
+    # family refuses the parameters, is rejected as a proposal of infinite
+    # energy is, and the chain runs on inside the domain; before, the refusal
+    # stopped the chain.
+    chain = hmc.sample(
+        _Bounded(), torch.Generator().manual_seed(912), 200, step_size=0.4, n_steps=8
+    )
+    assert 0.0 < chain.acceptance_rate < 1.0
+    assert bool((chain.theta.abs() < 1.0).all())
+    assert any(math.isinf(float(error)) for error in chain.energy_error)
