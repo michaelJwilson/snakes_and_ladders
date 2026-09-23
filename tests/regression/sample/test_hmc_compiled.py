@@ -1,4 +1,4 @@
-"""The compiled Gaussian HMC chain against the torch route (issue #986).
+"""The compiled Gaussian HMC and MALA chains against the torch route (issues #986, #997).
 
 Referees:
 
@@ -19,7 +19,7 @@ import pytest
 import torch
 from snakes_and_ladders import oxi_snakes_and_ladders
 from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.sample import hmc
+from snakes_and_ladders.sample import hmc, langevin
 from snakes_and_ladders.sample.expectation import KalmanMean
 from snakes_and_ladders.validation.gaussian import (
     GaussianTarget,
@@ -111,3 +111,52 @@ def test_a_declared_gradient_is_autograd_s(dense: bool) -> None:
     np.testing.assert_allclose(
         hmc.gradient_at(target, theta).numpy(), autograd.numpy(), rtol=0, atol=1e-13
     )
+
+
+@pytest.mark.end2end
+def test_the_compiled_mala_chain_recovers_the_gaussian_moments() -> None:
+    # Issue #997: MALA on a declared Gaussian runs the compiled chain at one
+    # leapfrog step, the identity `sample.langevin` keeps; judged against the
+    # target's moments as the HMC chain is.
+    dimension = 50
+    precision = diagonal_precision(dimension)
+    chain = langevin.mala(
+        GaussianTarget(precision),
+        torch.Generator().manual_seed(997),
+        20_000,
+        step_size=0.9 / (2.0 * dimension**0.25),
+        burn_in=500,
+    )
+    assert chain.theta.shape == (20_000, dimension)
+    assert chain.corrected
+    assert chain.acceptance_rate > 0.8
+    first, second = KalmanMean(), KalmanMean()
+    for row in chain.theta:
+        first.update(row)
+        second.update(row * row)
+    mean, square = first.estimate(), second.estimate()
+    assert np.abs(mean.mean.numpy() / mean.standard_error.numpy()).max() < 4.5
+    residual = (square.mean.numpy() - 1.0 / precision) / square.standard_error.numpy()
+    assert np.abs(residual).max() < 4.5
+
+
+@pytest.mark.smoke
+def test_the_compiled_mala_chain_routes_what_it_cannot_run() -> None:
+    target = GaussianTarget(diagonal_precision(8))
+
+    def run(**options: object) -> langevin.LangevinChain:
+        return langevin.mala(
+            target,
+            torch.Generator().manual_seed(9970),
+            50,
+            step_size=0.3,
+            **options,  # type: ignore[arg-type]
+        )
+
+    assert torch.equal(run().theta, run().theta)
+    # ULA and a temperature are the torch route's alone.
+    for options in ({"corrected": False}, {"temperature": 2.0}):
+        assert torch.equal(
+            run(**options).theta, run(**options, backend=Backend.PYTHON).theta
+        )
+    assert not torch.equal(run().theta, run(backend=Backend.PYTHON).theta)

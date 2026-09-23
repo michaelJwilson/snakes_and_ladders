@@ -691,6 +691,87 @@ def test_mixture_log_likelihood_fits_scikit_learns_memory(n_samples: int) -> Non
     assert_fits(int(np.median(peaks)), SCIKIT_LEARN_SCORE_MEMORY[n_samples])
 
 
+#: BlackJAX's MALA, `blackjax.mala` at `epsilon = h^2 / 2` for the package's
+#: Langevin step `h = 0.9 / (2 d^(1/4))`, 1,000 transitions on
+#: `diagonal_precision(d)`: the second call's seconds and peak, the chain
+#: stored, and the first call's peak with no draw kept, compilation and the
+#: buffers XLA keeps included as `BLACKJAX_HMC_CHAIN_FREE_MEMORY`'s are
+#: (#997). Stored, both sides hold the same `n x d` doubles, so that goal is
+#: bounded near 1.0x as `BLACKJAX_HMC_MEMORY`'s is.
+BLACKJAX_MALA = {
+    dimension: Goal(
+        "blackjax",
+        f"1,000 MALA transitions at d = {dimension:,}",
+        seconds,
+        "2026-09-23, 4-core reference host at a 1-minute load of 1.4, #997",
+    )
+    for dimension, seconds in ((100, 0.01097), (1_000, 0.04474), (10_000, 0.35298))
+}
+
+BLACKJAX_MALA_MEMORY = {
+    dimension: MemoryGoal(
+        "blackjax",
+        f"1,000 MALA transitions at d = {dimension:,}, the chain stored",
+        peak_bytes,
+        "2026-09-23, 4-core reference host, #997",
+    )
+    for dimension, peak_bytes in (
+        (100, 815_104),
+        (1_000, 8_065_024),
+        (10_000, 80_494_592),
+    )
+}
+
+BLACKJAX_MALA_CHAIN_FREE_MEMORY = {
+    dimension: MemoryGoal(
+        "blackjax",
+        f"1,000 MALA transitions at d = {dimension:,}, no draws kept",
+        peak_bytes,
+        "2026-09-23, 4-core reference host, first call, compilation included, #997",
+    )
+    for dimension, peak_bytes in (
+        (100, 31_760_384),
+        (1_000, 28_065_792),
+        (10_000, 32_493_568),
+    )
+}
+
+
+def _mala_inputs(dimension: int, store_chain: bool) -> dict[str, np.ndarray]:
+    """The harness's inputs for the MALA goals."""
+    return {
+        "precision": diagonal_precision(dimension),
+        "step_size": np.asarray(0.9 / (2.0 * dimension**0.25)),
+        "n_draws": np.asarray(1_000),
+        "seed": np.asarray(963),
+        "store_chain": np.asarray(store_chain),
+    }
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("dimension", sorted(BLACKJAX_MALA))
+def test_mala_meets_blackjaxs_runtime(dimension: int) -> None:
+    inputs = _mala_inputs(dimension, store_chain=True)
+    seconds = [package("mala_sample", inputs).seconds for _ in range(3)]
+    assert_meets(float(np.median(seconds)), BLACKJAX_MALA[dimension])
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("dimension", sorted(BLACKJAX_MALA_MEMORY))
+def test_mala_fits_blackjaxs_memory(dimension: int) -> None:
+    inputs = _mala_inputs(dimension, store_chain=True)
+    peaks = [package("mala_sample", inputs).peak_bytes or 0 for _ in range(3)]
+    assert_fits(int(np.median(peaks)), BLACKJAX_MALA_MEMORY[dimension])
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("dimension", sorted(BLACKJAX_MALA_CHAIN_FREE_MEMORY))
+def test_mala_without_its_chain_fits_blackjaxs_memory(dimension: int) -> None:
+    inputs = _mala_inputs(dimension, store_chain=False)
+    peaks = [package("mala_sample", inputs).peak_bytes or 0 for _ in range(3)]
+    assert_fits(int(np.median(peaks)), BLACKJAX_MALA_CHAIN_FREE_MEMORY[dimension])
+
+
 #: BlackJAX's peak added resident memory for the same compiled chain with no
 #: draw kept: its scan carries the state and emits only the acceptance, the
 #: medians of three subprocess runs (#997). Kept, the draws were 1.0x

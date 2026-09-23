@@ -238,6 +238,39 @@ def _mixture_score(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     return call
 
 
+def _mala_sample(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
+    """MALA on a zero-mean Gaussian at the Langevin step ``h``, as the BlackJAX pair runs (#997)."""
+    import torch
+
+    from snakes_and_ladders.sample import langevin
+    from snakes_and_ladders.validation.gaussian import GaussianTarget
+
+    target = GaussianTarget(inputs["precision"])
+    step_size = float(inputs["step_size"])
+    n_draws, seed = int(inputs["n_draws"]), int(inputs["seed"])
+    store_chain = bool(inputs.get("store_chain", np.asarray(True)))
+    # Outside the measured call, as `_hmc_sample`'s warm-up.
+    langevin.mala(
+        GaussianTarget(np.ones(2)),
+        torch.Generator().manual_seed(0),
+        2,
+        step_size=0.1,
+        store_chain=store_chain,
+    )
+
+    def call() -> Outputs:
+        chain = langevin.mala(
+            target,
+            torch.Generator().manual_seed(seed),
+            n_draws,
+            step_size=step_size,
+            store_chain=store_chain,
+        )
+        return {"acceptance": np.asarray(chain.acceptance_rate)}
+
+    return call
+
+
 def _mixture_em(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     """Ten mixture EM iterations from the given start, as the scikit-learn pair runs (#975)."""
     import torch
@@ -387,6 +420,7 @@ CALLS: dict[str, Build] = {
     "mixture_em": _mixture_em,
     "mixture_score": _mixture_score,
     "hmc_sample": _hmc_sample,
+    "mala_sample": _mala_sample,
     "cluster_labels": _cluster_labels,
     "gradient": _gradient,
 }

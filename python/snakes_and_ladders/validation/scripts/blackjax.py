@@ -15,6 +15,11 @@ Outputs ``draws`` and ``acceptance``, the mean acceptance probability. With
 transition's acceptance, so no draw is stacked and ``draws`` is empty
 (issue #997).
 
+``mode`` 2 samples by ``blackjax.mala`` at ``step_size``, which is BlackJAX's
+``epsilon`` in ``x + epsilon grad log p + sqrt(2 epsilon) xi``: the
+package's Langevin step ``h`` is ``epsilon = h^2 / 2``. Outputs as mode 1
+(issue #997).
+
 Each mode is compiled on one call first; the measured seconds are the second
 call, to ``block_until_ready``, so compilation is not charged. It is reported
 as ``compile_seconds``. The peak resident memory is the second call's too;
@@ -32,7 +37,7 @@ import numpy as np
 from snakes_and_ladders.validation.protocol import dump, load, paths, peaked
 
 #: What ``mode`` selects.
-INTEGRATE, SAMPLE = 0, 1
+INTEGRATE, SAMPLE, LANGEVIN = 0, 1, 2
 
 
 def main() -> None:
@@ -73,11 +78,15 @@ def main() -> None:
 
         arguments = (jnp.asarray(inputs["position"]), jnp.asarray(inputs["momentum"]))
     else:
-        kernel = blackjax.hmc(
-            logdensity,
-            step_size=step_size,
-            inverse_mass_matrix=unit,
-            num_integration_steps=n_steps,
+        kernel = (
+            blackjax.mala(logdensity, step_size=step_size)
+            if int(inputs["mode"]) == LANGEVIN
+            else blackjax.hmc(
+                logdensity,
+                step_size=step_size,
+                inverse_mass_matrix=unit,
+                num_integration_steps=n_steps,
+            )
         )
         keys = jax.random.split(
             jax.random.key(int(inputs["key"])), int(inputs["n_draws"])
