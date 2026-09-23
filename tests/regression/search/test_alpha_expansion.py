@@ -267,6 +267,40 @@ def test_the_numba_descent_reproduces_the_python_one_bitwise(seed: int) -> None:
     assert python.energy == compiled.energy
 
 
+@pytest.mark.critical
+@pytest.mark.oracle
+@pytest.mark.parametrize("seed", range(6))
+@pytest.mark.parametrize("sweep_order", [SweepOrder.RANDOM, SweepOrder.INDEX])
+def test_the_numba_descent_in_any_order_every_sweep_run_is_the_python_one(
+    seed: int, sweep_order: SweepOrder
+) -> None:
+    # Issue #923: ICM in a random order with every sweep run, the heat bath
+    # at T = 0 (`ground_state.run_icm_random`). The compiled sweep takes the
+    # permutations the Python sweep draws, in its order, so the labelling,
+    # the energy and the generator's state after are the Python sweep's.
+    graph = lattice_graph((8, 8), BoundaryCondition.PERIODIC, 0.5)
+    field = np.random.default_rng(300 + seed).normal(size=(graph.n_nodes, 3))
+    streams = [np.random.default_rng(seed) for _ in range(2)]
+    python, compiled = (
+        iterated_conditional_modes(
+            graph,
+            field,
+            3,
+            stream,
+            max_sweeps=12,
+            sweep_order=sweep_order,
+            stop_when_clean=False,
+            backend=backend,
+        )
+        for stream, backend in zip(
+            streams, (Backend.PYTHON, Backend.NUMBA), strict=True
+        )
+    )
+    assert np.array_equal(python.labelling, compiled.labelling)
+    assert python.energy == compiled.energy
+    assert streams[0].integers(1 << 62) == streams[1].integers(1 << 62)
+
+
 @pytest.mark.smoke
 def test_descent_has_no_rust_backend() -> None:
     graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.5)
@@ -485,19 +519,18 @@ def test_a_random_order_runs_every_sweep_when_a_clean_one_does_not_end_it() -> N
 
 @pytest.mark.smoke
 def test_the_compiled_sweep_refuses_an_order_it_does_not_walk() -> None:
+    # Since #923 the compiled sweep runs any order when every sweep runs; a
+    # random order that stops on a clean sweep would spend the generator
+    # past the stop, and is refused.
     graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.5)
 
-    with pytest.raises(ValueError, match="compiled sweep visits the sites"):
+    with pytest.raises(ValueError, match="stop_when_clean=True needs python"):
         iterated_conditional_modes(
             graph,
             np.zeros(3),
             3,
             np.random.default_rng(0),
             sweep_order=SweepOrder.RANDOM,
-        )
-    with pytest.raises(ValueError, match="compiled sweep visits the sites"):
-        iterated_conditional_modes(
-            graph, np.zeros(3), 3, np.random.default_rng(0), stop_when_clean=False
         )
 
 
