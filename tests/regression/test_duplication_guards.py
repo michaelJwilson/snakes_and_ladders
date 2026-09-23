@@ -595,6 +595,15 @@ def test_no_module_builds_a_scipy_sparse_store() -> None:
 
 @pytest.mark.critical
 @pytest.mark.infra
+def test_the_runtime_band_has_one_reader() -> None:
+    # Issue #926: `gap_band` and `qa.starts.curve_band` were the same loop
+    # written twice; the second is now an adapter onto the first.
+    assert _offenders(HELD_BAND, BAND_OWNER) == []
+    assert HELD_BAND.search((PACKAGE / BAND_OWNER).read_text())
+
+
+@pytest.mark.critical
+@pytest.mark.infra
 def test_each_guard_fails_on_violating_source() -> None:
     # The guards exercised. Each searches source text, so each passes
     # vacuously if the pattern is wrong -- which is the failure mode a guard
@@ -620,6 +629,12 @@ def test_each_guard_fails_on_violating_source() -> None:
         # Split inside the call for the reason the lines above are split: a
         # whole one here makes this module the reader the guard refuses.
         PIPE_SPLIT: "cells = line.split(" + '"|")\n',
+        # Unsplit: the guard reads the package, not this suite.
+        HELD_BAND: (
+            '        index = np.searchsorted(times, grid, side="right") - 1\n'
+            "        known = index >= 0\n"
+            "        held[row, known] = gaps[index[known]]\n"
+        ),
     }
     clean = {
         PRIVATE_LOGSUMEXP: "from snakes_and_ladders.numerics import logsumexp\n",
@@ -639,6 +654,7 @@ def test_each_guard_fails_on_violating_source() -> None:
         DERIVED_REPO_ROOT: "from tests._paths import REPO_ROOT\n",
         CATALOGUE_FILE: "rows = catalogue.rows()\n",
         PIPE_SPLIT: "cells = catalogue.cells(line)\n",
+        HELD_BAND: "band = curve_band(curves, grid)\n",
     }
 
     assert [p for p, text in violating.items() if not p.search(text)] == []
@@ -779,6 +795,14 @@ DERIVED_REPO_ROOT = re.compile(
 #: The pieces of a reader of `PROBLEMS.md`: the file, and a split of a row on
 #: its pipes. Both, because the tree is full of each alone --- `DEV.md` has
 #: tables too, and `select_tests.py` names the catalogue without parsing it.
+#: A runtime band read by holding each trial's gap forward to a grid: the
+#: one reader is `search.mixture_starts.curve_band` (issue #926), where two
+#: copies of the loop sat in `search.mixture_starts` and `qa.starts`.
+BAND_OWNER = "search/mixture_starts.py"
+HELD_BAND = re.compile(
+    r"searchsorted\([^\n]*side=\"right\"\)\s*-\s*1\n(?:.*\n){0,2}\s*held\["
+)
+
 CATALOGUE_FILE = re.compile(r"PROBLEMS\.md")
 PIPE_SPLIT = re.compile(r"\.split\(\"\|\"\)")
 

@@ -137,14 +137,22 @@ class SpatioSequentialParams:
         *are* the instance, and the spatial M step rebuilds them with
         ``replace(params, emissions=...)``, which preserves every other field
         by construction.
+    segments : tuple[int, ...] | None
+        Where the chain restarts (issue #666); ``None`` is one chain.
+    shared_emissions : bool
+        One emission family for every class (issue #933): the classes differ
+        in their chains and their initial distributions, and state ``k`` emits
+        alike whichever class a site holds. The M step then re-estimates one
+        family on every class's block pooled, and every entry of ``emissions``
+        must be that family. ``False``, the default, fits a family per class.
 
     Raises
     ------
     ValueError
         If a coupling is negative (the prior would be antiferromagnetic and
         the cluster moves refuse it), ``initial`` is not ``(M, K)`` row
-        stochastic, there is not one family per class, or a family does not
-        carry ``K`` states.
+        stochastic, there is not one family per class, a family does not
+        carry ``K`` states, or shared emissions differ between classes.
     """
 
     graph: PottsGraph
@@ -157,6 +165,7 @@ class SpatioSequentialParams:
     emissions: tuple[EmissionFamily, ...]
     covariate: np.ndarray | None = None
     segments: tuple[int, ...] | None = None
+    shared_emissions: bool = False
 
     def __post_init__(self) -> None:
         if any(coupling < 0.0 for coupling in self.graph.coupling):
@@ -230,6 +239,24 @@ class SpatioSequentialParams:
                     f"expected {self.n_states}"
                 )
                 raise ValueError(msg)
+        if self.shared_emissions:
+            first = self.emissions[0]
+            reference = first.named_parameters()
+            for m, family in enumerate(self.emissions[1:], start=1):
+                named = family.named_parameters()
+                if (
+                    type(family) is not type(first)
+                    or named.keys() != reference.keys()
+                    or any(
+                        not torch.equal(named[name], value)
+                        for name, value in reference.items()
+                    )
+                ):
+                    msg = (
+                        f"shared emissions are one family for every class; class "
+                        f"{m}'s differs from class 0's"
+                    )
+                    raise ValueError(msg)
         if self.covariate is not None:
             covariate = np.asarray(self.covariate, dtype=float)
             expected = (self.n_positions, self.graph.n_nodes)

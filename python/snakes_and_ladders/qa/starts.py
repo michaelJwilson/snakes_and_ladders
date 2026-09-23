@@ -25,8 +25,9 @@ axes, one colour per start from :data:`START_PALETTE` held across panels and
 every line solid, the runtime from :data:`RUNTIME_FLOOR`, a diamond at the
 mean handover joined to its curve, the gap on a symmetric-log axis,
 spread bands off unless asked for, and each panel's legend bottom left in one
-column from the lowest final gap to the highest. :func:`curve_band` reads the
-trials of an :class:`~snakes_and_ladders.opt.starts.SolverComparison` onto the
+column from the lowest final gap to the highest.
+:func:`~snakes_and_ladders.search.mixture_starts.curve_band` reads the trials
+of an :class:`~snakes_and_ladders.opt.starts.SolverComparison` onto the
 :class:`~snakes_and_ladders.search.mixture_starts.GapBand` the figure takes.
 """
 
@@ -467,42 +468,6 @@ def start_styles(names: Sequence[str]) -> dict[str, tuple[str, str]]:
         )
         raise ValueError(msg)
     return {name: (START_PALETTE[i], "-") for i, name in enumerate(names)}
-
-
-def curve_band(curves: Sequence[Curve], seconds: np.ndarray) -> GapBand:
-    """Each trial's gap held from each entry to the next, read on ``seconds``, as :func:`~snakes_and_ladders.search.mixture_starts.gap_band` reads a mixture trial.
-
-    The mean and the sample standard deviation are taken where every trial
-    has an entry; the handover is the mean over trials of each one's.
-
-    Returns
-    -------
-    GapBand
-
-    Raises
-    ------
-    ValueError
-        If ``curves`` is empty.
-    """
-    if not curves:
-        msg = "a band needs at least one trial"
-        raise ValueError(msg)
-    held = np.full((len(curves), seconds.shape[0]), np.nan)
-    for row, curve in enumerate(curves):
-        index = np.searchsorted(curve.seconds, seconds, side="right") - 1
-        known = index >= 0
-        held[row, known] = curve.gaps[index[known]]
-    started = ~np.isnan(held).any(axis=0)
-    mean = np.full(seconds.shape[0], np.nan)
-    std = np.full(seconds.shape[0], np.nan)
-    mean[started] = held[:, started].mean(axis=0)
-    if len(curves) > 1:
-        std[started] = held[:, started].std(axis=0, ddof=1)
-    handover = (
-        float(np.mean([c.seconds[c.handover] for c in curves])),
-        float(np.mean([c.gaps[c.handover] for c in curves])),
-    )
-    return GapBand(seconds, mean, std, handover)
 
 
 def gap_panels(
