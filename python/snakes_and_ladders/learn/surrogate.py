@@ -175,6 +175,7 @@ class _Batch:
         self.features = examples.features
         self.n = len(examples)
         self._adjacency: torch.Tensor | None = None
+        self._membership: torch.Tensor | None = None
         if examples.tokens:
             self.tokens = torch.cat(examples.tokens)
             self.owner = torch.as_tensor(
@@ -224,9 +225,24 @@ class _Batch:
             return self._adjacency @ state
 
     def pool(self, encoded: torch.Tensor) -> torch.Tensor:
-        """Sum each example's rows: the order-free reduction every token model ends with."""
-        pooled = torch.zeros((self.n, encoded.shape[1]), dtype=encoded.dtype)
-        return pooled.index_add(0, self.owner, encoded)
+        """Sum each example's rows: the order-free reduction every token model ends with.
+
+        One compressed-row product with the ``(n, rows)`` membership matrix,
+        built on first use (issue #986), in place of an ``index_add`` that
+        took 1.6 ms over 80,656 rows.
+        """
+        if self._membership is None:
+            size = self.owner.shape[0]
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                self._membership = torch.sparse_coo_tensor(
+                    torch.stack([self.owner, torch.arange(size)]),
+                    torch.ones(size, dtype=encoded.dtype),
+                    (self.n, size),
+                ).to_sparse_csr()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            return self._membership @ encoded
 
     def padded(self) -> tuple[torch.Tensor, torch.Tensor]:
         """Tokens as ``(n, max_tokens, d)`` with a mask of the padding, for attention."""
