@@ -545,6 +545,119 @@ STARTS: dict[str, Callable[[MixtureInstance, np.random.Generator], Seeded]] = {
 DETERMINISTIC = frozenset({"objective", "perturbed", "quantile"})
 
 
+@dataclass(frozen=True)
+class BestOf:
+    """A stochastic start run ``n`` times, the seeding of highest log-likelihood handed over (issue #905).
+
+    The ``n`` seedings draw from the cell's generator in sequence, so
+    ``BestOf(name, 1)`` is the start itself, bitwise, and one seed
+    reproduces all ``n``. Each seeding runs in a ``track`` block of its own,
+    so what it records stays its own, and is scored at equal weights, the
+    value the polish would begin from; the scored seedings are the path, one
+    entry per seeding in order, so the curve shows the selection. The charge
+    is the ``n`` seedings' passes and one scoring pass each; the seconds are
+    the ``n`` seedings' and the scoring, since :class:`TimedStart` times the
+    whole call. :func:`~snakes_and_ladders.opt.initialize.RandomRestart` does
+    this on the surrogate; this is the same policy at the seam.
+
+    Parameters
+    ----------
+    name : str
+        A key of :data:`STARTS` that reads its generator.
+    n : int
+        Seedings, at least 1.
+
+    Raises
+    ------
+    ValueError
+        If ``name`` is deterministic or not a start, or ``n`` is below 1.
+    """
+
+    name: str
+    n: int
+
+    def __post_init__(self) -> None:
+        if self.name not in STARTS or self.name in DETERMINISTIC:
+            msg = f"best-of takes a stochastic start, got {self.name!r}"
+            raise ValueError(msg)
+        if self.n < 1:
+            msg = f"best-of needs at least one seeding, got {self.n}"
+            raise ValueError(msg)
+
+    @property
+    def key(self) -> str:
+        """The start's name in :data:`BEST_OF_STARTS`: ``f"{name}x{n}"``."""
+        return f"{self.name}x{self.n}"
+
+    def __call__(self, instance: MixtureInstance, rng: np.random.Generator) -> Seeded:
+        """The best of ``n`` seedings, each scored at equal weights.
+
+        Returns
+        -------
+        Seeded
+        """
+        values = torch.as_tensor(instance.observations, dtype=torch.float64)
+        uniform = torch.full(
+            (instance.n_components,),
+            -math.log(instance.n_components),
+            dtype=torch.float64,
+        )
+        tracked = current()
+        path: list[tuple[int, EmissionFamily]] = []
+        scores: list[float] = []
+        passes = 0.0
+        for index in range(self.n):
+            with track(MemoryRun()):
+                seeded = lookup(self.name)(instance, rng)
+            score = float(mixture_log_likelihood(values, uniform, seeded.components))
+            tracked.record(index, seeding_log_likelihood=score)
+            path.append((index, seeded.components))
+            scores.append(score)
+            passes += seeded.passes + 1.0
+        best = int(np.argmax(scores))
+        return Seeded(
+            path[best][1],
+            passes,
+            f"best of {self.n}: seeding {best}",
+            tuple(path),
+        )
+
+
+def best_of(name: str, n: int) -> BestOf:
+    """The start that runs ``name`` ``n`` times and hands over the best seeding.
+
+    Returns
+    -------
+    BestOf
+    """
+    return BestOf(name, n)
+
+
+#: Seedings per best-of start in the notebook's group (issue #905).
+BEST_OF = 5
+
+#: The best-of group: every stochastic start at :data:`BEST_OF` seedings, in
+#: :data:`STARTS`' order, keyed ``f"{name}x{BEST_OF}"``.
+BEST_OF_STARTS: dict[str, BestOf] = {
+    start.key: start
+    for start in (
+        best_of(name, BEST_OF) for name in STARTS if name not in DETERMINISTIC
+    )
+}
+
+
+def lookup(name: str) -> Callable[[MixtureInstance, np.random.Generator], Seeded]:
+    """A start by name, from :data:`STARTS` or :data:`BEST_OF_STARTS`.
+
+    Returns
+    -------
+    Callable[[MixtureInstance, np.random.Generator], Seeded]
+    """
+    if name in STARTS:
+        return STARTS[name]
+    return BEST_OF_STARTS[name]
+
+
 #: Relative change in the log-likelihood between two EM iterations at which
 #: the polish stops: ``|L_i - L_{i-1}| <= POLISH_TOLERANCE * |L_{i-1}|``. On
 #: the stress draw, whose generating parameters reach -28,268.1 nats, 1e-6 is
@@ -769,7 +882,7 @@ class TimedStart:
     Parameters
     ----------
     name : str
-        A key of :data:`STARTS`.
+        A key of :data:`STARTS` or :data:`BEST_OF_STARTS`.
     passes : Budget | None
         A polish of fixed length in :attr:`~snakes_and_ladders.cost.Cost.PASSES`;
         ``None`` for the one budget.
@@ -803,7 +916,7 @@ class TimedStart:
             raise ValueError(msg)
         with track(MemoryRun()) as outer:
             with track(MemoryRun()) as inner:
-                seeded = STARTS[self.name](instance, rng)
+                seeded = lookup(self.name)(instance, rng)
             outer.record(0, context=HANDOVER, handed_over=1.0)
             if self.passes is None:
                 polished = polish(
