@@ -2855,10 +2855,12 @@ beats restarts of descent at an equal budget of sweeps is a property of the
 instance and is measured on Section~\ref{sec:frustrated}'s, never asserted in
 general.
 
-A fifth kind is available and deliberately not used as a start: a tempered
-ensemble estimates a \emph{distribution} rather than a point, so its cold
-replica's weights, Equation~\ref{eq:tempered-weight}, are an answer and not a
-starting point. Reading one as the other is the standing error about
+A fifth kind separates two readings of one run. A tempered ensemble
+estimates a \emph{distribution}, so its cold replica's weights,
+Equation~\ref{eq:tempered-weight}, are an answer and not a starting point;
+the lowest-valued point the ensemble visits is a start, and
+\texttt{FromTempering} hands over that point and nothing of the weights.
+Reading the weights as a start is the standing error about
 Appendix~\ref{app:tempering}.
 
 \section{Relaxing a Discrete Decision}
@@ -3328,6 +3330,22 @@ Equation~\ref{eq:kmeanspp-bound}; and recovery of the generating parameters
 up to the permutation of components, with the alignment part of the test. A
 component whose variance reaches the floor of Section~\ref{sec:properties}
 is a refusal, in either algorithm.
+
+\paragraph{Split and merge.}
+A converged alternation can hold one component across two generating ones and
+two on a third: moving a component between them lowers the likelihood on the
+way, so no iterate takes the move. Split-and-merge takes it in one step
+\citep{ueda2000}: merge a pair ranked by the cosine of their responsibility
+columns, split a component ranked by the local Kullback--Leibler divergence
+between the data it owns, $f_k(y_i) = r_{ik} / \sum_{i'} r_{i'k}$, and its own
+density, run partial expectation--maximization on the three with their total
+responsibility held fixed, then the full alternation, and keep the result only
+if the likelihood rose. The likelihood therefore never falls. Here a move is
+a re-weighting of the responsibility columns, the merged one their sum and the
+split one divided by a two-component seeding at two of its observations, so
+the family's own M step realizes it. Two identical components receive
+identical responsibilities and stay identical under the alternation; that
+fixed point is the one the test plants, and the first move repairs it.
 
 \subsection{Choosing among these at the supported sizes}
 \label{sec:mixture:discussion}
@@ -5456,6 +5474,22 @@ depends on the temperatures through $\beta_i - \beta_j$, so for an energy whose
 spread the temperature sets, the acceptance is a function of the ratio of
 neighbours. The endpoints are the caller's and never move; the warm-up's cost
 in sweeps is charged to any comparison against a ladder set by hand.
+
+The Hamiltonian ladder a tempering start runs is set the same way. A
+measurement is a short run of Algorithm~\ref{alg:parallel-tempering} whose
+step is one Hamiltonian transition per replica (Appendix~\ref{app:hmc}), $n$
+rounds on a candidate of $R$ rungs costing $nR$ transitions, read either for
+the exchange acceptance of every pair against the band or for the fraction of
+visits made by walkers on their way up, which the feedback placement
+of~\citet{katzgraber2006} redistributes at fixed $R$. Every measurement
+draws from the start's one stream and begins at the lowest-valued point the
+warm-up has visited, and so does the run on the settled ladder: the warm-up's
+positions are discarded and its transitions are not. A budget
+in seconds bounds the run as a ceiling, a round admitted only if the longest
+round so far would end inside it. What the settled ladder buys is a
+measurement at equal transitions, warm-up included, and not a consequence of
+the band: on a three-component count mixture it was no better a start than
+the hand ladder given the same transitions.
 
 \subsection{Tempering against a sampler, and against restarts}
 \label{app:tempering:comparison}

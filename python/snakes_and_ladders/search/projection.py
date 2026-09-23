@@ -610,12 +610,16 @@ def chain_seeding(
         because a seed drawn from a chain that has not mixed is a random
         restart with a longer bill.
     """
+    # No warm-up: the three chain candidates are matched at 72 gradients, and
+    # FromChain's default 300-proposal warm-up would add 2,700 to this one
+    # alone (issue #898).
     initializer = FromChain(
         CHAIN_DRAWS,
         CHAIN_STEP,
         _generator(rng),
         n_steps=CHAIN_TRAJECTORY,
         burn_in=CHAIN_BURN_IN,
+        adaptation=None,
     )
     chain = initializer.chain(surrogate(instance))
     return Seeding(
@@ -1344,9 +1348,10 @@ def polish_projected(
 
     Returns
     -------
-    Polished
+    snakes_and_ladders.opt.starts.Polished
         The last parameters, the negative log-likelihood there, and how the
-        loop ended.
+        loop ended. Named in full: `search.mixture_starts` has a `Polished`
+        of its own, and a bare name is two targets to Sphinx.
     """
     projected = _projected(objective)
     with torch.no_grad():

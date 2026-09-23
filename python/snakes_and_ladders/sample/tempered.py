@@ -294,6 +294,7 @@ def _exchange(
     burn_in: int,
     thin: int,
     record: Callable[[Sequence[S], Sequence[float]], None] | None = None,
+    stop: Callable[[], bool] | None = None,
 ) -> TemperedEnsemble:
     """The replica-exchange loop, over any structure with a step and a key.
 
@@ -314,6 +315,12 @@ def _exchange(
     the states and their log-densities after the exchanges, for a caller
     whose result carries the states themselves; the ensemble carries the
     keys of them.
+
+    ``stop`` is asked before every sweep after the first, and ``True`` ends
+    the loop there, so ``burn_in + n_sweeps`` is a ceiling rather than a
+    count. It is for a wall clock and must read no replica's state: a sweep
+    that stops on a state-dependent condition biases what it records
+    (`sample/CLAUDE.md`). ``None`` runs every sweep, as before it existed.
     """
     n_replicas = len(temperatures)
     betas = [1.0 / temperature for temperature in temperatures]
@@ -335,7 +342,11 @@ def _exchange(
     # `Metrics` reads the same replica the density is taken from.
     tracked: TrackedOptimization = current()
     started = time.perf_counter()
+    swept = 0
     for sweep in range(burn_in + n_sweeps):
+        if stop is not None and sweep > 0 and stop():
+            break
+        swept += 1
         for replica in range(n_replicas):
             states[replica], values[replica] = step(
                 states[replica],
@@ -387,9 +398,7 @@ def _exchange(
             )
     walkers = np.array(trace, dtype=np.int64).reshape(len(trace), n_replicas)
     log_densities = np.array(densities)
-    tracked.record_cost(
-        max(burn_in + n_sweeps - 1, 0), walkers.nbytes + log_densities.nbytes
-    )
+    tracked.record_cost(max(swept - 1, 0), walkers.nbytes + log_densities.nbytes)
     return TemperedEnsemble(
         temperatures=tuple(temperatures),
         keys=tuple(tuple(names) for names in recorded_keys),
