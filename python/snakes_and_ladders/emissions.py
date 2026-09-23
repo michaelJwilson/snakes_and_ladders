@@ -1195,6 +1195,22 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
         boundary = False
         iterations = 0
         residual = 0.0
+        if offsets is None:
+            # No exposure: one lockstep bisection over every state on the
+            # distinct counts (issue #918), as the beta-binomial's (#892).
+            batched = _solve_dispersion_batched(
+                values, weights, [float(m) for m in mean]
+            )
+            for state, solved in enumerate(batched):
+                dispersion[state] = solved.value
+            return Reestimate(
+                NegativeBinomialEmission(dispersion, mean),
+                at_boundary=any(one.at_boundary for one in batched),
+                iterations=max(one.iterations for one in batched),
+                residual=max(one.residual for one in batched),
+            )
+        # Under an exposure the rate differs per observation, so there is no
+        # histogram to take, and each state is solved over every observation.
         for state in range(self.n_states):
             # Formed once per state, outside the bisection: the solve is at
             # fixed `mu`, so `e * mu` does not move across its ~50 steps.
@@ -2855,6 +2871,99 @@ def _solve_dispersion(
         residual=abs(_weighted_dispersion_score(values, weights, dispersion, mean))
         / float(weights.sum()),
     )
+
+
+def _solve_dispersion_batched(
+    values: torch.Tensor,
+    weights: torch.Tensor,
+    means: Sequence[float],
+    *,
+    tolerance: float = 1e-12,
+) -> list[_SolvedDispersion]:
+    """:func:`_solve_dispersion` for every state at once, in lockstep, on the distinct counts (issue #918).
+
+    The cut #892 made for the beta-binomial. Within one solve the weights are
+    fixed, so ``sum_t w_t digamma(y_t + r)`` is a sum over the distinct counts
+    weighted by the responsibility summed at each, and a bisection step
+    evaluates ``digamma`` on those alone. Every state keeps its own bracket,
+    derived as the oracle derives it, and its own stop; the bracket's width
+    in ``log r`` is the same for every state, so the interior ones stop
+    together. The scalars the oracle takes through :mod:`math` --- the
+    bracket's logarithms, each midpoint's exponential --- are taken through
+    :mod:`math` here. :func:`_solve_dispersion` stays as the oracle; the sums
+    are reordered, so the pin is a tolerance.
+
+    Parameters
+    ----------
+    values : torch.Tensor
+        Counts, shape ``(n,)``.
+    weights : torch.Tensor
+        Posterior weights, shape ``(n, K)``.
+    means : Sequence[float]
+        Each state's profiled mean, length ``K``.
+
+    Returns
+    -------
+    list[_SolvedDispersion]
+        One per state, in order.
+    """
+    n_states = weights.shape[1]
+    columns = weights.T.contiguous()
+    total = columns.sum(dim=1)
+    distinct, summed = _weighted_histogram(values, columns)
+    grid = distinct.reshape(1, -1)
+    mean = torch.tensor(list(means), dtype=values.dtype)
+
+    def score(r: torch.Tensor) -> torch.Tensor:
+        """The profiled score of every state at its own ``r``."""
+        return (
+            (summed * torch.digamma(grid + r.reshape(-1, 1))).sum(dim=1)
+            - total * torch.digamma(r)
+            + total * torch.log(r / (r + mean))
+        )
+
+    def exp_each(log_values: torch.Tensor) -> torch.Tensor:
+        return torch.tensor(
+            [math.exp(v) for v in log_values.tolist()], dtype=values.dtype
+        )
+
+    uppers = [
+        identifiable_dispersion_bound(float(mean[k]), float(weights[:, k].sum()))
+        for k in range(n_states)
+    ]
+    lowers = [u * _DISPERSION_BRACKET_RATIO for u in uppers]
+    upper = torch.tensor(uppers, dtype=values.dtype)
+    lower = torch.tensor(lowers, dtype=values.dtype)
+    at_upper = score(upper) > 0.0
+    at_lower = ~at_upper & (score(lower) < 0.0)
+    moving = ~(at_upper | at_lower)
+    low = torch.tensor([math.log(v) for v in lowers], dtype=values.dtype)
+    high = torch.tensor([math.log(v) for v in uppers], dtype=values.dtype)
+    iterations = torch.zeros(n_states, dtype=torch.int64)
+    while True:
+        step = moving & (high - low > tolerance)
+        if not bool(step.any()):
+            break
+        middle = 0.5 * (low + high)
+        above = score(exp_each(middle)) > 0.0
+        low = torch.where(step & above, middle, low)
+        high = torch.where(step & ~above, middle, high)
+        iterations = iterations + step.to(torch.int64)
+    dispersion = torch.where(
+        at_upper, upper, torch.where(at_lower, lower, exp_each(0.5 * (low + high)))
+    )
+    residual = torch.where(
+        moving, score(dispersion).abs() / total, torch.zeros_like(total)
+    )
+    return [
+        _SolvedDispersion(
+            float(dispersion[k]),
+            at_boundary=bool(not moving[k]),
+            iterations=int(iterations[k]),
+            residual=float(residual[k]),
+        )
+        for k in range(n_states)
+    ]
 
 
 def _weighted_mass(weights: torch.Tensor, offsets: torch.Tensor | None) -> torch.Tensor:
