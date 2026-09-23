@@ -45,10 +45,15 @@ class GaussianTarget(Objective):
         return named["x"]
 
     def gradient(self, theta: torch.Tensor) -> torch.Tensor:
-        """``P theta``, the closed form ``hmc.gradient_at`` reads (issue #986)."""
-        if self.precision.ndim == 1:
-            return self.precision * theta
-        return self.precision @ theta
+        """``P theta``, the closed form ``hmc.gradient_at`` reads (issue #986).
+
+        In NumPy over the tensors' own buffers: a first torch operation in a
+        process costs megabytes of resident memory that the product does not.
+        """
+        precision, point = self.precision.numpy(), theta.detach().numpy()
+        if precision.ndim == 1:
+            return torch.from_numpy(precision * point)
+        return torch.from_numpy(precision @ point)
 
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         """The negative log density at ``theta``."""
