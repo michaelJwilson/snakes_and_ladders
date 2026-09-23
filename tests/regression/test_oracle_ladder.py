@@ -37,16 +37,18 @@ PACKAGE = "snakes_and_ladders"
 
 @pytest.fixture(scope="module")
 def markers() -> dict[str, frozenset[str]]:
-    """Every regression test's markers, parametrization stripped from the id.
+    """Every regression and validation test's markers, parametrization stripped.
 
     A rung names a test function, not one of its cases: a pin holds for every
-    case or the pin is wrong.
+    case or the pin is wrong. `tests/validation/` is read too, since a rung's
+    external oracle runs there, in a subprocess (issue #976).
     """
     collected: dict[str, set[str]] = {}
-    for nodeid, found in coverage_recut.collect_markers(
-        REPO_ROOT / "tests" / "regression"
-    ).items():
-        collected.setdefault(nodeid.split("[")[0], set()).update(found)
+    for directory in ("regression", "validation"):
+        for nodeid, found in coverage_recut.collect_markers(
+            REPO_ROOT / "tests" / directory
+        ).items():
+            collected.setdefault(nodeid.split("[")[0], set()).update(found)
     return {nodeid: frozenset(found) for nodeid, found in collected.items()}
 
 

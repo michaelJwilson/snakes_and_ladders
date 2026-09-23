@@ -225,7 +225,7 @@ def _union_find(n_nodes: int, bonds: np.ndarray) -> np.ndarray:
     roots = np.array([find_root(parent, node) for node in range(n_nodes)])
     smallest = np.full(n_nodes, n_nodes)
     np.minimum.at(smallest, roots, np.arange(n_nodes))
-    return smallest[roots]
+    return np.asarray(smallest[roots])
 
 
 @pytest.mark.oracle
