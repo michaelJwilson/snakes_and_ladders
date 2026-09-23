@@ -127,7 +127,7 @@ def test_the_per_state_rate_is_what_the_moments_are_stated_at() -> None:
 
 @pytest.mark.critical
 @pytest.mark.smoke
-def test_an_exposure_is_positive_and_broadcasts_along_the_states() -> None:
+def test_an_exposure_is_non_negative_and_broadcasts_along_the_states() -> None:
     # The layout rule the trial count already carries, for the same reason, and
     # a support the model has no meaning outside.
     live = NegativeBinomialEmission(DISPERSION, MEAN)
@@ -135,5 +135,6 @@ def test_an_exposure_is_positive_and_broadcasts_along_the_states() -> None:
 
     with pytest.raises(ValueError, match="singleton axis"):
         live.log_density(counts, torch.full((2, 2), 1.0))
-    with pytest.raises(ValueError, match="strictly positive"):
-        live.log_density(counts, torch.tensor([[1.0], [0.0]]))
+    # Zero is admitted since #933: it marks the total unobserved.
+    with pytest.raises(ValueError, match="non-negative"):
+        live.log_density(counts, torch.tensor([[1.0], [-1.0]]))
