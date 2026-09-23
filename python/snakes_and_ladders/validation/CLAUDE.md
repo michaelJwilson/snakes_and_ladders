@@ -18,9 +18,11 @@ module. It is referenced here, never restated. What follows is local.
 - **A script imports its framework inside `main`.** The docs build imports
   every module under `docs/source/index.rst` without the extras, so a
   module-level import of the framework would fail it.
-- **A script times the framework's own call and nothing else.** It wraps the
-  call in `protocol.timed`, so interpreter start-up and the file round trip
-  are not charged to the framework in a benchmark pair.
+- **A script times and weighs the framework's own call and nothing else.** It
+  wraps the call in `protocol.timed` inside `protocol.peaked`, so interpreter
+  start-up, the imports and the file round trip are charged to neither
+  figure. The package's side of a pair is read the same way, in a fresh
+  interpreter, by `scripts/package.py`.
 - **One framework, one extra, one module, one test file.** A framework arrives
   as a `validation-<name>` extra in `pyproject.toml`, a `Framework` entry in
   `FRAMEWORKS`, an adapter `<name>.py` here, a script `scripts/<name>.py` and

@@ -11,7 +11,7 @@ import sys
 
 import numpy as np
 
-from snakes_and_ladders.validation.protocol import dump, load, paths, timed
+from snakes_and_ladders.validation.protocol import dump, load, paths, peaked, timed
 
 
 def main() -> None:
@@ -22,8 +22,10 @@ def main() -> None:
     if code:
         print(f"selftest asked to fail with {code}", file=sys.stderr)
         raise SystemExit(code)
-    doubled, seconds = timed(lambda: 2.0 * inputs["values"])
-    dump(returned, {**inputs, "doubled": doubled}, seconds)
+    (doubled, seconds), peak_bytes = peaked(
+        lambda: timed(lambda: 2.0 * inputs["values"])
+    )
+    dump(returned, {**inputs, "doubled": doubled}, seconds, peak_bytes)
 
 
 if __name__ == "__main__":

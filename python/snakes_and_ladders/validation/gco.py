@@ -45,6 +45,8 @@ class Expansion:
     seconds: float
     #: Wall seconds building the graph in gco.
     build_seconds: float
+    #: Peak resident bytes the build and the expansion added.
+    peak_bytes: int
 
 
 def alpha_expansion(
@@ -78,4 +80,5 @@ def alpha_expansion(
         gco_energy=float(result.outputs["gco_energy"]),
         seconds=result.seconds,
         build_seconds=float(result.outputs["build_seconds"]),
+        peak_bytes=int(result.peak_bytes or 0),
     )
