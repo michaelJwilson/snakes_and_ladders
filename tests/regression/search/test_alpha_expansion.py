@@ -648,7 +648,9 @@ def test_the_cut_moves_agree_across_solvers_on_tied_fields(seed: int) -> None:
     # exactly, make ties and leave residuals of 1e-16 where the other solver
     # leaves 0. Read at the shared saturation floor both cuts are the minimal
     # one, so the labellings agree bitwise, which is what lets Rust be the
-    # default. Before the floor 7 of 120 such moves split.
+    # default. Before the floor 7 of 120 such moves split. The Rust route cuts
+    # a different network encoding the same energy --- no auxiliary node,
+    # each label's flow started from its last cut --- and agrees all the same.
     rng = np.random.default_rng(935 + seed)
     graph = lattice_graph((12, 12), BoundaryCondition.OPEN, 0.7)
     n_states = int(rng.choice([2, 3, 5]))

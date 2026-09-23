@@ -104,11 +104,11 @@ def test_the_expansion_network_build_benchmark(
 def test_the_rust_cut_moves_at_large_site_counts(
     benchmark: BenchmarkFixture, extent: int, name: str
 ) -> None:
-    """The whole Rust route at ten labels, network arrays to cut (issue #935).
+    """The whole Rust route at ten labels on the reused lattice network (issue #935).
 
-    The sizes the ticket measured, where the network build rather than the
-    cut was the cost: 0.39 -> 0.16 s and 1.67 -> 0.79 s for the expansion,
-    0.26 -> 0.06 s and 1.24 -> 0.28 s for the swap.
+    Measured one run each at 71 and 142, against the per-move network the
+    route built before: expansion 0.246 -> 0.077 s and 1.227 -> 0.356 s,
+    swap 0.216 -> 0.143 s and 1.078 -> 0.742 s, the same labellings.
     """
     graph, values = _problem(extent, 10)
     solve = alpha_expansion if name == "expansion" else alpha_beta_swap

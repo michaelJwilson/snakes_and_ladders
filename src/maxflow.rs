@@ -628,10 +628,10 @@ pub fn max_flow<'py>(
     Ok((value, PyArray1::from_vec(py, side)))
 }
 
-/// One alpha-expansion move's network, built here from the lattice rather
-/// than crossing as arcs (issue #935): the arcs `search.alpha_expansion.
-/// _expansion_arcs` lays out, in its order, so the cut is the one the Python
-/// route builds and solves. `values` is the `(n_nodes, n_states)` field
+/// One alpha-expansion move's network with an auxiliary node per
+/// disagreeing edge: the arcs `search.alpha_expansion._expansion_arcs` lays
+/// out, in its order. `lattice_cut.rs`'s tests pin its auxiliary-free
+/// network against this one's cut (issue #935). `values` is the `(n_nodes, n_states)` field
 /// row-major, `pinned` the capacity that makes a node already at `alpha`
 /// unable to keep its label.
 #[allow(clippy::too_many_arguments)]
@@ -693,56 +693,6 @@ pub fn expansion_network(
     }
     network.compress();
     network
-}
-
-/// The source side of one alpha-expansion move's minimal minimum cut.
-///
-/// The network is [`expansion_network`]'s, built and solved in one call with
-/// the GIL released: `first`, `second` and `coupling` are the lattice's edges
-/// in edge order, `values` the field row-major, `labels` the current
-/// labelling.
-#[pyfunction]
-#[allow(clippy::too_many_arguments)]
-pub fn expansion_source_side<'py>(
-    py: Python<'py>,
-    first: PyReadonlyArray1<'_, i64>,
-    second: PyReadonlyArray1<'_, i64>,
-    coupling: PyReadonlyArray1<'_, f64>,
-    values: PyReadonlyArray1<'_, f64>,
-    n_states: usize,
-    labels: PyReadonlyArray1<'_, i64>,
-    alpha: usize,
-    pinned: f64,
-) -> PyResult<Bound<'py, PyArray1<bool>>> {
-    let first = node_indices(first.as_slice()?)?;
-    let second = node_indices(second.as_slice()?)?;
-    let labels = node_indices(labels.as_slice()?)?;
-    let coupling = coupling.as_slice()?;
-    let values = values.as_slice()?;
-    let n_nodes = labels.len();
-    if values.len() != n_nodes * n_states || first.len() != coupling.len() {
-        return Err(PyValueError::new_err(
-            "values must be (n_nodes, n_states) and one coupling per edge",
-        ));
-    }
-    if first.iter().chain(&second).any(|&node| node >= n_nodes)
-        || labels.iter().any(|&label| label >= n_states)
-        || alpha >= n_states
-    {
-        return Err(PyValueError::new_err(
-            "an edge end or a label is out of range",
-        ));
-    }
-    let side = py
-        .detach(|| {
-            let mut network = expansion_network(
-                &first, &second, coupling, values, n_states, &labels, alpha, pinned,
-            );
-            max_flow_impl(&mut network, n_nodes, n_nodes + 1)
-        })
-        .map_err(PyValueError::new_err)?
-        .1;
-    Ok(PyArray1::from_vec(py, side))
 }
 
 /// The exact ground state of a two-state ferromagnetic Ising model.

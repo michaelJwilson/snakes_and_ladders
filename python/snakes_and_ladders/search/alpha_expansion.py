@@ -121,9 +121,9 @@ class _Arcs(NamedTuple):
     """A move's network as arrays, one row per edge, in ``add_edge`` order (issue #935).
 
     :meth:`~snakes_and_ladders.search.maxflow.FlowNetwork.from_arcs` builds
-    the Python solver's list store from these; the Rust cut takes them as
-    they are, so the route that never reads the lists does not build them.
-    The arc order is the contract either way: both solvers see one network.
+    the Python solver's list store from these, the oracle route. The Rust
+    route refills a :class:`LatticeCut` instead and is pinned to this
+    network's minimal minimum cut.
     """
 
     n_nodes: int
@@ -140,49 +140,26 @@ class _Arcs(NamedTuple):
 
 
 class _CutMove(NamedTuple):
-    """One binary move, built: the network, its terminals and where a cut lands.
+    """One binary move, built: its cut and where the cut lands.
 
     Parameters
     ----------
-    arcs : _Arcs
-        The move's network, whose arc order is part of the contract: a
-        minimum cut need not be unique, so the two solvers are pinned to one
-        labelling by building one network.
-    source, sink : int
-        The terminals. The source side keeps its label; the sink side takes
-        the move's.
+    source_side : Callable[[], np.ndarray]
+        Cuts the move's network and returns the source side of its minimal
+        minimum cut: the Python solver on the arcs :func:`_expansion_arcs`
+        or :func:`_swap_arcs` lays out, or a :class:`LatticeCut` refilled
+        in place (issue #935).
     place : Callable[[np.ndarray], np.ndarray]
-        The cut's source-side mask to the labelling it proposes.
-    solved : Callable[[], np.ndarray] | None
-        The source side from a kernel that builds and cuts the network itself
-        (issue #935), for the Rust route; ``arcs`` is then ``None``.
+        The source-side mask to the labelling it proposes.
     """
 
-    arcs: _Arcs | None
-    source: int
-    sink: int
+    source_side: Callable[[], np.ndarray]
     place: Callable[[np.ndarray], np.ndarray]
-    solved: Callable[[], np.ndarray] | None = None
 
 
-def _rust_source_side(arcs: _Arcs, source: int, sink: int) -> np.ndarray:
-    """The Rust cut's source side, from the arrays with no list store (issue #935).
-
-    What :func:`~snakes_and_ladders.search.maxflow_rust.min_cut` passes for
-    a network :meth:`FlowNetwork.from_arcs` built: the ``(tail, head)``
-    pairs interleaved, and the two capacity arrays as they are.
-    """
-    pairs = np.empty(2 * arcs.tail.size, dtype=np.int64)
-    pairs[0::2], pairs[1::2] = arcs.tail, arcs.head
-    _, side = oxi_snakes_and_ladders.max_flow(
-        arcs.n_nodes,
-        pairs,
-        np.ascontiguousarray(arcs.capacity, dtype=np.float64),
-        source,
-        sink,
-        np.ascontiguousarray(arcs.reverse, dtype=np.float64),
-    )
-    return np.asarray(side, dtype=bool)
+def _python_source_side(arcs: _Arcs, source: int, sink: int) -> np.ndarray:
+    """The Python solver's source side on ``arcs``: the oracle route."""
+    return max_flow(arcs.network(), source, sink).source_side
 
 
 def _check_cut_backend(backend: Backend, move: str) -> None:
@@ -220,12 +197,30 @@ def _terminal_capacities(
     return sink_side - offset, source_side - offset
 
 
+class _Carried(NamedTuple):
+    """What a cycle carries from one move to the next (issue #935).
+
+    Parameters
+    ----------
+    cut : LatticeCut | None
+        The Rust route's network, laid out once for the run; ``None`` on the
+        Python route.
+    energy : float
+        The energy of the labelling the move starts from, as
+        :func:`~snakes_and_ladders.sim.potts.energy` scored it on the last
+        move, so the next does not score it again.
+    """
+
+    cut: oxi_snakes_and_ladders.LatticeCut | None
+    energy: float
+
+
 def _lowest_by_cut(
     graph: PottsGraph,
     field_values: np.ndarray,
     labelling: np.ndarray,
     build: Callable[[np.ndarray], _CutMove | None],
-    backend: Backend,
+    held: float | None,
 ) -> Labelling:
     """A binary move by one minimum cut, taken only where it lowers the energy.
 
@@ -234,27 +229,17 @@ def _lowest_by_cut(
     accept the proposal only against the energy. They differ in the network,
     which is ``build``'s, and in nothing else. ``build`` returning ``None``
     is a move with no site to make it on, which is the labelling unchanged.
+    ``held`` is the input labelling's energy where the caller has it.
     """
     values = site_field(np.asarray(field_values, dtype=float), graph.n_nodes)
     built = build(values)
+    current = energy(graph, values, labelling) if held is None else held
     if built is None:
-        return Labelling(labelling, energy(graph, values, labelling))
+        return Labelling(labelling, current)
 
-    if built.solved is not None:
-        source_side = built.solved()
-    else:
-        assert built.arcs is not None
-        source_side = (
-            _rust_source_side(built.arcs, built.source, built.sink)
-            if backend is Backend.RUST
-            else max_flow(built.arcs.network(), built.source, built.sink).source_side
-        )
-    proposed = built.place(source_side)
+    proposed = built.place(built.source_side())
 
-    current, candidate = (
-        energy(graph, values, labelling),
-        energy(graph, values, proposed),
-    )
+    candidate = energy(graph, values, proposed)
     if candidate < current:
         return Labelling(proposed, candidate)
     return Labelling(labelling, current)
@@ -282,7 +267,14 @@ class _Move:
     reason: str
     label_sets: Callable[[int], Iterator[tuple[int, ...]]]
     apply: Callable[
-        [PottsGraph, np.ndarray, np.ndarray, tuple[int, ...], Backend],
+        [
+            PottsGraph,
+            np.ndarray,
+            np.ndarray,
+            tuple[int, ...],
+            Backend,
+            _Carried | None,
+        ],
         Labelling,
     ]
 
@@ -314,14 +306,19 @@ def _cycle_to_a_local_minimum(
     labelling = (
         values.argmax(axis=1).astype(np.int64) if start is None else start.copy()
     )
-    current = energy(graph, values, labelling)
+    current = held = energy(graph, values, labelling)
+    # One network for every move of the run: the lattice's arcs are laid out
+    # once and each cut refills their capacities (issue #935).
+    cut = _lattice_cut(graph) if backend is Backend.RUST else None
 
     moves = 0
     for cycle in range(1, max_cycles + 1):
         improved = False
         for labels in move.label_sets(n_states):
-            moved = move.apply(graph, values, labelling, labels, backend)
-            labelling = moved.labelling
+            moved = move.apply(
+                graph, values, labelling, labels, backend, _Carried(cut, held)
+            )
+            labelling, held = moved.labelling, moved.energy
             if moved.energy < current - 1e-12:
                 current = moved.energy
                 improved = True
@@ -479,19 +476,22 @@ def expand(
     unaffordable rather than by dropping it, so the edge terms around it stay
     in the same network.
 
-    ``backend`` chooses the minimum-cut solver and nothing else; the network
-    is built here either way. :data:`~snakes_and_ladders.backend.Backend.RUST`
-    runs :func:`snakes_and_ladders.search.maxflow_rust.min_cut`, which issue
-    #528 measured at 49.0% of this function's caller by `cProfile` self time.
-    It is the **default** since #935. A minimum cut need not be unique, but
-    both solvers read the *minimal* one --- the set reachable from the source
-    in the residual graph, which every maximum flow shares --- at one
-    saturation floor (:data:`~snakes_and_ladders.search.maxflow.SATURATED`),
-    so rounding in their different sums cannot move an arc across the cut.
-    Before that floor 7 of 120 random cut moves on decimal-valued fields
-    split between the two; with it, 120 of 120 agree bitwise
-    (`test_the_cut_moves_agree_across_solvers_on_tied_fields`), and
-    :data:`~snakes_and_ladders.backend.Backend.PYTHON` stays as the oracle.
+    ``backend`` chooses the network and its solver.
+    :data:`~snakes_and_ladders.backend.Backend.PYTHON` builds the network
+    above and cuts it with the Python Dinic: the oracle.
+    :data:`~snakes_and_ladders.backend.Backend.RUST`, the **default** since
+    #935, refills a :class:`~snakes_and_ladders.oxi_snakes_and_ladders.LatticeCut`
+    laid out once over the lattice, with no auxiliary node: Kolmogorov &
+    Zabih's (2004) arc for the pairwise term, so the layout does not change
+    with the labelling. Within :func:`alpha_expansion` each label's cut also
+    starts from the flow its last cut ended on. A minimum cut need not be
+    unique, but both routes read the *minimal* one --- the set reachable from
+    the source in the residual graph, which every maximum flow of every
+    network encoding the move's energy shares --- at one saturation floor
+    (:data:`~snakes_and_ladders.search.maxflow.SATURATED`), so rounding in
+    their different sums does not move a site across the cut: 120 of 120
+    random cut moves on decimal-valued fields agree bitwise
+    (`test_the_cut_moves_agree_across_solvers_on_tied_fields`).
 
     Returns
     -------
@@ -504,47 +504,58 @@ def expand(
     ValueError
         If ``backend`` names an implementation this function does not have.
     """
+    return _expand(graph, field_values, labelling, alpha, backend, None)
+
+
+def _expand(
+    graph: PottsGraph,
+    field_values: np.ndarray,
+    labelling: np.ndarray,
+    alpha: int,
+    backend: Backend,
+    carried: _Carried | None,
+) -> Labelling:
+    """:func:`expand` with what a cycle carries across its moves."""
     _check_cut_backend(backend, "alpha expansion")
 
     def build(values: np.ndarray) -> _CutMove | None:
+        # The sink side switched, so it takes alpha and the rest is held.
+        def place(source_side: np.ndarray) -> np.ndarray:
+            return np.where(~source_side[: graph.n_nodes], alpha, labelling)
+
         if backend is Backend.RUST:
-            # The kernel builds the network `_expansion_arcs` lays out, arc for
-            # arc, and cuts it in one call: no arc array crosses (issue #935).
-            first, second, coupling = graph.endpoints
+            workspace = (
+                _lattice_cut(graph)
+                if carried is None or carried.cut is None
+                else carried.cut
+            )
 
             def solved() -> np.ndarray:
-                side = oxi_snakes_and_ladders.expansion_source_side(
-                    np.ascontiguousarray(first, dtype=np.int64),
-                    np.ascontiguousarray(second, dtype=np.int64),
-                    np.ascontiguousarray(coupling, dtype=np.float64),
-                    np.ascontiguousarray(values, dtype=np.float64).reshape(-1),
-                    values.shape[1],
-                    np.ascontiguousarray(labelling, dtype=np.int64),
-                    alpha,
-                    _infinite_capacity(graph, values),
+                return np.asarray(
+                    workspace.expansion_source_side(
+                        np.ascontiguousarray(values, dtype=np.float64).reshape(-1),
+                        values.shape[1],
+                        np.ascontiguousarray(labelling, dtype=np.int64),
+                        alpha,
+                        _infinite_capacity(graph, values),
+                    ),
+                    dtype=bool,
                 )
-                return np.asarray(side, dtype=bool)
 
-            return _CutMove(
-                arcs=None,
-                source=graph.n_nodes,
-                sink=graph.n_nodes + 1,
-                place=lambda source_side: np.where(
-                    ~source_side[: graph.n_nodes], alpha, labelling
-                ),
-                solved=solved,
-            )
+            return _CutMove(solved, place)
+        arcs = _expansion_arcs(graph, values, labelling, alpha)
         return _CutMove(
-            arcs=_expansion_arcs(graph, values, labelling, alpha),
-            source=graph.n_nodes,
-            sink=graph.n_nodes + 1,
-            # The sink side switched, so it takes alpha and the rest is held.
-            place=lambda source_side: np.where(
-                ~source_side[: graph.n_nodes], alpha, labelling
-            ),
+            lambda: _python_source_side(arcs, graph.n_nodes, graph.n_nodes + 1),
+            place,
         )
 
-    return _lowest_by_cut(graph, field_values, labelling, build, backend)
+    return _lowest_by_cut(
+        graph,
+        field_values,
+        labelling,
+        build,
+        None if carried is None else carried.energy,
+    )
 
 
 def _expansion_label_sets(n_states: int) -> Iterator[tuple[int, ...]]:
@@ -558,9 +569,10 @@ def _apply_expansion(
     labelling: np.ndarray,
     labels: tuple[int, ...],
     backend: Backend,
+    carried: _Carried | None,
 ) -> Labelling:
     """:func:`expand` in the shape :func:`_cycle_to_a_local_minimum` calls."""
-    return expand(graph, values, labelling, labels[0], backend=backend)
+    return _expand(graph, values, labelling, labels[0], backend, carried)
 
 
 EXPANSION = _Move(
@@ -609,8 +621,8 @@ def alpha_expansion(
         exceeding it impossible on a correct implementation, so reaching it
         is a bug report rather than a tuning knob.
     backend : Backend
-        Which minimum-cut solver each :func:`expand` runs, and nothing else.
-        See :func:`expand` for why the Rust one is the default.
+        Which network and minimum-cut solver each :func:`expand` runs; see
+        :func:`expand` for the two and why the Rust one is the default.
 
     Raises
     ------
@@ -811,6 +823,17 @@ def iterated_conditional_modes(
     return Labelling(labelling, energy(graph, values, labelling))
 
 
+def _lattice_cut(graph: PottsGraph) -> oxi_snakes_and_ladders.LatticeCut:
+    """The Rust cut's network over ``graph``'s edges, laid out once (issue #935)."""
+    first, second, coupling = graph.endpoints
+    return oxi_snakes_and_ladders.LatticeCut(
+        graph.n_nodes,
+        np.ascontiguousarray(first, dtype=np.int64),
+        np.ascontiguousarray(second, dtype=np.int64),
+        np.ascontiguousarray(coupling, dtype=np.float64),
+    )
+
+
 def _infinite_capacity(graph: PottsGraph, values: np.ndarray) -> float:
     """A capacity no cut would ever pay, scaled to this problem.
 
@@ -915,6 +938,19 @@ def swap(
         or ``alpha`` and ``beta`` are the same label, where the move is the
         identity and a caller asking for it has a bug rather than a no-op.
     """
+    return _swap(graph, field_values, labelling, alpha, beta, backend, None)
+
+
+def _swap(
+    graph: PottsGraph,
+    field_values: np.ndarray,
+    labelling: np.ndarray,
+    alpha: int,
+    beta: int,
+    backend: Backend,
+    carried: _Carried | None,
+) -> Labelling:
+    """:func:`swap` with what a cycle carries across its moves."""
     _check_cut_backend(backend, "the alpha-beta swap")
     if alpha == beta:
         msg = f"a swap needs two distinct labels, got {alpha} twice"
@@ -924,17 +960,44 @@ def swap(
         moving = np.flatnonzero((labelling == alpha) | (labelling == beta))
         if moving.size == 0:
             return None
-        arcs = _swap_arcs(graph, values, moving, alpha, beta)
-        source, sink = moving.size, moving.size + 1
 
         def place(source_side: np.ndarray) -> np.ndarray:
             proposed = labelling.copy()
             proposed[moving] = np.where(source_side[: moving.size], alpha, beta)
             return proposed
 
-        return _CutMove(arcs=arcs, source=source, sink=sink, place=place)
+        if backend is Backend.RUST:
+            # The kernel cuts the whole lattice with every held site at zero
+            # capacity, so its side is read at the moving sites' own indices.
+            workspace = (
+                _lattice_cut(graph)
+                if carried is None or carried.cut is None
+                else carried.cut
+            )
 
-    return _lowest_by_cut(graph, field_values, labelling, build, backend)
+            def solved() -> np.ndarray:
+                side = workspace.swap_source_side(
+                    np.ascontiguousarray(values, dtype=np.float64).reshape(-1),
+                    values.shape[1],
+                    np.ascontiguousarray(labelling, dtype=np.int64),
+                    alpha,
+                    beta,
+                )
+                return np.asarray(side, dtype=bool)[moving]
+
+            return _CutMove(solved, place)
+        arcs = _swap_arcs(graph, values, moving, alpha, beta)
+        return _CutMove(
+            lambda: _python_source_side(arcs, moving.size, moving.size + 1), place
+        )
+
+    return _lowest_by_cut(
+        graph,
+        field_values,
+        labelling,
+        build,
+        None if carried is None else carried.energy,
+    )
 
 
 def _swap_label_sets(n_states: int) -> Iterator[tuple[int, ...]]:
@@ -952,9 +1015,10 @@ def _apply_swap(
     labelling: np.ndarray,
     labels: tuple[int, ...],
     backend: Backend,
+    carried: _Carried | None,
 ) -> Labelling:
     """:func:`swap` in the shape :func:`_cycle_to_a_local_minimum` calls."""
-    return swap(graph, values, labelling, labels[0], labels[1], backend=backend)
+    return _swap(graph, values, labelling, labels[0], labels[1], backend, carried)
 
 
 SWAP = _Move(
