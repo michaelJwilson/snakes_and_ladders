@@ -174,6 +174,33 @@ def simulate_count_pairs(
     totals: np.ndarray,
     successes: np.ndarray,
 ) -> None: ...
+def negative_binomial_dispersions(
+    tails: np.ndarray,
+    total: np.ndarray,
+    mean: np.ndarray,
+    lower: np.ndarray,
+    upper: np.ndarray,
+    tolerance: float,
+    value: np.ndarray,
+    at_boundary: np.ndarray,
+    iterations: np.ndarray,
+    residual: np.ndarray,
+) -> None: ...
+def beta_binomial_parameters(
+    success: np.ndarray,
+    failure: np.ndarray,
+    depth: np.ndarray,
+    total: np.ndarray,
+    rate: np.ndarray,
+    concentration: np.ndarray,
+    bound: np.ndarray,
+    log_low: np.ndarray,
+    tolerance: float,
+    max_iterations: int,
+    max_bisections: int,
+    margin: float,
+    out: np.ndarray,
+) -> None: ...
 def ragged_posteriors(
     log_density: np.ndarray,
     lengths: np.ndarray,

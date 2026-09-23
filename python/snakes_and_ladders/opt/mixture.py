@@ -334,6 +334,30 @@ def responsibilities(
     return torch.exp(joint - torch.logsumexp(joint, dim=-1, keepdim=True))
 
 
+def e_step(
+    observations: torch.Tensor,
+    log_weight: torch.Tensor,
+    components: EmissionFamily,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """:func:`mixture_log_likelihood` and :func:`responsibilities` from one log-density pass (issue #924).
+
+    An EM step needs both at the same parameters, and each of the two
+    functions evaluates the components' log-density on every observation.
+    Here the joint is formed once and its row normalizer taken once; the
+    operations on it are the two functions' own, so both results are theirs
+    bitwise.
+
+    Returns
+    -------
+    tuple[torch.Tensor, torch.Tensor]
+        The scalar log-likelihood, and the responsibilities, shape
+        ``(n_samples, n_components)``.
+    """
+    joint = log_weight + components.log_density(observations)
+    normalizer = torch.logsumexp(joint, dim=-1, keepdim=True)
+    return normalizer.sum(), torch.exp(joint - normalizer)
+
+
 @dataclass(frozen=True)
 class MixtureMetrics:
     """What a mixture parameter vector means: its log-likelihood and its k-means cost (issue #778).
@@ -481,8 +505,8 @@ def expectation_maximization(
         attempt += 1
         current, family = state
         log_weight = torch.log(current)
-        log_likelihood = float(mixture_log_likelihood(values, log_weight, family))
-        posterior = responsibilities(values, log_weight, family)
+        evidence, posterior = e_step(values, log_weight, family)
+        log_likelihood = float(evidence)
         reestimated = family.reestimate(
             values.reshape(1, -1), posterior.reshape(1, *posterior.shape)
         )
