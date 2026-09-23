@@ -503,6 +503,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.validation.scripts.selftest
    :members:
 
+.. automodule:: snakes_and_ladders.validation.scripts.package
+   :members:
+
 .. automodule:: snakes_and_ladders.qa
    :members:
 

@@ -9,6 +9,12 @@ installed to run it; it is installed to re-measure the number, by the
 benchmark pair in `tests/benchmarks/`, and the row records when and where it
 was measured.
 
+A :class:`MemoryGoal` is the same for the resident memory a call adds at its
+peak (issue #987). The package's figure is read by
+:func:`snakes_and_ladders.validation.runner.package`, in a fresh interpreter
+as the framework's was, and :func:`assert_fits` fails when it exceeds the
+goal.
+
 A goal test carries the `goal` marker and runs in a step of CI's
 `validation` job that reports and does not block, since a goal fails until it
 is met. Measured on a different host, the ratio moves with the hardware.
@@ -59,5 +65,29 @@ def assert_meets(ours: float, goal: Goal) -> None:
     assert ours <= limit, (
         f"{goal.what}: the package takes {ours * 1e3:.2f} ms against "
         f"{goal.framework}'s {limit * 1e3:.2f} ms ({goal.measured}), "
+        f"{ours / limit:.2f}x"
+    )
+
+
+@dataclass(frozen=True)
+class MemoryGoal:
+    """One external framework's peak added resident memory on one declared fixture."""
+
+    #: The framework, as `snakes_and_ladders.validation.FRAMEWORKS` names it.
+    framework: str
+    #: The fixture and the call measured, in words a reader can rebuild.
+    what: str
+    #: The framework's peak added resident bytes.
+    peak_bytes: int
+    #: When, where and by which ticket it was measured.
+    measured: str
+
+
+def assert_fits(ours: int, goal: MemoryGoal) -> None:
+    """Fail when ``ours`` exceeds the goal's peak bytes times the goal ratio."""
+    limit = goal.peak_bytes * GOAL_RATIO
+    assert ours <= limit, (
+        f"{goal.what}: the package peaks at {ours / 1e6:.1f} MB against "
+        f"{goal.framework}'s {limit / 1e6:.1f} MB ({goal.measured}), "
         f"{ours / limit:.2f}x"
     )
