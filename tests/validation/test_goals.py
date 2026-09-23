@@ -81,6 +81,18 @@ GCO_EXPANSION = {
     for side, seconds in ((71, 0.1402), (142, 0.6258))
 }
 
+#: gco's peak added resident memory for the same build and expansion, the
+#: medians of three subprocess runs (#987).
+GCO_EXPANSION_MEMORY = {
+    side: MemoryGoal(
+        "gco",
+        f"alpha expansion on the Rust cut, {side}x{side}, q = 10",
+        peak_bytes,
+        "2026-09-23, 4-core reference host, #987",
+    )
+    for side, peak_bytes in ((71, 2_686_976), (142, 9_756_672))
+}
+
 
 @pytest.mark.experiment
 @pytest.mark.parametrize("side", sorted(PYMAXFLOW_CUT))
@@ -119,3 +131,16 @@ def test_the_rust_cut_fits_pymaxflows_memory(side: int) -> None:
     inputs = _cut_inputs(side)
     peaks = [package("ising_cut", inputs).peak_bytes or 0 for _ in range(3)]
     assert_fits(int(np.median(peaks)), PYMAXFLOW_CUT_MEMORY[side])
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("side", sorted(GCO_EXPANSION_MEMORY))
+def test_the_expansion_fits_gcos_memory(side: int) -> None:
+    field = np.random.default_rng(974).normal(size=(side * side, 10))
+    inputs = {
+        "shape": np.asarray([side, side]),
+        "coupling": np.asarray(critical_coupling(10)),
+        "field": field,
+    }
+    peaks = [package("alpha_expansion", inputs).peak_bytes or 0 for _ in range(3)]
+    assert_fits(int(np.median(peaks)), GCO_EXPANSION_MEMORY[side])
