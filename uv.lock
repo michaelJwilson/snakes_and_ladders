@@ -4431,6 +4431,9 @@ validation-gco = [
 validation-hmmlearn = [
     { name = "hmmlearn" },
 ]
+validation-jax = [
+    { name = "jax" },
+]
 validation-pymaxflow = [
     { name = "pymaxflow" },
 ]
@@ -4446,6 +4449,7 @@ requires-dist = [
     { name = "gymnasium", marker = "extra == 'frameworks'", specifier = ">=1.0" },
     { name = "hmmlearn", marker = "extra == 'validation-hmmlearn'", specifier = ">=0.3.3" },
     { name = "ipykernel", marker = "extra == 'notebooks'", specifier = ">=6.29" },
+    { name = "jax", marker = "extra == 'validation-jax'", specifier = ">=0.11.2" },
     { name = "matplotlib", specifier = ">=3.9.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0.0" },
     { name = "nbclient", marker = "extra == 'notebooks'", specifier = ">=0.10" },
@@ -4472,7 +4476,7 @@ requires-dist = [
     { name = "towncrier", marker = "extra == 'dev'", specifier = ">=24.8.0" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0" },
 ]
-provides-extras = ["dev", "docs", "frameworks", "notebooks", "test", "track", "validation-blackjax", "validation-gco", "validation-hmmlearn", "validation-pymaxflow", "validation-scikit-learn"]
+provides-extras = ["dev", "docs", "frameworks", "notebooks", "test", "track", "validation-blackjax", "validation-gco", "validation-hmmlearn", "validation-jax", "validation-pymaxflow", "validation-scikit-learn"]
 
 [[package]]
 name = "snowballstemmer"

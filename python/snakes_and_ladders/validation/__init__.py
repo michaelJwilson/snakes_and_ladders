@@ -105,5 +105,13 @@ FRAMEWORKS: Mapping[str, Framework] = {
             source="https://github.com/blackjax-devs/blackjax",
             ticket=963,
         ),
+        Framework(
+            name="jax",
+            distribution="jax",
+            module="jax",
+            licence="Apache-2.0",
+            source="https://github.com/jax-ml/jax",
+            ticket=991,
+        ),
     )
 }

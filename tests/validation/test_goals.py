@@ -66,6 +66,63 @@ PYMAXFLOW_CUT_MEMORY = {
 }
 
 
+#: JAX's per-point gradient under `jit` and its peak added memory over 100
+#: points, the medians of three subprocess runs (#991): the diagonal Gaussian
+#: at d = 10, 10^3 and 10^4, and the three-component mixture at n = 10^5.
+#: Where torch's autograd was the faster or the lighter (the dense Gaussian at
+#: d = 10^3) no goal is set.
+JAX_GRADIENT = {
+    case: Goal(
+        "jax",
+        f"hmc.gradient_at per point, {case}",
+        seconds,
+        "2026-09-23, 4-core reference host, #991",
+    )
+    for case, seconds in (
+        ("diagonal d=10", 11.35e-6),
+        ("diagonal d=1000", 28.62e-6),
+        ("diagonal d=10000", 51.62e-6),
+        ("mixture n=100000", 2843.98e-6),
+    )
+}
+JAX_GRADIENT_MEMORY = {
+    case: MemoryGoal(
+        "jax",
+        f"hmc.gradient_at over 100 points, {case}",
+        peak_bytes,
+        "2026-09-23, 4-core reference host, #991",
+    )
+    for case, peak_bytes in (
+        ("diagonal d=10", 14_741_504),
+        ("diagonal d=1000", 9_277_440),
+        ("diagonal d=10000", 27_959_296),
+        ("mixture n=100000", 29_954_048),
+    )
+}
+
+
+def _gradient_inputs(case: str) -> dict[str, np.ndarray]:
+    """The points and target of one JAX goal, as `test_gradient_jax_bench.py` draws them."""
+    rng = np.random.default_rng(991)
+    if case.startswith("diagonal"):
+        dimension = int(case.split("=")[1])
+        return {
+            "precision": diagonal_precision(dimension),
+            "points": rng.normal(size=(100, dimension)),
+        }
+    draw = np.random.default_rng(975)
+    component = draw.choice(3, size=100_000, p=[0.3, 0.3, 0.4])
+    observations = draw.normal(
+        np.array([-4.0, 0.0, 5.0])[component], np.array([1.0, 1.5, 1.0])[component]
+    )
+    centre = np.array([0.0, 0.3, -3.0, 0.5, 4.0, 0.2, 0.0, 0.3])
+    return {
+        "observations": observations,
+        "n_components": np.asarray(3),
+        "points": centre + 0.05 * rng.normal(size=(100, 8)),
+    }
+
+
 def _cut_inputs(side: int) -> dict[str, np.ndarray]:
     """The Rust cut's arrays for `lattice_rung(side, 2, seed=973)`."""
     rung = lattice_rung(side, 2, seed=973)
@@ -361,3 +418,20 @@ def test_hmc_fits_blackjaxs_memory(dimension: int) -> None:
     }
     peaks = [package("hmc_sample", inputs).peak_bytes or 0 for _ in range(3)]
     assert_fits(int(np.median(peaks)), BLACKJAX_HMC_MEMORY[dimension])
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("case", sorted(JAX_GRADIENT))
+def test_the_gradient_meets_jaxs_runtime(case: str) -> None:
+    inputs = _gradient_inputs(case)
+    runs = [package("gradient", inputs) for _ in range(3)]
+    per_point = float(np.median([float(run.outputs["per_point"]) for run in runs]))
+    assert_meets(per_point, JAX_GRADIENT[case])
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("case", sorted(JAX_GRADIENT_MEMORY))
+def test_the_gradient_fits_jaxs_memory(case: str) -> None:
+    inputs = _gradient_inputs(case)
+    peaks = [package("gradient", inputs).peak_bytes or 0 for _ in range(3)]
+    assert_fits(int(np.median(peaks)), JAX_GRADIENT_MEMORY[case])
