@@ -201,6 +201,16 @@ def beta_binomial_parameters(
     margin: float,
     out: np.ndarray,
 ) -> None: ...
+def expansion_source_side(
+    first: np.ndarray,
+    second: np.ndarray,
+    coupling: np.ndarray,
+    values: np.ndarray,
+    n_states: int,
+    labels: np.ndarray,
+    alpha: int,
+    pinned: float,
+) -> np.ndarray: ...
 def ragged_posteriors(
     log_density: np.ndarray,
     lengths: np.ndarray,

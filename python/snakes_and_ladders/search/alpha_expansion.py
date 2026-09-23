@@ -153,12 +153,16 @@ class _CutMove(NamedTuple):
         the move's.
     place : Callable[[np.ndarray], np.ndarray]
         The cut's source-side mask to the labelling it proposes.
+    solved : Callable[[], np.ndarray] | None
+        The source side from a kernel that builds and cuts the network itself
+        (issue #935), for the Rust route; ``arcs`` is then ``None``.
     """
 
-    arcs: _Arcs
+    arcs: _Arcs | None
     source: int
     sink: int
     place: Callable[[np.ndarray], np.ndarray]
+    solved: Callable[[], np.ndarray] | None = None
 
 
 def _rust_source_side(arcs: _Arcs, source: int, sink: int) -> np.ndarray:
@@ -236,11 +240,15 @@ def _lowest_by_cut(
     if built is None:
         return Labelling(labelling, energy(graph, values, labelling))
 
-    source_side = (
-        _rust_source_side(built.arcs, built.source, built.sink)
-        if backend is Backend.RUST
-        else max_flow(built.arcs.network(), built.source, built.sink).source_side
-    )
+    if built.solved is not None:
+        source_side = built.solved()
+    else:
+        assert built.arcs is not None
+        source_side = (
+            _rust_source_side(built.arcs, built.source, built.sink)
+            if backend is Backend.RUST
+            else max_flow(built.arcs.network(), built.source, built.sink).source_side
+        )
     proposed = built.place(source_side)
 
     current, candidate = (
@@ -499,6 +507,33 @@ def expand(
     _check_cut_backend(backend, "alpha expansion")
 
     def build(values: np.ndarray) -> _CutMove | None:
+        if backend is Backend.RUST:
+            # The kernel builds the network `_expansion_arcs` lays out, arc for
+            # arc, and cuts it in one call: no arc array crosses (issue #935).
+            first, second, coupling = graph.endpoints
+
+            def solved() -> np.ndarray:
+                side = oxi_snakes_and_ladders.expansion_source_side(
+                    np.ascontiguousarray(first, dtype=np.int64),
+                    np.ascontiguousarray(second, dtype=np.int64),
+                    np.ascontiguousarray(coupling, dtype=np.float64),
+                    np.ascontiguousarray(values, dtype=np.float64).reshape(-1),
+                    values.shape[1],
+                    np.ascontiguousarray(labelling, dtype=np.int64),
+                    alpha,
+                    _infinite_capacity(graph, values),
+                )
+                return np.asarray(side, dtype=bool)
+
+            return _CutMove(
+                arcs=None,
+                source=graph.n_nodes,
+                sink=graph.n_nodes + 1,
+                place=lambda source_side: np.where(
+                    ~source_side[: graph.n_nodes], alpha, labelling
+                ),
+                solved=solved,
+            )
         return _CutMove(
             arcs=_expansion_arcs(graph, values, labelling, alpha),
             source=graph.n_nodes,
