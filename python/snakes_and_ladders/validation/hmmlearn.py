@@ -112,7 +112,7 @@ def family_baum_welch(
 
 
 @dataclass(frozen=True)
-class Decoding:
+class ViterbiPaths:
     """hmmlearn's Viterbi path and its joint log-probability."""
 
     states: np.ndarray
@@ -128,7 +128,7 @@ def viterbi(
     initial: np.ndarray,
     transition: np.ndarray,
     emission: dict[str, np.ndarray],
-) -> Decoding:
+) -> ViterbiPaths:
     """hmmlearn's Viterbi at the given parameters (issue #997).
 
     ``emission`` is as :func:`family_baum_welch` takes it, or
@@ -149,7 +149,7 @@ def viterbi(
         },
     )
     out = result.outputs
-    return Decoding(
+    return ViterbiPaths(
         out["states"],
         float(out["log_probability"]),
         result.seconds,
