@@ -82,36 +82,39 @@ def least_squares_lengths(
     distances: Mapping[frozenset[str], float],
     *,
     n_iterations: int = 20,
-) -> torch.Tensor:
+) -> np.ndarray:
     """Non-negative branch lengths whose path lengths best fit ``distances``, in ``branch_order``.
 
     The unconstrained least-squares solution clamped to non-negative, then
     ``n_iterations`` of projected gradient on the convex objective. Any
     non-negative lengths are a feasible point of the fit, which is what
     makes :class:`PlugInLikelihood` a bound; the refinement only tightens it.
+
+    NumPy, since no derivative is taken through the fit: the lengths are a
+    function of float distances alone. ``numpy.linalg.lstsq`` (LAPACK
+    ``gelsd``) returns one answer bitwise on repeated calls, where
+    ``torch.linalg.lstsq``'s CPU default ``gelsy`` returned up to 42
+    ulp-different answers in 1,000 calls on one 10x7 system (issue #1026).
     """
     splits = branch_splits(topology)
     pairs = list(distances)
-    rows = np.zeros((len(pairs), len(splits)))
+    design = np.zeros((len(pairs), len(splits)))
     for row, pair in enumerate(pairs):
         first, second = tuple(pair)
         for column, split in enumerate(splits):
             if (first in split) != (second in split):
-                rows[row, column] = 1.0
-    design = torch.as_tensor(rows)
-    target = torch.as_tensor([distances[pair] for pair in pairs], dtype=torch.float64)
-    lengths = torch.clamp(
-        torch.linalg.lstsq(design, target[:, None]).solution[:, 0], min=1e-6
-    )
-    step = 1.0 / float(torch.linalg.matrix_norm(design, ord=2) ** 2)
+                design[row, column] = 1.0
+    target = np.array([distances[pair] for pair in pairs], dtype=np.float64)
+    lengths = np.maximum(np.linalg.lstsq(design, target, rcond=None)[0], 1e-6)
+    step = 1.0 / float(np.linalg.norm(design, ord=2) ** 2)
     for _ in range(n_iterations):
         gradient = design.T @ (design @ lengths - target)
-        lengths = torch.clamp(lengths - step * gradient, min=1e-6)
+        lengths = np.maximum(lengths - step * gradient, 1e-6)
     return lengths
 
 
 def least_squares_residual(
-    topology: Topology, distances: Mapping[frozenset[str], float], lengths: torch.Tensor
+    topology: Topology, distances: Mapping[frozenset[str], float], lengths: np.ndarray
 ) -> float:
     """``sum (path length - distance)^2`` at the given lengths: how tree-like the distances are."""
     splits = branch_splits(topology)
@@ -144,7 +147,9 @@ class PlugInLikelihood(Surrogate):
     def lengths(
         self, topology: Topology, alignment: Mapping[str, np.ndarray]
     ) -> torch.Tensor:
-        return least_squares_lengths(topology, jc_distances(alignment, self.k))
+        return torch.from_numpy(
+            least_squares_lengths(topology, jc_distances(alignment, self.k))
+        )
 
     def __call__(self, structure: object, data: object) -> torch.Tensor:
         topology, alignment = _tree_arguments(structure, data)

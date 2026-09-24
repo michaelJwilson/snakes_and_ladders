@@ -483,7 +483,9 @@ class BlockFrequencyBound(Surrogate):
         self, topology: Topology, alignment: Mapping[str, np.ndarray]
     ) -> torch.Tensor:
         """The feasible branch lengths the interval is evaluated at."""
-        return least_squares_lengths(topology, jc_distances(alignment, self.k))
+        return torch.from_numpy(
+            least_squares_lengths(topology, jc_distances(alignment, self.k))
+        )
 
     def interval(
         self, topology: Topology, alignment: Mapping[str, np.ndarray]
