@@ -36,15 +36,18 @@ nine sites, and the dual bound's certificate where neither reaches.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import numpy as np
-import torch
 
 from snakes_and_ladders import oxisal
 from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.opt.termination import Termination
 from snakes_and_ladders.sim.graph import CompressedAdjacency, PottsGraph
 from snakes_and_ladders.sim.potts import energy, site_field
+
+if TYPE_CHECKING:
+    import torch
 
 #: Ramp end and integration step of the ballistic dynamics, Goto et al. (2021)'s
 #: values; the ramp ``a(t)`` runs from zero to ``A_END`` over the declared steps.
@@ -164,6 +167,8 @@ def _integrate_torch(
     discrete: bool,
 ) -> torch.Tensor:
     """The same update over tensors, operation for operation, on ``x.device``."""
+    import torch
+
     y = torch.zeros_like(x)
     weights = couplings[:, None]
     for step in range(steps):
@@ -296,6 +301,8 @@ def simulated_bifurcation(
                 discrete=discrete,
             )
         else:
+            import torch
+
             final = (
                 _integrate_torch(
                     torch.as_tensor(rows, device=device),
