@@ -164,7 +164,7 @@ def test_a_warm_chain_is_charged_its_descent_and_its_anneal(move: PottsMove) -> 
     rng = np.random.default_rng([0, 0])
     labelling, _ = descend(rung, rng, budget.size // rung.visits_per_sweep)
     anneal = run_annealed(
-        rung, remaining, rng, move, schedule=schedule, initial=labelling
+        rung, remaining, rng, move, schedule=schedule, start=labelling
     )
     assert warm.spent == descent + anneal.spent
     assert warm.energy == anneal.energy

@@ -1,0 +1,1 @@
+Made `main` green: `test_no_compressed_store_is_built_outside_the_incidence_seam` pins 12 consumers of the compressed-incidence seam; `qa/potts_clusters.py` (#1041) is the twelfth and had not moved the pin.
