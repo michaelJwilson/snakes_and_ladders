@@ -1,0 +1,1 @@
+Made `main` green: `docs/nb/data/potts_clusters.json` is regenerated (the `arms` part of `qa.potts_clusters`) under the edge sum #1044 introduced, so `potts_starts.ipynb`'s exact checks against it hold again; every recorded energy moved by at most 8.2e-11 absolute (8e-15 relative) and no labelling, visit count or verdict changed.
