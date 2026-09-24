@@ -24,7 +24,7 @@ from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.learn.rollout import greedy_rollout
 from snakes_and_ladders.learn.tree import RewardModel, TreeEnvironment
 from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import MoveSet, Topology, enumerate_topologies
 from snakes_and_ladders.sim.tree import edges
 
@@ -58,13 +58,7 @@ def params() -> SimulationParams:
 
 @pytest.fixture(scope="module")
 def alignment(params: SimulationParams) -> dict[str, np.ndarray]:
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=params.n_sites,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed))
     return dict(dataset.alignment)
 
 

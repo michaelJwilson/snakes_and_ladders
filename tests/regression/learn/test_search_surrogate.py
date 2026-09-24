@@ -45,7 +45,7 @@ from snakes_and_ladders.likelihood.surrogate import (
 )
 from snakes_and_ladders.search.infer import infer
 from snakes_and_ladders.sim.fixtures import baseline
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import (
     MoveSet,
     Topology,
@@ -63,12 +63,8 @@ def _alignments(n: int) -> tuple[list[dict[str, np.ndarray]], int, np.ndarray]:
     params = load_fixture(FIVE_TAXA)
     alignments = [
         dict(
-            simulate_alignment(
-                params.tau,
-                params.k,
-                params.pi,
-                np.random.default_rng(1000 + seed),
-                N_SITES,
+            simulate_tree(
+                params, np.random.default_rng(1000 + seed), n_sites=N_SITES
             ).alignment
         )
         for seed in range(n)
@@ -252,8 +248,8 @@ def test_surrogate_ranked_search_reaches_what_the_full_search_reaches() -> None:
     # the small-sites fixture with fewer fits and no lazy evaluations.
     params = load_fixture(SMALL_SITES)
     alignment = dict(
-        simulate_alignment(
-            params.tau, params.k, params.pi, np.random.default_rng(params.seed), 2000
+        simulate_tree(
+            params, np.random.default_rng(params.seed), n_sites=2000
         ).alignment
     )
     k, pi = params.k, np.asarray(params.pi)

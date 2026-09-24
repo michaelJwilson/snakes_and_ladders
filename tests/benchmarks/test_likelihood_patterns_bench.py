@@ -20,7 +20,7 @@ from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders.likelihood import pruning, pruning_rust, pruning_torch
 from snakes_and_ladders.likelihood.patterns import compress
 from snakes_and_ladders.likelihood.pruning_torch import branch_lengths_from_tree
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 
 from tests._fixtures import load_fixture
 
@@ -38,13 +38,7 @@ def test_pruning_over_patterns_benchmark(
 ) -> None:
     params = load_fixture(fixture_name)
     alignment = dict(
-        simulate_alignment(
-            tau=params.tau,
-            k=params.k,
-            pi=params.pi,
-            rng=np.random.default_rng(params.seed),
-            n_sites=params.n_sites,
-        ).alignment
+        simulate_tree(params, np.random.default_rng(params.seed)).alignment
     )
     patterns = compress(alignment)
     columns = patterns.alignment if compressed else alignment

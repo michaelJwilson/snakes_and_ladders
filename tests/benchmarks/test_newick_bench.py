@@ -14,7 +14,7 @@ from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.sim.newick import to_newick
 from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 
 from tests._fixtures import FIXTURES_DIR
 
@@ -31,13 +31,7 @@ def test_to_newick_with_states_benchmark(
     benchmark: BenchmarkFixture, fixture_name: str
 ) -> None:
     params = load_params(FIXTURES_DIR / fixture_name, SimulationParams)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=10,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=10)
 
     labelled = benchmark(to_newick, dataset.tau, dataset.node_states, 0)
 

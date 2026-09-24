@@ -22,6 +22,7 @@ from typing import Any
 
 import numpy as np
 
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.validation.runner import run
 
 #: The script this adapter runs.
@@ -80,17 +81,10 @@ def build(spec: Spec) -> tuple[Any, int]:
     from snakes_and_ladders.fixtures import load_params
     from snakes_and_ladders.learn.tree import RewardModel, TreeEnvironment
     from snakes_and_ladders.sim.params import SimulationParams
-    from snakes_and_ladders.sim.simulate import simulate_alignment
     from snakes_and_ladders.sim.topology import MoveSet
 
     params = load_params(Path(spec.fixture), SimulationParams)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=params.n_sites,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed))
     tree = TreeEnvironment(
         dict(dataset.alignment),
         params.k,

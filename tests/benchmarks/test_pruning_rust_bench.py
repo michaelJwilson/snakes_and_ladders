@@ -27,6 +27,7 @@ from snakes_and_ladders.likelihood import pruning, pruning_rust
 from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
 from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import random_topology
 from snakes_and_ladders.sim.tree import Node
 
@@ -45,13 +46,7 @@ def test_rust_log_likelihood_benchmark(
     benchmark: BenchmarkFixture, fixture_name: str
 ) -> None:
     params = load_params(FIXTURES_DIR / fixture_name, SimulationParams)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=params.n_sites,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed))
 
     result = benchmark(
         pruning_rust.log_likelihood, params.tau, params.k, params.pi, dataset.alignment
@@ -66,13 +61,7 @@ def test_rust_log_likelihood_benchmark(
 def test_numpy_vs_rust_forward_pass(benchmark: BenchmarkFixture) -> None:
     """Rust forward pass against the NumPy reference at a fixed size (report both)."""
     params = load_params(FIXTURES_DIR / "tree_jc/ci.yaml", SimulationParams)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=params.n_sites,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed))
 
     numpy_result = pruning.log_likelihood(
         params.tau, params.k, params.pi, dataset.alignment

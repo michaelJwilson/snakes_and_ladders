@@ -25,7 +25,7 @@ from snakes_and_ladders.sim.newick import (
     validate_unrooted_newick,
 )
 from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import FIXTURES_DIR
@@ -92,13 +92,7 @@ def test_count_topologies_rejects_non_positive_n_taxa() -> None:
 @pytest.mark.smoke
 def test_validate_newick_accepts_a_simulated_binary_tree() -> None:
     params = load_params(BINARY_FIXTURE, SimulationParams)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=10,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=10)
 
     assert validate_newick(dataset.newick)
 
@@ -106,13 +100,7 @@ def test_validate_newick_accepts_a_simulated_binary_tree() -> None:
 @pytest.mark.smoke
 def test_validate_newick_rejects_a_trifurcating_root() -> None:
     params = load_params(FIXTURE, SimulationParams)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=10,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=10)
 
     assert not validate_newick(dataset.newick)
 
@@ -120,13 +108,7 @@ def test_validate_newick_rejects_a_trifurcating_root() -> None:
 @pytest.mark.oracle
 def test_to_newick_with_node_states_round_trips_ancestor_labels() -> None:
     params = load_params(BINARY_FIXTURE, SimulationParams)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=10,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=10)
 
     labelled = to_newick(dataset.tau, dataset.node_states, site=0)
 
@@ -169,13 +151,7 @@ def test_validate_newick_accepts_branch_lengths_and_internal_labels() -> None:
 @pytest.mark.smoke
 def test_validate_unrooted_newick_accepts_a_trifurcating_root() -> None:
     params = load_params(FIXTURE, SimulationParams)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=10,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=10)
 
     assert validate_unrooted_newick(dataset.newick)
 
