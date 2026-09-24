@@ -24,7 +24,7 @@ class GaussianTarget(Objective):
 
     @property
     def gaussian_precision(self) -> torch.Tensor:
-        """``P``, which declares this a :class:`~snakes_and_ladders.sample.hmc.DeclaredGaussian`."""
+        """``P``, which declares this a :class:`~snakes_and_ladders.sample.declared.DeclaredGaussian`."""
         return self.precision
 
     @property

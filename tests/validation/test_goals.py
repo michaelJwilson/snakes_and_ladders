@@ -30,7 +30,7 @@ from snakes_and_ladders.learn.surrogate import (
 )
 from snakes_and_ladders.opt.hmm import GaussianHmmObjective, baum_welch
 from snakes_and_ladders.opt.mixture import expectation_maximization
-from snakes_and_ladders.sample import hmc
+from snakes_and_ladders.sample import hmc, metropolis
 from snakes_and_ladders.sample.potts_mcmc import _bond_probability
 from snakes_and_ladders.search.alpha_expansion import alpha_expansion
 from snakes_and_ladders.search.ground_state import lattice_rung
@@ -1176,3 +1176,170 @@ def test_the_gradient_fits_jaxs_memory(case: str) -> None:
     inputs = _gradient_inputs(case)
     peaks = [package("gradient", inputs).peak_bytes or 0 for _ in range(3)]
     assert_fits(int(np.median(peaks)), JAX_GRADIENT_MEMORY[case])
+
+
+#: The random-walk targets (#1006): name, dimension, the harness's target
+#: inputs, the start and the step. The Gaussian is `diagonal_precision(d)`
+#: from the origin at 1.2 / sqrt(d); Rosenbrock's function at a = 1, b = 100
+#: from every coordinate at -1.2 at 0.06 / sqrt(d).
+RWM_TARGETS = {
+    **{
+        f"gaussian-{d}": (
+            {"target": np.asarray(0), "precision": diagonal_precision(d)},
+            np.zeros(d),
+            1.2 / np.sqrt(d),
+        )
+        for d in (100, 1_000, 10_000)
+    },
+    **{
+        f"rosenbrock-{d}": (
+            {"target": np.asarray(1), "constants": np.asarray([1.0, 100.0])},
+            np.full(d, -1.2),
+            0.06 / np.sqrt(d),
+        )
+        for d in (10, 100)
+    },
+}
+
+_RWM_MEASURED = "2026-09-24, 4-core reference host at a 1-minute load of 0.6-1.9, #1006"
+
+#: BlackJAX's `additive_step_random_walk` with a normal step at the same
+#: scale, compiled, compilation excluded, the medians of three subprocess
+#: runs in `test_rwm_blackjax_bench.py`: 1,000 transitions, and 2,000 for
+#: the warm-up row, which the package spends as 1,000 warm-up proposals and
+#: 1,000 draws (BlackJAX has no random-walk warm-up, so its figure is the
+#: same number of proposals at a fixed step).
+BLACKJAX_RWM = {
+    name: Goal(
+        "blackjax", f"1,000 random-walk transitions, {name}", seconds, _RWM_MEASURED
+    )
+    for name, seconds in (
+        ("gaussian-100", 0.00977),
+        ("gaussian-1000", 0.03877),
+        ("gaussian-10000", 0.30202),
+        ("rosenbrock-10", 0.00559),
+        ("rosenbrock-100", 0.00964),
+    )
+}
+
+BLACKJAX_RWM_WARMUP = {
+    name: Goal(
+        "blackjax",
+        f"1,000 warm-up proposals and 1,000 random-walk transitions, {name}",
+        seconds,
+        _RWM_MEASURED,
+    )
+    for name, seconds in (
+        ("gaussian-100", 0.01846),
+        ("gaussian-1000", 0.08108),
+        ("gaussian-10000", 0.57001),
+        ("rosenbrock-10", 0.01147),
+        ("rosenbrock-100", 0.01894),
+    )
+}
+
+#: Stored, both sides hold the same `n x d` doubles, so this goal is bounded
+#: near 1.0x as `BLACKJAX_HMC_MEMORY`'s is.
+BLACKJAX_RWM_MEMORY = {
+    name: MemoryGoal(
+        "blackjax",
+        f"1,000 random-walk transitions, {name}, the chain stored",
+        peak_bytes,
+        _RWM_MEASURED,
+    )
+    for name, peak_bytes in (
+        ("gaussian-100", 823_296),
+        ("gaussian-1000", 8_052_736),
+        ("gaussian-10000", 80_261_120),
+        ("rosenbrock-10", 90_112),
+        ("rosenbrock-100", 815_104),
+    )
+}
+
+#: No draw kept: BlackJAX's first call, compilation and the buffers XLA keeps
+#: included, as `BLACKJAX_HMC_CHAIN_FREE_MEMORY`'s are (#997).
+BLACKJAX_RWM_CHAIN_FREE_MEMORY = {
+    name: MemoryGoal(
+        "blackjax",
+        f"1,000 random-walk transitions, {name}, no draws kept",
+        peak_bytes,
+        f"{_RWM_MEASURED}, first call, compilation included",
+    )
+    for name, peak_bytes in (
+        ("gaussian-100", 33_366_016),
+        ("gaussian-1000", 31_137_792),
+        ("gaussian-10000", 27_283_456),
+        ("rosenbrock-10", 22_724_608),
+        ("rosenbrock-100", 29_630_464),
+    )
+}
+
+#: Seconds per effective sample, the slowest coordinate's: 20,000 transitions
+#: on `gaussian-100`, 0.186 s for an effective size of 15.3 (#1006). A chain
+#: faster per step that mixes worse has not met this.
+BLACKJAX_RWM_PER_EFFECTIVE_SAMPLE = Goal(
+    "blackjax",
+    "seconds per effective sample, 20,000 random-walk transitions, gaussian-100",
+    0.18597 / 15.2825,
+    _RWM_MEASURED,
+)
+
+
+def _rwm_inputs(name: str, *, warmup: int, store_chain: bool) -> dict[str, np.ndarray]:
+    """The harness's inputs for the random-walk goals."""
+    target, position, step = RWM_TARGETS[name]
+    return {
+        **target,
+        "position": position,
+        "step_size": np.asarray(step),
+        "n_draws": np.asarray(1_000),
+        "seed": np.asarray(1006),
+        "warmup": np.asarray(warmup),
+        "store_chain": np.asarray(store_chain),
+    }
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("name", sorted(BLACKJAX_RWM))
+def test_random_walk_meets_blackjaxs_runtime(name: str) -> None:
+    inputs = _rwm_inputs(name, warmup=0, store_chain=True)
+    seconds = [package("random_walk_sample", inputs).seconds for _ in range(3)]
+    assert_meets(float(np.median(seconds)), BLACKJAX_RWM[name])
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("name", sorted(BLACKJAX_RWM_WARMUP))
+def test_random_walk_with_its_warm_up_meets_blackjaxs_runtime(name: str) -> None:
+    inputs = _rwm_inputs(name, warmup=1_000, store_chain=True)
+    seconds = [package("random_walk_sample", inputs).seconds for _ in range(3)]
+    assert_meets(float(np.median(seconds)), BLACKJAX_RWM_WARMUP[name])
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("name", sorted(BLACKJAX_RWM_MEMORY))
+def test_random_walk_fits_blackjaxs_memory(name: str) -> None:
+    inputs = _rwm_inputs(name, warmup=0, store_chain=True)
+    peaks = [package("random_walk_sample", inputs).peak_bytes or 0 for _ in range(3)]
+    assert_fits(int(np.median(peaks)), BLACKJAX_RWM_MEMORY[name])
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("name", sorted(BLACKJAX_RWM_CHAIN_FREE_MEMORY))
+def test_random_walk_without_its_chain_fits_blackjaxs_memory(name: str) -> None:
+    inputs = _rwm_inputs(name, warmup=0, store_chain=False)
+    peaks = [package("random_walk_sample", inputs).peak_bytes or 0 for _ in range(3)]
+    assert_fits(int(np.median(peaks)), BLACKJAX_RWM_CHAIN_FREE_MEMORY[name])
+
+
+@pytest.mark.experiment
+def test_random_walk_meets_blackjaxs_seconds_per_effective_sample() -> None:
+    target = GaussianTarget(diagonal_precision(100))
+
+    def chain() -> hmc.Chain:
+        return metropolis.random_walk(
+            target, torch.Generator().manual_seed(1006), 20_000, step_size=0.12
+        )
+
+    seconds = median_seconds(chain, repeats=3)
+    size = float(hmc.effective_sample_size(chain().draws).min())
+    assert_meets(seconds / size, BLACKJAX_RWM_PER_EFFECTIVE_SAMPLE)

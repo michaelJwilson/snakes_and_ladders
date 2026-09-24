@@ -21,6 +21,7 @@ pub mod bk;
 pub mod count_mstep;
 pub mod count_pairs;
 pub mod coupled;
+pub mod energy;
 pub mod hmc_gaussian;
 pub mod hmm_decode;
 pub mod hmm_stream;
@@ -29,6 +30,7 @@ pub mod maxflow;
 #[cfg(feature = "sandbox")]
 pub mod maxflow_declined;
 pub mod message_passing;
+pub mod metropolis;
 pub mod mixture_stream;
 pub mod potts;
 pub mod pruning;
@@ -116,6 +118,7 @@ fn oxisal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(gaussian_hmc, m)?)?;
     m.add_function(wrap_pyfunction!(gaussian_leapfrog, m)?)?;
     m.add_function(wrap_pyfunction!(bond_roots, m)?)?;
+    m.add_class::<metropolis::MetropolisWalk>()?;
     Ok(())
 }
 

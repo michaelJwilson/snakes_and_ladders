@@ -33,6 +33,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import numpy as np
 import torch
 
 #: The largest ``|phi|`` the estimate uses: at 0.999 the long-run variance is
@@ -71,6 +72,24 @@ class KalmanMean:
         self._first: torch.Tensor | None = None
         self._last: torch.Tensor | None = None
 
+    @classmethod
+    def from_statistics(
+        cls,
+        n: int,
+        sums: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+    ) -> KalmanMean:
+        """A filter holding statistics kept elsewhere: ``n``, the sums of ``y``, ``y^2``, ``y_t y_(t-1)``, and the first and last ``y``.
+
+        What a compiled chain hands back instead of its draws (issue #1006).
+        """
+        kalman = cls()
+        if n:
+            total, squares, lagged, first, last = (torch.from_numpy(v) for v in sums)
+            kalman.n = n
+            kalman._sum, kalman._squares, kalman._lagged = total, squares, lagged
+            kalman._first, kalman._last = first, last
+        return kalman
+
     def update(self, value: torch.Tensor) -> None:
         """Take one observation, of any fixed shape."""
         y = torch.as_tensor(value, dtype=torch.float64).detach().reshape(-1)
@@ -88,6 +107,33 @@ class KalmanMean:
             self._lagged += y * self._last
         self._last = y.clone()
         self.n += 1
+
+    def update_block(self, values: torch.Tensor) -> None:
+        """Take ``values.shape[0]`` observations at once, in order (issue #1006).
+
+        The sums :meth:`update` keeps, formed over the block in one pass, so
+        a compiled chain handing back draws in blocks is observed as it would
+        be one draw at a time --- to rounding in the summation order, not
+        bitwise.
+        """
+        y = torch.as_tensor(values, dtype=torch.float64).detach()
+        y = y.reshape(y.shape[0], -1)
+        if y.shape[0] == 0:
+            return
+        if self._last is None:
+            self.update(y[0])
+            y = y[1:]
+            if y.shape[0] == 0:
+                return
+        assert self._sum is not None
+        assert self._squares is not None
+        assert self._lagged is not None
+        assert self._last is not None
+        self._sum += y.sum(dim=0)
+        self._squares += (y * y).sum(dim=0)
+        self._lagged += y[0] * self._last + (y[1:] * y[:-1]).sum(dim=0)
+        self._last = y[-1].clone()
+        self.n += int(y.shape[0])
 
     def estimate(self) -> Expectation:
         """The filter's posterior at the ``phi`` the stream so far gives.

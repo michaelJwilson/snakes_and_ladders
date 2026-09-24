@@ -29,7 +29,7 @@ pub enum Precision<'a> {
 }
 
 impl Precision<'_> {
-    fn dimension(&self) -> usize {
+    pub(crate) fn dimension(&self) -> usize {
         match self {
             Precision::Diagonal(p) => p.len(),
             Precision::Dense(_, d) => *d,
@@ -38,7 +38,7 @@ impl Precision<'_> {
 
     /// `out = P x`.
     #[inline]
-    fn force(&self, x: &[f64], out: &mut [f64]) {
+    pub(crate) fn force(&self, x: &[f64], out: &mut [f64]) {
         match self {
             Precision::Diagonal(p) => {
                 for ((o, &pi), &xi) in out.iter_mut().zip(p.iter()).zip(x) {
@@ -54,7 +54,7 @@ impl Precision<'_> {
     }
 
     /// `x' P x / 2`.
-    fn potential(&self, x: &[f64], scratch: &mut [f64]) -> f64 {
+    pub(crate) fn potential(&self, x: &[f64], scratch: &mut [f64]) -> f64 {
         self.force(x, scratch);
         0.5 * x
             .iter()
@@ -158,7 +158,10 @@ pub fn chain(
     })
 }
 
-fn precision_of<'a>(values: &'a [f64], dimension: usize) -> Result<Precision<'a>, String> {
+pub(crate) fn precision_of<'a>(
+    values: &'a [f64],
+    dimension: usize,
+) -> Result<Precision<'a>, String> {
     if values.len() == dimension {
         Ok(Precision::Diagonal(values))
     } else if values.len() == dimension * dimension {
