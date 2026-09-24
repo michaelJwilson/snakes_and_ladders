@@ -19,7 +19,6 @@ import pytest
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.search.alpha_expansion import (
     UNIFORM_POTTS_BOUND,
-    SweepOrder,
     _expansion_network,
     _infinite_capacity,
     _swap_arcs,
@@ -27,9 +26,9 @@ from snakes_and_ladders.search.alpha_expansion import (
     alpha_beta_swap,
     alpha_expansion,
     expand,
-    iterated_conditional_modes,
     swap,
 )
+from snakes_and_ladders.search.icm import iterated_conditional_modes
 from snakes_and_ladders.search.maxflow import FlowNetwork, ising_ground_state
 from snakes_and_ladders.sim.graph import (
     BoundaryCondition,
@@ -155,27 +154,6 @@ def test_expansion_beats_single_site_descent_past_enumeration() -> None:
         assert expansion < descent
 
 
-@pytest.mark.analytic
-def test_single_site_descent_settles_at_a_local_minimum() -> None:
-    # A baseline that stopped early would make beating it say nothing. On
-    # termination no single site can improve, which defines the move set it
-    # represents.
-    rng = np.random.default_rng(21)
-    graph = lattice_graph((5, 5), BoundaryCondition.OPEN, 0.9)
-    field_values = rng.normal(size=(graph.n_nodes, 3))
-
-    labelling, settled = iterated_conditional_modes(
-        graph, field_values, 3, np.random.default_rng(1)
-    )
-
-    for node in range(graph.n_nodes):
-        for label in range(3):
-            candidate = labelling.copy()
-            candidate[node] = label
-
-            assert energy(graph, field_values, candidate) >= settled - 1e-12
-
-
 @pytest.mark.critical
 @pytest.mark.oracle
 def test_a_zero_coupling_problem_is_solved_exactly_by_the_data_term() -> None:
@@ -228,77 +206,6 @@ def test_an_already_optimal_start_makes_no_moves() -> None:
 
     assert again.moves == 0
     assert again.energy == pytest.approx(settled.energy, abs=1e-12)
-
-
-# --- the compiled descent kernel -----------------------------------------------
-
-
-@pytest.mark.critical
-@pytest.mark.oracle
-def test_the_numba_descent_reproduces_the_python_one_bitwise() -> None:
-    # Same update, order and tie rule (#264): identical, not close. A rugged
-    # per-node field makes the start decide the optimum; 20 of 20 agree at 32x32.
-    def check(seed: int) -> None:
-        graph = lattice_graph((8, 8), BoundaryCondition.PERIODIC, 0.5)
-        field = np.random.default_rng(100 + seed).normal(size=(graph.n_nodes, 3))
-
-        python = iterated_conditional_modes(
-            graph, field, 3, np.random.default_rng(seed), backend=Backend.PYTHON
-        )
-        compiled = iterated_conditional_modes(
-            graph, field, 3, np.random.default_rng(seed), backend=Backend.NUMBA
-        )
-
-        assert np.array_equal(python.labelling, compiled.labelling)
-        assert python.energy == compiled.energy
-
-    every_value(range(6), check)
-
-
-@pytest.mark.critical
-@pytest.mark.oracle
-@pytest.mark.parametrize("sweep_order", [SweepOrder.RANDOM, SweepOrder.INDEX])
-def test_the_numba_descent_in_any_order_every_sweep_run_is_the_python_one(
-    sweep_order: SweepOrder,
-) -> None:
-    # Issue #923: ICM in a random order with every sweep run, the heat bath
-    # at T = 0 (`ground_state.run_icm_random`). The compiled sweep takes the
-    # permutations the Python sweep draws, in its order, so the labelling,
-    # the energy and the generator's state after are the Python sweep's.
-    def check(seed: int) -> None:
-        graph = lattice_graph((8, 8), BoundaryCondition.PERIODIC, 0.5)
-        field = np.random.default_rng(300 + seed).normal(size=(graph.n_nodes, 3))
-        streams = [np.random.default_rng(seed) for _ in range(2)]
-        python, compiled = (
-            iterated_conditional_modes(
-                graph,
-                field,
-                3,
-                stream,
-                max_sweeps=12,
-                sweep_order=sweep_order,
-                stop_when_clean=False,
-                backend=backend,
-            )
-            for stream, backend in zip(
-                streams, (Backend.PYTHON, Backend.NUMBA), strict=True
-            )
-        )
-        assert np.array_equal(python.labelling, compiled.labelling)
-        assert python.energy == compiled.energy
-        assert streams[0].integers(1 << 62) == streams[1].integers(1 << 62)
-
-    every_value(range(6), check)
-
-
-@pytest.mark.smoke
-def test_descent_has_no_rust_backend() -> None:
-    graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.5)
-
-    with pytest.raises(ValueError, match="runs on numba or python, not rust"):
-        iterated_conditional_modes(
-            graph, np.zeros(3), 3, np.random.default_rng(0), backend=Backend.RUST
-        )
 
 
 @pytest.mark.critical
@@ -407,118 +314,6 @@ def test_the_vectorized_network_holds_on_a_graph_that_is_not_a_lattice() -> None
             assert built.target == wanted.target
             assert built.capacity == wanted.capacity
             assert built.outgoing == wanted.outgoing
-
-
-def _recomputing_descent(
-    graph: PottsGraph,
-    values: np.ndarray,
-    n_states: int,
-    rng: np.random.Generator,
-    start: np.ndarray,
-) -> np.ndarray:
-    """The loop `search.spatio_sequential.label_step` ran, kept as the sweep's oracle.
-
-    A full energy per candidate label: the same argmin as the local delta, the long way.
-    """
-    current = np.asarray(start, dtype=np.int64).copy()
-    best = energy(graph, values, current)
-    for _ in range(200):
-        moved = False
-        for node in rng.permutation(graph.n_nodes):
-            for label in range(n_states):
-                if label == current[node]:
-                    continue
-                trial = current.copy()
-                trial[node] = label
-                value = energy(graph, values, trial)
-                if value < best - 1e-12:
-                    best, current, moved = value, trial, True
-        if not moved:
-            break
-    return current
-
-
-@pytest.mark.critical
-@pytest.mark.oracle
-def test_the_local_delta_sweep_is_the_recomputing_descent() -> None:
-    # What lets `label_step` call the sweep (#858): the same site order from
-    # the same start, and the argmin read off the site's own field and
-    # incident edges rather than off `O(n_edges)` of energy per candidate.
-    # Realized: 6 of 6 seeds agree site for site, at 3 labels on 36 sites.
-    def check(seed: int) -> None:
-        graph = lattice_graph((6, 6), BoundaryCondition.OPEN, 0.7)
-        field = np.random.default_rng(700 + seed).normal(size=(graph.n_nodes, 3))
-        start = np.random.default_rng(seed).integers(0, 3, size=graph.n_nodes)
-
-        swept, _ = iterated_conditional_modes(
-            graph,
-            field,
-            3,
-            np.random.default_rng(seed),
-            start=start,
-            sweep_order=SweepOrder.RANDOM,
-            backend=Backend.PYTHON,
-        )
-        recomputed = _recomputing_descent(
-            graph,
-            site_field(field, graph.n_nodes),
-            3,
-            np.random.default_rng(seed),
-            start,
-        )
-
-        assert np.array_equal(swept, recomputed)
-
-    every_value(range(6), check)
-
-
-@pytest.mark.analytic
-def test_a_random_order_runs_every_sweep_when_a_clean_one_does_not_end_it() -> None:
-    # Gibbs at T = 0 is charged a fixed budget, so it spends every sweep; the
-    # descent is still monotone, since each visit takes an argmin.
-    graph = lattice_graph((5, 5), BoundaryCondition.PERIODIC, 0.9)
-    field = np.random.default_rng(31).normal(size=(graph.n_nodes, 3))
-
-    labelling, value = iterated_conditional_modes(
-        graph,
-        field,
-        3,
-        np.random.default_rng(4),
-        max_sweeps=25,
-        sweep_order=SweepOrder.RANDOM,
-        stop_when_clean=False,
-        backend=Backend.PYTHON,
-    )
-    settled, settled_value = iterated_conditional_modes(
-        graph,
-        field,
-        3,
-        np.random.default_rng(4),
-        max_sweeps=25,
-        sweep_order=SweepOrder.RANDOM,
-        backend=Backend.PYTHON,
-    )
-
-    assert value <= energy(graph, field, labelling) + 1e-12
-    assert settled_value <= value + 1e-12
-    assert settled.shape == labelling.shape
-
-
-@pytest.mark.smoke
-def test_the_compiled_sweep_refuses_an_order_it_does_not_walk() -> None:
-    # Since #923 the compiled sweep runs any order when every sweep runs; a
-    # random order that stops on a clean sweep would spend the generator
-    # past the stop, and is refused.
-    graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.5)
-
-    with pytest.raises(ValueError, match="stop_when_clean=True needs python"):
-        iterated_conditional_modes(
-            graph,
-            np.zeros(3),
-            3,
-            np.random.default_rng(0),
-            sweep_order=SweepOrder.RANDOM,
-        )
 
 
 # --- the one expansion template (issue #858) ----------------------------------

@@ -17,9 +17,10 @@ that direction on the hand-written sources.
 **Key** is the fixture directory under `tests/regression/fixtures/` and the
 marker its tests carry, which are one name and not two. A row with two keys is
 one problem declared at two instances. The **family** is the statement's own
-short name — `potts` over `potts_chain`, `potts_lattice` and `spatio_only` —
-so a test selects broadly with `-m potts` and narrowly with `-m potts_lattice`,
-and a test that runs on more than one type carries more than one marker.
+short name — `potts` over `potts_chain`, `potts_lattice`, `spatio_only` and
+`spatio_tiling` — so a test selects broadly with `-m potts` and narrowly with
+`-m potts_lattice`, and a test that runs on more than one type carries more than
+one marker.
 
 **Defines** is the narrowest code that is this problem and no other: a module
 where the module belongs to one problem, a symbol where the module is shared.
@@ -31,10 +32,10 @@ function added to a defining module is covered the day it is written.
 and `sample.schedule` fit, sample, start and temper *every* row — `ROADMAP.md`
 §1.1's claim — and `likelihood.message_passing`, `sim.factor_graph`,
 `sample.gibbs`, `likelihood.potts`, `sim.ldpc`, `sim.graph`, `sim.potts`,
-`sim.canonical`, `search.alpha_expansion`, `sample.potts_mcmc`, `search.infer`,
-`sim.topology`, `emissions` and the rest of `likelihood/` are reached from
-several. Importing one says nothing about which problem a test exercises, so
-none of them defines one.
+`sim.canonical`, `search.alpha_expansion`, `search.icm`, `sample.potts_mcmc`,
+`search.infer`, `sim.topology`, `emissions` and the rest of `likelihood/` are
+reached from several. Importing one says nothing about which problem a test
+exercises, so none of them defines one.
 
 | Problem | Key | Statement | Defines |
 | --- | --- | --- | --- |
@@ -44,6 +45,7 @@ none of them defines one.
 | Potts chain in a field | `potts_chain` | `sec:potts` | `sim.potts_chain`, `learn.potts`, `opt.potts` |
 | Potts lattice and Markov random field | `potts_lattice` | `sec:potts` | `likelihood.belief_propagation`, `search.maxflow`, `search.max_cut`, `sim.graph.lattice_graph`, `sim.graph.erdos_renyi_graph` |
 | Potts lattice in a per-site field | `spatio_only` | `sec:potts` | `sim.potts.spatio_only_field`, `sim.graph.triangular_lattice_graph` |
+| Potts lattice in a tiling field | `spatio_tiling` | `sec:potts` | `sim.potts.tiling_field`, `sim.potts.tile_partition`, `search.potts_starts.tiling_rung` |
 | Frustrated Potts: triangular antiferromagnet | `frustrated_lattice` | `sec:frustrated` | `sim.canonical.frustrated_triangular_lattice`, `sim.canonical.minimum_frustrated_edges` |
 | Planted spin glass, enumerable ground state | `planted_glass` | `sec:frustrated` | `sim.canonical.planted_spin_glass`, `sim.canonical.PlantedSpinGlass` |
 | Low-density parity-check code, Gallager (3,6) | `ldpc` | `sec:ldpc` | `sim.ldpc.gallager_code`, `likelihood.ldpc` |

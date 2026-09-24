@@ -56,7 +56,7 @@ from snakes_and_ladders.sample.statistics import (
     chi_square_p_value,
     integrated_autocorrelation_time,
 )
-from snakes_and_ladders.search.alpha_expansion import iterated_conditional_modes
+from snakes_and_ladders.search.icm import iterated_conditional_modes
 from snakes_and_ladders.sim.canonical import (
     PlantedSpinGlass,
     frustrated_triangular_lattice,

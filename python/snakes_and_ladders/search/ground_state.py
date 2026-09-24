@@ -81,13 +81,13 @@ from snakes_and_ladders.sample.potts_mcmc import (
     parallel_tempering,
 )
 from snakes_and_ladders.sample.schedule import ScheduleParams, ScheduleShape
-from snakes_and_ladders.search.alpha_expansion import (
+from snakes_and_ladders.search.alpha_expansion import alpha_beta_swap, alpha_expansion
+from snakes_and_ladders.search.bifurcation import simulated_bifurcation
+from snakes_and_ladders.search.icm import (
     SweepOrder,
-    alpha_beta_swap,
-    alpha_expansion,
+    check_min_sites,
     iterated_conditional_modes,
 )
-from snakes_and_ladders.search.bifurcation import simulated_bifurcation
 from snakes_and_ladders.sim.factor_graph import from_potts
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import (
@@ -658,6 +658,8 @@ def descend(
     max_sweeps: int,
     *,
     start: np.ndarray | None = None,
+    backend: Backend | None = None,
+    min_sites: int = 0,
 ) -> tuple[np.ndarray, int]:
     """Index-order ICM from a uniform draw, or from ``start``, one sweep at a time, and the sweeps it ran.
 
@@ -667,12 +669,19 @@ def descend(
     is counted, as :func:`~snakes_and_ladders.search.potts_starts.polish_by_icm`
     counts it.
 
+    ``backend`` and ``min_sites`` are
+    :func:`~snakes_and_ladders.search.icm.iterated_conditional_modes`'s;
+    ``None`` is its default backend. A floored sweep draws its ``n_nodes``
+    uniforms from ``rng`` per sweep, so the floor's draws are those of
+    one-sweep descents, not of :func:`run_icm`'s one call.
+
     Returns
     -------
     tuple[np.ndarray, int]
         The labelling, and the sweeps run, at most ``max_sweeps``.
     """
     problem = _problem(problem)
+    check_min_sites(min_sites, problem.n_nodes)
     labelling = (
         rng.integers(0, problem.n_states, size=problem.n_nodes)
         if start is None
@@ -687,6 +696,8 @@ def descend(
             rng,
             start=labelling,
             max_sweeps=1,
+            min_sites=min_sites,
+            backend=Backend.NUMBA if backend is None else backend,
         )
         sweeps += 1
         if np.array_equal(settled.labelling, labelling):
@@ -774,10 +785,15 @@ def run_icm(
     rng: np.random.Generator,
     *,
     start: np.ndarray | None = None,
+    backend: Backend | None = None,
+    min_sites: int = 0,
 ) -> MethodRun:
     """Iterated conditional modes: single-site descent in index order.
 
-    From a uniform draw, or from ``start``.
+    From a uniform draw, or from ``start``. ``backend`` and ``min_sites`` are
+    :func:`~snakes_and_ladders.search.icm.iterated_conditional_modes`'s;
+    ``None`` is the compiled sweep, the default before either was a
+    parameter (issue #1055).
     """
     problem = _problem(problem)
     steps = max(1, budget.size // problem.visits_per_sweep)
@@ -789,6 +805,8 @@ def run_icm(
         rng,
         start=start,
         max_sweeps=steps,
+        min_sites=min_sites,
+        backend=Backend.NUMBA if backend is None else backend,
     )
     return MethodRun(
         labelling=settled.labelling,
@@ -804,6 +822,8 @@ def run_icm_random(
     rng: np.random.Generator,
     *,
     start: np.ndarray | None = None,
+    backend: Backend | None = None,
+    min_sites: int = 0,
 ) -> MethodRun:
     """ICM in a random sweep order: the heat bath at T = 0, every sweep of the budget run.
 
@@ -819,6 +839,7 @@ def run_icm_random(
     for what it runs, ICM under a permutation, and `gibbs-T0` until #923,
     which also moved it onto the compiled sweep: the permutations are drawn
     in the Python sweep's order, and the labelling is that sweep's bitwise.
+    ``backend`` and ``min_sites`` are as :func:`run_icm` takes them.
     """
     problem = _problem(problem)
     steps = max(1, budget.size // problem.visits_per_sweep)
@@ -832,7 +853,8 @@ def run_icm_random(
         max_sweeps=steps,
         sweep_order=SweepOrder.RANDOM,
         stop_when_clean=False,
-        backend=Backend.NUMBA,
+        min_sites=min_sites,
+        backend=Backend.NUMBA if backend is None else backend,
     )
     return MethodRun(
         labelling=settled.labelling,
@@ -1231,6 +1253,11 @@ ARMS: dict[str, Method] = {
 #: The names that run an anneal, and so take a ``schedule`` and ``steps``.
 ANNEALED = frozenset({"anneal", "swendsen-wang", "wolff", *ARMS})
 
+#: The names that are a single-site descent, and so take its ``backend`` and
+#: ``min_sites`` floor (issue #1055). The annealers, the cuts and the hybrids
+#: have no floor of their own and refuse one.
+FLOORED = frozenset({"icm", "icm-random"})
+
 
 def ground_state(
     graph: PottsGraph,
@@ -1242,6 +1269,8 @@ def ground_state(
     start: np.ndarray | None = None,
     schedule: ScheduleParams | None = None,
     steps: int | None = None,
+    backend: Backend | None = None,
+    min_sites: int = 0,
 ) -> MethodRun:
     """One :data:`METHODS` or :data:`ARMS` entry on any Potts problem, with no fixture behind it (issues #933, #1052).
 
@@ -1281,6 +1310,14 @@ def ground_state(
     steps : int | None
         The anneal's step count, fixed beforehand, in place of the budget's
         rule; a name in :data:`ANNEALED` only.
+    backend : Backend | None
+        The descent's sweep, ``None`` for its default; a name in
+        :data:`FLOORED` only.
+    min_sites : int
+        The descent's floor (issue #1055): after each sweep a state holding
+        fewer sites is dissolved into those at or above it. A name in
+        :data:`FLOORED` only, where ``0``, the default, is the run before
+        the floor existed, bitwise.
 
     Returns
     -------
@@ -1291,8 +1328,9 @@ def ground_state(
     ValueError
         If ``method`` is in neither table, ``field`` is not one row per node,
         the budget is in another unit, ``start`` is not one state in range
-        per node, the method refuses a start, or ``schedule`` or ``steps``
-        is given to a method that runs no anneal.
+        per node, the method refuses a start, ``schedule`` or ``steps``
+        is given to a method that runs no anneal, or ``backend`` or
+        ``min_sites > 0`` to one outside :data:`FLOORED`.
     """
     solvers = METHODS | ARMS
     if method not in solvers:
@@ -1317,6 +1355,12 @@ def ground_state(
             f"apply to {sorted(ANNEALED)}"
         )
         raise ValueError(msg)
+    if (backend is not None or min_sites != 0) and method not in FLOORED:
+        msg = (
+            f"{method!r} runs no single-site descent, so takes no backend or "
+            f"min_sites; those apply to {sorted(FLOORED)}"
+        )
+        raise ValueError(msg)
     problem = Problem(graph, values, int(values.shape[1]))
     if start is not None:
         start = _checked_start(problem, start)
@@ -1325,6 +1369,9 @@ def ground_state(
         keywords["schedule"] = schedule
     if steps is not None:
         keywords["steps"] = steps
+    if method in FLOORED:
+        keywords["backend"] = backend
+        keywords["min_sites"] = min_sites
     return solvers[method](problem, budget, rng, start=start, **keywords)
 
 

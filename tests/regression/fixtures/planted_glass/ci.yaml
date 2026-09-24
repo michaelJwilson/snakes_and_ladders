@@ -16,7 +16,7 @@ oracle: enumeration
 # instance stops being a gauge transform of the ferromagnet.
 #
 # Measured on the committed values over 16 seeds of 50 seeded restarts of
-# `search.alpha_expansion.iterated_conditional_modes`: descent reaches the
+# `search.icm.iterated_conditional_modes`: descent reaches the
 # enumerated ground state from 0.079 of starts, 95% interval (0.056, 0.101).
 # The bar `STATUS.md` states is 0.4, so this instance is unsolved by a
 # factor of five. Chosen by sweeping 18 candidates over size (16, 18, 20),

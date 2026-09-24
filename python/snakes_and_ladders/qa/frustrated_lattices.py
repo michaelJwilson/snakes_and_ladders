@@ -13,7 +13,7 @@ planted state is only an upper bound, and the figure says which.
 
 Renders what `snakes_and_ladders.sim.canonical`,
 `snakes_and_ladders.search.max_cut` and
-`snakes_and_ladders.search.alpha_expansion` computed; it reimplements no
+`snakes_and_ladders.search.icm` computed; it reimplements no
 enumeration and no descent (`qa/CLAUDE.md`). The textbook cites it as ``fig:frustrated-lattices``.
 """
 
@@ -36,7 +36,7 @@ from snakes_and_ladders.qa.style import (
     letter_style,
     series_style,
 )
-from snakes_and_ladders.search.alpha_expansion import iterated_conditional_modes
+from snakes_and_ladders.search.icm import iterated_conditional_modes
 from snakes_and_ladders.search.max_cut import enumerate_max_cut
 from snakes_and_ladders.sim.canonical import (
     FrustratedLatticeParams,

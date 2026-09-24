@@ -1,0 +1,39 @@
+model: spatio-tiling
+oracle: enumeration
+
+# A Potts prior whose field favours one planted state per tile (issue #1050):
+# the sites are split into k connected tiles, and tile t rewards its state a_t
+# by s_t and no other state. Unlike `spatio_only`'s alpha[m] * c_i the field is
+# not linear in the state, so no reduction to the ladder's two ends holds and
+# the optimum at q = 3 can use all three states. See
+# python/snakes_and_ladders/sim/potts.py.
+#
+# 4x3 at 3 states is 3**12 = 531,441 labellings, so the ground state is
+# enumerated. The geometry and coupling are `release`'s, a triangular lattice
+# at J = 0.7, so the two tiers differ in size, state count and tile count
+# alone.
+geometry: triangular
+shape: [4, 3]
+boundary: open
+n_states: 3
+coupling: 0.7
+
+# Three tiles from centres drawn by default_rng(6), nearest by hops, ties to
+# the centre drawn first: 7, 3 and 2 sites. Seed 6 of the first 12 is the one
+# whose enumerated optimum is unique, uses all three states, and holds a tile
+# below the coupling: its margin to the next labelling is 0.60, and the best
+# labelling on any two states is 1.40 above it.
+tiles:
+  seed: 6
+  k: 3
+
+# One favoured state per tile, each distinct, so all three are in play.
+states: [0, 1, 2]
+
+# Below the coupling, above it, and five times it. The count of each tile's
+# sites' neighbours outside it is at most 2, 2 and 3, so the second and third
+# clear the bound J * 2 = 1.4 and J * 3 = 2.1 under which every graph-cut
+# local minimum labels a tile its state in full
+# (`search.potts_starts.recovery_bound`); the first, at 0.6, does not. No
+# strength is a multiple of J / 2, which on this lattice ties labellings.
+strengths: [0.6, 1.6, 3.5]
