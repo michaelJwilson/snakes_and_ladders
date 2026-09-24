@@ -31,6 +31,8 @@ from snakes_and_ladders.sim.galois import (
 from snakes_and_ladders.sim.ldpc import BinarySymmetricChannel
 from snakes_and_ladders.sim.reed_solomon import ReedSolomon, encode, reed_solomon
 
+from tests._rows import every_row, every_value
+
 
 @pytest.mark.analytic
 def test_the_field_is_a_field() -> None:
@@ -51,19 +53,21 @@ def test_the_field_is_a_field() -> None:
 
 
 @pytest.mark.analytic
-@pytest.mark.parametrize("m", sorted(PRIMITIVE))
-def test_the_generator_reaches_every_nonzero_element(m: int) -> None:
+def test_the_generator_reaches_every_nonzero_element() -> None:
     # What "primitive" means, and the property the logarithm table depends on:
     # alpha's powers run through every nonzero element exactly once before
     # repeating. A non-primitive polynomial still builds a ring and would make
     # the discrete logarithm partial, which is a silent wrong answer.
-    gf = field(m)
+    def check(m: int) -> None:
+        gf = field(m)
 
-    powers = sorted(gf.alpha(exponent) for exponent in range(gf.nonzero))
+        powers = sorted(gf.alpha(exponent) for exponent in range(gf.nonzero))
 
-    assert powers == list(range(1, gf.order))
-    for value in range(1, gf.order):
-        assert gf.multiply(value, gf.inverse(value)) == 1
+        assert powers == list(range(1, gf.order))
+        for value in range(1, gf.order):
+            assert gf.multiply(value, gf.inverse(value)) == 1
+
+    every_value(sorted(PRIMITIVE), check)
 
 
 @pytest.mark.smoke
@@ -106,24 +110,24 @@ def test_encoding_is_systematic_and_lands_in_the_code() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize(
-    ("m", "k", "errors"), [(3, 3, 0), (3, 3, 1), (3, 3, 2), (4, 9, 3)]
-)
-def test_the_decoder_is_exact_within_its_guarantee(m: int, k: int, errors: int) -> None:
+def test_the_decoder_is_exact_within_its_guarantee() -> None:
     # Every draw, not most: within `t` symbol errors the decoder is a solver
     # and not an estimator, so anything short of exact recovery is a defect.
-    code = reed_solomon(m, k)
-    rng = np.random.default_rng(1000 + errors)
-    assert errors <= code.correctable
+    def check(m: int, k: int, errors: int) -> None:
+        code = reed_solomon(m, k)
+        rng = np.random.default_rng(1000 + errors)
+        assert errors <= code.correctable
 
-    for _ in range(200):
-        message = rng.integers(0, code.field.order, size=k)
-        word = encode(code, message)
-        received = word.copy()
-        for position in rng.choice(code.n_symbols, size=errors, replace=False):
-            received[position] ^= int(rng.integers(1, code.field.order))
+        for _ in range(200):
+            message = rng.integers(0, code.field.order, size=k)
+            word = encode(code, message)
+            received = word.copy()
+            for position in rng.choice(code.n_symbols, size=errors, replace=False):
+                received[position] ^= int(rng.integers(1, code.field.order))
 
-        np.testing.assert_array_equal(decode(code, received), word)
+            np.testing.assert_array_equal(decode(code, received), word)
+
+    every_row([(3, 3, 0), (3, 3, 1), (3, 3, 2), (4, 9, 3)], check)
 
 
 #: Error patterns past the guarantee, at three symbols on a code that
@@ -421,19 +425,21 @@ def test_the_field_reproduces_the_published_gf_sixteen_table() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("m", sorted(PRIMITIVE))
-def test_every_nonzero_element_satisfies_fermat_and_its_own_inverse(m: int) -> None:
+def test_every_nonzero_element_satisfies_fermat_and_its_own_inverse() -> None:
     # Fermat's little theorem in `GF(2^m)`: `a^(2^m - 1) = 1` for every
     # nonzero `a`, the statement that the nonzero elements form a group of
     # that order. Exhaustive over all 2^m - 1 of them at each recorded
     # degree, 501 elements in total, and `a * a^-1 = 1` beside it, so the
     # inverse is the group's and not the table's. Exact over integers.
-    field.cache_clear()
-    gf = field(m)
+    def check(m: int) -> None:
+        field.cache_clear()
+        gf = field(m)
 
-    for value in range(1, gf.order):
-        assert gf.power(value, gf.nonzero) == 1
-        assert gf.multiply(value, gf.inverse(value)) == 1
-        assert gf.divide(value, value) == 1
-        # The discrete logarithm is the exponent the group law gives it.
-        assert gf.alpha(int(gf.logarithm[value])) == value
+        for value in range(1, gf.order):
+            assert gf.power(value, gf.nonzero) == 1
+            assert gf.multiply(value, gf.inverse(value)) == 1
+            assert gf.divide(value, value) == 1
+            # The discrete logarithm is the exponent the group law gives it.
+            assert gf.alpha(int(gf.logarithm[value])) == value
+
+    every_value(sorted(PRIMITIVE), check)

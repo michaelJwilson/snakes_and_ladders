@@ -29,6 +29,7 @@ from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import FIXTURES_DIR
+from tests._rows import every_row, every_value
 
 FIXTURE = FIXTURES_DIR / "tree_jc/stress.yaml"
 
@@ -66,21 +67,22 @@ def _enumerate_topologies(taxa: tuple[str, ...]) -> Iterator[Node]:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("n_taxa", [1, 2, 3, 4, 5, 6])
-def test_count_topologies_matches_brute_force_enumeration(n_taxa: int) -> None:
-    taxa = tuple(f"t{i}" for i in range(n_taxa))
-    brute_force_count = sum(1 for _ in _enumerate_topologies(taxa))
+def test_count_topologies_matches_brute_force_enumeration() -> None:
+    def check(n_taxa: int) -> None:
+        taxa = tuple(f"t{i}" for i in range(n_taxa))
+        brute_force_count = sum(1 for _ in _enumerate_topologies(taxa))
 
-    assert count_topologies(n_taxa) == brute_force_count
+        assert count_topologies(n_taxa) == brute_force_count
+
+    every_value([1, 2, 3, 4, 5, 6], check)
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize(
-    ("n_taxa", "expected"),
-    [(1, 1), (2, 1), (3, 3), (4, 15), (5, 105), (6, 945)],
-)
-def test_count_topologies_matches_known_values(n_taxa: int, expected: int) -> None:
-    assert count_topologies(n_taxa) == expected
+def test_count_topologies_matches_known_values() -> None:
+    def check(n_taxa: int, expected: int) -> None:
+        assert count_topologies(n_taxa) == expected
+
+    every_row([(1, 1), (2, 1), (3, 3), (4, 15), (5, 105), (6, 945)], check)
 
 
 @pytest.mark.smoke
@@ -119,23 +121,25 @@ def test_to_newick_with_node_states_round_trips_ancestor_labels() -> None:
 
 
 @pytest.mark.smoke
-@pytest.mark.parametrize(
-    "malformed",
-    [
-        "(A,B",  # unbalanced: missing closing paren and ';'
-        "(A,B))",  # unbalanced: extra closing paren
-        "(A,B,C);",  # non-binary: three children
-        "(A);",  # non-binary: one child
-        "(A,B)",  # missing terminating ';'
-        "(A,B);extra",  # trailing characters after ';'
-        "(,B);",  # empty leaf label
-        "(A:notanumber,B);",  # invalid branch length
-        "(A[unterminated,B);",  # unterminated comment
-        "",  # empty string
-    ],
-)
-def test_validate_newick_rejects_malformed_strings(malformed: str) -> None:
-    assert not validate_newick(malformed)
+def test_validate_newick_rejects_malformed_strings() -> None:
+    def check(malformed: str) -> None:
+        assert not validate_newick(malformed)
+
+    every_value(
+        [
+            "(A,B",  # unbalanced: missing closing paren and ';'
+            "(A,B))",  # unbalanced: extra closing paren
+            "(A,B,C);",  # non-binary: three children
+            "(A);",  # non-binary: one child
+            "(A,B)",  # missing terminating ';'
+            "(A,B);extra",  # trailing characters after ';'
+            "(,B);",  # empty leaf label
+            "(A:notanumber,B);",  # invalid branch length
+            "(A[unterminated,B);",  # unterminated comment
+            "",  # empty string
+        ],
+        check,
+    )
 
 
 @pytest.mark.smoke
@@ -165,22 +169,24 @@ def test_validate_unrooted_newick_rejects_a_strictly_binary_root() -> None:
 
 
 @pytest.mark.smoke
-@pytest.mark.parametrize(
-    "malformed",
-    [
-        "(A,B,C",  # unbalanced: missing closing paren and ';'
-        "(A,B,C,D);",  # 4 children at the root, not 3
-        "(A);",  # 1 child at the root: missing ',' after the first
-        "(A,B);",  # 2 children at the root, not 3 (validate_newick's shape)
-        "(A,B,C))",  # unbalanced: extra closing paren
-        "(A,B,C)",  # missing terminating ';'
-        "(A,B,C);extra",  # trailing characters after ';'
-        "(,B,C);",  # empty leaf label
-        "",  # empty string
-    ],
-)
-def test_validate_unrooted_newick_rejects_malformed_strings(malformed: str) -> None:
-    assert not validate_unrooted_newick(malformed)
+def test_validate_unrooted_newick_rejects_malformed_strings() -> None:
+    def check(malformed: str) -> None:
+        assert not validate_unrooted_newick(malformed)
+
+    every_value(
+        [
+            "(A,B,C",  # unbalanced: missing closing paren and ';'
+            "(A,B,C,D);",  # 4 children at the root, not 3
+            "(A);",  # 1 child at the root: missing ',' after the first
+            "(A,B);",  # 2 children at the root, not 3 (validate_newick's shape)
+            "(A,B,C))",  # unbalanced: extra closing paren
+            "(A,B,C)",  # missing terminating ';'
+            "(A,B,C);extra",  # trailing characters after ';'
+            "(,B,C);",  # empty leaf label
+            "",  # empty string
+        ],
+        check,
+    )
 
 
 @pytest.mark.smoke

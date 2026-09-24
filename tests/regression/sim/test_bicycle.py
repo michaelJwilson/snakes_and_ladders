@@ -21,6 +21,8 @@ from snakes_and_ladders.sim.ldpc import (
     generator_matrix,
 )
 
+from tests._rows import every_value
+
 CIRCULANT_WEIGHT = 3
 
 
@@ -48,34 +50,39 @@ def _circulant(first_row: np.ndarray, size: int) -> np.ndarray:
 
 
 @pytest.mark.analytic
-@pytest.mark.parametrize("n_bits", [12, 96, 996])
-def test_the_halves_are_a_circulant_and_its_transpose(n_bits: int) -> None:
+def test_the_halves_are_a_circulant_and_its_transpose() -> None:
     """`H = [A | A^T]` for the circulant of the first row `H` itself carries."""
-    code = _code(n_bits, n_bits // 2, seed=n_bits)
-    dense = code.dense()
 
-    left, right = dense[:, : n_bits // 2], dense[:, n_bits // 2 :]
+    def check(n_bits: int) -> None:
+        code = _code(n_bits, n_bits // 2, seed=n_bits)
+        dense = code.dense()
 
-    expected = _circulant(_first_row(code), n_bits // 2)
-    np.testing.assert_array_equal(left, expected)
-    np.testing.assert_array_equal(right, expected.T)
+        left, right = dense[:, : n_bits // 2], dense[:, n_bits // 2 :]
+
+        expected = _circulant(_first_row(code), n_bits // 2)
+        np.testing.assert_array_equal(left, expected)
+        np.testing.assert_array_equal(right, expected.T)
+
+    every_value([12, 96, 996], check)
 
 
 @pytest.mark.analytic
-@pytest.mark.parametrize("n_bits", [12, 96, 996])
-def test_the_degrees_before_deletion_are_the_circulant_weight(n_bits: int) -> None:
+def test_the_degrees_before_deletion_are_the_circulant_weight() -> None:
     """Every column carries `w` ones and every row `2w`, at every size."""
-    code = _code(n_bits, n_bits // 2, seed=n_bits + 1)
 
-    assert code.n_checks == n_bits // 2
-    assert code.n_edges == n_bits * CIRCULANT_WEIGHT
-    assert np.all(code.column_weights == CIRCULANT_WEIGHT)
-    assert np.all(code.row_weights == 2 * CIRCULANT_WEIGHT)
+    def check(n_bits: int) -> None:
+        code = _code(n_bits, n_bits // 2, seed=n_bits + 1)
+
+        assert code.n_checks == n_bits // 2
+        assert code.n_edges == n_bits * CIRCULANT_WEIGHT
+        assert np.all(code.column_weights == CIRCULANT_WEIGHT)
+        assert np.all(code.row_weights == 2 * CIRCULANT_WEIGHT)
+
+    every_value([12, 96, 996], check)
 
 
 @pytest.mark.analytic
-@pytest.mark.parametrize("n_checks", [48, 40, 32])
-def test_the_row_space_is_self_orthogonal(n_checks: int) -> None:
+def test_the_row_space_is_self_orthogonal() -> None:
     """`H H^T = 0` over GF(2), before and after deletion: the CSS condition.
 
     Nothing classical needs it. It holds because a circulant and its
@@ -83,13 +90,17 @@ def test_the_row_space_is_self_orthogonal(n_checks: int) -> None:
     making `H H^T = A A^T + A^T A = 0` over GF(2), and deleting rows keeps
     it. The quantum half of issue #362 rests on it, so it is asserted here.
     """
-    code = _code(96, n_checks, seed=5)
-    dense = code.dense().astype(np.int64)
 
-    product = (dense @ dense.T) % 2
+    def check(n_checks: int) -> None:
+        code = _code(96, n_checks, seed=5)
+        dense = code.dense().astype(np.int64)
 
-    assert code.n_checks == n_checks
-    assert not np.any(product)
+        product = (dense @ dense.T) % 2
+
+        assert code.n_checks == n_checks
+        assert not np.any(product)
+
+    every_value([48, 40, 32], check)
 
 
 # --- the rate the deletion buys -------------------------------------------------

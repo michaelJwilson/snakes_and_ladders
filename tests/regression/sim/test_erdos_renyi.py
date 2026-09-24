@@ -26,6 +26,8 @@ from snakes_and_ladders.likelihood.belief_propagation import (
 from snakes_and_ladders.likelihood.potts import enumerate_potts
 from snakes_and_ladders.sim.graph import PottsGraph, erdos_renyi_graph
 
+from tests._rows import every_value
+
 # `likelihood/CLAUDE.md`'s float64 bound, which is what BP must meet wherever
 # it is exact.
 RELATIVE_TOLERANCE = 1e-11
@@ -142,23 +144,25 @@ def test_the_deviation_on_a_cyclic_draw_is_reported_not_asserted() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("n_nodes", [4, 8, 12])
-def test_the_expected_edge_count_matches_the_closed_form(n_nodes: int) -> None:
+def test_the_expected_edge_count_matches_the_closed_form() -> None:
     # A property of the generator, checked against `p n (n - 1) / 2` rather
     # than against a run. The tolerance is three binomial standard errors,
     # derived rather than chosen.
-    probability, draws = 0.4, 400
-    rng = np.random.default_rng(11)
-    pairs = n_nodes * (n_nodes - 1) // 2
+    def check(n_nodes: int) -> None:
+        probability, draws = 0.4, 400
+        rng = np.random.default_rng(11)
+        pairs = n_nodes * (n_nodes - 1) // 2
 
-    counts = [
-        len(erdos_renyi_graph(n_nodes, probability, 1.0, rng).edges)
-        for _ in range(draws)
-    ]
+        counts = [
+            len(erdos_renyi_graph(n_nodes, probability, 1.0, rng).edges)
+            for _ in range(draws)
+        ]
 
-    expected = probability * pairs
-    error = np.sqrt(pairs * probability * (1.0 - probability) / draws)
-    assert abs(float(np.mean(counts)) - expected) < 3.0 * error
+        expected = probability * pairs
+        error = np.sqrt(pairs * probability * (1.0 - probability) / draws)
+        assert abs(float(np.mean(counts)) - expected) < 3.0 * error
+
+    every_value([4, 8, 12], check)
 
 
 @pytest.mark.smoke
@@ -208,12 +212,12 @@ def test_independent_draws_come_from_one_generator() -> None:
 
 
 @pytest.mark.smoke
-@pytest.mark.parametrize("probability", [-0.1, 1.1])
-def test_a_probability_outside_the_unit_interval_is_refused(
-    probability: float,
-) -> None:
-    with pytest.raises(ValueError, match=r"probability must lie in \[0, 1\]"):
-        erdos_renyi_graph(5, probability, 1.0, np.random.default_rng(0))
+def test_a_probability_outside_the_unit_interval_is_refused() -> None:
+    def check(probability: float) -> None:
+        with pytest.raises(ValueError, match=r"probability must lie in \[0, 1\]"):
+            erdos_renyi_graph(5, probability, 1.0, np.random.default_rng(0))
+
+    every_value([-0.1, 1.1], check)
 
 
 @pytest.mark.smoke

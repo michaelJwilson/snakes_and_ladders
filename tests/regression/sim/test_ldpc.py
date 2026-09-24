@@ -31,6 +31,8 @@ from snakes_and_ladders.sim.ldpc import (
     gf2_rank,
 )
 
+from tests._rows import every_row, every_value
+
 COLUMN_WEIGHT, ROW_WEIGHT = 3, 6
 
 
@@ -42,18 +44,21 @@ def _code(n_bits: int, seed: int) -> ParityCheck:
 
 
 @pytest.mark.analytic
-@pytest.mark.parametrize("n_bits", [12, 96, 996])
-def test_a_gallager_draw_has_the_declared_degrees(n_bits: int) -> None:
+def test_a_gallager_draw_has_the_declared_degrees() -> None:
     """Every column of a (3,6) draw has three ones and every row six, at every size."""
-    code = _code(n_bits, seed=n_bits)
 
-    assert code.n_checks == n_bits * COLUMN_WEIGHT // ROW_WEIGHT
-    assert code.n_edges == n_bits * COLUMN_WEIGHT
-    assert np.all(code.column_weights == COLUMN_WEIGHT)
-    assert np.all(code.row_weights == ROW_WEIGHT)
-    dense = code.dense()
-    assert np.all(dense.sum(axis=0) == COLUMN_WEIGHT)
-    assert np.all(dense.sum(axis=1) == ROW_WEIGHT)
+    def check(n_bits: int) -> None:
+        code = _code(n_bits, seed=n_bits)
+
+        assert code.n_checks == n_bits * COLUMN_WEIGHT // ROW_WEIGHT
+        assert code.n_edges == n_bits * COLUMN_WEIGHT
+        assert np.all(code.column_weights == COLUMN_WEIGHT)
+        assert np.all(code.row_weights == ROW_WEIGHT)
+        dense = code.dense()
+        assert np.all(dense.sum(axis=0) == COLUMN_WEIGHT)
+        assert np.all(dense.sum(axis=1) == ROW_WEIGHT)
+
+    every_value([12, 96, 996], check)
 
 
 @pytest.mark.analytic
@@ -103,18 +108,21 @@ def _draw(rng: np.random.Generator) -> tuple[int, ...]:
 
 
 @pytest.mark.analytic
-@pytest.mark.parametrize("n_bits", [24, 96, MAX_ENCODABLE_BITS - 2])
-def test_every_encoded_word_is_in_the_null_space(n_bits: int) -> None:
+def test_every_encoded_word_is_in_the_null_space() -> None:
     """`H c = 0` on 20 random messages per size, and distinct messages encode distinctly."""
-    code = _code(n_bits, seed=n_bits + 1)
-    rng = np.random.default_rng(7)
-    k = int(generator_matrix(code).shape[0])
 
-    words = {encode(code, rng.integers(0, 2, size=k)).tobytes() for _ in range(20)}
+    def check(n_bits: int) -> None:
+        code = _code(n_bits, seed=n_bits + 1)
+        rng = np.random.default_rng(7)
+        k = int(generator_matrix(code).shape[0])
 
-    assert len(words) == 20
-    for packed in words:
-        assert not np.any(code.syndrome(np.frombuffer(packed, dtype=np.uint8)))
+        words = {encode(code, rng.integers(0, 2, size=k)).tobytes() for _ in range(20)}
+
+        assert len(words) == 20
+        for packed in words:
+            assert not np.any(code.syndrome(np.frombuffer(packed, dtype=np.uint8)))
+
+    every_value([24, 96, MAX_ENCODABLE_BITS - 2], check)
 
 
 @pytest.mark.oracle
@@ -152,17 +160,20 @@ def test_the_binary_symmetric_ratio_is_the_closed_form() -> None:
 
 
 @pytest.mark.end2end
-@pytest.mark.parametrize(("p", "seed"), [(0.05, 11), (0.2, 12), (0.45, 13)])
-def test_the_flip_count_matches_the_flip_probability(p: float, seed: int) -> None:
+def test_the_flip_count_matches_the_flip_probability() -> None:
     """Flips on 20,000 bits fall within four binomial standard deviations of `n p`."""
-    code = _code(19_998, seed=1)
 
-    llr = all_zero_transmission(
-        code, BinarySymmetricChannel(p), np.random.default_rng(seed)
-    )
+    def check(p: float, seed: int) -> None:
+        code = _code(19_998, seed=1)
 
-    flips = int((llr < 0).sum())
-    assert abs(flips - p * code.n_bits) < 4 * math.sqrt(code.n_bits * p * (1 - p))
+        llr = all_zero_transmission(
+            code, BinarySymmetricChannel(p), np.random.default_rng(seed)
+        )
+
+        flips = int((llr < 0).sum())
+        assert abs(flips - p * code.n_bits) < 4 * math.sqrt(code.n_bits * p * (1 - p))
+
+    every_row([(0.05, 11), (0.2, 12), (0.45, 13)], check)
 
 
 @pytest.mark.analytic
@@ -259,15 +270,12 @@ def test_the_parity_check_factor_graph_scores_the_definition() -> None:
 
 
 @pytest.mark.smoke
-@pytest.mark.parametrize(
-    ("n_bits", "column_weight", "row_weight"),
-    [(12, 6, 3), (12, 1, 6), (12, 6, 6), (13, 3, 6), (0, 3, 6)],
-)
-def test_degrees_that_do_not_make_a_regular_code_are_refused(
-    n_bits: int, column_weight: int, row_weight: int
-) -> None:
-    with pytest.raises(ValueError, match="row_weight"):
-        gallager_code(n_bits, column_weight, row_weight, np.random.default_rng(0))
+def test_degrees_that_do_not_make_a_regular_code_are_refused() -> None:
+    def check(n_bits: int, column_weight: int, row_weight: int) -> None:
+        with pytest.raises(ValueError, match="row_weight"):
+            gallager_code(n_bits, column_weight, row_weight, np.random.default_rng(0))
+
+    every_row([(12, 6, 3), (12, 1, 6), (12, 6, 6), (13, 3, 6), (0, 3, 6)], check)
 
 
 @pytest.mark.smoke

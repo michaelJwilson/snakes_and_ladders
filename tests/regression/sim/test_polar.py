@@ -43,6 +43,7 @@ from snakes_and_ladders.sim.polar import (
 )
 
 from tests._fixtures import FIXTURES_DIR
+from tests._rows import every_value
 
 #: The information set the ticket states at `N = 16`, rate 1/2, on BEC(0.5).
 CI_INFORMATION = (3, 5, 7, 9, 11, 13, 14, 15)
@@ -72,14 +73,16 @@ def test_the_transform_is_its_own_inverse_over_gf2() -> None:
 
 
 @pytest.mark.analytic
-@pytest.mark.parametrize("stages", [3, 5, 8, 11])
-def test_the_erasure_recursion_conserves_capacity_exactly(stages: int) -> None:
+def test_the_erasure_recursion_conserves_capacity_exactly() -> None:
     # The one law that holds at every length: the transform moves capacity
     # between synthetic channels and creates none. Asserted as an equality to
     # 1e-12 rather than sampled, because the recursion is closed form.
-    erasure = 0.5
-    total = float(capacity(bec_reliability(stages, erasure)).sum())
-    assert total == pytest.approx(2**stages * (1.0 - erasure), abs=1e-12)
+    def check(stages: int) -> None:
+        erasure = 0.5
+        total = float(capacity(bec_reliability(stages, erasure)).sum())
+        assert total == pytest.approx(2**stages * (1.0 - erasure), abs=1e-12)
+
+    every_value([3, 5, 8, 11], check)
 
 
 @pytest.mark.analytic

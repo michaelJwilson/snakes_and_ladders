@@ -26,6 +26,8 @@ from snakes_and_ladders.sim.potts import (
     site_field,
 )
 
+from tests._rows import every_value
+
 #: `potts_lattice/ci`'s instance, which the pinned draws below were taken on
 #: --- read from the registry rather than rebuilt from its literals (issue
 #: #622). The graph is edge for edge the one the draws were taken on, and the
@@ -92,25 +94,25 @@ def _row(state: np.ndarray, neighbours: list[int]) -> np.ndarray:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("beta", [1.0, 0.4, 2.5])
-def test_the_conditional_is_the_field_plus_its_neighbours_couplings(
-    beta: float,
-) -> None:
-    rng = np.random.default_rng(4)
-    field_row = rng.normal(size=4)
-    couplings = rng.normal(size=5).tolist()
-    neighbours = rng.integers(0, 9, size=5).tolist()
-    state = rng.integers(0, 4, size=9)
+def test_the_conditional_is_the_field_plus_its_neighbours_couplings() -> None:
+    def check(beta: float) -> None:
+        rng = np.random.default_rng(4)
+        field_row = rng.normal(size=4)
+        couplings = rng.normal(size=5).tolist()
+        neighbours = rng.integers(0, 9, size=5).tolist()
+        state = rng.integers(0, 4, size=9)
 
-    realized = heat_bath_log_weights(
-        field_row, state, neighbours, couplings, 0, len(neighbours), beta
-    )
+        realized = heat_bath_log_weights(
+            field_row, state, neighbours, couplings, 0, len(neighbours), beta
+        )
 
-    # A sum of at most five terms in the same order either way, so the
-    # restatement reproduces it exactly rather than within a tolerance.
-    assert np.array_equal(
-        realized, _restated(field_row, _row(state, neighbours), couplings, beta)
-    )
+        # A sum of at most five terms in the same order either way, so the
+        # restatement reproduces it exactly rather than within a tolerance.
+        assert np.array_equal(
+            realized, _restated(field_row, _row(state, neighbours), couplings, beta)
+        )
+
+    every_value([1.0, 0.4, 2.5], check)
 
 
 @pytest.mark.oracle

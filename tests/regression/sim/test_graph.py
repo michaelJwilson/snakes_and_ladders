@@ -27,6 +27,8 @@ from snakes_and_ladders.sim.graph import (
 from snakes_and_ladders.sim.potts import PottsLatticeParams, SpatioOnlyParams
 from snakes_and_ladders.sim.spatio_sequential import SpatioSequentialParams
 
+from tests._rows import every_value
+
 #: Every fixture that declares a boundary, with the class that reads it. The
 #: five parse sites issue #862 put behind one parser; two named the file and
 #: three did not.
@@ -40,39 +42,39 @@ BOUNDARY_FIXTURES: tuple[tuple[str, type[Params]], ...] = (
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("shape", [(4,), (5,), (3, 3), (3, 4), (2, 2, 2), (2, 3, 4)])
-def test_open_lattice_node_and_edge_counts_match_the_closed_form(
-    shape: tuple[int, ...],
-) -> None:
-    graph = lattice_graph(shape, boundary=BoundaryCondition.OPEN, coupling=0.5)
-    n_nodes = 1
-    for extent in shape:
-        n_nodes *= extent
-    assert graph.n_nodes == n_nodes
+def test_open_lattice_node_and_edge_counts_match_the_closed_form() -> None:
+    def check(shape: tuple[int, ...]) -> None:
+        graph = lattice_graph(shape, boundary=BoundaryCondition.OPEN, coupling=0.5)
+        n_nodes = 1
+        for extent in shape:
+            n_nodes *= extent
+        assert graph.n_nodes == n_nodes
 
-    expected_edges = sum(
-        (shape[dim] - 1) * (n_nodes // shape[dim]) for dim in range(len(shape))
-    )
-    assert len(graph.edges) == expected_edges
-    assert len(graph.coupling) == expected_edges
-    assert set(graph.coupling) == {0.5}
+        expected_edges = sum(
+            (shape[dim] - 1) * (n_nodes // shape[dim]) for dim in range(len(shape))
+        )
+        assert len(graph.edges) == expected_edges
+        assert len(graph.coupling) == expected_edges
+        assert set(graph.coupling) == {0.5}
+
+    every_value([(4,), (5,), (3, 3), (3, 4), (2, 2, 2), (2, 3, 4)], check)
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("shape", [(4,), (5,), (3, 3), (3, 4), (3, 3, 3)])
-def test_periodic_lattice_node_and_edge_counts_match_the_closed_form(
-    shape: tuple[int, ...],
-) -> None:
+def test_periodic_lattice_node_and_edge_counts_match_the_closed_form() -> None:
     # Extents are kept >= 3 here: at extent 2 a periodic dimension's "+1" and
     # "-1" neighbour coincide, so the count below (ndim * n_nodes) still
     # holds, but as a doubled bond rather than as len(set(edges)) -- a
     # distinct claim tested separately.
-    graph = lattice_graph(shape, boundary=BoundaryCondition.PERIODIC, coupling=1.0)
-    n_nodes = 1
-    for extent in shape:
-        n_nodes *= extent
-    assert graph.n_nodes == n_nodes
-    assert len(graph.edges) == len(shape) * n_nodes
+    def check(shape: tuple[int, ...]) -> None:
+        graph = lattice_graph(shape, boundary=BoundaryCondition.PERIODIC, coupling=1.0)
+        n_nodes = 1
+        for extent in shape:
+            n_nodes *= extent
+        assert graph.n_nodes == n_nodes
+        assert len(graph.edges) == len(shape) * n_nodes
+
+    every_value([(4,), (5,), (3, 3), (3, 4), (3, 3, 3)], check)
 
 
 @pytest.mark.smoke
@@ -230,48 +232,50 @@ def _reference_lattice(
 @pytest.mark.smoke
 @pytest.mark.patch
 @pytest.mark.parametrize("boundary", list(BoundaryCondition))
-@pytest.mark.parametrize(
-    "shape", [(4,), (8,), (2, 2), (3, 3), (4, 5), (2, 3, 4), (3, 3, 3)]
-)
 def test_the_square_lattice_is_edge_for_edge_the_sweep_it_folded(
-    shape: tuple[int, ...], boundary: BoundaryCondition
+    boundary: BoundaryCondition,
 ) -> None:
     # `_lattice` is the core both builders wrote out (issue #862). The square
     # one joins each site to its successor along every dimension, so its
     # offsets are the unit vectors, in dimension order.
-    offsets = tuple(
-        tuple(1 if other == dim else 0 for other in range(len(shape)))
-        for dim in range(len(shape))
-    )
-    graph = lattice_graph(shape, boundary, -0.75)
-    n_nodes, edges, coupling = _reference_lattice(shape, offsets, boundary, -0.75)
+    def check(shape: tuple[int, ...]) -> None:
+        offsets = tuple(
+            tuple(1 if other == dim else 0 for other in range(len(shape)))
+            for dim in range(len(shape))
+        )
+        graph = lattice_graph(shape, boundary, -0.75)
+        n_nodes, edges, coupling = _reference_lattice(shape, offsets, boundary, -0.75)
 
-    assert graph.n_nodes == n_nodes
-    assert graph.edges == edges
-    assert graph.coupling == coupling
-    assert graph.shape == shape
-    assert graph.boundary is boundary
+        assert graph.n_nodes == n_nodes
+        assert graph.edges == edges
+        assert graph.coupling == coupling
+        assert graph.shape == shape
+        assert graph.boundary is boundary
+
+    every_value([(4,), (8,), (2, 2), (3, 3), (4, 5), (2, 3, 4), (3, 3, 3)], check)
 
 
 @pytest.mark.smoke
 @pytest.mark.patch
 @pytest.mark.parametrize("boundary", list(BoundaryCondition))
-@pytest.mark.parametrize("shape", [(2, 2), (3, 3), (4, 6), (8, 8)])
 def test_the_triangular_lattice_is_edge_for_edge_the_sweep_it_folded(
-    shape: tuple[int, int], boundary: BoundaryCondition
+    boundary: BoundaryCondition,
 ) -> None:
     # The same core at the offsets that add the cell diagonal, which is what
     # makes the graph non-bipartite.
-    graph = triangular_lattice_graph(shape, boundary, -1.0)
-    n_nodes, edges, coupling = _reference_lattice(
-        shape, ((0, 1), (1, 0), (1, 1)), boundary, -1.0
-    )
+    def check(shape: tuple[int, int]) -> None:
+        graph = triangular_lattice_graph(shape, boundary, -1.0)
+        n_nodes, edges, coupling = _reference_lattice(
+            shape, ((0, 1), (1, 0), (1, 1)), boundary, -1.0
+        )
 
-    assert graph.n_nodes == n_nodes
-    assert graph.edges == edges
-    assert graph.coupling == coupling
-    assert graph.shape == shape
-    assert graph.boundary is boundary
+        assert graph.n_nodes == n_nodes
+        assert graph.edges == edges
+        assert graph.coupling == coupling
+        assert graph.shape == shape
+        assert graph.boundary is boundary
+
+    every_value([(2, 2), (3, 3), (4, 6), (8, 8)], check)
 
 
 @pytest.mark.smoke

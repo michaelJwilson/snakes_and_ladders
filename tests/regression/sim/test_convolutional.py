@@ -29,6 +29,8 @@ from snakes_and_ladders.sim.convolutional import (
 )
 from snakes_and_ladders.sim.fixtures import fixture
 
+from tests._rows import every_row, every_value
+
 #: The default register: ``1 + D + D**2`` over ``1 + D**2``, memory 2.
 FEEDBACK, FEEDFORWARD, MEMORY = 0o7, 0o5, 2
 
@@ -49,17 +51,14 @@ def test_an_octal_generator_reads_as_the_polynomial_the_textbook_states() -> Non
 
 
 @pytest.mark.smoke
-@pytest.mark.parametrize(
-    ("polynomial", "memory"),
-    [(0o17, 2), (0o2, 2), (0o6, 3)],
-)
-def test_a_generator_that_does_not_fit_the_register_is_refused(
-    polynomial: int, memory: int
-) -> None:
+def test_a_generator_that_does_not_fit_the_register_is_refused() -> None:
     # Too many bits, or a zero constant term: both build a different register
     # silently, which is the failure a reader of the fixture cannot see.
-    with pytest.raises(ValueError, match="octal"):
-        octal_taps(polynomial, memory)
+    def check(polynomial: int, memory: int) -> None:
+        with pytest.raises(ValueError, match="octal"):
+            octal_taps(polynomial, memory)
+
+    every_row([(0o17, 2), (0o2, 2), (0o6, 3)], check)
 
 
 @pytest.mark.smoke
@@ -160,18 +159,19 @@ def test_the_tail_empties_the_register_from_every_state(
 
 
 @pytest.mark.analytic
-@pytest.mark.parametrize("length", [12, 256, 1024])
-def test_the_interleaver_is_a_permutation_and_its_inverse_undoes_it(
-    length: int,
-) -> None:
+def test_the_interleaver_is_a_permutation_and_its_inverse_undoes_it() -> None:
     """`inverse[order[i]] = i`, and both compositions are the identity."""
-    order = random_interleaver(length, np.random.default_rng(233))
-    inverse = inverse_permutation(order)
-    identity = np.arange(length)
 
-    np.testing.assert_array_equal(np.sort(order), identity)
-    np.testing.assert_array_equal(order[inverse], identity)
-    np.testing.assert_array_equal(inverse[order], identity)
+    def check(length: int) -> None:
+        order = random_interleaver(length, np.random.default_rng(233))
+        inverse = inverse_permutation(order)
+        identity = np.arange(length)
+
+        np.testing.assert_array_equal(np.sort(order), identity)
+        np.testing.assert_array_equal(order[inverse], identity)
+        np.testing.assert_array_equal(inverse[order], identity)
+
+    every_value([12, 256, 1024], check)
 
 
 @pytest.mark.smoke
@@ -210,28 +210,33 @@ def test_the_declared_instances_draw_the_interleaver_their_seed_names() -> None:
 
 
 @pytest.mark.analytic
-@pytest.mark.parametrize("message_length", [12, 40])
-def test_encoding_is_gf2_linear_and_systematic(message_length: int) -> None:
+def test_encoding_is_gf2_linear_and_systematic() -> None:
     """`c(u + v) = c(u) + c(v)`, and the first `K` bits of a word are the message."""
-    code = turbo_code(
-        FEEDBACK, FEEDFORWARD, MEMORY, message_length, np.random.default_rng(3)
-    )
-    rng = np.random.default_rng(4)
-    generator = turbo_generator_matrix(code)
 
-    for _ in range(10):
-        u = rng.integers(0, 2, message_length).astype(np.uint8)
-        v = rng.integers(0, 2, message_length).astype(np.uint8)
+    def check(message_length: int) -> None:
+        code = turbo_code(
+            FEEDBACK, FEEDFORWARD, MEMORY, message_length, np.random.default_rng(3)
+        )
+        rng = np.random.default_rng(4)
+        generator = turbo_generator_matrix(code)
 
-        word = turbo_encode(code, u)
-        np.testing.assert_array_equal(word[:message_length], u)
-        np.testing.assert_array_equal(
-            word,
-            ((u.astype(np.int64) @ generator.astype(np.int64)) & 1).astype(np.uint8),
-        )
-        np.testing.assert_array_equal(
-            turbo_encode(code, u ^ v), turbo_encode(code, u) ^ turbo_encode(code, v)
-        )
+        for _ in range(10):
+            u = rng.integers(0, 2, message_length).astype(np.uint8)
+            v = rng.integers(0, 2, message_length).astype(np.uint8)
+
+            word = turbo_encode(code, u)
+            np.testing.assert_array_equal(word[:message_length], u)
+            np.testing.assert_array_equal(
+                word,
+                ((u.astype(np.int64) @ generator.astype(np.int64)) & 1).astype(
+                    np.uint8
+                ),
+            )
+            np.testing.assert_array_equal(
+                turbo_encode(code, u ^ v), turbo_encode(code, u) ^ turbo_encode(code, v)
+            )
+
+    every_value([12, 40], check)
 
 
 @pytest.mark.analytic
