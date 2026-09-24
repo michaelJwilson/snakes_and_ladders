@@ -494,6 +494,24 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sandbox.polar_reference
    :members:
 
+.. automodule:: snakes_and_ladders.validation
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.runner
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.protocol
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.scripts
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.scripts.selftest
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.scripts.package
+   :members:
+
 .. automodule:: snakes_and_ladders.qa
    :members:
 
