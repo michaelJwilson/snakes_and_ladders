@@ -42,9 +42,7 @@ def test_the_batch_took_one_transition_fewer_per_boundary() -> None:
 def test_the_coupled_simulator_restarts_at_every_boundary() -> None:
     """The draw is a different draw, and the seed is not what changed.
 
-    The same parameters, the same seed, segmented and not. If the segmentation
-    were ignored the two would be identical; they are not, and the positions
-    that differ begin at a boundary.
+    Same parameters and seed, segmented or not; differences begin at a boundary.
     """
     declared = fixtures.fixture("spatio_sequential_ragged", "ci").params
     assert declared.segments is not None
@@ -65,9 +63,7 @@ def test_the_coupled_simulator_restarts_at_every_boundary() -> None:
 def test_the_simulator_draws_the_declared_segments() -> None:
     """A ragged instance simulates, and the batch it returns is its segments.
 
-    The rectangular batch has no shape to hold unequal chains, so the arrays
-    come back flat and `batch` reads them. Equal chains keep their rectangle,
-    which is what every fixture that predates this expects.
+    Flat arrays read by `batch`; equal chains keep their rectangle.
     """
     ragged = simulate_sequences(fixtures.fixture("ragged_hmm", "ci").params)
     assert not ragged.rectangular
@@ -83,11 +79,7 @@ def test_the_simulator_draws_the_declared_segments() -> None:
 @pytest.mark.critical
 @pytest.mark.smoke
 def test_a_ragged_instance_has_no_single_sequence_length() -> None:
-    """Asking for *the* length of unequal chains is a question with no answer.
-
-    An earlier draft returned the longest, which is the quiet wrong number the
-    segmentation exists to make impossible.
-    """
+    """Asking for *the* length of unequal chains has no answer, not the longest."""
     params = fixtures.fixture("ragged_hmm", "ci").params
     with pytest.raises(ValueError, match="do not share one"):
         _ = params.sequence_length

@@ -1,18 +1,9 @@
 """Belief propagation, asserted where it is exact and measured where it is not.
 
-Two regimes, two kinds of test, and conflating them is the mistake this file
-avoids.
-
 On a tree BP is exact, so equality against exhaustive enumeration carries the
-correctness claim: a wrong sign in the Bethe free energy, an off-by-one in the
-degree correction, or a message that failed to exclude its own reverse all fail
-here.
-
-On a loopy lattice BP is approximate, so asserting agreement would assert
-something false and asserting only that it ran would be coverage theatre (root
-`CLAUDE.md`). Asserted instead is the structure the physics requires --- exact
-at zero coupling, and a deviation that grows away from it --- with the error
-reported as a measurement against the exact strip transfer matrix.
+claim. On a loopy lattice it is approximate: asserted instead are exactness at
+zero coupling and a deviation growing away from it, reported against the
+exact strip transfer matrix.
 """
 
 from __future__ import annotations
@@ -144,11 +135,8 @@ def test_the_bethe_deviation_is_the_measured_size() -> None:
 
 @pytest.mark.oracle
 def test_the_bethe_deviation_on_the_registry_lattice_is_the_measured_size() -> None:
-    # The instance the registry declares, refereed by enumeration rather than
-    # the strip transfer matrix: 3x3 at 3 states is 19,683 configurations, so
-    # `log Z` and every marginal are summed exactly. The deviation
-    # `docs/nb/potts_chain.ipynb` reports, pinned so the notebook states
-    # nothing the suite does not.
+    # The declared instance by enumeration (19,683 configurations); pins the
+    # deviation `docs/nb/potts_chain.ipynb` reports.
     instance = fixture("potts_lattice", "ci").params
     graph = lattice_graph(instance.shape, instance.boundary, instance.coupling)
     # The gauge the chain loader canonicalizes to and the lattice loader does

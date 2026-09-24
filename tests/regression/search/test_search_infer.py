@@ -62,11 +62,7 @@ def _alignment() -> tuple[dict[str, np.ndarray], int]:
 
 @cache
 def _searched(moves: MoveSet) -> Inference:
-    """The seed-1 search over the fixture alignment, run once per move set.
-
-    Three tests below read the trace, the endpoint and the evaluation count
-    of the same search; it is one run and they share it.
-    """
+    """The seed-1 search over the fixture alignment, once per move set, for three tests."""
     alignment, k = _alignment()
     return infer(alignment, k, rng=np.random.default_rng(1), moves=moves)
 
@@ -194,11 +190,8 @@ def test_the_search_converges_and_ends_on_its_best_score(moves: MoveSet) -> None
 
 @pytest.mark.oracle
 def test_no_topology_is_scored_twice() -> None:
-    # The deduplication claim, refereed by the closed-form count `(2n - 5)!!`
-    # through `sim.newick.count_topologies`: at 4 taxa there are 3 unrooted
-    # topologies, so a converged search can never have spent more than 3 fits
-    # however many times a neighbourhood proposes the same tree. Realized 2
-    # evaluations against the bound of 3.
+    # `(2n - 5)!!` via `count_topologies`: 3 at 4 taxa bounds the fits;
+    # realized 2.
     alignment, k = _alignment()
 
     result = _searched(MoveSet.SPR)
@@ -301,11 +294,8 @@ def test_an_nni_move_replaces_exactly_one_split() -> None:
 
 @pytest.mark.oracle
 def test_a_warm_start_reaches_the_cold_optimum_on_every_neighbour() -> None:
-    # What lets warm starts be the default: where a fit starts moves, where it
-    # ends does not. Every SPR neighbour of a fitted topology is fitted cold
-    # and from the parent's lengths; the optima agree within the float64
-    # agreement bound (realized worst 5.3e-12 relative over 90 neighbours at
-    # eight taxa) and the parent refitted from its own lengths is the parent.
+    # Warm starts move the start, not the end: 90 SPR neighbours at eight taxa
+    # cold and warm agree to 5.3e-12 relative; the parent refits to itself.
     alignment, k = _eight_taxa()
     start = random_topology(sorted(alignment), np.random.default_rng(1))
     parent = infer_module._score(Model.JC, start, k, alignment)
@@ -323,11 +313,8 @@ def test_a_warm_start_reaches_the_cold_optimum_on_every_neighbour() -> None:
 
 @pytest.mark.oracle
 def test_the_partial_cache_returns_what_the_recursion_computes() -> None:
-    # Bitwise: a partial served from the cache is the tensor the recursion
-    # would produce, because the arithmetic inside a subtree is the same
-    # whatever sits above it. Checked by evaluating every NNI neighbour once
-    # with an empty cache and once with the parent's, and by pinning the
-    # cached evaluator against the plain recursion (realized deviation 0.0).
+    # Bitwise: a cached partial is the recursion's tensor; every NNI neighbour
+    # with an empty and a parent cache, and against the plain recursion (0.0).
     alignment, k = _eight_taxa()
     pi = np.full(k, 1.0 / k)
     start = random_topology(sorted(alignment), np.random.default_rng(1))
@@ -349,13 +336,8 @@ def test_the_partial_cache_returns_what_the_recursion_computes() -> None:
 
 @pytest.mark.end2end
 def test_lazy_ranking_places_the_fitted_best_first_for_nni() -> None:
-    # One unfitted evaluation at the parent's lengths ranks the NNI
-    # neighbourhood correctly at eight taxa: the fitted best is the lazy best
-    # on 6 of 6 neighbourhoods measured. Asserted at the margin the
-    # measurement supports. The same is *not* true of SPR, where a regraft's
-    # new branches sit at the default length and the ranking is poor (1 of 6
-    # at K = 1, 3 of 6 at K = 5); that number is recorded in STATUS.md and is
-    # why lazy scoring is opt-in.
+    # Unfitted scoring ranks NNI correctly on 6 of 6 neighbourhoods at eight
+    # taxa; not SPR (1 of 6 at K = 1, 3 of 6 at K = 5; `STATUS.md`): opt-in.
     alignment, k = _eight_taxa()
     hits = 0
     for seed in range(4):
@@ -533,11 +515,8 @@ def test_partial_reoptimization_reports_a_full_fit() -> None:
 
 @pytest.mark.smoke
 def test_parallel_candidate_fits_reproduce_the_serial_search_exactly() -> None:
-    # The claim that makes the fan-out safe: a neighbourhood's candidates are
-    # independent and their results are combined in input order, so the pool
-    # cannot change which move is accepted. Bitwise, not to a tolerance --
-    # every candidate is fitted from the same start by the same optimizer, and
-    # only where they run differs.
+    # Independent candidates combined in input order: the pool cannot change
+    # the accepted move. Bitwise.
     alignment, k = _alignment()
 
     serial = infer(alignment, k, rng=np.random.default_rng(0), max_evaluations=12)
@@ -577,12 +556,9 @@ def test_workers_without_a_pool_is_refused_rather_than_run_serially() -> None:
 
 @pytest.mark.smoke
 def test_nothing_of_the_optimizer_crosses_a_structural_move() -> None:
-    # `search/CLAUDE.md` (#815): a move constructs a new objective, and what
-    # crosses is the parent's fitted values keyed by the identity the move
-    # keeps. The record the warm start reads carries exactly that -- the value,
-    # the fitted parameters by name and by split, the default length and the
-    # cost -- and no step size, curvature or adaptation state; and the fit
-    # builds its optimizer per call, so two fits from one start are one fit.
+    # `search/CLAUDE.md` (#815): the warm-start record carries value, fitted
+    # parameters by name and split, default length and cost, no optimizer
+    # state; the optimizer is built per call.
     assert {field.name for field in dataclasses.fields(infer_module._Fitted)} == {
         "value",
         "parameters",

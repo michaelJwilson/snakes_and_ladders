@@ -1,21 +1,10 @@
 """The conserved count families are frozen, and still score what they scored (issue #631).
 
-They exist to referee the covariate-aware families at a constant covariate, so
-the value of this module is that it does not move. Two things are asserted and
-they fail differently.
-
-**Frozen.** All 27 definitions are hashed. An edit here --- a docstring
-tidied, a type widened, a helper "simplified" --- changes the hash and fails,
-which is the point: a referee that drifts toward its subject referees nothing.
-The one declared edit, both classes dropping the live protocol from their
-bases, is inside the hash, so it cannot happen twice without a decision.
-
-**Live.** torch and numpy move under this module, and a conserved
-route that no longer runs is a gap rather than an oracle
-(sandbox/CLAUDE.md). So both families are scored, and their agreement with
-the live families *today* is asserted --- the equivalence the later steps make
-interesting, checked here while it is still trivially true, so a disagreement
-lands in the pull request that causes it.
+They referee the covariate-aware families at a constant covariate. Frozen: all
+27 definitions are hashed, so any edit fails; the one declared edit (dropping
+the live protocol from the bases) is inside the hash. Live: both families are
+scored and their agreement with the live families today is asserted, so a
+torch or numpy change lands in its own PR (sandbox/CLAUDE.md).
 """
 
 from __future__ import annotations
@@ -76,10 +65,7 @@ FROZEN = "b338080eae2ddb1211b46a0336478baebd06b9eba0f5852c9529074a4c3b2e18"
 def _carried_source() -> str:
     """The carried definitions' source, in ``CARRIED`` order.
 
-    Four node kinds, because the live module declares its names in four ways:
-    a class, a function, a ``type`` alias and a module-level constant. A
-    walker that read only the first two would hash a subset and pass over an
-    edit to the rest, which is the failure this whole module exists to avoid.
+    Classes, functions, ``type`` aliases and constants: all four the module declares.
     """
     source = CONSERVED.read_text()
     lines = source.split("\n")

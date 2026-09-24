@@ -1,22 +1,11 @@
 """What `infra/release.sh` must rebuild in full, and in what order.
 
-Two of the gate's steps exist because prediction failed: the figure stamps
-were wrong on 476 of 476 decisions (issue #476), so the release gate renders
-every figure (issue #484), and an incremental Sphinx build reports on what a
-saved environment says changed, so the release gate reads all 134 modules
-whatever ``docs/_build/`` holds (issue #485). Both are
-edits away from being cheap again --- a `--only`, a dropped `-E` --- and
-neither loss would fail anything at the time it was made, which is what these
-tests are for.
-
-The ordering is checked as well as the flags. `infra/build_documents.sh`
-renders a stale cited figure *into* `docs/tex/figures/`, so a comparison run
-after it compares a rebuild against bytes that build had just written.
-
-The same two steps are also where the gate paid for the manifest twice
-(issue #530), so what the ordering allows and what the gate spends are
-pinned together: the comparison comes first, and because it did, the build
-after it is told not to render.
+Two steps exist because prediction failed: figure stamps were wrong on 476 of
+476 decisions (#476), so every figure renders (#484); an incremental Sphinx
+build reports only what a saved environment says changed, so all 134 modules
+are read (#485). A `--only` or a dropped `-E` would undo either silently. The
+comparison runs before `infra/build_documents.sh`, which writes stale figures
+into `docs/tex/figures/`, and the build after it does not render (#530).
 """
 
 from __future__ import annotations
@@ -43,13 +32,7 @@ _RUN_CHECK = re.compile(r"^run_check\s+(.*)$", re.MULTILINE)
 
 
 def _steps() -> list[tuple[str, list[str]]]:
-    """The gate's steps, in the order it runs them.
-
-    Returns
-    -------
-    list[tuple[str, list[str]]]
-        Each step's name and the argument vector it runs.
-    """
+    """The gate's steps in run order, as (name, argument vector)."""
     text = RELEASE_GATE.read_text().replace("\\\n", " ")
     steps = []
     for match in _RUN_CHECK.finditer(text):
@@ -77,10 +60,7 @@ def _step_named(fragment: str) -> tuple[int, list[str]]:
 def test_the_gate_renders_every_figure_without_consulting_a_stamp() -> None:
     """`--all --check`: no digest, no skip, and no overwrite.
 
-    `--all` is what ignores the stamps whose false-positive rate is 100%, and
-    `--check` is what makes a mismatch a failure rather than a refresh. A
-    `--only` or a `--document` here would narrow the gate back to a
-    prediction.
+    `--all` ignores stamps wrong on 100% of decisions; `--check` fails, not refreshes.
     """
     _, command = _step_named("QA figures")
     assert command[:3] == ["uv", "run", "python"], command
@@ -105,9 +85,7 @@ def test_the_gate_renders_every_figure_without_consulting_a_stamp() -> None:
 def test_the_figures_are_compared_before_the_document_build_rewrites_them() -> None:
     """The comparison must read the committed bytes, not a fresh render.
 
-    `infra/build_documents.sh` renders every stale cited figure into
-    `docs/tex/figures/`. Run first, it supplies the very bytes the comparison
-    is against, and every cited figure passes by construction.
+    Run after the document build, it would compare figures against themselves.
     """
     figures, _ = _step_named("QA figures")
     documents, command = _step_named("documents")
@@ -124,12 +102,7 @@ def test_the_figures_are_compared_before_the_document_build_rewrites_them() -> N
 def test_the_gate_renders_each_figure_once() -> None:
     """The document build is told not to render what the step before it did.
 
-    Both steps rendered the whole manifest until issue #530. The figure step
-    compares every entry against the committed bytes, so those bytes *are* a
-    fresh render; a second pass can only write them back. The stamps that once
-    let it skip most of that are deleted (issue #490) and issue #492 left
-    every entry cited, so the two selections are the same 23 entries and the
-    gate paid the manifest's declared total twice.
+    Both rendered the same 23 entries until #530, paying the manifest twice.
     """
     _, command = _step_named("documents")
     assert "--no-figures" in command, (
@@ -142,14 +115,7 @@ def test_the_gate_renders_each_figure_once() -> None:
 def test_the_build_script_renders_the_figures_unless_it_is_told_not_to() -> None:
     """`--no-figures` is one caller's flag, not the script's default.
 
-    Three callers may skip the render and one may not. The release gate skips
-    because it has just compared every figure (issue #530), and a pull request
-    skips because issue #488 moved the renders --- 431.8 s against the LaTeX's
-    15.8 s --- off the path a merge waits for, and issue #625 brought only the
-    LaTeX back. **The push to `main` must still render**, because that is what
-    catches a figure whose numbers moved; a workflow that skipped it there
-    would typeset figures nothing regenerates. An unknown argument is refused
-    rather than ignored, so a typo cannot silently turn the render off.
+    Release (#530) and PRs (#488: 431.8 s against 15.8 s) skip; `main` renders.
     """
     script = BUILD_DOCUMENTS.read_text()
     assert "--no-figures) figures=0" in script
@@ -198,10 +164,7 @@ def test_the_build_script_renders_the_figures_unless_it_is_told_not_to() -> None
 def test_the_gate_builds_the_documentation_in_full() -> None:
     """`-E -a -W`: every module re-read, every output written, warnings fatal.
 
-    Without `-E` the build reuses whatever ``docs/_build/`` holds from an
-    earlier branch or an interrupted run and states only what changed --- 8.2 s
-    against 32.2 s cold (issue #485) --- while a release claims all 134 modules
-    are clean.
+    Without `-E`: 8.2 s against 32.2 s cold, over changes only (issue #485).
     """
     _, command = _step_named("sphinx-build")
     assert "sphinx-build" in command
@@ -220,17 +183,7 @@ def test_the_gate_builds_the_documentation_in_full() -> None:
 def test_release_md_bounds_the_figure_pass_above_the_manifest_s_total() -> None:
     """`RELEASE.md`'s stated bound is not less than the manifest's sum.
 
-    The number this replaced --- ~6 min a figure --- was a whole re-stamp
-    pass's total read as one render, and it stood because nothing in the tree
-    disagreed with it (issue #476). `snakes_and_ladders.qa.manifest` carries a
-    measured `seconds` per figure, so the cost has a source a reader can add
-    up.
-
-    An inequality rather than an equality, because `RELEASE.md`'s numbers are
-    rounded upper bounds by design (issue #525) and an exact-equality guard
-    would fail on the rounding rather than on the drift. This fires when the
-    figure set outgrows what the document tells a reader to expect, which is
-    the drift worth catching.
+    Measured `seconds` per figure (#476); an inequality, as bounds round up (#525).
     """
     total = sum(spec.seconds for spec in FIGURES)
     release = (REPO_ROOT / "RELEASE.md").read_text()

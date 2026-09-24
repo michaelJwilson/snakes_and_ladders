@@ -1,17 +1,8 @@
 """The covariate seam: accepted as ``None``, refused otherwise (issue #631).
 
-Step 1 of the plan on that ticket adds ``covariate`` to the three data-facing
-members of :class:`~snakes_and_ladders.emissions.EmissionFamily` and to all
-eight implementers, and nothing else. What is asserted here is the seam's two
-halves --- that ``None`` changes no behaviour, and that a covariate is
-*refused* rather than dropped --- because a covariate silently ignored fits a
-different likelihood than the caller asked for, and the failure would read as
-a worse recovery rather than as an error.
-
-``BetaBinomialEmission`` took its trial count in step 3 and
-``NegativeBinomialEmission`` its exposure in step 4, so neither is listed here
-any more. What remains is the five families that condition on nothing, and the
-assertion is that they say so rather than dropping a covariate silently.
+``None`` changes no behaviour, and a covariate is refused rather than dropped:
+ignored, it would fit a different likelihood and read as a worse recovery.
+The five families that condition on nothing are listed.
 """
 
 from __future__ import annotations

@@ -19,16 +19,10 @@ import pytest
 PACKAGE = Path(__file__).resolve().parents[2] / "python" / "snakes_and_ladders"
 DIRECTORIES = ("sim", "likelihood", "opt", "search", "sample", "learn", "qa")
 
-#: The two directories the division does not run through, each against its
-#: reason. `sandbox/` is the conserved home: an implementation a measurement
-#: declined, kept to referee the one that replaced it, so it reads the live
-#: module it is the oracle for and a declaration per read would restate
-#: `sandbox/CLAUDE.md` eight times. What holds it is the other direction,
-#: which `tests/regression/test_sandbox.py` asserts: no package directory
-#: imports it. `scripts/` is the command line, which reaches whatever a
-#: command runs. `validation/` is `sandbox/`'s counterpart for external
-#: frameworks (issue #972): it reads what it checks, and
-#: `tests/regression/test_validation.py` asserts the other direction.
+#: The directories the division does not run through. `sandbox/` reads the
+#: live module it referees; nothing imports it (`test_sandbox.py`). `scripts/`
+#: is the command line. `validation/` checks external frameworks (issue #972;
+#: `test_validation.py` asserts the other direction).
 EXCLUDED = ("sandbox", "scripts", "validation")
 
 #: Every directory-to-directory import edge the tree carries, with the
@@ -124,9 +118,7 @@ def _imported_directories(path: Path) -> set[str]:
 def edges(package: Path = PACKAGE) -> dict[tuple[str, str], set[str]]:
     """Every ``(from, to)`` directory edge, with the modules that make it.
 
-    ``package`` is a parameter so the reader can be run over a tree whose
-    edges are known, which is what the negative control at the end of this
-    module does; every caller here reads the package.
+    ``package`` is a parameter for the negative control at the end of this module.
     """
     realized: dict[tuple[str, str], set[str]] = {}
     for path in sorted(package.rglob("*.py")):
@@ -168,12 +160,8 @@ def test_the_only_cycle_is_the_declared_one() -> None:
 @pytest.mark.critical
 @pytest.mark.infra
 def test_python_holds_only_the_declared_package() -> None:
-    # `pyproject.toml` builds one package from `python/`. The rename (#252)
-    # left `python/phylo/` behind: a symlink to an extension on one
-    # developer's host, resolving nowhere, that nothing imported and nothing
-    # named from 2026-09-05 until #873. A directory beside the package is a
-    # second package nothing declares, or a rename's remainder; either fails
-    # here rather than surviving.
+    # One package is built from `python/`. `python/phylo/`, a dangling symlink
+    # the rename (#252) left, survived unnamed until #873.
     entries = sorted(entry.name for entry in PACKAGE.parent.iterdir())
     assert entries == ["snakes_and_ladders"], entries
 
@@ -198,14 +186,9 @@ def _write(package: Path, module: str, source: str) -> None:
 @pytest.mark.infra
 @pytest.mark.smoke
 def test_the_edge_reader_finds_an_edge_no_sentence_admits(tmp_path: Path) -> None:
-    # The pairing `tests/regression/docs` established, and the failure mode
-    # this guard actually has: a reader that finds nothing reports a divided
-    # tree, and the assertions above pass on an empty dictionary. So the
-    # reader is run over a tree whose edges are known -- `opt -> sim`, which
-    # `opt/CLAUDE.md` admits for no module, written in the four import forms
-    # the package uses -- and `opt -> search` from the function-local one,
-    # which is the form a cycle hides behind -- beside a module that crosses
-    # nothing.
+    # A reader that finds nothing passes the assertions above, so it runs over
+    # known edges: `opt -> sim` in the four import forms, `opt -> search` from
+    # a function-local import, beside a module that crosses nothing.
     package = tmp_path / "snakes_and_ladders"
     _write(
         package,

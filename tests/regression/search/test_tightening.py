@@ -1,18 +1,9 @@
 """The dual bound, asserted where it must hold and measured where it is loose.
 
-Issue #696. Two kinds of claim, and conflating them is the mistake this file
-avoids.
-
-**Validity is structural and is asserted at every iteration**, including after
-one sweep, because the bound follows from the decomposition and not from
-convergence: the shares sum to the energy, each is maximized independently, so
-nothing can beat the total. A test that only checked the converged bound would
-pass on an implementation that is wrong until it converges.
-
-**Tightness is a measurement.** How much the triangles close is a property of
-the instance, so what is asserted is the ordering --- tightened is at least as
-tight as pairwise, and neither exceeds the enumerated ground state --- with the
-fraction reported in `STATUS.md`.
+Issue #696. Validity is structural and asserted at every iteration: the shares
+sum to the energy and are maximized independently. Tightness is a
+measurement: tightened is at least as tight as pairwise and neither exceeds
+the enumerated ground state; the fraction is in `STATUS.md`.
 """
 
 from __future__ import annotations
@@ -122,28 +113,11 @@ def _cooled(graph: PottsGraph, beta: float) -> PottsGraph:
 @pytest.mark.critical
 @pytest.mark.potts_lattice
 def test_the_dual_bound_is_the_zero_temperature_belief_propagation_energy() -> None:
-    # The rung below (issue #734). Sum-product is exact on a tree and the
-    # pairwise relaxation is tight there, so the two meet at zero temperature
-    # and the relation pinned is an equality; on the loopy lattice neither is
-    # exact and what survives is the inequality the bound is for.
-    #
-    # Three statements, in that order.
-    #
-    # 1. On the tree the bound is the max-product MAP energy -- belief
-    #    propagation's ground state, exact where the graph is a tree.
-    #    Realized |bound - energy| 8.9e-16 against the 1e-9 declared, which is
-    #    the slack `Certificate.optimal` itself reads.
-    # 2. The same number as a limit rather than an argmax: `-log Z / beta`
-    #    from sum-product on the cooled model rises to the bound from below,
-    #    and cannot be further below it than the entropy `log(k ** n) / beta`.
-    #    Realized gaps 3.7e-2 at beta = 10 and 4.5e-7 at beta = 100, inside
-    #    bounds of 0.659 and 0.066.
-    # 3. On the 3x3 lattice sum-product is the Bethe approximation and its
-    #    decoded labelling is a labelling like any other, so the bound is
-    #    below its energy. Realized slack 0.0 at J = 0.4 -- the decoding is
-    #    optimal there and the bound certifies it -- and 9.0 at J = -0.8,
-    #    where the frustrated marginals decode to a labelling the bound
-    #    rejects.
+    # The rung below (#734). On the tree the bound is max-product's MAP energy:
+    # 8.9e-16 (1e-9, `Certificate.optimal`'s slack). `-log Z / beta` rises to
+    # it within `log(k ** n) / beta`: gaps 3.7e-2 at beta 10, 4.5e-7 at 100
+    # (bounds 0.659, 0.066). On the loopy 3x3 the bound is below the Bethe
+    # decoding's energy: slack 0.0 at J = 0.4, 9.0 at J = -0.8.
     assignment, _ = max_product(from_potts(TREE, FIELD))
     decoded = np.array(
         [assignment[f"s{site}"] for site in range(TREE.n_nodes)], dtype=np.int64
@@ -221,11 +195,8 @@ def test_triangles_tighten_what_the_pairwise_relaxation_cannot_see() -> None:
 @pytest.mark.analytic
 @pytest.mark.frustrated_lattice
 def test_the_pairwise_bound_does_not_depend_on_the_coupling_here() -> None:
-    # Stated as its own test because it is the clearest statement of what the
-    # relaxation misses, and because it is a prediction rather than an
-    # observation: with three states every triangle is 3-colourable, so the
-    # relaxation can satisfy every edge at no cost whatever the coupling, and
-    # only a constraint over the triangle can charge for the frustration.
+    # A prediction: three states color every triangle, so pairwise pays
+    # nothing; only a triangle constraint charges the frustration.
     weak = triangular_lattice_graph((3, 3), BoundaryCondition.OPEN, -0.8)
     strong = triangular_lattice_graph((3, 3), BoundaryCondition.OPEN, -1.5)
 

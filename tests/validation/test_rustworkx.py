@@ -1,29 +1,13 @@
 """Graph construction, topology equality and cluster labelling against rustworkx (issue #976).
 
-rustworkx runs in a subprocess (`validation.rustworkx`), so this module
-replaces the two that imported it in-process, `sim/test_graph_rustworkx.py`
-and `search/test_search_topology_rustworkx.py` (#322, #376). Referees:
-
-- the open square lattice is `generators.grid_graph` and the open chain is
-  `path_graph`, as unordered pairs of the same integers; the periodic lattice
-  is the grid plus exactly the wraparound edges;
-- `erdos_renyi_graph` agrees with `undirected_gnp_random_graph` at both ends
-  of `p`, and on the mean edge count of 400 draws within four standard errors;
-- a multigraph built from our edges reads back in our order with our
-  couplings, doubled bonds included, and a periodic triangular lattice has
-  every node of degree 6 by rustworkx's own adjacency;
-- two topologies are equal by Robinson--Foulds exactly when rustworkx calls
-  their leaf-labelled trees isomorphic, in both directions;
-- the Swendsen--Wang union-find partitions a bond mask into
-  `connected_components`, at 16², 71² and 142², at three temperatures.
-
-Dropped with the move, each for its reason:
-- the `from_rustworkx` refusals, since the method is gone;
-- the cut against networkx and its enumeration check, since networkx is not
-  a validation framework and #973's PyMaxflow oracle pins the same cut
-  exactly at 10² to 142²;
-- the guard that rustworkx has no s-t flow, which served the networkx pin
-  alone.
+In a subprocess (`validation.rustworkx`; #322, #376). Open lattice =
+`grid_graph`, chain = `path_graph`, periodic = grid plus wraparound;
+`erdos_renyi_graph` against `undirected_gnp_random_graph` at both ends of `p`
+and on 400 draws' mean edges within four errors; multigraph order and
+couplings, degree 6 on the periodic triangular lattice; Robinson--Foulds
+equality iff isomorphism; union-find against `connected_components` at 16²,
+71², 142², three temperatures. Dropped: `from_rustworkx` (gone) and the
+networkx cut checks (PyMaxflow pins the cut, #973).
 """
 
 from __future__ import annotations

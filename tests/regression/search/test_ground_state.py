@@ -1,22 +1,12 @@
 """Ground-state recovery on `spatio_only`, and the two referees it is scored by.
 
-Issue #551's rungs, each pinned where an exact answer reaches: enumeration at
-nine sites, a graph cut at 5,041 sites and two states. The structural referee
---- the size tilt, the null class, the per-class occupancy --- is read off the
-parameters that built the field, so it is exact at both sizes and is asserted
-beside the energy rather than instead of it.
-
-Two things here exist to fail loudly rather than quietly.
-
-**The cluster accept step.** A cluster move running without it looks like a
-fast winner, so `test_the_field_accept_step_rejects` asserts the rejections
-are there before any timing is believed.
-
-**The bracket's shift.** Boykov, Veksler & Zabih bound a *non-negative*
-energy, and this repository's energy is negative; applied unshifted the
-factor-2 statement is false. `test_the_bracket_contains_the_known_optimum`
-checks it where the optimum is enumerable, which is the only place the claim
-can be checked at all.
+Issue #551: enumeration at nine sites, a graph cut at 5,041 sites and two
+states; the structural referee (size tilt, null class, occupancy) is read off
+the parameters that built the field, beside the energy.
+`test_the_field_accept_step_rejects` shows the cluster accept step is present
+before any timing is believed. Boykov, Veksler & Zabih bound a non-negative
+energy, so the bracket is shifted, checked where the optimum is enumerable
+(`test_the_bracket_contains_the_known_optimum`).
 """
 
 from __future__ import annotations
@@ -63,12 +53,8 @@ _EXACT = 1e-9
 CI: SpatioOnlyParams = fixture("spatio_only", "ci").params
 RELEASE: SpatioOnlyParams = fixture("spatio_only", "release").params
 
-#: The exact ground state of `spatio_only/release` at q = 2, measured by graph
-#: cut on this branch: energy, the field-only labelling's agreement with it,
-#: and its size tilt. The tilt is **below** the fixture's thermal 0.4935, and
-#: that is the physics rather than a defect --- a ferromagnet orders as the
-#: temperature falls and the majority class takes sites whose own field points
-#: elsewhere. Pinned so a change to the cut, the field or the sizes moves it.
+#: `spatio_only/release` at q = 2 by graph cut: energy, field-only agreement,
+#: and a tilt below the thermal 0.4935, as a ferromagnet orders when cooled.
 RELEASE_Q2_ENERGY = -10454.1562900565
 RELEASE_Q2_GREEDY_AGREEMENT = 0.5376
 RELEASE_Q2_TILT = 0.2151
@@ -118,16 +104,9 @@ def _enumerated_minimizers(
 @pytest.mark.oracle
 @pytest.mark.critical
 def test_the_graph_cut_is_the_enumerated_ground_state_at_two_states() -> None:
-    # The claim rung 2 rests on, checked at the only size where it can be:
-    # a ferromagnet in an arbitrary per-site field is submodular, so the cut
-    # is exact and not merely good. Both implementations, since the Rust one
-    # is what the 5,041-site rung runs.
-    #
-    # This instance's ground state is degenerate: all-0 and all-1 score
-    # -7.2 bitwise. A cut returns *a* minimizer, and since the shared
-    # saturation floor (#935) the Python cut returns the other one from the
-    # enumeration's first; so the claim is the energy, and membership of the
-    # enumerated set of minimizers, not one labelling of the tie.
+    # A ferromagnet in any per-site field is submodular: the cut is exact, both
+    # implementations. All-0 and all-1 tie at -7.2 bitwise, so the claim is
+    # energy and membership of the minimizers (#935).
     rung = _rung(CI, 2)
     _, exact = _enumerated(rung)
     minimizers = _enumerated_minimizers(rung, exact)
@@ -329,11 +308,8 @@ def test_a_swap_of_a_label_with_itself_is_refused() -> None:
 
 @pytest.mark.oracle
 def test_the_rust_sweep_runs_the_per_site_field_and_matches_the_oracle() -> None:
-    # The kernel took one row shared by every site and refused this fixture,
-    # which is the one that has a per-site field -- so the backend that exists
-    # to make Potts sampling affordable could not sample the instance the
-    # roadmap targets (issue #571). It runs now, and against the Python sweep
-    # on the same stream it is the same run, not merely a close one.
+    # The kernel once refused the per-site field (#571); it now reproduces the
+    # Python sweep on the same stream.
     rung = _rung(CI, 3)
     assert not bool(np.all(rung.field == rung.field[0])), (
         "this fixture is the per-site case; a shared field tests nothing here"
@@ -378,12 +354,8 @@ def test_the_exact_ground_state_at_five_thousand_sites() -> None:
 @pytest.mark.end2end
 @pytest.mark.release
 def test_the_exact_ground_state_at_five_thousand_sites_tilts_with_size() -> None:
-    # Both arms of issue #551's Step 1 gate. The greedy agreement is the
-    # trap check: above ~95% the instance would be field-dominated and the
-    # comparison would measure nothing. The tilt is positive and **below**
-    # the fixture's thermal 0.4935, which is the ordering a ferromagnet shows
-    # as the temperature falls, not a defect --- the same cut reproduces the
-    # enumerated ground state exactly at nine sites.
+    # #551's Step 1 gate: greedy agreement under ~95% (not field-dominated);
+    # tilt positive and below 0.4935, the cut exact at nine sites.
     rung = _rung(RELEASE, 2)
     labelling, _ = rust_ground_state(rung.graph, rung.field)
 
@@ -399,20 +371,10 @@ def test_the_exact_ground_state_at_five_thousand_sites_tilts_with_size() -> None
 @pytest.mark.oracle
 @pytest.mark.critical
 def test_the_runners_record_the_energy_their_kernels_return() -> None:
-    # The rung below (issue #734): a runner is the comparison's adapter and
-    # nothing else, so on the same rung, seed and budget it must record the
-    # number its kernel returns and the labelling that number belongs to. A
-    # runner that recomputed the energy, spent a different budget, or drew
-    # from the generator before passing it on would put its own number in the
-    # method's row, and every ranking downstream would be of the adapter.
-    #
-    # Three of them, each against the kernel it wraps: `parallel_tempering`
-    # on the ladder `run_tempering` builds, the field-only argmax
-    # `run_greedy` is, and flooding `max_product` at the iteration count
-    # `run_max_product` derives. The energies reproduce bitwise -- realized
-    # difference 0.0 on all three, against a declared tolerance of exact
-    # equality -- because the kernel is called with the same generator state
-    # and the arithmetic is the same arithmetic.
+    # The rung below (#734): a runner records its kernel's number and labelling
+    # on the same rung, seed and budget. `run_tempering`, `run_greedy` and
+    # `run_max_product` against `parallel_tempering`, the field argmax and
+    # flooding `max_product`: difference 0.0, exact equality declared.
     rung = _rung(CI, 3)
     budget = Budget(Cost.SITE_VISITS, 60 * rung.visits_per_sweep)
     seed = 11
@@ -463,12 +425,8 @@ def test_the_runners_record_the_energy_their_kernels_return() -> None:
 
 @pytest.mark.smoke
 def test_the_comparison_records_the_labelling_each_entry_returned() -> None:
-    # `opt.budget.compare` returns an energy and a spend; the structural
-    # referee needs the labelling, and running every method twice to get it
-    # would double the experiment. An entry carries the run it already made
-    # out on its outcome, and this asserts the records cover every cell
-    # rather than silently missing one -- which would show up as a structural
-    # column quietly read from the wrong run.
+    # Each entry carries its run's labelling; the records must cover every
+    # cell, or a structural column is read from the wrong run.
     from snakes_and_ladders.opt.budget import compare
 
     rung = _rung(CI, 3)

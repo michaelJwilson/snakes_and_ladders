@@ -1,20 +1,9 @@
 """Validation-error paths for ``snakes_and_ladders.likelihood``, route by route.
 
-Separated from `test_likelihood_pruning.py`, which pins scientific
-correctness; these pin the guardrails around malformed inputs, mirroring
-`tests/regression/sim/test_jc_validation.py`'s split for the simulator.
-
-**One body per claim, parametrised over the routes** (issue #863). The same
-three refusals were written three times, each with its own copy of the
-two-leaf tree; a route is added to `ROUTES` (`conftest.py`) now and is asked
-every question the others are.
-
-The adapters in `ROUTES` build the differentiable routes' branch-length
-tensor from the tree they are handed, so the tree without a branch length is
-refused where that route refuses it --- in `branch_lengths_from_tree` --- with
-the message `pruning_common` gives every route. The last test is torch's
-alone: a branch-length tensor of the wrong shape, which no other route can be
-given (merged from `test_pruning_torch_validation.py`, issue #982).
+The guardrails around malformed inputs, one body per claim parametrised over
+`ROUTES` (issue #863); refusals come from `branch_lengths_from_tree` with the
+message `pruning_common` gives every route. The last test is torch's alone, a
+branch-length tensor of the wrong shape (issue #982).
 """
 
 from __future__ import annotations

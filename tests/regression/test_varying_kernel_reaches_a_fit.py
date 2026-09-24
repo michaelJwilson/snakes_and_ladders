@@ -1,17 +1,10 @@
 """A kernel that varies by position, in a fit rather than only an evaluator (#658).
 
-#656 gave `forward_backward`, `sample_path` and
-`forward_log_likelihood_from_density` a `(T - 1, K, K)` kernel. Nothing that
-*fits* took one: `baum_welch_family`'s recursion took a single `(K, K)` and its
-M step returned one, and `SpatioSequentialParams` carried a scalar
-`self_transition` through `circulant_transition`, so the spatial model could
-not express a varying kernel at all.
-
-**A per-step kernel is conditioned on, not fitted**, and that is the claim
-these pin. It carries `(T - 1) * K * (K - 1)` free values against `T - 1`
-transitions per sequence, so an M step that re-estimated it would hand back the
-posterior it was given. Told one, the fit holds it and fits everything else ---
-the same standing a covariate has.
+#656 gave the evaluators a `(T - 1, K, K)` kernel; `baum_welch_family` and
+`SpatioSequentialParams` took only one matrix or a scalar. A per-step kernel
+is conditioned on, not fitted: it has `(T - 1) * K * (K - 1)` free values
+against `T - 1` transitions per sequence. Told one, the fit holds it and fits
+the rest, as with a covariate.
 """
 
 from __future__ import annotations
@@ -60,10 +53,7 @@ def _fit(
 def test_a_repeated_kernel_fits_what_the_single_matrix_fits() -> None:
     """The constant case is unchanged where the kernel is also fitted.
 
-    A `(T - 1, K, K)` of one repeated matrix is the same model as that matrix,
-    so the *likelihood* must agree. The fitted transitions cannot: told a
-    per-step kernel the fit holds it, told one matrix it fits it, and that
-    difference is the point of the test below.
+    One repeated matrix is that matrix: the likelihoods agree, the transitions not.
     """
     stay = np.full(59, 0.9)
     observations = _chain(stay, 60, seed=3)
@@ -77,11 +67,7 @@ def test_a_repeated_kernel_fits_what_the_single_matrix_fits() -> None:
 @pytest.mark.smoke
 @pytest.mark.critical
 def test_a_per_step_kernel_is_held_and_a_single_matrix_is_fitted() -> None:
-    """The rule, asserted both ways so neither half can quietly change.
-
-    Told a per-step kernel the fit returns it unchanged; told a single matrix
-    it returns something else, because it fitted it.
-    """
+    """The rule, asserted both ways so neither half can quietly change."""
     stay = np.linspace(0.95, 0.55, 59)
     observations = _chain(stay, 60, seed=5)
     given = _kernels(stay)
@@ -99,18 +85,7 @@ def test_a_per_step_kernel_is_held_and_a_single_matrix_is_fitted() -> None:
 def test_a_held_kernel_comes_back_bitwise_and_unnormalized() -> None:
     """ "Held" means the caller's values, not a copy that agrees to a tolerance.
 
-    `torch.equal` against a normalized kernel cannot tell holding from a
-    round trip: an implementation that exponentiated, renormalized and took
-    the log of a kernel whose rows already sum to one would return values that
-    pass it. So the kernel handed in here **does not** normalize --- its rows
-    sum to 1.4 --- and it must come back with that, to the bit.
-
-    A fit that renormalizes returns rows summing to one and fails on the sum;
-    a fit that round-trips through `exp` and `log` returns 1.4 to within a few
-    ulps and fails on `torch.equal`. Both are the failure this names: a fit
-    that holds a kernel and returns a drifted copy passes "it held it" and is
-    still wrong, because the caller's next iteration is over different
-    numbers than the one it asked for.
+    Rows sum to 1.4: renormalizing fails the sum, an `exp`/`log` trip `torch.equal`.
     """
     length = 40
     stay = np.full(length - 1, 0.9)
@@ -137,13 +112,7 @@ def test_a_held_kernel_comes_back_bitwise_and_unnormalized() -> None:
 def test_the_held_kernel_explains_the_data_better_than_a_constant_one() -> None:
     """And it is worth holding: the varying truth beats the best single matrix.
 
-    The chain's stickiness falls from 0.95 to 0.55 across 400 positions. Told
-    that, the fit reaches -340.422 against the -345.477 of one free to fit any
-    single matrix --- the statement that the shape carries information a
-    constant kernel cannot. The margin grows with the chain (+1.0 at 300
-    positions, +5.1 at 400, +7.4 at 500); 400 is where it is comfortably
-    outside the noise and the pair of fits is still inside the per-test
-    duration cap (`DEV.md`).
+    0.95 to 0.55: -340.422 vs -345.477; margin +1.0, +5.1, +7.4 at 300, 400, 500.
     """
     stay = np.linspace(0.95, 0.55, 399)
     observations = _chain(stay, 400, seed=11)
@@ -167,15 +136,7 @@ def test_a_kernel_of_the_wrong_length_is_refused_by_the_fit() -> None:
 def test_the_spatial_params_take_a_matrix_for_the_chain_or_one_per_transition() -> None:
     """`(K, K)` and `(S - 1, K, K)` are the forms; the scalar rate stays the default.
 
-    The matrix forms are read as the kernel itself. A kernel assembled from
-    parts --- a base over one latent and a kernel over another, combined into
-    the product space --- is not a circulant at any rate, so the scalar could
-    not express one **even when it does not vary along the chain**. That
-    constant case is what `(K, K)` is for, and it is the one a caller reaches
-    first.
-
-    How a caller assembled a kernel is the caller's; this carries the result
-    and does not reconstruct it.
+    A kernel assembled over a product space is no circulant, even when constant.
     """
     from dataclasses import replace
 

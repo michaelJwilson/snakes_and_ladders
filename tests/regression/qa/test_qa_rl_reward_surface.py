@@ -66,12 +66,8 @@ def test_the_correlation_matches_its_closed_form_on_a_worked_case() -> None:
 
 @pytest.mark.smoke
 def test_the_correlation_is_continuous_where_a_rank_statistic_is_not() -> None:
-    # The reason this statistic replaced Spearman's rho, pinned rather than
-    # argued. Near-tied values are exactly what the fitted surface produces --
-    # several optima agree to within the optimizer's convergence -- and a rank
-    # statistic reorders them on any perturbation. This one moves by the size
-    # of the perturbation, which is what lets a caption quote it and CI
-    # rebuild the same document.
+    # Why this statistic replaced Spearman's rho: near-tied optima reorder
+    # under any perturbation; this moves by the perturbation's size.
     first = np.arange(50.0)
     second = np.repeat(np.arange(25.0), 2)
     baseline = pearson_correlation(first, second)

@@ -45,14 +45,9 @@ def test_the_empirical_frequencies_match_the_distribution() -> None:
 @pytest.mark.critical
 @pytest.mark.smoke
 def test_a_row_summing_below_one_cannot_yield_an_index_past_the_end() -> None:
-    # The guard, and the reason this module exists. A normalized row can sum
-    # to 1 - 4e-16 after rounding, leaving a sliver of the unit interval above
-    # its own total; `rng.random` returns values in [0, 1), so a draw lands
-    # there eventually. Without the clamp the draw is past every column and
-    # the obvious formulations report category `n`, one past the alphabet.
-    #
-    # Constructed rather than sampled: the event has probability ~4e-16 per
-    # draw, so waiting for it is not a test.
+    # A normalized row can sum to 1 - 4e-16, and `rng.random` in [0, 1) lands
+    # above it eventually; without the clamp the draw reports category `n`.
+    # Constructed, not sampled: ~4e-16 per draw.
     distributions = np.array([[0.3, 0.3, 0.4 - 5e-16]])
     assert distributions.sum() < 1.0
 
@@ -100,11 +95,8 @@ def test_a_one_dimensional_distribution_is_rejected() -> None:
 
 @pytest.mark.analytic
 def test_reducing_several_axes_at_once_is_one_reduction() -> None:
-    # `logsumexp` takes a tuple of axes because a region belief marginalized
-    # onto a child sums out every variable the child does not carry (issue
-    # #689). The referee is the identity it has to satisfy: one reduction over
-    # two axes is the same number as two reductions over one, up to the
-    # floating-point reordering the shift makes irrelevant here.
+    # A region belief marginalized onto a child sums out several axes (#689).
+    # Referee: one reduction over two axes equals two over one.
     rng = np.random.default_rng(20260916)
     values = rng.normal(scale=3.0, size=(4, 5, 6))
 
@@ -130,14 +122,7 @@ def test_the_shift_survives_an_exponent_the_linear_domain_would_lose() -> None:
 def test_logsumexp_is_scipys_at_exponents_the_linear_domain_cannot_hold() -> None:
     """`scipy.special.logsumexp` is the referee, and it is the same algorithm.
 
-    So the comparison strives for equality and reaches it: over a 128-entry
-    vector, a batch centred at ``+800`` and one at ``-750`` --- either side of
-    what a float64 exponent holds --- and the constant array whose answer is
-    ``800 + log 4``, the two agree **bitwise**. Reducing two axes at once is
-    the one case that does not, `scipy` reshaping where this shifts, and the
-    declared tolerance there is 1e-15 relative against a realized
-    **1.78e-16**. The closed form is checked beside it, since two
-    implementations of one algorithm can be wrong together.
+    Bitwise at +800, -750 and ``800 + log 4``; two axes: 1.78e-16 against 1e-15.
     """
     rng = np.random.default_rng(20260919)
     vector = rng.normal(scale=5.0, size=128)

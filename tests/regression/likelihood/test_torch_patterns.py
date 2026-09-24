@@ -1,17 +1,8 @@
 """The PyTorch patterns issue #544 measured, and what each decline rests on.
 
-Every pattern in the ticket was declined on its measurement, and a decline on
-speed is only a decline on speed if the alternative computes the same thing.
-That is what this module pins: each arm reproduces the value the path in the
-tree produces, so `STATUS.md`'s numbers are the whole of the difference
-between them and nothing is hiding in the third decimal.
-
-The alternatives are written out here rather than conserved in
-`snakes_and_ladders.sandbox`, whose rule admits a *finished* route and reports
-an unfinished one. None is an implementation; each is the two or three lines a
-proposer would write, kept beside the assertion that says what it costs.
-
-`tests/benchmarks/test_torch_patterns_bench.py` times the same arms.
+Each declined arm reproduces the in-tree value, so `STATUS.md`'s timings are
+the whole difference. The arms are the few lines a proposer would write, not
+sandbox routes. `tests/benchmarks/test_torch_patterns_bench.py` times them.
 """
 
 from __future__ import annotations
@@ -51,12 +42,7 @@ def _dataset() -> tuple[Node, int, np.ndarray, dict[str, np.ndarray], torch.Tens
 
 
 def _eigen_transitions(rate_matrix: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
-    """``P(t)`` by one eigendecomposition of ``Q``, not one ``matrix_exp`` per branch.
-
-    The alternative item 6 names: ``Q`` is decomposed once and only the
-    eigenvalues are exponentiated per branch, so the per-branch cost falls from
-    a matrix exponential to a vector one.
-    """
+    """``P(t)`` by one eigendecomposition of ``Q``, not one ``matrix_exp`` per branch."""
     values, vectors = torch.linalg.eig(rate_matrix)
     inverse = torch.linalg.inv(vectors)
     scaled = torch.exp(values[None, :] * t[:, None].to(values.dtype))
@@ -70,8 +56,7 @@ def _eigen_transitions(rate_matrix: torch.Tensor, t: torch.Tensor) -> torch.Tens
 def test_inference_mode_returns_the_value_no_grad_returns() -> None:
     """Item 1: the two evaluation modes differ in bookkeeping, not in arithmetic.
 
-    Bitwise, not to a tolerance: ``inference_mode`` switches off the version
-    counter and view tracking, and neither enters a reduction.
+    Bitwise: version counters and view tracking enter no reduction.
     """
     tau, k, pi, alignment, lengths = _dataset()
     with torch.no_grad():
@@ -85,10 +70,7 @@ def test_inference_mode_returns_the_value_no_grad_returns() -> None:
 def test_vmap_over_theta_reproduces_the_sequential_objective() -> None:
     """Item 2: batching over starting points changes no value.
 
-    What declines the pattern is the optimizer, not the arithmetic: L-BFGS'
-    strong-Wolfe line search branches on each start's own values, so a batched
-    objective has no batched consumer. This says the objective itself batches
-    exactly.
+    L-BFGS' line search branches per start, so the optimizer declines it, not this.
     """
     tau, k, pi, alignment, _ = _dataset()
     objective = BranchLengthObjective(tau, k, pi, alignment)
@@ -117,12 +99,7 @@ def test_eigendecomposition_reproduces_matrix_exp() -> None:
 
 @pytest.mark.analytic
 def test_eigendecomposition_gives_a_transition_matrix() -> None:
-    """Rows sum to 1 and no entry is negative, whichever route built them.
-
-    Agreement with ``matrix_exp`` would be satisfied by two implementations
-    wrong the same way; this is the property a transition matrix has on its
-    own.
-    """
+    """Rows sum to 1 and no entry is negative, whichever route built them."""
     tau, k, _, alignment, lengths = _dataset()
     objective = SubstitutionModelObjective(tau, k, alignment)
     rate_matrix = objective.rate_matrix(objective.initial()).detach()
@@ -140,19 +117,7 @@ def test_eigendecomposition_gives_a_transition_matrix() -> None:
 def test_the_transposed_operand_is_the_contiguous_one() -> None:
     """Item 5: ``transitions[i].T`` is a view, and BLAS reads it as one.
 
-    The claim is that the copy buys nothing, so the decline on speed is also a
-    decline on nothing else: the product is the same number.
-
-    Bitwise is the target and it is what this host gives --- 200 seeded draws
-    at every thread count from 1 to 8, not one differing bit. It is not what a
-    GitHub runner gave, where one draw disagreed and put `main` red. Nothing
-    about the computation changed there; a BLAS that dispatches a different
-    kernel for a stride-transposed operand sums in a different order, which is
-    a reduction-order difference and the case `CLAUDE.md` lets back off to the
-    declared tolerance. So the tolerance is asserted, the bitwise result is
-    reported here rather than asserted, and the draw is seeded --- an
-    unseeded draw under a bitwise assertion is a test that fails on a
-    different day for no change, which is how this one failed.
+    Bitwise here over 200 draws at 1-8 threads, not on a runner: tolerance, seeded.
     """
     tau, k, _, _, lengths = _dataset()
     transitions = transition_probabilities(lengths, k, None)

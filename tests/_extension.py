@@ -1,24 +1,11 @@
 """Whether the compiled extension in this tree is older than the Rust it was built from.
 
-Issue #630. The shared environment holds one editable install, pointing at the
-primary worktree, and a worktree is reached with ``PYTHONPATH=<worktree>/python``
-which shadows it --- the extension included. So every worktree carries its own
-``oxisal`` and nothing rebuilds it: a merge that changes
-``src/`` leaves the binary behind, and the suite then runs new Python against
-old Rust.
-
-**What that looks like is not what it is.** A worktree whose extension predated
-a ``single_site_sweeps`` signature change failed 67 tests, almost all of them
-in ``search/test_potts_mcmc*.py``, over 36 minutes. Read at the end of a run
-those failures look exactly like the change under test breaking the oracles,
-and they were diagnosed that way twice before the `TypeError` underneath was
-read. The rebuild costs 18 seconds. Finding out costs a suite.
-
-So the check runs at ``pytest_configure``, before a test is collected, and the
-message names both files and the command that repairs it. Timestamps rather
-than a content hash: a checkout writes the files it changes and leaves the rest
-alone, so a merge that does not touch ``src/`` leaves the binary valid and this
-silent, which is the common case and the one that must stay free.
+Issue #630. A worktree reached with ``PYTHONPATH=<worktree>/python`` carries
+its own ``oxisal`` and nothing rebuilds it, so a merge that changes ``src/``
+runs new Python against old Rust. One stale extension failed 67 tests over 36
+minutes, read twice as a broken oracle; the rebuild costs 18 s. So the check
+runs at ``pytest_configure`` and names both files and the repair. Timestamps,
+not a hash: a merge that leaves ``src/`` alone stays silent and free.
 """
 
 from __future__ import annotations
@@ -38,12 +25,7 @@ SUFFIXES = (".so", ".pyd", ".dylib")
 
 
 def _built(root: Path) -> Path | None:
-    """The extension in `root`, or `None` where the tree carries none.
-
-    A tree with no extension is not stale: it is a checkout that has never
-    built one, and every import of the package will say so far more clearly
-    than a timestamp could.
-    """
+    """The extension in `root`, or `None` where the tree has never built one."""
     for path in sorted(root.glob(EXTENSION_GLOB)):
         if path.suffix in SUFFIXES:
             return path
@@ -68,17 +50,7 @@ def _newest_source(root: Path) -> tuple[Path, float] | None:
 def stale_extension(root: Path) -> str:
     """The refusal for a stale extension in `root`, empty where it is current.
 
-    Parameters
-    ----------
-    root : Path
-        The worktree to check.
-
-    Returns
-    -------
-    str
-        A message naming the extension, the source that outdates it and the
-        command that rebuilds it; empty where the extension is current, absent,
-        or the tree carries no Rust.
+    Names the extension, the newer source and the rebuild command.
     """
     built = _built(root)
     if built is None:

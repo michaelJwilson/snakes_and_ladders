@@ -36,11 +36,7 @@ def _first_row(code: ParityCheck) -> np.ndarray:
 
 
 def _circulant(first_row: np.ndarray, size: int) -> np.ndarray:
-    """The circulant of ``first_row``, rolled a row at a time.
-
-    Built here rather than imported: the construction assembles the same
-    matrix as edges, and a referee sharing that code would check nothing.
-    """
+    """The circulant of ``first_row``, rolled a row at a time, not built as edges."""
     top = np.zeros(size, dtype=np.uint8)
     top[first_row] = 1
     return np.stack([np.roll(top, i) for i in range(size)])
@@ -85,10 +81,7 @@ def test_the_degrees_before_deletion_are_the_circulant_weight() -> None:
 def test_the_row_space_is_self_orthogonal() -> None:
     """`H H^T = 0` over GF(2), before and after deletion: the CSS condition.
 
-    Nothing classical needs it. It holds because a circulant and its
-    transpose are both polynomials in the cyclic shift and so commute,
-    making `H H^T = A A^T + A^T A = 0` over GF(2), and deleting rows keeps
-    it. The quantum half of issue #362 rests on it, so it is asserted here.
+    Circulant and transpose commute: `A A^T + A^T A = 0`; #362's quantum half.
     """
 
     def check(n_checks: int) -> None:
@@ -110,10 +103,7 @@ def test_the_row_space_is_self_orthogonal() -> None:
 def test_deletion_raises_the_rate_and_keeps_the_row_weight() -> None:
     """Deleting 12 of 48 rows at `n = 96` takes `k` from 50 to 60, `2w` fixed.
 
-    `k = n - rank H` is at least the design rate's `n - m` at every count,
-    since deleting a row cannot raise the rank, and rises with each deletion.
-    A deleted row takes ones out of `2w` columns, so column weights fall and
-    row weights do not move.
+    `k >= n - m` and rises per deletion; column weights fall, row weights stay.
     """
     codes = [_code(96, n_checks, seed=6) for n_checks in (48, 44, 40, 36)]
 
@@ -128,11 +118,8 @@ def test_deletion_raises_the_rate_and_keeps_the_row_weight() -> None:
 
 @pytest.mark.smoke
 def test_deleting_the_heaviest_rows_beats_deleting_at_random() -> None:
-    # The construction chooses which rows to delete rather than deleting any
-    # twelve, and what it chooses them for is uniform column weights. The
-    # referee is the alternative: 20 random deletions of the same count,
-    # scored by the sum of squared column weights, which is minimized when
-    # the weights are level.
+    # Rows are chosen for level column weights; the referee is 20 random
+    # deletions scored by the sum of squared column weights.
     code = _code(96, 36, seed=7)
     full = _circulant(_first_row(code), 48)
     dense = np.concatenate([full, full.T], axis=1)

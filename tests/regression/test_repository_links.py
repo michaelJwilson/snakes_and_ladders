@@ -1,18 +1,10 @@
 """Every link to this project names the repository this project is in.
 
-Issue #250. `STATUS.md` cited 82 pull requests, `README.md`'s CI badge pointed
-twice, and `Cargo.toml`'s `repository` field once, all at
-the repository's former path under this owner -- one this project does not
-live at. Correct links in the repository: zero. The numbers were right and only the path
-was wrong, which is why nothing caught it: every link resolved to a plausible
-page, and a reviewer reading one saw a pull request that existed.
-
-`Cargo.toml`'s is the one with consequences beyond a reader: it is the metadata
-a published crate carries.
-
-The check is a guard rather than a one-time fix because the wrong path is what
-a copied line reproduces. It reads tracked text files, so a link added to any
-document is covered without listing the documents.
+Issue #250. `STATUS.md` cited 82 pull requests, `README.md`'s CI badge twice
+and `Cargo.toml`'s `repository` field once, all at the former path under this
+owner; every link resolved to a plausible page. `Cargo.toml`'s is the metadata
+a published crate carries. A guard, since a copied line reproduces the path;
+it reads every tracked text file.
 """
 
 from __future__ import annotations
@@ -39,11 +31,7 @@ SUFFIXES = (".md", ".toml", ".tex", ".py", ".rst", ".yml", ".yaml", ".sh", ".bib
 
 
 def _tracked_text_files() -> list[Path]:
-    """Every tracked file a link could be written in.
-
-    Uses `git ls-files` rather than a walk, so untracked scratch files and
-    build output cannot fail the check.
-    """
+    """Every tracked file a link could be written in, by `git ls-files`."""
     listing = subprocess.run(
         ["git", "ls-files"],
         cwd=REPO_ROOT,
@@ -68,9 +56,7 @@ def _wrong_links(text: str) -> list[str]:
 def test_every_link_names_this_repository() -> None:
     """No tracked file points at another repository under this owner.
 
-    A link under a *different* owner is somebody else's project and is not this
-    check's business; one under this owner naming something other than
-    `snakes_and_ladders` is this project under a name it no longer has.
+    Other owners are other projects; this owner's other names are former ones.
     """
     offenders = {
         str(path.relative_to(REPO_ROOT)): sorted(set(wrong))
@@ -88,14 +74,7 @@ def test_every_link_names_this_repository() -> None:
 def test_the_guard_fails_on_a_link_to_the_old_name() -> None:
     """The guard rejects exactly what it exists to reject.
 
-    A guard that only passes on the current tree says nothing about the next
-    line somebody copies -- the rule this repository settled on after the
-    documentation index needed four repairs by hand before a test closed it
-    (#223). The former path is the case that actually occurred, 85 times.
-
-    The offending URL is assembled from parts rather than written out: this
-    file is itself scanned, so a literal one here would fail the check above --
-    which is the guard working, but on its own test.
+    The former path (85 occurrences), assembled from parts: this file is scanned.
     """
     former = "phylo"
     assert _wrong_links(f"see https://github.com/{OWNER}/{former}/pull/49") == [former]

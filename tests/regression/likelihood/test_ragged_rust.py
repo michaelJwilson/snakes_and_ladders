@@ -64,9 +64,7 @@ def test_the_marginals_are_normalized_within_every_segment() -> None:
 def test_the_counts_hold_one_transition_fewer_than_the_positions() -> None:
     """The boundary pairs are absent, and the arithmetic says how many.
 
-    A batch of `S` segments totalling `T` positions took `T - S` transitions,
-    not `T - 1`: each boundary is a restart, not a step. Summing the expected
-    counts recovers exactly that, which is the claim the mask exists for.
+    `S` segments over `T` positions take `T - S` transitions: each boundary restarts.
     """
     lengths = (6, 19, 3, 11)
     density, initial, transition = _instance(lengths, seed=13)

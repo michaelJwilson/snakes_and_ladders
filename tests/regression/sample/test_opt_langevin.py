@@ -1,18 +1,11 @@
 """MALA, pinned against HMC where it is exact and against a closed form where it is not.
 
-Three statements, in that order. The one-step identity is arithmetic: MALA's
-proposal *is* one leapfrog step and its Metropolis ratio *is* the energy
-difference, so the two routes run on one generator state agree to floating
-point and the agreement is measured rather than assumed. Then the
-distribution, against an analytic Gaussian and against the mixture posterior
-whose evidence is a sum over all 4,096 assignments (issue #749). Then the
-correction, ablated: without it the chain is the Langevin diffusion's Euler
-discretization, whose stationary variance on a Gaussian has a closed form
-that is not the target's.
-
-`opt/CLAUDE.md` is why the energy error appears in every one of them. An
-acceptance rate near its target says the step is not absurd and says nothing
-about the spread, and for an uncorrected chain it is 1 by construction.
+MALA's proposal is one leapfrog step and its ratio the energy difference, so
+the two routes agree to floating point, measured. Then the distribution:
+an analytic Gaussian and the 4,096-assignment mixture posterior (issue #749).
+Then the correction ablated: unadjusted Langevin's stationary variance has a
+closed form that is not the target's. The energy error appears throughout
+(`opt/CLAUDE.md`): an uncorrected chain accepts at 1 by construction.
 """
 
 from __future__ import annotations
@@ -42,14 +35,9 @@ from tests._posteriors import (
     weight_posterior,
 )
 
-#: The tolerance the identity is declared at, and what it realizes. The two
-#: routes compute the same number by different arithmetic --- a trajectory's
-#: kick-drift-kick against two Gaussian log densities --- so bitwise agreement
-#: is not available and the difference is the reordering's. Measured over 400
-#: proposals at three step sizes: 2.7e-15, 1.3e-15 and 8.9e-16 on the draws
-#: and 2.6e-15, 2.7e-15 and 1.4e-14 on the energy error, against the 1e-12
-#: declared here. Every accept/reject decision agreed exactly, at acceptances
-#: of 0.985, 0.8425 and 0.560.
+#: Different arithmetic, same number: over 400 proposals at three steps,
+#: 2.7e-15, 1.3e-15, 8.9e-16 on draws and 2.6e-15, 2.7e-15, 1.4e-14 on the
+#: energy error; every decision agreed (acceptance 0.985, 0.8425, 0.560).
 IDENTITY = 1e-12
 
 #: Standard errors a marginal estimate is allowed from its closed form. Three
@@ -59,17 +47,9 @@ IDENTITY = 1e-12
 GAUSSIAN_SIGMAS = 3.0
 MIXTURE_SIGMAS = 4.0
 
-#: The uncorrected chain's target: a unit-variance Gaussian in one coordinate,
-#: where the Euler-Maruyama discretization is an AR(1) and its stationary
-#: variance is :func:`ula_stationary_variance` exactly. One coordinate because
-#: the closed form is written out below, and a matrix version of it would be
-#: the test asserting its own algebra.
-#:
-#: **The steps are 1.0 and 1.5 and not smaller.** At 0.5 the closed form is
-#: 1.067 against a target of 1.000, and 6,000 draws of a chain whose
-#: integrated autocorrelation time is 15 carry a standard error of 0.05 --- so
-#: the two candidate answers are 1.3 standard errors apart and the comparison
-#: decides nothing. At 1.0 they are 1.333 against 1.000, eleven of them.
+#: One unit-variance coordinate: Euler-Maruyama is an AR(1) with a closed-form
+#: variance. Steps 1.0 and 1.5: at 0.5 the answers (1.067 against 1.000) are
+#: 1.3 standard errors apart (ESS time 15, 6,000 draws); at 1.0, eleven.
 ULA_VARIANCE_TRUTH = 1.0
 ULA_DRAWS = 6000
 ULA_STEPS = (1.0, 1.5)
@@ -78,12 +58,7 @@ ULA_STEPS = (1.0, 1.5)
 def ula_stationary_variance(step_size: float, variance: float) -> float:
     """The variance unadjusted Langevin converges to on ``N(0, variance)``.
 
-    The proposal ``x' = x - (h^2 / 2) x / s^2 + h z`` is an AR(1) with
-    coefficient ``a = 1 - h^2 / (2 s^2)`` and innovation variance ``h^2``, so
-    its stationary variance is ``h^2 / (1 - a^2) = s^2 / (1 - h^2 / (4 s^2))``
-    --- above the target for every step, and unbounded as ``h`` approaches
-    ``2 s``, where the recursion stops being stable at all. Written here so
-    the test asserts the closed form rather than a recorded number.
+    AR(1), ``a = 1 - h^2 / (2 s^2)``: ``s^2 / (1 - h^2 / (4 s^2))``, unbounded at ``2s``.
     """
     return variance / (1.0 - step_size * step_size / (4.0 * variance))
 
@@ -91,11 +66,8 @@ def ula_stationary_variance(step_size: float, variance: float) -> float:
 @pytest.mark.analytic
 @pytest.mark.critical
 def test_one_langevin_step_is_the_hamiltonian_transition() -> None:
-    # The identity the module rests on: at one leapfrog step HMC's proposal is
-    # the Langevin proposal and its acceptance ratio is MALA's, so the two
-    # routes on one generator state are one chain. This module writes the
-    # transition densities and `hmc` writes the trajectory, so the comparison
-    # is between two implementations rather than of one against a copy.
+    # At one leapfrog step HMC's proposal and ratio are MALA's: two
+    # implementations (transition densities against the trajectory), one chain.
     for step in (0.3, 0.7, 1.0):
         hamiltonian_route = sample(
             GAUSSIAN,
@@ -129,18 +101,9 @@ def test_one_langevin_step_is_the_hamiltonian_transition() -> None:
 
 @pytest.mark.oracle
 def test_the_langevin_chain_recovers_an_analytic_gaussian() -> None:
-    # Mean and covariance in closed form, so nothing rests on a second
-    # sampler. Two seeds, at a fixed step rather than an adapted one: what is
-    # being asserted is the kernel's stationary distribution, and a warm-up
-    # would put a second thing between the claim and the failure.
-    #
-    # Realized over the two seeds, in the chain's own standard errors: mean
-    # 0.40 and 0.87 worst, variance 0.45 and 0.47 worst, against the 3.0
-    # declared. Acceptance 0.575 and 0.559 -- the Langevin optimum, reached
-    # at this step without a warm-up -- and the mean energy error 1.61 and
-    # 1.57 against a worst proposal of 21.7 and 25.1, which is what a
-    # single-step method at its optimal acceptance looks like and what the
-    # acceptance rate alone would not have said.
+    # Closed form, fixed step (no warm-up between claim and failure). Two
+    # seeds, in chain errors: mean 0.40, 0.87; variance 0.45, 0.47 (3.0).
+    # Acceptance 0.575, 0.559; mean energy error 1.61, 1.57, worst 21.7, 25.1.
     for seed in (11, 12):
         chain = mala(
             GAUSSIAN,
@@ -166,14 +129,9 @@ def test_the_langevin_chain_recovers_an_analytic_gaussian() -> None:
 @pytest.mark.oracle
 @pytest.mark.release
 def test_the_langevin_chain_recovers_the_enumerated_assignment_posterior() -> None:
-    # The rung below (issue #734): assignment enumeration. Every number the
-    # chain is judged against is a sum over all 4,096 whole assignments,
-    # integrated over the one free coordinate; the responsibilities come from
-    # the factorized E step and are compared against the enumeration's own.
-    #
-    # Realized over the two seeds: the posterior mean weight 1.15 and 0.11
-    # standard errors away and the worst marginal 1.14 and 0.15, against the
-    # 4.0 declared, at acceptances of 0.793 and 0.787.
+    # The rung below (#734): the enumerated posterior over 4,096 assignments.
+    # Two seeds: weight 1.15 and 0.11 errors, worst marginal 1.14 and 0.15
+    # (4.0 declared); acceptance 0.793, 0.787.
     target, observations, components = weight_posterior()
     reference = enumerated_quadrature(observations, components)
 
@@ -200,13 +158,9 @@ def test_the_langevin_chain_recovers_the_enumerated_assignment_posterior() -> No
 
 @pytest.mark.analytic
 def test_unadjusted_langevin_realizes_the_closed_form_discretization_bias() -> None:
-    # ULA converges, and not to the target: the discretization has its own
-    # stationary distribution and `ula_stationary_variance` writes it out.
-    # Asserting the chain against *that* rather than against the target is
-    # what makes this a statement about the discretization instead of a
-    # restatement of the ablation below. Realized: 0.14 standard errors from
-    # the closed form at a step of 1.0 and 0.98 at 1.5, where the chain's
-    # variance is 2.246 against a closed form of 2.286 and a target of 1.000.
+    # ULA converges to its own stationary law, not the target: 0.14 errors
+    # from the closed form at step 1.0, 0.98 at 1.5 (2.246 against 2.286;
+    # target 1.000).
     target = AnalyticGaussian([0.0], [[ULA_VARIANCE_TRUTH]])
     for step in ULA_STEPS:
         chain = mala(
@@ -231,14 +185,9 @@ def test_unadjusted_langevin_realizes_the_closed_form_discretization_bias() -> N
 
 @pytest.mark.analytic
 def test_dropping_the_correction_misses_the_variance_that_mala_recovers() -> None:
-    # The ablation. At a step the size of the target's standard deviation the
-    # uncorrected chain is 33% overdispersed --- `1 / (1 - h^2 / 4)` at
-    # `h = s = 1` --- and that is many standard errors, while the same step
-    # with the correction lands inside three. The acceptance rate sees none of
-    # it: the uncorrected chain reads 1.00 and the corrected one 0.927.
-    # Realized: the uncorrected variance is 11.09 standard errors from the
-    # truth and the corrected one 1.45, and the mean energy error 0.1835
-    # against 0.1524.
+    # Ablation at `h = s = 1`: uncorrected is 33% overdispersed, 11.09 errors
+    # off; corrected 1.45. Acceptance 1.00 against 0.927 sees none of it;
+    # mean energy error 0.1835 against 0.1524.
     target = AnalyticGaussian([0.0], [[ULA_VARIANCE_TRUTH]])
     truth = np.array([ULA_VARIANCE_TRUTH])
     uncorrected = mala(
@@ -268,12 +217,8 @@ def test_dropping_the_correction_misses_the_variance_that_mala_recovers() -> Non
 
 @pytest.mark.analytic
 def test_the_warm_up_adapts_the_step_to_the_langevin_acceptance() -> None:
-    # The same two windows HMC's warm-up runs, driven to MALA's target rather
-    # than HMC's. What is pinned is what the adaptation achieves on the drawn
-    # chain, not the constants behind it: pooled over four seeds the drawn
-    # acceptance is 0.537 against the 0.574 asked for --- 0.594, 0.542, 0.472
-    # and 0.542 by seed --- and every chain reports the step and the mass it
-    # ran at.
+    # HMC's two windows driven to MALA's target: pooled over four seeds 0.537
+    # against 0.574 (0.594, 0.542, 0.472, 0.542).
     adaptation = Adaptation(
         warmup=300, target_acceptance=MALA_TARGET_ACCEPTANCE, step_jitter=0.4
     )

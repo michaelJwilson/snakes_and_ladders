@@ -1,23 +1,9 @@
 """`opt.fit` on the test functions against `scipy.optimize.minimize` (issue #376).
 
-The test functions have analytic minimizers, so the fit already has an
-oracle; what a second optimizer adds is the other half of the claim ---
-that the *point* our L-BFGS stops at is the point an independently written
-L-BFGS stops at from the same start, and not merely a point near an answer we
-also wrote down. Both are given the same objective, the same closed-form
-gradient through autograd, and the same starting point, and are required to
-agree to ``1e-4`` in the minimizer.
-
-Only surfaces with an unambiguous basin from the given start are compared.
-Rastrigin from a start outside the central cell lands in whichever cell it
-began in, for either optimizer, so agreement there would be a coincidence of
-step lengths and not a claim; the central-cell start is used instead, and the
-success-rate claim the section makes stays where it is.
-
-``scipy`` is not a declared dependency of this repository
-(``sample.statistics`` and ``opt.fit`` write out the few constants they would
-need from it), so this skips unless it is installed. Whether to declare it is
-the open question issue #376 leaves standing.
+The analytic minimizers already referee the fit; an independent L-BFGS from
+the same start, objective and autograd gradient must stop at the same point,
+to ``1e-4``. Only unambiguous basins are compared: Rastrigin starts in the
+central cell. Skips without ``scipy``, which is undeclared (issue #376).
 """
 
 from __future__ import annotations

@@ -1,19 +1,10 @@
 """BCJR and Viterbi on one trellis, against enumeration and against sum-product.
 
-Two referees, and they answer different questions. Enumerating all ``2 ** K``
-messages says the posterior is *right*; the general message passing on
-:func:`snakes_and_ladders.sim.factor_graph.from_trellis` says the
-specialization here is the *same computation* as the one every other problem
-class in this repository runs. Neither replaces the other, which is the
-pairing issue #340 established for the parity-check decoder and this extends
-rather than duplicates.
-
-The tolerances are the measured agreements, stated as the module they pin:
-BCJR against enumeration at ``1e-9`` on a posterior ratio measured at
-``2.8e-14``, and against the tree schedule at ``1e-9`` on one measured at
-``2.7e-15``. Both are absolute on a log-odds ratio, which is a per-bit
-quantity and does not grow with the block length, unlike the summed
-log-likelihood ``likelihood/CLAUDE.md`` states a relative bound for.
+Enumerating all ``2 ** K`` messages says the posterior is right; message
+passing on :func:`snakes_and_ladders.sim.factor_graph.from_trellis` says it is
+the same computation as every other problem class (the pairing of #340).
+Tolerances, absolute on a per-bit log-odds ratio: ``1e-9`` against
+enumeration (measured ``2.8e-14``) and against the tree schedule (``2.7e-15``).
 """
 
 from __future__ import annotations
@@ -75,11 +66,7 @@ def _received(
 def test_bcjr_posteriors_are_the_exact_bitwise_map(backend: Backend) -> None:
     """The forward-backward ratio equals the sum over all `2 ** K` messages.
 
-    The whole claim of the decoder: no approximation is involved on a
-    terminated trellis, since it is a chain and message passing is exact on
-    one, so equality may be asserted rather than a departure reported. Both
-    backends are held to it, so the enumeration referees the port rather
-    than the port's agreement with the oracle standing in for it.
+    A terminated trellis is a chain, so exact; both backends against enumeration.
     """
 
     def check(message_length: int) -> None:
@@ -109,10 +96,7 @@ def test_bcjr_posteriors_are_the_exact_bitwise_map(backend: Backend) -> None:
 def test_viterbi_returns_the_maximum_likelihood_message_with_a_pinned_margin() -> None:
     """The best path is the enumerated maximum, and the runner-up is not tied to it.
 
-    ``sim/CLAUDE.md``: a degenerate fixture proves nothing. The margin is
-    asserted positive per draw, so what is compared is a maximum and not a
-    tie-break; the smallest margin the draws produced is reported by the
-    assertion that fails if any is zero.
+    A positive margin per draw (``sim/CLAUDE.md``: a degenerate fixture proves nothing).
     """
     trellis = recursive_systematic_trellis(FEEDBACK, FEEDFORWARD, MEMORY)
     rng = np.random.default_rng(11)
@@ -132,10 +116,7 @@ def test_viterbi_returns_the_maximum_likelihood_message_with_a_pinned_margin() -
 def test_the_two_decodings_of_one_trellis_are_different_answers() -> None:
     """A received word on which the bitwise and blockwise MAP disagree.
 
-    ``likelihood/CLAUDE.md``: two decodings of one model are different
-    answers, and a decoder computing one and reporting the other survives a
-    suite with no case where they diverge. This is that case, found by
-    searching seeds and pinned here as one.
+    ``likelihood/CLAUDE.md``: two decodings are different answers; seed found by search.
     """
     trellis = recursive_systematic_trellis(FEEDBACK, FEEDFORWARD, MEMORY)
     rng = np.random.default_rng(2)
@@ -162,10 +143,7 @@ def test_the_two_decodings_of_one_trellis_are_different_answers() -> None:
 def test_the_trellis_graph_is_a_chain_and_sum_product_gives_bcjr() -> None:
     """The tree schedule's beliefs and `log Z` are BCJR's, edge for edge.
 
-    `from_trellis` puts the observation on the transition, so the input
-    bit's posterior is read off the pairwise belief rather than off a
-    variable's; that read is the only arithmetic this test does that the
-    decoder does not.
+    The input bit is read off the pairwise belief: the one extra arithmetic step.
     """
     trellis = recursive_systematic_trellis(FEEDBACK, FEEDFORWARD, MEMORY)
     rng = np.random.default_rng(19)
@@ -222,10 +200,7 @@ def test_max_product_on_the_trellis_graph_gives_the_viterbi_path() -> None:
 def test_an_a_priori_ratio_enters_the_posterior_exactly_once() -> None:
     """`posterior = channel + a priori + extrinsic`, the decomposition eq:extrinsic.
 
-    The identity a turbo iteration rests on: the extrinsic ratio is what is
-    left after removing what the decoder was told, so a decoder that leaked
-    the a priori term back into its extrinsic output would fail here rather
-    than in a waterfall nobody can read.
+    A turbo iteration rests on it; a leaked a priori term fails here.
     """
     trellis = recursive_systematic_trellis(FEEDBACK, FEEDFORWARD, MEMORY)
     rng = np.random.default_rng(31)
@@ -246,10 +221,7 @@ def test_an_a_priori_ratio_enters_the_posterior_exactly_once() -> None:
 def test_an_a_priori_ratio_is_the_same_evidence_as_a_second_channel() -> None:
     """A priori `L_a` equals enumerating with `L_a` added to the systematic stream.
 
-    An a priori log-odds on the input bit is, by definition, evidence about
-    that bit from elsewhere; adding it to the systematic channel ratio is
-    the same posterior. Enumeration referees the equality, so the a priori
-    path is pinned by the same oracle as the rest and not by construction.
+    Evidence about the bit from elsewhere, refereed by enumeration.
     """
     trellis = recursive_systematic_trellis(FEEDBACK, FEEDFORWARD, MEMORY)
     rng = np.random.default_rng(37)
@@ -269,10 +241,7 @@ def test_an_a_priori_ratio_is_the_same_evidence_as_a_second_channel() -> None:
 def test_an_unterminated_decoder_computes_a_different_posterior() -> None:
     """Telling the decoder the register was not emptied changes the answer.
 
-    The boundary condition is not decoration: an unterminated backward
-    recursion starts uniform over states, so it admits paths the terminated
-    code does not contain. A decoder that ignored the flag would pass every
-    other test here, since both branches are otherwise identical.
+    An unterminated backward recursion starts uniform, admitting other paths.
     """
     trellis = recursive_systematic_trellis(FEEDBACK, FEEDFORWARD, MEMORY)
     rng = np.random.default_rng(41)
@@ -300,13 +269,7 @@ def test_streams_of_disagreeing_length_are_refused() -> None:
 def test_an_impossible_edge_is_a_finite_floor_and_not_minus_infinity() -> None:
     """A hard zero would make the general sum-product return `nan`, not a number.
 
-    The failure the floor prevents, asserted rather than described. At the
-    first steps of a terminated trellis most states are unreachable, so their
-    incoming edges are all impossible; the general implementation shifts a row
-    by its maximum before exponentiating, and a row that is entirely `-inf`
-    becomes `-inf - (-inf)`. Rebuilding the same graph with `-inf` in place of
-    `IMPOSSIBLE_EDGE` is what this asserts against, so the constant is pinned
-    by the thing it exists for.
+    An all-`-inf` row becomes `-inf - (-inf)`; rebuilt with `-inf`, it does.
     """
     trellis = recursive_systematic_trellis(FEEDBACK, FEEDFORWARD, MEMORY)
     rng = np.random.default_rng(43)
@@ -374,37 +337,13 @@ def test_the_trellis_returns_the_planted_message_and_fails_inside_the_union_boun
     BCJR's 0.0630, inside `[2.6e-3, 8.1e-2]` --- the nearest-codeword
     probability and the union bound over the enumerated weight spectrum.
 
-    The path is the package's: a message from a seeded generator,
-    `sim.convolutional.terminate` and `encode_stream` through the `(7, 5)`
-    register, `sim.ldpc`'s Gaussian channel on both streams, and the two
-    decoders this module ships --- `viterbi`, the blockwise MAP, and `bcjr`'s
-    hard decision, the bitwise one. The truth judged is the planted message,
-    read off the first `END2END_LENGTH` inputs; the tail is the register's and
-    is not a message.
-
-    What referees the rate is the code's own weight spectrum, enumerated here
-    rather than quoted: terminated, the code is linear, so the distance from
-    the sent word to any other is the weight of some codeword, and the 1,024
-    weights are computed by running the register over every message. The
-    minimum is `FREE_DISTANCE`, which is what the `(7, 5)` register is chosen
-    for. Two bounds follow and bracket maximum likelihood exactly:
-
-    * **below**, `Q(sqrt(d_free) / sigma)`: a decode fails at least as often
-      as one named nearest neighbour beats the word that was sent;
-    * **above**, `sum_w A_w Q(sqrt(w) / sigma)`: the union over every other
-      codeword.
-
-    Viterbi is maximum likelihood over the terminated code, so the bracket is
-    a statement about it and not an approximation to it. BCJR's hard decision
-    is the bitwise MAP and minimizes bit errors rather than block errors, so
-    its block rate is reported beside Viterbi's and is not asserted below it:
-    at these 2,000 draws it is higher, and a sample this size cannot order the
-    two.
-
-    The upper bound is not slack. A 4,000-draw run of the same path reads
-    0.0510, so the union bound is 1.6 times the rate it holds, and these 2,000
-    draws sit 1.8 standard errors above that: a decoder losing a factor of two
-    would read 0.102 and fail the bound, which is what it is kept tight for.
+    The path: a seeded message, `terminate` and `encode_stream` through the
+    `(7, 5)` register, `sim.ldpc`'s Gaussian channel, `viterbi` and `bcjr`'s
+    hard decision, judged on the first `END2END_LENGTH` inputs. The 1,024
+    codeword weights are enumerated; below is `Q(sqrt(d_free) / sigma)`,
+    above `sum_w A_w Q(sqrt(w) / sigma)`, bracketing ML (Viterbi); BCJR is
+    reported beside it. Not slack: 4,000 draws read 0.0510, so the bound is
+    1.6x the rate and a decoder losing a factor of two (0.102) fails.
     """
     trellis = recursive_systematic_trellis(FEEDBACK, FEEDFORWARD, MEMORY)
     weights = np.array(

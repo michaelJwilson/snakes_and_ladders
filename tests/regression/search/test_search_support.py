@@ -214,16 +214,10 @@ def _calibration_bins(
 def test_the_neighbourhood_and_bootstrap_supports_are_calibrated_at_seven_and_eight_taxa(
     fixture: str, n_taxa: int
 ) -> None:
-    # The five-taxon calibration above, where the enumerated weight is no
-    # longer affordable (945 fits per tree at seven taxa; refused at eight),
-    # so what is binned is what a search there can report: the NNI
-    # neighbourhood weight, and the bootstrap as a tree-level statistic --
-    # the smallest support over the tree's internal splits, since the tree is
-    # right only if every split is. Four site
-    # counts, four seeds, eight replicates: 16 runs per taxon count, about
-    # 10 min at seven taxa and 30 at eight. The realized tables are in
-    # `STATUS.md`; the assertion is that neither fraction falls from one
-    # bin to the next.
+    # Past enumeration (945 fits per tree at seven taxa, refused at eight): the
+    # NNI weight and the tree's smallest bootstrap split support, binned. Four
+    # site counts, four seeds, eight replicates (~10 min at seven taxa, 30 at
+    # eight; `STATUS.md`). Asserted: neither fraction falls between bins.
     params = load_params(fixture_path(fixture), SimulationParams)
     assert len(list(internal_splits(params.tau))) == n_taxa - 3
     truth = leaf_bipartitions(params.tau)
@@ -279,12 +273,8 @@ def _two_site_chain(clamp: int | None) -> FactorGraph:
 def test_the_single_site_neighbourhood_is_the_whole_space_only_where_one_site_is_free() -> (
     None
 ):
-    # On a two-site chain the single-site flips reach 5 of the 9 labellings:
-    # the four changing both sites are two moves away, so the neighbourhood
-    # weight is the enumerated one renormalized over that ball, and larger.
-    # Clamp one site by an indicator factor, as a leaf's observed state clamps
-    # a tree's, and the ball is every labelling with weight, so the two agree
-    # to 1e-12.
+    # A two-site chain's flips reach 5 of 9 labellings, so the weight is
+    # renormalized and larger; one clamped site makes them agree to 1e-12.
     labelling = np.array([1, 0])
     free = _two_site_chain(None)
     near, exact = (
@@ -315,11 +305,8 @@ def test_the_single_site_neighbourhood_is_the_whole_space_only_where_one_site_is
 def test_the_enumerated_labelling_weight_is_enumerate_potts_s_boltzmann_weight_at_beta_one() -> (
     None
 ):
-    # Every labelling of a 3 x 2 lattice, three states: `exp(log_weights -
-    # log Z)` from the Potts oracle, which shares no code with the factor
-    # graph's own log-density, equals the enumerated support to 1e-12 and
-    # the 729 weights sum to one; the single-site neighbourhood never gives
-    # a labelling less than its enumerated weight.
+    # 3 x 2 lattice, 729 labellings: the Potts oracle equals the enumerated
+    # support to 1e-12, sums to one, and no neighbourhood weight falls below it.
     graph = lattice_graph((3, 2), BoundaryCondition.OPEN, 0.8)
     factor_graph = from_potts(graph, FIELD)
     exact = enumerate_potts(graph, FIELD)
@@ -342,12 +329,8 @@ def test_the_enumerated_labelling_weight_is_enumerate_potts_s_boltzmann_weight_a
 def test_the_enumerated_decoding_weight_is_the_path_posterior_and_pins_the_ambiguous_fixture() -> (
     None
 ):
-    # A decoding is a labelling of the chain's factor graph. On the fixture
-    # whose two decoders disagree, the Viterbi path's enumerated weight is
-    # `exp(log P(path, x) - log P(x))` from the path enumeration, its margin
-    # is the 0.3033 nats `ambiguous_hmm` documents, and the posterior-decoded
-    # path sits 0.6066 nats below it -- a negative margin, which is what a
-    # decoding that is no maximum over paths looks like.
+    # On `ambiguous_hmm` the Viterbi path's margin is the documented 0.3033
+    # nats; the posterior-decoded path sits 0.6066 below: not a maximum.
     params = ambiguous_hmm()
     observations = AMBIGUOUS_OBSERVATIONS
     graph = from_hmm(
@@ -423,13 +406,9 @@ def test_a_topology_with_no_competitor_has_all_the_weight() -> None:
 def test_pattern_support_is_the_fraction_of_sites_some_tree_with_the_split_fits_in_the_fewest_changes() -> (
     None
 ):
-    # A site is compatible with a split when a resolved tree carrying that
-    # split explains it in one change per extra state, the fewest any tree
-    # can (Felsenstein, *Inferring Phylogenies*, ch. 8). Enumerated per site
-    # as the minimum Fitch score over every five-taxon topology containing
-    # the split, which shares nothing with the straddling-state count under
-    # test. The split tree with polytomies is not the oracle: it charges a
-    # change for two unresolved leaves that share a state.
+    # Compatibility (Felsenstein, ch. 8): the minimum Fitch score over every
+    # five-taxon topology carrying the split, not the polytomy tree, which
+    # charges two unresolved leaves sharing a state.
     params = load_params(fixture_path(FIVE_TAXA), SimulationParams)
     alignment = _alignment(params, 8, 120)
     taxa = sorted(alignment)
@@ -517,9 +496,7 @@ def test_a_split_that_is_not_a_bipartition_of_the_alignment_is_refused() -> None
 def test_four_workers_report_the_bootstrap_one_worker_reports() -> None:
     """Replicate ``i`` draws the stream spawned for it, whichever worker runs it (issue #344).
 
-    The frequencies are equal exactly, not within a Monte Carlo tolerance,
-    because the resample and the search of each replicate come from the
-    generator spawned for that replicate and from nothing scheduled.
+    Equal exactly: resample and search come from the replicate's own generator.
     """
     params = load_params(fixture_path(FIVE_TAXA), SimulationParams)
     alignment = _alignment(params, 3, 300)
@@ -541,10 +518,7 @@ def test_a_replicate_is_the_search_of_the_resample_its_spawned_generator_draws()
 ):
     """The stream a replicate sees is stated, so a reader can reproduce one by hand.
 
-    Replicate ``i`` gets ``rng.spawn(n_replicates)[i]``, draws its columns
-    from it, then searches with the same generator. Pinned against that
-    construction rather than against a recorded frequency, because the
-    frequency would also hold under a stream nobody could name.
+    ``rng.spawn(n_replicates)[i]`` draws the columns, then searches.
     """
     params = load_params(fixture_path(FIVE_TAXA), SimulationParams)
     alignment = _alignment(params, 3, 300)

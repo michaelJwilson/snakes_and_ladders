@@ -1,26 +1,11 @@
 """Why the tempered sweep scales the accumulated field, not its parts (#651).
 
-Dropping two whole-array temporaries per sweep is available for free in
-`sample/potts_mcmc/sweeps.py`: pass ``beta`` into the parts and compute
-``beta h + sum(beta J)`` instead of ``(h + sum J) beta``. The two are equal in
-real arithmetic, and #571 refused the cheaper one for not being bitwise.
-
-`CLAUDE.md` now permits backing off bitwise to the declared tolerance, so #651
-re-opened the question. **The measurement refuses it, and on mechanism rather
-than on caution.**
-
-The Rust sweep already tolerates a last-place disagreement: it decides a site
-only where the draw clears every cumulative boundary by ``GUARD`` units of the
-last place, and hands any site it declines back to the oracle's own update. So
-a reassociation inside the guard would cost extra hand-backs and nothing else.
-This one is not inside the guard, and it is not a rounding difference at all:
-``h + sum J`` cancels, so the scaled-parts form carries an absolute error set
-by the magnitudes of the *parts* while the result is near zero.
-
-The error therefore concentrates exactly where it does most harm --- a site
-whose accumulated field is near zero is a site whose conditional is closest to
-uniform, which is the site most likely to flip. That is why this is refused
-under a rule written to admit exactly this kind of trade.
+``beta h + sum(beta J)`` would drop two temporaries per sweep against
+``(h + sum J) beta``; #571 refused it as not bitwise, and #651 re-measured
+under the backed-off rule. Refused on mechanism: the Rust sweep's ``GUARD``
+absorbs last-place differences, but ``h + sum J`` cancels, so the error is set
+by the parts' magnitudes while the result is near zero. It concentrates on
+sites whose conditional is nearest uniform, the ones most likely to flip.
 """
 
 from __future__ import annotations

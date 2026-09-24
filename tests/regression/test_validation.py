@@ -1,22 +1,12 @@
 """`snakes_and_ladders.validation` drives external frameworks, each in a subprocess (issue #972).
 
-Three rules are read from the source tree, as `test_sandbox.py` reads its own,
-so a lazy import inside a function is caught too:
-
-- no hot-path package imports `validation`, and the package root does not
-  re-export it;
-- no module under `python/` or `tests/` imports a registered framework except
-  the scripts under `validation/scripts/`, which run in their own interpreter;
-- every `validation-*` extra names exactly one distribution, is registered in
-  `FRAMEWORKS` with the module its script imports, and has an adapter, a
-  script and a test module under the framework's name.
-
-The runner is checked against `scripts/selftest.py`, which imports NumPy
-alone: arrays come back bitwise, the time is the script's, and a failing
-script raises with its standard error.
-
-**This module stays at the top level**, beside `test_sandbox.py`, for the
-reason that one does: what it asserts is an absence across five packages.
+Read from the source tree, as `test_sandbox.py` does: no hot-path package
+imports `validation` and the root does not re-export it; only the scripts under
+`validation/scripts/` import a registered framework; each `validation-*` extra
+names one distribution registered in `FRAMEWORKS`, with an adapter, a script
+and a test module. The runner is checked against `scripts/selftest.py` (NumPy
+only): arrays bitwise, the script's time, stderr on failure. It stays at the
+top level, beside `test_sandbox.py`: it asserts an absence across five packages.
 """
 
 from __future__ import annotations

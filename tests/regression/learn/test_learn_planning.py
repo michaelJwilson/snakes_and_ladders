@@ -103,11 +103,9 @@ def test_the_visit_distribution_improves_on_the_prior_at_depth_three() -> None:
 def test_expert_iteration_makes_the_planner_reach_the_optimum_at_a_fraction_of_greedys_evaluations() -> (
     None
 ):
-    # Measured: an untrained prior with a fresh critic reaches the enumerated
-    # optimum from 76.5% of the 81 starts at 57 evaluations per episode against
-    # greedy's 80.2% at 48; after 10 iterations of 8 planned episodes the
-    # planner reaches it from 92.6% at 8.3 evaluations per episode, and at
-    # six simulations (6.3 evaluations) matches greedy's 80.2%.
+    # Measured: untrained prior, fresh critic: 76.5% of 81 starts at 57
+    # evaluations (greedy 80.2% at 48); after 10 x 8 planned episodes 92.6% at
+    # 8.3; at six simulations (6.3 evaluations) 80.2%.
     environment = potts_environment()
     starts = _states(environment)
     best = optimum(environment)[1]
@@ -204,11 +202,8 @@ def test_the_search_refuses_a_non_positive_budget_and_handles_a_terminal_root() 
 def test_a_planned_episode_is_an_episode_and_its_returns_are_the_recomputed_ones() -> (
     None
 ):
-    # `PlannedEpisode` was a second episode type without `terminated` or
-    # `returns_to_go`, so `expert_iteration` recomputed the returns it fits
-    # its critic against (issue #862). It is an `Episode` now, and its
-    # returns are bitwise the reversed cumulative sum that stood in for
-    # them.
+    # A planned episode is an `Episode` (#862); its returns are bitwise the
+    # reversed cumulative sum `expert_iteration` computed.
     environment = potts_environment()
     critic = Critic(
         n_state_features(environment),
@@ -244,11 +239,8 @@ def test_a_planned_episode_is_an_episode_and_its_returns_are_the_recomputed_ones
 @pytest.mark.smoke
 @pytest.mark.snapshot
 def test_the_expert_iteration_curve_is_the_one_a_fixed_seed_produces() -> None:
-    # The curve the fold is pinned against (issue #862), seed for seed. A
-    # diagnostic and not a result --- `learn/CLAUDE.md` says a sampled
-    # return is never one --- so what is asserted is reproduction, to the
-    # last bit, of the numbers the same seed produced before the planner's
-    # episode became an `Episode`.
+    # The curve the fold is pinned against (#862), seed for seed and bitwise;
+    # a diagnostic, not a result (`learn/CLAUDE.md`).
     environment = potts_environment()
 
     def curve() -> tuple[tuple[float, ...], tuple[float, ...], int]:

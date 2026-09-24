@@ -1,28 +1,13 @@
 """The Rust Swendsen-Wang pass, refereed twice: by the oracle's own pass on
 the same draws, and by the distribution it converges to.
 
-Issue #754. `search/CLAUDE.md`: a sampler is validated by the distribution it
-converges to, never by inspection. So the enumeration test is here, at the
-2x2 fixture `test_potts_mcmc.py` declares, with and without a field.
-
-**The oracle's chain is not reachable, and its pass is.** The oracle draws a
-cluster's colour and then, only where the field difference is negative, its
-accept uniform --- what the next draw *is* depends on the last one's outcome,
-so no array replays that stream and the Rust route draws its colours and
-uniforms in bulk instead (``potts_mcmc.sweeps._cluster_pass_rust``). What *is*
-reachable is the oracle running on the draws the kernel was given:
-:class:`_ScriptedDraws` hands ``swendsen_wang_sweep`` the same bond uniforms,
-the same colour per cluster and the same uniform per cluster, in the order the
-kernel indexes them. The two then have the same input and the comparison is
-bitwise --- which is the pin, and it is stronger than a second implementation
-written here would be, because what it runs *is* the oracle.
-
-The guard is what makes that bitwise rather than approximate: the kernel sums
-a cluster's field terms left to right where NumPy sums them pairwise, and
-``exp`` of the difference is a threshold. A cluster whose decision sits inside
-that width is handed back and decided by NumPy, and
-:func:`test_a_guard_that_hands_every_cluster_back_changes_no_recolouring`
-runs the pass with the hand-back forced on every cluster.
+Issue #754; the enumeration test is at `test_potts_mcmc.py`'s 2x2 fixture,
+with and without a field (`search/CLAUDE.md`). The oracle's draw order depends
+on outcomes, so its chain cannot be replayed; :class:`_ScriptedDraws` hands
+``swendsen_wang_sweep`` the kernel's own bond uniforms, colours and accept
+uniforms, so the comparison runs the oracle itself, bitwise. The kernel sums
+field terms left to right where NumPy sums pairwise, so a cluster inside that
+width is handed back to NumPy; one test forces the hand-back on every cluster.
 """
 
 from __future__ import annotations
@@ -72,13 +57,7 @@ PIN_TEMPERATURES = (0.5, 1.0, 2.0)
 class _ScriptedDraws:
     """The generator ``swendsen_wang_sweep`` draws from, replaying one pass.
 
-    The oracle draws in this order: one array of bond uniforms, then per
-    cluster in increasing root order one colour and --- where the field
-    difference is negative --- one uniform. Every cluster draws its colour,
-    so counting ``integers`` counts clusters, and the accept uniform a cluster
-    asks for is the one the kernel indexes by that cluster's rank. That is
-    what makes the comparison a comparison of *implementations* rather than of
-    generators.
+    Bond uniforms, then per cluster by root a colour and, if needed, a uniform.
     """
 
     def __init__(
@@ -192,10 +171,7 @@ def test_the_rust_pass_is_the_oracles_pass_bitwise_on_the_same_draws() -> None:
 def test_the_labels_are_the_oracles_own_components() -> None:
     """The bond pass and the union-find, against ``find_root`` on the same bonds.
 
-    Root identity and not only the partition: the oracle's ``union_roots`` keeps
-    the first edge end's root, and which node labels a component is what puts
-    the recolourings in their order --- so a kernel that partitioned the same
-    way under another rule would draw a different colour for each cluster.
+    Root identity, not only partition: it orders the recolourings.
     """
 
     def check(seed: int) -> None:
@@ -229,11 +205,7 @@ def test_the_labels_are_the_oracles_own_components() -> None:
 def test_a_guard_that_hands_every_cluster_back_changes_no_recolouring() -> None:
     """The hand-back path, forced and then checked against the pass without it.
 
-    The default guard hands nothing back on a realistic pass, so the path that
-    decides a borderline cluster in NumPy would otherwise never run. A guard
-    wide enough refuses every cluster with a field to weigh, and the pass must
-    come back with the same configuration --- which is what says the two
-    halves of the construction agree rather than only the fast one working.
+    A guard wide enough hands back every fielded cluster; the result is unchanged.
     """
     n_states, beta = 3, 1.0
     graph, rows, state = _instance((6, 6), n_states, SEEDS[0])
@@ -264,10 +236,7 @@ def test_a_guard_that_hands_every_cluster_back_changes_no_recolouring() -> None:
 def test_the_default_guard_hands_nothing_back_on_a_realistic_pass() -> None:
     """What the guard costs, measured rather than assumed.
 
-    The width is a bound on two summation orders and two ``exp``
-    implementations, not a rate: if it were routinely met the pass would be
-    running in NumPy while carrying a Rust kernel. Over twelve passes at 16x16
-    and three states, every cluster was decided in Rust.
+    Twelve passes at 16x16, three states: every cluster decided in Rust.
     """
     n_states = 3
     handed_back = 0
@@ -312,12 +281,7 @@ def test_the_rust_pass_draws_the_exact_boltzmann_distribution() -> None:
 
 @pytest.mark.oracle
 def test_the_rust_pass_is_still_exact_in_an_external_field() -> None:
-    """A field is not optional here.
-
-    The Fortuin-Kasteleyn construction is exact at zero field and the accept
-    step is what extends it, so a zero field alone could not tell a pass that
-    dropped the accept step from one that kept it.
-    """
+    """A field is not optional here: zero field cannot see a dropped accept step."""
 
     def check(seed: int) -> None:
         assert _goodness_of_fit(WITH_FIELD, seed) > SIGNIFICANCE
@@ -329,10 +293,7 @@ def test_the_rust_pass_is_still_exact_in_an_external_field() -> None:
 def test_the_test_would_catch_a_pass_that_ignored_the_field() -> None:
     """Evidence the two tests above have the power they claim.
 
-    A pass handed a zero field samples the zero-field law, which is a
-    *different* law from the one the enumeration above is taken in: if the
-    chi-square could not tell them apart it could not tell a broken accept
-    step either.
+    A zero-field pass samples a different law; the chi-square must reject it.
     """
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
     n_states = int(WITH_FIELD.shape[0])
@@ -366,10 +327,7 @@ def test_the_test_would_catch_a_pass_that_ignored_the_field() -> None:
 def test_the_rust_route_refuses_a_counter() -> None:
     """Instrumentation is refused rather than silently dropped.
 
-    `ClusterCounter` reads every cluster's members and whether its accept step
-    passed, which is the gather the port removes. A route that accepted the
-    argument and recorded nothing would make issue #551's measurement read
-    zero clusters and say so nowhere.
+    `ClusterCounter` needs the gather the port removes; silence would zero #551.
     """
     graph, rows, state = _instance((3, 3), 3, SEEDS[0])
 

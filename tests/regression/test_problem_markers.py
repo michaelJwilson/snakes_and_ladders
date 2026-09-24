@@ -1,19 +1,11 @@
 """The problem axis is derived, and two readings of the source say the same thing.
 
-Issue #614. `tests/_problems.py` reads each test module's fixture calls and
-`tests/conftest.py` turns them into markers at collection. Nothing here trusts
-that reading on its own: the selection is checked against `grep` over the same
-files --- a text search against an `ast` parse, so a disagreement is one of them
-being wrong --- and against the mini-suite below, which runs `pytest -m` for real
-rather than inspecting the hook.
-
-What each direction costs is not symmetric, and the tests are written to that.
-Missing a module is a test that silently did not run, so the `grep` check is
-two-sided: every module the plain call spelling names must be selected, and no
-module may be selected for a problem its reachable source never mentions.
-Selecting a module that only mentions a fixture --- a path handed to
-`select_tests.py` as data --- costs one test run, so it is allowed and the
-`ast` reading is held only to naming something real.
+Issue #614. `tests/_problems.py`'s reading is checked against `grep` over the
+same files (text against `ast`) and against a mini-suite running `pytest -m`.
+Missing a module is a test that did not run, so the check is two-sided: every
+module the plain call names is selected, and none is selected without
+evidence. Selecting a module that only mentions a fixture as data costs one
+run and is allowed.
 """
 
 from __future__ import annotations
@@ -102,11 +94,7 @@ def _imports_defining(path: Path, names: tuple[str, ...]) -> bool:
 def _catalogue_defines() -> dict[str, tuple[str, ...]]:
     """``problem -> defining names``, re-read from `PROBLEMS.md` here.
 
-    Deliberately a second reader, and the only one: everything else reads the
-    table through `infra/catalogue.py`, including `tests._problems`, which is
-    the module this guard judges (issue #863). A guard that imports the thing
-    it checks agrees with it by construction, so the second reading is what
-    makes this a check rather than a restatement.
+    The one second reader: importing the judged reader would agree by construction (#863).
     """
     defines: dict[str, list[str]] = {}
     for line in (REPO_ROOT / "PROBLEMS.md").read_text().splitlines():
@@ -124,9 +112,7 @@ def _catalogue_defines() -> dict[str, tuple[str, ...]]:
 def _reachable_source(path: Path) -> str:
     """One module's source, with that of every `tests` module it imports from.
 
-    The constants naming a fixture as a path --- ``SMALL_SITES`` and its
-    siblings --- live in `tests/_fixtures.py`, so the problem name a module
-    reaches through one of them is nowhere in the module itself.
+    ``SMALL_SITES`` and its siblings live in `tests/_fixtures.py`.
     """
     text = path.read_text()
     for node in ast.walk(ast.parse(text)):
@@ -140,9 +126,7 @@ def _reachable_source(path: Path) -> str:
 def _computed_call(path: Path) -> bool:
     """Whether the module names a problem with something other than a literal.
 
-    The names of the calls are shared with the scan and the reading is not: this
-    asks only whether the problem argument is a string, where the scan goes on
-    to follow a constant to the string it holds.
+    The scan follows constants; this only asks whether the argument is a string.
     """
     for node in ast.walk(ast.parse(path.read_text())):
         if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
@@ -162,11 +146,7 @@ def _computed_call(path: Path) -> bool:
 def test_every_module_the_call_spelling_names_is_selected(problem: str) -> None:
     """`grep`'s answer is contained in the scan's, problem by problem.
 
-    The lower bound, and the one the ticket states: a module that writes
-    the registry call in full --- the problem as a literal --- is a module that
-    `-m <problem>` must collect. The scan may name more --- `at_fixture`, a path literal, a
-    constant it followed --- and `test_no_module_is_selected_without_the_name`
-    is what stops "more" from meaning "all of them".
+    The lower bound; the upper is `test_no_module_is_selected_without_evidence_...`.
     """
     missing = _grepped(problem) - _selected(problem) - {QUOTED_CALLS}
     assert not missing, (
@@ -181,10 +161,7 @@ def test_every_module_the_call_spelling_names_is_selected(problem: str) -> None:
 def test_a_quoted_call_is_data_and_is_not_read_as_one() -> None:
     """The single place `grep` and the scan differ, and why the parse wins.
 
-    `test_problems_tables.py` feeds a quoted registry call naming `mixture` to
-    the regex reader it tests. `grep` counts it, so a text-search implementation
-    of this axis would run the whole `mixture` selection whenever that guard
-    changed; the parse sees a string and not a call.
+    `test_problems_tables.py` quotes a `mixture` call as data; the parse sees a string.
     """
     assert QUOTED_CALLS in _grepped("mixture")
     assert "mixture" not in fixtures_named_in(QUOTED_CALLS)
@@ -203,21 +180,7 @@ def test_a_quoted_call_is_data_and_is_not_read_as_one() -> None:
 def test_no_module_is_selected_without_evidence_it_exercises_the_problem() -> None:
     """The upper bound: a selection must point at something written down.
 
-    Without this the scan could return every problem for every module and pass
-    every containment above. Two kinds of evidence count, because there are two
-    readings: the problem's **name**, in the module or in a `tests` module it
-    imports from, or an **import** of code `PROBLEMS.md` says defines it.
-
-    The second is why this stopped being a name test (issue #622).
-    `search/test_maxflow.py` exercises the Potts lattice and never writes
-    "potts_lattice" anywhere --- it imports `search.maxflow` and builds its
-    lattices from literals --- and that module is one of the two #614 was
-    opened about. Requiring the name would refuse exactly the modules the
-    catalogue reading exists to reach.
-
-    It stays weaker than the scan, and shares no code with it: the names come
-    from the source text, and the imports are re-read here from the catalogue
-    rather than taken from `_defining_code`.
+    Evidence: the name (here or in an imported `tests` module) or a defining import (#622).
     """
     everything = frozenset(PROBLEMS)
     defines = _catalogue_defines()
@@ -241,18 +204,7 @@ def test_no_module_is_selected_without_evidence_it_exercises_the_problem() -> No
 def test_the_two_modules_the_axis_was_opened_about_are_selected() -> None:
     """The check #614 states as its motivation, and #619 shipped without.
 
-    `search/test_maxflow.py` and `search/test_alpha_expansion.py` are "that
-    problem's ground-state tests" in #614's own words, and the derived axis
-    gave them no marker at all: neither loads a fixture. They sweep lattices
-    built from literals --- fifteen in one module, each chosen for the property
-    under test, zero coupling against a dominant one against a negative one
-    against a periodic boundary --- so there is no single declared instance to
-    load, and declaring fifteen fixtures to carry fifteen deliberate variations
-    would make the registry a list of test arguments (issue #622).
-
-    They reach the problem the way `PROBLEMS.md` says a module does: by
-    importing `search.maxflow` and `sim.graph.lattice_graph`. A green
-    ``-m potts_lattice`` run over a broken solver is what this refuses.
+    `test_maxflow.py` and `test_alpha_expansion.py` build literal lattices (#622).
     """
     selected = _selected("potts_lattice")
     missing = [
@@ -268,10 +220,7 @@ def test_the_two_modules_the_axis_was_opened_about_are_selected() -> None:
 def test_a_module_selected_for_every_problem_really_has_a_computed_name() -> None:
     """Selecting every problem is the unresolvable answer, not a scan giving up.
 
-    It costs one module's tests on every problem's selection, so it must be
-    caused rather than reached: such a module names its problem with an
-    expression --- a loop variable over the registry, an unpacked tuple --- and
-    not with a string a reading could have had.
+    Such a module must name its problem by an expression, not a readable string.
     """
     everything = frozenset(PROBLEMS)
     unresolved = [p for p in _modules() if fixtures_named_in(p) == everything]
@@ -288,9 +237,7 @@ def test_a_module_selected_for_every_problem_really_has_a_computed_name() -> Non
 def test_the_problem_crosses_module_directories() -> None:
     """The case the substring and the directory both miss.
 
-    `-k potts` matches node ids, and `tests/regression/search/` is a directory;
-    the Potts lattice is exercised from `search/`, `likelihood/` and `sim/` at
-    once, which is the whole reason for a third axis.
+    The lattice is exercised from `search/`, `likelihood/` and `sim/` at once.
     """
     selected = _selected("potts_lattice")
     directories = {path.parent.name for path in selected}
@@ -303,12 +250,7 @@ def test_the_problem_crosses_module_directories() -> None:
 def _written_problem_markers(item: pytest.Item) -> set[str]:
     """The problem markers an author decorated `item`, its class or its module with.
 
-    Read from each object's own ``pytestmark`` and not from `iter_markers`,
-    which cannot tell the two apart: `tests/conftest.py`'s hook calls
-    ``add_marker``, which appends to the *node*, while a decorator writes the
-    *function*, the class or the module it is applied to. A derived marker is
-    therefore absent from every ``pytestmark`` here and a written one is in
-    exactly the object that carries it.
+    From each ``pytestmark``: the hook's ``add_marker`` writes the node, not these.
     """
     problems = set(PROBLEMS)
     written: set[str] = set()
@@ -334,20 +276,7 @@ def test_the_collected_items_carry_what_their_module_names(
 ) -> None:
     """The hook applied the scan to this very session's items.
 
-    Reading `session.items` rather than a second collection: it is free, it is
-    the real tree, and it covers whatever selection the invocation asked for,
-    so the check widens with the run rather than being pinned to one tier.
-
-    An item carries the scan's answer *and* whatever an author wrote, which is
-    the selection `-m <key>` collects and the one
-    `test_problem_families.py` reads: `search/test_decoding.py` and
-    `search/test_tightening.py` each decorate the items that build a
-    triangular antiferromagnet from literals with
-    ``frustrated_lattice``, a problem no fixture call and no catalogued import
-    names for those modules. Reading only the derived side called four such
-    items defective and the whole suite red (issue #745); what the two sides
-    are held to is stated separately -- the scan's answer is on *every* item
-    of the module, and an extra is a decorator that is really there.
+    Scan answer on every item; extras are real decorators (#745: `frustrated_lattice`).
     """
     problems = set(PROBLEMS)
     items = [item for item in request.session.items if item.path.is_relative_to(TESTS)]
@@ -367,11 +296,7 @@ def test_the_collected_items_carry_what_their_module_names(
 def test_the_cache_is_reread_when_the_file_changes(tmp_path: Path) -> None:
     """What makes the cross-session cache safe, rather than fast and wrong.
 
-    A stale entry is a module selected for the problem it used to load, which
-    is worse than the parse it saves. Both halves of the key are exercised, the
-    other held fixed with `os.utime`: an edit within one clock tick moves the
-    size and not the time, and a checkout moves the time and not necessarily
-    the size.
+    Both key halves, the other fixed by `os.utime`: size within a tick, time on checkout.
     """
 
     def write(problem: str) -> None:
@@ -405,9 +330,7 @@ def test_the_cache_is_reread_when_the_file_changes(tmp_path: Path) -> None:
 def test_a_damaged_cache_is_ignored_rather_than_raised_on() -> None:
     """A cache decides when work is redone, never whether a check runs.
 
-    `infra/CLAUDE.md`'s rule, applied to this one: the file is JSON a previous
-    session wrote and anything may have happened to it since, so a malformed
-    entry is dropped and rescanned rather than ending collection.
+    `infra/CLAUDE.md`'s rule: a malformed entry is rescanned, not raised on.
     """
     damaged: tuple[Any, ...] = (
         None,
@@ -429,11 +352,7 @@ def test_a_damaged_cache_is_ignored_rather_than_raised_on() -> None:
 def mini_suite(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """Five modules naming a problem four ways, and one naming none.
 
-    Nothing here is executed: the runs below are ``--collect-only``, and the
-    scan is static, so a call to an undefined name is exactly as readable as a
-    call to the real one. The suite registers the kind and tier markers itself
-    rather than borrowing `pyproject.toml`, so that `pytest` roots here and the
-    node ids it prints are the three file names below.
+    Collected only, never run; markers registered here so `pytest` roots here.
     """
     directory = tmp_path_factory.mktemp("problem_markers")
     (directory / "conftest.py").write_text(
@@ -472,9 +391,7 @@ def mini_suite(tmp_path_factory: pytest.TempPathFactory) -> Path:
 def _collected(suite: Path, expression: str, *files: str) -> tuple[int, set[str]]:
     """Run ``pytest --collect-only -m <expression>`` over the mini-suite.
 
-    A subprocess and not `pytester`: the claim is that the hook in
-    `tests/conftest.py` runs before `pytest`'s own deselection, and only a real
-    session orders hooks.
+    A subprocess, not `pytester`: only a real session orders hooks.
     """
     run = subprocess.run(
         [
@@ -503,10 +420,7 @@ def _collected(suite: Path, expression: str, *files: str) -> tuple[int, set[str]
 def test_a_computed_name_is_selected_by_every_problem(mini_suite: Path) -> None:
     """Step 3 of the plan, run rather than reasoned about.
 
-    A module the scan cannot read is selected by `potts_lattice` *and* by
-    `hmm`, and the module that names one problem in full is selected by the
-    first only --- `select_tests.py`'s rule, that an unreadable input selects
-    everything, applied to the axis rather than to the changed-file map.
+    An unreadable module is selected by every problem, as in `select_tests.py`.
     """
     files = ("test_literal.py", "test_computed.py")
     _, potts = _collected(mini_suite, "potts_lattice", *files)
@@ -524,10 +438,7 @@ def test_a_computed_name_is_selected_by_every_problem(mini_suite: Path) -> None:
 def test_the_problem_marker_intersects_the_tier(mini_suite: Path) -> None:
     """A third axis is worth nothing if it does not compose with the other two.
 
-    `-m "potts_lattice and critical"` is the one test that is both, not the
-    three that are either --- which also pins the hook ahead of `pytest`'s own
-    deselection: added afterwards, the marker would land on items already
-    thrown away and both selections would be empty.
+    Also pins the hook ahead of `pytest`'s deselection, or both would be empty.
     """
     files = ("test_literal.py", "test_computed.py")
     _, both = _collected(mini_suite, "potts_lattice and critical", *files)
@@ -541,9 +452,7 @@ def test_the_problem_marker_intersects_the_tier(mini_suite: Path) -> None:
 def test_a_misspelled_problem_marker_fails_collection(mini_suite: Path) -> None:
     """Registration is what keeps `--strict-markers` able to refuse a typo.
 
-    The hook adds the markers, so no author writes one --- but an author who
-    writes ``@pytest.mark.potts_latice`` by hand must still be told, and that
-    holds only while `pytest_configure` registers the real names.
+    A hand-written ``@pytest.mark.potts_latice`` must still fail collection.
     """
     status, _ = _collected(mini_suite, "potts_lattice", "test_typo.py")
     assert status != 0, "an unregistered problem marker was accepted"
@@ -553,11 +462,7 @@ def test_a_misspelled_problem_marker_fails_collection(mini_suite: Path) -> None:
 def test_a_module_naming_no_problem_is_selected_by_infra(mini_suite: Path) -> None:
     """ "Unmarked" is not a state a module can be in (issue #622).
 
-    It used to be, and it meant two things at once: the module exercises
-    shared machinery and has nothing to name, or the scan failed to see what
-    it exercises. Nothing told them apart. Run for real over the mini suite,
-    as the problem markers are: `-m infra` selects the module that names no
-    problem and nothing else, so the marker partitions rather than labels.
+    `-m infra` selects the module naming no problem and nothing else.
     """
     files = ("test_literal.py", "test_shared.py")
     _, infra = _collected(mini_suite, "infra", *files)
@@ -574,12 +479,7 @@ def test_a_module_naming_no_problem_is_selected_by_infra(mini_suite: Path) -> No
 def test_an_infra_module_imports_no_code_that_defines_a_problem() -> None:
     """The `infra` marker is a claim about the module, and this is the claim.
 
-    A module carries `infra` because its imports reach nothing `PROBLEMS.md`
-    attributes to a problem. Asserted the other way round here: if an
-    unmarked module *does* import defining code, the scan and the catalogue
-    disagree and one of them is wrong --- either the module exercises a
-    problem the axis is missing, or the catalogue attributes a module it
-    should not. Both are defects, and both are silent without this.
+    An `infra` module importing defining code means the scan or catalogue is wrong.
     """
     defining = {name for name, _ in _defining_code()}
     offenders = []

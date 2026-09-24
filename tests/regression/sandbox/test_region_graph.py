@@ -1,20 +1,9 @@
 """Region graphs and the Kikuchi free energy, refereed by the case they generalize.
 
-Issue #689. The free energy here is asserted where an exact answer exists and
-where an existing implementation already computes the same number:
-
-* On a **tree**, ``-F_K`` over the Bethe region graph is ``log Z``, which
-  `message_passing.sum_product` computes exactly under the tree schedule.
-* On a **loopy** graph, the same construction must reproduce that module's
-  Bethe value --- the general expression evaluated at the special case *is*
-  the special case, so a sign error in the entropy term or an off-by-one in a
-  counting number fails here rather than at a size where nothing can check it.
-* The counting numbers themselves are asserted against the closed form the
-  pairwise case has, ``1 - d`` on a variable of degree ``d``.
-
-What is not asserted is that Kikuchi beats Bethe: that is a measurement, it
-belongs in `STATUS.md`, and the algorithm that would produce it is the next
-step of this ticket.
+Issue #689. On a tree ``-F_K`` over the Bethe region graph is ``log Z``, which
+`message_passing.sum_product` computes exactly; on a loopy graph it is that
+module's Bethe value; counting numbers are ``1 - d`` at degree ``d``. Whether
+Kikuchi beats Bethe is a measurement for `STATUS.md`.
 """
 
 from __future__ import annotations
@@ -81,11 +70,8 @@ def test_the_free_energy_is_the_exact_log_partition_on_a_tree() -> None:
 def test_the_free_energy_reproduces_the_bethe_value_on_a_loop(
     shape: tuple[int, int],
 ) -> None:
-    # The reduction, which is what makes the general expression checkable
-    # before any of it is iterated: evaluated at the Bethe region graph, on the
-    # beliefs message passing settled at, `-F_K` is the number that module
-    # reports. The tolerance is the flooding schedule's own convergence, not a
-    # property of this expression.
+    # At the Bethe region graph and message passing's beliefs, `-F_K` is that
+    # module's number, to the flooding schedule's convergence.
     graph = _graph(shape, 0.6)
     loopy = sum_product(graph, schedule="flooding")
     regions = bethe_region_graph(graph)
@@ -228,11 +214,8 @@ def test_the_updates_find_the_bethe_fixed_point_on_a_loop() -> None:
 
 @pytest.mark.oracle
 def test_the_plaquette_regions_are_nearer_the_truth_than_the_pairwise_ones() -> None:
-    # The claim the ticket exists to test, against exhaustive enumeration of
-    # all 3**9 configurations. Asserted as an ordering rather than pinned to a
-    # digit: what is established is that seeing the 4-cycles helps, and by how
-    # much is a measurement `STATUS.md` carries, since it moves with the
-    # coupling -- 23,000x at J = 0.3 and 130x at J = 1.2 on this instance.
+    # Against all 3**9 configurations, as an ordering; the factor moves with
+    # the coupling (23,000x at J = 0.3, 130x at J = 1.2; `STATUS.md`).
     coupling = 0.6
     lattice = lattice_graph((3, 3), BoundaryCondition.OPEN, coupling)
     gauge = FIELD - np.log(float(np.exp(FIELD).sum()))
@@ -254,17 +237,9 @@ def test_the_plaquette_regions_are_nearer_the_truth_than_the_pairwise_ones() -> 
 def test_at_size_the_plaquette_graph_settles_where_the_pairwise_one_always_does() -> (
     None
 ):
-    # The binding constraint at size is convergence, not accuracy, and it is
-    # asserted in the direction the measurement found. On the 6x4 strip the
-    # pairwise region graph settles at every coupling measured; the plaquette
-    # one settles at J = 0.25 and does not at J = 0.5 -- damping 0.7 through
-    # 0.98 and 20,000 sweeps all refuse, with the residual falling from 0.377
-    # to 0.020 as the damping rises, so more damping buys a slower approach
-    # and not a fixed point (`STATUS.md`).
-    #
-    # The cap here is 200 sweeps rather than 20,000: what is asserted is that
-    # the two graphs part on this instance, and the fuller sweep is a
-    # measurement recorded rather than a test run per pull request.
+    # On the 6x4 strip pairwise settles at every coupling; plaquette at J = 0.25
+    # and not at 0.5 (damping 0.7-0.98, 20,000 sweeps: residual 0.377 to 0.020;
+    # `STATUS.md`). 200 sweeps here assert only that the two part.
     shape, cap = (6, 4), 200
     for coupling in (0.25, 0.5):
         pairwise = generalized_belief_propagation(

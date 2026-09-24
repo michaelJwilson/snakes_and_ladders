@@ -68,11 +68,9 @@ N_SWEEPS = 1000
 BURN_IN = 100
 SEEDS = 20
 
-#: The Monte Carlo tolerance, measured: over 20 seeds the largest deviation
-#: of one seed's weight from the enumerated one was 0.040 on the topologies
-#: (30 sites), 0.029 on the lattice and 0.024 on the chain, and the mean
-#: over seeds was within 0.003 on every instance. Asserted at 1.5 times the
-#: largest single-seed deviation and 3 times the largest mean deviation.
+#: Over 20 seeds the worst single-seed weight deviation was 0.040
+#: (topologies, 30 sites), 0.029 (lattice), 0.024 (chain); means within 0.003.
+#: Asserted at 1.5x the first and 3x the second.
 SEED_TOLERANCE = 0.06
 MEAN_TOLERANCE = 0.01
 
@@ -206,11 +204,8 @@ def test_the_tempered_weight_of_a_labelling_is_the_enumerated_one(
 def test_a_seed_reproduces_the_run_and_every_recorded_density_is_its_structure_s_score() -> (
     None
 ):
-    # One parent generator spawns the replicas and draws the exchanges, so
-    # one seed reproduces the run; and the densities recorded per replica
-    # are the scores the ensemble reports per structure, by key, which is
-    # what lets `tempered_topology_support` read a visited topology's score
-    # without a fit.
+    # One parent generator: one seed reproduces the run; per-replica scores are
+    # keyed so `tempered_topology_support` reads them without a fit.
     alignment, k = _four_taxa()
     start = next(enumerate_topologies(sorted(alignment)))
     cache: dict[frozenset[frozenset[str]], float] = {}
@@ -261,11 +256,8 @@ def test_an_unusable_ladder_and_a_ladder_without_temperature_one_are_refused() -
 
 # --- the pair ensemble and its round trips ----------------------------------
 #
-# Issue #756. Houdayer's move acts on two replicas at one temperature, so the
-# state the ladder carries is the pair and the exchange ratio takes the pair's
-# summed energy. What that buys is read as a *round trip* --- a walker from the
-# cold rung to the hot one and back --- because an exchange acceptance is a
-# per-pair number a ladder can look healthy in while nothing crosses it.
+# Issue #756. The ladder carries the pair; exchanges use its summed energy.
+# Read as round trips: a per-pair acceptance can look healthy with no crossing.
 
 #: The ladder the round-trip readings run on: ten rungs, ratio 1.32, from 0.2
 #: to 2.43. Denser than `LADDER` above because the pair's energy is the sum of
@@ -281,11 +273,8 @@ PAIR_SWEEPS = 4_000
 PAIR_THIN = 5
 PAIR_SIGNIFICANCE = 0.001
 
-#: Seeds behind the round-trip comparison, and the recorded sweeps each runs.
-#: Eight is the smallest paired sample whose exact sign test can reject at
-#: `SEPARATION`: seven of eight one way is `p = 0.0703` and eight is
-#: `p = 0.0078`, so a real direction is refutable here and a null result is
-#: not merely a shortage of seeds.
+#: Eight paired seeds: an exact sign test gives p = 0.0703 at seven of eight
+#: and 0.0078 at eight, so a direction is refutable.
 ROUND_TRIP_SEEDS = 8
 ROUND_TRIP_SWEEPS = 2_000
 
@@ -299,10 +288,7 @@ SEPARATION = 0.05
 def test_a_round_trip_is_the_cold_rung_reached_through_the_hot_one() -> None:
     """The definition, on traces whose answer is counted by hand.
 
-    A walker rattling at the cold end scores nothing however often it returns
-    to rung 0, and one that reaches the top and comes back scores one each
-    time --- which is the whole reason the statistic is preferred to an
-    exchange acceptance.
+    Rattling at the cold end scores nothing; each top-and-back trip scores one.
     """
     trace = np.array(
         [
@@ -326,12 +312,7 @@ def test_a_round_trip_is_the_cold_rung_reached_through_the_hot_one() -> None:
 def test_each_replica_of_the_cold_rungs_pair_is_the_enumerated_boltzmann_law() -> None:
     """The ensemble's marginal at temperature one, against enumeration.
 
-    The pair sampler is pinned on one temperature in
-    `tests/regression/search/test_potts_mcmc.py`; this pins the *tempered*
-    path --- the exchange on the pair's summed energy, the move applied at
-    every rung --- by reading the cold rung's two replicas against
-    `log_weights` over all 16 configurations. Realized p per replica at the
-    declared seed and the next: 0.4404 / 0.1214 and 0.8203 / 0.3536.
+    The tempered pair path; p per replica: 0.4404 / 0.1214 and 0.8203 / 0.3536.
     """
     graph = lattice_graph((2, 2), BoundaryCondition.OPEN, PAIR_COUPLING)
     field = np.array([0.6, -0.4])
@@ -370,17 +351,9 @@ def test_each_replica_of_the_cold_rungs_pair_is_the_enumerated_boltzmann_law() -
 def test_the_round_trip_does_not_separate_with_houdayers_move() -> None:
     """The measurement issue #756's plan asks for, and it does not separate.
 
-    Round-trip time in recorded sweeps on the 12x12 periodic triangular
-    antiferromagnet, `ROUND_TRIP_SEEDS` seeds paired by seed and read by
-    `sample.statistics.sign_test_p_value`: 1,115.5 sweeps without the move
-    against 1,090.7 with it, five seeds of eight shorter with the move and
-    two longer, `p = 0.6875`. So the direction is not established in either
-    sense, at 3.96x the wall --- 17.0 s against 67.3 s.
-
-    Asserted as a failure to separate rather than as a win or a loss, which is
-    what eight paired seeds can carry; the mechanism is
-    `test_the_overlap_defect_percolates_on_the_frustrated_lattice` and the
-    numbers are in
+    12x12 triangular antiferromagnet, sign test over paired seeds: 1,115.5
+    sweeps without the move against 1,090.7 with, five of eight shorter,
+    p = 0.6875, at 3.96x the wall (17.0 s against 67.3 s);
     `docs/experiments/022-cluster-moves-for-frustrated-lattices.md`.
     """
     graph = frustrated_triangular_lattice((12, 12), BoundaryCondition.PERIODIC, -1.0)
@@ -411,12 +384,7 @@ def test_the_round_trip_does_not_separate_with_houdayers_move() -> None:
 def test_the_overlap_defect_percolates_on_the_frustrated_lattice() -> None:
     """Why the round trip does not move: the cluster is most of the defect.
 
-    Houdayer's move swaps one connected component of the region where the two
-    replicas disagree. On this instance that region is 65 to 72 sites of 144
-    and its largest component 43 to 59 of that --- over half the defect at
-    every temperature read --- so the move is a near-global exchange of the
-    two replicas, and an exchange of two replicas that differ everywhere
-    carries the pair nowhere new.
+    Defect 65-72 of 144 sites, largest component 43-59: a near-global swap.
     """
     graph = frustrated_triangular_lattice((12, 12), BoundaryCondition.PERIODIC, -1.0)
     rows = site_field(np.zeros(2), graph.n_nodes)
@@ -452,9 +420,7 @@ def test_the_overlap_defect_percolates_on_the_frustrated_lattice() -> None:
 def test_the_pair_ensemble_refuses_houdayers_move_above_two_states() -> None:
     """The restriction stated where the ensemble is configured.
 
-    Houdayer's overlap `q_i = s_i s'_i` is the Ising one, and issue #756
-    validates the move at two states alone; a three-state model is refused
-    here rather than at the first move.
+    Houdayer's overlap is Ising (#756): three states are refused at configuration.
     """
     graph = lattice_graph((2, 2), BoundaryCondition.OPEN, PAIR_COUPLING)
 
@@ -466,28 +432,18 @@ def test_the_pair_ensemble_refuses_houdayers_move_above_two_states() -> None:
 
 # --- placing the ladder by its round trips (#756) ---------------------------
 #
-# The other criterion. `adapt_ladder_potts` places a ladder by its exchange
-# acceptance, which is a per-pair number; `adapt_ladder_round_trips` places
-# one of the same length by the fraction of walkers moving up at each rung,
-# and flattens the local diffusivity (Katzgraber et al. 2006). What that buys
-# is read as a round-trip time, paired by seed.
+# `adapt_ladder_round_trips` places rungs by the up-fraction, flattening the
+# diffusivity (Katzgraber et al. 2006); read as round-trip time, paired by seed.
 
-#: The warm-up both criteria are given: sweeps per replica per measurement,
-#: measurements, and the seed that fixes the ladder each returns. 1,000 sweeps
-#: rather than 400 because the placement is read from an up-fraction and a
-#: measurement too short to resolve it places rungs on its noise --- at 400
-#: sweeps over four rounds the placed ladder ranged from 1,469 to 5,357
-#: sweeps per round trip against a geometric ladder's 1,690 on the 16x16
+#: Warm-up for both criteria. 1,000 sweeps: at 400 over four rounds the placed
+#: ladder ranged 1,469 to 5,357 sweeps per trip against geometric's 1,690
 #: (`docs/experiments/023-placing-the-tempering-ladder.md`).
 WARM_UP_SWEEPS = 1_000
 WARM_UP_ROUNDS = 3
 WARM_UP_SEED = 11
 
-#: The acceptance criterion's band and budget. The budget is above the
-#: starting length, because insertion is the acceptance criterion's whole
-#: remedy for a gap and capping it at the starting length leaves it with
-#: nothing to do; the length it settles on is then the length the round-trip
-#: criterion is given, so the comparison is at equal rungs and equal cost.
+#: The acceptance criterion's band and budget, above the starting length so
+#: insertion can act; its length is the round-trip criterion's too.
 WARM_UP_BAND = (0.2, 0.6)
 WARM_UP_REPLICAS = 16
 
@@ -552,11 +508,7 @@ def _round_trip_times(graph: PottsGraph, ladder: tuple[float, ...]) -> np.ndarra
 def test_the_up_fraction_labels_a_walker_by_the_end_it_last_touched() -> None:
     """The measurement the placement reads, on the trace whose answer is counted by hand.
 
-    The same three walkers `test_a_round_trip_is_the_cold_rung_reached_through_the_hot_one`
-    counts trips in. Rung 0 sees 8 labelled visits and every one is a walker
-    on its way up; rung 1 sees 4 up and 3 down; the top rung sees 6 and none
-    of them up. So ``f`` is 1 and 0 at the ends by construction, which is what
-    makes the placement's cumulative read a fraction of a whole.
+    Rung 0: 8 up; rung 1: 4 up, 3 down; top: 6, none up. So ``f`` is 1 and 0 at the ends.
     """
     trace = np.array(
         [
@@ -578,10 +530,7 @@ def test_the_up_fraction_labels_a_walker_by_the_end_it_last_touched() -> None:
 def test_the_tempering_trace_holds_one_walker_per_rung() -> None:
     """A swap moves configurations between rungs; it does not create them.
 
-    `parallel_tempering` records the trace `round_trips` and `up_fraction`
-    read, so every recorded sweep must be a permutation of the rungs --- a
-    trace in which two walkers sit at one rung would still produce a
-    round-trip time, and a wrong one.
+    Every recorded sweep is a permutation of rungs, or trip times are wrong.
     """
     graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.4)
 
@@ -602,19 +551,10 @@ def test_the_tempering_trace_holds_one_walker_per_rung() -> None:
 def test_the_round_trip_placed_ladder_does_not_separate_at_the_transition() -> None:
     """The measurement issue #756's plan asks for, on the 16x16 square at ``J_c``.
 
-    256 sites at ``J_c = ln(1 + sqrt(2))``, where the correlation length is
-    the lattice and the walkers are held up. The acceptance warm-up settles on
-    12 rungs from 0.6 to 2; the round-trip warm-up places 12 of its own, and
-    over `ROUND_TRIP_SEEDS` paired seeds the times are 1,053.7 recorded sweeps
-    per trip against 1,194.4, six seeds of eight shorter, `p = 0.2891`. A
-    second reading at another warm-up seed gave 1,053.1 against 1,092.8 and
-    `p = 1.0`, at a 1-minute load of 3.86 and 12.2 s of wall for the eight
-    pairs.
-
-    Asserted as a failure to separate, which is what eight paired seeds carry;
-    both ladders beat the geometric one they were placed from, which
-    `docs/experiments/023-placing-the-tempering-ladder.md` reports and this
-    does not assert.
+    ``J_c = ln(1 + sqrt(2))``, 12 rungs from 0.6 to 2 each: 1,053.7 against
+    1,194.4 sweeps per trip, six of eight shorter, p = 0.2891; again 1,053.1
+    against 1,092.8, p = 1.0 (load 3.86, 12.2 s). No separation;
+    `docs/experiments/023-...` reports both beating geometric.
     """
     graph = lattice_graph((16, 16), BoundaryCondition.OPEN, critical_coupling(2))
     accepted, feedback = _placed_ladders(graph, 0.6, 2.0, 10)
@@ -631,11 +571,7 @@ def test_the_round_trip_placed_ladder_does_not_separate_on_the_frustrated_lattic
 ):
     """The same comparison on the 12x12 triangular antiferromagnet of step 5.
 
-    The acceptance warm-up settles on 9 rungs from 0.2 to 2.4333 and the
-    round-trip warm-up places 9. Round-trip time 366.6 recorded sweeps
-    against 360.1, five seeds of eight shorter, `p = 0.7266`; a second reading
-    gave 353.4 against 360.1 at the same `p`. So neither criterion is
-    established over the other here, at 7.0 s of wall for the eight pairs.
+    9 rungs, 0.2 to 2.4333: 366.6 against 360.1, five of eight, p = 0.7266 (again 353.4).
     """
     graph = frustrated_triangular_lattice((12, 12), BoundaryCondition.PERIODIC, -1.0)
     accepted, feedback = _placed_ladders(graph, 0.2, 2.4333, 10)

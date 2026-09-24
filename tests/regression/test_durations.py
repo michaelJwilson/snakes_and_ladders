@@ -48,9 +48,7 @@ def test_a_test_exactly_at_the_cap_is_inside_it() -> None:
 def test_a_scale_marked_critical_test_is_named_and_the_other_three_are_not() -> None:
     """The conflict is `critical` *and* a scale marker, and nothing else.
 
-    Issue #635. The three non-offenders are the cases that look like it: a
-    critical test inside the tier, a release test that does not gate, and a
-    test carrying neither.
+    Issue #635; the three look-alikes: critical in tier, release, neither.
     """
     items = [
         ("tests/a.py::test_gates", frozenset({"critical", "oracle"})),

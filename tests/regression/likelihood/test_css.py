@@ -1,18 +1,11 @@
 """Decoding a CSS code: the criterion first, then the oracle, then the decoder.
 
-The order is the point. A success criterion that is wrong makes every number
-after it meaningless, so :func:`decode_succeeds` is pinned from both sides
-before a decoder is called: a correct answer plus a nonzero stabilizer must
-read as a success, and a correct answer plus a logical operator must read as a
-failure. An implementation that always answers one way passes one of those and
-fails the other (``likelihood/CLAUDE.md``: a criterion's test is paired).
-
-The oracle is exact degenerate maximum likelihood by enumeration, which is a
-*different decoder* from the one returning the likeliest single error --- a sum
-over a coset against a maximum over its members --- and the fixture is declared
-where the two differ, so the gap is measured rather than asserted to exist.
-Belief propagation is then reported against that floor, with its failures split
-into the two defects a single rate hides.
+:func:`decode_succeeds` is pinned from both sides first: the right answer plus
+a nonzero stabilizer succeeds, plus a logical operator fails
+(``likelihood/CLAUDE.md``: a criterion's test is paired). The oracle is exact
+degenerate ML by enumeration, a sum over a coset rather than the likeliest
+single error, on a fixture declared where the two differ. Belief propagation
+is reported against that floor, its failures split into two defects.
 """
 
 from __future__ import annotations
@@ -81,10 +74,7 @@ def _stabilizers(code: CssCode) -> np.ndarray:
 def test_a_residual_in_the_row_space_is_a_success() -> None:
     """Adding any nonzero stabilizer to the right answer still decodes.
 
-    This is the whole of what degeneracy means, and the half a criterion
-    written as `e == ê` gets wrong: 127 of the 128 stabilizers of the declared
-    instance are nonzero, so 127 corrections that differ from the error are
-    each a success.
+    127 of the declared instance's 128 stabilizers are nonzero: each a success.
     """
     code = _code("ci")
     error = np.zeros(code.n_qubits, dtype=np.uint8)
@@ -104,8 +94,7 @@ def test_a_residual_in_the_row_space_is_a_success() -> None:
 def test_a_residual_outside_the_row_space_is_a_failure() -> None:
     """A logical operator added to the right answer fails, as does a wrong syndrome.
 
-    The second needs no branch of its own: `rowspace(H)` sits inside `ker H`,
-    so a residual that is not even in the kernel is in neither.
+    `rowspace(H)` sits inside `ker H`, so no second branch is needed.
     """
     code = _code("ci")
     error = np.zeros(code.n_qubits, dtype=np.uint8)
@@ -133,9 +122,7 @@ def test_a_residual_outside_the_row_space_is_a_failure() -> None:
 def test_the_cosets_partition_every_error_by_syndrome_and_by_quotient() -> None:
     """`2 ** k` cosets per reachable syndrome, and the probabilities sum to one.
 
-    A mis-built quotient does not break loudly (``search/CLAUDE.md``): it
-    merges or splits cosets, and both show here as a count that is not
-    `2 ** k` and as probability that has gone missing.
+    A mis-built quotient merges or splits cosets (``search/CLAUDE.md``).
     """
     code = _code("ci")
 
@@ -152,10 +139,7 @@ def test_the_cosets_partition_every_error_by_syndrome_and_by_quotient() -> None:
 def test_a_coset_probability_is_the_sum_over_its_members() -> None:
     """The partition against a direct sum over the errors of one coset.
 
-    Recomputed from the errors rather than from the partition: the cell the
-    enumeration reports for each `(syndrome, label)` is the total probability
-    of the errors carrying that pair, which is what makes degenerate maximum
-    likelihood a sum and not a maximum.
+    Recomputed from the errors: degenerate ML is a sum, not a maximum.
     """
     code = _code("ci")
     n_qubits = code.n_qubits
@@ -190,12 +174,7 @@ def test_a_coset_probability_is_the_sum_over_its_members() -> None:
 def test_summing_a_coset_beats_maximizing_over_one_error() -> None:
     """Degenerate ML is strictly better here, and the margin is pinned.
 
-    The two decoders read the same partition and differ in what they read: the
-    coset of greatest total probability against the coset holding the single
-    likeliest error. A fixture where they agreed would measure nothing, which
-    is why the instance is declared at a seed where they do not
-    (``sim/CLAUDE.md``: pin the margin, not only the answer). No syndrome ties
-    at this rate, so no tie-break is being measured either.
+    Declared at a seed where the decoders differ; no syndrome ties (``sim/CLAUDE.md``).
     """
     code = _code("ci")
 
@@ -219,9 +198,7 @@ def test_summing_a_coset_beats_maximizing_over_one_error() -> None:
 def test_no_other_coset_choice_beats_the_degenerate_decoder() -> None:
     """The returned coset carries the greatest probability at every syndrome.
 
-    That is what makes the rate a floor rather than one decoder's score: any
-    decoder reading only the syndrome chooses one coset per syndrome, so its
-    success probability is a sum of cells this maximum dominates term by term.
+    So the rate is a floor for any decoder reading only the syndrome.
     """
     code = _code("ci")
 
@@ -253,11 +230,7 @@ def test_an_unreachable_rate_and_an_unreachable_size_are_refused() -> None:
 def test_the_correction_depends_on_the_error_only_through_its_syndrome() -> None:
     """Two errors of one syndrome give one correction, which is what makes it a decoder.
 
-    A syndrome decoder sees `H e` and nothing else. This decoder is given the
-    ratios of an error, so the claim it rests on is the coset symmetry
-    ``sec:ldpc`` proves for the all-zero word: adding a codeword to the error
-    adds it to the estimate and leaves the correction fixed. It is checked here
-    rather than taken on the argument.
+    ``sec:ldpc``'s coset symmetry, checked rather than taken on the argument.
     """
     code = _code("ci")
     channel = BinarySymmetricChannel(CI_FLIP)
@@ -284,26 +257,11 @@ def test_the_correction_depends_on_the_error_only_through_its_syndrome() -> None
 def test_the_syndrome_decode_is_belief_propagation_on_the_component_code() -> None:
     """The CSS decoder against `ldpc.decode` on the same Tanner graph.
 
-    The rung below (issue #734). `sec:ldpc`'s decoder is run unchanged here, so
-    the ladder step is an identity and is asserted as one: over 50 seeded draws
-    and both check updates the residual is `decode(code.checks, llr).bits`
-    bitwise, the correction is the error exclusive-or'd with it, and
-    `converged` is that decoding's `decoded`.
-
-    What the identity buys is the claim on top of it, and that is asserted
-    exhaustively rather than sampled. A syndrome decoder may read `H e` and
-    nothing else; this one is handed the error's ratios. Two errors are taken
-    --- one whose syndrome BP converges on, one it does not --- and *every* one
-    of the 512 words of `ker H` is added to each, which runs over the whole
-    coset and not over the 25 shifts the sampled test takes. The correction is
-    the same 16 bits on all 1,024, so the decoder depends on the error through
-    its syndrome alone.
-
-    Where it stops: converging is what makes the correction reproduce the
-    observed syndrome. On the 71 of 100 decodes that converged, `H ê == H e`
-    exactly; on the 29 that reached the cap the residual is not in `ker H` and
-    the syndrome differs on 25 of them. Sum-product converged on 40 of the 50
-    draws and min-sum on 31.
+    The rung below (issue #734), an identity: over 50 draws and both check
+    updates the residual is `decode(code.checks, llr).bits` bitwise. All 512
+    words of `ker H` added to two errors give one 16-bit correction on all
+    1,024. `H ê == H e` on the 71 of 100 decodes that converged; of the 29
+    capped, 25 differ. Sum-product converged on 40 of 50, min-sum on 31.
     """
     code = _ci_code()
     channel = BinarySymmetricChannel(CI_FLIP)
@@ -360,18 +318,10 @@ def test_the_syndrome_decode_is_belief_propagation_on_the_component_code() -> No
 def test_belief_propagation_is_measured_against_the_degenerate_floor() -> None:
     """BP's decode at `ci`, against the coset exact degenerate ML returns.
 
-    Two comparisons on the same 2,000 seeded draws, and they are different
-    questions. Which coset: of the 1,732 decodes that converged, 1,674 return
-    the coset Equation~`eq:coset-ml` does and 58 do not. Whether it worked:
-    BP leaves the codespace fixed on 1,659 of the 2,000, a logical error rate
-    of 0.1705 against the exact floor of 0.070297. The two counts do not
-    agree, because the optimal decoder is not a correct one -- on 15 of these
-    draws BP returns the optimum's coset and fails with it.
-
-    The 30 four-cycles of the Tanner graph are the structural reason the gap
-    exists at all: `H H^T = 0` forces even row overlaps, and an overlap of two
-    is a four-cycle, so the condition making the code quantum puts short cycles
-    in the graph BP needs free of them.
+    Over 2,000 draws: of 1,732 converged, 1,674 return eq:coset-ml's coset and
+    58 do not; BP fixes the codespace on 1,659, a logical error rate of 0.1705
+    against the floor 0.070297; on 15 draws it fails with the optimum's coset.
+    `H H^T = 0` forces even overlaps, hence the graph's 30 four-cycles.
     """
     code = _ci_code()
     cosets = error_cosets(code, CI_FLIP)
@@ -407,10 +357,7 @@ def test_belief_propagation_is_measured_against_the_degenerate_floor() -> None:
 def test_the_two_decoding_failures_are_counted_apart() -> None:
     """Converging to a logical coset and reaching the cap are different defects.
 
-    At `ci` and the declared rate the 341 failures are 73 of the first and 268
-    of the second, so a single block-error count would report one number for
-    two things and hide that BP's dominant failure here is that it does not
-    converge at all.
+    At `ci`: 341 failures, 73 converged to a logical coset and 268 capped.
     """
     code = _code("ci")
 
@@ -427,9 +374,7 @@ def test_the_two_decoding_failures_are_counted_apart() -> None:
 def test_a_decode_that_did_not_converge_returns_no_usable_correction() -> None:
     """An unconverged residual satisfies no syndrome, so it is a failure by the test.
 
-    Counted rather than assumed: over the seeded run every decode that reached
-    the cap left a residual outside `ker H`, which is what makes
-    :func:`decode_succeeds` refuse it without a second branch.
+    Counted: every capped decode left a residual outside `ker H`.
     """
     code = _code("ci")
     channel = BinarySymmetricChannel(CI_FLIP)
@@ -465,10 +410,7 @@ def test_a_run_of_no_trials_is_refused() -> None:
 def test_the_decoder_runs_at_the_stress_length_with_no_oracle_behind_it() -> None:
     """At 96 qubits `2 ** n` does not enumerate, so the rate is reported alone.
 
-    `k = 16` and the graph carries 160 four-cycles. Over 1,000 draws at the
-    declared rate the decoder fails 280: 168 converged to a logical coset and
-    112 reached the cap. Nothing here is a gap to an optimum, and the fixture
-    states that by declaring no oracle.
+    `k = 16`, 160 four-cycles; 280 of 1,000 fail (168 logical, 112 capped).
     """
     code = _code("stress")
     params = fixture("bicycle_css", "stress").params
@@ -512,25 +454,11 @@ def test_a_planted_error_is_corrected_at_the_logical_rate_on_record() -> None:
     the spread over the three seeds 0.005788; 2.54 times the exact degenerate
     floor 0.070297 the enumeration returns on the same code and rate.
 
-    **There is no message to plant, and that is the path this code has.** A
-    qubit is not measured, so nothing here transmits a codeword and reads one
-    back: what is drawn is an `X` error at the declared physical rate, and
-    what the decoder is given is the syndrome that error produces. The truth
-    that generated the data is therefore the error pattern, and the judgement
-    is :func:`decode_succeeds` --- whether the residual `e + ê` is a
-    stabilizer, which is the criterion degeneracy forces and which
-    `likelihood.css` writes down before any decoder runs. Everything else is
-    the package's own: `sim.css.sample_x_error` is the channel,
-    :func:`measure_logical_error_rate` is the run, and belief propagation on
-    `H` is the decoder `STATUS.md` reports.
-
-    Two referees, and they answer different questions. The record says where
-    this decoder lands on this instance: three seeds of 4,000 trials, and the
-    rate a seeded run reproduces exactly. The enumeration says where the
-    optimum is: `error_cosets` sums each coset's probability over all
-    `2 ** 16` errors, and a decoder below that floor would be a defect in the
-    floor rather than a result. The gap between them is 2.54x and is what the
-    30 four-cycles of a CSS Tanner graph cost a decoder that assumes a tree.
+    No message is transmitted: the truth is the planted `X` error
+    (`sim.css.sample_x_error`), the decoder sees its syndrome, and the
+    judgement is :func:`decode_succeeds`. The record says where this decoder
+    lands (three seeds of 4,000); `error_cosets` over `2 ** 16` errors says
+    where the optimum is. The 2.54x gap is the cost of 30 four-cycles.
     """
     code = _ci_code()
     channel = BinarySymmetricChannel(CI_FLIP)

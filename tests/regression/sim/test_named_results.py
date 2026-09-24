@@ -1,19 +1,9 @@
 """The `sim/` package's named results iterate in their declared order (issue #865).
 
-The six entry points the ticket names return a frozen dataclass where they
-returned a bare tuple, and every caller that unpacks one is left unpacking.
-What makes that safe is a single property: ``__iter__`` yields the fields in
-the order they are declared, which is the order the tuple had. It is asserted
-here over the types themselves, so a field inserted in the middle without the
-matching line in ``__iter__`` fails here rather than at whichever call site
-unpacks next.
-
-The two private types are held to the same property: ``_Pruned`` is unpacked
-by a test and ``_RowEchelon`` is what its callers reach for positionally
-elsewhere, so their order is as load-bearing as a public one's.
-
-The values are sentinels: this checks the order, and the arithmetic that
-fills the fields is checked by the module's own tests.
+Six entry points return a frozen dataclass where they returned a tuple, and
+callers still unpack them, so ``__iter__`` must yield fields in declared
+order; ``_Pruned`` and ``_RowEchelon`` are unpacked positionally too.
+Sentinel values: this checks order; each module's tests check values.
 """
 
 from __future__ import annotations

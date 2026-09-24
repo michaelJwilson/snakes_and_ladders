@@ -1,16 +1,10 @@
 """The sizing harness, against an analytic family and against #194's number.
 
-Issue #596. Two kinds of check, because the harness makes two kinds of claim:
-
-* **the arithmetic** is checked against a family whose success probability is
-  written down, so the size the sweep reports is the size the binomial
-  predicts, and a probe that counted its starts or its reaches wrongly fails
-  here rather than on a research problem;
-* **the use** is checked by reproducing the measurement that motivated the
-  ticket --- random-restart hill climbing at **1.000** on the 7-taxon tree,
-  60 decisions, against a single descent's 0.48 (`STATUS.md`, issue #194). A
-  harness that cannot reproduce the finding it was built for is not measuring
-  what it claims.
+Issue #596. The arithmetic is checked against a family whose success
+probability is written down, so the reported size is the binomial's. The use
+is checked by reproducing the motivating measurement: random-restart hill
+climbing at 1.000 on the 7-taxon tree at 60 decisions, against a single
+descent's 0.48 (`STATUS.md`, issue #194).
 """
 
 from __future__ import annotations
@@ -51,11 +45,7 @@ class _Basin:
 
 
 def _draw(instance: _Basin, budget: Budget, rng: np.random.Generator) -> Outcome:
-    """Reach the target with the declared probability, spending the budget.
-
-    Module level and not a closure, so it is picklable the way
-    `opt/budget.py` requires of a method.
-    """
+    """Reach the target with the declared probability; module level, so picklable."""
     reached = float(rng.random()) < instance.fraction
     return Outcome(0.0 if reached else 1.0, budget.size)
 
@@ -111,11 +101,8 @@ def test_a_probe_counts_what_it_ran_and_what_it_reached() -> None:
 
 @pytest.mark.analytic
 def test_the_sweep_stops_at_the_size_the_binomial_predicts() -> None:
-    # `0.5 ** (size - 1)` is 1 at size 1, so the sweep cannot fail there; at
-    # size 2 it is one half and 32 starts miss the target with probability
-    # `1 - 0.5 ** 32`, so the first failure is size 2 for any seed. Asserting
-    # the *size* rather than the fraction is what makes this a test of the
-    # sweep and not of the draw.
+    # Size 1 cannot fail; size 2 misses with probability `1 - 0.5 ** 32`, so
+    # the first failure is size 2 for any seed: a test of the sweep.
     curve = failure_curve(
         _draw,
         _family,
@@ -276,9 +263,7 @@ def _descent(
 ) -> Outcome:
     """One greedy descent from a random start, scored as a negative likelihood.
 
-    The harness minimizes, and the environment maximizes a log-likelihood, so
-    the sign is flipped here rather than in the harness: an `Outcome` is lower
-    is better everywhere in `opt/budget.py`.
+    The harness minimizes (`opt/budget.py`), so the sign flips here.
     """
     state = instance.reset(rng)
     episode = greedy_rollout(instance, state, budget.size)
@@ -289,11 +274,8 @@ def _descent(
 @pytest.mark.release
 @pytest.mark.oracle
 def test_the_harness_reproduces_the_restart_baseline_on_the_seven_taxon_tree() -> None:
-    # The finding that motivated issue #596, through the harness rather than
-    # through a loop written for it: a single greedy descent reaches the
-    # enumerated maximum from about half the starts and random restarts at the
-    # same 60-decision budget reach it from all of them. So the baseline
-    # Milestone 2.1 has to beat here is 1.000, and the harness says so.
+    # #596's finding through the harness: one descent reaches the maximum from
+    # about half the starts, restarts at 60 decisions from all; the baseline is 1.000.
     environment, maximum = _tree_instance()
     budget = Budget(Cost.DECISIONS, DECISIONS)
 
@@ -324,11 +306,7 @@ def test_the_harness_reproduces_the_restart_baseline_on_the_seven_taxon_tree() -
 def _binomial_interval(n: int, p: float, mass: float) -> tuple[int, int]:
     """The shortest count interval holding ``mass`` of ``Binomial(n, p)``, enumerated.
 
-    Every one of the ``n + 1`` probabilities is written out with
-    :func:`math.comb` and the highest are taken until the mass is covered, so
-    the band is the distribution's own and not a normal approximation of it.
-    No `scipy` for the reason `test_learn_relaxed.py` gives for McNemar: root
-    `CLAUDE.md`'s dependency rule would not admit one for a binomial tail.
+    From :func:`math.comb`, not a normal approximation; no `scipy` for one tail.
     """
     pmf = [math.comb(n, k) * p**k * (1.0 - p) ** (n - k) for k in range(n + 1)]
     covered: set[int] = set()
@@ -345,11 +323,7 @@ def _binomial_interval(n: int, p: float, mass: float) -> tuple[int, int]:
 def test_the_curve_is_the_binomial_the_family_declares() -> None:
     """Every probe's reached count lands in the enumerated binomial band.
 
-    The family's basin fraction is `0.5 ** (size - 1)` by construction, so the
-    number of starts that reach the target at one size is
-    `Binomial(starts, 0.5 ** (size - 1))` exactly --- there is no estimate in
-    the referee, only `math.comb`. Over 400 starts at five sizes, the counts
-    and the 99.9% enumerated bands:
+    `Binomial(starts, 0.5 ** (size - 1))` exactly; 400 starts, 99.9% bands:
 
         size     p     reached     band
            1  1.000        400   400-400
@@ -358,11 +332,7 @@ def test_the_curve_is_the_binomial_the_family_declares() -> None:
            4  0.125         49    30- 73
            5  0.062         17    11- 42
 
-    The band is a property of the family and the seed decides where in it the
-    run lands, so this catches a probe that counted its starts or its reaches
-    wrongly and nothing else. `first_failure` is size 2 for any seed, a size-1
-    probe failing with probability zero and a size-2 probe with
-    `1 - 0.5 ** 400`.
+    `first_failure` is size 2 for any seed (a miss at 1 has probability zero).
     """
     curve = failure_curve(
         _draw,

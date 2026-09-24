@@ -1,15 +1,9 @@
 """A family whose observation has its own axes, fitted (issue #658).
 
-`baum_welch_family` unpacked `n_sequences, length = data.shape`, which is the
-whole shape and not its leading two, so it refused outright every family whose
-observation carries axes of its own — a family over a pair of counts among
-them. #658 made those families condition on a covariate, and until this nothing
-could call one in a fit: the family could be told an exposure and no fit could
-tell it one.
-
-The claim here is the one that shape change is for: a pair family fits, and
-told the exposure its draw was made under it recovers the rate that generated
-it where a fit not told it does not.
+`baum_welch_family` unpacked the whole data shape as two axes, refusing every
+family with observation axes of its own, such as a pair of counts. Claimed: a
+pair family fits, and told its exposure it recovers the generating rate where
+a fit not told it does not.
 """
 
 from __future__ import annotations
@@ -77,11 +71,9 @@ def _fit(observations: np.ndarray, covariate: np.ndarray | None) -> np.ndarray:
 @pytest.mark.smoke
 @pytest.mark.critical
 def test_a_family_with_its_own_axes_fits_at_all() -> None:
-    """The shape claim, on its own: the unpacking no longer refuses the family.
+    """The shape claim, on its own: the unpacking does not refuse the family.
 
-    Separate from recovery because it fails differently --- a `ValueError` out
-    of the shape unpacking, before any arithmetic --- and a reader looking at
-    a recovery failure should not have to rule this out first.
+    Separate from recovery: it fails as a `ValueError` before any arithmetic.
     """
     observations, _ = _draw(spread=1.0, seed=2)
 
@@ -101,8 +93,7 @@ def test_told_the_exposure_the_fit_recovers_the_planted_rate() -> None:
 def test_not_told_it_the_same_fit_misses() -> None:
     """And it is worth telling: withheld, the same fit on the same data misses.
 
-    It converges to the rate averaged over the exposures it was not told
-    about, which for a `U(1/3, 3)` exposure is a factor near its mean.
+    It converges near the rate times the `U(1/3, 3)` exposure's mean.
     """
     observations, _ = _draw(spread=3.0, seed=2)
 

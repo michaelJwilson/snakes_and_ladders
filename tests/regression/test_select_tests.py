@@ -30,13 +30,7 @@ from tests._paths import REPO_ROOT
 
 
 def _modules_of(chosen: dict[str, list[str]]) -> set[str]:
-    """Extract the submodules a selection runs the tests of.
-
-    Returns
-    -------
-    set[str]
-        Submodule names.
-    """
+    """The submodule names a selection runs the tests of."""
     return {
         path.rsplit("/", 1)[1]
         for path in chosen["paths"]
@@ -174,11 +168,8 @@ def test_changing_a_test_selects_its_module() -> None:
 @pytest.mark.critical
 @pytest.mark.smoke
 def test_a_likelihood_change_still_runs_the_conserved_gradient_tape() -> None:
-    # Issue #516 moved `test_pruning_burn.py` out of `tests/regression/
-    # likelihood/` and into the sandbox's own directory. What it referees is a
-    # second tape over the likelihood recursion, so a likelihood change is
-    # when it can fail, and the move must not have taken that away. The
-    # sandbox imports `likelihood`, so the expansion carries it.
+    # `test_pruning_burn.py` moved to the sandbox directory (#516) but referees
+    # the likelihood tape, so a likelihood change must still select it.
     for changed in (
         "python/snakes_and_ladders/likelihood/pruning_torch.py",
         "python/snakes_and_ladders/search/topology.py",
@@ -249,13 +240,7 @@ def test_coverage_targets_match_the_selected_modules() -> None:
 
 
 def _benchmarks_of(chosen: dict[str, list[str]]) -> set[str]:
-    """Extract the benchmark modules a selection runs.
-
-    Returns
-    -------
-    set[str]
-        Benchmark filenames.
-    """
+    """The benchmark filenames a selection runs."""
     return {
         path.rsplit("/", 1)[1]
         for path in chosen["paths"]
@@ -274,11 +259,8 @@ def test_benchmarks_run_only_for_the_modules_they_measure() -> None:
 @pytest.mark.critical
 @pytest.mark.smoke
 def test_a_benchmark_is_selected_with_the_module_it_pairs_with() -> None:
-    # The pairing DEV.md requires, used as the selector: a change runs the
-    # benchmarks of the modules that import it and no other. A learn change
-    # reaches `search` (its tree environment) and `likelihood` (the
-    # surrogates) but never `sim` or `opt`; running every benchmark cost 40 s
-    # against the few that measure what changed.
+    # A change runs the benchmarks of its importers only: `learn` reaches
+    # `search` and `likelihood`, never `sim` or `opt`; all of them cost 40 s.
     chosen = _benchmarks_of(select(["python/snakes_and_ladders/learn/reinforce.py"]))
     expected = {
         Path(path).name for path in _benchmarks_for(sorted(dependents(["learn"])))
@@ -332,11 +314,8 @@ def test_the_benchmarked_modules_are_a_subset_of_the_modules() -> None:
 
 @pytest.mark.smoke
 def test_every_always_run_path_names_a_file_that_exists() -> None:
-    # The failure this catches has no other symptom worth trusting: an entry
-    # renamed on one side only leaves `ALWAYS` naming a path that is gone, and
-    # a selection built from it either errors far from the cause or, worse,
-    # quietly stops running a test that is supposed to run on every change.
-    # A rename touching `tests/` is exactly when it happens.
+    # An `ALWAYS` entry renamed on one side names a path that is gone, and a
+    # test meant to run on every change quietly stops.
     root = Path(__file__).resolve().parents[2]
     missing = [path for path in ALWAYS if not (root / path).is_file()]
 
@@ -365,11 +344,8 @@ def test_every_whole_suite_trigger_names_something_in_the_tree() -> None:
 
 @pytest.mark.smoke
 def test_the_key_tier_runs_only_for_what_could_move_it() -> None:
-    # A key test is two minutes, so it is deselected by default and selected
-    # by the change that could fail it: the coupled model, the emissions, the
-    # fixtures or the Rust crate (issue #399). Both directions, because a
-    # trigger that never fires and a tier that always runs are the two ways
-    # this stops paying for itself.
+    # A key test is two minutes: deselected by default, selected by a change to
+    # the coupled model, emissions, fixtures or Rust (issue #399).
     assert "key" in select(["python/snakes_and_ladders/learn/policy.py"])["deselect"]
     for trigger in (
         "src/coupled.rs",

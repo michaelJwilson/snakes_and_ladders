@@ -24,18 +24,9 @@ def found() -> list[appraise_kernels.Kernel]:
 def test_the_pool_is_read_from_the_source_and_not_from_a_list(
     found: list[appraise_kernels.Kernel],
 ) -> None:
-    # The fact the ticket opens with: two kernels landed after #612 decided the
-    # thread pool and neither takes it. Read from each module's own parallel
-    # iterators, so a port that lands makes this true without anyone editing a
-    # list -- which is the failure #586 deleted the hand inventories over.
-    #
-    # Stated as containment in both directions and not as equality (issue
-    # #745). The equality was the set the day #678 was written, so #715's two
-    # max-flow kernels took the pool and turned the guard red on `main`
-    # without a defect: an inventory pinned inside an assertion is the hand
-    # list one level up, and every later port breaks it. What is asserted is
-    # what the guard exists for -- the three that take the pool still do, and
-    # the two that were found bare still are.
+    # Two kernels landed after #612 without the thread pool, read from each
+    # module's parallel iterators. Containment both ways, not equality: an
+    # inventory in an assertion broke on #715's ports without a defect (#745).
     pool = {kernel.module for kernel in found if kernel.parallel}
 
     assert {"coupled", "pruning", "sampling"} <= pool
@@ -65,19 +56,13 @@ def test_every_kernel_is_pinned_against_a_referee_its_tests_import(
 def test_an_oracle_inside_the_adapter_is_a_referee(
     found: list[appraise_kernels.Kernel],
 ) -> None:
-    # The case the first draft of this tool got wrong, which is why the
-    # placement is in the vocabulary: `test_ragged_rust.py` imports
-    # `posteriors` and `posteriors_oracle` from one module, so the referee is a
-    # symbol and not a module. A tool that only looked at modules called a
-    # pinned kernel bare, and a survey that reports a false gap is worse than
-    # one that reports none.
+    # The referee can be a symbol: `test_ragged_rust.py` imports `posteriors`
+    # and `posteriors_oracle` from one module; a module-only survey reported a
+    # false gap.
     ragged = next(kernel for kernel in found if kernel.module == "ragged")
 
-    # Since #933 (R5) `opt.hmm` calls the kernel too, and its own torch
-    # recursion is the oracle its tests pin it against, so the adapter module
-    # is itself a referee; the tests of `opt.hmm` bring its other referees.
-    # The adapter is `opt.hmm.estimation` since #1010 split the module, and a
-    # test importing from `opt.hmm` imports what the package re-exports.
+    # `opt.hmm` calls the kernel too (#933, R5), and its torch recursion is its
+    # oracle, so the adapter `opt.hmm.estimation` (#1010) is itself a referee.
     assert "likelihood.ragged_rust.posteriors_oracle" in ragged.referees
     assert ragged.referees == (
         "likelihood.message_passing_reference",

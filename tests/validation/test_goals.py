@@ -101,11 +101,9 @@ RUSTWORKX_COMPONENTS = {
 }
 
 
-#: rustworkx's cost of one Swendsen--Wang sweep's clusters at q = 3 on an
-#: open lattice at the critical coupling: building the `PyGraph` from that
-#: sweep's bonds and `connected_components` on it, the medians of three
-#: subprocess runs, and their peak added memory (#997). The package's figure
-#: is the whole sweep on the compiled pass, bonds and recolouring included.
+#: rustworkx: `PyGraph` from one Swendsen--Wang sweep's bonds plus
+#: `connected_components`, q = 3, open, critical; medians of three and peak
+#: memory (#997). The package's figure is the whole compiled sweep.
 RUSTWORKX_SWEEP = {
     side: Goal(
         "rustworkx",
@@ -127,11 +125,8 @@ RUSTWORKX_SWEEP_MEMORY = {
 }
 
 
-#: TorchRL's `GAE` at `gamma = 1`, `lmbda = 0.95`, one call per episode of
-#: 100 decisions, `_gae_rollouts`' rewards and values with every other
-#: episode terminated: the summed per-episode seconds, the median of three
-#: subprocess runs (#997). TD(0)'s target is GAE at `lmbda = 0`, the same
-#: recursion, and sets no goal of its own.
+#: TorchRL's `GAE`, `gamma = 1`, `lmbda = 0.95`, per 100-decision episode, every
+#: other terminated; summed seconds, median of three (#997). TD(0) is `lmbda = 0`.
 TORCHRL_GAE = {
     n_episodes: Goal(
         "torchrl",
@@ -152,13 +147,10 @@ def _gae_rollouts(n_episodes: int) -> list[tuple[list[float], list[float], bool]
     ]
 
 
-#: PyG's twin of `SetSurrogate` (hidden 8): its encoder and decoder around
-#: `global_add_pool`, one example of `side^2` tokens, the median of five
-#: subprocess runs of the median of nine warm forwards, at one intra-op
-#: thread as the suite runs (`tests/conftest.py`) (#997). At 142^2 the twin
-#: is level with the package after two attempts --- pooling before the
-#: encoder's last affine map (6.2 to 3.6 ms at 284^2 on four threads) and the
-#: body run in place --- since both run the same encoder over 20,164 rows.
+#: PyG's `SetSurrogate` twin (hidden 8) around `global_add_pool`, `side^2`
+#: tokens, median of five runs of nine warm forwards, one thread (#997). Level
+#: at 142^2 after two attempts (pooling before the last affine map: 6.2 to
+#: 3.6 ms at 284^2; in-place body): one encoder over 20,164 rows either way.
 TORCH_GEOMETRIC_SET = {
     side: Goal(
         "torch_geometric",
@@ -170,11 +162,9 @@ TORCH_GEOMETRIC_SET = {
 }
 
 
-#: JAX's per-point gradient under `jit` and its peak added memory over 100
-#: points, the medians of three subprocess runs (#991): the diagonal Gaussian
-#: at d = 10, 10^3 and 10^4, and the three-component mixture at n = 10^5.
-#: Where torch's autograd was the faster or the lighter (the dense Gaussian at
-#: d = 10^3) no goal is set.
+#: JAX's `jit` gradient and peak memory over 100 points, medians of three
+#: (#991): diagonal Gaussian at d = 10, 10^3, 10^4; mixture at n = 10^5. No
+#: goal where torch was faster or lighter (dense Gaussian at 10^3).
 JAX_GRADIENT = {
     case: Goal(
         "jax",
@@ -316,13 +306,10 @@ SCIKIT_LEARN_EM_MEMORY = {
 }
 
 
-#: gco's alpha-beta `swap()` to convergence on the expansion goals' instance
-#: (q = 10, `critical_coupling(10)`, field seed 974), graph build excluded,
-#: and its peak added memory with the build: medians of three subprocess
-#: runs (#997). The package's swap stood at 1.57x / 1.12x after two attempts
-#: --- a proposal scored by its energy change (0.92 to 0.76 s at 142^2) and
-#: each cut built on the moving sites alone (to 0.63 s) --- and at 1.27x /
-#: 0.89x the memory.
+#: gco's `swap()` on the expansion instance (q = 10, `critical_coupling(10)`,
+#: seed 974), build excluded, peak with build, medians of three (#997). Ours
+#: stood at 1.57x / 1.12x after two attempts (energy-change scoring, 0.92 to
+#: 0.76 s at 142^2; cuts on moving sites, 0.63 s), 1.27x / 0.89x memory.
 GCO_SWAP = {
     side: Goal(
         "gco",
@@ -580,13 +567,10 @@ def _score_inputs(n_samples: int) -> dict[str, np.ndarray]:
     }
 
 
-#: BlackJAX's MALA, `blackjax.mala` at `epsilon = h^2 / 2` for the package's
-#: Langevin step `h = 0.9 / (2 d^(1/4))`, 1,000 transitions on
-#: `diagonal_precision(d)`: the second call's seconds and peak, the chain
-#: stored, and the first call's peak with no draw kept, compilation and the
-#: buffers XLA keeps included as `BLACKJAX_HMC_CHAIN_FREE_MEMORY`'s are
-#: (#997). Stored, both sides hold the same `n x d` doubles, so that goal is
-#: bounded near 1.0x as `BLACKJAX_HMC_MEMORY`'s is.
+#: `blackjax.mala` at `epsilon = h^2 / 2`, `h = 0.9 / (2 d^(1/4))`, 1,000
+#: transitions on `diagonal_precision(d)`: second call's seconds and peak
+#: stored, first call's peak unstored, XLA buffers included (#997). Stored,
+#: both hold `n x d` doubles: near 1.0x, as `BLACKJAX_HMC_MEMORY`.
 BLACKJAX_MALA = {
     dimension: Goal(
         "blackjax",
@@ -695,12 +679,10 @@ BLACKJAX_HMC_CHAIN_FREE_MEMORY = {
 }
 
 
-#: TorchRL's warm call on 10⁵ Potts decisions, `WEIGHTS` in
-#: `tests/validation/_rl.py`: `ClipPPOLoss` at clip 0.2 in episodes of 100,
-#: and `ReinforceLoss` on greedy episodes of 10 at baseline 0.5, each with its
-#: gradient; the median of ten warm calls over two interpreters (#977). The
-#: package's REINFORCE recomputes every decision's features through the
-#: environment, which TorchRL is handed.
+#: TorchRL on 10⁵ Potts decisions (`_rl.py` `WEIGHTS`): `ClipPPOLoss` at 0.2,
+#: episodes of 100; `ReinforceLoss`, greedy episodes of 10, baseline 0.5; with
+#: gradients, median of ten warm calls over two interpreters (#977). Ours
+#: recomputes features through the environment.
 TORCHRL_LOSS = {
     "clip_ppo": Goal(
         "torchrl",
@@ -755,12 +737,9 @@ RWM_TARGETS = {
 
 _RWM_MEASURED = "2026-09-24, 4-core reference host at a 1-minute load of 0.6-1.9, #1006"
 
-#: BlackJAX's `additive_step_random_walk` with a normal step at the same
-#: scale, compiled, compilation excluded, the medians of three subprocess
-#: runs in `test_rwm_blackjax_bench.py`: 1,000 transitions, and 2,000 for
-#: the warm-up row, which the package spends as 1,000 warm-up proposals and
-#: 1,000 draws (BlackJAX has no random-walk warm-up, so its figure is the
-#: same number of proposals at a fixed step).
+#: BlackJAX's `additive_step_random_walk`, same scale, compiled, medians of
+#: three (`test_rwm_blackjax_bench.py`): 1,000 transitions; 2,000 against our
+#: 1,000 warm-up + 1,000 draws (BlackJAX has no warm-up).
 BLACKJAX_RWM = {
     name: Goal(
         "blackjax", f"1,000 random-walk transitions, {name}", seconds, _RWM_MEASURED
@@ -942,11 +921,9 @@ def _hmc_inputs(name: str, *, warmup: int, store_chain: bool) -> dict[str, np.nd
     }
 
 
-#: HMC on a Gaussian mixture's negative log-likelihood (#1008): 10^5 draws
-#: from weights (0.3, 0.3, 0.4), means (-4, 0, 5), scales (1, 1.5, 1), seed
-#: 1008, from the generating theta, 100 transitions of ten steps at 0.001.
-#: BlackJAX's target is the JAX twin in `scripts/blackjax.py`, a logsumexp
-#: over the (n, k) joint; the package's the declared family in `src/energy.rs`.
+#: HMC on a mixture's NLL (#1008): 10^5 draws, weights (0.3, 0.3, 0.4), means
+#: (-4, 0, 5), scales (1, 1.5, 1), seed 1008, 100 x 10 steps at 0.001; JAX
+#: twin in `scripts/blackjax.py`, ours `src/energy.rs`.
 def _mixture_hmc_inputs(*, warmup: int, store_chain: bool) -> dict[str, np.ndarray]:
     rng = np.random.default_rng(1008)
     labels = rng.choice(3, size=100_000, p=[0.3, 0.3, 0.4])
@@ -1032,11 +1009,8 @@ def _hmm_hmc_inputs(*, warmup: int, store_chain: bool) -> dict[str, np.ndarray]:
 
 _HMM_MEASURED = "2026-09-24, 4-core reference host at a 1-minute load of 1.1-1.4, #1008"
 
-#: 300 transitions of ten steps, and 100 warm-up steps before them.
-#: BlackJAX's target is the textbook log-space forward recursion under
-#: `vmap` (`scripts/blackjax.py`), compiled, second call; the package's the
-#: declared family in `src/energy.rs`, the gradient Fisher's identity over
-#: the streamed statistics.
+#: 300 transitions of ten steps after 100 warm-up; BlackJAX's `vmap`ped log
+#: forward recursion, second call; ours `src/energy.rs`, Fisher's identity.
 BLACKJAX_HMC_HMM = {
     "plain": Goal(
         "blackjax", "300 HMC transitions, Gaussian HMM of 10^4", 3.085, _HMM_MEASURED
@@ -1056,9 +1030,7 @@ BLACKJAX_HMC_HMM_MEMORY = MemoryGoal(
 
 # --- The package's figures -------------------------------------------------
 #
-# A runtime goal is read in process by the helpers below or in a fresh
-# interpreter by `scripts/package.py`, as its benchmark pair read it; every
-# memory goal is read in a fresh interpreter.
+# Runtime in process or via `scripts/package.py`; memory always fresh.
 
 
 def _package(

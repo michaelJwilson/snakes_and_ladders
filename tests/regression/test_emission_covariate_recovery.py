@@ -1,23 +1,12 @@
 """Planted parameters recovered with the covariates varying (issue #631).
 
-Step 5, and the ticket's Done-when. Each family is fitted back to the values
-that generated its data while its covariate varies over a stated spread --- an
-exposure over eightfold, a trial count over sixteenfold --- which is the regime
-neither conserved family can express and therefore the one nothing else here
-referees.
-
-**Refereed by the simulated truth, not by an oracle.** There is no independent
-implementation of a covariate-aware count family to check against, so what
-these assert is recovery of the generating parameters to a stated tolerance,
-which root ``CLAUDE.md`` admits where no oracle is affordable. The *oracle*
-half of the claim is elsewhere and is exact: at a constant covariate both
-families reduce to the conserved ones bitwise, in
-``test_emission_exposure.py`` and ``test_emission_trial_covariate.py``.
-
-The spreads are stated because they are the whole assertion. A covariate
-varying by a factor of one is a constant absorbed into the mean, which those
-other files already cover; these need it to vary enough that absorbing it is
-not available.
+Each family is fitted back to its generating values while its covariate varies
+--- an exposure over eightfold, a trial count over sixteenfold --- the regime
+no conserved family expresses. Refereed by the simulated truth: no independent
+covariate-aware implementation exists. The exact half is at a constant
+covariate, bitwise, in ``test_emission_exposure.py`` and
+``test_emission_trial_covariate.py``. The spreads are the assertion: a
+constant covariate is absorbed into the mean.
 """
 
 from __future__ import annotations
@@ -102,11 +91,8 @@ def test_ignoring_a_varying_covariate_does_not_recover_the_truth() -> None:
 
     blind = start.reestimate(draws, posterior).emissions
 
-    # Both halves land where the mathematics says. The mean recovers the
-    # *average* rate -- 5.684 against `mu E[e]` = 5.631, within 1% -- and so
-    # says nothing about `mu`. The dispersion absorbs the spread the exposure
-    # would have explained and comes back at 1.729 against a planted 3.0, a
-    # 42% underestimate: unmodelled heterogeneity reads as overdispersion.
+    # The mean recovers the average rate (5.684 against `mu E[e]` = 5.631); the
+    # dispersion reads 1.729 against a planted 3.0: heterogeneity as overdispersion.
     average_rate = mean * float(offsets.mean())
 
     assert float(blind.mean[0]) == pytest.approx(average_rate, rel=0.02)

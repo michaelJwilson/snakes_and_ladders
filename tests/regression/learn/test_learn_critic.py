@@ -261,12 +261,7 @@ def _trajectory_sum(
 ) -> float:
     """``sum over trajectories of P(trajectory) * G(trajectory)``, expanded forwards.
 
-    Brute force, and written here rather than imported: `exact.py` computes
-    the same number by a *backward* recursion over ``(state, remaining)``,
-    carrying one value per node. This carries a probability and a return per
-    trajectory and sums the products at the end, so the two share no algebra
-    and agreement between them is evidence rather than a tautology. Costs
-    ``|A| ** horizon`` trajectories, 512 at the settings below.
+    Shares no algebra with `exact.py`'s backward recursion; 512 trajectories here.
     """
     frontier = [(state, 1.0, 0.0)]
     total = 0.0
@@ -293,15 +288,7 @@ def _trajectory_sum(
 def test_the_action_values_are_a_brute_force_over_trajectories() -> None:
     """``Q^pi(s, a)`` equals the reward plus the enumerated return of the successor.
 
-    `exact_action_values` is what a planner's leaf and a critic's target are
-    read against, and until now it was checked only against
-    `exact_expected_return`, which is the same recursion one level up. Here
-    both are compared with :func:`_trajectory_sum`, a forward expansion over
-    all 512 trajectories of the 4-site chain at horizon 3.
-
-    Bitwise is not the target: the two routes sum the same terms in different
-    orders. Realized over seven states, the largest disagreement is 2.2e-16
-    absolute on values of order 1, against a declared 1e-12.
+    Against :func:`_trajectory_sum` over 512 trajectories: 2.2e-16 against 1e-12.
     """
     environment, policy = potts_environment(), _policy([0.3, -0.6])
 
@@ -327,23 +314,7 @@ def test_the_action_values_are_a_brute_force_over_trajectories() -> None:
 def test_the_bootstrapped_targets_telescope_to_the_closed_form_return() -> None:
     """At ``gamma = 1`` the TD targets sum to the return the energies state.
 
-    The closed form is `learn/CLAUDE.md`'s own: an undiscounted reward
-    telescopes, so the return from any step is `energy(s_T) - energy(s_t)`,
-    a difference of two *levels* that no reward in the episode appears in.
-    Two readings of `temporal_difference_targets` against it, for an episode
-    that ends at a local maximum:
-
-    * the last target is ``r_{T-1}`` exactly, the successor being terminal and
-      contributing no bootstrap --- equality, not a tolerance, since the
-      branch either fired or it did not;
-    * summing ``r_t + V(s_{t+1})`` and subtracting ``V(s_t)`` over the episode
-      leaves ``V(s_T) - V(s_0)``, so the targets less the critic's own values
-      at the features, plus ``V(s_0)``, is the return. Realized over the six
-      starts below that take an action: 4.4e-16 absolute at worst against a
-      declared 1e-12, on returns of 2.65 to 3.65.
-
-    `state_targets` is read against the same closed form, where the
-    agreement is term by term rather than in the sum.
+    `energy(s_T) - energy(s_t)` (`learn/CLAUDE.md`): last target exact; sum 4.4e-16.
     """
     environment = potts_environment()
     critic = Critic(
