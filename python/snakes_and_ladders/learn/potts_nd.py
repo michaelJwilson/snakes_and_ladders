@@ -55,7 +55,7 @@ from enum import StrEnum
 from typing import NamedTuple
 
 import numpy as np
-import torch
+from numpy.typing import NDArray
 
 from snakes_and_ladders.learn.environment import Environment
 from snakes_and_ladders.learn.keyed import KeyedMove, keyed_generator
@@ -604,7 +604,7 @@ class PottsNDEnvironment(Environment[Configuration, PottsAction]):
 
     def features(
         self, state: Configuration, actions: Sequence[PottsAction]
-    ) -> torch.Tensor:
+    ) -> NDArray[np.float64]:
         """``(len(actions), n_features())``: one column per reading that varies.
 
         The columns are the arm's, chosen at construction by
@@ -641,7 +641,7 @@ class PottsNDEnvironment(Environment[Configuration, PottsAction]):
         """
         width = len(self._columns)
         if not actions:
-            return torch.empty((0, width), dtype=torch.float64)
+            return np.empty((0, width), dtype=np.float64)
         labels = np.asarray(state, dtype=np.int64)
         sited = np.fromiter(
             (action.kind in PARAMETRIC_KINDS for action in actions),
@@ -690,9 +690,7 @@ class PottsNDEnvironment(Environment[Configuration, PottsAction]):
             readings[FeatureColumn.PRICE] = np.log(
                 np.where(sited, 1.0 + self._degree[sites], float(self._sweep_visits))
             )
-        return torch.from_numpy(
-            np.stack([readings[column] for column in self._columns], axis=1)
-        )
+        return np.stack([readings[column] for column in self._columns], axis=1)
 
     def _flip_gains(
         self, labels: np.ndarray, sites: np.ndarray, targets: np.ndarray

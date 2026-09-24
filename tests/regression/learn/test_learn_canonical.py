@@ -28,6 +28,7 @@ from typing import Any
 import numpy as np
 import pytest
 import torch
+from numpy.typing import NDArray
 from snakes_and_ladders.learn.canonical import (
     ChainMdp,
     CliffWalk,
@@ -295,7 +296,7 @@ class _Rewarding(Environment[int, int]):
     def step(self, state: int, action: int) -> tuple[int, float]:
         return min(max(state + action, 0), self._inner.n_states - 2), 1.0
 
-    def features(self, state: int, actions: Sequence[int]) -> torch.Tensor:
+    def features(self, state: int, actions: Sequence[int]) -> NDArray[np.float64]:
         return self._inner.features(state, actions)
 
     def n_features(self) -> int:

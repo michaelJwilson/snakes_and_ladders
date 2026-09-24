@@ -27,6 +27,12 @@ from typing import Protocol
 
 import numpy as np
 import torch
+from numpy.typing import NDArray
+
+#: What a policy scores: :meth:`Environment.features`' array, or a tensor.
+#: A feature is a constant to every loss here, so it is converted to a tensor
+#: once, where it meets the weights, and never differentiated (issue #1011).
+type FeatureRows = NDArray[np.float64] | torch.Tensor
 
 
 class Policy(Protocol):
@@ -45,7 +51,7 @@ class Policy(Protocol):
     """
 
     @abstractmethod
-    def sample(self, features: torch.Tensor, rng: np.random.Generator) -> int:
+    def sample(self, features: FeatureRows, rng: np.random.Generator) -> int:
         """Choose an action index from the scored actions."""
         ...
 
@@ -66,10 +72,10 @@ class TrainablePolicy(Policy, Protocol):
     def parameters(self) -> list[torch.Tensor]: ...
 
     @abstractmethod
-    def log_probabilities(self, features: torch.Tensor) -> torch.Tensor: ...
+    def log_probabilities(self, features: FeatureRows) -> torch.Tensor: ...
 
     @abstractmethod
-    def greedy(self, features: torch.Tensor) -> int: ...
+    def greedy(self, features: FeatureRows) -> int: ...
 
 
 class LinearPolicy(TrainablePolicy):
@@ -116,27 +122,30 @@ class LinearPolicy(TrainablePolicy):
         """The tensors an optimizer updates: the one weight vector."""
         return [self._weights]
 
-    def set_weights(self, values: torch.Tensor) -> None:
+    def set_weights(self, values: NDArray[np.float64] | torch.Tensor) -> None:
         """Replace the weights in place, keeping the same leaf tensor.
 
         Used by the optimizer and by tests that place a known truth in the
-        parameters; assigning a new tensor instead would detach the graph
-        every caller already holds.
+        parameters, such as an environment's NumPy ``greedy_weights``;
+        assigning a new tensor instead would detach the graph every caller
+        already holds.
         """
-        if values.shape != self._weights.shape:
-            msg = f"expected weights of shape {tuple(self._weights.shape)}, got {tuple(values.shape)}"
+        weights = torch.as_tensor(values)
+        if weights.shape != self._weights.shape:
+            msg = f"expected weights of shape {tuple(self._weights.shape)}, got {tuple(weights.shape)}"
             raise ValueError(msg)
         with torch.no_grad():
-            self._weights.copy_(values.to(self._dtype))
+            self._weights.copy_(weights.to(self._dtype))
 
-    def log_probabilities(self, features: torch.Tensor) -> torch.Tensor:
+    def log_probabilities(self, features: FeatureRows) -> torch.Tensor:
         """Log ``pi(a | s)`` over the actions ``features`` describes.
 
         Parameters
         ----------
-        features : torch.Tensor
+        features : FeatureRows
             Shape ``(n_actions, n_features)``, as
             :meth:`snakes_and_ladders.learn.environment.Environment.features` returns.
+            An array is read as a tensor without a copy.
 
         Returns
         -------
@@ -149,16 +158,17 @@ class LinearPolicy(TrainablePolicy):
         ValueError
             If ``features`` is not 2-D with ``n_features`` columns.
         """
-        if features.ndim != 2 or features.shape[1] != self.n_features:
+        rows = torch.as_tensor(features)
+        if rows.ndim != 2 or rows.shape[1] != self.n_features:
             msg = (
                 f"expected features of shape (n_actions, {self.n_features}), "
-                f"got {tuple(features.shape)}"
+                f"got {tuple(rows.shape)}"
             )
             raise ValueError(msg)
-        scores = features.to(self._dtype) @ self._weights
+        scores = rows.to(self._dtype) @ self._weights
         return torch.log_softmax(scores, dim=0)
 
-    def sample(self, features: torch.Tensor, rng: np.random.Generator) -> int:
+    def sample(self, features: FeatureRows, rng: np.random.Generator) -> int:
         """Draw an action index from ``pi(. | s)``.
 
         Sampled through ``rng`` rather than through torch's global generator
@@ -169,7 +179,7 @@ class LinearPolicy(TrainablePolicy):
             probabilities = torch.exp(self.log_probabilities(features))
         return int(rng.choice(probabilities.shape[0], p=probabilities.numpy()))
 
-    def greedy(self, features: torch.Tensor) -> int:
+    def greedy(self, features: FeatureRows) -> int:
         """The most probable action, which is the zero-temperature limit.
 
         Scaling the weights by ``beta`` and letting ``beta`` grow drives the
@@ -239,23 +249,24 @@ class MLPPolicy(TrainablePolicy):
     def parameters(self) -> list[torch.Tensor]:
         return list(self._net.parameters())
 
-    def log_probabilities(self, features: torch.Tensor) -> torch.Tensor:
+    def log_probabilities(self, features: FeatureRows) -> torch.Tensor:
         """Log ``pi(a | s)`` over the actions ``features`` describes, as :meth:`LinearPolicy.log_probabilities`."""
-        if features.ndim != 2 or features.shape[1] != self._n_features:
+        rows = torch.as_tensor(features)
+        if rows.ndim != 2 or rows.shape[1] != self._n_features:
             msg = (
                 f"expected features of shape (n_actions, {self._n_features}), "
-                f"got {tuple(features.shape)}"
+                f"got {tuple(rows.shape)}"
             )
             raise ValueError(msg)
-        scores: torch.Tensor = self._net(features.to(self._dtype))[:, 0]
+        scores: torch.Tensor = self._net(rows.to(self._dtype))[:, 0]
         return torch.log_softmax(scores, dim=0)
 
-    def sample(self, features: torch.Tensor, rng: np.random.Generator) -> int:
+    def sample(self, features: FeatureRows, rng: np.random.Generator) -> int:
         with torch.no_grad():
             probabilities = torch.exp(self.log_probabilities(features))
         return int(rng.choice(probabilities.shape[0], p=probabilities.numpy()))
 
-    def greedy(self, features: torch.Tensor) -> int:
+    def greedy(self, features: FeatureRows) -> int:
         with torch.no_grad():
             return int(torch.argmax(self.log_probabilities(features)))
 
@@ -323,7 +334,7 @@ class EpsilonGreedyPolicy(Policy):
             raise ValueError(msg)
         self._epsilon = value
 
-    def log_probabilities(self, features: torch.Tensor) -> torch.Tensor:
+    def log_probabilities(self, features: FeatureRows) -> torch.Tensor:
         """Log of the mixture this policy samples from: ``(1 - eps)`` on the greedy action plus ``eps / n`` everywhere.
 
         What an off-policy learner divides by when the episodes were
@@ -339,12 +350,12 @@ class EpsilonGreedyPolicy(Policy):
             probabilities[self._policy.greedy(features)] += 1.0 - self._epsilon
         return torch.log(probabilities)
 
-    def sample(self, features: torch.Tensor, rng: np.random.Generator) -> int:
+    def sample(self, features: FeatureRows, rng: np.random.Generator) -> int:
         """Choose an action index: uniform with probability ``epsilon``.
 
         Parameters
         ----------
-        features : torch.Tensor
+        features : FeatureRows
             Action features, shape ``(n_actions, n_features)``.
         rng : np.random.Generator
             The only source of randomness, as for :meth:`LinearPolicy.sample`.

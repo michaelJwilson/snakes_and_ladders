@@ -39,7 +39,11 @@ def state_features[S, A](environment: Environment[S, A], state: S) -> torch.Tens
     actions = environment.actions(state)
     if not actions:
         return torch.zeros(2 * width + 1, dtype=torch.float64)
-    features = environment.features(state, actions).to(torch.float64)
+    # The one conversion: the environment's array becomes a constant tensor
+    # here, where the critic's graph begins (issue #1011).
+    features = torch.as_tensor(
+        environment.features(state, actions), dtype=torch.float64
+    )
     return torch.cat(
         [
             features.mean(dim=0),

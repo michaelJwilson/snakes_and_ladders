@@ -51,6 +51,7 @@ from enum import StrEnum
 
 import numpy as np
 import torch
+from numpy.typing import NDArray
 
 from snakes_and_ladders.learn.environment import Environment
 from snakes_and_ladders.likelihood.parsimony import fitch_score
@@ -449,7 +450,9 @@ class TreeEnvironment(Environment[Topology, Topology]):
         width = len(FEATURE_NAMES[FeatureSet.FULL])
         return torch.tensor(rows, dtype=torch.float64).reshape(len(actions), width)
 
-    def features(self, state: Topology, actions: Sequence[Topology]) -> torch.Tensor:
+    def features(
+        self, state: Topology, actions: Sequence[Topology]
+    ) -> NDArray[np.float64]:
         """``(len(actions), n_features())``: what the policy scores each move by.
 
         Under ``FeatureSet.IMPROVEMENT``, the one unstandardized column of
@@ -473,12 +476,15 @@ class TreeEnvironment(Environment[Topology, Topology]):
         is a property of the move set: under NNI all seven do on the
         suite's fixtures, while a distance from the state does not and is
         therefore not a column.
+
+        An array, as :meth:`Environment.features` declares: the standardized
+        tensor is read out without a copy (issue #1011).
         """
         if self._features is FeatureSet.IMPROVEMENT:
             current = self.score(state)
             rows = [[self.score(action) - current] for action in actions]
-            return torch.tensor(rows, dtype=torch.float64).reshape(len(actions), 1)
-        return standardize(self.raw_features(state, actions))
+            return np.array(rows, dtype=np.float64).reshape(len(actions), 1)
+        return standardize(self.raw_features(state, actions)).numpy()
 
     def n_features(self) -> int:
         """Width of :meth:`features`: one, or the seven of the full set."""

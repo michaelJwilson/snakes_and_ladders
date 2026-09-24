@@ -116,7 +116,7 @@ def test_the_observation_is_the_neighbourhood_s_features_padded_with_zeros() -> 
     assert episode.observation.shape == (n_max + 3, environment.n_features())
     assert_allclose(
         episode.observation[:n_max],
-        environment.features(start, available_actions).numpy(),
+        environment.features(start, available_actions),
         atol=0.0,
     )
     assert not episode.observation[n_max:].any()

@@ -37,14 +37,19 @@ episode costs microseconds rather than seconds.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Iterator, Sequence
+from typing import TYPE_CHECKING
 
 import numpy as np
-import torch
+from numpy.typing import NDArray
 
 from snakes_and_ladders.enumeration import configurations, enumerated_optimum
 from snakes_and_ladders.learn.environment import Environment
 from snakes_and_ladders.sim.potts_chain import PottsParams
+
+if TYPE_CHECKING:
+    import torch
 
 # (site, new_state): flip one site to a state it is not already in.
 Flip = tuple[int, int]
@@ -256,7 +261,9 @@ class PottsEnvironment(Environment[Configuration, Flip]):
         reward = self._coupling * agreement_delta + field_delta
         return tuple(successor), reward
 
-    def features(self, state: Configuration, actions: Sequence[Flip]) -> torch.Tensor:
+    def features(
+        self, state: Configuration, actions: Sequence[Flip]
+    ) -> NDArray[np.float64]:
         """``(len(actions), 2)``: the change in agreement, and in field.
 
         These two span the reward exactly, so the policy class contains the
@@ -272,7 +279,7 @@ class PottsEnvironment(Environment[Configuration, Flip]):
         # neighbour table. `_deltas` stays as the scalar oracle a test pins
         # this against, exactly: the counts are integers.
         if not actions:
-            return torch.empty((0, 2), dtype=torch.float64)
+            return np.empty((0, 2), dtype=np.float64)
         sites = np.fromiter(
             (site for site, _ in actions), dtype=np.int64, count=len(actions)
         )
@@ -287,7 +294,7 @@ class PottsEnvironment(Environment[Configuration, Flip]):
             (before[:, None] == neighbour_states) & mask
         ).sum(axis=1)
         field = self._field[values] - self._field[before]
-        return torch.from_numpy(np.stack([agreement.astype(np.float64), field], axis=1))
+        return np.stack([agreement.astype(np.float64), field], axis=1)
 
     def n_features(self) -> int:
         """Two: the agreement change and the field change."""
@@ -306,10 +313,10 @@ class PottsEnvironment(Environment[Configuration, Flip]):
         # The reward of every move in one `features` pass rather than a
         # `_deltas` call per action; the same products and sums, so the same
         # comparison (#341).
-        features = self.features(state, self.actions(state)).numpy()
+        features = self.features(state, self.actions(state))
         return not bool((self._coupling * features[:, 0] + features[:, 1] > 0.0).any())
 
-    def greedy_weights(self) -> torch.Tensor:
+    def greedy_weights(self) -> NDArray[np.float64]:
         """The weight vector whose policy is greedy, up to temperature.
 
         ``delta_energy = J * agreement_delta + field_delta``, so scoring with
@@ -317,7 +324,23 @@ class PottsEnvironment(Environment[Configuration, Flip]):
         move. Exposed because it is the truth a recovery test compares a
         learned policy against.
         """
-        return torch.tensor([self._coupling, 1.0], dtype=torch.float64)
+        return np.array([self._coupling, 1.0], dtype=np.float64)
+
+    def greedy_weights_tensor(self) -> torch.Tensor:
+        """Deprecated: :meth:`greedy_weights` as the tensor release 0.3.0 returned.
+
+        Kept for one release after 0.3.0 and removed in the one after that
+        (issue #1011); the values are :meth:`greedy_weights`' bit for bit.
+        """
+        warnings.warn(
+            "greedy_weights_tensor is deprecated: greedy_weights returns a NumPy "
+            "array; call torch.as_tensor on it where a tensor is needed",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        import torch
+
+        return torch.as_tensor(self.greedy_weights())
 
     def _deltas(self, state: Configuration, action: Flip) -> tuple[float, float]:
         """Change in agreeing-neighbour count and in field, for one flip."""

@@ -14,7 +14,6 @@ import itertools
 
 import numpy as np
 import pytest
-import torch
 from numpy.testing import assert_allclose
 from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.learn.policy import LinearPolicy
@@ -69,7 +68,7 @@ def test_the_features_span_the_reward_exactly() -> None:
         actions = environment.actions(state)
         scores = environment.features(state, actions) @ weights
         rewards = [environment.step(state, action)[1] for action in actions]
-        assert_allclose(scores.numpy(), rewards, atol=1e-12)
+        assert_allclose(scores, rewards, atol=1e-12)
 
 
 @pytest.mark.oracle
@@ -191,9 +190,7 @@ def test_the_fixture_yaml_builds_the_same_environment() -> None:
     environment = PottsEnvironment.from_params(params)
     assert environment.n_states == params.n_states
     assert environment.chain_length == params.chain_length
-    assert_allclose(
-        environment.greedy_weights().numpy(), [params.coupling, 1.0], atol=1e-12
-    )
+    assert_allclose(environment.greedy_weights(), [params.coupling, 1.0], atol=1e-12)
 
 
 @pytest.mark.smoke
@@ -228,7 +225,7 @@ def test_features_have_one_row_per_action() -> None:
     actions = environment.actions(state)
     features = environment.features(state, actions)
     assert features.shape == (len(actions), environment.n_features())
-    assert features.dtype == torch.float64
+    assert features.dtype == np.float64
 
 
 @pytest.mark.oracle
@@ -244,7 +241,7 @@ def test_the_vectorized_features_are_the_scalar_deltas_exactly() -> None:
     for _ in range(50):
         state = environment.reset(rng)
         actions = environment.actions(state)
-        fast = environment.features(state, actions).numpy()
+        fast = environment.features(state, actions)
         slow = np.array([environment._deltas(state, action) for action in actions])
 
         assert fast.shape == (len(actions), 2)

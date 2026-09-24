@@ -11,6 +11,8 @@ environment here supplies a bias feature.
 from __future__ import annotations
 
 import ast
+import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -18,7 +20,7 @@ import pytest
 import snakes_and_ladders.learn
 import torch
 from numpy.testing import assert_allclose
-from snakes_and_ladders.learn.environment import Environment, Episode
+from snakes_and_ladders.learn.environment import Environment, Episode, features_tensor
 from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.potts import PottsEnvironment
 from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
@@ -319,3 +321,72 @@ def test_every_rollout_loop_reads_terminated_from_the_state_it_ended_in() -> Non
         assert episode.terminated == environment.is_terminal(episode.states[-1])
         assert len(episode.states) == len(episode.actions) + 1
         assert len(episode.rewards) == len(episode.actions)
+
+
+# --- The array boundary (issue #1011) --------------------------------------
+
+
+@pytest.mark.smoke
+@pytest.mark.patch
+def test_a_policy_scores_an_array_as_it_scored_the_tensor() -> None:
+    # `features` is an array and the policy converts it once, where it meets
+    # the weights. The tensor route it replaced is the referee, bitwise: the
+    # log-probabilities, their gradient, and the greedy index, at every
+    # state of the reference chain.
+    environment = potts_environment()
+    policy = LinearPolicy(2)
+    policy.set_weights(np.array([0.9, -0.4]))
+    for state in environment_states(environment):
+        rows = environment.features(state, environment.actions(state))
+        assert isinstance(rows, np.ndarray)
+        assert rows.dtype == np.float64
+        from_array = policy.log_probabilities(rows)
+        from_tensor = policy.log_probabilities(torch.as_tensor(rows))
+        assert from_array.detach().numpy().tobytes() == (
+            from_tensor.detach().numpy().tobytes()
+        )
+        (by_array,) = torch.autograd.grad(from_array[0], policy.weights)
+        (by_tensor,) = torch.autograd.grad(from_tensor[0], policy.weights)
+        assert by_array.numpy().tobytes() == by_tensor.numpy().tobytes()
+        assert policy.greedy(rows) == policy.greedy(torch.as_tensor(rows))
+
+
+def environment_states(environment: PottsEnvironment) -> list[tuple[int, ...]]:
+    """Twenty seeded states of ``environment``."""
+    rng = np.random.default_rng(1011)
+    return [environment.reset(rng) for _ in range(20)]
+
+
+@pytest.mark.smoke
+@pytest.mark.patch
+def test_the_deprecated_tensor_accessors_return_the_arrays_bitwise() -> None:
+    # Release 0.3.0 returned tensors from `features` and `greedy_weights`;
+    # the accessors keep that for one release and warn that they go.
+    environment = potts_environment()
+    state = (0, 1, 2, 0)
+    actions = environment.actions(state)
+    with pytest.warns(DeprecationWarning, match="features_tensor is deprecated"):
+        tensor = features_tensor(environment, state, actions)
+    assert isinstance(tensor, torch.Tensor)
+    assert tensor.dtype == torch.float64
+    assert tensor.numpy().tobytes() == environment.features(state, actions).tobytes()
+    with pytest.warns(DeprecationWarning, match="greedy_weights_tensor is deprecated"):
+        weights = environment.greedy_weights_tensor()
+    assert weights.numpy().tobytes() == environment.greedy_weights().tobytes()
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize(
+    "module", ["canonical", "environment", "hmm", "potts", "potts_nd"]
+)
+def test_an_environment_module_imports_no_torch(module: str) -> None:
+    # Root `CLAUDE.md`: no autodiff package where no derivative is taken. An
+    # environment's features are constants to every loss, so importing one
+    # loads no torch; a fresh interpreter, since this one has it loaded.
+    code = (
+        f"import sys, snakes_and_ladders.learn.{module}; print('torch' in sys.modules)"
+    )
+    loaded = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    assert loaded == "False"
