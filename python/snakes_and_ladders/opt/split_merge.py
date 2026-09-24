@@ -23,8 +23,19 @@ two-component seeding at two of its observations; every other column is
 kept. One call of the family's ``reestimate`` then builds all three, which
 is why nothing here reaches inside a family. Partial EM follows on the three
 affected components, their total responsibility on each observation held at
-what it was, then full EM to its tolerance
+what it was
+(:func:`~snakes_and_ladders.opt.emission_mixture.partial_expectation_maximization`),
+then full EM to its tolerance
 (:func:`~snakes_and_ladders.opt.emission_mixture.expectation_maximization`).
+
+**The criteria and the move are arithmetic on arrays; the EM is
+``opt.emission_mixture``'s** (issue #1011). No derivative is taken here, so
+the module holds NumPy arrays and imports no torch: the responsibilities and
+log-densities are read out of the fit once per round, and the two E and M
+steps the family's torch API requires run behind
+:func:`~snakes_and_ladders.opt.emission_mixture.log_densities`,
+:func:`~snakes_and_ladders.opt.emission_mixture.responsibilities_at` and the
+partial EM.
 
 **The likelihood never falls, by construction:** a move whose full EM does
 not end above the fit it started from is refused and the fit kept. What the
@@ -37,41 +48,43 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-import torch
 
 from snakes_and_ladders.emissions import EmissionFamily
 from snakes_and_ladders.opt.emission_mixture import (
     ComponentsAt,
     EmissionMixtureFit,
     expectation_maximization,
+    log_densities,
+    partial_expectation_maximization,
+    responsibilities_at,
 )
-from snakes_and_ladders.opt.mixture import responsibilities
 from snakes_and_ladders.track import current
 
 
-def merge_criterion(posterior: torch.Tensor) -> torch.Tensor:
+def merge_criterion(posterior: np.ndarray) -> np.ndarray:
     """The cosine of every pair of responsibility columns, shape ``(K, K)``, ``-inf`` on the diagonal.
 
     Parameters
     ----------
-    posterior : torch.Tensor
+    posterior : np.ndarray
         Responsibilities, shape ``(n_samples, K)``.
 
     Returns
     -------
-    torch.Tensor
+    np.ndarray
         ``J_merge(i, j) = r_i . r_j / (|r_i| |r_j|)``; a component is never
-        merged with itself.
+        merged with itself. A column of zeros has no direction and scores
+        ``nan``.
     """
-    norms = torch.linalg.vector_norm(posterior, dim=0)
-    cosine = (posterior.T @ posterior) / torch.outer(norms, norms)
-    cosine.fill_diagonal_(-float("inf"))
+    posterior = np.asarray(posterior, dtype=np.float64)
+    norms = np.linalg.norm(posterior, axis=0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        cosine: np.ndarray = (posterior.T @ posterior) / np.outer(norms, norms)
+    np.fill_diagonal(cosine, -np.inf)
     return cosine
 
 
-def split_criterion(
-    posterior: torch.Tensor, log_densities: torch.Tensor
-) -> torch.Tensor:
+def split_criterion(posterior: np.ndarray, log_densities: np.ndarray) -> np.ndarray:
     """The local Kullback--Leibler divergence of each component from the data it owns, shape ``(K,)``.
 
     ``f_k(x_i) = r_ik / sum_i r_ik`` is the data component ``k`` owns, as a
@@ -83,24 +96,26 @@ def split_criterion(
 
     Parameters
     ----------
-    posterior : torch.Tensor
+    posterior : np.ndarray
         Responsibilities, shape ``(n_samples, K)``.
-    log_densities : torch.Tensor
+    log_densities : np.ndarray
         ``log p_k(x_i)``, shape ``(n_samples, K)``.
 
     Returns
     -------
-    torch.Tensor
+    np.ndarray
     """
-    owned = posterior / posterior.sum(dim=0, keepdim=True)
-    terms = torch.where(
-        owned > 0.0, owned * (torch.log(owned) - log_densities), torch.zeros_like(owned)
-    )
-    return terms.sum(dim=0)
+    posterior = np.asarray(posterior, dtype=np.float64)
+    owned = posterior / posterior.sum(axis=0, keepdims=True)
+    # An observation a component does not own contributes nothing, and its
+    # ``0 * log 0`` is never read.
+    with np.errstate(divide="ignore", invalid="ignore"):
+        terms = np.where(owned > 0.0, owned * (np.log(owned) - log_densities), 0.0)
+    return terms.sum(axis=0)
 
 
 def candidate_moves(
-    posterior: torch.Tensor, log_densities: torch.Tensor, candidates: int
+    posterior: np.ndarray, log_densities: np.ndarray, candidates: int
 ) -> list[tuple[int, int, int]]:
     """The first ``candidates`` ``(i, j, k)`` triples: merge ``i`` and ``j``, split ``k``.
 
@@ -174,7 +189,7 @@ class SplitMerge:
         return sum(step.accepted for step in self.steps)
 
 
-def _split_seeds(values: torch.Tensor, owned: torch.Tensor) -> np.ndarray:
+def _split_seeds(values: np.ndarray, owned: np.ndarray) -> np.ndarray:
     """The two observations a split is seeded at: the most owned, and the most owned far from it.
 
     The first is the observation of highest responsibility; the second
@@ -183,19 +198,19 @@ def _split_seeds(values: torch.Tensor, owned: torch.Tensor) -> np.ndarray:
     highest responsibility sit together at the component's mode and seed two
     copies of one component, which partial EM cannot then tell apart.
     """
-    first = int(torch.argmax(owned))
-    distance = ((values - values[first]) ** 2).sum(dim=-1)
-    second = int(torch.argmax(owned * distance))
-    return values[[first, second]].numpy()
+    first = int(np.argmax(owned))
+    distance = ((values - values[first]) ** 2).sum(axis=-1)
+    second = int(np.argmax(owned * distance))
+    return values[[first, second]]
 
 
 def _moved(
     fit: EmissionMixtureFit,
-    values: torch.Tensor,
+    values: np.ndarray,
     at: ComponentsAt,
     move: tuple[int, int, int],
     partial_iterations: int,
-) -> tuple[torch.Tensor, EmissionFamily]:
+) -> tuple[np.ndarray, EmissionFamily]:
     """The weights and components a move and its partial EM hand to full EM.
 
     Raises
@@ -204,43 +219,31 @@ def _moved(
         If a component's M step did not converge.
     """
     i, j, k = move
-    posterior = fit.responsibilities.clone()
+    posterior = fit.responsibilities.detach().numpy()
     pair = values.reshape(values.shape[0], -1)
-    seeded = at(_split_seeds(pair, posterior[:, k]))
-    halves = responsibilities(
-        values, torch.log(torch.full((2,), 0.5, dtype=torch.float64)), seeded
+    halves = responsibilities_at(
+        values, np.full(2, 0.5), at(_split_seeds(pair, posterior[:, k]))
     )
-    moved = posterior.clone()
+    moved = posterior.copy()
     moved[:, i] = posterior[:, i] + posterior[:, j]
     moved[:, j] = posterior[:, k] * halves[:, 0]
     moved[:, k] = posterior[:, k] * halves[:, 1]
     affected = [i, j, k]
     # The three components' total claim on each observation, which partial
     # EM redistributes among them and never changes.
-    mass = posterior[:, affected].sum(dim=1, keepdim=True)
-    family = fit.components
-    for iteration in range(partial_iterations + 1):
-        reestimated = family.reestimate(values, moved)
-        if not reestimated.converged:
-            msg = (
-                f"a component's M step did not settle in the partial EM of "
-                f"move {move}, iteration {iteration}"
-            )
-            raise ValueError(msg)
-        family = reestimated.emissions
-        weights = moved.mean(dim=0)
-        if iteration == partial_iterations:
-            break
-        joint = torch.log(weights) + family.log_density(values)
-        local = joint[:, affected]
-        moved = moved.clone()
-        moved[:, affected] = mass * torch.softmax(local, dim=-1)
-    return weights, family
+    mass = posterior[:, affected].sum(axis=1, keepdims=True)
+    try:
+        return partial_expectation_maximization(
+            values, moved, fit.components, affected, mass, partial_iterations
+        )
+    except ValueError as error:
+        msg = f"{error}, in move {move}"
+        raise ValueError(msg) from error
 
 
 def split_and_merge(
     fit: EmissionMixtureFit,
-    observations: np.ndarray | torch.Tensor,
+    observations: np.ndarray,
     at: ComponentsAt,
     *,
     candidates: int,
@@ -264,7 +267,7 @@ def split_and_merge(
     fit : EmissionMixtureFit
         A converged fit, whose ``responsibilities`` are the posterior its
         last M step consumed.
-    observations : np.ndarray | torch.Tensor
+    observations : np.ndarray
         The observations ``fit`` was fitted to.
     at : ComponentsAt
         The seam a split seeds its two halves by.
@@ -294,14 +297,15 @@ def split_and_merge(
             f"got {candidates} and {partial_iterations}"
         )
         raise ValueError(msg)
-    values = torch.as_tensor(observations, dtype=torch.float64)
+    values = np.asarray(observations, dtype=np.float64)
     tracked = current()
     steps: list[SplitMergeStep] = []
     improved = True
     while improved:
         improved = False
-        log_densities = fit.components.log_density(values)
-        for move in candidate_moves(fit.responsibilities, log_densities, candidates):
+        posterior = fit.responsibilities.detach().numpy()
+        scored = log_densities(values, fit.components)
+        for move in candidate_moves(posterior, scored, candidates):
             weights, family = _moved(fit, values, at, move, partial_iterations)
             full = expectation_maximization(
                 values,
