@@ -17,7 +17,8 @@ A deviation from an exact reference is a finding only against the error the
 chain itself carries, and that error is the draws' spread over the
 *effective* sample size rather than over the draw count --- correlated draws
 divided by their number give a standard error several times too small, and a
-sampler passes a comparison it should fail.
+sampler passes a comparison it should fail. The assertions each sampler's
+module makes against these references are written once below (issue #982).
 """
 
 from __future__ import annotations
@@ -31,9 +32,16 @@ from snakes_and_ladders.likelihood.mixture_assignments import (
     enumerate_mixture_assignments,
 )
 from snakes_and_ladders.opt.constrain import free_from_log_simplex, log_simplex
-from snakes_and_ladders.opt.mixture import mixture_log_likelihood
+from snakes_and_ladders.opt.mixture import mixture_log_likelihood, responsibilities
+from snakes_and_ladders.sample.expectation import Expectation, KalmanMean
 from snakes_and_ladders.sample.hmc import WithGaussianPrior, effective_sample_size
 from snakes_and_ladders.sim.mixture import MixtureParams, simulate_mixture
+
+from tests._objective_checks import AnalyticGaussian
+
+#: The correlated two-dimensional Gaussian every continuous sampler is first
+#: judged on: its mean and covariance are closed forms.
+GAUSSIAN = AnalyticGaussian([1.0, -2.0], [[2.0, 0.6], [0.6, 0.5]])
 
 #: The enumerable mixture the chain is run on: twelve observations over two
 #: Gaussian components 1.5 standard deviations apart, so ``2 ** 12 = 4,096``
@@ -183,3 +191,86 @@ def monte_carlo_sigmas(
         np.abs(draws.mean(dim=0).numpy() - mean) / mean_error,
         np.abs(squares.mean(dim=0).numpy() - variance) / variance_error,
     )
+
+
+def assert_within_sigmas(
+    draws: torch.Tensor,
+    mean: np.ndarray,
+    variance: np.ndarray,
+    sigmas: float,
+    context: object = None,
+) -> None:
+    """Fail when a marginal mean or variance is ``sigmas`` standard errors off."""
+    mean_sigmas, variance_sigmas = monte_carlo_sigmas(draws, mean, variance)
+    assert float(mean_sigmas.max()) < sigmas, (context, mean_sigmas)
+    assert float(variance_sigmas.max()) < sigmas, (context, variance_sigmas)
+
+
+def assert_recovers_assignment_posterior(
+    theta: torch.Tensor,
+    observations: np.ndarray,
+    components: GaussianEmission,
+    reference: tuple[float, np.ndarray],
+    *,
+    sigmas: float,
+    size: float,
+    context: object = None,
+) -> None:
+    """Fail when a chain's weight or assignment marginals miss the enumeration's.
+
+    ``reference`` is :func:`enumerated_quadrature`'s. The drawn marginals come
+    from the factorized E step at each draw, and each tolerance is ``sigmas``
+    of the drawn spread over ``sqrt(size)``: the draw count or the effective
+    sample size, whichever the caller declares.
+    """
+    quadrature_weight, quadrature_marginal = reference
+    log_weights = log_simplex(theta)
+    drawn_weight = torch.exp(log_weights)[:, 0].numpy()
+    drawn_marginal = np.stack(
+        [
+            responsibilities(
+                torch.as_tensor(observations, dtype=torch.float64), row, components
+            ).numpy()[:, 0]
+            for row in log_weights
+        ]
+    )
+    weight_tolerance = sigmas * float(drawn_weight.std()) / np.sqrt(size)
+    marginal_tolerance = (
+        sigmas * float(drawn_marginal.std(axis=0).max()) / np.sqrt(size)
+    )
+    marginal_gap = np.abs(drawn_marginal.mean(axis=0) - quadrature_marginal).max()
+
+    assert abs(drawn_weight.mean() - quadrature_weight) < weight_tolerance, (
+        context,
+        drawn_weight.mean(),
+        quadrature_weight,
+    )
+    assert marginal_gap < marginal_tolerance, (context, marginal_gap)
+
+
+def draw_moments(draws: torch.Tensor) -> tuple[Expectation, Expectation]:
+    """The first and second moments of stored draws, each by its AR(1) filter."""
+    first, second = KalmanMean(), KalmanMean()
+    for row in draws:
+        first.update(row)
+        second.update(row * row)
+    return first.estimate(), second.estimate()
+
+
+def assert_gaussian_moments(
+    first: Expectation,
+    second: Expectation,
+    precision: np.ndarray,
+    *,
+    temperature: float = 1.0,
+    bound: float = 4.5,
+) -> None:
+    """Fail when a centred diagonal Gaussian's moments are ``bound`` errors off.
+
+    Every coordinate's mean against 0 and its second moment against
+    ``temperature / precision``, each in the standard error of its own
+    filter (``KalmanMean``).
+    """
+    assert np.abs(first.mean / first.standard_error).max() < bound
+    residual = (second.mean - temperature / precision) / second.standard_error
+    assert np.abs(residual).max() < bound

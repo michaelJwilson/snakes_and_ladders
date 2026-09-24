@@ -33,6 +33,8 @@ from snakes_and_ladders.sample.declared import Power
 from snakes_and_ladders.sample.expectation import KalmanMean
 from snakes_and_ladders.validation.gaussian import GaussianTarget, diagonal_precision
 
+from tests._posteriors import assert_gaussian_moments
+
 DIMENSION = 20
 PRECISION = diagonal_precision(DIMENSION)
 STEP = 1.2 / np.sqrt(DIMENSION)
@@ -51,9 +53,7 @@ def _chain(backend: Backend, n: int = 40_000, **options: object) -> hmc.Chain:
 
 def _assert_moments(chain: hmc.Chain, temperature: float = 1.0) -> None:
     first, second = chain.expectations["x"], chain.expectations["x2"]
-    assert np.all(np.abs(first.mean) < 4.5 * first.standard_error)
-    target = temperature / PRECISION
-    assert np.all(np.abs(second.mean - target) < 4.5 * second.standard_error)
+    assert_gaussian_moments(first, second, PRECISION, temperature=temperature)
 
 
 @pytest.mark.oracle

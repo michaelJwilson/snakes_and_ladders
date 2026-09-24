@@ -33,6 +33,8 @@ from snakes_and_ladders.validation.gaussian import (
     diagonal_precision,
 )
 
+from tests._posteriors import assert_gaussian_moments, draw_moments
+
 
 @pytest.mark.oracle
 @pytest.mark.parametrize("dense", [False, True], ids=["diagonal", "dense"])
@@ -73,14 +75,7 @@ def test_the_compiled_chain_recovers_the_gaussian_moments() -> None:
     )
     assert chain.theta.shape == (4_000, dimension)
     assert chain.acceptance_rate > 0.8
-    first, second = KalmanMean(), KalmanMean()
-    for row in chain.theta:
-        first.update(row)
-        second.update(row * row)
-    mean, square = first.estimate(), second.estimate()
-    assert np.abs(mean.mean / mean.standard_error).max() < 4.5
-    residual = (square.mean - 1.0 / precision) / square.standard_error
-    assert np.abs(residual).max() < 4.5
+    assert_gaussian_moments(*draw_moments(chain.theta), precision)
 
 
 @pytest.mark.smoke
@@ -141,14 +136,7 @@ def test_the_compiled_mala_chain_recovers_the_gaussian_moments() -> None:
     assert chain.theta.shape == (20_000, dimension)
     assert chain.corrected
     assert chain.acceptance_rate > 0.8
-    first, second = KalmanMean(), KalmanMean()
-    for row in chain.theta:
-        first.update(row)
-        second.update(row * row)
-    mean, square = first.estimate(), second.estimate()
-    assert np.abs(mean.mean / mean.standard_error).max() < 4.5
-    residual = (square.mean - 1.0 / precision) / square.standard_error
-    assert np.abs(residual).max() < 4.5
+    assert_gaussian_moments(*draw_moments(chain.theta), precision)
 
 
 @pytest.mark.smoke

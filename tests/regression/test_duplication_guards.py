@@ -426,74 +426,55 @@ def test_logsumexp_has_one_implementation() -> None:
     )
 
 
-@pytest.mark.critical
-@pytest.mark.infra
-def test_no_module_walks_edges_and_couplings_by_hand() -> None:
-    # Twelve sites across eight modules zipped the two tuples together. The
-    # pairing is an invariant of `PottsGraph`, so it belongs to the class:
-    # a consumer that omits `strict=True` truncates to the shorter tuple and
-    # silently drops edges from an energy.
-    assert _offenders(OPEN_CODED_EDGES, EDGE_ITERATION_OWNER) == []
+#: The suffixes and roots the rows below search.
+_PY, _PY_NB = ("*.py",), ("*.py", "*.ipynb")
+_TESTS, _HERE = (REPO_ROOT / "tests",), "test_duplication_guards.py"
+
+#: Each pattern refused outside its one home: the pattern, the path the owner
+#: ends with, the roots searched and the suffixes read.
+ABSENT: dict[str, tuple[re.Pattern[str], str, tuple[Path, ...], tuple[str, ...]]] = {
+    # Twelve sites across eight modules zipped the two tuples; a consumer
+    # without `strict=True` truncates to the shorter and drops edges from an
+    # energy. The pairing is `PottsGraph`'s invariant.
+    "edges by hand": (OPEN_CODED_EDGES, EDGE_ITERATION_OWNER, (PACKAGE,), _PY),
+    # Seven builders of one adjacency (issue #277), the sixth found by this
+    # guard; each paid a pointer chase and a Python float per neighbour where
+    # the compressed rows are a stride. `learn/potts.py` keeps its own,
+    # without couplings, since `learn/` imports no application module.
+    "neighbour lists": (NEIGHBOUR_LISTS, ADJACENCY_OWNER, (PACKAGE,), _PY),
+    # Four enumeration thresholds in three units, one enforced by nothing;
+    # enumeration is the oracle most claims rest on.
+    "enumeration cap": (CAP_LITERAL, ENUMERATION_OWNER, (PACKAGE,), _PY),
+    # `J_c = ln(1 + sqrt(q))` was a literal in a test and a notebook cell; a
+    # rounded copy moves an instance off the transition silently.
+    "square transition": (SQUARE_TRANSITION, TRANSITION_OWNER, SEARCHED, _PY_NB),
+    # Three names for one seam: #644 retired two, #705 the third. The old
+    # names survived longest in the suite and a notebook cell.
+    "retired environment": (RETIRED_ENVIRONMENTS, _HERE, SEARCHED, _PY_NB),
+    # A `csr_matrix` beside `SparseIncidence` is a second layout. The package
+    # and notebooks only: `tests/regression/test_incidence.py` holds
+    # `scipy.sparse` as the referee of the one layout (#776).
+    "scipy sparse": (
+        FOREIGN_SPARSE,
+        _HERE,
+        (PACKAGE, REPO_ROOT / "docs" / "nb"),
+        _PY_NB,
+    ),
+    # Issue #1010: `median_package`, `requires` and `measured`.
+    "hand median": (HAND_MEDIAN, "tests/validation/_goals.py", _TESTS, _PY),
+    "hand skip": (HAND_SKIP, "tests/_frameworks.py", _TESTS, _PY),
+    "hand measure": (HAND_MEASURE, MEASURE_OWNER, (PACKAGE,), _PY),
+    # Issue #1010: `simulate_tree(params, rng, n_sites=...)` draws a
+    # fixture's alignment; the fields were spelled out 104 times.
+    "fixture alignment": (FIXTURE_ALIGNMENT, FIXTURE_ALIGNMENT_OWNER, SEARCHED, _PY),
+}
 
 
 @pytest.mark.critical
 @pytest.mark.infra
-def test_the_adjacency_is_built_in_one_place() -> None:
-    # Seven builders of one object: `potts_mcmc._adjacency`,
-    # `potts_mcmc_rust.flatten_adjacency`, open-coded copies in
-    # `ground_state`, `alpha_expansion`, `sim.potts` and
-    # `spatio_sequential`, and `PottsGraph.compressed_adjacency` itself --
-    # the sixth found by this guard rather than by the survey. The copies
-    # agreed, so nothing failed; what they cost was the layout root
-    # `CLAUDE.md` names -- a pointer chase and a Python float per neighbour
-    # where the compressed rows are a stride (issue #277). `learn/potts.py`
-    # keeps its own, without couplings: `learn/` imports no application
-    # module, and its call site says so.
-    assert _offenders(NEIGHBOUR_LISTS, ADJACENCY_OWNER) == []
-
-
-@pytest.mark.critical
-@pytest.mark.infra
-def test_the_enumeration_cap_is_defined_once() -> None:
-    # Four thresholds in three units before this: 200_000 configurations,
-    # 200_000 paths, 20 nodes, and a docstring-only `n <= 6` that nothing
-    # enforced. Enumeration is the oracle nearly every claim here rests on,
-    # so how it declines is the one thing that should not vary.
-    assert _offenders(CAP_LITERAL, ENUMERATION_OWNER) == []
-
-
-@pytest.mark.critical
-@pytest.mark.infra
-def test_the_square_lattice_transition_is_computed_in_one_place() -> None:
-    # `J_c = ln(1 + sqrt(q))` was a literal in
-    # `tests/regression/search/test_potts_mcmc.py` and again in a
-    # `docs/nb/potts_chain.ipynb` cell, each building its own 12x12 lattice
-    # at it. The two agreed, so nothing failed; a rounded copy would have
-    # moved one of them off the transition silently, and the instance is
-    # only interesting *at* it. `snakes_and_ladders.sim.potts` owns the form
-    # and `potts_lattice/stress` declares the instance.
-    assert (
-        _found(SQUARE_TRANSITION, TRANSITION_OWNER, SEARCHED, ("*.py", "*.ipynb")) == []
-    )
-
-
-@pytest.mark.critical
-@pytest.mark.infra
-def test_no_retired_environment_name_returns() -> None:
-    # Three names for the same seam in two years: `PottsLandscape` and
-    # `StatePathLandscape` went in #644, `TopologyEnvironment` in #705. The
-    # search is the whole repository and not the package alone, because the
-    # old names survived longest in the suite and in a notebook cell -- which
-    # is where the fourth spelling would come back from.
-    assert (
-        _found(
-            RETIRED_ENVIRONMENTS,
-            "test_duplication_guards.py",
-            SEARCHED,
-            ("*.py", "*.ipynb"),
-        )
-        == []
-    )
+def test_each_guarded_pattern_is_absent_outside_its_owner() -> None:
+    found = {name: _found(*row) for name, row in ABSENT.items()}
+    assert {name: files for name, files in found.items() if files} == {}
 
 
 @pytest.mark.critical
@@ -588,28 +569,6 @@ def test_no_consumer_branches_on_a_schedules_name() -> None:
 
 @pytest.mark.critical
 @pytest.mark.infra
-def test_no_module_builds_a_scipy_sparse_store() -> None:
-    # `scipy` is carried for `linear_sum_assignment`. A `csr_matrix` beside
-    # `SparseIncidence` would be a second compressed layout whose row order,
-    # duplicate handling and transpose are somebody else's, and the compiled
-    # consumers take `as_arrays`, which it does not have.
-    # The package and the notebooks, not the tests: a test may hold
-    # `scipy.sparse` as the independent referee of the one layout, which
-    # `tests/regression/test_incidence.py` does (#776), and a referee is not
-    # a second store.
-    assert (
-        _found(
-            FOREIGN_SPARSE,
-            "test_duplication_guards.py",
-            (PACKAGE, REPO_ROOT / "docs" / "nb"),
-            ("*.py", "*.ipynb"),
-        )
-        == []
-    )
-
-
-@pytest.mark.critical
-@pytest.mark.infra
 def test_a_latex_table_has_one_scaffold() -> None:
     # Issue #926: four QA modules opened `tabular` and `array` by hand.
     assert _offenders(TABULAR_LITERAL, TABULAR_OWNER) == []
@@ -627,25 +586,6 @@ def test_the_runtime_band_has_one_reader() -> None:
     # written twice; the second is now an adapter onto the first.
     assert _offenders(HELD_BAND, BAND_OWNER) == []
     assert HELD_BAND.search((PACKAGE / BAND_OWNER).read_text())
-
-
-@pytest.mark.critical
-@pytest.mark.infra
-def test_the_validation_seams_have_one_home_each() -> None:
-    # Issue #1010: `median_package`, `requires` and `measured`.
-    tests = (REPO_ROOT / "tests",)
-    assert _found(HAND_MEDIAN, "tests/validation/_goals.py", tests, ("*.py",)) == []
-    assert _found(HAND_SKIP, "tests/_frameworks.py", tests, ("*.py",)) == []
-    assert _offenders(HAND_MEASURE, MEASURE_OWNER) == []
-
-
-@pytest.mark.critical
-@pytest.mark.infra
-def test_a_fixture_alignment_is_drawn_through_its_simulator() -> None:
-    # Issue #1010: `simulate_tree(params, rng, n_sites=...)` is the one way a
-    # fixture's alignment is drawn; the suite and the package spelled the
-    # fixture's three fields out 104 times.
-    assert _found(FIXTURE_ALIGNMENT, FIXTURE_ALIGNMENT_OWNER, SEARCHED, ("*.py",)) == []
 
 
 @pytest.mark.critical

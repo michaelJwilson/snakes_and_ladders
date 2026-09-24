@@ -39,8 +39,8 @@ from snakes_and_ladders.sim.potts import simulate_potts
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import Node
 
-from tests._objective_checks import AnalyticGaussian
 from tests._paths import REPO_ROOT
+from tests._posteriors import GAUSSIAN
 
 PACKAGE = REPO_ROOT / "python" / "snakes_and_ladders"
 
@@ -92,7 +92,6 @@ def _icm_draw(rng: np.random.Generator) -> tuple[int, ...]:
 
 #: A 2-D target with a closed form, so an HMC draw is cheap and its stream is
 #: the only thing that varies between chains.
-GAUSSIAN = AnalyticGaussian([1.0, -2.0], [[2.0, 0.6], [0.6, 0.5]])
 
 
 def _hmc_draw(generator: torch.Generator) -> tuple[float, ...]:
