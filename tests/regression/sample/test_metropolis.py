@@ -102,6 +102,7 @@ def test_the_tempered_chain_samples_the_tempered_target() -> None:
     _assert_moments(chain, temperature=2.0)
 
 
+@pytest.mark.oracle
 @pytest.mark.backend
 def test_both_warm_ups_settle_on_the_target_acceptance() -> None:
     adaptation = hmc.Adaptation(2_000, metropolis.RWM_TARGET_ACCEPTANCE, 0.0)
@@ -116,6 +117,7 @@ def test_both_warm_ups_settle_on_the_target_acceptance() -> None:
     assert abs(rates[0] - rates[1]) < 0.03
 
 
+@pytest.mark.oracle
 @pytest.mark.backend
 def test_both_routes_sample_one_rosenbrock_density() -> None:
     # b = 1 so the chain mixes in the draws a test affords; at b = 100 the
@@ -140,6 +142,7 @@ def test_both_routes_sample_one_rosenbrock_density() -> None:
         assert np.all(np.abs(rust.mean.numpy() - python.mean.numpy()) < 4.5 * spread)
 
 
+@pytest.mark.oracle
 @pytest.mark.backend
 def test_operators_are_filtered_as_kalman_mean_filters_the_stored_draws() -> None:
     operators: dict[str, Callable[[torch.Tensor], torch.Tensor]] = {
@@ -182,13 +185,13 @@ def test_a_block_update_is_the_one_at_a_time_update() -> None:
         )
 
 
-@pytest.mark.patch
+@pytest.mark.smoke
 def test_the_compiled_route_is_reproducible_from_the_generator() -> None:
     first, second = (_chain(Backend.RUST, n=200) for _ in range(2))
     np.testing.assert_array_equal(first.draws.numpy(), second.draws.numpy())
 
 
-@pytest.mark.patch
+@pytest.mark.smoke
 def test_a_bad_step_and_an_unknown_backend_are_refused() -> None:
     with pytest.raises(ValueError, match="step_size"):
         metropolis.random_walk(
