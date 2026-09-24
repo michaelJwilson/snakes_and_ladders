@@ -3411,6 +3411,53 @@ components overlap past the ordering's reach fails the recovery test for a
 property of the instance and not a defect of the fit, so the separation is
 declared with the instance rather than discovered from it.
 
+\subsection{Relabelling the draws of a mixture posterior}\label{sec:relabel}
+Under a prior exchangeable in the components the posterior is invariant under
+their permutation, so a chain that mixes visits all $K!$ namings of every mode,
+and a summary over draws averages different components together. A
+relabelling returns one permutation $\nu_t$ per draw $t$, in the order
+convention: label $k$ of the relabelled draw is component $\nu_t(k)$ of the
+drawn one, so parameters are relabelled as $\theta_{t,\nu_t(k)}$ and an
+allocation as $\nu_t^{-1}(z_{ti})$. With allocation probabilities
+$p_{tik} = P(z_i = k \mid x, \theta_t)$, allocations $z_{ti}$ and parameters
+$\theta_{tk} \in \mathbb{R}^J$:
+\begin{itemize}
+\item \textbf{STEPHENS} \citep{stephens2000}, the default: minimize
+  $\sum_t \sum_i \mathrm{KL}(p_{ti,\nu_t(\cdot)} \,\|\, q_i)$ over the
+  permutations and $q$ by alternation. The mean of the relabelled
+  probabilities minimizes it over $q$, and each $\nu_t$ is a linear assignment
+  on $c_{tkl} = \sum_i p_{til}(\log p_{til} - \log q_{ik})$, so the objective
+  never rises. Probabilities are clamped to $[10^{-6}, 1 - 10^{-6}]$ first.
+\item \textbf{ECR} \citep{papastamoulis2010}: maximize the agreement
+  $\sum_i [\nu_t^{-1}(z_{ti}) = z^\ast_i]$ with a pivot allocation $z^\ast$, a
+  linear assignment on the $K \times K$ table of counts.
+  \textbf{ECR-ITERATIVE-1} re-estimates $z^\ast$ as the mode of the relabelled
+  allocations, a coordinate ascent on the summed agreement;
+  \textbf{ECR-ITERATIVE-2} as the argmax of the mean relabelled probabilities.
+\item \textbf{PRA} \citep{marin2005}: maximize
+  $\sum_k \langle \theta^\ast_k, \theta_{t,\nu_t(k)} \rangle$ against a pivot
+  draw $\theta^\ast$; separable in $k$, so a linear assignment where the
+  published form enumerates $K!$.
+\item \textbf{SJW} \citep{sperrin2010}: EM over the latent
+  permutation. The E step weighs every $\nu$ by
+  $\exp \sum_i S_{i,\nu^{-1}(z_{ti})}$, with $S_{ik}$ the complete-data
+  log-likelihood of observation $i$ in component $k$ at the estimate
+  $\hat\theta$; the M step sets $\hat\theta$ to the weighted mean of the
+  relabelled draws. It enumerates $K!$ permutations per draw.
+\item \textbf{AIC}: order the components by one parameter; the identifiability
+  constraint the others are read against.
+\end{itemize}
+The published implementation \citep{papastamoulis2016} applies the order itself, not
+its inverse, to the allocations inside ECR-ITERATIVE-1 and SJW; the two agree
+only where a permutation is its own inverse, and the package keeps one
+convention. The referees are brute force over $K!$ for every assignment step,
+the monotonicity of the two alternations, and draws renamed by the random
+permutation sampler \citep{fruhwirth2001}, whose permutations are known;
+the worked example reads each method against the generating components and
+parameters. The draws come from the conjugate Gibbs sampler
+\citep{diebolt1994} and from the Hamiltonian and Langevin chains of
+Section~\ref{sec:hmc}.
+
 \section{Algorithms: The Count-Emission Mixture}
 \label{sec:emissionmixture:algorithms}
 

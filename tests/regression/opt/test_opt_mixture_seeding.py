@@ -62,7 +62,7 @@ from snakes_and_ladders.opt.mixture import (
 )
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.opt.starts import (
-    Polished,
+    PolishedPoint,
     SolverComparison,
     StartsBenchmark,
     polish_by_emission_em,
@@ -608,7 +608,7 @@ class SeedingStart(Initializer):
         ]
 
 
-def polish(objective: Objective, theta: torch.Tensor, budget: Budget) -> Polished:
+def polish(objective: Objective, theta: torch.Tensor, budget: Budget) -> PolishedPoint:
     """Expectation--maximization from ``theta``, or an infinite value where it is refused.
 
     A component collapsed onto a point: the Gaussian likelihood is unbounded
@@ -617,8 +617,10 @@ def polish(objective: Objective, theta: torch.Tensor, budget: Budget) -> Polishe
     try:
         return polish_by_emission_em(objective, theta, budget)
     except ValueError:
-        return Polished(
-            theta, float("inf"), Termination(False, budget.size, Stop.REFUSED)
+        return PolishedPoint(
+            value=float("inf"),
+            termination=Termination(False, budget.size, Stop.REFUSED),
+            theta=theta,
         )
 
 
