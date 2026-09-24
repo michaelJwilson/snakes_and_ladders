@@ -20,6 +20,8 @@ The runtime goal gco sets is in `test_goals.py`.
 
 from __future__ import annotations
 
+from itertools import product
+
 import numpy as np
 import pytest
 from snakes_and_ladders.backend import Backend
@@ -30,6 +32,7 @@ from snakes_and_ladders.sim.potts import critical_coupling, energies, energy
 from snakes_and_ladders.validation import gco
 
 from tests._frameworks import requires
+from tests._rows import every_row, every_value
 
 pytestmark = [
     pytest.mark.validation,
@@ -57,19 +60,18 @@ def _non_negative(graph: PottsGraph, field: np.ndarray, value: float) -> float:
 
 
 @pytest.mark.experiment
-@pytest.mark.parametrize("n_states", [3, 10])
-@pytest.mark.parametrize("side", [16, 71])
-def test_gcos_labelling_is_a_fixed_point_of_the_package_move(
-    side: int, n_states: int
-) -> None:
-    graph, field = _potts(side, n_states, 974)
-    theirs = gco.alpha_expansion(graph, field, n_states)
-    from_theirs = alpha_expansion(
-        graph, field, n_states, start=theirs.labelling, backend=Backend.RUST
-    )
-    assert from_theirs.moves == 0
-    assert np.array_equal(from_theirs.labelling, theirs.labelling)
-    assert from_theirs.energy == theirs.energy
+def test_gcos_labelling_is_a_fixed_point_of_the_package_move() -> None:
+    def check(n_states: int, side: int) -> None:
+        graph, field = _potts(side, n_states, 974)
+        theirs = gco.alpha_expansion(graph, field, n_states)
+        from_theirs = alpha_expansion(
+            graph, field, n_states, start=theirs.labelling, backend=Backend.RUST
+        )
+        assert from_theirs.moves == 0
+        assert np.array_equal(from_theirs.labelling, theirs.labelling)
+        assert from_theirs.energy == theirs.energy
+
+    every_row(product([3, 10], [16, 71]), check)
 
 
 @pytest.mark.oracle
@@ -94,9 +96,11 @@ def test_both_expansions_are_within_the_factor_two_bound_of_the_optimum() -> Non
 
 
 @pytest.mark.experiment
-@pytest.mark.parametrize("n_states", [3, 10])
-def test_the_two_energies_agree_within_one_per_cent_at_71(n_states: int) -> None:
-    graph, field = _potts(71, n_states, 974)
-    ours = alpha_expansion(graph, field, n_states, backend=Backend.RUST)
-    theirs = gco.alpha_expansion(graph, field, n_states)
-    assert theirs.energy == pytest.approx(ours.energy, rel=1e-2)
+def test_the_two_energies_agree_within_one_per_cent_at_71() -> None:
+    def check(n_states: int) -> None:
+        graph, field = _potts(71, n_states, 974)
+        ours = alpha_expansion(graph, field, n_states, backend=Backend.RUST)
+        theirs = gco.alpha_expansion(graph, field, n_states)
+        assert theirs.energy == pytest.approx(ours.energy, rel=1e-2)
+
+    every_value([3, 10], check)

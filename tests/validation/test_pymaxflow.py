@@ -26,6 +26,7 @@ from snakes_and_ladders.search.ground_state import lattice_rung
 from snakes_and_ladders.validation import pymaxflow
 
 from tests._frameworks import requires
+from tests._rows import every_value
 
 pytestmark = [
     pytest.mark.validation,
@@ -51,32 +52,36 @@ def _network(seed: int, n_nodes: int, n_edges: int) -> maxflow.FlowNetwork:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("side", [10, 71, 142])
-def test_the_ground_state_is_pymaxflows_node_for_node(side: int) -> None:
-    rung = lattice_rung(side, 2, seed=973)
-    theirs, cut = pymaxflow.ising_ground_state(rung.graph, rung.field)
-    backends = [Backend.RUST] if side > 71 else [Backend.PYTHON, Backend.RUST]
-    for backend in backends:
-        ours = maxflow.ising_ground_state(rung.graph, rung.field, backend=backend)
-        assert np.array_equal(ours.configuration, theirs.configuration), backend
-        assert ours.energy == theirs.energy, backend
-    # The cut's value is the energy's reduction, read back through the
-    # package's own arithmetic.
-    reduced = maxflow.cut_energy(rung.graph, rung.field, cut.value)
-    assert reduced == pytest.approx(theirs.energy, rel=FLOW_RTOL)
+def test_the_ground_state_is_pymaxflows_node_for_node() -> None:
+    def check(side: int) -> None:
+        rung = lattice_rung(side, 2, seed=973)
+        theirs, cut = pymaxflow.ising_ground_state(rung.graph, rung.field)
+        backends = [Backend.RUST] if side > 71 else [Backend.PYTHON, Backend.RUST]
+        for backend in backends:
+            ours = maxflow.ising_ground_state(rung.graph, rung.field, backend=backend)
+            assert np.array_equal(ours.configuration, theirs.configuration), backend
+            assert ours.energy == theirs.energy, backend
+        # The cut's value is the energy's reduction, read back through the
+        # package's own arithmetic.
+        reduced = maxflow.cut_energy(rung.graph, rung.field, cut.value)
+        assert reduced == pytest.approx(theirs.energy, rel=FLOW_RTOL)
+
+    every_value([10, 71, 142], check)
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("seed", [0, 1, 2, 3])
-def test_a_directed_network_cuts_to_the_same_value_and_side(seed: int) -> None:
-    network = _network(seed, 60, 400)
-    theirs = pymaxflow.min_cut(network, 0, 1)
-    rust = maxflow_rust.min_cut(network, 0, 1)
-    dinic = maxflow.max_flow(_network(seed, 60, 400), 0, 1)
-    for ours in (rust, dinic):
-        assert ours.value == pytest.approx(theirs.value, rel=FLOW_RTOL)
-        assert np.array_equal(ours.source_side, theirs.source_side)
-    assert theirs.value > 0.0
+def test_a_directed_network_cuts_to_the_same_value_and_side() -> None:
+    def check(seed: int) -> None:
+        network = _network(seed, 60, 400)
+        theirs = pymaxflow.min_cut(network, 0, 1)
+        rust = maxflow_rust.min_cut(network, 0, 1)
+        dinic = maxflow.max_flow(_network(seed, 60, 400), 0, 1)
+        for ours in (rust, dinic):
+            assert ours.value == pytest.approx(theirs.value, rel=FLOW_RTOL)
+            assert np.array_equal(ours.source_side, theirs.source_side)
+        assert theirs.value > 0.0
+
+    every_value([0, 1, 2, 3], check)
 
 
 @pytest.mark.oracle
