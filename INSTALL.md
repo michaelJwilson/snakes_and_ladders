@@ -53,8 +53,8 @@ states.
 
 The extras are `dev` (ruff, mypy, pre-commit, pip-audit), `test` (pytest and
 plugins, NumPy), `docs` (Sphinx), `notebooks` (a kernel, for re-executing
-`docs/nb/`), `frameworks` (Gymnasium, rustworkx, TorchRL and PyTorch
-Geometric: the external implementations the suite pins its own against), and
+`docs/nb/`), `frameworks` (Gymnasium, TorchRL and PyTorch Geometric: the external
+implementations the suite pins its own against in-process, until #977), and
 `track` (Aim, the run store). `--all-extras` installs all six; sync a single
 one with `uv sync --locked --extra test`. `notebooks` carries Jupyter
 Notebook itself, so a notebook opens where it is edited:
@@ -62,6 +62,15 @@ Notebook itself, so a notebook opens where it is edited:
 `frameworks`: every test using one of its packages skips without it, and
 `snakes_and_ladders.learn.gym` is the only module that imports one at module
 level.
+
+The `validation-<framework>` extras (issue #972) each install one external
+framework the package is checked or timed against, and nothing imports one
+into the package process: its script under
+`python/snakes_and_ladders/validation/scripts/` runs in a subprocess. Sync one
+with `uv sync --locked --extra test --extra validation-<name>`, or every one
+with `uv sync --locked --extra test $(python3 infra/validation_extras.py)`,
+then run `uv run pytest -m validation tests/validation`. Without its extra a
+test there skips.
 
 `track` is the one extra with an advisory against it, and the one to sync
 deliberately. It installs `aim`, the optional store behind

@@ -16,6 +16,7 @@ code with what it checks.
 | [`spatio_sequential.ipynb`](spatio_sequential.ipynb) | Coupled spatio-sequential model: a Potts prior over class labels gating one hidden chain per class | Enumeration over all 65,536 joint states of the CI fixture; the per-class forward recursion as a second route to the evidence; planted labels on a 10x10 lattice |
 | [`emission_mixture_starts.ipynb`](emission_mixture_starts.ipynb) | Where a mixture fit starts: fourteen seedings of the joint count-pair emission mixture and the best of five of each stochastic one on `emission_mixture/stress` (10 components, 3,000 pairs), each start and its EM polish to a 1e-6 relative change under one 120 s budget, gap against runtime on a log axis, timed through `track` | The generating parameters' own value on the draw, stated as the reference; the generating component of each pair, for the recovery |
 | [`potts_starts.ipynb`](potts_starts.ipynb) | Where a ground state starts: every solver of `search.ground_state` on `spatio_only/release` (71x71 triangular, q = 10, J = 0.7, size-tilted field), each polished by ICM through `opt.starts.StartsBenchmark` at five seeds, gap against runtime through `qa.starts.gap_panels` | The alpha-expansion bracket, stated as the reference; the generating ladder and sizes, for the structure |
+| [`label_switching.ipynb`](label_switching.ipynb) | Label switching: the Gaussian mixture `mixture/ci` drawn by conjugate Gibbs and by HMC, the count-pair mixture `emission_mixture/ci` by HMC and MALA, every draw renamed at random and relabelled by the seven methods of `sample.relabel` (STEPHENS the default) | The planted permutations; the generating component of each observation, read against the Bayes rule at the generating parameters; the generating means |
 
 Each ends with a **Further Work** section naming what it could not demonstrate
 and the issue that carries it: a notebook that quietly skipped the unbuilt half
@@ -41,7 +42,7 @@ request whose re-executed output disagrees with the committed one
 standard the figures in `docs/tex/` are.
 
 **Every notebook here is re-executed, on every run.** Which ones a run checks
-is its arguments and nothing else — the notebooks named, or all eight when none
+is its arguments and nothing else — the notebooks named, or all nine when none
 is — and the run states the set before executing any of it. A digest decided
 it until issue #480: `<name>.inputs` beside each notebook recorded a hash of
 its code cells, the modules they import and the fixtures they name (#372),

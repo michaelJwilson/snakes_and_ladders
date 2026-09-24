@@ -463,8 +463,8 @@ LADDER: tuple[Rung, ...] = (
         "topology equality",
         "sim.topology.robinson_foulds",
         None,
-        T + "search/test_search_topology_rustworkx.py"
-        "::test_two_topologies_our_code_calls_equal_are_isomorphic",
+        "tests/validation/test_rustworkx.py"
+        "::test_topology_equality_is_labelled_isomorphism",
         cost=Cost.PASS,
     ),
     Rung(

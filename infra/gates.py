@@ -256,6 +256,24 @@ SCHEDULING_MARKERS: Mapping[str, str] = {
         f"{KEY_DURATION_CAP.seconds} s; run in CI's full tier and selected "
         "locally only when its inputs change (DEV.md CI & Performance Budget)"
     ),
+    # Issue #972: a test judged against an external framework, which runs in a
+    # subprocess and is installed only by its `validation-<framework>` extra.
+    # Where the extra is absent the test skips, so the per-PR tier pays a skip;
+    # CI's `validation` job installs every extra and selects `-m validation`.
+    "validation": (
+        "checked against an external framework run in a subprocess; skips "
+        "where its validation-<framework> extra is absent, and runs in CI's "
+        "validation job (issue #972)"
+    ),
+    # A runtime the package has to meet, set by an external framework on a
+    # declared fixture. It fails until the package meets it, so CI's
+    # `validation` job runs it in a step of its own that reports and does not
+    # block: a goal is a target, and a red one says how far off it is.
+    "goal": (
+        "a runtime the package must meet -- an external framework's on a "
+        "declared fixture, both timed in one run; fails until it is met, and "
+        "runs in a non-blocking step of CI's validation job (issue #972)"
+    ),
 }
 
 #: What a test's subject is, where it is not one of the declared problems: the
@@ -281,6 +299,8 @@ MARKER_REGISTRATION_ORDER: tuple[str, ...] = (
     "critical",
     "stress",
     "key",
+    "validation",
+    "goal",
     *SUBJECT_MARKERS,
     *FINDING_MARKERS,
 )
@@ -306,7 +326,9 @@ class JudgedCoverage:
     counting: tuple[str, ...]
     #: Packages under `snakes_and_ladders` outside the guard: a renderer has
     #: no oracle, and `qa` is held by `snapshot` pins and stated beside the
-    #: figure, never inside it.
+    #: figure, never inside it. `validation` (issue #972) drives external
+    #: frameworks, and its oracles run in CI's `validation` job where the
+    #: extras are installed, never in the tier this recut reads.
     exempt_packages: tuple[str, ...]
     #: The floor over every package not exempt, as `--cov-fail-under` states
     #: one. Recut to the measurement and rounded down, never lowered.
@@ -319,7 +341,7 @@ class JudgedCoverage:
 JUDGED_COVERAGE = JudgedCoverage(
     name="judged",
     counting=("end2end", "oracle"),
-    exempt_packages=("qa",),
+    exempt_packages=("qa", "validation"),
     floor=86.3,
     package_floors={"search": 90.5},
 )
@@ -334,7 +356,7 @@ UNJUDGED_COVERAGE = JudgedCoverage(
         for name in (*KIND_MARKERS, *FINDING_MARKERS)
         if name not in JUDGED_COVERAGE.counting
     ),
-    exempt_packages=("qa",),
+    exempt_packages=("qa", "validation"),
     floor=89.2,
     package_floors={"search": 89.5},
 )

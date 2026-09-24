@@ -78,7 +78,8 @@ from snakes_and_ladders.opt.mixture import (
 from snakes_and_ladders.opt.mixture import (
     expectation_maximization as gaussian_expectation_maximization,
 )
-from snakes_and_ladders.opt.starts import Curve
+from snakes_and_ladders.opt.starts import Curve, Polished, Trial
+from snakes_and_ladders.opt.termination import Stop, Termination
 from snakes_and_ladders.parallel import Pool, map_tasks
 from snakes_and_ladders.sample.initialize import FromAnnealing, FromChain, FromTempering
 from snakes_and_ladders.sample.schedule import ExponentialTempSchedule, ladder
@@ -645,7 +646,7 @@ class _Seeded:
 
     seeded: Seeded
     score: float
-    fit: Polished | None
+    fit: MixturePolished | None
 
 
 def _run_seeding(task: _Seeding, generator: np.random.Generator) -> _Seeded:
@@ -666,7 +667,7 @@ def _run_seeding(task: _Seeding, generator: np.random.Generator) -> _Seeded:
     with track(MemoryRun()):
         seeded = lookup(task.name)(task.instance, generator)
     score = float(mixture_log_likelihood(values, uniform, seeded.components))
-    fit: Polished | None = None
+    fit: MixturePolished | None = None
     if task.passes is not None:
         with track(MemoryRun()):
             fit = polish(task.instance, seeded.components, passes=task.passes)
@@ -832,7 +833,7 @@ class BestOf:
         seconds: float | None = None,
         passes: int | None = None,
         tolerance: float | None = None,
-    ) -> tuple[Seeded, Polished]:
+    ) -> tuple[Seeded, MixturePolished]:
         """Every seeding polished by EM, and the fit of highest log-likelihood.
 
         Given ``seconds``, the seedings run in ``ceil(n / workers)`` rounds
@@ -845,7 +846,7 @@ class BestOf:
 
         Returns
         -------
-        tuple[Seeded, Polished]
+        tuple[Seeded, MixturePolished]
             The chosen seeding, as :meth:`__call__` returns one, and its fit.
 
         Raises
@@ -954,8 +955,13 @@ POLISH_TOLERANCE = 1e-6
 
 
 @dataclass(frozen=True)
-class Polished:
-    """The EM fit a start hands over to.
+class MixturePolished(Polished):
+    """The EM fit a start hands over to: :class:`~snakes_and_ladders.opt.starts.Polished` at the seam.
+
+    ``value`` is the negative log-likelihood where the polish stopped and
+    ``termination`` how: at its tolerance (:attr:`~snakes_and_ladders.opt.termination.Stop.CONVERGED`),
+    at an emptied component (:attr:`~snakes_and_ladders.opt.termination.Stop.REFUSED`)
+    or at its budget.
 
     Parameters
     ----------
@@ -966,8 +972,6 @@ class Polished:
     log_likelihoods : np.ndarray
         The log-likelihood at the handover and after every iteration, shape
         ``(iterations + 1,)``.
-    converged : bool
-        Whether the polish stopped at its tolerance rather than at its budget.
     emptied : bool
         Whether the polish stopped because EM emptied a component and its M
         step refused, :func:`polish`'s third stop.
@@ -976,13 +980,32 @@ class Polished:
     components: EmissionFamily
     weights: torch.Tensor
     log_likelihoods: np.ndarray
-    converged: bool = False
     emptied: bool = False
 
-    @property
-    def iterations(self) -> int:
-        """EM iterations run, one pass each."""
-        return int(self.log_likelihoods.shape[0]) - 1
+    @classmethod
+    def ended(
+        cls,
+        components: EmissionFamily,
+        weights: torch.Tensor,
+        log_likelihoods: np.ndarray,
+        *,
+        converged: bool = False,
+        emptied: bool = False,
+    ) -> MixturePolished:
+        """The fit at the trace's last value, its termination read off the two flags."""
+        reason = (
+            Stop.CONVERGED if converged else Stop.REFUSED if emptied else Stop.BUDGET
+        )
+        return cls(
+            value=-float(log_likelihoods[-1]),
+            termination=Termination(
+                converged, int(log_likelihoods.shape[0]) - 1, reason
+            ),
+            components=components,
+            weights=weights,
+            log_likelihoods=log_likelihoods,
+            emptied=emptied,
+        )
 
 
 def polish(
@@ -992,7 +1015,7 @@ def polish(
     passes: int | None = None,
     seconds: float | None = None,
     tolerance: float = POLISH_TOLERANCE,
-) -> Polished:
+) -> MixturePolished:
     """EM iterations from ``components`` at equal weights, one pass each, to one of two stops.
 
     Given ``passes``, exactly that many iterations. Given ``seconds``, the
@@ -1010,7 +1033,7 @@ def polish(
     from 2.6e-7 at iteration 156 to 1.5e-231 at 179, the likelihood climbing
     a nat an iteration, and the next E step underflows its responsibilities
     to zero, where the family's M step has no data to solve on and refuses.
-    The polish stops there, :attr:`~snakes_and_ladders.search.mixture_starts.Polished.emptied`, and hands over the fit
+    The polish stops there, :attr:`~snakes_and_ladders.search.mixture_starts.MixturePolished.emptied`, and hands over the fit
     of the iteration before: the refusal is caught only when the E step at
     that fit leaves some component no responsibility at all, and raised
     otherwise. A small weight is not by itself the stop: from the same start
@@ -1026,7 +1049,7 @@ def polish(
 
     Returns
     -------
-    Polished
+    MixturePolished
 
     Raises
     ------
@@ -1100,12 +1123,18 @@ def polish(
     tracked.record_cost(
         iteration, sum(int(t.element_size() * t.nelement()) for t in tensors)
     )
-    return Polished(components, weights, np.asarray(trace), converged, emptied)
+    return MixturePolished.ended(
+        components, weights, np.asarray(trace), converged=converged, emptied=emptied
+    )
 
 
 @dataclass(frozen=True)
-class Trial:
+class MixtureTrial(Trial):
     """One timed start and its polish, as :class:`TimedStart` reports it.
+
+    The seconds, the start's and its polish's together, and the polished
+    state's bytes are :class:`~snakes_and_ladders.opt.starts.Trial`'s;
+    ``curve[handover][0]`` is the start's seconds alone.
 
     Parameters
     ----------
@@ -1113,7 +1142,7 @@ class Trial:
         The start.
     seeded : Seeded
         What the start produced, without its path.
-    polished : Polished
+    polished : MixturePolished
         The fit it handed over to.
     curve : tuple[tuple[float, float], ...]
         ``(seconds, log_likelihood)`` for every entry of the start's path and
@@ -1121,11 +1150,6 @@ class Trial:
         read from a ``track`` sample.
     handover : int
         The index in ``curve`` of the seeded components.
-    seconds : float
-        Wall clock of the start and its polish; ``curve[handover][0]`` is the
-        start's alone.
-    state_bytes : int
-        What the polished state holds.
     recovery : float
         Fraction of pairs the fit assigns to their generating component, up to
         the best renaming of the components.
@@ -1136,11 +1160,9 @@ class Trial:
 
     name: str
     seeded: Seeded
-    polished: Polished
+    polished: MixturePolished
     curve: tuple[tuple[float, float], ...]
     handover: int
-    seconds: float
-    state_bytes: int
     recovery: float
     mean_error: float
 
@@ -1189,7 +1211,7 @@ class TimedStart:
     def __call__(
         self, instance: MixtureInstance, budget: Budget, rng: np.random.Generator
     ) -> Outcome:
-        """The negative log-likelihood reached, the seconds spent, and the :class:`Trial`.
+        """The negative log-likelihood reached, the seconds spent, and the :class:`MixtureTrial`.
 
         Returns
         -------
@@ -1208,7 +1230,7 @@ class TimedStart:
             raise ValueError(msg)
         start = lookup(self.name)
         every = isinstance(start, BestOf) and start.select is Selection.POLISHED
-        chosen: Polished | None = None
+        chosen: MixturePolished | None = None
         with track(MemoryRun()) as outer:
             with track(MemoryRun()) as inner:
                 if isinstance(start, BestOf) and every:
@@ -1301,7 +1323,7 @@ class TimedStart:
         fitted_mean = polished.components.alignment_key()[:, 0].numpy()
         true_mean = instance.truth.alignment_key()[:, 0].numpy()[columns]
         seconds = float(outer_run.last("seconds"))
-        trial = Trial(
+        trial = MixtureTrial(
             name=self.name,
             seeded=Seeded(seeded.components, seeded.passes, seeded.diagnostics),
             polished=polished,
@@ -1379,7 +1401,9 @@ class StartRow:
         return len(self.reached)
 
     @classmethod
-    def from_trials(cls, start: str, trials: list[Trial], reference: float) -> StartRow:
+    def from_trials(
+        cls, start: str, trials: list[MixtureTrial], reference: float
+    ) -> StartRow:
         """The row of one start's trials, read against the reference.
 
         Returns
@@ -1474,7 +1498,7 @@ def curve_band(curves: Sequence[Curve], seconds: np.ndarray) -> GapBand:
     return GapBand(seconds, mean, std, handover)
 
 
-def trial_curve(trial: Trial, reference: float, index: int = 0) -> Curve:
+def trial_curve(trial: MixtureTrial, reference: float, index: int = 0) -> Curve:
     """A mixture trial as the :class:`~snakes_and_ladders.opt.starts.Curve` :func:`curve_band` reads.
 
     Its samples' times, values, and gaps below ``reference``; its handover
@@ -1496,7 +1520,9 @@ def trial_curve(trial: Trial, reference: float, index: int = 0) -> Curve:
     )
 
 
-def gap_band(trials: list[Trial], reference: float, seconds: np.ndarray) -> GapBand:
+def gap_band(
+    trials: list[MixtureTrial], reference: float, seconds: np.ndarray
+) -> GapBand:
     """Each trial's gap below ``reference``, read on ``seconds`` by :func:`curve_band`.
 
     Returns
