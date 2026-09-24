@@ -1,19 +1,11 @@
 """`opt.hmm.baum_welch` against hmmlearn's, run in a subprocess (issue #975).
 
-hmmlearn's `CategoricalHMM` is an independent implementation of the same
-recursion. Referees:
-
-- ten iterations from one start on `hmm/ci.yaml` (3 states, 4 symbols, 600
-  sequences of 15): every probability within 1e-11, and one iteration alone
-  within the same, so the agreement is per step and not a shared fixed point;
-- ten iterations of the streamed Gaussian and Poisson steps against
-  `GaussianHMM` and `PoissonHMM` with every prior and floor zero: every
-  parameter within 1e-9 relative (issue #997);
-- the compiled Viterbi against `decode`: every path position, and the total
-  log-probability within 1e-11; the compiled forward pass against `score`
-  within 1e-11 (issue #997).
-
-The runtime goal hmmlearn sets is in `test_goals.py`.
+`CategoricalHMM` on `hmm/ci.yaml` (3 states, 4 symbols, 600 x 15): ten
+iterations and one alone within 1e-11. Streamed Gaussian and Poisson steps
+against `GaussianHMM`, `PoissonHMM` (no priors or floors): within 1e-9
+relative (#997). Compiled Viterbi against `decode` (every position,
+log-probability 1e-11) and forward against `score` (1e-11; #997). Runtime
+goal: `test_goals.py`.
 """
 
 from __future__ import annotations

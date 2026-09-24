@@ -16,11 +16,7 @@ PottsEpisode = Episode[tuple[int, ...], tuple[int, int]]
 
 
 def potts_decisions(steps: int) -> tuple[torch.Tensor, torch.Tensor]:
-    """``steps`` Potts decisions' neighbourhood features and a uniformly drawn index, seed 977.
-
-    Each decision's state is one of 64 drawn starts, so the table is built
-    once and the decisions index it.
-    """
+    """``steps`` Potts decisions' features and a uniform index, seed 977, 64 starts."""
     environment = potts_environment()
     rng = np.random.default_rng(977)
     states = [environment.reset(rng) for _ in range(64)]
@@ -41,10 +37,7 @@ def greedy_episodes(
 ) -> list[PottsEpisode]:
     """``count`` rollouts of ``length`` decisions, each the highest-scoring action.
 
-    TorchRL's ``ReinforceLoss`` re-runs the actor and resamples the action
-    rather than scoring the one in the batch; under the deterministic
-    interaction type that draw is the argmax, so greedy episodes make it the
-    recorded action.
+    `ReinforceLoss` resamples the action: deterministic, that is the argmax.
     """
     rng = np.random.default_rng(seed)
     episodes = []
