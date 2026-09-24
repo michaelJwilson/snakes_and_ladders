@@ -32,7 +32,7 @@ here so it is read once rather than off 46 signatures.
     `sample.annealed` and `sample.tempered`.
 ``NUMBA``
     `sample.gibbs` and
-    `search.alpha_expansion.iterated_conditional_modes`: arithmetic that is
+    `search.icm.iterated_conditional_modes`: arithmetic that is
     NumPy's operation for operation.
 ``JAX``
     the gradient of `opt.hmm`'s objectives (issue #1000), pinned to the

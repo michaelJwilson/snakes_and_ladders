@@ -32,10 +32,10 @@ function added to a defining module is covered the day it is written.
 and `sample.schedule` fit, sample, start and temper *every* row — `ROADMAP.md`
 §1.1's claim — and `likelihood.message_passing`, `sim.factor_graph`,
 `sample.gibbs`, `likelihood.potts`, `sim.ldpc`, `sim.graph`, `sim.potts`,
-`sim.canonical`, `search.alpha_expansion`, `sample.potts_mcmc`, `search.infer`,
-`sim.topology`, `emissions` and the rest of `likelihood/` are reached from
-several. Importing one says nothing about which problem a test exercises, so
-none of them defines one.
+`sim.canonical`, `search.alpha_expansion`, `search.icm`, `sample.potts_mcmc`,
+`search.infer`, `sim.topology`, `emissions` and the rest of `likelihood/` are
+reached from several. Importing one says nothing about which problem a test
+exercises, so none of them defines one.
 
 | Problem | Key | Statement | Defines |
 | --- | --- | --- | --- |

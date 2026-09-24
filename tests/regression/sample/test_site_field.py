@@ -20,10 +20,8 @@ from snakes_and_ladders.sample.potts_mcmc import (
     wolff_sweep,
 )
 from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
-from snakes_and_ladders.search.alpha_expansion import (
-    alpha_expansion,
-    iterated_conditional_modes,
-)
+from snakes_and_ladders.search.alpha_expansion import alpha_expansion
+from snakes_and_ladders.search.icm import iterated_conditional_modes
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import SiteField, log_weight_of, site_field
 

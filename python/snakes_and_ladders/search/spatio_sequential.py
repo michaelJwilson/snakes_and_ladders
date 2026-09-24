@@ -10,7 +10,7 @@ Given the parameters, the posterior defines a per-node, per-class external
 field ``H`` (the external-field equation of the textbook) and the labels are the ground state of a
 Potts model in that field (the label ground-state equation of the textbook): exactly the problem
 :func:`~snakes_and_ladders.search.alpha_expansion.alpha_expansion` solves
-with a bound, :func:`~snakes_and_ladders.search.alpha_expansion.iterated_conditional_modes`
+with a bound, :func:`~snakes_and_ladders.search.icm.iterated_conditional_modes`
 descends, and a Wolff cluster move in a field samples.
 
 Every block is held to one property: ``log p(x, l | theta)`` with the chains
@@ -59,11 +59,8 @@ from snakes_and_ladders.opt.mixture import emission_mixture_plus_plus
 from snakes_and_ladders.opt.termination import Termination
 from snakes_and_ladders.sample.potts_mcmc import adjacency_lists, wolff_sweep
 from snakes_and_ladders.sample.schedule import TempSchedule
-from snakes_and_ladders.search.alpha_expansion import (
-    SweepOrder,
-    alpha_expansion,
-    iterated_conditional_modes,
-)
+from snakes_and_ladders.search.alpha_expansion import alpha_expansion
+from snakes_and_ladders.search.icm import SweepOrder, iterated_conditional_modes
 from snakes_and_ladders.sim.count_pairs import (
     IndependentCountPair,
     IndependentCountPairSeeding,
@@ -229,6 +226,7 @@ def label_step(
     field: np.ndarray | None = None,
     wolff_schedule: TempSchedule | None = None,
     wolff_moves_per_step: int = 4,
+    min_sites: int = 0,
 ) -> np.ndarray:
     """One label block: the ground state of the Potts model in the field, by ``solver``.
 
@@ -237,7 +235,19 @@ def label_step(
     The two exact solvers start from ``labels``; Wolff anneals from them on
     ``wolff_schedule`` (temperatures multiply ``beta``'s inverse) and returns
     the lowest-energy labelling it visited.
+
+    ``min_sites`` is the ICM descent's floor
+    (:func:`~snakes_and_ladders.search.icm.iterated_conditional_modes`,
+    issue #1055): after each sweep a class holding fewer sites is dissolved
+    into those at or above it. ``0``, the default, is the step before the
+    floor existed, bitwise; the other solvers have no floor and refuse one.
     """
+    if min_sites != 0 and solver is not LabelSolver.ICM:
+        msg = (
+            f"the {solver} label step has no min_sites floor; it applies to "
+            f"{LabelSolver.ICM}"
+        )
+        raise ValueError(msg)
     labels = np.asarray(labels, dtype=np.int64).copy()
     if field is None:
         field = external_field(params, observations, labels)
@@ -248,11 +258,13 @@ def label_step(
             alpha_expansion(graph, potential, params.n_classes, start=labels).labelling
         )
     if solver is LabelSolver.ICM:
-        # The sweep `search.alpha_expansion` runs, started from `labels` in a
-        # random site order (issue #858). It reads the same argmin off local
-        # deltas rather than off a full energy per candidate, which is
-        # `O(k * degree)` per site against `O(k * n_edges)`; the labelling is
-        # pinned against the recomputing loop this replaced.
+        # The sweep `search.icm` runs, started from `labels` in a random site
+        # order (issue #858). It reads the same argmin off local deltas rather
+        # than off a full energy per candidate, which is `O(k * degree)` per
+        # site against `O(k * n_edges)`; the labelling is pinned against the
+        # recomputing loop this replaced. The Python sweep, since a random
+        # order that stops on a clean sweep draws each permutation as it
+        # starts, which the compiled sweep does not run.
         return iterated_conditional_modes(
             graph,
             potential,
@@ -260,6 +272,7 @@ def label_step(
             rng,
             start=labels,
             sweep_order=SweepOrder.RANDOM,
+            min_sites=min_sites,
             backend=Backend.PYTHON,
         ).labelling
     if wolff_schedule is None:

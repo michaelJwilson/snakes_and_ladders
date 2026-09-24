@@ -14,10 +14,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from snakes_and_ladders.fixtures import Scale
-from snakes_and_ladders.search.alpha_expansion import (
-    Labelling,
-    iterated_conditional_modes,
-)
+from snakes_and_ladders.search.alpha_expansion import Labelling
+from snakes_and_ladders.search.icm import iterated_conditional_modes
 from snakes_and_ladders.sim.canonical import FrustratedLatticeParams, PlantedSpinGlass
 from snakes_and_ladders.sim.fixtures import Baseline, baseline, fixture
 from snakes_and_ladders.sim.potts import energy

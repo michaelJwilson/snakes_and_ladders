@@ -290,7 +290,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "potts",
         "ICM",
-        "search.alpha_expansion.iterated_conditional_modes",
+        "search.icm.iterated_conditional_modes",
         "exact cut / max-flow",
         T + "search/test_potts_sizing.py"
         "::test_the_zero_field_optimum_is_a_closed_form_three_ways",

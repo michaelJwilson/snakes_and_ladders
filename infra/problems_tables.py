@@ -258,7 +258,7 @@ ALGORITHMS: dict[str, str] = {
     "sample.gibbs.chain_block_sweep": "sampling and tempering",
     "sample.hmc.anneal": "sampling and tempering",
     "search.alpha_expansion.alpha_expansion": "descent and expansion",
-    "search.alpha_expansion.iterated_conditional_modes": "descent and expansion",
+    "search.icm.iterated_conditional_modes": "descent and expansion",
     "search.maxflow.ising_ground_state": "exact ground state",
     "search.max_cut.goemans_williamson": "relaxation",
     "search.bifurcation.simulated_bifurcation": "relaxation",

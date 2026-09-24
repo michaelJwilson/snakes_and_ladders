@@ -291,9 +291,9 @@ def anneal_potts(
 
     One :func:`single_site_sweep` per schedule step at that step's
     temperature, tracking the lowest energy seen (Kirkpatrick, Gelatt & Vecchi,
-    1983). It is :func:`iterated_conditional_modes` at finite temperature: at
-    ``T -> 0`` the heat bath is the argmin over each site's conditional, ICM's
-    update, so the two are one search separated by the schedule and a
+    1983). It is :func:`~snakes_and_ladders.search.icm.iterated_conditional_modes`
+    at finite temperature: at ``T -> 0`` the heat bath is the argmin over each
+    site's conditional, ICM's update, so the two are one search separated by the schedule and a
     difference between them is a statement about the schedule.
 
     ``move`` names the move set. Single-site is the default and the fair
