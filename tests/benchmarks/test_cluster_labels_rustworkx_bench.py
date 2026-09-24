@@ -20,11 +20,11 @@ from snakes_and_ladders.sample.potts_mcmc import _bond_probability
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 from snakes_and_ladders.sim.potts import critical_coupling
 from snakes_and_ladders.validation import rustworkx
-from snakes_and_ladders.validation.runner import available, package
+from snakes_and_ladders.validation.runner import package
 
-pytestmark = pytest.mark.skipif(
-    not available("rustworkx"), reason="rustworkx is the validation-rustworkx extra"
-)
+from tests._frameworks import requires
+
+pytestmark = requires("rustworkx")
 
 #: Subprocess runs whose median each figure is.
 REPEATS = 3
@@ -65,7 +65,7 @@ def test_union_find_beside_rustworkx_benchmark(
     )
     benchmark.extra_info["package_s"] = float(np.median([run.seconds for run in runs]))
     benchmark.extra_info["package_peak_bytes"] = float(
-        np.median([run.peak_bytes or 0 for run in runs])
+        np.median([run.peak_bytes for run in runs])
     )
 
     assert runs[0].outputs["roots"].shape == (n_nodes,)

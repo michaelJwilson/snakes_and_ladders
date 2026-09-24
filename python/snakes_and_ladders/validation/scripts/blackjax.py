@@ -57,7 +57,7 @@ from typing import Any
 
 import numpy as np
 
-from snakes_and_ladders.validation.protocol import dump, load, paths, peaked
+from snakes_and_ladders.validation.protocol import dump, peaked, received
 
 #: What ``mode`` selects.
 INTEGRATE, SAMPLE, LANGEVIN, RANDOM_WALK, REPLAY, ADAPTED = 0, 1, 2, 3, 4, 5
@@ -75,8 +75,7 @@ def main() -> None:
     import jax.numpy as jnp
     from blackjax.mcmc import integrators, metrics
 
-    given, returned = paths()
-    inputs = load(given)
+    inputs, returned = received()
     dimension = int(inputs["position"].size)
     mode = int(inputs["mode"])
 

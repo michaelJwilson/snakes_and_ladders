@@ -12,15 +12,14 @@ from __future__ import annotations
 
 import numpy as np
 
-from snakes_and_ladders.validation.protocol import dump, load, paths, peaked, timed
+from snakes_and_ladders.validation.protocol import dump, peaked, received, timed
 
 
 def main() -> None:
     """Build the graph, cut it under the timer, and write the segments back."""
     import maxflow  # the framework, imported only in this interpreter
 
-    given, returned = paths()
-    inputs = load(given)
+    inputs, returned = received()
     n_nodes = int(inputs["n_nodes"])
 
     def build() -> tuple[object, np.ndarray]:

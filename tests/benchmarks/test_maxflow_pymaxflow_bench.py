@@ -26,11 +26,11 @@ from snakes_and_ladders.search.ground_state import lattice_rung
 from snakes_and_ladders.search.maxflow import ising_ground_state
 from snakes_and_ladders.sim.potts import site_field
 from snakes_and_ladders.validation import pymaxflow
-from snakes_and_ladders.validation.runner import available, package
+from snakes_and_ladders.validation.runner import package
 
-pytestmark = pytest.mark.skipif(
-    not available("maxflow"), reason="PyMaxflow is the validation-pymaxflow extra"
-)
+from tests._frameworks import requires
+
+pytestmark = requires("pymaxflow")
 
 #: Subprocess runs per size whose median PyMaxflow's figures are.
 REPEATS = 5
@@ -71,9 +71,7 @@ def test_rust_cut_beside_pymaxflow_benchmark(
         "coupling": coupling,
     }
     benchmark.extra_info["package_peak_bytes"] = float(
-        np.median(
-            [package("ising_cut", inputs).peak_bytes or 0 for _ in range(REPEATS)]
-        )
+        np.median([package("ising_cut", inputs).peak_bytes for _ in range(REPEATS)])
     )
 
     states = benchmark(

@@ -33,15 +33,13 @@ from snakes_and_ladders.opt.hmm import (
 )
 from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
 from snakes_and_ladders.validation import hmmlearn
-from snakes_and_ladders.validation.runner import available
 
 from tests._fixtures import FIXTURES_DIR
+from tests._frameworks import requires
 
 pytestmark = [
     pytest.mark.validation,
-    pytest.mark.skipif(
-        not available("hmmlearn"), reason="hmmlearn is the validation-hmmlearn extra"
-    ),
+    requires("hmmlearn"),
 ]
 
 FIXTURE: Path = FIXTURES_DIR / "hmm" / "ci.yaml"

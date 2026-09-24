@@ -38,7 +38,6 @@ from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
 from snakes_and_ladders.sim.potts import critical_coupling, site_field
 from snakes_and_ladders.validation.gaussian import GaussianTarget, diagonal_precision
-from snakes_and_ladders.validation.runner import package
 
 from tests._fixtures import FIXTURES_DIR
 from tests.regression.learn.conftest import potts_environment
@@ -47,6 +46,7 @@ from tests.validation._goals import (
     MemoryGoal,
     assert_fits,
     assert_meets,
+    median_package,
     median_seconds,
 )
 from tests.validation._rl import (
@@ -127,16 +127,19 @@ RUSTWORKX_SWEEP_MEMORY = {
 @pytest.mark.parametrize("side", sorted(RUSTWORKX_SWEEP))
 def test_the_sweep_meets_rustworkxs_runtime(side: int) -> None:
     inputs = {"side": np.asarray(side), "seed": np.asarray(976)}
-    seconds = [package("swendsen_wang", inputs).seconds for _ in range(5)]
-    assert_meets(float(np.median(seconds)), RUSTWORKX_SWEEP[side])
+    assert_meets(
+        median_package("swendsen_wang", inputs, repeats=5), RUSTWORKX_SWEEP[side]
+    )
 
 
 @pytest.mark.experiment
 @pytest.mark.parametrize("side", sorted(RUSTWORKX_SWEEP_MEMORY))
 def test_the_sweep_fits_rustworkxs_memory(side: int) -> None:
     inputs = {"side": np.asarray(side), "seed": np.asarray(976)}
-    peaks = [package("swendsen_wang", inputs).peak_bytes or 0 for _ in range(3)]
-    assert_fits(int(np.median(peaks)), RUSTWORKX_SWEEP_MEMORY[side])
+    assert_fits(
+        int(median_package("swendsen_wang", inputs, "peak_bytes")),
+        RUSTWORKX_SWEEP_MEMORY[side],
+    )
 
 
 #: TorchRL's `GAE` at `gamma = 1`, `lmbda = 0.95`, one call per episode of
@@ -430,17 +433,16 @@ def _swap_inputs(side: int) -> dict[str, np.ndarray]:
 @pytest.mark.experiment
 @pytest.mark.parametrize("side", sorted(GCO_SWAP))
 def test_the_swap_meets_gcos_runtime(side: int) -> None:
-    seconds = [package("alpha_expansion", _swap_inputs(side)).seconds for _ in range(3)]
-    assert_meets(float(np.median(seconds)), GCO_SWAP[side])
+    assert_meets(median_package("alpha_expansion", _swap_inputs(side)), GCO_SWAP[side])
 
 
 @pytest.mark.experiment
 @pytest.mark.parametrize("side", sorted(GCO_SWAP_MEMORY))
 def test_the_swap_fits_gcos_memory(side: int) -> None:
-    peaks = [
-        package("alpha_expansion", _swap_inputs(side)).peak_bytes or 0 for _ in range(3)
-    ]
-    assert_fits(int(np.median(peaks)), GCO_SWAP_MEMORY[side])
+    assert_fits(
+        int(median_package("alpha_expansion", _swap_inputs(side), "peak_bytes")),
+        GCO_SWAP_MEMORY[side],
+    )
 
 
 #: BlackJAX's compiled HMC chain, compilation excluded: 1,000 transitions of
@@ -480,8 +482,10 @@ BLACKJAX_HMC_MEMORY = {
 def test_the_rust_cut_fits_pymaxflows_memory(side: int) -> None:
     # Read in a fresh interpreter by `scripts/package.py`, as PyMaxflow's was.
     inputs = _cut_inputs(side)
-    peaks = [package("ising_cut", inputs).peak_bytes or 0 for _ in range(3)]
-    assert_fits(int(np.median(peaks)), PYMAXFLOW_CUT_MEMORY[side])
+    assert_fits(
+        int(median_package("ising_cut", inputs, "peak_bytes")),
+        PYMAXFLOW_CUT_MEMORY[side],
+    )
 
 
 @pytest.mark.experiment
@@ -493,8 +497,10 @@ def test_the_expansion_fits_gcos_memory(side: int) -> None:
         "coupling": np.asarray(critical_coupling(10)),
         "field": field,
     }
-    peaks = [package("alpha_expansion", inputs).peak_bytes or 0 for _ in range(3)]
-    assert_fits(int(np.median(peaks)), GCO_EXPANSION_MEMORY[side])
+    assert_fits(
+        int(median_package("alpha_expansion", inputs, "peak_bytes")),
+        GCO_EXPANSION_MEMORY[side],
+    )
 
 
 def _hmm_start() -> tuple[np.ndarray, ...]:
@@ -589,8 +595,10 @@ def test_baum_welch_fits_hmmlearns_memory(n_sequences: int) -> None:
         "emission": emission,
         "n_iter": np.asarray(10),
     }
-    peaks = [package("baum_welch", inputs).peak_bytes or 0 for _ in range(3)]
-    assert_fits(int(np.median(peaks)), HMMLEARN_BAUM_WELCH_MEMORY[n_sequences])
+    assert_fits(
+        int(median_package("baum_welch", inputs, "peak_bytes")),
+        HMMLEARN_BAUM_WELCH_MEMORY[n_sequences],
+    )
 
 
 @pytest.mark.experiment
@@ -603,8 +611,10 @@ def test_mixture_em_fits_scikit_learns_memory(n_samples: int) -> None:
         "scale": np.array([1.2, 1.0, 1.3]),
         "n_iter": np.asarray(10),
     }
-    peaks = [package("mixture_em", inputs).peak_bytes or 0 for _ in range(3)]
-    assert_fits(int(np.median(peaks)), SCIKIT_LEARN_EM_MEMORY[n_samples])
+    assert_fits(
+        int(median_package("mixture_em", inputs, "peak_bytes")),
+        SCIKIT_LEARN_EM_MEMORY[n_samples],
+    )
 
 
 #: hmmlearn's ten Baum--Welch iterations of a three-state Gaussian (diagonal)
@@ -778,9 +788,8 @@ def test_family_baum_welch_meets_hmmlearns_runtime(
     family: str, n_sequences: int
 ) -> None:
     inputs = _family_inputs(family, n_sequences)
-    seconds = [package("family_baum_welch", inputs).seconds for _ in range(3)]
     assert_meets(
-        float(np.median(seconds)),
+        median_package("family_baum_welch", inputs),
         HMMLEARN_FAMILY_BAUM_WELCH[(family, n_sequences)],
     )
 
@@ -791,9 +800,8 @@ def test_family_baum_welch_meets_hmmlearns_runtime(
 )
 def test_family_baum_welch_fits_hmmlearns_memory(family: str, n_sequences: int) -> None:
     inputs = _family_inputs(family, n_sequences)
-    peaks = [package("family_baum_welch", inputs).peak_bytes or 0 for _ in range(3)]
     assert_fits(
-        int(np.median(peaks)),
+        int(median_package("family_baum_welch", inputs, "peak_bytes")),
         HMMLEARN_FAMILY_BAUM_WELCH_MEMORY[(family, n_sequences)],
     )
 
@@ -809,16 +817,19 @@ def _viterbi_inputs(family: str, n_sequences: int) -> dict[str, np.ndarray]:
 @pytest.mark.parametrize(("family", "n_sequences"), sorted(HMMLEARN_VITERBI))
 def test_viterbi_meets_hmmlearns_runtime(family: str, n_sequences: int) -> None:
     inputs = _viterbi_inputs(family, n_sequences)
-    seconds = [package("viterbi", inputs).seconds for _ in range(3)]
-    assert_meets(float(np.median(seconds)), HMMLEARN_VITERBI[(family, n_sequences)])
+    assert_meets(
+        median_package("viterbi", inputs), HMMLEARN_VITERBI[(family, n_sequences)]
+    )
 
 
 @pytest.mark.experiment
 @pytest.mark.parametrize(("family", "n_sequences"), sorted(HMMLEARN_VITERBI_MEMORY))
 def test_viterbi_fits_hmmlearns_memory(family: str, n_sequences: int) -> None:
     inputs = _viterbi_inputs(family, n_sequences)
-    peaks = [package("viterbi", inputs).peak_bytes or 0 for _ in range(3)]
-    assert_fits(int(np.median(peaks)), HMMLEARN_VITERBI_MEMORY[(family, n_sequences)])
+    assert_fits(
+        int(median_package("viterbi", inputs, "peak_bytes")),
+        HMMLEARN_VITERBI_MEMORY[(family, n_sequences)],
+    )
 
 
 @pytest.mark.experiment
@@ -827,8 +838,9 @@ def test_hmm_log_likelihood_meets_hmmlearns_runtime(
     family: str, n_sequences: int
 ) -> None:
     inputs = {**_viterbi_inputs(family, n_sequences), "score": np.asarray(True)}
-    seconds = [package("viterbi", inputs).seconds for _ in range(3)]
-    assert_meets(float(np.median(seconds)), HMMLEARN_SCORE[(family, n_sequences)])
+    assert_meets(
+        median_package("viterbi", inputs), HMMLEARN_SCORE[(family, n_sequences)]
+    )
 
 
 @pytest.mark.experiment
@@ -837,8 +849,10 @@ def test_hmm_log_likelihood_fits_hmmlearns_memory(
     family: str, n_sequences: int
 ) -> None:
     inputs = {**_viterbi_inputs(family, n_sequences), "score": np.asarray(True)}
-    peaks = [package("viterbi", inputs).peak_bytes or 0 for _ in range(3)]
-    assert_fits(int(np.median(peaks)), HMMLEARN_SCORE_MEMORY[(family, n_sequences)])
+    assert_fits(
+        int(median_package("viterbi", inputs, "peak_bytes")),
+        HMMLEARN_SCORE_MEMORY[(family, n_sequences)],
+    )
 
 
 def _score_inputs(n_samples: int) -> dict[str, np.ndarray]:
@@ -855,16 +869,17 @@ def _score_inputs(n_samples: int) -> dict[str, np.ndarray]:
 @pytest.mark.parametrize("n_samples", sorted(SCIKIT_LEARN_SCORE))
 def test_mixture_log_likelihood_meets_scikit_learns_runtime(n_samples: int) -> None:
     inputs = _score_inputs(n_samples)
-    seconds = [package("mixture_score", inputs).seconds for _ in range(3)]
-    assert_meets(float(np.median(seconds)), SCIKIT_LEARN_SCORE[n_samples])
+    assert_meets(median_package("mixture_score", inputs), SCIKIT_LEARN_SCORE[n_samples])
 
 
 @pytest.mark.experiment
 @pytest.mark.parametrize("n_samples", sorted(SCIKIT_LEARN_SCORE_MEMORY))
 def test_mixture_log_likelihood_fits_scikit_learns_memory(n_samples: int) -> None:
     inputs = _score_inputs(n_samples)
-    peaks = [package("mixture_score", inputs).peak_bytes or 0 for _ in range(3)]
-    assert_fits(int(np.median(peaks)), SCIKIT_LEARN_SCORE_MEMORY[n_samples])
+    assert_fits(
+        int(median_package("mixture_score", inputs, "peak_bytes")),
+        SCIKIT_LEARN_SCORE_MEMORY[n_samples],
+    )
 
 
 #: BlackJAX's MALA, `blackjax.mala` at `epsilon = h^2 / 2` for the package's
@@ -928,24 +943,27 @@ def _mala_inputs(dimension: int, store_chain: bool) -> dict[str, np.ndarray]:
 @pytest.mark.parametrize("dimension", sorted(BLACKJAX_MALA))
 def test_mala_meets_blackjaxs_runtime(dimension: int) -> None:
     inputs = _mala_inputs(dimension, store_chain=True)
-    seconds = [package("mala_sample", inputs).seconds for _ in range(3)]
-    assert_meets(float(np.median(seconds)), BLACKJAX_MALA[dimension])
+    assert_meets(median_package("mala_sample", inputs), BLACKJAX_MALA[dimension])
 
 
 @pytest.mark.experiment
 @pytest.mark.parametrize("dimension", sorted(BLACKJAX_MALA_MEMORY))
 def test_mala_fits_blackjaxs_memory(dimension: int) -> None:
     inputs = _mala_inputs(dimension, store_chain=True)
-    peaks = [package("mala_sample", inputs).peak_bytes or 0 for _ in range(3)]
-    assert_fits(int(np.median(peaks)), BLACKJAX_MALA_MEMORY[dimension])
+    assert_fits(
+        int(median_package("mala_sample", inputs, "peak_bytes")),
+        BLACKJAX_MALA_MEMORY[dimension],
+    )
 
 
 @pytest.mark.experiment
 @pytest.mark.parametrize("dimension", sorted(BLACKJAX_MALA_CHAIN_FREE_MEMORY))
 def test_mala_without_its_chain_fits_blackjaxs_memory(dimension: int) -> None:
     inputs = _mala_inputs(dimension, store_chain=False)
-    peaks = [package("mala_sample", inputs).peak_bytes or 0 for _ in range(3)]
-    assert_fits(int(np.median(peaks)), BLACKJAX_MALA_CHAIN_FREE_MEMORY[dimension])
+    assert_fits(
+        int(median_package("mala_sample", inputs, "peak_bytes")),
+        BLACKJAX_MALA_CHAIN_FREE_MEMORY[dimension],
+    )
 
 
 #: JAX's `jit(value_and_grad)` of `GaussianHmmObjective`'s negative
@@ -989,8 +1007,7 @@ def _hmm_gradient_inputs(n_sequences: int) -> dict[str, np.ndarray]:
 @pytest.mark.parametrize("n_sequences", sorted(JAX_HMM_GRADIENT))
 def test_the_hmm_gradient_meets_jaxs_runtime(n_sequences: int) -> None:
     inputs = _hmm_gradient_inputs(n_sequences)
-    runs = [package("gradient", inputs) for _ in range(3)]
-    per_point = float(np.median([float(r.outputs["per_point"]) for r in runs]))
+    per_point = median_package("gradient", inputs, "per_point")
     assert_meets(per_point, JAX_HMM_GRADIENT[n_sequences])
 
 
@@ -998,8 +1015,10 @@ def test_the_hmm_gradient_meets_jaxs_runtime(n_sequences: int) -> None:
 @pytest.mark.parametrize("n_sequences", sorted(JAX_HMM_GRADIENT_MEMORY))
 def test_the_hmm_gradient_fits_jaxs_memory(n_sequences: int) -> None:
     inputs = _hmm_gradient_inputs(n_sequences)
-    peaks = [package("gradient", inputs).peak_bytes or 0 for _ in range(3)]
-    assert_fits(int(np.median(peaks)), JAX_HMM_GRADIENT_MEMORY[n_sequences])
+    assert_fits(
+        int(median_package("gradient", inputs, "peak_bytes")),
+        JAX_HMM_GRADIENT_MEMORY[n_sequences],
+    )
 
 
 #: BlackJAX's peak added resident memory for the same compiled chain with no
@@ -1038,8 +1057,10 @@ def test_hmc_without_its_chain_fits_blackjaxs_memory(dimension: int) -> None:
         "store_chain": np.asarray(False),
         "observe": np.asarray(False),
     }
-    peaks = [package("hmc_sample", inputs).peak_bytes or 0 for _ in range(3)]
-    assert_fits(int(np.median(peaks)), BLACKJAX_HMC_CHAIN_FREE_MEMORY[dimension])
+    assert_fits(
+        int(median_package("hmc_sample", inputs, "peak_bytes")),
+        BLACKJAX_HMC_CHAIN_FREE_MEMORY[dimension],
+    )
 
 
 @pytest.mark.experiment
@@ -1052,8 +1073,10 @@ def test_hmc_fits_blackjaxs_memory(dimension: int) -> None:
         "n_draws": np.asarray(1_000),
         "seed": np.asarray(963),
     }
-    peaks = [package("hmc_sample", inputs).peak_bytes or 0 for _ in range(3)]
-    assert_fits(int(np.median(peaks)), BLACKJAX_HMC_MEMORY[dimension])
+    assert_fits(
+        int(median_package("hmc_sample", inputs, "peak_bytes")),
+        BLACKJAX_HMC_MEMORY[dimension],
+    )
 
 
 @pytest.mark.experiment
@@ -1072,8 +1095,7 @@ def test_the_union_find_meets_rustworkxs_runtime(side: int) -> None:
         "first": np.ascontiguousarray(bonds[:, 0]),
         "second": np.ascontiguousarray(bonds[:, 1]),
     }
-    seconds = [package("cluster_labels", inputs).seconds for _ in range(3)]
-    assert_meets(float(np.median(seconds)), RUSTWORKX_COMPONENTS[side])
+    assert_meets(median_package("cluster_labels", inputs), RUSTWORKX_COMPONENTS[side])
 
 
 #: TorchRL's warm call on 10⁵ Potts decisions, `WEIGHTS` in
@@ -1165,8 +1187,7 @@ def test_the_graph_surrogate_meets_pygs_runtime(side: int) -> None:
 @pytest.mark.parametrize("case", sorted(JAX_GRADIENT))
 def test_the_gradient_meets_jaxs_runtime(case: str) -> None:
     inputs = _gradient_inputs(case)
-    runs = [package("gradient", inputs) for _ in range(3)]
-    per_point = float(np.median([float(run.outputs["per_point"]) for run in runs]))
+    per_point = median_package("gradient", inputs, "per_point")
     assert_meets(per_point, JAX_GRADIENT[case])
 
 
@@ -1174,8 +1195,9 @@ def test_the_gradient_meets_jaxs_runtime(case: str) -> None:
 @pytest.mark.parametrize("case", sorted(JAX_GRADIENT_MEMORY))
 def test_the_gradient_fits_jaxs_memory(case: str) -> None:
     inputs = _gradient_inputs(case)
-    peaks = [package("gradient", inputs).peak_bytes or 0 for _ in range(3)]
-    assert_fits(int(np.median(peaks)), JAX_GRADIENT_MEMORY[case])
+    assert_fits(
+        int(median_package("gradient", inputs, "peak_bytes")), JAX_GRADIENT_MEMORY[case]
+    )
 
 
 #: The random-walk targets (#1006): name, dimension, the harness's target
@@ -1303,32 +1325,36 @@ def _rwm_inputs(name: str, *, warmup: int, store_chain: bool) -> dict[str, np.nd
 @pytest.mark.parametrize("name", sorted(BLACKJAX_RWM))
 def test_random_walk_meets_blackjaxs_runtime(name: str) -> None:
     inputs = _rwm_inputs(name, warmup=0, store_chain=True)
-    seconds = [package("random_walk_sample", inputs).seconds for _ in range(3)]
-    assert_meets(float(np.median(seconds)), BLACKJAX_RWM[name])
+    assert_meets(median_package("random_walk_sample", inputs), BLACKJAX_RWM[name])
 
 
 @pytest.mark.experiment
 @pytest.mark.parametrize("name", sorted(BLACKJAX_RWM_WARMUP))
 def test_random_walk_with_its_warm_up_meets_blackjaxs_runtime(name: str) -> None:
     inputs = _rwm_inputs(name, warmup=1_000, store_chain=True)
-    seconds = [package("random_walk_sample", inputs).seconds for _ in range(3)]
-    assert_meets(float(np.median(seconds)), BLACKJAX_RWM_WARMUP[name])
+    assert_meets(
+        median_package("random_walk_sample", inputs), BLACKJAX_RWM_WARMUP[name]
+    )
 
 
 @pytest.mark.experiment
 @pytest.mark.parametrize("name", sorted(BLACKJAX_RWM_MEMORY))
 def test_random_walk_fits_blackjaxs_memory(name: str) -> None:
     inputs = _rwm_inputs(name, warmup=0, store_chain=True)
-    peaks = [package("random_walk_sample", inputs).peak_bytes or 0 for _ in range(3)]
-    assert_fits(int(np.median(peaks)), BLACKJAX_RWM_MEMORY[name])
+    assert_fits(
+        int(median_package("random_walk_sample", inputs, "peak_bytes")),
+        BLACKJAX_RWM_MEMORY[name],
+    )
 
 
 @pytest.mark.experiment
 @pytest.mark.parametrize("name", sorted(BLACKJAX_RWM_CHAIN_FREE_MEMORY))
 def test_random_walk_without_its_chain_fits_blackjaxs_memory(name: str) -> None:
     inputs = _rwm_inputs(name, warmup=0, store_chain=False)
-    peaks = [package("random_walk_sample", inputs).peak_bytes or 0 for _ in range(3)]
-    assert_fits(int(np.median(peaks)), BLACKJAX_RWM_CHAIN_FREE_MEMORY[name])
+    assert_fits(
+        int(median_package("random_walk_sample", inputs, "peak_bytes")),
+        BLACKJAX_RWM_CHAIN_FREE_MEMORY[name],
+    )
 
 
 @pytest.mark.experiment
@@ -1440,32 +1466,34 @@ def _hmc_inputs(name: str, *, warmup: int, store_chain: bool) -> dict[str, np.nd
 @pytest.mark.parametrize("name", sorted(BLACKJAX_HMC_ROSENBROCK))
 def test_hmc_on_rosenbrock_meets_blackjaxs_runtime(name: str) -> None:
     inputs = _hmc_inputs(name, warmup=0, store_chain=True)
-    seconds = [package("hmc_declared", inputs).seconds for _ in range(3)]
-    assert_meets(float(np.median(seconds)), BLACKJAX_HMC_ROSENBROCK[name])
+    assert_meets(median_package("hmc_declared", inputs), BLACKJAX_HMC_ROSENBROCK[name])
 
 
 @pytest.mark.experiment
 @pytest.mark.parametrize("name", sorted(BLACKJAX_HMC_WARMUP))
 def test_hmc_with_its_warm_up_meets_blackjaxs_runtime(name: str) -> None:
     inputs = _hmc_inputs(name, warmup=500, store_chain=True)
-    seconds = [package("hmc_declared", inputs).seconds for _ in range(3)]
-    assert_meets(float(np.median(seconds)), BLACKJAX_HMC_WARMUP[name])
+    assert_meets(median_package("hmc_declared", inputs), BLACKJAX_HMC_WARMUP[name])
 
 
 @pytest.mark.experiment
 @pytest.mark.parametrize("name", sorted(BLACKJAX_HMC_ROSENBROCK_MEMORY))
 def test_hmc_on_rosenbrock_fits_blackjaxs_memory(name: str) -> None:
     inputs = _hmc_inputs(name, warmup=0, store_chain=True)
-    peaks = [package("hmc_declared", inputs).peak_bytes or 0 for _ in range(3)]
-    assert_fits(int(np.median(peaks)), BLACKJAX_HMC_ROSENBROCK_MEMORY[name])
+    assert_fits(
+        int(median_package("hmc_declared", inputs, "peak_bytes")),
+        BLACKJAX_HMC_ROSENBROCK_MEMORY[name],
+    )
 
 
 @pytest.mark.experiment
 @pytest.mark.parametrize("name", sorted(BLACKJAX_HMC_ROSENBROCK_CHAIN_FREE_MEMORY))
 def test_hmc_on_rosenbrock_without_its_chain_fits_blackjaxs_memory(name: str) -> None:
     inputs = _hmc_inputs(name, warmup=0, store_chain=False)
-    peaks = [package("hmc_declared", inputs).peak_bytes or 0 for _ in range(3)]
-    assert_fits(int(np.median(peaks)), BLACKJAX_HMC_ROSENBROCK_CHAIN_FREE_MEMORY[name])
+    assert_fits(
+        int(median_package("hmc_declared", inputs, "peak_bytes")),
+        BLACKJAX_HMC_ROSENBROCK_CHAIN_FREE_MEMORY[name],
+    )
 
 
 #: HMC on a Gaussian mixture's negative log-likelihood (#1008): 10^5 draws
@@ -1528,15 +1556,16 @@ def test_hmc_on_the_mixture_meets_blackjaxs_runtime(label: str) -> None:
     inputs = _mixture_hmc_inputs(
         warmup=100 if label == "warm-up" else 0, store_chain=True
     )
-    seconds = [package("hmc_declared", inputs).seconds for _ in range(3)]
-    assert_meets(float(np.median(seconds)), BLACKJAX_HMC_MIXTURE[label])
+    assert_meets(median_package("hmc_declared", inputs), BLACKJAX_HMC_MIXTURE[label])
 
 
 @pytest.mark.experiment
 def test_hmc_on_the_mixture_fits_blackjaxs_memory() -> None:
     inputs = _mixture_hmc_inputs(warmup=0, store_chain=True)
-    peaks = [package("hmc_declared", inputs).peak_bytes or 0 for _ in range(3)]
-    assert_fits(int(np.median(peaks)), BLACKJAX_HMC_MIXTURE_MEMORY)
+    assert_fits(
+        int(median_package("hmc_declared", inputs, "peak_bytes")),
+        BLACKJAX_HMC_MIXTURE_MEMORY,
+    )
 
 
 def _hmm_hmc_inputs(*, warmup: int, store_chain: bool) -> dict[str, np.ndarray]:
@@ -1601,12 +1630,13 @@ BLACKJAX_HMC_HMM_MEMORY = MemoryGoal(
 @pytest.mark.parametrize("label", sorted(BLACKJAX_HMC_HMM))
 def test_hmc_on_the_hmm_meets_blackjaxs_runtime(label: str) -> None:
     inputs = _hmm_hmc_inputs(warmup=100 if label == "warm-up" else 0, store_chain=True)
-    seconds = [package("hmc_declared", inputs).seconds for _ in range(3)]
-    assert_meets(float(np.median(seconds)), BLACKJAX_HMC_HMM[label])
+    assert_meets(median_package("hmc_declared", inputs), BLACKJAX_HMC_HMM[label])
 
 
 @pytest.mark.experiment
 def test_hmc_on_the_hmm_fits_blackjaxs_memory() -> None:
     inputs = _hmm_hmc_inputs(warmup=0, store_chain=True)
-    peaks = [package("hmc_declared", inputs).peak_bytes or 0 for _ in range(3)]
-    assert_fits(int(np.median(peaks)), BLACKJAX_HMC_HMM_MEMORY)
+    assert_fits(
+        int(median_package("hmc_declared", inputs, "peak_bytes")),
+        BLACKJAX_HMC_HMM_MEMORY,
+    )

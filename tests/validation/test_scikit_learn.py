@@ -26,16 +26,13 @@ from snakes_and_ladders.opt.mixture import (
 )
 from snakes_and_ladders.sim.mixture import MixtureParams, simulate_mixture
 from snakes_and_ladders.validation import scikit_learn
-from snakes_and_ladders.validation.runner import available
 
 from tests._fixtures import FIXTURES_DIR
+from tests._frameworks import requires
 
 pytestmark = [
     pytest.mark.validation,
-    pytest.mark.skipif(
-        not available("sklearn"),
-        reason="scikit-learn is the validation-scikit-learn extra",
-    ),
+    requires("scikit_learn"),
 ]
 
 FIXTURE: Path = FIXTURES_DIR / "mixture" / "ci.yaml"

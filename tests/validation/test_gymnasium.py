@@ -31,16 +31,14 @@ from snakes_and_ladders.learn.environment import Environment
 from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.rollout import rollout
 from snakes_and_ladders.validation import gymnasium
-from snakes_and_ladders.validation.runner import available
 
 from tests._fixtures import FIXTURES_DIR
+from tests._frameworks import requires
 from tests.regression.learn.conftest import COUPLING, FIELD
 
 pytestmark = [
     pytest.mark.validation,
-    pytest.mark.skipif(
-        not available("gymnasium"), reason="Gymnasium is the validation-gymnasium extra"
-    ),
+    requires("gymnasium"),
 ]
 
 TREE = gymnasium.Spec(

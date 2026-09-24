@@ -19,11 +19,11 @@ import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders.validation import jax
 from snakes_and_ladders.validation.gaussian import dense_precision, diagonal_precision
-from snakes_and_ladders.validation.runner import available, package
+from snakes_and_ladders.validation.runner import package
 
-pytestmark = pytest.mark.skipif(
-    not available("jax"), reason="JAX is the validation-jax extra"
-)
+from tests._frameworks import requires
+
+pytestmark = requires("jax")
 
 CASES = [
     "diagonal 10",
@@ -76,7 +76,7 @@ def test_gradient_routes_beside_jax_benchmark(
             np.median([float(run.outputs["per_point"]) for run in runs])
         )
         benchmark.extra_info[f"{route}_peak_bytes"] = float(
-            np.median([run.peak_bytes or 0 for run in runs])
+            np.median([run.peak_bytes for run in runs])
         )
     keywords = (
         {"precision": inputs["precision"]}

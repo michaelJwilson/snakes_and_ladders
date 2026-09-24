@@ -78,7 +78,7 @@ def _cut(
         result.outputs["sink_side"].astype(bool),
         result.seconds,
         float(result.outputs["build_seconds"]),
-        int(result.peak_bytes or 0),
+        result.peak_bytes,
     )
 
 

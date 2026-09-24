@@ -26,7 +26,7 @@ from typing import Any
 
 import numpy as np
 
-from snakes_and_ladders.validation.protocol import dump, load, paths, peaked, timed
+from snakes_and_ladders.validation.protocol import dump, peaked, received, timed
 
 
 def _graph(rustworkx: Any, n_nodes: int, first: np.ndarray, second: np.ndarray) -> Any:
@@ -42,8 +42,7 @@ def main() -> None:
     """Run the requested query and write its answer back."""
     import rustworkx  # the framework, imported only in this interpreter
 
-    given, returned = paths()
-    inputs = load(given)
+    inputs, returned = received()
     mode = str(inputs["mode"])
     outputs: dict[str, np.ndarray] = {}
     seconds = 0.0

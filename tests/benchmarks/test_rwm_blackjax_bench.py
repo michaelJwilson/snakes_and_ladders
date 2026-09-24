@@ -22,11 +22,11 @@ from snakes_and_ladders.opt.testfunctions import Rosenbrock
 from snakes_and_ladders.sample import metropolis
 from snakes_and_ladders.validation import blackjax
 from snakes_and_ladders.validation.gaussian import GaussianTarget, diagonal_precision
-from snakes_and_ladders.validation.runner import available, package
+from snakes_and_ladders.validation.runner import package
 
-pytestmark = pytest.mark.skipif(
-    not available("blackjax"), reason="BlackJAX is the validation-blackjax extra"
-)
+from tests._frameworks import requires
+
+pytestmark = requires("blackjax")
 
 #: Subprocess runs whose median BlackJAX's figure is.
 REPEATS = 3
@@ -73,10 +73,7 @@ def test_random_walk_beside_blackjax_benchmark(
     }
     benchmark.extra_info["package_peak_bytes"] = float(
         np.median(
-            [
-                package("random_walk_sample", inputs).peak_bytes or 0
-                for _ in range(REPEATS)
-            ]
+            [package("random_walk_sample", inputs).peak_bytes for _ in range(REPEATS)]
         )
     )
     chain = benchmark.pedantic(  # type: ignore[no-untyped-call]

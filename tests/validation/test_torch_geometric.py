@@ -30,16 +30,13 @@ from snakes_and_ladders.learn.surrogate import (
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.topology import enumerate_topologies
 from snakes_and_ladders.validation import torch_geometric
-from snakes_and_ladders.validation.runner import available
 
 from tests._fixtures import load_fixture
+from tests._frameworks import requires
 
 pytestmark = [
     pytest.mark.validation,
-    pytest.mark.skipif(
-        not available("torch_geometric"),
-        reason="PyTorch Geometric is the validation-torch-geometric extra",
-    ),
+    requires("torch_geometric"),
 ]
 
 FIVE_TAXA = "tree_search/ci.yaml"

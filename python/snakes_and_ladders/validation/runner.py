@@ -41,8 +41,9 @@ class Run:
     outputs: dict[str, np.ndarray]
     #: Wall seconds around the framework's own call, measured in the script.
     seconds: float
-    #: Resident bytes the call added at its peak, where the script measured it.
-    peak_bytes: int | None = None
+    #: Resident bytes the call added at its peak; zero where the script
+    #: measured none, which every reader substituted by hand (issue #1010).
+    peak_bytes: int = 0
 
 
 def available(module: str) -> bool:
@@ -86,7 +87,7 @@ def run(
     return Run(
         outputs=outputs,
         seconds=seconds,
-        peak_bytes=None if peak is None else int(peak),
+        peak_bytes=0 if peak is None else int(peak),
     )
 
 

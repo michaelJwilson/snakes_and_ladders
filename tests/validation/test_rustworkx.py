@@ -56,13 +56,12 @@ from snakes_and_ladders.sim.topology import (
 from snakes_and_ladders.sim.tree import edges as tree_edges
 from snakes_and_ladders.sim.tree import preorder
 from snakes_and_ladders.validation import rustworkx
-from snakes_and_ladders.validation.runner import available
+
+from tests._frameworks import requires
 
 pytestmark = [
     pytest.mark.validation,
-    pytest.mark.skipif(
-        not available("rustworkx"), reason="rustworkx is the validation-rustworkx extra"
-    ),
+    requires("rustworkx"),
 ]
 
 NAMES = ("t1", "t2", "t3", "t4", "t5", "t6")
