@@ -21,16 +21,14 @@ from snakes_and_ladders.cost import Cost
 from snakes_and_ladders.likelihood.potts import enumerate_potts
 from snakes_and_ladders.opt.budget import Budget
 from snakes_and_ladders.search.alpha_expansion import alpha_beta_swap, alpha_expansion
-from snakes_and_ladders.search.cluster_moves import (
-    run_expansion_then_swendsen_wang,
-    run_swendsen_wang_then_expansion,
-)
 from snakes_and_ladders.search.ground_state import (
     ANNEAL_SCHEDULE,
     MethodRun,
     expansion_bracket,
     run_alpha_beta_swap,
     run_alpha_expansion,
+    run_expansion_then_swendsen_wang,
+    run_swendsen_wang_then_expansion,
 )
 from snakes_and_ladders.search.potts_starts import (
     TilingRung,
