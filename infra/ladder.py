@@ -167,7 +167,7 @@ LADDER: tuple[Rung, ...] = (
         "likelihood.belief_propagation.belief_propagation",
         "sum-product / BP",
         T + "likelihood/test_message_passing.py"
-        "::test_flooding_on_the_loopy_lattice_is_belief_propagation",
+        "::test_an_iterative_schedule_on_the_loopy_lattice_is_belief_propagation",
         cost=Cost.ITERATIONS,
     ),
     Rung(
@@ -176,7 +176,7 @@ LADDER: tuple[Rung, ...] = (
         "likelihood.schedule.ResidualMessageSchedule",
         "flooding schedule",
         T + "likelihood/test_message_passing.py"
-        "::test_residual_on_the_loopy_lattice_is_belief_propagation",
+        "::test_an_iterative_schedule_on_the_loopy_lattice_is_belief_propagation",
         cost=Cost.ITERATIONS,
     ),
     Rung(
@@ -507,7 +507,8 @@ LADDER: tuple[Rung, ...] = (
         "pruning, Rust",
         "likelihood.pruning_rust.log_likelihood",
         "pruning, NumPy",
-        T + "likelihood/test_pruning_rust.py::test_rust_matches_numpy_oracle",
+        T + "likelihood/test_pruning_common.py"
+        "::test_the_rust_route_meets_the_oracle_within_the_float64_bound",
         cost=Cost.PASS,
     ),
     Rung(
@@ -515,7 +516,8 @@ LADDER: tuple[Rung, ...] = (
         "pruning, Torch",
         "likelihood.pruning_torch.log_likelihood",
         "pruning, NumPy",
-        T + "likelihood/test_pruning_torch.py::test_torch_matches_numpy_oracle",
+        T + "likelihood/test_pruning_common.py"
+        "::test_the_torch_route_reproduces_the_oracle_bitwise",
         cost=Cost.PASS,
     ),
     Rung(
@@ -523,8 +525,8 @@ LADDER: tuple[Rung, ...] = (
         "pruning, analytic gradient",
         "likelihood.pruning_analytic.log_likelihood",
         "pruning, Torch",
-        T + "likelihood/test_pruning_gradient.py"
-        "::test_every_route_agrees_with_the_taped_gradient",
+        T + "likelihood/test_pruning_analytic.py"
+        "::test_gradient_matches_the_taped_gradient",
         cost=Cost.PASS,
     ),
     Rung(
@@ -686,7 +688,7 @@ LADDER: tuple[Rung, ...] = (
         "likelihood.message_passing_rust.tree_messages",
         "forward via sum-product",
         T + "likelihood/test_message_passing_rust.py"
-        "::test_the_rust_tree_schedule_agrees_with_the_numpy_oracle",
+        "::test_the_kernel_writes_the_oracle_s_messages_edge_for_edge",
         cost=Cost.ITERATIONS,
     ),
     Rung(
@@ -694,8 +696,8 @@ LADDER: tuple[Rung, ...] = (
         "Viterbi",
         "likelihood.message_passing.max_product",
         "path enumeration",
-        T
-        + "likelihood/test_message_passing.py::test_max_product_on_the_chain_is_viterbi",
+        T + "likelihood/test_message_passing.py"
+        "::test_every_chain_evaluator_is_the_path_enumeration",
         cost=Cost.PASS,
     ),
     Rung(
