@@ -28,11 +28,11 @@ from __future__ import annotations
 from collections import deque
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
-from snakes_and_ladders.backend import Backend, refuse_backend
+from snakes_and_ladders.backend import Backend, twin
 from snakes_and_ladders.incidence import SparseIncidence
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import energy, site_field
@@ -507,13 +507,8 @@ def ising_ground_state(
         is the submodularity boundary: the problem is NP-hard there and this
         returns nothing rather than a lattice-shaped wrong answer.
     """
-    refuse_backend("ising_ground_state", backend, (Backend.PYTHON, Backend.RUST))
-    if backend is Backend.RUST:
-        # Local, because the twin imports `FlowNetwork` and `MinCut` from
-        # here: a module-level import is the cycle.
-        from snakes_and_ladders.search import maxflow_rust
-
-        return maxflow_rust.ising_ground_state(graph, field_values)
+    if (rust := twin("ising_ground_state", backend, __name__)) is not None:
+        return cast("GroundState", rust.ising_ground_state(graph, field_values))
     values = site_field(
         np.asarray(field_values, dtype=float), graph.n_nodes, n_states=2
     )

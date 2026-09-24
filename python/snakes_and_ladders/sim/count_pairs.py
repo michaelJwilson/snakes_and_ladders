@@ -34,12 +34,12 @@ import hashlib
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, ClassVar, Generic, Self, TypeVar
+from typing import Any, ClassVar, Generic, Self, TypeVar, cast
 
 import numpy as np
 import torch
 
-from snakes_and_ladders.backend import Backend, refuse_backend
+from snakes_and_ladders.backend import Backend, twin
 from snakes_and_ladders.emissions import (
     BetaBinomialEmission,
     CovariateNotSupportedError,
@@ -1175,13 +1175,8 @@ def simulate_count_pairs(
         holds are one statement. A draw that overflows it is a fixture whose
         parameters moved, not a type to widen silently.
     """
-    refuse_backend("simulate_count_pairs", backend, (Backend.PYTHON, Backend.RUST))
-    if backend is Backend.RUST:
-        # Local, because the twin imports its labels and chains from here: a
-        # module-level import is the cycle.
-        from snakes_and_ladders.sim import count_pairs_rust
-
-        return count_pairs_rust.simulate_count_pairs(declared)
+    if (rust := twin("simulate_count_pairs", backend, __name__)) is not None:
+        return cast("CountPairInstance", rust.simulate_count_pairs(declared))
     params = declared.model
     n_nodes = params.graph.n_nodes
     labels = planted_labels(params, params.n_classes)

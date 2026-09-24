@@ -238,6 +238,16 @@ FIXTURE_ALIGNMENT = re.compile(
     r"simulate_alignment\(\s*(?:tau=)?(\w+)\.tau,\s*(?:k=)?\1\.k,\s*(?:pi=)?\1\.pi\b"
 )
 FIXTURE_ALIGNMENT_OWNER = "sim/simulator.py"
+#: A Rust twin imported inside a function by hand: the refusal, the local
+#: import and the comment on the cycle it avoids, which eight sites in six
+#: modules wrote before `backend.twin` carried them (issue #1010). Indented
+#: only: a module-level import of a twin is the cycle and fails at import.
+TWIN_IMPORT = re.compile(
+    r"^[ \t]+(?:from snakes_and_ladders\.[\w.]+ import \w+_rust\b"
+    r"|import snakes_and_ladders\.[\w.]+_rust\b)",
+    re.MULTILINE,
+)
+TWIN_OWNER = "backend.py"
 
 #: Where a caller of the transition may live: the package, the suite and the
 #: notebooks. Wider than the package alone, because both copies this guard
@@ -467,6 +477,9 @@ ABSENT: dict[str, tuple[re.Pattern[str], str, tuple[Path, ...], tuple[str, ...]]
     # Issue #1010: `simulate_tree(params, rng, n_sites=...)` draws a
     # fixture's alignment; the fields were spelled out 104 times.
     "fixture alignment": (FIXTURE_ALIGNMENT, FIXTURE_ALIGNMENT_OWNER, SEARCHED, _PY),
+    # Issue #1010: `backend.twin(name, backend, __name__)` refuses and
+    # imports; eight sites in six modules spelled both out.
+    "twin by hand": (TWIN_IMPORT, TWIN_OWNER, (PACKAGE,), _PY),
 }
 
 
@@ -627,6 +640,7 @@ def test_each_guard_fails_on_violating_source() -> None:
         HAND_SKIP: "mark = pytest.mark.skipif(" + 'not available("gco"), reason="")\n',
         HAND_MEASURE: "r, p = peaked(" + "lambda: timed(call))\n",
         FIXTURE_ALIGNMENT: "d = simulate_" + "alignment(p.tau, p.k, p.pi, rng, 9)\n",
+        TWIN_IMPORT: "        from snakes_and_ladders.likelihood import pruning_rust\n",
     }
     clean = {
         PRIVATE_LOGSUMEXP: "from snakes_and_ladders.numerics import logsumexp\n",
@@ -652,6 +666,7 @@ def test_each_guard_fails_on_violating_source() -> None:
         HAND_SKIP: 'pytestmark = requires("blackjax")\n',
         HAND_MEASURE: "result, seconds, peak = measured(call)\n",
         FIXTURE_ALIGNMENT: "data = simulate_tree(params, rng, n_sites=9)\n",
+        TWIN_IMPORT: "    if (rust := twin(name, backend, __name__)) is not None:\n",
     }
 
     assert [p for p, text in violating.items() if not p.search(text)] == []
@@ -670,6 +685,12 @@ def test_each_guard_fails_on_violating_source() -> None:
         "    if plan is not MessageScheduleName.FLOODING:\n"
     )
     assert not SCHEDULE_NAME_BRANCH.search("    if plan.requires_tree:\n")
+    # The twin's other spelling, and the module-level import a caller of a
+    # twin that is not its oracle (`qa.backend_agreement`) is free to write.
+    assert TWIN_IMPORT.search("    import snakes_and_ladders.search.maxflow_rust\n")
+    assert not TWIN_IMPORT.search(
+        "from snakes_and_ladders.likelihood import pruning_rust\n"
+    )
 
     # The structural guard on the same discipline, since it cannot be written
     # as a pattern: a sixth schedule beside the base and the same class under
