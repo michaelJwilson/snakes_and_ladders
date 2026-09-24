@@ -10,7 +10,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from snakes_and_ladders.qa.figure import QATable, latex_escape, latex_integer
+from snakes_and_ladders.qa.figure import (
+    QATable,
+    booktabs_tabular,
+    latex_escape,
+    latex_integer,
+)
 from snakes_and_ladders.qa.runner import ParamsArgument, registry_params, table_main
 from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.tree import preorder
@@ -43,30 +48,19 @@ def render_problem_sizes(
         A complete ``tabular`` environment.
     """
     rows = [
-        " & ".join(
-            [
-                f"\\texttt{{{latex_escape(fixture_name)}}}",
-                str(_n_taxa(params_by_fixture[fixture_name])),
-                latex_integer(params_by_fixture[fixture_name].n_sites),
-                # A seed is an identifier, not a magnitude: separators would
-                # make 20260902 look like a quantity rather than a date.
-                str(params_by_fixture[fixture_name].seed),
-                f"{params_by_fixture[fixture_name].tolerance:g}",
-            ]
-        )
-        + r" \\"
+        [
+            f"\\texttt{{{latex_escape(fixture_name)}}}",
+            str(_n_taxa(params_by_fixture[fixture_name])),
+            latex_integer(params_by_fixture[fixture_name].n_sites),
+            # A seed is an identifier, not a magnitude: separators would
+            # make 20260902 look like a quantity rather than a date.
+            str(params_by_fixture[fixture_name].seed),
+            f"{params_by_fixture[fixture_name].tolerance:g}",
+        ]
         for fixture_name in fixture_names
     ]
-    return "\n".join(
-        [
-            r"\begin{tabular}{lrrrr}",
-            r"  \toprule",
-            r"  Fixture & Taxa & Sites & Seed & Tolerance \\",
-            r"  \midrule",
-            *(f"  {row}" for row in rows),
-            r"  \bottomrule",
-            r"\end{tabular}",
-        ]
+    return booktabs_tabular(
+        "lrrrr", ["Fixture", "Taxa", "Sites", "Seed", "Tolerance"], rows
     )
 
 

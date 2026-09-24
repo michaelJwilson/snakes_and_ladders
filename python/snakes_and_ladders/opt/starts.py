@@ -74,22 +74,73 @@ type Start = Initializer | Callable[[np.random.Generator], Initializer]
 
 @dataclass(frozen=True)
 class Polished:
-    """What a polisher reached from one start.
+    """What a polish reached from one start, whatever it polished (issue #926).
+
+    The one type every polish in the package returns: the value reached,
+    lower being better, and how the polish's loop ended. What was polished is
+    the subclass's: :class:`PolishedPoint`, a point of an
+    :class:`~snakes_and_ladders.opt.objective.Objective`, and
+    :class:`~snakes_and_ladders.search.mixture_starts.MixturePolished`, a
+    mixture's components and weights at the seam, which has no ``theta``.
+
+    Parameters
+    ----------
+    value : float
+        The objective reached, lower being better: a negative log-likelihood
+        for a fit.
+    termination : Termination
+        How the polish's loop ended; its ``iterations`` are what the polish
+        spent against the budget, one unit an iteration.
+    """
+
+    value: float
+    termination: Termination
+
+    @property
+    def converged(self) -> bool:
+        """Whether the polish met its own stopping criterion."""
+        return self.termination.converged
+
+    @property
+    def iterations(self) -> int:
+        """The polish's iterations, one unit each."""
+        return self.termination.iterations
+
+
+@dataclass(frozen=True)
+class PolishedPoint(Polished):
+    """A polish of a point of an ``Objective``: the point reached, beside what :class:`Polished` carries.
 
     Parameters
     ----------
     theta : torch.Tensor
         The polished point, in the objective's unconstrained coordinates.
-    value : float
-        The objective there, lower being better, as the optimizer reports it.
-    termination : Termination
-        How the optimizer's loop ended; its ``iterations`` are what the
-        polish spent against the budget, one unit an iteration.
     """
 
     theta: torch.Tensor
-    value: float
-    termination: Termination
+
+
+@dataclass(frozen=True)
+class Trial:
+    """One timed run of a start and its fit: what it cost (issue #926).
+
+    The shared part of a timed fit's record; what was fitted and read is the
+    subclass's: :class:`~snakes_and_ladders.search.projection.ProjectedTrial`
+    for the projected fit, and
+    :class:`~snakes_and_ladders.search.mixture_starts.MixtureTrial` for a
+    start and its polish at the seam. :class:`StartTrial` is not one: it
+    carries its seconds as a series, one entry per sample.
+
+    Parameters
+    ----------
+    seconds : float
+        Wall clock of the whole run, read from the run's ``seconds`` series.
+    state_bytes : int
+        What the fitted state held, from the same record.
+    """
+
+    seconds: float
+    state_bytes: int
 
 
 #: An optimizer run from one start at one budget. A type alias and not a
@@ -98,7 +149,7 @@ class Polished:
 #: signature unadapted, and an adapter of three positional arguments is a
 #: plain callable. A function, a ``functools.partial`` of one or a dataclass
 #: with ``__call__`` satisfies it, and each pickles for a process pool.
-type Polisher = Callable[[Objective, torch.Tensor, Budget], Polished]
+type Polisher = Callable[[Objective, torch.Tensor, Budget], PolishedPoint]
 
 
 def refuse_start(name: str, objective: Objective, reason: str) -> NoReturn:
@@ -124,16 +175,18 @@ def _ended(termination: Termination | None, iterations: int) -> Termination:
 
 def polish_by_fit(
     objective: Objective, theta: torch.Tensor, budget: Budget
-) -> Polished:
+) -> PolishedPoint:
     """:func:`snakes_and_ladders.opt.fit.fit` from ``theta``, one L-BFGS iteration a unit.
 
     Returns
     -------
-    Polished
+    PolishedPoint
     """
     result = fit(objective, theta, max_iterations=budget.size)
-    return Polished(
-        result.theta, result.value, _ended(result.termination, result.iterations)
+    return PolishedPoint(
+        value=result.value,
+        termination=_ended(result.termination, result.iterations),
+        theta=result.theta,
     )
 
 
@@ -161,7 +214,7 @@ def _mixture_at(objective: Objective, theta: torch.Tensor) -> tuple[Any, Any, An
 
 def polish_by_emission_em(
     objective: Objective, theta: torch.Tensor, budget: Budget
-) -> Polished:
+) -> PolishedPoint:
     """:func:`snakes_and_ladders.opt.emission_mixture.expectation_maximization` from ``theta``.
 
     One EM iteration a unit, at the entry point's own tolerance. The value is
@@ -171,7 +224,7 @@ def polish_by_emission_em(
 
     Returns
     -------
-    Polished
+    PolishedPoint
     """
     observations, weights, family = _mixture_at(objective, theta)
     fitted = expectation_maximization(
@@ -183,16 +236,16 @@ def polish_by_emission_em(
             **fitted.components.named_parameters(),
         }
     )
-    return Polished(
-        polished,
-        -fitted.log_likelihood,
-        _ended(fitted.termination, fitted.iterations),
+    return PolishedPoint(
+        value=-fitted.log_likelihood,
+        termination=_ended(fitted.termination, fitted.iterations),
+        theta=polished,
     )
 
 
 def polish_by_baum_welch(
     objective: Objective, theta: torch.Tensor, budget: Budget
-) -> Polished:
+) -> PolishedPoint:
     """Baum-Welch from ``theta`` on an HMM objective, one EM iteration a unit.
 
     Through :func:`~snakes_and_ladders.opt.hmm.baum_welch_family`, which
@@ -201,7 +254,7 @@ def polish_by_baum_welch(
 
     Returns
     -------
-    Polished
+    PolishedPoint
     """
     emissions = getattr(objective, "emissions", None)
     observations = getattr(objective, "observations", None)
@@ -230,10 +283,10 @@ def polish_by_baum_welch(
             **fitted.emissions.named_parameters(),
         }
     )
-    return Polished(
-        polished,
-        -fitted.log_likelihood,
-        _ended(fitted.termination, budget.size),
+    return PolishedPoint(
+        value=-fitted.log_likelihood,
+        termination=_ended(fitted.termination, budget.size),
+        theta=polished,
     )
 
 
@@ -784,6 +837,7 @@ class StartsBenchmark:
 __all__ = [
     "Curve",
     "Polished",
+    "PolishedPoint",
     "Polisher",
     "SolverComparison",
     "Start",
@@ -792,6 +846,7 @@ __all__ = [
     "StartsBenchmark",
     "StartsReading",
     "StartsRow",
+    "Trial",
     "polish_by_baum_welch",
     "polish_by_emission_em",
     "polish_by_fit",

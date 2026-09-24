@@ -43,6 +43,7 @@ This file is authoritative. Each of the remainder has a defined task:
 | `docs/tex/` | The academic paper reporting results, the textbook of problem statements, algorithms, and properties that define them, the API map --- the package's own surface, generated from its docstrings and edited by no one --- and the mind map of the package, which is the one document that names code |
 | `docs/nb/` | One worked notebook per problem, from the fixture (of given size) to likelihood, optimization and learned policy |
 | `docs/reviews/` | Dated reviews of the whole between releases: what is established, where the documents and the code disagree, what is missing, and what is worth doing next; each fixes what is stale and tickets the rest |
+| `docs/templates/` | The pages the agentic loop publishes, as templates it fills: the work-in-flight page, what each section reads and how it is refreshed |
 
 Submodules include `infra/`, `sim/`, `likelihood/`, `opt/`, `search/`, learn/`, `qa/`, `sandbox/`, `validation/`, and `docs/` with each carrying their own `CLAUDE.md` of specific details.  All are subject to the same **writing style, and rules** as defined in this doc.  `ROADMAP.md` and `STATUS.md` plan and track at a higher level; open work is in the issue tracker, not a file (#804). `DEV.md` and `INSTALL.md` are detailed, e.g. step by step.  There may be some light repetion betwen the two then.
 
@@ -76,7 +77,7 @@ Submodules include `infra/`, `sim/`, `likelihood/`, `opt/`, `search/`, learn/`, 
 *   **Inlining.** No Python-level call per site or per node; hoist it or vectorize it. In Rust, `#[inline]` the small hot helpers; use smallvec on the stack.
 *   **Allocation.** Preallocate and reuse buffers across sweeps.
 *   **The FFI boundary.** Cross it once per call with contiguous arrays.
-*   **Parallel over independent tasks.** A loop of independent bodies — starts, seeds, replicates — should utilize `snakes_and_ladders.parallel`.
+*   **Parallel over independent tasks.** A loop of independent bodies — starts, seeds, replicates — should utilize `snakes_and_ladders.parallel`, and every body handed to it is **thread-safe**: it draws only from its own spawned generator, writes no shared or module state, and records only into its own run, so the thread backend is admissible wherever it pays and a parallel run is pinned bitwise to the serial one. A pool nested inside a pool pays nowhere: a best-of inside `compare`'s four workers took 69.8 s against 54.8 s serial (#912).
 *   **The GIL.** A compiled kernel that touches no Python object releases it, or the thread backend cannot use it. Held, four Python threads took 3.82x the wall of one on the Potts sweep — serialization exactly; released, 1.08x, for a throughput of 3.70x beside a NumPy control's 3.19x (#604).
 *   **Compiled backends.** `njit` for ease, Rust carries the load.
 

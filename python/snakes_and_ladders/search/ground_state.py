@@ -58,6 +58,7 @@ from typing import Any
 import numpy as np
 
 from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.cost import Cost
 from snakes_and_ladders.likelihood.message_passing import (
     ConvergenceError,
     MessageScheduleName,
@@ -752,6 +753,73 @@ METHODS: dict[str, Method] = {
 #: The two rows that are one axis, so a reader of the table is told rather
 #: than left to notice.
 ONE_AXIS = ("icm", "icm-random")
+
+
+def ground_state(
+    graph: PottsGraph,
+    field: np.ndarray,
+    method: str,
+    budget: Budget,
+    rng: np.random.Generator,
+) -> MethodRun:
+    """One :data:`METHODS` entry on any Potts problem, with no fixture behind it (issue #933).
+
+    Every method reads the lattice, the field, the class count and the cost
+    of a sweep, and nothing else: the ladder, the sizes and the optimum a
+    :class:`Rung` also carries are what the structural referee and the
+    bracket read. So a caller with a graph and a field --- a label step's
+    energy, say --- reaches every method here without constructing a
+    fixture's rung. The rung built inside carries no ladder and no optimum,
+    and is not returned: it is not an instance the referees can score.
+
+    Parameters
+    ----------
+    graph : PottsGraph
+        The lattice; every coupling non-negative.
+    field : np.ndarray
+        ``h``, shape ``(n_nodes, n_states)``.
+    method : str
+        A key of :data:`METHODS`.
+    budget : Budget
+        In :attr:`~snakes_and_ladders.cost.Cost.SITE_VISITS`, the unit every
+        entry is charged in.
+    rng : np.random.Generator
+        The method's generator.
+
+    Returns
+    -------
+    MethodRun
+
+    Raises
+    ------
+    ValueError
+        If ``method`` is not an entry, ``field`` is not one row per node, or
+        the budget is in another unit.
+    """
+    if method not in METHODS:
+        msg = f"no ground-state method {method!r}; the entries are {sorted(METHODS)}"
+        raise ValueError(msg)
+    values = np.asarray(field, dtype=np.float64)
+    if values.ndim != 2 or values.shape[0] != graph.n_nodes:
+        msg = (
+            f"the field is one row per node, ({graph.n_nodes}, n_states); got "
+            f"{values.shape}"
+        )
+        raise ValueError(msg)
+    if budget.unit is not Cost.SITE_VISITS:
+        msg = f"every entry is charged in site visits, not {budget.unit}"
+        raise ValueError(msg)
+    n_states = int(values.shape[1])
+    problem = Rung(
+        name="problem",
+        graph=graph,
+        field=values,
+        alpha=np.zeros(n_states),
+        sizes=np.ones(graph.n_nodes),
+        n_states=n_states,
+        optimum=None,
+    )
+    return METHODS[method](problem, budget, rng)
 
 
 def outcome(run: MethodRun) -> Outcome:
