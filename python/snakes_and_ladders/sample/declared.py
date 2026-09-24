@@ -8,6 +8,12 @@ code and parameters as ``oxisal``'s energy kernels take them (``src/energy.rs``)
 
 * :class:`DeclaredGaussian` --- ``U(x) = x' P x / 2``, ``P`` diagonal
   ``(d,)`` or dense ``(d, d)`` symmetric (issue #986).
+* :class:`DeclaredMixture` --- a one-channel Gaussian mixture's negative
+  log-likelihood of its observations, in ``theta = (k - 1 free weights, k
+  means, k log scales)`` (issue #1008).
+* :class:`DeclaredGaussianHmm` --- a Gaussian HMM's negative log-likelihood of
+  equal-length sequences, its gradient Fisher's identity over the streamed
+  statistics (issue #1008).
 * :class:`Power` --- an *operator* ``f(x) = x ** k`` elementwise, whose
   :class:`~snakes_and_ladders.sample.expectation.KalmanMean` a compiled
   chain keeps itself rather than handing its draws back (issue #1006).
@@ -18,14 +24,15 @@ code and parameters as ``oxisal``'s energy kernels take them (``src/energy.rs``)
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 import numpy as np
 import torch
 
 #: The family codes ``oxisal``'s energy kernels read.
-GAUSSIAN, ROSENBROCK = 0, 1
+GAUSSIAN, ROSENBROCK, MIXTURE, GAUSSIAN_HMM = 0, 1, 2, 3
 
 
 @runtime_checkable
@@ -52,8 +59,45 @@ class DeclaredRosenbrock(Protocol):
         ...
 
 
+@runtime_checkable
+class DeclaredMixture(Protocol):
+    """An objective that declares itself a one-channel Gaussian mixture's negative log-likelihood."""
+
+    @property
+    def gaussian_mixture_declaration(self) -> tuple[int, np.ndarray] | None:
+        """``(k, observations)``, or ``None`` where the objective is not that family."""
+        ...
+
+
+@runtime_checkable
+class DeclaredGaussianHmm(Protocol):
+    """An objective that declares itself a Gaussian HMM's negative log-likelihood."""
+
+    @property
+    def gaussian_hmm_declaration(self) -> tuple[int, np.ndarray] | None:
+        """``(m, observations)``, sequences as rows, or ``None`` where the objective is not that family."""
+        ...
+
+
 def declared_energy(objective: object) -> tuple[int, np.ndarray] | None:
     """The family code and its flat ``float64`` parameters, or ``None`` if none is declared."""
+    if isinstance(objective, DeclaredGaussianHmm):
+        hmm = objective.gaussian_hmm_declaration
+        if hmm is not None:
+            m, sequences = hmm
+            return GAUSSIAN_HMM, np.concatenate(
+                (
+                    [float(m), float(sequences.shape[1])],
+                    np.asarray(sequences, float).ravel(),
+                )
+            )
+    if isinstance(objective, DeclaredMixture):
+        declared = objective.gaussian_mixture_declaration
+        if declared is not None:
+            k, values = declared
+            return MIXTURE, np.concatenate(
+                ([float(k)], np.asarray(values, float).ravel())
+            )
     if isinstance(objective, DeclaredGaussian):
         precision = objective.gaussian_precision.detach().numpy()
         return GAUSSIAN, np.ascontiguousarray(precision, dtype=np.float64).reshape(-1)
@@ -74,3 +118,25 @@ class Power:
 
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
         return x**self.exponent
+
+
+@runtime_checkable
+class DeclaredJaxEnergy(Protocol):
+    """An objective whose energy is a traceable JAX ``(theta, data)`` function (issue #1008).
+
+    What :mod:`snakes_and_ladders.sample.hmc_jax` runs a chain on under
+    ``jit``; ``None`` where the objective has none at its current backend.
+    """
+
+    def jax_energy(self) -> tuple[Callable[[Any, Any], Any], Any] | None:
+        """``(energy, data)``, or ``None``."""
+        ...
+
+
+def declared_jax_energy(
+    objective: object,
+) -> tuple[Callable[[Any, Any], Any], Any] | None:
+    """The objective's traceable JAX energy and its data, or ``None`` if it declares none."""
+    if isinstance(objective, DeclaredJaxEnergy):
+        return objective.jax_energy()
+    return None

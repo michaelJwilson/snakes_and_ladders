@@ -150,11 +150,33 @@ def declares_gradient(objective: object) -> bool:
 
     A runtime-checkable protocol checks only that the attribute exists, and
     the phylogenetic objective's ``gradient`` is a property naming its route
-    (`likelihood.objective`), not a function of ``theta``.
+    (`likelihood.objective`), not a function of ``theta``. Read from the
+    class, so the answer is one per type (:func:`_routes`).
     """
-    return isinstance(objective, DeclaredGradient) and callable(
-        getattr(type(objective), "gradient", None)
-    )
+    return _routes(type(objective))[0]
+
+
+def _declares(kind: type, name: str) -> bool:
+    """Whether ``kind`` has a *method* ``name``: a class attribute that is callable."""
+    return callable(getattr(kind, name, None))
+
+
+#: :func:`_routes`' answers, by type.
+_ROUTES: dict[type, tuple[bool, bool]] = {}
+
+
+def _routes(kind: type) -> tuple[bool, bool]:
+    """``(declares gradient, declares value and gradient)`` for a type, resolved once (issue #1008).
+
+    What the runtime protocols answer, read from the class: an
+    ``isinstance`` against a runtime-checkable protocol walks its members on
+    every call, 16% of a Rosenbrock chain when it was asked per leapfrog step.
+    """
+    routes = _ROUTES.get(kind)
+    if routes is None:
+        routes = _declares(kind, "gradient"), _declares(kind, "value_and_gradient")
+        _ROUTES[kind] = routes
+    return routes
 
 
 def value_and_gradient(
@@ -166,14 +188,14 @@ def value_and_gradient(
     gradient beside a graph-free value where it declares that alone, and
     autograd through ``__call__`` otherwise.
     """
-    if isinstance(objective, DeclaredValueAndGradient):
-        return objective.value_and_gradient(theta)
-    if declares_gradient(objective):
-        assert isinstance(objective, DeclaredGradient)
+    gradient, together = _routes(type(objective))
+    if together:
+        return objective.value_and_gradient(theta)  # type: ignore[attr-defined, no-any-return]
+    if gradient:
         with torch.no_grad():
             value = objective(theta.detach())
-        return value, objective.gradient(theta.detach())
+        return value, objective.gradient(theta.detach())  # type: ignore[attr-defined]
     point = theta.detach().clone().requires_grad_(True)
     value = objective(point)
-    (gradient,) = torch.autograd.grad(value, point)
-    return value.detach(), gradient
+    (derivative,) = torch.autograd.grad(value, point)
+    return value.detach(), derivative

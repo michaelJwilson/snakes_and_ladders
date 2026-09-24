@@ -69,19 +69,21 @@ def coefficients(weights: tuple[float, ...]) -> np.ndarray:
 
 
 def integrate(
-    precision: np.ndarray,
+    precision: np.ndarray | None,
     position: np.ndarray,
     momentum: np.ndarray,
     step_size: float,
     n_steps: int,
     weights: tuple[float, ...],
+    *,
+    rosenbrock: tuple[float, float] | None = None,
 ) -> Trajectory:
-    """``n_steps`` steps of the composition ``weights`` in BlackJAX."""
+    """``n_steps`` steps of the composition ``weights`` in BlackJAX, on the Gaussian or on Rosenbrock's function."""
     result = run(
         SCRIPT,
         {
             "mode": np.asarray(0, dtype=np.int64),
-            "precision": np.ascontiguousarray(precision, dtype=np.float64),
+            **_target(precision, rosenbrock),
             "position": np.ascontiguousarray(position, dtype=np.float64),
             "momentum": np.ascontiguousarray(momentum, dtype=np.float64),
             "step_size": np.asarray(step_size, dtype=np.float64),
@@ -94,7 +96,7 @@ def integrate(
 
 
 def sample(
-    precision: np.ndarray,
+    precision: np.ndarray | None,
     position: np.ndarray,
     step_size: float,
     n_steps: int,
@@ -102,19 +104,23 @@ def sample(
     key: int,
     *,
     store_chain: bool = True,
+    rosenbrock: tuple[float, float] | None = None,
+    mixture: tuple[int, np.ndarray] | None = None,
+    hmm: tuple[int, np.ndarray] | None = None,
 ) -> Chain:
     """``n_draws`` BlackJAX HMC transitions at unit mass, from ``jax.random.key(key)``.
 
     ``key`` is the integer JAX builds its own PRNG key from, in the
     subprocess; no NumPy or torch generator crosses the boundary. With
     ``store_chain`` false no draw is kept and ``draws`` has zero rows
-    (issue #997).
+    (issue #997). ``rosenbrock = (a, b)`` targets Rosenbrock's function in
+    place of the Gaussian of ``precision`` (issue #1008).
     """
     result = run(
         SCRIPT,
         {
             "mode": np.asarray(1, dtype=np.int64),
-            "precision": np.ascontiguousarray(precision, dtype=np.float64),
+            **_target(precision, rosenbrock, mixture, hmm),
             "position": np.ascontiguousarray(position, dtype=np.float64),
             "step_size": np.asarray(step_size, dtype=np.float64),
             "n_steps": np.asarray(n_steps, dtype=np.int64),
@@ -176,9 +182,24 @@ def mala(
 
 
 def _target(
-    precision: np.ndarray | None, rosenbrock: tuple[float, float] | None
+    precision: np.ndarray | None,
+    rosenbrock: tuple[float, float] | None,
+    mixture: tuple[int, np.ndarray] | None = None,
+    hmm: tuple[int, np.ndarray] | None = None,
 ) -> dict[str, np.ndarray]:
-    """The script's target inputs: a Gaussian's precision or Rosenbrock's ``(a, b)``."""
+    """The script's target inputs: a Gaussian's precision, Rosenbrock's ``(a, b)``, a mixture's ``(k, values)`` or a Gaussian HMM's ``(m, sequences)``."""
+    if hmm is not None:
+        return {
+            "target": np.asarray(3, dtype=np.int64),
+            "n_states": np.asarray(hmm[0], dtype=np.int64),
+            "values": np.ascontiguousarray(hmm[1], dtype=np.float64),
+        }
+    if mixture is not None:
+        return {
+            "target": np.asarray(2, dtype=np.int64),
+            "n_components": np.asarray(mixture[0], dtype=np.int64),
+            "values": np.ascontiguousarray(mixture[1], dtype=np.float64),
+        }
     if rosenbrock is not None:
         return {
             "target": np.asarray(1, dtype=np.int64),
@@ -265,3 +286,61 @@ def replay(
         },
     )
     return Replay(result.outputs["draws"], result.outputs["uniforms"])
+
+
+@dataclass(frozen=True)
+class AdaptedChain:
+    """BlackJAX's HMC after ``window_adaptation``, and what the adaptation settled on."""
+
+    chain: Chain
+    step_size: float
+    inverse_mass_matrix: np.ndarray
+
+
+def adapted_sample(
+    position: np.ndarray,
+    step_size: float,
+    n_steps: int,
+    warmup: int,
+    n_draws: int,
+    key: int,
+    target_acceptance: float,
+    *,
+    precision: np.ndarray | None = None,
+    rosenbrock: tuple[float, float] | None = None,
+    mixture: tuple[int, np.ndarray] | None = None,
+    hmm: tuple[int, np.ndarray] | None = None,
+    store_chain: bool = True,
+) -> AdaptedChain:
+    """``blackjax.window_adaptation`` over ``warmup`` steps, then ``n_draws`` HMC transitions (issue #1008).
+
+    The warm-up and the draws are one compiled call, as the package's
+    compiled chain runs them.
+    """
+    result = run(
+        SCRIPT,
+        {
+            "mode": np.asarray(5, dtype=np.int64),
+            **_target(precision, rosenbrock, mixture, hmm),
+            "position": np.ascontiguousarray(position, dtype=np.float64),
+            "step_size": np.asarray(step_size, dtype=np.float64),
+            "n_steps": np.asarray(n_steps, dtype=np.int64),
+            "warmup": np.asarray(warmup, dtype=np.int64),
+            "n_draws": np.asarray(n_draws, dtype=np.int64),
+            "key": np.asarray(key, dtype=np.int64),
+            "target_acceptance": np.asarray(target_acceptance, dtype=np.float64),
+            "store_chain": np.asarray(store_chain),
+        },
+    )
+    out = result.outputs
+    return AdaptedChain(
+        Chain(
+            out["draws"].reshape(-1 if store_chain else 0, position.shape[0]),
+            float(out["acceptance"]),
+            result.seconds,
+            int(result.peak_bytes or 0),
+            int(out["first_peak_bytes"]),
+        ),
+        float(out["step_size"]),
+        np.asarray(out["inverse_mass_matrix"]),
+    )
