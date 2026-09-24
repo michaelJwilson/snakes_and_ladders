@@ -107,6 +107,12 @@ ANNEAL_SCHEDULE = ScheduleParams(ScheduleShape.EXPONENTIAL, ANNEAL_START, ANNEAL
 N_REPLICAS = 6
 
 
+#: The move sets :func:`run_annealed` runs on the compiled cluster route.
+_COMPILED_CLUSTERS = frozenset(
+    {PottsMove.SWENDSEN_WANG, PottsMove.GHOST_SPIN, PottsMove.LABEL_DIRECTED}
+)
+
+
 @dataclass(frozen=True)
 class Rung:
     """One instance of the comparison, and what can referee its energy.
@@ -428,6 +434,50 @@ def expansion_bracket(rung: Rung, expansion_energy: float) -> Bracket:
     return Bracket(expansion_energy / 2.0 - offset / 2.0, expansion_energy)
 
 
+def ends_labelling(rung: Rung, labelling: np.ndarray) -> np.ndarray:
+    """``labelling`` with every inner class moved to the ladder end its sites favour, at no higher energy (issue #1041).
+
+    **Why the optimum of a `spatio_only` rung at any class count is its
+    two-state one.** The field is ``h[i, m] = alpha[m] c_i``
+    (:func:`~snakes_and_ladders.sim.potts.spatio_only_field`), linear in the
+    class value. Take every site carrying one class ``k`` other than the
+    ladder's lowest and highest and give them all the lowest or the highest,
+    whichever ``sum_i c_i`` over them favours: the field term,
+    ``alpha[k] sum c_i``, is linear in ``alpha[k]`` and so no smaller at one
+    end of the ladder; a bond inside the set keeps its agreement, and a bond
+    leaving it agreed with nothing before and may agree now, which with
+    ``J >= 0`` lowers the energy or leaves it. Class by class, any labelling
+    maps to one on the two ends at no higher energy, so the minimum over all
+    classes is the minimum over two --- which a graph cut solves exactly.
+
+    Returns
+    -------
+    np.ndarray
+        The relabelled copy, carrying only the two end classes.
+
+    Raises
+    ------
+    ValueError
+        If the field is not ``alpha`` times one number per site, or a
+        coupling is negative, where the argument fails.
+    """
+    alpha = np.asarray(rung.alpha, dtype=float)
+    low, high = int(np.argmin(alpha)), int(np.argmax(alpha))
+    per_site = (rung.field[:, high] - rung.field[:, low]) / (alpha[high] - alpha[low])
+    if not np.allclose(rung.field, np.outer(per_site, alpha), rtol=0.0, atol=1e-12):
+        msg = "the field is not alpha times one number per site"
+        raise ValueError(msg)
+    if float(np.min(rung.graph.edge_coupling, initial=0.0)) < 0.0:
+        msg = "a negative coupling breaks the argument"
+        raise ValueError(msg)
+    moved = np.array(labelling, dtype=np.int64)
+    for inner in sorted(set(range(rung.n_states)) - {low, high}):
+        members = moved == inner
+        if members.any():
+            moved[members] = high if per_site[members].sum() >= 0.0 else low
+    return moved
+
+
 @dataclass(frozen=True)
 class MethodRun:
     """One method on one rung under one generator.
@@ -472,6 +522,12 @@ class MethodRun:
     termination: Termination | None = None
 
 
+def step_cost(rung: Rung, move: PottsMove) -> int:
+    """Site visits one step of ``move`` is budgeted at: a sweep's, and a ghost bond per site for the ghost-spin pass."""
+    extra = rung.n_nodes if move is PottsMove.GHOST_SPIN else 0
+    return rung.visits_per_sweep + extra
+
+
 def run_annealed(
     rung: Rung,
     budget: Budget,
@@ -490,24 +546,28 @@ def run_annealed(
     accumulated cluster size is a stop on the state, which `search/CLAUDE.md`
     refuses, and the underspend is reported as the finding it is.
 
+    The ghost-spin pass also reads one ghost bond per site, so its step costs
+    :func:`step_cost` and it runs fewer steps on the same budget (issue
+    #1041); every other move's step costs ``visits_per_sweep``.
+
     ``schedule``, ``steps`` and ``initial`` are what issue #1038 varies, and
     their defaults are the run above bitwise. ``steps`` replaces the count
     with one a caller fixed beforehand, still not read from the run's state;
     ``initial`` starts the chain from a labelling instead of a uniform draw.
     """
-    count = max(1, budget.size // rung.visits_per_sweep) if steps is None else steps
+    count = max(1, budget.size // step_cost(rung, move)) if steps is None else steps
     start = time.perf_counter()
     # Swendsen-Wang on the compiled pass: the same law on another order of
-    # draws, and the comparison reads no cluster counter (issue #923).
+    # draws, and the comparison reads no cluster counter (issue #923). The
+    # ghost-spin and label-directed passes merge their bonds on the compiled
+    # union-find, which returns the Python roots, so the chain (issue #1041).
     run = anneal_potts(
         rung.graph,
         rung.field,
         schedule.build(count),
         rng,
         move=move,
-        cluster_backend=Backend.RUST
-        if move is PottsMove.SWENDSEN_WANG
-        else Backend.PYTHON,
+        cluster_backend=Backend.RUST if move in _COMPILED_CLUSTERS else Backend.PYTHON,
         initial=initial,
     )
     return MethodRun(

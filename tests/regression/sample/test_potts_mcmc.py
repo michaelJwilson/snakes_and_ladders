@@ -114,6 +114,9 @@ THINNING = {
     # p = 0.0 with a mean cluster of 8.3 sites in 9, the near-percolating
     # cluster being exactly what correlates successive sweeps there.
     PottsMove.NIEDERMAYER: 25,
+    # A pass over every site, as Swendsen-Wang's is (issue #1041).
+    PottsMove.GHOST_SPIN: 5,
+    PottsMove.LABEL_DIRECTED: 5,
 }
 
 #: The NumPy gradient-informed sweeps cost seconds; 4,000 sweeps still expect
@@ -124,6 +127,8 @@ SWEEPS_BY_MOVE = {
     PottsMove.SWENDSEN_WANG: SWEEPS,
     PottsMove.WOLFF: SWEEPS,
     PottsMove.NIEDERMAYER: SWEEPS,
+    PottsMove.GHOST_SPIN: SWEEPS,
+    PottsMove.LABEL_DIRECTED: SWEEPS,
     PottsMove.LOCALLY_BALANCED: BALANCED_SWEEPS,
     PottsMove.GIBBS_WITH_GRADIENTS: BALANCED_SWEEPS,
 }

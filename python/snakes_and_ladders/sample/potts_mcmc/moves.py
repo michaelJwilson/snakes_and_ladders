@@ -25,6 +25,10 @@ class PottsMove(StrEnum):
     LOCALLY_BALANCED = "locally-balanced"
     GIBBS_WITH_GRADIENTS = "gibbs-with-gradients"
     NIEDERMAYER = "niedermayer"
+    # Issue #1041: the field as bonds to a ghost site per label, and
+    # Fortuin-Kasteleyn clusters proposed onto one label at a time.
+    GHOST_SPIN = "ghost-spin"
+    LABEL_DIRECTED = "label-directed"
 
 
 #: The move sets built on the Fortuin-Kasteleyn bond construction, which needs
@@ -33,7 +37,14 @@ class PottsMove(StrEnum):
 #: and a negation would have refused them with the clusters. Niedermayer's
 #: rule builds clusters on a coupling of either sign and is not in the set,
 #: which is the whole reason issue #756 adds it.
-_CLUSTER_MOVES = frozenset({PottsMove.SWENDSEN_WANG, PottsMove.WOLFF})
+_CLUSTER_MOVES = frozenset(
+    {
+        PottsMove.SWENDSEN_WANG,
+        PottsMove.WOLFF,
+        PottsMove.GHOST_SPIN,
+        PottsMove.LABEL_DIRECTED,
+    }
+)
 
 
 class MoveKind(StrEnum):
