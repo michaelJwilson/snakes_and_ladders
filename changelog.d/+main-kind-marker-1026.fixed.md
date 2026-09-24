@@ -1,0 +1,1 @@
+`tests/regression/likelihood/test_surrogate.py::test_least_squares_lengths_are_bitwise_across_repeated_calls` takes the `smoke` kind beside `bug`, so `test_test_kinds.py` passes on `main` again after #1027 merged one commit before its fix (#1026).
