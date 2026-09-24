@@ -52,6 +52,8 @@ from snakes_and_ladders.sim.ldpc import (
     generator_matrix,
 )
 
+from tests._rows import every_row, every_value
+
 #: Agreement between the decoder and the general implementation at a shared
 #: fixed point: same arithmetic in a different order, both run to a message
 #: residual of 1e-12. Realized 4.6e-11 on the worst of the six loopy fixtures.
@@ -133,44 +135,45 @@ def test_sum_product_is_exact_on_a_cycle_free_code(channel: Channel) -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("seed", [2, 3, 4])
-def test_min_sum_is_max_product_and_the_ml_codeword_on_a_cycle_free_code(
-    seed: int,
-) -> None:
+def test_min_sum_is_max_product_and_the_ml_codeword_on_a_cycle_free_code() -> None:
     """On the caterpillar code min-sum's max-marginals equal the tree-schedule
     max-product's and its decision is the enumerated ML codeword, whose margin
     over the runner-up is pinned above 0.1 nats so no tie is being broken."""
-    code = _caterpillar(7, 4)
-    llr = all_zero_transmission(
-        code, BinaryInputGaussianChannel(1.0), np.random.default_rng(seed)
-    )
 
-    decoded = decode(
-        code,
-        llr,
-        algorithm=DecodingAlgorithm.MIN_SUM,
-        early_stop=False,
-        max_iterations=20,
-        tolerance=1e-14,
-    )
-    assignment, general = max_product(
-        from_parity_check(code, llr), schedule=MessageScheduleName.TREE
-    )
-    exact = exact_decoding(code, llr)
+    def check(seed: int) -> None:
+        code = _caterpillar(7, 4)
+        llr = all_zero_transmission(
+            code, BinaryInputGaussianChannel(1.0), np.random.default_rng(seed)
+        )
 
-    scores = np.sort(-(enumerate_codewords(code).astype(float) @ llr))
-    assert scores[-1] - scores[-2] > 0.1
-    assert decoded.estimate is MapEstimate.BLOCKWISE
-    np.testing.assert_allclose(
-        decoded.posterior_llr,
-        _general_llr(general.variable, code.n_bits),
-        rtol=0,
-        atol=TREE_TOLERANCE,
-    )
-    np.testing.assert_array_equal(decoded.bits, exact.ml_codeword)
-    np.testing.assert_array_equal(
-        decoded.bits, [assignment[f"x{i}"] for i in range(code.n_bits)]
-    )
+        decoded = decode(
+            code,
+            llr,
+            algorithm=DecodingAlgorithm.MIN_SUM,
+            early_stop=False,
+            max_iterations=20,
+            tolerance=1e-14,
+        )
+        assignment, general = max_product(
+            from_parity_check(code, llr), schedule=MessageScheduleName.TREE
+        )
+        exact = exact_decoding(code, llr)
+
+        scores = np.sort(-(enumerate_codewords(code).astype(float) @ llr))
+        assert scores[-1] - scores[-2] > 0.1
+        assert decoded.estimate is MapEstimate.BLOCKWISE
+        np.testing.assert_allclose(
+            decoded.posterior_llr,
+            _general_llr(general.variable, code.n_bits),
+            rtol=0,
+            atol=TREE_TOLERANCE,
+        )
+        np.testing.assert_array_equal(decoded.bits, exact.ml_codeword)
+        np.testing.assert_array_equal(
+            decoded.bits, [assignment[f"x{i}"] for i in range(code.n_bits)]
+        )
+
+    every_value([2, 3, 4], check)
 
 
 @pytest.mark.oracle
@@ -364,16 +367,19 @@ def test_the_996_bit_code_on_the_erasure_channel_either_side_of_the_threshold() 
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize(("degrees", "published"), sorted(PUBLISHED_THRESHOLD.items()))
-def test_the_erasure_threshold_matches_its_published_value(
-    degrees: tuple[int, int], published: float
-) -> None:
+def test_the_erasure_threshold_matches_its_published_value() -> None:
     """Bisection on `eq:density-evolution` reproduces the published (3,6), (4,8)
     and (3,5) thresholds to 5e-4."""
-    assert (
-        abs(erasure_threshold(*degrees, iterations=2000, precision=1e-4) - published)
-        < 5e-4
-    )
+
+    def check(degrees: tuple[int, int], published: float) -> None:
+        assert (
+            abs(
+                erasure_threshold(*degrees, iterations=2000, precision=1e-4) - published
+            )
+            < 5e-4
+        )
+
+    every_row(sorted(PUBLISHED_THRESHOLD.items()), check)
 
 
 @pytest.mark.analytic

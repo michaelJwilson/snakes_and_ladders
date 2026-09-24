@@ -44,6 +44,8 @@ from snakes_and_ladders.sim.convolutional import (
 from snakes_and_ladders.sim.factor_graph import Factor, FactorGraph, from_trellis
 from snakes_and_ladders.sim.ldpc import BinaryInputGaussianChannel
 
+from tests._rows import every_value
+
 #: Agreement with an exact answer on a log-odds ratio. Measured at 2.8e-14
 #: against enumeration and 2.7e-15 against the tree schedule at the sizes
 #: below; five orders of margin, so a real disagreement fails and rounding
@@ -70,10 +72,7 @@ def _received(
 
 @pytest.mark.oracle
 @pytest.mark.parametrize("backend", [Backend.PYTHON, Backend.RUST])
-@pytest.mark.parametrize("message_length", [6, 10])
-def test_bcjr_posteriors_are_the_exact_bitwise_map(
-    message_length: int, backend: Backend
-) -> None:
+def test_bcjr_posteriors_are_the_exact_bitwise_map(backend: Backend) -> None:
     """The forward-backward ratio equals the sum over all `2 ** K` messages.
 
     The whole claim of the decoder: no approximation is involved on a
@@ -82,24 +81,28 @@ def test_bcjr_posteriors_are_the_exact_bitwise_map(
     backends are held to it, so the enumeration referees the port rather
     than the port's agreement with the oracle standing in for it.
     """
-    trellis = recursive_systematic_trellis(FEEDBACK, FEEDFORWARD, MEMORY)
-    rng = np.random.default_rng(233)
 
-    for _ in range(5):
-        message = rng.integers(0, 2, message_length).astype(np.uint8)
-        systematic, parity = _received(trellis, message, 0.9, rng)
+    def check(message_length: int) -> None:
+        trellis = recursive_systematic_trellis(FEEDBACK, FEEDFORWARD, MEMORY)
+        rng = np.random.default_rng(233)
 
-        decoding = bcjr(trellis, systematic, parity, backend=backend)
-        exact = exact_bitwise_posterior(trellis, systematic, parity, message_length)
+        for _ in range(5):
+            message = rng.integers(0, 2, message_length).astype(np.uint8)
+            systematic, parity = _received(trellis, message, 0.9, rng)
 
-        np.testing.assert_allclose(
-            decoding.posterior_llr[:message_length],
-            exact.posterior_llr,
-            atol=EXACT_TOLERANCE,
-        )
-        assert decoding.log_evidence == pytest.approx(
-            exact.log_evidence, abs=EXACT_TOLERANCE
-        )
+            decoding = bcjr(trellis, systematic, parity, backend=backend)
+            exact = exact_bitwise_posterior(trellis, systematic, parity, message_length)
+
+            np.testing.assert_allclose(
+                decoding.posterior_llr[:message_length],
+                exact.posterior_llr,
+                atol=EXACT_TOLERANCE,
+            )
+            assert decoding.log_evidence == pytest.approx(
+                exact.log_evidence, abs=EXACT_TOLERANCE
+            )
+
+    every_value([6, 10], check)
 
 
 @pytest.mark.oracle

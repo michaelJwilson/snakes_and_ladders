@@ -62,6 +62,7 @@ from snakes_and_ladders.sim.spatio_sequential import simulate_spatio_sequential
 from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import SMALL_SITES, load_fixture
+from tests._rows import every_row, every_value
 from tests.regression.likelihood.conftest import (
     CHAIN_CASES,
     FIELD,
@@ -168,14 +169,16 @@ def test_flooding_refuses_when_it_has_not_converged() -> None:
 
 
 @pytest.mark.smoke
-@pytest.mark.parametrize("damping", [-0.1, 1.0])
-def test_damping_outside_the_unit_interval_is_refused(damping: float) -> None:
-    with pytest.raises(ValueError, match="damping"):
-        sum_product(
-            from_potts(LOOPY, FIELD),
-            schedule=MessageScheduleName.FLOODING,
-            damping=damping,
-        )
+def test_damping_outside_the_unit_interval_is_refused() -> None:
+    def check(damping: float) -> None:
+        with pytest.raises(ValueError, match="damping"):
+            sum_product(
+                from_potts(LOOPY, FIELD),
+                schedule=MessageScheduleName.FLOODING,
+                damping=damping,
+            )
+
+    every_value([-0.1, 1.0], check)
 
 
 # --- the chain shape ------------------------------------------------------------
@@ -183,65 +186,73 @@ def test_damping_outside_the_unit_interval_is_refused(damping: float) -> None:
 
 @pytest.mark.critical
 @pytest.mark.oracle
-@pytest.mark.parametrize(("n_states", "n_symbols", "length", "seed"), CHAIN_CASES)
-def test_every_chain_evaluator_is_the_path_enumeration(
-    n_states: int, n_symbols: int, length: int, seed: int
-) -> None:
+def test_every_chain_evaluator_is_the_path_enumeration() -> None:
     # One table, one referee (issue #982 merged five tests over these four
     # chains): `hmm_paths.enumerate_hidden_paths` sums every path, and each
     # evaluator below shares no code with it.
-    params = random_hmm(n_states, n_symbols, length, seed)
-    observations = np.random.default_rng(seed).integers(0, n_symbols, size=length)
-    enumerated = enumerate_hidden_paths(params, observations)
-    log_density = emission_log_density(params, observations)
-    log_initial, log_transition = np.log(params.initial), np.log(params.transition)
+    def check(n_states: int, n_symbols: int, length: int, seed: int) -> None:
+        params = random_hmm(n_states, n_symbols, length, seed)
+        observations = np.random.default_rng(seed).integers(0, n_symbols, size=length)
+        enumerated = enumerate_hidden_paths(params, observations)
+        log_density = emission_log_density(params, observations)
+        log_initial, log_transition = np.log(params.initial), np.log(params.transition)
 
-    # `opt.hmm`'s forward recursion: the check that the enumeration sums the
-    # model it claims to.
-    forward = forward_log_likelihood(
-        torch.from_numpy(observations[None, :]),
-        torch.log(torch.from_numpy(params.initial)),
-        torch.log(torch.from_numpy(params.transition)),
-        torch.log(torch.from_numpy(params.emission)),
-    )
-    assert enumerated.log_likelihood == pytest.approx(float(forward), rel=1e-12)
+        # `opt.hmm`'s forward recursion: the check that the enumeration sums the
+        # model it claims to.
+        forward = forward_log_likelihood(
+            torch.from_numpy(observations[None, :]),
+            torch.log(torch.from_numpy(params.initial)),
+            torch.log(torch.from_numpy(params.transition)),
+            torch.log(torch.from_numpy(params.emission)),
+        )
+        assert enumerated.log_likelihood == pytest.approx(float(forward), rel=1e-12)
 
-    # Forward--backward: evidence, posterior, and the pairwise marginals
-    # summing to the posterior on either side.
-    run = forward_backward(log_density, log_initial, log_transition)
-    assert abs(run.log_evidence - enumerated.log_likelihood) < 1e-12 * abs(
-        enumerated.log_likelihood
-    )
-    np.testing.assert_allclose(
-        run.posterior, enumerated.posterior, rtol=1e-11, atol=1e-13
-    )
-    np.testing.assert_allclose(run.pairwise.sum(axis=(1, 2)), 1.0, rtol=1e-12)
-    np.testing.assert_allclose(run.pairwise.sum(axis=2), run.posterior[:-1], rtol=1e-11)
-    np.testing.assert_allclose(run.pairwise.sum(axis=1), run.posterior[1:], rtol=1e-11)
+        # Forward--backward: evidence, posterior, and the pairwise marginals
+        # summing to the posterior on either side.
+        run = forward_backward(log_density, log_initial, log_transition)
+        assert abs(run.log_evidence - enumerated.log_likelihood) < 1e-12 * abs(
+            enumerated.log_likelihood
+        )
+        np.testing.assert_allclose(
+            run.posterior, enumerated.posterior, rtol=1e-11, atol=1e-13
+        )
+        np.testing.assert_allclose(run.pairwise.sum(axis=(1, 2)), 1.0, rtol=1e-12)
+        np.testing.assert_allclose(
+            run.pairwise.sum(axis=2), run.posterior[:-1], rtol=1e-11
+        )
+        np.testing.assert_allclose(
+            run.pairwise.sum(axis=1), run.posterior[1:], rtol=1e-11
+        )
 
-    # Sum- and max-product on the chain's factor graph, on the default route,
-    # which is the Rust kernel: the marginals and `log Z`, and Viterbi.
-    graph = from_hmm(log_initial, log_transition, log_density)
-    result = sum_product(graph)
-    assert result.exact
-    assert math.isclose(result.log_partition, enumerated.log_likelihood, rel_tol=1e-13)
-    posterior = np.stack([result.variable[f"z{t}"] for t in range(length)])
-    np.testing.assert_allclose(posterior, enumerated.posterior, rtol=RTOL, atol=ATOL)
-    assignment, marginals = max_product(graph)
-    path = np.array([assignment[f"z{t}"] for t in range(length)])
-    np.testing.assert_array_equal(path, enumerated.viterbi)
-    assert math.isclose(
-        marginals.log_partition, enumerated.viterbi_log_probability, rel_tol=1e-13
-    )
+        # Sum- and max-product on the chain's factor graph, on the default route,
+        # which is the Rust kernel: the marginals and `log Z`, and Viterbi.
+        graph = from_hmm(log_initial, log_transition, log_density)
+        result = sum_product(graph)
+        assert result.exact
+        assert math.isclose(
+            result.log_partition, enumerated.log_likelihood, rel_tol=1e-13
+        )
+        posterior = np.stack([result.variable[f"z{t}"] for t in range(length)])
+        np.testing.assert_allclose(
+            posterior, enumerated.posterior, rtol=RTOL, atol=ATOL
+        )
+        assignment, marginals = max_product(graph)
+        path = np.array([assignment[f"z{t}"] for t in range(length)])
+        np.testing.assert_array_equal(path, enumerated.viterbi)
+        assert math.isclose(
+            marginals.log_partition, enumerated.viterbi_log_probability, rel_tol=1e-13
+        )
 
-    # The NumPy route against the dictionary reference, bitwise (issue #341).
-    _assert_same_marginals(
-        sum_product(graph, backend=Backend.PYTHON), reference.sum_product(graph)
-    )
-    assignment, marginals = max_product(graph, backend=Backend.PYTHON)
-    expected_assignment, expected = reference.max_product(graph)
-    assert assignment == expected_assignment
-    _assert_same_marginals(marginals, expected)
+        # The NumPy route against the dictionary reference, bitwise (issue #341).
+        _assert_same_marginals(
+            sum_product(graph, backend=Backend.PYTHON), reference.sum_product(graph)
+        )
+        assignment, marginals = max_product(graph, backend=Backend.PYTHON)
+        expected_assignment, expected = reference.max_product(graph)
+        assert assignment == expected_assignment
+        _assert_same_marginals(marginals, expected)
+
+    every_row(CHAIN_CASES, check)
 
 
 # --- the tree shape -------------------------------------------------------------
