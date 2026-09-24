@@ -27,6 +27,11 @@ filter is evaluated on them at the current ``phi`` when :meth:`KalmanMean.estima
 is called, exactly what the recursion at that ``phi`` would give. ``phi`` is
 held inside ``(-PHI_BOUND, PHI_BOUND)`` so the variance stays finite on a
 chain that has not moved.
+
+**NumPy in, NumPy out.** The filter takes no derivative, so it holds no
+autodiff type (issue #1011): :meth:`KalmanMean.update` and
+:meth:`KalmanMean.update_block` take array-likes, and :class:`Expectation`
+holds ``np.ndarray``.
 """
 
 from __future__ import annotations
@@ -34,7 +39,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-import torch
+from numpy.typing import ArrayLike
 
 #: The largest ``|phi|`` the estimate uses: at 0.999 the long-run variance is
 #: 1,999 times the marginal one, beyond what a chain of the lengths run here
@@ -47,13 +52,26 @@ class Expectation:
     """``E f`` estimated from a stream of ``f(theta_t)``, per output coordinate."""
 
     #: The posterior mean of ``mu``.
-    mean: torch.Tensor
+    mean: np.ndarray
     #: Its posterior standard deviation under the AR(1) noise model.
-    standard_error: torch.Tensor
+    standard_error: np.ndarray
     #: The lag-one autocorrelation the noise model used.
-    phi: torch.Tensor
+    phi: np.ndarray
     #: Observations taken.
     n: int
+
+
+def _running(total: np.ndarray, terms: np.ndarray) -> np.ndarray:
+    """``total + terms[0] + terms[1] + ...``, added one row at a time, left to right.
+
+    The order :meth:`KalmanMean.update` adds in, so a block is summed
+    bitwise as its rows one at a time would be: ``cumsum`` accumulates
+    sequentially, where ``sum`` over an axis may reorder (pairwise, or
+    torch's cascade before issue #1011).
+    """
+    running = np.cumsum(np.concatenate((total[None], terms)), axis=0)
+    last: np.ndarray = running[-1]
+    return last
 
 
 class KalmanMean:
@@ -66,11 +84,11 @@ class KalmanMean:
 
     def __init__(self) -> None:
         self.n = 0
-        self._sum: torch.Tensor | None = None
-        self._squares: torch.Tensor | None = None
-        self._lagged: torch.Tensor | None = None
-        self._first: torch.Tensor | None = None
-        self._last: torch.Tensor | None = None
+        self._sum: np.ndarray | None = None
+        self._squares: np.ndarray | None = None
+        self._lagged: np.ndarray | None = None
+        self._first: np.ndarray | None = None
+        self._last: np.ndarray | None = None
 
     @classmethod
     def from_statistics(
@@ -81,23 +99,24 @@ class KalmanMean:
         """A filter holding statistics kept elsewhere: ``n``, the sums of ``y``, ``y^2``, ``y_t y_(t-1)``, and the first and last ``y``.
 
         What a compiled chain hands back instead of its draws (issue #1006).
+        The arrays are held, not copied.
         """
         kalman = cls()
         if n:
-            total, squares, lagged, first, last = (torch.from_numpy(v) for v in sums)
+            total, squares, lagged, first, last = (np.asarray(v) for v in sums)
             kalman.n = n
             kalman._sum, kalman._squares, kalman._lagged = total, squares, lagged
             kalman._first, kalman._last = first, last
         return kalman
 
-    def update(self, value: torch.Tensor) -> None:
+    def update(self, value: ArrayLike) -> None:
         """Take one observation, of any fixed shape."""
-        y = torch.as_tensor(value, dtype=torch.float64).detach().reshape(-1)
+        y = np.asarray(value, dtype=np.float64).reshape(-1)
         if self._last is None:
-            self._sum = y.clone()
+            self._sum = y.copy()
             self._squares = y * y
-            self._lagged = torch.zeros_like(y)
-            self._first = y.clone()
+            self._lagged = np.zeros_like(y)
+            self._first = y.copy()
         else:
             assert self._sum is not None
             assert self._squares is not None
@@ -105,18 +124,17 @@ class KalmanMean:
             self._sum += y
             self._squares += y * y
             self._lagged += y * self._last
-        self._last = y.clone()
+        self._last = y.copy()
         self.n += 1
 
-    def update_block(self, values: torch.Tensor) -> None:
+    def update_block(self, values: ArrayLike) -> None:
         """Take ``values.shape[0]`` observations at once, in order (issue #1006).
 
-        The sums :meth:`update` keeps, formed over the block in one pass, so
-        a compiled chain handing back draws in blocks is observed as it would
-        be one draw at a time --- to rounding in the summation order, not
-        bitwise.
+        The sums :meth:`update` keeps, added in its order, so a compiled
+        chain handing back draws in blocks is observed bitwise as it would
+        be one draw at a time (issue #1011).
         """
-        y = torch.as_tensor(values, dtype=torch.float64).detach()
+        y = np.asarray(values, dtype=np.float64)
         y = y.reshape(y.shape[0], -1)
         if y.shape[0] == 0:
             return
@@ -129,10 +147,11 @@ class KalmanMean:
         assert self._squares is not None
         assert self._lagged is not None
         assert self._last is not None
-        self._sum += y.sum(dim=0)
-        self._squares += (y * y).sum(dim=0)
-        self._lagged += y[0] * self._last + (y[1:] * y[:-1]).sum(dim=0)
-        self._last = y[-1].clone()
+        previous = np.concatenate((self._last[None], y[:-1]))
+        self._sum = _running(self._sum, y)
+        self._squares = _running(self._squares, y * y)
+        self._lagged = _running(self._lagged, y * previous)
+        self._last = y[-1].copy()
         self.n += int(y.shape[0])
 
     def estimate(self) -> Expectation:
@@ -160,14 +179,14 @@ class KalmanMean:
         tail = self._sum - self._first
         gamma1 = (self._lagged - mean * (head + tail) + (n - 1) * mean * mean) / (n - 1)
         moving = gamma0 > 0.0
-        phi = torch.where(
+        phi = np.where(
             moving,
-            (gamma1 / torch.where(moving, gamma0, 1.0)).clamp(-PHI_BOUND, PHI_BOUND),
-            torch.zeros_like(gamma0),
+            np.clip(gamma1 / np.where(moving, gamma0, 1.0), -PHI_BOUND, PHI_BOUND),
+            np.zeros_like(gamma0),
         )
         gain = 1.0 - phi
-        noise = (gamma0 * (1.0 - phi * phi)).clamp(min=0.0)
+        noise = np.maximum(gamma0 * (1.0 - phi * phi), 0.0)
         whitened = tail - phi * head
         mu = whitened / ((n - 1) * gain)
         variance = noise / ((n - 1) * gain * gain)
-        return Expectation(mean=mu, standard_error=variance.sqrt(), phi=phi, n=n)
+        return Expectation(mean=mu, standard_error=np.sqrt(variance), phi=phi, n=n)
