@@ -1,15 +1,9 @@
 """The spatial seams under a covariate, on a fixture that carries one (#658 item 5).
 
-`test_covariate_reaches_the_fit.py`'s spatial test could assert only that the
-seams run: the canonical instance is categorical and refuses a covariate, so
-there was no fixture to make the claim against. This is that fixture — a
-count-pair instance whose params carry a varying covariate — and the claims it
-makes are the ones that one could not.
-
-`external_field` is the seam this exists for. It scores through its own
-`log_density`, and `fit_spatio_sequential` hands it a posterior computed *with*
-the covariate, so before #658 the two halves of one step disagreed about the
-model and nothing failed.
+The canonical instance is categorical, so `test_covariate_reaches_the_fit.py`
+could assert only that the seams run; this count-pair instance carries a
+varying covariate. `external_field` scored through its own `log_density` while
+`fit_spatio_sequential` handed it a posterior computed with the covariate.
 """
 
 from __future__ import annotations
@@ -42,9 +36,7 @@ def _instance() -> tuple[SpatioSequentialParams, np.ndarray, np.ndarray]:
 def _covariate(observations: np.ndarray, spread: float) -> np.ndarray:
     """A per-vertex exposure and a trial count that covers the drawn successes.
 
-    The two channels are drawn from separate streams, so a trial count taken
-    from the total scores `-inf` wherever the successes exceeded it and every
-    comparison below comes back `nan`.
+    Separate streams: a trial count from the total would score `-inf`.
     """
     n_positions, n_nodes = observations.shape[:2]
     rng = np.random.default_rng(19)
@@ -59,10 +51,7 @@ def _covariate(observations: np.ndarray, spread: float) -> np.ndarray:
 def test_every_spatial_seam_changes_when_the_covariate_does() -> None:
     """The claim the replaced test named and could not make.
 
-    Four seams, each asserted to move: three score through their own
-    `log_density` and the fourth is the differentiable one. A seam that
-    silently dropped the covariate would pass an `isfinite` and fail here,
-    which is the whole difference between this and what it replaces.
+    Four seams, each asserted to move; a dropped covariate passes `isfinite`.
     """
     params, observations, labels = _instance()
     covaried = replace(params, covariate=_covariate(observations, spread=4.0))
@@ -90,11 +79,7 @@ def test_every_spatial_seam_changes_when_the_covariate_does() -> None:
 def test_the_field_and_the_posterior_agree_about_the_model() -> None:
     """The defect: a field scored without the covariate the posterior was scored with.
 
-    `external_field` takes a `posterior` argument, and the fit passes one
-    computed under `params`. Asserted as the property that failure broke: the
-    field under a covariate is not the field without one, *given the same
-    posterior*. Before #658 the two were equal, max `|diff|` `0.000e+00`,
-    because the field ignored what the posterior had conditioned on.
+    Given the same posterior, the field moves with the covariate (was `0.000e+00`).
     """
     params, observations, labels = _instance()
     covaried = replace(params, covariate=_covariate(observations, spread=4.0))
@@ -113,10 +98,7 @@ def test_the_field_and_the_posterior_agree_about_the_model() -> None:
 def test_a_neutral_covariate_leaves_every_seam_where_it_was() -> None:
     """The other half: what the covariate does nothing to, it does nothing to.
 
-    Neutral is an exposure of one and the families' own declared trials, not
-    ones on both channels. Compared to the declared tolerance rather than
-    bitwise: the covaried path multiplies by one and divides by the same
-    trials, which is the same arithmetic in a different order.
+    Neutral: exposure one, declared trials; to tolerance, as the order differs.
     """
     params, observations, labels = _instance()
     family = params.emissions[0]

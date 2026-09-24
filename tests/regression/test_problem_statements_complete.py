@@ -1,20 +1,11 @@
 """Every problem statement in the textbook carries the five parts (issue #376).
 
-The textbook's Notation section states the shape a problem statement takes:
-the model, the sizes it is supported at, the model as a factor graph with a
-sketch of that structure, the algorithms cited from the appendix, and the
-validation. Before this guard one of the sections carried all five and
-the rest carried between two and four, and nothing said so --- a section
-missing its sizes or its validation reads as complete, because what is absent
-leaves no mark on the page.
-
-Five labels make each part checkable, and the convention is stated in
-``docs/CLAUDE.md``: ``sec:<p>:model``, ``par:<p>:sizes``,
-``sec:<p>:validation``, an ``\\input{<p>_figure}`` whose file exists and
-defines ``fig:<p>:sketch``, and at least one ``\\ref{alg:...}`` in the
-section's own text. A label is used rather than a heading because a heading
-is broken by the next retitle, which is the rule ``docs/CLAUDE.md`` already
-states for citations from code.
+The textbook's Notation section states them: the model, its supported sizes,
+the factor graph with a sketch, the cited algorithms, and the validation. One
+section carried all five and the rest two to four. Labels make each checkable
+(``docs/CLAUDE.md``): ``sec:<p>:model``, ``par:<p>:sizes``,
+``sec:<p>:validation``, an ``\\input{<p>_figure}`` defining ``fig:<p>:sketch``,
+and a ``\\ref{alg:...}`` in the section's own text.
 """
 
 from __future__ import annotations
@@ -29,31 +20,17 @@ from tests._paths import REPO_ROOT
 TEX = REPO_ROOT / "docs" / "tex"
 TEXTBOOK = TEX / "textbook.tex"
 
-#: What a catalogue key that **shares** a section must state of its own, as the
-#: label of the sub-part stating it.
-#:
-#: The guard below checks one statement per stem, so a key sharing a stem with
-#: another was invisible to it: `spatio_sequential_counts`,
-#: `spatio_sequential_ragged` and `ragged_hmm` all resolve to a section whose
-#: five parts were complete, while the model each declares was stated nowhere
-#: (issue #681). A key here names the part that states it, so the next shared
-#: key is caught by a failing test rather than by an audit.
-#:
-#: A key absent from this mapping is one whose section states it under the five
-#: parts already --- `tree_jc` under `sec:phylo`, say --- which is why this is a
-#: mapping and not a requirement on every key.
+#: A catalogue key sharing a section, and the label of the sub-part stating
+#: its own model: one check per stem missed three such keys (issue #681). A
+#: key absent here is stated under the five parts already.
 SHARED_KEYS: dict[str, str] = {
     "spatio_sequential_counts": "par:coupled:pairs",
     "spatio_sequential_ragged": "par:coupled:ragged",
     "ragged_hmm": "par:hmm:ragged",
 }
 
-#: Sections whose own text states every instance they carry, so a key sharing
-#: one needs no sub-part: `sec:phylo` names the Jukes--Cantor and
-#: general-time-reversible trees and the scaled instance together, `sec:potts`
-#: its chain, lattice and per-site-field cases, `sec:ldpc` its three codes, and
-#: `sec:frustrated` both the triangular antiferromagnet and the planted glass,
-#: each at the sizes declared there.
+#: Sections whose own text states every instance they carry at the declared
+#: sizes (`sec:phylo`, `sec:potts`, `sec:ldpc`, `sec:frustrated`).
 STATED_IN_SIZES = frozenset({"sec:phylo", "sec:potts", "sec:ldpc", "sec:frustrated"})
 
 #: The problem statements, by the stem their labels and figure file use. A
@@ -79,18 +56,7 @@ _ALGORITHM_CITATION = re.compile(r"\\ref\{alg:[a-z0-9-]+\}")
 def problem_section(stem: str, text: str | None = None) -> str:
     """The text of one problem statement, from its ``\\label`` to the next section.
 
-    Parameters
-    ----------
-    stem : str
-        The problem's stem, as in :data:`PROBLEMS`.
-    text : str | None
-        The textbook source. ``None`` reads the committed file.
-
-    Returns
-    -------
-    str
-        Everything from the section's label to the start of the next
-        ``\\section``, which is the span the five parts must sit inside.
+    ``text=None`` reads the committed textbook.
     """
     source = TEXTBOOK.read_text() if text is None else text
     start = source.index(f"\\label{{sec:{stem}}}")
@@ -168,11 +134,8 @@ def test_the_guard_reads_one_section_and_not_the_next() -> None:
 @pytest.mark.infra
 @pytest.mark.parametrize(("key", "part"), sorted(SHARED_KEYS.items()))
 def test_a_key_sharing_a_section_states_what_is_its_own(key: str, part: str) -> None:
-    # The gap #681 names. `spatio_sequential_counts` and `sec:coupled`'s other
-    # key resolve to one section, and a guard that checks one statement per
-    # stem passes while the covariate contract and the unequal lengths are
-    # stated nowhere. The part is asserted inside its own section's span, so a
-    # label that drifted into a neighbouring section fails here too.
+    # The gap #681 names, asserted inside the section's own span, so a label
+    # drifted into a neighbouring section fails too.
     stem = part.split(":")[1]
     section = problem_section(stem)
 
@@ -182,20 +145,13 @@ def test_a_key_sharing_a_section_states_what_is_its_own(key: str, part: str) -> 
 @pytest.mark.critical
 @pytest.mark.infra
 def test_every_shared_catalogue_key_is_covered() -> None:
-    # The mapping above is a guard only if it covers what `PROBLEMS.md`
-    # declares. Read from the catalogue rather than from a list, so a key added
-    # there cannot drift away from the statement that has to state it: every
-    # key sharing a section with another is either named in `SHARED_KEYS` or
-    # sits in a section whose own sizes paragraph states its instances.
+    # Read from the catalogue: every key sharing a section is in `SHARED_KEYS`
+    # or in a section whose sizes paragraph states its instances.
     by_statement = catalogue.statements()
 
     assert by_statement, "no catalogue rows parsed from PROBLEMS.md"
-    # The **principal** instance of a statement is the first key of its first
-    # row: the one the section's five parts are about. The catalogue's own
-    # reading gives this --- "a row with two keys is one problem declared at
-    # two instances", and a second row on one statement is a second problem
-    # sharing a section. Every other key declares something the five parts do
-    # not, so it needs a sub-part or a section that states its instances.
+    # The principal instance is the first key of a statement's first row;
+    # every other key declares something the five parts do not.
     uncovered = {
         key: statement
         for statement, keys in by_statement.items()

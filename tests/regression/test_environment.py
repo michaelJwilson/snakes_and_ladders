@@ -53,17 +53,7 @@ def test_the_environment_carries_every_package_the_repository_assumes() -> None:
 def test_a_shared_environment_carries_every_declared_requirement() -> None:
     """Nothing declared is missing from an environment the worktrees share.
 
-    The test above names the handful an import failure has already been traced
-    to. This asks the whole question `pyproject.toml` answers, because the
-    narrowing does not take packages one at a time: the `uv sync` that removed
-    `gymnasium` removed `ruff`, `mypy`, `sphinx`, `nbformat` and eleven others
-    with it, and each was found only when something reached for it hours apart.
-
-    It runs only where the `.venv` is a symlink, which is what makes an
-    environment shared and the damage everyone's. CI builds a real directory
-    per job, deliberately narrow --- `python-tests` installs `test` and
-    no more --- so there the question has no answer to give
-    and the test skips rather than asserting a falsehood.
+    One `uv sync` removed `gymnasium`, `ruff`, `mypy` and 13 more; needs a symlinked `.venv`.
     """
     if not (REPO_ROOT / ".venv").is_symlink():
         pytest.skip("not a shared environment: CI installs one extra set per job")
@@ -85,10 +75,7 @@ def test_a_shared_environment_carries_every_declared_requirement() -> None:
 def test_the_package_under_test_is_this_worktrees_own() -> None:
     """The import resolves inside this tree, not a sibling's working copy.
 
-    `infra/new_worktree.sh` checks this at creation, with `PYTHONPATH` set. It
-    is checked again here because the fault appears *later*, when a sibling
-    repoints the shared editable install, and at that point no creation-time
-    check can see it.
+    Rechecked after `infra/new_worktree.sh`: a sibling can repoint the install later.
     """
     import snakes_and_ladders
 

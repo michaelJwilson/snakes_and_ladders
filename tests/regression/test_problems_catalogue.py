@@ -27,10 +27,7 @@ PACKAGE = "snakes_and_ladders."
 def _resolves(symbol: str) -> bool:
     """A repository path, an importable module, or a symbol one defines.
 
-    The module is tried first: `Defines` names a module wherever the module
-    belongs to one problem, and a submodule is not an attribute of its package
-    until something imports it, so the attribute reading alone refuses
-    `learn.hmm` (issue #640).
+    Module first: an unimported submodule is not an attribute (`learn.hmm`, #640).
     """
     if "/" in symbol or symbol.endswith((".md", ".yaml", ".ipynb")):
         return (REPO_ROOT / symbol).exists()

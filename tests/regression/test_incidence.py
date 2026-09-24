@@ -244,15 +244,7 @@ def _distinct_pairs(
 def test_the_compressed_layout_is_scipys_csr_on_the_same_pairs() -> None:
     """`scipy.sparse.csr_matrix` builds the same layout by another route.
 
-    The dictionary-of-lists oracle above decides which row an entry landed
-    in; this decides that the *compressed* arrays are the ones a second
-    compressed implementation produces. `scipy` orders within a row and sums
-    repeated pairs, so the comparison is against ``ascending=True`` on
-    relations with no pair repeated. Over three of them --- 30 entries in
-    7 x 5, 200 in 40 x 9 and 512 in 64 x 64 --- ``offsets`` equals
-    ``indptr``, ``indices`` equals ``indices``, ``degrees`` equals
-    ``diff(indptr)`` and :meth:`dense` equals ``toarray`` **entry for
-    entry**, the tolerance declared for an integer layout being equality.
+    Equal entry for entry on 30 in 7 x 5, 200 in 40 x 9, 512 in 64 x 64; no repeats.
     """
 
     def check(n_rows: int, n_cols: int, n_entries: int) -> None:

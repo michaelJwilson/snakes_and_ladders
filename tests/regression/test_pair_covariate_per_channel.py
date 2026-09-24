@@ -57,8 +57,7 @@ def _neutral(observations: torch.Tensor) -> torch.Tensor:
 def test_the_neutral_covariate_reproduces_the_uncovaried_score_bitwise() -> None:
     """The referee for admitting the shape: neutral changes nothing at all.
 
-    Bitwise, because an exposure of exactly one multiplies a rate by one and a
-    trial count equal to the declared one is the declared one.
+    Bitwise: an exposure of one and the declared trial count change nothing.
     """
     family, observations = _family(), _observations()
 
@@ -73,12 +72,7 @@ def test_the_neutral_covariate_reproduces_the_uncovaried_score_bitwise() -> None
 def test_the_neutral_covariate_is_not_ones_on_both_channels() -> None:
     """The asymmetry a caller has to know, asserted rather than documented only.
 
-    The two channels condition on different kinds of thing --- a rate's
-    exposure against a count's trials --- which is why one tensor could not be
-    both. Ones on both asks the beta-binomial for 3 and 7 successes out of 1
-    trial, which is outside its support and scores `-inf`. A caller who assumes
-    "ones is neutral" from the single-channel families gets that, and this is
-    where they find out.
+    Ones on both asks for 3 and 7 successes out of 1 trial: `-inf`.
     """
     family, observations = _family(), _observations()
 
@@ -92,9 +86,7 @@ def test_the_neutral_covariate_is_not_ones_on_both_channels() -> None:
 def test_each_channel_moves_the_score_on_its_own() -> None:
     """Both covariates reach a family, and neither is the other's.
 
-    Asserted as two separate movements from the same neutral, so a covariate
-    wired to the wrong channel --- the failure a split can silently have ---
-    shows up as one of these not moving.
+    Two movements from one neutral, so a covariate on the wrong channel fails.
     """
     family, observations = _family(), _observations()
     neutral = _neutral(observations)
@@ -119,10 +111,7 @@ def test_each_channel_moves_the_score_on_its_own() -> None:
 def test_a_covariate_without_the_channel_axis_is_refused() -> None:
     """The tensor #631 was right about: nothing says which channel it is.
 
-    The axis is checked by width and nothing else, so a two-wide trailing axis
-    is taken as the channels whatever the caller meant --- the same latitude
-    the observations have, and not a new one. What is refused is an axis that
-    cannot be the channels at all.
+    Checked by width alone; refused only where it cannot be the channels.
     """
     family, observations = _family(), _observations()
 
@@ -140,9 +129,7 @@ def test_a_covariate_without_the_channel_axis_is_refused() -> None:
 def test_a_draw_under_an_exposure_scales_with_it() -> None:
     """`sample` conditions too, which is what item 4 needs to plant an instance.
 
-    The total is a rate times its exposure, so a tenfold exposure is a tenfold
-    mean; asserted over enough draws that the ratio is the model's and not one
-    seed's.
+    A tenfold exposure is a tenfold mean, over enough draws to be the model's.
     """
     family = _family()
     states = np.zeros(4000, dtype=np.int64)

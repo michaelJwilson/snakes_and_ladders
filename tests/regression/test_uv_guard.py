@@ -1,17 +1,9 @@
 """What `infra/bin/uv` must refuse, and what it must leave alone.
 
-Issue #615. The guard exists because one `.venv` is a real directory in the
-main clone and a symlink in every other worktree, so a `uv sync` narrower than
-the extras installed uninstalls the rest for all of them at once. A guard that
-refuses everything is removed on the first false alarm and one that refuses
-nothing is never noticed, so each test here builds one of the two situations
-and asserts the verdict on it.
-
-No test invokes the real `uv`. A stub earlier on `PATH` records the arguments
-it was handed, which is what distinguishes "passed through" from "refused"
-without installing or uninstalling anything --- and, since running the real
-command is the fault under repair, is the only way this suite can assert it at
-all.
+Issue #615. `.venv` is a symlink in every worktree, so a narrow `uv sync`
+uninstalls extras for all of them. Each test builds a refused or a passed
+situation. A stub `uv` earlier on `PATH` records its arguments; the real
+command is the fault under repair and is never run.
 """
 
 from __future__ import annotations
@@ -33,11 +25,7 @@ STUB = '#!/usr/bin/env bash\nprintf "STUB %s\\n" "$*"\n'
 
 
 def _project(root: Path, *, shared: bool) -> Path:
-    """A project at ``root`` whose ``.venv`` is a symlink, or a real directory.
-
-    ``shared`` is the whole of the guard's input: the symlink is what says the
-    environment has more than one worktree behind it.
-    """
+    """A project at ``root`` whose ``.venv`` is a symlink (``shared``), or a directory."""
     root.mkdir(parents=True, exist_ok=True)
     (root / "pyproject.toml").write_text('[project]\nname = "p"\nversion = "0"\n')
 
@@ -77,11 +65,7 @@ def _run(
 
 
 def _ci_sync_commands() -> list[list[str]]:
-    """Every `uv sync` line in `.github/workflows/ci.yml`, as argv.
-
-    Read from the workflow rather than restated, so a CI job that acquires a
-    new narrow extra set is covered by the test that says CI is unaffected.
-    """
+    """Every `uv sync` line in `.github/workflows/ci.yml`, as argv, read not restated."""
     found = re.findall(r"^\s*(?:-\s*)?run:\s*(uv sync .*)$", WORKFLOW.read_text(), re.M)
 
     return [command.split() for command in found]
@@ -121,8 +105,7 @@ def test_every_ci_sync_line_passes_through_a_real_environment(
 ) -> None:
     """CI builds its own directory per job; the guard must be invisible to it.
 
-    Each job installs a deliberately narrow extra set, which is correct there
-    and is the shape the guard refuses on a symlink.
+    Each job's narrow extra set is correct there and refused on a symlink.
     """
     project = _project(tmp_path / "runner", shared=False)
     commands = _ci_sync_commands()
@@ -142,9 +125,7 @@ def test_a_syncing_run_is_refused_and_a_non_syncing_one_is_not(
 ) -> None:
     """`uv run` syncs unless told not to, and `UV_NO_SYNC=1` is what tells it.
 
-    `infra/new_worktree.sh` resolves the import through exactly that command,
-    so the guard turning the convention into a precondition is what keeps the
-    script working (`DEV.md`).
+    `infra/new_worktree.sh` relies on that command (`DEV.md`).
     """
     project = _project(tmp_path / "worktree", shared=True)
 

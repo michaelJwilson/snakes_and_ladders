@@ -1,27 +1,13 @@
 """The superset claim of issue #622, stated per family and not per word.
 
-The claim step 5 promised: for each problem, the derived selection covers what a
-text search for that problem finds. Per word it is false --- `grep -rl mixture`
-finds the emission mixture, `grep -rl potts` finds three keys and every guard
-over this file --- so it is stated over the **family**: the set of catalogue keys
-sharing one problem statement, `PROBLEMS.md`'s **Statement** column. Eleven
-families over the 226 modules under ``tests/regression``, and the difference is
-empty for nine of them; the two words that name no problem are in `BY_WORD`,
-asserted rather than waived.
-
-What counts as naming a family is narrowed three ways, each forced by a module
-that means something else by the word and each stated where it is applied:
-comments and docstrings are prose and not a selection input; a
-`snakes_and_ladders` import is read by the catalogue, which is what
-`tests/_problems.py` already does with it; and a stem matches as the head of a
-name (``tree_likelihood``) rather than bare, because `ast.parse` returns a tree
-and `sum_product` takes a ``"tree"`` schedule. A key still matches bare, which
-is what `grep` is given.
-
-The selection read here is the item's: the markers `tests/conftest.py` derives
-through `fixtures_named_in`, and the problem markers an author writes by hand,
-which `-m <key>` collects the same way --- `search/test_decoding.py` carries
-``@pytest.mark.frustrated_lattice`` on two items and loads no fixture.
+For each problem the derived selection covers what a text search finds. Per
+word it is false (`grep -rl potts` finds three keys and every guard), so it is
+stated per family: the keys sharing a `PROBLEMS.md` **Statement**. Eleven
+families over 226 modules; the difference is empty for nine and the two words
+naming no problem are asserted in `BY_WORD`. Narrowed three ways: prose is not
+read, a package import is the catalogue's, and a stem matches only as a name's
+head (``tree_likelihood``). The selection is the item's markers, derived and
+hand-written (`search/test_decoding.py` writes two).
 """
 
 from __future__ import annotations
@@ -46,18 +32,10 @@ CATALOGUE = catalogue_reader.CATALOGUE
 #: Every problem key, which is every marker the hook can add.
 DECLARED = frozenset(problem_names())
 
-#: The three modules that name a family and exercise none, with the word and
-#: what it means there. None is a gap: the first names notebooks in the map
-#: `select_tests.py` is checked against --- ``docs/nb/hmm.ipynb`` is data, the
-#: case `test_problem_markers.py` already meets in `QUOTED_CALLS` --- the
-#: second passes ``parsimony_start=True`` to `search.infer`, shared machinery
-#: that `PROBLEMS.md` says defines nothing, where the parsimony statement's own
-#: tests import `likelihood.parsimony` and are selected; and the third names
-#: `tree_messages` and the tree schedule, which are the graph-theoretic tree
-#: `_stem_pattern` already excuses in its bare form --- the kernel is exact on
-#: a chain and a Potts tree and touches no phylogeny, whose own tests import
-#: `likelihood.pruning` and are selected. Asserted below, so an entry that
-#: stops being a false match fails rather than hiding a gap.
+#: The three modules that name a family and exercise none, each asserted, so
+#: an entry that stops being a false match fails: a notebook path as data, a
+#: ``parsimony_start=True`` flag to shared machinery, and the graph-theoretic
+#: tree of `tree_messages` (a chain and a Potts tree, no phylogeny).
 BY_WORD: dict[str, str] = {
     "tests/regression/test_select_tests.py": "sec:hmm",
     "tests/regression/search/test_search_exhaustive.py": "sec:parsimony",
@@ -73,46 +51,23 @@ _EDGE = r"(?<![0-9A-Za-z_\-])"
 
 
 def _key_pattern(key: str) -> re.Pattern[str]:
-    """A key as a whole token, where ``-`` and ``_`` bind.
-
-    ``-`` binds so that ``"emission-mixture"``, a model name, is one token and
-    not a match for the key `mixture` of another family.
-    """
+    """A key as a whole token, where ``-`` and ``_`` bind (``"emission-mixture"``)."""
     return re.compile(_EDGE + re.escape(key) + r"(?![0-9A-Za-z_\-])")
 
 
 def _stem_pattern(stem: str) -> re.Pattern[str]:
     """A stem as the head of a name: ``tree_likelihood``, not ``tree``.
 
-    The bare word is another thing in this tree --- an `ast` tree, a
-    ``"tree"`` message schedule, a ``parsimony-start`` keyword --- and a stem
-    is the family's word and not the repository's.
+    The bare word is an `ast` tree, a ``"tree"`` schedule, a keyword.
     """
     return re.compile(_EDGE + re.escape(stem) + r"_[0-9A-Za-z]")
 
 
 @cache
 def families(catalogue: Path = CATALOGUE) -> dict[str, frozenset[str]]:
-    """``statement label -> the fixture keys stated by it``.
+    """``statement label -> the fixture keys stated by it``, via `infra/catalogue.py`.
 
-    Parameters
-    ----------
-    catalogue : Path
-        `PROBLEMS.md`.
-
-    Returns
-    -------
-    dict[str, frozenset[str]]
-        A key may sit in two families --- `tree_jc` is the Jukes--Cantor tree
-        of ``sec:phylo`` and the parsimony problem of ``sec:parsimony`` --- so
-        a family is the section's key set and not a partition of the keys.
-
-    Notes
-    -----
-    Read through `infra/catalogue.py`, which the textbook's tables read too.
-    Two readings of the table used to be zipped ``strict`` here to hold them
-    to the same rows; one reader is the stronger form of that check, so the
-    zip went with the second reader (issue #863).
+    Not a partition: `tree_jc` sits in ``sec:phylo`` and ``sec:parsimony`` (#863).
     """
     return {
         label: frozenset(keys)
@@ -123,20 +78,7 @@ def families(catalogue: Path = CATALOGUE) -> dict[str, frozenset[str]]:
 def stems(label: str, keys: frozenset[str]) -> frozenset[str]:
     """The family's word stems, derived from the statement and from its keys.
 
-    Parameters
-    ----------
-    label : str
-        The statement label, ``sec:phylo``.
-    keys : frozenset[str]
-        The family's keys.
-
-    Returns
-    -------
-    frozenset[str]
-        The statement's own short name, and the keys' common word prefix where
-        they share one: ``sec:phylo`` gives ``phylo`` and ``tree``,
-        ``sec:coupled`` gives ``coupled`` and ``spatio_sequential``. A key is
-        not repeated as a stem, since a key is matched bare and a stem is not.
+    ``sec:phylo`` gives ``phylo`` and ``tree``; keys are not repeated as stems.
     """
     found = {label.split(":", 1)[-1]}
     prefix: list[str] = []
@@ -152,18 +94,7 @@ def stems(label: str, keys: frozenset[str]) -> frozenset[str]:
 def code_of(path: Path) -> str:
     """One module's source without its comments, docstrings or package imports.
 
-    Parameters
-    ----------
-    path : Path
-        A Python source file.
-
-    Returns
-    -------
-    str
-        What is left is what the module *does*. Prose names a problem to
-        explain a contrast --- "a gamma-Poisson mixture", "on a tree" --- and
-        an import names one for the catalogue to read, which
-        `tests/_problems.py` does; neither is a module exercising the problem.
+    What is left is what the module does; prose and imports are read elsewhere.
     """
     source = path.read_text()
     dropped: set[int] = set()
@@ -193,24 +124,7 @@ def code_of(path: Path) -> str:
 def markers_of(path: Path) -> frozenset[str]:
     """The problem markers one module's items carry, derived and written.
 
-    Parameters
-    ----------
-    path : Path
-        A test module.
-
-    Returns
-    -------
-    frozenset[str]
-        `fixtures_named_in`, which is what `tests/conftest.py` adds, together
-        with the problem markers the source applies by hand. Empty is the
-        `infra` case: the module exercises no problem.
-
-    Notes
-    -----
-    The written markers are read as decorators and not as text, since a
-    module naming one in prose --- this one names
-    ``pytest.mark.frustrated_lattice`` two paragraphs up --- would otherwise
-    read as carrying it.
+    Written markers are read as decorators, not text; empty means `infra`.
     """
     written: set[str] = set()
     for node in ast.walk(ast.parse(path.read_text())):
@@ -235,22 +149,7 @@ def unselected(
 ) -> list[str]:
     """The modules that name a family, exercise a problem, and are not selected.
 
-    Parameters
-    ----------
-    keys : frozenset[str]
-        The family's keys.
-    family_stems : frozenset[str]
-        Its stems, from `stems`.
-    modules : Mapping[str, tuple[frozenset[str], str]]
-        ``name -> (the problem markers it carries, its code)``.
-
-    Returns
-    -------
-    list[str]
-        Sorted. A module carrying no problem marker is `infra` --- a guard
-        over this file, a document check, shared machinery --- and is excluded:
-        it names the word without exercising the problem by construction, and
-        `test_problem_markers.py` holds that claim from the other side.
+    Sorted; a module with no problem marker is `infra` and excluded.
     """
     patterns = [_key_pattern(key) for key in sorted(keys)]
     patterns += [_stem_pattern(stem) for stem in sorted(family_stems)]
@@ -265,11 +164,7 @@ def unselected(
 
 @cache
 def _tree() -> dict[str, tuple[frozenset[str], str]]:
-    """Every collected module under ``tests/regression``, read once.
-
-    ``tests/regression/docs/`` is excluded: those guards read the documents,
-    which name every problem, and none of them runs a model.
-    """
+    """Every collected module under ``tests/regression`` but ``docs/``, read once."""
     return {
         str(path.relative_to(REPO_ROOT)): (markers_of(path), code_of(path))
         for path in sorted(TESTS.rglob("test_*.py"))
@@ -283,10 +178,7 @@ def _tree() -> dict[str, tuple[frozenset[str], str]]:
 def test_the_selection_of_a_family_covers_every_module_naming_it(label: str) -> None:
     """The claim, per family: the selection is a superset of the text search.
 
-    `search/test_maxflow.py` and `search/test_alpha_expansion.py` are in the
-    `sec:potts` selection through their imports, which
-    `test_problem_markers.py::test_the_two_modules_the_axis_was_opened_about_are_selected`
-    asserts on its own; it is not repeated here.
+    The two #614 modules are asserted in `test_problem_markers.py`, not here.
     """
     keys = families()[label]
     missing = [
@@ -306,10 +198,7 @@ def test_the_selection_of_a_family_covers_every_module_naming_it(label: str) -> 
 def test_every_key_is_stated_and_one_key_is_stated_twice() -> None:
     """The family map is read from the catalogue, and this says it was read.
 
-    An empty or partial parse leaves the guard above passing on nothing, which
-    is the failure a derived map trades for a hand-written one. Both halves of
-    the shape are pinned: every declared key sits in a family, and `tree_jc`
-    sits in two, since a key is stated as a model and as a parsimony instance.
+    Every declared key sits in a family, and `tree_jc` in two.
     """
     stated = families()
     assert frozenset().union(*stated.values()) == DECLARED
@@ -322,10 +211,7 @@ def test_every_key_is_stated_and_one_key_is_stated_twice() -> None:
 def test_a_word_that_is_not_the_problem_is_still_a_word_and_not_the_problem() -> None:
     """`BY_WORD` is asserted, not waived: an entry that goes stale fails.
 
-    Each entry is a module the text search reaches and the selection does not.
-    If one gains a fixture call or an import of defining code the scan reads,
-    it stops being an exception and this says so; if one stops naming the
-    family, the entry is dead and this says that too.
+    Fails if an entry gains a selection, or stops naming the family.
     """
     tree = _tree()
     for name, label in BY_WORD.items():
@@ -340,11 +226,7 @@ def test_a_word_that_is_not_the_problem_is_still_a_word_and_not_the_problem() ->
 def test_the_word_alone_is_infra_and_the_call_is_selected(tmp_path: Path) -> None:
     """The exclusion carries weight, on two modules written for it.
 
-    One mentions `potts_lattice` in a comment and in a constant and calls
-    nothing: no marker, so `infra`, so excluded --- and the comment is not even
-    read, since prose is stripped. The other makes the registry call and is
-    selected for the family. The markers are derived by the same
-    `fixtures_named_in` that collection uses, not asserted into place.
+    A word-only module is `infra`; a registry call is selected, by `fixtures_named_in`.
     """
     word = tmp_path / "test_word_only.py"
     word.write_text(
@@ -371,9 +253,7 @@ def test_the_word_alone_is_infra_and_the_call_is_selected(tmp_path: Path) -> Non
 def test_the_checker_reports_a_module_that_names_a_family_and_is_not_selected() -> None:
     """The guard is not vacuous, on inputs it cannot have derived.
 
-    Three modules, one of each kind the rule distinguishes: one naming the
-    family and exercising another problem, which is the defect; one selected
-    for a key of the family; one carrying no problem marker at all.
+    Three modules: the defect, a selected one, and one with no problem marker.
     """
     keys = families()["sec:potts"]
     modules = {

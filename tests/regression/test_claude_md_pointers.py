@@ -54,11 +54,9 @@ def _rule_five_sentence() -> str:
     raise AssertionError(msg)
 
 
-# Rule 6 says a `CLAUDE.md` carries principles rather than technical detail,
-# and the detail accreting fastest is a measurement: a result belongs to
-# whatever produced it, and a second copy is a copy to keep true. Three shapes
-# cover what was found in these files (issue #235): scientific notation, an
-# "N of M" count, and a decimal carrying two or more fractional digits.
+# Rule 6: a `CLAUDE.md` carries principles, not measurements. Three shapes
+# (issue #235): scientific notation, an "N of M" count, and a decimal with two
+# or more fractional digits.
 MEASUREMENT = re.compile(
     r"\b\d+(?:\.\d+)?e[-+]?\d+\b|\b\d+ of \d+\b|\b\d+\.\d{2,}\b"
     # A fourth shape, which the three above missed: a comma-grouped count,
@@ -86,16 +84,7 @@ def _in_root(name: str, root: str) -> bool:
 
 
 def _module_claude_files() -> list[Path]:
-    """Find every module `CLAUDE.md` on disk.
-
-    Discovered rather than listed, so a module directory added without a
-    `CLAUDE.md` is caught by the emptiness check below.
-
-    Returns
-    -------
-    list[Path]
-        Every `CLAUDE.md` under a package or tooling directory, sorted.
-    """
+    """Every module `CLAUDE.md` on disk, sorted; discovered, not listed."""
     found = sorted(REPO_ROOT.glob("python/snakes_and_ladders/*/CLAUDE.md"))
     for directory in ("infra", "docs"):
         candidate = REPO_ROOT / directory / "CLAUDE.md"
@@ -190,11 +179,8 @@ def test_the_root_file_states_that_the_rules_reach_the_module_files() -> None:
 @pytest.mark.critical
 @pytest.mark.infra
 def test_no_module_claude_md_points_at_a_root_section_root_does_not_have() -> None:
-    # This checked that only `docs/` named root's **Expected Reader**, while
-    # root had no such section -- so it asserted the absence of a reference to
-    # something absent, and passed for the wrong reason (#787). What is worth
-    # checking is the opposite direction: a module file naming a bold root
-    # section that root does not carry sends a reader nowhere.
+    # A module file naming a bold root section that root does not carry sends
+    # a reader nowhere (#787).
     root = (REPO_ROOT / "CLAUDE.md").read_text()
     dangling: dict[str, list[str]] = {}
     for path in _module_claude_files():
