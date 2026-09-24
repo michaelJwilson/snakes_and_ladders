@@ -26,7 +26,9 @@ coordinate), ``n_draws`` transitions keyed from ``key``; outputs as mode 1
 (issue #1006). ``target`` 1 is Rosenbrock's function with ``constants``
 ``(a, b)`` in place of the Gaussian: ``log p = -U``; ``target`` 2 is a
 Gaussian mixture's log-likelihood of ``values`` at ``n_components``, in
-``GaussianMixtureObjective``'s ``theta`` (issue #1008).
+``GaussianMixtureObjective``'s ``theta``; ``target`` 3 a Gaussian HMM's of
+the sequences ``values`` at ``n_states``, in ``GaussianHmmObjective``'s,
+by the textbook log-space forward recursion (issue #1008).
 
 ``mode`` 4 replays: ``blackjax``'s ``build_rmh`` kernel with the increments
 ``increments`` supplied, one row per transition, and each transition's key
@@ -61,7 +63,7 @@ from snakes_and_ladders.validation.protocol import dump, load, paths, peaked
 INTEGRATE, SAMPLE, LANGEVIN, RANDOM_WALK, REPLAY, ADAPTED = 0, 1, 2, 3, 4, 5
 
 #: What ``target`` selects.
-GAUSSIAN, ROSENBROCK, MIXTURE = 0, 1, 2
+GAUSSIAN, ROSENBROCK, MIXTURE, GAUSSIAN_HMM = 0, 1, 2, 3
 
 
 def main() -> None:
@@ -79,7 +81,40 @@ def main() -> None:
     mode = int(inputs["mode"])
 
     target = int(inputs.get("target", np.asarray(GAUSSIAN)))
-    if target == MIXTURE:
+    if target == GAUSSIAN_HMM:
+        sequences = jnp.asarray(inputs["values"])
+        m = int(inputs["n_states"])
+
+        def logdensity(x: Any) -> Any:
+            # `GaussianHmmObjective`'s theta: m - 1 free initial, m (m - 1)
+            # free transition rows, m means, m log scales; the textbook
+            # forward recursion in log space, one sequence per row.
+            def simplex(free: Any) -> Any:
+                pinned = jnp.concatenate(
+                    [jnp.zeros(free.shape[:-1] + (1,)), free], axis=-1
+                )
+                return jax.nn.log_softmax(pinned, axis=-1)
+
+            log_initial = simplex(x[: m - 1])
+            log_transition = simplex(x[m - 1 : m * m - 1].reshape(m, m - 1))
+            mean, log_scale = x[m * m - 1 : m * m - 1 + m], x[m * m - 1 + m :]
+
+            def one(y: Any) -> Any:
+                z = (y[:, None] - mean) * jnp.exp(-log_scale)
+                emit = -0.5 * jnp.log(2 * jnp.pi) - log_scale - 0.5 * z * z
+
+                def step(alpha: Any, row: Any) -> tuple[Any, None]:
+                    alpha = jax.scipy.special.logsumexp(
+                        alpha[:, None] + log_transition, axis=0
+                    )
+                    return alpha + row, None
+
+                alpha, _ = jax.lax.scan(step, log_initial + emit[0], emit[1:])
+                return jax.scipy.special.logsumexp(alpha)
+
+            return jnp.sum(jax.vmap(one)(sequences))
+
+    elif target == MIXTURE:
         values = jnp.asarray(inputs["values"])
         k = int(inputs["n_components"])
 

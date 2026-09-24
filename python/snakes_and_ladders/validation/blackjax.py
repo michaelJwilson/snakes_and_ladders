@@ -106,6 +106,7 @@ def sample(
     store_chain: bool = True,
     rosenbrock: tuple[float, float] | None = None,
     mixture: tuple[int, np.ndarray] | None = None,
+    hmm: tuple[int, np.ndarray] | None = None,
 ) -> Chain:
     """``n_draws`` BlackJAX HMC transitions at unit mass, from ``jax.random.key(key)``.
 
@@ -119,7 +120,7 @@ def sample(
         SCRIPT,
         {
             "mode": np.asarray(1, dtype=np.int64),
-            **_target(precision, rosenbrock, mixture),
+            **_target(precision, rosenbrock, mixture, hmm),
             "position": np.ascontiguousarray(position, dtype=np.float64),
             "step_size": np.asarray(step_size, dtype=np.float64),
             "n_steps": np.asarray(n_steps, dtype=np.int64),
@@ -184,8 +185,15 @@ def _target(
     precision: np.ndarray | None,
     rosenbrock: tuple[float, float] | None,
     mixture: tuple[int, np.ndarray] | None = None,
+    hmm: tuple[int, np.ndarray] | None = None,
 ) -> dict[str, np.ndarray]:
-    """The script's target inputs: a Gaussian's precision, Rosenbrock's ``(a, b)`` or a mixture's ``(k, values)``."""
+    """The script's target inputs: a Gaussian's precision, Rosenbrock's ``(a, b)``, a mixture's ``(k, values)`` or a Gaussian HMM's ``(m, sequences)``."""
+    if hmm is not None:
+        return {
+            "target": np.asarray(3, dtype=np.int64),
+            "n_states": np.asarray(hmm[0], dtype=np.int64),
+            "values": np.ascontiguousarray(hmm[1], dtype=np.float64),
+        }
     if mixture is not None:
         return {
             "target": np.asarray(2, dtype=np.int64),
@@ -301,6 +309,7 @@ def adapted_sample(
     precision: np.ndarray | None = None,
     rosenbrock: tuple[float, float] | None = None,
     mixture: tuple[int, np.ndarray] | None = None,
+    hmm: tuple[int, np.ndarray] | None = None,
     store_chain: bool = True,
 ) -> AdaptedChain:
     """``blackjax.window_adaptation`` over ``warmup`` steps, then ``n_draws`` HMC transitions (issue #1008).
@@ -312,7 +321,7 @@ def adapted_sample(
         SCRIPT,
         {
             "mode": np.asarray(5, dtype=np.int64),
-            **_target(precision, rosenbrock, mixture),
+            **_target(precision, rosenbrock, mixture, hmm),
             "position": np.ascontiguousarray(position, dtype=np.float64),
             "step_size": np.asarray(step_size, dtype=np.float64),
             "n_steps": np.asarray(n_steps, dtype=np.int64),

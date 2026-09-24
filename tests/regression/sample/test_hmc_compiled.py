@@ -14,11 +14,14 @@ Referees:
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import pytest
 import torch
 from snakes_and_ladders import oxisal
 from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.opt.hmm import GaussianHmmObjective, PoissonHmmObjective
 from snakes_and_ladders.opt.mixture import GaussianMixtureObjective
 from snakes_and_ladders.opt.objective import DeclaredGradient
 from snakes_and_ladders.opt.testfunctions import Rosenbrock
@@ -331,3 +334,116 @@ def test_both_routes_sample_the_mixture_posterior_alike() -> None:
     rust, python = expectations
     spread = np.hypot(rust.standard_error.numpy(), python.standard_error.numpy())
     assert np.all(np.abs(rust.mean.numpy() - python.mean.numpy()) < 4.5 * spread)
+
+
+def _sequences(n: int, length: int, counts: bool = False) -> np.ndarray:
+    rng = np.random.default_rng(1008)
+    states = np.zeros((n, length), dtype=int)
+    for t in range(1, length):
+        stay = rng.random(n) < 0.9
+        states[:, t] = np.where(stay, states[:, t - 1], 1 - states[:, t - 1])
+    means = np.array([2.0, 9.0]) if counts else np.array([-1.0, 1.0])
+    if counts:
+        drawn: np.ndarray = rng.poisson(means[states]).astype(np.float64)
+    else:
+        drawn = means[states] + 0.6 * rng.normal(size=states.shape)
+    return drawn
+
+
+_HMM_START = [
+    0.0,
+    np.log(0.1 / 0.9),
+    np.log(0.9 / 0.1),
+    -1.0,
+    1.0,
+    np.log(0.6),
+    np.log(0.6),
+]
+
+
+@pytest.mark.oracle
+def test_the_compiled_hmm_trajectory_is_the_torch_leapfrog() -> None:
+    # Issue #1008: the declared Gaussian HMM's force is Fisher's identity
+    # over the streamed statistics, step for step with autograd's leapfrog.
+    objective = GaussianHmmObjective(_sequences(20, 50), 2, backend=Backend.TORCH)
+    declared = declared_energy(objective)
+    assert declared is not None
+    rng = np.random.default_rng(10081)
+    theta = np.asarray(_HMM_START) + 0.05 * rng.normal(size=7)
+    momentum = rng.normal(size=7)
+    torch_end = hmc.leapfrog(
+        objective, torch.as_tensor(theta), torch.as_tensor(momentum), 0.01, 10
+    )
+    position, velocity = oxisal.leapfrog_trajectory(
+        declared[0], declared[1], theta, momentum, 0.01, 10
+    )
+    np.testing.assert_allclose(
+        position, torch_end.position.numpy(), rtol=1e-10, atol=1e-12
+    )
+    np.testing.assert_allclose(
+        velocity, torch_end.momentum.numpy(), rtol=1e-9, atol=1e-9
+    )
+
+
+@pytest.mark.oracle
+@pytest.mark.backend
+@pytest.mark.parametrize("family", ["gaussian-rust", "poisson-jax"])
+def test_both_routes_sample_the_hmm_posterior_alike(family: str) -> None:
+    # The Gaussian HMM runs the Rust walk, the Poisson HMM the JAX one
+    # (`sample.hmc_jax`), each against the torch route in distribution.
+    if family == "gaussian-rust":
+        objective: Any = GaussianHmmObjective(_sequences(10, 50), 2)
+        theta0 = torch.as_tensor(_HMM_START)
+        step = 0.02
+    else:
+        objective = PoissonHmmObjective(_sequences(10, 50, counts=True), 2)
+        theta0 = torch.as_tensor(
+            [0.0, np.log(0.1 / 0.9), np.log(0.9 / 0.1), np.log(2.0), np.log(9.0)]
+        )
+        step = 0.02
+    expectations = [
+        hmc.sample(
+            objective,
+            torch.Generator().manual_seed(1008),
+            500,
+            step_size=step,
+            n_steps=8,
+            theta0=theta0,
+            burn_in=100,
+            store_chain=False,
+            operators={"x": Power(1)},
+            backend=backend,
+        ).expectations["x"]
+        for backend in (Backend.RUST, Backend.PYTHON)
+    ]
+    rust, python = expectations
+    spread = np.hypot(rust.standard_error.numpy(), python.standard_error.numpy())
+    assert np.all(np.abs(rust.mean.numpy() - python.mean.numpy()) < 4.5 * spread)
+
+
+@pytest.mark.oracle
+@pytest.mark.backend
+def test_the_jax_walk_filters_and_warms_up_as_the_rust_one_does() -> None:
+    objective = PoissonHmmObjective(_sequences(10, 40, counts=True), 2)
+    theta0 = torch.as_tensor([0.0, -2.0, 2.0, np.log(2.0), np.log(9.0)])
+    chain = hmc.sample(
+        objective,
+        torch.Generator().manual_seed(1008),
+        400,
+        step_size=0.05,
+        n_steps=6,
+        theta0=theta0,
+        adaptation=hmc.Adaptation(200, 0.65, 0.2),
+        operators={"x2": Power(2)},
+    )
+    assert chain.adapted is not None
+    assert chain.adapted.mass_diagonal.shape == (5,)
+    assert abs(chain.acceptance_rate - 0.65) < 0.2
+    kalman = KalmanMean()
+    for row in chain.theta:
+        kalman.update(row**2)
+    np.testing.assert_allclose(
+        chain.expectations["x2"].mean.numpy(),
+        kalman.estimate().mean.numpy(),
+        rtol=1e-12,
+    )

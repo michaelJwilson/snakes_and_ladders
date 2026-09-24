@@ -434,6 +434,10 @@ def _declared_target(inputs: Mapping[str, np.ndarray]) -> object:
     from snakes_and_ladders.opt.testfunctions import Rosenbrock
     from snakes_and_ladders.validation.gaussian import GaussianTarget
 
+    if int(inputs["target"]) == 3:
+        from snakes_and_ladders.opt.hmm import GaussianHmmObjective
+
+        return GaussianHmmObjective(inputs["values"], int(inputs["n_states"]))
     if int(inputs["target"]) == 2:
         from snakes_and_ladders.opt.mixture import GaussianMixtureObjective
 
@@ -488,6 +492,10 @@ def _hmc_declared(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
             store_chain=store_chain,
         )
         return {"acceptance": np.asarray(chain.acceptance_rate)}
+
+    # The same call once, untimed: a JAX-declared target compiles its chain
+    # on first use, and BlackJAX's figure is its second call (issue #1008).
+    call()
 
     return call
 

@@ -1537,3 +1537,76 @@ def test_hmc_on_the_mixture_fits_blackjaxs_memory() -> None:
     inputs = _mixture_hmc_inputs(warmup=0, store_chain=True)
     peaks = [package("hmc_declared", inputs).peak_bytes or 0 for _ in range(3)]
     assert_fits(int(np.median(peaks)), BLACKJAX_HMC_MIXTURE_MEMORY)
+
+
+def _hmm_hmc_inputs(*, warmup: int, store_chain: bool) -> dict[str, np.ndarray]:
+    """A two-state Gaussian HMM, 100 sequences of 100 (#1008): stay 0.95, means -1 and 1, scale 0.5, seed 1008."""
+    rng = np.random.default_rng(1008)
+    states = np.zeros((100, 100), dtype=int)
+    states[:, 0] = rng.integers(0, 2, 100)
+    for t in range(1, 100):
+        stay = rng.random(100) < 0.95
+        states[:, t] = np.where(stay, states[:, t - 1], 1 - states[:, t - 1])
+    values = np.array([-1.0, 1.0])[states] + 0.5 * rng.normal(size=states.shape)
+    return {
+        "target": np.asarray(3),
+        "values": values,
+        "n_states": np.asarray(2),
+        "position": np.array(
+            [
+                0.0,
+                np.log(0.05 / 0.95),
+                np.log(0.95 / 0.05),
+                -1.0,
+                1.0,
+                np.log(0.5),
+                np.log(0.5),
+            ]
+        ),
+        "step_size": np.asarray(0.01),
+        "n_steps": np.asarray(10),
+        "n_draws": np.asarray(300),
+        "seed": np.asarray(1008),
+        "warmup": np.asarray(warmup),
+        "target_acceptance": np.asarray(0.65),
+        "store_chain": np.asarray(store_chain),
+    }
+
+
+_HMM_MEASURED = "2026-09-24, 4-core reference host at a 1-minute load of 1.1-1.4, #1008"
+
+#: 300 transitions of ten steps, and 100 warm-up steps before them.
+#: BlackJAX's target is the textbook log-space forward recursion under
+#: `vmap` (`scripts/blackjax.py`), compiled, second call; the package's the
+#: declared family in `src/energy.rs`, the gradient Fisher's identity over
+#: the streamed statistics.
+BLACKJAX_HMC_HMM = {
+    "plain": Goal(
+        "blackjax", "300 HMC transitions, Gaussian HMM of 10^4", 3.085, _HMM_MEASURED
+    ),
+    "warm-up": Goal(
+        "blackjax",
+        "100 warm-up steps and 300 HMC transitions, Gaussian HMM of 10^4",
+        4.1372,
+        _HMM_MEASURED,
+    ),
+}
+
+BLACKJAX_HMC_HMM_MEMORY = MemoryGoal(
+    "blackjax", "300 HMC transitions, Gaussian HMM of 10^4", 1_187_840, _HMM_MEASURED
+)
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("label", sorted(BLACKJAX_HMC_HMM))
+def test_hmc_on_the_hmm_meets_blackjaxs_runtime(label: str) -> None:
+    inputs = _hmm_hmc_inputs(warmup=100 if label == "warm-up" else 0, store_chain=True)
+    seconds = [package("hmc_declared", inputs).seconds for _ in range(3)]
+    assert_meets(float(np.median(seconds)), BLACKJAX_HMC_HMM[label])
+
+
+@pytest.mark.experiment
+def test_hmc_on_the_hmm_fits_blackjaxs_memory() -> None:
+    inputs = _hmm_hmc_inputs(warmup=0, store_chain=True)
+    peaks = [package("hmc_declared", inputs).peak_bytes or 0 for _ in range(3)]
+    assert_fits(int(np.median(peaks)), BLACKJAX_HMC_HMM_MEMORY)

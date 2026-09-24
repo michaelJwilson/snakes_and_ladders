@@ -77,8 +77,13 @@ from snakes_and_ladders.sample.accept import (
     accept_with,
     acceptance_probability,
 )
-from snakes_and_ladders.sample.declared import Power, declared_energy
+from snakes_and_ladders.sample.declared import (
+    Power,
+    declared_energy,
+    declared_jax_energy,
+)
 from snakes_and_ladders.sample.expectation import Expectation, KalmanMean
+from snakes_and_ladders.sample.hmc_jax import JaxWalk
 from snakes_and_ladders.sample.schedule import (
     Monotone,
     TempSchedule,
@@ -666,16 +671,21 @@ def sample(
     _check_trajectory(step_size, n_steps)
     refuse_backend("hmc.sample", backend, (Backend.PYTHON, Backend.RUST))
     declared = declared_energy(objective)
+    traced = None if declared is not None else declared_jax_energy(objective)
+    plain = integrator is leapfrog and temperature == 1.0
     if (
         backend is Backend.RUST
-        and declared is not None
-        and integrator is leapfrog
-        and temperature == 1.0
+        and (declared is not None or traced is not None)
+        and plain
         and current_tracked() is UNTRACKED
+        and (
+            declared is not None
+            or all(isinstance(o, Power) for o in (operators or {}).values())
+        )
     ):
         chain = run_compiled(
-            oxisal.HmcWalk,
-            declared,
+            oxisal.HmcWalk if declared is not None else JaxWalk,
+            declared if declared is not None else traced,  # type: ignore[arg-type]
             (n_steps,),
             integrator.force_evaluations(n_steps),
             generator,
@@ -900,7 +910,7 @@ BLOCK = 1_024
 
 def run_compiled(
     walk_class: Callable[..., Any],
-    declared: tuple[int, np.ndarray],
+    declared: tuple[Any, Any],
     extra: tuple[Any, ...],
     per_proposal: int,
     generator: torch.Generator,

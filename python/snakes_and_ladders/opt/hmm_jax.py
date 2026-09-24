@@ -202,8 +202,14 @@ def _table(data: dict[str, np.ndarray]) -> bool:
 
 
 @functools.cache
-def _compiled(structure: _Structure) -> Any:
-    """``jit(value_and_grad)`` of the negative log-likelihood, once per structure."""
+def _negative_log_likelihood(
+    structure: _Structure,
+) -> Callable[[Any, dict[str, Any]], Any]:
+    """``(theta, data) -> U(theta)``, traceable, once per structure (issue #1008).
+
+    What :func:`_compiled` differentiates and a compiled chain
+    (:mod:`snakes_and_ladders.sample.hmc_jax`) traces inside its own loop.
+    """
     import jax
 
     jnp = jax.numpy
@@ -224,7 +230,28 @@ def _compiled(structure: _Structure) -> Any:
             emit = emit[data["index"]]
         return -forward(log_initial, log_transition, emit)
 
-    return jax.jit(jax.value_and_grad(negative_log_likelihood))
+    return negative_log_likelihood
+
+
+@functools.cache
+def _compiled(structure: _Structure) -> Any:
+    """``jit(value_and_grad)`` of the negative log-likelihood, once per structure."""
+    import jax
+
+    return jax.jit(jax.value_and_grad(_negative_log_likelihood(structure)))
+
+
+def jax_energy(
+    objective: _HmmObjective,
+) -> tuple[Callable[[Any, Any], Any], dict[str, Any]]:
+    """The objective's negative log-likelihood as a traceable ``(theta, data)`` function, and its data on the device (issue #1008)."""
+    import jax
+
+    jax.config.update("jax_enable_x64", True)  # type: ignore[no-untyped-call]
+    structure, host = _prepared(objective)
+    return _negative_log_likelihood(structure), {
+        key: jax.device_put(value) for key, value in host.items()
+    }
 
 
 def _density(

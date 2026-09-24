@@ -59,6 +59,7 @@ pub(crate) fn precision_of<'a>(
 pub const GAUSSIAN: u8 = 0;
 pub const ROSENBROCK: u8 = 1;
 pub const MIXTURE: u8 = 2;
+pub const GAUSSIAN_HMM: u8 = 3;
 
 /// `U(x)` for one declared family.
 pub enum Energy<'a> {
@@ -70,6 +71,77 @@ pub enum Energy<'a> {
     /// in `theta = (k - 1 free weights, k means, k log scales)`, as
     /// `opt.mixture.GaussianMixtureObjective` states it (issue #1008).
     Mixture { values: &'a [f64], k: usize },
+    /// A Gaussian HMM's negative log-likelihood of equal-length sequences,
+    /// row-major, in `theta = (m - 1 free initial, m (m - 1) free
+    /// transition, m means, m log scales)`, as `opt.hmm.GaussianHmmObjective`
+    /// states it; the gradient is Fisher's identity over
+    /// `hmm_stream::gaussian_statistics` (issue #1008).
+    GaussianHmm {
+        observations: &'a [f64],
+        length: usize,
+        m: usize,
+    },
+}
+
+/// `log_softmax([0, free])`, the simplex a pinned first logit spans.
+fn pinned_simplex(free: &[f64]) -> Vec<f64> {
+    let mut padded = Vec::with_capacity(free.len() + 1);
+    padded.push(0.0);
+    padded.extend_from_slice(free);
+    let high = padded.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let total = high + padded.iter().map(|v| (v - high).exp()).sum::<f64>().ln();
+    padded.iter().map(|v| v - total).collect()
+}
+
+/// The Gaussian HMM's value and negative score at `theta`, written into `out`.
+fn gaussian_hmm(
+    observations: &[f64],
+    length: usize,
+    m: usize,
+    theta: &[f64],
+    out: &mut [f64],
+) -> f64 {
+    let log_initial = pinned_simplex(&theta[..m - 1]);
+    let log_transition: Vec<f64> = theta[m - 1..m * m - 1]
+        .chunks_exact(m - 1)
+        .flat_map(pinned_simplex)
+        .collect();
+    let mean = &theta[m * m - 1..m * m - 1 + m];
+    let scale: Vec<f64> = theta[m * m - 1 + m..].iter().map(|v| v.exp()).collect();
+    let Ok((first, pairs, moments, log_likelihood)) = crate::hmm_stream::gaussian_statistics(
+        observations,
+        length,
+        &log_initial,
+        &log_transition,
+        mean,
+        &scale,
+    ) else {
+        out.iter_mut().for_each(|o| *o = f64::NAN);
+        return f64::NAN;
+    };
+    // `GaussianHmmObjective.gradient`'s assembly, negated.
+    let n_sequences = (observations.len() / length) as f64;
+    let mut index = 0;
+    for k in 1..m {
+        out[index] = -(first[k] - n_sequences * log_initial[k].exp());
+        index += 1;
+    }
+    for i in 0..m {
+        let row: f64 = pairs[i * m..(i + 1) * m].iter().sum();
+        for j in 1..m {
+            out[index] = -(pairs[i * m + j] - row * log_transition[i * m + j].exp());
+            index += 1;
+        }
+    }
+    for s in 0..m {
+        out[index] = -(moments[3 * s + 1] / (scale[s] * scale[s]));
+        index += 1;
+    }
+    for s in 0..m {
+        out[index] = -(moments[3 * s + 2] / (scale[s] * scale[s]) - moments[3 * s]);
+        index += 1;
+    }
+    -log_likelihood
 }
 
 /// A mixture's `theta` split into what `mixture_stream::gaussian_gradient` reads.
@@ -106,6 +178,11 @@ impl Energy<'_> {
                 crate::mixture_stream::gaussian_gradient(values, &log_weight, mean, &scale, true)
                     .map_or(f64::NAN, |(value, _)| value)
             }
+            Energy::GaussianHmm {
+                observations,
+                length,
+                m,
+            } => gaussian_hmm(observations, *length, *m, x, scratch),
         }
     }
 
@@ -151,6 +228,11 @@ impl Energy<'_> {
                     }
                 }
             }
+            Energy::GaussianHmm {
+                observations,
+                length,
+                m,
+            } => gaussian_hmm(observations, *length, *m, x, out),
         }
     }
 }
@@ -175,6 +257,24 @@ pub fn energy_of(code: u8, parameters: &[f64], dimension: usize) -> Result<Energ
             }
             _ => Err(format!(
                 "a mixture takes (k, values...) with d = 3k - 1, got d = {dimension}"
+            )),
+        },
+        GAUSSIAN_HMM => match parameters {
+            [m, length, observations @ ..]
+                if *m >= 2.0
+                    && *length >= 1.0
+                    && observations.len() % (*length as usize) == 0
+                    && dimension as f64 == m * m + 2.0 * m - 1.0 =>
+            {
+                Ok(Energy::GaussianHmm {
+                    observations,
+                    length: *length as usize,
+                    m: *m as usize,
+                })
+            }
+            _ => Err(format!(
+                "a Gaussian HMM takes (m, length, observations...) with d = m^2 + 2m - 1, \
+                 got d = {dimension}"
             )),
         },
         _ => Err(format!("no declared energy family {code}")),
