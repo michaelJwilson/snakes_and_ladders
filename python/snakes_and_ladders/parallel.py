@@ -20,6 +20,20 @@ each running a multithreaded kernel oversubscribes the machine.
 backend applies the same count, so the two runs execute the same kernels with
 the same reduction order. ``DEV.md`` carries the measured rule and the hardware.
 
+The count is ``torch``'s, and this module never imports ``torch`` (issue
+#1011): a body that runs NumPy alone runs without it, in the caller and in
+every worker. Where ``torch`` is already loaded the count is set at once;
+where it is not, an import hook sets it the moment ``torch`` finishes
+importing, so a body that imports ``torch`` itself -- as a spawned worker does
+when it unpickles a function from a module that imports it -- runs its first
+kernel at the count. The serial and thread backends restore what they
+replaced, including the default of a ``torch`` first imported inside the call.
+BLAS behind NumPy is not set here: it reads its thread count when NumPy
+loads, which in a spawned worker is before any initializer runs, and changing
+it afterwards needs ``threadpoolctl``, which is not a dependency. It follows
+``OMP_NUM_THREADS``, ``OPENBLAS_NUM_THREADS`` and ``MKL_NUM_THREADS``, which
+a spawned worker inherits from the caller's environment.
+
 The process backend uses the ``spawn`` start method, which works with ``torch``
 and on Apple Silicon. Spawned workers import the package afresh, a fixed cost
 per pool that ``STATUS.md`` reports beside each speedup; a function sent to it
@@ -28,11 +42,15 @@ must be importable by name, and its items picklable.
 
 from __future__ import annotations
 
+import importlib.abc
 import multiprocessing
-from collections.abc import Callable, Iterable, Iterator
+import sys
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from concurrent.futures import Executor, Future, ProcessPoolExecutor, ThreadPoolExecutor
 from contextlib import contextmanager
-from typing import Literal, TypeVar, overload
+from importlib.machinery import ModuleSpec
+from types import ModuleType
+from typing import Any, Literal, TypeVar, overload
 
 import numpy as np
 
@@ -51,13 +69,77 @@ T = TypeVar("T")
 R = TypeVar("R")
 
 
-def _set_intra_op_threads(count: int) -> int:
+def _set_intra_op_threads(torch: Any, count: int) -> int:
     """Set ``torch``'s intra-op thread count and return the one it replaces."""
-    import torch
-
-    previous = torch.get_num_threads()
+    previous: int = torch.get_num_threads()
     torch.set_num_threads(count)
     return previous
+
+
+class _PinAtImport(importlib.abc.MetaPathFinder):
+    """Sets ``torch``'s intra-op thread count when ``torch`` finishes importing.
+
+    Placed first on ``sys.meta_path``, it answers for ``torch`` alone: it asks
+    the other finders for the real spec and wraps its loader, so the
+    import is the one the process would have made and the count is set
+    before any caller can run a kernel. One-shot: it leaves ``sys.meta_path``
+    when it fires. ``replaced`` is the count ``torch`` started with, ``None``
+    until then.
+    """
+
+    def __init__(self, count: int) -> None:
+        self.count = count
+        self.replaced: int | None = None
+
+    def find_spec(
+        self,
+        fullname: str,
+        path: Sequence[str] | None,
+        target: ModuleType | None = None,
+    ) -> ModuleSpec | None:
+        if fullname != "torch":
+            return None
+        for finder in list(sys.meta_path):
+            find = getattr(finder, "find_spec", None)
+            if finder is self or find is None:
+                continue
+            spec: ModuleSpec | None = find(fullname, path, target)
+            if spec is not None and spec.loader is not None:
+                spec.loader = _PinningLoader(spec.loader, self)
+                return spec
+        return None
+
+    def pin(self, torch: Any) -> None:
+        self.replaced = _set_intra_op_threads(torch, self.count)
+        self.remove()
+
+    def remove(self) -> None:
+        if self in sys.meta_path:
+            sys.meta_path.remove(self)
+
+
+class _PinningLoader(importlib.abc.Loader):
+    """``torch``'s own loader, with the count set once its module has run."""
+
+    def __init__(self, loader: Any, finder: _PinAtImport) -> None:
+        self._loader = loader
+        self._finder = finder
+
+    def create_module(self, spec: ModuleSpec) -> ModuleType | None:
+        module: ModuleType | None = self._loader.create_module(spec)
+        return module
+
+    def exec_module(self, module: ModuleType) -> None:
+        # The real loader goes back on the module before `torch` runs, so
+        # nothing it reads during or after its import sees this wrapper.
+        module.__loader__ = self._loader
+        if module.__spec__ is not None:
+            module.__spec__.loader = self._loader
+        self._loader.exec_module(module)
+        self._finder.pin(module)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._loader, name)
 
 
 @contextmanager
@@ -65,22 +147,41 @@ def _intra_op_threads(count: int | None) -> Iterator[None]:
     """Run the block with ``torch`` at ``count`` intra-op threads, then restore.
 
     ``None`` leaves the setting alone, so a caller naming no count keeps
-    whatever the process had.
+    whatever the process had. Where ``torch`` is not loaded, it is not
+    imported: the count is set if the block imports it, and the default it
+    replaced is restored afterwards.
     """
     if count is None:
         yield
         return
-    previous = _set_intra_op_threads(count)
+    torch = sys.modules.get("torch")
+    if torch is not None:
+        previous = _set_intra_op_threads(torch, count)
+        try:
+            yield
+        finally:
+            _set_intra_op_threads(torch, previous)
+        return
+    hook = _PinAtImport(count)
+    sys.meta_path.insert(0, hook)
     try:
         yield
     finally:
-        _set_intra_op_threads(previous)
+        hook.remove()
+        torch = sys.modules.get("torch")
+        if hook.replaced is not None and torch is not None:
+            _set_intra_op_threads(torch, hook.replaced)
 
 
 def _configure_worker(count: int | None) -> None:
-    """Process-pool initializer: pin the worker's intra-op threads."""
-    if count is not None:
-        _set_intra_op_threads(count)
+    """Process-pool initializer: pin the worker's intra-op threads, now or at ``torch``'s import."""
+    if count is None:
+        return
+    torch = sys.modules.get("torch")
+    if torch is not None:
+        _set_intra_op_threads(torch, count)
+    else:
+        sys.meta_path.insert(0, _PinAtImport(count))
 
 
 def _call(
@@ -158,8 +259,9 @@ def map_tasks(
         of pickling the item and the result and of spawning the workers.
     intra_op_threads : int | None
         ``torch.set_num_threads`` inside every worker, and in this process
-        for the serial and thread backends, restored afterwards. ``None``
-        leaves the setting alone. Stated by the caller rather than defaulted
+        for the serial and thread backends, restored afterwards; set at
+        ``torch``'s import where ``torch`` is not yet loaded, so it is never
+        imported here. ``None`` leaves the setting alone. Stated by the caller rather than defaulted
         because it decides whether the pool oversubscribes the machine;
         ``DEV.md`` carries the measured rule.
     generator : np.random.Generator | None
