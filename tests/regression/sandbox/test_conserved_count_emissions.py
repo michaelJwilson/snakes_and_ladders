@@ -112,7 +112,8 @@ def test_every_definition_the_families_reach_is_carried() -> None:
     imported = {
         alias.name
         for node in ast.parse(CONSERVED.read_text()).body
-        if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("snakes")
+        if isinstance(node, ast.ImportFrom)
+        and (node.module or "").split(".")[0] == "snakes_and_ladders"
         for alias in node.names
     }
 

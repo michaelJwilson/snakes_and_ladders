@@ -15,10 +15,13 @@ from __future__ import annotations
 
 import ast
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import _paths
 import pytest
+import rename_package
 from snakes_and_ladders.likelihood.schedule import (
     SCHEDULES,
     MessageSchedule,
@@ -822,3 +825,47 @@ def test_no_module_imports_another_modules_private_name() -> None:
     assert not _private_imports(
         "from snakes_and_ladders.sample.chain import run_chain\n"
     )
+
+
+#: The package's import name before issue #1048, which nothing imports now.
+RETIRED = "snakes_and_ladders"  # rename-package: keep
+
+
+@pytest.mark.critical
+@pytest.mark.infra
+def test_no_line_names_the_retired_package() -> None:
+    # Issue #1048: `infra/rename_package.py` renamed the package, and a line
+    # it would still rewrite is an import or a path to a package that is gone.
+    # Its keep-list is the exception: records of a path as it was, and the
+    # repository's and the distribution's own name.
+    assert rename_package.pending(RETIRED, "sal") == []
+
+
+@pytest.mark.infra
+def test_the_rename_guard_reports_a_retired_import() -> None:
+    # The failing input: an import of the old name is a line to rewrite, and a
+    # name that only contains it, the console script's, is not.
+    line, counts = rename_package.rewrite_line(
+        "x.py", f"from {RETIRED}.sim import potts  # run_{RETIRED}\n", RETIRED, "sal"
+    )
+
+    assert line == f"from sal.sim import potts  # run_{RETIRED}\n"
+    assert counts == {"dotted": 1}
+
+
+@pytest.mark.smoke
+def test_the_retired_name_does_not_import() -> None:
+    # No alias is kept (issue #1048): the old name fails in a fresh process,
+    # where no earlier import can have left it in `sys.modules`.
+    code = (
+        "import importlib, sal\n"
+        "try:\n"
+        f"    importlib.import_module({RETIRED!r})\n"
+        "except ModuleNotFoundError:\n"
+        "    print('refused')\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+    )
+
+    assert result.stdout.strip() == "refused"

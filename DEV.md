@@ -27,6 +27,7 @@ keeping the two liftable matters.
 | `src/lib.rs` | Rust extension (`oxisal`), exposed through PyO3. |
 | `docs/tex/` | LaTeX source for the paper and the textbook, with the notation and preamble both share. |
 | `infra/build_documents.sh` | Regenerates QA figures, checks citation integrity (`infra/check_citations.py`), then builds `docs/paper.pdf`, `docs/textbook.pdf`, `docs/api_map.pdf` and `docs/mind_map.pdf` (committed, rebuilt only by a "Rebuild the documents" pull request; the `.aux`, `.bbl`, `.log` and other files `latexmk` leaves beside them are ignored). `--no-figures` drops the regeneration, for the one caller that has already rendered and compared every figure (`infra/release.sh`, issue #530). |
+| `infra/rename_package.py` | Renames the import package: `python infra/rename_package.py OLD NEW` moves `python/OLD/` to `python/NEW/`, rewrites every import and path outside its keep-list, re-sorts and re-formats the Python it touched, and prints the count per file and per category. A second run changes nothing, and `--check` writes nothing and fails if anything is pending. A script and not a hand edit, so a rename is re-run on the `main` it lands on rather than merged against every open pull request (issue #1048). `tests/regression/test_duplication_guards.py` fails on a line it would still rewrite. |
 
 *Note: each directory carries a localized `CLAUDE.md`, appending to rather than overriding the root.*
 

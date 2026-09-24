@@ -8,6 +8,7 @@ rather than dropping it, and fails a note citing a renumbered experiment.
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from pathlib import Path
 
@@ -245,9 +246,11 @@ def test_a_declared_shape_never_collapses_to_one_number() -> None:
 def test_the_declared_shapes_name_no_code() -> None:
     # `docs/CLAUDE.md`: the document names no code. The field names are the
     # fixture file's own words, so a module that moves does not stale the
-    # text; this asserts nothing else got in.
+    # text; this asserts nothing else got in. The package name is matched as
+    # a word, being short enough to sit inside one (issue #1048).
     for title, tier, shape in problems_tables.fixture_rows():
-        for forbidden in ("snakes_and_ladders", ".py", ".yaml", "tests/"):
+        assert not re.search(r"(?<!\w)snakes_and_ladders(?!\w)", shape), shape
+        for forbidden in (".py", ".yaml", "tests/"):
             assert forbidden not in shape, f"{title} / {tier} names code: {shape}"
 
 
