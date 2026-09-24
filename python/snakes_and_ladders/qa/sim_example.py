@@ -22,7 +22,8 @@ from snakes_and_ladders.qa.figure import (
 )
 from snakes_and_ladders.qa.runner import FIXTURE_PARAMS, Option, figure_main
 from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import SimulatedDataset, simulate_alignment
+from snakes_and_ladders.sim.simulate import SimulatedDataset
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.tree import Node, preorder
 
 _MODEL_NAME = "Jukes-Cantor"
@@ -185,13 +186,7 @@ def build_figure(
     tuple[Figure, str]
         The figure and its caption.
     """
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=params.n_sites,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed))
     fig, ax = plt.subplots(figsize=(6, 4))
     n_shown = render_sim_example(dataset, n_sites_shown, ax)
     return fig, build_caption(params, n_shown)

@@ -24,7 +24,7 @@ from snakes_and_ladders.likelihood.distance import DistanceKind, distance_matrix
 from snakes_and_ladders.search.infer import infer, score_topology
 from snakes_and_ladders.search.neighbor_joining import neighbor_joining
 from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import normalized_robinson_foulds
 from snakes_and_ladders.sim.tree import Node, balanced_tree, preorder
 
@@ -47,13 +47,7 @@ def _dataset(
     instance: Fixture[SimulationParams],
 ) -> tuple[Node, dict[str, np.ndarray], int]:
     params = instance.params
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=params.n_sites,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed))
     return params.tau, dict(dataset.alignment), params.k
 
 

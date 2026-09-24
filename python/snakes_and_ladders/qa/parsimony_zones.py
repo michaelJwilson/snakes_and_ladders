@@ -39,6 +39,7 @@ from snakes_and_ladders.qa.style import (
 from snakes_and_ladders.search.infer import parsimony_search
 from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import (
     MoveSet,
     enumerate_topologies,
@@ -160,12 +161,8 @@ def ranking(params: SimulationParams) -> Ranking:
     -------
     Ranking
     """
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=RANKED_SITES,
+    dataset = simulate_tree(
+        params, np.random.default_rng(params.seed), n_sites=RANKED_SITES
     )
     alignment = dict(dataset.alignment)
     scores = np.array(

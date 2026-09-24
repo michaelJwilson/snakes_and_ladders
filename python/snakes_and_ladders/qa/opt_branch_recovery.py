@@ -38,7 +38,7 @@ from snakes_and_ladders.qa.style import (
     series_style,
 )
 from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 
 # Enough sites for a well-determined estimate without a slow build; the
 # fixtures' own 2e5 sites are for the Monte Carlo validation tests.
@@ -66,13 +66,7 @@ def recovery(
         True values, fitted values, standard errors, and whether each 95%
         interval covers, one entry per *estimable* parameter.
     """
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=SITES,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=SITES)
     objective = BranchLengthObjective(
         params.tau, params.k, params.pi, dict(dataset.alignment)
     )
@@ -106,13 +100,7 @@ def split_profile(
     tuple[np.ndarray, np.ndarray]
         The splits, and the log-likelihood change from the even split.
     """
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=SITES,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=SITES)
     alignment = dict(dataset.alignment)
     order = pruning_torch.branch_order(params.tau)
     lengths = pruning_torch.branch_lengths_from_tree(params.tau)

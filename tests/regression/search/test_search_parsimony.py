@@ -29,6 +29,7 @@ from snakes_and_ladders.search.infer import (
 )
 from snakes_and_ladders.sim.newick import count_topologies
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import (
     MoveSet,
     Topology,
@@ -61,12 +62,10 @@ def _alignment(
     name: str, n_sites: int | None = None
 ) -> tuple[dict[str, np.ndarray], int]:
     params = load_fixture(name)
-    dataset = simulate_alignment(
-        params.tau,
-        params.k,
-        params.pi,
+    dataset = simulate_tree(
+        params,
         np.random.default_rng(params.seed),
-        params.n_sites if n_sites is None else n_sites,
+        n_sites=params.n_sites if n_sites is None else n_sites,
     )
     return dict(dataset.alignment), params.k
 

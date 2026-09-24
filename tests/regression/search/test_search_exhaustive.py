@@ -27,7 +27,7 @@ from snakes_and_ladders.sim.newick import (
     validate_unrooted_newick,
 )
 from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import (
     MoveSet,
     Topology,
@@ -47,13 +47,7 @@ _LIKELIHOOD_TOLERANCE = 1e-5
 
 def _alignment(path: Path = FIXTURE) -> tuple[dict[str, np.ndarray], int, Topology]:
     params = load_params(path, SimulationParams)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=params.n_sites,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed))
     return dict(dataset.alignment), params.k, params.tau
 
 

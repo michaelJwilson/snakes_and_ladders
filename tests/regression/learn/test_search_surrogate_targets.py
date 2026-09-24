@@ -38,7 +38,7 @@ from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 from snakes_and_ladders.sim.newick import to_newick, validate_unrooted_newick
 from snakes_and_ladders.sim.potts import SpatioOnlyParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import leaf_bipartitions, random_topology
 
 from tests._fixtures import SMALL_SITES, load_fixture
@@ -158,13 +158,7 @@ def test_shuffling_a_node_s_children_moves_no_likelihood() -> None:
     # movement in the maximized log-likelihood is 1.3e-16.
     params = load_fixture(SMALL_SITES)
     alignment = dict(
-        simulate_alignment(
-            tau=params.tau,
-            k=params.k,
-            pi=params.pi,
-            rng=np.random.default_rng(params.seed),
-            n_sites=200,
-        ).alignment
+        simulate_tree(params, np.random.default_rng(params.seed), n_sites=200).alignment
     )
     rng = np.random.default_rng(17)
     topology = random_topology(sorted(alignment), np.random.default_rng(2))
