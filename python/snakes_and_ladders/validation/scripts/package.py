@@ -130,6 +130,10 @@ def _hmc_sample(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     target = GaussianTarget(inputs["precision"])
     step_size, n_steps = float(inputs["step_size"]), int(inputs["n_steps"])
     n_draws, seed = int(inputs["n_draws"]), int(inputs["seed"])
+    # Issue #988: with ``store_chain`` false the chain keeps no draws and
+    # estimates the mean of ``x`` instead.
+    store_chain = bool(inputs.get("store_chain", np.asarray(True)))
+    operators = None if store_chain else {"x": lambda x: x}
 
     def call() -> Outputs:
         chain = hmc.sample(
@@ -138,6 +142,8 @@ def _hmc_sample(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
             n_draws,
             step_size=step_size,
             n_steps=n_steps,
+            store_chain=store_chain,
+            operators=operators,
         )
         return {"acceptance": np.asarray(chain.acceptance_rate)}
 
@@ -161,6 +167,59 @@ def _cluster_labels(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     return call
 
 
+def _gradient(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
+    """``gradient_at`` at every point, as the JAX pair differentiates them (#991).
+
+    ``route`` picks the torch path: ``autograd`` is ``hmc.gradient_at``, the
+    one HMC calls; ``func`` is ``torch.func.grad_and_value``; ``closed`` is
+    the Gaussian's ``P x`` with no tape. The measured call is the loop over
+    the points; ``per_point`` is each point's median alone.
+    """
+    import statistics
+    import time
+
+    import torch
+
+    from snakes_and_ladders.opt.mixture import GaussianMixtureObjective
+    from snakes_and_ladders.sample.hmc import gradient_at
+    from snakes_and_ladders.validation.gaussian import GaussianTarget
+
+    points = torch.as_tensor(inputs["points"])
+    route = str(inputs.get("route", np.asarray("autograd")))
+    if "precision" in inputs:
+        target: object = GaussianTarget(inputs["precision"])
+        precision = torch.as_tensor(inputs["precision"])
+    else:
+        target = GaussianMixtureObjective(
+            inputs["observations"], int(inputs["n_components"])
+        )
+        precision = None
+
+    def one(point: torch.Tensor) -> torch.Tensor:
+        if route == "closed":
+            assert precision is not None
+            return precision * point if precision.ndim == 1 else precision @ point
+        if route == "func":
+            grad, _ = torch.func.grad_and_value(target)(point)  # type: ignore[arg-type]
+            return grad  # type: ignore[no-any-return]
+        return gradient_at(target, point)  # type: ignore[arg-type]
+
+    def call() -> Outputs:
+        one(points[0])
+        seconds = []
+        rows = []
+        for point in points:
+            start = time.perf_counter()
+            rows.append(one(point))
+            seconds.append(time.perf_counter() - start)
+        return {
+            "gradients": torch.stack(rows).numpy(),
+            "per_point": np.asarray(statistics.median(seconds)),
+        }
+
+    return call
+
+
 #: The calls this script measures, by name.
 CALLS: dict[str, Build] = {
     "allocate": _allocate,
@@ -170,6 +229,7 @@ CALLS: dict[str, Build] = {
     "mixture_em": _mixture_em,
     "hmc_sample": _hmc_sample,
     "cluster_labels": _cluster_labels,
+    "gradient": _gradient,
 }
 
 

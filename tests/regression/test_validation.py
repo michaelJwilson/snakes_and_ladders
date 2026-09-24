@@ -77,6 +77,13 @@ def _declared_extras() -> dict[str, list[str]]:
     return {name: declared[name] for name in validation_extras()}
 
 
+def _core_distributions() -> set[str]:
+    """The distributions the package itself depends on, lower-cased."""
+    with (REPO_ROOT / "pyproject.toml").open("rb") as handle:
+        declared = tomllib.load(handle)["project"]["dependencies"]
+    return {_distribution(requirement).lower() for requirement in declared}
+
+
 def _distribution(requirement: str) -> str:
     """The distribution a requirement names, without version or marker."""
     match = re.match(r"\s*([A-Za-z0-9][A-Za-z0-9._-]*)", requirement)
@@ -100,7 +107,15 @@ def test_no_hot_path_package_imports_the_validation_home() -> None:
 @pytest.mark.critical
 @pytest.mark.infra
 def test_only_the_scripts_import_a_framework() -> None:
-    modules = [framework.module for framework in FRAMEWORKS.values()]
+    # A framework the package also depends on is not external to it: JAX is
+    # the HMM objectives' gradient (#1000) as well as #991's reference, so
+    # the package may import it. Every other framework stays in the scripts.
+    core = _core_distributions()
+    modules = [
+        framework.module
+        for framework in FRAMEWORKS.values()
+        if framework.distribution.lower() not in core
+    ]
     offenders = sorted(
         str(path.relative_to(REPO_ROOT))
         for root in (PACKAGE, TESTS)

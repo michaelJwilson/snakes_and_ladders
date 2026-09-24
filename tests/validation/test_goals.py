@@ -19,6 +19,9 @@ from snakes_and_ladders import oxi_snakes_and_ladders
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.emissions import GaussianEmission
 from snakes_and_ladders.fixtures import load_params
+from snakes_and_ladders.learn.policy import LinearPolicy
+from snakes_and_ladders.learn.reinforce import surrogate_loss
+from snakes_and_ladders.learn.surrogate import Examples, GraphSurrogate, _Batch
 from snakes_and_ladders.opt.hmm import baum_welch
 from snakes_and_ladders.opt.mixture import expectation_maximization
 from snakes_and_ladders.sample import hmc
@@ -32,12 +35,19 @@ from snakes_and_ladders.validation.gaussian import GaussianTarget, diagonal_prec
 from snakes_and_ladders.validation.runner import package
 
 from tests._fixtures import FIXTURES_DIR
+from tests.regression.learn.conftest import potts_environment
 from tests.validation._goals import (
     Goal,
     MemoryGoal,
     assert_fits,
     assert_meets,
     median_seconds,
+)
+from tests.validation._rl import (
+    WEIGHTS,
+    greedy_episodes,
+    potts_decisions,
+    ppo_loss_and_gradient,
 )
 
 pytestmark = pytest.mark.goal
@@ -79,6 +89,63 @@ RUSTWORKX_COMPONENTS = {
     )
     for side, seconds in ((142, 11.176e-3), (284, 46.366e-3))
 }
+
+
+#: JAX's per-point gradient under `jit` and its peak added memory over 100
+#: points, the medians of three subprocess runs (#991): the diagonal Gaussian
+#: at d = 10, 10^3 and 10^4, and the three-component mixture at n = 10^5.
+#: Where torch's autograd was the faster or the lighter (the dense Gaussian at
+#: d = 10^3) no goal is set.
+JAX_GRADIENT = {
+    case: Goal(
+        "jax",
+        f"hmc.gradient_at per point, {case}",
+        seconds,
+        "2026-09-23, 4-core reference host, #991",
+    )
+    for case, seconds in (
+        ("diagonal d=10", 11.35e-6),
+        ("diagonal d=1000", 28.62e-6),
+        ("diagonal d=10000", 51.62e-6),
+        ("mixture n=100000", 2843.98e-6),
+    )
+}
+JAX_GRADIENT_MEMORY = {
+    case: MemoryGoal(
+        "jax",
+        f"hmc.gradient_at over 100 points, {case}",
+        peak_bytes,
+        "2026-09-23, 4-core reference host, #991",
+    )
+    for case, peak_bytes in (
+        ("diagonal d=10", 14_741_504),
+        ("diagonal d=1000", 9_277_440),
+        ("diagonal d=10000", 27_959_296),
+        ("mixture n=100000", 29_954_048),
+    )
+}
+
+
+def _gradient_inputs(case: str) -> dict[str, np.ndarray]:
+    """The points and target of one JAX goal, as `test_gradient_jax_bench.py` draws them."""
+    rng = np.random.default_rng(991)
+    if case.startswith("diagonal"):
+        dimension = int(case.split("=")[1])
+        return {
+            "precision": diagonal_precision(dimension),
+            "points": rng.normal(size=(100, dimension)),
+        }
+    draw = np.random.default_rng(975)
+    component = draw.choice(3, size=100_000, p=[0.3, 0.3, 0.4])
+    observations = draw.normal(
+        np.array([-4.0, 0.0, 5.0])[component], np.array([1.0, 1.5, 1.0])[component]
+    )
+    centre = np.array([0.0, 0.3, -3.0, 0.5, 4.0, 0.2, 0.0, 0.3])
+    return {
+        "observations": observations,
+        "n_components": np.asarray(3),
+        "points": centre + 0.05 * rng.normal(size=(100, 8)),
+    }
 
 
 def _cut_inputs(side: int) -> dict[str, np.ndarray]:
@@ -396,3 +463,105 @@ def test_the_union_find_meets_rustworkxs_runtime(side: int) -> None:
     }
     seconds = [package("cluster_labels", inputs).seconds for _ in range(3)]
     assert_meets(float(np.median(seconds)), RUSTWORKX_COMPONENTS[side])
+
+
+#: TorchRL's warm call on 10⁵ Potts decisions, `WEIGHTS` in
+#: `tests/validation/_rl.py`: `ClipPPOLoss` at clip 0.2 in episodes of 100,
+#: and `ReinforceLoss` on greedy episodes of 10 at baseline 0.5, each with its
+#: gradient; the median of ten warm calls over two interpreters (#977). The
+#: package's REINFORCE recomputes every decision's features through the
+#: environment, which TorchRL is handed.
+TORCHRL_LOSS = {
+    "clip_ppo": Goal(
+        "torchrl",
+        "ppo_loss and its gradient on 10^5 Potts decisions",
+        14.66e-3,
+        "2026-09-23, 4-core reference host, #977",
+    ),
+    "reinforce": Goal(
+        "torchrl",
+        "surrogate_loss and its gradient on 10^5 Potts decisions",
+        17.97e-3,
+        "2026-09-23, 4-core reference host, #977",
+    ),
+}
+
+#: PyG's `GINConv` twin's forward pass on one open lattice with 4 random
+#: token features per node, hidden 8, two layers, tied weights; the median of
+#: ten warm calls over two interpreters (#977).
+TORCH_GEOMETRIC_FORWARD = {
+    side: Goal(
+        "torch_geometric",
+        f"GraphSurrogate's forward on the {side}x{side} open lattice",
+        seconds,
+        "2026-09-23, 4-core reference host, #977",
+    )
+    for side, seconds in ((142, 5.845e-3), (284, 18.87e-3))
+}
+
+
+@pytest.mark.experiment
+def test_ppo_loss_meets_torchrls_runtime() -> None:
+    features, taken = potts_decisions(100_000)
+    rng = np.random.default_rng(9770)
+    old = torch.as_tensor(rng.normal(scale=0.1, size=100_000)) - 1.5
+    advantages = torch.as_tensor(rng.normal(size=100_000))
+    ppo_loss_and_gradient(features, taken, old, advantages, 100, 0.2)  # warm-up
+    seconds = median_seconds(
+        lambda: ppo_loss_and_gradient(features, taken, old, advantages, 100, 0.2)
+    )
+    assert_meets(seconds, TORCHRL_LOSS["clip_ppo"])
+
+
+@pytest.mark.experiment
+def test_reinforce_loss_meets_torchrls_runtime() -> None:
+    environment = potts_environment()
+    policy = LinearPolicy(2)
+    policy.set_weights(torch.tensor(WEIGHTS, dtype=torch.float64))
+    episodes = greedy_episodes(environment, policy.weights, 10_000, 10, 977)
+
+    def loss_and_gradient() -> None:
+        value = surrogate_loss(environment, policy, episodes, 0.5)
+        torch.autograd.grad(value, policy.weights)
+
+    assert_meets(
+        median_seconds(loss_and_gradient, repeats=3), TORCHRL_LOSS["reinforce"]
+    )
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("side", sorted(TORCH_GEOMETRIC_FORWARD))
+def test_the_graph_surrogate_meets_pygs_runtime(side: int) -> None:
+    graph = lattice_graph((side, side), BoundaryCondition.OPEN, 1.0)
+    rng = np.random.default_rng(977)
+    examples = Examples(
+        features=torch.as_tensor(rng.normal(size=(1, 3))),
+        targets=torch.zeros(1, dtype=torch.float64),
+        groups=np.zeros(1, dtype=np.int64),
+        tokens=(torch.as_tensor(rng.normal(size=(graph.n_nodes, 4))),),
+        adjacency=(np.asarray(graph.edge_index, dtype=np.int64),),
+    )
+    batch = _Batch(examples)
+    torch.manual_seed(977)
+    model = GraphSurrogate(3, 4, hidden=8, n_layers=2)
+    with torch.no_grad():
+        model(batch)  # warm-up
+        seconds = median_seconds(lambda: model(batch))
+    assert_meets(seconds, TORCH_GEOMETRIC_FORWARD[side])
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("case", sorted(JAX_GRADIENT))
+def test_the_gradient_meets_jaxs_runtime(case: str) -> None:
+    inputs = _gradient_inputs(case)
+    runs = [package("gradient", inputs) for _ in range(3)]
+    per_point = float(np.median([float(run.outputs["per_point"]) for run in runs]))
+    assert_meets(per_point, JAX_GRADIENT[case])
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("case", sorted(JAX_GRADIENT_MEMORY))
+def test_the_gradient_fits_jaxs_memory(case: str) -> None:
+    inputs = _gradient_inputs(case)
+    peaks = [package("gradient", inputs).peak_bytes or 0 for _ in range(3)]
+    assert_fits(int(np.median(peaks)), JAX_GRADIENT_MEMORY[case])

@@ -300,6 +300,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sample.hmc
    :members:
 
+.. automodule:: snakes_and_ladders.sample.expectation
+   :members:
+
 .. automodule:: snakes_and_ladders.sample.langevin
    :members:
 
@@ -429,9 +432,6 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.learn.tree
    :members:
 
-.. automodule:: snakes_and_ladders.learn.gym
-   :members:
-
 .. automodule:: snakes_and_ladders.backend
    :members:
 
@@ -551,7 +551,31 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.validation.scripts.rustworkx
    :members:
 
+.. automodule:: snakes_and_ladders.validation.jax
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.scripts.jax
+   :members:
+
 .. automodule:: snakes_and_ladders.validation.scripts.blackjax
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.gymnasium
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.scripts.gymnasium
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.torchrl
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.scripts.torchrl
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.torch_geometric
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.scripts.torch_geometric
    :members:
 
 .. automodule:: snakes_and_ladders.qa
