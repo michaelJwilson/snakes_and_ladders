@@ -36,7 +36,7 @@ from snakes_and_ladders.likelihood.surrogate import (
 )
 from snakes_and_ladders.search.infer import score_topology
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import enumerate_topologies
 
 from tests._fixtures import load_fixture
@@ -50,9 +50,7 @@ SITE_FIELD = np.random.default_rng(365).normal(0.0, 0.4, (9, 3))
 
 def _alignment() -> tuple[dict[str, np.ndarray], int, np.ndarray]:
     params = load_fixture(FIVE_TAXA)
-    dataset = simulate_alignment(
-        params.tau, params.k, params.pi, np.random.default_rng(params.seed), 1000
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=1000)
     return dict(dataset.alignment), params.k, np.asarray(params.pi)
 
 

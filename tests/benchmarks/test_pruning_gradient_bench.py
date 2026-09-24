@@ -37,7 +37,7 @@ from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.likelihood import pruning_analytic, pruning_torch
 from snakes_and_ladders.sandbox import pruning_burn
 from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.tree import Node
 
 from tests._fixtures import FIXTURES_DIR
@@ -57,13 +57,7 @@ def _dataset(
     fixture_name: str, n_sites: int
 ) -> tuple[Node, int, np.ndarray, dict[str, np.ndarray], torch.Tensor]:
     params = load_params(FIXTURES_DIR / fixture_name, SimulationParams)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=n_sites,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=n_sites)
     return (
         params.tau,
         params.k,

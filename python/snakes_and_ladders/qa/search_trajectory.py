@@ -31,7 +31,7 @@ from snakes_and_ladders.qa.style import (
 )
 from snakes_and_ladders.search.infer import infer, score_topology
 from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import MoveSet, enumerate_topologies
 
 # Starting seeds whose trajectories are drawn. Three is enough to show that
@@ -59,13 +59,7 @@ def search_trajectories(
         the generating tree's own score, every enumerated topology's score,
         and the best score found by any search.
     """
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=params.n_sites,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed))
     alignment = dict(dataset.alignment)
 
     trajectories: dict[str, list[tuple[int, float]]] = {}

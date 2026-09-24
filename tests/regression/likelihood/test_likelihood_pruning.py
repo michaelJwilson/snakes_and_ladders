@@ -33,6 +33,7 @@ from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
 from snakes_and_ladders.likelihood.pruning import log_likelihood
 from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import FIXTURES_DIR
@@ -182,13 +183,7 @@ def test_pulley_principle_is_invariant_to_root_position() -> None:
 @pytest.mark.end2end
 def test_generating_topology_outscores_random_wrong_topologies() -> None:
     params = load_params(FIXTURES_DIR / "tree_jc/release.yaml", SimulationParams)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=params.n_sites,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed))
 
     true_log_likelihood = log_likelihood(
         params.tau, params.k, params.pi, dataset.alignment

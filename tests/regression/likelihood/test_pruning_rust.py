@@ -29,6 +29,7 @@ from snakes_and_ladders.likelihood.brute_force import brute_force_log_likelihood
 from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
 from snakes_and_ladders.likelihood.patterns import compress
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.tree import Node
 
 from tests._fixtures import FOUR_TAXA, SMALL_SITES, load_fixture
@@ -163,13 +164,7 @@ def test_relative_tolerance_transfers_to_fixture_scale() -> None:
     that off the per-PR path.
     """
     params = load_fixture(FOUR_TAXA)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=params.n_sites,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed))
     alignment = dict(dataset.alignment)
 
     numpy_ll = pruning.log_likelihood(params.tau, params.k, params.pi, alignment)
@@ -199,13 +194,7 @@ def test_the_enum_reaches_the_rust_kernel_bitwise() -> None:
     # the door too. Any other member is refused by name.
     for name in (SMALL_SITES, "tree_search/ci.yaml"):
         params = load_fixture(name)
-        dataset = simulate_alignment(
-            tau=params.tau,
-            k=params.k,
-            pi=params.pi,
-            rng=np.random.default_rng(params.seed),
-            n_sites=params.n_sites,
-        )
+        dataset = simulate_tree(params, np.random.default_rng(params.seed))
         patterns = compress(dataset.alignment)
 
         assert pruning.log_likelihood(
