@@ -38,6 +38,7 @@ from typing import Any, ClassVar, Generic, Self, TypeVar, cast
 
 import numpy as np
 import torch
+from numpy.typing import ArrayLike
 
 from snakes_and_ladders.backend import Backend, twin
 from snakes_and_ladders.emissions import (
@@ -47,6 +48,7 @@ from snakes_and_ladders.emissions import (
     NegativeBinomialEmission,
     Reestimate,
 )
+from snakes_and_ladders.emissions.base import as_array
 from snakes_and_ladders.fixtures import BinInstance
 from snakes_and_ladders.sim.graph import (
     boundary_from_declared,
@@ -242,16 +244,18 @@ class IndependentCountPair(EmissionFamily):
         self,
         states: np.ndarray,
         rng: np.random.Generator,
-        covariate: torch.Tensor | None = None,
+        covariate: ArrayLike | None = None,
     ) -> np.ndarray:
         """Draw one pair per entry of ``states``, shape ``states.shape + (2,)``.
 
         ``covariate`` is one per channel, as :func:`split_covariate` describes:
         the total is drawn against its exposure and the successes out of their
         trial count, so a planted instance can be drawn under a varying one
-        (issue #658).
+        (issue #658). An array or a tensor, split as an array (issue #1011).
         """
-        channels = split_covariate(self, covariate)
+        channels = split_covariate(
+            self, None if covariate is None else as_array(covariate)
+        )
         return np.stack(
             [
                 self._total.sample(states, rng, covariate=channels.exposure),
@@ -302,9 +306,9 @@ class IndependentCountPair(EmissionFamily):
 
     def reestimate(
         self,
-        observations: torch.Tensor,
-        posterior: torch.Tensor,
-        covariate: torch.Tensor | None = None,
+        observations: ArrayLike,
+        posterior: ArrayLike,
+        covariate: ArrayLike | None = None,
     ) -> Reestimate[IndependentCountPair]:
         """Each channel's own M step, reported together.
 
@@ -317,14 +321,19 @@ class IndependentCountPair(EmissionFamily):
         ``covariate`` splits by channel, so each channel re-estimates against
         the same one it was scored against --- a fit that scores against an
         exposure and re-estimates without it is fitting two different models
-        (issue #658).
+        (issue #658). Every argument is an array or a tensor; the pair is
+        split as an array, and each channel's family converts what it is
+        handed (issue #1011).
         """
-        channels = split_covariate(self, covariate)
+        channels = split_covariate(
+            self, None if covariate is None else as_array(covariate)
+        )
+        values = as_array(observations)
         first = self._total.reestimate(
-            observations[..., TOTAL], posterior, covariate=channels.exposure
+            values[..., TOTAL], posterior, covariate=channels.exposure
         )
         second = self._successes.reestimate(
-            observations[..., SUCCESSES], posterior, covariate=channels.trials
+            values[..., SUCCESSES], posterior, covariate=channels.trials
         )
         return Reestimate(
             emissions=IndependentCountPair(first.emissions, second.emissions),
@@ -403,7 +412,7 @@ class ReflectedEmission(EmissionFamily):
         self,
         states: np.ndarray,
         rng: np.random.Generator,
-        covariate: torch.Tensor | None = None,
+        covariate: ArrayLike | None = None,
     ) -> np.ndarray:
         """Draw from the ``2K``-state family the two halves unfold to."""
         return self._unfolded.sample(states, rng, covariate=covariate)
@@ -424,9 +433,9 @@ class ReflectedEmission(EmissionFamily):
 
     def reestimate(
         self,
-        observations: torch.Tensor,
-        posterior: torch.Tensor,
-        covariate: torch.Tensor | None = None,
+        observations: ArrayLike,
+        posterior: ArrayLike,
+        covariate: ArrayLike | None = None,
     ) -> Reestimate[ReflectedEmission]:
         """The base family's M step on the observations and their reflection.
 
@@ -443,16 +452,20 @@ class ReflectedEmission(EmissionFamily):
         """
         k = self._base.n_states
         pair = isinstance(self._base, IndependentCountPair)
-        trailing = observations.shape[posterior.ndim - 1 :]
-        values = observations.reshape(-1, *trailing)
-        weights = posterior.reshape(-1, 2 * k)
-        conditioned = (
-            None
-            if covariate is None
-            else covariate.reshape(
-                values.shape[0], *covariate.shape[posterior.ndim - 1 :]
+        # Array arithmetic: a reshape, a reflection and a stack, none of it
+        # differentiated, so no tensor is formed here; the base family
+        # converts what it is handed (issue #1011).
+        gamma = as_array(posterior)
+        observed = as_array(observations, self.observation_dtype)
+        trailing = observed.shape[gamma.ndim - 1 :]
+        values = observed.reshape(-1, *trailing)
+        weights = gamma.reshape(-1, 2 * k)
+        conditioned = None
+        if covariate is not None:
+            supplied = as_array(covariate)
+            conditioned = supplied.reshape(
+                values.shape[0], *supplied.shape[gamma.ndim - 1 :]
             )
-        )
         successes = values[:, SUCCESSES] if pair else values
         if conditioned is not None:
             trials = conditioned[:, SUCCESSES] if pair else conditioned[:, 0]
@@ -461,7 +474,7 @@ class ReflectedEmission(EmissionFamily):
                 self._base.successes.trials
                 if isinstance(self._base, IndependentCountPair)
                 else self._base.trials
-            )
+            ).numpy()
             if not bool((declared == declared[0]).all()):
                 msg = (
                     "a reflection maps successes about their trial count, and "
@@ -470,18 +483,18 @@ class ReflectedEmission(EmissionFamily):
                 )
                 raise ValueError(msg)
             trials = declared[0]
-        reflected_successes = trials.to(successes.dtype) - successes
+        reflected_successes = np.asarray(trials, dtype=successes.dtype) - successes
         if pair:
-            reflected = values.clone()
+            reflected = values.copy()
             reflected[:, SUCCESSES] = reflected_successes
         else:
             reflected = reflected_successes
         step = self._base.reestimate(
-            torch.cat([values, reflected]),
-            torch.cat([weights[:, :k], weights[:, k:]]),
+            np.concatenate([values, reflected]),
+            np.concatenate([weights[:, :k], weights[:, k:]]),
             covariate=None
             if conditioned is None
-            else torch.cat([conditioned, conditioned]),
+            else np.concatenate([conditioned, conditioned]),
         )
         return Reestimate(
             ReflectedEmission(step.emissions),
@@ -1106,7 +1119,7 @@ def chain_states(
     return np.asarray(walk % n_states, dtype=np.int64)
 
 
-def vertex_covariate(params: SpatioSequentialParams, node: int) -> torch.Tensor | None:
+def vertex_covariate(params: SpatioSequentialParams, node: int) -> np.ndarray | None:
     """``params.covariate`` for one vertex, as a draw over its ``S`` positions wants it.
 
     The count-pair simulators draw a vertex at a time from a stream of its own,
@@ -1115,15 +1128,18 @@ def vertex_covariate(params: SpatioSequentialParams, node: int) -> torch.Tensor 
     --- the covariate already carries the family's channel axis, and the
     singleton belongs inside each channel (issue #671).
 
+    An array: :meth:`EmissionFamily.sample` takes one, and a draw takes no
+    derivative (issue #1011).
+
     Returns
     -------
-    torch.Tensor | None
+    np.ndarray | None
         ``(S, ...)`` with the covariate's own trailing axes, or ``None`` where
         the params carry none.
     """
     if params.covariate is None:
         return None
-    return torch.as_tensor(params.covariate[:, node])
+    return np.asarray(params.covariate[:, node])
 
 
 def simulate_count_pairs(
