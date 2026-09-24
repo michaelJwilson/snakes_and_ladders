@@ -27,15 +27,17 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 import torch
 
+from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.likelihood import (
     parsimony,
     pruning,
     pruning_analytic,
+    pruning_jax,
     pruning_torch,
 )
 from snakes_and_ladders.opt.constrain import (
@@ -104,6 +106,12 @@ class BranchLengthObjective(Objective):
         justify changing it: the ratio between the two inverts on the
         branch lengths alone. The argument exists so a caller can measure
         the two through a fit, rather than only at ``log_likelihood``.
+    backend : Backend
+        Where :meth:`value_and_gradient` takes the value and gradient.
+        ``Backend.JAX`` is :mod:`snakes_and_ladders.likelihood.pruning_jax`,
+        one program per topology under ``jit`` (issue #1005);
+        ``Backend.TORCH`` is ``gradient``'s PyTorch route, the oracle it is
+        pinned to. ``__call__`` is the PyTorch route under either.
 
     Raises
     ------
@@ -121,7 +129,11 @@ class BranchLengthObjective(Objective):
         dtype: torch.dtype = torch.float64,
         device: torch.device | str | None = None,
         gradient: GradientRoute = "taped",
+        backend: Backend = Backend.TORCH,
     ) -> None:
+        refuse_backend(
+            "a phylogenetic objective's gradient", backend, (Backend.JAX, Backend.TORCH)
+        )
         if len(tau.children) < 2:
             msg = (
                 f"root {tau.name!r} has {len(tau.children)} children; a tree "
@@ -133,6 +145,8 @@ class BranchLengthObjective(Objective):
             raise ValueError(msg)
 
         self._gradient: GradientRoute = gradient
+        self._backend = backend
+        self._jax: tuple[Any, dict[str, Any]] | None = None
         self._tau = tau
         self._k = k
         self._pi = pi
@@ -251,6 +265,56 @@ class BranchLengthObjective(Objective):
     def gradient(self) -> GradientRoute:
         """Which route this objective's derivative comes from."""
         return self._gradient
+
+    def branch_map(self) -> tuple[tuple[int, ...], tuple[int, ...]]:
+        """Where each branch's length sits in ``theta``, and the halved root pair.
+
+        :meth:`branch_lengths` as an index: branch ``j`` is
+        ``exp(theta[source[j]])``, halved where ``j`` is in ``halves``.
+        """
+        n_branches = len(self._branch_order)
+        if self._merged is None:
+            return tuple(range(n_branches)), ()
+        first, second = self._merged
+        source = tuple(
+            j if j < second else (first if j == second else j - 1)
+            for j in range(n_branches)
+        )
+        return source, (first, second)
+
+    def value_and_gradient(
+        self, theta: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """The negative log-likelihood at ``theta`` and its gradient, detached (issue #1005)."""
+        if self._backend is Backend.TORCH:
+            point = theta.detach().clone().requires_grad_(True)
+            value = self(point)
+            (gradient,) = torch.autograd.grad(value, point)
+            return value.detach(), gradient
+        if self._jax is None:
+            source, halves = self.branch_map()
+            data, weight = pruning_jax.leaves(self._tau, self._k, self._alignment, None)
+            program = pruning_jax.branch_length_program(
+                pruning_jax.steps(self._tau),
+                self._k,
+                len(self._branch_order),
+                source,
+                halves,
+            )
+            self._jax = (
+                program,
+                pruning_jax.placed(
+                    {"pi": np.asarray(self._pi, float), "data": data, "weight": weight}
+                ),
+            )
+        program, placed = self._jax
+        value, gradient = program(
+            theta.detach().cpu().numpy(), placed["pi"], placed["data"], placed["weight"]
+        )
+        return (
+            torch.tensor(float(value), dtype=theta.dtype),
+            torch.as_tensor(np.array(gradient), dtype=theta.dtype),
+        )
 
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         """Negative log-likelihood of the alignment at these branch lengths."""
@@ -379,6 +443,9 @@ class SubstitutionModelObjective(Objective):
         Precision; ``float64`` by default.
     device : torch.device | str | None
         Where to run.
+    backend : Backend
+        Where :meth:`value_and_gradient` takes the value and gradient, as for
+        :class:`BranchLengthObjective` (issue #1005).
     """
 
     def __init__(
@@ -388,7 +455,13 @@ class SubstitutionModelObjective(Objective):
         alignment: Mapping[str, np.ndarray],
         dtype: torch.dtype = torch.float64,
         device: torch.device | str | None = None,
+        backend: Backend = Backend.TORCH,
     ) -> None:
+        refuse_backend(
+            "a phylogenetic objective's gradient", backend, (Backend.JAX, Backend.TORCH)
+        )
+        self._backend = backend
+        self._jax: tuple[Any, dict[str, Any]] | None = None
         # The branch-length block, including the confounded-root-pair merge,
         # is exactly BranchLengthObjective's. Reused rather than restated so
         # the two cannot drift; pi is a placeholder here because this class
@@ -529,6 +602,36 @@ class SubstitutionModelObjective(Objective):
             self._alignment,
             self._branches.branch_lengths(branches),
             rate_matrix=self.rate_matrix(theta),
+        )
+
+    def value_and_gradient(
+        self, theta: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """The negative log-likelihood at ``theta`` and its gradient, detached (issue #1005)."""
+        if self._backend is Backend.TORCH:
+            point = theta.detach().clone().requires_grad_(True)
+            value = self(point)
+            (gradient,) = torch.autograd.grad(value, point)
+            return value.detach(), gradient
+        if self._jax is None:
+            source, halves = self._branches.branch_map()
+            data, weight = pruning_jax.leaves(self._tau, self._k, self._alignment, None)
+            program = pruning_jax.substitution_model_program(
+                pruning_jax.steps(self._tau),
+                self._k,
+                len(source),
+                source,
+                halves,
+                self._branches.n_parameters,
+            )
+            self._jax = (program, pruning_jax.placed({"data": data, "weight": weight}))
+        program, placed = self._jax
+        value, gradient = program(
+            theta.detach().cpu().numpy(), placed["data"], placed["weight"]
+        )
+        return (
+            torch.tensor(float(value), dtype=theta.dtype),
+            torch.as_tensor(np.array(gradient), dtype=theta.dtype),
         )
 
     def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
