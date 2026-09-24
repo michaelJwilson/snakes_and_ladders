@@ -26,7 +26,7 @@ import itertools
 from collections.abc import Iterator, Sequence
 
 import numpy as np
-import torch
+from numpy.typing import NDArray
 
 from snakes_and_ladders.enumeration import configurations, enumerated_optimum
 from snakes_and_ladders.learn.environment import Environment
@@ -169,7 +169,7 @@ class HmmEnvironment(Environment[Path, Revision]):
         transition_delta, emission_delta = self._deltas(state, action)
         return tuple(successor), transition_delta + emission_delta
 
-    def features(self, state: Path, actions: Sequence[Revision]) -> torch.Tensor:
+    def features(self, state: Path, actions: Sequence[Revision]) -> NDArray[np.float64]:
         """``(len(actions), 2)``: the change in transition and in emission terms.
 
         The two span the reward exactly --- their sum *is* it --- so the
@@ -179,7 +179,7 @@ class HmmEnvironment(Environment[Path, Revision]):
         would swallow, and there is deliberately no third constant feature.
         """
         rows = [self._deltas(state, action) for action in actions]
-        return torch.tensor(rows, dtype=torch.float64).reshape(len(actions), 2)
+        return np.array(rows, dtype=np.float64).reshape(len(actions), 2)
 
     def n_features(self) -> int:
         """Two: the transition change and the emission change."""
@@ -194,7 +194,7 @@ class HmmEnvironment(Environment[Path, Revision]):
             )
         )
 
-    def greedy_weights(self) -> torch.Tensor:
+    def greedy_weights(self) -> NDArray[np.float64]:
         """The weight vector whose policy is greedy, up to temperature.
 
         The reward is the plain sum of the two features, so ``(1, 1)`` scores
@@ -202,7 +202,7 @@ class HmmEnvironment(Environment[Path, Revision]):
         ``(J, 1)``, this carries no parameter --- which makes it the cleaner
         of the two recovery targets.
         """
-        return torch.ones(2, dtype=torch.float64)
+        return np.ones(2, dtype=np.float64)
 
     def _deltas(self, state: Path, action: Revision) -> tuple[float, float]:
         """Change in the transition terms and in the emission term."""

@@ -97,9 +97,7 @@ def test_the_features_span_the_reward_on_a_lattice() -> None:
     state = environment.reset(np.random.default_rng(2))
     actions = environment.actions(state)
 
-    scored = (
-        environment.features(state, actions) @ environment.greedy_weights()
-    ).numpy()
+    scored = environment.features(state, actions) @ environment.greedy_weights()
     rewards = np.array([environment.step(state, action)[1] for action in actions])
 
     assert_allclose(scored, rewards, atol=1e-12)

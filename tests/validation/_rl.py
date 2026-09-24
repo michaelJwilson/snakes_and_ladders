@@ -24,8 +24,8 @@ def potts_decisions(steps: int) -> tuple[torch.Tensor, torch.Tensor]:
     environment = potts_environment()
     rng = np.random.default_rng(977)
     states = [environment.reset(rng) for _ in range(64)]
-    table = torch.stack(
-        [environment.features(s, environment.actions(s)) for s in states]
+    table = torch.as_tensor(
+        np.stack([environment.features(s, environment.actions(s)) for s in states])
     )
     pick = torch.as_tensor(rng.integers(0, len(states), steps))
     taken = torch.as_tensor(rng.integers(0, table.shape[1], steps))
@@ -53,7 +53,7 @@ def greedy_episodes(
         states, actions, rewards = [state], [], []
         for _ in range(length):
             available = environment.actions(state)
-            scores = environment.features(state, available) @ weights
+            scores = torch.as_tensor(environment.features(state, available)) @ weights
             action = available[int(torch.argmax(scores.detach()))]
             state, reward = environment.step(state, action)
             actions.append(action)
@@ -77,7 +77,7 @@ def reinforce_decisions(
             features.append(environment.features(episode.states[step], available))
             taken.append(available.index(action))
             returns.append(to_go[step])
-    return torch.stack(features), np.asarray(taken), np.asarray(returns)
+    return torch.as_tensor(np.stack(features)), np.asarray(taken), np.asarray(returns)
 
 
 def ppo_loss_and_gradient(

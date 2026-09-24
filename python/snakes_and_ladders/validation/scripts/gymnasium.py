@@ -188,7 +188,7 @@ def adapter(gymnasium: Any) -> Any:
             observation = np.zeros(
                 (self._n_max, self._environment.n_features()), dtype=np.float64
             )
-            observation[: len(self._available)] = features.detach().numpy()
+            observation[: len(self._available)] = features
             return observation
 
         def _info(self, *, action_valid: bool) -> dict[str, Any]:

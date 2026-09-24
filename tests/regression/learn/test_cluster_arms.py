@@ -669,7 +669,7 @@ def test_each_arm_carries_the_columns_that_can_vary_in_it(
     environment, _, _ = _arm(6, 3, kinds)
     state = environment.reset(np.random.default_rng(6))
     offered = environment.actions(state)
-    readings = environment.features(state, offered).numpy()
+    readings = environment.features(state, offered)
 
     assert environment._columns == expected
     assert environment.n_features() == len(expected)
