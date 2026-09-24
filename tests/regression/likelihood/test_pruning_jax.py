@@ -51,6 +51,7 @@ def _points(objective: BranchLengthObjective, tau: Node) -> list[torch.Tensor]:
     return [truth, torch.full_like(truth, float(np.log(0.1)))]
 
 
+@pytest.mark.oracle
 @pytest.mark.backend
 @pytest.mark.parametrize("name", [SMALL_SITES, FOUR_TAXA, EIGHT_TAXA])
 def test_branch_length_value_and_gradient_match_torch(name: str) -> None:
@@ -69,6 +70,7 @@ def test_branch_length_value_and_gradient_match_torch(name: str) -> None:
         )
 
 
+@pytest.mark.oracle
 @pytest.mark.backend
 def test_the_analytic_route_and_jax_agree() -> None:
     """Three routes to one gradient: ``gradient="analytic"`` is the third."""
@@ -114,6 +116,7 @@ def test_the_jax_gradient_passes_finite_differences() -> None:
     check_grads(value, (theta,), order=1, modes=("rev",))  # type: ignore[no-untyped-call]
 
 
+@pytest.mark.oracle
 @pytest.mark.backend
 @pytest.mark.parametrize("name", [SMALL_SITES, EIGHT_TAXA])
 def test_substitution_model_value_and_gradient_match_torch(name: str) -> None:
@@ -133,6 +136,7 @@ def test_substitution_model_value_and_gradient_match_torch(name: str) -> None:
     assert_allclose(actual[1].numpy(), expected[1].numpy(), rtol=1e-10, atol=1e-10)
 
 
+@pytest.mark.oracle
 @pytest.mark.backend
 def test_a_fit_reaches_the_same_optimum() -> None:
     """L-BFGS through either route stops at the same lengths and likelihood."""
@@ -146,7 +150,7 @@ def test_a_fit_reaches_the_same_optimum() -> None:
     assert_allclose(results[1].theta.numpy(), results[0].theta.numpy(), atol=1e-6)
 
 
-@pytest.mark.patch
+@pytest.mark.smoke
 def test_a_backend_other_than_jax_or_torch_is_refused() -> None:
     tau, k, pi, alignment = _alignment(SMALL_SITES, n_sites=10)
     with pytest.raises(ValueError, match="gradient"):
