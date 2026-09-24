@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import itertools
 import sys
+from itertools import product
 
 import numpy as np
 import pytest
@@ -43,6 +44,8 @@ from snakes_and_ladders.sim.graph import (
 )
 from snakes_and_ladders.sim.potts import energy, site_field
 
+from tests._rows import every_row, every_value
+
 sys.setrecursionlimit(50_000)
 
 
@@ -55,24 +58,23 @@ def _enumerated(graph: PottsGraph, field_values: np.ndarray, n_states: int) -> f
 
 @pytest.mark.critical
 @pytest.mark.oracle
-@pytest.mark.parametrize("shape", [(2, 2), (3, 3), (4, 3)])
-@pytest.mark.parametrize("coupling", [0.0, 0.5, 1.5])
-def test_two_labels_reproduce_the_exact_minimum_cut(
-    shape: tuple[int, int], coupling: float
-) -> None:
+def test_two_labels_reproduce_the_exact_minimum_cut() -> None:
     # At k = 2 one expansion is exact, so this compares against an
     # independently validated exact solver rather than enumeration, and fails
     # on a construction error enumeration at these sizes does not notice.
-    rng = np.random.default_rng(0)
-    graph = lattice_graph(shape, BoundaryCondition.OPEN, coupling)
+    def check(shape: tuple[int, int], coupling: float) -> None:
+        rng = np.random.default_rng(0)
+        graph = lattice_graph(shape, BoundaryCondition.OPEN, coupling)
 
-    for _ in range(3):
-        field_values = rng.normal(size=(graph.n_nodes, 2))
+        for _ in range(3):
+            field_values = rng.normal(size=(graph.n_nodes, 2))
 
-        realized = alpha_expansion(graph, field_values, 2).energy
-        _, exact = ising_ground_state(graph, field_values)
+            realized = alpha_expansion(graph, field_values, 2).energy
+            _, exact = ising_ground_state(graph, field_values)
 
-        assert realized == pytest.approx(exact, abs=1e-9)
+            assert realized == pytest.approx(exact, abs=1e-9)
+
+    every_row(product([(2, 2), (3, 3), (4, 3)], [0.0, 0.5, 1.5]), check)
 
 
 @pytest.mark.critical
@@ -249,59 +251,63 @@ def test_an_already_optimal_start_makes_no_moves() -> None:
 
 @pytest.mark.critical
 @pytest.mark.oracle
-@pytest.mark.parametrize("seed", range(6))
-def test_the_numba_descent_reproduces_the_python_one_bitwise(seed: int) -> None:
+def test_the_numba_descent_reproduces_the_python_one_bitwise() -> None:
     # What lets the kernel be the default (#264): same update, same index
     # order, same first-minimum tie rule, so the labelling and the energy are
     # identical rather than close. A random per-node field against a coupling
     # of the same order makes the surface rugged enough that the start decides
     # the optimum -- 20 of 20 starts agree at 32x32.
-    graph = lattice_graph((8, 8), BoundaryCondition.PERIODIC, 0.5)
-    field = np.random.default_rng(100 + seed).normal(size=(graph.n_nodes, 3))
+    def check(seed: int) -> None:
+        graph = lattice_graph((8, 8), BoundaryCondition.PERIODIC, 0.5)
+        field = np.random.default_rng(100 + seed).normal(size=(graph.n_nodes, 3))
 
-    python = iterated_conditional_modes(
-        graph, field, 3, np.random.default_rng(seed), backend=Backend.PYTHON
-    )
-    compiled = iterated_conditional_modes(
-        graph, field, 3, np.random.default_rng(seed), backend=Backend.NUMBA
-    )
+        python = iterated_conditional_modes(
+            graph, field, 3, np.random.default_rng(seed), backend=Backend.PYTHON
+        )
+        compiled = iterated_conditional_modes(
+            graph, field, 3, np.random.default_rng(seed), backend=Backend.NUMBA
+        )
 
-    assert np.array_equal(python.labelling, compiled.labelling)
-    assert python.energy == compiled.energy
+        assert np.array_equal(python.labelling, compiled.labelling)
+        assert python.energy == compiled.energy
+
+    every_value(range(6), check)
 
 
 @pytest.mark.critical
 @pytest.mark.oracle
-@pytest.mark.parametrize("seed", range(6))
 @pytest.mark.parametrize("sweep_order", [SweepOrder.RANDOM, SweepOrder.INDEX])
 def test_the_numba_descent_in_any_order_every_sweep_run_is_the_python_one(
-    seed: int, sweep_order: SweepOrder
+    sweep_order: SweepOrder,
 ) -> None:
     # Issue #923: ICM in a random order with every sweep run, the heat bath
     # at T = 0 (`ground_state.run_icm_random`). The compiled sweep takes the
     # permutations the Python sweep draws, in its order, so the labelling,
     # the energy and the generator's state after are the Python sweep's.
-    graph = lattice_graph((8, 8), BoundaryCondition.PERIODIC, 0.5)
-    field = np.random.default_rng(300 + seed).normal(size=(graph.n_nodes, 3))
-    streams = [np.random.default_rng(seed) for _ in range(2)]
-    python, compiled = (
-        iterated_conditional_modes(
-            graph,
-            field,
-            3,
-            stream,
-            max_sweeps=12,
-            sweep_order=sweep_order,
-            stop_when_clean=False,
-            backend=backend,
+    def check(seed: int) -> None:
+        graph = lattice_graph((8, 8), BoundaryCondition.PERIODIC, 0.5)
+        field = np.random.default_rng(300 + seed).normal(size=(graph.n_nodes, 3))
+        streams = [np.random.default_rng(seed) for _ in range(2)]
+        python, compiled = (
+            iterated_conditional_modes(
+                graph,
+                field,
+                3,
+                stream,
+                max_sweeps=12,
+                sweep_order=sweep_order,
+                stop_when_clean=False,
+                backend=backend,
+            )
+            for stream, backend in zip(
+                streams, (Backend.PYTHON, Backend.NUMBA), strict=True
+            )
         )
-        for stream, backend in zip(
-            streams, (Backend.PYTHON, Backend.NUMBA), strict=True
-        )
-    )
-    assert np.array_equal(python.labelling, compiled.labelling)
-    assert python.energy == compiled.energy
-    assert streams[0].integers(1 << 62) == streams[1].integers(1 << 62)
+        assert np.array_equal(python.labelling, compiled.labelling)
+        assert python.energy == compiled.energy
+        assert streams[0].integers(1 << 62) == streams[1].integers(1 << 62)
+
+    every_value(range(6), check)
 
 
 @pytest.mark.smoke
@@ -316,23 +322,24 @@ def test_descent_has_no_rust_backend() -> None:
 
 @pytest.mark.critical
 @pytest.mark.oracle
-@pytest.mark.parametrize("seed", range(6))
-@pytest.mark.parametrize("n_states", [2, 4])
-def test_the_rust_cut_reproduces_the_python_expansion(seed: int, n_states: int) -> None:
+def test_the_rust_cut_reproduces_the_python_expansion() -> None:
     # What issue #528 changed: the binding returns the source side it already
     # computed, so `expand` can reach it. The two solvers must agree on the
     # *labelling* and not merely its energy, which would also agree if a
     # degenerate cut sent the two routes to different minima of equal value.
     # Realized: 12 of 12 cells agree.
-    graph = lattice_graph((8, 8), BoundaryCondition.PERIODIC, 0.5)
-    field = np.random.default_rng(500 + seed).normal(size=(graph.n_nodes, n_states))
+    def check(seed: int, n_states: int) -> None:
+        graph = lattice_graph((8, 8), BoundaryCondition.PERIODIC, 0.5)
+        field = np.random.default_rng(500 + seed).normal(size=(graph.n_nodes, n_states))
 
-    python = alpha_expansion(graph, field, n_states, backend=Backend.PYTHON)
-    compiled = alpha_expansion(graph, field, n_states, backend=Backend.RUST)
+        python = alpha_expansion(graph, field, n_states, backend=Backend.PYTHON)
+        compiled = alpha_expansion(graph, field, n_states, backend=Backend.RUST)
 
-    assert np.array_equal(python.labelling, compiled.labelling)
-    assert python.energy == compiled.energy
-    assert (python.cycles, python.moves) == (compiled.cycles, compiled.moves)
+        assert np.array_equal(python.labelling, compiled.labelling)
+        assert python.energy == compiled.energy
+        assert (python.cycles, python.moves) == (compiled.cycles, compiled.moves)
+
+    every_row(product(range(6), [2, 4]), check)
 
 
 @pytest.mark.smoke
@@ -464,30 +471,36 @@ def _recomputing_descent(
 
 @pytest.mark.critical
 @pytest.mark.oracle
-@pytest.mark.parametrize("seed", range(6))
-def test_the_local_delta_sweep_is_the_recomputing_descent(seed: int) -> None:
+def test_the_local_delta_sweep_is_the_recomputing_descent() -> None:
     # What lets `label_step` call the sweep (#858): the same site order from
     # the same start, and the argmin read off the site's own field and
     # incident edges rather than off `O(n_edges)` of energy per candidate.
     # Realized: 6 of 6 seeds agree site for site, at 3 labels on 36 sites.
-    graph = lattice_graph((6, 6), BoundaryCondition.OPEN, 0.7)
-    field = np.random.default_rng(700 + seed).normal(size=(graph.n_nodes, 3))
-    start = np.random.default_rng(seed).integers(0, 3, size=graph.n_nodes)
+    def check(seed: int) -> None:
+        graph = lattice_graph((6, 6), BoundaryCondition.OPEN, 0.7)
+        field = np.random.default_rng(700 + seed).normal(size=(graph.n_nodes, 3))
+        start = np.random.default_rng(seed).integers(0, 3, size=graph.n_nodes)
 
-    swept, _ = iterated_conditional_modes(
-        graph,
-        field,
-        3,
-        np.random.default_rng(seed),
-        start=start,
-        sweep_order=SweepOrder.RANDOM,
-        backend=Backend.PYTHON,
-    )
-    recomputed = _recomputing_descent(
-        graph, site_field(field, graph.n_nodes), 3, np.random.default_rng(seed), start
-    )
+        swept, _ = iterated_conditional_modes(
+            graph,
+            field,
+            3,
+            np.random.default_rng(seed),
+            start=start,
+            sweep_order=SweepOrder.RANDOM,
+            backend=Backend.PYTHON,
+        )
+        recomputed = _recomputing_descent(
+            graph,
+            site_field(field, graph.n_nodes),
+            3,
+            np.random.default_rng(seed),
+            start,
+        )
 
-    assert np.array_equal(swept, recomputed)
+        assert np.array_equal(swept, recomputed)
+
+    every_value(range(6), check)
 
 
 @pytest.mark.analytic
@@ -621,31 +634,32 @@ def _swap_network_by_loop(
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("seed", range(4))
-def test_the_swap_arcs_are_the_add_edge_loop_arc_for_arc(seed: int) -> None:
+def test_the_swap_arcs_are_the_add_edge_loop_arc_for_arc() -> None:
     # Issue #935: the swap network is built as arrays, in the order the loop
     # appended its arcs, since a minimum cut need not be unique and the two
     # solvers are pinned to one labelling through one network.
-    graph = lattice_graph((8, 8), BoundaryCondition.PERIODIC, 0.5)
-    rng = np.random.default_rng(935 + seed)
-    values = rng.normal(size=(graph.n_nodes, 4))
-    labelling = rng.integers(0, 4, graph.n_nodes)
-    moving = np.flatnonzero((labelling == 1) | (labelling == 3))
-    network = _swap_arcs(graph, values, moving, 1, 3).network()
-    loop = _swap_network_by_loop(graph, values, labelling, 1, 3)
-    assert network.target == loop.target
-    assert network.capacity == loop.capacity
-    assert network.outgoing == loop.outgoing
-    python = swap(graph, values, labelling, 1, 3, backend=Backend.PYTHON)
-    compiled = swap(graph, values, labelling, 1, 3, backend=Backend.RUST)
-    assert np.array_equal(python.labelling, compiled.labelling)
-    assert python.energy == compiled.energy
+    def check(seed: int) -> None:
+        graph = lattice_graph((8, 8), BoundaryCondition.PERIODIC, 0.5)
+        rng = np.random.default_rng(935 + seed)
+        values = rng.normal(size=(graph.n_nodes, 4))
+        labelling = rng.integers(0, 4, graph.n_nodes)
+        moving = np.flatnonzero((labelling == 1) | (labelling == 3))
+        network = _swap_arcs(graph, values, moving, 1, 3).network()
+        loop = _swap_network_by_loop(graph, values, labelling, 1, 3)
+        assert network.target == loop.target
+        assert network.capacity == loop.capacity
+        assert network.outgoing == loop.outgoing
+        python = swap(graph, values, labelling, 1, 3, backend=Backend.PYTHON)
+        compiled = swap(graph, values, labelling, 1, 3, backend=Backend.RUST)
+        assert np.array_equal(python.labelling, compiled.labelling)
+        assert python.energy == compiled.energy
+
+    every_value(range(4), check)
 
 
 @pytest.mark.critical
 @pytest.mark.oracle
-@pytest.mark.parametrize("seed", range(8))
-def test_the_cut_moves_agree_across_solvers_on_tied_fields(seed: int) -> None:
+def test_the_cut_moves_agree_across_solvers_on_tied_fields() -> None:
     # Issue #935: fields rounded to one decimal, which binary cannot hold
     # exactly, make ties and leave residuals of 1e-16 where the other solver
     # leaves 0. Read at the shared saturation floor both cuts are the minimal
@@ -653,12 +667,15 @@ def test_the_cut_moves_agree_across_solvers_on_tied_fields(seed: int) -> None:
     # default. Before the floor 7 of 120 such moves split. The Rust route cuts
     # a different network encoding the same energy --- no auxiliary node,
     # each label's flow started from its last cut --- and agrees all the same.
-    rng = np.random.default_rng(935 + seed)
-    graph = lattice_graph((12, 12), BoundaryCondition.OPEN, 0.7)
-    n_states = int(rng.choice([2, 3, 5]))
-    field = np.round(rng.normal(size=(graph.n_nodes, n_states)), 1)
-    for solve in (alpha_expansion, alpha_beta_swap):
-        python = solve(graph, field, n_states, backend=Backend.PYTHON)
-        compiled = solve(graph, field, n_states, backend=Backend.RUST)
-        assert np.array_equal(python.labelling, compiled.labelling), solve.__name__
-        assert python.energy == compiled.energy
+    def check(seed: int) -> None:
+        rng = np.random.default_rng(935 + seed)
+        graph = lattice_graph((12, 12), BoundaryCondition.OPEN, 0.7)
+        n_states = int(rng.choice([2, 3, 5]))
+        field = np.round(rng.normal(size=(graph.n_nodes, n_states)), 1)
+        for solve in (alpha_expansion, alpha_beta_swap):
+            python = solve(graph, field, n_states, backend=Backend.PYTHON)
+            compiled = solve(graph, field, n_states, backend=Backend.RUST)
+            assert np.array_equal(python.labelling, compiled.labelling), solve.__name__
+            assert python.energy == compiled.energy
+
+    every_value(range(8), check)

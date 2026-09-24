@@ -47,6 +47,7 @@ from snakes_and_ladders.sim.topology import (
 from snakes_and_ladders.sim.tree import preorder
 
 from tests._fixtures import EIGHT_TAXA, SMALL_SITES, load_fixture
+from tests._rows import every_value
 
 # Enough sites to distinguish topologies, few enough that a search is
 # seconds. One candidate fit costs about 0.12 s here.
@@ -74,13 +75,15 @@ def _searched(moves: MoveSet) -> Inference:
 
 
 @pytest.mark.smoke
-@pytest.mark.parametrize("n_taxa", [3, 4, 5, 6])
-def test_random_topology_is_a_valid_unrooted_topology(n_taxa: int) -> None:
-    names = [f"t{index}" for index in range(n_taxa)]
-    topology = random_topology(names, np.random.default_rng(0))
+def test_random_topology_is_a_valid_unrooted_topology() -> None:
+    def check(n_taxa: int) -> None:
+        names = [f"t{index}" for index in range(n_taxa)]
+        topology = random_topology(names, np.random.default_rng(0))
 
-    assert validate_unrooted_newick(to_newick(topology))
-    assert sorted(node.name for node in preorder(topology) if node.is_leaf) == names
+        assert validate_unrooted_newick(to_newick(topology))
+        assert sorted(node.name for node in preorder(topology) if node.is_leaf) == names
+
+    every_value([3, 4, 5, 6], check)
 
 
 @pytest.mark.oracle
