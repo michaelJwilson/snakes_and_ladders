@@ -16,7 +16,8 @@ import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.search.ground_state import Rung
-from snakes_and_ladders.search.icm import icm_sweeps_checked, iterated_conditional_modes
+from snakes_and_ladders.search.icm import iterated_conditional_modes
+from snakes_and_ladders.search.numba.icm import icm_sweeps_checked
 from snakes_and_ladders.search.potts_starts import spatio_rung
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.potts import site_field

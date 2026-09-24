@@ -2,7 +2,7 @@
 
 Issue #264's audit ranked the Python-level loops of this package by self time
 and found one that a compiled kernel removes outright: the single-site descent
-sweep, which lives beside its solver in :mod:`snakes_and_ladders.search.icm`
+sweep, which lives in :mod:`snakes_and_ladders.search.numba.icm`
 since issue #1055. The kernels here share its test: each is reproduced
 **bitwise** by its oracle.
 
