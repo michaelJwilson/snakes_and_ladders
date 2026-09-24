@@ -54,8 +54,30 @@ def _ising_cut(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     return call
 
 
+def _alpha_expansion(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
+    """Expansion on the Rust cut to convergence, as the gco pair times it (#974)."""
+    from snakes_and_ladders.backend import Backend
+    from snakes_and_ladders.search.alpha_expansion import alpha_expansion
+    from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+
+    shape = tuple(int(extent) for extent in inputs["shape"])
+    graph = lattice_graph(shape, BoundaryCondition.OPEN, float(inputs["coupling"]))
+    field = inputs["field"]
+    n_states = int(field.shape[1])
+
+    def call() -> Outputs:
+        result = alpha_expansion(graph, field, n_states, backend=Backend.RUST)
+        return {"labelling": result.labelling, "energy": np.asarray(result.energy)}
+
+    return call
+
+
 #: The calls this script measures, by name.
-CALLS: dict[str, Build] = {"allocate": _allocate, "ising_cut": _ising_cut}
+CALLS: dict[str, Build] = {
+    "allocate": _allocate,
+    "ising_cut": _ising_cut,
+    "alpha_expansion": _alpha_expansion,
+}
 
 
 def main() -> None:

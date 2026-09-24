@@ -72,5 +72,13 @@ FRAMEWORKS: Mapping[str, Framework] = {
             source="https://github.com/pmneila/PyMaxflow",
             ticket=973,
         ),
+        Framework(
+            name="gco",
+            distribution="gco-wrapper",
+            module="gco",
+            licence="MIT (wrapper); gco-v3.0 research-use",
+            source="https://github.com/Borda/pyGCO",
+            ticket=974,
+        ),
     )
 }

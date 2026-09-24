@@ -13,8 +13,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.search.alpha_expansion import alpha_expansion
 from snakes_and_ladders.search.ground_state import lattice_rung
-from snakes_and_ladders.sim.potts import site_field
+from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+from snakes_and_ladders.sim.potts import critical_coupling, site_field
 from snakes_and_ladders.validation.runner import package
 
 from tests.validation._goals import (
@@ -64,6 +67,33 @@ def _cut_inputs(side: int) -> dict[str, np.ndarray]:
     }
 
 
+#: gco's graph build and expansion to convergence, q = 10, on an open lattice
+#: at `critical_coupling(10)` under a standard normal field drawn with seed
+#: 974: the medians of three subprocess runs in
+#: `test_alpha_expansion_gco_bench.py`.
+GCO_EXPANSION = {
+    side: Goal(
+        "gco",
+        f"alpha expansion on the Rust cut, {side}x{side}, q = 10",
+        seconds,
+        "2026-09-23, 4-core reference host at a 1-minute load of 1.0, #974",
+    )
+    for side, seconds in ((71, 0.1402), (142, 0.6258))
+}
+
+#: gco's peak added resident memory for the same build and expansion, the
+#: medians of three subprocess runs (#987).
+GCO_EXPANSION_MEMORY = {
+    side: MemoryGoal(
+        "gco",
+        f"alpha expansion on the Rust cut, {side}x{side}, q = 10",
+        peak_bytes,
+        "2026-09-23, 4-core reference host, #987",
+    )
+    for side, peak_bytes in ((71, 2_686_976), (142, 9_756_672))
+}
+
+
 @pytest.mark.experiment
 @pytest.mark.parametrize("side", sorted(PYMAXFLOW_CUT))
 def test_the_rust_cut_meets_pymaxflows_runtime(side: int) -> None:
@@ -84,9 +114,33 @@ def test_the_rust_cut_meets_pymaxflows_runtime(side: int) -> None:
 
 
 @pytest.mark.experiment
+@pytest.mark.parametrize("side", sorted(GCO_EXPANSION))
+def test_the_expansion_meets_gcos_runtime(side: int) -> None:
+    graph = lattice_graph((side, side), BoundaryCondition.OPEN, critical_coupling(10))
+    field = np.random.default_rng(974).normal(size=(graph.n_nodes, 10))
+    ours = median_seconds(
+        lambda: alpha_expansion(graph, field, 10, backend=Backend.RUST), repeats=3
+    )
+    assert_meets(ours, GCO_EXPANSION[side])
+
+
+@pytest.mark.experiment
 @pytest.mark.parametrize("side", sorted(PYMAXFLOW_CUT_MEMORY))
 def test_the_rust_cut_fits_pymaxflows_memory(side: int) -> None:
     # Read in a fresh interpreter by `scripts/package.py`, as PyMaxflow's was.
     inputs = _cut_inputs(side)
     peaks = [package("ising_cut", inputs).peak_bytes or 0 for _ in range(3)]
     assert_fits(int(np.median(peaks)), PYMAXFLOW_CUT_MEMORY[side])
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("side", sorted(GCO_EXPANSION_MEMORY))
+def test_the_expansion_fits_gcos_memory(side: int) -> None:
+    field = np.random.default_rng(974).normal(size=(side * side, 10))
+    inputs = {
+        "shape": np.asarray([side, side]),
+        "coupling": np.asarray(critical_coupling(10)),
+        "field": field,
+    }
+    peaks = [package("alpha_expansion", inputs).peak_bytes or 0 for _ in range(3)]
+    assert_fits(int(np.median(peaks)), GCO_EXPANSION_MEMORY[side])

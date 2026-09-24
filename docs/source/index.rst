@@ -518,6 +518,12 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.validation.scripts.pymaxflow
    :members:
 
+.. automodule:: snakes_and_ladders.validation.gco
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.scripts.gco
+   :members:
+
 .. automodule:: snakes_and_ladders.qa
    :members:
 
