@@ -14,6 +14,12 @@ metric is a per-coordinate proposal scale, and dual averaging drives the step
 to a target acceptance, which belongs near :data:`RWM_TARGET_ACCEPTANCE`
 (Roberts, Gelman & Gilks, 1997) and not at HMC's 0.65.
 
+No derivative is taken, so the chain reads the objective through
+:func:`~snakes_and_ladders.opt.objective.energy_of` on arrays and draws from
+a :class:`numpy.random.Generator` (issue #1011): an objective declaring a
+NumPy :meth:`~snakes_and_ladders.opt.objective.DeclaredEnergy.energy` is
+evaluated without the tensor type, and any other through ``__call__``.
+
 The compiled route (``oxisal.metropolis``, ``src/metropolis.rs``) runs the
 whole chain, the warm-up included, on a declared family
 (:mod:`snakes_and_ladders.sample.declared`), from its own ChaCha8 stream.
@@ -33,7 +39,7 @@ import torch
 from snakes_and_ladders import oxisal
 from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.emissions import ParameterDomainError
-from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.opt.objective import Objective, energy_of
 from snakes_and_ladders.sample import hmc
 from snakes_and_ladders.sample.accept import accept_ratio, acceptance_probability
 from snakes_and_ladders.sample.chain import (
@@ -52,11 +58,6 @@ RWM_TARGET_ACCEPTANCE = 0.234
 
 #: Energy evaluations per proposal: the proposal's; the current point's is carried.
 EVALUATIONS_PER_PROPOSAL = 1
-
-
-def _energy(objective: Objective, theta: torch.Tensor) -> float:
-    with torch.no_grad():
-        return float(objective(theta))
 
 
 def _decide(
@@ -78,9 +79,11 @@ class _RandomWalkKernel:
     """One Gaussian proposal and its Metropolis test: :func:`random_walk`'s kernel.
 
     The generator is consumed as the normal increment, then the uniform. The
-    current energy is kept beside the tensor it was taken at, and reused
-    while the chain has not moved --- the identity of the tensor is the key,
-    so a changed objective or a new position is evaluated afresh.
+    step is on arrays: the loop's tensor is read through its own buffer and
+    the proposal handed back on its buffer, so neither is copied. The current
+    energy is kept beside the tensor it was taken at, and reused while the
+    chain has not moved --- the identity of the tensor is the key, so a
+    changed objective or a new position is evaluated afresh.
     """
 
     def __init__(self) -> None:
@@ -91,7 +94,7 @@ class _RandomWalkKernel:
         objective: Objective,
         position: torch.Tensor,
         temperature: float,
-        generator: torch.Generator,
+        generator: np.random.Generator,
         step_size: float,
     ) -> Transition:
         if (
@@ -101,27 +104,26 @@ class _RandomWalkKernel:
         ):
             current = self._at[2]
         else:
-            current = _energy(objective, position)
-        increment = torch.randn(
-            position.shape, generator=generator, dtype=torch.float64
-        )
-        proposal = position + step_size * math.sqrt(temperature) * increment
+            current = energy_of(objective, position.numpy())
+        increment = generator.standard_normal(position.shape[0])
+        proposal = position.numpy() + step_size * math.sqrt(temperature) * increment
         try:
-            proposed = _energy(objective, proposal)
+            proposed = energy_of(objective, proposal)
         except ParameterDomainError:
             proposed = math.inf
-        uniform = float(torch.rand(1, generator=generator))
+        uniform = float(generator.random())
         take, probability, error = _decide(current, proposed, temperature, uniform)
         if take:
-            self._at = (objective, proposal, proposed)
-            return Transition(proposal, error, 1, probability)
+            moved = torch.from_numpy(proposal)
+            self._at = (objective, moved, proposed)
+            return Transition(moved, error, 1, probability)
         self._at = (objective, position, current)
         return Transition(position, error, 0, probability)
 
 
 def random_walk(
     objective: Objective,
-    generator: torch.Generator,
+    generator: np.random.Generator,
     n_samples: int,
     *,
     step_size: float,
@@ -138,9 +140,10 @@ def random_walk(
     Parameters
     ----------
     objective : Objective
-        Read as an unnormalized negative log density; only its value is used.
-    generator : torch.Generator
-        The stream every increment and uniform is drawn from.
+        Read as an unnormalized negative log density; only its value is
+        used, through :func:`~snakes_and_ladders.opt.objective.energy_of`.
+    generator : numpy.random.Generator
+        The stream every increment and uniform is drawn from (issue #1011).
     n_samples : int
         Draws recorded after burn-in.
     step_size : float
@@ -161,9 +164,9 @@ def random_walk(
         ``operators`` observe the draws as :func:`~snakes_and_ladders.sample.hmc.run_compiled`
         states, so a
         chain with ``store_chain=False`` holds that many draws at most. Its stream is ChaCha8 seeded by one draw from
-        ``generator``, so it is pinned to the torch route in distribution.
+        ``generator``, so it is pinned to the Python route in distribution.
         Any other chain, and :data:`~snakes_and_ladders.backend.Backend.PYTHON`,
-        run the torch kernel.
+        run the NumPy kernel.
 
     Returns
     -------
@@ -234,19 +237,19 @@ def replay(
     randomness is compared draw for draw. ``step_size`` is a scalar or one
     scale per coordinate.
     """
-    position = torch.as_tensor(np.asarray(theta0, dtype=np.float64)).clone()
-    scale = torch.as_tensor(np.asarray(step_size, dtype=np.float64))
-    current = _energy(objective, position)
+    position = np.array(theta0, dtype=np.float64)
+    scale = np.asarray(step_size, dtype=np.float64)
+    current = energy_of(objective, position)
     draws = np.empty((len(uniforms), position.shape[0]))
     accepted = np.zeros(len(uniforms), dtype=bool)
     for index, (increment, uniform) in enumerate(
         zip(increments, uniforms, strict=True)
     ):
-        proposal = position + scale * torch.as_tensor(increment)
-        proposed = _energy(objective, proposal)
+        proposal = position + scale * np.asarray(increment, dtype=np.float64)
+        proposed = energy_of(objective, proposal)
         take, _, _ = _decide(current, proposed, 1.0, float(uniform))
         if take:
             position, current = proposal, proposed
         accepted[index] = take
-        draws[index] = position.numpy()
+        draws[index] = position
     return Replayed(draws, accepted)

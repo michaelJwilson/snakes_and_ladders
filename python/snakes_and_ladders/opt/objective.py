@@ -28,6 +28,7 @@ from abc import abstractmethod
 from collections.abc import Callable, Mapping
 from typing import Protocol, runtime_checkable
 
+import numpy as np
 import torch
 
 
@@ -143,6 +144,47 @@ class DeclaredValueAndGradient(Protocol):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """``(U(theta), dU/dtheta)``, both detached."""
         ...  # pragma: no cover
+
+
+@runtime_checkable
+class DeclaredEnergy(Protocol):
+    """An objective that states its value on an array, without the tensor type (issue #1011).
+
+    Optional beside :class:`Objective`: a consumer that reads a value and
+    never a derivative --- a random-walk proposal, an annealer --- takes it
+    from :func:`energy_of`, which falls back to ``__call__`` where this is
+    not declared, so no objective breaks. It must equal ``__call__`` at the
+    same point, which each implementation's test pins: bitwise where the
+    arithmetic is the same, and at its stated tolerance where a reduction
+    is ordered differently.
+    """
+
+    def energy(self, x: np.ndarray) -> float:
+        """``U(x)`` at a ``float64`` array ``x``."""
+        ...  # pragma: no cover
+
+
+#: :func:`energy_of`'s answers, by type: whether it declares ``energy``.
+_ENERGY: dict[type, bool] = {}
+
+
+def energy_of(objective: Objective, x: np.ndarray) -> float:
+    """``U(x)`` as a ``float``: the objective's declared :meth:`~DeclaredEnergy.energy`, or ``__call__`` without a graph.
+
+    The seam a value-only consumer evaluates through (issue #1011): it
+    passes and receives arrays whether or not the objective has a NumPy
+    route, and the fallback is ``float(objective(torch.as_tensor(x)))``
+    under ``no_grad``, what such a consumer computed before the seam. Read
+    from the class once per type, as :func:`_routes` is.
+    """
+    kind = type(objective)
+    declared = _ENERGY.get(kind)
+    if declared is None:
+        declared = _ENERGY[kind] = _declares(kind, "energy")
+    if declared:
+        return objective.energy(x)  # type: ignore[attr-defined, no-any-return]
+    with torch.no_grad():
+        return float(objective(torch.as_tensor(x)))
 
 
 def declares_gradient(objective: object) -> bool:

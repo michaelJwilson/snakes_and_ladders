@@ -17,8 +17,10 @@ module. It is referenced here, never restated. What follows is local.
 
 ## Assumed frameworks
 
-NumPy, PyTorch for the continuous samplers, the Rust sweeps behind
-`potts_mcmc`.
+NumPy, PyTorch for the continuous samplers that take a gradient, the Rust
+sweeps behind `potts_mcmc`. A sampler that reads values alone evaluates
+through `opt.objective.energy_of` on arrays and draws from a
+`np.random.Generator`; `metropolis` is the first (#1011).
 
 ## Local rules
 

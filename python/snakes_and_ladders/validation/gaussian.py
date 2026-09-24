@@ -62,6 +62,13 @@ class GaussianTarget(Objective):
         value: torch.Tensor = 0.5 * theta @ self.precision @ theta
         return value
 
+    def energy(self, x: np.ndarray) -> float:
+        """:meth:`__call__` on an array, the value :func:`~snakes_and_ladders.opt.objective.energy_of` reads (issue #1011)."""
+        precision = self.precision.numpy()
+        if precision.ndim == 1:
+            return float(0.5 * (precision * x * x).sum())
+        return float(0.5 * x @ precision @ x)
+
 
 def dense_precision(dimension: int, rng: np.random.Generator) -> np.ndarray:
     """``A A^T / d + I`` for a standard normal ``A`` drawn from ``rng``.

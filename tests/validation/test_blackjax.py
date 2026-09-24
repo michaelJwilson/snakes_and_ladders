@@ -155,7 +155,7 @@ def test_the_random_walk_accepts_as_blackjaxs_does() -> None:
     precision = diagonal_precision(100)
     ours = metropolis.random_walk(
         GaussianTarget(precision),
-        torch.Generator().manual_seed(1006),
+        np.random.default_rng(1006),
         20_000,
         step_size=0.12,
         store_chain=False,
