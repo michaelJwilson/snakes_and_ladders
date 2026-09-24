@@ -309,6 +309,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sample.metropolis
    :members:
 
+.. automodule:: snakes_and_ladders.sample.hmc_jax
+   :members:
+
 .. automodule:: snakes_and_ladders.sample.declared
    :members:
 
