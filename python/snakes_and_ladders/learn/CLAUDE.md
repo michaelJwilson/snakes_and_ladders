@@ -105,12 +105,9 @@ name (issue #779).
 
 ## Framework
 
-**PyTorch** where a derivative is taken --- the policies, the estimators, the
-critic --- per root `CLAUDE.md`, and `float64` throughout: the exact oracle
-compares autodiff against central finite differences, which `float32` cannot
-support. An environment takes no derivative, so it is NumPy: `features` is a
-constant to every loss, returned as an array and converted to a tensor once,
-where the policy meets it (issue #1011).
+**PyTorch** where a derivative is taken, in `float64`, which the oracle's central
+finite differences need. Environments take none and are NumPy; `features` becomes
+a tensor once, where the policy meets it (issue #1011).
 
 ## Relaxations
 
