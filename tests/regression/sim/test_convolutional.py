@@ -79,11 +79,7 @@ def test_the_trellis_runs_the_polynomial_division_the_generators_state(
 ) -> None:
     """The register's output equals ``b(D) / a(D)`` applied to the input, term by term.
 
-    The independent computation: the recursive systematic encoder's parity
-    stream is the input filtered by the rational transfer function the two
-    generators name, which is here run as an explicit long division over
-    GF(2) on a list of bits, sharing nothing with the ``(state, input)``
-    arrays under test.
+    A GF(2) long division on a list of bits, sharing nothing with the arrays.
     """
     trellis = recursive_systematic_trellis(feedback, feedforward, memory)
     a, b = octal_taps(feedback, memory), octal_taps(feedforward, memory)
@@ -118,9 +114,7 @@ def test_the_two_edges_leaving_a_state_enter_different_states(
 ) -> None:
     """Every state has two outgoing and two incoming edges, so the trellis is regular.
 
-    The property the decoders rest on: an input bit is recoverable from a
-    state pair, which is what lets `sim.factor_graph.from_trellis` carry no
-    variable for it.
+    A state pair recovers the input bit: `from_trellis` carries no variable for it.
     """
     trellis = recursive_systematic_trellis(feedback, feedforward, memory)
 
@@ -258,10 +252,7 @@ def test_the_block_length_and_rate_are_three_k_plus_four_m() -> None:
 def test_the_code_is_the_null_space_a_parity_check_matrix_defines() -> None:
     """Every encoded word satisfies `H c = 0`, and `H`'s null space is the code.
 
-    The independent construction: `H` comes from a GF(2) nullspace of the
-    generator, and the codewords are re-derived from `H` alone by issue
-    #340's `enumerate_codewords`, which never sees the shift register. Two
-    sets of `2 ** K` words, built from opposite ends, are compared.
+    `H` from the generator's nullspace; #340's `enumerate_codewords` from `H` alone.
     """
     code = turbo_code(FEEDBACK, FEEDFORWARD, MEMORY, 10, np.random.default_rng(7))
     check = parity_check(code)

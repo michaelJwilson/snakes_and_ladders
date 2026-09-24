@@ -1,16 +1,10 @@
 """The heat-bath conditional three sweeps share, and the draws it must reproduce.
 
-`sim.potts.heat_bath_log_weights` is the expression
-`sample.potts_mcmc.sweeps.single_site_sweep`, `sim.potts._simulate_gibbs` and the
-Rust kernel each wrote out before issue #277. The loops around it stay
-separate --- one chain in time, many chains at once, one compiled --- so what
-is checked here is the expression and the draws, not a merged sweep.
-
-The bar is **bitwise**, not a tolerance. An extraction that reassociated the
-coupling sum would move every committed chain and every autocorrelation
-`STATUS.md` pins, and would do it silently; the pinned configurations below
-are the ones the sweeps drew before the extraction, at the seeds that drew
-them (the standard #228, #266 and #571 were held to).
+`sim.potts.heat_bath_log_weights` is the expression `single_site_sweep`,
+`_simulate_gibbs` and the Rust kernel each wrote before #277; the loops stay
+separate. Bitwise: reassociating the coupling sum would move every committed
+chain `STATUS.md` pins; the pinned configurations are those drawn before the
+extraction (#228, #266, #571).
 """
 
 from __future__ import annotations
@@ -62,11 +56,7 @@ def _restated(
     couplings: list[float],
     beta: float,
 ) -> np.ndarray:
-    """``beta * (h_ik + sum_j J_ij [k = s_j])``, written from the definition.
-
-    Independent of the implementation: a term per state per neighbour rather
-    than an accumulation into the field row.
-    """
+    """``beta * (h_ik + sum_j J_ij [k = s_j])``, a term per state per neighbour."""
     n_states = field_row.shape[0]
     return np.array(
         [

@@ -1,23 +1,12 @@
 """The Potts field, one row per site: the capability, and the three instances (issue #413).
 
-Two claims, refereed differently at each size.
-
-**That a per-site field is scored correctly.** The widened shape reaches four
-routines --- the exact open-chain sampler, the Gibbs sweep, enumeration and
-the strip transfer matrix --- each checked against another. Enumeration shares
-no recursion with any of them, so it referees the two samplers; the strip
-shares no configuration walk with enumeration, so the two referee each other
-where both reach; and a field whose rows are all equal must reproduce the
-shared-field result exactly, catching a broadcast applied to the wrong axis.
-
-**That the covariate is identified.** ``h[n, m] = alpha[m] * log(size[n] /
-size_bar)`` is only a model if the sizes vary: with one size every row of the
-field is equal and ``alpha`` is a constant in disguise. At ``ci`` the exact
-marginals under the declared field are compared against the exact marginals
-under its site-average, and ``alpha`` is recovered against enumeration; at
-``stress`` the exact normalizer past enumeration referees the sampler; at
-``release`` the tilt survives 5,041 vertices, where a field indexed by the
-wrong site would leave none.
+A per-site field reaches four routines (exact chain sampler, Gibbs sweep,
+enumeration, strip transfer), each checked against another; equal rows
+reproduce the shared-field result exactly. ``h[n, m] = alpha[m] * log(size[n]
+/ size_bar)`` is identified only if sizes vary: at ``ci`` the marginals
+differ from the site-average field's and ``alpha`` is recovered against
+enumeration; at ``stress`` the exact normalizer referees the sampler; at
+``release`` the tilt survives 5,041 vertices.
 """
 
 from __future__ import annotations
@@ -164,11 +153,8 @@ def test_gibbs_matches_enumeration_at_the_declared_spatio_only_instance() -> Non
 
 @pytest.mark.analytic
 def test_the_declared_sizes_move_the_marginals() -> None:
-    # Replacing the per-site field by its site average must change the exact
-    # marginals by more than the tolerance the sampler is checked within, or
-    # the fixture is a uniform-field instance under another name. The average
-    # is exactly zero here, the covariate being centred, so the control is the
-    # uniform distribution.
+    # The centred covariate averages to zero: the uniform control must differ
+    # by more than the sampler's tolerance.
     exact = enumerate_potts(CI.graph, CI.field)
     averaged = enumerate_potts(
         CI.graph, np.tile(CI.field.mean(axis=0), (CI.graph.n_nodes, 1))
@@ -183,15 +169,7 @@ def test_the_declared_sizes_move_the_marginals() -> None:
 def _fit_alpha(params: SpatioOnlyParams, configurations: np.ndarray) -> np.ndarray:
     """Maximum likelihood ``alpha``, normalized exactly by enumeration.
 
-    The model is an exponential family in ``alpha`` with sufficient statistic
-    ``T_m = sum_n log(size_n / size_bar) [s_n = m]``, so the fit is a convex
-    problem whose gradient is the difference between the model's ``T`` and
-    the sample's. Both come from :func:`enumerate_potts`, which shares no
-    code with the sampler that drew ``configurations``.
-
-    ``alpha`` and ``alpha + c`` give the same model --- a constant shifts every
-    class at a site alike and cancels --- so the estimate is returned in the
-    sum-zero gauge the fixture declares its own ``alpha`` in.
+    Convex in ``T_m``, both sides from `enumerate_potts`; returned in sum-zero gauge.
     """
     covariate = np.log(params.sizes) - float(np.log(params.sizes).mean())
     indicator = configurations[:, :, np.newaxis] == np.arange(params.n_classes)
@@ -246,12 +224,8 @@ def test_the_covariate_coefficients_are_recovered_at_the_ci_instance() -> None:
 @pytest.mark.oracle
 @pytest.mark.stress
 def test_the_sampler_matches_the_exact_normalizer_past_enumeration() -> None:
-    # 72 sites is 3**72 configurations and no enumeration, but a strip six
-    # sites wide still transfers exactly. The quantity both routes produce is
-    # the mean field energy: it is `d log Z(t h) / dt` at `t = 1`, which two
-    # more transfer-matrix evaluations give, and it is a sample mean under
-    # the sampler. A per-site field carried wrongly by either route moves one
-    # of the two. Measured deviation 0.005 against the declared 0.25.
+    # 3**72 configurations, but a six-wide strip transfers exactly: mean field
+    # energy `d log Z(t h) / dt` against the sampler. Deviation 0.005 (0.25).
     step = 1e-3
     columns, width = _strip_shape(STRESS)
     scaled = [

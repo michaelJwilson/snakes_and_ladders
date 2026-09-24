@@ -146,13 +146,8 @@ def test_free_exchangeabilities_are_completed_with_a_pinned_one() -> None:
 
 @pytest.mark.oracle
 def test_the_free_parameterisation_inverts_its_own_closed_form() -> None:
-    # The gauge map has a closed-form inverse -- divide every exchangeability
-    # by the last, drop that last one -- and this is the round trip through
-    # both directions. The referee is the *rate matrix*, which lives outside
-    # `exchangeabilities_from_free` and is invariant under the scaling the
-    # gauge removes, so a map that pinned the wrong entry or rescaled the
-    # wrong way would reach a different `Q` and fail here rather than agree
-    # with itself.
+    # The gauge map's closed-form inverse (divide by the last, drop it), round
+    # tripped; the referee is the rate matrix, invariant under the gauge.
     def check(k: int) -> None:
         rng = np.random.default_rng(729)
         full = rng.uniform(0.2, 3.0, size=n_exchangeabilities(k))
@@ -237,11 +232,8 @@ def test_the_default_simulator_path_is_unchanged() -> None:
 
 @pytest.mark.oracle
 def test_simulating_under_a_jc_equivalent_gtr_matches_the_jc_path() -> None:
-    # End-to-end: the two code paths reach the same alignment when the model
-    # is the same one. Not asserted bit-for-bit -- the eigendecomposition and
-    # the closed form differ by ~3e-16, which can flip an occasional
-    # inverse-CDF draw -- but the disagreement must be at that scale, not at
-    # the scale of a different model.
+    # Same model, same alignment: eigendecomposition and closed form differ by
+    # ~3e-16, which can flip a rare inverse-CDF draw, and no more.
     params = load_fixture(SMALL_SITES)
     uniform = np.full(params.k, 1.0 / params.k)
     equivalent = gtr_rate_matrix(np.ones(n_exchangeabilities(params.k)), uniform)

@@ -222,9 +222,7 @@ def test_a_codeword_through_the_channel_is_the_zero_word_up_to_sign(
 ) -> None:
     """On one noise realization the ratios of `c` are those of `0` negated where `c_i = 1`.
 
-    The output symmetry `all_zero_transmission` rests on, per realization: a
-    flip or an erasure is applied to the bit whatever its value, so the two
-    transmissions differ only by the sign the codeword imposes.
+    `all_zero_transmission`'s symmetry: flips and erasures ignore the bit's value.
     """
     code = _code(96, seed=18)
     codeword = encode(
@@ -316,17 +314,9 @@ def test_the_encoder_refuses_a_wrong_length_and_a_code_past_its_size() -> None:
 
 
 def _independent(matrix: np.ndarray, take: int, *, by_row: bool) -> list[int]:
-    """Indices of ``take`` rows or columns independent over GF(2).
+    """Indices of ``take`` rows or columns independent over GF(2), greedily by rank.
 
-    Greedy: an index joins the set when it lifts the rank, which is what
-    independence means, so the set is independent at every step and the walk
-    is bounded by the axis it scans.
-
-    Raises
-    ------
-    ValueError
-        If the axis carries fewer than ``take`` independent vectors, which
-        means the caller's rank was not this matrix's.
+    Raises `ValueError` if fewer exist: the caller's rank was not this matrix's.
     """
     chosen: list[int] = []
     for index in range(matrix.shape[0] if by_row else matrix.shape[1]):
@@ -344,9 +334,7 @@ def _independent(matrix: np.ndarray, take: int, *, by_row: bool) -> list[int]:
 def test_the_gf2_rank_and_inverse_agree_with_the_elimination_they_share() -> None:
     """The rank against the null space's dimension, and the inverse against `I`.
 
-    `null_space` and `gf2_rank` read the same elimination, so the check that
-    means something is the rank-nullity identity between them: a rank that
-    disagrees with `columns - dim ker` is an elimination that lost a pivot.
+    Rank-nullity between two readings of one elimination catches a lost pivot.
     """
     code = _code(24, seed=17)
     dense = code.dense()
@@ -355,12 +343,8 @@ def test_the_gf2_rank_and_inverse_agree_with_the_elimination_they_share() -> Non
 
     assert rank + generator_matrix(code).shape[0] == code.n_bits
 
-    # An invertible block has to be built, not sliced off. `dense` here is
-    # 12 x 24 of rank 10 -- neither full row rank nor full column rank -- so
-    # its leading `rank` columns span only 7 dimensions and any fixed slice is
-    # singular. Greedily take `rank` independent columns, then `rank`
-    # independent rows of those, which is square and invertible by
-    # construction and terminates in at most one pass over each axis.
+    # 12 x 24 of rank 10: its leading columns span 7 dimensions, so any slice
+    # is singular; take independent columns, then rows of those.
     columns = _independent(dense, rank, by_row=False)
     block = dense[:, columns]
     square = block[_independent(block, rank, by_row=True), :]
@@ -397,11 +381,8 @@ PUBLISHED_HAMMING = np.array(
 
 @pytest.mark.oracle
 def test_the_published_parity_check_reads_back_with_its_published_properties() -> None:
-    # `ParityCheck` over a matrix from the literature: the offsets layout
-    # against the dense array it was built from, the syndrome of each
-    # single-bit error against the column of `H` the textbook says it is, and
-    # the rank, dimension and minimum distance the (7, 4) Hamming code is
-    # defined by. Integers throughout: the comparison is equality.
+    # A published (7, 4) Hamming `H`: offsets against the dense array, each
+    # single-bit syndrome against its column, rank, dimension and distance.
     code = ParityCheck.from_dense(PUBLISHED_HAMMING)
 
     assert (code.n_bits, code.n_checks) == (7, 3)
