@@ -10,6 +10,8 @@ whose permutations are known, put back in one labelling by every method.
 from __future__ import annotations
 
 import itertools
+import subprocess
+import sys
 
 import numpy as np
 import pytest
@@ -253,3 +255,39 @@ def test_what_a_method_cannot_run_on_is_refused() -> None:
     assert ordered.permutations.tolist() == [[1, 2, 0]]
     stalled = ecr_iterative_2(np.zeros((2, 3), dtype=np.int64), np.full((2, 3, 2), 0.5))
     assert stalled.converged
+
+
+@pytest.mark.patch
+@pytest.mark.smoke
+def test_a_tensor_is_relabelled_bitwise_as_its_array() -> None:
+    # A `Chain`'s draws are tensors, a fitted one's with a grad: converted on
+    # entry, they give the array call's permutations and objective bitwise.
+    data = _draws(5)
+    tensor = torch.as_tensor(data["probabilities"]).requires_grad_(True)
+    by_array = stephens(data["probabilities"])
+    by_tensor = stephens(tensor)
+    assert np.array_equal(by_tensor.permutations, by_array.permutations)
+    assert by_tensor.objective == by_array.objective
+    moved = permute_parameters(
+        torch.as_tensor(data["parameters"]), torch.as_tensor(data["planted"])
+    )
+    assert isinstance(moved, np.ndarray)
+    assert np.array_equal(
+        moved, permute_parameters(data["parameters"], data["planted"])
+    )
+
+
+@pytest.mark.infra
+def test_the_module_imports_no_torch() -> None:
+    # No method takes a derivative (issue #1011), so the import, and a call on
+    # arrays, leave torch unloaded; checked in a fresh process.
+    code = (
+        "import sys, numpy as np\n"
+        "from snakes_and_ladders.sample.relabel import stephens\n"
+        "stephens(np.random.default_rng(0).dirichlet(np.ones(3), (4, 5)))\n"
+        "print('torch' in sys.modules)"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+    )
+    assert result.stdout.strip() == "False"
