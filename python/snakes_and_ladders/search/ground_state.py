@@ -770,7 +770,10 @@ def run_icm(
     *,
     start: np.ndarray | None = None,
 ) -> MethodRun:
-    """Iterated conditional modes: single-site descent in index order, from a uniform draw or ``start``."""
+    """Iterated conditional modes: single-site descent in index order.
+
+    From a uniform draw, or from ``start``.
+    """
     problem = _problem(problem)
     steps = max(1, budget.size // problem.visits_per_sweep)
     started = time.perf_counter()
