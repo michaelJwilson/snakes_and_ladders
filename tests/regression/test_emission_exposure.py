@@ -11,12 +11,12 @@ What makes the conserved family a referee here is an identity rather than a
 tolerance. Where ``e_i`` is constant the two models **are** the same model,
 absorbing the exposure as ``log mu - log(c)``, so the covariate-aware family at
 constant ``e`` is the conserved family at ``mu e`` --- checked bitwise, not
-approximately.
+approximately. Recovery under a varying exposure, where no oracle exists, is
+``test_emission_covariate_recovery.py``'s.
 """
 
 from __future__ import annotations
 
-import numpy as np
 import pytest
 import torch
 from snakes_and_ladders.emissions import NegativeBinomialEmission
@@ -84,33 +84,6 @@ def test_unit_exposure_changes_nothing_in_scoring_or_the_m_step(
     assert torch.allclose(
         fitted.dispersion, reference.dispersion, rtol=CROSS_DEVICE_RTOL_FLOAT64
     )
-
-
-@pytest.mark.critical
-@pytest.mark.end2end
-def test_a_varying_exposure_recovers_the_planted_rate_and_dispersion() -> None:
-    # The regime the conserved family cannot express, so it is refereed by the
-    # parameters that generated the data rather than by an oracle. The exposure
-    # spans an eightfold range, which is what makes this a test of the offset
-    # rather than of a constant absorbed into the mean.
-    rng = np.random.default_rng(SEED)
-    offsets = torch.tensor(rng.uniform(0.5, 4.0, 2000), dtype=torch.float64)
-    planted_mean, planted_dispersion = 2.5, 3.0
-    rate = (offsets * planted_mean).numpy()
-    draws = torch.tensor(
-        rng.negative_binomial(
-            planted_dispersion, planted_dispersion / (planted_dispersion + rate)
-        ),
-        dtype=torch.float64,
-    ).reshape(1, -1)
-
-    start = NegativeBinomialEmission(torch.tensor([1.0]), torch.tensor([1.0]))
-    fitted = start.reestimate(
-        draws, torch.ones(1, 2000, 1, dtype=torch.float64), offsets.reshape(1, -1)
-    ).emissions
-
-    assert float(fitted.mean[0]) == pytest.approx(planted_mean, rel=0.05)
-    assert float(fitted.dispersion[0]) == pytest.approx(planted_dispersion, rel=0.10)
 
 
 @pytest.mark.critical

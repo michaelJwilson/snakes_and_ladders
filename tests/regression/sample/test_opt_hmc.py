@@ -32,7 +32,6 @@ from snakes_and_ladders.likelihood.mixture_assignments import (
     enumerate_mixture_assignments,
 )
 from snakes_and_ladders.opt.constrain import log_simplex
-from snakes_and_ladders.opt.mixture import responsibilities
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.opt.potts import PottsObjective
 from snakes_and_ladders.sample import hmc
@@ -59,18 +58,17 @@ from snakes_and_ladders.sample.tempered import (
 )
 from snakes_and_ladders.sim.potts_chain import PottsParams, simulate_chains
 
-from tests._objective_checks import AnalyticGaussian, Counted
+from tests._objective_checks import Counted
 from tests._posteriors import (
+    GAUSSIAN,
     MIXTURE_PRIOR_SCALE,
+    assert_recovers_assignment_posterior,
     enumerated_quadrature,
     weight_posterior,
 )
 from tests._scale import stress_only
 
 EXACT = 1e-13
-
-
-GAUSSIAN = AnalyticGaussian([1.0, -2.0], [[2.0, 0.6], [0.6, 0.5]])
 
 
 def _potts_posterior() -> WithGaussianPrior:
@@ -813,9 +811,7 @@ def test_the_chain_recovers_the_enumerated_assignment_posterior_of_a_mixture() -
     # components -- 5 ** 500 assignments -- and the six-coordinate objective
     # has no quadrature reference at all; the pin is the small instance's.
     target, observations, components = weight_posterior()
-    quadrature_weight, quadrature_marginal = enumerated_quadrature(
-        observations, components
-    )
+    reference = enumerated_quadrature(observations, components)
 
     chain = sample(
         target,
@@ -838,34 +834,14 @@ def test_the_chain_recovers_the_enumerated_assignment_posterior_of_a_mixture() -
         worst = max(worst, abs(float(target(theta)) / expected - 1.0))
     assert worst < 1e-12, worst
 
-    log_weights = log_simplex(chain.theta)
-    drawn_weight = torch.exp(log_weights)[:, 0].numpy()
-    drawn_marginal = np.stack(
-        [
-            responsibilities(
-                torch.as_tensor(observations, dtype=torch.float64), row, components
-            ).numpy()[:, 0]
-            for row in log_weights
-        ]
+    assert_recovers_assignment_posterior(
+        chain.theta,
+        observations,
+        components,
+        reference,
+        sigmas=MONTE_CARLO_SIGMAS,
+        size=MIXTURE_DRAWS,
     )
-
-    weight_tolerance = (
-        MONTE_CARLO_SIGMAS * float(drawn_weight.std()) / math.sqrt(MIXTURE_DRAWS)
-    )
-    marginal_tolerance = (
-        MONTE_CARLO_SIGMAS
-        * float(drawn_marginal.std(axis=0).max())
-        / math.sqrt(MIXTURE_DRAWS)
-    )
-
-    assert abs(drawn_weight.mean() - quadrature_weight) < weight_tolerance, (
-        drawn_weight.mean(),
-        quadrature_weight,
-    )
-    assert (
-        np.abs(drawn_marginal.mean(axis=0) - quadrature_marginal).max()
-        < marginal_tolerance
-    ), np.abs(drawn_marginal.mean(axis=0) - quadrature_marginal).max()
 
 
 class _Bounded(Objective):

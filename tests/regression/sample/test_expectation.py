@@ -24,6 +24,8 @@ from snakes_and_ladders.sample import hmc
 from snakes_and_ladders.sample.expectation import KalmanMean
 from snakes_and_ladders.validation.gaussian import GaussianTarget, diagonal_precision
 
+from tests._posteriors import assert_gaussian_moments
+
 
 def _ar1(
     rng: np.random.Generator, n: int, phi: float, mu: float, width: int
@@ -92,9 +94,7 @@ def test_a_chain_without_its_draws_returns_the_expectations() -> None:
     assert chain.theta.shape == (0, dimension)
     first, second = chain.expectations["x"], chain.expectations["x2"]
     assert first.n == second.n == 1_000
-    assert np.abs(first.mean / first.standard_error).max() < 4.5
-    residual = (second.mean - 1.0 / precision) / second.standard_error
-    assert np.abs(residual).max() < 4.5
+    assert_gaussian_moments(first, second, precision)
 
 
 @pytest.mark.smoke

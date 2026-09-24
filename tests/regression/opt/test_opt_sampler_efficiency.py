@@ -26,11 +26,8 @@ from snakes_and_ladders.sample.hmc import Adaptation, effective_sample_size, sam
 from snakes_and_ladders.sample.langevin import MALA_TARGET_ACCEPTANCE, mala
 from snakes_and_ladders.sample.slice import slice_sample
 
-from tests._objective_checks import AnalyticGaussian
-from tests._posteriors import weight_posterior
+from tests._posteriors import GAUSSIAN, weight_posterior
 from tests._scale import at_scale
-
-GAUSSIAN = AnalyticGaussian([1.0, -2.0], [[2.0, 0.6], [0.6, 0.5]])
 
 #: Each sampler at its own warm-up, since a comparison between a tuned method
 #: and an untuned one measures the tuning. HMC and MALA adapt the step and the

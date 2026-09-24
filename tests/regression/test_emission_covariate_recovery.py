@@ -31,6 +31,20 @@ from snakes_and_ladders.emissions import (
 )
 
 SEED = 20260916
+#: The planted negative-binomial rate and dispersion.
+MEAN, DISPERSION = 2.5, 3.0
+
+
+def _exposed_draws() -> tuple[torch.Tensor, torch.Tensor]:
+    """2,000 exposures over 0.5 to 4.0 and the counts drawn under them."""
+    rng = np.random.default_rng(SEED)
+    offsets = torch.tensor(rng.uniform(0.5, 4.0, 2000), dtype=torch.float64)
+    rate = (offsets * MEAN).numpy()
+    draws = torch.tensor(
+        rng.negative_binomial(DISPERSION, DISPERSION / (DISPERSION + rate)),
+        dtype=torch.float64,
+    ).reshape(1, -1)
+    return offsets, draws
 
 
 @pytest.mark.critical
@@ -38,14 +52,8 @@ SEED = 20260916
 def test_the_exposure_does_not_hide_the_rate_or_the_dispersion() -> None:
     # 2,000 draws, exposure over 0.5 to 4.0 -- an eightfold spread, so no single
     # rescaling of `mu` explains the data.
-    rng = np.random.default_rng(SEED)
-    offsets = torch.tensor(rng.uniform(0.5, 4.0, 2000), dtype=torch.float64)
-    mean, dispersion = 2.5, 3.0
-    rate = (offsets * mean).numpy()
-    draws = torch.tensor(
-        rng.negative_binomial(dispersion, dispersion / (dispersion + rate)),
-        dtype=torch.float64,
-    ).reshape(1, -1)
+    offsets, draws = _exposed_draws()
+    mean, dispersion = MEAN, DISPERSION
 
     start = NegativeBinomialEmission(torch.tensor([1.0]), torch.tensor([1.0]))
     fitted = start.reestimate(
@@ -87,14 +95,8 @@ def test_ignoring_a_varying_covariate_does_not_recover_the_truth() -> None:
     # What makes the two above a test of the covariate and not of the fit. The
     # same draws, refitted with the covariate withheld, must miss -- otherwise
     # the exposure was never load-bearing and the recovery proves nothing.
-    rng = np.random.default_rng(SEED)
-    offsets = torch.tensor(rng.uniform(0.5, 4.0, 2000), dtype=torch.float64)
-    mean, dispersion = 2.5, 3.0
-    rate = (offsets * mean).numpy()
-    draws = torch.tensor(
-        rng.negative_binomial(dispersion, dispersion / (dispersion + rate)),
-        dtype=torch.float64,
-    ).reshape(1, -1)
+    offsets, draws = _exposed_draws()
+    mean, dispersion = MEAN, DISPERSION
     posterior = torch.ones(1, 2000, 1, dtype=torch.float64)
     start = NegativeBinomialEmission(torch.tensor([1.0]), torch.tensor([1.0]))
 

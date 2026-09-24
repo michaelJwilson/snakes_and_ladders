@@ -20,8 +20,6 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.opt.constrain import log_simplex
-from snakes_and_ladders.opt.mixture import responsibilities
 from snakes_and_ladders.sample.hmc import (
     Adaptation,
     effective_sample_size,
@@ -36,12 +34,13 @@ from snakes_and_ladders.sample.langevin import (
 
 from tests._objective_checks import AnalyticGaussian
 from tests._posteriors import (
+    GAUSSIAN,
+    assert_recovers_assignment_posterior,
+    assert_within_sigmas,
     enumerated_quadrature,
     monte_carlo_sigmas,
     weight_posterior,
 )
-
-GAUSSIAN = AnalyticGaussian([1.0, -2.0], [[2.0, 0.6], [0.6, 0.5]])
 
 #: The tolerance the identity is declared at, and what it realizes. The two
 #: routes compute the same number by different arithmetic --- a trajectory's
@@ -151,15 +150,14 @@ def test_the_langevin_chain_recovers_an_analytic_gaussian() -> None:
             burn_in=400,
         )
 
-        mean_sigmas, variance_sigmas = monte_carlo_sigmas(
+        assert_within_sigmas(
             chain.theta,
             GAUSSIAN.mean.numpy(),
             np.diag(GAUSSIAN.covariance.numpy()),
+            GAUSSIAN_SIGMAS,
+            seed,
         )
-
         assert chain.corrected
-        assert float(mean_sigmas.max()) < GAUSSIAN_SIGMAS, (seed, mean_sigmas)
-        assert float(variance_sigmas.max()) < GAUSSIAN_SIGMAS, (seed, variance_sigmas)
         # The diagnostic `opt/CLAUDE.md` requires beside the acceptance rate:
         # a step too large biases the spread while acceptance looks healthy.
         assert float(chain.energy_error.mean()) < 2.5, seed
@@ -177,9 +175,7 @@ def test_the_langevin_chain_recovers_the_enumerated_assignment_posterior() -> No
     # standard errors away and the worst marginal 1.14 and 0.15, against the
     # 4.0 declared, at acceptances of 0.793 and 0.787.
     target, observations, components = weight_posterior()
-    quadrature_weight, quadrature_marginal = enumerated_quadrature(
-        observations, components
-    )
+    reference = enumerated_quadrature(observations, components)
 
     for seed in (756, 757):
         chain = mala(
@@ -191,31 +187,15 @@ def test_the_langevin_chain_recovers_the_enumerated_assignment_posterior() -> No
         )
         assert chain.acceptance_rate > 0.6, (seed, chain.acceptance_rate)
 
-        log_weights = log_simplex(chain.theta)
-        drawn_weight = torch.exp(log_weights)[:, 0].numpy()
-        drawn_marginal = np.stack(
-            [
-                responsibilities(
-                    torch.as_tensor(observations, dtype=torch.float64), row, components
-                ).numpy()[:, 0]
-                for row in log_weights
-            ]
+        assert_recovers_assignment_posterior(
+            chain.theta,
+            observations,
+            components,
+            reference,
+            sigmas=MIXTURE_SIGMAS,
+            size=float(effective_sample_size(chain.theta)[0]),
+            context=seed,
         )
-        size = float(effective_sample_size(chain.theta)[0])
-        weight_tolerance = MIXTURE_SIGMAS * float(drawn_weight.std()) / np.sqrt(size)
-        marginal_tolerance = (
-            MIXTURE_SIGMAS * float(drawn_marginal.std(axis=0).max()) / np.sqrt(size)
-        )
-
-        assert abs(drawn_weight.mean() - quadrature_weight) < weight_tolerance, (
-            seed,
-            drawn_weight.mean(),
-            quadrature_weight,
-        )
-        assert (
-            np.abs(drawn_marginal.mean(axis=0) - quadrature_marginal).max()
-            < marginal_tolerance
-        ), (seed, np.abs(drawn_marginal.mean(axis=0) - quadrature_marginal).max())
 
 
 @pytest.mark.analytic
