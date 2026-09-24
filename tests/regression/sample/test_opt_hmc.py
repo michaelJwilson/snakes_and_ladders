@@ -1,21 +1,11 @@
 """HMC, checked where it is exact before it is checked where it is statistical.
 
-The integrator has two properties that are exact statements about arithmetic
-and need no sampling: it is reversible, and its energy error is second order
-in the step size. Those come first, because a distributional test says the
-chain is wrong while these say which half is wrong.
-
-Then the distribution, against three references that are not another sampler:
-a Gaussian whose mean and covariance are analytic, a real `Objective` whose
-posterior is computed by grid quadrature, and a mixture whose evidence and
-assignment marginals are summed over all 4,096 assignments and integrated over
-the one coordinate left free (issue #734).
-
-The last test is the one that changed the module. A step size too large biases
-the posterior *spread* downward while leaving the mean correct and the
-acceptance rate looking healthy --- measured at 0.982 acceptance with the
-standard deviation 12% low. Acceptance does not detect it; the energy error
-does, which is why `HmcChain` carries it.
+Exact first: the integrator is reversible and its energy error second order,
+which say which half is wrong. Then the distribution against non-samplers: an
+analytic Gaussian, a real `Objective` by grid quadrature, and a mixture summed
+over all 4,096 assignments (issue #734). A too-large step biases the spread
+while acceptance looks healthy (0.982 accepted, sd 12% low); the energy
+error detects it, which is why `HmcChain` carries it.
 """
 
 from __future__ import annotations
@@ -75,10 +65,7 @@ EXACT = 1e-13
 def _potts_posterior() -> WithGaussianPrior:
     """A real `Objective` whose `theta` is 2-D, so quadrature can referee it.
 
-    At ``q = 2`` and a chain of 8 the normalizer takes the squaring route
-    (``opt.potts.squaring_is_cheaper``), so the quadrature and step-size pins
-    below run on it and hold at the values they held on the recursion
-    (issue #754).
+    Takes the squaring route at ``q = 2``, chain 8; the pins held there (#754).
     """
     field = np.array([0.3, -0.3])
     field = field - np.log(np.exp(field).sum())
@@ -126,11 +113,8 @@ def test_the_integrator_is_reversible(integrator: Integrator) -> None:
 
 @pytest.mark.analytic
 def test_the_energy_error_is_second_order_in_the_step_size() -> None:
-    # Halving the step must quarter the error. The *trajectory length* is held
-    # fixed and the step count scaled with it: varying the step at a fixed
-    # step count moves the endpoint around the orbit instead, and the errors
-    # oscillate rather than converge, as the first draft of this test
-    # measured.
+    # Halving the step must quarter the error at fixed trajectory length; at a
+    # fixed step count the errors oscillate around the orbit.
     theta = torch.tensor([0.4, 0.9], dtype=torch.float64)
     momentum = torch.tensor([-0.3, 1.1], dtype=torch.float64)
     reference = hamiltonian(GAUSSIAN, theta, momentum)
@@ -175,14 +159,8 @@ def test_the_chain_recovers_an_analytic_gaussian() -> None:
     "estimates the spread badly and would assert less than it claims"
 )
 def test_the_chain_matches_grid_quadrature_on_a_real_objective() -> None:
-    # The Potts chain's `theta` is two-dimensional at two states, so the
-    # posterior integrates on a grid and the reference is not a sampler. The
-    # step size is deliberately small: see the test below for what a larger
-    # one does to the second moment.
-    # Three independent chains, pooled. One chain of the same total length
-    # estimates the *mean* fine and the *spread* badly -- a single 2000-draw
-    # chain came out 18% high -- because the second moment needs far more
-    # effective samples than the first and this posterior mixes slowly.
+    # 2-D `theta`, so quadrature referees. Three pooled chains: one 2000-draw
+    # chain put the spread 18% high, as the second moment mixes slowly.
     posterior = _potts_posterior()
 
     draws = torch.cat(
@@ -213,8 +191,7 @@ def test_the_chain_matches_grid_quadrature_on_a_real_objective() -> None:
     "as the test above before it is measurable at all"
 )
 def test_a_step_size_that_diverges_biases_the_spread_not_the_mean() -> None:
-    # The failure this module's `energy_error` exists for, and the reason
-    # acceptance rate is not enough on its own. Measured against quadrature:
+    # Against quadrature:
     #
     #   step   accept   max|dH|   sd / true
     #   0.050   0.799   9.3e+00   0.92, 0.93
@@ -222,9 +199,7 @@ def test_a_step_size_that_diverges_biases_the_spread_not_the_mean() -> None:
     #   0.005   1.000   8.1e-03   1.07, 1.04
     #   0.002   1.000   5.1e-03   1.01, 1.00
     #
-    # At 0.020 the acceptance rate looks healthy and the standard deviation is
-    # 12% low, because divergent trajectories are rejected preferentially in
-    # the tails. What tracks the bias is the energy error.
+    # At 0.020 acceptance looks healthy and sd is 12% low: the energy error tracks it.
     posterior = _potts_posterior()
 
     coarse = sample(
@@ -352,12 +327,7 @@ def _hand_written_leapfrog(
     step_size: float,
     n_steps: int,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Kick-drift-kick, written out, as `leapfrog` was before it was composed.
-
-    Kept as the reference the composition is pinned against: a general driver
-    reducing to this for the trivial composition is one implementation instead
-    of two, and the test below establishes that it does.
-    """
+    """Kick-drift-kick written out: the reference the composed `leapfrog` is pinned to."""
     position = theta.detach().clone()
     velocity = momentum.detach().clone()
     velocity = velocity - 0.5 * step_size * gradient_at(objective, position)
@@ -412,15 +382,9 @@ def test_a_composition_that_integrates_the_wrong_interval_is_refused() -> None:
 
 @pytest.mark.analytic
 def test_the_energy_error_is_fourth_order_in_the_step_size() -> None:
-    # The companion of the second-order test above: a slope estimator
-    # reporting 4 for both integrators is broken, and only the pair catches
-    # it.
-    #
-    # Realized ratios, coarse to fine: 16.310, 16.077, 16.019, 16.005, 16.001
-    # -- converging on 16 rather than drifting, so the claim is an order
-    # rather than a coincidence at one step size. The coarsest is excluded
-    # from the assertion and reported here: at 1/10 the higher-order terms
-    # have not yet died away.
+    # With the second-order test, catches a slope estimator reporting 4 for
+    # both. Ratios 16.310, 16.077, 16.019, 16.005, 16.001; the coarsest (1/10)
+    # is excluded from the assertion.
     theta = torch.tensor([0.4, 0.9], dtype=torch.float64)
     momentum = torch.tensor([-0.3, 1.1], dtype=torch.float64)
     reference = hamiltonian(GAUSSIAN, theta, momentum)
@@ -464,18 +428,10 @@ def test_force_evaluations_counts_what_a_trajectory_actually_costs(
 
 @pytest.mark.analytic
 def test_leapfrog_reaches_the_acceptance_target_more_cheaply_than_yoshida() -> None:
-    # **The measurement is negative.** A fourth-order method pays where the
-    # step is limited by *accuracy*; here it is limited by *stability*.
-    #
-    # Yoshida's largest sub-step is |w0| = 1.70 times the nominal step, so its
-    # stability limit in the step size is ~0.59 of leapfrog's -- measured at
-    # 0.0333 against 0.0500, a ratio of 1.50 against the 1.70 the coefficient
-    # predicts. Combined with three force evaluations per step, that is where
-    # the order advantage goes.
-    #
-    # Realized on this posterior: leapfrog reaches 0.855 acceptance at **21**
-    # gradients per trajectory; Yoshida needs **91** to reach 0.975, and at 61
-    # it accepts *nothing*. On the analytic Gaussian, 3 against 7.
+    # Negative: the step is limited by stability, not accuracy. Yoshida's
+    # |w0| = 1.70 gives ~0.59 of leapfrog's limit (0.0333 against 0.0500).
+    # Leapfrog: 0.855 acceptance at 21 gradients; Yoshida 0.975 at 91, nothing
+    # at 61; analytic Gaussian 3 against 7.
     target = _potts_posterior()
     cheapest = {}
     for integrator in (leapfrog, yoshida):
@@ -527,13 +483,9 @@ def test_the_default_integrator_is_the_one_every_committed_result_used() -> None
 
 @pytest.mark.smoke
 def test_tempering_a_gaussian_scales_the_chain_by_the_square_root_of_t() -> None:
-    # Where the approximation is exact. For a Gaussian target the dynamics are
-    # linear, so a chain at temperature T *is* the chain at 1 with its
-    # deviations from the mean scaled by sqrt(T), draw for draw, once the
-    # start has been forgotten. The first is the implementation check
-    # (momentum variance T, energy difference over T, nothing else); the
-    # second is what tempering means. Realized: 1.0004 and 0.9953 of
-    # sqrt(T) sigma at both T = 2 and T = 0.5.
+    # Gaussian dynamics are linear: a chain at T is the chain at 1 scaled by
+    # sqrt(T), draw for draw. Realized 1.0004 and 0.9953 of sqrt(T) sigma at
+    # T = 2 and 0.5.
     exact = GAUSSIAN.covariance.diagonal().sqrt()
     reference = sample(
         GAUSSIAN,
@@ -629,11 +581,8 @@ def test_annealing_reports_the_best_point_visited_not_the_last() -> None:
 
 @pytest.mark.analytic
 def test_each_tempering_replica_samples_the_gaussian_at_its_own_temperature() -> None:
-    # With exchanges on, replica r targets exp(-U / T_r): on the analytic
-    # Gaussian that is the same mean and covariance scaled by T_r. The ladder
-    # is close enough that exchanges happen -- a swap rate of 0 would leave
-    # four independent chains, which would pass this test while exchanging
-    # nothing.
+    # Replica r targets exp(-U / T_r); the ladder is tight enough that swaps
+    # happen, since four independent chains would pass without exchanging.
     ladder = (1.0, 2.0, 4.0)
     run = parallel_tempering(
         GAUSSIAN,
@@ -697,12 +646,8 @@ def test_tempering_costs_what_its_accounting_says_and_is_reproducible() -> None:
 
 @pytest.mark.analytic
 def test_the_walker_trace_counts_the_round_trips_a_two_rung_ladder_makes() -> None:
-    # The trace the discrete temperings carry, now on the continuous ladder
-    # (issue #861). Two rungs make every statement about it exact: the two
-    # walkers are a permutation of the two rungs at every round, a rung
-    # change is an accepted exchange and nothing else, and a round trip is a
-    # return to rung 0 from the rung above -- counted here from the trace and
-    # by `tempered.round_trips`, which the discrete ensembles are read with.
+    # The trace on the continuous ladder (#861): two rungs make it exact, read
+    # directly and by `tempered.round_trips`.
     rounds = 200
     run = parallel_tempering(
         GAUSSIAN,
@@ -786,31 +731,13 @@ MONTE_CARLO_SIGMAS = 4.0
 @pytest.mark.oracle
 @pytest.mark.release
 def test_the_chain_recovers_the_enumerated_assignment_posterior_of_a_mixture() -> None:
-    # The rung below (issue #734): assignment enumeration. The chain is pinned
-    # at the exact end against an analytic Gaussian above, which says nothing
-    # about a mixture; here the surface is a mixture's and every number the
-    # chain is judged against is a sum over all 4,096 whole assignments.
-    #
-    # Two statements. The surface first, exactly: at 50 of the draws the
-    # objective is the negated enumerated evidence plus the prior's own term,
-    # to 4.4e-16 relative against 1e-12 declared -- the chain walks the
-    # enumeration's own log density and not a neighbouring one.
-    #
-    # Then the draws. Integrating the enumerated evidence and the enumerated
-    # marginals over the one free coordinate gives the posterior mean weight
-    # and the posterior mean of P(z_i = 0 | y), neither of them a sampler's
-    # estimate. Over 800 draws the chain's weight is 2.0e-03 away against a
-    # declared 2.0e-02 -- four standard errors at this draw count -- and its
-    # responsibilities, which come from the factorized E step rather than the
-    # enumeration, are 2.1e-03 away at their worst against a declared 2.0e-02.
-    # Acceptance 0.83, so the step is the surface's rather than a rejection
-    # rate dressed as a chain.
-    #
-    # Where it stops: the enumeration is exponential and the posterior is
-    # integrated on a line, so this is twelve observations and one free
-    # coordinate. The declared mixture fixture is 500 observations over five
-    # components -- 5 ** 500 assignments -- and the six-coordinate objective
-    # has no quadrature reference at all; the pin is the small instance's.
+    # The rung below (#734): assignment enumeration over 4,096 assignments. At
+    # 50 draws the objective is the negated enumerated evidence plus the prior,
+    # to 4.4e-16 (1e-12). Over 800 draws the weight is 2.0e-03 off the
+    # integrated posterior mean (2.0e-02 declared, four standard errors) and
+    # the E-step responsibilities 2.1e-03 at worst (2.0e-02); acceptance 0.83.
+    # Twelve observations and one free coordinate: the declared fixture's
+    # 5 ** 500 assignments have no reference.
     target, observations, components = weight_posterior()
     reference = enumerated_quadrature(observations, components)
 

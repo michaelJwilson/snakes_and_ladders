@@ -1,15 +1,10 @@
 """The compiled Gaussian HMC and MALA chains against the torch route (issues #986, #997).
 
-Referees:
-
-- ``hmc.compiled_trajectory`` (``oxisal.leapfrog_trajectory``) is ``hmc.leapfrog`` on the same position and
-  momentum, diagonal and dense, within 1e-12: the trajectory is the only
-  arithmetic the two routes share, since their streams differ;
-- the compiled chain at d = 200 returns every coordinate's mean within 4.5
-  standard errors of 0 and variance within 4.5 of ``1 / p``, the standard
-  errors from the chain's own AR(1) fit (``KalmanMean``);
-- it is reproducible from the generator, and a chain the compiled route
-  cannot run (an operator, a temperature) takes the torch route.
+``hmc.compiled_trajectory`` (``oxisal.leapfrog_trajectory``) is
+``hmc.leapfrog`` on the same position and momentum, diagonal and dense, within
+1e-12 (the streams differ). At d = 200 every mean is within 4.5 standard errors
+of 0 and variance of ``1 / p`` (``KalmanMean``). Reproducible from the
+generator; an operator or temperature takes the torch route.
 """
 
 from __future__ import annotations

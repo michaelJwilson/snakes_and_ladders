@@ -1,18 +1,12 @@
 """``log Z`` from an annealed run, against the transfer matrix and against enumeration.
 
-Issue #756. Three estimators and one claim each, every one refereed outside
-the sampler: importance sampling and population annealing recover
+Issue #756. Importance sampling and population annealing recover
 `likelihood.potts.strip_log_partition` at three widths and
-`opt.potts.log_partition_graph` on the enumerable lattices, each within three
-times *its own* standard error over two seeds; the simulated-tempering walker
-visits the enumerated Boltzmann law at every rung by chi-square, and its rungs
-in the proportion its weights predict.
-
-**A ``log Z`` without its error is not an estimate**, so every deviation below
-is read in standard errors rather than in nats, and the two ablations are read
-the same way: dropping the importance weight misses by 7.9 errors on a coarse
-ladder, and dropping the resampling turns population annealing back into the
-importance sampler to 1.8e-15.
+`opt.potts.log_partition_graph` on enumerable lattices within three of their
+own standard errors over two seeds; the simulated-tempering walker visits the
+enumerated law at every rung, in the proportion its weights predict. Ablations:
+no importance weight misses by 7.9 errors; no resampling is the importance
+sampler to 1.8e-15.
 """
 
 from __future__ import annotations
@@ -137,9 +131,7 @@ def _within(estimate: LogPartition, exact: float) -> float:
 def test_the_importance_sampled_log_partition_is_the_transfer_matrix() -> None:
     """Neal's estimator against the exact strip, at three widths.
 
-    Realized deviations, in standard errors: 0.61 and 0.52 at width 4, 0.98
-    and 0.41 at width 6, 1.44 and 0.64 at width 8, over the two seeds; the
-    weights carried an ESS of 59 to 90 of 128.
+    Errors: 0.61, 0.52 (w4); 0.98, 0.41 (w6); 1.44, 0.64 (w8); ESS 59-90 of 128.
     """
     betas = geometric_betas(1.0, RUNGS, beta_min=BETA_MIN)
     for width in STRIP_WIDTHS:
@@ -162,11 +154,7 @@ def test_the_importance_sampled_log_partition_is_the_transfer_matrix() -> None:
 def test_the_population_annealed_log_partition_is_the_transfer_matrix() -> None:
     """The resampled population against the same exact strip.
 
-    Realized deviations, in standard errors: 1.01 and 0.20 at width 4, 0.36
-    and 1.27 at width 6, 1.63 and 0.68 at width 8. The population's family
-    entropy is 3.45 to 3.88 nats of the 4.85 it starts with, which is the
-    diagnostic resampling costs: the copies share ancestors, and a run whose
-    entropy has collapsed is one estimate rather than 128.
+    Errors: 1.01, 0.20; 0.36, 1.27; 1.63, 0.68; family entropy 3.45-3.88 of 4.85 nats.
     """
     betas = geometric_betas(1.0, RUNGS, beta_min=BETA_MIN)
     for width in STRIP_WIDTHS:
@@ -188,12 +176,7 @@ def test_the_population_annealed_log_partition_is_the_transfer_matrix() -> None:
 def test_both_estimators_recover_the_enumerated_log_partition() -> None:
     """The same claim where the answer is a sum over every configuration.
 
-    The 3x3 open square and the 3x3 periodic triangular antiferromagnet, 512
-    configurations each. Realized deviations in standard errors: 0.35 and
-    0.15 for the importance sampler, 0.04 and 0.45 for the population, on the
-    open square; 0.15 and 0.14, 0.90 and 1.35 on the frustrated one, where
-    every coupling is negative and both Fortuin-Kasteleyn cluster moves are
-    refused.
+    512 each. Open: 0.35, 0.15 (IS), 0.04, 0.45 (PA); frustrated: 0.15, 0.14, 0.90, 1.35.
     """
     betas = geometric_betas(1.0, RUNGS // 2, beta_min=BETA_MIN)
     for name, (graph, coupling, field) in _enumerable().items():
@@ -212,11 +195,7 @@ def test_both_estimators_recover_the_enumerated_log_partition() -> None:
 def test_the_zero_rung_is_n_log_q_bitwise() -> None:
     """``==``, not a tolerance: the uniform law's normalizer is exact.
 
-    A one-rung ladder draws from ``beta = 0`` and stops, so both estimators
-    must return ``n log q`` to the last bit and an error of exactly zero.
-    An estimator that returned ``n log q * (1 - 1e-16)`` here has a bias
-    nothing downstream would localize, the zero rung being what every other
-    rung is measured from.
+    One rung, ``beta = 0``: ``n log q`` to the last bit, error exactly zero.
     """
     graph = lattice_graph((3, 3), BoundaryCondition.OPEN, WIDER_COUPLING)
     exact = graph.n_nodes * math.log(2)
@@ -238,12 +217,8 @@ def test_dropping_the_importance_weight_misses_log_z_by_more_than_three_errors()
 ):
     """The ablation: a plain annealing run reports ``mean(log w)``, not ``log mean(w)``.
 
-    Six rungs on the 3x3 open square, where the ladder is coarse enough for
-    the weights to spread. The importance sampler lands at 11.7015 +- 0.1458
-    against the enumerated 11.5199, 1.25 errors; the average of the *logs* ---
-    Jensen's lower bound, which is what an annealing run that keeps no weight
-    can report --- lands at 10.3647, **7.9 errors low** and low every time,
-    the gap being a variance and so one-signed.
+    Six rungs, 3x3 open: IS 11.7015 +- 0.1458 against 11.5199 (1.25 errors);
+    Jensen's bound 10.3647, 7.9 errors low, one-signed.
     """
     graph, coupling, field = _enumerable()["3x3-open"]
     exact = _enumerated_log_z(graph, coupling, field)
@@ -263,11 +238,7 @@ def test_dropping_the_importance_weight_misses_log_z_by_more_than_three_errors()
 def test_population_annealing_without_resampling_is_the_importance_sampler() -> None:
     """The second ablation, and the identity that makes the two one estimator.
 
-    With the resampling off, the per-rung normalizers telescope into
-    ``logsumexp(w) - log N``: the same trajectories from the same seed, so
-    the two estimates agree to 1.8e-15 of a ``log Z`` near 11.44, and the
-    population's normalized log weights are the importance sampler's own
-    shifted by their normalizer.
+    Normalizers telescope to ``logsumexp(w) - log N``: 1.8e-15 of ~11.44.
     """
     graph, _, field = _enumerable()["3x3-open"]
     betas = geometric_betas(1.0, RUNGS // 2, beta_min=BETA_MIN)
@@ -290,14 +261,8 @@ def test_population_annealing_without_resampling_is_the_importance_sampler() -> 
 def test_systematic_resampling_keeps_the_families_multinomial_loses() -> None:
     """Why the default is systematic, in the diagnostic that separates them.
 
-    Both are unbiased and both land inside three standard errors of the
-    enumerated answer --- realized 0.04 to 1.05 over four seeds --- so the
-    estimate does not choose between them. The genealogy does: over 100 rungs
-    on the 3x3 open square, systematic resampling ends at a family entropy of
-    4.01 to 4.17 nats of a possible 4.85, and multinomial at 0.19 to 0.80 ---
-    two to three effective families of 128. Systematic gives a member whose
-    weight is ``1 / N`` exactly one copy where multinomial draws its count,
-    and that variance compounds once per rung.
+    Both within three errors (0.04-1.05); over 100 rungs family entropy 4.01-4.17
+    (systematic) against 0.19-0.80 (multinomial) of 4.85 nats.
     """
     graph, coupling, field = _enumerable()["3x3-open"]
     exact = _enumerated_log_z(graph, coupling, field)
@@ -344,13 +309,8 @@ def _tempering_fixture() -> tuple[PottsGraph, np.ndarray, np.ndarray, list[np.nd
 def test_the_simulated_tempering_walker_is_the_enumerated_law_at_every_rung() -> None:
     """Marinari and Parisi's walker, rung by rung, against enumeration.
 
-    The rung is a sampled variable, so the claim is conditional: the
-    configurations recorded *at* rung ``k`` are drawn from the Boltzmann law
-    at ``beta_k``, all four laws from one chain. Realized chi-square p over
-    the 16 configurations: 0.2635, 0.1572, 0.0941 and 0.6561 at the first
-    seed, 0.6100, 0.7028, 0.4190 and 0.0138 at the second. The walker
-    completed 520 and 525 round trips over the ladder, so no rung is a law it
-    visited once.
+    p over 16 states: 0.2635, 0.1572, 0.0941, 0.6561 and 0.6100, 0.7028,
+    0.4190, 0.0138 over two seeds; 520 and 525 round trips.
     """
     graph, field, configurations, laws = _tempering_fixture()
     index = {
@@ -393,13 +353,8 @@ def test_the_simulated_tempering_walker_is_the_enumerated_law_at_every_rung() ->
 def test_the_rung_occupation_is_the_one_the_weights_predict() -> None:
     """The rung marginal is ``Z_k exp(g_k)``, and a pilot estimate is what sets it.
 
-    Two readings of the same identity. Given the exact ``g_k = -log Z_k`` the
-    occupation is uniform: realized p 0.1907 and 0.7083. Given a pilot
-    `annealed_importance_sampling` run's ``g_k``, whose error is 0.0009 to
-    0.0736 nats, the prediction tilts to 0.241, 0.242, 0.259, 0.257 and the
-    occupation follows it: p 0.2765 and 0.3747. A uniform asserted against
-    the pilot's own run would fail at p = 0.0003, which is the estimate's
-    error and not the sampler's defect.
+    Exact ``g_k``: uniform, p 0.1907, 0.7083. Pilot ``g_k`` (error 0.0009-0.0736
+    nats) predicts 0.241, 0.242, 0.259, 0.257: p 0.2765, 0.3747 (uniform: 0.0003).
     """
     graph, field, _, _ = _tempering_fixture()
     exact = np.array(
@@ -449,12 +404,7 @@ def test_the_rung_occupation_is_the_one_the_weights_predict() -> None:
 
 @pytest.mark.smoke
 def test_a_ladder_or_a_population_the_estimators_cannot_use_is_refused() -> None:
-    """Every refusal at the entry point, rather than at the first weight.
-
-    A ladder that does not start at zero has no exact rung to anchor on, one
-    that is not increasing is not a ladder, and a population of one carries an
-    estimate with no statement about it.
-    """
+    """Every refusal at the entry point, rather than at the first weight."""
     graph, _, field = _enumerable()["3x3-open"]
     rng = np.random.default_rng(0)
 
@@ -480,10 +430,7 @@ def test_a_ladder_or_a_population_the_estimators_cannot_use_is_refused() -> None
 def test_a_cluster_move_on_a_negative_coupling_is_refused_by_every_estimator() -> None:
     """The dispatch's refusal, reached through the three new entry points.
 
-    Wolff's bond probability is not a probability below zero, and an
-    estimator that ran it there would return a number rather than fail ---
-    which is the reason `potts_mcmc.refuse_negative_coupling` is one
-    function and every entry point calls it.
+    One `potts_mcmc.refuse_negative_coupling`, called by every entry point.
     """
     graph, _, field = _enumerable()["frustrated-triangular"]
     rng = np.random.default_rng(0)

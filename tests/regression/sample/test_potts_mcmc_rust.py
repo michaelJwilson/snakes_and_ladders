@@ -1,23 +1,12 @@
 """The Rust single-site sampler, refereed twice: by the distribution it
 converges to, and by the oracle's own chain.
 
-Issue #246. `search/CLAUDE.md`: a sampler is validated by the distribution it
-converges to, never by inspection -- a chain that visibly moves is what a
-sampler with a broken accept step also does. So this compares the Rust backend
-against the *exact enumerated* Boltzmann distribution.
-
-**And state for state against the oracle, which issue #599 is what buys.**
-Rust's `f64::exp` agrees with NumPy's to within a unit in the last place
-rather than exactly, and `np.searchsorted` is a threshold, so the kernel
-decides a site only where the draw clears every cumulative boundary by
-`potts_mcmc.sweeps.GUARD` units of the last place per state and hands the rest to
-NumPy. The enumeration test stays, because it is what would catch a guard
-that decided the wrong site rather than declining it.
-
-The fixture, the significance and the thinning are `test_potts_mcmc.py`'s, so
-the two backends are held to one standard: a 2x2 two-state lattice has 16
-configurations, and 10,000 sweeps thinned by 5 puts every chi-square cell in
-the hundreds.
+Issue #246: against the exact enumerated Boltzmann law (`search/CLAUDE.md`).
+State for state against the oracle (#599): Rust's `f64::exp` is within an ulp
+of NumPy's, so a site is decided only where the draw clears every boundary by
+`potts_mcmc.sweeps.GUARD` ulps per state, else NumPy decides it. Fixture,
+significance and thinning are `test_potts_mcmc.py`'s: 16 configurations,
+10,000 sweeps thinned by 5.
 """
 
 from __future__ import annotations
@@ -95,12 +84,7 @@ def test_the_rust_chain_is_drawn_from_the_exact_boltzmann_distribution() -> None
 
 @pytest.mark.oracle
 def test_the_rust_chain_is_still_exact_in_an_external_field() -> None:
-    """A field is not optional here.
-
-    `search/CLAUDE.md` requires every distributional test to run with a field
-    as well as without: a zero field is symmetric between states, so a sampler
-    that mishandled the field term entirely could still pass the test above.
-    """
+    """A field is not optional here (`search/CLAUDE.md`): zero field is symmetric."""
     assert _goodness_of_fit(WITH_FIELD) > SIGNIFICANCE
 
 
@@ -108,11 +92,7 @@ def test_the_rust_chain_is_still_exact_in_an_external_field() -> None:
 def test_the_test_would_catch_a_sampler_that_ignored_the_field() -> None:
     """Evidence the two tests above have the power they claim.
 
-    Without this, "the sampler passes a chi-square" and "the chi-square could
-    not tell" are indistinguishable -- the same argument
-    `test_dropping_the_field_accept_step_is_caught` makes for the cluster
-    moves. A chain drawn under no field, scored against the *with-field*
-    truth, must be rejected.
+    A no-field chain scored against the with-field truth must be rejected.
     """
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
     index, with_field_truth = enumerated_law(graph, WITH_FIELD)
@@ -137,11 +117,7 @@ def test_the_test_would_catch_a_sampler_that_ignored_the_field() -> None:
 def test_the_kernel_reads_the_graph_s_own_adjacency() -> None:
     """Both backends read the same neighbour structure, because there is one.
 
-    The kernel took a second builder (`flatten_adjacency`) until issue #277
-    retired it; it now takes `PottsGraph.compressed_adjacency`, which the
-    Python sweep indexes. Two builders cannot disagree about which nodes are
-    adjacent when there is one -- a disagreement that would have shown up as
-    a distributional failure with no indication of where it came from.
+    `PottsGraph.compressed_adjacency` since #277 retired `flatten_adjacency`.
     """
     graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.4)
     offsets, neighbours, couplings = graph.compressed_adjacency()
@@ -168,12 +144,7 @@ def test_the_kernel_reads_the_graph_s_own_adjacency() -> None:
 
 @pytest.mark.smoke
 def test_a_chain_is_reproducible_from_its_generator() -> None:
-    """A declared seed still determines the run.
-
-    The kernel holds no generator: every uniform it consumes is drawn here and
-    passed down, which is what keeps `snakes_and_ladders.sim`'s reproducibility
-    contract intact across the boundary.
-    """
+    """A declared seed still determines the run: every uniform is drawn here."""
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
 
     first = sample_potts(graph, NO_FIELD, np.random.default_rng(11), 20)
@@ -184,12 +155,7 @@ def test_a_chain_is_reproducible_from_its_generator() -> None:
 
 @pytest.mark.smoke
 def test_a_state_outside_the_alphabet_is_refused() -> None:
-    """The kernel's own precondition, surfaced as a Python error.
-
-    Reached through the extension rather than the wrapper, since the wrapper
-    draws a valid start itself: this asserts the boundary refuses rather than
-    reading past the field.
-    """
+    """The kernel's own precondition, surfaced as a Python error (via the extension)."""
     from snakes_and_ladders import oxisal
 
     with pytest.raises(ValueError, match=r"expected \[0, 2\)"):
@@ -222,9 +188,7 @@ PIN_SWEEPS = 20
 def test_the_rust_chain_is_the_oracle_s_chain_state_for_state() -> None:
     """Every recorded configuration, not a distribution over them.
 
-    This is what makes :data:`~snakes_and_ladders.backend.Backend.RUST`
-    the default without moving a committed number: a chain of the same law
-    would move every autocorrelation figure `STATUS.md` pins.
+    So the Rust default moves no autocorrelation figure `STATUS.md` pins.
     """
 
     def check(extent: int, seed: int, states: int) -> None:
@@ -257,11 +221,7 @@ def test_the_rust_chain_is_the_oracle_s_chain_state_for_state() -> None:
 def test_a_guard_wide_enough_hands_every_site_back() -> None:
     """The hand-back path itself, which no realistic draw reaches.
 
-    A guard covering the whole cumulative sum leaves the kernel unable to
-    decide any site, so it returns the position it started at every time and
-    NumPy decides all of them. The chain that comes out is still the oracle's,
-    which is what says the two halves of the sweep join up (issue #599, and
-    #561's test of the same shape).
+    A guard over the whole sum hands every site to NumPy: still the oracle's chain (#599).
     """
     from snakes_and_ladders import oxisal
 
@@ -330,11 +290,7 @@ def test_the_kernel_refuses_a_negative_guard() -> None:
 def test_the_default_guard_hands_nothing_back_on_a_realistic_chain() -> None:
     """The rate the port is worth measuring at, pinned as an absence.
 
-    `GUARD` is a hand-back *threshold*, so narrowing it toward the derived
-    bound of four units per state is what would buy speed. It buys nothing:
-    the kernel decided every one of these sites itself. A regression that
-    started handing sites back would be a correctness change dressed as a
-    slowdown, so it is asserted rather than left to the benchmark.
+    The kernel decided every site; a hand-back would be a correctness change.
     """
     from snakes_and_ladders import oxisal
 

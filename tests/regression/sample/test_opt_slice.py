@@ -1,17 +1,10 @@
 """Slice sampling, pinned on the property that defines it before the distribution.
 
-The procedure's defining statement is exact and needs no chain: every point
-it returns lies in the slice its level was cut at, whatever the target and
-whatever the width. That comes first, because a distributional failure says
-the sampler is wrong while this says which half.
-
-Then the distribution, against the same two references HMC and MALA are read
-against --- an analytic Gaussian and the mixture posterior whose evidence is a
-sum over all 4,096 assignments (issue #749) --- and then the shrinkage,
-ablated. The shrinkage is a cost device rather than a correctness one: the
-interval the stepping-out leaves already contains the current point, so
-rejecting from it without narrowing samples the same distribution. What it
-buys is an evaluation count that stays bounded, and that is what is measured.
+Every returned point lies in the slice its level was cut at, whatever the
+target and width. Then the distribution, against HMC and MALA's references
+(an analytic Gaussian, the 4,096-assignment mixture; issue #749). Then the
+shrinkage, ablated: it bounds the evaluation count, not correctness, since
+the stepped-out interval already contains the current point.
 """
 
 from __future__ import annotations
@@ -53,11 +46,8 @@ MIXTURE_SIGMAS = 4.0
 @pytest.mark.analytic
 @pytest.mark.critical
 def test_every_slice_update_returns_a_point_in_its_slice() -> None:
-    # Neal's (2003) invariant, and the only exact thing a slice sampler
-    # asserts: `-objective(theta) >= log_slice` for the point returned. It
-    # holds per update and not per draw, which is why `slice_update` is public
-    # --- a sweep cuts one level per coordinate and a chain can report none of
-    # them.
+    # Neal (2003): `-objective(theta) >= log_slice`, per update, so
+    # `slice_update` is public; a sweep reports no level.
     generator = torch.Generator().manual_seed(2003)
     position = GAUSSIAN.initial()
     for index in range(200):
@@ -88,14 +78,9 @@ def test_every_slice_update_returns_a_point_in_its_slice() -> None:
 def test_the_slice_chain_recovers_an_analytic_gaussian(
     direction: SliceDirection,
 ) -> None:
-    # Mean and covariance in closed form, over two seeds and both schemes ---
-    # the coordinate sweep and hit-and-run, which differ in how they meet the
-    # target's correlation and must agree with it either way.
-    #
-    # Realized, worst over the two coordinates and in the chain's own standard
-    # errors: coordinate 0.53 and 0.64 on the mean, 0.55 and 0.56 on the
-    # variance; hit-and-run 0.29 and 0.36 on the mean, 1.66 and 0.33 on the
-    # variance. Against the 3.0 declared.
+    # Closed form, two seeds, both schemes; worst in chain errors: coordinate
+    # mean 0.53, 0.64, variance 0.55, 0.56; hit-and-run mean 0.29, 0.36,
+    # variance 1.66, 0.33 (3.0).
     for seed in (11, 12):
         chain = slice_sample(
             GAUSSIAN,
@@ -153,19 +138,9 @@ def test_the_slice_chain_recovers_the_enumerated_assignment_posterior() -> None:
 
 @pytest.mark.analytic
 def test_shrinkage_is_what_bounds_the_evaluations_a_draw_costs() -> None:
-    # The ablation, and the half of it that is refereeable. Bias is not: the
-    # interval the stepping-out leaves contains the current point, so
-    # rejecting from it without narrowing is a valid update and samples the
-    # same distribution. Cost is, and it has no useful bound --- the level is
-    # cut at `f(x) + log u`, so a `u` near 1 leaves a slice of arbitrarily
-    # small measure inside an interval of fixed width, and the rejection form
-    # spends candidates in proportion to the ratio.
-    #
-    # Measured on this target: the rejection form reaches the 100-candidate
-    # refusal at every width tried --- 2.0, 10.0 and 40.0 --- while the
-    # shrinkage holds a sweep to 11.3, 12.6 and 16.0 evaluations over that
-    # same 20x range, which is the sense in which the width is the only knob
-    # and a wrong one costs evaluations rather than correctness.
+    # Bias is not refereeable (rejecting without narrowing is still valid);
+    # cost is: the rejection form hits the 100-candidate refusal at widths 2.0,
+    # 10.0 and 40.0, shrinkage holds 11.3, 12.6 and 16.0 evaluations per sweep.
     costs = []
     for width in (2.0, 10.0, 40.0):
         chain = slice_sample(

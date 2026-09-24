@@ -1,17 +1,9 @@
 """Each accept arm is the line it replaced, decision for decision and draw for draw.
 
-Issue #857 gave twelve sites one accept step. The claim a fold makes is that
-nothing moved, and for a Metropolis test that claim has two halves: the same
-decision, and the same number of uniforms taken from the generator in the same
-order. A sampler that accepts identically while drawing one uniform more per
-step returns a different chain from the next step onward, and every seeded
-chain in this directory would fail --- which is the referee, one level up. This
-module is the referee one level down: each arm runs beside the inline form the
-site wrote, on two generators seeded alike, and the streams are read afterwards
-to show they are level.
-
-The comparison is the closed form rather than a backend or a recorded chain, so
-the kind is ``analytic``.
+Issue #857 gave twelve sites one accept step. Each arm runs beside the site's
+inline form on two generators seeded alike: same decisions, and the streams
+read afterwards are level, since one extra uniform changes every later step.
+Referee: the closed form, so ``analytic``.
 """
 
 from __future__ import annotations
@@ -103,9 +95,7 @@ def test_every_arm_is_its_inline_form_decision_for_decision_and_draw_for_draw() 
 def test_the_zero_temperature_limit_is_taken_without_a_draw() -> None:
     """``beta = inf`` refuses a step down and takes a step up, drawing nothing.
 
-    The limit rather than its neighbourhood: a negative difference at infinite
-    beta is refused exactly, not accepted with a probability that underflowed,
-    and a generator that is never touched says so.
+    Refused exactly, not by an underflowed probability; the generator is untouched.
     """
     rng = np.random.default_rng(6)
     before = rng.bit_generator.state

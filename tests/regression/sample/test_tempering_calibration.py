@@ -105,19 +105,12 @@ def test_the_calibrated_ladder_exchanges_inside_the_band_where_the_fixed_one_doe
 ) -> None:
     """The band, measured where the ladder settled and again on the run it served.
 
-    At seed 0 the fixed ladder ``(1, 64)`` exchanges at **0.067** over 150
-    rounds, below the band ``(0.2, 0.6)``. The calibration bisects the gap
-    geometrically once and stops: ``(1, 8, 64)``, measured at **0.373** and
-    **0.327**, within the band after two measurements and 750 transitions
-    (1.0 to 1.1 s at a 1-minute load of 3.4 to 5.6 on the 4-core host). The 400-round run on
-    it exchanges at **0.305** and **0.285**, inside the band on a measurement
-    the calibration did not make; the fixed ladder's own 400-round run
-    exchanges at **0.072**. The first measurement *is* the fixed ladder's: a
-    run of 150 rounds from a generator seeded alike reproduces it bitwise.
-
-    Where it stops: on seeds 0 to 5 the calibration settles inside the band
-    on 5; seed 5 inserts a rung at 4.76, measures 0.747 on ``(4.76, 8)`` and
-    spends its four measurements, which ``settled`` reports as ``False``.
+    Seed 0: ``(1, 64)`` exchanges at 0.067 over 150 rounds, below ``(0.2,
+    0.6)``; one bisection gives ``(1, 8, 64)`` at 0.373 and 0.327 (two
+    measurements, 750 transitions, 1.0-1.1 s at load 3.4-5.6). 400 rounds on
+    it: 0.305 and 0.285; the fixed ladder 0.072. The first measurement is the
+    fixed ladder's, bitwise. Seeds 0-5 settle on 5; seed 5 inserts 4.76,
+    measures 0.747 and reports ``settled`` ``False``.
     """
     start, run = runs["calibrated"]
     _, fixed = runs["fixed"]
@@ -159,12 +152,7 @@ def test_the_cold_replica_matches_quadrature_on_either_ladder(
 ) -> None:
     """The calibration moves the hot rungs and leaves the cold marginal where it was.
 
-    The posterior mean weight integrated over the enumerated evidence is
-    0.4068. After 50 rounds discarded, the cold replica's mean over 350 is
-    **0.13** standard errors from it on the fixed ladder and **0.41** on the
-    calibrated one, each at the draws' own effective sample size (198 and
-    118), against the three declared. The calibrated run starts at the
-    lowest-valued point its warm-up visited, and the pin is the same.
+    Quadrature 0.4068; cold replica 0.13 (fixed), 0.41 (calibrated) errors; ESS 198, 118.
     """
     _, observations, components = weight_posterior()
     reference, _ = enumerated_quadrature(observations, components)
@@ -176,9 +164,7 @@ def test_the_cold_replica_matches_quadrature_on_either_ladder(
 def test_one_seed_reproduces_the_calibrated_ladder_and_the_start_bitwise() -> None:
     """Every measurement draws from the start's generator, so one seed is the whole start.
 
-    And without a calibration the start is the fixed ladder's
-    ``parallel_tempering`` run, bitwise, as it was before the calibration
-    existed.
+    Uncalibrated, the start is the fixed ladder's ``parallel_tempering`` run, bitwise.
     """
     target, _, _ = weight_posterior()
     calibration = LadderCalibration(
@@ -237,9 +223,7 @@ class _Slow:
 def test_a_budget_in_seconds_stops_inside_it_and_another_unit_is_refused() -> None:
     """A round runs only if the longest so far ends inside the budget; the clock includes the warm-up.
 
-    Measured at a 1-minute load of 5.6 on the 4-core host: 165 rounds of
-    ``(1, 8, 64)`` in 0.989 s of a 1 s budget, and with a 0.31 s calibration
-    369 rounds in 1.991 s of 2 s.
+    Load 5.6: 165 rounds in 0.989 s of 1 s; after a 0.31 s calibration, 369 in 1.991 s of 2.
     """
     target, _, _ = weight_posterior()
     alone = _start(0, None, (1.0, 8.0, 64.0), Budget(Cost.SECONDS, 1))
@@ -280,10 +264,7 @@ def test_a_budget_in_seconds_stops_inside_it_and_another_unit_is_refused() -> No
 def test_the_round_trip_rule_keeps_the_length_and_the_endpoints() -> None:
     """The feedback placement redistributes rungs and buys none; its cost is its measurements'.
 
-    At seed 0, 100 rounds a measurement on ``(1, 8, 64)`` read an up-fraction
-    of 0.061 at the middle rung, which the placement moves to 16.58; two
-    measurements do not converge at a tolerance of 0.05, and ``settled``
-    says so.
+    Seed 0: up-fraction 0.061 at the middle moves it to 16.58; unsettled at 0.05.
     """
     target, _, _ = weight_posterior()
     calibration = LadderCalibration(
@@ -364,29 +345,13 @@ def _handover(
 def test_on_the_mixture_the_calibration_buys_no_handover_at_equal_transitions() -> None:
     """The calibrated start against the fixed ladder given the same transitions, on `emission_mixture/ci`.
 
-    The fixed ladder is `search.projection.TEMPERATURES`, ``(1, 2, 4, 8)``, at
-    the step and trajectory `search.mixture_starts` runs it at; the
-    calibrated start runs `TEMPERING_ROUNDS = 2` on the ladder its warm-up
-    settled, and the fixed one runs ``ceil(total / 4)`` rounds, so it spends
-    at least the calibrated start's transitions, warm-up included.
-
-    **The ticket's expectation does not hold.** Over seeds 0 to 7 the
-    calibrated start's handover is above the fixed ladder's on 2 (+4.0,
-    +7.4), equal on 2 and below on 4 (-1.0 to -10.5), a mean of -1.25 in
-    log-likelihood. The warm-up settled inside the band on 4 of the 8, three
-    of them on ``(1, 2, 4, 8)`` itself, and spent its three measurements on
-    the other 4 with a pair outside it. Both
-    are above today's two-round start on 8 of 8, by 13.5 to 64.2, which is
-    the extra rounds and not the ladder. The calibrated start spent 88 to 374
-    transitions, warm-up included, in 0.5 to 2.9 s at a 1-minute load of 6.8
-    on the 4-core host, 6 to 7 ms a transition.
-
-    Pinned, one seed on each side: seed 4, where the warm-up inserts 5.66
-    and the calibrated start hands over at -8000.7 against the fixed
-    ladder's -8004.7, and seed 5, where it keeps the ladder and hands over at
-    -7990.9 against -7989.9. A warning because the default stays the fixed
-    ladder and the notebook opting in should know that on this fixture the
-    calibration's cost buys no better start at equal transitions.
+    Fixed ``(1, 2, 4, 8)`` (`search.projection.TEMPERATURES`) runs ``ceil(total
+    / 4)`` rounds against `TEMPERING_ROUNDS = 2` on the settled ladder. The
+    expectation fails: over seeds 0-7 calibrated is above on 2 (+4.0, +7.4),
+    equal on 2, below on 4 (-1.0 to -10.5), mean -1.25; settled on 4 (three on
+    ``(1, 2, 4, 8)``). Both beat the two-round start on 8 of 8 by 13.5-64.2.
+    88-374 transitions, 0.5-2.9 s at load 6.8. Pinned: seed 4 (-8000.7 against
+    -8004.7), seed 5 (-7990.9 against -7989.9). A warning: the default stays.
     """
     params = fixture("emission_mixture", "ci").params
     instance = mixture_starts.instance_from(

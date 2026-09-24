@@ -137,14 +137,9 @@ BALANCED_SWEEPS = 4_000
 def test_a_balanced_sweep_samples_the_potts_boltzmann_distribution(
     move: GibbsMove,
 ) -> None:
-    # The same referee as the heat-bath chain above: the 16 configurations of
-    # the 2x2 lattice enumerated by `log_weights`, which shares no proposal or
-    # accept step with the sampler. The move sets here choose *which* variable
-    # to change from the whole neighbourhood, so a sweep visits some variables
-    # twice and others not at all; only the law it converges to is claimed.
-    # Realized p at the declared seed and the next: 0.2208 and 0.0483, the
-    # same to four figures for both move sets, since the estimate is the
-    # difference and the two draw the same uniforms against the same weights.
+    # Referee: the 16 enumerated 2x2 configurations (`log_weights`). Only the
+    # law is claimed. Realized p at the declared seed and the next: 0.2208 and
+    # 0.0483, alike for both move sets (same uniforms, same weights).
     graph, factor_graph = _potts_pair()
     configurations = np.array(list(product(range(2), repeat=4)))
     weights = log_weights(graph, FIELD, configurations)
@@ -172,11 +167,8 @@ def test_a_balanced_sweep_samples_the_potts_boltzmann_distribution(
 def test_the_factor_graph_taylor_estimate_is_the_enumerated_density_difference() -> (
     None
 ):
-    # Gibbs-with-gradients' estimate is exact on a sum of factor tables, for
-    # the reason the module docstring gives: the multilinear extension is
-    # affine in each variable's row. Refereed three ways --- the tape's
-    # gradient at the one-hot state, and the graph's own `log_density` of every
-    # single-variable change, neither of which is the sweep's arithmetic.
+    # Exact on a sum of factor tables (affine per variable's row); refereed by
+    # the tape's gradient at the one-hot state and `log_density` per change.
     _, factor_graph = _potts_pair()
     indexed = Indexed(factor_graph)
     rng = np.random.default_rng(3)
@@ -227,17 +219,11 @@ def _lattice_graph(extent: int) -> FactorGraph:
 @pytest.mark.critical
 @pytest.mark.oracle
 def test_the_compiled_sweep_reproduces_the_numpy_one_bitwise() -> None:
-    # What lets the kernels be the default (#561, #563): the same uniforms in
-    # the same order give the same states, exactly, not to a tolerance. The
-    # sweep kernel gathers the conditional from one array of tables and NumPy
-    # from a slice per factor, in the same order, so the sums are identical;
-    # the exponential is where the two could part, and the kernel declines any
-    # site whose draw comes within the last place of a cumulative boundary.
-    # The density kernel reads the same array and takes no exponential, so
-    # order is all it needs: it sums factors left to right in graph order, as
-    # the dictionary oracle does. Realized: 8 of 8 runs agree on every state
-    # and every log-density, 15,360 draws at 16x16 and 61,440 at 32x32, and
-    # every compiled density equals the dictionary one to the last bit.
+    # Exact, not a tolerance (#561, #563): the same sums in the same order; the
+    # sweep kernel declines a draw within the last place of a boundary; the
+    # density kernel sums left to right as the dictionary oracle. Realized:
+    # 8 of 8 runs agree on every state and density, 15,360 draws at 16x16 and
+    # 61,440 at 32x32, densities to the last bit.
     def check(extent: int, seed: int) -> None:
         graph = _lattice_graph(extent)
 
@@ -274,11 +260,8 @@ def test_the_log_density_has_no_rust_backend() -> None:
 def test_a_site_the_kernel_declines_is_decided_by_numpy(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # The handing back is what makes the pin exact rather than probable, and
-    # no realistic draw reaches it -- so it is driven here instead, by a
-    # guard wide enough that every site falls to NumPy. The chain must be the
-    # same chain, which is a statement about resuming at the right position
-    # with the right draw, not about arithmetic.
+    # The hand-back no realistic draw reaches, driven by a guard that sends
+    # every site to NumPy: the same chain, resumed at the right draw.
     graph = _lattice_graph(8)
     monkeypatch.setattr(gibbs, "_GUARD", 1e12)
 
@@ -349,10 +332,7 @@ CELL_FLOOR = 25.0
 def _enumerated_chain() -> tuple[FactorGraph, np.ndarray, PathEnumeration, np.ndarray]:
     """The declared HMM instance, its factor graph, and both enumerations of it.
 
-    The observations are the fixture's own first sequence, truncated to a
-    length the path enumeration reaches; the posterior the block move is held
-    to is :mod:`snakes_and_ladders.likelihood.hmm_paths`', which shares no
-    code with the sampler.
+    The fixture's first sequence, truncated; referee `likelihood.hmm_paths`.
     """
     params = fixture("hmm", "ci").params
     observations = simulate_sequences(params).observations[0][:BLOCK_LENGTH]
@@ -392,13 +372,9 @@ def _lumped(posterior: np.ndarray, n_draws: int) -> list[list[int]]:
 def test_the_block_move_draws_the_whole_chain_from_the_enumerated_path_posterior() -> (
     None
 ):
-    # Every block draw is an independent sample from the posterior, so no
-    # thinning is needed: that is what "exact" buys. Held to the 3**8 = 6,561
-    # enumerated paths of the declared instance, both marginally and jointly.
-    # Over 4,000 draws the largest per-site deviation from the enumerated
-    # marginal is 0.0146, the smallest per-site chi-square p-value 0.062, and
-    # the p-value of the joint over 36 lumped cells 0.251; over seeds 0 to 5
-    # the smallest of either was 0.062.
+    # Each block draw is exact, so no thinning. Against 3**8 = 6,561 paths over
+    # 4,000 draws: worst site deviation 0.0146, smallest site p 0.062, joint p
+    # over 36 lumped cells 0.251; over seeds 0 to 5 the smallest was 0.062.
     graph, _, enumerated, posterior = _enumerated_chain()
     names = [f"z{t}" for t in range(BLOCK_LENGTH)]
     paths = list(product(range(enumerated.posterior.shape[1]), repeat=BLOCK_LENGTH))
@@ -459,11 +435,8 @@ def test_the_generic_sweep_recovers_the_exact_marginals_on_a_tree() -> None:
         )
 
 
-#: The coupled chain, thinned. One sweep redraws every label and every chain
-#: state in place, so successive sweeps are correlated and a chi-square over
-#: them rejects a sampler that is right: at the `thin = 3` the marginal test
-#: below runs at, node 3's marginal returns p = 5.7e-6 on generator seed 4.
-#: The thinning is part of the test, not a speed knob (`test_potts_mcmc.py`).
+#: Thinning is part of the test (`test_potts_mcmc.py`): at `thin = 3` node 3's
+#: marginal returns p = 5.7e-6 on generator seed 4 for a correct sampler.
 COUPLED_SWEEPS = 40_000
 COUPLED_THIN = 10
 COUPLED_BURN_IN = 1_000
@@ -479,11 +452,7 @@ def _enumerated_labelling_law(
 ) -> tuple[np.ndarray, np.ndarray]:
     """``p(l | x)`` over every labelling, by enumerating each class's paths.
 
-    `enumerate_spatio_sequential` returns the node marginals of this law and
-    not the law, so the sum over each class's ``K ** S`` paths is written out
-    here from the enumeration's own terms --- its Potts prior and its per-class
-    chain score --- and the marginals of what it returns are asserted to be
-    the enumeration's.
+    From the enumeration's own terms; its node marginals are asserted to match.
     """
     labellings = configurations(params.n_classes, params.graph.n_nodes)
     paths = configurations(params.n_states, params.n_positions)
@@ -507,20 +476,10 @@ def _enumerated_labelling_law(
 @pytest.mark.oracle
 @pytest.mark.critical
 def test_the_coupled_sweep_draws_labellings_from_the_enumerated_joint_law() -> None:
-    # The rung below (issue #734): the coupled model's exact enumeration. The
-    # test above reads the same chain marginally, one node at a time, which a
-    # sampler that drew each label from its own marginal would also pass --
-    # and the Potts term is exactly what makes the labels dependent. What is
-    # pinned here is the joint over all 2**4 labellings of the declared
-    # instance, as `test_potts_mcmc.py` and `test_potts_simulate.py` pin the
-    # lattice chain over its 16 configurations.
-    #
-    # Realized on generator seed 3: the written-out law's node marginals are
-    # the enumeration's to 1.6e-15; over 4,000 thinned draws the joint
-    # chi-square over 12 lumped cells returns p = 0.882 and the smallest node
-    # marginal p = 0.389, both against the 0.001 declared, and total variation
-    # over the 16 cells is 0.0132. Over generator seeds 0 to 7 the smallest of
-    # either was 0.125 and 0.028.
+    # The rung below (#734): the joint over all 2**4 labellings, which a
+    # per-node sampler would fail. Seed 3: law marginals to 1.6e-15; 4,000
+    # thinned draws: joint p = 0.882 over 12 cells, smallest node p = 0.389
+    # (0.001 declared), TV 0.0132. Over seeds 0 to 7 the smallest 0.125, 0.028.
     params = fixture("spatio_sequential", "ci").params
     data = simulate_spatio_sequential(params, np.random.default_rng(1))
     exact = enumerate_spatio_sequential(params, data.observations)
