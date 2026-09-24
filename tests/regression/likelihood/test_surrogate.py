@@ -259,10 +259,10 @@ def test_tree_features_are_invariant_to_child_order() -> None:
         # Rows compared as a sorted multiset: two branches at the same clamped
         # length tie, so a sort on one column alone would not fix the order.
         original = sorted(
-            map(tuple, np.round(tree_tokens(topology, alignment, k).numpy(), 9))
+            map(tuple, np.round(tree_tokens(topology, alignment, k), 9).tolist())
         )
         after = sorted(
-            map(tuple, np.round(tree_tokens(shuffled, alignment, k).numpy(), 9))
+            map(tuple, np.round(tree_tokens(shuffled, alignment, k), 9).tolist())
         )
         assert original == after
     assert len(TREE_FEATURE_NAMES) == tree_features(topology, alignment, k, pi).shape[0]

@@ -40,15 +40,23 @@ and 2.5% because the block partition's sort dominates. The saving is in
 in forward passes; ``tests/benchmarks/test_likelihood_blocks_bench.py``
 carries the table and `STATUS.md` the conclusion. For a cheaper evaluation
 the right tool is :mod:`snakes_and_ladders.likelihood.patterns`.
+
+**Arrays in, floats out.** No derivative is taken through the interval, so
+it takes array-likes and returns ``float`` (issue #1011). Two quantities come
+from :mod:`~snakes_and_ladders.likelihood.pruning_torch`, whose tensors the
+fits differentiate: the exact half's evaluation and the transition matrices
+``P(t)`` the extremes are read from. Each crosses there once per call, and
+``torch`` is imported at that call rather than with the module.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import numpy as np
-import torch
+import numpy.typing as npt
 
 from snakes_and_ladders.bound import Bound, Surrogate
 from snakes_and_ladders.likelihood.patterns import compress_columns
@@ -56,14 +64,13 @@ from snakes_and_ladders.likelihood.pruning_common import (
     check_branch_lengths_shape,
     check_pi_shape,
 )
-from snakes_and_ladders.likelihood.pruning_torch import (
-    branch_order,
-    log_likelihood,
-    transition_probabilities,
-)
 from snakes_and_ladders.likelihood.surrogate import jc_distances, least_squares_lengths
+from snakes_and_ladders.numerics import logsumexp
 from snakes_and_ladders.sim.topology import Topology
 from snakes_and_ladders.sim.tree import Node
+
+if TYPE_CHECKING:
+    import torch
 
 
 @dataclass(frozen=True)
@@ -72,13 +79,12 @@ class Interval:
 
     Parameters
     ----------
-    lower : torch.Tensor
-        0-dimensional; at most the exact log-likelihood at the same branch
-        lengths.
-    upper : torch.Tensor
-        0-dimensional; at least it.
-    exact : torch.Tensor
-        0-dimensional; the frequent blocks' own log-likelihood, which both
+    lower : float
+        At most the exact log-likelihood at the same branch lengths.
+    upper : float
+        At least it.
+    exact : float
+        The frequent blocks' own log-likelihood, which both
         ends are built from. Over a subset of the sites, so it claims nothing
         about the whole and is a ranking signal rather than a bound
         (``likelihood/CLAUDE.md``, "A cheap value that claims nothing
@@ -98,9 +104,9 @@ class Interval:
         it is compared against is the alignment's length.
     """
 
-    lower: torch.Tensor
-    upper: torch.Tensor
-    exact: torch.Tensor
+    lower: float
+    upper: float
+    exact: float
     exact_sites: int
     bounded_sites: int
     exact_blocks: int
@@ -108,7 +114,7 @@ class Interval:
     evaluated_columns: int
 
     @property
-    def extrapolated(self) -> torch.Tensor:
+    def extrapolated(self) -> float:
         """The exact half scaled to the whole alignment: a point estimate, not a bound.
 
         The frequent blocks are the same sites for every topology, so this is
@@ -137,7 +143,7 @@ class Interval:
     @property
     def width(self) -> float:
         """``upper - lower``: zero where nothing was bounded."""
-        return float(self.upper - self.lower)
+        return self.upper - self.lower
 
     def contains(self, value: float, *, tolerance: float = 0.0) -> bool:
         """Whether ``value`` lies inside, allowing ``tolerance`` relative slack.
@@ -146,7 +152,7 @@ class Interval:
         and nothing more: a bound that needs a wider one is not a bound.
         """
         slack = tolerance * abs(value)
-        return float(self.lower) <= value + slack and float(self.upper) >= value - slack
+        return self.lower <= value + slack and self.upper >= value - slack
 
 
 @dataclass(frozen=True)
@@ -155,28 +161,41 @@ class Extremes:
 
     Parameters
     ----------
-    lower : torch.Tensor
-        0-dimensional; at most every column's ``log Pr(x)``. ``-inf`` where
-        a branch of length zero makes some column impossible.
-    upper : torch.Tensor
-        0-dimensional; at least every column's.
+    lower : float
+        At most every column's ``log Pr(x)``. ``-inf`` where a branch of
+        length zero makes some column impossible.
+    upper : float
+        At least every column's.
     """
 
-    lower: torch.Tensor
-    upper: torch.Tensor
+    lower: float
+    upper: float
 
-    def __iter__(self) -> Iterator[torch.Tensor]:
+    def __iter__(self) -> Iterator[float]:
         """``(lower, upper)``: the order callers unpack."""
         yield from (self.lower, self.upper)
+
+
+def _log_total(terms: np.ndarray, axis: int) -> np.ndarray:
+    """``log sum exp`` along ``axis``, ``-inf`` where every term is ``-inf``.
+
+    :func:`~snakes_and_ladders.numerics.logsumexp` shifts by the maximum, and
+    a maximum of ``-inf`` makes that shift ``nan``. A child message of
+    ``-inf`` in every state is what a zero-length leaf branch gives the lower
+    end, and the sum it stands for is zero, so its logarithm is ``-inf``.
+    """
+    with np.errstate(invalid="ignore"):
+        total = logsumexp(terms, axis=axis)
+    return np.where(np.isneginf(terms.max(axis=axis)), -np.inf, total)
 
 
 def site_log_likelihood_extremes(
     tau: Node,
     k: int,
-    pi: np.ndarray | torch.Tensor,
-    branch_lengths: torch.Tensor,
+    pi: npt.ArrayLike,
+    branch_lengths: npt.ArrayLike,
     *,
-    rate_matrix: torch.Tensor | None = None,
+    rate_matrix: npt.ArrayLike | None = None,
 ) -> Extremes:
     """Bounds on ``log Pr(x)`` holding for every column ``x``, in one pass over the tree.
 
@@ -191,56 +210,68 @@ def site_log_likelihood_extremes(
         Root of the topology. Its own ``branch_length`` fields are ignored.
     k : int
         Number of states.
-    pi : np.ndarray | torch.Tensor
+    pi : npt.ArrayLike
         Root state distribution, shape ``(k,)``.
-    branch_lengths : torch.Tensor
-        Shape ``(len(branch_order(tau)),)``, as
+    branch_lengths : npt.ArrayLike
+        Shape ``(len(branch_order(tau)),)``, in the order
         :func:`~snakes_and_ladders.likelihood.pruning_torch.log_likelihood`
-        takes it.
-    rate_matrix : torch.Tensor | None
+        takes it; read as ``float64``.
+    rate_matrix : npt.ArrayLike | None
         A general rate matrix, or ``None`` for the closed-form Jukes-Cantor
         transition probabilities.
 
     Returns
     -------
     Extremes
-        The two ends, both 0-dimensional. ``lower`` is ``-inf`` where a
-        branch of length zero makes some column impossible, which is
-        correct rather than a failure: such a column has log-likelihood
-        ``-inf``.
+        The two ends. ``lower`` is ``-inf`` where a branch of length zero
+        makes some column impossible, which is correct rather than a
+        failure: such a column has log-likelihood ``-inf``.
 
     Raises
     ------
     ValueError
         If ``pi`` or ``branch_lengths`` has the wrong shape.
     """
-    dtype = branch_lengths.dtype
-    device = branch_lengths.device
-    pi_t = torch.as_tensor(pi, dtype=dtype, device=device)
-    check_pi_shape(tuple(pi_t.shape), k)
-    order = branch_order(tau)
-    check_branch_lengths_shape(tuple(branch_lengths.shape), len(order))
-    index = {name: position for position, name in enumerate(order)}
-    transitions = transition_probabilities(branch_lengths, k, rate_matrix)
+    import torch
 
-    def message(child: Node) -> tuple[torch.Tensor, torch.Tensor]:
+    from snakes_and_ladders.likelihood.pruning_torch import (
+        branch_order,
+        transition_probabilities,
+    )
+
+    lengths = np.asarray(branch_lengths, dtype=np.float64)
+    pi_values = np.asarray(pi, dtype=np.float64)
+    check_pi_shape(pi_values.shape, k)
+    order = branch_order(tau)
+    check_branch_lengths_shape(lengths.shape, len(order))
+    index = {name: position for position, name in enumerate(order)}
+    # `P(t)` is the model's definition and lives with the tensors the fits
+    # differentiate; it crosses here once, and everything after is NumPy.
+    transitions = transition_probabilities(
+        torch.from_numpy(lengths), k, _rate_tensor(rate_matrix)
+    ).numpy()
+    with np.errstate(divide="ignore"):
+        log_transitions = np.log(transitions)
+        log_pi = np.log(pi_values)
+
+    def message(child: Node) -> tuple[np.ndarray, np.ndarray]:
         """Bounds on ``log sum_j P(s, j) L_child(j)``, shape ``(k,)`` each."""
-        log_transition = torch.log(transitions[index[child.name]])
+        log_transition = log_transitions[index[child.name]]
         if child.is_leaf:
             # The message is the column P(., x) for the observed state x, so
             # over every x it lies between the row's smallest and largest
             # entry. log is monotone, so the extremes commute with it.
-            return log_transition.amin(dim=1), log_transition.amax(dim=1)
+            return log_transition.min(axis=1), log_transition.max(axis=1)
         lower, upper = _partial(child)
         return (
-            torch.logsumexp(log_transition + lower[None, :], dim=1),
-            torch.logsumexp(log_transition + upper[None, :], dim=1),
+            _log_total(log_transition + lower[None, :], axis=1),
+            _log_total(log_transition + upper[None, :], axis=1),
         )
 
-    def _partial(node: Node) -> tuple[torch.Tensor, torch.Tensor]:
+    def _partial(node: Node) -> tuple[np.ndarray, np.ndarray]:
         """Bounds on ``log L_node(s)``, shape ``(k,)`` each."""
-        lower = torch.zeros(k, dtype=dtype, device=device)
-        upper = torch.zeros(k, dtype=dtype, device=device)
+        lower = np.zeros(k)
+        upper = np.zeros(k)
         for child in node.children:
             child_lower, child_upper = message(child)
             lower = lower + child_lower
@@ -248,11 +279,19 @@ def site_log_likelihood_extremes(
         return lower, upper
 
     root_lower, root_upper = _partial(tau)
-    log_pi = torch.log(pi_t)
     return Extremes(
-        torch.logsumexp(log_pi + root_lower, dim=0),
-        torch.logsumexp(log_pi + root_upper, dim=0),
+        float(_log_total(log_pi + root_lower, axis=0)),
+        float(_log_total(log_pi + root_upper, axis=0)),
     )
+
+
+def _rate_tensor(rate_matrix: npt.ArrayLike | None) -> torch.Tensor | None:
+    """``rate_matrix`` as the ``float64`` tensor ``pruning_torch`` takes, or ``None``."""
+    if rate_matrix is None:
+        return None
+    import torch
+
+    return torch.from_numpy(np.array(rate_matrix, dtype=np.float64))
 
 
 def _partition(columns: np.ndarray, block_size: int) -> tuple[np.ndarray, np.ndarray]:
@@ -276,13 +315,13 @@ def _partition(columns: np.ndarray, block_size: int) -> tuple[np.ndarray, np.nda
 def block_frequency_interval(
     tau: Node,
     k: int,
-    pi: np.ndarray | torch.Tensor,
+    pi: npt.ArrayLike,
     alignment: Mapping[str, np.ndarray],
-    branch_lengths: torch.Tensor,
+    branch_lengths: npt.ArrayLike,
     *,
     block_size: int,
     min_count: int,
-    rate_matrix: torch.Tensor | None = None,
+    rate_matrix: npt.ArrayLike | None = None,
 ) -> Interval:
     """An interval containing the log-likelihood, exact on frequent blocks.
 
@@ -292,20 +331,21 @@ def block_frequency_interval(
         Root of the topology. Its own ``branch_length`` fields are ignored.
     k : int
         Number of states.
-    pi : np.ndarray | torch.Tensor
+    pi : npt.ArrayLike
         Root state distribution, shape ``(k,)``.
     alignment : Mapping[str, np.ndarray]
         Leaf name to its observed states, each of shape ``(n_sites,)``.
-    branch_lengths : torch.Tensor
-        Shape ``(len(branch_order(tau)),)``. The interval brackets the
-        log-likelihood at *these* lengths, not the maximized one.
+    branch_lengths : npt.ArrayLike
+        Shape ``(len(branch_order(tau)),)``, read as ``float64``. The
+        interval brackets the log-likelihood at *these* lengths, not the
+        maximized one.
     block_size : int
         Sites per block. ``1`` makes every block a column, and the frequent
         set is then the site-pattern table itself.
     min_count : int
         Occurrences a distinct block needs before it is evaluated exactly.
         ``1`` evaluates everything and returns an interval of zero width.
-    rate_matrix : torch.Tensor | None
+    rate_matrix : npt.ArrayLike | None
         A general rate matrix, or ``None`` for closed-form Jukes-Cantor.
 
     Returns
@@ -367,33 +407,40 @@ def block_frequency_interval(
         pieces.append(remainder)
         weights.append(np.ones(remainder.shape[1], dtype=np.int64))
 
+    lengths = np.asarray(branch_lengths, dtype=np.float64)
     if pieces:
         patterns = compress_columns(
             names,
             np.ascontiguousarray(np.concatenate(pieces, axis=1)),
             np.concatenate(weights),
         )
-        exact = log_likelihood(
-            tau,
-            k,
-            pi,
-            patterns.alignment,
-            branch_lengths,
-            weights=patterns.weights,
-            rate_matrix=rate_matrix,
+        # The exact half is one evaluation of the tensor recursion the fits
+        # differentiate; the lengths cross into it here, once.
+        import torch
+
+        from snakes_and_ladders.likelihood.pruning_torch import log_likelihood
+
+        exact = float(
+            log_likelihood(
+                tau,
+                k,
+                np.asarray(pi, dtype=np.float64),
+                patterns.alignment,
+                torch.from_numpy(lengths),
+                weights=patterns.weights,
+                rate_matrix=_rate_tensor(rate_matrix),
+            )
         )
         exact_sites = patterns.n_sites
         evaluated_columns = patterns.n_patterns
     else:
-        exact = torch.zeros(
-            (), dtype=branch_lengths.dtype, device=branch_lengths.device
-        )
+        exact = 0.0
         exact_sites = 0
         evaluated_columns = 0
 
     bounded_sites = n_sites - exact_sites
     extremes = site_log_likelihood_extremes(
-        tau, k, pi, branch_lengths, rate_matrix=rate_matrix
+        tau, k, pi, lengths, rate_matrix=rate_matrix
     )
     return Interval(
         lower=exact + bounded_sites * extremes.lower,
@@ -481,11 +528,9 @@ class BlockFrequencyBound(Surrogate):
 
     def lengths(
         self, topology: Topology, alignment: Mapping[str, np.ndarray]
-    ) -> torch.Tensor:
+    ) -> np.ndarray:
         """The feasible branch lengths the interval is evaluated at."""
-        return torch.from_numpy(
-            least_squares_lengths(topology, jc_distances(alignment, self.k))
-        )
+        return least_squares_lengths(topology, jc_distances(alignment, self.k))
 
     def interval(
         self, topology: Topology, alignment: Mapping[str, np.ndarray]
@@ -507,10 +552,10 @@ class BlockFrequencyBound(Surrogate):
             raise TypeError(msg)
         interval = self.interval(structure, data)
         if self._claim is Bound.LOWER:
-            return float(interval.lower)
+            return interval.lower
         if self._claim is Bound.UPPER:
-            return float(interval.upper)
-        return float(interval.extrapolated)
+            return interval.upper
+        return interval.extrapolated
 
 
 __all__ = [

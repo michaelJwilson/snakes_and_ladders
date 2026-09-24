@@ -31,7 +31,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-import torch
 
 from snakes_and_ladders.enumeration import (
     MAX_ENUMERABLE_CONFIGURATIONS,
@@ -94,7 +93,16 @@ def emission_log_density(params: HmmParams, observations: np.ndarray) -> np.ndar
         Shape ``(T, n_states)``. A log-probability for a categorical family
         and a log *density* for a continuous one, so entries may be positive
         and so may the evidence assembled from them.
+
+    Notes
+    -----
+    The one call into torch in this module: ``log_density`` is the families'
+    tensor API, which the objectives differentiate through, so the
+    observations cross once here and the scores come back as an array. torch
+    is imported at the call rather than with the module (issue #1011).
     """
+    import torch
+
     family = params.emissions
     return np.asarray(
         family.log_density(

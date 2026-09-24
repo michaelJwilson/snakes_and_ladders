@@ -115,7 +115,7 @@ def test_per_site_field_bound_benchmark(benchmark: BenchmarkFixture, kind: str) 
         "saturated": saturated_log_partition,
         "ground_energy": decoupled_ground_energy,
     }[kind]
-    assert torch.isfinite(benchmark(bound, graph, torch.as_tensor(SITE_FIELD)))
+    assert np.isfinite(float(benchmark(bound, graph, torch.as_tensor(SITE_FIELD))))
 
 
 @pytest.mark.parametrize("kind", ["features", "tokens"])
@@ -124,4 +124,4 @@ def test_lattice_surrogate_input_benchmark(
 ) -> None:
     graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.7)
     assemble = lattice_features if kind == "features" else lattice_tokens
-    assert torch.isfinite(benchmark(assemble, graph, SITE_FIELD)).all()
+    assert np.isfinite(benchmark(assemble, graph, SITE_FIELD)).all()

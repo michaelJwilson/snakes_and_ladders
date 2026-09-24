@@ -160,9 +160,16 @@ def energies(graph: PottsGraph, field: np.ndarray, states: np.ndarray) -> np.nda
     ``log_weights`` stays the independent referee and is not merged into
     this: an implementation that computes its own oracle is no longer
     refereed. The two sum the edge terms in different orders --- one gather
-    and a dot product here, a term per edge there --- so they agree to a
+    and a pairwise sum here, a term per edge there --- so they agree to a
     relative ``1e-12`` rather than bitwise (issue #341, pinned in
     `tests/regression/search/test_maxflow.py`).
+
+    The edge term never enters BLAS (issue #1044). As a gemv it split
+    across the host's BLAS threads: at the release-q10 rung (5,041 sites)
+    one labelling cost 7.0 to 12.2 ms at the default thread count against
+    130 us at one, 92 to 98% of an annealed run's wall, and its value moved
+    by up to ``4.5e-13`` with the thread count. Each row here is reduced
+    alone, by the same pairwise sum at any thread count and block size.
 
     A single labelling is the ``n_configurations = 1`` case: a caller passes
     ``state[None]`` and reads element zero. Consolidating the other way ---
@@ -201,10 +208,13 @@ def energies(graph: PottsGraph, field: np.ndarray, states: np.ndarray) -> np.nda
         # One gather over every edge rather than a Python-level term per
         # edge: issue #341 measured that loop at 92% of this function's self
         # time, and #336 found it the term left in the Rust ground state's
-        # wall clock.
+        # wall clock. `take` along the last axis keeps a block row-major
+        # where the fancy index hands back column-major, so the sum walks
+        # each row contiguously and reduces a block row as it reduces that
+        # labelling alone (issue #1044).
         ends = graph.edge_index
-        agree = states[..., ends[:, 0]] == states[..., ends[:, 1]]
-        total = total + agree.astype(float) @ graph.edge_coupling
+        agree = states.take(ends[:, 0], axis=-1) == states.take(ends[:, 1], axis=-1)
+        total = total + (agree * graph.edge_coupling).sum(axis=-1)
     return -np.asarray(total)
 
 
