@@ -23,14 +23,18 @@ from scipy.stats import chisquare
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.cost import Cost
 from snakes_and_ladders.opt.budget import Budget
-from snakes_and_ladders.sample.kernels import icm_sweeps, icm_sweeps_checked
 from snakes_and_ladders.search.ground_state import (
     FLOORED,
     METHODS,
     descend,
     ground_state,
 )
-from snakes_and_ladders.search.icm import SweepOrder, iterated_conditional_modes
+from snakes_and_ladders.search.icm import (
+    SweepOrder,
+    icm_sweeps,
+    icm_sweeps_checked,
+    iterated_conditional_modes,
+)
 from snakes_and_ladders.search.potts_starts import spatio_rung
 from snakes_and_ladders.search.spatio_sequential import (
     LabelSolver,

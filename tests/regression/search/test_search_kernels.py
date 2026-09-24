@@ -23,9 +23,9 @@ from snakes_and_ladders.sample.gibbs import _GUARD, Indexed
 from snakes_and_ladders.sample.kernels import (
     factor_graph_log_density,
     gibbs_sweep_sites,
-    icm_sweeps,
 )
 from snakes_and_ladders.sample.statistics import chi_square_p_value
+from snakes_and_ladders.search.icm import icm_sweeps
 from snakes_and_ladders.sim.factor_graph import from_potts
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import energies, site_field
