@@ -23,7 +23,7 @@ from snakes_and_ladders.likelihood.objective import (
     SubstitutionModelObjective,
 )
 from snakes_and_ladders.opt.fit import fit
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.tree import Node
 
 from tests._fixtures import EIGHT_TAXA, FOUR_TAXA, SMALL_SITES, load_fixture
@@ -35,13 +35,7 @@ def _alignment(
     name: str, n_sites: int = _SITES
 ) -> tuple[Node, int, np.ndarray, dict[str, np.ndarray]]:
     params = load_fixture(name)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=n_sites,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites)
     return params.tau, params.k, params.pi, dict(dataset.alignment)
 
 
