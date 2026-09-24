@@ -159,6 +159,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.likelihood.pruning_torch
    :members:
 
+.. automodule:: snakes_and_ladders.likelihood.pruning_jax
+   :members:
+
 .. automodule:: snakes_and_ladders.likelihood.pruning_rust
    :members:
 
