@@ -25,9 +25,9 @@ from snakes_and_ladders.search.alpha_expansion import alpha_expansion
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 from snakes_and_ladders.sim.potts import critical_coupling
 from snakes_and_ladders.validation import gco
-from snakes_and_ladders.validation.runner import package
 
 from tests._frameworks import requires
+from tests.validation._goals import median_package
 
 pytestmark = requires("gco")
 
@@ -69,10 +69,8 @@ def test_rust_expansion_beside_gco_benchmark(
         "coupling": np.asarray(critical_coupling(N_STATES)),
         "field": field,
     }
-    benchmark.extra_info["package_peak_bytes"] = float(
-        np.median(
-            [package("alpha_expansion", inputs).peak_bytes for _ in range(REPEATS)]
-        )
+    benchmark.extra_info["package_peak_bytes"] = median_package(
+        "alpha_expansion", inputs, "peak_bytes", repeats=REPEATS
     )
 
     result = benchmark.pedantic(  # type: ignore[no-untyped-call]

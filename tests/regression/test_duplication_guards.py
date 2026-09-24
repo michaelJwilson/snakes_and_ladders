@@ -224,6 +224,14 @@ EXCLUDED: dict[str, str] = {
 #: where a reader reaches for one.
 FOREIGN_SPARSE = re.compile(r"\b(?:csr|csc|coo)_(?:matrix|array)\s*\(")
 
+#: The validation seams of issue #1010: a goal's median of package runs, a
+#: framework test's skip, and a script's timed peak, each written out by
+#: hand 38, 24 and 6 times before it had one home.
+HAND_MEDIAN = re.compile(r"np\.median\(\s*\[\s*package\(")
+HAND_SKIP = re.compile(r"skipif\(\s*not available\(")
+HAND_MEASURE = re.compile(r"peaked\(\s*lambda: timed\(")
+MEASURE_OWNER = "validation/protocol.py"
+
 #: Where a caller of the transition may live: the package, the suite and the
 #: notebooks. Wider than the package alone, because both copies this guard
 #: exists for were outside it.
@@ -616,6 +624,16 @@ def test_the_runtime_band_has_one_reader() -> None:
 
 @pytest.mark.critical
 @pytest.mark.infra
+def test_the_validation_seams_have_one_home_each() -> None:
+    # Issue #1010: `median_package`, `requires` and `measured`.
+    tests = (REPO_ROOT / "tests",)
+    assert _found(HAND_MEDIAN, "tests/validation/_goals.py", tests, ("*.py",)) == []
+    assert _found(HAND_SKIP, "tests/_frameworks.py", tests, ("*.py",)) == []
+    assert _offenders(HAND_MEASURE, MEASURE_OWNER) == []
+
+
+@pytest.mark.critical
+@pytest.mark.infra
 def test_each_guard_fails_on_violating_source() -> None:
     # The guards exercised. Each searches source text, so each passes
     # vacuously if the pattern is wrong -- which is the failure mode a guard
@@ -648,6 +666,10 @@ def test_each_guard_fails_on_violating_source() -> None:
             "        known = index >= 0\n"
             "        held[row, known] = gaps[index[known]]\n"
         ),
+        # Split so this module is not its own offender.
+        HAND_MEDIAN: "s = np.median(" + '[package("viterbi", inputs).seconds])\n',
+        HAND_SKIP: "mark = pytest.mark.skipif(" + 'not available("gco"), reason="")\n',
+        HAND_MEASURE: "r, p = peaked(" + "lambda: timed(call))\n",
     }
     clean = {
         PRIVATE_LOGSUMEXP: "from snakes_and_ladders.numerics import logsumexp\n",
@@ -669,6 +691,9 @@ def test_each_guard_fails_on_violating_source() -> None:
         PIPE_SPLIT: "cells = catalogue.cells(line)\n",
         TABULAR_LITERAL: 'table = booktabs_tabular("lrrrr", HEADER, rows)\n',
         HELD_BAND: "band = curve_band(curves, grid)\n",
+        HAND_MEDIAN: 'seconds = median_package("viterbi", inputs)\n',
+        HAND_SKIP: 'pytestmark = requires("blackjax")\n',
+        HAND_MEASURE: "result, seconds, peak = measured(call)\n",
     }
 
     assert [p for p, text in violating.items() if not p.search(text)] == []
