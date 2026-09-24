@@ -40,7 +40,7 @@ def _ar1(
 def _filtered(stream: np.ndarray) -> KalmanMean:
     kalman = KalmanMean()
     for row in stream:
-        kalman.update(torch.as_tensor(row))
+        kalman.update(row)
     return kalman
 
 
@@ -56,12 +56,10 @@ def test_the_filter_is_the_ar1_gls_estimator() -> None:
     whitened = stream[1:] - phi * stream[:-1]
     gls = whitened.sum(axis=0) / ((n - 1) * (1.0 - phi))
     variance = gamma0 * (1.0 - phi**2) / ((n - 1) * (1.0 - phi) ** 2)
-    np.testing.assert_allclose(estimate.phi.numpy(), phi, rtol=1e-12)
-    np.testing.assert_allclose(estimate.mean.numpy(), gls, rtol=1e-12)
-    np.testing.assert_allclose(
-        estimate.standard_error.numpy() ** 2, variance, rtol=1e-12
-    )
-    assert np.abs(estimate.phi.numpy() - 0.7).max() < 0.05
+    np.testing.assert_allclose(estimate.phi, phi, rtol=1e-12)
+    np.testing.assert_allclose(estimate.mean, gls, rtol=1e-12)
+    np.testing.assert_allclose(estimate.standard_error**2, variance, rtol=1e-12)
+    assert np.abs(estimate.phi - 0.7).max() < 0.05
 
 
 @pytest.mark.oracle
@@ -69,7 +67,7 @@ def test_the_intervals_cover_at_their_level_where_white_noise_does_not() -> None
     rng = np.random.default_rng(9880)
     streams = _ar1(rng, 2_000, 0.9, 1.0, 400)
     estimate = _filtered(streams).estimate()
-    z = (estimate.mean.numpy() - 1.0) / estimate.standard_error.numpy()
+    z = (estimate.mean - 1.0) / estimate.standard_error
     coverage = float(np.mean(np.abs(z) < 1.96))
     error = np.sqrt(0.95 * 0.05 / 400)
     assert abs(coverage - 0.95) < 3 * error, coverage
@@ -94,8 +92,8 @@ def test_a_chain_without_its_draws_returns_the_expectations() -> None:
     assert chain.theta.shape == (0, dimension)
     first, second = chain.expectations["x"], chain.expectations["x2"]
     assert first.n == second.n == 1_000
-    assert np.abs(first.mean.numpy() / first.standard_error.numpy()).max() < 4.5
-    residual = (second.mean.numpy() - 1.0 / precision) / second.standard_error.numpy()
+    assert np.abs(first.mean / first.standard_error).max() < 4.5
+    residual = (second.mean - 1.0 / precision) / second.standard_error
     assert np.abs(residual).max() < 4.5
 
 
@@ -121,8 +119,8 @@ def test_an_operator_leaves_the_chain_bitwise_as_it_was() -> None:
     assert torch.equal(plain.theta, observed.theta)
     assert plain.expectations == {}
     np.testing.assert_allclose(
-        observed.expectations["x"].mean.numpy(),
-        _filtered(plain.theta.numpy()).estimate().mean.numpy(),
+        observed.expectations["x"].mean,
+        _filtered(plain.theta.numpy()).estimate().mean,
         rtol=0.0,
         atol=0.0,
     )
