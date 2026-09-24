@@ -20,7 +20,10 @@ module. It is referenced here, never restated. What follows is local.
 NumPy, PyTorch for the continuous samplers that take a gradient, the Rust
 sweeps behind `potts_mcmc`. A sampler that reads values alone evaluates
 through `opt.objective.energy_of` on arrays and draws from a
-`np.random.Generator`; `metropolis` is the first (#1011).
+`np.random.Generator`; `metropolis` is the first (#1011). A module that
+takes no derivative imports no torch: `relabel` takes array-likes and
+converts a tensor on entry, found by its `detach` method, so a `Chain`'s
+draws reach it without the module importing their type.
 
 ## Local rules
 

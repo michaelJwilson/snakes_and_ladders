@@ -46,6 +46,17 @@ parameters ``(m, K, J)`` (PRA, SJW, AIC). :func:`allocation_draws` builds the
 first two from any :class:`~snakes_and_ladders.emissions.EmissionFamily`
 through its ``log_density``, so every algorithm serves any emission mixture,
 the Gaussian one included.
+
+**Arrays in, arrays out.** No method takes a derivative, so the module holds
+no autodiff type and imports no torch (issue #1011): every input is an
+array-like and every output an ``np.ndarray``. A tensor --- a
+:class:`~snakes_and_ladders.sample.chain.Chain`'s draws --- is accepted and
+converted once on entry, detached and moved to the host, found by its
+``detach`` method rather than by importing its type.
+:func:`allocation_draws` alone runs torch, inside the
+:class:`~snakes_and_ladders.emissions.EmissionFamily` it is handed, whose
+``log_density`` is a tensor function; a caller holding a family has loaded
+torch already.
 """
 
 from __future__ import annotations
@@ -55,12 +66,14 @@ import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 import numpy as np
-import torch
+from numpy.typing import ArrayLike, DTypeLike
 from scipy.optimize import linear_sum_assignment
 
-from snakes_and_ladders.emissions import EmissionFamily
+if TYPE_CHECKING:  # pragma: no cover - the import is for the annotation only
+    from snakes_and_ladders.emissions import EmissionFamily
 
 #: SJW enumerates every permutation of every draw: ``8! = 40,320`` per draw
 #: is the largest set it is run over.
@@ -133,43 +146,57 @@ class AllocationDraws:
     allocations: np.ndarray
 
 
+def _array(value: ArrayLike, dtype: DTypeLike | None = None) -> np.ndarray:
+    """``value`` as an array, a tensor detached and moved to the host first.
+
+    A tensor is recognized by its ``detach`` method, so this module accepts
+    one without importing torch; ``np.asarray`` alone refuses a tensor that
+    requires grad or lives on a device.
+    """
+    detach = getattr(value, "detach", None)
+    if callable(detach):
+        value = detach().cpu()
+    return np.asarray(value, dtype=dtype)
+
+
 def all_permutations(n_components: int) -> np.ndarray:
     """Every permutation of ``range(n_components)``, lexicographic, shape ``(K!, K)``."""
     return np.array(list(itertools.permutations(range(n_components))), dtype=np.int64)
 
 
-def inverse(permutations: np.ndarray) -> np.ndarray:
+def inverse(permutations: ArrayLike) -> np.ndarray:
     """The inverse of each row: ``inverse(p)[t, p[t, k]] == k``."""
-    orders = np.asarray(permutations, dtype=np.int64)
+    orders = _array(permutations, np.int64)
     inverted = np.empty_like(orders)
     rows = np.arange(orders.shape[0])[:, None]
     inverted[rows, orders] = np.arange(orders.shape[1])[None, :]
     return inverted
 
 
-def permute_parameters(values: np.ndarray, permutations: np.ndarray) -> np.ndarray:
+def permute_parameters(values: ArrayLike, permutations: ArrayLike) -> np.ndarray:
     """Per-draw parameters relabelled: ``values[t, permutations[t]]``, shape ``(m, K, ...)``."""
-    rows = np.arange(values.shape[0])[:, None]
-    return np.asarray(np.asarray(values)[rows, np.asarray(permutations)])
+    array = _array(values)
+    rows = np.arange(array.shape[0])[:, None]
+    return np.asarray(array[rows, _array(permutations)])
 
 
 def permute_probabilities(
-    probabilities: np.ndarray, permutations: np.ndarray
+    probabilities: ArrayLike, permutations: ArrayLike
 ) -> np.ndarray:
     """Allocation probabilities ``(m, n, K)`` relabelled along the component axis."""
-    rows = np.arange(probabilities.shape[0])[:, None, None]
-    columns = np.asarray(permutations)[:, None, :]
-    positions = np.arange(probabilities.shape[1])[None, :, None]
-    return np.asarray(np.asarray(probabilities)[rows, positions, columns])
+    values = _array(probabilities)
+    rows = np.arange(values.shape[0])[:, None, None]
+    columns = _array(permutations)[:, None, :]
+    positions = np.arange(values.shape[1])[None, :, None]
+    return np.asarray(values[rows, positions, columns])
 
 
-def permute_allocations(
-    allocations: np.ndarray, permutations: np.ndarray
-) -> np.ndarray:
+def permute_allocations(allocations: ArrayLike, permutations: ArrayLike) -> np.ndarray:
     """Allocations ``(m, n)`` relabelled: the inverse permutation applied to each label."""
     inverted = inverse(permutations)
-    rows = np.arange(allocations.shape[0])[:, None]
-    return np.asarray(inverted[rows, np.asarray(allocations)])
+    labels = _array(allocations)
+    rows = np.arange(labels.shape[0])[:, None]
+    return np.asarray(inverted[rows, labels])
 
 
 def random_permutations(
@@ -187,7 +214,7 @@ def random_permutations(
     return np.argsort(rng.random((n_draws, n_components)), axis=1)
 
 
-def planted_recovery(recovered: np.ndarray, planted: np.ndarray) -> float:
+def planted_recovery(recovered: ArrayLike, planted: ArrayLike) -> float:
     """Fraction of draws whose relabelling undoes the planted permutation.
 
     Draws permuted by ``planted`` (as :func:`permute_parameters` applies it)
@@ -196,24 +223,28 @@ def planted_recovery(recovered: np.ndarray, planted: np.ndarray) -> float:
     fraction is the share of draws at that composite's mode: ``1.0`` when
     every draw is put back in one labelling, whichever it is.
     """
-    composite = permute_parameters(np.asarray(planted), np.asarray(recovered))
+    composite = permute_parameters(planted, recovered)
     _, counts = np.unique(composite, axis=0, return_counts=True)
     return float(counts.max() / composite.shape[0])
 
 
 def allocation_draws(
-    observations: np.ndarray | torch.Tensor,
-    log_weights: np.ndarray | torch.Tensor,
+    observations: ArrayLike,
+    log_weights: ArrayLike,
     families: Sequence[EmissionFamily],
     rng: np.random.Generator,
 ) -> AllocationDraws:
     """Allocation probabilities and an allocation per draw, for any emission family.
 
+    Each family's ``log_density`` is a tensor function, so this is the one
+    function here that runs torch; it imports it on the call, when the
+    families' own module has loaded it.
+
     Parameters
     ----------
-    observations : np.ndarray | torch.Tensor
+    observations : ArrayLike
         Shape ``(n,)`` or ``(n, channels)``.
-    log_weights : np.ndarray | torch.Tensor
+    log_weights : ArrayLike
         Log mixing weights per draw, shape ``(m, K)``.
     families : Sequence[EmissionFamily]
         The components at each draw, ``m`` of them.
@@ -225,8 +256,10 @@ def allocation_draws(
     -------
     AllocationDraws
     """
-    values = torch.as_tensor(observations)
-    weights = torch.as_tensor(log_weights, dtype=torch.float64)
+    import torch
+
+    values = torch.as_tensor(_array(observations))
+    weights = torch.as_tensor(_array(log_weights, np.float64))
     if weights.shape[0] != len(families):
         msg = f"{weights.shape[0]} weight draws against {len(families)} families"
         raise ValueError(msg)
@@ -268,8 +301,8 @@ def _agreement(
     return counts.reshape(m, n_components, n_components).astype(np.float64)
 
 
-def _check_allocations(allocations: np.ndarray, n_components: int) -> np.ndarray:
-    labels = np.asarray(allocations, dtype=np.int64)
+def _check_allocations(allocations: ArrayLike, n_components: int) -> np.ndarray:
+    labels = _array(allocations, np.int64)
     if labels.ndim != 2:
         msg = f"allocations are (draws, observations); got shape {labels.shape}"
         raise ValueError(msg)
@@ -279,7 +312,7 @@ def _check_allocations(allocations: np.ndarray, n_components: int) -> np.ndarray
     return labels
 
 
-def ecr(allocations: np.ndarray, pivot: np.ndarray, n_components: int) -> Relabelling:
+def ecr(allocations: ArrayLike, pivot: ArrayLike, n_components: int) -> Relabelling:
     """ECR: each draw's permutation maximizes its agreement with ``pivot``.
 
     Draw ``t``'s relabelled allocations agree with the pivot on
@@ -289,9 +322,9 @@ def ecr(allocations: np.ndarray, pivot: np.ndarray, n_components: int) -> Relabe
 
     Parameters
     ----------
-    allocations : np.ndarray
+    allocations : ArrayLike
         Shape ``(m, n)``, labels in ``[0, n_components)``.
-    pivot : np.ndarray
+    pivot : ArrayLike
         One allocation, shape ``(n,)``: the maximum a posteriori draw's is
         the published choice.
     n_components : int
@@ -302,7 +335,7 @@ def ecr(allocations: np.ndarray, pivot: np.ndarray, n_components: int) -> Relabe
     Relabelling
     """
     labels = _check_allocations(allocations, n_components)
-    centre = np.asarray(pivot, dtype=np.int64)
+    centre = _array(pivot, np.int64)
     if centre.shape != (labels.shape[1],):
         msg = f"the pivot has shape {centre.shape}, the draws {labels.shape[1]} observations"
         raise ValueError(msg)
@@ -320,10 +353,10 @@ def _mode(labels: np.ndarray, n_components: int) -> np.ndarray:
 
 
 def ecr_iterative_1(
-    allocations: np.ndarray,
+    allocations: ArrayLike,
     n_components: int,
     *,
-    start: np.ndarray | None = None,
+    start: ArrayLike | None = None,
     max_iterations: int = 100,
 ) -> Relabelling:
     """ECR-ITERATIVE-1: ECR against the mode of the relabelled allocations, iterated.
@@ -335,11 +368,11 @@ def ecr_iterative_1(
 
     Parameters
     ----------
-    allocations : np.ndarray
+    allocations : ArrayLike
         Shape ``(m, n)``.
     n_components : int
         ``K``.
-    start : np.ndarray | None
+    start : ArrayLike | None
         Initial permutations ``(m, K)``; the identity when omitted.
     max_iterations : int
         Passes allowed.
@@ -352,7 +385,7 @@ def ecr_iterative_1(
     orders = (
         np.tile(np.arange(n_components), (labels.shape[0], 1))
         if start is None
-        else np.asarray(start, dtype=np.int64)
+        else _array(start, np.int64)
     )
     history: list[float] = []
     converged = False
@@ -375,8 +408,8 @@ def ecr_iterative_1(
     )
 
 
-def _check_probabilities(probabilities: np.ndarray) -> np.ndarray:
-    values = np.asarray(probabilities, dtype=np.float64)
+def _check_probabilities(probabilities: ArrayLike) -> np.ndarray:
+    values = _array(probabilities, np.float64)
     if values.ndim != 3:
         msg = f"probabilities are (draws, observations, components); got {values.shape}"
         raise ValueError(msg)
@@ -384,8 +417,8 @@ def _check_probabilities(probabilities: np.ndarray) -> np.ndarray:
 
 
 def ecr_iterative_2(
-    allocations: np.ndarray,
-    probabilities: np.ndarray,
+    allocations: ArrayLike,
+    probabilities: ArrayLike,
     *,
     max_iterations: int = 100,
     threshold: float = 1e-6,
@@ -400,9 +433,9 @@ def ecr_iterative_2(
 
     Parameters
     ----------
-    allocations : np.ndarray
+    allocations : ArrayLike
         Shape ``(m, n)``.
-    probabilities : np.ndarray
+    probabilities : ArrayLike
         Shape ``(m, n, K)``.
     max_iterations : int
         Passes allowed.
@@ -438,9 +471,9 @@ def ecr_iterative_2(
 
 
 def stephens(
-    probabilities: np.ndarray,
+    probabilities: ArrayLike,
     *,
-    start: np.ndarray | None = None,
+    start: ArrayLike | None = None,
     max_iterations: int = 100,
     threshold: float = 1e-6,
 ) -> Relabelling:
@@ -456,10 +489,10 @@ def stephens(
 
     Parameters
     ----------
-    probabilities : np.ndarray
+    probabilities : ArrayLike
         Shape ``(m, n, K)``; clamped to ``[STEPHENS_FLOOR, 1 - STEPHENS_FLOOR]``
         and renormalized first.
-    start : np.ndarray | None
+    start : ArrayLike | None
         Initial permutations ``(m, K)``; the identity when omitted.
     max_iterations : int
         Passes allowed.
@@ -479,7 +512,7 @@ def stephens(
     orders = (
         np.tile(np.arange(n_components), (values.shape[0], 1))
         if start is None
-        else np.asarray(start, dtype=np.int64)
+        else _array(start, np.int64)
     )
     m, n = values.shape[:2]
     # Two layouts built once, so each pass is two matrix products: the draws
@@ -515,8 +548,8 @@ def stephens(
     )
 
 
-def _check_parameters(parameters: np.ndarray) -> np.ndarray:
-    values = np.asarray(parameters, dtype=np.float64)
+def _check_parameters(parameters: ArrayLike) -> np.ndarray:
+    values = _array(parameters, np.float64)
     if values.ndim == 2:
         values = values[..., None]
     if values.ndim != 3:
@@ -525,7 +558,7 @@ def _check_parameters(parameters: np.ndarray) -> np.ndarray:
     return values
 
 
-def pra(parameters: np.ndarray, pivot: np.ndarray) -> Relabelling:
+def pra(parameters: ArrayLike, pivot: ArrayLike) -> Relabelling:
     """PRA: each draw's permutation maximizes its inner product with ``pivot``.
 
     ``sum_k <pivot[k], parameters[t, order[k]]>`` is separable in the
@@ -535,9 +568,9 @@ def pra(parameters: np.ndarray, pivot: np.ndarray) -> Relabelling:
 
     Parameters
     ----------
-    parameters : np.ndarray
+    parameters : ArrayLike
         Shape ``(m, K)`` or ``(m, K, J)``.
-    pivot : np.ndarray
+    pivot : ArrayLike
         Shape ``(K,)`` or ``(K, J)``: the maximum a posteriori draw is the
         published choice.
 
@@ -546,7 +579,7 @@ def pra(parameters: np.ndarray, pivot: np.ndarray) -> Relabelling:
     Relabelling
     """
     values = _check_parameters(parameters)
-    centre = np.asarray(pivot, dtype=np.float64).reshape(values.shape[1], -1)
+    centre = _array(pivot, np.float64).reshape(values.shape[1], -1)
     if centre.shape != values.shape[1:]:
         msg = f"the pivot has shape {centre.shape}, a draw {values.shape[1:]}"
         raise ValueError(msg)
@@ -555,7 +588,7 @@ def pra(parameters: np.ndarray, pivot: np.ndarray) -> Relabelling:
     return Relabelling(orders, RelabelMethod.PRA, 1, True, (_achieved(scores, orders),))
 
 
-def aic(parameters: np.ndarray, column: int = 0) -> Relabelling:
+def aic(parameters: ArrayLike, column: int = 0) -> Relabelling:
     """AIC: the components ordered by one parameter, ascending, in every draw.
 
     The identifiability constraint the other methods are compared against:
@@ -568,9 +601,9 @@ def aic(parameters: np.ndarray, column: int = 0) -> Relabelling:
 
 
 def sjw(
-    parameters: np.ndarray,
-    allocations: np.ndarray,
-    scores: Callable[[np.ndarray], np.ndarray],
+    parameters: ArrayLike,
+    allocations: ArrayLike,
+    scores: Callable[[np.ndarray], ArrayLike],
     *,
     start: int | None = None,
     max_iterations: int = 100,
@@ -588,11 +621,11 @@ def sjw(
 
     Parameters
     ----------
-    parameters : np.ndarray
+    parameters : ArrayLike
         Shape ``(m, K)`` or ``(m, K, J)``.
-    allocations : np.ndarray
+    allocations : ArrayLike
         Shape ``(m, n)``.
-    scores : Callable[[np.ndarray], np.ndarray]
+    scores : Callable[[np.ndarray], ArrayLike]
         ``estimate (K, J) -> S (n, K)``: the complete-data log-likelihood of
         observation ``i`` in component ``k`` at the estimate, weight
         included. A mixture's complete-data log-likelihood is additive over
@@ -632,7 +665,7 @@ def sjw(
     converged = False
     weights = np.full((m, orders.shape[0]), 1.0 / orders.shape[0])
     for _ in range(max_iterations):
-        score = np.asarray(scores(estimate), dtype=np.float64)
+        score = _array(scores(estimate), np.float64)
         # G[t, j, k]: draw t's observations allocated to j, scored in k.
         grouped = np.zeros((m, n_components, n_components))
         np.add.at(
@@ -665,11 +698,11 @@ def sjw(
 def relabel(
     method: RelabelMethod = RelabelMethod.STEPHENS,
     *,
-    probabilities: np.ndarray | None = None,
-    allocations: np.ndarray | None = None,
-    parameters: np.ndarray | None = None,
-    pivot: np.ndarray | None = None,
-    scores: Callable[[np.ndarray], np.ndarray] | None = None,
+    probabilities: ArrayLike | None = None,
+    allocations: ArrayLike | None = None,
+    parameters: ArrayLike | None = None,
+    pivot: ArrayLike | None = None,
+    scores: Callable[[np.ndarray], ArrayLike] | None = None,
     max_iterations: int = 100,
     threshold: float = 1e-6,
 ) -> Relabelling:
@@ -684,13 +717,13 @@ def relabel(
     ----------
     method : RelabelMethod
         The algorithm.
-    probabilities : np.ndarray | None
+    probabilities : ArrayLike | None
         ``(m, n, K)``: STEPHENS, ECR-ITERATIVE-2.
-    allocations : np.ndarray | None
+    allocations : ArrayLike | None
         ``(m, n)``: ECR, ECR-ITERATIVE-1, ECR-ITERATIVE-2, SJW.
-    parameters : np.ndarray | None
+    parameters : ArrayLike | None
         ``(m, K, J)``: PRA, SJW, AIC.
-    pivot : np.ndarray | None
+    pivot : ArrayLike | None
         ECR's pivot allocation ``(n,)`` or PRA's pivot parameters ``(K, J)``.
     scores : Callable | None
         SJW's complete-data scores, as :func:`sjw` states them.
@@ -702,11 +735,11 @@ def relabel(
     Relabelling
     """
 
-    def needs(value: np.ndarray | None, what: str) -> np.ndarray:
+    def needs(value: ArrayLike | None, what: str) -> np.ndarray:
         if value is None:
             msg = f"{method} needs {what}"
             raise ValueError(msg)
-        return value
+        return _array(value)
 
     match method:
         case RelabelMethod.STEPHENS:
@@ -719,7 +752,7 @@ def relabel(
             labels = needs(allocations, "allocations")
             centre = needs(pivot, "a pivot allocation")
             n_components = (
-                int(probabilities.shape[2])
+                int(_array(probabilities).shape[2])
                 if probabilities is not None
                 else int(max(labels.max(), centre.max())) + 1
             )
@@ -727,7 +760,7 @@ def relabel(
         case RelabelMethod.ECR_ITERATIVE_1:
             labels = needs(allocations, "allocations")
             n_components = (
-                int(probabilities.shape[2])
+                int(_array(probabilities).shape[2])
                 if probabilities is not None
                 else int(labels.max()) + 1
             )
