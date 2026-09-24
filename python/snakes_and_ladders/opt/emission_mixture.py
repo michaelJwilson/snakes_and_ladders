@@ -51,6 +51,7 @@ from snakes_and_ladders.opt.mixture import (
     e_step,
     emission_mixture_plus_plus,
     mixture_log_likelihood,
+    responsibilities,
     uniform_seeds,
 )
 from snakes_and_ladders.opt.objective import Objective
@@ -107,7 +108,7 @@ class EmissionMixtureFit:
 
 def expectation_maximization(
     observations: np.ndarray | torch.Tensor,
-    weights: torch.Tensor,
+    weights: np.ndarray | torch.Tensor,
     components: EmissionFamily,
     max_iterations: int = 200,
     tolerance: float = 1e-10,
@@ -130,8 +131,9 @@ def expectation_maximization(
     ----------
     observations : np.ndarray | torch.Tensor
         Observations, shape ``(n_samples,)`` or ``(n_samples, channels)``.
-    weights : torch.Tensor
-        Starting mixing weights, shape ``(n_components,)``.
+    weights : np.ndarray | torch.Tensor
+        Starting mixing weights, shape ``(n_components,)``; an array is read
+        as a tensor of its own dtype, and a tensor is used as given.
     components : EmissionFamily
         Starting components.
     max_iterations : int
@@ -171,6 +173,7 @@ def expectation_maximization(
     A float array of the same counts takes the per-observation route, which
     is the oracle.
     """
+    weights = torch.as_tensor(weights)
     distinct = _distinct_counts(observations, components)
     if distinct is not None:
         return _cell_expectation_maximization(
@@ -233,6 +236,99 @@ def expectation_maximization(
         at_boundary=boundary,
         termination=termination,
     )
+
+
+def log_densities(observations: np.ndarray, components: EmissionFamily) -> np.ndarray:
+    """``log p_k(x_i)`` for every observation and component, shape ``(n_samples, K)``, as an array.
+
+    The family's own :meth:`log_density` on the observations as float64, read
+    out once: the E step's input for a consumer that holds arrays and takes no
+    derivative (issue #1011).
+    """
+    values = torch.as_tensor(observations, dtype=torch.float64)
+    return components.log_density(values).detach().numpy()
+
+
+def responsibilities_at(
+    observations: np.ndarray, weights: np.ndarray, components: EmissionFamily
+) -> np.ndarray:
+    """The E step at ``weights`` and ``components``, shape ``(n_samples, K)``, as an array.
+
+    :func:`snakes_and_ladders.opt.mixture.responsibilities` on the observations
+    as float64 and ``log(weights)``, read out once (issue #1011).
+    """
+    values = torch.as_tensor(observations, dtype=torch.float64)
+    log_weight = torch.log(torch.as_tensor(weights, dtype=torch.float64))
+    return responsibilities(values, log_weight, components).detach().numpy()
+
+
+def partial_expectation_maximization(
+    observations: np.ndarray,
+    posterior: np.ndarray,
+    components: EmissionFamily,
+    affected: Sequence[int],
+    mass: np.ndarray,
+    iterations: int,
+) -> tuple[np.ndarray, EmissionFamily]:
+    """EM on the ``affected`` components alone, their total claim on each observation held at ``mass``.
+
+    The partial EM of Ueda, Nakano, Ghahramani & Hinton (2000): one M step
+    realizes ``posterior``, then each of ``iterations`` steps redistributes
+    ``mass`` among the affected components by their joint, softmax-normalized
+    among them, and M-steps again. Every other column is never touched, so
+    the unaffected components are refitted to the responsibilities they
+    started with.
+
+    Parameters
+    ----------
+    observations : np.ndarray
+        Observations, shape ``(n_samples,)`` or ``(n_samples, channels)``.
+    posterior : np.ndarray
+        The responsibilities the first M step realizes, shape
+        ``(n_samples, K)``.
+    components : EmissionFamily
+        The family whose ``reestimate`` realizes them.
+    affected : Sequence[int]
+        The components partial EM redistributes among.
+    mass : np.ndarray
+        Their total responsibility on each observation, shape
+        ``(n_samples, 1)``.
+    iterations : int
+        Partial E steps after the first M step, each followed by an M step.
+
+    Returns
+    -------
+    tuple[np.ndarray, EmissionFamily]
+        The mixing weights, the mean of the last responsibilities, and the
+        family its last M step fitted.
+
+    Raises
+    ------
+    ValueError
+        If a component's M step did not converge.
+    """
+    values = torch.as_tensor(observations, dtype=torch.float64)
+    moved = torch.from_numpy(posterior)
+    held = torch.from_numpy(mass)
+    columns = list(affected)
+    family = components
+    for iteration in range(iterations + 1):
+        reestimated = family.reestimate(values, moved)
+        if not reestimated.converged:
+            msg = (
+                f"a component's M step did not settle at partial EM iteration "
+                f"{iteration}"
+            )
+            raise ValueError(msg)
+        family = reestimated.emissions
+        weights = moved.mean(dim=0)
+        if iteration == iterations:
+            break
+        joint = torch.log(weights) + family.log_density(values)
+        local = joint[:, columns]
+        moved = moved.clone()
+        moved[:, columns] = held * torch.softmax(local, dim=-1)
+    return weights.detach().numpy(), family
 
 
 #: The count families whose M step reads only weighted counts, so a fit on
