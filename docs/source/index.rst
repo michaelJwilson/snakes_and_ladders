@@ -728,6 +728,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.qa.potts_clusters
    :members:
 
+.. automodule:: snakes_and_ladders.qa.potts_converge
+   :members:
+
 .. automodule:: snakes_and_ladders.scripts
    :members:
 
