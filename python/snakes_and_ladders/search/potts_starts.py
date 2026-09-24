@@ -42,7 +42,6 @@ from snakes_and_ladders.opt.starts import refuse_start
 from snakes_and_ladders.opt.termination import Termination
 from snakes_and_ladders.sample.potts_mcmc import PottsMove
 from snakes_and_ladders.sample.schedule import ScheduleParams
-from snakes_and_ladders.search.alpha_expansion import iterated_conditional_modes
 from snakes_and_ladders.search.ground_state import (
     METHODS,
     MethodRun,
@@ -51,6 +50,7 @@ from snakes_and_ladders.search.ground_state import (
     rung_field,
     warm_anneal,
 )
+from snakes_and_ladders.search.icm import iterated_conditional_modes
 from snakes_and_ladders.search.maxflow import ising_ground_state
 from snakes_and_ladders.sim.graph import lattice_graph
 from snakes_and_ladders.sim.potts import (
@@ -350,7 +350,11 @@ def _rung(objective: Objective, who: str) -> Rung:
 
 
 def polish_by_icm(
-    objective: Objective, theta: torch.Tensor, budget: Budget
+    objective: Objective,
+    theta: torch.Tensor,
+    budget: Budget,
+    *,
+    min_sites: int = 0,
 ) -> opt_starts.PolishedPoint:
     """Iterated conditional modes from ``theta`` until a sweep changes nothing, one sweep a unit.
 
@@ -359,6 +363,12 @@ def polish_by_icm(
     descent is converged at the first sweep that leaves the labelling as it
     found it, and that sweep is charged; ``budget.size`` sweeps is the cap.
 
+    ``min_sites`` is the descent's floor
+    (:func:`~snakes_and_ladders.search.icm.iterated_conditional_modes`,
+    issue #1055), its uniforms drawn from one generator seeded ``0`` across
+    the sweeps. ``0``, the default, draws nothing and is the polish before
+    the floor existed, bitwise.
+
     Returns
     -------
     snakes_and_ladders.opt.starts.PolishedPoint
@@ -366,7 +376,8 @@ def polish_by_icm(
     Raises
     ------
     ValueError
-        If ``budget`` is not in :attr:`~snakes_and_ladders.cost.Cost.SWEEPS`.
+        If ``budget`` is not in :attr:`~snakes_and_ladders.cost.Cost.SWEEPS`,
+        or ``min_sites`` is negative or exceeds the sites.
     """
     if budget.unit is not Cost.SWEEPS:
         msg = f"an ICM polish is counted in sweeps, not {budget.unit}"
@@ -375,9 +386,9 @@ def polish_by_icm(
     tracked = current()
     labelling = np.asarray(theta.numpy(), dtype=np.int64)
     value = energy(rung.graph, rung.field, labelling)
-    # The start's own generator is never read: a start is given, and the
-    # index order draws no permutation.
-    unused = np.random.default_rng(0)
+    # Read by the floor alone: a start is given, and the index order draws no
+    # permutation.
+    floor_draws = np.random.default_rng(0)
     converged = False
     sweeps = 0
     while sweeps < budget.size:
@@ -385,9 +396,10 @@ def polish_by_icm(
             rung.graph,
             rung.field,
             rung.n_states,
-            unused,
+            floor_draws,
             start=labelling,
             max_sweeps=1,
+            min_sites=min_sites,
         )
         sweeps += 1
         tracked.record(sweeps, objective=settled.energy)

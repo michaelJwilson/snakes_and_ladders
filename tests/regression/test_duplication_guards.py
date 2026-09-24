@@ -488,6 +488,13 @@ def test_the_runtime_band_has_one_reader() -> None:
 
 @pytest.mark.critical
 @pytest.mark.infra
+def test_iterated_conditional_modes_is_defined_in_one_module() -> None:
+    assert _found(ICM_DEFINITION, ICM_OWNER, SEARCHED, ("*.py",)) == []
+    assert ICM_DEFINITION.search((PACKAGE / ICM_OWNER).read_text())
+
+
+@pytest.mark.critical
+@pytest.mark.infra
 def test_each_guard_fails_on_violating_source() -> None:
     # The guards exercised. Each searches source text, so each passes
     # vacuously if the pattern is wrong -- which is the failure mode a guard
@@ -526,6 +533,8 @@ def test_each_guard_fails_on_violating_source() -> None:
         HAND_MEASURE: "r, p = peaked(" + "lambda: timed(call))\n",
         FIXTURE_ALIGNMENT: "d = simulate_" + "alignment(p.tau, p.k, p.pi, rng, 9)\n",
         TWIN_IMPORT: "        from snakes_and_ladders.likelihood import pruning_rust\n",
+        # Unsplit: anchored at a line start, and this literal is indented.
+        ICM_DEFINITION: "def iterated_conditional_modes(\n    graph,\n",
     }
     clean = {
         PRIVATE_LOGSUMEXP: "from snakes_and_ladders.numerics import logsumexp\n",
@@ -552,6 +561,7 @@ def test_each_guard_fails_on_violating_source() -> None:
         HAND_MEASURE: "result, seconds, peak = measured(call)\n",
         FIXTURE_ALIGNMENT: "data = simulate_tree(params, rng, n_sites=9)\n",
         TWIN_IMPORT: "    if (rust := twin(name, backend, __name__)) is not None:\n",
+        ICM_DEFINITION: "from snakes_and_ladders.search.icm import iterated_conditional_modes\n",
     }
 
     assert [p for p, text in violating.items() if not p.search(text)] == []
@@ -696,6 +706,12 @@ BAND_OWNER = "search/mixture_starts.py"
 HELD_BAND = re.compile(
     r"searchsorted\([^\n]*side=\"right\"\)\s*-\s*1\n(?:.*\n){0,2}\s*held\["
 )
+
+#: Single-site descent, defined in `search.icm` alone: it sat in
+#: `search.alpha_expansion` as the expansion's baseline until issue #1055
+#: moved it, with no alias left behind.
+ICM_OWNER = "search/icm.py"
+ICM_DEFINITION = re.compile(r"^def iterated_conditional_modes\(", re.MULTILINE)
 
 CATALOGUE_FILE = re.compile(r"PROBLEMS\.md")
 PIPE_SPLIT = re.compile(r"\.split\(\"\|\"\)")

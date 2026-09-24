@@ -23,8 +23,9 @@ single flips crosses a barrier that one expansion crosses in a step.
 the label set a cycle offers and in the network one move builds; the widening,
 the solver pick, the accept, the cycle and the two refusals are the same text,
 so they are written once and parameterised by a :class:`_Move` (issue #858).
-Single-site descent is here too, as the baseline the expansion has to beat and
-as the sweep two other callers run under :class:`SweepOrder`.
+Single-site descent, the baseline the expansion has to beat, is
+:mod:`snakes_and_ladders.search.icm` (issue #1055); it returns this module's
+:class:`Labelling`.
 
 See Boykov, Veksler & Zabih (2001); Kolmogorov & Zabih (2004) for which
 energies a cut can represent.
@@ -34,7 +35,6 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from enum import StrEnum
 from typing import Any, NamedTuple
 
 import numpy as np
@@ -62,7 +62,7 @@ class Labelling:
     """A state per node, and the energy it scores.
 
     One type for the three moves: :func:`expand`, :func:`swap` and
-    :func:`iterated_conditional_modes` report the same two quantities with
+    :func:`~snakes_and_ladders.search.icm.iterated_conditional_modes` report the same two quantities with
     the same meaning, so a caller that exchanges one for another reads the
     same fields (issue #865).
 
@@ -661,190 +661,6 @@ def alpha_expansion(
         max_cycles=max_cycles,
         backend=backend,
     )
-
-
-class SweepOrder(StrEnum):
-    """The order one sweep visits the sites in --- a parameter, not a second method.
-
-    A sweep order is first-class here for the reason
-    ``likelihood/schedule.py`` gives for message orders: being unable to ask
-    for a different one hides what the default buys. The update is the same
-    argmin either way, so the pair's spread *is* the order's effect
-    (issue #858).
-    """
-
-    INDEX = "index"
-    """``range(n_nodes)``: the sites in index order, every sweep."""
-    RANDOM = "random"
-    """A fresh ``rng.permutation(n_nodes)`` per sweep, which is Gibbs at T = 0."""
-
-
-def iterated_conditional_modes(
-    graph: PottsGraph,
-    field_values: SiteField | np.ndarray,
-    n_states: int,
-    rng: np.random.Generator,
-    *,
-    start: np.ndarray | None = None,
-    max_sweeps: int = 200,
-    sweep_order: SweepOrder = SweepOrder.INDEX,
-    stop_when_clean: bool = True,
-    backend: Backend = Backend.NUMBA,
-) -> Labelling:
-    """Single-site descent: the baseline alpha expansion has to beat.
-
-    Each site takes the label minimizing the energy given its neighbours,
-    until a sweep changes nothing. This is the natural point of comparison
-    because it is the *same objective* under a move set of one site at a time
-    --- so a difference between the two is a statement about the move set
-    rather than about the model or the code path.
-
-    Three parameters say what a caller varies and the sweep does not
-    (issue #858): where it starts, the order it visits sites in, and whether
-    a clean sweep ends it. Gibbs at ``T = 0`` is this descent under
-    :data:`SweepOrder.RANDOM` with ``stop_when_clean=False``, and the label
-    block of :mod:`snakes_and_ladders.search.spatio_sequential` is this
-    descent from a given ``start``; neither is a second implementation of the
-    update.
-
-    Local deltas rather than a full energy per candidate: only the site's own
-    field term and its incident edges change, so a sweep costs
-    ``O(n_nodes * k * degree)`` rather than ``O(n_nodes * k * n_edges)``. The
-    distinction matters because this is meant to be a *fair* baseline, and a
-    baseline made slow by its implementation is not one.
-
-    ``backend`` chooses the sweep's implementation and nothing else. The
-    :data:`~snakes_and_ladders.backend.Backend.NUMBA` kernel in
-    :mod:`snakes_and_ladders.sample.kernels` walks the compressed-row adjacency and
-    returns the labelling the Python loop returns **bitwise** -- same update,
-    same index order, same first-minimum tie rule -- which is what lets it be
-    the default: the audit behind it (#264) measured the Python sweep at
-    the top of the descent's self time, and the labelling a caller sees does
-    not move. :data:`~snakes_and_ladders.backend.Backend.PYTHON` is the oracle
-    that pins it.
-
-    Parameters
-    ----------
-    graph : PottsGraph
-        The lattice, read through its compressed adjacency.
-    field_values : SiteField | np.ndarray
-        External field, ``(n_states,)`` or ``(n_nodes, n_states)``.
-    n_states : int
-        Labels available at each site.
-    rng : np.random.Generator
-        Draws the start where ``start`` is ``None``, and one permutation per
-        sweep under :data:`SweepOrder.RANDOM`.
-    start : np.ndarray | None
-        The labelling to descend from, or ``None`` to draw one uniformly.
-    max_sweeps : int
-        Sweeps the descent is allowed.
-    sweep_order : SweepOrder
-        The order sites are visited in; index order by default.
-    stop_when_clean : bool
-        Whether a sweep that changes nothing ends the descent. ``False`` runs
-        every sweep of ``max_sweeps``, which is what a method charged a fixed
-        budget spends.
-    backend : Backend
-        The sweep's implementation. The compiled kernel runs index order
-        either way, and a random order when every sweep runs, its
-        permutations drawn up front in the Python sweep's order (issue #923).
-        A random order that stops on a clean sweep would spend the generator
-        past the stop, so it needs
-        :data:`~snakes_and_ladders.backend.Backend.PYTHON` and is refused.
-
-    Returns
-    -------
-    Labelling
-        The labelling it settles on, and its energy.
-
-    Raises
-    ------
-    ValueError
-        If ``backend`` names no sweep, or names the compiled one for a
-        descent it does not implement.
-    """
-    field_values = log_weight_of(field_values)
-    values = site_field(np.asarray(field_values, dtype=float), graph.n_nodes)
-    labelling = (
-        rng.integers(0, n_states, size=graph.n_nodes)
-        if start is None
-        else np.asarray(start, dtype=np.int64).copy()
-    )
-
-    if backend is Backend.NUMBA:
-        if sweep_order is SweepOrder.RANDOM and stop_when_clean:
-            msg = (
-                f"the compiled sweep takes every sweep's order drawn up front, "
-                f"which spends the generator past a clean sweep the Python sweep "
-                f"stops at; {sweep_order} order with stop_when_clean=True needs "
-                f"{Backend.PYTHON}"
-            )
-            raise ValueError(msg)
-        from snakes_and_ladders.sample.kernels import icm_sweeps, icm_sweeps_ordered
-
-        offsets, neighbour_index, couplings = graph.compressed_adjacency()
-        contiguous = np.ascontiguousarray(values, dtype=np.float64)
-        if sweep_order is SweepOrder.INDEX and stop_when_clean:
-            icm_sweeps(
-                labelling, contiguous, offsets, neighbour_index, couplings, max_sweeps
-            )
-        else:
-            # The permutations the Python sweep draws, one per sweep and in
-            # its order (issue #923): with every sweep run, the same stream.
-            orders = (
-                np.arange(graph.n_nodes, dtype=np.int64).reshape(1, -1)
-                if sweep_order is SweepOrder.INDEX
-                else np.stack(
-                    [rng.permutation(graph.n_nodes) for _ in range(max_sweeps)]
-                ).astype(np.int64)
-            )
-            icm_sweeps_ordered(
-                labelling,
-                contiguous,
-                offsets,
-                neighbour_index,
-                couplings,
-                orders,
-                max_sweeps,
-                stop_when_clean,
-            )
-        return Labelling(labelling, energy(graph, values, labelling))
-    refuse_backend(
-        "iterated conditional modes", backend, (Backend.NUMBA, Backend.PYTHON)
-    )
-
-    # The compressed rows as Python sequences, converted once rather than
-    # sliced per site: a NumPy slice and gather per site measured a third of
-    # this sweep (issue #277, `sim.potts.heat_bath_log_weights`). The
-    # `numba` kernel above takes the arrays themselves.
-    offsets, neighbour_index, edge_couplings = graph.compressed_adjacency()
-    bounds = offsets.tolist()
-    neighbours, couplings = neighbour_index.tolist(), edge_couplings.tolist()
-
-    # The labels as a Python list for the duration: the sweep reads a
-    # neighbour's label once per incident edge, and a list read is 0.18 us
-    # cheaper than a NumPy scalar one. Same reads, same order, same writes.
-    labels = labelling.tolist()
-    for _ in range(max_sweeps):
-        order = (
-            range(graph.n_nodes)
-            if sweep_order is SweepOrder.INDEX
-            else rng.permutation(graph.n_nodes)
-        )
-        changed = False
-        for node in order:
-            local = -values[node].copy()
-            for position in range(bounds[node], bounds[node + 1]):
-                local[labels[neighbours[position]]] -= couplings[position]
-            best = int(np.argmin(local))
-            if best != labels[node]:
-                labels[node] = best
-                changed = True
-        if stop_when_clean and not changed:
-            break
-    labelling[:] = labels
-
-    return Labelling(labelling, energy(graph, values, labelling))
 
 
 def _lattice_cut(graph: PottsGraph) -> oxisal.LatticeCut:

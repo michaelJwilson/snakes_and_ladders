@@ -21,7 +21,6 @@ from snakes_and_ladders.cost import Cost
 from snakes_and_ladders.opt.budget import Budget
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.opt.starts import StartsBenchmark
-from snakes_and_ladders.search.alpha_expansion import iterated_conditional_modes
 from snakes_and_ladders.search.ground_state import (
     METHODS,
     Rung,
@@ -30,6 +29,7 @@ from snakes_and_ladders.search.ground_state import (
     run_alpha_expansion,
     rung_field,
 )
+from snakes_and_ladders.search.icm import iterated_conditional_modes
 from snakes_and_ladders.search.potts_starts import (
     PottsObjective,
     SolverStart,

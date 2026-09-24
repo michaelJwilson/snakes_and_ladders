@@ -19,7 +19,7 @@ schedule is *learned* rather than declared, where
 ``sample.potts_mcmc.anneal_potts`` takes it as two constants, and **the
 classical method is a point in the policy class rather than a separate
 program**: a policy that always takes the sweep at rung zero reproduces
-``search.alpha_expansion.iterated_conditional_modes``'s labelling exactly,
+``search.icm.iterated_conditional_modes``'s labelling exactly,
 which a test pins.
 
 The *fine* action at ``T = 0`` is a different classical baseline --- steepest

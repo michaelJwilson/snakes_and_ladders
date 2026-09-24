@@ -70,7 +70,7 @@ from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
 from snakes_and_ladders.learn.tree import FeatureSet, RewardModel, TreeEnvironment
 from snakes_and_ladders.likelihood.potts import log_weights
 from snakes_and_ladders.log import get_logger, phase
-from snakes_and_ladders.search.alpha_expansion import iterated_conditional_modes
+from snakes_and_ladders.search.icm import iterated_conditional_modes
 from snakes_and_ladders.sim.fixtures import (
     BASELINE_LIBRARIES,
     Baseline,
@@ -542,7 +542,7 @@ SPECS: tuple[BaselineSpec, ...] = (
         tier=Scale.CI,
         modules=(
             "snakes_and_ladders.likelihood.potts",
-            "snakes_and_ladders.search.alpha_expansion",
+            "snakes_and_ladders.search.icm",
             "snakes_and_ladders.sim.canonical",
         ),
         compute=planted_glass_baseline,

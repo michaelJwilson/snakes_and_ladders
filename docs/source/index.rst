@@ -495,6 +495,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.search.alpha_expansion
    :members:
 
+.. automodule:: snakes_and_ladders.search.icm
+   :members:
+
 .. automodule:: snakes_and_ladders.search.max_cut
    :members:
 

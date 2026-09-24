@@ -124,10 +124,19 @@ def _descend(
     contiguous = np.ascontiguousarray(values, dtype=np.float64)
     interpreted = labelling.copy()
     compiled = labelling.copy()
-    sweeps = icm_sweeps.py_func(
-        interpreted, contiguous, offsets, neighbours, couplings, max_sweeps
+    # Index order (no rows of `orders`) and no floor (no draws), which is the
+    # descent the two kernels before #1055 ran.
+    unfloored = (
+        np.empty((0, labelling.size), dtype=np.int64),
+        np.empty(0, dtype=np.float64),
+        max_sweeps,
+        True,
+        0,
     )
-    other = icm_sweeps(compiled, contiguous, offsets, neighbours, couplings, max_sweeps)
+    sweeps = icm_sweeps.py_func(
+        interpreted, contiguous, offsets, neighbours, couplings, *unfloored
+    )
+    other = icm_sweeps(compiled, contiguous, offsets, neighbours, couplings, *unfloored)
     assert np.array_equal(interpreted, compiled)
     return interpreted, int(sweeps), int(other)
 

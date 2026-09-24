@@ -18,7 +18,7 @@ from snakes_and_ladders.likelihood.hmm_paths import (
     path_log_probability,
 )
 from snakes_and_ladders.sample.potts_mcmc import PottsMove, sample_potts
-from snakes_and_ladders.search.alpha_expansion import iterated_conditional_modes
+from snakes_and_ladders.search.icm import iterated_conditional_modes
 from snakes_and_ladders.search.max_cut import enumerate_max_cut
 from snakes_and_ladders.sim.canonical import (
     AMBIGUOUS_OBSERVATIONS,
