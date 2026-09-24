@@ -286,7 +286,7 @@ class LearnedTreeSurrogate(Surrogate):
     def kind(self) -> Bound:
         return self.fitted.kind
 
-    def __call__(self, structure: object, data: object) -> torch.Tensor:
+    def __call__(self, structure: object, data: object) -> float:
         if not isinstance(structure, Node) or not isinstance(data, Mapping):
             msg = "a tree surrogate takes a topology and an alignment"
             raise TypeError(msg)
@@ -300,7 +300,7 @@ class LearnedTreeSurrogate(Surrogate):
             (edges,),
             offset=plug_in_offset(features),
         )
-        return self.fitted.predict(examples)[0]
+        return float(self.fitted.predict(examples)[0])
 
 
 __all__ = [

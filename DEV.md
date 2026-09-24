@@ -374,7 +374,9 @@ go through it, each taking `workers=` explicitly — `opt.fit.fit_from` (starts)
   of workers each at the default thread count oversubscribes the cores; where a
   pool pays, pin `intra_op_threads` to cores divided by workers. `map_tasks`
   sets it per worker from that argument (`None` leaves the process's setting
-  alone) and restores the caller's afterwards. The three
+  alone) and restores the caller's afterwards. It never imports `torch`: where
+  `torch` is not loaded, an import hook sets the count when a body imports it,
+  so a NumPy body runs without `torch` in the caller or a worker (#1011). The three
   sites pass `None`, by measurement: pinning one thread slowed the serial
   multi-start fit 2.9× (1.40 s against 0.49 s at 8 taxa × 1000 sites),
   because torch's intra-op parallelism over the sites is the parallelism that

@@ -6,6 +6,12 @@ and :func:`certify` is what holds it to the claim against the exact value.
 ``snakes_and_ladders.likelihood.surrogate`` builds the analytic bounds on
 these and ``snakes_and_ladders.learn.surrogate`` the learned ones, and
 ``learn/CLAUDE.md`` is why the seam lives above both.
+
+A surrogate's value is a ``float``. It is a function of a discrete structure
+and the data, with no continuous argument to take a gradient in, and every
+caller -- :func:`certify`, ``search.infer``'s ranking, the features of
+``likelihood.features`` -- reads it as a number; so the seam imports no
+``torch`` (issue #1011).
 """
 
 from __future__ import annotations
@@ -17,7 +23,6 @@ from enum import StrEnum
 from typing import Protocol
 
 import numpy as np
-import torch
 
 
 class Bound(StrEnum):
@@ -35,8 +40,8 @@ class Surrogate(Protocol):
     def kind(self) -> Bound: ...  # pragma: no cover - protocol
 
     @abstractmethod
-    def __call__(self, structure: object, data: object) -> torch.Tensor:
-        """The surrogate's value, a differentiable scalar."""
+    def __call__(self, structure: object, data: object) -> float:
+        """The surrogate's value at the structure and the data."""
         ...  # pragma: no cover - protocol
 
 
