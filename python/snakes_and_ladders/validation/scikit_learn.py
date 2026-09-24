@@ -59,7 +59,7 @@ def expectation_maximization(
         out["scale"],
         int(out["iterations"]),
         result.seconds,
-        int(result.peak_bytes or 0),
+        result.peak_bytes,
     )
 
 
@@ -92,5 +92,5 @@ def score(
     return Score(
         float(result.outputs["log_likelihood"]),
         result.seconds,
-        int(result.peak_bytes or 0),
+        result.peak_bytes,
     )

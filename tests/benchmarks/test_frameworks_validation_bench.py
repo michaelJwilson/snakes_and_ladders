@@ -41,8 +41,8 @@ from snakes_and_ladders.learn.rollout import rollout
 from snakes_and_ladders.learn.surrogate import Examples, GraphSurrogate, _Batch
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 from snakes_and_ladders.validation import gymnasium, torch_geometric, torchrl
-from snakes_and_ladders.validation.runner import available
 
+from tests._frameworks import requires
 from tests.regression.learn.conftest import COUPLING, FIELD, potts_environment
 from tests.validation._rl import (
     WEIGHTS,
@@ -82,7 +82,7 @@ def _warm_ours[T](
     return result, float(benchmark.stats.stats.median)
 
 
-@pytest.mark.skipif(not available("torchrl"), reason="validation-torchrl extra")
+@requires("torchrl")
 @pytest.mark.parametrize(
     "steps", [1_000, 100_000, pytest.param(1_000_000, marks=pytest.mark.release)]
 )
@@ -102,7 +102,7 @@ def test_gae_beside_torchrl_benchmark(benchmark: BenchmarkFixture, steps: int) -
     np.testing.assert_allclose(theirs.advantages[0], ours, rtol=0.0, atol=1e-8)
 
 
-@pytest.mark.skipif(not available("torchrl"), reason="validation-torchrl extra")
+@requires("torchrl")
 @pytest.mark.parametrize(
     "steps", [1_000, 100_000, pytest.param(1_000_000, marks=pytest.mark.release)]
 )
@@ -131,7 +131,7 @@ def test_clip_ppo_beside_torchrl_benchmark(
     np.testing.assert_allclose(theirs.gradients[0], gradient.numpy(), atol=1e-8)
 
 
-@pytest.mark.skipif(not available("torchrl"), reason="validation-torchrl extra")
+@requires("torchrl")
 @pytest.mark.parametrize("steps", [1_000, 100_000])
 def test_reinforce_beside_torchrl_benchmark(
     benchmark: BenchmarkFixture, steps: int
@@ -161,9 +161,7 @@ def test_reinforce_beside_torchrl_benchmark(
     np.testing.assert_allclose(theirs.gradients[0], gradient.numpy(), atol=1e-8)
 
 
-@pytest.mark.skipif(
-    not available("torch_geometric"), reason="validation-torch-geometric extra"
-)
+@requires("torch_geometric")
 @pytest.mark.parametrize("side", [16, 71, 142, 284])
 def test_graph_surrogate_beside_gin_benchmark(
     benchmark: BenchmarkFixture, side: int
@@ -199,7 +197,7 @@ def test_graph_surrogate_beside_gin_benchmark(
     np.testing.assert_allclose(theirs.forward[0], ours.numpy(), atol=1e-10)
 
 
-@pytest.mark.skipif(not available("gymnasium"), reason="validation-gymnasium extra")
+@requires("gymnasium")
 @pytest.mark.parametrize("steps", [1_000, 100_000])
 def test_gymnasium_adapter_beside_rollout_benchmark(
     benchmark: BenchmarkFixture, steps: int

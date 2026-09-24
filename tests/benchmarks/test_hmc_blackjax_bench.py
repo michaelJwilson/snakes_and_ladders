@@ -24,11 +24,11 @@ from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders.sample import hmc
 from snakes_and_ladders.validation import blackjax
 from snakes_and_ladders.validation.gaussian import GaussianTarget, diagonal_precision
-from snakes_and_ladders.validation.runner import available, package
 
-pytestmark = pytest.mark.skipif(
-    not available("blackjax"), reason="BlackJAX is the validation-blackjax extra"
-)
+from tests._frameworks import requires
+from tests.validation._goals import median_package
+
+pytestmark = requires("blackjax")
 
 #: Subprocess runs whose median BlackJAX's figure is.
 REPEATS = 3
@@ -64,10 +64,8 @@ def test_hmc_beside_blackjax_benchmark(
         "n_draws": np.asarray(N_DRAWS),
         "seed": np.asarray(963),
     }
-    benchmark.extra_info["package_peak_bytes"] = float(
-        np.median(
-            [package("hmc_sample", inputs).peak_bytes or 0 for _ in range(REPEATS)]
-        )
+    benchmark.extra_info["package_peak_bytes"] = median_package(
+        "hmc_sample", inputs, "peak_bytes", repeats=REPEATS
     )
 
     chain = benchmark.pedantic(  # type: ignore[no-untyped-call]

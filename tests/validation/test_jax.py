@@ -24,11 +24,13 @@ from snakes_and_ladders.validation.gaussian import (
     dense_precision,
     diagonal_precision,
 )
-from snakes_and_ladders.validation.runner import available, package
+from snakes_and_ladders.validation.runner import package
+
+from tests._frameworks import requires
 
 pytestmark = [
     pytest.mark.validation,
-    pytest.mark.skipif(not available("jax"), reason="JAX is the validation-jax extra"),
+    requires("jax"),
 ]
 
 #: Relative agreement of two reverse modes summing in different orders.

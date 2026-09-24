@@ -24,7 +24,7 @@ import numpy as np
 import torch
 
 from snakes_and_ladders.learn.surrogate import GraphSurrogate, SetSurrogate
-from snakes_and_ladders.validation.protocol import dump, load, paths, timed
+from snakes_and_ladders.validation.protocol import dump, received, timed
 
 
 class _Twin(torch.nn.Module):
@@ -83,8 +83,7 @@ def main() -> None:
     """Run each model's twin forward on the batch and write the outputs back."""
     from torch_geometric import nn  # the framework, imported only in this interpreter
 
-    given, returned = paths()
-    inputs = load(given)
+    inputs, returned = received()
     hidden = int(inputs["hidden"])
     n = int(inputs["n"])
     batch = {

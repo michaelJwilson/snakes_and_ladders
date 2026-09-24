@@ -55,7 +55,7 @@ import torch
 from snakes_and_ladders.learn.environment import Environment
 from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.validation.gymnasium import Spec, build, encode
-from snakes_and_ladders.validation.protocol import dump, load, paths, timed
+from snakes_and_ladders.validation.protocol import dump, received, timed
 
 Observation = np.ndarray[Any, np.dtype[np.float64]]
 
@@ -237,8 +237,7 @@ def main() -> None:
     import gymnasium  # the framework, imported only in this interpreter
     from gymnasium.utils.env_checker import check_env
 
-    given, returned = paths()
-    inputs = load(given)
+    inputs, returned = received()
     mode = str(inputs["mode"])
     environment, n_max = build(Spec.of(inputs))
     wrap = adapter(gymnasium)

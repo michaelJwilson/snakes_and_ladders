@@ -27,9 +27,10 @@ from snakes_and_ladders.opt.hmm import baum_welch
 from snakes_and_ladders.opt.mixture import expectation_maximization
 from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
 from snakes_and_ladders.validation import hmmlearn, scikit_learn
-from snakes_and_ladders.validation.runner import available, package
 
 from tests._fixtures import FIXTURES_DIR
+from tests._frameworks import requires
+from tests.validation._goals import median_package
 
 #: Subprocess runs whose median each framework figure is.
 REPEATS = 3
@@ -43,7 +44,7 @@ def _simplex(rng: np.random.Generator, *shape: int) -> np.ndarray:
     return np.asarray(draw / draw.sum(axis=-1, keepdims=True))
 
 
-@pytest.mark.skipif(not available("hmmlearn"), reason="validation-hmmlearn extra")
+@requires("hmmlearn")
 @pytest.mark.parametrize(
     "n_sequences",
     [None, 1_000, pytest.param(10_000, marks=pytest.mark.release)],
@@ -75,8 +76,8 @@ def test_baum_welch_beside_hmmlearn_benchmark(
         "emission": start[2],
         "n_iter": np.asarray(N_ITER),
     }
-    benchmark.extra_info["package_peak_bytes"] = float(
-        np.median([package("baum_welch", ours).peak_bytes or 0 for _ in range(REPEATS)])
+    benchmark.extra_info["package_peak_bytes"] = median_package(
+        "baum_welch", ours, "peak_bytes", repeats=REPEATS
     )
     logs = [torch.log(torch.as_tensor(p)) for p in start]
 
@@ -87,7 +88,7 @@ def test_baum_welch_beside_hmmlearn_benchmark(
     assert np.isfinite(fit.log_likelihood)
 
 
-@pytest.mark.skipif(not available("sklearn"), reason="validation-scikit-learn extra")
+@requires("scikit_learn")
 @pytest.mark.parametrize(
     "n_samples",
     [4_000, 100_000, pytest.param(1_000_000, marks=pytest.mark.release)],
@@ -122,8 +123,8 @@ def test_mixture_em_beside_scikit_learn_benchmark(
         "scale": scale,
         "n_iter": np.asarray(N_ITER),
     }
-    benchmark.extra_info["package_peak_bytes"] = float(
-        np.median([package("mixture_em", ours).peak_bytes or 0 for _ in range(REPEATS)])
+    benchmark.extra_info["package_peak_bytes"] = median_package(
+        "mixture_em", ours, "peak_bytes", repeats=REPEATS
     )
 
     fit = benchmark(

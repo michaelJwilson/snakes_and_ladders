@@ -20,11 +20,11 @@ import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders.validation import blackjax
 from snakes_and_ladders.validation.gaussian import diagonal_precision
-from snakes_and_ladders.validation.runner import available, package
+from snakes_and_ladders.validation.runner import package
 
-pytestmark = pytest.mark.skipif(
-    not available("blackjax"), reason="BlackJAX is the validation-blackjax extra"
-)
+from tests._frameworks import requires
+
+pytestmark = requires("blackjax")
 
 REPEATS = 3
 
@@ -90,5 +90,5 @@ def test_hmc_on_a_declared_target_beside_blackjax_benchmark(
     )
     benchmark.extra_info["package_s"] = float(np.median([run.seconds for run in ours]))
     benchmark.extra_info["package_peak_bytes"] = float(
-        np.median([run.peak_bytes or 0 for run in ours])
+        np.median([run.peak_bytes for run in ours])
     )

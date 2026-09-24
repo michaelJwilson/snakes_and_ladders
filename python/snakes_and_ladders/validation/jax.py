@@ -80,5 +80,5 @@ def gradients(
         seconds=result.seconds,
         eager_seconds=float(out["eager_seconds"]),
         batch_seconds=float(out["batch_seconds"]),
-        peak_bytes=int(result.peak_bytes or 0),
+        peak_bytes=result.peak_bytes,
     )

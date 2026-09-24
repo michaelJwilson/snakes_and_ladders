@@ -36,13 +36,12 @@ from snakes_and_ladders.validation.gaussian import (
     dense_precision,
     diagonal_precision,
 )
-from snakes_and_ladders.validation.runner import available
+
+from tests._frameworks import requires
 
 pytestmark = [
     pytest.mark.validation,
-    pytest.mark.skipif(
-        not available("blackjax"), reason="BlackJAX is the validation-blackjax extra"
-    ),
+    requires("blackjax"),
 ]
 
 #: The dense target's dimension and the seed its precision is drawn from.

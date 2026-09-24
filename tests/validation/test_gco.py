@@ -28,11 +28,12 @@ from snakes_and_ladders.search.alpha_expansion import alpha_expansion
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import critical_coupling, energies, energy
 from snakes_and_ladders.validation import gco
-from snakes_and_ladders.validation.runner import available
+
+from tests._frameworks import requires
 
 pytestmark = [
     pytest.mark.validation,
-    pytest.mark.skipif(not available("gco"), reason="gco is the validation-gco extra"),
+    requires("gco"),
 ]
 
 

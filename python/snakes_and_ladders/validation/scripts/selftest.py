@@ -11,20 +11,17 @@ import sys
 
 import numpy as np
 
-from snakes_and_ladders.validation.protocol import dump, load, paths, peaked, timed
+from snakes_and_ladders.validation.protocol import dump, measured, received
 
 
 def main() -> None:
     """Read the inputs, double ``values`` under the timer, and write them back."""
-    given, returned = paths()
-    inputs = load(given)
+    inputs, returned = received()
     code = int(inputs.get("fail", np.int64(0)))
     if code:
         print(f"selftest asked to fail with {code}", file=sys.stderr)
         raise SystemExit(code)
-    (doubled, seconds), peak_bytes = peaked(
-        lambda: timed(lambda: 2.0 * inputs["values"])
-    )
+    doubled, seconds, peak_bytes = measured(lambda: 2.0 * inputs["values"])
     dump(returned, {**inputs, "doubled": doubled}, seconds, peak_bytes)
 
 

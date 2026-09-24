@@ -23,10 +23,11 @@ is met. Measured on a different host, the ratio moves with the hardware.
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 import numpy as np
+from snakes_and_ladders.validation.runner import package
 
 #: Runs whose median the package's figure is.
 REPEATS = 5
@@ -59,6 +60,27 @@ def median_seconds(call: Callable[[], object], repeats: int = REPEATS) -> float:
         call()
         seconds.append(time.perf_counter() - start)
     return float(np.median(seconds))
+
+
+def median_package(
+    call: str, inputs: Mapping[str, np.ndarray], read: str = "seconds", repeats: int = 3
+) -> float:
+    """The median over ``repeats`` fresh-interpreter runs of the package's ``call`` (issue #1010).
+
+    ``read`` is ``"seconds"``, ``"peak_bytes"`` (a run that reports none
+    counts as zero) or the name of one of the call's scalar outputs. Every
+    goal read the package's figure this way, written out 36 times.
+    """
+    values = []
+    for _ in range(repeats):
+        run = package(call, inputs)
+        if read == "seconds":
+            values.append(run.seconds)
+        elif read == "peak_bytes":
+            values.append(float(run.peak_bytes))
+        else:
+            values.append(float(run.outputs[read]))
+    return float(np.median(values))
 
 
 def assert_meets(ours: float, goal: Goal) -> None:

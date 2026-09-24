@@ -29,7 +29,7 @@ from typing import Any
 import numpy as np
 import torch
 
-from snakes_and_ladders.validation.protocol import dump, load, paths, timed
+from snakes_and_ladders.validation.protocol import dump, received, timed
 
 
 def _actor(weights: torch.Tensor) -> Any:
@@ -170,8 +170,7 @@ def _loss(
 
 def main() -> None:
     """Run the requested TorchRL call and write its answer back."""
-    given, returned = paths()
-    inputs = load(given)
+    inputs, returned = received()
     call = str(inputs["call"])
     if call == "gae":
         outputs, case_seconds = _gae(inputs)

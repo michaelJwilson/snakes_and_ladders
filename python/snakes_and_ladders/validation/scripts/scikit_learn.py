@@ -18,7 +18,7 @@ from pathlib import Path
 
 import numpy as np
 
-from snakes_and_ladders.validation.protocol import dump, load, paths, peaked, timed
+from snakes_and_ladders.validation.protocol import dump, measured, received
 
 
 def main() -> None:
@@ -26,8 +26,7 @@ def main() -> None:
     from sklearn.exceptions import ConvergenceWarning  # the framework, only here
     from sklearn.mixture import GaussianMixture
 
-    given, returned = paths()
-    inputs = load(given)
+    inputs, returned = received()
     scale = inputs["scale"]
     if str(inputs.get("call", np.asarray("fit"))) == "score":
         _score(inputs, returned)
@@ -46,7 +45,7 @@ def main() -> None:
     with warnings.catch_warnings():
         # A fixed iteration count is asked for; "not converged" is expected.
         warnings.simplefilter("ignore", ConvergenceWarning)
-        (_, seconds), peak_bytes = peaked(lambda: timed(lambda: model.fit(column)))
+        _, seconds, peak_bytes = measured(lambda: model.fit(column))
     dump(
         returned,
         {
@@ -71,9 +70,7 @@ def _score(inputs: dict[str, np.ndarray], returned: Path) -> None:
     model.covariances_ = scale[:, None] ** 2
     model.precisions_cholesky_ = 1.0 / scale[:, None]
     column = inputs["observations"][:, None]
-    (scores, seconds), peak_bytes = peaked(
-        lambda: timed(lambda: model.score_samples(column))
-    )
+    scores, seconds, peak_bytes = measured(lambda: model.score_samples(column))
     dump(
         returned,
         {"log_likelihood": np.asarray(float(np.sum(scores)))},

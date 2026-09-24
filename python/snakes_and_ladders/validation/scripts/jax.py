@@ -33,7 +33,7 @@ from typing import Any
 
 import numpy as np
 
-from snakes_and_ladders.validation.protocol import dump, load, paths, peaked
+from snakes_and_ladders.validation.protocol import dump, peaked, received
 
 
 def _per_point(call: Any, points: Any, jax: Any) -> float:
@@ -110,8 +110,7 @@ def main() -> None:
     jax.config.update("jax_enable_x64", True)
     import jax.numpy as jnp
 
-    given, returned = paths()
-    inputs = load(given)
+    inputs, returned = received()
     target = str(inputs["target"])
 
     if target == "gaussian":

@@ -87,5 +87,5 @@ def alpha_expansion(
         gco_energy=float(result.outputs["gco_energy"]),
         seconds=result.seconds,
         build_seconds=float(result.outputs["build_seconds"]),
-        peak_bytes=int(result.peak_bytes or 0),
+        peak_bytes=result.peak_bytes,
     )

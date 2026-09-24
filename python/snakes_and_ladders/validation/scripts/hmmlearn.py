@@ -22,7 +22,7 @@ from typing import Any
 
 import numpy as np
 
-from snakes_and_ladders.validation.protocol import dump, load, paths, peaked, timed
+from snakes_and_ladders.validation.protocol import dump, measured, received
 
 
 def _model(inputs: dict[str, np.ndarray], family: str) -> Any:
@@ -83,8 +83,7 @@ def _parameters(model: Any, family: str) -> dict[str, np.ndarray]:
 
 def main() -> None:
     """Fit or decode under the timer, and write the result back."""
-    given, returned = paths()
-    inputs = load(given)
+    inputs, returned = received()
     family = str(inputs.get("family", np.asarray("categorical")))
     call = str(inputs.get("call", np.asarray("fit")))
     observations = inputs["observations"]
@@ -93,22 +92,20 @@ def main() -> None:
     column = observations.reshape(-1, 1)
     lengths = [length] * n_sequences
     if call == "score":
-        (log_likelihood, seconds), peak_bytes = peaked(
-            lambda: timed(lambda: model.score(column, lengths))
+        log_likelihood, seconds, peak_bytes = measured(
+            lambda: model.score(column, lengths)
         )
         outputs = {"log_likelihood": np.asarray(log_likelihood, dtype=np.float64)}
     elif call == "decode":
-        ((log_probability, states), seconds), peak_bytes = peaked(
-            lambda: timed(lambda: model.decode(column, lengths, algorithm="viterbi"))
+        (log_probability, states), seconds, peak_bytes = measured(
+            lambda: model.decode(column, lengths, algorithm="viterbi")
         )
         outputs = {
             "states": np.asarray(states, dtype=np.int64).reshape(n_sequences, length),
             "log_probability": np.asarray(log_probability, dtype=np.float64),
         }
     else:
-        (_, seconds), peak_bytes = peaked(
-            lambda: timed(lambda: model.fit(column, lengths=lengths))
-        )
+        _, seconds, peak_bytes = measured(lambda: model.fit(column, lengths=lengths))
         outputs = {
             "initial": np.asarray(model.startprob_, dtype=np.float64),
             "transition": np.asarray(model.transmat_, dtype=np.float64),

@@ -16,15 +16,14 @@ from __future__ import annotations
 
 import numpy as np
 
-from snakes_and_ladders.validation.protocol import dump, load, paths, peaked, timed
+from snakes_and_ladders.validation.protocol import dump, peaked, received, timed
 
 
 def main() -> None:
     """Build the graph, expand under the timer, and write the labels back."""
     import gco  # the framework, imported only in this interpreter
 
-    given, returned = paths()
-    inputs = load(given)
+    inputs, returned = received()
     unary = inputs["unary"]
     n_nodes, n_states = unary.shape
 

@@ -32,16 +32,14 @@ from snakes_and_ladders.learn.potts import PottsEnvironment
 from snakes_and_ladders.learn.reinforce import surrogate_loss
 from snakes_and_ladders.learn.rollout import rollout
 from snakes_and_ladders.validation import torchrl
-from snakes_and_ladders.validation.runner import available
 
+from tests._frameworks import requires
 from tests.regression.learn.conftest import potts_environment
 from tests.validation._rl import greedy_episodes, reinforce_decisions
 
 pytestmark = [
     pytest.mark.validation,
-    pytest.mark.skipif(
-        not available("torchrl"), reason="TorchRL is the validation-torchrl extra"
-    ),
+    requires("torchrl"),
 ]
 
 # One fixed rollout each, in the shape `generalized_advantages` takes: rewards

@@ -18,7 +18,7 @@ from collections.abc import Callable, Mapping
 
 import numpy as np
 
-from snakes_and_ladders.validation.protocol import dump, load, paths, peaked, timed
+from snakes_and_ladders.validation.protocol import dump, measured, received
 
 #: One output mapping from one measured call.
 Outputs = dict[str, np.ndarray]
@@ -598,10 +598,9 @@ CALLS: dict[str, Build] = {
 
 def main() -> None:
     """Build the named call, measure it, and write its outputs back."""
-    given, returned = paths()
-    inputs = load(given)
+    inputs, returned = received()
     call = CALLS[str(inputs["call"])](inputs)
-    (outputs, seconds), peak_bytes = peaked(lambda: timed(call))
+    outputs, seconds, peak_bytes = measured(call)
     dump(returned, outputs, seconds, peak_bytes)
 
 

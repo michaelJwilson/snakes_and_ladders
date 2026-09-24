@@ -136,7 +136,7 @@ def sample(
         else out["draws"].reshape(0, position.shape[0]),
         float(out["acceptance"]),
         result.seconds,
-        int(result.peak_bytes or 0),
+        result.peak_bytes,
         int(out["first_peak_bytes"]),
     )
 
@@ -176,7 +176,7 @@ def mala(
         else out["draws"].reshape(0, position.shape[0]),
         float(out["acceptance"]),
         result.seconds,
-        int(result.peak_bytes or 0),
+        result.peak_bytes,
         int(out["first_peak_bytes"]),
     )
 
@@ -246,7 +246,7 @@ def random_walk(
         out["draws"].reshape(-1 if store_chain else 0, position.shape[0]),
         float(out["acceptance"]),
         result.seconds,
-        int(result.peak_bytes or 0),
+        result.peak_bytes,
         int(out["first_peak_bytes"]),
     )
 
@@ -338,7 +338,7 @@ def adapted_sample(
             out["draws"].reshape(-1 if store_chain else 0, position.shape[0]),
             float(out["acceptance"]),
             result.seconds,
-            int(result.peak_bytes or 0),
+            result.peak_bytes,
             int(out["first_peak_bytes"]),
         ),
         float(out["step_size"]),

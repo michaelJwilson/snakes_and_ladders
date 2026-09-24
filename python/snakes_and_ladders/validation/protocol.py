@@ -93,6 +93,21 @@ def peaked(call: Callable[[], T]) -> tuple[T, int]:
     return result, max(_status("VmHWM") - before, 0)
 
 
+def measured(call: Callable[[], T]) -> tuple[T, float, int]:
+    """``call()``, the wall seconds it took and the resident bytes it added at its peak (issue #1010).
+
+    :func:`timed` inside :func:`peaked`, the pairing six scripts wrote out.
+    """
+    (result, seconds), peak_bytes = peaked(lambda: timed(call))
+    return result, seconds, peak_bytes
+
+
+def received(argv: list[str] | None = None) -> tuple[dict[str, np.ndarray], Path]:
+    """A script's inputs, loaded, and the path its outputs go to (issue #1010)."""
+    given, returned = paths(argv)
+    return load(given), returned
+
+
 def paths(argv: list[str] | None = None) -> tuple[Path, Path]:
     """The inputs and outputs paths a script is called with."""
     arguments = sys.argv[1:] if argv is None else argv

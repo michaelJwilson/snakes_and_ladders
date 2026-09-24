@@ -24,14 +24,12 @@ from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.search import maxflow, maxflow_rust
 from snakes_and_ladders.search.ground_state import lattice_rung
 from snakes_and_ladders.validation import pymaxflow
-from snakes_and_ladders.validation.runner import available
+
+from tests._frameworks import requires
 
 pytestmark = [
     pytest.mark.validation,
-    pytest.mark.skipif(
-        not available("maxflow"),
-        reason="PyMaxflow is the validation-pymaxflow extra",
-    ),
+    requires("pymaxflow"),
 ]
 
 #: Relative agreement of two flow values summed in different orders.
