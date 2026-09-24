@@ -24,6 +24,8 @@ from snakes_and_ladders.search.spatio_sequential import merge_step
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.spatio_sequential import simulate_spatio_sequential
 
+from tests._rows import every_value
+
 
 def _distinct(seed: int) -> tuple:  # type: ignore[type-arg]
     """The stress fixture at 16 positions, drawn on a planted half/half labelling."""
@@ -54,43 +56,51 @@ def _split_instance(seed: int) -> tuple:  # type: ignore[type-arg]
 
 @pytest.mark.critical
 @pytest.mark.oracle
-@pytest.mark.parametrize("seed", range(3))
-def test_a_class_split_from_its_copy_is_merged_back(seed: int) -> None:
-    truth, split, data, labels = _split_instance(seed)
-    merge = merge_step(split, data.observations, labels)
-    assert merge.merged == (0, 2)
-    assert set(np.unique(merge.labels)) == {0, 1}
-    np.testing.assert_array_equal(merge.labels, _distinct(seed)[2])
-    before = labelled_log_likelihood(split, data.observations, labels)
-    assert merge.criterion >= before
+def test_a_class_split_from_its_copy_is_merged_back() -> None:
+    def check(seed: int) -> None:
+        truth, split, data, labels = _split_instance(seed)
+        merge = merge_step(split, data.observations, labels)
+        assert merge.merged == (0, 2)
+        assert set(np.unique(merge.labels)) == {0, 1}
+        np.testing.assert_array_equal(merge.labels, _distinct(seed)[2])
+        before = labelled_log_likelihood(split, data.observations, labels)
+        assert merge.criterion >= before
+
+    every_value(range(3), check)
 
 
 @pytest.mark.critical
 @pytest.mark.oracle
-@pytest.mark.parametrize("seed", range(3))
-def test_the_kept_merge_is_the_best_pair_by_the_joint(seed: int) -> None:
-    _, split, data, labels = _split_instance(seed)
-    merge = merge_step(split, data.observations, labels)
-    for kept, emptied, value in merge.tried:
-        merged = np.where(labels == emptied, kept, labels)
-        assert np.unique(merged).size == 2
-        assert value <= merge.criterion
-    assert merge.criterion == max(value for _, _, value in merge.tried)
-    assert merge.criterion == labelled_log_likelihood(
-        merge.params, data.observations, merge.labels
-    )
+def test_the_kept_merge_is_the_best_pair_by_the_joint() -> None:
+    def check(seed: int) -> None:
+        _, split, data, labels = _split_instance(seed)
+        merge = merge_step(split, data.observations, labels)
+        for kept, emptied, value in merge.tried:
+            merged = np.where(labels == emptied, kept, labels)
+            assert np.unique(merged).size == 2
+            assert value <= merge.criterion
+        assert merge.criterion == max(value for _, _, value in merge.tried)
+        assert merge.criterion == labelled_log_likelihood(
+            merge.params, data.observations, merge.labels
+        )
+
+    every_value(range(3), check)
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("seed", range(3))
-def test_classes_the_truth_keeps_apart_are_not_merged(seed: int) -> None:
-    truth, data, labels = _distinct(seed)
-    merge = merge_step(truth, data.observations, labels)
-    assert merge.merged is None
-    assert merge.labels is labels or np.array_equal(merge.labels, labels)
-    assert merge.criterion == labelled_log_likelihood(truth, data.observations, labels)
-    assert len(merge.tried) == 1
-    assert merge.tried[0][2] < merge.criterion
+def test_classes_the_truth_keeps_apart_are_not_merged() -> None:
+    def check(seed: int) -> None:
+        truth, data, labels = _distinct(seed)
+        merge = merge_step(truth, data.observations, labels)
+        assert merge.merged is None
+        assert merge.labels is labels or np.array_equal(merge.labels, labels)
+        assert merge.criterion == labelled_log_likelihood(
+            truth, data.observations, labels
+        )
+        assert len(merge.tried) == 1
+        assert merge.tried[0][2] < merge.criterion
+
+    every_value(range(3), check)
 
 
 @pytest.mark.smoke

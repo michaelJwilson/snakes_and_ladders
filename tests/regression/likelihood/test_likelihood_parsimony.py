@@ -48,6 +48,7 @@ from tests._fixtures import (
     balanced_four_taxa,
     load_fixture,
 )
+from tests._rows import every_value
 
 FIVE_TAXA = "tree_search/ci.yaml"
 UNIFORM = np.full(4, 0.25)
@@ -150,13 +151,15 @@ def test_sequences_of_different_lengths_are_refused() -> None:
 
 
 @pytest.mark.smoke
-@pytest.mark.parametrize("k", [1, 64])
-def test_a_state_count_a_bitmask_cannot_hold_is_refused(k: int) -> None:
-    tau = balanced_four_taxa(0.1, 0.1, 0.1, 0.1)
-    alignment = {name: np.zeros(4, dtype=np.int64) for name in FOUR_TAXA_LEAVES}
+def test_a_state_count_a_bitmask_cannot_hold_is_refused() -> None:
+    def check(k: int) -> None:
+        tau = balanced_four_taxa(0.1, 0.1, 0.1, 0.1)
+        alignment = {name: np.zeros(4, dtype=np.int64) for name in FOUR_TAXA_LEAVES}
 
-    with pytest.raises(ValueError, match=r"k must be in \[2, 63\]"):
-        fitch_score(tau, alignment, k)
+        with pytest.raises(ValueError, match=r"k must be in \[2, 63\]"):
+            fitch_score(tau, alignment, k)
+
+    every_value([1, 64], check)
 
 
 def _directed_brute_force(

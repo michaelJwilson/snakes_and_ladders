@@ -29,6 +29,7 @@ Dropped with the move, each for its reason:
 from __future__ import annotations
 
 import itertools
+from itertools import product
 
 import numpy as np
 import pytest
@@ -55,6 +56,7 @@ from snakes_and_ladders.sim.tree import preorder
 from snakes_and_ladders.validation import rustworkx
 
 from tests._frameworks import requires
+from tests._rows import every_row, every_value
 
 pytestmark = [
     pytest.mark.validation,
@@ -69,21 +71,25 @@ def _pairs(edges: np.ndarray | tuple[tuple[int, int], ...]) -> set[frozenset[int
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("shape", [(2, 2), (3, 4), (5, 3), (6, 6)])
-def test_the_open_square_lattice_is_rustworkxs_grid(shape: tuple[int, int]) -> None:
-    ours = lattice_graph(shape, BoundaryCondition.OPEN, 1.0)
-    theirs = rustworkx.grid_edges(shape)
-    assert _pairs(theirs) == _pairs(ours.edges)
-    assert len(ours.edges) == theirs.shape[0]
+def test_the_open_square_lattice_is_rustworkxs_grid() -> None:
+    def check(shape: tuple[int, int]) -> None:
+        ours = lattice_graph(shape, BoundaryCondition.OPEN, 1.0)
+        theirs = rustworkx.grid_edges(shape)
+        assert _pairs(theirs) == _pairs(ours.edges)
+        assert len(ours.edges) == theirs.shape[0]
+
+    every_value([(2, 2), (3, 4), (5, 3), (6, 6)], check)
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("length", [2, 5, 9])
-def test_the_open_chain_is_rustworkxs_path(length: int) -> None:
-    ours = lattice_graph((length,), BoundaryCondition.OPEN, 1.0)
-    theirs = rustworkx.path_edges(length)
-    assert _pairs(theirs) == _pairs(ours.edges)
-    assert len(ours.edges) == theirs.shape[0]
+def test_the_open_chain_is_rustworkxs_path() -> None:
+    def check(length: int) -> None:
+        ours = lattice_graph((length,), BoundaryCondition.OPEN, 1.0)
+        theirs = rustworkx.path_edges(length)
+        assert _pairs(theirs) == _pairs(ours.edges)
+        assert len(ours.edges) == theirs.shape[0]
+
+    every_value([2, 5, 9], check)
 
 
 @pytest.mark.oracle
@@ -174,14 +180,16 @@ def _labelled(topology: Topology) -> tuple[np.ndarray, np.ndarray]:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("n_taxa", [4, 5])
-def test_topology_equality_is_labelled_isomorphism(n_taxa: int) -> None:
-    topologies = list(enumerate_topologies(NAMES[:n_taxa]))
-    pairs = list(itertools.combinations(range(len(topologies)), 2))
-    theirs = rustworkx.isomorphic([_labelled(t) for t in topologies], pairs)
-    ours = [robinson_foulds(topologies[a], topologies[b]) == 0 for a, b in pairs]
-    assert list(theirs) == ours
-    assert not any(ours)
+def test_topology_equality_is_labelled_isomorphism() -> None:
+    def check(n_taxa: int) -> None:
+        topologies = list(enumerate_topologies(NAMES[:n_taxa]))
+        pairs = list(itertools.combinations(range(len(topologies)), 2))
+        theirs = rustworkx.isomorphic([_labelled(t) for t in topologies], pairs)
+        ours = [robinson_foulds(topologies[a], topologies[b]) == 0 for a, b in pairs]
+        assert list(theirs) == ours
+        assert not any(ours)
+
+    every_value([4, 5], check)
 
 
 @pytest.mark.oracle
@@ -225,13 +233,12 @@ def _union_find(n_nodes: int, bonds: np.ndarray) -> np.ndarray:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("side", [16, 71, 142])
-@pytest.mark.parametrize("beta", [0.5, 1.0, 1.5])
-def test_the_bond_pass_partitions_as_connected_components(
-    side: int, beta: float
-) -> None:
-    graph, bonds = _bond_mask(side, beta, 976)
-    ours = _union_find(graph.n_nodes, bonds)
-    theirs = rustworkx.components(graph.n_nodes, bonds)
-    assert np.array_equal(ours, theirs.labels)
-    assert 1 < np.unique(ours).size < graph.n_nodes
+def test_the_bond_pass_partitions_as_connected_components() -> None:
+    def check(side: int, beta: float) -> None:
+        graph, bonds = _bond_mask(side, beta, 976)
+        ours = _union_find(graph.n_nodes, bonds)
+        theirs = rustworkx.components(graph.n_nodes, bonds)
+        assert np.array_equal(ours, theirs.labels)
+        assert 1 < np.unique(ours).size < graph.n_nodes
+
+    every_row(product([16, 71, 142], [0.5, 1.0, 1.5]), check)

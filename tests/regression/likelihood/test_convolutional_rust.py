@@ -28,6 +28,8 @@ copies of all three here).
 
 from __future__ import annotations
 
+from itertools import product
+
 import numpy as np
 import pytest
 from snakes_and_ladders.backend import Backend
@@ -46,6 +48,8 @@ from snakes_and_ladders.sim.convolutional import (
 )
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.ldpc import BinaryInputGaussianChannel
+
+from tests._rows import every_row
 
 #: The declared register and the three above it, as octal `(feedback,
 #: feedforward)` pairs. `memory` 2 is the `(7, 5)` encoder every fixture
@@ -74,12 +78,7 @@ def _ratios(length: int, seed: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]
 @pytest.mark.critical
 @pytest.mark.oracle
 @pytest.mark.backend
-@pytest.mark.parametrize("memory", BITWISE_MEMORY)
-@pytest.mark.parametrize("message_length", [8, 256, 1024])
-@pytest.mark.parametrize("terminated", [True, False])
-def test_the_rust_pass_is_the_numpy_oracle_bitwise_on_the_declared_registers(
-    memory: int, message_length: int, terminated: bool
-) -> None:
+def test_the_rust_pass_is_the_numpy_oracle_bitwise_on_the_declared_registers() -> None:
     """Every output, to the last bit, at the state count the fixtures use.
 
     The rung `infra/ladder.py` records under `BCJR`: the kernel is not
@@ -88,34 +87,34 @@ def test_the_rust_pass_is_the_numpy_oracle_bitwise_on_the_declared_registers(
     states the two implementations reassociate nothing relative to each
     other, so it is what is asserted.
     """
-    feedback, feedforward = REGISTERS[memory]
-    trellis = recursive_systematic_trellis(feedback, feedforward, memory)
-    systematic, parity, apriori = _ratios(message_length + memory, memory + 17)
 
-    oracle = bcjr(
-        trellis,
-        systematic,
-        parity,
-        apriori,
-        terminated=terminated,
-        backend=Backend.PYTHON,
-    )
-    ported = convolutional_rust.bcjr(
-        trellis, systematic, parity, apriori, terminated=terminated
-    )
+    def check(memory: int, message_length: int, terminated: bool) -> None:
+        feedback, feedforward = REGISTERS[memory]
+        trellis = recursive_systematic_trellis(feedback, feedforward, memory)
+        systematic, parity, apriori = _ratios(message_length + memory, memory + 17)
 
-    np.testing.assert_array_equal(ported.posterior_llr, oracle.posterior_llr)
-    np.testing.assert_array_equal(ported.extrinsic_llr, oracle.extrinsic_llr)
-    assert ported.log_evidence == oracle.log_evidence
+        oracle = bcjr(
+            trellis,
+            systematic,
+            parity,
+            apriori,
+            terminated=terminated,
+            backend=Backend.PYTHON,
+        )
+        ported = convolutional_rust.bcjr(
+            trellis, systematic, parity, apriori, terminated=terminated
+        )
+
+        np.testing.assert_array_equal(ported.posterior_llr, oracle.posterior_llr)
+        np.testing.assert_array_equal(ported.extrinsic_llr, oracle.extrinsic_llr)
+        assert ported.log_evidence == oracle.log_evidence
+
+    every_row(product(BITWISE_MEMORY, [8, 256, 1024], [True, False]), check)
 
 
 @pytest.mark.oracle
 @pytest.mark.backend
-@pytest.mark.parametrize("memory", [3, 4])
-@pytest.mark.parametrize("message_length", [64, 256, 1024])
-def test_past_four_states_the_two_part_only_by_numpys_pairwise_sum(
-    memory: int, message_length: int
-) -> None:
+def test_past_four_states_the_two_part_only_by_numpys_pairwise_sum() -> None:
     """Inside the float64 cross-implementation bound, and the evidence is exact.
 
     NumPy's pairwise reduction switches to eight accumulators at eight terms
@@ -126,20 +125,24 @@ def test_past_four_states_the_two_part_only_by_numpys_pairwise_sum(
     stays bitwise, which is what says the departure is the reduction and not
     the recursions feeding it.
     """
-    feedback, feedforward = REGISTERS[memory]
-    trellis = recursive_systematic_trellis(feedback, feedforward, memory)
-    systematic, parity, apriori = _ratios(message_length + memory, memory + 17)
 
-    oracle = bcjr(trellis, systematic, parity, apriori, backend=Backend.PYTHON)
-    ported = bcjr(trellis, systematic, parity, apriori, backend=Backend.RUST)
+    def check(memory: int, message_length: int) -> None:
+        feedback, feedforward = REGISTERS[memory]
+        trellis = recursive_systematic_trellis(feedback, feedforward, memory)
+        systematic, parity, apriori = _ratios(message_length + memory, memory + 17)
 
-    np.testing.assert_allclose(
-        ported.posterior_llr, oracle.posterior_llr, rtol=CROSS_DEVICE_RTOL_FLOAT64
-    )
-    np.testing.assert_allclose(
-        ported.extrinsic_llr, oracle.extrinsic_llr, rtol=CROSS_DEVICE_RTOL_FLOAT64
-    )
-    assert ported.log_evidence == oracle.log_evidence
+        oracle = bcjr(trellis, systematic, parity, apriori, backend=Backend.PYTHON)
+        ported = bcjr(trellis, systematic, parity, apriori, backend=Backend.RUST)
+
+        np.testing.assert_allclose(
+            ported.posterior_llr, oracle.posterior_llr, rtol=CROSS_DEVICE_RTOL_FLOAT64
+        )
+        np.testing.assert_allclose(
+            ported.extrinsic_llr, oracle.extrinsic_llr, rtol=CROSS_DEVICE_RTOL_FLOAT64
+        )
+        assert ported.log_evidence == oracle.log_evidence
+
+    every_row(product([3, 4], [64, 256, 1024]), check)
 
 
 @pytest.mark.oracle

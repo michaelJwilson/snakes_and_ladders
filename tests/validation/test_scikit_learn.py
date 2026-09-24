@@ -29,6 +29,7 @@ from snakes_and_ladders.validation import scikit_learn
 
 from tests._fixtures import FIXTURES_DIR
 from tests._frameworks import requires
+from tests._rows import every_value
 
 pytestmark = [
     pytest.mark.validation,
@@ -96,9 +97,11 @@ def _agree(
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("n_iter", [1, 10])
-def test_em_is_scikit_learns_iteration_for_iteration(n_iter: int) -> None:
-    _agree(_draws(5_000), WEIGHTS, MEAN, SCALE, n_iter)
+def test_em_is_scikit_learns_iteration_for_iteration() -> None:
+    def check(n_iter: int) -> None:
+        _agree(_draws(5_000), WEIGHTS, MEAN, SCALE, n_iter)
+
+    every_value([1, 10], check)
 
 
 @pytest.mark.oracle

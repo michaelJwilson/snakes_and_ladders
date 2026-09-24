@@ -39,6 +39,8 @@ from snakes_and_ladders.likelihood.hmm_paths import (
 )
 from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
 
+from tests._rows import every_value
+
 FIXTURES = Path(__file__).parent.parent / "fixtures"
 
 # An antiferromagnetic chain with two nearly-degenerate states. The
@@ -131,24 +133,24 @@ def test_the_relaxed_optimum_of_the_hmm_is_the_viterbi_path() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("seed", [0, 1, 2])
-def test_the_expected_discrete_score_equals_the_score_at_the_marginals(
-    seed: int,
-) -> None:
+def test_the_expected_discrete_score_equals_the_score_at_the_marginals() -> None:
     # `E_q[score] = score(q)` for a multilinear objective under a factorized
     # `q`, against enumeration over every configuration, which shares no
     # algebra with the closed form. It licenses the deterministic relaxation:
     # it approximates nothing.
-    torch.manual_seed(seed)
-    for objective in (RelaxedPotts(_environment()), _hmm(length=7)[0]):
-        logits = torch.randn(
-            (objective.n_sites, objective.n_states), dtype=torch.float64
-        )
+    def check(seed: int) -> None:
+        torch.manual_seed(seed)
+        for objective in (RelaxedPotts(_environment()), _hmm(length=7)[0]):
+            logits = torch.randn(
+                (objective.n_sites, objective.n_states), dtype=torch.float64
+            )
 
-        enumerated = exact_expected_score(objective, logits)
-        closed_form = float(objective.relaxed(torch.softmax(logits, dim=1)))
+            enumerated = exact_expected_score(objective, logits)
+            closed_form = float(objective.relaxed(torch.softmax(logits, dim=1)))
 
-        assert enumerated == pytest.approx(closed_form, rel=1e-11)
+            assert enumerated == pytest.approx(closed_form, rel=1e-11)
+
+    every_value([0, 1, 2], check)
 
 
 @pytest.mark.analytic

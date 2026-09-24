@@ -30,6 +30,7 @@ from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import critical_coupling
 
+from tests._rows import every_row
 from tests.regression.likelihood.conftest import FIELD, TREE
 
 RELATIVE_TOLERANCE = 1e-11
@@ -117,28 +118,28 @@ _DEVIATION_CURVE = (
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize(("coupling", "expected", "sweeps"), _DEVIATION_CURVE)
-def test_the_bethe_deviation_is_the_measured_size(
-    coupling: float, expected: float, sweeps: int
-) -> None:
+def test_the_bethe_deviation_is_the_measured_size() -> None:
     # Pinned to the order of magnitude, not the digit: the deliverable is how
     # far the approximation sits from exact, and a bound an order of magnitude
     # either side of the measurement still fails if the estimator changes.
-    shape = (6, 4)
-    graph = lattice_graph(shape, BoundaryCondition.OPEN, coupling)
-    exact = strip_log_partition(shape, BoundaryCondition.OPEN, coupling, FIELD)
+    def check(coupling: float, expected: float, sweeps: int) -> None:
+        shape = (6, 4)
+        graph = lattice_graph(shape, BoundaryCondition.OPEN, coupling)
+        exact = strip_log_partition(shape, BoundaryCondition.OPEN, coupling, FIELD)
 
-    result = belief_propagation(graph, FIELD)
-    realized = _relative(result.bethe_log_partition, exact)
+        result = belief_propagation(graph, FIELD)
+        realized = _relative(result.bethe_log_partition, exact)
 
-    assert realized == pytest.approx(expected, rel=0.1) or (
-        expected < 1e-12 and realized < 1e-12
-    )
-    # Reported beside the deviation so a point that only just converged is
-    # visible. Banded rather than pinned: the count is a threshold crossing on
-    # a float residual, so a machine summing the messages in a different order
-    # can land a sweep either side.
-    assert result.iterations == pytest.approx(sweeps, rel=0.2)
+        assert realized == pytest.approx(expected, rel=0.1) or (
+            expected < 1e-12 and realized < 1e-12
+        )
+        # Reported beside the deviation so a point that only just converged is
+        # visible. Banded rather than pinned: the count is a threshold crossing on
+        # a float residual, so a machine summing the messages in a different order
+        # can land a sweep either side.
+        assert result.iterations == pytest.approx(sweeps, rel=0.2)
+
+    every_row(_DEVIATION_CURVE, check)
 
 
 @pytest.mark.oracle

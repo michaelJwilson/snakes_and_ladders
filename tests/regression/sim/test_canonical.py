@@ -38,6 +38,8 @@ from snakes_and_ladders.sim.canonical import (
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import energy
 
+from tests._rows import every_row, every_value
+
 ZERO_FIELD = np.zeros(2)
 
 
@@ -60,42 +62,42 @@ def _agreeing_edges(graph: PottsGraph) -> tuple[int, int]:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("shape", [(3, 3), (3, 4), (4, 4)])
-def test_the_periodic_ground_state_agrees_on_exactly_one_edge_in_three(
-    shape: tuple[int, int],
-) -> None:
+def test_the_periodic_ground_state_agrees_on_exactly_one_edge_in_three() -> None:
     # The closed form, which is a double count rather than a search: 3N edges,
     # 2N triangles, each triangle needs an agreeing edge, each edge lies in
     # two triangles, so at least N edges agree. Enumeration shows the bound is
     # attained, at N = 9, 12 and 16.
-    graph = frustrated_triangular_lattice(shape)
+    def check(shape: tuple[int, int]) -> None:
+        graph = frustrated_triangular_lattice(shape)
 
-    lowest, _ = _agreeing_edges(graph)
+        lowest, _ = _agreeing_edges(graph)
 
-    assert len(graph.edges) == 3 * graph.n_nodes
-    assert lowest == minimum_frustrated_edges(graph) == graph.n_nodes
-    assert lowest * 3 == len(graph.edges)
+        assert len(graph.edges) == 3 * graph.n_nodes
+        assert lowest == minimum_frustrated_edges(graph) == graph.n_nodes
+        assert lowest * 3 == len(graph.edges)
+
+    every_value([(3, 3), (3, 4), (4, 4)], check)
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("shape", [(3, 3), (3, 4)])
-def test_the_ground_state_energy_is_known_without_enumerating(
-    shape: tuple[int, int],
-) -> None:
+def test_the_ground_state_energy_is_known_without_enumerating() -> None:
     # What the closed form buys: the ground-state *energy* at any size, in the
     # convention `snakes_and_ladders.sim.potts.energy` uses.
     # Every other discrete claim here stops where enumeration does.
-    graph = frustrated_triangular_lattice(shape, coupling=-1.5)
-    field = np.zeros((graph.n_nodes, 2))
+    def check(shape: tuple[int, int]) -> None:
+        graph = frustrated_triangular_lattice(shape, coupling=-1.5)
+        field = np.zeros((graph.n_nodes, 2))
 
-    lowest, _ = _agreeing_edges(graph)
-    attained = min(
-        energy(graph, field, np.array(assignment, dtype=np.int64))
-        for assignment in itertools.product(range(2), repeat=graph.n_nodes)
-    )
+        lowest, _ = _agreeing_edges(graph)
+        attained = min(
+            energy(graph, field, np.array(assignment, dtype=np.int64))
+            for assignment in itertools.product(range(2), repeat=graph.n_nodes)
+        )
 
-    assert lowest == graph.n_nodes
-    assert attained == pytest.approx(1.5 * graph.n_nodes)
+        assert lowest == graph.n_nodes
+        assert attained == pytest.approx(1.5 * graph.n_nodes)
+
+    every_value([(3, 3), (3, 4)], check)
 
 
 @pytest.mark.analytic
@@ -111,17 +113,19 @@ def test_a_square_lattice_is_unfrustrated_and_a_triangular_one_is_not() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("shape", [(3, 3), (3, 4)])
-def test_the_frustrated_optimum_is_the_maximum_cut(shape: tuple[int, int]) -> None:
+def test_the_frustrated_optimum_is_the_maximum_cut() -> None:
     # The identity `max_cut.py` documents, checked on the instance it matters
     # most on: minimizing agreeing edges is maximizing the cut, so an
     # independent solver in another module must reach `2N` of the `3N` edges.
-    graph = frustrated_triangular_lattice(shape)
+    def check(shape: tuple[int, int]) -> None:
+        graph = frustrated_triangular_lattice(shape)
 
-    _, maximum = enumerate_max_cut(graph)
+        _, maximum = enumerate_max_cut(graph)
 
-    assert maximum == pytest.approx(float(len(graph.edges) - graph.n_nodes))
-    assert maximum == pytest.approx(2.0 * graph.n_nodes)
+        assert maximum == pytest.approx(float(len(graph.edges) - graph.n_nodes))
+        assert maximum == pytest.approx(2.0 * graph.n_nodes)
+
+    every_value([(3, 3), (3, 4)], check)
 
 
 @pytest.mark.smoke
@@ -248,33 +252,34 @@ def test_zero_frustration_is_a_gauge_transform_of_the_ferromagnet() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize(
-    ("frustration", "expected_hits"),
-    [(0.0, 60), (0.1, 41), (0.2, 23), (0.3, 10), (0.5, 0)],
-)
-def test_the_planted_state_stops_being_the_ground_state_as_frustration_rises(
-    frustration: float, expected_hits: int
-) -> None:
+def test_the_planted_state_stops_being_the_ground_state_as_frustration_rises() -> None:
     # The limit of planting, measured against enumeration at `n = 10`. The
     # planted state has *known energy* and so upper-bounds the ground-state
     # energy at any size. It is not the ground state.
-    rng = np.random.default_rng(7)
+    def check(frustration: float, expected_hits: int) -> None:
+        rng = np.random.default_rng(7)
 
-    hits = 0
-    for _ in range(60):
-        instance = planted_spin_glass(10, 3.0, frustration, rng)
-        lowest = min(
-            energy(
-                instance.graph,
-                np.zeros((instance.graph.n_nodes, 2)),
-                np.array(assignment, dtype=np.int64),
+        hits = 0
+        for _ in range(60):
+            instance = planted_spin_glass(10, 3.0, frustration, rng)
+            lowest = min(
+                energy(
+                    instance.graph,
+                    np.zeros((instance.graph.n_nodes, 2)),
+                    np.array(assignment, dtype=np.int64),
+                )
+                for assignment in itertools.product(
+                    range(2), repeat=instance.graph.n_nodes
+                )
             )
-            for assignment in itertools.product(range(2), repeat=instance.graph.n_nodes)
-        )
-        assert instance.planted_energy >= lowest - 1e-12, "planting must upper bound"
-        hits += abs(instance.planted_energy - lowest) < 1e-12
+            assert instance.planted_energy >= lowest - 1e-12, (
+                "planting must upper bound"
+            )
+            hits += abs(instance.planted_energy - lowest) < 1e-12
 
-    assert hits == expected_hits
+        assert hits == expected_hits
+
+    every_row([(0.0, 60), (0.1, 41), (0.2, 23), (0.3, 10), (0.5, 0)], check)
 
 
 @pytest.mark.oracle

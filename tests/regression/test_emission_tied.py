@@ -23,6 +23,8 @@ from snakes_and_ladders.emissions import (
 )
 from snakes_and_ladders.sim.count_pairs import IndependentCountPair
 
+from tests._rows import every_value
+
 #: The declared floor for a reordered sum through a bisection (#648).
 FLOOR = 2e-06
 N_OBS = 1_500
@@ -70,24 +72,26 @@ def _bb_start(tied: bool = True) -> BetaBinomialEmission:
 
 @pytest.mark.critical
 @pytest.mark.oracle
-@pytest.mark.parametrize("exposure", [False, True])
-def test_one_tied_state_is_the_untied_solve(exposure: bool) -> None:
+def test_one_tied_state_is_the_untied_solve() -> None:
     # At K = 1 the summed score is the one score, so the tied solve is the
     # per-state one; the digamma half is summed on the distinct counts here and
     # per observation there, so the pin is #648's floor.
-    data = _counts(0, exposure)
-    weights = data["posterior"][:, :1]  # type: ignore[index]
-    values = data["counts"]
-    assert values is not None
-    offsets = None if data["exposure"] is None else data["exposure"].reshape(-1)
-    mean = (weights.T @ values) / (
-        weights.sum(0) if offsets is None else weights.T @ offsets
-    )
-    tied = mstep.solve_dispersion_tied(values, weights, mean, offsets)
-    rate = float(mean[0]) if offsets is None else offsets * float(mean[0])
-    untied = mstep.solve_dispersion(values, weights[:, 0], rate)
-    assert abs(tied.value - untied.value) / untied.value < FLOOR
-    assert tied.at_boundary == untied.at_boundary
+    def check(exposure: bool) -> None:
+        data = _counts(0, exposure)
+        weights = data["posterior"][:, :1]  # type: ignore[index]
+        values = data["counts"]
+        assert values is not None
+        offsets = None if data["exposure"] is None else data["exposure"].reshape(-1)
+        mean = (weights.T @ values) / (
+            weights.sum(0) if offsets is None else weights.T @ offsets
+        )
+        tied = mstep.solve_dispersion_tied(values, weights, mean, offsets)
+        rate = float(mean[0]) if offsets is None else offsets * float(mean[0])
+        untied = mstep.solve_dispersion(values, weights[:, 0], rate)
+        assert abs(tied.value - untied.value) / untied.value < FLOOR
+        assert tied.at_boundary == untied.at_boundary
+
+    every_value([False, True], check)
 
 
 @pytest.mark.critical
@@ -107,26 +111,33 @@ def test_one_tied_beta_binomial_state_is_the_untied_solve_bitwise() -> None:
 
 @pytest.mark.critical
 @pytest.mark.oracle
-@pytest.mark.parametrize("exposure", [False, True])
-def test_the_tied_dispersion_maximizes_the_likelihood(exposure: bool) -> None:
+def test_the_tied_dispersion_maximizes_the_likelihood() -> None:
     # The referee never sees a score: it maximizes the weighted log-density
     # over log r at the profiled means, which are the means' MLE at any r.
-    data = _counts(1, exposure)
-    counts, posterior = data["counts"], data["posterior"]
-    assert counts is not None
-    assert posterior is not None
-    fitted = _nb_start().reestimate(counts, posterior, data["exposure"]).emissions
-    assert fitted.tied
-    assert bool((fitted.dispersion == fitted.dispersion[0]).all())
+    def check(exposure: bool) -> None:
+        data = _counts(1, exposure)
+        counts, posterior = data["counts"], data["posterior"]
+        assert counts is not None
+        assert posterior is not None
+        fitted = _nb_start().reestimate(counts, posterior, data["exposure"]).emissions
+        assert fitted.tied
+        assert bool((fitted.dispersion == fitted.dispersion[0]).all())
 
-    def negative(log_r: float) -> float:
-        family = NegativeBinomialEmission([math.exp(log_r)] * 3, fitted.mean)
-        return -float((posterior * family.log_density(counts, data["exposure"])).sum())
+        def negative(log_r: float) -> float:
+            family = NegativeBinomialEmission([math.exp(log_r)] * 3, fitted.mean)
+            return -float(
+                (posterior * family.log_density(counts, data["exposure"])).sum()
+            )
 
-    best = minimize_scalar(
-        negative, bounds=(-3.0, 5.0), method="bounded", options={"xatol": 1e-10}
-    )
-    assert abs(float(fitted.dispersion[0]) - math.exp(best.x)) / math.exp(best.x) < 1e-6
+        best = minimize_scalar(
+            negative, bounds=(-3.0, 5.0), method="bounded", options={"xatol": 1e-10}
+        )
+        assert (
+            abs(float(fitted.dispersion[0]) - math.exp(best.x)) / math.exp(best.x)
+            < 1e-6
+        )
+
+    every_value([False, True], check)
 
 
 @pytest.mark.critical

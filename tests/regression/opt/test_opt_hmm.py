@@ -44,6 +44,7 @@ from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
 
 from tests._fixtures import FIXTURES_DIR
 from tests._objective_checks import assert_gradient_matches_finite_differences
+from tests._rows import every_value
 
 FIXTURE = FIXTURES_DIR / "hmm/ci.yaml"
 
@@ -136,24 +137,30 @@ def test_the_likelihood_is_invariant_to_relabelling_the_hidden_states() -> None:
 
 
 @pytest.mark.analytic
-@pytest.mark.parametrize("at_truth", [True, False])
-def test_gradient_matches_central_finite_differences(at_truth: bool) -> None:
-    params = load_params(FIXTURE, HmmParams)
-    # A short slice: the finite-difference check costs two objective
-    # evaluations per parameter, and the recursion it exercises is the same
-    # at any length.
-    objective = HmmObjective(
-        simulate_sequences(params).observations[:40], params.n_states, params.n_symbols
-    )
-    theta = (
-        objective.theta_from_truth(params.initial, params.transition, params.emission)
-        if at_truth
-        else objective.initial()
-    )
+def test_gradient_matches_central_finite_differences() -> None:
+    def check(at_truth: bool) -> None:
+        params = load_params(FIXTURE, HmmParams)
+        # A short slice: the finite-difference check costs two objective
+        # evaluations per parameter, and the recursion it exercises is the same
+        # at any length.
+        objective = HmmObjective(
+            simulate_sequences(params).observations[:40],
+            params.n_states,
+            params.n_symbols,
+        )
+        theta = (
+            objective.theta_from_truth(
+                params.initial, params.transition, params.emission
+            )
+            if at_truth
+            else objective.initial()
+        )
 
-    assert_gradient_matches_finite_differences(
-        objective, theta, _FINITE_DIFFERENCE_STEP, _RTOL_GRADIENT
-    )
+        assert_gradient_matches_finite_differences(
+            objective, theta, _FINITE_DIFFERENCE_STEP, _RTOL_GRADIENT
+        )
+
+    every_value([True, False], check)
 
 
 @pytest.mark.oracle
@@ -519,41 +526,43 @@ def test_baum_welch_ascends_and_settles_on_the_re_estimation_equations() -> None
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("n_sequences", [1, 40])
-def test_the_streamed_baum_welch_is_the_batched_one(n_sequences: int) -> None:
+def test_the_streamed_baum_welch_is_the_batched_one() -> None:
     # Issue #986: the compiled route streams scaled messages into expected
     # counts; the log-space batch in `baum_welch_family` is its oracle, over
     # ten iterations from a perturbed start on the fixture's model.
-    params = replace(
-        load_params(FIXTURES_DIR / "hmm" / "ci.yaml", HmmParams),
-        lengths=(60,) * n_sequences,
-    )
-    observations = simulate_sequences(params).observations
-    rng = np.random.default_rng(986)
-    draws = [rng.random(shape) + 0.5 for shape in ((3,), (3, 3), (3, 4))]
-    initial, transition, emission = (
-        torch.log(torch.as_tensor(d / d.sum(-1, keepdims=True))) for d in draws
-    )
-    fits = [
-        baum_welch(
-            observations,
-            initial,
-            transition,
-            emission,
-            max_iterations=10,
-            tolerance=-np.inf,
-            backend=backend,
+    def check(n_sequences: int) -> None:
+        params = replace(
+            load_params(FIXTURES_DIR / "hmm" / "ci.yaml", HmmParams),
+            lengths=(60,) * n_sequences,
         )
-        for backend in (Backend.PYTHON, Backend.RUST)
-    ]
-    for name in ("log_initial", "log_transition", "log_emission"):
-        assert_allclose(
-            getattr(fits[1], name).numpy(),
-            getattr(fits[0], name).numpy(),
-            rtol=0.0,
-            atol=1e-10,
+        observations = simulate_sequences(params).observations
+        rng = np.random.default_rng(986)
+        draws = [rng.random(shape) + 0.5 for shape in ((3,), (3, 3), (3, 4))]
+        initial, transition, emission = (
+            torch.log(torch.as_tensor(d / d.sum(-1, keepdims=True))) for d in draws
         )
-    assert_allclose(fits[1].log_likelihood, fits[0].log_likelihood, rtol=1e-12)
+        fits = [
+            baum_welch(
+                observations,
+                initial,
+                transition,
+                emission,
+                max_iterations=10,
+                tolerance=-np.inf,
+                backend=backend,
+            )
+            for backend in (Backend.PYTHON, Backend.RUST)
+        ]
+        for name in ("log_initial", "log_transition", "log_emission"):
+            assert_allclose(
+                getattr(fits[1], name).numpy(),
+                getattr(fits[0], name).numpy(),
+                rtol=0.0,
+                atol=1e-10,
+            )
+        assert_allclose(fits[1].log_likelihood, fits[0].log_likelihood, rtol=1e-12)
+
+    every_value([1, 40], check)
 
 
 def _count_chain(

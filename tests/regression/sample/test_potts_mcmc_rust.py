@@ -22,6 +22,8 @@ the hundreds.
 
 from __future__ import annotations
 
+from itertools import product
+
 import numpy as np
 import pytest
 from snakes_and_ladders.backend import Backend
@@ -33,6 +35,7 @@ from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_
 from snakes_and_ladders.sim.potts import site_field
 
 from tests._chains import enumerated_law, fit_p_value
+from tests._rows import every_row
 
 
 def sample_potts(
@@ -216,39 +219,38 @@ PIN_SWEEPS = 20
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("extent", PIN_EXTENTS, ids=lambda e: f"{e}x{e}")
-@pytest.mark.parametrize("seed", PIN_SEEDS)
-@pytest.mark.parametrize("states", [2, 3])
-def test_the_rust_chain_is_the_oracle_s_chain_state_for_state(
-    extent: int, seed: int, states: int
-) -> None:
+def test_the_rust_chain_is_the_oracle_s_chain_state_for_state() -> None:
     """Every recorded configuration, not a distribution over them.
 
     This is what makes :data:`~snakes_and_ladders.backend.Backend.RUST`
     the default without moving a committed number: a chain of the same law
     would move every autocorrelation figure `STATUS.md` pins.
     """
-    graph = lattice_graph((extent, extent), BoundaryCondition.PERIODIC, 0.4)
-    field = np.linspace(0.6, -0.4, states)
 
-    python = oracle_sample_potts(
-        graph,
-        field,
-        PottsMove.SINGLE_SITE,
-        np.random.default_rng(seed),
-        PIN_SWEEPS,
-        backend=Backend.PYTHON,
-    )
-    rust = oracle_sample_potts(
-        graph,
-        field,
-        PottsMove.SINGLE_SITE,
-        np.random.default_rng(seed),
-        PIN_SWEEPS,
-        backend=Backend.RUST,
-    )
+    def check(extent: int, seed: int, states: int) -> None:
+        graph = lattice_graph((extent, extent), BoundaryCondition.PERIODIC, 0.4)
+        field = np.linspace(0.6, -0.4, states)
 
-    np.testing.assert_array_equal(python.states, rust.states)
+        python = oracle_sample_potts(
+            graph,
+            field,
+            PottsMove.SINGLE_SITE,
+            np.random.default_rng(seed),
+            PIN_SWEEPS,
+            backend=Backend.PYTHON,
+        )
+        rust = oracle_sample_potts(
+            graph,
+            field,
+            PottsMove.SINGLE_SITE,
+            np.random.default_rng(seed),
+            PIN_SWEEPS,
+            backend=Backend.RUST,
+        )
+
+        np.testing.assert_array_equal(python.states, rust.states)
+
+    every_row(product(PIN_EXTENTS, PIN_SEEDS, [2, 3]), check)
 
 
 @pytest.mark.smoke

@@ -18,6 +18,8 @@ from snakes_and_ladders.sample.statistics import (
     sign_test_p_value,
 )
 
+from tests._rows import every_row
+
 # Published chi-square critical values: the statistic at which the upper tail
 # equals the stated significance. Any table gives these; they are not derived
 # from the function under test.
@@ -35,25 +37,25 @@ CRITICAL_VALUES = [
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize(("degrees_of_freedom", "statistic", "tail"), CRITICAL_VALUES)
-def test_the_chi_square_tail_matches_published_critical_values(
-    degrees_of_freedom: int, statistic: float, tail: float
-) -> None:
+def test_the_chi_square_tail_matches_published_critical_values() -> None:
     # Two categories whose squared deviation over expectation is exactly the
     # critical statistic, so the p-value must come back as the significance
     # that value was tabulated at. The tolerance is 5e-4 because the published
     # values are quoted to three decimals.
     # Two cells, each deviating by `sqrt(statistic / 2)` from an expectation
     # of 1, so the statistic is exactly the tabulated value.
-    deviation = float(np.sqrt(statistic / 2.0))
-    expected = np.array([1.0, 1.0])
-    observed = np.array([1.0 + deviation, 1.0 - deviation])
+    def check(degrees_of_freedom: int, statistic: float, tail: float) -> None:
+        deviation = float(np.sqrt(statistic / 2.0))
+        expected = np.array([1.0, 1.0])
+        observed = np.array([1.0 + deviation, 1.0 - deviation])
 
-    realized = chi_square_p_value(
-        observed, expected, degrees_of_freedom=degrees_of_freedom
-    )
+        realized = chi_square_p_value(
+            observed, expected, degrees_of_freedom=degrees_of_freedom
+        )
 
-    assert realized == pytest.approx(tail, abs=5e-4)
+        assert realized == pytest.approx(tail, abs=5e-4)
+
+    every_row(CRITICAL_VALUES, check)
 
 
 @pytest.mark.smoke
@@ -125,14 +127,14 @@ SIGN_TEST_CASES = [
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize(("n", "positive", "expected"), SIGN_TEST_CASES)
-def test_the_sign_test_matches_the_binomial_tail_sums(
-    n: int, positive: int, expected: float
-) -> None:
-    differences = np.array([1.0] * positive + [-1.0] * (n - positive))
-    assert sign_test_p_value(differences) == expected
-    # Symmetric: the same count of the other sign gives the same p-value.
-    assert sign_test_p_value(-differences) == expected
+def test_the_sign_test_matches_the_binomial_tail_sums() -> None:
+    def check(n: int, positive: int, expected: float) -> None:
+        differences = np.array([1.0] * positive + [-1.0] * (n - positive))
+        assert sign_test_p_value(differences) == expected
+        # Symmetric: the same count of the other sign gives the same p-value.
+        assert sign_test_p_value(-differences) == expected
+
+    every_row(SIGN_TEST_CASES, check)
 
 
 @pytest.mark.smoke

@@ -22,6 +22,8 @@ from snakes_and_ladders.qa.figure import (
     write_qa_table,
 )
 
+from tests._rows import every_row, every_value
+
 mpl.use("Agg")
 
 
@@ -51,31 +53,35 @@ def test_write_qa_figure_does_not_mutate_global_font_rc(tmp_path: Path) -> None:
 
 
 @pytest.mark.infra
-@pytest.mark.parametrize(
-    ("value", "expected"),
-    [
-        (0, "0"),
-        (10, "10"),
-        (9999, "9999"),
-        (10_000, r"10\_000"),
-        (200_000, r"200\_000"),
-        (1_000_000, r"1\_000\_000"),
-    ],
-)
-def test_latex_integer_separates_only_where_it_helps(value: int, expected: str) -> None:
+def test_latex_integer_separates_only_where_it_helps() -> None:
     # Below ten thousand a separator makes a number harder to read, not
     # easier, so the threshold is deliberate rather than an accident of
     # formatting.
-    assert latex_integer(value) == expected
+    def check(value: int, expected: str) -> None:
+        assert latex_integer(value) == expected
+
+    every_row(
+        [
+            (0, "0"),
+            (10, "10"),
+            (9999, "9999"),
+            (10_000, r"10\_000"),
+            (200_000, r"200\_000"),
+            (1_000_000, r"1\_000\_000"),
+        ],
+        check,
+    )
 
 
 @pytest.mark.smoke
-@pytest.mark.parametrize("special", ["_", "%", "&", "#", "\\"])
-def test_an_unescaped_special_is_refused(special: str) -> None:
+def test_an_unescaped_special_is_refused() -> None:
     # The check has to fail on something, or it is decoration. Every
     # character it claims to catch is exercised.
-    with pytest.raises(ValueError, match="unescaped LaTeX special"):
-        check_latex_safe(f"a caption containing {special} directly")
+    def check(special: str) -> None:
+        with pytest.raises(ValueError, match="unescaped LaTeX special"):
+            check_latex_safe(f"a caption containing {special} directly")
+
+    every_value(["_", "%", "&", "#", "\\"], check)
 
 
 @pytest.mark.smoke

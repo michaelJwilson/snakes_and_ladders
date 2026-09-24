@@ -39,6 +39,7 @@ from snakes_and_ladders.sim.topology import (
 from snakes_and_ladders.sim.tree import Node
 
 from tests._fixtures import EIGHT_TAXA, FOUR_TAXA, load_fixture
+from tests._rows import every_value
 
 FIVE_TAXA = "tree_search/ci.yaml"
 SIX_TAXA = "tree_search/stress.yaml"
@@ -89,14 +90,17 @@ def test_the_fixture_tree_is_recovered_exactly_from_its_path_lengths(name: str) 
 
 
 @pytest.mark.analytic
-@pytest.mark.parametrize("n_taxa", [20, 50])
-def test_a_random_tree_is_recovered_exactly_from_its_path_lengths(n_taxa: int) -> None:
+def test_a_random_tree_is_recovered_exactly_from_its_path_lengths() -> None:
     """Ten random trees at each size, every one recovered to ``1e-12``."""
-    for seed in range(10):
-        truth = random_tree(n_taxa, np.random.default_rng([n_taxa, seed]))
-        names, distances = tree_distances(truth)
 
-        _assert_recovered(truth, neighbor_joining(names, distances))
+    def check(n_taxa: int) -> None:
+        for seed in range(10):
+            truth = random_tree(n_taxa, np.random.default_rng([n_taxa, seed]))
+            names, distances = tree_distances(truth)
+
+            _assert_recovered(truth, neighbor_joining(names, distances))
+
+    every_value([20, 50], check)
 
 
 def _pairwise(
@@ -113,10 +117,9 @@ def _pairwise(
 
 @pytest.mark.oracle
 @pytest.mark.critical
-@pytest.mark.parametrize("n_taxa", [5, 6, 7])
-def test_the_joined_tree_is_the_least_squares_optimum_over_the_enumerated_topologies(
-    n_taxa: int,
-) -> None:
+def test_the_joined_tree_is_the_least_squares_optimum_over_the_enumerated_topologies() -> (
+    None
+):
     # The rung below (issue #734): enumeration, which at these sizes scores
     # every topology there is -- 15, 105 and 945. The criterion has to be
     # named, since a topology on its own has no score: it is the least-squares
@@ -131,27 +134,30 @@ def test_the_joined_tree_is_the_least_squares_optimum_over_the_enumerated_topolo
     # residual is at most 3.3e-31 against the 1e-20 declared, and the runner-up
     # at least 1.9e-3 against the 1e-4 declared, so the argmin is unique by
     # 27 orders of magnitude and not by a rounding.
-    for seed in range(2):
-        truth = random_tree(n_taxa, np.random.default_rng([734, n_taxa, seed]))
-        names, distances = tree_distances(truth)
-        pairwise = _pairwise(names, distances)
+    def check(n_taxa: int) -> None:
+        for seed in range(2):
+            truth = random_tree(n_taxa, np.random.default_rng([734, n_taxa, seed]))
+            names, distances = tree_distances(truth)
+            pairwise = _pairwise(names, distances)
 
-        joined = neighbor_joining(names, distances)
-        scored = sorted(
-            (
-                least_squares_residual(
-                    topology, pairwise, least_squares_lengths(topology, pairwise)
-                ),
-                index,
-                topology,
+            joined = neighbor_joining(names, distances)
+            scored = sorted(
+                (
+                    least_squares_residual(
+                        topology, pairwise, least_squares_lengths(topology, pairwise)
+                    ),
+                    index,
+                    topology,
+                )
+                for index, topology in enumerate(enumerate_topologies(sorted(names)))
             )
-            for index, topology in enumerate(enumerate_topologies(sorted(names)))
-        )
 
-        assert scored[0][0] < 1e-20
-        assert scored[1][0] > 1e-4
-        assert leaf_bipartitions(scored[0][2]) == leaf_bipartitions(joined)
-        assert leaf_bipartitions(joined) == leaf_bipartitions(truth)
+            assert scored[0][0] < 1e-20
+            assert scored[1][0] > 1e-4
+            assert leaf_bipartitions(scored[0][2]) == leaf_bipartitions(joined)
+            assert leaf_bipartitions(joined) == leaf_bipartitions(truth)
+
+    every_value([5, 6, 7], check)
 
 
 @pytest.mark.analytic

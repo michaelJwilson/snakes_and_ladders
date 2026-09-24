@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import itertools
 import math
+from itertools import product
 
 import numpy as np
 import pytest
@@ -36,6 +37,8 @@ from snakes_and_ladders.sim.graph import (
     triangular_lattice_graph,
 )
 from snakes_and_ladders.sim.potts import energy
+
+from tests._rows import every_row, every_value
 
 FIELD = np.log(np.array([0.5, 0.35, 0.15]))
 
@@ -75,36 +78,35 @@ def _triangles(graph: PottsGraph) -> tuple[tuple[int, ...], ...]:
 
 @pytest.mark.oracle
 @pytest.mark.potts_lattice
-@pytest.mark.parametrize("coupling", [0.6, -0.8])
-@pytest.mark.parametrize("iterations", [1, 3, 20])
-def test_the_bound_never_exceeds_the_enumerated_ground_state(
-    coupling: float, iterations: int
-) -> None:
+def test_the_bound_never_exceeds_the_enumerated_ground_state() -> None:
     # Validity, at one sweep as at twenty: it follows from the decomposition,
     # not from convergence. Both signs of coupling, because the repulsive one
     # is where this earns its place -- minimum cut cannot take it.
-    graph = lattice_graph((3, 3), BoundaryCondition.OPEN, coupling)
+    def check(coupling: float, iterations: int) -> None:
+        graph = lattice_graph((3, 3), BoundaryCondition.OPEN, coupling)
 
-    certificate = dual_bound(graph, FIELD, iterations=iterations)
+        certificate = dual_bound(graph, FIELD, iterations=iterations)
 
-    assert certificate.bound <= _ground_state(graph) + 1e-9
+        assert certificate.bound <= _ground_state(graph) + 1e-9
+
+    every_row(product([0.6, -0.8], [1, 3, 20]), check)
 
 
 @pytest.mark.oracle
 @pytest.mark.potts_lattice
-@pytest.mark.parametrize("coupling", [0.6, -0.8])
-def test_the_decoded_labelling_is_certified_optimal_on_the_square_lattice(
-    coupling: float,
-) -> None:
+def test_the_decoded_labelling_is_certified_optimal_on_the_square_lattice() -> None:
     # The whole point of a bound rather than an approximation: the gap closes
     # and the labelling is *proved* optimal, with no oracle consulted. The
     # enumeration here checks that claim rather than supplying it.
-    graph = lattice_graph((3, 3), BoundaryCondition.OPEN, coupling)
+    def check(coupling: float) -> None:
+        graph = lattice_graph((3, 3), BoundaryCondition.OPEN, coupling)
 
-    certificate = dual_bound(graph, FIELD, iterations=200)
+        certificate = dual_bound(graph, FIELD, iterations=200)
 
-    assert certificate.optimal
-    assert certificate.energy == pytest.approx(_ground_state(graph), abs=1e-9)
+        assert certificate.optimal
+        assert certificate.energy == pytest.approx(_ground_state(graph), abs=1e-9)
+
+    every_value([0.6, -0.8], check)
 
 
 def _cooled(graph: PottsGraph, beta: float) -> PottsGraph:
@@ -195,23 +197,25 @@ def test_a_decoded_labelling_is_never_better_than_the_bound() -> None:
 
 @pytest.mark.oracle
 @pytest.mark.frustrated_lattice
-@pytest.mark.parametrize("coupling", [-0.8, -1.5])
-def test_triangles_tighten_what_the_pairwise_relaxation_cannot_see(
-    coupling: float,
-) -> None:
+def test_triangles_tighten_what_the_pairwise_relaxation_cannot_see() -> None:
     # The ticket's thesis, on the instance that motivates it. The pairwise
     # relaxation believes every edge can be satisfied at every site's preferred
     # label, which no labelling achieves -- so its bound does not even depend
     # on the coupling. Adding the triangles is what sees the odd cycle.
-    graph = triangular_lattice_graph((3, 3), BoundaryCondition.OPEN, coupling)
-    ground = _ground_state(graph)
+    def check(coupling: float) -> None:
+        graph = triangular_lattice_graph((3, 3), BoundaryCondition.OPEN, coupling)
+        ground = _ground_state(graph)
 
-    pairwise = dual_bound(graph, FIELD, iterations=300)
-    tightened = dual_bound(graph, FIELD, iterations=300, plaquettes=_triangles(graph))
+        pairwise = dual_bound(graph, FIELD, iterations=300)
+        tightened = dual_bound(
+            graph, FIELD, iterations=300, plaquettes=_triangles(graph)
+        )
 
-    assert pairwise.bound <= ground + 1e-9
-    assert tightened.bound <= ground + 1e-9
-    assert tightened.bound > pairwise.bound
+        assert pairwise.bound <= ground + 1e-9
+        assert tightened.bound <= ground + 1e-9
+        assert tightened.bound > pairwise.bound
+
+    every_value([-0.8, -1.5], check)
 
 
 @pytest.mark.analytic

@@ -52,6 +52,7 @@ from snakes_and_ladders.sim.count_pairs import binned_model
 from snakes_and_ladders.sim.fixtures import fixture
 
 from tests._paths import REPO_ROOT
+from tests._rows import every_value
 
 #: L-BFGS iterations a Himmelblau start is polished at.
 POLISH = Budget(Cost.ITERATIONS, 6)
@@ -234,23 +235,25 @@ def test_the_table_is_latex_safe_and_one_row_per_start() -> None:
 
 
 @pytest.mark.smoke
-@pytest.mark.parametrize("n_seeds", [1, 3])
-def test_the_standard_figure_builds_at_one_trial_and_at_three(n_seeds: int) -> None:
-    result = _benchmark(tuple(range(n_seeds))).run()
-    fig, caption = starts_figure(result, reference_label="the known minimum, zero")
-    try:
-        check_latex_safe(caption)
-        assert ("One trial per start" in caption) == (n_seeds == 1)
-        assert ("standard deviation" in caption) == (n_seeds > 1)
-        left, right = fig.axes
-        assert left.get_yscale() == "log"
-        assert left.get_ylim()[0] <= GAP_FLOOR
-        assert [label.get_text() for label in right.get_yticklabels()] == list(
-            result.names
-        )
-        assert tuple(fig.get_size_inches()) == (10.0, 3.8)
-    finally:
-        plt.close(fig)
+def test_the_standard_figure_builds_at_one_trial_and_at_three() -> None:
+    def check(n_seeds: int) -> None:
+        result = _benchmark(tuple(range(n_seeds))).run()
+        fig, caption = starts_figure(result, reference_label="the known minimum, zero")
+        try:
+            check_latex_safe(caption)
+            assert ("One trial per start" in caption) == (n_seeds == 1)
+            assert ("standard deviation" in caption) == (n_seeds > 1)
+            left, right = fig.axes
+            assert left.get_yscale() == "log"
+            assert left.get_ylim()[0] <= GAP_FLOOR
+            assert [label.get_text() for label in right.get_yticklabels()] == list(
+                result.names
+            )
+            assert tuple(fig.get_size_inches()) == (10.0, 3.8)
+        finally:
+            plt.close(fig)
+
+    every_value([1, 3], check)
 
 
 def _gaussian_mixture() -> GaussianMixtureObjective:

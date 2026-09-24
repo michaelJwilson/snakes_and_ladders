@@ -31,6 +31,7 @@ from snakes_and_ladders.sample.statistics import chi_square_p_value
 from snakes_and_ladders.sim.canonical import AMBIGUOUS_OBSERVATIONS, ambiguous_hmm
 from snakes_and_ladders.sim.hmm import HmmParams
 
+from tests._rows import every_row
 from tests.regression.likelihood.conftest import CHAIN_CASES, random_hmm
 
 #: Declared significance, the value every goodness-of-fit test in this
@@ -113,13 +114,7 @@ def _lumped(law: np.ndarray, n_draws: int) -> list[list[int]]:
 
 @pytest.mark.oracle
 @pytest.mark.critical
-@pytest.mark.parametrize(
-    ("n_states", "n_symbols", "length", "seed"),
-    CHAIN_CASES[:3],
-)
-def test_the_sampled_paths_are_drawn_from_the_enumerated_path_posterior(
-    n_states: int, n_symbols: int, length: int, seed: int
-) -> None:
+def test_the_sampled_paths_are_drawn_from_the_enumerated_path_posterior() -> None:
     # The rung below (issue #734): the enumeration, which on a chain short
     # enough to enumerate carries the whole posterior over paths and not only
     # its marginals. `sample_path` filters forward and samples backward, so
@@ -137,52 +132,57 @@ def test_the_sampled_paths_are_drawn_from_the_enumerated_path_posterior(
     # `forward_backward`'s posterior is the enumeration's to 2.3e-15, which
     # is asserted here rather than assumed, so the marginal comparison is
     # against a quantity this file's own oracle establishes.
-    params = random_hmm(n_states, n_symbols, length, seed)
-    observations = np.random.default_rng(seed).integers(0, n_symbols, size=length)
-    enumerated = enumerate_hidden_paths(params, observations)
+    def check(n_states: int, n_symbols: int, length: int, seed: int) -> None:
+        params = random_hmm(n_states, n_symbols, length, seed)
+        observations = np.random.default_rng(seed).integers(0, n_symbols, size=length)
+        enumerated = enumerate_hidden_paths(params, observations)
 
-    paths = list(itertools.product(range(n_states), repeat=length))
-    joint = np.array(
-        [
-            path_log_probability(params, np.array(path, dtype=np.int64), observations)
-            for path in paths
-        ]
-    )
-    law = np.exp(joint - enumerated.log_likelihood)
-    index = {path: position for position, path in enumerate(paths)}
-
-    log_density = emission_log_density(params, observations)
-    log_initial, log_transition = np.log(params.initial), np.log(params.transition)
-    run = forward_backward(log_density, log_initial, log_transition)
-    assert np.abs(run.posterior - enumerated.posterior).max() < 1e-14
-
-    rng = np.random.default_rng(734)
-    drawn = np.zeros(len(paths))
-    marginal = np.zeros_like(enumerated.posterior)
-    for _ in range(SAMPLED_DRAWS):
-        path = sample_path(log_density, log_initial, log_transition, rng)
-        drawn[index[tuple(int(state) for state in path)]] += 1
-        marginal[np.arange(length), path] += 1
-
-    cells = _lumped(law, SAMPLED_DRAWS)
-    assert (
-        chi_square_p_value(
-            np.array([drawn[cell].sum() for cell in cells]),
-            np.array([law[cell].sum() for cell in cells]) * SAMPLED_DRAWS,
+        paths = list(itertools.product(range(n_states), repeat=length))
+        joint = np.array(
+            [
+                path_log_probability(
+                    params, np.array(path, dtype=np.int64), observations
+                )
+                for path in paths
+            ]
         )
-        > SIGNIFICANCE
-    )
-    assert 0.5 * np.abs(drawn / SAMPLED_DRAWS - law).sum() < TOTAL_VARIATION
+        law = np.exp(joint - enumerated.log_likelihood)
+        index = {path: position for position, path in enumerate(paths)}
 
-    frequency = marginal / SAMPLED_DRAWS
-    assert np.abs(frequency - run.posterior).max() < MARGINAL_DEVIATION
-    for position in range(length):
+        log_density = emission_log_density(params, observations)
+        log_initial, log_transition = np.log(params.initial), np.log(params.transition)
+        run = forward_backward(log_density, log_initial, log_transition)
+        assert np.abs(run.posterior - enumerated.posterior).max() < 1e-14
+
+        rng = np.random.default_rng(734)
+        drawn = np.zeros(len(paths))
+        marginal = np.zeros_like(enumerated.posterior)
+        for _ in range(SAMPLED_DRAWS):
+            path = sample_path(log_density, log_initial, log_transition, rng)
+            drawn[index[tuple(int(state) for state in path)]] += 1
+            marginal[np.arange(length), path] += 1
+
+        cells = _lumped(law, SAMPLED_DRAWS)
         assert (
             chi_square_p_value(
-                marginal[position], SAMPLED_DRAWS * run.posterior[position]
+                np.array([drawn[cell].sum() for cell in cells]),
+                np.array([law[cell].sum() for cell in cells]) * SAMPLED_DRAWS,
             )
             > SIGNIFICANCE
         )
+        assert 0.5 * np.abs(drawn / SAMPLED_DRAWS - law).sum() < TOTAL_VARIATION
+
+        frequency = marginal / SAMPLED_DRAWS
+        assert np.abs(frequency - run.posterior).max() < MARGINAL_DEVIATION
+        for position in range(length):
+            assert (
+                chi_square_p_value(
+                    marginal[position], SAMPLED_DRAWS * run.posterior[position]
+                )
+                > SIGNIFICANCE
+            )
+
+    every_row(CHAIN_CASES[:3], check)
 
 
 @pytest.mark.oracle

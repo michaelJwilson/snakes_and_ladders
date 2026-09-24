@@ -32,22 +32,24 @@ from snakes_and_ladders.learn.hmm import enumerate_paths
 from snakes_and_ladders.learn.potts import enumerate_configurations
 from snakes_and_ladders.numerics import logsumexp
 
+from tests._rows import every_row
+
 
 @pytest.mark.oracle
 @pytest.mark.critical
-@pytest.mark.parametrize(("n_states", "n_sites"), [(2, 1), (2, 5), (3, 4), (5, 3)])
-def test_the_product_space_is_itertools_product_in_its_order(
-    n_states: int, n_sites: int
-) -> None:
-    expected = np.array(
-        list(itertools.product(range(n_states), repeat=n_sites)), dtype=np.int64
-    )
+def test_the_product_space_is_itertools_product_in_its_order() -> None:
+    def check(n_states: int, n_sites: int) -> None:
+        expected = np.array(
+            list(itertools.product(range(n_states), repeat=n_sites)), dtype=np.int64
+        )
 
-    realized = configurations(n_states, n_sites)
+        realized = configurations(n_states, n_sites)
 
-    assert realized.dtype == np.int64
-    assert realized.flags.c_contiguous
-    assert np.array_equal(realized, expected)
+        assert realized.dtype == np.int64
+        assert realized.flags.c_contiguous
+        assert np.array_equal(realized, expected)
+
+    every_row([(2, 1), (2, 5), (3, 4), (5, 3)], check)
 
 
 @pytest.mark.smoke
@@ -124,20 +126,20 @@ def _the_deleted_body(
 
 @pytest.mark.oracle
 @pytest.mark.critical
-@pytest.mark.parametrize(("n_states", "n_sites"), [(2, 1), (2, 6), (3, 4), (5, 3)])
-def test_the_enumerated_optimum_is_the_loop_the_three_adapters_carried(
-    n_states: int, n_sites: int
-) -> None:
+def test_the_enumerated_optimum_is_the_loop_the_three_adapters_carried() -> None:
     # A score with no structure, so nothing about the answer follows from the
     # problem: what is asserted is that two routes to it agree exactly.
-    draws = np.random.default_rng(755).normal(size=n_states**n_sites)
-    space = itertools.product(range(n_states), repeat=n_sites)
-    score = dict(zip(space, draws, strict=True))
+    def check(n_states: int, n_sites: int) -> None:
+        draws = np.random.default_rng(755).normal(size=n_states**n_sites)
+        space = itertools.product(range(n_states), repeat=n_sites)
+        score = dict(zip(space, draws, strict=True))
 
-    realized = enumerated_optimum(n_states, n_sites, score.__getitem__)
+        realized = enumerated_optimum(n_states, n_sites, score.__getitem__)
 
-    assert realized == _the_deleted_body(n_states, n_sites, score.__getitem__)
-    assert realized[1] == max(draws)
+        assert realized == _the_deleted_body(n_states, n_sites, score.__getitem__)
+        assert realized[1] == max(draws)
+
+    every_row([(2, 1), (2, 6), (3, 4), (5, 3)], check)
 
 
 @pytest.mark.analytic

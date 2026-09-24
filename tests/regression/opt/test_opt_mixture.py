@@ -47,6 +47,7 @@ from snakes_and_ladders.sim.mixture import MixtureParams, simulate_mixture
 from snakes_and_ladders.sim.potts_chain import PottsParams, simulate_chains
 
 from tests._objective_checks import assert_gradient_matches_finite_differences
+from tests._rows import every_value
 
 WEIGHTS = np.array([0.35, 0.65])
 MEAN = np.array([-3.0, 3.0])
@@ -825,21 +826,25 @@ def test_the_mixture_gradient_is_autograd_s() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("n_samples", [1, 4_097, 100_000])
-def test_the_streamed_mixture_score_is_the_torch_one(n_samples: int) -> None:
+def test_the_streamed_mixture_score_is_the_torch_one() -> None:
     # Issue #997: with no gradient to take, the log-likelihood streams
     # through the compiled kernel over chunks of 4,096; torch's logsumexp is
     # the oracle, and a tracked call still takes it.
-    rng = np.random.default_rng(997)
-    values = torch.as_tensor(rng.normal(0.0, 3.0, n_samples), dtype=torch.float64)
-    family = GaussianEmission(
-        torch.tensor([-3.0, 0.5, 4.0], dtype=torch.float64),
-        torch.tensor([1.2, 1.0, 1.3], dtype=torch.float64),
-        1e-12,
-    )
-    log_weight = torch.log(torch.tensor([0.3, 0.3, 0.4], dtype=torch.float64))
-    streamed = mixture_log_likelihood(values, log_weight, family)
-    oracle = mixture_log_likelihood(values, log_weight, family, backend=Backend.PYTHON)
-    assert_allclose(float(streamed), float(oracle), rtol=1e-13)
-    tracked = log_weight.clone().requires_grad_(True)
-    assert mixture_log_likelihood(values, tracked, family).grad_fn is not None
+    def check(n_samples: int) -> None:
+        rng = np.random.default_rng(997)
+        values = torch.as_tensor(rng.normal(0.0, 3.0, n_samples), dtype=torch.float64)
+        family = GaussianEmission(
+            torch.tensor([-3.0, 0.5, 4.0], dtype=torch.float64),
+            torch.tensor([1.2, 1.0, 1.3], dtype=torch.float64),
+            1e-12,
+        )
+        log_weight = torch.log(torch.tensor([0.3, 0.3, 0.4], dtype=torch.float64))
+        streamed = mixture_log_likelihood(values, log_weight, family)
+        oracle = mixture_log_likelihood(
+            values, log_weight, family, backend=Backend.PYTHON
+        )
+        assert_allclose(float(streamed), float(oracle), rtol=1e-13)
+        tracked = log_weight.clone().requires_grad_(True)
+        assert mixture_log_likelihood(values, tracked, family).grad_fn is not None
+
+    every_value([1, 4_097, 100_000], check)

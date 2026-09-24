@@ -9,6 +9,8 @@ gives over seeds --- the number a caller compares to Atteson's radius.
 
 from __future__ import annotations
 
+from itertools import product
+
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
@@ -30,6 +32,7 @@ from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import Node
 
 from tests._fixtures import EIGHT_TAXA, FOUR_TAXA, load_fixture
+from tests._rows import every_row, every_value
 
 #: Branch lengths the closed forms are inverted at, spanning short to near
 #: saturation for four states (the saturation is at 0.75 of sites differing,
@@ -50,11 +53,7 @@ def _pair_from_frequencies(
 
 @pytest.mark.oracle
 @pytest.mark.analytic
-@pytest.mark.parametrize("t", LENGTHS)
-@pytest.mark.parametrize("k", [2, 4])
-def test_the_jukes_cantor_distance_inverts_the_transition_probabilities(
-    t: float, k: int
-) -> None:
+def test_the_jukes_cantor_distance_inverts_the_transition_probabilities() -> None:
     """At the exact pair frequencies ``P(t) / k`` the closed form returns ``t``.
 
     The pair frequency matrix of two taxa joined by a branch ``t`` is
@@ -62,33 +61,38 @@ def test_the_jukes_cantor_distance_inverts_the_transition_probabilities(
     point, which is what makes the estimator an inversion rather than an
     approximation.
     """
-    n_sites = 10**6
-    frequencies = jc_transition_probabilities(t, k=k) / k
-    first, second = _pair_from_frequencies(frequencies, n_sites)
-    # Rounding to integer counts moves the total by at most k^2 sites and p
-    # by at most that fraction; the closed form is held at the realized p.
-    realized = 1.0 - np.trace(pair_counts(first, second, k)) / first.shape[0]
-    expected = -((k - 1) / k) * np.log(1.0 - realized * k / (k - 1))
 
-    estimate = jukes_cantor_distance(first, second, k)
+    def check(t: float, k: int) -> None:
+        n_sites = 10**6
+        frequencies = jc_transition_probabilities(t, k=k) / k
+        first, second = _pair_from_frequencies(frequencies, n_sites)
+        # Rounding to integer counts moves the total by at most k^2 sites and p
+        # by at most that fraction; the closed form is held at the realized p.
+        realized = 1.0 - np.trace(pair_counts(first, second, k)) / first.shape[0]
+        expected = -((k - 1) / k) * np.log(1.0 - realized * k / (k - 1))
 
-    assert estimate.value == pytest.approx(expected, rel=1e-12)
-    assert estimate.value == pytest.approx(t, abs=1e-4)
+        estimate = jukes_cantor_distance(first, second, k)
+
+        assert estimate.value == pytest.approx(expected, rel=1e-12)
+        assert estimate.value == pytest.approx(t, abs=1e-4)
+
+    every_row(product(LENGTHS, [2, 4]), check)
 
 
 @pytest.mark.analytic
-@pytest.mark.parametrize("t", LENGTHS)
-def test_the_log_det_distance_equals_the_branch_length_under_jukes_cantor(
-    t: float,
-) -> None:
+def test_the_log_det_distance_equals_the_branch_length_under_jukes_cantor() -> None:
     """``-tr(Q)/k`` is 1 for the normalized Jukes--Cantor ``Q``, so log-det returns ``t``."""
-    k = 4
-    frequencies = jc_transition_probabilities(t, k=k) / k
-    first, second = _pair_from_frequencies(frequencies, 10**6)
 
-    estimate = log_det_distance(first, second, k)
+    def check(t: float) -> None:
+        k = 4
+        frequencies = jc_transition_probabilities(t, k=k) / k
+        first, second = _pair_from_frequencies(frequencies, 10**6)
 
-    assert estimate.value == pytest.approx(t, abs=2e-4)
+        estimate = log_det_distance(first, second, k)
+
+        assert estimate.value == pytest.approx(t, abs=2e-4)
+
+    every_value(LENGTHS, check)
 
 
 @pytest.mark.analytic

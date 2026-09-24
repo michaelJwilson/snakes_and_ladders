@@ -31,6 +31,8 @@ from snakes_and_ladders.opt.fit import fit
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.opt.testfunctions import Himmelblau, Rastrigin, Rosenbrock
 
+from tests._rows import every_value
+
 optimize = pytest.importorskip("scipy.optimize")
 
 
@@ -91,19 +93,19 @@ def test_the_fit_reaches_the_minimizer_scipy_reaches_from_the_same_start(
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("dimension", [2, 3, 5])
-def test_both_optimizers_reach_rosenbrock_s_analytic_minimizer(
-    dimension: int,
-) -> None:
+def test_both_optimizers_reach_rosenbrock_s_analytic_minimizer() -> None:
     # The referee refereed: agreement between two optimizers is agreement, so
     # the pair is anchored once to the closed form they are both aiming at.
-    objective = Rosenbrock(dimension=dimension)
-    expected = objective.minimizer().numpy()
+    def check(dimension: int) -> None:
+        objective = Rosenbrock(dimension=dimension)
+        expected = objective.minimizer().numpy()
 
-    np.testing.assert_allclose(
-        fit(objective).theta.detach().numpy(), expected, rtol=0.0, atol=1e-5
-    )
-    np.testing.assert_allclose(_scipy_minimizer(objective), expected, atol=1e-5)
+        np.testing.assert_allclose(
+            fit(objective).theta.detach().numpy(), expected, rtol=0.0, atol=1e-5
+        )
+        np.testing.assert_allclose(_scipy_minimizer(objective), expected, atol=1e-5)
+
+    every_value([2, 3, 5], check)
 
 
 @pytest.mark.smoke

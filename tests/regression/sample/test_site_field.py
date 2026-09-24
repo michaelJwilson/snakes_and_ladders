@@ -27,6 +27,8 @@ from snakes_and_ladders.search.alpha_expansion import (
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import SiteField, log_weight_of, site_field
 
+from tests._rows import every_value
+
 
 def _deleted_wolff_update(
     labels: np.ndarray,
@@ -73,30 +75,32 @@ def _model() -> tuple[PottsGraph, np.ndarray]:
 
 @pytest.mark.critical
 @pytest.mark.oracle
-@pytest.mark.parametrize("beta", [0.3, 1.0, 3.0])
-def test_the_folded_move_is_the_deleted_one_bitwise(beta: float) -> None:
+def test_the_folded_move_is_the_deleted_one_bitwise() -> None:
     # 500 steps of each from one state and one stream: the same labels after
     # every step.
-    graph, energy = _model()
-    offsets, neighbours, couplings = graph.compressed_adjacency()
-    lists = adjacency_lists(offsets, neighbours, couplings)
-    declared = SiteField.from_energy(energy)
-    start = np.random.default_rng(1).integers(0, 3, graph.n_nodes)
-    old, new = start.copy(), start.copy()
-    old_rng, new_rng = np.random.default_rng(2), np.random.default_rng(2)
-    for _ in range(500):
-        _deleted_wolff_update(old, graph, -energy, beta, old_rng)
-        wolff_sweep(
-            new,
-            declared,
-            offsets,
-            neighbours,
-            couplings,
-            new_rng,
-            beta=beta,
-            lists=lists,
-        )
-        assert np.array_equal(old, new)
+    def check(beta: float) -> None:
+        graph, energy = _model()
+        offsets, neighbours, couplings = graph.compressed_adjacency()
+        lists = adjacency_lists(offsets, neighbours, couplings)
+        declared = SiteField.from_energy(energy)
+        start = np.random.default_rng(1).integers(0, 3, graph.n_nodes)
+        old, new = start.copy(), start.copy()
+        old_rng, new_rng = np.random.default_rng(2), np.random.default_rng(2)
+        for _ in range(500):
+            _deleted_wolff_update(old, graph, -energy, beta, old_rng)
+            wolff_sweep(
+                new,
+                declared,
+                offsets,
+                neighbours,
+                couplings,
+                new_rng,
+                beta=beta,
+                lists=lists,
+            )
+            assert np.array_equal(old, new)
+
+    every_value([0.3, 1.0, 3.0], check)
 
 
 @pytest.mark.smoke

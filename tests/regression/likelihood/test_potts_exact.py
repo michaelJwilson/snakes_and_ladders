@@ -10,6 +10,8 @@ before this module existed and sharing no code with it.
 
 from __future__ import annotations
 
+from itertools import product
+
 import numpy as np
 import pytest
 import torch
@@ -25,6 +27,8 @@ from snakes_and_ladders.opt.potts import log_partition
 from snakes_and_ladders.sim.factor_graph import from_potts
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
+from tests._rows import every_row, every_value
+
 # `likelihood/CLAUDE.md`'s float64 bound. Both sides here are float64, so this
 # is the applicable one; nothing in this module runs on a device.
 RELATIVE_TOLERANCE = 1e-11
@@ -37,40 +41,42 @@ def _relative(realized: float, reference: float) -> float:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("shape", [(3, 3), (4, 2), (2, 4), (5, 2)])
-def test_the_transfer_matrix_reproduces_exhaustive_enumeration(
-    shape: tuple[int, int],
-) -> None:
+def test_the_transfer_matrix_reproduces_exhaustive_enumeration() -> None:
     # (4, 2) and (2, 4) are the same lattice transposed. Both are checked
     # because the recursion runs along one axis and sums within the other, so
     # a swapped convention would agree with enumeration on squares only.
-    coupling = 0.6
-    graph = lattice_graph(shape, BoundaryCondition.OPEN, coupling)
-    exact = enumerate_potts(graph, FIELD)
-    realized = strip_log_partition(shape, BoundaryCondition.OPEN, coupling, FIELD)
+    def check(shape: tuple[int, int]) -> None:
+        coupling = 0.6
+        graph = lattice_graph(shape, BoundaryCondition.OPEN, coupling)
+        exact = enumerate_potts(graph, FIELD)
+        realized = strip_log_partition(shape, BoundaryCondition.OPEN, coupling, FIELD)
 
-    assert _relative(realized, exact.log_partition) < RELATIVE_TOLERANCE
+        assert _relative(realized, exact.log_partition) < RELATIVE_TOLERANCE
+
+    every_value([(3, 3), (4, 2), (2, 4), (5, 2)], check)
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("length", [2, 3, 5, 8])
-def test_a_strip_of_width_one_reduces_to_the_chain_transfer_matrix(
-    length: int,
-) -> None:
+def test_a_strip_of_width_one_reduces_to_the_chain_transfer_matrix() -> None:
     # A second exact reference, not a second sampler: `snakes_and_ladders.opt.potts`
     # transfers a single site at a time in torch, this transfers a column of
     # `M` sites in numpy, and at `M = 1` they must agree to machine precision.
-    coupling = 0.6
-    realized = strip_log_partition((length, 1), BoundaryCondition.OPEN, coupling, FIELD)
-    reference = float(
-        log_partition(
-            torch.tensor(coupling, dtype=torch.float64),
-            torch.tensor(FIELD, dtype=torch.float64),
-            length,
+    def check(length: int) -> None:
+        coupling = 0.6
+        realized = strip_log_partition(
+            (length, 1), BoundaryCondition.OPEN, coupling, FIELD
         )
-    )
+        reference = float(
+            log_partition(
+                torch.tensor(coupling, dtype=torch.float64),
+                torch.tensor(FIELD, dtype=torch.float64),
+                length,
+            )
+        )
 
-    assert _relative(realized, reference) < RELATIVE_TOLERANCE
+        assert _relative(realized, reference) < RELATIVE_TOLERANCE
+
+    every_value([2, 3, 5, 8], check)
 
 
 def _chain(length: int, coupling: float) -> PottsGraph:
@@ -88,11 +94,7 @@ def _chain(length: int, coupling: float) -> PottsGraph:
 
 @pytest.mark.oracle
 @pytest.mark.critical
-@pytest.mark.parametrize("coupling", [0.7, -0.5])
-@pytest.mark.parametrize("length", [6, 10])
-def test_the_transfer_matrix_is_sum_product_on_the_strip_that_is_a_tree(
-    length: int, coupling: float
-) -> None:
+def test_the_transfer_matrix_is_sum_product_on_the_strip_that_is_a_tree() -> None:
     # The rung below (issue #734): sum-product is exact where the factor graph
     # is a tree, and the only strip that is one is width 1 -- a width of 2
     # closes every square into a loop. The two routes then compute one number
@@ -102,18 +104,21 @@ def test_the_transfer_matrix_is_sum_product_on_the_strip_that_is_a_tree(
     # cannot catch a route reading the field rows in the wrong order.
     # Realized relative difference over the eight comparisons, at most
     # 4.8e-16, against the 1e-13 declared here.
-    graph = _chain(length, coupling)
-    assert from_potts(graph, FIELD).is_tree()
-    drawn = np.random.default_rng(7).normal(0.0, 0.8, size=(length, FIELD.shape[0]))
+    def check(coupling: float, length: int) -> None:
+        graph = _chain(length, coupling)
+        assert from_potts(graph, FIELD).is_tree()
+        drawn = np.random.default_rng(7).normal(0.0, 0.8, size=(length, FIELD.shape[0]))
 
-    for field in (FIELD, drawn):
-        realized = strip_log_partition(
-            (length, 1), BoundaryCondition.OPEN, coupling, field
-        )
-        reference = sum_product(from_potts(graph, field))
+        for field in (FIELD, drawn):
+            realized = strip_log_partition(
+                (length, 1), BoundaryCondition.OPEN, coupling, field
+            )
+            reference = sum_product(from_potts(graph, field))
 
-        assert reference.exact
-        assert _relative(realized, reference.log_partition) < 1e-13
+            assert reference.exact
+            assert _relative(realized, reference.log_partition) < 1e-13
+
+    every_row(product([0.7, -0.5], [6, 10]), check)
 
 
 @pytest.mark.smoke

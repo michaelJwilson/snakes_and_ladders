@@ -28,6 +28,8 @@ from snakes_and_ladders.sim.spatio_sequential import (
     simulate_spatio_sequential,
 )
 
+from tests._rows import every_value
+
 
 def _dataset(
     seed: int,
@@ -37,14 +39,18 @@ def _dataset(
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("seed", [1, 2, 3])
-def test_the_enumerated_evidence_equals_the_per_class_forward_route(seed: int) -> None:
-    params, data = _dataset(seed)
+def test_the_enumerated_evidence_equals_the_per_class_forward_route() -> None:
+    def check(seed: int) -> None:
+        params, data = _dataset(seed)
 
-    exact = enumerate_spatio_sequential(params, data.observations)
-    forward = log_evidence_by_forward(params, data.observations)
+        exact = enumerate_spatio_sequential(params, data.observations)
+        forward = log_evidence_by_forward(params, data.observations)
 
-    assert abs(exact.log_evidence - forward) <= CROSS_DEVICE_RTOL_FLOAT64 * abs(forward)
+        assert abs(exact.log_evidence - forward) <= CROSS_DEVICE_RTOL_FLOAT64 * abs(
+            forward
+        )
+
+    every_value([1, 2, 3], check)
 
 
 @pytest.mark.oracle

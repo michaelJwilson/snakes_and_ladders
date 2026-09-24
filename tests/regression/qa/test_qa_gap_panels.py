@@ -20,6 +20,8 @@ from snakes_and_ladders.qa.starts import (
 )
 from snakes_and_ladders.search.mixture_starts import GapBand, curve_band, gap_band
 
+from tests._rows import every_value
+
 GRID = np.geomspace(1e-3, 10.0, 50)
 
 
@@ -48,31 +50,33 @@ def _held_band(
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("seed", range(4))
-def test_the_one_band_reader_is_the_mixture_band_it_replaced(seed: int) -> None:
+def test_the_one_band_reader_is_the_mixture_band_it_replaced() -> None:
     # Issue #926 folded `gap_band` onto `curve_band`; the loop it replaced is
     # kept above as the referee, and the band is bitwise it on random trials,
     # one to five of them, some starting after the grid does.
-    rng = np.random.default_rng([926, seed])
-    reference = float(rng.normal(10.0, 1.0))
-    trials = []
-    for _ in range(int(rng.integers(1, 6))):
-        size = int(rng.integers(2, 12))
-        times = np.sort(rng.uniform(1e-3, 8.0, size))
-        values = reference - rng.exponential(2.0, size)
-        trials.append(
-            _FakeTrial(
-                tuple(zip(times.tolist(), values.tolist(), strict=True)),
-                int(rng.integers(0, size)),
+    def check(seed: int) -> None:
+        rng = np.random.default_rng([926, seed])
+        reference = float(rng.normal(10.0, 1.0))
+        trials = []
+        for _ in range(int(rng.integers(1, 6))):
+            size = int(rng.integers(2, 12))
+            times = np.sort(rng.uniform(1e-3, 8.0, size))
+            values = reference - rng.exponential(2.0, size)
+            trials.append(
+                _FakeTrial(
+                    tuple(zip(times.tolist(), values.tolist(), strict=True)),
+                    int(rng.integers(0, size)),
+                )
             )
-        )
-    expected = _held_band(trials, reference, GRID)
-    got = gap_band(trials, reference, GRID)  # type: ignore[arg-type]
-    assert np.array_equal(got.mean, expected.mean, equal_nan=True)
-    assert np.array_equal(got.std, expected.std, equal_nan=True)
-    assert got.handover == expected.handover
-    with pytest.raises(ValueError, match="at least one"):
-        curve_band([], GRID)
+        expected = _held_band(trials, reference, GRID)
+        got = gap_band(trials, reference, GRID)  # type: ignore[arg-type]
+        assert np.array_equal(got.mean, expected.mean, equal_nan=True)
+        assert np.array_equal(got.std, expected.std, equal_nan=True)
+        assert got.handover == expected.handover
+        with pytest.raises(ValueError, match="at least one"):
+            curve_band([], GRID)
+
+    every_value(range(4), check)
 
 
 class _FakeTrial:

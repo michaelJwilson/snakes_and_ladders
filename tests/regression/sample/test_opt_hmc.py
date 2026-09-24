@@ -66,6 +66,7 @@ from tests._posteriors import (
     enumerated_quadrature,
     weight_posterior,
 )
+from tests._rows import every_row, every_value
 from tests._scale import stress_only
 
 EXACT = 1e-13
@@ -101,26 +102,26 @@ QUADRATURE_SD = (0.05497, 0.04524)
 
 @pytest.mark.analytic
 @pytest.mark.parametrize("integrator", [leapfrog, yoshida])
-@pytest.mark.parametrize(("n_steps", "step_size"), [(20, 0.05), (50, 0.1), (100, 0.02)])
-def test_the_integrator_is_reversible(
-    n_steps: int, step_size: float, integrator: Integrator
-) -> None:
+def test_the_integrator_is_reversible(integrator: Integrator) -> None:
     # Run forward, negate the momentum, run forward again: the exact statement
     # that makes the Metropolis proposal symmetric. Without it the acceptance
     # ratio is not the energy difference alone and the chain targets the wrong
     # distribution, which no sampling would localize to here.
-    theta = torch.tensor([0.4, 0.9], dtype=torch.float64)
-    momentum = torch.tensor([-0.3, 1.1], dtype=torch.float64)
+    def check(n_steps: int, step_size: float) -> None:
+        theta = torch.tensor([0.4, 0.9], dtype=torch.float64)
+        momentum = torch.tensor([-0.3, 1.1], dtype=torch.float64)
 
-    forward, forward_momentum = integrator(
-        GAUSSIAN, theta, momentum, step_size, n_steps
-    )
-    back, back_momentum = integrator(
-        GAUSSIAN, forward, -forward_momentum, step_size, n_steps
-    )
+        forward, forward_momentum = integrator(
+            GAUSSIAN, theta, momentum, step_size, n_steps
+        )
+        back, back_momentum = integrator(
+            GAUSSIAN, forward, -forward_momentum, step_size, n_steps
+        )
 
-    assert float((back - theta).abs().max()) < EXACT
-    assert float((-back_momentum - momentum).abs().max()) < EXACT
+        assert float((back - theta).abs().max()) < EXACT
+        assert float((-back_momentum - momentum).abs().max()) < EXACT
+
+    every_row([(20, 0.05), (50, 0.1), (100, 0.02)], check)
 
 
 @pytest.mark.analytic
@@ -368,24 +369,22 @@ def _hand_written_leapfrog(
     return position, velocity
 
 
-@pytest.mark.parametrize(
-    ("n_steps", "step_size"), [(20, 0.05), (50, 0.1), (7, 0.13), (1, 0.3)]
-)
 @pytest.mark.analytic
-def test_the_composition_reproduces_the_hand_written_leapfrog_exactly(
-    n_steps: int, step_size: float
-) -> None:
+def test_the_composition_reproduces_the_hand_written_leapfrog_exactly() -> None:
     # Bitwise, not to a tolerance. The composition driver replaced a
     # hand-written loop, and a tolerance here would hide a merged kick
     # computed in the wrong order.
-    theta = torch.tensor([0.4, 0.9], dtype=torch.float64)
-    momentum = torch.tensor([-0.3, 1.1], dtype=torch.float64)
+    def check(n_steps: int, step_size: float) -> None:
+        theta = torch.tensor([0.4, 0.9], dtype=torch.float64)
+        momentum = torch.tensor([-0.3, 1.1], dtype=torch.float64)
 
-    composed = leapfrog(GAUSSIAN, theta, momentum, step_size, n_steps)
-    written = _hand_written_leapfrog(GAUSSIAN, theta, momentum, step_size, n_steps)
+        composed = leapfrog(GAUSSIAN, theta, momentum, step_size, n_steps)
+        written = _hand_written_leapfrog(GAUSSIAN, theta, momentum, step_size, n_steps)
 
-    assert torch.equal(composed.position, written[0])
-    assert torch.equal(composed.momentum, written[1])
+        assert torch.equal(composed.position, written[0])
+        assert torch.equal(composed.momentum, written[1])
+
+    every_row([(20, 0.05), (50, 0.1), (7, 0.13), (1, 0.3)], check)
 
 
 @pytest.mark.analytic
@@ -441,24 +440,26 @@ def test_the_energy_error_is_fourth_order_in_the_step_size() -> None:
 
 @pytest.mark.smoke
 @pytest.mark.parametrize("integrator", [leapfrog, yoshida])
-@pytest.mark.parametrize("n_steps", [1, 3, 20])
 def test_force_evaluations_counts_what_a_trajectory_actually_costs(
-    integrator: Integrator, n_steps: int
+    integrator: Integrator,
 ) -> None:
     # The number a comparison between integrators rests on. Counted rather
     # than derived: a comparison at equal *steps* says nothing, and an
     # off-by-one here would quietly favour one method.
-    counted = Counted(GAUSSIAN)
+    def check(n_steps: int) -> None:
+        counted = Counted(GAUSSIAN)
 
-    integrator(
-        counted,
-        torch.zeros(2, dtype=torch.float64),
-        torch.ones(2, dtype=torch.float64),
-        0.05,
-        n_steps,
-    )
+        integrator(
+            counted,
+            torch.zeros(2, dtype=torch.float64),
+            torch.ones(2, dtype=torch.float64),
+            0.05,
+            n_steps,
+        )
 
-    assert counted.calls == integrator.force_evaluations(n_steps)
+        assert counted.calls == integrator.force_evaluations(n_steps)
+
+    every_value([1, 3, 20], check)
 
 
 @pytest.mark.analytic

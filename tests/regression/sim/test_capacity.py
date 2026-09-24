@@ -19,7 +19,7 @@ so what it is checked against matters more than usual:
 from __future__ import annotations
 
 import math
-from itertools import pairwise
+from itertools import pairwise, product
 
 import numpy as np
 import pytest
@@ -43,6 +43,8 @@ from snakes_and_ladders.sim.ldpc import (
     BinarySymmetricChannel,
     Channel,
 )
+
+from tests._rows import every_row, every_value
 
 # The rate-1/2 binary-input Gaussian limit (Richardson and Urbanke 2008,
 # §4.10), quoted to four places, which is what fixes the tolerance below.
@@ -144,28 +146,29 @@ def test_the_node_count_is_not_what_the_number_rests_on() -> None:
 
 
 @pytest.mark.analytic
-@pytest.mark.parametrize("rate", RATES)
 @pytest.mark.parametrize(
     "family",
     [BinaryErasureChannel, BinarySymmetricChannel, BinaryInputGaussianChannel],
 )
-def test_the_shannon_limit_round_trips_through_capacity(
-    rate: float, family: type
-) -> None:
+def test_the_shannon_limit_round_trips_through_capacity(family: type) -> None:
     # What `noise_at_capacity` claims, checked by putting the answer back in:
     # the capacity at the returned noise level is the rate asked for.
-    noise = noise_at_capacity(rate, family)
-    assert capacity(family(noise)) == pytest.approx(rate, abs=1e-7)
+    def check(rate: float) -> None:
+        noise = noise_at_capacity(rate, family)
+        assert capacity(family(noise)) == pytest.approx(rate, abs=1e-7)
+
+    every_value(RATES, check)
 
 
 @pytest.mark.oracle
 @pytest.mark.analytic
-@pytest.mark.parametrize("rate", RATES)
-def test_the_erasure_limit_is_one_minus_the_rate(rate: float) -> None:
+def test_the_erasure_limit_is_one_minus_the_rate() -> None:
     # Closed form, so the bisection is held to it rather than to itself.
-    assert noise_at_capacity(rate, BinaryErasureChannel) == pytest.approx(
-        1.0 - rate, abs=1e-9
-    )
+    def check(rate: float) -> None:
+        limit = noise_at_capacity(rate, BinaryErasureChannel)
+        assert limit == pytest.approx(1.0 - rate, abs=1e-9)
+
+    every_value(RATES, check)
 
 
 @pytest.mark.oracle
@@ -202,12 +205,14 @@ def test_a_channel_with_no_declared_capacity_is_refused() -> None:
 
 
 @pytest.mark.smoke
-@pytest.mark.parametrize("rate", [0.0, 1.0, -0.1, 1.5])
-def test_a_rate_outside_the_open_unit_interval_is_refused(rate: float) -> None:
+def test_a_rate_outside_the_open_unit_interval_is_refused() -> None:
     # At 0 and 1 the limit is an interval end rather than a crossing, and the
     # bisection would return that end as though it had solved for it.
-    with pytest.raises(ValueError, match="strictly in"):
-        noise_at_capacity(rate, BinaryErasureChannel)
+    def check(rate: float) -> None:
+        with pytest.raises(ValueError, match="strictly in"):
+            noise_at_capacity(rate, BinaryErasureChannel)
+
+    every_value([0.0, 1.0, -0.1, 1.5], check)
 
 
 @pytest.mark.smoke
@@ -223,17 +228,15 @@ def test_the_arguments_each_function_cannot_answer_for_are_refused() -> None:
 
 
 @pytest.mark.analytic
-@pytest.mark.parametrize("rate", RATES)
-@pytest.mark.parametrize("decibels", [-1.0, 0.0, 1.5, 4.0, 9.0])
-def test_the_two_directions_of_the_decibel_map_are_inverses(
-    rate: float, decibels: float
-) -> None:
+def test_the_two_directions_of_the_decibel_map_are_inverses() -> None:
     # `noise_scale` sets a waterfall's points and `eb_n0_decibels` reads them
     # back. They are one formula written twice, in opposite directions, in two
     # modules -- so they are pinned to each other here rather than restated.
-    assert eb_n0_decibels(noise_scale(decibels, rate), rate) == pytest.approx(
-        decibels, abs=1e-12
-    )
+    def check(rate: float, decibels: float) -> None:
+        read = eb_n0_decibels(noise_scale(decibels, rate), rate)
+        assert read == pytest.approx(decibels, abs=1e-12)
+
+    every_row(product(RATES, [-1.0, 0.0, 1.5, 4.0, 9.0]), check)
 
 
 @pytest.mark.oracle

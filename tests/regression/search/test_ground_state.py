@@ -54,6 +54,8 @@ from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 from snakes_and_ladders.sim.potts import SpatioOnlyParams, energy
 
+from tests._rows import every_value
+
 #: Two exact routes sum the same weights in a different order, so they agree
 #: to the last bits of a float64 reduction rather than bitwise.
 _EXACT = 1e-9
@@ -159,18 +161,20 @@ def test_the_backend_seam_reaches_the_rust_cut_bitwise() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("n_states", [2, 3])
-def test_both_cut_move_sets_reach_the_enumerated_optimum(n_states: int) -> None:
+def test_both_cut_move_sets_reach_the_enumerated_optimum() -> None:
     # Alpha expansion carries a bound and the swap carries none, so this is
     # the only place the swap's answer is refereed rather than compared.
-    rung = _rung(CI, n_states)
-    _, exact = _enumerated(rung)
+    def check(n_states: int) -> None:
+        rung = _rung(CI, n_states)
+        _, exact = _enumerated(rung)
 
-    expansion = alpha_expansion(rung.graph, rung.field, n_states)
-    swapped = alpha_beta_swap(rung.graph, rung.field, n_states)
+        expansion = alpha_expansion(rung.graph, rung.field, n_states)
+        swapped = alpha_beta_swap(rung.graph, rung.field, n_states)
 
-    assert expansion.energy == pytest.approx(exact, abs=_EXACT)
-    assert swapped.energy == pytest.approx(exact, abs=_EXACT)
+        assert expansion.energy == pytest.approx(exact, abs=_EXACT)
+        assert swapped.energy == pytest.approx(exact, abs=_EXACT)
+
+    every_value([2, 3], check)
 
 
 @pytest.mark.analytic

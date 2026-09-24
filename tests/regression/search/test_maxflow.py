@@ -23,6 +23,7 @@ from __future__ import annotations
 import itertools
 import sys
 from functools import cache
+from itertools import product
 
 import numpy as np
 import pytest
@@ -34,6 +35,8 @@ from snakes_and_ladders.search.maxflow import (
 )
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import energies, site_field
+
+from tests._rows import every_row, every_value
 
 # The Python blocking flow recurses to the depth of the level graph. The Rust
 # port uses an explicit stack and needs no such raise, which is one of the two
@@ -72,25 +75,24 @@ def _oracle_and_kernel(
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("shape", [(2, 2), (3, 3), (4, 3), (4, 4)])
-@pytest.mark.parametrize("coupling", [0.0, 0.4, 1.2])
-def test_the_cut_finds_the_enumerated_minimum_with_a_per_node_field(
-    shape: tuple[int, int], coupling: float
-) -> None:
+def test_the_cut_finds_the_enumerated_minimum_with_a_per_node_field() -> None:
     # A per-node field is the case with content. Under the *uniform* field the
     # rest of the repository uses, every coupling favours agreement and every
     # site prefers the same state, so the ferromagnetic ground state is
     # `argmax(h)` everywhere and a cut is an expensive way to say so.
-    rng = np.random.default_rng(0)
-    graph = lattice_graph(shape, BoundaryCondition.OPEN, coupling)
+    def check(shape: tuple[int, int], coupling: float) -> None:
+        rng = np.random.default_rng(0)
+        graph = lattice_graph(shape, BoundaryCondition.OPEN, coupling)
 
-    for _ in range(3):
-        field_values = rng.normal(size=(graph.n_nodes, 2))
-        _, realized = ising_ground_state(graph, field_values)
+        for _ in range(3):
+            field_values = rng.normal(size=(graph.n_nodes, 2))
+            _, realized = ising_ground_state(graph, field_values)
 
-        assert realized == pytest.approx(
-            _enumerated_minimum(graph, field_values), abs=1e-12
-        )
+            assert realized == pytest.approx(
+                _enumerated_minimum(graph, field_values), abs=1e-12
+            )
+
+    every_row(product([(2, 2), (3, 3), (4, 3), (4, 4)], [0.0, 0.4, 1.2]), check)
 
 
 @pytest.mark.oracle
@@ -177,14 +179,16 @@ def test_the_flow_value_equals_the_capacity_of_the_cut_it_induces() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("extent", [4, 8, 12])
-def test_the_rust_kernel_reproduces_the_python_oracle_exactly(extent: int) -> None:
+def test_the_rust_kernel_reproduces_the_python_oracle_exactly() -> None:
     # Exact equality of energy, not a tolerance: this is a combinatorial
     # minimum. The configuration itself may differ where the minimum is
     # degenerate, which is why the energy is what is compared.
-    _, expected, _, realized = _oracle_and_kernel(extent)
+    def check(extent: int) -> None:
+        _, expected, _, realized = _oracle_and_kernel(extent)
 
-    assert realized == pytest.approx(expected, abs=1e-12)
+        assert realized == pytest.approx(expected, abs=1e-12)
+
+    every_value([4, 8, 12], check)
 
 
 @pytest.mark.oracle
@@ -207,34 +211,33 @@ def test_the_rust_min_cut_reproduces_a_hand_computed_value_and_cut() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("n_nodes", [6, 12, 24])
-@pytest.mark.parametrize("seed", [528, 529])
-def test_the_rust_min_cut_returns_the_python_cut_on_seeded_networks(
-    n_nodes: int, seed: int
-) -> None:
+def test_the_rust_min_cut_returns_the_python_cut_on_seeded_networks() -> None:
     # The claim issue #528 rests on: the side the binding now returns is the
     # side the oracle computes, arc for arc, on a random network with back
     # capacities -- not merely a set of the same capacity. Two networks are
     # built from the same draws because the pure solver consumes the one it
     # is given, turning its capacities into residual capacities.
-    rng = np.random.default_rng(seed)
-    tails = rng.integers(0, n_nodes, size=4 * n_nodes)
-    heads = rng.integers(0, n_nodes, size=4 * n_nodes)
-    forward = rng.uniform(0.1, 3.0, size=4 * n_nodes)
-    reverse = rng.uniform(0.0, 1.0, size=4 * n_nodes)
-    networks = [FlowNetwork(n_nodes=n_nodes) for _ in range(2)]
-    for network in networks:
-        for tail, head, capacity, back in zip(
-            tails, heads, forward, reverse, strict=True
-        ):
-            if tail != head:
-                network.add_edge(int(tail), int(head), float(capacity), float(back))
+    def check(n_nodes: int, seed: int) -> None:
+        rng = np.random.default_rng(seed)
+        tails = rng.integers(0, n_nodes, size=4 * n_nodes)
+        heads = rng.integers(0, n_nodes, size=4 * n_nodes)
+        forward = rng.uniform(0.1, 3.0, size=4 * n_nodes)
+        reverse = rng.uniform(0.0, 1.0, size=4 * n_nodes)
+        networks = [FlowNetwork(n_nodes=n_nodes) for _ in range(2)]
+        for network in networks:
+            for tail, head, capacity, back in zip(
+                tails, heads, forward, reverse, strict=True
+            ):
+                if tail != head:
+                    network.add_edge(int(tail), int(head), float(capacity), float(back))
 
-    expected = max_flow(networks[0], 0, n_nodes - 1)
-    realized = maxflow_rust.min_cut(networks[1], 0, n_nodes - 1)
+        expected = max_flow(networks[0], 0, n_nodes - 1)
+        realized = maxflow_rust.min_cut(networks[1], 0, n_nodes - 1)
 
-    assert realized.value == pytest.approx(expected.value, rel=1e-12)
-    assert realized.source_side.tolist() == expected.source_side.tolist()
+        assert realized.value == pytest.approx(expected.value, rel=1e-12)
+        assert realized.source_side.tolist() == expected.source_side.tolist()
+
+    every_row(product([6, 12, 24], [528, 529]), check)
 
 
 @pytest.mark.smoke
@@ -373,14 +376,14 @@ def test_a_batch_of_the_wrong_shape_is_refused() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("extent", [4, 8, 12, 16])
-def test_the_kernel_returns_the_python_configuration_as_well_as_its_energy(
-    extent: int,
-) -> None:
+def test_the_kernel_returns_the_python_configuration_as_well_as_its_energy() -> None:
     # The configuration is read off the minimal minimum cut, which every
     # maximum flow shares, so a kernel that returned a different one would
     # have returned a different cut and not a tie (issue #715).
-    expected_state, expected, realized_state, realized = _oracle_and_kernel(extent)
+    def check(extent: int) -> None:
+        expected_state, expected, realized_state, realized = _oracle_and_kernel(extent)
 
-    assert realized == expected
-    assert np.array_equal(realized_state, expected_state)
+        assert realized == expected
+        assert np.array_equal(realized_state, expected_state)
+
+    every_value([4, 8, 12, 16], check)

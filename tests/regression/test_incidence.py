@@ -21,6 +21,8 @@ from snakes_and_ladders.sim.factor_graph import Factor, FactorGraph, Variable
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 from snakes_and_ladders.sim.ldpc import gallager_code
 
+from tests._rows import every_row
+
 
 def _rows_of(
     n_rows: int, rows: np.ndarray, columns: np.ndarray, *, ascending: bool
@@ -43,21 +45,23 @@ def _pairs(
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("ascending", [False, True])
-@pytest.mark.parametrize(("n_rows", "n_cols", "n_entries"), [(7, 5, 30), (40, 9, 200)])
-def test_the_rows_are_the_loop_s_rows(
-    ascending: bool, n_rows: int, n_cols: int, n_entries: int
-) -> None:
-    rows, columns = _pairs(2026, n_rows, n_cols, n_entries)
-    incidence = SparseIncidence.from_pairs(
-        n_rows, n_cols, rows, columns, ascending=ascending
+def test_the_rows_are_the_loop_s_rows() -> None:
+    def check(ascending: bool, n_rows: int, n_cols: int, n_entries: int) -> None:
+        rows, columns = _pairs(2026, n_rows, n_cols, n_entries)
+        incidence = SparseIncidence.from_pairs(
+            n_rows, n_cols, rows, columns, ascending=ascending
+        )
+
+        recovered = [incidence.row(index).tolist() for index in range(n_rows)]
+
+        assert recovered == _rows_of(n_rows, rows, columns, ascending=ascending)
+        assert incidence.degrees.tolist() == [len(row) for row in recovered]
+        assert incidence.n_entries == n_entries
+
+    sizes = [(7, 5, 30), (40, 9, 200)]
+    every_row(
+        ((ascending, *size) for ascending in (False, True) for size in sizes), check
     )
-
-    recovered = [incidence.row(index).tolist() for index in range(n_rows)]
-
-    assert recovered == _rows_of(n_rows, rows, columns, ascending=ascending)
-    assert incidence.degrees.tolist() == [len(row) for row in recovered]
-    assert incidence.n_entries == n_entries
 
 
 @pytest.mark.oracle
@@ -237,12 +241,7 @@ def _distinct_pairs(
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize(
-    ("n_rows", "n_cols", "n_entries"), [(7, 5, 30), (40, 9, 200), (64, 64, 512)]
-)
-def test_the_compressed_layout_is_scipys_csr_on_the_same_pairs(
-    n_rows: int, n_cols: int, n_entries: int
-) -> None:
+def test_the_compressed_layout_is_scipys_csr_on_the_same_pairs() -> None:
     """`scipy.sparse.csr_matrix` builds the same layout by another route.
 
     The dictionary-of-lists oracle above decides which row an entry landed
@@ -255,16 +254,21 @@ def test_the_compressed_layout_is_scipys_csr_on_the_same_pairs(
     ``diff(indptr)`` and :meth:`dense` equals ``toarray`` **entry for
     entry**, the tolerance declared for an integer layout being equality.
     """
-    rows, columns = _distinct_pairs(31 + n_rows, n_rows, n_cols, n_entries)
-    incidence = SparseIncidence.from_pairs(
-        n_rows, n_cols, rows, columns, ascending=True, distinct=True
-    )
-    reference = csr_matrix(
-        (np.ones(n_entries, dtype=np.int64), (rows, columns)), shape=(n_rows, n_cols)
-    )
 
-    assert incidence.n_entries == n_entries == int(reference.nnz)
-    assert np.array_equal(incidence.offsets, reference.indptr)
-    assert np.array_equal(incidence.indices, reference.indices)
-    assert np.array_equal(incidence.degrees, np.diff(reference.indptr))
-    assert np.array_equal(incidence.dense(), reference.toarray())
+    def check(n_rows: int, n_cols: int, n_entries: int) -> None:
+        rows, columns = _distinct_pairs(31 + n_rows, n_rows, n_cols, n_entries)
+        incidence = SparseIncidence.from_pairs(
+            n_rows, n_cols, rows, columns, ascending=True, distinct=True
+        )
+        reference = csr_matrix(
+            (np.ones(n_entries, dtype=np.int64), (rows, columns)),
+            shape=(n_rows, n_cols),
+        )
+
+        assert incidence.n_entries == n_entries == int(reference.nnz)
+        assert np.array_equal(incidence.offsets, reference.indptr)
+        assert np.array_equal(incidence.indices, reference.indices)
+        assert np.array_equal(incidence.degrees, np.diff(reference.indptr))
+        assert np.array_equal(incidence.dense(), reference.toarray())
+
+    every_row([(7, 5, 30), (40, 9, 200), (64, 64, 512)], check)

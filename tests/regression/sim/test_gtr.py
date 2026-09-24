@@ -11,6 +11,8 @@ and the rate normalization -- are asserted directly.
 
 from __future__ import annotations
 
+from itertools import product
+
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
@@ -25,6 +27,7 @@ from snakes_and_ladders.sim.jc import jc_rate_matrix, jc_transition_probabilitie
 from snakes_and_ladders.sim.simulate import simulate_alignment
 
 from tests._fixtures import SMALL_SITES, load_fixture
+from tests._rows import every_row, every_value
 
 # A deliberately asymmetric truth: no two exchangeabilities equal, no two
 # frequencies equal, so a bug that collapsed either would show.
@@ -33,25 +36,26 @@ TRUE_PI = np.array([0.35, 0.15, 0.30, 0.20])
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("k", [2, 3, 4, 5])
-def test_equal_rates_and_uniform_pi_reproduce_jukes_cantor(k: int) -> None:
-    rate = gtr_rate_matrix(np.ones(n_exchangeabilities(k)), np.full(k, 1.0 / k))
-    assert_allclose(rate, jc_rate_matrix(k), atol=1e-15)
+def test_equal_rates_and_uniform_pi_reproduce_jukes_cantor() -> None:
+    def check(k: int) -> None:
+        rate = gtr_rate_matrix(np.ones(n_exchangeabilities(k)), np.full(k, 1.0 / k))
+        assert_allclose(rate, jc_rate_matrix(k), atol=1e-15)
+
+    every_value([2, 3, 4, 5], check)
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("k", [2, 4, 5])
-@pytest.mark.parametrize("t", [0.0, 0.05, 0.5, 2.0])
-def test_transition_probabilities_reproduce_the_jc_closed_form(
-    k: int, t: float
-) -> None:
-    pi = np.full(k, 1.0 / k)
-    rate = gtr_rate_matrix(np.ones(n_exchangeabilities(k)), pi)
-    assert_allclose(
-        reversible_transition_probabilities(rate, pi, t),
-        jc_transition_probabilities(t, k=k),
-        atol=1e-15,
-    )
+def test_transition_probabilities_reproduce_the_jc_closed_form() -> None:
+    def check(k: int, t: float) -> None:
+        pi = np.full(k, 1.0 / k)
+        rate = gtr_rate_matrix(np.ones(n_exchangeabilities(k)), pi)
+        assert_allclose(
+            reversible_transition_probabilities(rate, pi, t),
+            jc_transition_probabilities(t, k=k),
+            atol=1e-15,
+        )
+
+    every_row(product([2, 4, 5], [0.0, 0.05, 0.5, 2.0]), check)
 
 
 @pytest.mark.analytic
@@ -77,26 +81,30 @@ def test_the_rate_is_normalized_to_one_substitution_per_unit_time() -> None:
 
 
 @pytest.mark.analytic
-@pytest.mark.parametrize("scale", [0.1, 3.7, 100.0])
-def test_scaling_every_exchangeability_changes_nothing(scale: float) -> None:
+def test_scaling_every_exchangeability_changes_nothing() -> None:
     # Why one exchangeability has to be pinned. This is an exact invariance,
     # not an approximate one: the rate normalization divides the scale
     # straight back out, so without a gauge the likelihood is flat along this
     # direction and no parameter has a confidence interval.
-    assert_allclose(
-        gtr_rate_matrix(scale * TRUE_EXCHANGEABILITIES, TRUE_PI),
-        gtr_rate_matrix(TRUE_EXCHANGEABILITIES, TRUE_PI),
-        atol=1e-15,
-    )
+    def check(scale: float) -> None:
+        assert_allclose(
+            gtr_rate_matrix(scale * TRUE_EXCHANGEABILITIES, TRUE_PI),
+            gtr_rate_matrix(TRUE_EXCHANGEABILITIES, TRUE_PI),
+            atol=1e-15,
+        )
+
+    every_value([0.1, 3.7, 100.0], check)
 
 
 @pytest.mark.analytic
-@pytest.mark.parametrize("t", [0.05, 0.4, 1.5])
-def test_transition_probabilities_are_a_stochastic_matrix(t: float) -> None:
-    rate = gtr_rate_matrix(TRUE_EXCHANGEABILITIES, TRUE_PI)
-    probabilities = reversible_transition_probabilities(rate, TRUE_PI, t)
-    assert_allclose(probabilities.sum(axis=1), np.ones(4), atol=1e-14)
-    assert bool((probabilities > 0.0).all())
+def test_transition_probabilities_are_a_stochastic_matrix() -> None:
+    def check(t: float) -> None:
+        rate = gtr_rate_matrix(TRUE_EXCHANGEABILITIES, TRUE_PI)
+        probabilities = reversible_transition_probabilities(rate, TRUE_PI, t)
+        assert_allclose(probabilities.sum(axis=1), np.ones(4), atol=1e-14)
+        assert bool((probabilities > 0.0).all())
+
+    every_value([0.05, 0.4, 1.5], check)
 
 
 @pytest.mark.oracle
@@ -137,8 +145,7 @@ def test_free_exchangeabilities_are_completed_with_a_pinned_one() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("k", [2, 3, 4, 5])
-def test_the_free_parameterisation_inverts_its_own_closed_form(k: int) -> None:
+def test_the_free_parameterisation_inverts_its_own_closed_form() -> None:
     # The gauge map has a closed-form inverse -- divide every exchangeability
     # by the last, drop that last one -- and this is the round trip through
     # both directions. The referee is the *rate matrix*, which lives outside
@@ -146,25 +153,28 @@ def test_the_free_parameterisation_inverts_its_own_closed_form(k: int) -> None:
     # gauge removes, so a map that pinned the wrong entry or rescaled the
     # wrong way would reach a different `Q` and fail here rather than agree
     # with itself.
-    rng = np.random.default_rng(729)
-    full = rng.uniform(0.2, 3.0, size=n_exchangeabilities(k))
-    pi = rng.dirichlet(np.full(k, 4.0))
+    def check(k: int) -> None:
+        rng = np.random.default_rng(729)
+        full = rng.uniform(0.2, 3.0, size=n_exchangeabilities(k))
+        pi = rng.dirichlet(np.full(k, 4.0))
 
-    free = full[:-1] / full[-1]
-    completed = exchangeabilities_from_free(free, k)
+        free = full[:-1] / full[-1]
+        completed = exchangeabilities_from_free(free, k)
 
-    # The closed form, stated rather than recomputed: the last entry is 1 and
-    # the others are the ratios.
-    assert completed[-1] == 1.0
-    assert_allclose(completed[:-1], full[:-1] / full[-1], rtol=0.0, atol=0.0)
-    # And the round trip the other way is the identity on the free vector.
-    assert_allclose(completed[:-1] / completed[-1], free, rtol=0.0, atol=0.0)
-    # Realized on the four sizes: the largest entry of `Q` moves by
-    # 2.22e-16, one ulp of the rate normalization's division, against the
-    # 1e-15 declared here.
-    assert_allclose(
-        gtr_rate_matrix(completed, pi), gtr_rate_matrix(full, pi), atol=1e-15
-    )
+        # The closed form, stated rather than recomputed: the last entry is 1 and
+        # the others are the ratios.
+        assert completed[-1] == 1.0
+        assert_allclose(completed[:-1], full[:-1] / full[-1], rtol=0.0, atol=0.0)
+        # And the round trip the other way is the identity on the free vector.
+        assert_allclose(completed[:-1] / completed[-1], free, rtol=0.0, atol=0.0)
+        # Realized on the four sizes: the largest entry of `Q` moves by
+        # 2.22e-16, one ulp of the rate normalization's division, against the
+        # 1e-15 declared here.
+        assert_allclose(
+            gtr_rate_matrix(completed, pi), gtr_rate_matrix(full, pi), atol=1e-15
+        )
+
+    every_value([2, 3, 4, 5], check)
 
 
 @pytest.mark.smoke

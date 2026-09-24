@@ -40,6 +40,8 @@ from snakes_and_ladders.search.ground_state import (
 from snakes_and_ladders.search.maxflow import ising_ground_state
 from snakes_and_ladders.sim.potts import energy
 
+from tests._rows import every_value
+
 #: Sweeps of budget every probe gets, converted to site visits per rung. The
 #: unit is the module's own (`search/ground_state.py`): a Wolff step flips one
 #: cluster while a heat-bath sweep touches every site, so equal sweeps would
@@ -60,8 +62,7 @@ def _budget(rung: object) -> Budget:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("side", [4, 6, 8])
-def test_the_zero_field_optimum_is_a_closed_form_three_ways(side: int) -> None:
+def test_the_zero_field_optimum_is_a_closed_form_three_ways() -> None:
     """``-J * n_edges``, the exact cut, and a uniform labelling agree.
 
     Three routes to one number: the closed form, the two-label graph cut which
@@ -71,14 +72,18 @@ def test_the_zero_field_optimum_is_a_closed_form_three_ways(side: int) -> None:
     the closed form sums the couplings in a different order from either of the
     others.
     """
-    rung = lattice_rung(side, 2)
-    closed = uniform_ground_energy(rung)
-    _, cut = ising_ground_state(rung.graph, rung.field)
-    uniform = energy(rung.graph, rung.field, np.zeros(rung.n_nodes, dtype=np.int64))
 
-    assert closed == pytest.approx(cut, rel=1e-12)
-    assert closed == pytest.approx(uniform, rel=1e-12)
-    assert rung.optimum == closed
+    def check(side: int) -> None:
+        rung = lattice_rung(side, 2)
+        closed = uniform_ground_energy(rung)
+        _, cut = ising_ground_state(rung.graph, rung.field)
+        uniform = energy(rung.graph, rung.field, np.zeros(rung.n_nodes, dtype=np.int64))
+
+        assert closed == pytest.approx(cut, rel=1e-12)
+        assert closed == pytest.approx(uniform, rel=1e-12)
+        assert rung.optimum == closed
+
+    every_value([4, 6, 8], check)
 
 
 @pytest.mark.smoke
@@ -124,8 +129,7 @@ def test_the_zero_field_baseline_does_not_fail() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("side", [8, 12])
-def test_alpha_expansion_is_exact_at_two_labels(side: int) -> None:
+def test_alpha_expansion_is_exact_at_two_labels() -> None:
     """In a field at ``q = 2`` the expansion equals the graph cut, gap 0.0.
 
     Bitwise, not to a tolerance, at both sides here and at 16, 24 and 32 in the
@@ -135,14 +139,18 @@ def test_alpha_expansion_is_exact_at_two_labels(side: int) -> None:
     is what makes the three-label measurement below a measurement of the
     *labels* rather than of the implementation.
     """
-    rung = lattice_rung(side, 2, seed=side)
-    _, exact = ising_ground_state(rung.graph, rung.field)
 
-    expansion = Entry("alpha-expansion")(
-        rung, _budget(rung), np.random.default_rng(596)
-    )
+    def check(side: int) -> None:
+        rung = lattice_rung(side, 2, seed=side)
+        _, exact = ising_ground_state(rung.graph, rung.field)
 
-    assert expansion.value == exact
+        expansion = Entry("alpha-expansion")(
+            rung, _budget(rung), np.random.default_rng(596)
+        )
+
+        assert expansion.value == exact
+
+    every_value([8, 12], check)
 
 
 @pytest.mark.analytic

@@ -70,6 +70,8 @@ from snakes_and_ladders.search.ground_state import (
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import critical_coupling, energies, spatio_only_field
 
+from tests._rows import every_value
+
 #: The class ladder the fixtures tilt by, as `test_potts_nd.py` builds it.
 ALPHA = (-1.0, 0.0, 1.0)
 
@@ -211,8 +213,7 @@ def test_a_move_and_a_field_of_different_heights_are_refused() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("temperature", [0.25, 1.0, 4.0])
-def test_a_wolff_step_is_potts_mcmcs_own_sweep_bitwise(temperature: float) -> None:
+def test_a_wolff_step_is_potts_mcmcs_own_sweep_bitwise() -> None:
     """Above zero temperature the move *is* ``wolff_sweep``, root and colour aside.
 
     The claim this file rests on: there is no second Wolff kernel to keep in
@@ -220,38 +221,43 @@ def test_a_wolff_step_is_potts_mcmcs_own_sweep_bitwise(temperature: float) -> No
     moved out of the sweep's generator and into the action, and the ``beta`` the
     rung means --- and a wrong one of either is exactly what this catches.
     """
-    graph, field, _ = _lattice(4, 2)
-    move = WolffMove(graph, field)
-    offsets, neighbours, couplings = graph.compressed_adjacency()
-    state = np.ascontiguousarray(
-        np.random.default_rng(3).integers(0, 2, size=graph.n_nodes), dtype=np.int64
-    )
 
-    keyed, charge = move.propose(
-        state, temperature=temperature, site=5, label=1, rng=np.random.default_rng(99)
-    )
-    direct = state.copy()
-    size = wolff_sweep(
-        direct,
-        field,
-        offsets,
-        neighbours,
-        couplings,
-        np.random.default_rng(99),
-        beta=1.0 / temperature,
-        root=5,
-        proposed=1,
-    )
+    def check(temperature: float) -> None:
+        graph, field, _ = _lattice(4, 2)
+        move = WolffMove(graph, field)
+        offsets, neighbours, couplings = graph.compressed_adjacency()
+        state = np.ascontiguousarray(
+            np.random.default_rng(3).integers(0, 2, size=graph.n_nodes), dtype=np.int64
+        )
 
-    assert np.array_equal(keyed, direct)
-    assert charge == size * (1 + 2 * len(graph.edges) // graph.n_nodes)
+        keyed, charge = move.propose(
+            state,
+            temperature=temperature,
+            site=5,
+            label=1,
+            rng=np.random.default_rng(99),
+        )
+        direct = state.copy()
+        size = wolff_sweep(
+            direct,
+            field,
+            offsets,
+            neighbours,
+            couplings,
+            np.random.default_rng(99),
+            beta=1.0 / temperature,
+            root=5,
+            proposed=1,
+        )
+
+        assert np.array_equal(keyed, direct)
+        assert charge == size * (1 + 2 * len(graph.edges) // graph.n_nodes)
+
+    every_value([0.25, 1.0, 4.0], check)
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("temperature", [0.0, 0.25, 1.0, 4.0])
-def test_a_niedermayer_step_is_potts_mcmcs_own_sweep_bitwise(
-    temperature: float,
-) -> None:
+def test_a_niedermayer_step_is_potts_mcmcs_own_sweep_bitwise() -> None:
     """The same for issue #756's arm, and at ``T = 0`` as well.
 
     Where `WolffMove` writes the zero-temperature limit out --- ``beta = 1/0``
@@ -261,39 +267,46 @@ def test_a_niedermayer_step_is_potts_mcmcs_own_sweep_bitwise(
     refused without a uniform. So there is one kernel at every temperature and
     this asserts it at four, the zero included.
     """
-    graph, field, _ = _lattice(4, 2)
-    move = NiedermayerMove(graph, field)
-    offsets, neighbours, couplings = graph.compressed_adjacency()
-    state = np.ascontiguousarray(
-        np.random.default_rng(3).integers(0, 2, size=graph.n_nodes), dtype=np.int64
-    )
 
-    keyed, charge = move.propose(
-        state, temperature=temperature, site=5, label=1, rng=np.random.default_rng(99)
-    )
-    direct = state.copy()
-    size = niedermayer_sweep(
-        direct,
-        field,
-        offsets,
-        neighbours,
-        couplings,
-        np.random.default_rng(99),
-        beta=math.inf if temperature == 0.0 else 1.0 / temperature,
-        threshold=move.threshold,
-        root=5,
-        partner=1,
-    )
+    def check(temperature: float) -> None:
+        graph, field, _ = _lattice(4, 2)
+        move = NiedermayerMove(graph, field)
+        offsets, neighbours, couplings = graph.compressed_adjacency()
+        state = np.ascontiguousarray(
+            np.random.default_rng(3).integers(0, 2, size=graph.n_nodes), dtype=np.int64
+        )
 
-    assert np.array_equal(keyed, direct)
-    assert charge == size * (1 + 2 * len(graph.edges) // graph.n_nodes)
+        keyed, charge = move.propose(
+            state,
+            temperature=temperature,
+            site=5,
+            label=1,
+            rng=np.random.default_rng(99),
+        )
+        direct = state.copy()
+        size = niedermayer_sweep(
+            direct,
+            field,
+            offsets,
+            neighbours,
+            couplings,
+            np.random.default_rng(99),
+            beta=math.inf if temperature == 0.0 else 1.0 / temperature,
+            threshold=move.threshold,
+            root=5,
+            partner=1,
+        )
+
+        assert np.array_equal(keyed, direct)
+        assert charge == size * (1 + 2 * len(graph.edges) // graph.n_nodes)
+
+    every_value([0.0, 0.25, 1.0, 4.0], check)
 
 
 @pytest.mark.oracle
 @pytest.mark.parametrize("backend", [Backend.PYTHON, Backend.RUST])
-@pytest.mark.parametrize("temperature", [0.25, 1.0, 4.0])
 def test_a_swendsen_wang_pass_is_potts_mcmcs_own_sweep_bitwise(
-    temperature: float, backend: Backend
+    backend: Backend,
 ) -> None:
     """The same for the bond pass, which the action does not parameterize at all.
 
@@ -301,22 +314,36 @@ def test_a_swendsen_wang_pass_is_potts_mcmcs_own_sweep_bitwise(
     kernel of its own, and issue #754's Rust pass is the sweep's backend
     rather than a second implementation reached from here.
     """
-    graph, field, _ = _lattice(4, 3)
-    move = SwendsenWangMove(graph, field, backend)
-    state = np.ascontiguousarray(
-        np.random.default_rng(4).integers(0, 3, size=graph.n_nodes), dtype=np.int64
-    )
 
-    keyed, charge = move.propose(
-        state, temperature=temperature, site=-1, label=-1, rng=np.random.default_rng(7)
-    )
-    direct = state.copy()
-    swendsen_wang_sweep(
-        direct, graph, field, np.random.default_rng(7), None, 1.0 / temperature, backend
-    )
+    def check(temperature: float) -> None:
+        graph, field, _ = _lattice(4, 3)
+        move = SwendsenWangMove(graph, field, backend)
+        state = np.ascontiguousarray(
+            np.random.default_rng(4).integers(0, 3, size=graph.n_nodes), dtype=np.int64
+        )
 
-    assert np.array_equal(keyed, direct)
-    assert charge == graph.n_nodes + 2 * len(graph.edges)
+        keyed, charge = move.propose(
+            state,
+            temperature=temperature,
+            site=-1,
+            label=-1,
+            rng=np.random.default_rng(7),
+        )
+        direct = state.copy()
+        swendsen_wang_sweep(
+            direct,
+            graph,
+            field,
+            np.random.default_rng(7),
+            None,
+            1.0 / temperature,
+            backend,
+        )
+
+        assert np.array_equal(keyed, direct)
+        assert charge == graph.n_nodes + 2 * len(graph.edges)
+
+    every_value([0.25, 1.0, 4.0], check)
 
 
 @pytest.mark.analytic
@@ -373,8 +400,7 @@ def test_keys_draw_the_same_cluster_size_law_as_seeds() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("side", [4, 6])
-def test_a_wolff_step_at_zero_flips_the_roots_whole_component(side: int) -> None:
+def test_a_wolff_step_at_zero_flips_the_roots_whole_component() -> None:
     """The ``T -> 0`` limit: every like-coloured bond active, so the cluster is
     the component, and the recolouring survives only if it does not lower the
     score.
@@ -382,32 +408,35 @@ def test_a_wolff_step_at_zero_flips_the_roots_whole_component(side: int) -> None
     Both halves are checked against this file's own breadth-first search and
     its own field sum, so nothing is read from the move's union-find.
     """
-    environment, graph, field = _arm(side, 3, (MoveKind.WOLFF,))
-    rng = np.random.default_rng(0)
 
-    for _ in range(40):
-        state = environment.reset(rng)
-        labels = np.asarray(state, dtype=np.int64)
-        root, label = int(rng.integers(side * side)), int(rng.integers(3))
-        successor, reward = environment.step(
-            state, PottsAction(MoveKind.WOLFF, root, label, 0)
-        )
-        members = sorted(_component(labels, graph, root))
-        gain = float(field[members, label].sum() - field[members, labels[root]].sum())
-        changed = set(np.flatnonzero(np.asarray(successor) != labels).tolist())
+    def check(side: int) -> None:
+        environment, graph, field = _arm(side, 3, (MoveKind.WOLFF,))
+        rng = np.random.default_rng(0)
 
-        if label != labels[root] and gain >= 0.0:
-            assert changed == set(members)
-        else:
-            assert changed == set()
-        assert reward >= 0.0
+        for _ in range(40):
+            state = environment.reset(rng)
+            labels = np.asarray(state, dtype=np.int64)
+            root, label = int(rng.integers(side * side)), int(rng.integers(3))
+            successor, reward = environment.step(
+                state, PottsAction(MoveKind.WOLFF, root, label, 0)
+            )
+            members = sorted(_component(labels, graph, root))
+            gain = float(
+                field[members, label].sum() - field[members, labels[root]].sum()
+            )
+            changed = set(np.flatnonzero(np.asarray(successor) != labels).tolist())
+
+            if label != labels[root] and gain >= 0.0:
+                assert changed == set(members)
+            else:
+                assert changed == set()
+            assert reward >= 0.0
+
+    every_value([4, 6], check)
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("side", [4, 6])
-def test_swendsen_wang_at_zero_recolours_every_component_as_a_block(
-    side: int,
-) -> None:
+def test_swendsen_wang_at_zero_recolours_every_component_as_a_block() -> None:
     """Every cluster is a like-coloured component, so it moves or it does not.
 
     The partition is not asserted directly --- a component that keeps its
@@ -417,20 +446,24 @@ def test_swendsen_wang_at_zero_recolours_every_component_as_a_block(
     changed on its account. Together with the score never falling, that is the
     ``beta -> inf`` bond pass.
     """
-    environment, graph, _ = _arm(side, 3, (MoveKind.SWENDSEN_WANG,))
-    rng = np.random.default_rng(1)
 
-    for _ in range(40):
-        state = environment.reset(rng)
-        labels = np.asarray(state, dtype=np.int64)
-        successor, reward = environment.step(
-            state, PottsAction(MoveKind.SWENDSEN_WANG, -1, -1, 0)
-        )
-        after = np.asarray(successor)
-        for root in range(side * side):
-            members = sorted(_component(labels, graph, root))
-            assert len(set(after[members].tolist())) == 1
-        assert reward >= 0.0
+    def check(side: int) -> None:
+        environment, graph, _ = _arm(side, 3, (MoveKind.SWENDSEN_WANG,))
+        rng = np.random.default_rng(1)
+
+        for _ in range(40):
+            state = environment.reset(rng)
+            labels = np.asarray(state, dtype=np.int64)
+            successor, reward = environment.step(
+                state, PottsAction(MoveKind.SWENDSEN_WANG, -1, -1, 0)
+            )
+            after = np.asarray(successor)
+            for root in range(side * side):
+                members = sorted(_component(labels, graph, root))
+                assert len(set(after[members].tolist())) == 1
+            assert reward >= 0.0
+
+    every_value([4, 6], check)
 
 
 @pytest.mark.analytic

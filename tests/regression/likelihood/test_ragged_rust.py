@@ -13,6 +13,8 @@ from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
 from snakes_and_ladders.likelihood.ragged_rust import posteriors, posteriors_oracle
 from snakes_and_ladders.ragged import Ragged
 
+from tests._rows import every_value
+
 STATES = 3
 
 
@@ -31,22 +33,21 @@ def _instance(
 
 @pytest.mark.critical
 @pytest.mark.oracle
-@pytest.mark.parametrize(
-    "lengths",
-    [(5, 11, 3, 40), (2, 2), (400, 2, 7), (17,) * 6],
-    ids=["mixed", "shortest", "one-long", "even"],
-)
-def test_the_compiled_kernel_matches_the_oracle(lengths: tuple[int, ...]) -> None:
+def test_the_compiled_kernel_matches_the_oracle() -> None:
     """Marginals, transition counts and evidence, all three."""
-    density, initial, transition = _instance(lengths, seed=4)
-    gamma, counts, evidence = posteriors(density, initial, transition)
-    want_gamma, want_counts, want_evidence = posteriors_oracle(
-        density, initial, transition
-    )
-    tolerance = CROSS_DEVICE_RTOL_FLOAT64
-    np.testing.assert_allclose(evidence, want_evidence, rtol=tolerance)
-    np.testing.assert_allclose(gamma, want_gamma, rtol=tolerance)
-    np.testing.assert_allclose(counts, want_counts, rtol=tolerance)
+
+    def check(lengths: tuple[int, ...]) -> None:
+        density, initial, transition = _instance(lengths, seed=4)
+        gamma, counts, evidence = posteriors(density, initial, transition)
+        want_gamma, want_counts, want_evidence = posteriors_oracle(
+            density, initial, transition
+        )
+        tolerance = CROSS_DEVICE_RTOL_FLOAT64
+        np.testing.assert_allclose(evidence, want_evidence, rtol=tolerance)
+        np.testing.assert_allclose(gamma, want_gamma, rtol=tolerance)
+        np.testing.assert_allclose(counts, want_counts, rtol=tolerance)
+
+    every_value([(5, 11, 3, 40), (2, 2), (400, 2, 7), (17,) * 6], check)
 
 
 @pytest.mark.critical

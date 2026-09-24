@@ -22,6 +22,8 @@ from snakes_and_ladders.emissions import NegativeBinomialEmission
 from snakes_and_ladders.opt.hmm import baum_welch_family
 from snakes_and_ladders.ragged import Ragged
 
+from tests._rows import every_value
+
 #: The float64 tolerance for a reordered recursion (DEV.md; issue #649).
 TOLERANCE = 1e-11
 
@@ -59,36 +61,44 @@ def _relative(first: torch.Tensor, second: torch.Tensor) -> float:
 @pytest.mark.critical
 @pytest.mark.oracle
 @pytest.mark.backend
-@pytest.mark.parametrize("seed", range(2))
-def test_the_compiled_e_step_is_the_torch_recursion(seed: int) -> None:
+def test_the_compiled_e_step_is_the_torch_recursion() -> None:
     # Measured: the log-likelihood within a relative 7.7e-16 and every
     # parameter within 5.0e-13 after 10 iterations at this size; 3.7e-15 and
     # 2.0e-12 at 318,945 positions.
-    batch, start, kernel = _batch(seed)
-    initial = torch.full((4,), -math.log(4.0), dtype=torch.float64)
-    fits = {
-        backend: baum_welch_family(
-            batch,
-            initial,
-            kernel,
-            start,
-            max_iterations=10,
-            tolerance=0.0,
-            backend=backend,
+    def check(seed: int) -> None:
+        batch, start, kernel = _batch(seed)
+        initial = torch.full((4,), -math.log(4.0), dtype=torch.float64)
+        fits = {
+            backend: baum_welch_family(
+                batch,
+                initial,
+                kernel,
+                start,
+                max_iterations=10,
+                tolerance=0.0,
+                backend=backend,
+            )
+            for backend in (Backend.PYTHON, Backend.RUST)
+        }
+        torch_fit, compiled = fits[Backend.PYTHON], fits[Backend.RUST]
+        assert abs(
+            torch_fit.log_likelihood - compiled.log_likelihood
+        ) <= TOLERANCE * abs(torch_fit.log_likelihood)
+        for name, value in torch_fit.emissions.named_parameters().items():
+            assert (
+                _relative(compiled.emissions.named_parameters()[name], value)
+                < TOLERANCE
+            )
+        assert (
+            float((torch_fit.log_transition - compiled.log_transition).abs().max())
+            < TOLERANCE
         )
-        for backend in (Backend.PYTHON, Backend.RUST)
-    }
-    torch_fit, compiled = fits[Backend.PYTHON], fits[Backend.RUST]
-    assert abs(torch_fit.log_likelihood - compiled.log_likelihood) <= TOLERANCE * abs(
-        torch_fit.log_likelihood
-    )
-    for name, value in torch_fit.emissions.named_parameters().items():
-        assert _relative(compiled.emissions.named_parameters()[name], value) < TOLERANCE
-    assert (
-        float((torch_fit.log_transition - compiled.log_transition).abs().max())
-        < TOLERANCE
-    )
-    assert float((torch_fit.log_initial - compiled.log_initial).abs().max()) < TOLERANCE
+        assert (
+            float((torch_fit.log_initial - compiled.log_initial).abs().max())
+            < TOLERANCE
+        )
+
+    every_value(range(2), check)
 
 
 @pytest.mark.critical

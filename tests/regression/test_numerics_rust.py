@@ -22,6 +22,8 @@ import pytest
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.numerics import sample_rows
 
+from tests._rows import every_row
+
 
 def oracle(
     rng: np.random.Generator, distributions: np.ndarray, rows: np.ndarray
@@ -40,22 +42,19 @@ SEED = 20260904
 
 @pytest.mark.critical
 @pytest.mark.oracle
-@pytest.mark.parametrize(
-    ("n_rows", "n_categories", "n_draws"),
-    [(4, 4, 200_000), (3, 2, 50_000), (8, 7, 5_000), (1, 3, 100)],
-)
-def test_the_rust_sampler_is_bit_identical_to_the_oracle(
-    n_rows: int, n_categories: int, n_draws: int
-) -> None:
-    distributions = np.random.default_rng(1).dirichlet(
-        np.ones(n_categories), size=n_rows
-    )
-    rows = np.random.default_rng(2).integers(n_rows, size=n_draws)
+def test_the_rust_sampler_is_bit_identical_to_the_oracle() -> None:
+    def check(n_rows: int, n_categories: int, n_draws: int) -> None:
+        distributions = np.random.default_rng(1).dirichlet(
+            np.ones(n_categories), size=n_rows
+        )
+        rows = np.random.default_rng(2).integers(n_rows, size=n_draws)
 
-    assert np.array_equal(
-        oracle(np.random.default_rng(SEED), distributions, rows),
-        accelerated(np.random.default_rng(SEED), distributions, rows),
-    )
+        assert np.array_equal(
+            oracle(np.random.default_rng(SEED), distributions, rows),
+            accelerated(np.random.default_rng(SEED), distributions, rows),
+        )
+
+    every_row([(4, 4, 200_000), (3, 2, 50_000), (8, 7, 5_000), (1, 3, 100)], check)
 
 
 @pytest.mark.critical

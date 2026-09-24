@@ -39,6 +39,8 @@ from snakes_and_ladders.sim.canonical import frustrated_triangular_lattice
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import energy
 
+from tests._rows import every_row, every_value
+
 
 def _random_graph(n_nodes: int, density: float, seed: int) -> PottsGraph:
     """An Erdos-Renyi-shaped instance, which is *not* bipartite.
@@ -59,70 +61,66 @@ def _random_graph(n_nodes: int, density: float, seed: int) -> PottsGraph:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize(("first", "second"), [(3, 4), (5, 5)])
-def test_a_complete_bipartite_graph_has_every_edge_in_its_maximum_cut(
-    first: int, second: int
-) -> None:
+def test_a_complete_bipartite_graph_has_every_edge_in_its_maximum_cut() -> None:
     # Known without solving anything: every edge joins the two parts, so
     # separating them cuts all of them and nothing can do better.
-    graph = complete_bipartite(first, second)
+    def check(first: int, second: int) -> None:
+        graph = complete_bipartite(first, second)
 
-    result = goemans_williamson(graph, generator=torch.Generator().manual_seed(1))
+        result = goemans_williamson(graph, generator=torch.Generator().manual_seed(1))
 
-    assert result.value == pytest.approx(float(len(graph.edges)))
+        assert result.value == pytest.approx(float(len(graph.edges)))
+
+    every_row([(3, 4), (5, 5)], check)
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("shape", [(3, 3), (4, 3), (4, 4)])
-def test_the_rounded_cut_reaches_the_enumerated_optimum_on_a_lattice(
-    shape: tuple[int, int],
-) -> None:
+def test_the_rounded_cut_reaches_the_enumerated_optimum_on_a_lattice() -> None:
     # A lattice is bipartite, so this is the easy regime and reaching the
     # optimum is expected. It is here to catch a solver that is broken rather
     # than to distinguish a good one -- the random graphs below do that.
-    graph = lattice_graph(shape, BoundaryCondition.OPEN, 1.0)
+    def check(shape: tuple[int, int]) -> None:
+        graph = lattice_graph(shape, BoundaryCondition.OPEN, 1.0)
 
-    result = goemans_williamson(graph, generator=torch.Generator().manual_seed(3))
-    _, optimum = enumerate_max_cut(graph)
+        result = goemans_williamson(graph, generator=torch.Generator().manual_seed(3))
+        _, optimum = enumerate_max_cut(graph)
 
-    assert result.value == pytest.approx(optimum)
+        assert result.value == pytest.approx(optimum)
+
+    every_value([(3, 3), (4, 3), (4, 4)], check)
 
 
 @pytest.mark.analytic
-@pytest.mark.parametrize(
-    ("n_nodes", "density", "seed"), [(12, 0.4, 1), (16, 0.3, 2), (18, 0.25, 3)]
-)
-def test_the_realized_ratio_beats_the_bound_on_a_graph_with_triangles(
-    n_nodes: int, density: float, seed: int
-) -> None:
+def test_the_realized_ratio_beats_the_bound_on_a_graph_with_triangles() -> None:
     # The measurement that matters, against the true optimum rather than
     # against the relaxation. Measured: the rounded cut reached the optimum on
     # every one of these instances, so the realized ratio is 1.0000 against a
     # guarantee of 0.87856 -- the bound is not tight and is not meant to be.
-    graph = _random_graph(n_nodes, density, seed)
+    def check(n_nodes: int, density: float, seed: int) -> None:
+        graph = _random_graph(n_nodes, density, seed)
 
-    result = goemans_williamson(graph, generator=torch.Generator().manual_seed(5))
-    _, optimum = enumerate_max_cut(graph)
+        result = goemans_williamson(graph, generator=torch.Generator().manual_seed(5))
+        _, optimum = enumerate_max_cut(graph)
 
-    assert result.value / optimum >= GOEMANS_WILLIAMSON_RATIO
-    assert result.value <= optimum + 1e-9
+        assert result.value / optimum >= GOEMANS_WILLIAMSON_RATIO
+        assert result.value <= optimum + 1e-9
+
+    every_row([(12, 0.4, 1), (16, 0.3, 2), (18, 0.25, 3)], check)
 
 
 @pytest.mark.analytic
-@pytest.mark.parametrize(
-    ("n_nodes", "density", "seed"), [(12, 0.4, 1), (16, 0.3, 2), (18, 0.25, 3)]
-)
-def test_the_certificate_holds_where_the_optimum_is_unknown(
-    n_nodes: int, density: float, seed: int
-) -> None:
+def test_the_certificate_holds_where_the_optimum_is_unknown() -> None:
     # The point of the relaxation: `value / relaxation` is computable without
     # knowing the optimum, so it certifies a run at a size enumeration cannot
     # reach. Measured on these instances: 0.95 to 0.98.
-    graph = _random_graph(n_nodes, density, seed)
+    def check(n_nodes: int, density: float, seed: int) -> None:
+        graph = _random_graph(n_nodes, density, seed)
 
-    result = goemans_williamson(graph, generator=torch.Generator().manual_seed(5))
+        result = goemans_williamson(graph, generator=torch.Generator().manual_seed(5))
 
-    assert result.ratio >= GOEMANS_WILLIAMSON_RATIO
+        assert result.ratio >= GOEMANS_WILLIAMSON_RATIO
+
+    every_row([(12, 0.4, 1), (16, 0.3, 2), (18, 0.25, 3)], check)
 
 
 @pytest.mark.smoke
@@ -146,38 +144,40 @@ def test_the_relaxation_is_solved_approximately_and_says_so() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("weight", [1.0, 2.5, 0.4])
-def test_max_cut_is_the_antiferromagnetic_ising_ground_state(weight: float) -> None:
+def test_max_cut_is_the_antiferromagnetic_ising_ground_state() -> None:
     # The identity the module rests on, checked rather than asserted in prose:
     # with every coupling negative and no field, the minimum energy is the
     # total weight less the maximum cut. A non-bipartite graph is used because
     # on a bipartite one the maximum cut is every edge and the relation
     # degenerates to `0 = 0`.
-    positive = _random_graph(10, 0.45, 4)
-    positive = PottsGraph(
-        n_nodes=positive.n_nodes,
-        edges=positive.edges,
-        coupling=(weight,) * len(positive.edges),
-    )
-    negative = PottsGraph(
-        n_nodes=positive.n_nodes,
-        edges=positive.edges,
-        coupling=(-weight,) * len(positive.edges),
-    )
-    field = np.zeros((positive.n_nodes, 2))
+    def check(weight: float) -> None:
+        positive = _random_graph(10, 0.45, 4)
+        positive = PottsGraph(
+            n_nodes=positive.n_nodes,
+            edges=positive.edges,
+            coupling=(weight,) * len(positive.edges),
+        )
+        negative = PottsGraph(
+            n_nodes=positive.n_nodes,
+            edges=positive.edges,
+            coupling=(-weight,) * len(positive.edges),
+        )
+        field = np.zeros((positive.n_nodes, 2))
 
-    minimum = min(
-        energy(negative, field, np.array(assignment, dtype=np.int64))
-        for assignment in itertools.product(range(2), repeat=positive.n_nodes)
-    )
-    _, maximum_cut = enumerate_max_cut(positive)
+        minimum = min(
+            energy(negative, field, np.array(assignment, dtype=np.int64))
+            for assignment in itertools.product(range(2), repeat=positive.n_nodes)
+        )
+        _, maximum_cut = enumerate_max_cut(positive)
 
-    assert minimum == pytest.approx(
-        weight * len(positive.edges) - maximum_cut, abs=1e-12
-    )
-    # And the instance is genuinely non-bipartite, so the relation is not
-    # degenerate: some edge is uncut at the optimum.
-    assert maximum_cut < weight * len(positive.edges)
+        assert minimum == pytest.approx(
+            weight * len(positive.edges) - maximum_cut, abs=1e-12
+        )
+        # And the instance is genuinely non-bipartite, so the relation is not
+        # degenerate: some edge is uncut at the optimum.
+        assert maximum_cut < weight * len(positive.edges)
+
+    every_value([1.0, 2.5, 0.4], check)
 
 
 def _bipartite(left: int, right: int, seed: int) -> tuple[PottsGraph, np.ndarray]:

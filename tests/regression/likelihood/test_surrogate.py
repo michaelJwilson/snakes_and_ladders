@@ -50,6 +50,7 @@ from snakes_and_ladders.sim.topology import enumerate_topologies
 from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import FIXTURES_DIR, load_fixture
+from tests._rows import every_value
 
 FIVE_TAXA = "tree_search/ci.yaml"
 N_SITES = 200
@@ -286,23 +287,23 @@ def test_tree_features_are_invariant_to_child_order() -> None:
 
 @pytest.mark.critical
 @pytest.mark.oracle
-@pytest.mark.parametrize("shape", [(2, 3), (3, 3)])
-def test_mean_field_and_spanning_tree_bounds_sandwich_log_z(
-    shape: tuple[int, int],
-) -> None:
+def test_mean_field_and_spanning_tree_bounds_sandwich_log_z() -> None:
     # Against enumeration on random-coupling open lattices: the mean-field
     # value never above log Z, the spanning-tree value never below, and each
     # within 0.1 nats per node (0.078 and 0.052 measured over 40 lattices).
-    rng = np.random.default_rng(11)
-    for _ in range(4):
-        graph = _random_lattice(shape, rng)
-        field = rng.normal(0.0, 0.4, 3)
-        exact = enumerate_potts(graph, field).log_partition
-        lower = float(mean_field_log_partition(graph, torch.as_tensor(field)))
-        upper = float(spanning_tree_log_partition(graph, torch.as_tensor(field)))
-        assert lower <= exact + 1e-9 <= upper + 1e-9
-        assert (exact - lower) / graph.n_nodes < 0.1
-        assert (upper - exact) / graph.n_nodes < 0.1
+    def check(shape: tuple[int, int]) -> None:
+        rng = np.random.default_rng(11)
+        for _ in range(4):
+            graph = _random_lattice(shape, rng)
+            field = rng.normal(0.0, 0.4, 3)
+            exact = enumerate_potts(graph, field).log_partition
+            lower = float(mean_field_log_partition(graph, torch.as_tensor(field)))
+            upper = float(spanning_tree_log_partition(graph, torch.as_tensor(field)))
+            assert lower <= exact + 1e-9 <= upper + 1e-9
+            assert (exact - lower) / graph.n_nodes < 0.1
+            assert (upper - exact) / graph.n_nodes < 0.1
+
+    every_value([(2, 3), (3, 3)], check)
 
 
 @pytest.mark.oracle

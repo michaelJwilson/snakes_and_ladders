@@ -45,6 +45,7 @@ from snakes_and_ladders.sim.simulator import simulate_tree
 
 from tests._fixtures import FOUR_TAXA, load_fixture
 from tests._posteriors import GAUSSIAN
+from tests._rows import every_value
 from tests._scale import at_scale
 
 EXACT = 1e-13
@@ -168,28 +169,30 @@ def test_the_scaled_objective_inverts_its_own_map() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("phi", [0.0, 0.5, 0.9])
-def test_the_effective_sample_size_recovers_an_ar1_autocorrelation_time(
-    phi: float,
-) -> None:
+def test_the_effective_sample_size_recovers_an_ar1_autocorrelation_time() -> None:
     # An AR(1) with coefficient phi has integrated autocorrelation time
     # (1 + phi) / (1 - phi) in closed form, so the estimator has an exact
     # answer to be held to. Realized ratios of estimate to truth over ten
     # seeds at 20,000 draws: 0.94 to 1.02 at phi = 0, 0.89 to 1.04 at 0.5,
     # 0.83 to 1.12 at 0.9 -- the truncation is a Monte Carlo estimate and
     # the bound below is its spread, not a claim of exactness.
-    n = 20_000
-    tau = (1.0 + phi) / (1.0 - phi)
-    generator = torch.Generator().manual_seed(7)
-    noise = torch.randn(n, 2, generator=generator, dtype=torch.float64)
-    draws = torch.empty(n, 2, dtype=torch.float64)
-    draws[0] = noise[0]
-    for index in range(1, n):
-        draws[index] = phi * draws[index - 1] + math.sqrt(1.0 - phi**2) * noise[index]
+    def check(phi: float) -> None:
+        n = 20_000
+        tau = (1.0 + phi) / (1.0 - phi)
+        generator = torch.Generator().manual_seed(7)
+        noise = torch.randn(n, 2, generator=generator, dtype=torch.float64)
+        draws = torch.empty(n, 2, dtype=torch.float64)
+        draws[0] = noise[0]
+        for index in range(1, n):
+            draws[index] = (
+                phi * draws[index - 1] + math.sqrt(1.0 - phi**2) * noise[index]
+            )
 
-    ratio = (effective_sample_size(draws) / (n / tau)).numpy()
+        ratio = (effective_sample_size(draws) / (n / tau)).numpy()
 
-    np.testing.assert_allclose(ratio, np.ones(2), rtol=0.2)
+        np.testing.assert_allclose(ratio, np.ones(2), rtol=0.2)
+
+    every_value([0.0, 0.5, 0.9], check)
 
 
 @pytest.mark.smoke

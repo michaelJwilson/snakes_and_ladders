@@ -21,6 +21,8 @@ from snakes_and_ladders.opt.hmm import (
     PoissonHmmObjective,
 )
 
+from tests._rows import every_value
+
 
 def _objectives() -> list[hmm_jax.Twinned]:
     rng = np.random.default_rng(1000)
@@ -109,24 +111,26 @@ def test_one_structure_compiles_once() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("index", range(8))
-def test_the_default_gradient_is_the_torch_backend(index: int) -> None:
+def test_the_default_gradient_is_the_torch_backend() -> None:
     # Referee: the same objective built with Backend.TORCH, autograd.
-    from snakes_and_ladders.backend import Backend
-    from snakes_and_ladders.opt.objective import value_and_gradient
+    def check(index: int) -> None:
+        from snakes_and_ladders.backend import Backend
+        from snakes_and_ladders.opt.objective import value_and_gradient
 
-    objective = _objectives()[index]
-    theta = objective.initial() + 0.1
-    value, gradient = value_and_gradient(objective, theta)
-    objective._backend = Backend.TORCH
-    torch_value, torch_gradient = value_and_gradient(objective, theta)
-    assert_allclose(float(value), float(torch_value), rtol=1e-10)
-    assert_allclose(
-        gradient.numpy(),
-        torch_gradient.numpy(),
-        rtol=1e-10,
-        atol=1e-10 * float(torch_gradient.abs().max()),
-    )
+        objective = _objectives()[index]
+        theta = objective.initial() + 0.1
+        value, gradient = value_and_gradient(objective, theta)
+        objective._backend = Backend.TORCH
+        torch_value, torch_gradient = value_and_gradient(objective, theta)
+        assert_allclose(float(value), float(torch_value), rtol=1e-10)
+        assert_allclose(
+            gradient.numpy(),
+            torch_gradient.numpy(),
+            rtol=1e-10,
+            atol=1e-10 * float(torch_gradient.abs().max()),
+        )
+
+    every_value(range(8), check)
 
 
 @pytest.mark.oracle

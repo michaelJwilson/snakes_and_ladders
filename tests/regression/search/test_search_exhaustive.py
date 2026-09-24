@@ -36,6 +36,7 @@ from snakes_and_ladders.sim.topology import (
 )
 
 from tests._fixtures import FIXTURES_DIR
+from tests._rows import every_value
 
 FIXTURE = FIXTURES_DIR / "tree_search/stress.yaml"
 
@@ -93,24 +94,30 @@ def five_taxon() -> tuple[
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("n_taxa", [3, 4, 5, 6, 7])
-def test_enumeration_produces_every_topology_exactly_once(n_taxa: int) -> None:
+def test_enumeration_produces_every_topology_exactly_once() -> None:
     # Checked against the closed form, not against a second enumeration. A
     # generator that double-counted would make hill climbing look better
     # than it is; one that missed trees would make it look worse.
-    names = [f"t{index}" for index in range(n_taxa)]
-    produced = list(enumerate_topologies(names))
+    def check(n_taxa: int) -> None:
+        names = [f"t{index}" for index in range(n_taxa)]
+        produced = list(enumerate_topologies(names))
 
-    assert len(produced) == count_topologies(n_taxa - 1)
-    assert len({leaf_bipartitions(topology) for topology in produced}) == len(produced)
+        assert len(produced) == count_topologies(n_taxa - 1)
+        assert len({leaf_bipartitions(topology) for topology in produced}) == len(
+            produced
+        )
+
+    every_value([3, 4, 5, 6, 7], check)
 
 
 @pytest.mark.smoke
-@pytest.mark.parametrize("n_taxa", [4, 6])
-def test_every_enumerated_topology_is_well_formed(n_taxa: int) -> None:
-    names = [f"t{index}" for index in range(n_taxa)]
-    for topology in enumerate_topologies(names):
-        assert validate_unrooted_newick(to_newick(topology))
+def test_every_enumerated_topology_is_well_formed() -> None:
+    def check(n_taxa: int) -> None:
+        names = [f"t{index}" for index in range(n_taxa)]
+        for topology in enumerate_topologies(names):
+            assert validate_unrooted_newick(to_newick(topology))
+
+    every_value([4, 6], check)
 
 
 @pytest.mark.smoke

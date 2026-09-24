@@ -23,6 +23,8 @@ from snakes_and_ladders.likelihood.forward_backward import (
 )
 from snakes_and_ladders.opt.hmm import forward_log_likelihood_from_density
 
+from tests._rows import every_row
+
 
 def _chain(
     n_states: int, length: int, seed: int
@@ -68,10 +70,7 @@ def _enumerate(
 
 @pytest.mark.smoke
 @pytest.mark.critical
-@pytest.mark.parametrize(("n_states", "length", "seed"), [(2, 9, 1), (4, 12, 2)])
-def test_a_repeated_kernel_reproduces_the_single_matrix_bitwise(
-    n_states: int, length: int, seed: int
-) -> None:
+def test_a_repeated_kernel_reproduces_the_single_matrix_bitwise() -> None:
     """The second shape must cost the first nothing, and it costs it nothing.
 
     ``step_kernels`` hands the recursion a stride-zero view of the same
@@ -79,19 +78,25 @@ def test_a_repeated_kernel_reproduces_the_single_matrix_bitwise(
     order. Equality here is exact, not a tolerance: were it a tolerance, the
     26 call sites that pass a matrix would have been re-refereed.
     """
-    log_density, log_initial, log_transition = _chain(n_states, length, seed)
-    repeated = np.repeat(log_transition[None], length - 1, axis=0)
 
-    one = forward_backward(log_density, log_initial, log_transition)
-    many = forward_backward(log_density, log_initial, repeated)
+    def check(n_states: int, length: int, seed: int) -> None:
+        log_density, log_initial, log_transition = _chain(n_states, length, seed)
+        repeated = np.repeat(log_transition[None], length - 1, axis=0)
 
-    assert one.log_evidence == many.log_evidence
-    assert np.array_equal(one.posterior, many.posterior)
-    assert np.array_equal(one.pairwise, many.pairwise)
-    assert np.array_equal(
-        sample_path(log_density, log_initial, log_transition, np.random.default_rng(5)),
-        sample_path(log_density, log_initial, repeated, np.random.default_rng(5)),
-    )
+        one = forward_backward(log_density, log_initial, log_transition)
+        many = forward_backward(log_density, log_initial, repeated)
+
+        assert one.log_evidence == many.log_evidence
+        assert np.array_equal(one.posterior, many.posterior)
+        assert np.array_equal(one.pairwise, many.pairwise)
+        assert np.array_equal(
+            sample_path(
+                log_density, log_initial, log_transition, np.random.default_rng(5)
+            ),
+            sample_path(log_density, log_initial, repeated, np.random.default_rng(5)),
+        )
+
+    every_row([(2, 9, 1), (4, 12, 2)], check)
 
 
 @pytest.mark.smoke
@@ -140,24 +145,25 @@ def test_the_constant_form_is_a_view_and_not_a_copy() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize(("n_states", "length", "seed"), [(2, 8, 3), (3, 6, 4)])
-def test_a_varying_kernel_is_the_path_enumeration(
-    n_states: int, length: int, seed: int
-) -> None:
+def test_a_varying_kernel_is_the_path_enumeration() -> None:
     """The varying recursion against every path written out from the definition."""
-    rng = np.random.default_rng(seed)
-    log_density = np.log(rng.dirichlet(np.ones(n_states), size=length))
-    log_initial = np.log(rng.dirichlet(np.ones(n_states)))
-    kernels = np.log(
-        rng.dirichlet(np.ones(n_states), size=(length - 1, n_states))
-    ).reshape(length - 1, n_states, n_states)
 
-    run = forward_backward(log_density, log_initial, kernels)
-    evidence, posterior, pairwise = _enumerate(log_density, log_initial, kernels)
+    def check(n_states: int, length: int, seed: int) -> None:
+        rng = np.random.default_rng(seed)
+        log_density = np.log(rng.dirichlet(np.ones(n_states), size=length))
+        log_initial = np.log(rng.dirichlet(np.ones(n_states)))
+        kernels = np.log(
+            rng.dirichlet(np.ones(n_states), size=(length - 1, n_states))
+        ).reshape(length - 1, n_states, n_states)
 
-    assert abs(run.log_evidence - evidence) < 1e-12 * abs(evidence)
-    np.testing.assert_allclose(run.posterior, posterior, rtol=1e-11, atol=1e-13)
-    np.testing.assert_allclose(run.pairwise, pairwise, rtol=1e-11, atol=1e-13)
+        run = forward_backward(log_density, log_initial, kernels)
+        evidence, posterior, pairwise = _enumerate(log_density, log_initial, kernels)
+
+        assert abs(run.log_evidence - evidence) < 1e-12 * abs(evidence)
+        np.testing.assert_allclose(run.posterior, posterior, rtol=1e-11, atol=1e-13)
+        np.testing.assert_allclose(run.pairwise, pairwise, rtol=1e-11, atol=1e-13)
+
+    every_row([(2, 8, 3), (3, 6, 4)], check)
 
 
 @pytest.mark.end2end
