@@ -25,7 +25,7 @@ a move is.
 from __future__ import annotations
 
 from abc import abstractmethod
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Protocol, runtime_checkable
 
 import torch
@@ -195,6 +195,18 @@ def value_and_gradient(
         with torch.no_grad():
             value = objective(theta.detach())
         return value, objective.gradient(theta.detach())  # type: ignore[attr-defined]
+    return autograd_value_and_gradient(objective, theta)
+
+
+def autograd_value_and_gradient(
+    objective: Callable[[torch.Tensor], torch.Tensor], theta: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """``(U(theta), dU/dtheta)`` detached, by autograd through ``objective`` (issue #1010).
+
+    The oracle every declared gradient is pinned to, and the route an
+    objective takes where it declares none; written out at each site that
+    fell back to it before it had one home.
+    """
     point = theta.detach().clone().requires_grad_(True)
     value = objective(point)
     (derivative,) = torch.autograd.grad(value, point)

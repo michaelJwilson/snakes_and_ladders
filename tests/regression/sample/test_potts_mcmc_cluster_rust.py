@@ -378,7 +378,7 @@ def test_the_rust_route_refuses_a_counter() -> None:
 def test_the_pass_refuses_a_backend_it_does_not_have() -> None:
     graph, rows, state = _instance((3, 3), 3, SEEDS[0])
 
-    with pytest.raises(ValueError, match="no .* backend"):
+    with pytest.raises(ValueError, match="runs on python or rust, not numba"):
         swendsen_wang_sweep(
             state, graph, rows, np.random.default_rng(0), None, 1.0, Backend.NUMBA
         )

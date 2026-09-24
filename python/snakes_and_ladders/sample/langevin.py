@@ -52,18 +52,17 @@ from snakes_and_ladders import oxisal
 from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.sample.accept import accept_ratio, acceptance_probability
-from snakes_and_ladders.sample.declared import declared_energy
-from snakes_and_ladders.sample.hmc import (
+from snakes_and_ladders.sample.chain import (
     Adaptation,
     Adapted,
     Transition,
+    compiled_route,
     gradient_at,
     run_chain,
     run_compiled,
     start_point,
 )
-from snakes_and_ladders.track import NULL as UNTRACKED
-from snakes_and_ladders.track import current as current_tracked
+from snakes_and_ladders.sample.declared import declared_energy
 
 #: The acceptance a MALA step is adapted toward: the optimal scaling of the
 #: Langevin diffusion in the limit of many dimensions (Roberts & Rosenthal,
@@ -208,13 +207,7 @@ def mala(
         raise ValueError(msg)
     refuse_backend("mala", backend, (Backend.PYTHON, Backend.RUST))
     declared = declared_energy(objective)
-    if (
-        backend is Backend.RUST
-        and corrected
-        and declared is not None
-        and temperature == 1.0
-        and current_tracked() is UNTRACKED
-    ):
+    if compiled_route(backend, temperature) and corrected and declared is not None:
         # MALA is one leapfrog step (the identity this module keeps), so the
         # compiled Hamiltonian walk at one step is this chain, warm-up included.
         chain = run_compiled(

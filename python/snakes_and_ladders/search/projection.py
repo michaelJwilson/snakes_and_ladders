@@ -348,10 +348,7 @@ def _at_indices(
 ) -> IndependentCountPair:
     """The family seeded on the observations these indices name."""
     seeded = at(np.asarray(observations)[np.asarray(chosen, dtype=np.int64)])
-    if not isinstance(seeded, IndependentCountPair):
-        msg = f"the projection seeds a count pair, not {type(seeded).__name__}"
-        raise TypeError(msg)
-    return seeded
+    return _count_pair(seeded)
 
 
 def euclidean_seeding(
@@ -426,9 +423,7 @@ def prior_seeding(
     rates = rng.uniform(0.0, 1.0, size=instance.n_components)
     rows = np.stack([means, rates * instance.trials], axis=1)
     seeded = at(rows)
-    if not isinstance(seeded, IndependentCountPair):
-        msg = f"the projection seeds a count pair, not {type(seeded).__name__}"
-        raise TypeError(msg)
+    seeded = _count_pair(seeded)
     return Seeding(seeded, 0.0)
 
 

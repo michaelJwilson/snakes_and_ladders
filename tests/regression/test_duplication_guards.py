@@ -930,3 +930,49 @@ def test_the_problem_catalogue_has_one_reader() -> None:
     }
 
     assert readers == CATALOGUE_READERS
+
+
+#: Private names one module may import from another, each with its reason
+#: (issue #1010, CLEAN's E). `_submodules` is the package's lazy-import
+#: plumbing every subpackage `__init__` calls; `_HmmObjective` is the HMM
+#: base `hmm_jax` narrows on until C5 gives each family a declared JAX form
+#: (#1004).
+PRIVATE_IMPORTS_ADMITTED = {
+    ("snakes_and_ladders", "_submodules"),
+    ("snakes_and_ladders.opt.hmm", "_HmmObjective"),
+}
+
+
+def _private_imports(source: str) -> set[tuple[str, str]]:
+    """``(module, name)`` for every ``from snakes_and_ladders... import _name`` in ``source``."""
+    found: set[tuple[str, str]] = set()
+    for node in ast.walk(ast.parse(source)):
+        if (
+            isinstance(node, ast.ImportFrom)
+            and node.module
+            and node.module.startswith("snakes_and_ladders")
+        ):
+            found.update(
+                (node.module, alias.name)
+                for alias in node.names
+                if alias.name.startswith("_") and not alias.name.startswith("__")
+            )
+    return found
+
+
+@pytest.mark.critical
+@pytest.mark.infra
+def test_no_module_imports_another_modules_private_name() -> None:
+    # Issue #1010 (C4): a name with a leading underscore belongs to its
+    # module; another module that needs it gets a public name or a seam.
+    crossing = {
+        f"{path.relative_to(PACKAGE)}: {module}.{name}"
+        for path in sorted(PACKAGE.rglob("*.py"))
+        for module, name in _private_imports(path.read_text())
+        if (module, name) not in PRIVATE_IMPORTS_ADMITTED
+    }
+    assert crossing == set()
+    assert _private_imports("from snakes_and_ladders.sample.hmc import _warm_up\n")
+    assert not _private_imports(
+        "from snakes_and_ladders.sample.chain import run_chain\n"
+    )

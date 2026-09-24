@@ -282,7 +282,7 @@ def _check_budget(n_sweeps: int, thin: int, burn_in: int) -> None:
         raise ValueError(msg)
 
 
-def _exchange(
+def exchange(
     step: Callable[[S, float, float, G], tuple[S, float]],
     key: Callable[[S], Hashable] | None,
     states: list[S],
@@ -463,7 +463,7 @@ def tempered_factor_graph(
         gibbs_sweep(indexed, state, child, beta=1.0 / temperature)
         return state, indexed.log_density(state)
 
-    return _exchange(
+    return exchange(
         step,
         lambda state: tuple(int(value) for value in state),
         states,
@@ -497,7 +497,7 @@ def tempered_potts_pair(
     the two sweeps and the exchange. The state carried along the ladder is the
     *pair*, so the joint target at a rung is the product of the two tempered
     marginals and the exchange ratio takes the pair's summed energy --- which
-    is :func:`_exchange`'s own ratio on that energy, not a second one.
+    is :func:`exchange`'s own ratio on that energy, not a second one.
 
     Nothing here is a new sampler. The within-replica sweep is
     :func:`~snakes_and_ladders.sample.potts_mcmc.sample_potts`'s own, through
@@ -590,7 +590,7 @@ def tempered_potts_pair(
             houdayer_move(pair[0], pair[1], offsets, neighbours, child)
         return pair, density(pair)
 
-    return _exchange(
+    return exchange(
         step,
         lambda pair: tuple(int(value) for value in np.concatenate(pair)),
         states,
@@ -650,7 +650,7 @@ def tempered_topologies(
         taken = topology_step(state, current, temperature, child, score, moves=moves)
         return taken.topology, taken.log_likelihood
 
-    return _exchange(
+    return exchange(
         step,
         leaf_bipartitions,
         [start] * len(temperatures),

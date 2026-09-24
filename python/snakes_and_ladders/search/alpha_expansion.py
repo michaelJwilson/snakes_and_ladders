@@ -40,7 +40,7 @@ from typing import Any, NamedTuple
 import numpy as np
 
 from snakes_and_ladders import oxisal
-from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.opt.termination import Termination
 from snakes_and_ladders.search.maxflow import (
     FlowNetwork,
@@ -164,9 +164,7 @@ def _python_source_side(arcs: _Arcs, source: int, sink: int) -> np.ndarray:
 
 def _check_cut_backend(backend: Backend, move: str) -> None:
     """Refuse a backend neither move has a minimum cut for."""
-    if backend not in (Backend.PYTHON, Backend.RUST):
-        msg = f"{move} has no {backend} minimum-cut backend"
-        raise ValueError(msg)
+    refuse_backend(f"{move}'s minimum cut", backend, (Backend.PYTHON, Backend.RUST))
 
 
 def _terminal_capacities(
@@ -811,9 +809,9 @@ def iterated_conditional_modes(
                 stop_when_clean,
             )
         return Labelling(labelling, energy(graph, values, labelling))
-    if backend is not Backend.PYTHON:
-        msg = f"iterated conditional modes has no {backend} backend"
-        raise ValueError(msg)
+    refuse_backend(
+        "iterated conditional modes", backend, (Backend.NUMBA, Backend.PYTHON)
+    )
 
     # The compressed rows as Python sequences, converted once rather than
     # sliced per site: a NumPy slice and gather per site measured a third of
