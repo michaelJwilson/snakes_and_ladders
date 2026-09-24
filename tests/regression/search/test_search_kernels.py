@@ -1,25 +1,13 @@
 """The three compiled kernels against referees outside the package (issue #729).
 
-`search/kernels.py` carried 62 of its 71 statements behind `njit`, where no
-test could enter them: a dispatcher runs machine code and `coverage` sees the
-`def` line alone. Each kernel is entered here through ``py_func`` --- the
-Python the compiler was handed --- and judged against a referee that is not
-this package's sweep:
-
-* :func:`factor_graph_log_density` against
-  :func:`snakes_and_ladders.likelihood.potts.log_weights` on every
-  configuration of a 2x2 lattice, and its normalization against
-  :func:`snakes_and_ladders.likelihood.potts.enumerate_potts`.
-* :func:`icm_sweeps` against the enumerated ground state on the two instances
-  where single-site descent provably reaches it --- a decoupled field and a
-  ferromagnet from an aligned start --- against a sweep stepped by hand on
-  two nodes, and against a local-minimum certificate brute-forced per site.
-* :func:`gibbs_sweep_sites` against the heat-bath conditional written out
-  from the model in this file, and over 10,000 sweeps against the enumerated
-  single-site Boltzmann marginals.
-
-Each kernel's compiled form is pinned to the ``py_func`` it was compiled
-from, which is the bitwise reproduction the module's docstring claims.
+62 of `search/kernels.py`'s 71 statements sat behind `njit`, unseen by
+coverage; each kernel is entered through ``py_func`` and judged outside the
+package: :func:`factor_graph_log_density` against
+:func:`snakes_and_ladders.likelihood.potts.log_weights` and `enumerate_potts`
+on a 2x2 lattice; :func:`icm_sweeps` against enumeration where descent is
+exact, a hand-stepped two-node sweep, and a brute-forced local-minimum
+certificate; :func:`gibbs_sweep_sites` against the heat-bath conditional and
+10,000 sweeps of enumerated marginals. Compiled equals ``py_func`` bitwise.
 """
 
 from __future__ import annotations
@@ -78,14 +66,9 @@ def _configurations(n_nodes: int, n_states: int) -> np.ndarray:
 
 @pytest.mark.oracle
 def test_the_density_kernel_is_the_enumerated_boltzmann_log_weight() -> None:
-    # The referee is `likelihood.potts.log_weights`, which shares no code with
-    # the edge layout: it reads the graph's edges and the field, where the
-    # kernel reads one flat array of factor tables. Every one of the 16
-    # configurations, and the normalization of the 16 against
-    # `enumerate_potts`. Realized worst relative deviation 0.0 on the weights
-    # and 0.0 on log Z, held at the declared tolerance rather than at equality
-    # because the two sum the edge terms in different orders; the compiled
-    # kernel equals the Python it was compiled from on all 16, bitwise.
+    # `log_weights` reads edges and field, not the flat factor tables: all 16
+    # configurations and log Z, realized 0.0 (declared tolerance, since sums
+    # reorder); compiled equals Python bitwise.
     graph, indexed = _lattice()
     layout = indexed.layout()
     states = _configurations(graph.n_nodes, int(FIELD.shape[0]))
@@ -153,14 +136,9 @@ def _descend(
 def test_the_descent_kernel_reaches_the_enumerated_minimum_where_it_provably_can() -> (
     None
 ):
-    # Two instances where single-site descent is exact, so enumeration judges
-    # the answer rather than bounding it. A decoupled field -- every coupling
-    # zero -- makes each site an independent argmin, reached from any start in
-    # two sweeps; a ferromagnet in zero field from an aligned start is already
-    # a global minimum and must not move. Realized: the decoupled minimum
-    # recovered from all 16 starts, in 1 sweep from the start that is already
-    # it and 2 from the other 15, the ferromagnet in 1, and both energies
-    # equal to the enumerated minimum to 0.0 relative.
+    # Descent is exact on a decoupled field (from all 16 starts, 1 or 2 sweeps)
+    # and on an aligned ferromagnet (1 sweep); energies equal the enumerated
+    # minimum to 0.0.
     n_states = 2
     decoupled = lattice_graph(SHAPE, BoundaryCondition.OPEN, 0.0)
     rng = np.random.default_rng(11)
@@ -189,16 +167,10 @@ def test_the_descent_kernel_reaches_the_enumerated_minimum_where_it_provably_can
 
 @pytest.mark.oracle
 def test_every_descent_the_kernel_settles_on_is_a_certified_local_minimum() -> None:
-    # Where descent is not exact, the claim it does make is checkable by brute
-    # force: no single site can be relabelled without raising the energy, and
-    # the energy is at or above the enumerated global minimum. Certified per
-    # site by `sim.potts.energies` rather than by the kernel's own local
-    # deltas. Realized over 32 starts on the 3-state antiferromagnetic 3x3,
-    # against all 19,683 configurations: every settled labelling certified,
-    # the enumerated minimum reached from 3 starts and missed from 29, worst
-    # gap 1.328. So both assertions bind -- a descent that stopped early
-    # fails the certificate and one that undershot the minimum fails the
-    # bound.
+    # Where descent is inexact: no single relabel lowers the energy (checked by
+    # `sim.potts.energies`) and it is at or above the minimum. 32 starts on the
+    # 3-state antiferromagnetic 3x3, 19,683 configurations: all certified,
+    # minimum from 3, missed from 29, worst gap 1.328.
     n_states = 3
     graph = lattice_graph((3, 3), BoundaryCondition.OPEN, -0.7)
     rng = np.random.default_rng(3)
@@ -222,13 +194,9 @@ def test_every_descent_the_kernel_settles_on_is_a_certified_local_minimum() -> N
 
 @pytest.mark.oracle
 def test_the_descent_kernel_reproduces_a_sweep_stepped_by_hand() -> None:
-    # Two nodes and one edge, where the update the docstring states can be
-    # written out: with J = 0.5 and h = [[0.0, 0.3], [0.2, 0.0]] from the
-    # start [0, 1], site 0 compares 0.0 against -0.8 and takes 1, site 1
-    # compares -0.2 against -0.5 and keeps 1, and the second sweep changes
-    # nothing, so the kernel returns [1, 1] at 2 sweeps. Bitwise, and the
-    # budget is pinned by the same start at `max_sweeps = 1`, which returns
-    # the first sweep's labelling and 1.
+    # J = 0.5, h = [[0.0, 0.3], [0.2, 0.0]], start [0, 1]: site 0 takes 1
+    # (0.0 against -0.8), site 1 keeps 1 (-0.2 against -0.5); [1, 1] at 2
+    # sweeps, bitwise; `max_sweeps = 1` returns the first sweep and 1.
     graph = lattice_graph((2,), BoundaryCondition.OPEN, 0.5)
     values = np.array([[0.0, 0.3], [0.2, 0.0]])
 
@@ -292,12 +260,7 @@ def _sweep(
 def _heat_bath(
     graph: PottsGraph, state: np.ndarray, position: int
 ) -> tuple[np.ndarray, np.ndarray]:
-    """One site's exact conditional from the model: the log weights and the probabilities.
-
-    The definition `likelihood.potts.log_weights` states, evaluated by
-    rescoring the whole configuration at each label of one site, so it shares
-    no gather, stride or table with the kernel it referees.
-    """
+    """One site's exact conditional from the model, rescoring each label: no shared table."""
     n_states = int(FIELD.shape[0])
     candidates = np.tile(state, (n_states, 1))
     candidates[:, position] = np.arange(n_states)
@@ -308,13 +271,9 @@ def _heat_bath(
 
 @pytest.mark.oracle
 def test_the_heat_bath_kernel_takes_the_label_the_exact_conditional_names() -> None:
-    # The conditional is written out here from `log_weights` by rescoring the
-    # configuration at each label, and the label the draw selects is read off
-    # its cumulative sum. Over 200 sweeps of four sites -- 800 decisions --
-    # the kernel takes that label every time, and decides every site rather
-    # than handing one back (realized: 200 of 200 sweeps returned 4).
-    # Realized worst relative deviation between the conditional here and the
-    # one the kernel normalizes is 2.4e-16.
+    # Over 200 sweeps x 4 sites the kernel takes the cumulative-sum label every
+    # time and decides every site (200 of 200 returned 4); conditionals agree
+    # to 2.4e-16.
     graph, indexed = _lattice()
     rng = np.random.default_rng(19)
     state = np.zeros(graph.n_nodes, dtype=np.int64)

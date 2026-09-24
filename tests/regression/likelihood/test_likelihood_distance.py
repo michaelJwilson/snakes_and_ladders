@@ -56,10 +56,7 @@ def _pair_from_frequencies(
 def test_the_jukes_cantor_distance_inverts_the_transition_probabilities() -> None:
     """At the exact pair frequencies ``P(t) / k`` the closed form returns ``t``.
 
-    The pair frequency matrix of two taxa joined by a branch ``t`` is
-    ``diag(pi) P(t)``; the distance read from it must be ``t`` to floating
-    point, which is what makes the estimator an inversion rather than an
-    approximation.
+    ``diag(pi) P(t)`` inverts to ``t`` to floating point: an inversion.
     """
 
     def check(t: float, k: int) -> None:
@@ -99,8 +96,7 @@ def test_the_log_det_distance_equals_the_branch_length_under_jukes_cantor() -> N
 def test_the_log_det_distance_is_proportional_to_the_branch_length_under_gtr() -> None:
     """Under a reversible ``Q`` the log-det distance is ``-tr(Q)/k`` times ``t``.
 
-    Additivity is what neighbor joining needs, and a constant factor keeps
-    it; the factor is stated so a caller can undo it.
+    Additive up to a stated constant, which is what neighbor joining needs.
     """
     k = 4
     pi = np.array([0.1, 0.2, 0.3, 0.4])
@@ -136,12 +132,7 @@ def test_the_distance_converges_on_the_path_length_with_the_site_count(
 ) -> None:
     """The error against the true path length falls as ``1/sqrt(L)``.
 
-    Two taxa ``A`` and ``B`` at branch lengths 0.1 and 0.25 below one root,
-    path length 0.35, simulated at 1,000 to 100,000 sites over 100 seeds
-    each: the root-mean-square error at each size, and that it falls by the
-    factor the site ratio predicts. Realized: 0.0239, 0.00735 and 0.00221
-    for the Jukes--Cantor distance, ratios 3.25 and 3.32 against
-    ``sqrt(10) = 3.16``; 0.0240, 0.00735 and 0.00221 for log-det.
+    RMS 0.0239, 0.00735, 0.00221 (JC, ratios 3.25, 3.32; log-det 0.0240), 100 seeds.
     """
     tau = Node("root", None, (Node("A", 0.1), Node("B", 0.25)))
     pi = np.full(4, 0.25)
@@ -169,11 +160,7 @@ def test_the_stated_variance_covers_the_truth_at_the_nominal_rate(
 ) -> None:
     """``value +- 1.96 sqrt(variance)`` covers the true path length 95% of the time.
 
-    The same pair at 2,000 sites over 400 seeds. A coverage inside the
-    binomial 99% band around 0.95, ``[0.922, 0.978]``, is the delta method
-    doing its job; outside it the variance would be wrong by more than
-    sampling can explain. Realized: 0.940 (Jukes--Cantor) and 0.9425
-    (log-det).
+    2,000 sites, 400 seeds, band ``[0.922, 0.978]``: 0.940 (JC), 0.9425 (log-det).
     """
     tau = Node("root", None, (Node("A", 0.1), Node("B", 0.25)))
     pi = np.full(4, 0.25)
@@ -197,10 +184,7 @@ def test_the_stated_variance_covers_the_truth_at_the_nominal_rate(
 def test_tree_distances_are_the_path_lengths(name: str) -> None:
     """Path length between two leaves is the sum of the branches between them.
 
-    On the four-taxon fixture ``A`` to ``D`` crosses ``0.10 + 0.05 + 0.40``;
-    on the eight-taxon one ``A`` to ``H`` crosses every level. Both are
-    written out rather than computed, so the function is held to arithmetic
-    it does not share.
+    Written out (``A`` to ``D``: ``0.10 + 0.05 + 0.40``), not computed.
     """
     params = load_fixture(name)
     names, matrix = tree_distances(params.tau)

@@ -41,12 +41,7 @@ WOLFF = ExponentialTempSchedule(2.0, 0.2, 12)
 
 
 def _planted_lattice() -> tuple[SpatioSequentialParams, np.ndarray]:
-    """The stress fixture --- past enumeration, weak emissions --- and a planting.
-
-    The instance is the declared one rather than one built here, so the
-    notebook that compares the same solvers on it is comparing them on the
-    same problem.
-    """
+    """The stress fixture (past enumeration, weak emissions), the notebook's, and a planting."""
     params = fixture("spatio_sequential", "stress").params
     side = params.graph.shape[0]
     planted = (np.arange(side * side) % side < side // 2).astype(np.int64)
@@ -58,11 +53,8 @@ def _planted_lattice() -> tuple[SpatioSequentialParams, np.ndarray]:
 def test_the_label_step_reaches_the_enumerated_map_from_the_planted_labels(
     solver: LabelSolver,
 ) -> None:
-    # Coordinate ascent on the labels with the parameters at the truth: a
-    # local optimum of the joint, which from the planted labels is the
-    # enumerated MAP on 5 of 6 draws for every solver (the sixth is a draw
-    # whose planted labelling sits in another basin), and from a uniform
-    # start on 3 of 6. Asserted at the margin, four of six.
+    # Labels at true parameters: the enumerated MAP on 5 of 6 draws from the
+    # planting, 3 of 6 from uniform; asserted at four of six.
     params = fixture("spatio_sequential", "ci").params
     hits = 0
     for seed in range(6):
@@ -91,13 +83,7 @@ BURN_IN = ExponentialTempSchedule(4.0, 1.0, 30)
 def _enumerated_log_posterior(
     params: SpatioSequentialParams, observations: np.ndarray, labels: np.ndarray
 ) -> float:
-    """``log p(l | x)`` exactly: the labelled joint, less both normalizers.
-
-    :func:`labelled_log_likelihood` leaves out ``log Z_Potts`` and
-    :func:`enumerate_spatio_sequential` supplies it beside the evidence, so
-    at a size enumeration reaches the posterior of any labelling is an exact
-    number and not a rank.
-    """
+    """``log p(l | x)`` exactly: the labelled joint, less both normalizers."""
     exact = enumerate_spatio_sequential(params, observations)
     return (
         labelled_log_likelihood(params, observations, labels)
@@ -108,13 +94,8 @@ def _enumerated_log_posterior(
 
 @pytest.mark.oracle
 def test_the_burn_in_start_reaches_the_enumerated_map_of_the_model_it_reached() -> None:
-    # What an initializer is asked for is the mode of the labelling posterior
-    # under the parameters it has fitted, and at 2x2 that mode is enumerable.
-    # Over twelve draws Graph_BurnIn++ returns it on 9, and on the other 3 a
-    # labelling 0.66, 0.84 and 1.05 nats of enumerated log-posterior below
-    # it. The uniform labelling it replaces returns the mode on 2 and sits a
-    # mean 1,020.8 nats below, so the margin is three orders of magnitude and
-    # the assertion is at 8 of 12 and 1.5 nats.
+    # The 2x2 mode, over twelve draws: Graph_BurnIn++ 9 (others 0.66, 0.84,
+    # 1.05 nats below); uniform 2, mean 1,020.8 below. Asserted 8 of 12, 1.5 nats.
     params = fixture("spatio_sequential", "ci").params
     hits = 0
     gaps = []
@@ -198,16 +179,9 @@ def test_the_label_step_recovers_planted_labels_when_the_parameters_are_known() 
 
 @pytest.mark.end2end
 def test_the_annealed_start_beats_every_cold_solver_at_equal_blocks() -> None:
-    # The study the ticket asked for, and it does not say what the ticket
-    # expected. From a uniform start and the true parameters as the starting
-    # point of EM, block ascent freezes on this instance whichever label
-    # solver runs: mean accuracy up to permutation over six planted draws of
-    # 0.66 (alpha expansion), 0.78 (single-site descent), 0.68 (annealed
-    # Wolff). The cluster move does not escape what descent freezes into --
-    # the trap is the parameters, not the labels. Graph_BurnIn++, which
-    # anneals the prior while the emissions are fitted to what the data
-    # supports, reaches 0.97. Asserted at the margins: the annealed start
-    # above every cold solver, and every cold solver below 0.9.
+    # From uniform, EM at the truth freezes for every solver: accuracy 0.66
+    # (expansion), 0.78 (descent), 0.68 (annealed Wolff), six draws; the trap
+    # is the parameters. Graph_BurnIn++: 0.97. Asserted: it above all, all < 0.9.
     params, planted = _planted_lattice()
     accuracy: dict[str, list[float]] = {solver.value: [] for solver in LabelSolver}
     accuracy["burn_in"] = []
@@ -352,13 +326,9 @@ def test_an_untracked_block_ascent_is_the_fit_before_the_hook() -> None:
 
 @pytest.mark.end2end
 def test_the_seeded_start_recovers_planted_labels_at_the_enumerable_size() -> None:
-    # What the issue #887 notebook stated at its enumerable size, before issue
-    # #891 moved it to the emission mixture alone: on the instance the
-    # enumeration referees, block ascent from Emission_Mixture++
-    # labels the planted stripes above the 0.5 chance of two classes, and its
-    # fitted joint is not below the evidence at the generating parameters ---
-    # at four nodes and six positions the fit has more parameters than the
-    # draw constrains. Measured 0.792 and -7.0 nats over these six draws.
+    # #887's enumerable claim (moved by #891): from Emission_Mixture++ the
+    # stripes beat 0.5 chance and the joint is not below the truth's: 0.792
+    # and -7.0 nats over six draws.
     params = fixture("spatio_sequential", "ci").params
     planted = (np.arange(params.graph.n_nodes) % params.n_classes == 0).astype(np.int64)
     accuracies = []

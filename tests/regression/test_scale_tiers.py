@@ -1,20 +1,10 @@
 """The test tiers, asserted structurally rather than on a clock.
 
-`DEV.md` budgets the CI tier at 5 minutes and the stress tier at 10, and
-forbids ranking performance on CI hardware. A wall-clock assertion would
-therefore fail for the machine rather than for the change, so the budgets are
-kept by *size* and this module checks the things that are true regardless of
-how fast the machine is:
-
-* the stress and key tiers are non-empty and reachable, because a tier
-  nothing selects is a tier that rots --- the failure mode `release` avoids
-  only because ``infra/release.sh`` runs it;
-* every scheduling marker is registered, so a typo deselects nothing silently;
-* ``at_scale`` produces exactly one CI case and one stress case, since a
-  parameterization that marked both or neither would move a test between
-  tiers without anyone editing it.
-
-`infra/measure_test_budget.sh` reports the wall clock against the budgets.
+`DEV.md` budgets CI at 5 minutes and stress at 10 and forbids timing on CI, so
+budgets are kept by size and checked here: the stress and key tiers are
+non-empty and reachable; every scheduling marker is registered; ``at_scale``
+yields exactly one CI and one stress case. `infra/measure_test_budget.sh`
+reports the wall clock.
 """
 
 from __future__ import annotations
@@ -77,13 +67,8 @@ def test_the_key_tier_is_reachable_and_not_empty() -> None:
 
 @pytest.mark.analytic
 def test_the_ci_tier_excludes_the_stress_and_key_tiers() -> None:
-    # The selections must partition, or the CI tier silently carries the sizes
-    # the budget exists to keep out of it. Three tiers now: `key` is not
-    # `stress`, so a selection written before it existed would have run a
-    # two-minute test on every pull request. The universe is `not release`:
-    # a `release` test with an `at_scale` case carries `stress` too (#756's
-    # sampler-efficiency test), and counting its stress case here against a
-    # total that excludes it was one off on every host from 2026-09-19.
+    # The selections partition within `not release`: a `release` test with an
+    # `at_scale` case carries `stress` too (#756), and `key` is not `stress`.
     ci = _collected("not release and not stress and not key")
     stress = _collected("stress and not key and not release")
     key = _collected("key and not release")

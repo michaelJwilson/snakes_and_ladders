@@ -1,18 +1,10 @@
 """Drawing the two-channel count pair: under a covariate, and from the general simulator.
 
-Three seams could not previously draw a pair the way every seam above them
-scores one. `sim.count_pairs.simulate_count_pairs` and its Rust twin ignored
-the model's covariate (issue #671); `sim.spatio_sequential.simulate_spatio_
-sequential` assumed a scalar observation and could not draw a pair at all
-(issue #672). What referees the draws here is what refereed them before: the
-families' own closed-form moments, never one simulator against the other
-alone.
-
-The covariate's two channels do different jobs and are asserted separately.
-The exposure multiplies the negative binomial's mean, so a constant one moves
-a mean that is known in closed form. The successes' covariate *replaces* the
-declared trial count, so it bounds the draw outright --- a bound a mean-only
-check would miss.
+`simulate_count_pairs` and its Rust twin ignored the covariate (#671) and
+`simulate_spatio_sequential` could not draw a pair (#672). Refereed by the
+families' closed-form moments. The exposure multiplies the NB mean, checked
+in closed form; the successes' covariate replaces the trial count and bounds
+the draw outright.
 """
 
 from __future__ import annotations
@@ -205,11 +197,8 @@ def test_both_twins_read_one_rank_rule(
     shape: tuple[int, ...],
     refused: bool,
 ) -> None:
-    # The NumPy check accepted a bare `(2,)` and the Rust one refused every
-    # rank but three, so a covariate one simulator drew under was a refusal in
-    # the other (issue #856). One check now: the trailing axis is the channel
-    # pair, the leading axes are the caller's layout, and each twin gives the
-    # same answer on the same shape.
+    # One shape check for both twins (#856): trailing axis the channel pair,
+    # leading axes the caller's.
     covariate = np.arange(float(np.prod(shape))).reshape(shape)
 
     if refused:

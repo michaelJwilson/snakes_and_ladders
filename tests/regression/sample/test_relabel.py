@@ -49,9 +49,7 @@ WEIGHTS = np.array([0.1, 0.2, 0.3, 0.4])
 def _draws(seed: int) -> dict[str, np.ndarray]:
     """Draws of a separated 4-component Gaussian mixture, and their planted relabellings.
 
-    Each draw's means and weights are the truth plus noise, its
-    probabilities the responsibilities there, its allocations drawn from
-    them; then every draw is put in a uniformly random labelling.
+    Truth plus noise per draw, then a uniformly random labelling each.
     """
     rng = np.random.default_rng([964, seed])
     labels = rng.choice(K, size=N_OBS, p=WEIGHTS)

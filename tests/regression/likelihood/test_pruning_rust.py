@@ -21,13 +21,8 @@ from snakes_and_ladders.likelihood.patterns import compress
 
 from tests._fixtures import FOUR_TAXA, SMALL_SITES, load_fixture, simulated_alignment
 
-# Relative, not absolute. The log-likelihood is a sum over sites, so an
-# absolute bound fixed at one site count does not transfer to another
-# (issue #111): the backends agree to ~8e-13 relative at every size, but that
-# same agreement reads as 7.4e-07 absolute at 200,000 sites and would fail an
-# absolute 1e-9. CROSS_DEVICE_RTOL_FLOAT64 is the float64 implementation-
-# agreement bound stated in docs/tex/textbook.tex (sec:tolerance); it is
-# never relaxed to accommodate a discrepancy.
+# Relative (#111): ~8e-13 relative at every size is 7.4e-07 absolute at
+# 200,000 sites. The bound is `sec:tolerance`'s, never relaxed.
 _RTOL_ORACLE = CROSS_DEVICE_RTOL_FLOAT64
 
 
@@ -36,12 +31,7 @@ _RTOL_ORACLE = CROSS_DEVICE_RTOL_FLOAT64
 def test_relative_tolerance_transfers_to_fixture_scale() -> None:
     """The tolerance holds at 200,000 sites, where an absolute one would not.
 
-    This is the claim issue #111 turns on, in executable form. The suite's
-    fast tests run at tens of sites because that is cheap, not because the
-    tolerance requires it -- and a bound that only holds at tens of sites is
-    not a bound on the backend, it is a bound on the test. Release-gated
-    rather than deleted: it costs a full-fixture score, and issue #109 keeps
-    that off the per-PR path.
+    Issue #111 in executable form; release-gated, a full-fixture score (#109).
     """
     params, alignment = simulated_alignment(FOUR_TAXA)
 
@@ -65,12 +55,8 @@ def test_relative_tolerance_transfers_to_fixture_scale() -> None:
 @pytest.mark.backend
 @pytest.mark.oracle
 def test_the_enum_reaches_the_rust_kernel_bitwise() -> None:
-    # #860: `Backend.RUST` at the oracle's own entry point is this module's
-    # call and nothing else --- the same float64, bit for bit, not the
-    # relative tolerance the two *implementations* are compared at above.
-    # The weighted route is included because the twin splits a weighted call
-    # into one kernel call per distinct weight, so the keywords have to cross
-    # the door too. Any other member is refused by name.
+    # #860: `Backend.RUST` at the oracle's entry point is this module's call,
+    # bit for bit, weighted route included; any other member is refused by name.
     for name in (SMALL_SITES, "tree_search/ci.yaml"):
         params, alignment = simulated_alignment(name)
         patterns = compress(alignment)

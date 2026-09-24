@@ -1,29 +1,12 @@
 """The Rust BCJR pass against the NumPy oracle and against enumeration (issue #754).
 
-`likelihood/CLAUDE.md`: the reference implementation is the oracle and it
-stays, and a backend is accepted or rejected against a stated bound rather
-than adjusted until it matches. Two claims are separated here rather than
-merged into the looser one.
-
-* **Bitwise** on every register this repository declares. `src/bcjr.rs`
-  takes NumPy's `npy_logaddexp` branch for branch and
-  `numerics.logsumexp`'s shift by the row maximum, and at `memory` 1 and 2
-  --- four states, the `(7, 5)` encoder of every fixture and both
-  benchmark lengths --- the two agree to the last bit.
-* **Inside `CROSS_DEVICE_RTOL_FLOAT64`** at `memory` 3 and 4, where NumPy's
-  pairwise sum switches to eight accumulators and this kernel stays left to
-  right. That is a reassociation of a floating sum: realized 2.3e-13
-  absolute and 2.2e-12 relative over `K` up to 1,024, with the log evidence
-  still bitwise.
-
-Both backends are then pinned to `exact_bitwise_posterior`, which shares no
-recursion with either, so the pair is not established by agreeing with each
-other alone: `test_convolutional.py::test_bcjr_posteriors_are_the_exact_bitwise_map`
-runs that enumeration on both backends. End to end, `bcjr` and
-`decode_turbo` default to this kernel, so
-`test_convolutional.py`'s planted-message test and `test_turbo.py`'s
-recorded-rate test judge it against the planted truth (issue #982 dropped the
-copies of all three here).
+Bitwise at `memory` 1 and 2 (four states, every declared register):
+`src/bcjr.rs` follows `npy_logaddexp` and `numerics.logsumexp`'s shift. Inside
+`CROSS_DEVICE_RTOL_FLOAT64` at `memory` 3 and 4, where NumPy's pairwise sum
+switches to eight accumulators: 2.3e-13 absolute, 2.2e-12 relative over `K`
+up to 1,024, the log evidence still bitwise. Both backends are pinned to
+enumeration in `test_convolutional.py`; end to end, `bcjr` and `decode_turbo`
+default to this kernel, judged there and in `test_turbo.py` (#982).
 """
 
 from __future__ import annotations
@@ -81,11 +64,7 @@ def _ratios(length: int, seed: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]
 def test_the_rust_pass_is_the_numpy_oracle_bitwise_on_the_declared_registers() -> None:
     """Every output, to the last bit, at the state count the fixtures use.
 
-    The rung `infra/ladder.py` records under `BCJR`: the kernel is not
-    accepted against a tolerance where it does not need one. Equality is the
-    strongest thing a referee can assert (root `CLAUDE.md`), and at four
-    states the two implementations reassociate nothing relative to each
-    other, so it is what is asserted.
+    The `BCJR` rung of `infra/ladder.py`; at four states nothing reassociates.
     """
 
     def check(memory: int, message_length: int, terminated: bool) -> None:
@@ -117,13 +96,7 @@ def test_the_rust_pass_is_the_numpy_oracle_bitwise_on_the_declared_registers() -
 def test_past_four_states_the_two_part_only_by_numpys_pairwise_sum() -> None:
     """Inside the float64 cross-implementation bound, and the evidence is exact.
 
-    NumPy's pairwise reduction switches to eight accumulators at eight terms
-    and the kernel's state loop stays left to right, so the two reassociate
-    the sum over states differently. Realized over these six cells:
-    **2.3e-13** absolute and **2.2e-12** relative in the ratios, against a
-    bound of 1e-11 relative. The log evidence reduces once per call and
-    stays bitwise, which is what says the departure is the reduction and not
-    the recursions feeding it.
+    Pairwise against left-to-right: 2.3e-13 absolute, 2.2e-12 relative, bound 1e-11.
     """
 
     def check(memory: int, message_length: int) -> None:
@@ -148,11 +121,7 @@ def test_past_four_states_the_two_part_only_by_numpys_pairwise_sum() -> None:
 @pytest.mark.oracle
 @pytest.mark.backend
 def test_the_rust_pass_is_the_oracle_on_the_ci_turbo_fixture() -> None:
-    """The declared instance, both constituent streams, bitwise.
-
-    The fixture rather than a constructed trellis: a backend measured only
-    on inputs its author chose is measured on its author.
-    """
+    """The declared instance, both constituent streams, bitwise."""
     code = fixture("turbo", "ci").params.code()
     rng = np.random.default_rng(233)
     message = rng.integers(0, 2, code.message_length).astype(np.uint8)
@@ -197,9 +166,7 @@ def test_both_backends_refuse_streams_of_disagreeing_length(backend: Backend) ->
 def test_a_next_state_table_that_is_not_a_permutation_is_refused() -> None:
     """The kernel derives the gather's inverse and checks it rather than trusting it.
 
-    `Trellis.source` is built by a scatter into an uninitialized array, so a
-    table that is not a permutation leaves a state reading whatever was in
-    the slot. The kernel derives the inverse itself and refuses instead.
+    A non-permutation would leave `Trellis.source` reading uninitialized slots.
     """
     broken = Trellis(
         memory=1,

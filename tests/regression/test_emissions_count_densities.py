@@ -1,15 +1,10 @@
 """The count families against `scipy.stats`, covariate folded in (issue #729).
 
-The four count families' log densities, their two moments and their
-alignment keys had no referee outside `emissions.py`: what pinned them was
-the mean-variance relation each family states about itself and the limits
-between the families. `scipy.stats` states the same four distributions in
-its own parameterization, so it is an answer arrived at by another route,
-and the exposure and trial-count branches of issue #658 are the same
-distributions one rate and one trial count over.
-
-Tolerances are relative and declared per comparison; each test's docstring
-carries the value realized on the 4-core reference host.
+`scipy.stats` states the four count distributions in its own parameterization,
+an answer by another route; the exposure and trial-count branches (#658) are
+the same distributions at a rate and a trial count per observation. Relative
+tolerances per comparison; docstrings carry the value realized on the 4-core
+reference host.
 """
 
 from __future__ import annotations
@@ -68,12 +63,7 @@ def _scipy_negative_binomial(
 def test_the_four_count_families_score_the_log_probabilities_scipy_states() -> None:
     """Every family's `log_density` against `scipy.stats`, at 18 points each.
 
-    The widest relative difference over the four families is **1.07e-14**, on
-    the negative binomial, against a declared 1e-12; the Poisson's is
-    1.25e-16, the binomial's 1.69e-15 and the beta-binomial's 3.26e-15. The
-    two binomial entries whose count exceeds their state's trial count score
-    ``-inf`` on both sides, which is the support asserted rather than
-    assumed.
+    Widest 1.07e-14 (NB) against 1e-12; counts above trials score ``-inf`` both sides.
     """
     observations = torch.from_numpy(COUNTS)
     counts = COUNTS[..., np.newaxis]
@@ -109,15 +99,7 @@ def test_the_four_count_families_score_the_log_probabilities_scipy_states() -> N
 def test_the_covariate_branches_score_the_exposure_and_trial_count_folded_in() -> None:
     """The two branches issue #658 added, against the same closed forms.
 
-    An exposure ``e_i`` multiplies the negative binomial's rate, so the
-    referee is `scipy`'s negative binomial at ``e_i mu_k``: **4.19e-15**
-    relative at the widest over the six exposures, against a declared 1e-12.
-    A trial count per observation overrides the beta-binomial's per-state
-    one, so the referee is `scipy`'s beta-binomial at ``n_i``: **2.39e-15**.
-    Neither is the covariate absorbed into a constant -- the exposures vary
-    over a factor of twelve and the trial counts over nine -- so a branch
-    that ignored its covariate would score the unit-exposure density and be
-    caught.
+    NB at ``e_i mu_k``: 4.19e-15; beta-binomial at ``n_i``: 2.39e-15; declared 1e-12.
     """
     observations = torch.from_numpy(COUNTS)
     counts = COUNTS[..., np.newaxis]
@@ -153,12 +135,7 @@ def test_the_covariate_branches_score_the_exposure_and_trial_count_folded_in() -
 def test_each_count_familys_moments_are_the_moments_scipy_reports() -> None:
     """`mean`, `variance` and `alignment_key` against `scipy.stats`' moments.
 
-    The keys are what a recovery test permutes states on, so a family whose
-    two moments were right and whose key reported something else would align
-    on the wrong signature and still pass its own tests. The widest relative
-    difference is **4.35e-16** on the negative binomial's variance, against a
-    declared 1e-14; the Poisson and beta-binomial means and the binomial mean
-    are exact.
+    Widest 4.35e-16 (NB variance) against 1e-14; keys are what recovery permutes on.
     """
     poisson = PoissonEmission(RATE)
     binomial = BinomialEmission(TRIALS, PROBABILITY)

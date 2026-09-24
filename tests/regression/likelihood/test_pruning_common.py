@@ -1,24 +1,12 @@
 """The shared pruning plumbing moved no number: every route still meets the oracle (issue #858).
 
-``snakes_and_ladders.likelihood.pruning_common`` carries the post-order, the
-leaf indicator, the rescaling step and the four validations the Rust, Torch,
-analytic and surrogate routes had a copy of each. The oracle,
-``likelihood.pruning``, imports none of it --- so the seam is checked the way
-the ladder is: each route against the oracle on ``tree_jc/ci``.
-
-What each route is held to is what it met before the fold, and the two are not
-the same claim. ``pruning_torch`` and ``pruning_analytic`` reproduce the
-oracle's value *bitwise* at this fixture, so that is what is asserted; the
-compiled route reassociates its sums in Rust and never did, so it is held to
-:data:`~snakes_and_ladders.likelihood.device.CROSS_DEVICE_RTOL_FLOAT64`, the
-float64 implementation-agreement bound of ``docs/tex/textbook.tex``
-(``sec:tolerance``). Loosening either to admit a result is forbidden; both are
-where the comparison lands.
-
-These are the Rust and Torch routes' oracle tests since issue #982 dropped
-the per-route copies on a hand-built copy of this fixture's tree;
-``test_pruning_analytic.py`` keeps its own against the tape. The torch test
-also holds the default dtype: a caller passing none gets ``float64``.
+``pruning_common`` carries the post-order, leaf indicator, rescaling and four
+validations each route had a copy of; ``likelihood.pruning`` imports none of
+it. On ``tree_jc/ci``, ``pruning_torch`` and ``pruning_analytic`` meet the
+oracle bitwise; the Rust route reassociates and is held to
+:data:`~snakes_and_ladders.likelihood.device.CROSS_DEVICE_RTOL_FLOAT64`
+(``sec:tolerance``). These are the Rust and Torch oracle tests since #982;
+the torch test also holds the default dtype to ``float64``.
 """
 
 from __future__ import annotations

@@ -1,19 +1,10 @@
 """The two documents pay for things nothing reads (issues #492, #495).
 
-An orphan here is one-sided: a figure the QA manifest renders at the release
-gate and no document cites, and a problem statement the textbook carries with
-no box in the release checklist. Neither is asserted empty --- whether each
-should exist belongs to its own ticket --- so what is asserted is that the
-detector works, on a figure the manifest declares and a checklist that
-parsed. An unparsed template would otherwise report every statement as
-unboxed and read as a finding.
-
-The join these two used to sit beside is gone with ``PROBLEMS.md``'s
-inventory columns (issue #640). What it protected is not: the root
-``CLAUDE.md`` splits the documents so the textbook can state an algorithm
-without naming any code, and the last test here asserts that of the
-hand-written sources, which is where a join was always the natural place to
-break it.
+An orphan is a figure the QA manifest renders and no document cites, or a
+problem statement with no box in the release checklist. Neither is asserted
+empty; what is asserted is that the detector works, on a declared figure and a
+parsed checklist. The last test asserts the textbook's hand-written sources
+name no code (root ``CLAUDE.md``; issue #640).
 """
 
 from __future__ import annotations
@@ -55,14 +46,9 @@ def test_a_statement_the_release_checklist_has_no_box_for_is_seen() -> None:
 @pytest.mark.critical
 @pytest.mark.infra
 def test_the_key_travels_one_way_and_the_textbook_names_no_code() -> None:
-    # The constraint the whole design rests on (root `CLAUDE.md`, issue #249):
-    # the catalogue may name the document, and the document may name no code.
-    # `test_problems_tables.py` asserts it of the *generated* table; this
-    # asserts it of the hand-written sources, which is where a join would have
-    # been the natural place to put a module path.
-    # A module path, a filename or a typeset identifier is application
-    # documentation wearing a textbook's clothes (the needles merged from
-    # `qa/test_qa_build.py`, issue #982).
+    # The textbook may name no code (root `CLAUDE.md`, issue #249); this holds
+    # the hand-written sources to it, `test_problems_tables.py` the generated
+    # table. Needles: a module path, a filename, a typeset identifier (#982).
     for name in TEXTBOOK_SOURCES:
         source = (document_orphans.TEX_DIR / name).read_text()
         offenders = [

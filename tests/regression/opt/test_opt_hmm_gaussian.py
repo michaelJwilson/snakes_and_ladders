@@ -75,15 +75,7 @@ def _params(
 
 
 def _coverage(separation: float, replicates: int) -> tuple[int, int, int]:
-    """Fit ``replicates`` datasets at one separation and count covering intervals.
-
-    Returns
-    -------
-    tuple[int, int, int]
-        Intervals covering, intervals checked, and replicates whose observed
-        information was too ill-conditioned to invert, which contribute no
-        interval and are reported rather than dropped.
-    """
+    """Fit ``replicates`` datasets at one separation: (covering, checked, uninvertible)."""
     truth = _truth(separation)
     covered = total = boundary = 0
     for replicate in range(replicates):
@@ -224,11 +216,8 @@ def test_the_alignment_recovers_a_known_permutation_of_the_states() -> None:
 
 @pytest.mark.analytic
 def test_the_start_places_the_means_on_the_data_and_breaks_the_symmetry() -> None:
-    # A shared mean would leave the states exchangeable and the gradient in
-    # that block exactly zero, which is the failure `opt/CLAUDE.md` names. A
-    # mean far from every observation is the other failure: the state's
-    # density underflows, it is invisible to the E step, and the fit silently
-    # becomes one with fewer states.
+    # A shared mean makes the states exchangeable (`opt/CLAUDE.md`); a distant
+    # one underflows and silently drops a state.
     observations = simulate_sequences(_params(_truth(), seed=23)).observations
     objective = GaussianHmmObjective(observations, 2)
 
@@ -285,11 +274,8 @@ def test_a_collapsing_fit_is_refused_rather_than_returned() -> None:
 
 @pytest.mark.end2end
 def test_coverage_reaches_nominal_only_where_the_states_are_separated() -> None:
-    # The identifiable regime, measured rather than assumed. At half a standard
-    # deviation of separation the two states are nearly one: most replicates
-    # produce an information matrix too ill-conditioned to invert, and the
-    # intervals that exist under-cover. The cheap two-point form of the sweep
-    # the release test tabulates.
+    # At half a standard deviation most replicates' information is
+    # uninvertible and the rest under-cover: the release sweep's two points.
     close_covered, close_total, close_boundary = _coverage(0.5, replicates=8)
     far_covered, far_total, far_boundary = _coverage(6.0, replicates=8)
 

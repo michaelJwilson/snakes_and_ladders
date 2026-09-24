@@ -1,18 +1,11 @@
 """The citation check reports each way a citation stops resolving (issue #488).
 
-`infra/check_citations.py` runs where the documents are built, over the real
-`docs/tex/`, and that run is the check. What this pins is the guard's own
-trigger: a check nothing has been seen to fail is a check that may not fail.
-Four findings, one test each --- a figure cited under a name the tree does
-not carry; a `\\ref` whose `\\label` the *other* document defines, which is
-what `fig:turbo-waterfall` did (issue #249); a `\\cite` with no entry; and a
-bibliography entry left unclosed, which a merge did during the 0.5.0 union.
-
-The tree the fixture builds is the smallest one that carries all four, so a
-finding is attributable to the defect written into it rather than to
-anything `docs/tex/` happens to hold today. The real documents are checked
-by the `documents` job on the push to `main` (`DEV.md`); repeating that here
-would assert against a generated fragment this suite does not write.
+This pins the guard's trigger, one test per finding: a figure cited under a
+name the tree does not carry; a `\\ref` whose `\\label` the other document
+defines (`fig:turbo-waterfall`, issue #249); a `\\cite` with no entry; and an
+unclosed bibliography entry (the 0.5.0 union). The fixture tree is the
+smallest carrying all four, so each finding is attributable to its defect.
+The real `docs/tex/` is checked by the `documents` job on `main` (`DEV.md`).
 """
 
 from __future__ import annotations

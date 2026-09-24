@@ -1,24 +1,12 @@
 """`learn.ppo` and `learn.reinforce` against TorchRL's estimators, in a subprocess (issues #322, #376, #977).
 
-TorchRL runs in `validation.torchrl`, so this module replaces
-`learn/test_learn_ppo_torchrl.py` and `learn/test_learn_reinforce_torchrl.py`,
-which imported it in-process. What each asserts is unchanged:
-
-- ``generalized_advantages`` is TorchRL's ``GAE`` at ``gamma = 1``, to
-  ``1e-10``, on three fixed episodes at four ``lam`` and both end flags;
-- ``ppo_loss`` and its gradient are ``ClipPPOLoss``'s, to ``1e-10``, at three
-  clips, with the clip active on some decision;
-- ``surrogate_loss`` and its gradient are ``ReinforceLoss``'s, to ``1e-10``,
-  at three baselines, on greedy episodes whose actions TorchRL's
-  deterministic actor draws back.
-
-Two conventions differ and are mapped rather than hidden. TorchRL reads a
-truncated episode from ``done`` without ``terminated``, the flag
-``generalized_advantages`` takes; and its objectives are means over
-decisions where ours are means over episodes of sums over decisions, so the
-adapter scales by ``n_decisions / n_episodes``. ``ReinforceLoss`` forms the
-advantage itself when the key is absent, so the return-to-go minus the
-baseline is supplied, with a constant critic its constructor requires.
+To ``1e-10``: ``generalized_advantages`` against ``GAE`` at ``gamma = 1``,
+four ``lam``, both end flags; ``ppo_loss`` and its gradient against
+``ClipPPOLoss`` at three clips, one active; ``surrogate_loss`` against
+``ReinforceLoss`` at three baselines on greedy episodes. Mapped conventions:
+truncation read from ``done``; means over decisions against ours per
+episode, scaled by ``n_decisions / n_episodes``; the advantage supplied, with
+the constant critic the constructor requires.
 """
 
 from __future__ import annotations

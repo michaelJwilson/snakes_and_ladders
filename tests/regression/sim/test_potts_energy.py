@@ -1,16 +1,9 @@
 """The one Potts energy, against the oracle it replaced four loops with.
 
-`sim.potts.energies` is what `sample.potts_mcmc`, `search.alpha_expansion`
-and `search.maxflow` each scored a labelling with before issue #277.
-`likelihood.potts.log_weights` is deliberately **not** merged into it: it is
-the independent answer this is refereed by, and an implementation that
-computes its own referee is no longer refereed.
-
-The two sum the edge terms in different orders --- one gather and a dot
-product here, a term per edge there --- so they agree to a relative `1e-12`
-and not bitwise (issue #341). The four instances are the fixtures the
-consolidation was validated on: a chain, a lattice, a glass with couplings of
-both signs, and a lattice whose field varies by site.
+`sim.potts.energies` replaced three scorers (#277); `likelihood.potts.log_weights`
+stays separate as its referee. Orders differ (gather and dot against a term
+per edge), so relative `1e-12`, not bitwise (#341). Instances: a chain, a
+lattice, a mixed-sign glass, a per-site field.
 """
 
 from __future__ import annotations

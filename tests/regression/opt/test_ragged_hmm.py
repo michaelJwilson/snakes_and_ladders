@@ -50,10 +50,7 @@ def _draw(lengths: tuple[int, ...], seed: int) -> np.ndarray:
 def test_equal_lengths_reproduce_the_conserved_route_bitwise() -> None:
     """The sandbox rule's own standard, and the guard on the whole refactor.
 
-    At equal lengths the ragged path's mask is everywhere true, so every
-    `torch.where` must fall through to exactly the conserved arithmetic in the
-    same order. A masked form that reassociates a sum, or gathers the evidence
-    from the wrong column, differs here in the last bits and nowhere else.
+    At equal lengths the mask is all true: exactly the conserved arithmetic.
     """
     observations = _draw((40, 40, 40), seed=11).reshape(3, 40)
     initial, transition, family = _model()
@@ -91,11 +88,7 @@ def test_equal_lengths_reproduce_the_conserved_route_bitwise() -> None:
 @pytest.mark.critical
 @pytest.mark.analytic
 def test_the_evidence_is_the_sum_over_segments() -> None:
-    """A batch's evidence is its segments', added --- the free referee.
-
-    Nothing is fitted here: the claim is about the E step alone, so it rests on
-    arithmetic rather than on a second implementation agreeing.
-    """
+    """A batch's evidence is its segments', added --- the free referee."""
     lengths = (7, 13, 5)
     batch = Ragged(_draw(lengths, seed=3), lengths)
     initial, transition, family = _model()
@@ -116,10 +109,7 @@ def test_the_evidence_is_the_sum_over_segments() -> None:
 def test_a_boundary_is_not_a_transition() -> None:
     """The closed form that says the segmentation was honoured.
 
-    The same observations, cut once in the middle or left whole. The whole
-    chain pays one transition for the step across the cut; the split pays an
-    initial distribution instead. The difference between the two evidences is
-    therefore exactly those two terms, and nothing else.
+    Cut or whole, the evidences differ by one transition against one initial.
     """
     initial, transition, family = _model()
     counts = _draw((12,), seed=5)
@@ -165,10 +155,7 @@ def test_a_segment_of_one_position_never_reaches_the_fit() -> None:
 def test_the_declared_ragged_instance_recovers_its_transition() -> None:
     """The fixture, loaded, simulated at its own segmentation, and fitted.
 
-    `sim.hmm.simulate_sequences` still returns a rectangular batch, so the
-    segments are drawn here from the declared parameters rather than by it. A
-    ragged simulator is deferred and noted on #666; what this pins is that the
-    **declared instance** is fitted through the registry, not a literal.
+    Segments are drawn here; a ragged simulator is deferred on #666.
     """
     declared = fixtures.fixture("ragged_hmm", "ci").params
     lengths = declared.segment_lengths

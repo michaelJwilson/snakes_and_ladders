@@ -1,20 +1,11 @@
 """Data-driven starts for the tree, and what they buy at equal evaluations (issue #364).
 
-`FromDistances` and `FromHadamard` are held to the `Initializer` protocol
-exactly as the mixture's k-means++ is: they take an `Objective`, refuse one
-whose parameters they cannot interpret, and return one point in its
-unconstrained coordinates. The measurement is the part that matters, and it
-is two comparisons through `opt.budget.compare`. For the branch-length fit
-on the generating topology every start reaches the same optimum, so what
-separates them is the evaluations spent reaching it. For the topology
-search the start is a topology, so the random start is the baseline and the
-two estimators are the candidates, scored by whether the climb reaches the
-enumerated optimum and the candidates it scores on the way.
-
-The per-pull-request tier pins the direction on the five-taxon fixture over
-three datasets; the release-gated tier is the measurement
-`docs/experiments/005` reports, and ``pytest -s -m release -k initializers``
-reproduces its tables.
+`FromDistances` and `FromHadamard` follow the `Initializer` protocol as the
+mixture's k-means++ does. Two comparisons through `opt.budget.compare`: the
+branch-length fit (every start reaches one optimum; evaluations separate
+them) and the topology search (random start as baseline, scored by reaching
+the enumerated optimum and candidates scored). Per PR: five taxa, three
+datasets; release: `docs/experiments/005` (``pytest -s -m release -k initializers``).
 """
 
 from __future__ import annotations
@@ -67,11 +58,8 @@ SIX_TAXA = "tree_search/stress.yaml"
 FIT_BUDGET = Budget(Cost.EVALUATIONS, 2000)
 #: Candidates one topology search may score.
 SEARCH_BUDGET = Budget(Cost.CANDIDATES, 60)
-#: Sites of the twenty-taxon instance, where nothing is enumerated, and its
-#: branch-length range: with twenty taxa a path crosses up to a dozen
-#: branches, and at ``[0.02, 0.4]`` some pairs saturate at 1,000 sites ---
-#: three quarters of sites differing, where no finite distance exists and
-#: the estimator refuses. The range keeps every path inside the model.
+#: Twenty taxa, nothing enumerated: at ``[0.02, 0.4]`` no path saturates at
+#: 1,000 sites (three quarters differing has no finite distance).
 TWENTY_TAXA_SITES = 1000
 TWENTY_TAXA_LENGTHS = (0.02, 0.15)
 #: Two fits of one surface agree to the optimizer's convergence, not to
@@ -242,9 +230,7 @@ def test_the_start_is_one_point_in_the_objective_s_coordinates(
 ) -> None:
     """One start, of the objective's dimension, whose lengths are the estimate's.
 
-    On the five-taxon fixture the objective is unrooted, so every branch is
-    estimable and the constrained start is the estimate's length on each
-    split, floored at the initializer's minimum.
+    Unrooted: every split gets the estimate's length, floored at the minimum.
     """
     params = load_fixture(FIVE_TAXA)
     dataset = simulate_tree(params, np.random.default_rng(params.seed))
@@ -323,14 +309,9 @@ def test_a_non_positive_floor_is_refused() -> None:
 def test_every_start_reaches_the_fit_optimum_and_none_reaches_it_cheaper() -> None:
     """Five-taxon fixture, three datasets: all five starts converge to one optimum at one cost.
 
-    The finding, and the opposite of the plausible guess. The neighbor-joining
-    start begins within a few nats of the optimum and the objective's own
-    constant 200 nats above it, yet L-BFGS spends the same 21 to 26
-    evaluations from either: the stop is the gradient relative to the
-    objective, and the line search and curvature pairs cost the same from
-    anywhere in the basin. Realized evaluations per dataset: FromObjective
-    22, 22, 21; Perturbed 25, 25, 21; RandomRestart 21, 24, 23;
-    FromDistances 22, 26, 23; FromHadamard 24, 23, 20.
+    L-BFGS spends 21 to 26 evaluations from anywhere: FromObjective 22, 22, 21;
+    Perturbed 25, 25, 21; RandomRestart 21, 24, 23; FromDistances 22, 26, 23;
+    FromHadamard 24, 23, 20.
     """
     comparison = measure_fits(_instances(FIVE_TAXA, range(3)), tuple(Start))
     hits = comparison.hits(TOLERANCE, relative=True)
@@ -348,10 +329,7 @@ def test_every_start_reaches_the_fit_optimum_and_none_reaches_it_cheaper() -> No
 def test_the_estimator_starts_reach_the_enumerated_optimum_at_five_taxa() -> None:
     """Five-taxon fixture, three datasets: the climb from either estimator reaches the enumerated optimum.
 
-    The random start reaches it too on these datasets; what the estimators
-    buy is the spend, since a start at the optimum scores one neighbourhood
-    and stops. Realized candidates scored: RandomRestart 15.3, FromDistances
-    4.0, FromHadamard 4.0.
+    The estimators buy spend: candidates 15.3 (random), 4.0 (distances), 4.0 (Hadamard).
     """
     instances = _instances(FIVE_TAXA, range(3))
     known = [_enumerated_optimum(instance) for instance in instances]
@@ -380,14 +358,8 @@ def test_the_estimator_starts_reach_the_enumerated_optimum_at_five_taxa() -> Non
 def test_initializers_at_equal_evaluations(name: str | None, n_seeds: int) -> None:
     """The measurement `docs/experiments/005` reports; ``pytest -s`` prints its tables.
 
-    Twenty datasets of the five-taxon fixture, ten of the six-taxon one and
-    five of a random twenty-taxon tree at 1,000 sites --- the counts that
-    keep each case inside ten minutes on one core, since the six-taxon
-    referee is 105 fits per dataset and a twenty-taxon climb is 60. The fit
-    comparison runs every start; the search comparison runs the three that
-    name a topology, the Hadamard start only where the taxon count admits
-    it, against the enumerated optimum at five and six taxa and the best
-    found at twenty.
+    Datasets: 20 at five taxa, 10 at six (105 referee fits each), 5 at twenty
+    (1,000 sites), each case under ten minutes on one core.
     """
     print()
     label = name or "random tree, 20 taxa"

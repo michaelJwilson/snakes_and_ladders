@@ -32,9 +32,7 @@ def test_the_segments_tile_the_array_and_are_views() -> None:
 def test_a_one_position_segment_is_refused() -> None:
     """All initial distribution and no transition, so the shape is refused.
 
-    The maintainer's ruling on #666: a length-1 segment is not admitted. It is
-    where a padded, masked recursion goes wrong first, and refusing it at the
-    carrier is cheaper than distrusting every number downstream of it.
+    The ruling on #666: a padded, masked recursion goes wrong here first.
     """
     with pytest.raises(ValueError, match="at least 2 positions"):
         Ragged(np.zeros(3), (1, 2))
@@ -67,9 +65,7 @@ def test_a_rectangular_batch_is_a_ragged_one_with_equal_lengths() -> None:
 def test_padding_is_recoverable_and_the_mask_says_where() -> None:
     """The padded form loses nothing: the mask selects exactly the real rows.
 
-    This is what lets the recursion batch over segments at one step per
-    position of the longest without the padding entering a likelihood --- the
-    mask is the whole of that promise, so it is asserted rather than assumed.
+    The mask keeps padding out of a likelihood batched over segments.
     """
     batch = Ragged(np.arange(9.0), (2, 3, 4))
     block, mask = batch.padded(fill=np.nan)

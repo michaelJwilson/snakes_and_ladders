@@ -1,17 +1,10 @@
 """A fixture hill climbing does not already solve, and why it does not.
 
-`STATUS.md` records that no claim about a learned tree policy is possible in
-either direction, because on the 6-taxon fixture greedy reaches the enumerated
-optimum from every start. Issue #177 is that gap. What is asserted here is a
-property of the *fixture*, not of any agent: that a single-move neighbourhood
-gets trapped on it, that the trap is a genuine local optimum rather than a
-truncated episode, and that the generating topology is nonetheless the
-best-scoring one -- without which a search failing would say nothing.
-
-The surface is the fixed-branch-length one `snakes_and_ladders.learn.tree` scores
-(`RewardModel.KNOWN`), because that is the surface an agent optimizes and the
-one issue #178 trains against. All 945 unrooted topologies on 7 leaves are
-enumerated, so "the best topology" is an enumerated fact.
+On the 6-taxon fixture greedy reached the optimum from every start, so no
+learned-policy claim was possible (issue #177). Asserted of the fixture: a
+single-move neighbourhood is trapped, the trap is a genuine local optimum, and
+the generating topology scores best. The surface is `RewardModel.KNOWN`, the
+one issue #178 trains on; all 945 unrooted topologies on 7 leaves are enumerated.
 """
 
 from __future__ import annotations
@@ -37,12 +30,8 @@ STARTS = 50
 HORIZON = 30
 START_SEED_OFFSET = 1000
 
-# Realized on the committed fixture. NNI reaches the enumerated maximum from
-# 24 of 50 starts; SPR from 50 of 50. The assertions below are bounds around
-# these rather than equalities: pinning 0.48 exactly would fail on a numpy
-# version that reorders a tie, and the claim the fixture has to support is
-# "greedy fails often enough to leave room", not "greedy fails 52% of the
-# time".
+# Realized: NNI reaches the maximum from 24 of 50 starts, SPR from 50 of 50.
+# Asserted as bounds; a tie reordered by numpy would move 0.48.
 _NNI_SUCCESS = 0.48
 _SPR_SUCCESS = 1.00
 # Median log-likelihood shortfall of an NNI run that does not reach the

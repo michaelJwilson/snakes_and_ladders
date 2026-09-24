@@ -1,23 +1,14 @@
 """Runtime goals: the package against an external framework's measured time (issue #972).
 
-A :class:`Goal` is an external framework's runtime on a declared fixture,
-measured once on the 4-core reference host and written here as a number, so
-a goal test needs the package alone: it times the package's call with
-:func:`median_seconds` and :func:`assert_meets` fails when the median exceeds
-the goal times :data:`GOAL_RATIO`, 0.55, saying by how much. The framework is not
-installed to run it; it is installed to re-measure the number, by the
-benchmark pair in `tests/benchmarks/`, and the row records when and where it
-was measured.
-
-A :class:`MemoryGoal` is the same for the resident memory a call adds at its
-peak (issue #987). The package's figure is read by
-:func:`snakes_and_ladders.validation.runner.package`, in a fresh interpreter
-as the framework's was, and :func:`assert_fits` fails when it exceeds the
-goal.
-
-A goal test carries the `goal` marker and runs in a step of CI's
-`validation` job that reports and does not block, since a goal fails until it
-is met. Measured on a different host, the ratio moves with the hardware.
+A :class:`Goal` is a framework's runtime on a declared fixture, measured once
+on the 4-core reference host and written here, so a goal test needs the
+package alone: :func:`median_seconds` times the package and
+:func:`assert_meets` fails above the goal times :data:`GOAL_RATIO`, 0.55. The
+benchmark pair in `tests/benchmarks/` re-measures it. A :class:`MemoryGoal`
+bounds the peak added resident memory (issue #987), read in a fresh
+interpreter by :func:`snakes_and_ladders.validation.runner.package`
+(:func:`assert_fits`). Goal tests carry `goal` and run in CI's `validation`
+job without blocking; the ratio moves with the hardware.
 """
 
 from __future__ import annotations
@@ -67,9 +58,7 @@ def median_package(
 ) -> float:
     """The median over ``repeats`` fresh-interpreter runs of the package's ``call`` (issue #1010).
 
-    ``read`` is ``"seconds"``, ``"peak_bytes"`` (a run that reports none
-    counts as zero) or the name of one of the call's scalar outputs. Every
-    goal read the package's figure this way, written out 36 times.
+    ``read``: ``"seconds"``, ``"peak_bytes"`` (none reads 0) or a scalar output's name.
     """
     values = []
     for _ in range(repeats):

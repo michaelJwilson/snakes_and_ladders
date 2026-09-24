@@ -1,18 +1,10 @@
 """`GraphSurrogate` against PyTorch Geometric's `GINConv`, weights copied across, in a subprocess (issues #322, #977).
 
-PyG runs in `validation.torch_geometric`, so this module replaces
-`learn/test_learn_surrogate_pyg.py`, which imported it in-process. What it
-asserts is unchanged:
-
-- on tied first-layer weights, where the node half and the neighbour half
-  are equal, the ``GINConv`` twin reproduces ours to ``1e-12`` on twelve
-  five-taxon trees at two seeds, which pins the neighbour sum, the residual,
-  the pooling and the decoder;
-- on general weights the two are different architectures, the gap above
-  ``1e-6``, and tying the weights closes it below ``1e-12``.
-
-``GCNConv`` is not a candidate: it normalizes by degree and adds self-loops,
-neither of which our layer does.
+On tied first-layer weights the ``GINConv`` twin reproduces ours to
+``1e-12`` on twelve five-taxon trees at two seeds (neighbour sum, residual,
+pooling, decoder); on general weights the gap exceeds ``1e-6`` and tying
+closes it below ``1e-12``. ``GCNConv`` normalizes by degree and adds
+self-loops, which our layer does not.
 """
 
 from __future__ import annotations

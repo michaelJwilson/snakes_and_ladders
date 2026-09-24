@@ -69,9 +69,7 @@ def test_a_name_outside_the_surface_is_refused() -> None:
 def test_a_submodule_resolves_on_first_use_and_loads_nothing_beside_it() -> None:
     """``sal.sim.tree`` reads as written, and costs ``sim.tree`` alone.
 
-    A fresh process, since the suite has imported everything: after the bare
-    import neither ``sim`` nor ``learn`` is loaded; reading ``sal.sim.tree``
-    loads ``sim.tree`` and leaves ``learn``, which imports ``torch``, alone.
+    Fresh process: ``sim.tree`` loads, ``learn`` (which imports ``torch``) does not.
     """
     code = (
         "import sys\n"

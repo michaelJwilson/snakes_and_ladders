@@ -1,15 +1,9 @@
 """What the three review gates added under #418 must refuse.
 
-A gate is only worth its seconds if it fires. Each test here builds the
-situation the gate exists to catch and asserts the gate's verdict on it, and
-its mirror -- the situation that must pass -- because a gate that refuses
-everything is removed on the first false alarm and one that refuses nothing is
-never noticed at all (`DEV.md`, Review starts from `infra/review_gates.sh`).
-
-The third gate, the generated ledgers, runs ``infra/ledgers.sh``. What that
-gate protects is checked here: the three files it writes are not in the index.
-A committed copy is what made a machine-written file a merge participant, and
-re-adding one is the way this change is silently undone (issue #425).
+Each test builds the situation a gate exists to catch and its mirror that must
+pass (`DEV.md`, Review starts from `infra/review_gates.sh`). For the ledger
+gate, what is checked is that the three files ``infra/ledgers.sh`` writes are
+not in the index: re-adding one undoes issue #425 silently.
 """
 
 from __future__ import annotations
@@ -171,11 +165,8 @@ def test_the_seam_gate_counts_the_modules_that_name_the_protocol(
 def test_the_seam_gate_takes_the_reason_from_the_declaration_itself(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Where the reason lives is the whole of issue #586's argument: the
-    # declaration is the record, so the gate reads the class's own docstring
-    # and a reader reads the same words in the same place. The reason stops at
-    # its paragraph, so one written above a ``Parameters`` section does not
-    # swallow it.
+    # The declaration is the record (#586): the gate reads the class docstring,
+    # and the reason stops at its paragraph, above any ``Parameters``.
     reason = f"{gate_new_seams.REASON} issue #418 will add two.\n\n    Parameters"
     sources = {"opt.objective": _declared(reason), "a": "New\n"}
     monkeypatch.setattr(
@@ -196,12 +187,8 @@ def test_the_seam_gate_takes_the_reason_from_the_declaration_itself(
 
 @pytest.mark.infra
 def test_the_derived_ledgers_are_not_in_the_index() -> None:
-    # The index, not the working tree: `infra/ledgers.sh` writes all three
-    # into the tree on every document build and every review, so their
-    # presence there says nothing. Tracking one is what the gate refuses,
-    # demonstrated on a throwaway branch carrying a CHECKS.md committed with a
-    # row the tests do not have: `infra/ledgers.sh --check` exited 1 on it and
-    # so did this test (issue #425's pull request records the run).
+    # The index, not the tree: `infra/ledgers.sh` writes all three on every
+    # build. A committed CHECKS.md failed this and `--check` alike (#425's PR).
     listed = subprocess.run(
         [
             "git",

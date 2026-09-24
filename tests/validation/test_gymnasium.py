@@ -1,24 +1,12 @@
 """The Gymnasium adapter reproduces the in-house rollout and passes Farama's checker, in a subprocess (issues #322, #977).
 
-Gymnasium runs in `validation.gymnasium`, and the adapter that was
-`learn.gym.GymnasiumEnvironment` lives in its script, so this module replaces
-`learn/test_search_gym.py`. Referees:
-
-- ``gymnasium.utils.env_checker.check_env``, the API's own statement of what
-  an environment must do, passes on the Potts chain and the tree search;
-- one seed, one policy, the same episode through :func:`rollout` and through
-  ``reset``/``step``: the same states, rewards, end flags and candidate
-  count, on the Potts chain at three seeds and the tree at two;
-- the observation is the neighbourhood's features padded with zeros;
-- the episode truncates at the decision budget and terminates at a local
-  optimum, from a given start, where the rollout does.
-
-Dropped with the move, since the adapter left the package API and its
-argument checks are no claim about the science: the refusals of an unknown
-reset option, a masked action, a neighbourhood wider than ``n_max``, a
-non-positive width or budget, and a state read before the first reset; and
-the step taken after a terminal start, which asserted the environment's
-reward sign and not the adapter.
+The adapter lives in `validation.gymnasium`'s script. Referees:
+``gymnasium.utils.env_checker.check_env`` on the Potts chain and tree search;
+one seed and policy through :func:`rollout` and through ``reset``/``step``:
+same states, rewards, end flags and candidate count (Potts at three seeds,
+tree at two); zero-padded observations; truncation at the budget and
+termination at a local optimum. The adapter's argument refusals left with it:
+they are no claim about the science.
 """
 
 from __future__ import annotations

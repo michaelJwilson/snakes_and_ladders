@@ -1,30 +1,13 @@
 """The fixture registry and the problem catalogue name each other (issue #382).
 
-A supported problem's instance is a file, and `PROBLEMS.md` says which file.
-Two ways that can rot: a row naming a fixture that no longer loads, and a
-fixture no row names --- an instance nothing is claimed about. Both fail here.
-
-The rule ``sim/CLAUDE.md`` states --- a supported instance is a fixture,
-never a literal --- is enforced here for the two consumers that cannot import
-the suite's helpers: the QA scripts and the notebooks. Neither may construct a
-problem's declared truth or call a canonical constructor.
-
-The registry's oracle vocabulary is held to the tables the textbook typesets,
-so a fixture cannot state an oracle the applicability tables have no column
-for; and the two fixtures that restate a canonical constructor are pinned
-against it, since a file that has drifted from the instance it copies is a
-second truth (``sim/CLAUDE.md``).
-
-The baseline records of issue #401 are held to what makes reading a cached
-number safe. The reader returns what the writer wrote; a record computed
-against another ``numpy``, ``scipy`` or ``torch`` is refused rather than
-served; and a record the tree no longer produces is caught by recomputing it,
-which replaced the committed digest (issue #460). The selection deciding which
-records a change is recomputed against is asserted here too, since a selection
-that misses a record is a check that silently did not run.
-
-Every proof runs against a *copy* of the fixture directory, since the
-committed fixtures and records must not be edited to make one.
+`PROBLEMS.md` names each supported instance's file; a row naming no loadable
+fixture, or a fixture no row names, fails. ``sim/CLAUDE.md``'s rule (an
+instance is a fixture, never a literal) is enforced on the QA scripts and
+notebooks; oracle names are held to the textbook's tables; the fixtures that
+restate a canonical constructor are pinned against it. Issue #401's baseline
+records: read back as written, refused under other library versions, and
+caught when the tree no longer produces them (issue #460), with the selection
+of records to recompute asserted. Proofs run on a copy of the fixture directory.
 """
 
 from __future__ import annotations
@@ -192,23 +175,15 @@ CHEAPEST = "potts_chain/ci"
 
 @pytest.fixture(scope="module")
 def recomputed_cheapest() -> tuple[baseline_script.BaselineSpec, Baseline]:
-    """The CHEAPEST spec and one recomputation of it, run once for the module.
-
-    Two tests below recompute the same record from the same tree, so the
-    recomputation is shared and each pays for what it adds: a second run, or
-    a run against a mutated fixture.
-    """
+    """The CHEAPEST spec and one recomputation of it, shared by the module."""
     (spec,) = baseline_script.selected([CHEAPEST])
     return spec, baseline_script.compute(spec)
 
 
 @pytest.mark.smoke
 def test_every_committed_baseline_reads_back_against_the_current_tree() -> None:
-    # The round trip the readers depend on: what `infra/baselines.py --write`
-    # wrote is what `baseline()` returns, computed against the libraries
-    # installed here. A record left behind by a library upgrade fails here
-    # without recomputing a number; one left behind by a change to the code
-    # it measures fails in `infra/baselines.py`, which recomputes.
+    # `infra/baselines.py --write` round-trips through `baseline()` under the
+    # installed libraries; a code change is caught by `infra/baselines.py`.
     recorded = baselines()
     assert recorded, "no baseline record is committed"
 
@@ -227,11 +202,8 @@ def test_a_mutated_fixture_makes_its_baseline_fail_recomputation(
     tmp_path: Path,
     recomputed_cheapest: tuple[baseline_script.BaselineSpec, Baseline],
 ) -> None:
-    # The property that makes a cached number safe: a record whose instance
-    # moved under it does not survive being recomputed. The mutation is made
-    # in a *copy* of the fixture directory, so the committed instance is
-    # untouched. The removed digest said the tree had moved; this says the
-    # number did, and names both values (issue #460).
+    # A record whose instance moved (in a copy) fails recomputation, naming
+    # both values (issue #460).
     root = tmp_path / "tree"
     (root / "tests" / "regression").mkdir(parents=True)
     shutil.copytree(FIXTURES_DIR, root / "tests" / "regression" / "fixtures")
@@ -255,11 +227,8 @@ def test_a_mutated_fixture_makes_its_baseline_fail_recomputation(
 def test_an_edited_budget_is_a_disagreement_the_recomputation_reports(
     tmp_path: Path,
 ) -> None:
-    # The budget says what a value means, so a record whose restart count was
-    # edited to match a test describes a measurement other than the one it
-    # holds. `differences` reports the budget beside a moved value; reporting
-    # the value alone would let the edit pass wherever the number was
-    # reproduced.
+    # The budget says what a value means, so `differences` reports it beside
+    # a moved value: an edited restart count cannot pass.
     copied = tmp_path / "release.baseline.json"
     original = baseline_path("tree_search", Scale.RELEASE)
     copied.write_text(original.read_text().replace('"starts": 50', '"starts": 20'))
@@ -288,11 +257,8 @@ def test_a_record_computed_against_another_library_is_refused(tmp_path: Path) ->
 
 @pytest.mark.smoke
 def test_a_change_is_recomputed_against_the_records_it_reaches() -> None:
-    # The selection that replaced the digest, and why it is safe to recompute
-    # less than everything: a record's numbers are a function of its fixture
-    # and of the import closure of the modules that computed them, so a change
-    # to neither can move them. A missed record is a check that silently did
-    # not run, the failure mode `infra/CLAUDE.md` names for `select_tests.py`.
+    # A record is a function of its fixture and its import closure, so a change
+    # to neither cannot move it; a missed record is a check that did not run.
     every = {f"{spec.problem}/{spec.tier}" for spec in baseline_script.SPECS}
 
     def reached(*paths: str) -> set[str]:
@@ -328,12 +294,9 @@ def test_the_same_baseline_computed_twice_is_the_same_record(
     assert baseline_script.differences(first, read_baseline(first.path)) == []
 
 
-#: What the GitHub runner computed for `tree_search/ci`'s
-#: `maximized_log_likelihood` where the committed record is what this
-#: repository's 4-core host computes: the 45 fits of run 34549737349, job
-#: 103109927613, on a pull request that changed only docstrings, comments and
-#: LaTeX. Kept as data because it is the observation the tolerance is derived
-#: from --- a second host's arithmetic, which no single-host run reproduces.
+#: The GitHub runner's `tree_search/ci` `maximized_log_likelihood` values, the
+#: 45 fits of run 34549737349, job 103109927613, on a comment-only PR: the
+#: second host's arithmetic the tolerance is derived from.
 RUNNER_FITS = (
     -963.7650335864475,
     -963.9244927034631,
@@ -390,12 +353,7 @@ REAL_CHANGE = 1e-11
 
 
 def _moved(record: Baseline, name: str, **fields: Any) -> Baseline:
-    """``record`` with one measurement's fields replaced.
-
-    Returns
-    -------
-    Baseline
-    """
+    """``record`` with one measurement's fields replaced."""
     held = dict(record.measurements)
     held[name] = replace(record.measurement(name), **fields)
     return replace(record, measurements=held)
@@ -403,14 +361,9 @@ def _moved(record: Baseline, name: str, **fields: Any) -> Baseline:
 
 @pytest.mark.smoke
 def test_a_fit_is_compared_within_its_declared_tolerance_and_not_bitwise() -> None:
-    # The comparison issue #527 is about, against the observation that raised
-    # it. A recorded maximum-likelihood fit is an iterative optimiser over a
-    # floating-point reduction, so a host whose BLAS orders that reduction
-    # differently reproduces it to a tolerance and not bit for bit: the
-    # runner moved 26 of these 45 values, by 4.365e-15 relative at the
-    # widest. The bound has to admit that and still catch a move three orders
-    # of magnitude above it, or it hides a regression rather than admitting
-    # noise.
+    # Issue #527: the runner moved 26 of these 45 fitted values, by 4.365e-15
+    # relative at the widest; the bound admits that and catches a move three
+    # orders above it.
     committed = read_baseline(baseline_path("tree_search", Scale.CI))
     recorded = committed.values("maximized_log_likelihood")
     deviation = max(
@@ -437,11 +390,7 @@ def test_a_fit_is_compared_within_its_declared_tolerance_and_not_bitwise() -> No
 
 @pytest.mark.smoke
 def test_a_value_that_declares_no_tolerance_is_still_compared_exactly() -> None:
-    # The other half of the rule: an enumerated optimum, a ground-state
-    # energy and a rate over seeded rollouts are counted or enumerated, not
-    # fitted, so they reproduce bit for bit and a tolerance on them would
-    # admit a change nothing else catches. One ulp is the smallest move there
-    # is, and it fails.
+    # Counted or enumerated values reproduce bit for bit; one ulp fails.
     committed = read_baseline(baseline_path("potts_chain", Scale.CI))
     assert committed.measurement("enumerated_optimum").rtol is None
 
@@ -454,11 +403,8 @@ def test_a_value_that_declares_no_tolerance_is_still_compared_exactly() -> None:
 
 @pytest.mark.smoke
 def test_a_record_cannot_loosen_the_tolerance_it_is_checked_at() -> None:
-    # A tolerance is a declaration, and the record is not what gets to relax
-    # the check it is caught by --- the failure #527 names is a record edited
-    # to make a check pass. The comparison takes the stricter of the two
-    # declarations, so the edit reports the moved value *and* the edited
-    # tolerance.
+    # The stricter of the two declared tolerances is taken, so a record edited
+    # to pass (#527) reports the moved value and the edited tolerance.
     original = read_baseline(baseline_path("tree_search", Scale.CI))
     recorded = original.values("maximized_log_likelihood")
     loosened = _moved(original, "maximized_log_likelihood", rtol=1e-3)
@@ -584,11 +530,8 @@ def test_the_guard_catches_a_constructed_instance() -> None:
 def test_a_fixture_file_that_is_not_a_mapping_is_refused_as_one(
     tmp_path: Path,
 ) -> None:
-    # `fixture` read the file with its own `yaml.safe_load` and asked what
-    # came back for its keys, so a list-valued file failed as an
-    # `AttributeError` from inside the registry. The one parse is
-    # `load_declared`'s and the refusal is its message, naming the file and
-    # what the yaml parsed to (issue #864).
+    # One parse, `load_declared`'s: a list-valued file is refused naming the
+    # file and what it parsed to, not an `AttributeError` (issue #864).
     directory = tmp_path / "fixtures"
     (directory / "listed").mkdir(parents=True)
     (directory / "listed" / "ci.yaml").write_text(

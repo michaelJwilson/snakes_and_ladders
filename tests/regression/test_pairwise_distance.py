@@ -27,13 +27,8 @@ def test_pairwise_distance_small_fixed_input() -> None:
         ]
     )
 
-    # Hand-computed expected distances:
-    #   x[0]=(0,0) to y[0]=(0,0) -> 0
-    #   x[0]=(0,0) to y[1]=(1,0) -> 1
-    #   x[0]=(0,0) to y[2]=(0,1) -> 1
-    #   x[1]=(3,4) to y[0]=(0,0) -> sqrt(9+16) = 5
-    #   x[1]=(3,4) to y[1]=(1,0) -> sqrt(4+16) = sqrt(20)
-    #   x[1]=(3,4) to y[2]=(0,1) -> sqrt(9+9)  = sqrt(18)
+    # Hand-computed: x[0]=(0,0) to y = (0,0), (1,0), (0,1) -> 0, 1, 1;
+    # x[1]=(3,4) to the same -> 5, sqrt(20), sqrt(18).
     expected = np.array(
         [
             [0.0, 1.0, 1.0],

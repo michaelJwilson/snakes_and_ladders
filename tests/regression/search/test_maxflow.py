@@ -1,21 +1,11 @@
 """Max flow, and the exact ground state it certifies.
 
-Three kinds of reference, which is the point of the ticket: this is the first
-place in the repository where a discrete optimum is *proved* rather than
-enumerated, and enumeration alone would leave it capped at twenty sites.
-
-1. Exhaustive enumeration, where it fits, at exact equality --- a ground state
-   is a combinatorial minimum, not a float comparison.
-2. Two analytic corners, at sizes far past what enumeration reaches: with no
-   field the ground state is all-aligned at energy `-J |E|`, and with no
-   coupling every site independently takes its better state.
-3. The max-flow min-cut theorem, as a self-check rather than a second
-   implementation: the flow value must equal the capacity of the cut induced
-   by residual reachability.
-
-The Rust kernel is pinned against the Python oracle at exact equality of
-energy. The *configuration* may legitimately differ where the minimum is
-degenerate, so the energy is what is compared.
+The first discrete optimum proved rather than enumerated. References:
+enumeration where it fits, at exact equality; two analytic corners past it
+(no field: all aligned at `-J |E|`; no coupling: each site's better state); and
+max-flow min-cut as a self-check (flow equals the residual cut's capacity).
+Rust is pinned to the Python oracle on energy; configurations may differ
+where the minimum is degenerate.
 """
 
 from __future__ import annotations
@@ -59,11 +49,7 @@ def _oracle_and_kernel(
 ) -> tuple[np.ndarray, float, np.ndarray, float]:
     """One seeded square lattice solved twice, in Python and in Rust.
 
-    The two tests below read different halves of the same solve --- the
-    energy, which is a combinatorial minimum, and the configuration, which is
-    read off the minimal cut --- so the solve is run once per extent and the
-    claims stay two tests with two names (issue #745, the form #735 hoisted
-    eight clusters into).
+    Solved once per extent for two tests: energy and configuration (#745).
     """
     rng = np.random.default_rng(extent)
     graph = lattice_graph((extent, extent), BoundaryCondition.OPEN, 0.6)
@@ -212,11 +198,8 @@ def test_the_rust_min_cut_reproduces_a_hand_computed_value_and_cut() -> None:
 
 @pytest.mark.oracle
 def test_the_rust_min_cut_returns_the_python_cut_on_seeded_networks() -> None:
-    # The claim issue #528 rests on: the side the binding now returns is the
-    # side the oracle computes, arc for arc, on a random network with back
-    # capacities -- not merely a set of the same capacity. Two networks are
-    # built from the same draws because the pure solver consumes the one it
-    # is given, turning its capacities into residual capacities.
+    # #528: the returned side is the oracle's arc for arc, with back capacities;
+    # two networks, since a solve consumes its capacities.
     def check(n_nodes: int, seed: int) -> None:
         rng = np.random.default_rng(seed)
         tails = rng.integers(0, n_nodes, size=4 * n_nodes)

@@ -1,15 +1,10 @@
 """Decoding a bicycle code: the same decoder, held to the same oracles.
 
-The construction is new and nothing downstream is (``sec:ldpc:bicycle``), so
-what is checked here is that the code goes through the existing machinery and
-where it lands. Enumeration over the 64 codewords of the 12-bit fixture gives
-both exact decodings, and the optimality of each -- the bitwise MAP minimizes
-bit errors, the maximum-likelihood codeword block errors -- bounds what
-belief propagation can do on a graph full of short cycles. At 96 and 996 bits
-no enumeration reaches, and the claim is a comparison: the bicycle code
-against a Gallager draw of the same length and degrees, on shared seeds. The
-decoder's agreement with the general flooding on this fixture is a row of
-`test_ldpc.py::test_flooding_reaches_the_general_fixed_point_on_a_loopy_code`.
+``sec:ldpc:bicycle``. On the 12-bit fixture, enumeration over 64 codewords
+gives the bitwise MAP and the ML codeword, which bound belief propagation. At
+96 and 996 bits the claim is a comparison with a Gallager draw of the same
+length and degrees on shared seeds. Agreement with the general flooding is a
+row of `test_ldpc.py::test_flooding_reaches_the_general_fixed_point_on_a_loopy_code`.
 """
 
 from __future__ import annotations
@@ -53,15 +48,8 @@ def _failures(code: ParityCheck, channel: Channel) -> int:
 @pytest.mark.parametrize("channel_of", ["symmetric_channel", "gaussian_channel"])
 def test_the_exact_decodings_bound_belief_propagation(channel_of: str) -> None:
     """Over 200 transmissions of the 12-bit fixture the enumerated decodings are
-    the better of each pair: 295 bit errors against the decoder's 348 and 30
-    block errors against its 171 on the symmetric channel, 129 against 285 and
-    29 against 110 on the Gaussian.
-
-    Neither ordering is a coincidence to be re-measured. The bitwise MAP
-    minimizes the expected bit error rate and the maximum-likelihood codeword
-    the block error rate, so an enumeration cannot lose to a decoder on the
-    quantity it optimizes; the gap is what a Bethe approximation costs on a
-    graph whose girth is four.
+    better: bits 295 against 348 and blocks 30 against 171 (symmetric channel),
+    129 against 285 and 29 against 110 (Gaussian).
     """
     params = fixture("bicycle", "ci").params
     code, channel = params.code(), getattr(params, channel_of)()
@@ -91,13 +79,9 @@ def test_the_exact_decodings_bound_belief_propagation(channel_of: str) -> None:
 @pytest.mark.stress
 @pytest.mark.end2end
 def test_the_bicycle_code_fails_more_blocks_than_a_gallager_draw_at_96_bits() -> None:
-    """At 96 bits, column weight 3 and row weight 6 in both, the bicycle code
-    loses at all six settings: 2 and 12 blocks of 20 against 1 and 5 on the
-    symmetric channel, 20 and 20 against 3 and 12 on the erasure channel, 9 and
-    20 against 1 and 15 on the Gaussian.
-
-    The circulant is what costs it. Its dimension, 48 against the Gallager
-    draw's 50, is the smaller of the two, so the deficit is not bought rate.
+    """At 96 bits, weights (3, 6), dimension 48 against 50, the bicycle code loses
+    all six settings, blocks of 20: 2, 12 vs 1, 5 (symmetric); 20, 20 vs 3, 12
+    (erasure); 9, 20 vs 1, 15 (Gaussian).
     """
     bicycle = fixture("bicycle", "stress").params.code()
     gallager = fixture("ldpc", "stress").params.code()
@@ -123,13 +107,8 @@ def test_the_bicycle_waterfall_sits_above_a_gallager_draws_at_996_bits() -> None
     blocks of 20 as the Gallager draw at every one of twelve settings, and more
     at eleven: 3, 11, 19, 20 against 0, 0, 0, 7 on the symmetric channel; 0, 8,
     19, 20 against 0, 0, 3, 18 on the erasure channel; 1, 6, 17, 20 against 0, 0,
-    0, 16 on the Gaussian.
-
-    The erasure column carries the point. The (3,6) ensemble's threshold
-    0.4294 referees the Gallager draw, which still resolves every block at
-    0.30; the bicycle code fails 8 of 20 there. A threshold is a property of
-    the ensemble a code is drawn from, and this code is not drawn from that
-    one, which is why its fixture states no oracle.
+    0, 16 on the Gaussian. The (3,6) threshold 0.4294 referees the Gallager draw
+    (all blocks at 0.30, where the bicycle code fails 8); it states no oracle here.
     """
     bicycle = fixture("bicycle", "release").params.code()
     gallager = fixture("ldpc", "release").params.code()

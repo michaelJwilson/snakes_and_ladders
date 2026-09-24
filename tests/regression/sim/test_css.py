@@ -1,16 +1,9 @@
 """The CSS code a bicycle matrix defines, and the quotient it is scored in.
 
-Every claim here is exact over GF(2) and needs no tolerance. The gate comes
-first, because everything downstream is vacuous without it: ``H H^T = 0``, so
-the matrix defines a code at all; ``k = n - 2 rank(H) > 0``, so the code
-encodes something and a decode of it can fail; and a logical basis, so there
-is a quotient to score in. The classical fixtures fail the second of those and
-are checked to be refused rather than quietly decoded.
-
-The two ways of deciding a coset --- the rank test and the label matrix --- are
-held to each other over every one of the 65,536 vectors of the declared
-instance. They share no computation, which is what makes the agreement mean
-something: a mis-built quotient does not break loudly (``search/CLAUDE.md``).
+Exact over GF(2). The gate first: ``H H^T = 0``; ``k = n - 2 rank(H) > 0``
+(the classical fixtures fail this and are refused); and a logical basis. The
+rank test and the label matrix, sharing no computation, agree on all 65,536
+vectors of the declared instance (``search/CLAUDE.md``).
 """
 
 from __future__ import annotations
@@ -91,10 +84,7 @@ def test_the_classical_fixture_lengths_encode_nothing_at_half_the_rows(
 ) -> None:
     """At `m = n / 2` the rank is `n / 2`, so `k = 0` and the code is refused.
 
-    This is the measurement that forced a second set of fixtures: the bicycle
-    fixtures of ``sec:ldpc:bicycle`` keep every row of the circulant, and a
-    decode of the code they define succeeds because there is nothing to fail
-    at rather than because the decoder worked.
+    Why a second fixture set: ``sec:ldpc:bicycle``'s codes have nothing to fail.
     """
     checks = bicycle_code(n_bits, n_bits // 2, 3, np.random.default_rng(361))
 
@@ -121,10 +111,7 @@ def test_the_logical_basis_lies_in_the_kernel_and_outside_the_row_space(
 ) -> None:
     """`k` representatives of `ker(H) / rowspace(H)`, independent modulo it.
 
-    Independence is the rank of the rows of `H` and the basis together: it is
-    `rank + k` exactly when no combination of the representatives, and no
-    combination with a stabilizer, is a stabilizer. Checking the rows one at a
-    time would pass on a basis whose *sum* is a stabilizer.
+    Rank of `H` and basis together is `rank + k`; row by row would miss a sum.
     """
     code = _code(tier)
     dense = code.checks.dense()
@@ -158,13 +145,7 @@ def test_the_two_logical_bases_pair_to_the_identity(tier: str) -> None:
 def test_the_label_and_the_rank_test_agree_on_every_kernel_word() -> None:
     """A stabilizer is a kernel word of zero label, over all 512 kernel words.
 
-    The two share no computation --- an elimination on an `(m + 1) x n` matrix
-    against a product with a `k x n` matrix --- so this is the check that the
-    label map's kernel really is the row space, and not a rederivation of it.
-    The kernel is where the distinction is subtle and it is walked in full;
-    outside it every word fails both tests, which 1,000 seeded draws cover
-    rather than the remaining 65,024, the rank test costing an elimination
-    each.
+    No shared computation; outside the kernel 1,000 draws stand for 65,024.
     """
     code = _code("ci")
     words = _all_vectors(code.n_qubits)
@@ -185,12 +166,7 @@ def test_the_label_and_the_rank_test_agree_on_every_kernel_word() -> None:
 
 @pytest.mark.analytic
 def test_every_coset_of_the_quotient_is_reached_exactly_once_per_label() -> None:
-    """The `2 ** k` labels partition `ker H` into cosets of equal size.
-
-    `dim ker H = rank + k`, so each of the `2 ** k` labels carries
-    `2 ** rank` kernel words: one coset of the row space per label, which is
-    what "the quotient has dimension `k`" means as a count.
-    """
+    """The `2 ** k` labels partition `ker H` into cosets of `2 ** rank` words each."""
     code = _code("ci")
     words = _all_vectors(code.n_qubits)
     kernel = words[~((words.astype(np.int64) @ code.checks.dense().T) & 1).any(axis=1)]
@@ -223,9 +199,7 @@ def test_a_word_of_the_wrong_length_is_refused_by_both_routes() -> None:
 def test_self_orthogonality_makes_every_row_overlap_even(tier: str) -> None:
     """`H H^T = 0` over GF(2) says each pair of checks meets an even number of bits.
 
-    That is the structural claim under the four-cycle count: a pair that meets
-    at all meets at least twice, and two checks sharing two bits *are* a
-    four-cycle. The count is pinned beside it, exactly.
+    So a meeting pair shares two bits: a four-cycle; the count is pinned exactly.
     """
     _, _, _, four_cycles = DECLARED[tier]
     code = _code(tier)
@@ -240,12 +214,7 @@ def test_self_orthogonality_makes_every_row_overlap_even(tier: str) -> None:
 
 @pytest.mark.analytic
 def test_the_four_cycle_count_is_the_pairs_of_bits_two_checks_share() -> None:
-    """Counted a second way: over pairs of bits, the checks covering both.
-
-    A four-cycle is two checks and two bits, so counting it from the bits must
-    give what counting it from the checks gave. The transpose shares no code
-    path with :meth:`CssCode.four_cycles`, which reduces over the checks.
-    """
+    """Counted a second way: over pairs of bits, the checks covering both."""
     code = _code("ci")
     dense = code.checks.dense().astype(np.int64)
 
@@ -261,10 +230,7 @@ def test_the_four_cycle_count_is_the_pairs_of_bits_two_checks_share() -> None:
 def test_the_drawn_error_has_the_rate_the_channel_declares() -> None:
     """The flip rate over 400 draws recovers `p`, and the ratios match the error.
 
-    The error is read back from the ratios rather than drawn a second time, so
-    what is checked is that the two agree per qubit and that the draw is the
-    channel's: the count of flips over 6,400 qubits at `p = 0.05` is
-    `Binomial(6400, 0.05)`, whose four-sigma band is 253 to 387.
+    6,400 qubits at `p = 0.05`: four-sigma band 253 to 387.
     """
     code = _code("ci")
     channel = BinarySymmetricChannel(0.05)

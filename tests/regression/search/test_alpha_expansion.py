@@ -1,16 +1,11 @@
 """Alpha expansion, checked against an exact solver before a bound is claimed.
 
-The strongest test here is a *reduction*. At two labels a single expansion
-offers every site the only other label, so alpha expansion is no approximation
---- it must reproduce `snakes_and_ladders.search.maxflow`'s exact minimum cut,
-energy for energy. That caught the two errors this module was written with: the
-terminal capacities were swapped, and the auxiliary-node capacities ignored the
-case where an endpoint's current label already equals alpha. Both produce a
-labelling that is merely *worse* --- the enumeration tests below passed while
-the reduction failed by up to 2.55 in energy.
-
-Then the bound, measured rather than assumed, and two invariants needing no
-oracle: the energy never rises, and the loop terminates.
+At two labels one expansion offers every site the other label, so it must
+reproduce `snakes_and_ladders.search.maxflow`'s exact cut, energy for energy.
+That reduction caught swapped terminal capacities and auxiliary capacities
+ignoring an endpoint already at alpha, while enumeration passed (off by up to
+2.55). Then the bound, measured; and two oracle-free invariants: energy never
+rises, and the loop terminates.
 """
 
 from __future__ import annotations
@@ -114,13 +109,9 @@ def test_the_cycle_terminates_well_inside_its_cap() -> None:
 @pytest.mark.analytic
 @pytest.mark.parametrize("coupling", [0.3, 0.8, 1.5, 3.0])
 def test_the_realized_energy_is_inside_the_proved_bound(coupling: float) -> None:
-    # The bound is `2 c_max / c_min`, exactly 2 for a uniform coupling --- the
-    # one claim here that holds at *every* size rather than where enumeration
-    # reaches.
-    #
-    # Measured at 3x3 over 40 runs: alpha expansion found the global optimum
-    # 39 times, and recovered 99.554% of the achievable improvement in the
-    # one miss. The bound is not tight here and is not expected to be.
+    # The bound `2 c_max / c_min` (2 at uniform coupling) holds at every size.
+    # Measured at 3x3 over 40 runs: optimum 39 times, 99.554% of the
+    # improvement in the miss; not tight.
     rng = np.random.default_rng(7)
     graph = lattice_graph((3, 3), BoundaryCondition.OPEN, coupling)
 
@@ -145,11 +136,8 @@ def test_the_realized_energy_is_inside_the_proved_bound(coupling: float) -> None
 @pytest.mark.critical
 @pytest.mark.end2end
 def test_expansion_beats_single_site_descent_past_enumeration() -> None:
-    # Where the move set earns its complexity. At the sizes enumeration reaches
-    # the two are indistinguishable -- 3x3 with three labels, both finding the
-    # optimum in 31 of 32 runs. The separation appears at 8x8 with four labels,
-    # past enumeration, where expansion beat the best of eight single-site
-    # descents on every trial by 1.8 to 11.0 in energy.
+    # At 3x3, three labels both find the optimum 31 of 32; at 8x8, four labels,
+    # expansion beat the best of eight descents on every trial by 1.8 to 11.0.
     rng = np.random.default_rng(7)
     graph = lattice_graph((8, 8), BoundaryCondition.OPEN, 1.2)
 
@@ -204,12 +192,8 @@ def test_a_zero_coupling_problem_is_solved_exactly_by_the_data_term() -> None:
 
 @pytest.mark.oracle
 def test_a_dominant_coupling_drives_every_site_to_one_label() -> None:
-    # The opposite corner, and its optimum has a closed form: at J = 50 one
-    # disagreement costs more than the whole field can repay, so the minimizer
-    # is the constant labelling and the label is `argmax` of the summed field.
-    # That closed form is the referee, derived from the model rather than read
-    # from a solver. Realized: the returned labelling is constant at label 1,
-    # which is the summed field's argmax.
+    # At J = 50 the minimizer is constant at the summed field's argmax, a closed
+    # form from the model. Realized: constant at label 1, that argmax.
     rng = np.random.default_rng(6)
     graph = lattice_graph((4, 4), BoundaryCondition.OPEN, 50.0)
     field_values = rng.normal(size=(graph.n_nodes, 3))
@@ -252,11 +236,8 @@ def test_an_already_optimal_start_makes_no_moves() -> None:
 @pytest.mark.critical
 @pytest.mark.oracle
 def test_the_numba_descent_reproduces_the_python_one_bitwise() -> None:
-    # What lets the kernel be the default (#264): same update, same index
-    # order, same first-minimum tie rule, so the labelling and the energy are
-    # identical rather than close. A random per-node field against a coupling
-    # of the same order makes the surface rugged enough that the start decides
-    # the optimum -- 20 of 20 starts agree at 32x32.
+    # Same update, order and tie rule (#264): identical, not close. A rugged
+    # per-node field makes the start decide the optimum; 20 of 20 agree at 32x32.
     def check(seed: int) -> None:
         graph = lattice_graph((8, 8), BoundaryCondition.PERIODIC, 0.5)
         field = np.random.default_rng(100 + seed).normal(size=(graph.n_nodes, 3))
@@ -323,11 +304,8 @@ def test_descent_has_no_rust_backend() -> None:
 @pytest.mark.critical
 @pytest.mark.oracle
 def test_the_rust_cut_reproduces_the_python_expansion() -> None:
-    # What issue #528 changed: the binding returns the source side it already
-    # computed, so `expand` can reach it. The two solvers must agree on the
-    # *labelling* and not merely its energy, which would also agree if a
-    # degenerate cut sent the two routes to different minima of equal value.
-    # Realized: 12 of 12 cells agree.
+    # #528: the binding returns its source side; the solvers agree on the
+    # labelling, not only the energy. Realized 12 of 12.
     def check(seed: int, n_states: int) -> None:
         graph = lattice_graph((8, 8), BoundaryCondition.PERIODIC, 0.5)
         field = np.random.default_rng(500 + seed).normal(size=(graph.n_nodes, n_states))
@@ -355,13 +333,7 @@ def test_expansion_has_no_numba_backend() -> None:
 def _network_by_hand(
     graph: PottsGraph, values: np.ndarray, labelling: np.ndarray, alpha: int
 ) -> FlowNetwork:
-    """The ``add_edge`` loop `_expansion_network` replaces, kept as its oracle.
-
-    Issue #598 vectorized the build. The construction is intricate enough --- a
-    variable number of arcs per edge, auxiliaries numbered in encounter order
-    --- that the vectorized form is checked against this transcription rather
-    than against its own reasoning.
-    """
+    """The ``add_edge`` loop `_expansion_network` replaces (#598), kept as its oracle."""
     disagreeing = {
         position
         for position, (first, second) in enumerate(graph.edges)
@@ -446,10 +418,7 @@ def _recomputing_descent(
 ) -> np.ndarray:
     """The loop `search.spatio_sequential.label_step` ran, kept as the sweep's oracle.
 
-    A full energy per candidate label, accepted where it lowers the total,
-    sites in a random order. It reads the same argmin as the sweep's local
-    delta the long way round, so a labelling the two disagree on is a defect
-    in the delta.
+    A full energy per candidate label: the same argmin as the local delta, the long way.
     """
     current = np.asarray(start, dtype=np.int64).copy()
     best = energy(graph, values, current)
@@ -554,12 +523,8 @@ def test_the_compiled_sweep_refuses_an_order_it_does_not_walk() -> None:
 
 # --- the one expansion template (issue #858) ----------------------------------
 
-#: What the two moves return on a 4x4 open lattice at coupling 0.8 in a
-#: seeded three-label field, recorded before `expand`/`swap` and
-#: `alpha_expansion`/`alpha_beta_swap` were folded onto one body each. The two
-#: reach the same labelling by different routes --- the expansion in 2 moves
-#: and the swap in 3 --- which is what makes the pair a check on the template:
-#: a body that lost the label set would collapse the counts onto each other.
+#: Both moves on a 4x4 open lattice at 0.8, recorded before the fold: the same
+#: labelling in 2 moves (expansion) and 3 (swap), so the counts check the template.
 RECORDED_LABELLING = [1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0]
 RECORDED_ENERGY = -25.228722898156448
 RECORDED_CYCLES = 2
@@ -660,13 +625,9 @@ def test_the_swap_arcs_are_the_add_edge_loop_arc_for_arc() -> None:
 @pytest.mark.critical
 @pytest.mark.oracle
 def test_the_cut_moves_agree_across_solvers_on_tied_fields() -> None:
-    # Issue #935: fields rounded to one decimal, which binary cannot hold
-    # exactly, make ties and leave residuals of 1e-16 where the other solver
-    # leaves 0. Read at the shared saturation floor both cuts are the minimal
-    # one, so the labellings agree bitwise, which is what lets Rust be the
-    # default. Before the floor 7 of 120 such moves split. The Rust route cuts
-    # a different network encoding the same energy --- no auxiliary node,
-    # each label's flow started from its last cut --- and agrees all the same.
+    # #935: one-decimal fields tie with residuals of 1e-16 against 0; at the
+    # shared saturation floor both cuts are minimal and agree bitwise (7 of 120
+    # split before). The Rust network differs (no auxiliary node) and agrees.
     def check(seed: int) -> None:
         rng = np.random.default_rng(935 + seed)
         graph = lattice_graph((12, 12), BoundaryCondition.OPEN, 0.7)

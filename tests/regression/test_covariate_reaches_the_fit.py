@@ -1,20 +1,11 @@
 """A covariate reaching the family through a fit, not through a test (issue #652).
 
-#631 gave the emission families a per-observation covariate and refereed it at
-the family. Nothing above them passed one, so no end-to-end claim rested on it.
-These are that claim, at the two seams #652 threads: Baum-Welch over an HMM,
-and the spatial model's params.
-
-The shape is #631's recovery raised from the family to the fit. A varying
-exposure carries information a fit cannot recover from the counts alone: told
-the exposure, a negative-binomial fit recovers the planted rate; not told it,
-the same data and the same fit recover the *average* rate and read the spread
-the exposure would have explained as overdispersion. The gap between the two
-is what the threading is worth, and it is measured rather than asserted.
-
-`NegativeBinomialEmission` because it is one of the two families #631 gave an
-exposure to --- `PoissonEmission` refuses a covariate by design, as every
-family that conditions on nothing does, so it is not a site here either.
+#631 refereed the per-observation covariate at the family; these are the
+end-to-end claims at the two seams #652 threads, Baum-Welch over an HMM and the
+spatial model's params. Told a varying exposure, a negative-binomial fit
+recovers the planted rate; not told it, the same fit recovers the average rate
+and reads the spread as overdispersion. The gap is measured. `PoissonEmission`
+refuses a covariate by design, so it is not a site here.
 """
 
 from __future__ import annotations
@@ -91,8 +82,7 @@ _START = np.array([1.0, 6.0])
 def test_baum_welch_told_the_exposure_recovers_the_planted_rates() -> None:
     """The claim the threading is for: the fit reaches the rate that generated it.
 
-    Recovers 1.9688 and 8.8088 against a planted 2.0 and 9.0, over a
-    ``U(0.25, 4)`` exposure whose draw here spans 15.8x.
+    1.9688 and 8.8088 against a planted 2.0 and 9.0; exposure ``U(0.25, 4)``.
     """
     counts, exposure, _ = _two_state_chain(_RATE, _SPREAD, _LENGTH, _SEED)
 
@@ -105,12 +95,7 @@ def test_baum_welch_told_the_exposure_recovers_the_planted_rates() -> None:
 def test_the_same_fit_without_the_exposure_misses_them() -> None:
     """And the claim that it is worth something: withheld, the same fit misses.
 
-    Not a failure to converge --- it converges, to the rate averaged over the
-    exposures it was not told about: 4.1505 and 18.5904, factors of 2.075 and
-    2.066 high against an ``E[U(0.25, 4)]`` of 2.125. The bound is stated as a
-    floor the untold fit must exceed, so this fails if the covariate ever
-    stops reaching the family and the test above starts passing for the wrong
-    reason.
+    It converges to 4.1505 and 18.5904, ~2.07x high against ``E[U(0.25, 4)]`` = 2.125.
     """
     counts, _, _ = _two_state_chain(_RATE, _SPREAD, _LENGTH, _SEED)
 
@@ -123,10 +108,7 @@ def test_the_same_fit_without_the_exposure_misses_them() -> None:
 def test_a_constant_exposure_of_one_scores_bitwise() -> None:
     """#631's referee at the seam this threads to: ones change no score at all.
 
-    A rate multiplied by exactly 1.0 is that rate, and the reduction that
-    follows is the same one, so the *scoring* seam is bitwise and is asserted
-    as such. The fit is a separate claim, below, because it is a separate
-    mechanism.
+    A rate times exactly 1.0 is that rate, so scoring is bitwise; the fit is below.
     """
     counts, _, _ = _two_state_chain(_RATE, spread=1.0, length=400, seed=5)
     family = NegativeBinomialEmission(
@@ -147,23 +129,7 @@ def test_a_constant_exposure_of_one_scores_bitwise() -> None:
 def test_a_constant_exposure_of_one_fits_inside_the_declared_tolerance() -> None:
     """The same claim through 200 EM iterations, which is not bitwise.
 
-    The scoring is bitwise, as above, so the divergence is the emission M step:
-    `reestimate` under a covariate reduces in a different order, and 200
-    iterations compound it.
-
-    **Under this suite it is 1.5e-13.** `tests/conftest.py` pins
-    `OMP_NUM_THREADS` to 1 (`DEV.md`, one process is one core), so the
-    reduction is serial here and in CI. The figure is worth stating with its
-    thread count because it does not survive one: the same fit reads 5.1e-14 at
-    two threads and 9.9e-14 at four, since a split reduction sums in a
-    different order again. A reading taken outside the suite's pinned thread is
-    a reading of a different configuration.
-
-    Every one of those is two orders inside the 1e-11 declared for a float64
-    comparison, which is the trade `CLAUDE.md` permits where the only cost of a
-    justified change is bitwise agreement. The bound is a tenth of that
-    tolerance, 6.6x the serial reading, so a real drift fails here rather than
-    hiding under the floor while a thread count nobody chose does not.
+    One thread 1.5e-13 (two 5.1e-14, four 9.9e-14); bound 1e-12 = 1e-11 / 10.
     """
     counts, _, _ = _two_state_chain(_RATE, spread=1.0, length=400, seed=5)
 
@@ -184,19 +150,7 @@ def test_a_constant_exposure_of_one_fits_inside_the_declared_tolerance() -> None
 def test_the_spatial_seams_run_and_the_covariate_field_is_validated() -> None:
     """What this actually checks: both seams run uncovaried, and the field validates.
 
-    It does **not** check that either seam reads `params.covariate`, and its
-    name and docstring said it did until #658 caught them. The canonical
-    instance is categorical, which refuses a covariate, so there is no fixture
-    here to make that claim against --- which under No Coverage Theatre means
-    the claim is a gap to ticket, not a sentence to write over an `isfinite`.
-    #658 item 5 carries the gap, and its item 2 is what a covariate-carrying
-    spatial fixture here would have failed against: `external_field` scores
-    with its own unthreaded `log_density`, and `fit_spatio_sequential` feeds it
-    a posterior computed *with* the covariate.
-
-    The `critical` marker is gone with the claim. A test that gates early has
-    to be one whose failure means the rest is not worth running; this one's
-    failure means an import broke.
+    Not that a seam reads `params.covariate`: the instance is categorical (#658 item 5).
     """
     from dataclasses import replace
 

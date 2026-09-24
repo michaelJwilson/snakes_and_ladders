@@ -1,28 +1,13 @@
 """The run seam: it records what the run returns, it scores what the state means, and it changes nothing (issue #778).
 
-Three claims, and the first is the one a sampler's caller cares about. **A
-tracked run is the untracked run**, bitwise: the same seed gives the same
-draws, the same labelling and the same counters under :data:`NULL_RUN` as it
-does outside any context, so a hook cannot be a source of scientific
-difference.
-
-**A recorded series ends at the field the result reports.** Every hook records
-a number its dataclass already returns --- the acceptance rate, the gradients
-spent, the best energy, the fitted value --- so the last entry of a series
-equals that field by ``==`` rather than to a tolerance. That is what makes the
-series readable as the field's history instead of as a second definition to
-keep in step.
-
-**A metric is a function the package already has.** Each
-:class:`~snakes_and_ladders.track.Metrics` instance is pinned against the
-function its docstring cites, and against the truth where the problem carries
-one: zero split distance on the topology that generated the alignment, zero
-bit errors on the word that was sent, zero distance at a known minimizer.
-
-The referee is :class:`~snakes_and_ladders.track.MemoryRun`, and the Aim round
-trip is refereed by the ``MemoryRun`` record of the same call: what Aim reads
-back must be what the run recorded, or the optional store is not the same
-store.
+**A tracked run is the untracked run**, bitwise: same seed, same draws,
+labelling and counters under :data:`NULL_RUN`. **A recorded series ends at the
+field the result reports**, by ``==``. **A metric is a function the package
+already has**: each :class:`~snakes_and_ladders.track.Metrics` is pinned to
+the function its docstring cites and to the truth where the problem has one
+(zero split distance, zero bit errors, zero distance at a known minimizer).
+The referee is :class:`~snakes_and_ladders.track.MemoryRun`, which also
+referees the Aim round trip.
 """
 
 from __future__ import annotations
@@ -628,12 +613,8 @@ def test_an_aim_run_reads_back_what_the_memory_run_recorded(tmp_path: Path) -> N
     for name in ("acceptance_so_far", "energy_error", "force_evaluations"):
         recorded = [value for _, value in record.series(name)]
         sequence = sequences[name]
-        # The values are compared as a multiset and the steps by their range:
-        # aim 3.29's ``values_list`` returns a sequence in the order its
-        # storage holds it rather than in step order, and reading a value at
-        # a step raises. What is refereed is that every number the run
-        # recorded reached the store, once, over the steps it recorded them
-        # at --- the claim the extra is carried for.
+        # A multiset of values over the range of steps: aim 3.29's
+        # ``values_list`` returns storage order, and reading a step raises.
         assert sorted(sequence.values.values_list()) == sorted(recorded)
         assert sequence.first_step() == 0
         assert sequence.last_step() == len(recorded) - 1

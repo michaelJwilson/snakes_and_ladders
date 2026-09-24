@@ -315,12 +315,8 @@ def test_an_adapter_refuses_an_objective_it_cannot_read() -> None:
         polish_by_baum_welch(Himmelblau(), Himmelblau().initial(), POLISH)
 
 
-#: The projected fit's declared relative tolerance against `fit_projection`.
-#: The seam hands a start over as ``theta``, so the uniform weights and each
-#: component's positive parameters pass through `log` and `exp` once; over
-#: six cells of experiment 009's key model at 100 components the measured
-#: difference in the value reached is 1.4e-15 to 5.3e-15 relative (issue
-#: #894), under this bound by more than two decades.
+#: Against `fit_projection`: `log`/`exp` once per start; over six cells of
+#: experiment 009's key model at 100 components, 1.4e-15 to 5.3e-15 (#894).
 PROJECTED_RTOL = 1.0e-12
 
 
@@ -415,18 +411,10 @@ COMMITTED_PASSES = {
 @pytest.mark.smoke
 @pytest.mark.patch
 def test_experiment_009_s_rows_are_re_derived_through_the_seam() -> None:
-    # The sweep's own benchmark, at its six instances, seed 0 and six passes.
-    # Each value is `fit_projection`'s to 5.3e-15 relative (the sample in
-    # `test_a_projected_cell_is_fit_projection_to_its_declared_tolerance`'s
-    # comment), so the gaps are the record's to its printed precision.
-    #
-    # **Recovery is pinned as the record's finding, not its decimals.** Its
-    # matching is a linear assignment over 100 components, and a 7e-13
-    # difference in a mean moves it: instance 0's `kmeans++` recovery is
-    # 0.06075 from `fit_projection` and 0.063 through the seam, and the
-    # direct path's means (prior 0.0563, kmeans++ 0.0672) no longer print the
-    # record's 0.060 and 0.069 either. What the record concludes --- `data`
-    # and `tempering` beat `prior` on recovery on every instance --- holds.
+    # Six instances, seed 0, six passes; values to 5.3e-15, gaps to print
+    # precision. Recovery is pinned as the finding (`data` and `tempering`
+    # beat `prior` everywhere): a 7e-13 mean shift moves instance 0's
+    # `kmeans++` from 0.06075 to 0.063 through the linear assignment.
     sys.path.insert(0, str(REPO_ROOT / "infra"))
     import seeding_sweep
 

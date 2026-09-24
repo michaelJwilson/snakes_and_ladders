@@ -1,16 +1,10 @@
 """The map lists the surface, counted against a second walk of the tree.
 
-Issue #576. A generated document fails quietly: the entries look complete
-whatever the generator dropped, and a reader cannot tell a module that is
-absent because it has no public names from one absent because its parse
-raised. So what is asserted here is not that the generator ran but that its
-count is the tree's, taken a second way --- `pathlib` and `ast` over the
-package, with no import of the generator's own walk.
-
-The two guards the ticket asks for are checked as guards: a public top-level
-function with no summary is a blank the document would typeset, so `--write`
-fails on one, and the suite asserts both that the tree has none today and that
-the refusal fires on a tree that does.
+Issue #576. The referee is a second count of the tree --- `pathlib` and `ast`
+over the package, with no import of the generator's walk --- so a dropped
+module fails rather than reading as complete. A public top-level function with
+no summary fails `--write`; the suite asserts the tree has none and that the
+refusal fires on a tree that does.
 """
 
 from __future__ import annotations
@@ -30,9 +24,7 @@ GENERATED = REPO_ROOT / "docs" / "tex" / "generated" / "api_map.tex"
 def _second_walk() -> dict[str, int]:
     """Modules, classes, functions and public methods, counted here from scratch.
 
-    Deliberately a second implementation and not a call into the generator:
-    two readings of one tree that must agree, which is what says neither
-    dropped anything.
+    A second implementation, not a call into the generator: two readings agree.
     """
     tally = {"module": 0, "class": 0, "function": 0, "method": 0}
     for path in sorted(PACKAGE.rglob("*.py")):

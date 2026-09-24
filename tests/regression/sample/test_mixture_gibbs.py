@@ -77,13 +77,10 @@ def test_the_exact_posterior_is_symmetric_and_sums_to_one() -> None:
 
 @pytest.mark.end2end
 def test_a_separated_mixture_is_recovered_after_relabelling() -> None:
-    # Planted: three components at -4, 0 and 4, unit scale, weights 0.2,
-    # 0.3 and 0.5, 300 draws. Started from a split at the sample's tertiles:
-    # from uniform allocations the chain holds a local mode with one wide
-    # component over two clusters for hundreds of sweeps. Relabelled by
-    # STEPHENS, the posterior means lie within 0.25 of the generating means
-    # and the weights within 0.03 of the draw's own shares (0.183, 0.250,
-    # 0.567), which is what the posterior centres on.
+    # Planted -4, 0, 4, weights 0.2, 0.3, 0.5, 300 draws, started at tertiles
+    # (uniform starts sit in a merged mode for hundreds of sweeps). After
+    # STEPHENS: means within 0.25, weights within 0.03 of the draw's shares
+    # (0.183, 0.250, 0.567).
     rng = np.random.default_rng([964, 1])
     means = np.array([-4.0, 0.0, 4.0])
     weights = np.array([0.2, 0.3, 0.5])

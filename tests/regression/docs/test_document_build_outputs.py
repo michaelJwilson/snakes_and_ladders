@@ -1,24 +1,14 @@
 """What `infra/build_documents.sh` writes is what `DEV.md` says it writes.
 
-Issue #429. The build rewrites every PDF it builds on every run and only a
-"Rebuild the documents" pull request may carry that change; it
-also rewrites a cited figure whose stamp is stale, and those *are* committed by
-the pull request that changed them. A contributor who does not know which is
-which commits the wrong one, so `DEV.md` carries the table --- and a table
-nothing checks drifts from the script the first time either changes.
+Issue #429. `DEV.md` tables which outputs a build rewrites and which of those a
+pull request commits. The referee is the build's own sources, not a second
+list: the stems from `snakes_and_ladders.qa.manifest` and the documents'
+citations, the documents from `infra/build_documents.sh`, tracked paths from
+`git`, and ignored ones from `.gitignore`.
 
-The comparison is against the build's own sources rather than against a second
-copy of the list: the stems from `snakes_and_ladders.qa.manifest` and the
-documents' citations, the documents from `infra/build_documents.sh`, what is
-committed from `git`, and what cannot be from `.gitignore`. A figure added to
-the manifest and cited, a figure the documents stop citing, or a third document
-therefore fails here until `DEV.md` says so.
-
-Not checked here: that a build *run* writes these and no others. That is a
-render, which occupies every core it is given (`DEV.md`, Throughput) and does
-not belong in a test session. It was measured instead --- eight builds, the tree
-hashed before and after each --- and `DEV.md` records the result beside the wall
-times.
+Not checked: that a build run writes these and no others. That was measured
+--- eight builds, the tree hashed before and after each --- and `DEV.md`
+records it beside the wall times.
 """
 
 from __future__ import annotations
@@ -46,10 +36,8 @@ _QUOTED = re.compile(r"`([^`]+)`")
 _DOCUMENT_LOOP = re.compile(r"^for document in (.+); do$", re.MULTILINE)
 
 #: The sources the script hands the figure selection, and where it puts the
-#: renders. Read from the script rather than from
-#: `snakes_and_ladders.qa.build`'s defaults: those resolve against the checkout
-#: the package was installed from, which on a shared environment is another
-#: worktree, and this test is about *this* tree's paths.
+#: renders, read from the script: `snakes_and_ladders.qa.build`'s defaults
+#: resolve against the installed checkout, which may be another worktree.
 _SELECTION_DOCUMENT = re.compile(r"^\s*--document (\S+)", re.MULTILINE)
 _OUTPUT_DIR = re.compile(r"^\s*--output-dir (\S+)", re.MULTILINE)
 
@@ -97,13 +85,7 @@ def _rendered(stem: str) -> Path:
 
 
 def regenerated_and_committed() -> set[str]:
-    """The paths a build rewrites that are also tracked.
-
-    Returns
-    -------
-    set[str]
-        Repository-relative: two files per cited figure, and the two PDFs.
-    """
+    """The tracked paths a build rewrites: two per cited figure, and the PDFs."""
     paths = {f"docs/{document}.pdf" for document in documents()}
     for stem in cited_stems(*selection_documents()):
         paths.add(str(_rendered(stem).relative_to(REPO_ROOT)))
@@ -191,9 +173,7 @@ def _byproducts() -> set[str]:
 def test_dev_md_names_every_regenerated_path_that_is_committed() -> None:
     """The table's committed rows and the build's own sources name one set.
 
-    This is the half a contributor acts on: a path that is rewritten by a build
-    *and* tracked either belongs in their commit or is refused by a gate, and
-    nothing else in the tree distinguishes the two.
+    A path rewritten by a build and tracked is either committed or refused.
     """
     documented: set[str] = set()
     for paths, committed in _rows():
@@ -213,9 +193,7 @@ def test_dev_md_names_every_regenerated_path_that_is_committed() -> None:
 def test_the_uncommitted_rows_are_the_ones_git_cannot_carry() -> None:
     """A row marked "no" is ignored; a row marked "yes" is tracked.
 
-    The table's third column is a claim about `git`, so it is checked against
-    `git` rather than read as prose. An entry that becomes committable, or a
-    committed output that falls out of the index, fails here.
+    The third column is a claim about `git`, checked against `git`.
     """
     for paths, committed in _rows():
         for pattern in paths:
@@ -239,11 +217,7 @@ def test_the_uncommitted_rows_are_the_ones_git_cannot_carry() -> None:
 def test_the_pdfs_are_the_paths_the_gates_name() -> None:
     """Only the PDFs need a rule, and both gates that enforce it name each one.
 
-    A byproduct cannot be committed and a re-rendered figure should be. The PDFs
-    are the only outputs that are rewritten every run *and* tracked, which is
-    why `infra/review_gates.sh` and the `documents` job check them by name. The
-    list is read from the script, so a document added there fails here until
-    both gates name it -- which is how `docs/api_map.pdf` reached them (#576).
+    Read from the script; that is how `docs/api_map.pdf` reached them (#576).
     """
     pdfs = {f"docs/{document}.pdf" for document in documents()}
     workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
@@ -258,19 +232,7 @@ def test_the_pdfs_are_the_paths_the_gates_name() -> None:
 def test_every_tracked_figure_file_belongs_to_a_manifest_stem() -> None:
     """`docs/tex/figures/` holds two files per manifest entry and nothing else.
 
-    The contract table above says "cited stem" because
-    `infra/build_documents.sh` regenerates the cited figures alone, and the
-    release gate the rest (`--all`). Since issue #492 every entry is cited, so
-    that column ranges over the whole manifest and this asserts the range
-    rather than the split: the selection is still the mechanism --- a document
-    that drops a citation narrows it the same day, which
-    `tests/regression/qa/test_qa_build.py` pins on documents it writes itself
-    --- but no file here is outside the build's reach today.
-
-    What the check is for is unchanged either way: a tracked file under the
-    figures directory that no manifest entry renders is regenerated by
-    nothing, and a stem missing one of its two is published without the
-    caption that referees it.
+    A tracked figure no entry renders is regenerated by nothing (#492).
     """
     cited = set(cited_stems(*selection_documents()))
     every = {spec.stem for spec in FIGURES}

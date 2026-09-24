@@ -1,28 +1,12 @@
 """A discrete instance descent does not solve, whose optimum is still enumerated (issue #406).
 
-`STATUS.md` has recorded since #198 that the repository has no problem a
-baseline fails on: hill climbing reaches the enumerated maximum from every
-start of the six-taxon tree, and from 0.476 of the seven-taxon one while
-random restarts reach it always. Without such an instance every Stage 2 claim
-about a learned searcher is a claim about a solved problem.
-
-What is asserted here is a property of the *fixture*, as
-`test_search_hard_fixture.py` asserts one of the tree: that single-site
-descent reaches the ground state from well under the 0.4 of starts `STATUS.md`
-calls solved, that the failures are genuine local minima rather than truncated
-runs, and that the ground state is an enumerated fact rather than the planted
-bound --- which on this instance it is not, the planted state scoring 7.0
-above it.
-
-The counterweight is asserted too, because the fixture would otherwise
-overstate itself: random-restart descent reaches the ground state on every
-seed. A single descent has 0.92 of headroom here; restarts have none. That is
-the same distinction #198 drew on the tree, made explicit rather than left to
-a later reader.
-
-The numbers come from the fixture's baseline record, which
-`infra/baselines.py` recomputes at the release gate; the recomputation here is
-one seed of it, which is what makes the record a check rather than a memo.
+Since #198 no problem failed a baseline (the seven-taxon tree: 0.476 by
+descent, 1.0 by restarts). Asserted of the fixture: single-site descent reaches
+the ground state from well under 0.4 of starts, failures are genuine local
+minima, and the ground state is enumerated, 7.0 below the planted state.
+Random restarts reach it on every seed: a single descent has 0.92 of
+headroom, restarts none (#198's distinction). The numbers are the baseline
+record's, recomputed at release (`infra/baselines.py`) and here for one seed.
 """
 
 from __future__ import annotations
@@ -92,11 +76,8 @@ def test_single_site_descent_does_not_solve_the_declared_glass(
 def test_the_ground_state_is_enumerated_and_the_planted_state_is_not_it(
     record: Baseline, glass: PlantedSpinGlass
 ) -> None:
-    # Why the fixture states `enumeration` as its oracle and not the planted
-    # energy `sim.canonical` carries. At frustration 0.30 the planted state is
-    # 7.0 above the ground state, so a search scored against it would be
-    # scored against the wrong number --- the case `planted_spin_glass`'s
-    # docstring warns of, realized.
+    # At frustration 0.30 the planted state is 7.0 above the ground state, so
+    # the oracle is `enumeration` (`planted_spin_glass`'s warning, realized).
     best = record.value("enumerated_ground_energy")
     planted = record.value("planted_energy")
 
@@ -132,14 +113,8 @@ def test_every_descent_failure_stops_at_a_genuine_local_minimum(
 def test_random_restart_descent_still_reaches_the_ground_state(
     record: Baseline, glass: PlantedSpinGlass
 ) -> None:
-    # The counterweight, and the reason this fixture does not by itself settle
-    # Milestone 2.1: the baseline a learned searcher has to beat is
-    # random-restart descent, and over the declared 50 restarts that baseline
-    # is 1.000 on every seed measured. The headroom is against a single run.
-    # Refereed by `enumerated_ground_energy`, the exhaustive minimum the
-    # fixture's baseline record carries, as the two tests above are; realized
-    # 8 of the 50 restarts within 1e-9 of it at this seed, so a run of 50
-    # reaches it and a single descent mostly does not.
+    # The baseline to beat is restart descent: 1.000 over 50 restarts on every
+    # seed measured; here 8 of 50 within 1e-9 of `enumerated_ground_energy`.
     best = record.value("enumerated_ground_energy")
     reached = [abs(found - best) < 1e-9 for _, found in _descents(glass, 20260908, 50)]
 

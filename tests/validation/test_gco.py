@@ -1,21 +1,12 @@
 """The package's alpha expansion beside gco's, run in a subprocess (issue #974).
 
-gco (Veksler and Delong's C++) is not an oracle for the labelling: expansion
-stops at a local minimum, and the two start differently and cut on different
-costs. What a correct expansion must satisfy whatever it started from is
-checked instead:
-
-- a labelling gco returns is a fixed point of the package's own expansion
-  move --- a full cycle from it makes no move and leaves the energy bitwise
-  unchanged --- at 16² and 71², q = 3 and 10;
-- on a 4x4 lattice at q = 3, both labellings are within the factor-2 bound
-  Boykov, Veksler and Zabih prove for Potts, against the minimum over all
-  3^16 = 43,046,721 labellings, the energy written with non-negative terms;
-  on this instance both reach the minimum, within 1e-12;
-- at 71² the two energies agree within 1 per cent, the spread #938's spike
-  measured at 0.13 per cent at q = 10.
-
-The runtime goal gco sets is in `test_goals.py`.
+gco (Veksler and Delong) is not an oracle for the labelling: expansion stops
+at a local minimum. Checked: gco's labelling is a fixed point of our move
+(energy bitwise unchanged) at 16² and 71², q = 3 and 10; on a 4x4 lattice at
+q = 3 both are within Boykov, Veksler and Zabih's factor 2 of the minimum over
+3^16 = 43,046,721 labellings (non-negative terms), and both reach it within
+1e-12; at 71² the energies agree within 1% (#938 measured 0.13% at q = 10).
+Runtime goal: `test_goals.py`.
 """
 
 from __future__ import annotations
@@ -50,12 +41,7 @@ def _potts(side: int, n_states: int, seed: int) -> tuple[PottsGraph, np.ndarray]
 
 
 def _non_negative(graph: PottsGraph, field: np.ndarray, value: float) -> float:
-    """``value`` with the constant removed that makes every term non-negative.
-
-    ``E = sum_i D_i + sum J [s_i != s_j] - sum J`` with ``D_i = -h_i[s_i]``;
-    adding ``sum J`` and each row's ``max h`` leaves the data costs shifted to
-    their minimum of zero, which is the form the factor-2 bound is proved on.
-    """
+    """``value`` shifted by ``sum J`` and each row's ``max h``: the bound's non-negative form."""
     return value + float(graph.edge_coupling.sum()) + float(field.max(axis=1).sum())
 
 

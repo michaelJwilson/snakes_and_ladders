@@ -1,20 +1,10 @@
 """`docs/tex/` builds two documents, and no live file may call them one.
 
 Issue #377. Since #249 the build produces `docs/paper.pdf` and
-`docs/textbook.pdf`, and nothing else; 77 references across ~30 files still
-named a single artifact that had not existed since that split -- a CI job, a
-build script, a `CLAUDE.md` heading, and docstrings that told a reader to look
-for a document the tree does not contain. Renaming them once fixes the tree
-today; this fixes the next line somebody copies, which is the rule the
-repository settled on for the link guard (#250) and applies here.
-
-Two exclusions, both history rather than instruction: `changelog.d/` fragments
-and `CHANGELOG.md` record what landed under the name it had, and `STATUS.md`'s
-dated consistency audits quote the name they found. Neither tells a reader
-what to run.
-
-A match is looked for across one line break as well as within a line, because
-the phrase is wrapped in prose more often than not.
+`docs/textbook.pdf`; 77 references across ~30 files named one artifact. This
+fixes the next copied line, as the link guard does (#250). Excluded as history:
+`changelog.d/`, `CHANGELOG.md`, and `STATUS.md`'s dated audits. A match is
+sought across one line break, since prose wraps the phrase.
 """
 
 from __future__ import annotations
@@ -99,11 +89,7 @@ def _offending_lines(text: str) -> list[int]:
 @pytest.mark.critical
 @pytest.mark.infra
 def test_no_live_file_names_a_single_technical_artifact() -> None:
-    """Every live reference names the documents, the paper, or the textbook.
-
-    A reader following the old name looks for a build script and a CI job
-    that no longer exist, and for one PDF where two are built.
-    """
+    """Every live reference names the documents, the paper, or the textbook."""
     offenders = {
         str(path.relative_to(REPO_ROOT)): lines
         for path in _tracked_text_files()
@@ -126,9 +112,7 @@ def test_no_live_file_names_a_single_technical_artifact() -> None:
 def test_the_guard_rejects_the_retired_name_and_keeps_the_audits() -> None:
     """The guard rejects what it exists to reject, in each spelling.
 
-    The name is assembled from parts rather than written out: this file is
-    itself scanned, so a literal would fail the check above -- the guard
-    working, but on its own test.
+    The name is assembled from parts: this file is itself scanned.
     """
     retired = "technical"
     assert _offending_lines(f"the {retired} document is built") == [1]

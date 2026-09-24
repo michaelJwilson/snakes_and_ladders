@@ -1,17 +1,9 @@
 """The footprint table publishes a model; this is what pins it to measurement.
 
-`snakes_and_ladders.qa.likelihood_footprint` computes what the arrays occupy from their
-shapes, because `docs/CLAUDE.md` admits only a number that survives a rebuild on
-another machine and a ``tracemalloc`` peak does not — an earlier draft published
-one and the continuous-integration runner regenerated a different table. That
-moves the burden here: a model nothing checks is arithmetic, not a measurement,
-so every published figure is compared against the allocator's own count.
-
-The comparison is a ratio within a stated tolerance rather than an equality. The
-model omits the transient a matrix product allocates and the interpreter's own
-overhead, both bounded and neither worth modelling; what matters is that nothing
-*unaccounted for* dominates, and a 5% band says so while catching a term left
-out.
+The table is computed from shapes, since a ``tracemalloc`` peak does not
+survive a rebuild on another machine (`docs/CLAUDE.md`), so every figure is
+compared against the allocator's count within 5%: matrix-product transients
+and interpreter overhead are omitted, and a missing term falls outside the band.
 """
 
 from __future__ import annotations
@@ -54,20 +46,14 @@ N_STATES = fixture("tree_jc", "ci").params.k
 
 @pytest.fixture(autouse=True, scope="module")
 def _warmed() -> None:
-    """Absorb the cold-call inflation before any assertion reads a peak.
-
-    `snakes_and_ladders.qa.likelihood_footprint.warm_up` states why; calling it from here
-    rather than restating the reason keeps one home for the fact.
-    """
+    """Absorb the cold-call inflation before any assertion reads a peak (see `warm_up`)."""
     warm_up()
 
 
 def _balanced(n_taxa: int) -> Node:
     """A balanced binary topology on ``n_taxa`` leaves, a power of two.
 
-    The shallow counterpart of `caterpillar`: depth ``log2(n_taxa)`` against
-    ``n_taxa - 2``, which is what makes it the cheaper case for an evaluator
-    holding one partial per open node.
+    Depth ``log2(n_taxa)`` against the caterpillar's ``n_taxa - 2``.
     """
     level: list[Node] = [
         Node(name=f"t{index}", branch_length=None) for index in range(n_taxa)
@@ -84,10 +70,7 @@ def _balanced(n_taxa: int) -> Node:
 def test_the_published_simulation_figure_matches_the_allocator() -> None:
     """Every cell of the Simulate column, against `tracemalloc`.
 
-    The model is `(2n - 1) x L x 8`: the simulator retains every node's states,
-    internal ones included, because the ancestral truth is what the validation
-    tests compare against. A simulator that kept only the leaves would come in
-    at half this and fail here rather than quietly making the table wrong.
+    `(2n - 1) x L x 8`: internal states are kept for the ancestral truth.
     """
 
     def check(size: tuple[int, int]) -> None:
@@ -101,9 +84,7 @@ def test_the_published_simulation_figure_matches_the_allocator() -> None:
 def test_the_published_evaluation_figure_matches_the_allocator() -> None:
     """Every cell of the Evaluate column, against `tracemalloc`.
 
-    The model is `(2n - 2) x L x k x 8`: on a caterpillar every node but the
-    root is open at the deepest point of the post-order, which is the claim
-    that makes this the worst case and the table a bound.
+    `(2n - 2) x L x k x 8`: on a caterpillar all but the root are open at once.
     """
 
     def check(size: tuple[int, int]) -> None:
@@ -119,9 +100,7 @@ def test_the_published_evaluation_figure_matches_the_allocator() -> None:
 def test_a_balanced_topology_costs_strictly_less_than_the_caterpillar() -> None:
     """The table reports the worst case, and this is what says so.
 
-    Same taxa, same sites, same data volume: only the depth differs. If a
-    balanced tree were not cheaper, the caterpillar would not be the bound the
-    caption claims and the last row would understate the requirement.
+    Same taxa, sites and data; only depth differs.
     """
     pi = np.full(4, 0.25)
     peaks: list[float] = []
@@ -146,10 +125,7 @@ def test_a_balanced_topology_costs_strictly_less_than_the_caterpillar() -> None:
 def test_the_declared_maximum_sits_inside_the_memory_requirement() -> None:
     """The bound `ROADMAP.md` §1.2 states, at the corner it states it for.
 
-    Asserted as an order of magnitude of headroom rather than an exact figure:
-    the margin is what the requirement is about, and a tight assertion here
-    would fail for a change to the representation rather than for a change that
-    breaks the requirement.
+    An order of magnitude of headroom, not an exact figure.
     """
     taxa, sites = DECLARED_MAXIMUM
     total = simulation_bytes(taxa, sites) + evaluation_bytes(taxa, sites, N_STATES)
@@ -160,9 +136,7 @@ def test_the_declared_maximum_sits_inside_the_memory_requirement() -> None:
 def test_the_check_would_fail_on_a_model_missing_a_term() -> None:
     """The tolerance rejects the error it exists to reject.
 
-    A 5% band is only a check if a plausible mistake lands outside it. Dropping
-    the internal nodes from the simulator, or the state axis from the
-    evaluator, are the two mistakes available, and both are factors.
+    Dropping internal nodes or the state axis are factors, outside 5%.
     """
     taxa, sites = 20, 2_000
     leaves_only = taxa * sites * 8

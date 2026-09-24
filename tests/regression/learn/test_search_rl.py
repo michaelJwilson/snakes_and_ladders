@@ -116,11 +116,7 @@ def _gtr_alignment(
 
 
 def _mirrored(topology: Topology) -> Topology:
-    """The same topology with every child list reversed.
-
-    A different spelling of the same tree, which is what the memoization key
-    has to see through.
-    """
+    """The same topology with every child list reversed, which memoization sees through."""
     return Node(
         name=topology.name,
         branch_length=topology.branch_length,

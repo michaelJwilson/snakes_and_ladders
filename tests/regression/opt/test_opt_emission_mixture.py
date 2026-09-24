@@ -1,15 +1,10 @@
 """Fitting a mixture whose components are two-channel count emissions.
 
-Three referees, in the order their strength falls. At the CI size the E step
-is checked against the **enumerated posterior** over component labellings ---
-an exhaustive sum sharing no code with the normalization it referees. The fit
-is then checked against the **planted parameters** at both declared sizes, up
-to the permutation of components. The seeded start is checked against the
-uniform one over **shared seeds** and reported whichever way it falls, on the
-terms ``snakes_and_ladders.qa.mixture_seeding`` states for the Gaussian case.
-
-Every instance is the registry's (``sim/CLAUDE.md``); the starts' shape
-constants are stated here.
+The E step against the enumerated posterior over labellings (CI size); the fit
+against the planted parameters up to permutation (both sizes); the seeded
+start against the uniform one over shared seeds, reported either way, on
+``snakes_and_ladders.qa.mixture_seeding``'s terms. Instances are the
+registry's (``sim/CLAUDE.md``).
 """
 
 from __future__ import annotations
@@ -37,11 +32,8 @@ from snakes_and_ladders.sim.emission_mixture import (
 )
 from snakes_and_ladders.sim.fixtures import fixture
 
-#: Where a component starts before the data moves it. One observation says
-#: what depth and allele fraction a component sits at and nothing about either
-#: shape, so the dispersion and the concentration start at values declared
-#: here. Both are away from the fixtures' truth -- 6, 10, 15 and 12 at the CI
-#: size -- so a fit that recovers them found them rather than started at them.
+#: Declared shape starts, away from the CI truth (6, 10, 15, 12), so a fit
+#: that recovers them found them.
 START_DISPERSION = 5.0
 START_CONCENTRATION = 10.0
 
@@ -51,11 +43,8 @@ START_CONCENTRATION = 10.0
 #: parameters to four figures.
 EM_TOLERANCE = 1e-8
 
-#: Observations the enumeration oracle runs over. With K = 3 that is 3**10 =
-#: 59,049 labellings, inside the cap `snakes_and_ladders.enumeration` sets.
-#: The observations are independent, so the marginal at each of these ten is
-#: the same quantity the responsibilities of the whole dataset carry, and
-#: enumerating the whole dataset would be 3**900.
+#: 3**10 = 59,049 labellings, inside `snakes_and_ladders.enumeration`'s cap;
+#: observations are independent, so each marginal is the full data's.
 ENUMERATED = 10
 
 
@@ -99,22 +88,14 @@ def _fit(
 def _by_depth(family: CountPairEmission) -> np.ndarray:
     """The permutation ordering components by their depth, then their rate.
 
-    Every declared instance separates its components in the total channel, in
-    the success channel, or in both, so ordering on the pair is a canonical
-    labelling and recovery is stated against it. Where the key separates, this
-    is the answer ``opt.hmm.align_families`` reaches by enumeration --- 3.6
-    million permutations at ten components.
+    Where the key separates, the labelling `align_families` reaches by enumeration.
     """
     return np.lexsort((family.rate.numpy(), family.total.mean.numpy()))
 
 
 @pytest.fixture(scope="module")
 def ci_instance() -> tuple[EmissionMixtureParams, np.ndarray, EmissionMixtureFit]:
-    """The declared CI instance, its draw, and one fit of it.
-
-    Module-scoped because the fit takes about four seconds and three tests
-    read it (``CLAUDE.md``, Testing).
-    """
+    """The declared CI instance, its draw, and one fit (about 4 s, read three times)."""
     params = fixture("emission_mixture", "ci").params
     observations = simulate_emission_mixture(params).observations.astype(float)
     return params, observations, _fit(params, observations, seed=1)
@@ -124,11 +105,8 @@ def ci_instance() -> tuple[EmissionMixtureParams, np.ndarray, EmissionMixtureFit
 def test_the_responsibilities_are_the_enumerated_posterior(
     ci_instance: tuple[EmissionMixtureParams, np.ndarray, EmissionMixtureFit],
 ) -> None:
-    # The E step against an exhaustive sum over component labellings, sharing
-    # no line with it: the enumeration scores each of the 3**10 labellings of
-    # the prefix, normalizes over all 59,049 of them and marginalizes; the E
-    # step normalizes each observation's row on its own. Their agreement says
-    # the mixture's posterior factorizes.
+    # Enumeration normalizes over all 59,049 labellings, the E step per row:
+    # agreement says the posterior factorizes.
     params, observations, _ = ci_instance
     prefix = torch.as_tensor(observations[:ENUMERATED])
     log_weight = torch.log(torch.as_tensor(params.weights))
@@ -159,15 +137,10 @@ def test_the_enumeration_oracle_refuses_a_dataset_it_cannot_enumerate() -> None:
 def test_the_fit_recovers_the_planted_mixture_at_the_ci_size(
     ci_instance: tuple[EmissionMixtureParams, np.ndarray, EmissionMixtureFit],
 ) -> None:
-    # Measured relative errors at this instance, per component: weight 0.064,
-    # 0.097 and 0.015; depth 0.017, 0.034 and 0.002; dispersion 0.27, 0.18 and
-    # 0.175; rate 0.051, 0.007 and 0.018; concentration 0.16, 0.037 and 0.32.
-    # The two shape parameters carry the loosest bounds because this much data
-    # resolves them least: the dispersion's likelihood flattens toward the
-    # Poisson limit and the concentration's toward the binomial one, the
-    # hazard `emissions.mstep` derives a bound for. The fixture's declared
-    # `tolerance` is the loosest of these; the better-resolved parameters are
-    # held tighter here.
+    # Measured relative errors per component: weight 0.064, 0.097, 0.015; depth
+    # 0.017, 0.034, 0.002; dispersion 0.27, 0.18, 0.175; rate 0.051, 0.007,
+    # 0.018; concentration 0.16, 0.037, 0.32. The shapes flatten toward their
+    # limits (`emissions.mstep`), so the fixture's `tolerance` is their bound.
     params, _, fit = ci_instance
     truth = params.components
     assert isinstance(truth, CountPairEmission)
@@ -246,19 +219,10 @@ RESOLVED_COMPONENTS = 7
 @pytest.mark.end2end
 def test_the_fit_recovers_most_of_the_planted_mixture_at_ten_components() -> None:
     """How much of a ten-component mixture one seeded run resolves, and how much not."""
-    # **The finding this test records.** At three components a single
-    # `Emission_Mixture++`-seeded run recovers every planted parameter; at ten
-    # it does not, a property of the instance and of the start rather than a
-    # defect to be tuned away (`sim/CLAUDE.md`: a fixture is hard only once
-    # measured). Asserted is how many planted components have a fitted
-    # component near them, and that the fit has climbed past the planted
-    # parameters --- so a regression that loses a component, or stops
-    # ascending, fails here while the honest shortfall does not.
-    #
-    # Recovery is stated by nearest match rather than by a permutation: the
-    # depths are 1.35 apart and a 20% error in one reorders neighbours, so a
-    # sort is not an alignment here, and enumerating the 3.6 million
-    # permutations `opt.hmm.align_families` would is not affordable.
+    # The finding: at ten components one seeded run does not recover every
+    # component (`sim/CLAUDE.md`). Asserted: how many have a fit nearby, and
+    # the fit climbs past the planted parameters. By nearest match: depths
+    # 1.35 apart, and 3.6 million permutations are unaffordable.
     params = fixture("emission_mixture", "stress").params
     observations = simulate_emission_mixture(params).observations.astype(float)
     truth = params.components

@@ -1,18 +1,9 @@
 """Every test says what it is checked against, and nothing checks that but this.
 
-Issue #237. A suite of 855 assertions had no axis for *kind*: `select_tests.py`
-chooses by module path, so there was no way to ask for "the checks that must
-never break" independently of where a diff landed. The kind markers add that
-axis, and a marker nobody applies is a marker that rots -- so the rule is
-enforced here rather than asked for in a document.
-
-Two axes, and they are independent. A *kind* says what a test is checked
-against; `critical` says whether it gates early. A test is critical *and* an
-oracle test, never instead of one.
-
-The check reads the source rather than pytest's collected items: a decorator is
-what a reviewer sees in the diff, and reading the tree means the guard cannot be
-satisfied by a `conftest.py` applying markers invisibly.
+Issue #237. `select_tests.py` chooses by path, so kind is a second axis, and a
+marker nobody applies rots. `critical` is independent: a test is critical and
+an oracle test, never instead. The source is read rather than the collected
+items, so a `conftest.py` cannot satisfy the guard invisibly.
 """
 
 from __future__ import annotations
@@ -52,10 +43,7 @@ def _marked_test_files() -> list[Path]:
 def test_every_test_says_what_it_is_checked_against() -> None:
     """The rule itself: at least one kind, never exactly one.
 
-    "At least" rather than "exactly": a recovery test that checks a fitted
-    parameter against simulated truth *and* refuses a bad input is both, and
-    splitting it would mean writing two worse tests. The scheme is tags, and a
-    partition would force a choice the suite has no basis for.
+    Tags, not a partition: a recovery test that also refuses bad input is both.
     """
     unmarked = [
         f"{path.relative_to(REPO_ROOT)}::{node.name}"
@@ -76,9 +64,7 @@ def test_every_test_says_what_it_is_checked_against() -> None:
 def test_the_guard_fails_on_an_unmarked_test(tmp_path: Path) -> None:
     """The guard rejects what it exists to reject.
 
-    A guard that only passes on the current tree says nothing about the next
-    module -- the rule this repository settled on after the documentation index
-    needed four repairs by hand before a test closed it (#223).
+    The documentation index needed four hand repairs before this rule (#223).
     """
     unmarked = tmp_path / "test_unmarked.py"
     unmarked.write_text("def test_nothing() -> None:\n    assert True\n")
@@ -97,9 +83,7 @@ def test_the_guard_fails_on_an_unmarked_test(tmp_path: Path) -> None:
 def test_the_registered_markers_are_these() -> None:
     """`pyproject.toml` and `KINDS` cannot drift apart.
 
-    `--strict-markers` makes a typo fail collection rather than silently select
-    nothing, which is the other half of the same protection: registration
-    catches the misspelling, this catches a name registered and never enforced.
+    `--strict-markers` catches a misspelling; this, a name never enforced.
     """
     config = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text())
     pytest_config = config["tool"]["pytest"]["ini_options"]
@@ -114,10 +98,7 @@ def test_the_registered_markers_are_these() -> None:
 def test_critical_is_a_second_axis_and_not_a_kind() -> None:
     """Every critical test also says what it is checked against.
 
-    If `critical` were a kind, a test would have to choose between saying it
-    gates early and saying what it checks. It is not, so the set of critical
-    tests is a strict subset of the kind-marked ones and carries no test of its
-    own.
+    `critical` is not a kind: critical tests are a strict subset of kind-marked ones.
     """
     critical = [
         (path, node)
@@ -137,11 +118,7 @@ def test_critical_is_a_second_axis_and_not_a_kind() -> None:
 @pytest.mark.infra
 @pytest.mark.parametrize("kind", KINDS)
 def test_every_kind_is_used(kind: str) -> None:
-    """A category nothing carries is a category that has stopped being applied.
-
-    The taxonomy was settled against a survey of the whole suite, so each name
-    had tests when it was registered. This is what notices if one empties.
-    """
+    """A category nothing carries is a category that has stopped being applied."""
     carriers = sum(
         1
         for path in _marked_test_files()
@@ -156,11 +133,7 @@ def test_every_kind_is_used(kind: str) -> None:
 def test_a_written_infra_sits_in_a_module_naming_no_problem() -> None:
     """`infra` is a claim about the module, and a test may write it only there.
 
-    Issue #729 made `infra` a kind an author writes on a test of the
-    repository's own machinery. The collection hook adds the same marker where
-    the problem scan finds nothing, and `test_problem_markers.py` holds that
-    such a module imports no defining code; a written `infra` in a module that
-    names a problem would count a test of the science as a test of the tree.
+    Issue #729: a written `infra` beside a problem would count science as tree.
     """
     misplaced = [
         f"{path.relative_to(REPO_ROOT)}::{node.name}"
@@ -181,10 +154,7 @@ def test_a_written_infra_sits_in_a_module_naming_no_problem() -> None:
 def test_a_finding_is_carried_beside_a_kind() -> None:
     """The second axis is never instead of the first.
 
-    A test marked `bug` says what is wrong and not what decided that: the
-    oracle, the planted truth or the contract is the kind beside it. Every
-    finding marker is registered so `--strict-markers` accepts it; the audit
-    issue #729 plans applies them, and this holds each carrier to a kind.
+    A `bug` says what is wrong, the kind beside it what decided that (#729).
     """
     without_a_kind = [
         f"{path.relative_to(REPO_ROOT)}::{node.name}"

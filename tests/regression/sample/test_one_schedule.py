@@ -156,10 +156,7 @@ def test_hamiltonian_tempering_reads_both_spellings_to_the_same_positions() -> N
 def test_the_warm_ups_read_both_spellings_and_the_zero_anchor_stays_refused() -> None:
     """The six ladders #834 left on a bare sequence, read from a schedule (issue #861).
 
-    Four place the same ladder from the same measurement either way. The two
-    anchored at ``beta = 0`` are refused on the anchor rather than by their
-    type: a schedule declares temperatures and the infinite one is not among
-    them, so the rung the estimate is anchored on is one it cannot spell.
+    Four place alike; the two anchored at ``beta = 0`` are refused: no schedule spells it.
     """
     graph = _graph()
     warm_ups = (

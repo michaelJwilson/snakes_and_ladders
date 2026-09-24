@@ -1,20 +1,11 @@
 """The schedule seam: the alternatives, what each guarantees, and every graph.
 
-Issue #592. Three things are checked and they are different things. That the
-refactor changed no number --- the two schedules that predate it reproduce
-their old output bitwise, which
-`tests/regression/likelihood/test_message_passing.py` asserts against the
-dictionary reference. That the new schedules are *right*, which for the
-upward pass means agreeing with an oracle written in another module
-(`likelihood.pruning`) and, for the iterative three, reaching belief
-propagation's fixed point: both are asserted in `test_message_passing.py`,
-parametrised over the schedule (issue #982). And that the seam reaches the
-graphs it claims to: every adapter in `sim.factor_graph`, run under every
-schedule its graph admits.
-
-A partial schedule is the interesting case. `upward` is exact where it speaks
-and silent elsewhere, so the test asserts the silence too: a marginal it does
-not compute is absent, and reading one raises rather than returning a number.
+Issue #592. The two schedules predating the refactor reproduce their output
+bitwise, and the new ones are right (upward against `likelihood.pruning`, the
+iterative three at BP's fixed point), both in `test_message_passing.py`
+(#982). Here: every `sim.factor_graph` adapter under every schedule its graph
+admits. `upward` is exact where it speaks and silent elsewhere, so a marginal
+it does not compute is absent and reading one raises.
 """
 
 from __future__ import annotations
@@ -128,12 +119,8 @@ def test_an_unregistered_schedule_is_refused_by_name() -> None:
     "graph", [_chain(8), _star(12), _chain(3)], ids=["chain", "star", "triple"]
 )
 def test_the_upward_pass_alone_recovers_the_log_partition(graph: FactorGraph) -> None:
-    # Felsenstein pruning is the leaf-to-root pass, and pruning returns the
-    # likelihood: so half the messages must give the whole of `log Z`. The two
-    # reach it by different arithmetic --- the two-pass schedule sums a Bethe
-    # free energy over the beliefs, the upward pass sums the normalizers it
-    # discarded --- so they agree to rounding and not bitwise. Measured at one
-    # unit in the last place on these three; the bound is well inside it.
+    # Half the messages give all of `log Z`, by different arithmetic (Bethe
+    # sum against discarded normalizers): measured one ulp apart on these three.
     both = sum_product(graph, schedule="tree")
     half = sum_product(graph, schedule="upward")
 

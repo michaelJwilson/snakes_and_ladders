@@ -46,9 +46,7 @@ TOLERANCE = 0.1
 def test_the_default_initializer_is_the_objective_s_own_start() -> None:
     """`FromObjective` is today's behaviour exactly, not an approximation.
 
-    Every number `STATUS.md` pins was produced from the objective's own
-    `initial()`, so it must stay reachable and identical; otherwise the
-    abstraction silently moves results.
+    Every number `STATUS.md` pins came from the objective's own `initial()`.
     """
     objective = Rosenbrock()
 
@@ -60,11 +58,7 @@ def test_the_default_initializer_is_the_objective_s_own_start() -> None:
 
 @pytest.mark.smoke
 def test_a_single_start_makes_the_multi_start_fit_the_ordinary_one() -> None:
-    """One start is the degenerate case of many, and the code agrees.
-
-    `fit_from` with `FromObjective` differing from `fit` would make the
-    abstraction a second code path rather than a generalization.
-    """
+    """One start is the degenerate case of many, and the code agrees."""
     objective = Rosenbrock()
 
     single = fit(objective)
@@ -81,11 +75,7 @@ def test_the_perturbed_start_leaves_the_stationary_point_the_uniform_hmm_sits_on
 ):
     """The defect this initializer generalizes, asserted rather than described.
 
-    `opt/hmm.py` records that a uniform HMM is a *stationary point*: with every
-    hidden state identical, the gradient with respect to the initial and
-    transition parameters is exactly zero and an optimizer never leaves. Fixed
-    there by hand; checked here of the model-free perturbation, whose nudged
-    start has a gradient the symmetric one does not.
+    A uniform HMM is a stationary point (`opt/hmm.py`); the nudged start has a gradient.
     """
     observations = np.array([[0, 1, 0, 1, 0], [1, 0, 1, 0, 1]], dtype=np.int64)
     objective = HmmObjective(observations=observations, n_states=2, n_symbols=2)
@@ -112,9 +102,7 @@ def test_the_perturbed_start_leaves_the_stationary_point_the_uniform_hmm_sits_on
 def test_restarts_reach_every_himmelblau_basin_and_one_start_reaches_one() -> None:
     """The case multi-start is for, measured against four analytic minima.
 
-    Himmelblau has four equal global minima, so the start alone decides which
-    comes back. A single fixed start reaches one basin however often it is
-    run; four random restarts reach all four.
+    One fixed start reaches one of Himmelblau's four basins; four restarts, all.
     """
     objective = Himmelblau()
 
@@ -140,18 +128,7 @@ def test_restarts_reach_every_himmelblau_basin_and_one_start_reaches_one() -> No
 def test_restarts_barely_help_on_rastrigin_and_the_number_says_so() -> None:
     """The negative result, kept because it is the more useful one.
 
-    Rastrigin has roughly `10 ** n` local minima, one per lattice cell, and
-    every one satisfies the first-order condition. Restarts drawn around a
-    fixed centre land in *some* cell and stay there, so the global minimum is
-    reached 2 times in 30 at sixteen starts against 0 in 30 at one -- sixteen
-    times the cost for a success rate still near zero. Widening the draw does
-    not fix it: the same 2 in 30 at scale 4.0 as at 2.0, because the obstacle
-    is the density of minima and not the reach of the proposal.
-
-    So the defaults do not change: multi-start is a tool for a few
-    well-separated basins, and a general improvement is what the measurement
-    contradicts. Through `opt.budget.compare` at eight fits it is 0 of 10
-    either way.
+    ~`10 ** n` minima: 2/30 at sixteen starts (scale 2.0 or 4.0), 0/30 at one.
     """
     objective = Rastrigin()
 
@@ -197,10 +174,7 @@ def test_restarts_barely_help_on_rastrigin_and_the_number_says_so() -> None:
 def test_the_spread_reports_that_the_starts_disagreed() -> None:
     """A multi-start fit that returned only the best would hide the multimodality.
 
-    On Himmelblau every basin has value 0, so the spread is ~0 even though the
-    *answers* differ, which is why the fits are returned as well as the spread.
-    On Rastrigin the values differ, and the spread says how wrong a single fit
-    could have been.
+    Himmelblau's basins all score 0, so fits are returned beside the spread.
     """
     flat = fit_from(
         Himmelblau(), RandomRestart(4, 3.0, np.random.default_rng(0)), workers=1
@@ -217,12 +191,7 @@ def test_the_spread_reports_that_the_starts_disagreed() -> None:
 
 @pytest.mark.smoke
 def test_two_generators_seeded_alike_give_the_same_restarts() -> None:
-    """A declared seed still determines the run.
-
-    `opt/hmm.py` rejected a jitter because it "would make the fit depend on a
-    second seed nobody declared". Taking the generator removes that objection:
-    the seed is the caller's, and declared.
-    """
+    """A declared seed still determines the run: the generator is the caller's."""
     objective = Himmelblau()
 
     first = RandomRestart(4, 1.0, np.random.default_rng(3)).starts(objective)
@@ -235,8 +204,7 @@ def test_two_generators_seeded_alike_give_the_same_restarts() -> None:
 def test_independent_restart_sets_come_from_one_generator() -> None:
     """The property `sim/CLAUDE.md`'s rule exists for, on this module.
 
-    Seeding inside would make every restart set identical, which looks like an
-    ensemble and is one draw.
+    Seeding inside would make every restart set one draw.
     """
     objective = Himmelblau()
     rng = np.random.default_rng(9)
@@ -261,11 +229,7 @@ def test_independent_restart_sets_come_from_one_generator() -> None:
 def test_an_unusable_restart_specification_is_refused(
     n_starts: int, scale: float, match: str
 ) -> None:
-    """Zero starts and a non-positive scale are refused where they are stated.
-
-    A zero-start initializer surfaces as an empty `min` inside `fit_from`, and
-    a zero scale is a restart set that is not one.
-    """
+    """Zero starts and a non-positive scale are refused where they are stated."""
     with pytest.raises(ValueError, match=match):
         RandomRestart(n_starts, scale, np.random.default_rng(0))
 
@@ -281,10 +245,7 @@ def test_a_non_positive_perturbation_is_refused() -> None:
 def test_four_workers_fit_the_starts_one_worker_fits() -> None:
     """A multi-start fit on a process pool is the serial one, bitwise (issue #344).
 
-    A start draws nothing once the initializer has produced it, and every
-    worker runs at the intra-op thread count the serial path runs at, so the
-    same kernels reduce in the same order: the fitted parameters are equal
-    with ``torch.equal``, not ``allclose``.
+    Same intra-op thread count, same reduction order: ``torch.equal``.
     """
     objective = Himmelblau()
 
@@ -310,23 +271,15 @@ def test_a_multi_start_fit_refuses_no_workers() -> None:
         fit_from(Himmelblau(), FromObjective(), workers=0)
 
 
-#: Distance within which a fit counts as having *reached* a published
-#: minimizer rather than merely landed in its basin. Set from the precision
-#: the constants are quoted to --- six decimals
-#: (:data:`snakes_and_ladders.opt.testfunctions.HIMMELBLAU_MINIMA`) --- so a
-#: tighter bound would be checking the transcription and not the fit.
+#: Distance counting as reaching a published minimizer: the six decimals of
+#: :data:`snakes_and_ladders.opt.testfunctions.HIMMELBLAU_MINIMA`.
 PUBLISHED_TOLERANCE = 1e-5
 
 
 @pytest.mark.oracle
 def test_every_restart_lands_on_a_published_himmelblau_minimizer() -> None:
-    # The multi-start initializer was refereed by basin *coverage*: four
-    # restarts reach four distinct basins. Coverage passes whatever the fit
-    # converged to and says nothing about where in the basin it stopped.
-    # Himmelblau's minimizers are published to six decimals, which makes the
-    # stronger statement exact: every fit from every restart is within 6.2e-07
-    # of one of them, against a tolerance of 1e-5, and its value is 7.9e-31
-    # against an exact 0. The four together are still covered.
+    # Stronger than basin coverage: every fit is within 6.2e-07 of a published
+    # minimizer (1e-5 declared), value 7.9e-31 against 0; all four covered.
     objective = Himmelblau()
 
     reached, worst_distance, worst_value = set(), 0.0, 0.0
@@ -380,9 +333,7 @@ def _lowest(objective: Rastrigin, points: list[torch.Tensor]) -> float:
 def _chain_start(seed: int) -> FromChain:
     """Six draws of a short chain, at the step the surface accepts.
 
-    Fixed-parameter, ``adaptation=None``: the comparison below is at the
-    chain's 286 gradients, and FromChain's default warm-up (issue #898) would
-    add 300 proposals of 11 gradients each to it alone.
+    ``adaptation=None``: the default warm-up (#898) would add 300 x 11 gradients.
     """
     return FromChain(
         6,
@@ -399,12 +350,9 @@ def _chain_start(seed: int) -> FromChain:
 def test_a_chain_start_warms_up_by_default_and_none_is_the_chain_it_drew_before() -> (
     None
 ):
-    # Issue #898 made the warm-up FromChain's default. The referee is
-    # `hmc.sample` called directly: the default is that call with
-    # CHAIN_ADAPTATION, bitwise, charging the warm-up's 300 proposals; and
-    # `adaptation=None` is that call without one, bitwise the pre-#898 chain.
-    # The acceptance these values reach is pinned where they were measured,
-    # `tests/regression/sample/test_opt_hmc_adaptive.py`'s ADAPTATION.
+    # Referee: `hmc.sample` called directly, bitwise with CHAIN_ADAPTATION
+    # (#898, 300 proposals charged) and without it; acceptance is pinned in
+    # `test_opt_hmc_adaptive.py`'s ADAPTATION.
     objective = AnalyticGaussian([1.0, -2.0], [[2.0, 0.6], [0.6, 0.5]])
     draws, step, steps, burn_in = 4, 0.1, 5, 3
     per_proposal = hmc.leapfrog.force_evaluations(steps)
@@ -460,37 +408,15 @@ def _tempered_start(seed: int) -> FromTempering:
 def test_the_sampled_starts_are_their_runs_own_records_and_leave_the_cell_descent_cannot() -> (
     None
 ):
-    # The referee is outside the ladder (issue #734): each run's own record,
-    # bitwise, and Rastrigin's closed form -- roughly 10 ** n local minima on
-    # the integer lattice, one global minimum of 0 at the origin, and a fit
-    # that stops at whichever cell it was started in.
-    #
-    # What a start *is*, asserted rather than described. From generators
-    # seeded alike, `FromChain.starts` is the chain's own draws in order,
-    # `FromAnnealing.starts` is `[run.theta]` and `FromTempering.starts` is
-    # `[run.theta]`, every one of them equal bit for bit; both runs report the
-    # value at the point they return, exactly; annealing's best is at or below
-    # where its chain ended; and tempering's best is the lowest value in the
-    # positions it recorded, with a gap of exactly 0.0.
-    #
-    # What the sampling buys, over eight seeds. Descent from the objective's
-    # own start lands at 31.8385 every time -- the cell at (3.9798, 3.9798) --
-    # and every one of the three sampled starts lands strictly below it on all
-    # eight: at most 7.9597 for the chain and for tempering, 25.8687 for
-    # annealing, every landing point on the lattice to 0.0253 against the
-    # 0.03 declared.
-    #
-    # One wording the ticket offers does not hold. The tempered start is *not*
-    # the coldest replica's: over the eight seeds the lowest value recorded
-    # sits at the coldest replica on 7 and at a hotter one on the eighth,
-    # which is what a ladder is for, so the count is what is asserted.
-    #
-    # Where it stops, and it stops short of the ticket's wording: none of the
-    # three *reaches* the closed-form optimum at this budget. Over 24 runs the
-    # global minimum is found 0 times, so what is pinned is escape from the
-    # start's cell and not a solution of Rastrigin. The cheapest of the three
-    # is no worse here: 1,320 gradients of annealing buy a ceiling three times
-    # the 286-gradient chain's.
+    # Outside the ladder (#734): each run's record, bitwise, and Rastrigin's
+    # closed form. Starts are the chain's draws, `[run.theta]` for annealing
+    # and tempering, bitwise; tempering's best has gap 0.0. Over eight seeds
+    # descent from `initial()` lands at 31.8385 (cell (3.9798, 3.9798)); all
+    # three sampled starts land below on all eight: <= 7.9597 (chain,
+    # tempering), 25.8687 (annealing), on the lattice to 0.0253 (0.03). The
+    # tempered best is the coldest replica's on 7 of 8. None reaches the
+    # optimum in 24 runs: escape, not solution; 1,320 annealing gradients buy
+    # three times the 286-gradient chain's ceiling.
     objective = Rastrigin()
 
     drawn = _chain_start(0).starts(objective)

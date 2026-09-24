@@ -1,18 +1,11 @@
 """The declined max-flow kernels referee the package kernel, and each other.
 
-Issue #715. Four kernels were built behind one seam and one was kept; the
-three here are pinned exactly as the kept one is --- the value to the last
-bits and the side arc for arc against the Python Dinic, the ground state's
-energy and configuration against the package kernel, the enumerated minimum
-where it fits --- and as the inner solver of alpha expansion, where every
-kernel must give the same labelling after every cut and a bitwise-equal
-energy. The parallel kernel is additionally pinned bit for bit across thread
-counts, which is the property that makes its result a result.
-
-**It skips unless the extension carries the ``sandbox`` Cargo feature.** The
-kernels are not in the default build, so a missing ``max_flow_declined``
-skips the module rather than failing it; ``infra/release.sh`` rebuilds with
-the feature to see these run.
+Issue #715: three of four kernels declined, pinned as the kept one is (value
+and side against the Python Dinic, ground state against the package kernel,
+the enumerated minimum where it fits) and as alpha expansion's inner solver
+(same labellings, bitwise energy); the parallel kernel bitwise across thread
+counts. Skips without the ``sandbox`` Cargo feature; ``infra/release.sh``
+builds it.
 """
 
 from __future__ import annotations
@@ -137,12 +130,8 @@ def test_every_declined_kernel_finds_the_enumerated_minimum(
 def test_every_declined_kernel_terminates_when_nothing_reaches_the_sink(
     kernel: DeclinedKernel,
 ) -> None:
-    # The first swap network of `_spots(12, 3)` has 79 arcs out of the source,
-    # none into the sink, and a maximum flow of 0: the parallel kernel's
-    # global relabel kept every source-side label at `n`, so no node reached
-    # `n + 1` and pushed its excess back, and the round never ended. The
-    # relabel is now two-sided, as the sequential kernel's, and the value and
-    # the side are the package kernel's.
+    # `_spots(12, 3)`'s first swap network (79 source arcs, flow 0) never ended
+    # under a one-sided global relabel; it is two-sided now, as sequentially.
     network = FlowNetwork(n_nodes=4)
     network.add_edge(0, 1, 1.0)
     network.add_edge(1, 2, 0.5)
@@ -198,12 +187,7 @@ def test_the_parallel_kernel_is_bitwise_independent_of_its_thread_count(
 def declined_inner_solver(
     monkeypatch: pytest.MonkeyPatch,
 ) -> Callable[[DeclinedKernel], None]:
-    """Route alpha expansion's Rust cut through a declined kernel.
-
-    The package seam carries one kernel by design, so the expansion is run
-    on a declined one by replacing the cut it calls rather than by a
-    parameter nothing in the package needs.
-    """
+    """Route alpha expansion's Rust cut through a declined kernel, by replacing the cut."""
 
     def install(kernel: DeclinedKernel) -> None:
         def cut(network: FlowNetwork, source: int, sink: int) -> object:

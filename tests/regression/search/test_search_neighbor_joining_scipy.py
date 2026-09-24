@@ -1,23 +1,11 @@
 """`search.neighbor_joining` against SciPy's UPGMA where the two must agree (issue #376).
 
-On an *ultrametric* additive matrix --- one whose leaves are all the same
-distance from the root --- average-linkage agglomeration and neighbor joining
-return the same tree, and both return the generating one. That is the regime
-where `scipy.cluster.hierarchy.linkage(method="average")` is an independent
-implementation of the answer, written from a different algorithm: it joins
-the closest pair by mean distance where neighbor joining joins the pair
-minimizing ``(n-2) d_ij - r_i - r_j``.
-
-What this establishes is the joining, on the matrices where the two criteria
-coincide. What it does not establish is anything outside that regime, and the
-second test here is the reason the distinction is stated rather than assumed:
-on an additive matrix that is *not* ultrametric --- two long branches that are
-not a cherry --- UPGMA returns the wrong tree and neighbor joining the right
-one, which is Atteson's guarantee doing work no clustering method has.
-
-``scipy`` is not a declared dependency of this repository, so this skips
-unless it is installed; whether to declare it is the open question issue #376
-leaves standing.
+On an ultrametric additive matrix average linkage and neighbor joining return
+the same, generating tree; there
+`scipy.cluster.hierarchy.linkage(method="average")` is an independent answer
+by a different criterion. Off that regime (two long branches not a cherry)
+UPGMA is wrong and neighbor joining right: Atteson's guarantee at work. Skips
+without ``scipy``, which is undeclared (issue #376).
 """
 
 from __future__ import annotations
@@ -121,14 +109,9 @@ def test_the_two_return_the_same_tree_on_an_ultrametric_matrix() -> None:
 
 @pytest.mark.oracle
 def test_upgma_returns_the_wrong_tree_where_the_matrix_is_not_ultrametric() -> None:
-    # Two long branches that are not a cherry: the true tree is
-    # ((t1,t2),(t3,t4)) with t1 and t3 long, so the two shortest branches are
-    # t2 and t4 and the closest pair by distance is t2 with t4 --- which is
-    # what average linkage joins first, and it is wrong. The matrix is exactly
-    # additive, so this is the criterion failing and not noise in an estimate.
-    # The referee is that tree, written into the matrix by hand rather than
-    # taken from either implementation: neighbour joining recovers it and
-    # average linkage returns {t2, t4} instead. Realized exactly, on splits.
+    # ((t1,t2),(t3,t4)) with t1, t3 long: average linkage joins t2 with t4
+    # first, wrong, on an exactly additive matrix. The hand-written tree is the
+    # referee; neighbour joining recovers it, exactly on splits.
     names = ("t1", "t2", "t3", "t4")
     matrix = np.array(
         [

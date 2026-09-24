@@ -1,27 +1,13 @@
 """The analytic two-pass backward, against the taped gradient it would replace.
 
-``pruning_torch`` is the oracle and stays (``likelihood/CLAUDE.md``). What is
-checked here is that the closed form of ``alg:pruning-backward`` computes the
-same derivative: against the tape, against central differences, and through
-``torch.autograd.gradcheck``, all in ``float64``.
-
-**The central-difference tolerance is derived, not chosen.** Sweeping the step
-over ``1e-4, 1e-5, 1e-6, 1e-7`` at 4 and 8 taxa and 2,000 and 20,000 sites, the
-largest relative deviation of *any* of the three routes from the difference
-quotient is 9.5e-4 at ``h = 1e-4`` and 1.007e-6 at ``h = 1e-6``, where the
-quotient's truncation and its cancellation are balanced. The three routes
-deviate by the same amount to four significant figures at every step, which
-says the deviation is the quotient's and not any gradient's. The bound below is
-``h = 1e-6`` and twice that worst case.
-
-Agreement with the taped gradient is a different question and a much tighter
-one: the worst observed relative difference is 5.9e-13, inside
-``CROSS_DEVICE_RTOL_FLOAT64``, which this module reads from
-``likelihood.device`` rather than retyping.
-
-The five checks shared with `burn`'s conserved tape run over :data:`ROUTES`
-(issue #982); `burn`'s refusals stay in
-``tests/regression/sandbox/test_pruning_burn.py``.
+``pruning_torch`` is the oracle (``likelihood/CLAUDE.md``); ``alg:pruning-backward``
+is checked against the tape, central differences and ``gradcheck`` in
+``float64``. The difference tolerance is derived: over steps ``1e-4`` to
+``1e-7``, 4 and 8 taxa, 2,000 and 20,000 sites, the worst deviation of all
+three routes is 9.5e-4 at ``h = 1e-4`` and 1.007e-6 at ``h = 1e-6``, alike to
+four figures (the quotient's error); the bound is twice that at ``1e-6``.
+Against the tape: 5.9e-13, inside ``CROSS_DEVICE_RTOL_FLOAT64``. Five checks
+run over :data:`ROUTES` with `burn` (#982).
 """
 
 from __future__ import annotations
@@ -109,8 +95,7 @@ def test_gradient_matches_the_taped_gradient(
 ) -> None:
     """The gradient the tape produces, to the float64 agreement tolerance.
 
-    For `burn` this settles the `f64` question the route was adopted on: a
-    tape narrowed to `f32` could not agree with the taped `float64` gradient.
+    For `burn`, the `f64` question: an `f32` tape could not agree.
     """
     case = _case(fixture_name, n_sites)
     _, expected = _gradient(pruning_torch.log_likelihood, case)
@@ -160,12 +145,7 @@ def test_gradcheck_in_float64(route: Callable[..., torch.Tensor]) -> None:
 def test_weighted_patterns_give_the_uncompressed_gradient(
     route: Callable[..., torch.Tensor],
 ) -> None:
-    """The compressed alignment with its weights is the full alignment's gradient.
-
-    The weights are constants of the data, so the gradient is the weighted sum
-    of the site gradients -- the same claim ``pruning_torch`` makes for the
-    value, now for the derivative.
-    """
+    """The compressed alignment with its weights is the full alignment's gradient."""
     tau, k, pi, alignment, lengths = _case(EIGHT_TAXA, 2000)
     compressed = compress(alignment)
     _, full = _gradient(route, (tau, k, pi, alignment, lengths))
@@ -197,9 +177,7 @@ def test_a_general_rate_matrix_agrees_with_the_taped_path() -> None:
 def test_a_zero_message_does_not_produce_a_nan_gradient() -> None:
     """A site an observation forbids has a finite derivative, not a NaN.
 
-    The sibling product is taken by a scan rather than by dividing the parent's
-    partial by the child's message, and this is the case that separates the
-    two: at a site where one leaf's state forces a zero, the division is 0/0.
+    The sibling product is a scan: dividing would be 0/0 here.
     """
     tau = Node(
         name="root",
@@ -249,12 +227,7 @@ def test_branch_lengths_of_the_wrong_length_are_refused() -> None:
 
 @pytest.mark.smoke
 def test_the_graph_is_one_node_whatever_the_tree() -> None:
-    """The count issue #443 attacks: the taped graph tracks the tree, this does not.
-
-    Measured here rather than asserted as a constant: what matters is that the
-    count stops growing with the topology, which is the mechanism the route
-    claims.
-    """
+    """The count issue #443 attacks: the taped graph tracks the tree, this does not."""
 
     def graph_nodes(value: torch.Tensor) -> int:
         seen: set[object] = set()

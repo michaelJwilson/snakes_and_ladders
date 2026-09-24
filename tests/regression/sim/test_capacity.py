@@ -1,19 +1,10 @@
 """Capacity against an independent route, a published pin, and a converse.
 
-Issue #594. Capacity is the one referee here that bounds a result from above,
-so what it is checked against matters more than usual:
-
-* **the erasure and symmetric channels have closed forms**, and the symmetric
-  one is checked against the mutual information summed directly over the
-  ``2 x 2`` joint distribution --- a different computation, not a rearranged
-  one;
-* **the Gaussian channel's integral has no closed form**, so quadrature is
-  held to Monte Carlo at a tolerance the sample size sets, and to the
-  published rate-1/2 limit ``sigma* = 0.9787``;
-* **the inverse is a converse**, and the (3,6) ensemble's erasure threshold
-  is asserted to sit below it. A code whose threshold exceeded capacity would
-  be a mistake in one of the two, and nothing else in the suite compares
-  them.
+Issue #594. The erasure and symmetric channels have closed forms, the symmetric
+checked against mutual information summed over the ``2 x 2`` joint. The
+Gaussian integral is held to Monte Carlo at the sample's tolerance and to the
+published rate-1/2 ``sigma* = 0.9787``. The inverse is a converse: the (3,6)
+erasure threshold sits below it, the suite's one comparison of the two.
 """
 
 from __future__ import annotations
@@ -174,11 +165,8 @@ def test_the_erasure_limit_is_one_minus_the_rate() -> None:
 @pytest.mark.oracle
 @pytest.mark.analytic
 def test_no_ensemble_threshold_reaches_the_limit_it_is_bounded_by() -> None:
-    # The converse, and the only place the suite compares the two: the (3,6)
-    # ensemble's density-evolution threshold against the erasure channel's
-    # capacity at the same design rate. 0.4294 against 0.5 leaves 14.1% of
-    # the channel unused, and that gap is the ensemble's, surviving to
-    # infinite length.
+    # (3,6) threshold 0.4294 against capacity 0.5: 14.1% unused, the ensemble's
+    # gap at any length.
     threshold = erasure_threshold(3, 6, iterations=2000, precision=1e-4)
     limit = noise_at_capacity(0.5, BinaryErasureChannel)
     assert threshold < limit
@@ -269,15 +257,9 @@ def test_the_decibel_map_refuses_what_it_cannot_answer_for() -> None:
 
 @pytest.mark.oracle
 def test_each_family_s_rate_half_limit_is_the_figure_its_text_quotes() -> None:
-    # The three published rate-1/2 limits, one per family, so every branch of
-    # `noise_at_capacity` is read against a number from outside this tree
-    # rather than against its own round trip. Richardson and Urbanke 2008,
-    # §4.1 and §4.10; the erasure limit is Shannon's `1 - eps` inverted.
-    #
-    # Realized, against a declared 1e-3 on the two quoted to four places:
-    # eps* = 0.4999999995, 4.66e-10 from 1/2, which is the bisection's own
-    # precision and not a quotation; p* = 0.11002786, 2.79e-5 from 0.11;
-    # sigma* = 0.97869412, 5.88e-6 from 0.9787.
+    # Published rate-1/2 limits (Richardson and Urbanke 2008, §4.1, §4.10;
+    # erasure `1 - eps`), 1e-3 declared: eps* 0.4999999995 (4.66e-10, the
+    # bisection's precision), p* 0.11002786 (2.79e-5), sigma* 0.97869412 (5.88e-6).
     erasure = noise_at_capacity(0.5, BinaryErasureChannel)
     crossover = noise_at_capacity(0.5, BinarySymmetricChannel)
     sigma = noise_at_capacity(0.5, BinaryInputGaussianChannel)
@@ -294,12 +276,8 @@ def test_each_family_s_rate_half_limit_is_the_figure_its_text_quotes() -> None:
 
 @pytest.mark.oracle
 def test_the_symmetric_limit_is_the_entropy_equation_solved_by_hand() -> None:
-    # The bisection's symmetric branch against the closed form it inverts,
-    # solved independently by `scipy.optimize.brentq` on `H(p) = 1 - R`.
-    # Brent's method shares no step, bracket or stopping rule with a
-    # bisection, so agreeing to 1e-9 is a statement about the root and not
-    # about the search. Realized: 4.21e-10 at the widest of the five rates,
-    # against the 1e-9 the bisection is asked to stop at.
+    # `scipy.optimize.brentq` on `H(p) = 1 - R` shares no step with bisection:
+    # worst 4.21e-10 over five rates, against 1e-9.
     worst = 0.0
     for rate in RATES:
         expected = float(

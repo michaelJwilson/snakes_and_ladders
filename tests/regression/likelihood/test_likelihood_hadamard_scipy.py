@@ -1,21 +1,10 @@
 """`likelihood.hadamard`'s transform against `scipy.linalg.hadamard` (issue #376).
 
-`walsh_hadamard` is the Sylvester--Hadamard product ``H v`` computed by an
-in-place butterfly in ``O(N log N)``, which is a different computation from
-forming ``H`` and multiplying. `scipy.linalg.hadamard` builds the matrix by
-the Kronecker recursion, so the product against it is an independent answer
-and not a rearrangement of ours.
-
-What this establishes is the transform, exactly, at every order the
-conjugation is offered at, and with it the two directions of
-``eq:hadamard``, which are the transform composed with a logarithm and an
-exponential. What it does not establish is the phylogenetic content --- that
-the edge spectrum a real alignment implies is the generating tree's --- which
-is the pruning likelihood's job and is refereed there.
-
-``scipy`` is not a declared dependency of this repository, so this skips
-unless it is installed; whether to declare it is the open question issue #376
-leaves standing.
+`walsh_hadamard` is an in-place ``O(N log N)`` butterfly; `scipy` builds ``H``
+by the Kronecker recursion, an independent answer. Established: the transform
+exactly at every offered order, and so both directions of ``eq:hadamard``; the
+phylogenetic content is the pruning likelihood's. Skips without ``scipy``,
+which is undeclared (issue #376).
 """
 
 from __future__ import annotations

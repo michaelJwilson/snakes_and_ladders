@@ -1,20 +1,13 @@
 """Adaptation, pinned where it is exact before it is pinned where it is statistical.
 
-Three statements are arithmetic and need no chain: the dual-averaging
-iteration is Hoffman & Gelman's, line for line (``eq:dual-averaging``); a
-diagonal mass matrix is a change of coordinates, so the scaled integrator
-reproduces a hand-written mass-matrix leapfrog; and the effective sample
-size estimator recovers a known integrated autocorrelation time. Then the
-statistics: the acceptance lands at its target, the adapted chain and the
-fixed one agree on the posterior within Monte Carlo error, and what a draw
-costs in gradients is reported for both (issue #333).
-
-:class:`~snakes_and_ladders.sample.hmc.Adaptation` records the measurement that
-shaped the module: on a locally quadratic target the acceptance is a cliff in
-the step size, and dual averaging at a single-proposal statistic oscillates
-across it. The step jitter and the dual-averaging gain are set from that
-measurement, and the tests below pin what they achieve rather than the
-constants.
+Arithmetic first: dual averaging is Hoffman & Gelman's line for line
+(``eq:dual-averaging``); a diagonal mass matrix is a change of coordinates
+(a hand-written mass-matrix leapfrog); the ESS estimator recovers a known
+autocorrelation time. Then: acceptance lands at target, adapted and fixed
+chains agree within Monte Carlo error, and cost per draw in gradients is
+reported (issue #333). On a locally quadratic target acceptance is a cliff in
+the step (:class:`~snakes_and_ladders.sample.hmc.Adaptation`); the jitter and
+gain come from that measurement, and what they achieve is pinned.
 """
 
 from __future__ import annotations
@@ -170,12 +163,9 @@ def test_the_scaled_objective_inverts_its_own_map() -> None:
 
 @pytest.mark.oracle
 def test_the_effective_sample_size_recovers_an_ar1_autocorrelation_time() -> None:
-    # An AR(1) with coefficient phi has integrated autocorrelation time
-    # (1 + phi) / (1 - phi) in closed form, so the estimator has an exact
-    # answer to be held to. Realized ratios of estimate to truth over ten
-    # seeds at 20,000 draws: 0.94 to 1.02 at phi = 0, 0.89 to 1.04 at 0.5,
-    # 0.83 to 1.12 at 0.9 -- the truncation is a Monte Carlo estimate and
-    # the bound below is its spread, not a claim of exactness.
+    # AR(1): time (1 + phi) / (1 - phi) exactly. Estimate/truth over ten seeds
+    # at 20,000 draws: 0.94-1.02 (phi 0), 0.89-1.04 (0.5), 0.83-1.12 (0.9);
+    # the bound is the truncation's spread.
     def check(phi: float) -> None:
         n = 20_000
         tau = (1.0 + phi) / (1.0 - phi)
@@ -303,12 +293,9 @@ def _pooled_acceptance(objective: Objective, seeds: range, n_samples: int) -> fl
 
 @pytest.mark.smoke
 def test_the_adapted_acceptance_lands_at_its_target_on_the_gaussian() -> None:
-    # The contract: a 300-proposal warm-up from a step of 0.05, and the
-    # drawn chain accepts at the target. Pooled over 20 seeds, since one
-    # seed's rate at 400 draws has a binomial sd of 0.024 before the
-    # step's own spread across seeds (0.15 on a mean of 1.09) is counted.
-    # Realized 0.650 against 0.65; the per-seed rates ran 0.578 to 0.758
-    # with a sd of 0.050.
+    # 300-proposal warm-up from 0.05; pooled over 20 seeds (one seed's binomial
+    # sd 0.024, step spread 0.15 on 1.09). Realized 0.650 against 0.65; per
+    # seed 0.578 to 0.758, sd 0.050.
     pooled = _pooled_acceptance(GAUSSIAN, range(20), 400)
 
     assert abs(pooled - TARGET) < 0.05, pooled
@@ -319,12 +306,9 @@ def test_the_adapted_acceptance_lands_at_its_target_on_the_gaussian() -> None:
 def test_the_adapted_acceptance_lands_at_its_target_on_the_four_taxon_posterior(
     n_seeds: int,
 ) -> None:
-    # The same contract on a real posterior: five log branch lengths whose
-    # warm-up masses span 5 to 125, so the unit-mass chain the fixed sampler
-    # runs has to take the stiffest coordinate's step on every one of them.
-    # Realized 0.678 over 3 seeds at 300 draws (0.633 to 0.750) and 0.673
-    # over 20 (0.573 to 0.750, sd 0.049); the adapted step ran 0.98 +/- 0.16
-    # across the 20 seeds.
+    # Five log branch lengths, warm-up masses 5 to 125. Realized 0.678 over 3
+    # seeds (0.633-0.750), 0.673 over 20 (0.573-0.750, sd 0.049); step
+    # 0.98 +/- 0.16.
     pooled = _pooled_acceptance(_four_taxon_posterior(), range(n_seeds), 300)
 
     assert abs(pooled - TARGET) < 0.05, pooled
@@ -338,11 +322,7 @@ def _agreement(
 ) -> tuple[HmcChain, HmcChain]:
     """An adapted chain and a fixed-parameter chain of the same length, and their agreement.
 
-    Means must agree within three standard errors, each from the chain's own
-    effective sample size; so must the spreads, whose standard error is
-    ``sd / sqrt(2 ESS)``. The fixed chain is the oracle --- the sampler every
-    committed result used --- and the adapted one may be more efficient but
-    not different.
+    Means and spreads (``sd / sqrt(2 ESS)``) within three errors; fixed is the oracle.
     """
     adapted = sample(
         objective,
@@ -380,20 +360,11 @@ def _agreement(
 
 @pytest.mark.oracle
 def test_the_adapted_chain_agrees_with_the_fixed_chain_and_the_exact_gaussian() -> None:
-    # Two oracles: the fixed-parameter chain, which is what every committed
-    # result used, and the closed-form mean and covariance behind both. The
-    # delta-method interval of #268 is exact here (a Gaussian's Hessian is
-    # its precision), so both chains' spreads are held to it as well.
-    #
-    # Realized at 2000 draws: means within 1.83 and 0.03 standard errors
-    # of each other, spreads within 0.54 and 0.28; the adapted chain's
-    # spread is 1.009 and 1.008 of the exact one, the fixed chain's 0.996
-    # and 1.018. The warm-up's mass diagonal is 0.60 and 1.81 against the
-    # marginal precisions 0.5 and 2.0. Effective samples per gradient:
-    # adapted 0.099 and 0.105 against fixed 0.098 and 0.015 -- the fixed
-    # chain at a step of 0.25 over 12 leapfrog steps accepts at 0.989 and
-    # spends 13 gradients per proposal to move the stiff coordinate by
-    # less than its width, 459 effective draws of 2000.
+    # Oracles: the fixed chain and the closed form (#268's interval is exact
+    # here). At 2000 draws: means 1.83 and 0.03 errors apart, spreads 0.54 and
+    # 0.28; spreads/exact adapted 1.009, 1.008, fixed 0.996, 1.018; mass 0.60,
+    # 1.81 against 0.5, 2.0. ESS per gradient: adapted 0.099, 0.105; fixed
+    # 0.098, 0.015 (step 0.25 x 12, acceptance 0.989, 459 of 2000).
     adapted, fixed = _agreement(
         GAUSSIAN, fixed_step=0.25, fixed_steps=12, n_samples=2000
     )
@@ -420,23 +391,12 @@ def test_the_adapted_chain_agrees_with_the_fixed_chain_and_the_exact_gaussian() 
 def test_the_adapted_chain_agrees_with_the_fixed_chain_on_the_four_taxon_posterior() -> (
     None
 ):
-    # The fixed chain runs at unit mass with the step the stiffest branch
-    # allows; the adapted one at the warm-up's metric. Same posterior, same
-    # Monte Carlo error bound as the Gaussian case, and the #268 interval --
-    # the delta-method standard error at the posterior mode -- reported beside
-    # both chains' spreads, since on a tree it is an approximation the chain
-    # checks.
-    #
-    # Realized at 600 draws: means within 1.77 standard errors on every
-    # branch, spreads within 2.84 -- the fixed chain's stiffest branch has
-    # 102 effective draws, so its spread's standard error is the wide one.
-    # Sampled spread over the Laplace interval: adapted 1.01 to 1.13, fixed
-    # 0.99 to 1.08. Effective samples per gradient on the slowest branch:
-    # adapted 0.038 against fixed 0.019, and the fixed chain's fastest
-    # branch is antithetic at 0.58 (3121 effective draws of 600) while its
-    # slowest has 102. The warm-up's masses span 5 to 124; the unit-mass
-    # chain at a step of 0.1 accepts at 0.873 and moves every branch at the
-    # stiffest one's step.
+    # Unit mass at the stiffest branch's step against the warm-up metric; the
+    # #268 interval reported beside both. At 600 draws: means within 1.77
+    # errors, spreads 2.84 (fixed stiffest ESS 102). Spread/Laplace: adapted
+    # 1.01-1.13, fixed 0.99-1.08. ESS per gradient, slowest branch: 0.038
+    # against 0.019; fixed fastest antithetic (3121 of 600). Masses 5 to 124;
+    # unit mass at 0.1 accepts 0.873.
     posterior = _four_taxon_posterior()
     adapted, fixed = _agreement(posterior, fixed_step=0.1, fixed_steps=5, n_samples=600)
 
@@ -477,36 +437,15 @@ def test_the_adapted_chains_marginals_are_the_exact_gaussians_within_three_error
     """The warm-up's own chain against the closed-form marginals, at three
     Monte Carlo standard errors.
 
-    The referee is the target: `AnalyticGaussian` carries the mean and the
-    covariance, so each marginal mean and each marginal variance has an exact
-    value and a standard error the chain itself supplies --- ``sd / sqrt(ESS)``
-    for a mean, and for a variance the standard error of the squared
-    deviations at *their* effective sample size, which is the smaller number
-    (320 and 406 against 2,659 and 2,171 here) and the one a bound taken from
-    the mean's would understate.
-
-    The `Adaptation` is built here rather than shared, so what is judged is a
-    warm-up run end to end: 300 proposals, target 0.80, jitter 0.4, from a
-    step of 0.05. It settles on a step of **0.9952** and a mass diagonal of
-    **0.862 and 2.688** against the marginal inverse variances 0.5 and 2.0 ---
-    a variance over the first window's 75 draws, so it recovers the *order*
-    of the two coordinates' stiffness and not their values --- and reports a
-    warm-up acceptance of **0.765** for 1,800 of the chain's 9,000 gradients.
-
-    Realized deviation in standard errors, at 1,200 draws: means **2.17** and
-    **0.06**, variances **0.36** and **0.57**, all against a bound of 3.0.
-    Sampled mean (1.0596, -1.9990) against (1, -2); sampled variance (2.0621,
-    0.5211) against (2.0, 0.5).
-
-    Those figures are the reference host's. The chain is seeded, but its
-    last bits follow the code path MKL picks for the CPU --- ``MKL_CBWR``
-    alone moves them --- and one bit of an acceptance probability moves the
-    dual-averaged step and from there every trajectory. Under
-    ``MKL_CBWR=COMPATIBLE``, which reproduces a GitHub runner's chain bitwise
-    (#895), the step is 1.1013, the warm-up acceptance 0.770, and the
-    deviations 0.04 and 1.16 for the means and 0.33 and 0.73 for the
-    variances; under ``MKL_CBWR=AVX2``, 1.0562, 0.769, 0.78 and 0.62, 0.94
-    and 0.70. The same claim, on three chains.
+    Errors from the chain: ``sd / sqrt(ESS)`` for a mean, the squared
+    deviations' own ESS for a variance (320 and 406 against 2,659 and 2,171).
+    Warm-up: 300 proposals, target 0.80, jitter 0.4, from 0.05; step 0.9952,
+    mass 0.862 and 2.688 (against 0.5, 2.0: order, not value), acceptance
+    0.765, 1,800 of 9,000 gradients. At 1,200 draws: means 2.17 and 0.06,
+    variances 0.36 and 0.57 errors (3.0); means (1.0596, -1.9990), variances
+    (2.0621, 0.5211). MKL's code path moves the last bits (#895):
+    ``MKL_CBWR=COMPATIBLE`` (a runner, bitwise) step 1.1013, acceptance 0.770,
+    0.04, 1.16, 0.33, 0.73; ``AVX2`` 1.0562, 0.769, 0.78, 0.62, 0.94, 0.70.
     """
     below_the_cliff = sample(
         GAUSSIAN,
@@ -578,34 +517,14 @@ def _largest_energy_errors(target: float) -> tuple[list[float], float]:
 def test_the_energy_error_and_not_the_acceptance_rate_says_the_step_is_safe() -> None:
     """Two warm-ups that each land where they were asked, one on the cliff.
 
-    **The energy error, not the acceptance rate, is what says the step is
-    safe** (`opt/CLAUDE.md`). At a target of 0.80 the adapted step sits below
-    the stability limit; at 0.65 --- the target the rest of this module runs
-    --- dual averaging lands on the cliff `Adaptation` documents, and the
-    chain's largest energy error is three orders of magnitude larger while
-    its acceptance is where it was asked to be.
-
-    **Pooled over five seeds, because one chain's largest energy error is
-    one draw from a heavy tail** (#895). The claim was a single chain's,
-    seed 729, where the reference host measured 27.78 and 1.190e+05. A GitHub
-    runner measured 426.85 on the same seed, reproduced bitwise here under
-    ``MKL_CBWR=COMPATIBLE``: MKL's code path moves the chain's last bits, and
-    the chain's largest error is a function of all of them. Across the five
-    seeds the 0.80 chain's largest error exceeds 100 on one under
-    ``MKL_CBWR=COMPATIBLE`` (426.85) and one under ``MKL_CBWR=AVX2`` (153),
-    and the single-chain ratio falls to 617 and 372, so neither was a
-    property of the sampler; the median over the five is.
-
+    The energy error, not acceptance, says the step is safe (`opt/CLAUDE.md`).
+    Pooled over five seeds (#895): seed 729 alone read 27.78 against
+    1.190e+05 here, 426.85 on a runner (``MKL_CBWR=COMPATIBLE``, bitwise).
     Medians of the largest energy error, 0.80 against 0.65: 20.88 against
-    9.367e+04 on the reference host (ratio 4,486), 37.98 against 1.123e+05
-    under ``MKL_CBWR=COMPATIBLE`` (2,957), 23.55 against 7.513e+04 under
-    ``MKL_CBWR=AVX2`` (3,190). The rates are judged as
-    `test_the_adapted_acceptance_lands_at_its_target_on_the_gaussian` judges
-    one, pooled and within 0.05 of the target: 0.841 and 0.621 on the
-    reference host, 0.825 and 0.609 under ``COMPATIBLE``, 0.822 and 0.627
-    under ``AVX2``. A single chain's rate at 0.65 ran 0.555 to 0.665 across
-    the fifteen chains, so the ``> 0.65`` the single-chain claim asserted
-    held on one of them.
+    9.367e+04 (ratio 4,486); ``COMPATIBLE`` 37.98 against 1.123e+05 (2,957);
+    ``AVX2`` 23.55 against 7.513e+04 (3,190). Pooled rates within 0.05 of
+    target: 0.841/0.621, 0.825/0.609, 0.822/0.627; single chains at 0.65 ran
+    0.555 to 0.665.
     """
     safe, safe_rate = _largest_energy_errors(0.80)
     diverging, diverging_rate = _largest_energy_errors(TARGET)

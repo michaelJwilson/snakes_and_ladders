@@ -1,31 +1,14 @@
 """The two cluster control arms: the oracle's moves, keyed, and what they cost.
 
-Issue #706, plan steps 3 and 4. A control arm asks one question --- *does a
-learned schedule beat a declared one for this move?* --- so the arm is worth
-nothing until its declared-schedule control is shown to be the classical
-method itself. Four kinds of claim, in the order of how much they prove:
-
-* **the moves are ``potts_mcmc``'s, not copies.** Above zero temperature
-  ``propose`` and a direct ``wolff_sweep`` or ``swendsen_wang_sweep`` call on
-  an identically seeded generator return the same labelling **bitwise**. So
-  nothing here has to be kept in step with an oracle: the oracle is what runs,
-  and the tests below pin the wrapping rather than the physics;
-* **zero temperature is exact.** The bond probability ``1 - exp(-J / T)`` goes
-  to one, so a cluster is a connected component of the like-coloured subgraph
-  --- which this file computes by its own breadth-first search, never by the
-  union-find the moves use --- and the accept step keeps only a recolouring
-  that does not lower the score. That limit is where a cluster move is
-  checkable against something rather than against a distribution;
-* **the arm is the classical run.** The control walking `ground_state`'s
-  declared exponential ladder is statistically indistinguishable from
-  ``run_swendsen_wang`` and ``run_wolff`` over 32 seeds, in the energy it
-  reaches *and* in the site visits it spends. Marked ``release``: the four
-  comparisons are seconds each, not the per-PR cap;
-* **the prices and the features are the arm's.** A Swendsen-Wang pass costs
-  `ground_state`'s ``visits_per_sweep`` exactly, a Wolff step its realized
-  cluster, and each arm's feature columns are the ones its move set and ladder
-  let vary --- which is the gauge rule
-  `learn.environment.Environment` states, held per arm rather than on average.
+Issue #706, plan steps 3 and 4. The moves are ``potts_mcmc``'s: above zero
+temperature ``propose`` equals a direct ``wolff_sweep`` or
+``swendsen_wang_sweep`` bitwise. At zero temperature a cluster is a
+like-coloured component, computed here by breadth-first search, never the
+moves' union-find, and a recolouring is kept only if the score does not fall.
+The arm is the classical run: over 32 seeds the declared ladder is
+indistinguishable from ``run_swendsen_wang`` and ``run_wolff`` in energy and
+site visits (``release``). A pass costs ``visits_per_sweep``, a Wolff step its
+cluster, and each arm's features obey `learn.environment.Environment`'s gauge rule.
 """
 
 from __future__ import annotations
@@ -127,10 +110,7 @@ def _arm(
 def _component(labels: np.ndarray, graph: PottsGraph, root: int) -> set[int]:
     """The root's like-coloured connected component, by breadth-first search.
 
-    Deliberately not ``potts_keyed.monochrome_partition``: that is the
-    union-find the moves themselves run, so reading the answer from it would
-    compare an implementation with itself. An adjacency walk from the root is
-    the independent statement of what a component is.
+    Not ``monochrome_partition``, the moves' own union-find.
     """
     incident: dict[int, list[int]] = {node: [] for node in range(graph.n_nodes)}
     for first, second in graph.edges:
@@ -162,9 +142,7 @@ def test_both_moves_satisfy_the_seam_the_environment_takes() -> None:
 def test_a_cluster_kind_without_its_move_is_refused_at_construction() -> None:
     """An arm that cannot take half its actions is a misconfigured experiment.
 
-    Refused where it is configured rather than at the first `step`: the arm's
-    kinds and its moves are given together, so a mismatch is knowable then and
-    a failure a hundred decisions in says nothing about which.
+    Refused at construction, where the mismatch is knowable.
     """
     graph, field, coupling = _lattice(4, 3)
     with pytest.raises(ValueError, match="needs its move passed"):
@@ -182,9 +160,7 @@ def test_a_cluster_kind_without_its_move_is_refused_at_construction() -> None:
 def test_a_move_built_on_another_lattice_is_refused() -> None:
     """Two callers scoring one problem is the property this ticket exists for.
 
-    A move holds its own graph, so nothing but this check stops an arm being
-    built with a move on a lattice of another size --- and the energies would
-    then disagree with no error to read.
+    A move on another lattice would disagree on energies with no error.
     """
     graph, field, coupling = _lattice(4, 3)
     other, other_field, _ = _lattice(6, 3)
@@ -216,10 +192,7 @@ def test_a_move_and_a_field_of_different_heights_are_refused() -> None:
 def test_a_wolff_step_is_potts_mcmcs_own_sweep_bitwise() -> None:
     """Above zero temperature the move *is* ``wolff_sweep``, root and colour aside.
 
-    The claim this file rests on: there is no second Wolff kernel to keep in
-    step with an oracle. What the wrapper adds is the root and the colour,
-    moved out of the sweep's generator and into the action, and the ``beta`` the
-    rung means --- and a wrong one of either is exactly what this catches.
+    The wrapper adds the root, the colour and the rung's ``beta``; this catches either.
     """
 
     def check(temperature: float) -> None:
@@ -260,12 +233,7 @@ def test_a_wolff_step_is_potts_mcmcs_own_sweep_bitwise() -> None:
 def test_a_niedermayer_step_is_potts_mcmcs_own_sweep_bitwise() -> None:
     """The same for issue #756's arm, and at ``T = 0`` as well.
 
-    Where `WolffMove` writes the zero-temperature limit out --- ``beta = 1/0``
-    is not a number its sweep can carry --- this one passes ``math.inf``
-    through, because `niedermayer_sweep` takes it: a bond of positive energy
-    margin is certain rather than drawn, and a step that lowers the score is
-    refused without a uniform. So there is one kernel at every temperature and
-    this asserts it at four, the zero included.
+    ``math.inf`` passes through `niedermayer_sweep`: one kernel, four temperatures.
     """
 
     def check(temperature: float) -> None:
@@ -310,9 +278,7 @@ def test_a_swendsen_wang_pass_is_potts_mcmcs_own_sweep_bitwise(
 ) -> None:
     """The same for the bond pass, which the action does not parameterize at all.
 
-    On both routes, each against the sweep on the same route: the arm adds no
-    kernel of its own, and issue #754's Rust pass is the sweep's backend
-    rather than a second implementation reached from here.
+    On both routes; #754's Rust pass is the sweep's backend, not a second kernel.
     """
 
     def check(temperature: float) -> None:
@@ -350,11 +316,7 @@ def test_a_swendsen_wang_pass_is_potts_mcmcs_own_sweep_bitwise(
 def test_keys_draw_the_same_cluster_size_law_as_seeds() -> None:
     """A ``blake2b`` digest used as a seed does not bias the move it feeds.
 
-    The one thing the bitwise test above cannot show: it matches one draw to
-    one draw, while the claim is that the *keys* induce the move's own law over
-    its uniforms. Read as the cluster-size distribution, since that is what the
-    bond probability determines. Measured over 4,000 of each: total variation
-    0.005, chi-square p = 0.78.
+    Cluster sizes over 4,000 of each: total variation 0.005, chi-square p = 0.78.
     """
     graph, field, _ = _lattice(4, 2)
     offsets, neighbours, couplings = graph.compressed_adjacency()
@@ -401,12 +363,8 @@ def test_keys_draw_the_same_cluster_size_law_as_seeds() -> None:
 
 @pytest.mark.oracle
 def test_a_wolff_step_at_zero_flips_the_roots_whole_component() -> None:
-    """The ``T -> 0`` limit: every like-coloured bond active, so the cluster is
-    the component, and the recolouring survives only if it does not lower the
-    score.
-
-    Both halves are checked against this file's own breadth-first search and
-    its own field sum, so nothing is read from the move's union-find.
+    """The ``T -> 0`` limit: the cluster is the component, and the recolouring
+    survives only if it does not lower the score, by this file's own search.
     """
 
     def check(side: int) -> None:
@@ -439,12 +397,7 @@ def test_a_wolff_step_at_zero_flips_the_roots_whole_component() -> None:
 def test_swendsen_wang_at_zero_recolours_every_component_as_a_block() -> None:
     """Every cluster is a like-coloured component, so it moves or it does not.
 
-    The partition is not asserted directly --- a component that keeps its
-    colour is indistinguishable from one merged with a neighbour of that colour
-    --- so what is asserted is the property that identifies it: each
-    pre-move component carries one label afterwards, and no site outside it
-    changed on its account. Together with the score never falling, that is the
-    ``beta -> inf`` bond pass.
+    Each pre-move component carries one label after; nothing outside it moved.
     """
 
     def check(side: int) -> None:
@@ -470,10 +423,7 @@ def test_swendsen_wang_at_zero_recolours_every_component_as_a_block() -> None:
 def test_the_bond_probability_is_the_oracles_and_exactly_one_at_zero() -> None:
     """``1 - exp(-J / T)``, and the limit taken rather than divided.
 
-    ``1 / 0`` is not a float and the value it stands for is one, which is the
-    whole reason zero temperature is written out in
-    :mod:`snakes_and_ladders.sample.potts_keyed` rather than passed through as
-    ``beta``.
+    ``1 / 0`` is not a float, so `potts_keyed` writes zero temperature out.
     """
     ladder = (0.0, 0.25, 1.0, 4.0)
     environment, _, _ = _arm(4, 3, (MoveKind.SWENDSEN_WANG,), ladder=ladder)
@@ -498,9 +448,7 @@ def test_the_score_after_a_cluster_move_is_the_negated_energy_bitwise(
 ) -> None:
     """A cluster move lands on a labelling ``sim.potts.energies`` scores alike.
 
-    `test_potts_nd.py` pins `score` against `-energies` over drawn labellings;
-    this pins it over the labellings the *cluster moves reach*, which is the
-    set a cluster arm actually visits and is not the same set.
+    Over the labellings cluster moves reach, not drawn ones (`test_potts_nd.py`).
     """
     side = 6
     environment, graph, field = _arm(side, 3, (kind,))
@@ -523,9 +471,7 @@ def test_the_score_after_a_cluster_move_is_the_negated_energy_bitwise(
 def test_a_swendsen_wang_pass_costs_one_sweep_and_a_wolff_step_its_cluster() -> None:
     """`ground_state`'s units, move by move.
 
-    A cluster move undercharged is a comparison that hands it a free lattice,
-    which is the error the unit exists to prevent. The Wolff charge is read
-    against this file's own component at ``T = 0``, where the cluster is known.
+    The Wolff charge is read against this file's own component at ``T = 0``.
     """
     side = 6
     environment, graph, _ = _arm(side, 3, tuple(MoveKind))
@@ -552,9 +498,7 @@ def test_a_swendsen_wang_pass_costs_one_sweep_and_a_wolff_step_its_cluster() -> 
 def test_visits_is_the_charge_the_move_itself_reports(kind: MoveKind) -> None:
     """The realized charge, not an average of it.
 
-    Both readings grow the same cluster because both are keyed on
-    ``(state, action)``, which is what lets a budget be debited by the move
-    that will run rather than by one like it.
+    Keyed on ``(state, action)``, both readings grow the same cluster.
     """
     side = 6
     environment, graph, field = _arm(side, 3, (kind,))
@@ -583,13 +527,7 @@ def test_visits_is_the_charge_the_move_itself_reports(kind: MoveKind) -> None:
 def test_the_vectorized_gain_is_the_scalar_one_bitwise() -> None:
     """``_flip_gains`` equals ``_flip_gain`` to the last bit, over every pair.
 
-    The optimization that made a Wolff decision 9.1x cheaper replaced a call
-    per candidate with one gather, and `CLAUDE.md`'s rule on that is bitwise is
-    the target and the declared tolerance the floor. Here bitwise is available
-    --- the agreement term is a count, so summing it over the padded row under
-    the mask gives the same integer as over the compacted row --- so this pins
-    it rather than a tolerance, on all 144 sites times two targets at once and
-    one at a time.
+    The gather made a Wolff decision 9.1x cheaper; counts under a mask sum alike.
     """
     side = 6
     environment, _, _ = _arm(side, 3, (MoveKind.FLIP, MoveKind.SWEEP))
@@ -618,11 +556,7 @@ def test_the_vectorized_gain_is_the_scalar_one_bitwise() -> None:
 def test_a_cluster_move_replays_and_another_key_does_not(kind: MoveKind) -> None:
     """``step`` is a pure function, and not by being constant.
 
-    The obstacle #706 had to clear before a Monte Carlo move could be an
-    action at all: 200 replays of one pair give one successor, so
-    `learn.exact`'s enumeration stays valid --- and an environment with
-    different key material reaches a different one on at least one state, so
-    the determinism is the keyed kind and not a move that never moves.
+    200 replays give one successor (#706); other key material moves at least one state.
     """
     side = 6
     environment, graph, field = _arm(side, 3, (kind,))
@@ -693,11 +627,7 @@ def test_each_arm_carries_the_columns_that_can_vary_in_it(
 ) -> None:
     """The gauge rule, held per arm rather than on average.
 
-    The Swendsen-Wang arm is the case that forces it: its actions differ in
-    their rung alone, so a gain column would be constant across every action
-    at a state and would sit in the direction the softmax cancels. Carrying it
-    anyway would leave a weight nothing identifies, and dropping it is what
-    makes the arm's two columns the two readings a rung means.
+    Swendsen-Wang actions differ in rung alone, so a gain column would be constant.
     """
     environment, _, _ = _arm(6, 3, kinds)
     state = environment.reset(np.random.default_rng(6))
@@ -714,9 +644,7 @@ def test_each_arm_carries_the_columns_that_can_vary_in_it(
 def test_an_arm_with_nothing_to_prefer_is_refused() -> None:
     """One move at one rung offers one action, so there is nothing to learn.
 
-    Refused rather than served with a zero-column feature map: an arm whose
-    every action scores alike is a training run that cannot fail and cannot
-    succeed, and the cheapest place to say so is where it was configured.
+    Refused at configuration: such a run can neither fail nor succeed.
     """
     graph, field, coupling = _lattice(4, 3)
     with pytest.raises(ValueError, match="no feature column that varies"):
@@ -748,12 +676,7 @@ def _declared_control(
 ) -> tuple[list[float], list[int], Rung, Budget]:
     """The arm walking `ground_state`'s own exponential ladder, over seeds.
 
-    The ladder is the schedule's realized temperatures rather than
-    :data:`~snakes_and_ladders.learn.potts_nd.DEFAULT_LADDER`: the control has
-    to be the classical method, and the classical method's temperature at step
-    ``s`` is ``ExponentialTempSchedule(2.0, 0.05, steps)(s)``. A coarser ladder
-    would make this a comparison of two schedules rather than a recovery of
-    one.
+    ``ExponentialTempSchedule(2.0, 0.05, steps)(s)``, not ``DEFAULT_LADDER``.
     """
     graph, field, coupling = _lattice(side, n_states)
     alpha = np.asarray(ALPHA if n_states == 3 else (ALPHA[0], ALPHA[-1]))
@@ -817,26 +740,12 @@ def test_the_arm_walking_the_declared_ladder_is_its_classical_run(
 ) -> None:
     """The control *is* the classical method, in energy and in what it spends.
 
-    What the arm's whole question rests on. A learned schedule is worth
-    something only against a declared one, and a declared one measured here
-    that disagreed with `search.ground_state`'s run would mean the two callers
-    are not running one method --- so the disagreement, not the learning, would
-    be the finding.
-
-    Measured at 144 sites, `q = 3`, the 200-sweep budget, over
-    :data:`COMPARISON_SEEDS` seeds: Swendsen-Wang reaches -263.5 +- 5.2 against
-    the run's -262.3 +- 5.8 (Welch p = 0.38) at an identical 134,400 site
-    visits, and Wolff -203.6 +- 13.2 against -206.5 +- 17.8 (p = 0.47) at
-    25,393 +- 7,584 against 26,328 +- 11,998 (p = 0.72). Wolff underspends the
-    budget by five sixths, which is the finding ``ground_state.run_annealed``
-    reports rather than a defect here.
-
-    The charge is read by the instrument the move's cost has. A
-    Swendsen-Wang pass costs a sweep whatever it draws, so every seed spends
-    the same number and *equality* is the claim --- a Welch test over two
-    constant samples is a division by zero, not a stronger check. A Wolff
-    step's cost is its realized cluster, so there the claim is distributional
-    like the energy.
+    144 sites, `q = 3`, 200 sweeps, :data:`COMPARISON_SEEDS` seeds.
+    Swendsen-Wang: -263.5 +- 5.2 against -262.3 +- 5.8 (Welch p = 0.38) at an
+    identical 134,400 visits, so visits are asserted equal (Welch would divide
+    by zero). Wolff: -203.6 +- 13.2 against -206.5 +- 17.8 (p = 0.47) at
+    25,393 +- 7,584 against 26,328 +- 11,998 visits (p = 0.72), a
+    five-sixths underspend that ``ground_state.run_annealed`` reports.
     """
     energy, spend, rung, budget = _declared_control(kind, 12, 3)
     runs = [

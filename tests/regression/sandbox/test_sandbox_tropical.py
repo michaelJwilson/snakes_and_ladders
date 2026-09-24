@@ -1,30 +1,13 @@
 """The tropical Grassmannian relaxation against enumeration and the Hadamard closed form.
 
-Issue #408. ``ROADMAP.md`` Stage 3 records the differentiable-topology half
-as blocked on an oracle. Two are used here.
-
-**Enumeration**, at 5 to 8 taxa, where every unrooted topology can be scored
-on the quartet surface: the relaxation at a corner is the discrete objective,
-the corner is a tree metric and the softmin's weight leakage is bounded, and
-gradient ascent is held to the enumerated maximum rather than to whether it
-improved.
-
-**The Hadamard conjugation**, ``eq:hadamard``, which on two-state data
-returns the tree's own branch lengths on its splits and zero elsewhere. Its
-metric is a point of the tropical Grassmannian computed by a route that
-shares no algebra with :func:`~snakes_and_ladders.likelihood.distance.tree_distances`
---- a Walsh--Hadamard transform of pattern frequencies against a walk over
-the tree --- so the four-point condition holding on it, to ``1e-12``, is a
-statement about the model rather than about either implementation.
-
-**The corner tolerance is relative and is derived.**
-:func:`~snakes_and_ladders.sandbox.tropical.temperature_for` returns the
-``tau`` at which the softmin leaks under ``1e-11`` of score off a corner's own
-resolutions; what is then left is float64 rounding of a sum over quartets, at
-``3.8e-16`` of the value across 5, 6, 7 and 8 taxa. The agreement is pinned
-*relatively*, for the reason root ``CLAUDE.md`` gives about a log-likelihood:
-at 340,000 in magnitude the absolute ``1e-11`` of the Gumbel-softmax half is
-3 ulp rather than a defect.
+Issue #408; ``ROADMAP.md`` Stage 3's missing oracle. Enumeration at 5 to 8
+taxa: at a corner the relaxation is the discrete objective and a tree metric,
+leakage is bounded, and ascent is held to the enumerated maximum. The
+Hadamard conjugation (``eq:hadamard``) gives a metric sharing no algebra with
+:func:`~snakes_and_ladders.likelihood.distance.tree_distances`, on which the
+four-point condition holds to ``1e-12``. The corner tolerance is relative:
+at ``temperature_for``'s ``tau`` the leakage is under ``1e-11`` and the rest
+is rounding, ``3.8e-16`` of the value; at 340,000 an absolute ``1e-11`` is 3 ulp.
 """
 
 from __future__ import annotations
@@ -86,11 +69,8 @@ SEVEN_TAXA = "tree_search/release.yaml"
 #: half so both halves of the roadmap bullet state the same claim.
 SOFTMIN_TOLERANCE = 1e-11
 
-#: What is left once the softmin is under :data:`SOFTMIN_TOLERANCE`: float64
-#: rounding of a sum over ``C(n, 4)`` quartets. Measured at 2.9e-16, 3.0e-16,
-#: 3.4e-16 and 3.8e-16 of the value at 5, 6, 7 and 8 taxa, on fixtures whose
-#: scores span 25,000 to 340,000, and pinned here with a factor of 26 of
-#: headroom over the worst.
+#: Float64 rounding over ``C(n, 4)`` quartets: 2.9e-16, 3.0e-16, 3.4e-16,
+#: 3.8e-16 at 5-8 taxa (scores 25,000 to 340,000); 26x headroom over the worst.
 CORNER_RELATIVE_TOLERANCE = 1e-14
 
 #: Two D values inside this of each other are the same value: the quartet
@@ -99,11 +79,8 @@ CORNER_RELATIVE_TOLERANCE = 1e-14
 #: (``search/CLAUDE.md``).
 CONVERGENCE_TIE = 1e-6
 
-#: Sites of the eight-taxon fixture the quartet table is fitted on. The
-#: fixture declares 200,000, which is 3.91 s per four-taxon fit against 0.12 s
-#: here and 210 fits either way; the shortening is
-#: ``tests/regression/search/test_search_parsimony.py``'s, on the same fixture
-#: and the same seed.
+#: 1,000 of the declared 200,000 sites: 0.12 s against 3.91 s per fit, 210
+#: fits; the same shortening as `test_search_parsimony.py`.
 EIGHT_TAXON_SITES = 1000
 
 #: Ascent budget, fixed across every size so a recovery rate is comparable
@@ -141,11 +118,7 @@ class Instance:
 
 
 def _instance(name: str, n_sites: int | None = None) -> Instance:
-    """Load a fixture, fit its quartet table, and enumerate the quartet surface.
-
-    ``n_sites`` shortens the alignment the fixture declares; see
-    :data:`EIGHT_TAXON_SITES`.
-    """
+    """Load a fixture, fit its quartet table, and enumerate the quartet surface."""
     params, alignment = simulated_alignment(name, n_sites)
     k = params.k
     table = quartet_table(alignment, k)
@@ -303,12 +276,8 @@ def test_the_metric_scale_is_a_gauge(five_taxon: Instance, factor: float) -> Non
 def test_the_combinatorial_resolution_is_the_tropical_plucker_argmin(
     fixture_name: str,
 ) -> None:
-    # Two routes to a quartet's topology: the leaf bipartitions of the tree,
-    # and the argmin of the three pairing sums of its metric. The second is
-    # the tropical Plucker relation and is what the relaxation smooths, so
-    # the relaxation optimizes the topology only if the two agree. No fits
-    # here, so all 945 topologies at seven taxa are affordable per pull
-    # request.
+    # Leaf bipartitions against the argmin of the three pairing sums (the
+    # tropical Plucker relation); no fits, so all 945 seven-taxon topologies.
     params = load_fixture(fixture_name)
     names = sorted(_leaves(params.tau))
     quartets = quartet_indices(len(names))
@@ -421,11 +390,8 @@ def test_ascent_reaches_the_enumerated_maximum_from_random_metrics(
 def test_ascent_leaves_the_grassmannian_and_is_projected_back(
     five_taxon: Instance,
 ) -> None:
-    # F is optimized over the ambient space, not over the tree locus, so the
-    # point ascent stops at is generally not a tree metric. The claim is not
-    # that it stays on the locus -- the measured violation is 0.2 in units
-    # where the metric has mean 1 -- but that the answer read off it is
-    # still the enumerated maximum.
+    # Ascent leaves the tree locus (violation 0.2 at mean metric 1); the
+    # answer read off it is still the enumerated maximum.
     result = optimize(
         five_taxon.table,
         five_taxon.start(),
@@ -454,12 +420,8 @@ def _leaves(node: Topology) -> frozenset[str]:
 def test_the_hadamard_closed_form_lands_on_the_tropical_grassmannian(
     fixture_name: str,
 ) -> None:
-    # The exact spectrum of eq:hadamard, inverted, gives a weight per split
-    # -- including every split the tree does not have, which must come back
-    # zero. Summing those weights over the splits that separate two taxa
-    # reaches the metric by a route sharing no algebra with a walk over the
-    # tree, so the four-point condition holding on it is a statement about
-    # the model. The second oracle, and it needs no fit and no alignment.
+    # The inverted exact spectrum gives every split a weight, absent ones zero;
+    # summed per taxon pair it reaches the metric with no tree walk.
     params = load_fixture(fixture_name)
     names, spectrum = edge_spectrum(params.tau)
     recovered = hadamard_conjugation(expected_spectrum(spectrum))
@@ -498,14 +460,9 @@ def test_the_hadamard_metric_resolves_every_quartet_as_the_tree_does(
 def test_the_two_state_recoding_resolves_every_quartet_as_the_tree_does(
     five_taxon: Instance,
 ) -> None:
-    # A four-state Jukes-Cantor alignment reduces to the two-state model at
-    # `recoding_scale` of every branch length, so the metric the conjugation
-    # returns from the recoded alignment is a scale change the model
-    # produced rather than a constant multiplied in by hand. Asserted is what
-    # this site count supports: the resolutions, and the topology. The scale
-    # is an estimate here -- largest deviation from 2/3 of the truth 0.049 at
-    # 1,200 sites -- and the two tests above pin it exactly on the closed
-    # form's own spectrum instead.
+    # A four-state JC alignment is two-state at `recoding_scale`: resolutions
+    # and topology asserted; the scale is an estimate (0.049 off 2/3 at 1,200
+    # sites), pinned exactly on the closed form above.
     params = five_taxon.params
     recoded = dict(binary_recoding(five_taxon.alignment, five_taxon.k))
     names, spectrum = sequence_spectrum(recoded)
@@ -651,13 +608,9 @@ def test_the_relaxation_holds_at_six_taxa(six_taxon: Instance) -> None:
 def test_at_seven_taxa_the_top_two_of_the_quartet_surface_are_tied(
     seven_taxon: Instance,
 ) -> None:
-    # The negative result, pinned rather than described. This fixture's
-    # internal branches are ~0.02 (issue #177), and the top two quartet
-    # scores come out 0.0117 apart in 339,982 -- 3.4e-8 relative, inside the
-    # convergence of the fits that produced them. "The enumerated argmax" is
-    # therefore not a target any method can be held to here, and neither the
-    # relaxation nor neighbor joining returns it. Both return the generating
-    # topology, which is the claim that survives.
+    # Internal branches ~0.02 (#177): the top two scores differ by 0.0117 in
+    # 339,982 (3.4e-8), inside fit convergence, so no method is held to the
+    # argmax; both return the generating topology.
     ordered = sorted(seven_taxon.scores.values(), reverse=True)
     separation = (ordered[0] - ordered[1]) / abs(ordered[0])
     assert separation < CONVERGENCE_TIE, (

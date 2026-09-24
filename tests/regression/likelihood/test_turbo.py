@@ -1,25 +1,12 @@
 """Turbo decoding: what it is held to, and where it departs from the exact answer.
 
-The joint graph has cycles, so the iteration is the Bethe approximation and
-equality against the exact bitwise MAP would be a false assertion. Four
-things are asserted instead, and each names its referee.
-
-* *Enumeration over all ``2 ** K`` messages* referees the direction and the
-  size of the gap: the iteration's bit error rate falls from its first
-  iteration and stays within a stated factor of the exact MAP's.
-* *The all-zero symmetry* referees the shortcut every measurement past the
-  encoder's reach rests on, per realization on a real codeword.
-* *The uncoded closed form* ``Q(sqrt(2 E_b / N_0))`` referees the waterfall:
-  a coded curve above it at the operating point is a code buying nothing.
-* *The binomial interval the frame count supports* referees the
-  monotonicity claim, stated in the weak form the measurement supports, with
-  the departure reported in the docstring of the test that measures it.
-
-The tiers are set from the measured wall clock on the reference host: the
-CI-tier tests here cost 4.4 s together, and the two waterfalls fell from
-12.1 s and 182 s to **0.46 s** and **6.0 s** with issue #754's Rust trellis.
-The stress waterfall runs both backends, so it is 11.8 s and the ratio is
-the port's, not the host's; the release one runs the default.
+The joint graph has cycles (Bethe), so exactness is not asserted. Referees:
+enumeration over ``2 ** K`` messages (the gap to the exact MAP falls and stays
+bounded); the all-zero symmetry, per realization; the uncoded closed form
+``Q(sqrt(2 E_b / N_0))``; and the binomial interval of the frame count for
+monotonicity, stated weakly. CI tests cost 4.4 s; the waterfalls fell from
+12.1 s and 182 s to 0.46 s and 6.0 s with #754's Rust trellis (stress runs
+both backends, 11.8 s).
 """
 
 from __future__ import annotations
@@ -43,11 +30,8 @@ from snakes_and_ladders.sim.convolutional import TurboCode, TurboParams, turbo_e
 from snakes_and_ladders.sim.fixtures import Fixture, fixture
 from snakes_and_ladders.sim.ldpc import BinaryInputGaussianChannel
 
-#: The exact bitwise MAP's bit error rate, times this, bounds the iteration's
-#: at the enumerable size. Measured at 1.26, 1.66, 1.74 and 3.20 over the
-#: four declared points of the CI fixture: a K = 12 interleaver is far too
-#: short for the iteration to approach the MAP. A bound on the *gap*, so the
-#: claim is that the iteration decodes the same code, not that it is optimal.
+#: Bounds the iteration's bit error rate by this times the exact MAP's; measured
+#: 1.26, 1.66, 1.74, 3.20 over the four CI points (K = 12): a bound on the gap.
 MAP_GAP_FACTOR = 4.0
 
 #: How many one-sigma binomial intervals an increase in the ensemble bit
@@ -70,10 +54,7 @@ def _transmit(
 def _increase_within_noise(rates: ErrorRates) -> float:
     """The largest rise across iterations, in one-sigma binomial intervals.
 
-    Zero when the ensemble rate never rises. The interval is
-    :attr:`ErrorRates.bit_error_interval`, which understates the true spread
-    because a turbo failure is bursty, so the comparison is conservative in
-    the direction that would fail.
+    Bursty failures make the interval understate the spread: conservative.
     """
     rise = np.diff(rates.bit_error_rate)
     interval = rates.bit_error_interval[:-1]
@@ -90,16 +71,7 @@ def _increase_within_noise(rates: ErrorRates) -> float:
 def test_the_iteration_reduces_the_bit_error_rate_towards_the_exact_map() -> None:
     """Iteration 8 beats iteration 1 and stays within `MAP_GAP_FACTOR` of the MAP.
 
-    Without the first the iteration could be doing nothing; without the
-    second it could be converging to the wrong code's answer. Neither is
-    equality, because the joint graph has cycles: the ordering the
-    approximation must respect is what is asserted.
-
-    Per point the claim is *no worse*, because the fixture's 1,200 message
-    bits per point cannot separate 40 errors from 40: at 2 dB the first and
-    last iterations tie exactly. The strict improvement is asserted over the
-    four points together, where the sample is 4,800 bits and 306 errors
-    against 267.
+    Per point "no worse" (2 dB ties); strictly over all four: 306 against 267 of 4,800.
     """
     params = fixture("turbo", "ci").params
     code = params.code()
@@ -133,12 +105,7 @@ def test_the_iteration_reduces_the_bit_error_rate_towards_the_exact_map() -> Non
 def test_the_joint_posterior_is_the_enumerated_one_where_the_two_chains_agree() -> None:
     """At high signal the iteration's posterior ratios are the exact ones.
 
-    The regime in which the approximation is exact, which
-    ``likelihood/CLAUDE.md`` says an approximate evaluator must state: when
-    every message bit is decided far from zero, the cycles carry no ambiguity
-    around them and the Bethe beliefs are the true marginals. The sign
-    agreement is asserted and the ratios are not, since Bethe over-counts the
-    evidence around a cycle.
+    The exact regime (``likelihood/CLAUDE.md``): signs asserted; Bethe over-counts ratios.
     """
     params = fixture("turbo", "ci").params
     code = params.code()
@@ -161,11 +128,8 @@ def test_the_joint_posterior_is_the_enumerated_one_where_the_two_chains_agree() 
 # --- the structure of one decoding ----------------------------------------------
 
 
-#: Posterior ratios, in nats, the turbo decoder and BCJR may differ by where
-#: the two compute the same quantity. Declared at 1e-12 and realized at
-#: 1.8e-14 over the 100 draws below: the second pass re-forms the same sums in
-#: a different order, so bitwise is not available, and the decisions are still
-#: held to equality.
+#: Declared 1e-12 nats, realized 1.8e-14 over 100 draws: the second pass
+#: reorders the sums; decisions are held to equality.
 BCJR_TOLERANCE = 1e-12
 
 #: Draws per declared point of the CI fixture.
@@ -180,36 +144,12 @@ def test_the_turbo_posterior_is_bcjr_on_the_first_constituent_alone(
 ) -> None:
     """With the second constituent carrying no evidence, the pair is one BCJR.
 
-    The rung below (issue #734): `convolutional.bcjr`, one pass over one
-    chain. The turbo decoder returns the second decoder's posterior
-    deinterleaved, so the two are compared by taking the second constituent's
-    evidence away --- its parity stream and its tail stream set to zero ratios,
-    which is the received word of a channel that erased them. That decoder then
-    learns nothing of its own: its extrinsic output on the message bits is
-    zero, its posterior is the systematic ratios plus the a priori ratios it
-    was handed, and deinterleaving returns
-    `L_sys + L_ext,1 = bcjr(trellis, systematic, parity_first).posterior_llr`.
-
-    This is where the exchange is pinned rather than the code. A decoder handed
-    the other's *posterior* instead of its extrinsic would return the
-    systematic ratios twice, so the identity holds only if `eq:extrinsic` is
-    subtracted exactly once.
-
-    Both backends are held to it: the constituent pass is
-    `convolutional.bcjr`'s rung and the identity is a statement about the
-    exchange, not about which implementation ran it.
-
-    Over the fixture's four points and 25 draws each, at `iterations = 8`: the
-    posteriors agree to 1.8e-14 against the `BCJR_TOLERANCE` declared, the
-    decisions on all 1,200 message bits agree exactly, and the iteration is
-    stationary --- one iteration and eight differ by 2.1e-14 --- because a zero
-    extrinsic comes back every time.
-
-    Where it stops is two streams away, and both are asserted. Erasing the
-    parity alone leaves the second decoder's tail ratios in, and those are bits
-    nothing else transmits: the identity fails by 18.9 nats. With the code
-    intact it fails by 51.9, which is what the second parity stream adds and
-    what the iteration exists to collect.
+    The rung below (#734). Zeroing the second parity and tail ratios leaves
+    `L_sys + L_ext,1 = bcjr(trellis, systematic, parity_first).posterior_llr`,
+    true only if eq:extrinsic is subtracted once; both backends. Over four
+    points x 25 draws: 1.8e-14, all 1,200 decisions equal, one and eight
+    iterations 2.1e-14 apart. Erasing parity alone fails by 18.9 nats; the
+    intact code by 51.9, what the second parity stream adds.
     """
     params = fixture("turbo", "ci").params
     code = params.code()
@@ -292,10 +232,7 @@ def test_the_per_iteration_run_is_the_capped_run_at_every_cap() -> None:
 def test_the_second_decoder_reads_the_first_decoders_systematic_stream() -> None:
     """No message bit crosses the channel twice: the streams partition the word.
 
-    The interleaver reorders what decoder two reads; it adds no evidence. A
-    decoder given a second independent copy of the systematic bits would
-    decode better than the code allows, and no error-rate test would
-    attribute that failure.
+    A second systematic copy would decode better than the code allows.
     """
     params = fixture("turbo", "ci").params
     code = params.code()
@@ -344,11 +281,7 @@ def test_a_word_of_the_wrong_length_or_a_zero_iteration_cap_is_refused() -> None
 def test_the_error_pattern_under_a_codeword_is_the_pattern_under_zero() -> None:
     """Per realization, on a real codeword, for the recursive encoder.
 
-    Issue #340 states the argument for the parity-check decoder; a turbo
-    code's encoder is recursive and its decoder a different message map, so
-    the property is re-checked here rather than inherited. It licenses
-    :func:`~snakes_and_ladders.likelihood.turbo.measure_error_rates` sending
-    the zero message at every length.
+    Re-checked, not inherited from #340; licenses `measure_error_rates`'s zero message.
     """
     params = fixture("turbo", "ci").params
     code = params.code()
@@ -400,17 +333,10 @@ def _waterfall(
 def test_the_waterfall_falls_below_the_uncoded_closed_form(backend: Backend) -> None:
     """The coded curve is under `Q(sqrt(2 E_b / N_0))` at every declared point.
 
-    It also falls with `E_b / N_0` and improves from the first iteration to
-    the last.
-
-    *The departure, reported rather than asserted:* the ensemble bit error
-    rate is **not** monotone in the iteration count. Over the six declared
-    points it rises between consecutive iterations at four of them --- the
-    largest rise 2.3e-3 at 0 dB, between iterations 7 and 8 --- and every
-    rise is inside one binomial interval of the 12,800 message bits the
-    point rests on. So the strong claim is not made: asserted is that the
-    last iteration beats the first and that no rise exceeds
-    `NOISE_INTERVALS` intervals.
+    It falls with `E_b / N_0` and improves first to last iteration. Not
+    monotone in iterations: rises at four of six points, largest 2.3e-3 at
+    0 dB (7 to 8), each inside one interval of 12,800 bits, so asserted: last
+    beats first, no rise over `NOISE_INTERVALS`.
     """
     # 12.1 s measured, so `stress` and not the CI tier. The CI-tier sibling
     # is the enumeration test above, at a size the budget holds.
@@ -434,10 +360,7 @@ def test_the_waterfall_falls_below_the_uncoded_closed_form(backend: Backend) -> 
 def test_the_release_waterfall_turns_where_the_ensemble_says() -> None:
     """At `K = 1024` the curve falls two orders of magnitude across the span.
 
-    It stays under the uncoded closed form throughout. The claim a short block
-    cannot carry: the interleaver gain grows with the block length, so the
-    turn is sharp at 1,024 and gradual at 256. The stress tier's monotonicity
-    departure applies here and is checked the same way.
+    Under the uncoded form; the turn sharpens with block length (1,024 against 256).
     """
     # 182 s measured over 1,200 decodings, so `release`: past both the 5- and
     # the 10-minute budgets `DEV.md` sets.
@@ -484,20 +407,10 @@ def test_the_iteration_recovers_the_planted_message_at_the_recorded_rate() -> No
     three-decimal record is recomputed to; 46, 23, 11 and 5 of 100 frames
     carried a wrong bit.
 
-    The path is the package's, end to end and with no oracle in it: a message
-    drawn from the fixture's seeded generator, `sim.convolutional.turbo_encode`
-    through both terminated constituents and the seeded interleaver,
-    `sim.ldpc`'s Gaussian channel at the `sigma` `noise_scale` gives each
-    declared `E_b / N_0`, and `decode_turbo` at the fixture's 8 iterations.
-    What is judged is the planted message, bit for bit.
-
-    The rate is the claim rather than a bound on it. `STATUS.md` reports these
-    four numbers as the iteration's side of its comparison against the exact
-    bitwise MAP, and the comparison is only worth what the iteration's own
-    figure is: a decoder that drifted would move these and pass every
-    ordering test beside them, since an ordering survives both sides moving
-    together. The sibling above asks whether the iteration approaches the MAP;
-    this asks whether it still lands where the record says.
+    End to end with no oracle: seeded message, `turbo_encode`, `sim.ldpc`'s
+    Gaussian channel at each declared `E_b / N_0`, `decode_turbo` at 8
+    iterations, judged bit for bit. The rate is the claim: an ordering test
+    survives both sides of `STATUS.md`'s MAP comparison drifting together.
     """
     params = fixture("turbo", "ci").params
     code = params.code()

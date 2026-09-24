@@ -24,11 +24,7 @@ from snakes_and_ladders.sim.spatio_sequential import (
 
 @pytest.mark.smoke
 def test_the_schedule_is_what_the_matrix_form_takes_bitwise() -> None:
-    """The referee: same chain, same numbers, no tolerance.
-
-    Each step's matrix is `circulant_transition` at that step's rate, which is
-    the live function, so equality here is exact and not an agreement.
-    """
+    """The referee: same chain, same numbers, no tolerance (`circulant_transition`)."""
     params = canonical_spatio_sequential()
     rates = np.linspace(0.55, 0.95, params.n_positions - 1)
 

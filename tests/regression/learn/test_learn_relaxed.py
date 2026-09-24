@@ -67,11 +67,7 @@ def _hmm(length: int = 8) -> tuple[RelaxedHmmPath, HmmParams, np.ndarray]:
 
 
 def _mcnemar(first: np.ndarray, second: np.ndarray) -> tuple[int, int, float]:
-    """Exact two-sided McNemar on paired successes.
-
-    Written out because the repository carries no `scipy`, and adding one for
-    a binomial tail would not survive root `CLAUDE.md`'s dependency rule.
-    """
+    """Exact two-sided McNemar on paired successes; no `scipy` for one binomial tail."""
     only_first = int((first & ~second).sum())
     only_second = int((~first & second).sum())
     discordant = only_first + only_second
@@ -242,9 +238,7 @@ def test_the_two_objectives_satisfy_the_protocol() -> None:
 def test_the_estimator_bias_falls_and_its_variance_rises_as_temperature_falls(
     mode: RelaxationMode,
 ) -> None:
-    # The trade the method rests on, measured rather than asserted small.
-    # Against the exact gradient at 20000 draws, scaled by the largest exact
-    # component:
+    # Against the exact gradient at 20000 draws, over the largest exact component:
     #
     #   tau    soft bias (SEM)    soft sd    ST bias (SEM)     ST sd
     #   2.00   0.5975 (0.0012)     0.165     0.5620 (0.0027)   0.382
@@ -253,13 +247,8 @@ def test_the_estimator_bias_falls_and_its_variance_rises_as_temperature_falls(
     #   0.20   0.0475 (0.0157)     2.220     0.0502 (0.0165)   2.340
     #   0.10   0.0356 (0.0240)     3.392     0.0380 (0.0246)   3.472
     #
-    # The bias falls by a factor of 17 while the standard deviation rises by a
-    # factor of 21, so no temperature is good at both. Straight-through's bias
-    # matches the soft estimator's within error while its variance is higher
-    # at every temperature -- it buys nothing on this problem.
-    #
-    # The run below uses 2000 draws to stay inside the CI budget, so it
-    # asserts the *ordering*, which is stable, rather than the numbers above.
+    # Bias falls 17x as sd rises 21x; straight-through buys nothing. At 2000
+    # draws (CI budget) the ordering is asserted, not the numbers.
     objective = RelaxedPotts(_environment())
     torch.manual_seed(0)
     logits = 0.5 * torch.randn(
@@ -324,26 +313,10 @@ def test_the_relaxation_and_its_gradient_are_the_enumerated_ones_along_the_path(
 ):
     """Every claim this module makes at a corner, re-read at four interior points.
 
-    The corner tests say the relaxation is an extension; they say nothing
-    about the simplex the ascent actually walks through. Here 40 Adam steps
-    are taken on the deterministic relaxation and the run is stopped at steps
-    0, 10, 20 and 30, each a genuinely interior point --- no row's largest
-    marginal exceeds 0.999 --- and three things are read against enumeration
-    over all 2,187 configurations of the chain:
-
-    * the relaxed score equals `exact_expected_score`, to 1e-12 absolute.
-      Realized: 2.2e-15 at worst over the four points, the multilinearity
-      identity holding away from the corners as it does at them;
-    * the gradient the ascent stepped on equals `exact_expected_gradient`, to
-      1e-10 absolute. Realized: 1.1e-15;
-    * `estimate_gradient` at `tau = 0.5` over 600 draws is *biased* against
-      that exact gradient at every point --- 0.193, 0.222, 0.172 and 0.564 of
-      the largest exact component, against a Monte Carlo standard error of
-      0.013 and below --- and still points along it, the cosine of the two
-      reading 0.9973, 0.9787, 0.9928 and 0.9867. The bias is what the
-      relaxation costs and the cosine is what it buys; the last point is the
-      largest ratio because the exact gradient has fallen to 0.0365 there,
-      which is the scale shrinking rather than the bias growing.
+    Adam steps 0, 10, 20, 30 (max marginal <= 0.999), against all 2,187
+    configurations: score 2.2e-15 (1e-12), gradient 1.1e-15 (1e-10);
+    `tau = 0.5` over 600 draws is biased (0.193, 0.222, 0.172, 0.564; SEM
+    <= 0.013) with cosines 0.9973, 0.9787, 0.9928, 0.9867.
     """
     objective = RelaxedPotts(_environment())
     torch.manual_seed(3)
@@ -395,14 +368,7 @@ def test_the_relaxation_and_its_gradient_are_the_enumerated_ones_along_the_path(
 def test_an_annealed_sampled_run_cannot_pass_the_enumerated_optimum() -> None:
     """The relaxation adds no optimum the discrete problem lacks, on the sampled path.
 
-    The corner argument gives this for the objective; the claim here is about
-    a whole annealed run of `optimize`, whose every step is a Gumbel draw
-    rather than a marginal. Its final relaxed score sits at or below the
-    enumerated maximum over all 2,187 configurations, and the configuration
-    it reads off is a real one scored at or below the same bound. Realized:
-    the enumerated maximum is 2.65 at `(0, 1, 0, 1, 0, 1, 0)`, and the run
-    returns that configuration with a relaxed score of 2.65 --- it reaches the
-    bound and does not pass it, which is what "no new optimum" means here.
+    Enumerated maximum 2.65 at `(0, 1, 0, 1, 0, 1, 0)`; the run returns it at 2.65.
     """
     objective = RelaxedPotts(_environment())
     _, best = enumerate_optimum(objective)
@@ -452,8 +418,8 @@ def test_the_exact_gradient_matches_a_finite_difference() -> None:
 
 @pytest.mark.oracle
 def test_the_deterministic_relaxation_beats_single_flip_hill_climbing() -> None:
-    # The comparison that decides whether this is worth having, on shared
-    # seeds with the exact optimum as the target. Measured over 40 restarts:
+    # Shared seeds, exact optimum as target, 40 restarts, 100 gradient steps
+    # (unchanged at 400):
     #
     #   greedy hill climbing        5/40
     #   deterministic relaxation   18/40   McNemar p = 0.00098
@@ -461,21 +427,8 @@ def test_the_deterministic_relaxation_beats_single_flip_hill_climbing() -> None:
     #   straight-through           11/40   McNemar p = 0.180
     #   annealed soft (0.5 -> 0.05) 11/40  McNemar p = 0.180
     #
-    # at 100 gradient steps, which is where the deterministic run has
-    # converged: at 400 steps it is unchanged at 18/40 and the sampled runs
-    # move by one instance.
-    #
-    # The *sampling* costs, not the relaxation. The deterministic ascent --
-    # which the identity above licenses -- beats the baseline significantly;
-    # adding Gumbel noise gives up that advantage and lands at a tie, and
-    # annealing does not recover it.
-    #
-    # The budgets are not the same unit: greedy terminates at a local maximum
-    # after 3.5 decisions on average, at 14 discrete evaluations each, while
-    # the relaxation takes gradient steps and evaluates no discrete
-    # configuration until the end. Matched are the restart count and the
-    # seeds. The relaxation already wins at 25 gradient steps (15/40,
-    # p = 0.0064), so the advantage is not bought with the larger budget.
+    # Sampling costs the advantage. Budgets differ in unit (greedy: 3.5
+    # decisions x 14 evaluations); at 25 steps the relaxation has 15/40, p = 0.0064.
     environment = _environment()
     objective = RelaxedPotts(environment)
     _, best = optimum(environment)
@@ -590,13 +543,9 @@ def test_a_gumbel_softmax_sample_is_row_stochastic(mode: RelaxationMode) -> None
 
 @pytest.mark.smoke
 def test_straight_through_is_one_hot_forward_and_soft_backward() -> None:
-    # The identity the mode is built on, checked on both halves: the value is
-    # a corner, and the gradient is not the corner's (which would be zero
-    # everywhere).
-    # The logits come from the test's own generator, not the global stream a
-    # worker's earlier tests have advanced. The loss weights the classes
-    # unequally: each row of a softmax sums to one, so `sample.sum()` has a
-    # soft-half gradient of zero and `max > 0` held only on rounding (#997).
+    # The value is a corner and the gradient is not the corner's. Own
+    # generator; unequal class weights, since `sample.sum()` has zero soft
+    # gradient and `max > 0` held only on rounding (#997).
     generator = torch.Generator().manual_seed(3)
     logits = torch.randn(
         (4, 3), dtype=torch.float64, generator=generator
