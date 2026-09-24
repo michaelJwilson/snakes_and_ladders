@@ -377,6 +377,58 @@ def _hmc_sample(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     return call
 
 
+def _random_walk_sample(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
+    """Random-walk Metropolis on a declared target, as the BlackJAX pair runs (#1006).
+
+    ``target`` 0 is the Gaussian of ``precision``, 1 Rosenbrock's function
+    with ``constants``; ``warmup`` proposals above zero run the warm-up at
+    the optimal random-walk acceptance first.
+    """
+    import torch
+
+    from snakes_and_ladders.opt.testfunctions import Rosenbrock
+    from snakes_and_ladders.sample import hmc, metropolis
+    from snakes_and_ladders.validation.gaussian import GaussianTarget
+
+    position = inputs["position"]
+    target = (
+        Rosenbrock(position.size, *(float(c) for c in inputs["constants"]))
+        if int(inputs["target"]) == 1
+        else GaussianTarget(inputs["precision"])
+    )
+    step_size, n_draws = float(inputs["step_size"]), int(inputs["n_draws"])
+    seed, warmup = int(inputs["seed"]), int(inputs["warmup"])
+    store_chain = bool(inputs["store_chain"])
+    adaptation = (
+        hmc.Adaptation(warmup, metropolis.RWM_TARGET_ACCEPTANCE, 0.0)
+        if warmup
+        else None
+    )
+    theta0 = torch.as_tensor(position)
+    # Outside the measured call, as `_hmc_sample`'s set-up.
+    metropolis.random_walk(
+        GaussianTarget(np.ones(2)),
+        torch.Generator().manual_seed(0),
+        2,
+        step_size=0.1,
+        store_chain=store_chain,
+    )
+
+    def call() -> Outputs:
+        chain = metropolis.random_walk(
+            target,
+            torch.Generator().manual_seed(seed),
+            n_draws,
+            step_size=step_size,
+            theta0=theta0,
+            adaptation=adaptation,
+            store_chain=store_chain,
+        )
+        return {"acceptance": np.asarray(chain.acceptance_rate)}
+
+    return call
+
+
 def _cluster_labels(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     """The Swendsen--Wang pass's union-find on a bond mask, as the rustworkx pair runs (#976)."""
     from snakes_and_ladders.sample.potts_mcmc import bond_roots
@@ -465,6 +517,7 @@ CALLS: dict[str, Build] = {
     "mixture_score": _mixture_score,
     "hmc_sample": _hmc_sample,
     "mala_sample": _mala_sample,
+    "random_walk_sample": _random_walk_sample,
     "cluster_labels": _cluster_labels,
     "swendsen_wang": _swendsen_wang,
     "gradient": _gradient,

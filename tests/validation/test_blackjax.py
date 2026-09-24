@@ -15,7 +15,12 @@ The trajectory length stays off the target's half-period: at step 0.2 and ten
 steps the chain is antithetic, and `effective_sample_size` returns a negative
 size there (#984).
 
-The runtime goal BlackJAX sets is in `test_goals.py`.
+- the random walk (#1006): BlackJAX's `rmh` on supplied increments and
+  `metropolis.replay` on the same increments and uniforms, draw for draw at
+  1e-10 on a Gaussian and on Rosenbrock, and the two chains' acceptance at
+  one scale within 0.02.
+
+The runtime goals BlackJAX sets are in `test_goals.py`.
 """
 
 from __future__ import annotations
@@ -23,7 +28,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.sample import hmc, langevin
+from snakes_and_ladders.opt.testfunctions import Rosenbrock
+from snakes_and_ladders.sample import hmc, langevin, metropolis
 from snakes_and_ladders.validation import blackjax
 from snakes_and_ladders.validation.gaussian import (
     GaussianTarget,
@@ -119,3 +125,43 @@ def test_mala_accepts_as_blackjaxs_mala_does() -> None:
     )
     assert 0.3 < theirs.acceptance < 0.97
     assert abs(ours.acceptance_rate - theirs.acceptance) < 0.03
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("target", ["gaussian", "rosenbrock"])
+def test_the_random_walk_is_blackjaxs_rmh_draw_for_draw(target: str) -> None:
+    # Issue #1006: BlackJAX's `build_rmh` kernel on the increments given, and
+    # `metropolis.replay` on the same increments and the uniforms BlackJAX's
+    # acceptance compared, run the same chain; measured agreement is exact.
+    rng = np.random.default_rng(1006)
+    if target == "rosenbrock":
+        objective: object = Rosenbrock(10)
+        options: dict[str, object] = {"rosenbrock": (1.0, 100.0)}
+        start, step = np.full(10, -1.2), 0.02
+    else:
+        precision = diagonal_precision(50)
+        objective, options = GaussianTarget(precision), {"precision": precision}
+        start, step = np.zeros(50), 0.2
+    increments = step * rng.normal(size=(2_000, start.size))
+    theirs = blackjax.replay(start, increments, 1006, **options)  # type: ignore[arg-type]
+    ours = metropolis.replay(objective, start, 1.0, increments, theirs.uniforms)  # type: ignore[arg-type]
+    np.testing.assert_allclose(ours.draws, theirs.draws, rtol=0, atol=1e-10)
+    assert 0.05 < ours.accepted.mean() < 0.95
+
+
+@pytest.mark.experiment
+def test_the_random_walk_accepts_as_blackjaxs_does() -> None:
+    # Issue #1006: the same proposal scale on the same target, different
+    # streams; 20,000 transitions put a rate near 0.34 within about 0.01.
+    precision = diagonal_precision(100)
+    ours = metropolis.random_walk(
+        GaussianTarget(precision),
+        torch.Generator().manual_seed(1006),
+        20_000,
+        step_size=0.12,
+        store_chain=False,
+    )
+    theirs = blackjax.random_walk(
+        np.zeros(100), 0.12, 20_000, 1006, precision=precision, store_chain=False
+    )
+    assert abs(ours.acceptance_rate - theirs.acceptance) < 0.02

@@ -173,3 +173,95 @@ def mala(
         int(result.peak_bytes or 0),
         int(out["first_peak_bytes"]),
     )
+
+
+def _target(
+    precision: np.ndarray | None, rosenbrock: tuple[float, float] | None
+) -> dict[str, np.ndarray]:
+    """The script's target inputs: a Gaussian's precision or Rosenbrock's ``(a, b)``."""
+    if rosenbrock is not None:
+        return {
+            "target": np.asarray(1, dtype=np.int64),
+            "constants": np.asarray(rosenbrock, dtype=np.float64),
+        }
+    return {
+        "target": np.asarray(0, dtype=np.int64),
+        "precision": np.ascontiguousarray(precision, dtype=np.float64),
+    }
+
+
+def random_walk(
+    position: np.ndarray,
+    step_size: float | np.ndarray,
+    n_draws: int,
+    key: int,
+    *,
+    precision: np.ndarray | None = None,
+    rosenbrock: tuple[float, float] | None = None,
+    store_chain: bool = True,
+) -> Chain:
+    """``n_draws`` transitions of ``blackjax.additive_step_random_walk`` with a normal step (issue #1006).
+
+    ``step_size`` is the step's standard deviation, a scalar or one per
+    coordinate: the package's ``step_size`` times its metric's scale. The
+    target is the Gaussian of ``precision`` or Rosenbrock's function with
+    ``rosenbrock = (a, b)``.
+    """
+    result = run(
+        SCRIPT,
+        {
+            "mode": np.asarray(3, dtype=np.int64),
+            **_target(precision, rosenbrock),
+            "position": np.ascontiguousarray(position, dtype=np.float64),
+            "step_size": np.asarray(step_size, dtype=np.float64),
+            "n_steps": np.asarray(1, dtype=np.int64),
+            "n_draws": np.asarray(n_draws, dtype=np.int64),
+            "key": np.asarray(key, dtype=np.int64),
+            "store_chain": np.asarray(store_chain),
+        },
+    )
+    out = result.outputs
+    return Chain(
+        out["draws"].reshape(-1 if store_chain else 0, position.shape[0]),
+        float(out["acceptance"]),
+        result.seconds,
+        int(result.peak_bytes or 0),
+        int(out["first_peak_bytes"]),
+    )
+
+
+@dataclass(frozen=True)
+class Replay:
+    """BlackJAX's ``rmh`` chain on supplied increments, and the uniforms it compared."""
+
+    draws: np.ndarray
+    uniforms: np.ndarray
+
+
+def replay(
+    position: np.ndarray,
+    increments: np.ndarray,
+    key: int,
+    *,
+    precision: np.ndarray | None = None,
+    rosenbrock: tuple[float, float] | None = None,
+) -> Replay:
+    """BlackJAX's ``build_rmh`` kernel on ``increments``, one row per transition (issue #1006).
+
+    Returns every position and the uniform each acceptance was decided on,
+    so :func:`snakes_and_ladders.sample.metropolis.replay` runs the same chain.
+    """
+    result = run(
+        SCRIPT,
+        {
+            "mode": np.asarray(4, dtype=np.int64),
+            **_target(precision, rosenbrock),
+            "position": np.ascontiguousarray(position, dtype=np.float64),
+            "increments": np.ascontiguousarray(increments, dtype=np.float64),
+            "step_size": np.asarray(1.0),
+            "n_steps": np.asarray(1, dtype=np.int64),
+            "n_draws": np.asarray(increments.shape[0], dtype=np.int64),
+            "key": np.asarray(key, dtype=np.int64),
+        },
+    )
+    return Replay(result.outputs["draws"], result.outputs["uniforms"])
