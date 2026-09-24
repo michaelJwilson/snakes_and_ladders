@@ -35,7 +35,7 @@ from snakes_and_ladders.learn.surrogate import (
 from snakes_and_ladders.opt.hmm import GaussianHmmObjective, baum_welch
 from snakes_and_ladders.opt.mixture import expectation_maximization
 from snakes_and_ladders.sample import hmc, metropolis
-from snakes_and_ladders.sample.potts_mcmc import _bond_probability
+from snakes_and_ladders.sample.potts_mcmc.sweeps import bond_probability
 from snakes_and_ladders.search.alpha_expansion import alpha_expansion
 from snakes_and_ladders.search.ground_state import lattice_rung
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
@@ -1091,7 +1091,7 @@ def _bond_inputs(side: int) -> dict[str, np.ndarray]:
     state = rng.integers(0, 3, graph.n_nodes)
     first, second = graph.edge_index[:, 0], graph.edge_index[:, 1]
     like = state[first] == state[second]
-    active = like & (rng.random(len(graph.edges)) < _bond_probability(graph, 1.0))
+    active = like & (rng.random(len(graph.edges)) < bond_probability(graph, 1.0))
     bonds = graph.edge_index[active]
     return {
         "n_nodes": np.asarray(graph.n_nodes),

@@ -287,9 +287,9 @@ def test_gibbs_at_zero_temperature_is_the_descent_update() -> None:
     offsets, neighbours, couplings = rung.graph.compressed_adjacency()
 
     cold = state.copy()
-    from snakes_and_ladders.sample.potts_mcmc import _single_site_sweep
+    from snakes_and_ladders.sample.potts_mcmc.sweeps import single_site_sweep
 
-    _single_site_sweep(
+    single_site_sweep(
         cold, rung.field, offsets, neighbours, couplings, np.random.default_rng(3), 1e6
     )
 

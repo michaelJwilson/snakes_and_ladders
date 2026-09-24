@@ -295,6 +295,12 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.opt.hmm
    :members:
 
+.. automodule:: snakes_and_ladders.opt.hmm.forward
+
+.. automodule:: snakes_and_ladders.opt.hmm.objectives
+
+.. automodule:: snakes_and_ladders.opt.hmm.estimation
+
 .. automodule:: snakes_and_ladders.opt.hmm_jax
    :members:
 
@@ -349,6 +355,13 @@ whether or not it has members yet.
 
 .. automodule:: snakes_and_ladders.sample.potts_mcmc
    :members:
+
+.. automodule:: snakes_and_ladders.sample.potts_mcmc.moves
+
+.. automodule:: snakes_and_ladders.sample.potts_mcmc.sweeps
+   :members: GUARD, sweep_at, single_site_sweep, site_update, balanced_sweep_at, bond_probability
+
+.. automodule:: snakes_and_ladders.sample.potts_mcmc.chains
 
 .. automodule:: snakes_and_ladders.sample.gibbs
    :members:

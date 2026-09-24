@@ -425,7 +425,7 @@ class PottsNDEnvironment(Environment[Configuration, PottsAction]):
         the cluster is recoloured to, so the candidate set has the same shape
         and is subset the same way. A target label equal to the site's current
         one is excluded: for a flip it is a no-op, and for Wolff it is the
-        recolouring ``potts_mcmc._recolour`` reports as never proposed.
+        recolouring ``potts_mcmc.sweeps._recolour`` reports as never proposed.
         """
         labels = np.asarray(state, dtype=np.int64)
         whole = self._n_nodes * (self._n_states - 1) * len(self._ladder)
@@ -568,7 +568,7 @@ class PottsNDEnvironment(Environment[Configuration, PottsAction]):
         Sites are visited in index order and each update sees the labels the
         earlier ones left, which is what makes a sweep a sweep rather than a
         batch of independent flips --- and what
-        ``sample.potts_mcmc._single_site_sweep`` does.
+        ``sample.potts_mcmc.sweeps.single_site_sweep`` does.
         """
         labels = np.asarray(state, dtype=np.int64).copy()
         before = self.score(tuple(int(value) for value in labels))

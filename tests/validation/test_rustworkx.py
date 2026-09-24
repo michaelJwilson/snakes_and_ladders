@@ -32,11 +32,8 @@ import itertools
 
 import numpy as np
 import pytest
-from snakes_and_ladders.sample.potts_mcmc import (
-    _bond_probability,
-    find_root,
-    union_roots,
-)
+from snakes_and_ladders.sample.potts_mcmc import find_root, union_roots
+from snakes_and_ladders.sample.potts_mcmc.sweeps import bond_probability
 from snakes_and_ladders.sim.canonical import planted_spin_glass
 from snakes_and_ladders.sim.graph import (
     BoundaryCondition,
@@ -212,7 +209,7 @@ def _bond_mask(side: int, beta: float, seed: int) -> tuple[PottsGraph, np.ndarra
     state = rng.integers(0, 3, graph.n_nodes)
     first, second = graph.edge_index[:, 0], graph.edge_index[:, 1]
     like = state[first] == state[second]
-    active = like & (rng.random(len(graph.edges)) < _bond_probability(graph, beta))
+    active = like & (rng.random(len(graph.edges)) < bond_probability(graph, beta))
     return graph, graph.edge_index[active]
 
 

@@ -47,11 +47,8 @@ from snakes_and_ladders.sample.gibbs import (
     gibbs_sweep,
     sample_factor_graph,
 )
-from snakes_and_ladders.sample.potts_mcmc import (
-    _single_site_sweep,
-    anneal_potts,
-    energies,
-)
+from snakes_and_ladders.sample.potts_mcmc import anneal_potts, energies
+from snakes_and_ladders.sample.potts_mcmc.sweeps import single_site_sweep
 from snakes_and_ladders.sample.schedule import (
     ConstantTempSchedule,
     ExponentialTempSchedule,
@@ -95,7 +92,7 @@ SIGNIFICANCE = 0.001
 FIELD = np.array([0.6, -0.4])
 
 #: The same field as one row per site, which is the shape
-#: `potts_mcmc._single_site_sweep` takes since issue #551 widened it. A shared
+#: `potts_mcmc.sweeps.single_site_sweep` takes since issue #551 widened it. A shared
 #: field reaching it as equal rows is the identity, which
 #: `tests/regression/search/test_ground_state.py` pins.
 _ROWS = np.tile(FIELD, (4, 1))
@@ -214,7 +211,7 @@ def test_the_generic_sweep_reproduces_the_potts_sweep_draw_for_draw() -> None:
     agreed = 0
     for _ in range(2000):
         gibbs_sweep(indexed, state_a, generic)
-        _single_site_sweep(state_b, _ROWS, offsets, neighbours, couplings, specialised)
+        single_site_sweep(state_b, _ROWS, offsets, neighbours, couplings, specialised)
         agreed += int(np.array_equal(state_a, state_b))
         state_b[:] = state_a
 

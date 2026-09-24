@@ -1,7 +1,7 @@
 """The heat-bath conditional three sweeps share, and the draws it must reproduce.
 
 `sim.potts.heat_bath_log_weights` is the expression
-`sample.potts_mcmc._single_site_sweep`, `sim.potts._simulate_gibbs` and the
+`sample.potts_mcmc.sweeps.single_site_sweep`, `sim.potts._simulate_gibbs` and the
 Rust kernel each wrote out before issue #277. The loops around it stay
 separate --- one chain in time, many chains at once, one compiled --- so what
 is checked here is the expression and the draws, not a merged sweep.

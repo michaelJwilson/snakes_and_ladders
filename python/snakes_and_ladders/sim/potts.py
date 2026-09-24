@@ -275,7 +275,7 @@ def heat_bath_log_weights(
     ``log p(s_i = k | rest) + c = beta * (h_ik + sum_j J_ij [k = s_j])``, the
     arithmetic every heat-bath sweep performs and three of them each wrote
     out before issue #277: the vectorized simulator :func:`_simulate_gibbs`,
-    the sequential sampler `sample.potts_mcmc._single_site_sweep`, and the
+    the sequential sampler `sample.potts_mcmc.sweeps.single_site_sweep`, and the
     Rust kernel. The *loops* stay separate --- one steps a chain in time, one
     is vectorized across independent chains, one is compiled --- because they
     are separate; what they share is this expression.
