@@ -1,6 +1,6 @@
 """The batched negative-binomial dispersion solve against the per-state solve it replaced (issue #918).
 
-`emissions._solve_dispersion_batched` runs every state's bisection on
+`mstep.solve_dispersion_batched` runs every state's bisection on
 ``log r`` at once, on the distinct counts weighted by the responsibility
 summed at each. `_solve_dispersion`, one state at a time over every
 observation, is kept as the oracle. The sums are reordered, so bitwise is the
@@ -15,8 +15,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders import emissions
-from snakes_and_ladders.emissions import CountPairEmission, NegativeBinomialEmission
+from snakes_and_ladders.emissions import (
+    CountPairEmission,
+    NegativeBinomialEmission,
+    mstep,
+)
 from snakes_and_ladders.opt.mixture import responsibilities
 from snakes_and_ladders.sim.emission_mixture import simulate_emission_mixture
 from snakes_and_ladders.sim.fixtures import fixture
@@ -43,11 +46,11 @@ def _draw(tier: str) -> tuple[torch.Tensor, torch.Tensor, NegativeBinomialEmissi
 
 def _oracle(
     values: torch.Tensor, posterior: torch.Tensor
-) -> tuple[torch.Tensor, list[emissions._SolvedDispersion]]:
+) -> tuple[torch.Tensor, list[mstep.SolvedDispersion]]:
     """The profiled means and the per-state solve, state by state, as before #918."""
     mean = (posterior.T @ values) / posterior.sum(dim=0)
     return mean, [
-        emissions._solve_dispersion(values, posterior[:, k], float(mean[k]))
+        mstep.solve_dispersion(values, posterior[:, k], float(mean[k]))
         for k in range(posterior.shape[1])
     ]
 
@@ -64,7 +67,7 @@ def test_the_batched_dispersion_is_the_per_state_solve_at_the_floor(tier: str) -
     # oracle's, since every bracket has the same width in log r.
     values, posterior, _ = _draw(tier)
     mean, oracle = _oracle(values, posterior)
-    batched = emissions._solve_dispersion_batched(
+    batched = mstep.solve_dispersion_batched(
         values, posterior, [float(m) for m in mean]
     )
     assert [one.at_boundary for one in batched] == [o.at_boundary for o in oracle]
@@ -104,10 +107,8 @@ def test_a_state_past_the_identifiable_bound_is_reported_at_it() -> None:
     weights[:2_000, 0] = 1.0
     weights[2_000:, 1] = 1.0
     means = [float(values[:2_000].mean()), float(values[2_000:].mean())]
-    batched = emissions._solve_dispersion_batched(values, weights, means)
-    oracle = [
-        emissions._solve_dispersion(values, weights[:, k], means[k]) for k in (0, 1)
-    ]
+    batched = mstep.solve_dispersion_batched(values, weights, means)
+    oracle = [mstep.solve_dispersion(values, weights[:, k], means[k]) for k in (0, 1)]
     assert [one.at_boundary for one in batched] == [True, False]
     assert [one.at_boundary for one in oracle] == [True, False]
     assert batched[0].value == oracle[0].value

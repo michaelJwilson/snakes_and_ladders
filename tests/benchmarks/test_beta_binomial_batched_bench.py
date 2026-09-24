@@ -11,8 +11,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders import emissions
-from snakes_and_ladders.emissions import BetaBinomialEmission
+from snakes_and_ladders.emissions import BetaBinomialEmission, mstep
 from snakes_and_ladders.opt.mixture import responsibilities
 from snakes_and_ladders.search.projection import flatten, project
 from snakes_and_ladders.sim.count_pairs import binned_model
@@ -42,13 +41,13 @@ def m_step() -> tuple[torch.Tensor, torch.Tensor, BetaBinomialEmission]:
 
 def _per_component(
     values: torch.Tensor, posterior: torch.Tensor, channel: BetaBinomialEmission
-) -> list[emissions._SolvedBetaBinomial]:
+) -> list[mstep.SolvedBetaBinomial]:
     alpha, beta = (
         channel.named_parameters()["alpha"],
         channel.named_parameters()["beta"],
     )
     return [
-        emissions._solve_beta_binomial(
+        mstep.solve_beta_binomial(
             values,
             posterior[:, k],
             float(channel.trials[k]),

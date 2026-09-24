@@ -14,8 +14,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders import emissions
-from snakes_and_ladders.emissions import BetaBinomialEmission
+from snakes_and_ladders.emissions import BetaBinomialEmission, mstep
 from snakes_and_ladders.opt.mixture import responsibilities
 from snakes_and_ladders.search.projection import flatten, project
 from snakes_and_ladders.sim.count_pairs import binned_model
@@ -57,7 +56,7 @@ def problem() -> Problem:
 @pytest.mark.parametrize("route", ["batched", "rust"])
 def test_beta_binomial_solve(benchmark: object, problem: Problem, route: str) -> None:
     values, posterior, trials, rates, totals, _ = problem
-    solve = getattr(emissions, f"_solve_beta_binomial_{route}")
+    solve = getattr(mstep, f"solve_beta_binomial_{route}")
     benchmark(solve, values[:, 1], posterior, trials, rates, totals)  # type: ignore[operator]
 
 
@@ -66,5 +65,5 @@ def test_beta_binomial_solve(benchmark: object, problem: Problem, route: str) ->
 @pytest.mark.parametrize("route", ["batched", "rust"])
 def test_dispersion_solve(benchmark: object, problem: Problem, route: str) -> None:
     values, posterior, _, _, _, means = problem
-    solve = getattr(emissions, f"_solve_dispersion_{route}")
+    solve = getattr(mstep, f"solve_dispersion_{route}")
     benchmark(solve, values[:, 0], posterior, means)  # type: ignore[operator]
