@@ -94,7 +94,7 @@ def _baum_welch(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
             max_iterations=n_iter,
             tolerance=-np.inf,
         )
-        return {"emission": fit.log_emission.exp().numpy()}
+        return {"emission": np.exp(fit.log_emission.numpy())}
 
     return call
 
@@ -152,17 +152,13 @@ def _hmc_sample(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
 
 def _cluster_labels(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     """The Swendsen--Wang pass's union-find on a bond mask, as the rustworkx pair runs (#976)."""
-    from snakes_and_ladders.sample.potts_mcmc import find_root, union_roots
+    from snakes_and_ladders.sample.potts_mcmc import bond_roots
 
     n_nodes = int(inputs["n_nodes"])
-    bonds = np.stack([inputs["first"], inputs["second"]], axis=1).tolist()
+    bonds = np.stack([inputs["first"], inputs["second"]], axis=1)
 
     def call() -> Outputs:
-        parent = np.arange(n_nodes)
-        for first, second in bonds:
-            union_roots(parent, first, second)
-        roots = np.array([find_root(parent, node) for node in range(n_nodes)])
-        return {"roots": roots}
+        return {"roots": bond_roots(n_nodes, bonds)}
 
     return call
 
@@ -207,13 +203,18 @@ def _gradient(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     def call() -> Outputs:
         one(points[0])
         seconds = []
-        rows = []
-        for point in points:
+        # One block for every gradient, as JAX's script returns them, rather
+        # than a kept row per point stacked into a second copy (issue #986).
+        # Written through NumPy: a torch indexing op first used here would
+        # charge its lazy set-up to the call.
+        gradients = np.empty(tuple(points.shape))
+        for row, point in enumerate(points):
             start = time.perf_counter()
-            rows.append(one(point))
+            gradient = one(point)
             seconds.append(time.perf_counter() - start)
+            gradients[row] = gradient.numpy()
         return {
-            "gradients": torch.stack(rows).numpy(),
+            "gradients": gradients,
             "per_point": np.asarray(statistics.median(seconds)),
         }
 

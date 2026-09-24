@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import torch
@@ -284,14 +285,97 @@ def log_probabilities_of[S, A](
         order.
     """
     out = []
+    scored = _Scored(policy, environment)
     for episode in episodes:
-        decisions = []
-        for step, action in enumerate(episode.actions):
-            state = episode.states[step]
-            available = environment.actions(state)
-            log_probabilities = policy.log_probabilities(
-                environment.features(state, available)
-            )
-            decisions.append(Decision(log_probabilities, available.index(action)))
-        out.append(decisions)
+        out.append(
+            [
+                Decision(*scored(episode.states[step], action))
+                for step, action in enumerate(episode.actions)
+            ]
+        )
     return out
+
+
+def taken_log_probabilities[S, A](
+    policy: TrainablePolicy | EpsilonGreedyPolicy,
+    environment: Environment[S, A],
+    episodes: Sequence[Episode[S, A]],
+) -> torch.Tensor:
+    """``log pi(a_t | s_t)`` of every recorded decision, episodes end to end, as one tensor.
+
+    :func:`log_probabilities_of` reduced to the taken entries, gathered in
+    one indexing operation rather than one per decision: the autograd graph
+    then has one node for every distinct state and one for the gather,
+    where a sum over :attr:`Decision.taken` had one per decision (issue
+    #986: 10^5 decisions of the Potts chain, 81 states among them).
+    """
+    scored = _Scored(policy, environment)
+    # `(state, action)` as `zip` builds it is the key: one dictionary probe
+    # per decision, and a miss only on the first visit of a pair.
+    seen: dict[Any, int] = {}
+    flat: list[int] = []
+    for episode in episodes:
+        for pair in zip(episode.states, episode.actions, strict=False):
+            try:
+                at = seen.get(pair)
+            except TypeError:
+                at = scored.position(*pair)
+            else:
+                if at is None:
+                    at = seen[pair] = scored.position(*pair)
+            flat.append(at)
+    return scored.table()[torch.as_tensor(flat, dtype=torch.long)]
+
+
+class _Scored[S, A]:
+    """Each distinct state's distribution under ``policy``, formed once and kept.
+
+    An :class:`~snakes_and_ladders.learn.environment.Environment` is
+    stateless in the episode, so a state's neighbourhood and features are
+    its own whatever episode reaches it, and a distribution scored once is
+    the one every later visit would score (issue #986). A state that is not
+    hashable is scored at every visit, as before.
+    """
+
+    def __init__(
+        self,
+        policy: TrainablePolicy | EpsilonGreedyPolicy,
+        environment: Environment[S, A],
+    ) -> None:
+        self._policy = policy
+        self._environment = environment
+        self._states: dict[Any, tuple[torch.Tensor, Sequence[A], int]] = {}
+        self._rows: list[torch.Tensor] = []
+        self._width = 0
+
+    def _score(self, state: S) -> tuple[torch.Tensor, Sequence[A], int]:
+        available = self._environment.actions(state)
+        log_probabilities = self._policy.log_probabilities(
+            self._environment.features(state, available)
+        )
+        offset = self._width
+        self._rows.append(log_probabilities)
+        self._width += len(available)
+        return log_probabilities, available, offset
+
+    def _entry(self, state: S) -> tuple[torch.Tensor, Sequence[A], int]:
+        try:
+            entry = self._states.get(state)
+        except TypeError:
+            return self._score(state)
+        if entry is None:
+            entry = self._states[state] = self._score(state)
+        return entry
+
+    def __call__(self, state: S, action: A) -> tuple[torch.Tensor, int]:
+        log_probabilities, available, _ = self._entry(state)
+        return log_probabilities, available.index(action)
+
+    def position(self, state: S, action: A) -> int:
+        """Where ``(state, action)``'s entry sits in :meth:`table`."""
+        _, available, offset = self._entry(state)
+        return offset + available.index(action)
+
+    def table(self) -> torch.Tensor:
+        """Every scored distribution, end to end."""
+        return torch.cat(self._rows) if self._rows else torch.zeros(0)

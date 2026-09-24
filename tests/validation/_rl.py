@@ -99,7 +99,8 @@ def ppo_loss_and_gradient(
     value, _ = ppo.ppo_loss(
         list(current.reshape(n_episodes, episode_length)),
         list(old.reshape(n_episodes, episode_length)),
-        advantages.reshape(n_episodes, episode_length).tolist(),
+        # Views, as TorchRL is handed its advantages: a tensor, not floats.
+        list(advantages.reshape(n_episodes, episode_length)),
         clip=clip,
     )
     (gradient,) = torch.autograd.grad(value, weights)

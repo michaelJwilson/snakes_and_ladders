@@ -119,7 +119,7 @@ def _log_probabilities[S, A](
 def ppo_loss(
     log_probabilities: Sequence[torch.Tensor],
     old_log_probabilities: Sequence[torch.Tensor],
-    advantages: Sequence[Sequence[float]],
+    advantages: Sequence[Sequence[float] | torch.Tensor],
     *,
     clip: float,
 ) -> tuple[torch.Tensor, float]:
@@ -131,22 +131,42 @@ def ppo_loss(
     if clip <= 0.0:
         msg = f"clip must be positive (use math.inf for no clipping), got {clip}"
         raise ValueError(msg)
-    total = torch.zeros(
-        (), dtype=log_probabilities[0].dtype if log_probabilities else torch.float64
-    )
-    clipped, steps = 0, 0
-    for current, old, episode_advantages in zip(
-        log_probabilities, old_log_probabilities, advantages, strict=True
+    if len(old_log_probabilities) != len(log_probabilities) or len(advantages) != len(
+        log_probabilities
     ):
-        if current.shape[0] == 0:
-            continue
-        ratio = torch.exp(current - old.detach())
-        weights = torch.as_tensor(list(episode_advantages), dtype=current.dtype)
-        unclipped = ratio * weights
-        limited = torch.clamp(ratio, 1.0 - clip, 1.0 + clip) * weights
-        total = total + torch.minimum(unclipped, limited).sum()
-        clipped += int((limited < unclipped).sum())
-        steps += int(current.shape[0])
+        msg = (
+            f"{len(log_probabilities)} episodes of log-probabilities, "
+            f"{len(old_log_probabilities)} of old ones and {len(advantages)} of "
+            f"advantages"
+        )
+        raise ValueError(msg)
+    dtype = log_probabilities[0].dtype if log_probabilities else torch.float64
+    if not log_probabilities:
+        return torch.zeros((), dtype=dtype), 0.0
+    # Every episode's steps end to end, so the objective is one expression
+    # rather than one per episode (issue #986: 1,000 episodes of 100 steps
+    # spent 154 ms in the per-episode loop). The sum over steps is the sum
+    # over episodes of their sums, in a different order.
+    current = torch.cat(list(log_probabilities))
+    old = torch.cat([episode.detach() for episode in old_log_probabilities])
+    # A tensor per episode is joined as it is; floats are read once.
+    weights = (
+        torch.cat(
+            [torch.as_tensor(episode, dtype=current.dtype) for episode in advantages]
+        )
+        if all(isinstance(episode, torch.Tensor) for episode in advantages)
+        else torch.tensor(
+            [value for episode in advantages for value in episode], dtype=current.dtype
+        )
+    )
+    if weights.shape != current.shape or old.shape != current.shape:
+        msg = "each episode needs one old log-probability and one advantage per step"
+        raise ValueError(msg)
+    ratio = torch.exp(current - old)
+    unclipped = ratio * weights
+    limited = torch.clamp(ratio, 1.0 - clip, 1.0 + clip) * weights
+    total = torch.minimum(unclipped, limited).sum()
+    clipped, steps = int((limited < unclipped).sum()), int(current.shape[0])
     return -total / len(log_probabilities), (clipped / steps if steps else 0.0)
 
 

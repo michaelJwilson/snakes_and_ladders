@@ -1177,6 +1177,7 @@ def baum_welch(
     log_emission: torch.Tensor,
     max_iterations: int = 500,
     tolerance: float = 1e-12,
+    backend: Backend = Backend.RUST,
 ) -> CategoricalFit:
     """Fit an HMM by expectation-maximization, with no autodiff involved.
 
@@ -1197,6 +1198,16 @@ def baum_welch(
         Stop when the log-likelihood improves by less than this *relative*
         to its magnitude -- absolute would not transfer across data sizes
         (``DEV.md``, issue #111).
+    backend : Backend
+        :data:`~snakes_and_ladders.backend.Backend.RUST`, the default since
+        issue #986, runs each E and M step in
+        ``oxi.categorical_em_step``: scaled messages
+        streamed one sequence at a time into expected counts, so no array
+        over every position is held. At 10^5 positions of three states one
+        fit peaked at 62.6 MB on the batched route.
+        :data:`~snakes_and_ladders.backend.Backend.PYTHON` is that route,
+        :func:`baum_welch_family` in log space, and the oracle that pins the
+        compiled one within 1e-10.
 
     Returns
     -------
@@ -1204,6 +1215,16 @@ def baum_welch(
         Fitted log initial, log transition and log emission, and the final
         log-likelihood.
     """
+    refuse_backend("baum_welch", backend, (Backend.PYTHON, Backend.RUST))
+    if backend is Backend.RUST:
+        return _streamed_baum_welch(
+            observations,
+            log_initial,
+            log_transition,
+            log_emission,
+            max_iterations=max_iterations,
+            tolerance=tolerance,
+        )
     result = baum_welch_family(
         observations,
         log_initial,
@@ -1339,6 +1360,49 @@ class ExpectedRateNormalizer:
         else:
             updated[..., self.channel] = covariate[..., self.channel] / divisor
         return updated
+
+
+def _streamed_baum_welch(
+    observations: np.ndarray,
+    log_initial: torch.Tensor,
+    log_transition: torch.Tensor,
+    log_emission: torch.Tensor,
+    *,
+    max_iterations: int,
+    tolerance: float,
+) -> CategoricalFit:
+    """:func:`baum_welch` on the compiled step, driven by the same :func:`em_loop`."""
+    # Borrowed where NumPy already holds int64 rows; a copy only otherwise.
+    symbols = np.ascontiguousarray(observations, dtype=np.int64)
+    m, n_symbols = log_emission.shape
+
+    def step(
+        state: tuple[np.ndarray, np.ndarray, np.ndarray],
+    ) -> tuple[tuple[np.ndarray, np.ndarray, np.ndarray], float]:
+        initial, transition, emission, log_likelihood = oxi.categorical_em_step(
+            symbols, *state
+        )
+        return (initial, transition, emission), log_likelihood
+
+    def flat(tensor: torch.Tensor) -> np.ndarray:
+        return np.ascontiguousarray(tensor.detach().numpy(), dtype=np.float64).reshape(
+            -1
+        )
+
+    (initial, transition, emission), log_likelihood, _ = em_loop(
+        step,
+        (flat(log_initial), flat(log_transition), flat(log_emission)),
+        tolerance=tolerance,
+        max_iterations=max_iterations,
+    )
+    # Shaped in NumPy and wrapped without a copy: a first torch `reshape` in a
+    # process costs 2.1 MB of resident memory, 60 times the fit's own.
+    return CategoricalFit(
+        torch.from_numpy(initial),
+        torch.from_numpy(transition.reshape(m, m)),
+        torch.from_numpy(emission.reshape(m, n_symbols)),
+        log_likelihood,
+    )
 
 
 def baum_welch_family(

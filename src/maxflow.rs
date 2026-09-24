@@ -490,6 +490,7 @@ fn boykov_kolmogorov(network: &mut FlowNetwork, source: usize, sink: usize) -> f
 /// construction is the one `snakes_and_ladders.search.maxflow.ising_ground_state`
 /// documents; it is duplicated here rather than shared because the two
 /// implementations must be independent for one to be the other's oracle.
+#[cfg_attr(not(feature = "sandbox"), allow(dead_code))]
 pub(crate) fn ising_network(
     n_nodes: usize,
     field: &[f64],
@@ -538,15 +539,10 @@ pub(crate) fn ising_network(
 pub fn ising_ground_state_impl(
     n_nodes: usize,
     field: &[f64],
-    edges: &[usize],
+    edges: &[i64],
     coupling: &[f64],
 ) -> Result<Vec<i64>, String> {
-    let mut network = ising_network(n_nodes, field, edges, coupling)?;
-    let (_, side) = max_flow_impl(&mut network, n_nodes, n_nodes + 1)?;
-    Ok(side[..n_nodes]
-        .iter()
-        .map(|&reachable| i64::from(!reachable))
-        .collect())
+    crate::bk::ising_ground_state(n_nodes, field, edges, coupling)
 }
 
 /// Node indices from an `int64` array, refusing a negative one.
@@ -598,7 +594,7 @@ pub fn max_flow<'py>(
     // `as_slice` succeeds only for a C-contiguous array, the same contract
     // `sampling::sample_rows` states; the wrapper normalizes with
     // `ascontiguousarray`, free when the array already is one.
-    let arcs = node_indices(arcs.as_slice()?)?;
+    let arcs = arcs.as_slice()?;
     let capacity = capacity.as_slice()?;
     if arcs.len() != 2 * capacity.len() {
         return Err(PyValueError::new_err(format!(
@@ -620,10 +616,8 @@ pub fn max_flow<'py>(
             )));
         }
     }
-    let mut network =
-        FlowNetwork::from_arcs(n_nodes, &arcs, capacity, back).map_err(PyValueError::new_err)?;
     let (value, side) = py
-        .detach(|| max_flow_impl(&mut network, source, sink))
+        .detach(|| crate::bk::max_flow(n_nodes, arcs, capacity, back, source, sink))
         .map_err(PyValueError::new_err)?;
     Ok((value, PyArray1::from_vec(py, side)))
 }
@@ -711,11 +705,11 @@ pub fn ising_ground_state<'py>(
     edges: PyReadonlyArray1<'py, i64>,
     coupling: PyReadonlyArray1<'py, f64>,
 ) -> PyResult<Bound<'py, PyArray1<i64>>> {
-    let edges = node_indices(edges.as_slice()?)?;
+    let edges = edges.as_slice()?;
     let field = field.as_slice()?;
     let coupling = coupling.as_slice()?;
     let states = py
-        .detach(|| ising_ground_state_impl(n_nodes, field, &edges, coupling))
+        .detach(|| ising_ground_state_impl(n_nodes, field, edges, coupling))
         .map_err(PyValueError::new_err)?;
     Ok(PyArray1::from_vec(py, states))
 }
@@ -739,7 +733,7 @@ pub fn ising_ground_states<'py>(
     coupling: PyReadonlyArray1<'py, f64>,
     threads: Option<usize>,
 ) -> PyResult<Bound<'py, PyArray1<i64>>> {
-    let edges = node_indices(edges.as_slice()?)?;
+    let edges = edges.as_slice()?;
     let fields = fields.as_slice()?;
     let coupling = coupling.as_slice()?;
     let width = 2 * n_nodes;
@@ -754,7 +748,7 @@ pub fn ising_ground_states<'py>(
             on_pool(threads, || {
                 fields
                     .par_chunks(width)
-                    .map(|field| ising_ground_state_impl(n_nodes, field, &edges, coupling))
+                    .map(|field| ising_ground_state_impl(n_nodes, field, edges, coupling))
                     .collect::<Result<Vec<Vec<i64>>, String>>()
             })
         })

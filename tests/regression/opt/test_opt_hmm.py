@@ -16,6 +16,7 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.likelihood.hmm_paths import enumerate_hidden_paths
 from snakes_and_ladders.opt.hmm import (
@@ -503,3 +504,41 @@ def test_baum_welch_ascends_and_settles_on_the_re_estimation_equations() -> None
         torch.exp(log_transition).numpy(), transition, atol=_ATOL_FIXED_POINT
     )
     assert_allclose(torch.exp(log_emission).numpy(), emission, atol=_ATOL_FIXED_POINT)
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("n_sequences", [1, 40])
+def test_the_streamed_baum_welch_is_the_batched_one(n_sequences: int) -> None:
+    # Issue #986: the compiled route streams scaled messages into expected
+    # counts; the log-space batch in `baum_welch_family` is its oracle, over
+    # ten iterations from a perturbed start on the fixture's model.
+    params = replace(
+        load_params(FIXTURES_DIR / "hmm" / "ci.yaml", HmmParams),
+        lengths=(60,) * n_sequences,
+    )
+    observations = simulate_sequences(params).observations
+    rng = np.random.default_rng(986)
+    draws = [rng.random(shape) + 0.5 for shape in ((3,), (3, 3), (3, 4))]
+    initial, transition, emission = (
+        torch.log(torch.as_tensor(d / d.sum(-1, keepdims=True))) for d in draws
+    )
+    fits = [
+        baum_welch(
+            observations,
+            initial,
+            transition,
+            emission,
+            max_iterations=10,
+            tolerance=-np.inf,
+            backend=backend,
+        )
+        for backend in (Backend.PYTHON, Backend.RUST)
+    ]
+    for name in ("log_initial", "log_transition", "log_emission"):
+        assert_allclose(
+            getattr(fits[1], name).numpy(),
+            getattr(fits[0], name).numpy(),
+            rtol=0.0,
+            atol=1e-10,
+        )
+    assert_allclose(fits[1].log_likelihood, fits[0].log_likelihood, rtol=1e-12)
