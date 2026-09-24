@@ -18,11 +18,12 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
+from typing import cast
 
 import numpy as np
 import torch
 
-from snakes_and_ladders.backend import Backend, refuse_backend
+from snakes_and_ladders.backend import Backend, twin
 from snakes_and_ladders.enumeration import (
     configurations,
     refuse_oversized,
@@ -34,6 +35,12 @@ from snakes_and_ladders.sim.spatio_sequential import (
     SpatioSequentialParams,
     gated_log_density,
 )
+
+#: What a refusal names: the coupled E step runs on NumPy, the oracle, or on
+#: the tabulated Rust kernel. One enum names the kernel, as it does for
+#: `maxflow` and `count_pairs` (#819); the frozen triple of callables it
+#: replaced spelled the same choice a second way for one problem (#828).
+_COUPLED = "the coupled model"
 
 
 @dataclass(frozen=True)
@@ -368,11 +375,10 @@ def class_posteriors(
     backend: Backend = Backend.PYTHON,
 ) -> ClassPosteriors:
     """Forward--backward on every class's chain over its members' summed scores."""
-    if backend is Backend.RUST:
-        from snakes_and_ladders.likelihood import spatio_sequential_rust
-
-        return spatio_sequential_rust.class_posteriors(params, observations, labels)
-    _refuse_backend(backend)
+    if (rust := twin(_COUPLED, backend, __name__)) is not None:
+        return cast(
+            "ClassPosteriors", rust.class_posteriors(params, observations, labels)
+        )
     density = class_log_density(params, observations, labels)
     log_transition = np.log(params.transition)
     posterior = np.empty_like(density)
@@ -415,13 +421,10 @@ def external_field(
     model and accepted them under another. The ascent stays monotone either
     way, which is why nothing failed.
     """
-    if backend is Backend.RUST:
-        from snakes_and_ladders.likelihood import spatio_sequential_rust
-
-        return spatio_sequential_rust.external_field(
-            params, observations, labels, posterior
+    if (rust := twin(_COUPLED, backend, __name__)) is not None:
+        return cast(
+            "np.ndarray", rust.external_field(params, observations, labels, posterior)
         )
-    _refuse_backend(backend)
     if posterior is None:
         posterior = class_posteriors(params, observations, labels).posterior
     # The vertices the observations carry, not the graph's: a slice of a
@@ -457,26 +460,11 @@ def labelled_log_likelihood(
     :attr:`ExactSpatioSequential.log_prior_normalizer` where enumeration
     reaches, which is how the test pins this against the oracle.
     """
-    if backend is Backend.RUST:
-        from snakes_and_ladders.likelihood import spatio_sequential_rust
-
-        return spatio_sequential_rust.labelled_log_likelihood(
-            params, observations, labels
-        )
-    _refuse_backend(backend)
+    if (rust := twin(_COUPLED, backend, __name__)) is not None:
+        return cast("float", rust.labelled_log_likelihood(params, observations, labels))
     own = float(log_prior(params, np.asarray(labels, dtype=np.int64)[None, :])[0])
     evidence = class_posteriors(params, observations, labels).log_evidence
     return own + float(evidence.sum())
-
-
-def _refuse_backend(backend: Backend) -> None:
-    """The coupled E step runs on NumPy, the oracle, or on the tabulated Rust kernel.
-
-    One enum names the kernel, as it does for `maxflow` and `count_pairs`
-    (#819); the frozen triple of callables this replaced spelled the same
-    choice a second way for one problem (#828).
-    """
-    refuse_backend("the coupled model", backend, (Backend.PYTHON, Backend.RUST))
 
 
 def map_labelling(

@@ -54,11 +54,15 @@ same.
 :func:`refuse_backend` is how a module declines a member it has no
 implementation for. The sentence was written inline at five sites and is one
 here, so a refusal reads the same wherever a caller meets it.
+:func:`twin` is how a module with a Rust twin reaches it: the refusal, then
+the twin imported at call time (issue #1010).
 """
 
 from __future__ import annotations
 
+import importlib
 from enum import StrEnum
+from types import ModuleType
 
 
 class Backend(StrEnum):
@@ -112,3 +116,46 @@ def refuse_backend(name: str, backend: Backend, allowed: tuple[Backend, ...]) ->
     runs_on = " or ".join(str(one) for one in allowed)
     msg = f"{name} runs on {runs_on}, not {backend}"
     raise ValueError(msg)
+
+
+def twin(name: str, backend: Backend, oracle: str) -> ModuleType | None:
+    """The Rust twin of module ``oracle`` where ``backend`` asks for it, else ``None``.
+
+    A module whose compiled route lives in ``<oracle>_rust`` refuses every
+    member but ``PYTHON`` and ``RUST`` with :func:`refuse_backend`, and imports
+    the twin inside the call rather than at module level: each twin imports a
+    type or a helper from its oracle, so the module-level import is a cycle,
+    and it would also put the extension behind every import of the oracle.
+    Six modules wrote those three steps and the comment out by hand, at eight
+    sites; the
+    caller passes its ``__name__``, so the twin is found by the naming
+    convention rather than by a second spelling of the path.
+
+    What the call site gives up is the type of the kernel: an attribute of a
+    module imported by name is ``Any`` to ``mypy``, so a site returning the
+    kernel's value states the type it returns with ``cast``.
+
+    Parameters
+    ----------
+    name : str
+        As :func:`refuse_backend`.
+    backend : Backend
+        What the caller asked for.
+    oracle : str
+        The calling module's ``__name__``.
+
+    Returns
+    -------
+    ModuleType | None
+        ``<oracle>_rust`` for :data:`Backend.RUST`; ``None`` for
+        :data:`Backend.PYTHON`, where the caller runs its own oracle.
+
+    Raises
+    ------
+    ValueError
+        If ``backend`` is neither ``PYTHON`` nor ``RUST``.
+    """
+    refuse_backend(name, backend, (Backend.PYTHON, Backend.RUST))
+    if backend is not Backend.RUST:
+        return None
+    return importlib.import_module(f"{oracle}_rust")

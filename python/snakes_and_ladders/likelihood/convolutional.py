@@ -33,10 +33,11 @@ parity-check decoder.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 import numpy as np
 
-from snakes_and_ladders.backend import Backend, refuse_backend
+from snakes_and_ladders.backend import Backend, twin
 from snakes_and_ladders.enumeration import refuse_oversized
 from snakes_and_ladders.numerics import logsumexp
 from snakes_and_ladders.sim.convolutional import (
@@ -162,15 +163,10 @@ def bcjr(
             f"{apriori.shape} must be the same one-dimensional shape"
         )
         raise ValueError(msg)
-    refuse_backend("bcjr", backend, (Backend.PYTHON, Backend.RUST))
-    if backend is Backend.RUST:
-        # Local, because the twin imports `TrellisDecoding` from here: a
-        # module-level import is the cycle. The seam itself is
-        # `pruning`/`pruning_rust`'s and `maxflow`/`maxflow_rust`'s.
-        from snakes_and_ladders.likelihood import convolutional_rust
-
-        return convolutional_rust.bcjr(
-            trellis, systematic, parity, apriori, terminated=terminated
+    if (rust := twin("bcjr", backend, __name__)) is not None:
+        return cast(
+            "TrellisDecoding",
+            rust.bcjr(trellis, systematic, parity, apriori, terminated=terminated),
         )
     length = systematic.size
     n_states = trellis.n_states

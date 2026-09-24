@@ -30,9 +30,11 @@ pin, and this oracle gained no code from the route it referees.
 
 from __future__ import annotations
 
+from typing import cast
+
 import numpy as np
 
-from snakes_and_ladders.backend import Backend, refuse_backend
+from snakes_and_ladders.backend import Backend, twin
 from snakes_and_ladders.likelihood.patterns import check_weights
 from snakes_and_ladders.sim.jc import jc_transition_probabilities
 from snakes_and_ladders.sim.tree import Node, preorder
@@ -98,16 +100,12 @@ def log_likelihood(
     """
     # A door, before any arithmetic: the recursion below is the oracle and
     # gains nothing from the route it referees.
-    refuse_backend("pruning log_likelihood", backend, (Backend.PYTHON, Backend.RUST))
-    if backend is Backend.RUST:
-        # Local, because a module-level import would put the compiled
-        # extension behind every import of the oracle: the seam is
-        # `convolutional`/`convolutional_rust`'s and
-        # `maxflow`/`maxflow_rust`'s.
-        from snakes_and_ladders.likelihood import pruning_rust
-
-        return pruning_rust.log_likelihood(
-            tau, k, pi, alignment, weights=weights, rescale=rescale
+    if (rust := twin("pruning log_likelihood", backend, __name__)) is not None:
+        return cast(
+            "float",
+            rust.log_likelihood(
+                tau, k, pi, alignment, weights=weights, rescale=rescale
+            ),
         )
 
     if pi.shape != (k,):
