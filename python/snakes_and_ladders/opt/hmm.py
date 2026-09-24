@@ -57,7 +57,7 @@ from snakes_and_ladders.opt.constrain import (
 )
 from snakes_and_ladders.opt.em import em_loop
 from snakes_and_ladders.opt.initialize import quantile_locations
-from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.opt.objective import Objective, autograd_value_and_gradient
 from snakes_and_ladders.opt.termination import Termination
 from snakes_and_ladders.ragged import Ragged
 
@@ -244,10 +244,7 @@ class _HmmObjective(Objective):
         1e-10.
         """
         if self._backend is Backend.TORCH:
-            point = theta.detach().clone().requires_grad_(True)
-            value = self(point)
-            (gradient,) = torch.autograd.grad(value, point)
-            return value.detach(), gradient
+            return autograd_value_and_gradient(self, theta)
         if self._jax is None:
             from snakes_and_ladders.opt.hmm_jax import value_and_grad
 
@@ -514,9 +511,7 @@ class GaussianHmmObjective(_HmmObjective):
             or self._dtype != torch.float64
             or self._observations.dim() != 2
         ):
-            point = theta.detach().clone().requires_grad_(True)
-            (grad,) = torch.autograd.grad(self(point), point)
-            return grad
+            return autograd_value_and_gradient(self, theta)[1]
         free = theta.detach()
         transitions = self._transition_parameters(free)
         mean = free[self._mean_slice()].numpy()

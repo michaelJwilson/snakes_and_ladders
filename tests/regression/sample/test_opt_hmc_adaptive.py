@@ -28,6 +28,7 @@ import torch
 from snakes_and_ladders.likelihood.objective import BranchLengthObjective
 from snakes_and_ladders.opt.fit import fit, standard_errors_at
 from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.sample.chain import _DualAveraging, _Scaled
 from snakes_and_ladders.sample.hmc import (
     DUAL_AVERAGING_GAMMA,
     DUAL_AVERAGING_KAPPA,
@@ -35,8 +36,6 @@ from snakes_and_ladders.sample.hmc import (
     Adaptation,
     HmcChain,
     WithGaussianPrior,
-    _DualAveraging,
-    _Scaled,
     effective_sample_size,
     gradient_at,
     leapfrog,

@@ -13,7 +13,7 @@ drives it unchanged.
 The arithmetic is ``src/hmc.rs``'s and ``src/chain.rs``'s: the gradient at
 the current point carried from the trajectory that reached it, drifts of
 ``s * p`` and kicks of ``s * grad U`` on the metric of scale ``s``, the two
-dual-averaging windows of ``hmc._warm_up`` (Welford over the first window's
+dual-averaging windows of ``chain._warm_up`` (Welford over the first window's
 second half), and ``KalmanMean``'s six statistics per operator. The stream is
 JAX's, keyed by one draw from the caller's generator, so the torch route is
 matched in distribution.
@@ -82,7 +82,7 @@ def _programs(
     def dual(
         averaging: tuple[Any, ...], probability: Any, target: Any, constants: Any
     ) -> tuple[Any, ...]:
-        # `hmc._DualAveraging.update`, term for term.
+        # `chain._DualAveraging.update`, term for term.
         mu, h_bar, log_step, log_averaged, m = averaging
         gamma, t0, kappa = constants
         m = m + 1.0
@@ -256,7 +256,7 @@ class JaxWalk:
             raise ValueError(msg)
         self._scale = jnp.sqrt(jnp.asarray(variance))
         averaged = float(np.exp(dual[3]))
-        # `hmc._warm_up`: window two restarts dual averaging from window
+        # `chain._warm_up`: window two restarts dual averaging from window
         # one's averaged step, and its first step is the new iteration's
         # averaged one, exp(0).
         restarted = (jnp.log(10.0 * averaged), 0.0, 0.0, 0.0, 0.0)

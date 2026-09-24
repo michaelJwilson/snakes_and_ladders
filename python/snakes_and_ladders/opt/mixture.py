@@ -50,7 +50,7 @@ from snakes_and_ladders.opt.constrain import (
 )
 from snakes_and_ladders.opt.em import em_loop
 from snakes_and_ladders.opt.initialize import Initializer, quantile_locations
-from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.opt.objective import Objective, autograd_value_and_gradient
 from snakes_and_ladders.opt.termination import Termination
 
 
@@ -244,9 +244,7 @@ class GaussianMixtureObjective(Objective):
         autograd; any other takes autograd through :meth:`__call__`.
         """
         if self._n_channels != 1 or self._dtype != torch.float64:
-            point = theta.detach().clone().requires_grad_(True)
-            (grad,) = torch.autograd.grad(self(point), point)
-            return grad
+            return autograd_value_and_gradient(self, theta)[1]
         padded = np.concatenate(([0.0], theta[self._weight_slice].detach().numpy()))
         _, gradient = oxisal.gaussian_mixture_gradient(
             np.ascontiguousarray(self._observations.numpy()).reshape(-1),

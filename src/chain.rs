@@ -42,7 +42,7 @@ impl Warmup {
     }
 }
 
-/// `hmc._DualAveraging`, term for term.
+/// `chain._DualAveraging`, term for term.
 struct DualAveraging {
     mu: f64,
     target: f64,
@@ -162,7 +162,7 @@ pub fn decide(log_ratio: f64, uniform: f64) -> (bool, f64) {
     (uniform < ratio, probability)
 }
 
-/// `hmc._jittered`: no draw at zero jitter.
+/// `chain._jittered`: no draw at zero jitter.
 #[inline]
 fn jittered(rng: &mut ChaCha8Rng, step_size: f64, jitter: f64) -> f64 {
     if jitter == 0.0 {
@@ -172,7 +172,7 @@ fn jittered(rng: &mut ChaCha8Rng, step_size: f64, jitter: f64) -> f64 {
     step_size * (1.0 + jitter * (2.0 * uniform - 1.0))
 }
 
-/// The two windows of `hmc._warm_up`; leaves the kernel on the metric.
+/// The two windows of `chain._warm_up`; leaves the kernel on the metric.
 ///
 /// Returns the adapted step, the mass diagonal and the second window's mean
 /// acceptance probability.

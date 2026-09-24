@@ -5,7 +5,7 @@
 //! family (`energy.rs`). The transition is `metropolis._RandomWalkKernel` at
 //! unit temperature: `y = x + h s * z` with `z` standard normal and `s` the
 //! metric's per-coordinate scale, accepted when a uniform on `[0, 1)` is
-//! below `exp(U(x) - U(y))`. The warm-up is `hmc._warm_up` operation for
+//! below `exp(U(x) - U(y))`. The warm-up is `chain._warm_up` operation for
 //! operation, shared with HMC in `chain.rs`. The draws come from ChaCha8 seeded by the caller, so the
 //! stream is this route's own and the torch route is matched in
 //! distribution.
