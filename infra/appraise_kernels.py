@@ -163,10 +163,33 @@ def _package_imports(source: str) -> set[str]:
     return found
 
 
+def _reexports(python: dict[str, str]) -> dict[str, set[str]]:
+    """``package -> submodules`` whose names the package's ``__init__`` re-exports.
+
+    A test importing ``baum_welch_family`` from ``opt.hmm`` runs the adapter in
+    ``opt.hmm.estimation`` the package re-exports it from (issue #1010), so an
+    import of the package is an import of each submodule it imports from.
+    """
+    return {
+        name: {
+            module
+            for module in _package_imports(source)
+            if module.startswith(f"{name}.") and module in python
+        }
+        for name, source in python.items()
+    }
+
+
 def kernels() -> list[Kernel]:
     """Every Rust module, with its boundary, its callers and its referees."""
     python = _python_modules()
     tests = _test_modules()
+    reexports = _reexports(python)
+
+    def imported(source: str) -> set[str]:
+        names = _package_imports(source)
+        return names | {sub for name in names for sub in reexports.get(name, ())}
+
     adapters_by_module = {
         name: source for name, source in python.items() if EXTENSION in source
     }
@@ -187,7 +210,7 @@ def kernels() -> list[Kernel]:
             sorted(
                 path
                 for path, text in tests.items()
-                if any(adapter in _package_imports(text) for adapter in adapters)
+                if any(adapter in imported(text) for adapter in adapters)
             )
         )
         # The referees: what those tests import besides the adapter, narrowed
@@ -197,7 +220,7 @@ def kernels() -> list[Kernel]:
         siblings = {adapter.removesuffix("_rust") for adapter in adapters}
         referees: set[str] = set()
         for path in exercising:
-            for name in _package_imports(tests[path]):
+            for name in imported(tests[path]):
                 symbol = name.rsplit(".", 1)[-1]
                 # An oracle beside the kernel in the adapter's own module: the
                 # name is `<adapter>.<symbol>`, so it is not a module and the

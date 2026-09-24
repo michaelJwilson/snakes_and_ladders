@@ -58,7 +58,7 @@ def accept_drawn(log_ratio: float, draw: Callable[[], float]) -> bool:
     The arm for a site whose uniform is *conditional*: the generator it would
     come from is keyed on the move, or costs something to reach, so taking one
     eagerly would advance a stream that a non-negative ``log_ratio`` never
-    touched --- ``potts_mcmc._recolour_drawn``'s contract, which the Rust
+    touched --- ``potts_mcmc.sweeps._recolour_drawn``'s contract, which the Rust
     hand-back path reads (issues #599, #754).
 
     Parameters

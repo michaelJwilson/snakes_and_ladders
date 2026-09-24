@@ -1,7 +1,7 @@
 """Why the tempered sweep scales the accumulated field, not its parts (#651).
 
 Dropping two whole-array temporaries per sweep is available for free in
-`sample/potts_mcmc.py`: pass ``beta`` into the parts and compute
+`sample/potts_mcmc/sweeps.py`: pass ``beta`` into the parts and compute
 ``beta h + sum(beta J)`` instead of ``(h + sum J) beta``. The two are equal in
 real arithmetic, and #571 refused the cheaper one for not being bitwise.
 
@@ -10,7 +10,7 @@ re-opened the question. **The measurement refuses it, and on mechanism rather
 than on caution.**
 
 The Rust sweep already tolerates a last-place disagreement: it decides a site
-only where the draw clears every cumulative boundary by ``_GUARD`` units of the
+only where the draw clears every cumulative boundary by ``GUARD`` units of the
 last place, and hands any site it declines back to the oracle's own update. So
 a reassociation inside the guard would cost extra hand-backs and nothing else.
 This one is not inside the guard, and it is not a rounding difference at all:
@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.sample.potts_mcmc import _GUARD
+from snakes_and_ladders.sample.potts_mcmc.sweeps import GUARD
 
 SEED = 20260916
 #: Sites drawn per trial, over neighbourhoods and alphabets the lattice fixtures
@@ -66,9 +66,9 @@ def test_scaling_the_parts_leaves_the_guard_behind() -> None:
     errors, _ = _reassociation_ulps()
 
     assert np.median(errors) <= 2.0, "the typical site is a last-place difference"
-    assert errors.max() > 1_000.0 * _GUARD, (
+    assert errors.max() > 1_000.0 * GUARD, (
         f"worst reassociation {errors.max():.0f} ulps against a guard of "
-        f"{_GUARD}; if this ever falls inside the guard the cheaper form is "
+        f"{GUARD}; if this ever falls inside the guard the cheaper form is "
         "available and #651's first candidate should be re-read"
     )
 
@@ -81,7 +81,7 @@ def test_the_error_concentrates_where_the_conditional_is_finely_balanced() -> No
     # is near zero -- and a near-zero accumulated field is a near-uniform
     # conditional, the site whose decision a perturbation is likeliest to flip.
     errors, fields = _reassociation_ulps()
-    past_guard = errors > _GUARD
+    past_guard = errors > GUARD
 
     assert 0.01 < past_guard.mean() < 0.10, (
         f"{past_guard.mean():.2%} of sites past the guard; the measurement this "

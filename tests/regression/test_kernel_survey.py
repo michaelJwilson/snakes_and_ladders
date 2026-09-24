@@ -76,11 +76,13 @@ def test_an_oracle_inside_the_adapter_is_a_referee(
     # Since #933 (R5) `opt.hmm` calls the kernel too, and its own torch
     # recursion is the oracle its tests pin it against, so the adapter module
     # is itself a referee; the tests of `opt.hmm` bring its other referees.
+    # The adapter is `opt.hmm.estimation` since #1010 split the module, and a
+    # test importing from `opt.hmm` imports what the package re-exports.
     assert "likelihood.ragged_rust.posteriors_oracle" in ragged.referees
     assert ragged.referees == (
         "likelihood.message_passing_reference",
         "likelihood.ragged_rust.posteriors_oracle",
-        "opt.hmm",
+        "opt.hmm.estimation",
         "sandbox.rectangular_hmm",
     )
 
@@ -111,7 +113,7 @@ def test_the_boundary_names_the_adapter_each_kernel_is_called_through(
     assert adapters["count_pairs"] == ("sim.count_pairs_rust",)
     # Two callers since #933 (R5): `opt.hmm` may not import `likelihood`, so
     # Baum-Welch's compiled E step reaches the kernel through the extension.
-    assert adapters["ragged"] == ("likelihood.ragged_rust", "opt.hmm")
+    assert adapters["ragged"] == ("likelihood.ragged_rust", "opt.hmm.estimation")
     assert adapters["coupled"] == ("likelihood.spatio_sequential_rust",)
 
 

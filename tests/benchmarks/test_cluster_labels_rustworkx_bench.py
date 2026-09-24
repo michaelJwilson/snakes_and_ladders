@@ -16,7 +16,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.sample.potts_mcmc import _bond_probability
+from snakes_and_ladders.sample.potts_mcmc.sweeps import bond_probability
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 from snakes_and_ladders.sim.potts import critical_coupling
 from snakes_and_ladders.validation import rustworkx
@@ -37,7 +37,7 @@ def bond_mask(side: int) -> tuple[int, np.ndarray]:
     state = rng.integers(0, 3, graph.n_nodes)
     first, second = graph.edge_index[:, 0], graph.edge_index[:, 1]
     like = state[first] == state[second]
-    active = like & (rng.random(len(graph.edges)) < _bond_probability(graph, 1.0))
+    active = like & (rng.random(len(graph.edges)) < bond_probability(graph, 1.0))
     return graph.n_nodes, graph.edge_index[active]
 
 

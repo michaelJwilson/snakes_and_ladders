@@ -23,12 +23,12 @@ from snakes_and_ladders import oxisal
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.sample.potts_keyed import SwendsenWangMove
 from snakes_and_ladders.sample.potts_mcmc import (
-    _GUARD,
     PottsChain,
     PottsMove,
     parallel_tempering,
     sample_potts,
 )
+from snakes_and_ladders.sample.potts_mcmc.sweeps import GUARD
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import critical_coupling, site_field
 
@@ -159,7 +159,7 @@ def _sweep_task(seed: int) -> np.ndarray:
         draws,
         THREADED_SWEEPS,
         1.0,
-        _GUARD,
+        GUARD,
         0,
     )
     return state

@@ -9,7 +9,7 @@ converges to, never by inspection. So the enumeration test is here, at the
 cluster's colour and then, only where the field difference is negative, its
 accept uniform --- what the next draw *is* depends on the last one's outcome,
 so no array replays that stream and the Rust route draws its colours and
-uniforms in bulk instead (``potts_mcmc._cluster_pass_rust``). What *is*
+uniforms in bulk instead (``potts_mcmc.sweeps._cluster_pass_rust``). What *is*
 reachable is the oracle running on the draws the kernel was given:
 :class:`_ScriptedDraws` hands ``swendsen_wang_sweep`` the same bond uniforms,
 the same colour per cluster and the same uniform per cluster, in the order the
@@ -37,13 +37,12 @@ from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.likelihood.potts import log_weights
 from snakes_and_ladders.sample import potts_mcmc
 from snakes_and_ladders.sample.potts_mcmc import (
-    _GUARD,
     ClusterCounter,
     PottsMove,
-    _bond_probability,
     sample_potts,
     swendsen_wang_sweep,
 )
+from snakes_and_ladders.sample.potts_mcmc.sweeps import GUARD, bond_probability
 from snakes_and_ladders.sample.statistics import chi_square_p_value
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
@@ -135,7 +134,7 @@ def _kernel_pass(
     state: np.ndarray,
     beta: float,
     draws: tuple[np.ndarray, np.ndarray, np.ndarray],
-    guard: float = _GUARD,
+    guard: float = GUARD,
 ) -> tuple[np.ndarray, int, int]:
     """One pass through the binding, with the draws supplied rather than drawn."""
     bond, colours, accepts = draws
@@ -144,7 +143,7 @@ def _kernel_pass(
         state,
         np.ascontiguousarray(beta * rows),
         np.ascontiguousarray(graph.edge_index).reshape(-1),
-        np.ascontiguousarray(_bond_probability(graph, beta)),
+        np.ascontiguousarray(bond_probability(graph, beta)),
         bond,
         colours,
         accepts,
@@ -207,7 +206,7 @@ def test_the_labels_are_the_oracles_own_components(seed: int) -> None:
     )
 
     first, second = graph.edge_index[:, 0], graph.edge_index[:, 1]
-    active = (state[first] == state[second]) & (bond < _bond_probability(graph, beta))
+    active = (state[first] == state[second]) & (bond < bond_probability(graph, beta))
     parent = np.arange(graph.n_nodes)
     for edge in np.flatnonzero(active):
         potts_mcmc.union_roots(parent, int(first[edge]), int(second[edge]))
@@ -410,11 +409,11 @@ def test_the_kernel_refuses_a_malformed_call(broken: str, message: str) -> None:
             state,
             np.ascontiguousarray(rows),
             np.ascontiguousarray(graph.edge_index).reshape(-1),
-            np.ascontiguousarray(_bond_probability(graph, 1.0)),
+            np.ascontiguousarray(bond_probability(graph, 1.0)),
             bond,
             colours,
             accepts,
             labels,
-            _GUARD,
+            GUARD,
             0,
         )

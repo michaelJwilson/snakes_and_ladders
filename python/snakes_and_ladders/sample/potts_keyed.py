@@ -96,7 +96,7 @@ def _recolour_at_zero(
 ) -> None:
     """Keep a cluster's recolouring only if it does not lower the score.
 
-    The ``beta -> inf`` limit of ``potts_mcmc._recolour``: the Metropolis
+    The ``beta -> inf`` limit of ``potts_mcmc.sweeps._recolour``: the Metropolis
     acceptance ``exp(beta * difference)`` vanishes for a negative difference,
     so a decrease is refused outright and no uniform is consumed. A zero
     difference is accepted, as it is there --- a move that changes nothing

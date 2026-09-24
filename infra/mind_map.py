@@ -148,6 +148,47 @@ def spellings(package: Path = PACKAGE) -> dict[str, str]:
     return found
 
 
+def split_modules(package: Path = PACKAGE) -> dict[str, tuple[str, ...]]:
+    """``spelling -> modules`` for a package that was one module, as each is written.
+
+    A package whose ``__init__`` imports from its own submodules is a module
+    that was split and re-exports what it held --- ``emissions``,
+    ``sample.potts_mcmc`` and ``opt.hmm`` since issue #1010 --- so `STATUS.md`
+    naming it, or a symbol inside it, names each module it became. A directory
+    package imports none of its submodules (its ``__init__`` defers to
+    ``_submodules``) and is not one: naming ``sample`` claims nothing.
+    """
+    names = {
+        ".".join(path.relative_to(package).with_suffix("").parts)
+        for path in package.rglob("*.py")
+        if path.name != "__init__.py" and "__pycache__" not in path.parts
+    }
+    # A basename a module also has is ambiguous, as `spellings` treats one.
+    bases = {name.rsplit(".", 1)[-1] for name in names}
+    found: dict[str, tuple[str, ...]] = {}
+    for init in sorted(package.rglob("__init__.py")):
+        if init.parent == package or "__pycache__" in init.parts:
+            continue
+        dotted = ".".join(init.parent.relative_to(package).parts)
+        parts = {
+            node.module.removeprefix(f"{package.name}.")
+            for node in ast.parse(init.read_text()).body
+            if isinstance(node, ast.ImportFrom) and node.module
+        }
+        modules = tuple(
+            sorted(
+                part
+                for part in parts
+                if part in names and part.startswith(f"{dotted}.")
+            )
+        )
+        if modules:
+            found[dotted] = modules
+            if dotted.rsplit(".", 1)[-1] not in bases:
+                found.setdefault(dotted.rsplit(".", 1)[-1], modules)
+    return found
+
+
 def status_claims(
     root: Path = REPO_ROOT, package: Path = PACKAGE
 ) -> dict[str, set[str]]:
@@ -158,6 +199,7 @@ def status_claims(
     """
     text = (root / "STATUS.md").read_text()
     known = spellings(package)
+    split = split_modules(package)
     # A milestone's section ends at the next `##` heading of **any** kind, not
     # at the next milestone. `STATUS.md` carries free-form sections after the
     # last milestone, and bounding on milestones alone swept every one of them
@@ -173,8 +215,12 @@ def status_claims(
             candidate = span.removeprefix("snakes_and_ladders.")
             # A symbol inside a module names the module: `device.available_device`.
             name = known.get(candidate) or known.get(candidate.rsplit(".", 1)[0])
-            if name is not None:
-                claims.setdefault(name, set()).add(number)
+            for one in (
+                (name,)
+                if name is not None
+                else split.get(candidate) or split.get(candidate.rsplit(".", 1)[0], ())
+            ):
+                claims.setdefault(one, set()).add(number)
     return claims
 
 

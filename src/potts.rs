@@ -1,6 +1,6 @@
 //! Single-site heat-bath sweeps for the Potts model, ported from
-//! `python/snakes_and_ladders/search/potts_mcmc.py::_single_site_sweep` (the
-//! oracle) and exposed to Python as
+//! `python/snakes_and_ladders/sample/potts_mcmc/sweeps.py::single_site_sweep`
+//! (the oracle) and exposed to Python as
 //! `snakes_and_ladders.oxisal.single_site_sweeps`.
 //!
 //! **Why this one is a Rust port.** Issue #232 profiled the sweep as the one
@@ -377,12 +377,13 @@ pub fn bond_roots<'py>(
 
 /// One Swendsen-Wang bond-and-recolour pass over `state`, in place.
 ///
-/// Ported from `search.potts_mcmc.swendsen_wang_sweep` and its `_recolour`,
-/// which stay as the oracle. The pass activates a bond on each like-coloured
-/// edge whose draw clears the bond probability, joins the active bonds into
-/// clusters, and offers each cluster one colour, accepted on the field
-/// difference alone --- the Fortuin-Kasteleyn construction contributes
-/// nothing to the ratio, which `potts_mcmc`'s module docstring derives.
+/// Ported from `sample.potts_mcmc.sweeps.swendsen_wang_sweep` and its
+/// `_recolour`, which stay as the oracle. The pass activates a bond on each
+/// like-coloured edge whose draw clears the bond probability, joins the
+/// active bonds into clusters, and offers each cluster one colour, accepted
+/// on the field difference alone --- the Fortuin-Kasteleyn construction
+/// contributes nothing to the ratio, which `sample.potts_mcmc`'s package
+/// docstring derives.
 ///
 /// # Parameters
 /// - `state`: the configuration, length `n_nodes`, updated in place.
@@ -694,7 +695,7 @@ pub fn swendsen_wang_sweep(
 mod tests {
     use super::*;
 
-    /// `search.potts_mcmc._GUARD`, the width the callers pass.
+    /// `sample.potts_mcmc.sweeps.GUARD`, the width the callers pass.
     const GUARD: f64 = 16.0;
 
     /// Two isolated sites, no coupling, a field favouring state 1 by `ln 3`.

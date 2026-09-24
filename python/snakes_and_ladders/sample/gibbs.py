@@ -11,7 +11,7 @@ best state visited.
 
 Three things are held fixed from the specialised samplers. The single-site
 update draws one uniform per variable and searches a cumulative sum, the
-arithmetic of :func:`snakes_and_ladders.sample.potts_mcmc._single_site_sweep`,
+arithmetic of :func:`snakes_and_ladders.sample.potts_mcmc.sweeps.single_site_sweep`,
 so on a Potts graph the two agree draw for draw except where a uniform lands
 within rounding of a boundary; the pin is distributional and the agreement is
 reported. A sweep never stops on a state-dependent condition
@@ -578,7 +578,7 @@ def balanced_sweep(
     """``n_variables`` gradient-informed proposals, each Metropolis-corrected, in place.
 
     The factor-graph form of
-    :func:`snakes_and_ladders.sample.potts_mcmc._balanced_sweep_at`, over the
+    :func:`snakes_and_ladders.sample.potts_mcmc.sweeps.balanced_sweep_at`, over the
     same kernel (:mod:`snakes_and_ladders.sample.balanced`). One sweep is one
     proposal per variable, :func:`gibbs_sweep`'s sweep size, so the two are
     comparable in sweeps without a normalization --- but a sweep here is

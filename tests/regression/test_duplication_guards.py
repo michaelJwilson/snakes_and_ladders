@@ -876,10 +876,13 @@ def test_the_problem_catalogue_has_one_reader() -> None:
 #: (issue #1010, CLEAN's E). `_submodules` is the package's lazy-import
 #: plumbing every subpackage `__init__` calls; `_HmmObjective` is the HMM
 #: base `hmm_jax` narrows on until C5 gives each family a declared JAX form
-#: (#1004).
+#: (#1004). Since C3 split `opt.hmm` into a package it is defined in
+#: `opt.hmm.objectives`, and the package `__init__` re-exports it so the
+#: `hmm_jax` import is unchanged: one name, two crossings, both admitted.
 PRIVATE_IMPORTS_ADMITTED = {
     ("snakes_and_ladders", "_submodules"),
     ("snakes_and_ladders.opt.hmm", "_HmmObjective"),
+    ("snakes_and_ladders.opt.hmm.objectives", "_HmmObjective"),
 }
 
 

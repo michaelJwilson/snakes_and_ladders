@@ -317,7 +317,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "potts",
         "Swendsen--Wang, Rust",
-        "sample.potts_mcmc._cluster_pass_rust",
+        "sample.potts_mcmc.sweeps._cluster_pass_rust",
         "Potts MCMC, Wolff, Swendsen--Wang",
         T + "sample/test_potts_mcmc_cluster_rust.py"
         "::test_the_rust_pass_is_the_oracles_pass_bitwise_on_the_same_draws",

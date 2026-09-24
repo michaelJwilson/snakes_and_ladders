@@ -39,7 +39,6 @@ from snakes_and_ladders.sample.balanced import (
     log_normalizer,
     log_ratios,
 )
-from snakes_and_ladders.sample.potts_mcmc import _GUARD as GUARD
 from snakes_and_ladders.sample.potts_mcmc import (
     ClusterCounter,
     PottsChain,
@@ -48,15 +47,18 @@ from snakes_and_ladders.sample.potts_mcmc import (
     adapt_ladder_potts,
     anneal_potts,
     autodiff_log_ratios,
+    chains,
     energies,
     houdayer_cluster,
     niedermayer_threshold,
     parallel_tempering,
     sample_potts,
     sample_potts_pair,
+    sweeps,
     taylor_log_ratios,
     tempered,
 )
+from snakes_and_ladders.sample.potts_mcmc.sweeps import GUARD
 from snakes_and_ladders.sample.schedule import (
     ConstantTempSchedule,
     ExponentialTempSchedule,
@@ -223,12 +225,17 @@ def test_dropping_the_field_accept_step_is_caught(
         # #706's Wolff action names; unused here, since the point of this stub
         # is that the accept step is gone, not which colour it skipped.
         del proposed
+        called.append(None)
         state[members] = int(rng.integers(rows.shape[1]))
         return potts_mcmc.Recolour(proposed=True, accepted=True)
 
-    monkeypatch.setattr(potts_mcmc, "_recolour", unconditional)
+    # The sweeps read `_recolour` from `sweeps`' globals; the package's copy
+    # of a name is not the one they call (issue #1010).
+    called: list[None] = []
+    monkeypatch.setattr(sweeps, "_recolour", unconditional)
 
     assert _goodness_of_fit(move, FIELDS[field]) < SIGNIFICANCE
+    assert called, "the stub never ran: the patch missed the sweep"
 
 
 @pytest.mark.smoke
@@ -573,9 +580,11 @@ def test_dropping_niedermayers_accept_step_is_caught(
         # ferromagnetic case also carries, and the boundary terms only a mixed
         # instance has.
         del delta, beta, rng
+        called.append(None)
         return True
 
-    monkeypatch.setattr(potts_mcmc, "_niedermayer_accept", unconditional)
+    called: list[None] = []
+    monkeypatch.setattr(sweeps, "_niedermayer_accept", unconditional)
 
     p_value = _chi_square_against(
         _frustrated_lattice(),
@@ -586,6 +595,7 @@ def test_dropping_niedermayers_accept_step_is_caught(
     )
 
     assert p_value < SIGNIFICANCE, p_value
+    assert called, "the stub never ran: the patch missed the sweep"
 
 
 @pytest.mark.smoke
@@ -606,15 +616,18 @@ def test_swapping_a_site_rather_than_a_component_is_caught(
         neighbours: np.ndarray,
     ) -> np.ndarray:
         del first, second, neighbours
+        called.append(None)
         return np.arange(int(offsets.shape[0]) - 1)
 
-    monkeypatch.setattr(potts_mcmc, "houdayer_cluster", singletons)
+    called: list[None] = []
+    monkeypatch.setattr(sweeps, "houdayer_cluster", singletons)
 
     first, second = _pair_chi_square(
         _frustrated_lattice(), WITH_FIELD, PottsMove.SINGLE_SITE, SEED
     )
 
     assert min(first, second) < SIGNIFICANCE, (first, second)
+    assert called, "the stub never ran: the patch missed the move"
 
 
 @pytest.mark.analytic
@@ -1020,11 +1033,14 @@ def test_dropping_the_metropolis_correction_is_caught(
     # rejects it.
     def always_accept(*arguments: float) -> float:
         del arguments
+        called.append(None)
         return 0.0
 
-    monkeypatch.setattr(potts_mcmc, "log_metropolis_ratio", always_accept)
+    called: list[None] = []
+    monkeypatch.setattr(sweeps, "log_metropolis_ratio", always_accept)
 
     assert _goodness_of_fit(move, WITH_FIELD) < SIGNIFICANCE
+    assert called, "the stub never ran: the patch missed the sweep"
 
 
 # The instance at the transition, declared rather than built here (issue
@@ -1326,9 +1342,12 @@ def test_omitting_the_exchange_term_is_caught(monkeypatch: pytest.MonkeyPatch) -
     # exchange is accepted -- and every replica's marginal is the wrong
     # distribution: realized p = 0.0 at all three temperatures.
     def always_exchange(*_: float) -> float:
+        called.append(None)
         return 0.0
 
-    monkeypatch.setattr(potts_mcmc, "swap_log_ratio", always_exchange)
+    # `parallel_tempering` reads `swap_log_ratio` from `chains`' globals.
+    called: list[None] = []
+    monkeypatch.setattr(chains, "swap_log_ratio", always_exchange)
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
 
     run = parallel_tempering(
@@ -1343,6 +1362,7 @@ def test_omitting_the_exchange_term_is_caught(monkeypatch: pytest.MonkeyPatch) -
 
     assert bool((run.swap_acceptance == 1.0).all())
     assert max(_replica_p_values(run, graph, WITH_FIELD)) < SIGNIFICANCE
+    assert called, "the stub never ran: the patch missed the exchange"
 
 
 @pytest.mark.analytic
@@ -1668,7 +1688,7 @@ def _swept(
     closure is the shape that builder replaced.
     """
     offsets, neighbours, couplings = graph.compressed_adjacency()
-    sweep = potts_mcmc._sweep_at(rows, offsets, neighbours, couplings, backend)
+    sweep = sweeps.sweep_at(rows, offsets, neighbours, couplings, backend)
     state = np.zeros(graph.n_nodes, dtype=np.int64)
     rng = np.random.default_rng(7)
     for _ in range(5):

@@ -10,7 +10,7 @@ against the *exact enumerated* Boltzmann distribution.
 Rust's `f64::exp` agrees with NumPy's to within a unit in the last place
 rather than exactly, and `np.searchsorted` is a threshold, so the kernel
 decides a site only where the draw clears every cumulative boundary by
-`potts_mcmc._GUARD` units of the last place per state and hands the rest to
+`potts_mcmc.sweeps.GUARD` units of the last place per state and hands the rest to
 NumPy. The enumeration test stays, because it is what would catch a guard
 that decided the wrong site rather than declining it.
 
@@ -25,9 +25,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.sample import potts_mcmc
-from snakes_and_ladders.sample.potts_mcmc import _GUARD, PottsChain, PottsMove
+from snakes_and_ladders.sample.potts_mcmc import PottsChain, PottsMove, sweeps
 from snakes_and_ladders.sample.potts_mcmc import sample_potts as oracle_sample_potts
+from snakes_and_ladders.sample.potts_mcmc.sweeps import GUARD
 from snakes_and_ladders.sample.statistics import chi_square_p_value
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import site_field
@@ -199,7 +199,7 @@ def test_a_state_outside_the_alphabet_is_refused() -> None:
             np.array([0.5]),
             1,
             1.0,
-            _GUARD,
+            GUARD,
             0,
         )
 
@@ -279,7 +279,7 @@ def test_a_guard_wide_enough_hands_every_site_back() -> None:
             )
             if node < graph.n_nodes:
                 handed_back += 1
-                potts_mcmc._site_update(
+                sweeps.site_update(
                     state,
                     rows,
                     neighbours.tolist(),
@@ -328,7 +328,7 @@ def test_the_kernel_refuses_a_negative_guard() -> None:
 def test_the_default_guard_hands_nothing_back_on_a_realistic_chain() -> None:
     """The rate the port is worth measuring at, pinned as an absence.
 
-    `_GUARD` is a hand-back *threshold*, so narrowing it toward the derived
+    `GUARD` is a hand-back *threshold*, so narrowing it toward the derived
     bound of four units per state is what would buy speed. It buys nothing:
     the kernel decided every one of these sites itself. A regression that
     started handing sites back would be a correctness change dressed as a
@@ -346,7 +346,7 @@ def test_the_default_guard_hands_nothing_back_on_a_realistic_chain() -> None:
         draws = np.ascontiguousarray(rng.random(graph.n_nodes), dtype=np.float64)
         assert (
             oxisal.single_site_sweeps(
-                state, rows, offsets, neighbours, couplings, draws, 1, 1.0, _GUARD, 0
+                state, rows, offsets, neighbours, couplings, draws, 1, 1.0, GUARD, 0
             )
             == graph.n_nodes
         )
