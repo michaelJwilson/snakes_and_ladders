@@ -80,10 +80,9 @@ def test_a_strip_of_width_one_reduces_to_the_chain_transfer_matrix() -> None:
 
 
 def _chain(length: int, coupling: float) -> PottsGraph:
-    """The graph a width-1 strip is: `length` sites in a line, `lattice_graph`'s order.
+    """A width-1 strip: `length` sites in a line, in `lattice_graph`'s order.
 
-    Built here rather than by `lattice_graph`, which refuses an extent of 1.
-    Node ``i`` is column ``i``, so the per-site field rows are the strip's.
+    Built here: `lattice_graph` refuses an extent of 1.
     """
     return PottsGraph(
         n_nodes=length,
@@ -95,15 +94,9 @@ def _chain(length: int, coupling: float) -> PottsGraph:
 @pytest.mark.oracle
 @pytest.mark.critical
 def test_the_transfer_matrix_is_sum_product_on_the_strip_that_is_a_tree() -> None:
-    # The rung below (issue #734): sum-product is exact where the factor graph
-    # is a tree, and the only strip that is one is width 1 -- a width of 2
-    # closes every square into a loop. The two routes then compute one number
-    # by different factorizations: a column transferred forward against
-    # messages passed over the tree. The drawn per-site field is the second
-    # half of the case: the shared field is one number at every site and so
-    # cannot catch a route reading the field rows in the wrong order.
-    # Realized relative difference over the eight comparisons, at most
-    # 4.8e-16, against the 1e-13 declared here.
+    # The rung below (#734): only a width-1 strip is a tree. Transfer against
+    # tree messages, with a per-site field to catch row order: at most 4.8e-16
+    # relative over eight comparisons, 1e-13 declared.
     def check(coupling: float, length: int) -> None:
         graph = _chain(length, coupling)
         assert from_potts(graph, FIELD).is_tree()
@@ -221,11 +214,8 @@ def test_a_zero_coupling_lattice_factorizes_into_independent_sites() -> None:
 
 @pytest.mark.oracle
 def test_the_two_log_weight_routes_score_the_same_model() -> None:
-    # `log_weights` scores every edge in one gather below `GATHER_BELOW`
-    # configurations and loops over them above it (issue #598). The two sum
-    # the same terms in a different order, so they agree to floating point
-    # and not bitwise -- the precedent `maxflow.energy` set, which pins to
-    # 1e-12 relative and realizes 7.7e-14.
+    # One gather below `GATHER_BELOW`, a loop above (#598): reordered sums, so
+    # to floating point, as `maxflow.energy` (1e-12, realized 7.7e-14).
     rng = np.random.default_rng(598)
     worst = 0.0
     for shape, n_states in (((3, 3), 2), ((4, 4), 3), ((5, 4), 4)):

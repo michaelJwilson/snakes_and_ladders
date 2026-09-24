@@ -1,15 +1,9 @@
 """Site-pattern compression against the uncompressed log-likelihood (issue #408).
 
-The claim is an identity, not an approximation: the weighted sum over
-distinct columns is the sum over all columns, so the two numbers agree to
-what floating-point reassociation allows and the weights agree with the
-column counts exactly. Both halves are checked here -- the weights against a
-count taken independently of :func:`compress`, and the value on every tree
-fixture across all three backends.
-
-The compression ratio is reported per fixture rather than asserted at a
-value: it is a property of the data, it bounds the win, and pinning it would
-pin the simulator's output rather than this module's.
+An identity: the weighted sum over distinct columns is the sum over all, to
+reassociation, and the weights equal an independent column count. Checked on
+every tree fixture and all three backends. The ratio is reported per fixture,
+not pinned: it is a property of the data.
 """
 
 from __future__ import annotations
@@ -118,12 +112,8 @@ def test_the_compressed_log_likelihood_equals_the_uncompressed() -> None:
 
 @pytest.mark.analytic
 def test_the_compression_ratio_at_each_fixtures_declared_size() -> None:
-    # The ratio is a property of the data, so it is reported rather than
-    # pinned; what is asserted is the bound it cannot exceed. A column is
-    # one of `k ** n_taxa` values and there are `L` of them, so the pattern
-    # count is at most the smaller, and the ratio is at least `L / that`.
-    # This runs at the fixture's own `n_sites`, which the equality test
-    # above does not: the identity holds at any length, the ratio does not.
+    # Reported, bounded: at most `min(k ** n_taxa, L)` patterns, at the
+    # fixture's own `n_sites` (the identity holds at any length; the ratio does not).
     print("\ncompression at the declared size (L -> patterns):")
     for name in TREE_FIXTURES:
         params = load_fixture(name)

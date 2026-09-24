@@ -1,17 +1,9 @@
 """A search fitting with any route to the pruning gradient returns the same answer (issue #449).
 
-Each route's gradient is pinned against ``pruning_torch`` in its own module
-(``test_pruning_analytic.py``; the ``[analytic]`` copy of that check here was
-dropped by issue #982 as the same fixture, size and tolerance). What is pinned
-here is the claim a per-route test cannot make: a search that fits with any
-of them returns the same answer. A gradient that changes which topology
-:func:`snakes_and_ladders.search.infer.infer` returns has changed the answer
-and not the cost, whatever it did to the wall clock.
-
-The swap is a ``monkeypatch`` of ``pruning_torch.log_likelihood`` and not a
-seam. ``likelihood.objective`` calls that function directly and keeps calling
-it; a permanent switch for running the other path would be machinery outliving
-its measurement (issue #425).
+Each route's gradient is pinned in its own module; here, a search fitting with
+any of them returns the same topology from
+:func:`snakes_and_ladders.search.infer.infer`. The swap is a ``monkeypatch``
+of ``pruning_torch.log_likelihood``, not a permanent seam (issue #425).
 """
 
 from __future__ import annotations

@@ -1,20 +1,11 @@
 """Regression tests for ``snakes_and_ladders.likelihood.pruning_torch``.
 
-Issue #70's checks that every route shares are one body each, parametrised
-over ``ROUTES`` (issue #982): agreement with the NumPy oracle, bitwise, in
-``test_pruning_common.py``; with ``brute_force.py`` at ``n <= 6`` taxa and
-rescaled against unrescaled --- the check ``likelihood/CLAUDE.md``'s
-"Rescaling must stay differentiable" calls for --- in
-``test_likelihood_pruning.py``. What is left is the taped route's own:
-``torch.autograd.gradcheck`` and central finite differences of the NumPy
-likelihood w.r.t. branch lengths
-(``test_gradient_matches_finite_differences_of_numpy_oracle``).
-
-A further check pins the general ``rate_matrix`` path (``torch.matrix_exp``)
-against the closed-form JC path when given the JC generator
-(``test_matrix_exp_rate_matrix_path_matches_closed_form``) -- the path issue
-#70 asks be exercised for fitting a general Q, even though JC's Q is fully
-determined by k.
+Issue #70's shared checks run over ``ROUTES`` (#982): the oracle in
+``test_pruning_common.py``, brute force and rescaling in
+``test_likelihood_pruning.py``. Here, the taped route's own: ``gradcheck``
+and central differences of the NumPy likelihood; and the general
+``rate_matrix`` path (``torch.matrix_exp``) against closed-form JC given the
+JC generator, the path #70 asks be exercised for fitting a general Q.
 """
 
 from __future__ import annotations
@@ -40,11 +31,8 @@ _RTOL_ORACLE = CROSS_DEVICE_RTOL_FLOAT64
 
 _FD_EPS = 1e-6
 
-# Finite differences are far less precise than the likelihood itself, so the
-# gradient bound is its own number rather than the oracle's. Relative for the
-# same reason: the gradient of a sum over sites scales with the site count.
-# Measured worst relative disagreement is 6.1e-07 at the step above, so this
-# leaves better than an order of magnitude.
+# Relative, its own number: finite differences are far less precise. Measured
+# worst 6.1e-07 at the step above, over an order inside.
 _RTOL_GRADIENT = 1e-5
 
 
@@ -122,13 +110,9 @@ def test_gradient_matches_finite_differences_of_numpy_oracle() -> None:
 
 @pytest.mark.oracle
 def test_the_batched_transition_matrices_are_the_scalar_ones() -> None:
-    # #264 computes every branch's P(t) in one call. The JC closed form is
-    # elementwise, so each matrix of the batch equals the scalar call's
-    # bitwise -- `torch.equal`, not a tolerance. `matrix_exp` is not: torch
-    # picks its Pade degree per input norm and its batched kernel is a
-    # different code path, so the GTR matrices agree to 2.9e-13 absolute
-    # (measured, stable across runs) and are held to 1e-12 rather than to
-    # equality that would assert something false.
+    # #264 batches P(t): JC is elementwise, so `torch.equal`; `matrix_exp`
+    # picks a Pade degree per norm and batches differently, so GTR agrees to
+    # 2.9e-13 absolute (stable), held to 1e-12.
     lengths = torch.tensor([0.01, 0.1, 0.35, 1.2, 3.0], dtype=torch.float64)
     rate = torch.tensor(
         [
