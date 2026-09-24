@@ -21,6 +21,8 @@ from snakes_and_ladders.emissions import EmissionFamily
 from snakes_and_ladders.opt.budget import Budget, compare
 from snakes_and_ladders.opt.emission_mixture import CountPairSeeding
 from snakes_and_ladders.opt.mixture import mixture_log_likelihood
+from snakes_and_ladders.opt.starts import Polished, Trial
+from snakes_and_ladders.opt.termination import Stop
 from snakes_and_ladders.search.mixture_starts import (
     BEST_OF,
     BEST_OF_EM_STARTS,
@@ -29,10 +31,10 @@ from snakes_and_ladders.search.mixture_starts import (
     POLISH_TOLERANCE,
     STARTS,
     MixtureInstance,
+    MixtureTrial,
     Selection,
     StartRow,
     TimedStart,
-    Trial,
     best_of,
     gap_band,
     instance_from,
@@ -73,7 +75,7 @@ def _instance() -> MixtureInstance:
 
 
 @pytest.fixture(scope="module")
-def trials() -> dict[str, Trial]:
+def trials() -> dict[str, MixtureTrial]:
     """Every start run once through `compare`, serially, at seed 0."""
     comparison = compare(
         {name: TimedStart(name, PASSES) for name in STARTS},
@@ -82,16 +84,16 @@ def trials() -> dict[str, Trial]:
         [0],
         workers=1,
     )
-    found: dict[str, Trial] = {}
+    found: dict[str, MixtureTrial] = {}
     for name, outcome in zip(comparison.methods, comparison.outcomes, strict=True):
-        assert isinstance(outcome.detail, Trial)
+        assert isinstance(outcome.detail, MixtureTrial)
         found[name] = outcome.detail
     return found
 
 
 @pytest.mark.end2end
 def test_every_start_that_reads_the_pairs_recovers_the_generating_components(
-    trials: dict[str, Trial],
+    trials: dict[str, MixtureTrial],
 ) -> None:
     for name, trial in trials.items():
         values = trial.polished.log_likelihoods
@@ -103,7 +105,7 @@ def test_every_start_that_reads_the_pairs_recovers_the_generating_components(
 
 @pytest.mark.analytic
 def test_the_curve_is_the_path_then_the_polish_in_the_order_it_was_sampled(
-    trials: dict[str, Trial],
+    trials: dict[str, MixtureTrial],
 ) -> None:
     for name, trial in trials.items():
         times = [seconds for seconds, _ in trial.curve]
@@ -133,7 +135,7 @@ def test_a_deterministic_start_reads_no_generator() -> None:
 
 @pytest.mark.analytic
 def test_a_row_reads_its_trials_against_the_reference(
-    trials: dict[str, Trial],
+    trials: dict[str, MixtureTrial],
 ) -> None:
     # The gaps are the reference less the handover's and the reached value,
     # entry by entry, and the seeding's seconds are the handover's.
@@ -166,7 +168,7 @@ def test_the_one_budget_polishes_to_the_tolerance_and_charges_the_whole_cell() -
     )
     for name, outcome in zip(comparison.methods, comparison.outcomes, strict=True):
         trial = outcome.detail
-        assert isinstance(trial, Trial)
+        assert isinstance(trial, MixtureTrial)
         assert trial.polished.converged, name
         # The trace's last entry is the closing E step at the components the
         # last iteration left; the change the rule read is between the two
@@ -200,7 +202,7 @@ def test_a_polish_stops_at_one_of_its_two_stops_and_a_timed_start_is_in_seconds(
 
 @pytest.mark.analytic
 def test_a_band_holds_each_trial_between_its_samples_and_averages_across_trials(
-    trials: dict[str, Trial],
+    trials: dict[str, MixtureTrial],
 ) -> None:
     # Issue #898's figure: the referee is the curve itself. At a sample's own
     # time the band is that sample's gap; between samples it is the earlier
@@ -341,7 +343,7 @@ def test_a_timed_best_of_charges_its_seedings_and_draws_their_scores() -> None:
     trial = TimedStart(BEST_OF_STARTS["data" + f"x{BEST_OF}"].key, PASSES)(
         instance, CEILING, np.random.default_rng(0)
     ).detail
-    assert isinstance(trial, Trial)
+    assert isinstance(trial, MixtureTrial)
     assert trial.handover == BEST_OF
     scores = [value for _, value in trial.curve[: trial.handover]]
     assert trial.curve[trial.handover][1] == max(scores)
@@ -398,7 +400,7 @@ def test_a_timed_polished_best_of_hands_over_its_chosen_fit() -> None:
     key = f"datax{BEST_OF}+em"
     outcome = TimedStart(key)(instance, CEILING, np.random.default_rng(0))
     trial = outcome.detail
-    assert isinstance(trial, Trial)
+    assert isinstance(trial, MixtureTrial)
     assert trial.handover == BEST_OF
     assert trial.curve[-1][1] == float(trial.polished.log_likelihoods[-1])
     assert outcome.spent <= CEILING.size
@@ -416,3 +418,24 @@ def test_a_polished_best_of_is_keyed_and_refuses_a_call_without_its_budget() -> 
         start(_instance(), np.random.default_rng(0))
     with pytest.raises(ValueError, match="exactly one"):
         start.polished(_instance(), np.random.default_rng(0))
+
+
+@pytest.mark.smoke
+def test_a_mixture_polish_and_trial_are_the_shared_types() -> None:
+    # Issue #926: one Polished and one Trial for every polish and timed fit;
+    # the mixture's value is the negative log-likelihood where it stopped and
+    # its termination counts the iterations its trace holds.
+    instance = _instance()
+    seeded = STARTS["data"](instance, np.random.default_rng(0))
+    fixed = polish(instance, seeded.components, passes=PASSES.size)
+    assert isinstance(fixed, Polished)
+    assert fixed.value == -float(fixed.log_likelihoods[-1])
+    assert fixed.iterations == PASSES.size == len(fixed.log_likelihoods) - 1
+    assert fixed.termination.reason is Stop.BUDGET
+    assert not fixed.converged
+    trial = TimedStart("data", PASSES)(
+        instance, CEILING, np.random.default_rng(0)
+    ).detail
+    assert isinstance(trial, Trial)
+    assert isinstance(trial, MixtureTrial)
+    assert isinstance(trial.polished, Polished)
