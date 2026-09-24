@@ -52,7 +52,7 @@ from typing import Any
 
 import numpy as np
 
-from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.numerics import logsumexp
 from snakes_and_ladders.sample.accept import accept
 from snakes_and_ladders.sample.balanced import (
@@ -383,9 +383,7 @@ class Indexed:
                     layout.factor_stride,
                 )
             )
-        if backend is not Backend.PYTHON:
-            msg = f"the log-density has no {backend} backend"
-            raise ValueError(msg)
+        refuse_backend("the log-density", backend, (Backend.NUMBA, Backend.PYTHON))
         return self.graph.log_density(
             dict(zip(self.names, map(int, state), strict=True))
         )
@@ -487,9 +485,7 @@ def gibbs_sweep(
                 position += 1
         return
 
-    if backend is not Backend.PYTHON:
-        msg = f"the Gibbs sweep has no {backend} backend"
-        raise ValueError(msg)
+    refuse_backend("the Gibbs sweep", backend, (Backend.NUMBA, Backend.PYTHON))
 
     for position in range(len(indexed.names)):
         _site_update(indexed, state, position, float(draws[position]), beta)

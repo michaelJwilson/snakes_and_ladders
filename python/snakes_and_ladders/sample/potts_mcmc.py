@@ -72,7 +72,7 @@ from typing import Any, NamedTuple
 
 import numpy as np
 
-from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.sample.accept import accept, accept_at, accept_drawn
 from snakes_and_ladders.sample.balanced import (
     draw_change,
@@ -1275,8 +1275,8 @@ def _sweep_at(
                     node += 1
 
         return rust_sweep
-    msg = f"the heat-bath sweep has no {backend} backend"
-    raise ValueError(msg)
+    refuse_backend("the heat-bath sweep", backend, (Backend.PYTHON, Backend.RUST))
+    raise AssertionError(backend)  # pragma: no cover - both routes returned
 
 
 def _single_site_sweep(
@@ -1643,9 +1643,7 @@ def swendsen_wang_sweep(
             raise ValueError(msg)
         _cluster_pass_rust(state, graph, rows, rng, beta)
         return
-    if backend is not Backend.PYTHON:
-        msg = f"the Swendsen-Wang pass has no {backend} backend"
-        raise ValueError(msg)
+    refuse_backend("the Swendsen-Wang pass", backend, (Backend.PYTHON, Backend.RUST))
 
     first, second = graph.edge_index[:, 0], graph.edge_index[:, 1]
     like = state[first] == state[second]
