@@ -75,7 +75,7 @@ from snakes_and_ladders.opt.mixture import (
     expectation_maximization as gaussian_expectation_maximization,
 )
 from snakes_and_ladders.opt.objective import Objective
-from snakes_and_ladders.opt.starts import Polished
+from snakes_and_ladders.opt.starts import PolishedPoint, Trial
 from snakes_and_ladders.opt.termination import Termination
 from snakes_and_ladders.sample.initialize import FromAnnealing, FromChain, FromTempering
 from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
@@ -1082,26 +1082,23 @@ class SeededFit:
 
 
 @dataclass(frozen=True)
-class Trial:
-    """One timed run of a start and its fit, as :class:`TimedFit` reports it.
+class ProjectedTrial(Trial):
+    """One timed run of a start and its projected fit, as :class:`TimedFit` reports it.
+
+    The seconds and the state's bytes are :class:`~snakes_and_ladders.opt.starts.Trial`'s,
+    read from the run's ``seconds`` series
+    (:meth:`snakes_and_ladders.track.TrackedOptimization.record_cost`).
 
     Parameters
     ----------
     fitted : Fitted
         The fit, its seeding and its fitted components.
-    seconds : float
-        Wall clock of the seeding and the fit together, read from the run's
-        ``seconds`` series (:meth:`snakes_and_ladders.track.TrackedOptimization.record_cost`).
-    state_bytes : int
-        What the fit's state held, from the same record.
     curve : tuple[float, ...]
         The ``log_likelihood`` series the run recorded, one value per
         iteration and one at the end.
     """
 
     fitted: Fitted
-    seconds: float
-    state_bytes: int
     curve: tuple[float, ...]
 
 
@@ -1115,7 +1112,7 @@ class TimedFit:
     reported against it is the wall clock rounded up. The seeding and the fit
     run inside one :func:`~snakes_and_ladders.track.track` block, so the
     seconds cover both, and the whole record rides back on
-    :attr:`~snakes_and_ladders.opt.budget.Outcome.detail` as a :class:`Trial`
+    :attr:`~snakes_and_ladders.opt.budget.Outcome.detail` as a :class:`ProjectedTrial`
     --- a process-pool cell records nowhere else (issue #891).
 
     Parameters
@@ -1139,7 +1136,7 @@ class TimedFit:
     def __call__(
         self, instance: ProjectedCounts, budget: Budget, rng: np.random.Generator
     ) -> Outcome:
-        """The negative log-likelihood reached, the whole seconds spent, and the :class:`Trial`.
+        """The negative log-likelihood reached, the whole seconds spent, and the :class:`ProjectedTrial`.
 
         Returns
         -------
@@ -1160,7 +1157,7 @@ class TimedFit:
             msg = "the timed fit records into the MemoryRun it opened"
             raise TypeError(msg)
         seconds = float(run.last("seconds"))
-        trial = Trial(
+        trial = ProjectedTrial(
             fitted=fitted,
             seconds=seconds,
             state_bytes=int(run.last("state_bytes")),
@@ -1343,23 +1340,24 @@ def _projected(objective: Objective) -> ProjectedObjective:
 
 def polish_projected(
     objective: Objective, theta: torch.Tensor, budget: Budget
-) -> Polished:
+) -> PolishedPoint:
     """:func:`fit_projection`'s loop from ``theta``: the seam's polisher of experiment 009.
 
     Returns
     -------
-    snakes_and_ladders.opt.starts.Polished
+    snakes_and_ladders.opt.starts.PolishedPoint
         The last parameters, the negative log-likelihood there, and how the
-        loop ended. Named in full: `search.mixture_starts` has a `Polished`
-        of its own, and a bare name is two targets to Sphinx.
+        loop ended.
     """
     projected = _projected(objective)
     with torch.no_grad():
         weights = torch.exp(projected.constrain(theta)["log_weight"])
         components = projected.components(theta)
     run = _projected_em(projected.instance, weights, components, budget)
-    return Polished(
-        projected.theta_at(run.components, run.weights), -run.trace[-1], run.termination
+    return PolishedPoint(
+        value=-run.trace[-1],
+        termination=run.termination,
+        theta=projected.theta_at(run.components, run.weights),
     )
 
 

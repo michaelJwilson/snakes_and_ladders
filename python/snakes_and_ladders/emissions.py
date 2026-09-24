@@ -292,6 +292,17 @@ def validated_trials(covariate: torch.Tensor, declared: torch.Tensor) -> torch.T
     return counts
 
 
+def _check_tied(tied: bool, name: str, values: torch.Tensor, rtol: float = 0.0) -> None:
+    """Refuse a tied family whose shared parameter differs across states.
+
+    ``rtol`` admits the rounding of a parameter the family stores in parts:
+    ``p M + (1 - p) M`` is ``M`` to a few units in the last place.
+    """
+    if tied and not bool(((values - values[0]).abs() <= rtol * values[0]).all()):
+        msg = f"a tied {name} holds one value across states, got {values.tolist()}"
+        raise ValueError(msg)
+
+
 def refuse_covariate(family: object, covariate: torch.Tensor | None) -> None:
     """Raise unless ``covariate`` is ``None``.
 
@@ -988,20 +999,29 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
         closer to Poisson.
     mean : Values
         Per-state ``mu``, shape ``(n_states,)``, strictly positive.
+    tied : bool
+        One dispersion shared by every state (issue #933): the M step solves
+        the score summed over the states, and ``dispersion`` must hold one
+        value. Keyword-only and off by default: it is a constraint on the
+        model, not a solver setting.
 
     Raises
     ------
     ValueError
-        If the shapes disagree or a parameter is not positive.
+        If the shapes disagree, a parameter is not positive, or a tied
+        dispersion differs across states.
     """
 
     def __init__(
         self,
         dispersion: Values,
         mean: Values,
+        *,
+        tied: bool = False,
     ) -> None:
         self._dispersion = torch.as_tensor(dispersion, dtype=torch.float64).reshape(-1)
         self._mean = torch.as_tensor(mean, dtype=torch.float64).reshape(-1)
+        self._tied = tied
         if self._dispersion.shape != self._mean.shape:
             msg = (
                 f"dispersion and mean must have the same shape, got "
@@ -1015,6 +1035,12 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
             if bool((values <= 0.0).any()):
                 msg = f"every {name} must be positive, got {values.tolist()}"
                 raise ParameterDomainError(msg)
+        _check_tied(tied, "dispersion", self._dispersion)
+
+    @property
+    def tied(self) -> bool:
+        """Whether one dispersion is shared by every state."""
+        return self._tied
 
     @classmethod
     def from_probability(
@@ -1233,6 +1259,16 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
         # `CLAUDE.md` permits and this measurement is the price of (#649).
         mass = _weighted_mass(weights, offsets)
         mean = (weights.T @ values) / mass
+        if self._tied:
+            tied = _solve_dispersion_tied(values, weights, mean, offsets)
+            return Reestimate(
+                NegativeBinomialEmission(
+                    torch.full_like(mean, tied.value), mean, tied=True
+                ),
+                at_boundary=tied.at_boundary,
+                iterations=tied.iterations,
+                residual=tied.residual,
+            )
 
         dispersion = torch.empty_like(mean)
         boundary = False
@@ -1253,7 +1289,25 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
                 residual=max(one.residual for one in batched),
             )
         # Under an exposure the rate differs per observation, so there is no
-        # histogram to take, and each state is solved over every observation.
+        # histogram to take for the log half. The compiled kernel sums the
+        # digamma half on the tails and the rest per observation (issue #933);
+        # the per-state torch solve below stays as its oracle.
+        if M_STEP_BACKEND is Backend.RUST:
+            try:
+                exposed = _solve_dispersion_exposed_rust(
+                    values, weights, [float(m) for m in mean], offsets
+                )
+            except _NoTails:
+                exposed = None
+            if exposed is not None:
+                for state, solved in enumerate(exposed):
+                    dispersion[state] = solved.value
+                return Reestimate(
+                    NegativeBinomialEmission(dispersion, mean),
+                    at_boundary=any(one.at_boundary for one in exposed),
+                    iterations=max(one.iterations for one in exposed),
+                    residual=max(one.residual for one in exposed),
+                )
         for state in range(self.n_states):
             # Formed once per state, outside the bisection: the solve is at
             # fixed `mu`, so `e * mu` does not move across its ~50 steps.
@@ -1608,6 +1662,9 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
         Per-state ``n``, shape ``(n_states,)``, positive integers.
     alpha, beta : Values
         Per-state Beta parameters, shape ``(n_states,)``, strictly positive.
+    tied : bool
+        One concentration ``a + b`` shared by every state, each keeping its
+        own rate ``a / (a + b)`` (issue #933). Keyword-only, off by default.
 
     Raises
     ------
@@ -1620,8 +1677,11 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
         trials: Values,
         alpha: Values,
         beta: Values,
+        *,
+        tied: bool = False,
     ) -> None:
         self._trials = torch.as_tensor(trials, dtype=torch.float64).reshape(-1)
+        self._tied = tied
         self._alpha = torch.as_tensor(alpha, dtype=torch.float64).reshape(-1)
         self._beta = torch.as_tensor(beta, dtype=torch.float64).reshape(-1)
         if not self._trials.shape == self._alpha.shape == self._beta.shape:
@@ -1638,6 +1698,12 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
             if bool((values <= 0.0).any()):
                 msg = f"every {name} must be positive, got {values.tolist()}"
                 raise ParameterDomainError(msg)
+        _check_tied(tied, "concentration", self._alpha + self._beta, rtol=1e-12)
+
+    @property
+    def tied(self) -> bool:
+        """Whether one concentration is shared by every state."""
+        return self._tied
 
     @property
     def n_states(self) -> int:
@@ -1814,6 +1880,26 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
             float(self._alpha[state] + self._beta[state])
             for state in range(self.n_states)
         ]
+        if self._tied:
+            tied = _solve_beta_binomial_tied(
+                values,
+                weights,
+                supplied
+                if per_observation
+                else [float(self._trials[state]) for state in range(self.n_states)],
+                [
+                    float(self._alpha[state]) / totals[state]
+                    for state in range(self.n_states)
+                ],
+                totals[0],
+            )
+            return Reestimate(
+                BetaBinomialEmission(self._trials, tied.alpha, tied.beta, tied=True),
+                at_boundary=tied.at_boundary,
+                converged=tied.converged,
+                iterations=tied.iterations,
+                residual=tied.residual,
+            )
         batch = _solve_beta_binomial_m_step(
             values,
             weights,
@@ -2900,16 +2986,21 @@ def _weighted_dispersion_score(
 
     Under an exposure ``mean`` is the **rate** ``e_t mu`` per observation, and
     the last term stops factoring out of the sum: it is
-    ``sum_t w_t log(r / (r + e_t mu))``. The profiling identity still holds,
-    because the closed form for ``mu`` under an exposure is
-    ``sum_t w_t y_t / sum_t w_t e_t`` (issue #631).
+    ``sum_t w_t log(r / (r + e_t mu))``. The profiling identity does **not**
+    survive a varying exposure: ``sum_t w_t (e_t mu - y_t) / (r + e_t mu)``
+    vanishes only where ``e_t`` is constant, so it is added wherever the rate
+    varies, and the solve is the likelihood's maximum in ``r`` at the given
+    ``mu`` (issue #933; until then the fitted ``r`` sat a relative 5.6e-4
+    off it on a 1,500-observation draw). A constant rate keeps the profiled
+    form, so its fits are unchanged bitwise.
     """
     r = torch.tensor(dispersion, dtype=values.dtype)
     weighted = (weights * (torch.digamma(values + r) - torch.digamma(r))).sum()
     if isinstance(mean, torch.Tensor):
-        return float(
-            weighted + (weights * torch.log(dispersion / (dispersion + mean))).sum()
-        )
+        score = weighted + (weights * torch.log(dispersion / (dispersion + mean))).sum()
+        if not _is_constant(mean):
+            score = score + (weights * (mean - values) / (dispersion + mean)).sum()
+        return float(score)
     return float(weighted + weights.sum() * math.log(dispersion / (dispersion + mean)))
 
 
@@ -3055,6 +3146,197 @@ def _solve_dispersion_batched(
         )
         for k in range(n_states)
     ]
+
+
+def _solve_dispersion_tied(
+    values: torch.Tensor,
+    weights: torch.Tensor,
+    means: torch.Tensor,
+    offsets: torch.Tensor | None,
+    *,
+    tolerance: float = 1e-12,
+) -> _SolvedDispersion:
+    """One dispersion for every state: bisection on ``log r`` of the summed score (issue #933).
+
+    The score is :func:`_weighted_dispersion_score` summed over the states,
+    each at its own profiled mean. Its ``digamma`` half pools: ``sum_k sum_t
+    w_tk (digamma(y_t + r) - digamma(r))`` is one sum at the weight each
+    observation carries over all states, so without an exposure it is taken
+    on the distinct counts as :func:`_solve_dispersion_batched` takes it. The
+    ``log`` half keeps a term per state, and per observation under an
+    exposure. A sum of decreasing scores is decreasing, so the bracket is
+    unconditional; it is :func:`identifiable_dispersion_bound` at the pooled
+    rate and weight, as one state holding all the data would read it.
+
+    Returns
+    -------
+    _SolvedDispersion
+    """
+    per_state = weights.sum(dim=0)
+    pooled = weights.sum(dim=1)
+    total = float(per_state.sum())
+    if offsets is None:
+        distinct, summed = _weighted_histogram(values, pooled.reshape(1, -1))
+        grid, mass = distinct, summed[0]
+
+        def score(r: float) -> float:
+            at = torch.tensor(r, dtype=values.dtype)
+            return float(
+                (mass * torch.digamma(grid + at)).sum()
+                - total * torch.digamma(at)
+                + (per_state * torch.log(r / (r + means))).sum()
+            )
+
+        rate = float((per_state * means).sum()) / total
+    else:
+        rates = offsets.reshape(-1, 1) * means.reshape(1, -1)
+        # The term profiling drops, kept where the exposure varies, as
+        # `_weighted_dispersion_score` keeps it.
+        varying = not _is_constant(offsets)
+        observed = values.reshape(-1, 1)
+
+        def score(r: float) -> float:
+            at = torch.tensor(r, dtype=values.dtype)
+            summed = (
+                pooled * (torch.digamma(values + at) - torch.digamma(at))
+            ).sum() + (weights * torch.log(r / (r + rates))).sum()
+            if varying:
+                summed = summed + (weights * (rates - observed) / (r + rates)).sum()
+            return float(summed)
+
+        rate = float((weights * rates).sum()) / total
+
+    upper = identifiable_dispersion_bound(rate, total)
+    lower = upper * _DISPERSION_BRACKET_RATIO
+    if score(upper) > 0.0:
+        return _SolvedDispersion(upper, at_boundary=True, iterations=0, residual=0.0)
+    if score(lower) < 0.0:
+        return _SolvedDispersion(lower, at_boundary=True, iterations=0, residual=0.0)
+    low, high = math.log(lower), math.log(upper)
+    iterations = 0
+    while high - low > tolerance:
+        middle = 0.5 * (low + high)
+        if score(math.exp(middle)) > 0.0:
+            low = middle
+        else:
+            high = middle
+        iterations += 1
+    dispersion = math.exp(0.5 * (low + high))
+    return _SolvedDispersion(
+        dispersion,
+        at_boundary=False,
+        iterations=iterations,
+        residual=abs(score(dispersion)) / total,
+    )
+
+
+@dataclass(frozen=True)
+class _SolvedTiedBetaBinomial:
+    """The tied beta-binomial solve: every state's ``(a, b)`` at one concentration."""
+
+    alpha: torch.Tensor
+    beta: torch.Tensor
+    at_boundary: bool
+    converged: bool
+    iterations: int
+    residual: float
+
+
+def _solve_beta_binomial_tied(
+    values: torch.Tensor,
+    weights: torch.Tensor,
+    trials: torch.Tensor | Sequence[float],
+    rates: Sequence[float],
+    concentration: float,
+    *,
+    tolerance: float = 1e-10,
+    max_iterations: int = 60,
+) -> _SolvedTiedBetaBinomial:
+    """:func:`_solve_beta_binomial` with one concentration for every state (issue #933).
+
+    The same alternation: each state's rate by bisection at the held
+    concentration, then the concentration by bisection on ``log M`` of the
+    concentration score summed over the states at their rates. Each score is
+    decreasing in its own coordinate, and a sum of decreasing scores is too.
+    The bound is :func:`identifiable_concentration_bound` at the pooled
+    weight and the weighted mean trial count.
+
+    Returns
+    -------
+    _SolvedTiedBetaBinomial
+    """
+    n_states = weights.shape[1]
+    per_observation = isinstance(trials, torch.Tensor)
+
+    def trials_of(state: int) -> float | torch.Tensor:
+        return trials if per_observation else float(trials[state])  # type: ignore[return-value]
+
+    per_state = weights.sum(dim=0)
+    if per_observation:
+        effective = _effective_trials(trials, weights.sum(dim=1))  # type: ignore[arg-type]
+    else:
+        depth = torch.tensor(list(trials), dtype=weights.dtype)
+        first = depth[0]
+        effective = (
+            float(first)
+            if bool((depth == first).all())
+            else float((per_state * depth).sum() / per_state.sum())
+        )
+    bound = identifiable_concentration_bound(effective, float(per_state.sum()))
+    concentration = min(concentration, bound)
+    rate = list(rates)
+    at_boundary = False
+    residual = float("inf")
+    iterations = 0
+
+    def summed(log_concentration: float) -> float:
+        held = math.exp(log_concentration)
+        return sum(
+            _beta_binomial_concentration_score(
+                values, weights[:, k], trials_of(k), rate[k], held
+            )
+            for k in range(n_states)
+        )
+
+    while iterations < max_iterations:
+        iterations += 1
+        previous = ([*rate], concentration)
+        rate = [
+            _bisect(
+                _rate_score_at(values, weights[:, k], trials_of(k), concentration),
+                _PROBABILITY_MARGIN,
+                1.0 - _PROBABILITY_MARGIN,
+                tolerance,
+            )
+            for k in range(n_states)
+        ]
+        if summed(math.log(bound)) > 0.0:
+            concentration, at_boundary = bound, True
+        else:
+            at_boundary = False
+            concentration = math.exp(
+                _bisect(
+                    summed,
+                    math.log(bound) + math.log(_CONCENTRATION_BRACKET_RATIO),
+                    math.log(bound),
+                    tolerance,
+                )
+            )
+        residual = max(
+            *(abs(a - b) for a, b in zip(rate, previous[0], strict=True)),
+            abs(concentration - previous[1]) / concentration,
+        )
+        if residual <= tolerance:
+            break
+    shares = torch.tensor(rate, dtype=torch.float64)
+    return _SolvedTiedBetaBinomial(
+        alpha=shares * concentration,
+        beta=(1.0 - shares) * concentration,
+        at_boundary=at_boundary,
+        converged=residual <= tolerance,
+        iterations=iterations,
+        residual=residual,
+    )
 
 
 #: Where the count families' M-step solves run (issue #922). The compiled
@@ -3203,6 +3485,88 @@ def _solve_dispersion_rust(
     ]
 
 
+#: The widest tails, as a multiple of the observations, the exposed kernel
+#: takes before the oracle's per-observation digamma is cheaper (issue #933).
+EXPOSED_TAIL_RATIO = 8.0
+
+
+def _solve_dispersion_exposed_rust(
+    values: torch.Tensor,
+    weights: torch.Tensor,
+    means: Sequence[float],
+    offsets: torch.Tensor,
+    *,
+    tolerance: float = 1e-12,
+) -> list[_SolvedDispersion]:
+    """:func:`_solve_dispersion` under an exposure, every state in the compiled kernel (issue #933).
+
+    The digamma half by the reciprocal-sum identity on the tails, as
+    :func:`_solve_dispersion_rust`; the log half and the term a varying
+    exposure keeps per observation. Each state's bracket is the oracle's.
+
+    **The tails are as wide as the largest count, and past a width of**
+    :data:`EXPOSED_TAIL_RATIO` **times the observations they cost more than
+    the digamma calls they replace**, so the solve falls back to the oracle
+    there. Measured at four states, 2,000 observations and exposures in
+    [0.5, 2], best of three: 5.4-5.9x the torch solve at widths under one
+    observation, 2.2x at 8.3, 1.3x at 16.7, parity at 23.7 and 0.4x at 59.
+    The cap is where the kernel still clears the 2x root ``CLAUDE.md`` keeps
+    a compiled path for.
+
+    Returns
+    -------
+    list[_SolvedDispersion]
+
+    Raises
+    ------
+    _NoTails
+        Where a weighted count has no tails, as :func:`_weight_tails` says,
+        or they are wider than the cap.
+    """
+    from snakes_and_ladders import oxi_snakes_and_ladders as oxi
+
+    if values.numel() and float(values.max()) > EXPOSED_TAIL_RATIO * values.numel():
+        raise _NoTails
+    n_states = weights.shape[1]
+    columns = weights.T.contiguous().to(torch.float64)
+    exposures = offsets.to(torch.float64)
+    uppers = [
+        identifiable_dispersion_bound(
+            _effective_rate(exposures * float(means[k]), weights[:, k]),
+            float(weights[:, k].sum()),
+        )
+        for k in range(n_states)
+    ]
+    value = np.empty(n_states)
+    at_boundary = np.empty(n_states, dtype=np.uint8)
+    iterations = np.empty(n_states, dtype=np.uint32)
+    residual = np.empty(n_states)
+    oxi.negative_binomial_dispersions_exposed(
+        _weight_tails(values, columns).reshape(-1),
+        np.ascontiguousarray(columns.numpy()).reshape(-1),
+        np.ascontiguousarray(exposures.numpy()),
+        np.ascontiguousarray(values.to(torch.float64).numpy()),
+        columns.sum(dim=1).numpy().astype(np.float64),
+        np.asarray(means, dtype=np.float64),
+        np.asarray([u * _DISPERSION_BRACKET_RATIO for u in uppers]),
+        np.asarray(uppers, dtype=np.float64),
+        tolerance,
+        value,
+        at_boundary,
+        iterations,
+        residual,
+    )
+    return [
+        _SolvedDispersion(
+            float(value[k]),
+            at_boundary=bool(at_boundary[k]),
+            iterations=int(iterations[k]),
+            residual=float(residual[k]),
+        )
+        for k in range(n_states)
+    ]
+
+
 def _solve_beta_binomial_rust(
     values: torch.Tensor,
     weights: torch.Tensor,
@@ -3298,6 +3662,11 @@ def _weighted_mass(weights: torch.Tensor, offsets: torch.Tensor | None) -> torch
     if bool((offsets == first).all()):
         return weights.sum(dim=0) * first
     return weights.T @ offsets
+
+
+def _is_constant(values: torch.Tensor) -> bool:
+    """Whether every entry of ``values`` is its first."""
+    return bool((values == values.reshape(-1)[0]).all())
 
 
 def _effective_rate(mean: float | torch.Tensor, weights: torch.Tensor) -> float:

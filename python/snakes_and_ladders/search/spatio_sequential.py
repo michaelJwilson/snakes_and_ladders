@@ -40,9 +40,11 @@ from scipy.optimize import linear_sum_assignment
 
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.emissions import (
+    BetaBinomialEmission,
     CategoricalEmission,
     EmissionFamily,
     GaussianEmission,
+    NegativeBinomialEmission,
 )
 from snakes_and_ladders.likelihood.forward_backward import sample_path
 from snakes_and_ladders.likelihood.spatio_sequential import (
@@ -53,17 +55,22 @@ from snakes_and_ladders.likelihood.spatio_sequential import (
     external_field,
     labelled_log_likelihood,
 )
+from snakes_and_ladders.opt.emission_mixture import plus_plus_start
 from snakes_and_ladders.opt.mixture import emission_mixture_plus_plus
 from snakes_and_ladders.opt.termination import Termination
-from snakes_and_ladders.sample.accept import accept
+from snakes_and_ladders.sample.potts_mcmc import adjacency_lists, wolff_sweep
 from snakes_and_ladders.sample.schedule import TempSchedule
 from snakes_and_ladders.search.alpha_expansion import (
     SweepOrder,
     alpha_expansion,
     iterated_conditional_modes,
 )
-from snakes_and_ladders.sim.graph import PottsGraph
-from snakes_and_ladders.sim.potts import energy
+from snakes_and_ladders.sim.count_pairs import (
+    IndependentCountPair,
+    IndependentCountPairSeeding,
+    rate_space,
+)
+from snakes_and_ladders.sim.potts import SiteField, energy
 from snakes_and_ladders.sim.spatio_sequential import SpatioSequentialParams
 from snakes_and_ladders.track import current as current_tracked
 
@@ -117,7 +124,9 @@ def m_step(
     """Re-estimate every class's emissions, ``Pi_m`` and the shared ``t`` from the E step.
 
     A class with no members keeps its emissions: there is nothing to
-    re-estimate them from, and its chain posterior is its prior. A per-step
+    re-estimate them from, and its chain posterior is its prior. Under
+    ``params.shared_emissions`` one family is re-estimated on every class's
+    block, and every class takes it. A per-step
     ``self_transition`` is kept too, for the reason stated at the assignment.
 
     ``params.covariate`` is selected by the same members and moved by the same
@@ -129,11 +138,11 @@ def m_step(
     and not this module's own (issue #670).
     """
     labels = np.asarray(labels, dtype=np.int64)
-    emissions: list[EmissionFamily] = []
+    blocks: list[tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]] = []
     for m, family in enumerate(params.emissions):
         members = np.flatnonzero(labels == m)
         if members.size == 0:
-            emissions.append(family)
+            blocks.append((torch.empty(0), torch.empty(0), None))
             continue
         block = torch.as_tensor(
             np.moveaxis(observations[:, members], 1, 0), dtype=family.observation_dtype
@@ -150,9 +159,38 @@ def m_step(
         weights = torch.as_tensor(posteriors.posterior[m])[None].expand(
             members.size, -1, -1
         )  # (n_m, S, K)
-        emissions.append(
-            family.reestimate(block, weights, covariate=exposure).emissions
-        )
+        blocks.append((block, weights, exposure))
+    emissions: list[EmissionFamily]
+    if params.shared_emissions:
+        # One family for every class (issue #933): its M step is the family's
+        # own on the classes' blocks stacked along the member axis, which is
+        # the sum over classes of each class's expected log-likelihood.
+        filled = [one for one in blocks if one[0].numel() > 0]
+        if not filled:
+            emissions = list(params.emissions)
+        else:
+            covariates = [one[2] for one in filled]
+            pooled = (
+                params.emissions[0]
+                .reestimate(
+                    torch.cat([one[0] for one in filled]),
+                    torch.cat([one[1] for one in filled]),
+                    covariate=None
+                    if covariates[0] is None
+                    else torch.cat([c for c in covariates if c is not None]),
+                )
+                .emissions
+            )
+            emissions = [pooled] * params.n_classes
+    else:
+        emissions = [
+            family
+            if block.numel() == 0
+            else family.reestimate(block, weights, covariate=exposure).emissions
+            for family, (block, weights, exposure) in zip(
+                params.emissions, blocks, strict=True
+            )
+        ]
     initial = np.maximum(posteriors.posterior[:, 0, :], 1e-12)
     initial = initial / initial.sum(axis=1, keepdims=True)
     self_transition: float | np.ndarray = params.self_transition
@@ -176,47 +214,6 @@ def m_step(
         self_transition=self_transition,
         emissions=tuple(emissions),
     )
-
-
-def _wolff_update(
-    labels: np.ndarray,
-    graph: PottsGraph,
-    field: np.ndarray,
-    beta: float,
-    rng: np.random.Generator,
-) -> None:
-    """One cluster grown on ``1 - exp(-beta J)`` and recoloured on the field alone (the textbook's Wolff-in-a-field algorithm).
-
-    ``field`` is ``-H`` per node and class, so the accept step is Metropolis
-    on ``beta * sum_C (H[n, new] - H[n, old])``.
-    """
-    n_nodes = labels.shape[0]
-    offsets, neighbour_index, edge_couplings = graph.compressed_adjacency()
-    bounds = offsets.tolist()
-    neighbours, couplings = neighbour_index.tolist(), edge_couplings.tolist()
-    root = int(rng.integers(n_nodes))
-    colour = int(labels[root])
-    members = [root]
-    inside = np.zeros(n_nodes, dtype=bool)
-    inside[root] = True
-    frontier = [root]
-    while frontier:
-        node = frontier.pop()
-        for position in range(bounds[node], bounds[node + 1]):
-            neighbour, coupling = neighbours[position], couplings[position]
-            if inside[neighbour] or labels[neighbour] != colour:
-                continue
-            if rng.random() < 1.0 - np.exp(-beta * coupling):
-                inside[neighbour] = True
-                members.append(neighbour)
-                frontier.append(neighbour)
-    proposed = int(rng.integers(field.shape[1]))
-    if proposed == colour:
-        return
-    cluster = np.array(members, dtype=np.int64)
-    difference = beta * float((field[cluster, proposed] - field[cluster, colour]).sum())
-    if accept(difference, rng):
-        labels[cluster] = proposed
 
 
 def label_step(
@@ -267,11 +264,22 @@ def label_step(
         raise ValueError(msg)
     best_labels = labels.copy()
     best_value = energy(graph, potential, labels)
+    # The field declared as the energy it is: the move reads -H (#921).
+    declared = SiteField.from_energy(field)
+    offsets, neighbours, couplings = params.graph.compressed_adjacency()
+    lists = adjacency_lists(offsets, neighbours, couplings)
     for step in range(wolff_schedule.n_steps):
         temperature = wolff_schedule(step)
         for _ in range(wolff_moves_per_step):
-            _wolff_update(
-                labels, params.graph, potential, params.beta / temperature, rng
+            wolff_sweep(
+                labels,
+                declared,
+                offsets,
+                neighbours,
+                couplings,
+                rng,
+                beta=params.beta / temperature,
+                lists=lists,
             )
         value = energy(graph, potential, labels)
         if value < best_value:
@@ -427,6 +435,107 @@ def fit_spatio_sequential(
     )
 
 
+@dataclass(frozen=True)
+class Merge:
+    """What one :func:`merge_step` tried and what it kept.
+
+    Parameters
+    ----------
+    params : SpatioSequentialParams
+        The parameters after the kept merge, or the input where none was.
+    labels : np.ndarray
+        The labels after the kept merge, or the input.
+    criterion : float
+        :func:`~snakes_and_ladders.likelihood.spatio_sequential.labelled_log_likelihood`
+        less ``penalty`` per occupied class, at what was kept.
+    merged : tuple[int, int] | None
+        ``(kept, emptied)``: the class that absorbed the other, or ``None``.
+    tried : tuple[tuple[int, int, float], ...]
+        Every pair tried and its criterion, in the order tried.
+    """
+
+    params: SpatioSequentialParams
+    labels: np.ndarray
+    criterion: float
+    merged: tuple[int, int] | None
+    tried: tuple[tuple[int, int, float], ...]
+
+
+def merge_step(
+    params: SpatioSequentialParams,
+    observations: np.ndarray,
+    labels: np.ndarray,
+    *,
+    penalty: float = 0.0,
+) -> Merge:
+    """Merge the pair of classes that most raises the labelled joint, if any does (issue #933).
+
+    No other move lowers the number of classes a labelling occupies: the
+    label solvers keep every class they are given, and ``opt.split_merge``
+    acts on mixture components. For every pair ``a < b`` of occupied
+    classes, ``b``'s sites take ``a`` and one :func:`m_step` refits the
+    parameters on the merged labels; the criterion is the labelled joint
+    less ``penalty`` per occupied class. The best merge is kept when its
+    criterion is at least the input's, so a block ascent that interleaves
+    this step stays non-decreasing in the criterion. The emptied class keeps
+    its parameters, as :func:`m_step` keeps an empty class's, and a later
+    label step may repopulate it.
+
+    Parameters
+    ----------
+    params : SpatioSequentialParams
+        The current parameters.
+    observations : np.ndarray
+        ``(S, n_nodes, ...)``.
+    labels : np.ndarray
+        The current class per node.
+    penalty : float
+        The criterion's cost per occupied class, non-negative; ``0``, the
+        default, merges only where the joint itself does not fall.
+
+    Returns
+    -------
+    Merge
+
+    Raises
+    ------
+    ValueError
+        If ``penalty`` is negative.
+    """
+    if penalty < 0.0:
+        msg = f"a class penalty is non-negative, got {penalty}"
+        raise ValueError(msg)
+    labels = np.asarray(labels, dtype=np.int64)
+
+    def criterion(candidate: SpatioSequentialParams, labelled: np.ndarray) -> float:
+        occupied = int(np.unique(labelled).size)
+        return (
+            labelled_log_likelihood(candidate, observations, labelled)
+            - penalty * occupied
+        )
+
+    current = criterion(params, labels)
+    best: Merge | None = None
+    tried: list[tuple[int, int, float]] = []
+    occupied = [int(m) for m in np.unique(labels)]
+    for index, kept in enumerate(occupied):
+        for emptied in occupied[index + 1 :]:
+            merged = np.where(labels == emptied, kept, labels)
+            refit = m_step(
+                params,
+                observations,
+                merged,
+                class_posteriors(params, observations, merged),
+            )
+            value = criterion(refit, merged)
+            tried.append((kept, emptied, value))
+            if value >= current and (best is None or value > best.criterion):
+                best = Merge(refit, merged, value, (kept, emptied), ())
+    if best is None:
+        return Merge(params, labels, current, None, tuple(tried))
+    return replace(best, tried=tuple(tried))
+
+
 def label_accuracy(fitted: np.ndarray, planted: np.ndarray, n_classes: int) -> float:
     """The fraction of nodes labelled as planted, up to the best permutation of classes.
 
@@ -460,13 +569,21 @@ def label_accuracy(fitted: np.ndarray, planted: np.ndarray, n_classes: int) -> f
 
 
 def seed_emissions(
-    params: SpatioSequentialParams, observations: np.ndarray, rng: np.random.Generator
+    params: SpatioSequentialParams,
+    observations: np.ndarray,
+    rng: np.random.Generator,
+    *,
+    seed_counts: bool = False,
 ) -> SpatioSequentialParams:
     """``Emission_Mixture++`` for every class: seeds under the family's own divergence.
 
     A categorical family is seeded from symbols (a smoothed one-hot row per
     seed); a Gaussian one from values (the seed as the mean, the pooled scale).
-    Other families keep their parameters, which the notebook records.
+    With ``seed_counts`` a count family is seeded too (issue #933):
+    :func:`_seed_count_family` says how. Without it, and for any other
+    family, the parameters are kept, which the notebook records; the default
+    stays off so a caller's start does not move under it. Under
+    ``params.shared_emissions`` one family is seeded and every class takes it.
 
     The Gaussian score is the Bregman divergence exactly. The categorical's
     carries the smoothing constant its seeded row scores at the seed itself,
@@ -476,8 +593,16 @@ def seed_emissions(
     """
     emissions: list[EmissionFamily] = []
     flat = observations.reshape(-1)
-    for family in params.emissions:
-        if isinstance(family, CategoricalEmission):
+    families = params.emissions[:1] if params.shared_emissions else params.emissions
+    for family in families:
+        seeded = (
+            _seed_count_family(family, params, observations, rng)
+            if seed_counts
+            else None
+        )
+        if seeded is not None:
+            emissions.append(seeded)
+        elif isinstance(family, CategoricalEmission):
             n_symbols = int(family.matrix.shape[1])
 
             def score(
@@ -512,7 +637,72 @@ def seed_emissions(
             )
         else:
             emissions.append(family)
+    if params.shared_emissions:
+        emissions = emissions * params.n_classes
     return replace(params, emissions=tuple(emissions))
+
+
+def _seed_count_family(
+    family: EmissionFamily,
+    params: SpatioSequentialParams,
+    observations: np.ndarray,
+    rng: np.random.Generator,
+) -> EmissionFamily | None:
+    """A count family seeded by ``Emission_Mixture++`` under its divergence, or ``None`` (issue #933).
+
+    Every (position, node) observation is a candidate, placed in rate space
+    where the params carry a covariate: a total over its exposure, successes
+    as the fraction of their own trials, over the family's declared count
+    (:func:`~snakes_and_ladders.sim.count_pairs.rate_space`). The seeds set
+    the per-state means and rates; the dispersion and concentration start at
+    the family's own, averaged over its states, since one seed carries no
+    shape. ``None`` for a family this does not seed.
+    """
+    covariate = (
+        None if params.covariate is None else np.asarray(params.covariate, dtype=float)
+    )
+    k = params.n_states
+    if isinstance(family, IndependentCountPair):
+        trials = float(family.successes.trials[0])
+        rows = observations.reshape(-1, 2).astype(np.float64)
+        if covariate is not None:
+            rows = rate_space(rows, covariate.reshape(-1, 2), trials)
+        seeding = IndependentCountPairSeeding(
+            dispersion=float(family.total.dispersion.mean()),
+            concentration=float(family.successes.concentration.mean()),
+            trials=trials,
+        )
+        return plus_plus_start(rows, k, seeding, rng)
+    if isinstance(family, NegativeBinomialEmission):
+        values = observations.reshape(-1).astype(np.float64)
+        if covariate is not None:
+            values = values / covariate.reshape(-1)
+        dispersion = float(family.dispersion.mean())
+        return plus_plus_start(
+            values,
+            k,
+            lambda rows: NegativeBinomialEmission(
+                np.full(len(rows), dispersion), np.maximum(rows.reshape(-1), 1e-6)
+            ),
+            rng,
+        )
+    if isinstance(family, BetaBinomialEmission):
+        trials = float(family.trials[0])
+        values = observations.reshape(-1).astype(np.float64)
+        if covariate is not None:
+            values = values / covariate.reshape(-1) * trials
+        concentration = float(family.concentration.mean())
+
+        def at(rows: np.ndarray) -> BetaBinomialEmission:
+            rate = (rows.reshape(-1) + 0.5) / (trials + 1.0)
+            return BetaBinomialEmission(
+                np.full(len(rate), trials),
+                rate * concentration,
+                (1.0 - rate) * concentration,
+            )
+
+        return plus_plus_start(values, k, at, rng)
+    return None
 
 
 def graph_burn_in(
@@ -522,6 +712,7 @@ def graph_burn_in(
     schedule: TempSchedule,
     *,
     wolff_moves_per_step: int = 4,
+    seed_counts: bool = False,
 ) -> SpatioSequentialFit:
     """``Graph_BurnIn++`` (the textbook's burn-in algorithm): the blocks while the inverse temperature rises.
 
@@ -531,16 +722,29 @@ def graph_burn_in(
     current field, a block Gibbs draw of every class's chain, an E step and an
     M step, then the field. Emissions are seeded once by ``Emission_Mixture++``
     and labels uniformly; the returned fit is the state at the schedule's end,
-    to be polished by :func:`fit_spatio_sequential`.
+    to be polished by :func:`fit_spatio_sequential`. ``seed_counts`` is
+    :func:`seed_emissions`'s.
     """
-    params = seed_emissions(params, observations, rng)
+    params = seed_emissions(params, observations, rng, seed_counts=seed_counts)
     labels = rng.integers(0, params.n_classes, size=params.graph.n_nodes)
     field = external_field(params, observations, labels)
     values = [labelled_log_likelihood(params, observations, labels)]
+    offsets, neighbours, couplings = params.graph.compressed_adjacency()
+    lists = adjacency_lists(offsets, neighbours, couplings)
     for step in range(schedule.n_steps):
         beta = params.beta / schedule(step)
+        declared = SiteField.from_energy(field)
         for _ in range(wolff_moves_per_step):
-            _wolff_update(labels, params.graph, -field, beta, rng)
+            wolff_sweep(
+                labels,
+                declared,
+                offsets,
+                neighbours,
+                couplings,
+                rng,
+                beta=beta,
+                lists=lists,
+            )
         density = class_log_density(params, observations, labels)
         for m in range(
             params.n_classes
