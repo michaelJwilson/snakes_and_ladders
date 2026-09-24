@@ -30,6 +30,19 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.emissions
    :members:
 
+.. automodule:: snakes_and_ladders.emissions.base
+   :members: Values, FamilyT_co
+
+.. automodule:: snakes_and_ladders.emissions.families
+   :members: COLLAPSE_EXPONENT
+
+.. automodule:: snakes_and_ladders.emissions.mstep
+   :members:
+   :exclude-members: identifiable_concentration_bound, identifiable_dispersion_bound
+
+.. automodule:: snakes_and_ladders.emissions.counts
+   :members: lgamma_shifted
+
 .. automodule:: snakes_and_ladders.fixtures
    :members:
 

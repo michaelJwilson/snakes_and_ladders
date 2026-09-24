@@ -1,5 +1,5 @@
 //! The count families' M-step solves, ported from
-//! `python/snakes_and_ladders/emissions.py` (the batched `torch` solves, the
+//! `python/snakes_and_ladders/emissions/mstep.py` (the batched `torch` solves, the
 //! oracle) to Rust, exposed to Python via PyO3 as
 //! `snakes_and_ladders.oxisal.negative_binomial_dispersions`
 //! and `...beta_binomial_parameters` (issue #922).

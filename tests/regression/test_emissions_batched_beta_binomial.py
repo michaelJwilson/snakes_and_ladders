@@ -1,6 +1,6 @@
 """The batched beta-binomial M step against the per-component solve it replaced (issue #892).
 
-`emissions._solve_beta_binomial_batched` runs every component's alternating
+`mstep.solve_beta_binomial_batched` runs every component's alternating
 bisection at once, on each channel's distinct values weighted by the
 responsibility summed there. `_solve_beta_binomial`, one component at a time
 over every observation, is kept as the oracle. The sums are reordered, so
@@ -16,8 +16,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders import emissions
-from snakes_and_ladders.emissions import BetaBinomialEmission, CountPairEmission
+from snakes_and_ladders.emissions import BetaBinomialEmission, CountPairEmission, mstep
 from snakes_and_ladders.opt.mixture import responsibilities
 from snakes_and_ladders.search.projection import flatten, project
 from snakes_and_ladders.sim.count_pairs import binned_model
@@ -31,13 +30,13 @@ def _oracle(
     trials: torch.Tensor | list[float],
     alpha: torch.Tensor,
     beta: torch.Tensor,
-) -> list[emissions._SolvedBetaBinomial]:
+) -> list[mstep.SolvedBetaBinomial]:
     """The per-component solve, component by component, as the M step ran before #892."""
     solved = []
     for state in range(weights.shape[1]):
         total = float(alpha[state] + beta[state])
         solved.append(
-            emissions._solve_beta_binomial(
+            mstep.solve_beta_binomial(
                 values,
                 weights[:, state],
                 trials if isinstance(trials, torch.Tensor) else trials[state],
@@ -54,9 +53,9 @@ def _batched(
     trials: torch.Tensor | list[float],
     alpha: torch.Tensor,
     beta: torch.Tensor,
-) -> list[emissions._SolvedBetaBinomial]:
+) -> list[mstep.SolvedBetaBinomial]:
     totals = [float(a + b) for a, b in zip(alpha, beta, strict=True)]
-    return emissions._solve_beta_binomial_batched(
+    return mstep.solve_beta_binomial_batched(
         values,
         weights,
         trials,
@@ -139,7 +138,7 @@ def test_a_trial_count_per_component_is_the_per_component_solve_bitwise() -> Non
 def test_a_histogram_is_the_weights_summed_at_each_distinct_value() -> None:
     values = torch.tensor([3.0, 1.0, 3.0, 0.0, 1.0, 3.0], dtype=torch.float64)
     columns = torch.arange(12, dtype=torch.float64).reshape(2, 6)
-    distinct, summed = emissions._weighted_histogram(values, columns)
+    distinct, summed = mstep.weighted_histogram(values, columns)
     assert distinct.tolist() == [0.0, 1.0, 3.0]
     assert summed.tolist() == [
         [3.0, 1.0 + 4.0, 0.0 + 2.0 + 5.0],

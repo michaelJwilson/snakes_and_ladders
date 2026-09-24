@@ -16,7 +16,7 @@ import pytest
 import torch
 from snakes_and_ladders import emissions
 from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.emissions import NegativeBinomialEmission
+from snakes_and_ladders.emissions import NegativeBinomialEmission, mstep
 
 #: The declared floor for a reordered sum through a bisection (#648).
 FLOOR = 2e-06
@@ -51,9 +51,9 @@ def test_the_kernel_is_the_per_state_solve(scale: float, varying: bool) -> None:
     # constant exposure; every state's steps and boundary decision agree.
     values, weights, offsets = _draw(2_000, scale, 0, varying)
     means = ((weights.T @ values) / (weights.T @ offsets)).tolist()
-    rust = emissions._solve_dispersion_exposed_rust(values, weights, means, offsets)
+    rust = mstep.solve_dispersion_exposed_rust(values, weights, means, offsets)
     oracle = [
-        emissions._solve_dispersion(values, weights[:, k], offsets * means[k])
+        mstep.solve_dispersion(values, weights[:, k], offsets * means[k])
         for k in range(4)
     ]
     assert [r.at_boundary for r in rust] == [o.at_boundary for o in oracle]
@@ -85,8 +85,8 @@ def test_the_m_step_routes_through_the_kernel_and_falls_back_past_the_cap(
     # answers, so the two backends agree bitwise.
     wide, wide_weights, wide_offsets = _draw(200, 5_000.0, 2)
     assert float(wide.max()) > emissions.EXPOSED_TAIL_RATIO * wide.numel()
-    with pytest.raises(emissions._NoTails):
-        emissions._solve_dispersion_exposed_rust(
+    with pytest.raises(mstep.NoTails):
+        mstep.solve_dispersion_exposed_rust(
             wide, wide_weights, [1.0, 2.0, 3.0, 4.0], wide_offsets
         )
     fallback = family.reestimate(

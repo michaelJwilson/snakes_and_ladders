@@ -16,8 +16,11 @@ import numpy as np
 import pytest
 import torch
 from scipy.optimize import minimize, minimize_scalar
-from snakes_and_ladders import emissions
-from snakes_and_ladders.emissions import BetaBinomialEmission, NegativeBinomialEmission
+from snakes_and_ladders.emissions import (
+    BetaBinomialEmission,
+    NegativeBinomialEmission,
+    mstep,
+)
 from snakes_and_ladders.sim.count_pairs import IndependentCountPair
 
 #: The declared floor for a reordered sum through a bisection (#648).
@@ -80,9 +83,9 @@ def test_one_tied_state_is_the_untied_solve(exposure: bool) -> None:
     mean = (weights.T @ values) / (
         weights.sum(0) if offsets is None else weights.T @ offsets
     )
-    tied = emissions._solve_dispersion_tied(values, weights, mean, offsets)
+    tied = mstep.solve_dispersion_tied(values, weights, mean, offsets)
     rate = float(mean[0]) if offsets is None else offsets * float(mean[0])
-    untied = emissions._solve_dispersion(values, weights[:, 0], rate)
+    untied = mstep.solve_dispersion(values, weights[:, 0], rate)
     assert abs(tied.value - untied.value) / untied.value < FLOOR
     assert tied.at_boundary == untied.at_boundary
 
@@ -93,12 +96,10 @@ def test_one_tied_beta_binomial_state_is_the_untied_solve_bitwise() -> None:
     # One state's summed concentration score is its score, term for term.
     data = _successes(0)
     weights = data["posterior"][:, :1]
-    tied = emissions._solve_beta_binomial_tied(
+    tied = mstep.solve_beta_binomial_tied(
         data["successes"], weights, [40.0], [0.3], 5.0
     )
-    untied = emissions._solve_beta_binomial(
-        data["successes"], weights[:, 0], 40.0, 0.3, 5.0
-    )
+    untied = mstep.solve_beta_binomial(data["successes"], weights[:, 0], 40.0, 0.3, 5.0)
     assert float(tied.alpha[0]) == untied.alpha
     assert float(tied.beta[0]) == untied.beta
     assert tied.iterations == untied.iterations

@@ -64,18 +64,18 @@ def test_lgamma_on_the_distinct_counts_is_the_direct_form_bitwise() -> None:
     # The count families' log-densities take lgamma(counts + shift) on the
     # distinct counts and gather; elementwise, so the direct form bitwise,
     # and the direct form wherever the shapes or autodiff rule the gather out.
-    from snakes_and_ladders.emissions import _lgamma_shifted
+    from snakes_and_ladders.emissions.counts import lgamma_shifted
 
     rng = np.random.default_rng(924)
     counts = torch.as_tensor(rng.integers(0, 300, (3_000, 1)), dtype=torch.float64)
     shift = torch.as_tensor(rng.random(10) * 50.0, dtype=torch.float64)
-    assert torch.equal(_lgamma_shifted(counts, shift), torch.lgamma(counts + shift))
+    assert torch.equal(lgamma_shifted(counts, shift), torch.lgamma(counts + shift))
     per_observation = torch.as_tensor(rng.random((3_000, 10)), dtype=torch.float64)
     assert torch.equal(
-        _lgamma_shifted(counts, per_observation),
+        lgamma_shifted(counts, per_observation),
         torch.lgamma(counts + per_observation),
     )
     tracked = shift.clone().requires_grad_(True)
     assert torch.equal(
-        _lgamma_shifted(counts, tracked).detach(), torch.lgamma(counts + shift)
+        lgamma_shifted(counts, tracked).detach(), torch.lgamma(counts + shift)
     )

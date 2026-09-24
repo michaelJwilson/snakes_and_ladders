@@ -373,7 +373,7 @@ def test_the_key_tier_runs_only_for_what_could_move_it() -> None:
     assert "key" in select(["python/snakes_and_ladders/learn/policy.py"])["deselect"]
     for trigger in (
         "src/coupled.rs",
-        "python/snakes_and_ladders/emissions.py",
+        "python/snakes_and_ladders/emissions/counts.py",
         "python/snakes_and_ladders/sim/count_pairs.py",
         "tests/regression/fixtures/spatio_sequential_counts/stress.yaml",
     ):
