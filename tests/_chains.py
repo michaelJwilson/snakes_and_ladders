@@ -42,7 +42,8 @@ def enumerated_law(
         The instance. Enumeration is ``n_states ** n_nodes`` rows, so this is
         an oracle for the small declared lattices and nothing larger.
     field : np.ndarray
-        The per-state field; its length is the alphabet.
+        The field, shared ``(n_states,)`` or per site ``(n_nodes, n_states)``;
+        its last axis is the alphabet.
     temperature : float
         ``exp(-E / T)`` from the *unscaled* model, so a tempered chain is
         held to an oracle that shares nothing with `sample.tempered`. The
@@ -55,7 +56,7 @@ def enumerated_law(
         The cell index of each configuration, and the probabilities in that
         order.
     """
-    n_states = int(field.shape[0])
+    n_states = int(field.shape[-1])
     configurations = np.array(
         list(itertools.product(range(n_states), repeat=graph.n_nodes)),
         dtype=np.int64,

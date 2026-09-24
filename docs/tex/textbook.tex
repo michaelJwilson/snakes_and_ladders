@@ -4789,18 +4789,26 @@ iterated conditional modes freezes into spurious disjoint clusters, and
 single-site annealing slows critically for the same reason. The Wolff move of
 Section~\ref{sec:potts-sampling} recolours a whole cluster at once, and
 Algorithm~\ref{alg:wolff-field} is that move with the field of
-Equation~\ref{eq:external-field} in its accept step. At $\beta \to 0$ it is a
-single-site Gibbs update, at $\beta \gg 1$ the greedy entrapment of iterated
-conditional modes; annealing in $\beta$ moves between them.
+Equation~\ref{eq:external-field} in its accept step. Its $H_{nm}$ is that
+equation's field, an energy the labels minimize, so the step accepts on
+$e^{-\beta \Delta H}$; the samplers of Section~\ref{sec:potts-sampling} take
+a log-weight $h$ and accept on Equation~\ref{eq:cluster-accept}, so they are
+handed $h = -H$, and the two acceptances are one. At $\beta \to 0$ no bond
+forms, so the cluster is the root alone and the move is a single-site
+Metropolis update with a uniform proposal, not a heat-bath draw; the two
+coincide only at $\beta = 0$, where both relabel uniformly. At finite $\beta$
+a single-site cluster has positive probability, so the move with its accept
+step is irreducible on its own. At $\beta \gg 1$ it is the greedy entrapment
+of iterated conditional modes; annealing in $\beta$ moves between them.
 
 \begin{algorithm}[htbp]
 \caption{One Wolff update on the labels, in the external field}
 \label{alg:wolff-field}
 \begin{algorithmic}[1]
 \State draw a root $\rho$ uniformly from the nodes; $\mu \gets \ell_\rho$;
-       $\mathcal{C} \gets \{\rho\}$; queue $Q \gets \{\rho\}$
+       $\mathcal{C} \gets \{\rho\}$; frontier $Q \gets \{\rho\}$
 \While{$Q \ne \varnothing$}
-  \State pop $n$ from $Q$
+  \State take any $n$ from $Q$ \Comment{the order does not change the cluster's law}
   \For{each neighbour $n'$ of $n$ with $\ell_{n'} = \mu$ and $n' \notin \mathcal{C}$}
     \State with probability $1 - e^{-\beta J_{nn'}}$: add $n'$ to $\mathcal{C}$ and to $Q$
   \EndFor
