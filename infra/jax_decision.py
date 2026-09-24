@@ -7,7 +7,11 @@ added (``/proc/self/clear_refs`` then ``VmHWM`` over ``VmRSS``, as issue #987
 reads a framework's). The rule: JAX replaces PyTorch where it takes at most
 half the runtime at no more than 1.25x the memory, or the converse.
 
-Usage: ``python infra/jax_decision.py`` prints a Markdown table.
+Issue #1005 adds the phylogenetic cells (:data:`PRUNING`): the JC
+branch-length and GTR objectives on a balanced tree, taxa and sites crossed,
+the same rule deciding whether ``Backend.JAX`` becomes their default.
+
+Usage: ``python infra/jax_decision.py [hmm|pruning]`` prints a Markdown table.
 """
 
 from __future__ import annotations
@@ -70,10 +74,39 @@ print(json.dumps({"seconds": statistics.median(seconds), "peak": max(status("VmH
 """
 
 
-def cell(family: str, n_sequences: int, backend: str) -> dict[str, float]:
-    """One measurement in a fresh interpreter."""
+PRUNING_CELL = r"""
+import json, statistics, sys, time
+from pathlib import Path
+import numpy as np
+
+family, n_taxa, n_sites, backend, repeats = (sys.argv[1], int(sys.argv[2]), int(sys.argv[3]),
+    sys.argv[4], int(sys.argv[5]))
+from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.likelihood.objective import BranchLengthObjective, SubstitutionModelObjective
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.tree import balanced_tree
+tau, k = balanced_tree(n_taxa, 0.5), 4
+pi = np.full(k, 1.0 / k)
+alignment = dict(simulate_alignment(tau, k, pi, np.random.default_rng(1005), n_sites).alignment)
+route = {"torch": {}, "analytic": {"gradient": "analytic"}, "jax": {"backend": Backend.JAX}}[backend]
+if family == "jc":
+    objective = BranchLengthObjective(tau, k, pi, alignment, **route)
+else:
+    objective = SubstitutionModelObjective(tau, k, alignment, **route)
+theta = objective.initial()
+one = lambda: objective.value_and_gradient(theta)
+one()
+""" + CELL[CELL.index("\ndef status") :]
+
+#: The phylogenetic cells (issue #1005): the objective, then taxa and sites
+#: crossed; ``analytic`` is the JC objective's closed-form route beside them.
+PRUNING = (("jc", "gtr"), (4, 8, 16, 32), (20_000, 100_000))
+
+
+def cell(program: str, *arguments: object) -> dict[str, float]:
+    """One measurement of ``program`` in a fresh interpreter."""
     out = subprocess.run(
-        [sys.executable, "-c", CELL, family, str(n_sequences), backend, str(REPEATS)],
+        [sys.executable, "-c", program, *map(str, arguments), str(REPEATS)],
         check=True,
         capture_output=True,
         text=True,
@@ -81,27 +114,60 @@ def cell(family: str, n_sequences: int, backend: str) -> dict[str, float]:
     return json.loads(out.strip().splitlines()[-1])  # type: ignore[no-any-return]
 
 
-def main() -> None:
-    """Print the table, one row per objective and size, with the rule's verdict."""
+def verdict(torch_cell: dict[str, float], jax_cell: dict[str, float]) -> str:
+    """The row's ratios and the rule's verdict, as table cells."""
+    runtime = jax_cell["seconds"] / torch_cell["seconds"]
+    memory = (jax_cell["peak"] + 1) / (torch_cell["peak"] + 1)
+    replace = (runtime <= 0.5 and memory <= 1.25) or (memory <= 0.5 and runtime <= 1.25)
+    return (
+        f"{1e3 * torch_cell['seconds']:.2f} | {1e3 * jax_cell['seconds']:.2f} | "
+        f"{runtime:.2f} | {torch_cell['peak'] / 1e6:.1f} | {jax_cell['peak'] / 1e6:.1f} | "
+        f"{memory:.2f} | {'replace' if replace else 'sandbox'}"
+    )
+
+
+def hmm() -> None:
+    """The HMM table (issue #1000), one row per objective and size."""
     print(
         "| objective | positions | torch ms | jax ms | runtime ratio | torch MB | jax MB | memory ratio | verdict |"
     )
     print("|---|---|---|---|---|---|---|---|---|")
     for family in FAMILIES:
         for n_sequences in SIZES:
-            torch_cell = cell(family, n_sequences, "torch")
-            jax_cell = cell(family, n_sequences, "jax")
-            runtime = jax_cell["seconds"] / torch_cell["seconds"]
-            memory = (jax_cell["peak"] + 1) / (torch_cell["peak"] + 1)
-            replace = (runtime <= 0.5 and memory <= 1.25) or (
-                memory <= 0.5 and runtime <= 1.25
-            )
+            torch_cell = cell(CELL, family, n_sequences, "torch")
+            jax_cell = cell(CELL, family, n_sequences, "jax")
             print(
-                f"| {family} | {100 * n_sequences:,} | {1e3 * torch_cell['seconds']:.2f} | "
-                f"{1e3 * jax_cell['seconds']:.2f} | {runtime:.2f} | {torch_cell['peak'] / 1e6:.1f} | "
-                f"{jax_cell['peak'] / 1e6:.1f} | {memory:.2f} | {'replace' if replace else 'sandbox'} |",
+                f"| {family} | {100 * n_sequences:,} | {verdict(torch_cell, jax_cell)} |",
                 flush=True,
             )
+
+
+def pruning() -> None:
+    """The phylogenetic table (issue #1005), with the JC analytic route beside it."""
+    print(
+        "| objective | taxa | sites | analytic ms | torch ms | jax ms | runtime ratio | torch MB | jax MB | memory ratio | verdict |"
+    )
+    print("|---|---|---|---|---|---|---|---|---|---|---|")
+    families, taxa, sites = PRUNING
+    for family in families:
+        for n_taxa in taxa:
+            for n_sites in sites:
+                torch_cell = cell(PRUNING_CELL, family, n_taxa, n_sites, "torch")
+                jax_cell = cell(PRUNING_CELL, family, n_taxa, n_sites, "jax")
+                analytic = (
+                    f"{1e3 * cell(PRUNING_CELL, family, n_taxa, n_sites, 'analytic')['seconds']:.2f}"
+                    if family == "jc"
+                    else "-"
+                )
+                print(
+                    f"| {family} | {n_taxa} | {n_sites:,} | {analytic} | {verdict(torch_cell, jax_cell)} |",
+                    flush=True,
+                )
+
+
+def main() -> None:
+    """Print the table the argument names: ``hmm`` (the default) or ``pruning``."""
+    {"hmm": hmm, "pruning": pruning}[sys.argv[1] if len(sys.argv) > 1 else "hmm"]()
 
 
 if __name__ == "__main__":
