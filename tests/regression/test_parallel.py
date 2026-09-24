@@ -11,6 +11,10 @@ No CI Profiling rule.
 from __future__ import annotations
 
 import math
+import os
+import subprocess
+import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -240,3 +244,74 @@ def test_the_pool_alias_still_resolves_under_its_old_name() -> None:
     # written before the rename still means the same three values.
     assert parallel.Backend is parallel.Pool
     assert set(BACKENDS) == {"serial", "threads", "processes"}
+
+
+_BODIES = """
+import sys
+
+
+def torch_loaded(_item: int) -> bool:
+    return "torch" in sys.modules
+
+
+def torch_threads(_item: int) -> int:
+    import torch
+
+    return torch.get_num_threads()
+"""
+
+_PROBE = """
+import sys
+
+import _bodies
+from snakes_and_ladders.parallel import map_tasks
+
+backend = sys.argv[1]
+workers = 1 if backend == "serial" else 2
+numpy_only = map_tasks(
+    _bodies.torch_loaded, [0, 1], workers=workers, backend=backend, intra_op_threads=1
+)
+print(numpy_only, "torch" in sys.modules)
+pinned = map_tasks(
+    _bodies.torch_threads, [0, 1], workers=workers, backend=backend, intra_op_threads=1
+)
+import torch
+
+print(pinned, torch.get_num_threads())
+"""
+
+
+@pytest.mark.infra
+@pytest.mark.parametrize("backend", list(BACKENDS))
+def test_torch_is_imported_only_by_a_body_that_imports_it(
+    backend: Pool, tmp_path: Path
+) -> None:
+    """A NumPy body loads no ``torch``; a ``torch`` body runs at the count (issue #1011).
+
+    A fresh process, since this one has imported ``torch``, with
+    ``OMP_NUM_THREADS`` and ``MKL_NUM_THREADS`` at 3 so ``torch``'s default
+    is not the count of 1 the map asks for. The NumPy body reports ``torch`` absent in every worker and
+    the caller after the map. The body that imports ``torch`` itself -- which
+    the import hook pins, where the thread count used to be set by importing
+    ``torch`` up front -- reports 1 in every worker, and the caller reads 3
+    afterwards: the default of a ``torch`` first imported inside the call.
+    """
+    (tmp_path / "_bodies.py").write_text(_BODIES)
+    environment = {
+        **os.environ,
+        "OMP_NUM_THREADS": "3",
+        "MKL_NUM_THREADS": "3",
+        "PYTHONPATH": os.pathsep.join(
+            [str(tmp_path), os.environ.get("PYTHONPATH", "")]
+        ),
+    }
+
+    result = subprocess.run(
+        [sys.executable, "-c", _PROBE, backend],
+        capture_output=True,
+        text=True,
+        check=True,
+        env=environment,
+    )
+
+    assert result.stdout.splitlines() == ["[False, False] False", "[1, 1] 3"]
