@@ -1,6 +1,6 @@
 //! Felsenstein pruning, ported from `python/snakes_and_ladders/likelihood/pruning.py`
 //! (the NumPy oracle) to Rust, exposed to Python via PyO3 as
-//! `snakes_and_ladders.oxi_snakes_and_ladders.pruning_log_likelihood`.
+//! `snakes_and_ladders.oxisal.pruning_log_likelihood`.
 //!
 //! Implements `eq:pruning` and `eq:root` of `docs/tex/textbook.tex` exactly: message passing `partial[i, s] = sum_j P_ij(t) *
 //! child_partial[j, s]`, post-order over the topology, with the same
@@ -121,7 +121,7 @@ pub struct LeafObservations<'a> {
 /// `pi` does not have length `k`, a branch length is negative, a leaf state
 /// is outside `[0, k)`, or no leaf provides `n_sites`.
 ///
-/// `pub` (not just `pub(crate)`) so `benches/oxi_snakes_and_ladders_bench.rs` can call it
+/// `pub` (not just `pub(crate)`) so `benches/oxisal_bench.rs` can call it
 /// directly, staying PyO3-free for the same link-time reason unit tests do
 /// (see the module docs).
 pub fn pruning_log_likelihood_impl(

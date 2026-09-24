@@ -1519,7 +1519,7 @@ placeholder integer multiply and does not. Each already extracted its slices
 and then touched no Python object, so `Ungil` makes a Python object inside
 the closure a compile error rather than a crash.
 
-| `oxi.single_site_sweeps`, 32x32, 200 sweeps | held | released | control |
+| `oxisal.single_site_sweeps`, 32x32, 200 sweeps | held | released | control |
 | --- | --- | --- | --- |
 | 1 thread | 13.3 ms, 1.00x | 13.1 ms, 1.00x | 1.00x |
 | 2 threads | 25.8 ms, 1.03x | 13.4 ms, **1.96x** | 1.87x |
@@ -1810,7 +1810,7 @@ self time (51.5%) and the two emission `log_density` bodies 18.9 s cumulative
 and the emission densities 188.1 s (98.3%). Forward–backward is 0.72 s (3.6%)
 and the `einsum` 1.1 s (0.6%), so the port is the emission density and nothing
 else. Both counts are integers in a range of a few thousand, so
-`oxi_snakes_and_ladders::coupled` tabulates the log-density by count — `[count,
+`oxisal::coupled` tabulates the log-density by count — `[count,
 M, K]`, count-major — and reads two doubles where the oracle calls `lgamma`
 three times. NumPy against Rust through the binding, one thread:
 

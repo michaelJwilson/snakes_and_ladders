@@ -35,7 +35,7 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 
-from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders import oxisal
 from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.emissions import (
     EmissionFamily,
@@ -229,7 +229,7 @@ class GaussianMixtureObjective(Objective):
 
         One-channel ``float64`` mixtures stream every draw's responsibilities
         into the three per-component sums the gradient needs in
-        ``oxi_snakes_and_ladders.gaussian_mixture_gradient``, pinned to
+        ``oxisal.gaussian_mixture_gradient``, pinned to
         autograd; any other takes autograd through :meth:`__call__`.
         """
         if self._n_channels != 1 or self._dtype != torch.float64:
@@ -237,7 +237,7 @@ class GaussianMixtureObjective(Objective):
             (grad,) = torch.autograd.grad(self(point), point)
             return grad
         padded = np.concatenate(([0.0], theta[self._weight_slice].detach().numpy()))
-        _, gradient = oxi_snakes_and_ladders.gaussian_mixture_gradient(
+        _, gradient = oxisal.gaussian_mixture_gradient(
             np.ascontiguousarray(self._observations.numpy()).reshape(-1),
             padded - np.logaddexp.reduce(padded),
             np.ascontiguousarray(theta[self._mean_slice()].detach().numpy()),
@@ -352,7 +352,7 @@ def mixture_log_likelihood(
     backend : Backend
         :data:`~snakes_and_ladders.backend.Backend.RUST`, the default since
         issue #997, streams the sum in
-        ``oxi_snakes_and_ladders.gaussian_mixture_gradient`` where no
+        ``oxisal.gaussian_mixture_gradient`` where no
         gradient is to be taken --- autograd off, or nothing here requiring
         one --- and the components are exactly a one-channel ``float64``
         :class:`~snakes_and_ladders.emissions.GaussianEmission` over a
@@ -378,7 +378,7 @@ def mixture_log_likelihood(
         and _streams_score(observations, log_weight, components)
     ):
         assert isinstance(components, GaussianEmission)
-        negative, _ = oxi_snakes_and_ladders.gaussian_mixture_gradient(
+        negative, _ = oxisal.gaussian_mixture_gradient(
             np.ascontiguousarray(observations.numpy()),
             np.ascontiguousarray(log_weight.numpy(), dtype=np.float64),
             np.ascontiguousarray(components.mean.numpy()),
@@ -574,7 +574,7 @@ def expectation_maximization(
     backend : Backend
         :data:`~snakes_and_ladders.backend.Backend.RUST`, the default since
         issue #986 for one-channel components, runs each step in
-        ``oxi_snakes_and_ladders.gaussian_mixture_em_step``: the draws
+        ``oxisal.gaussian_mixture_em_step``: the draws
         streamed into each component's mass, mean and centred sum of squares,
         with no ``(n_samples, n_components)`` array held. Ten iterations at
         10^5 draws peaked at 31.1 MB on the tensor route.
@@ -681,9 +681,7 @@ def _streamed_expectation_maximization(
         attempt += 1
         weight, mean, scale = state
         new_weight, new_mean, variance, log_likelihood = (
-            oxi_snakes_and_ladders.gaussian_mixture_em_step(
-                values, np.log(weight), mean, scale
-            )
+            oxisal.gaussian_mixture_em_step(values, np.log(weight), mean, scale)
         )
         collapsed = variance <= floor
         if collapsed.any():

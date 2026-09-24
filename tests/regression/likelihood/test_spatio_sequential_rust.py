@@ -22,7 +22,7 @@ from dataclasses import replace
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders import oxisal
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.emissions import CategoricalEmission
 from snakes_and_ladders.likelihood import spatio_sequential
@@ -194,7 +194,7 @@ def test_a_count_past_the_table_is_refused_rather_than_clamped() -> None:
     )
 
     with pytest.raises(ValueError, match="past the table's extent"):
-        oxi_snakes_and_ladders.class_posteriors(*arguments)
+        oxisal.class_posteriors(*arguments)
 
 
 @pytest.mark.smoke

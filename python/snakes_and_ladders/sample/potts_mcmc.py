@@ -1203,7 +1203,7 @@ def _sweep_at(
 
         return python_sweep
     if backend is Backend.RUST:
-        from snakes_and_ladders import oxi_snakes_and_ladders
+        from snakes_and_ladders import oxisal
 
         # The field crosses as one row per site, which is the shape `rows`
         # already has: `sim.potts.site_field` widened it at the entry point,
@@ -1249,7 +1249,7 @@ def _sweep_at(
                 # guard nor a relative tolerance reaches it.
                 # `tests/regression/search/test_potts_sweep_reassociation.py`
                 # holds those numbers.
-                node = oxi_snakes_and_ladders.single_site_sweeps(
+                node = oxisal.single_site_sweeps(
                     state,
                     contiguous_field,
                     offsets,
@@ -1719,7 +1719,7 @@ def _cluster_pass_rust(
     state and labels out, the flattened edge ends, the bond probabilities and
     their draws, the colour and accept draws, and the scaled field.
     """
-    from snakes_and_ladders import oxi_snakes_and_ladders
+    from snakes_and_ladders import oxisal
 
     n_nodes, n_states = graph.n_nodes, int(rows.shape[1])
     scaled = np.ascontiguousarray(beta * rows, dtype=np.float64)
@@ -1738,7 +1738,7 @@ def _cluster_pass_rust(
 
     cluster = 0
     while True:
-        n_clusters, cluster = oxi_snakes_and_ladders.swendsen_wang_sweep(
+        n_clusters, cluster = oxisal.swendsen_wang_sweep(
             state,
             scaled,
             edges,
@@ -2260,7 +2260,7 @@ def bond_roots(
     exactly when a chain of bonds joins them, and which node is the root is
     :func:`union_roots`' rule, keeping the first bond end's. Issue #986:
     :data:`~snakes_and_ladders.backend.Backend.RUST`, the default, is
-    ``oxi_snakes_and_ladders.bond_roots``, the same :func:`find_root` and
+    ``oxisal.bond_roots``, the same :func:`find_root` and
     :func:`union_roots` compiled; :data:`~snakes_and_ladders.backend.Backend.PYTHON`
     is the loop over them and the oracle that pins the roots bitwise.
 
@@ -2280,9 +2280,9 @@ def bond_roots(
     """
     pairs = np.asarray(bonds, dtype=np.int64).reshape(-1, 2)
     if backend is Backend.RUST:
-        from snakes_and_ladders import oxi_snakes_and_ladders
+        from snakes_and_ladders import oxisal
 
-        return oxi_snakes_and_ladders.bond_roots(
+        return oxisal.bond_roots(
             n_nodes,
             np.ascontiguousarray(pairs[:, 0]),
             np.ascontiguousarray(pairs[:, 1]),

@@ -1,7 +1,7 @@
 //! Single-site heat-bath sweeps for the Potts model, ported from
 //! `python/snakes_and_ladders/search/potts_mcmc.py::_single_site_sweep` (the
 //! oracle) and exposed to Python as
-//! `snakes_and_ladders.oxi_snakes_and_ladders.single_site_sweeps`.
+//! `snakes_and_ladders.oxisal.single_site_sweeps`.
 //!
 //! **Why this one is a Rust port.** Issue #232 profiled the sweep as the one
 //! place a Python-level loop dominates: 100 sweeps on a 32x32 periodic lattice

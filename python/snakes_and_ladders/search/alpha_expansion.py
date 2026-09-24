@@ -39,7 +39,7 @@ from typing import Any, NamedTuple
 
 import numpy as np
 
-from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders import oxisal
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.opt.termination import Termination
 from snakes_and_ladders.search.maxflow import (
@@ -211,7 +211,7 @@ class _Carried(NamedTuple):
         move, so the next does not score it again.
     """
 
-    cut: oxi_snakes_and_ladders.LatticeCut | None
+    cut: oxisal.LatticeCut | None
     energy: float
 
 
@@ -504,7 +504,7 @@ def expand(
     :data:`~snakes_and_ladders.backend.Backend.PYTHON` builds the network
     above and cuts it with the Python Dinic: the oracle.
     :data:`~snakes_and_ladders.backend.Backend.RUST`, the **default** since
-    #935, refills a :class:`~snakes_and_ladders.oxi_snakes_and_ladders.LatticeCut`
+    #935, refills a :class:`~snakes_and_ladders.oxisal.LatticeCut`
     laid out once over the lattice, with no auxiliary node: Kolmogorov &
     Zabih's (2004) arc for the pairwise term, so the layout does not change
     with the labelling. Within :func:`alpha_expansion` each label's cut also
@@ -849,10 +849,10 @@ def iterated_conditional_modes(
     return Labelling(labelling, energy(graph, values, labelling))
 
 
-def _lattice_cut(graph: PottsGraph) -> oxi_snakes_and_ladders.LatticeCut:
+def _lattice_cut(graph: PottsGraph) -> oxisal.LatticeCut:
     """The Rust cut's network over ``graph``'s edges, laid out once (issue #935)."""
     first, second, coupling = graph.endpoints
-    return oxi_snakes_and_ladders.LatticeCut(
+    return oxisal.LatticeCut(
         graph.n_nodes,
         np.ascontiguousarray(first, dtype=np.int64),
         np.ascontiguousarray(second, dtype=np.int64),

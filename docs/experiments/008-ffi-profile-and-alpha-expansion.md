@@ -31,6 +31,6 @@ status: confirmed
 
 ## Finding
 
-#447 held: the ranking puts the Python Dinic solver at 49.0% of `alpha_expansion`, and the reason was never the boundary --- `oxi_snakes_and_ladders.max_flow` computed the source side and discarded it, so `expand`, which needs the cut and not the flow value, could not use the kernel at all.
+#447 held: the ranking puts the Python Dinic solver at 49.0% of `alpha_expansion`, and the reason was never the boundary --- `oxisal.max_flow` computed the source side and discarded it, so `expand`, which needs the cut and not the flow value, could not use the kernel at all.
 Returning that side and hoisting a per-edge `set` construction out of the edge loop gives 4.82x to 10.76x as a caller pays; Criterion times the kernel alone at 15.2, 68.4 and 298.9 µs per cut, so the crossing is not the term at these sizes either.
 From `python tests/benchmarks/profile_hotpaths.py --tier mid`, `pytest tests/benchmarks/test_alpha_expansion_bench.py` and `cargo bench -- max_flow_expansion_network`; no third backend and no other candidate above the 10% rule, which #528 reports as the outcome it is.

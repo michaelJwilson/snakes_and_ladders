@@ -17,7 +17,7 @@ import itertools
 
 import numpy as np
 import pytest
-from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders import oxisal
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.fixtures import Scale
 from snakes_and_ladders.search import ground_state
@@ -222,7 +222,7 @@ def test_the_compiled_integration_is_the_numpy_one_bitwise(discrete: bool) -> No
         discrete=discrete,
     )
     compiled = start.copy()
-    oxi_snakes_and_ladders.bifurcation_integrate(
+    oxisal.bifurcation_integrate(
         rows.reshape(-1),
         graph.incidence.offsets,
         graph.incidence.neighbours,

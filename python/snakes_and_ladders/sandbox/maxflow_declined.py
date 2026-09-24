@@ -38,13 +38,13 @@ from enum import StrEnum
 
 import numpy as np
 
-from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders import oxisal
 from snakes_and_ladders.search.maxflow import FlowNetwork, MinCut
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import energy, site_field
 
 #: Whether the extension was built with the ``sandbox`` feature.
-AVAILABLE = hasattr(oxi_snakes_and_ladders, "max_flow_declined")
+AVAILABLE = hasattr(oxisal, "max_flow_declined")
 
 _UNAVAILABLE = (
     "the declined max-flow kernels are not in this build: rebuild the extension "
@@ -100,7 +100,7 @@ def min_cut(
     """
     _require()
     arcs, capacity, reverse = network.as_arrays()
-    value, side = oxi_snakes_and_ladders.max_flow_declined(
+    value, side = oxisal.max_flow_declined(
         network.n_nodes, arcs, capacity, source, sink, reverse, str(kernel), threads
     )
     return MinCut(value=float(value), source_side=np.asarray(side, dtype=bool))
@@ -123,7 +123,7 @@ def ising_ground_state(
     values = site_field(
         np.asarray(field_values, dtype=float), graph.n_nodes, n_states=2
     )
-    states = oxi_snakes_and_ladders.ising_ground_state_declined(
+    states = oxisal.ising_ground_state_declined(
         graph.n_nodes,
         np.ascontiguousarray(values, dtype=np.float64).reshape(-1),
         graph.edge_index.reshape(-1),

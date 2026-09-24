@@ -58,7 +58,7 @@ PACKAGE_ROOT = REPO_ROOT / "python" / "snakes_and_ladders"
 TESTS_ROOT = REPO_ROOT / "tests"
 
 #: The crate the bindings are imported from, as every adapter spells it.
-EXTENSION = "oxi_snakes_and_ladders"
+EXTENSION = "oxisal"
 
 #: What a referee is called here. Not a guess at semantics: these are the three
 #: forms the oracle rule takes in this tree --- the implementation an adapter
@@ -69,13 +69,13 @@ _CONSERVED = "sandbox"
 
 #: Modules that cross the boundary and are not kernels, with the reason. The
 #: unpinned list is for gaps, and `lib`'s `double` is the build probe ---
-#: `double(21) == 42` in `tests/test_oxi_snakes_and_ladders_bindings.py`
+#: `double(21) == 42` in `tests/test_oxisal_bindings.py`
 #: asserts that the extension imports at all, and arithmetic is not an oracle
 #: a reference implementation could referee.
 PROBES: dict[str, str] = {
     "lib": (
         "the extension-loads probe: `double(21) == 42` is checked by "
-        "arithmetic in tests/test_oxi_snakes_and_ladders_bindings.py, which "
+        "arithmetic in tests/test_oxisal_bindings.py, which "
         "is what it is for"
     ),
 }

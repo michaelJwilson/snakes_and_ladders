@@ -33,7 +33,7 @@ import numpy as np
 
 from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.likelihood.forward_backward import forward_backward
-from snakes_and_ladders.oxi_snakes_and_ladders import ragged_posteriors
+from snakes_and_ladders.oxisal import ragged_posteriors
 from snakes_and_ladders.ragged import Ragged
 
 

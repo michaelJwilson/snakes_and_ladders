@@ -1,4 +1,4 @@
-"""Type stub for the compiled `snakes_and_ladders.oxi_snakes_and_ladders` Rust extension.
+"""Type stub for the compiled `snakes_and_ladders.oxisal` Rust extension.
 
 Hand-written, so it can drift: keep the signatures here matching the
 `#[pyfunction]` definitions in src/lib.rs, src/pruning.rs, src/pruning_burn.rs,

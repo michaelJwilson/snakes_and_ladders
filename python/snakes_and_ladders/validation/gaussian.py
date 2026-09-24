@@ -64,7 +64,7 @@ class GaussianTarget(Objective):
 
 
 def dense_precision(dimension: int, rng: np.random.Generator) -> np.ndarray:
-    """``A Aᵀ / d + I`` for a standard normal ``A`` drawn from ``rng``.
+    """``A A^T / d + I`` for a standard normal ``A`` drawn from ``rng``.
 
     At d = 10 from ``default_rng(963)`` its eigenvalues run from 1.01 to 3.50.
     """

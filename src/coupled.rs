@@ -1,7 +1,7 @@
 //! The E step of the coupled spatio-sequential model, ported from
 //! `python/snakes_and_ladders/likelihood/spatio_sequential.py` (the NumPy
 //! oracle) to Rust, exposed to Python via PyO3 as
-//! `snakes_and_ladders.oxi_snakes_and_ladders.class_posteriors` and
+//! `snakes_and_ladders.oxisal.class_posteriors` and
 //! `...external_field`.
 //!
 //! **What the port is for.** At the declared 5,041-vertex instance

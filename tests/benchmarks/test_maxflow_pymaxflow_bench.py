@@ -20,7 +20,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders import oxisal
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.search.ground_state import lattice_rung
 from snakes_and_ladders.search.maxflow import ising_ground_state
@@ -77,7 +77,7 @@ def test_rust_cut_beside_pymaxflow_benchmark(
     )
 
     states = benchmark(
-        oxi_snakes_and_ladders.ising_ground_state,
+        oxisal.ising_ground_state,
         rung.graph.n_nodes,
         field,
         edges,

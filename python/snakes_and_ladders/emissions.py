@@ -3466,7 +3466,7 @@ def _solve_dispersion_rust(
     -------
     list[_SolvedDispersion]
     """
-    from snakes_and_ladders import oxi_snakes_and_ladders as oxi
+    from snakes_and_ladders import oxisal
 
     n_states = weights.shape[1]
     columns = weights.T.contiguous()
@@ -3478,7 +3478,7 @@ def _solve_dispersion_rust(
     at_boundary = np.empty(n_states, dtype=np.uint8)
     iterations = np.empty(n_states, dtype=np.uint32)
     residual = np.empty(n_states)
-    oxi.negative_binomial_dispersions(
+    oxisal.negative_binomial_dispersions(
         _weight_tails(values, columns).reshape(-1),
         columns.sum(dim=1).numpy().astype(np.float64),
         np.asarray(means, dtype=np.float64),
@@ -3539,7 +3539,7 @@ def _solve_dispersion_exposed_rust(
         Where a weighted count has no tails, as :func:`_weight_tails` says,
         or they are wider than the cap.
     """
-    from snakes_and_ladders import oxi_snakes_and_ladders as oxi
+    from snakes_and_ladders import oxisal
 
     if values.numel() and float(values.max()) > EXPOSED_TAIL_RATIO * values.numel():
         raise _NoTails
@@ -3557,7 +3557,7 @@ def _solve_dispersion_exposed_rust(
     at_boundary = np.empty(n_states, dtype=np.uint8)
     iterations = np.empty(n_states, dtype=np.uint32)
     residual = np.empty(n_states)
-    oxi.negative_binomial_dispersions_exposed(
+    oxisal.negative_binomial_dispersions_exposed(
         _weight_tails(values, columns).reshape(-1),
         np.ascontiguousarray(columns.numpy()).reshape(-1),
         np.ascontiguousarray(exposures.numpy()),
@@ -3599,7 +3599,7 @@ def _solve_beta_binomial_rust(
     -------
     list[_SolvedBetaBinomial]
     """
-    from snakes_and_ladders import oxi_snakes_and_ladders as oxi
+    from snakes_and_ladders import oxisal
 
     n_components = weights.shape[1]
     columns = weights.T.contiguous()
@@ -3621,7 +3621,7 @@ def _solve_beta_binomial_rust(
         for k in range(n_components)
     ]
     out = np.empty(6 * n_components)
-    oxi.beta_binomial_parameters(
+    oxisal.beta_binomial_parameters(
         _weight_tails(values, columns).reshape(-1),
         failure.reshape(-1),
         depth.reshape(-1),

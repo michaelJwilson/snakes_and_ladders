@@ -71,7 +71,7 @@ class Backend(StrEnum):
     """A ``numba.njit`` kernel over the compressed-row adjacency."""
 
     RUST = "rust"
-    """The ``oxi_snakes_and_ladders`` extension."""
+    """The ``oxisal`` extension."""
 
     TORCH = "torch"
     """A ``torch`` kernel: the same arithmetic as the NumPy oracle over a tensor,

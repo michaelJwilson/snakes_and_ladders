@@ -182,7 +182,7 @@ def mala(
     backend : Backend
         :data:`~snakes_and_ladders.backend.Backend.RUST`, the default since
         issue #997, runs the whole chain in
-        ``oxi_snakes_and_ladders.gaussian_hmc`` at one leapfrog step --- the
+        ``oxisal.gaussian_hmc`` at one leapfrog step --- the
         identity this module keeps --- when the objective is a
         :class:`~snakes_and_ladders.sample.hmc.DeclaredGaussian` and the chain
         is the plain corrected one: unit temperature, no adaptation, and no

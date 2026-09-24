@@ -1,4 +1,4 @@
-//! Criterion benchmarks for the `oxi_snakes_and_ladders` bindings.
+//! Criterion benchmarks for the `oxisal` bindings.
 //!
 //! `bench_double` is scaffolding, kept for the same demo binding
 //! `src/lib.rs` still exposes. `bench_pruning_log_likelihood` measures the
@@ -14,17 +14,15 @@
 //! and `--baseline`.
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use oxi_snakes_and_ladders::coupled::{
-    class_posteriors_into, external_field_into, CoupledShape, EmissionTables,
-};
-use oxi_snakes_and_ladders::double;
-use oxi_snakes_and_ladders::maxflow::{max_flow_impl, FlowNetwork};
+use oxisal::coupled::{class_posteriors_into, external_field_into, CoupledShape, EmissionTables};
+use oxisal::double;
+use oxisal::maxflow::{max_flow_impl, FlowNetwork};
 #[cfg(feature = "sandbox")]
-use oxi_snakes_and_ladders::maxflow_declined::{max_flow_with, Algorithm};
-use oxi_snakes_and_ladders::pruning::{pruning_log_likelihood_impl, LeafObservations};
+use oxisal::maxflow_declined::{max_flow_with, Algorithm};
+use oxisal::pruning::{pruning_log_likelihood_impl, LeafObservations};
 #[cfg(feature = "sandbox")]
-use oxi_snakes_and_ladders::pruning_burn::pruning_gradient_impl;
-use oxi_snakes_and_ladders::sampling::sample_rows_impl;
+use oxisal::pruning_burn::pruning_gradient_impl;
+use oxisal::sampling::sample_rows_impl;
 
 fn bench_double(c: &mut Criterion) {
     c.bench_function("double", |b| b.iter(|| double(std::hint::black_box(21))));

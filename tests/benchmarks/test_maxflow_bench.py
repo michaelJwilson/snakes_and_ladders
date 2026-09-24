@@ -23,7 +23,7 @@ from collections.abc import Callable
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders import oxisal
 from snakes_and_ladders.sandbox import maxflow_declined
 from snakes_and_ladders.sandbox.maxflow_declined import DeclinedKernel
 from snakes_and_ladders.search import maxflow_rust
@@ -88,9 +88,7 @@ def test_rust_kernel_ising_ground_state_benchmark(
     edges = np.asarray(graph.edges, dtype=np.int64).reshape(-1)
     coupling = np.asarray(graph.coupling, dtype=np.float64)
 
-    states = benchmark(
-        oxi_snakes_and_ladders.ising_ground_state, graph.n_nodes, field, edges, coupling
-    )
+    states = benchmark(oxisal.ising_ground_state, graph.n_nodes, field, edges, coupling)
 
     assert states.shape == (graph.n_nodes,)
 

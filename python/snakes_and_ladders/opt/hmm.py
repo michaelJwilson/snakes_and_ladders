@@ -32,7 +32,7 @@ from typing import Any, Protocol
 import numpy as np
 import torch
 
-from snakes_and_ladders import oxi_snakes_and_ladders as oxi
+from snakes_and_ladders import oxisal
 from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.emissions import (
     BetaBinomialEmission,
@@ -476,7 +476,7 @@ class GaussianHmmObjective(_HmmObjective):
         - a log scale: ``sum_t gamma_t(s) ((x_t - mu_s)^2 / s_s^2 - 1)``;
 
         each summed in one streamed pass in
-        ``oxi.gaussian_hmm_statistics``, negated for the
+        ``oxisal.gaussian_hmm_statistics``, negated for the
         negative log-likelihood. Autograd through :meth:`__call__` is the
         oracle; a covariate, or any dtype but ``float64``, takes it.
         """
@@ -493,7 +493,7 @@ class GaussianHmmObjective(_HmmObjective):
         transitions = self._transition_parameters(free)
         mean = free[self._mean_slice()].numpy()
         scale = np.exp(free[self._log_scale_slice()].numpy())
-        first, pairs, moments, _ = oxi.gaussian_hmm_statistics(
+        first, pairs, moments, _ = oxisal.gaussian_hmm_statistics(
             np.ascontiguousarray(self._observations.numpy()),
             np.ascontiguousarray(transitions["log_initial"].numpy()),
             np.ascontiguousarray(transitions["log_transition"].numpy()).reshape(-1),
@@ -1302,7 +1302,7 @@ def baum_welch(
     backend : Backend
         :data:`~snakes_and_ladders.backend.Backend.RUST`, the default since
         issue #986, runs each E and M step in
-        ``oxi.categorical_em_step``: scaled messages
+        ``oxisal.categorical_em_step``: scaled messages
         streamed one sequence at a time into expected counts, so no array
         over every position is held. At 10^5 positions of three states one
         fit peaked at 62.6 MB on the batched route.
@@ -1371,7 +1371,7 @@ def _ragged_e_step(
     gamma = np.empty_like(values)
     counts = np.empty((m, m), dtype=np.float64)
     evidence = np.empty(lengths.shape[0], dtype=np.float64)
-    oxi.ragged_posteriors(
+    oxisal.ragged_posteriors(
         values,
         lengths,
         np.ascontiguousarray(log_initial.numpy(), dtype=np.float64),
@@ -1480,7 +1480,7 @@ def _streamed_baum_welch(
     def step(
         state: tuple[np.ndarray, np.ndarray, np.ndarray],
     ) -> tuple[tuple[np.ndarray, np.ndarray, np.ndarray], float]:
-        initial, transition, emission, log_likelihood = oxi.categorical_em_step(
+        initial, transition, emission, log_likelihood = oxisal.categorical_em_step(
             symbols, *state
         )
         return (initial, transition, emission), log_likelihood
@@ -1591,7 +1591,7 @@ def _streamed_family(
     """:func:`baum_welch_family` on a compiled step that streams (issue #997).
 
     A one-channel Gaussian is scored and re-estimated in
-    ``oxi.gaussian_em_step``. A count family is scored in
+    ``oxisal.gaussian_em_step``. A count family is scored in
     ``count_em_step``, term for term its ``log_density`` with a compiled
     ``lgamma``: once per cell for the ``table_size`` cells the data repeats
     most --- a cell is a distinct count, or a distinct pair of a count and its
@@ -1618,8 +1618,10 @@ def _streamed_family(
         ) -> tuple[tuple[np.ndarray, np.ndarray, EmissionFamily], float]:
             initial, transition, family = state
             assert isinstance(family, GaussianEmission)
-            initial, transition, mean, variance, log_likelihood = oxi.gaussian_em_step(
-                values, initial, transition, flat(family.mean), flat(family.scale)
+            initial, transition, mean, variance, log_likelihood = (
+                oxisal.gaussian_em_step(
+                    values, initial, transition, flat(family.mean), flat(family.scale)
+                )
             )
             refuse_collapsed(torch.from_numpy(variance), floor)
             fitted = GaussianEmission(mean, np.sqrt(variance), floor)
@@ -1635,7 +1637,7 @@ def _streamed_family(
             else np.ascontiguousarray(covariate, dtype=np.int64)
         )
         stride = 1 if given is None else int(given.max()) + 1
-        cells, multiplicity = oxi.count_cells(counts, given, stride)
+        cells, multiplicity = oxisal.count_cells(counts, given, stride)
         rows = np.zeros((int(counts.max()) + 1) * stride, dtype=np.uint32)
         rows[cells] = np.arange(cells.size, dtype=np.uint32)
         # The table holds the `table_size` cells that repeat most; ties go to
@@ -1657,7 +1659,7 @@ def _streamed_family(
         ) -> tuple[tuple[np.ndarray, np.ndarray, EmissionFamily], float]:
             nonlocal at_boundary
             initial, transition, family = state
-            initial, transition, histogram, log_likelihood = oxi.count_em_step(
+            initial, transition, histogram, log_likelihood = oxisal.count_em_step(
                 counts,
                 given,
                 stride,
@@ -1721,7 +1723,7 @@ def viterbi(
         The emission family.
     backend : Backend
         :data:`~snakes_and_ladders.backend.Backend.RUST`, the default,
-        decodes the sequences in parallel in ``oxi.
+        decodes the sequences in parallel in ``oxisal.
         hmm_viterbi`` where ``emissions`` is exactly a categorical, a
         one-channel Gaussian or a count family; any other family, and
         :data:`~snakes_and_ladders.backend.Backend.PYTHON`, take the NumPy
@@ -1741,7 +1743,7 @@ def viterbi(
         name, parameters = compiled
         # Symbols and counts are read as the int64 NumPy holds them.
         dtype = np.int64 if np.issubdtype(values.dtype, np.integer) else np.float64
-        states, log_probability = oxi.hmm_viterbi(
+        states, log_probability = oxisal.hmm_viterbi(
             np.ascontiguousarray(values, dtype=dtype),
             np.ascontiguousarray(log_initial.detach().numpy(), dtype=np.float64),
             np.ascontiguousarray(
@@ -1796,7 +1798,7 @@ def hmm_log_likelihood(
     backend : Backend
         :data:`~snakes_and_ladders.backend.Backend.RUST`, the default, runs
         the scaled forward pass over the sequences in parallel in
-        ``oxi.hmm_score`` for the families :func:`viterbi`
+        ``oxisal.hmm_score`` for the families :func:`viterbi`
         compiles, and forms no ``(n_sequences, length, m)`` array;
         :data:`~snakes_and_ladders.backend.Backend.PYTHON`, and any other
         family, take :func:`forward_log_likelihood_from_density`, the oracle
@@ -1813,7 +1815,7 @@ def hmm_log_likelihood(
         name, parameters = compiled
         dtype = np.int64 if np.issubdtype(values.dtype, np.integer) else np.float64
         return float(
-            oxi.hmm_score(
+            oxisal.hmm_score(
                 np.ascontiguousarray(values, dtype=dtype),
                 np.ascontiguousarray(log_initial.detach().numpy(), dtype=np.float64),
                 np.ascontiguousarray(

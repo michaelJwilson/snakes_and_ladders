@@ -1,7 +1,7 @@
 //! Per-vertex simulation of the coupled model's two-channel counts, ported
 //! from `python/snakes_and_ladders/sim/count_pairs.py` (the NumPy oracle) to
 //! Rust, exposed to Python via PyO3 as
-//! `snakes_and_ladders.oxi_snakes_and_ladders.simulate_count_pairs`.
+//! `snakes_and_ladders.oxisal.simulate_count_pairs`.
 //!
 //! The declared 5,041-vertex instance is 1.008e8 count pairs
 //! (`tests/regression/fixtures/spatio_sequential_counts/stress.yaml`), each a

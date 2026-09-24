@@ -46,7 +46,7 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 
-from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders import oxisal
 from snakes_and_ladders.likelihood.spatio_sequential import (
     ClassPosteriors,
     log_prior,
@@ -285,7 +285,7 @@ def class_posteriors(
             (params.n_classes, params.n_states, params.n_states),
         )
     )
-    oxi_snakes_and_ladders.class_posteriors(
+    oxisal.class_posteriors(
         rows.total_rows.reshape(-1),
         rows.success_rows.reshape(-1),
         np.ascontiguousarray(labels, dtype=np.int64),
@@ -329,7 +329,7 @@ def external_field(
     # (M, S, K) to (S, M, K): the kernel wants one position's weights
     # contiguous beside the tables' rows, which are count-major.
     weights = np.ascontiguousarray(np.moveaxis(posterior, 0, 1))
-    oxi_snakes_and_ladders.external_field(
+    oxisal.external_field(
         rows.total_rows.reshape(-1),
         rows.success_rows.reshape(-1),
         rows.total_table.reshape(-1),

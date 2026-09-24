@@ -1,4 +1,4 @@
-"""Rust CPU Felsenstein pruning (`snakes_and_ladders.oxi_snakes_and_ladders.pruning_log_likelihood`) --
+"""Rust CPU Felsenstein pruning (`snakes_and_ladders.oxisal.pruning_log_likelihood`) --
 pinned against ``snakes_and_ladders.likelihood.pruning``, the NumPy oracle
 (``likelihood/CLAUDE.md``, "The NumPy reference is the oracle and it
 stays").
@@ -43,7 +43,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders import oxisal
 from snakes_and_ladders.likelihood.patterns import check_weights
 from snakes_and_ladders.likelihood.pruning_common import (
     check_alignment_covers,
@@ -67,7 +67,7 @@ def log_likelihood(
 
     Signature matches ``snakes_and_ladders.likelihood.pruning.log_likelihood``; this
     wrapper flattens ``tau`` and ``alignment`` into the arrays
-    ``snakes_and_ladders.oxi_snakes_and_ladders.pruning_log_likelihood`` expects and calls the compiled
+    ``snakes_and_ladders.oxisal.pruning_log_likelihood`` expects and calls the compiled
     Rust kernel.
 
     Parameters
@@ -150,7 +150,7 @@ def log_likelihood(
 
     def _kernel(states: np.ndarray) -> float:
         return float(
-            oxi_snakes_and_ladders.pruning_log_likelihood(
+            oxisal.pruning_log_likelihood(
                 branch_length,
                 children,
                 np.ascontiguousarray(states),

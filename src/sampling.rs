@@ -1,11 +1,11 @@
 //! Vectorized inverse-CDF categorical sampling, ported from
 //! `python/snakes_and_ladders/numerics.py` (the NumPy oracle) to Rust, exposed to Python
-//! via PyO3 as `snakes_and_ladders.oxi_snakes_and_ladders.sample_rows`.
+//! via PyO3 as `snakes_and_ladders.oxisal.sample_rows`.
 //!
 //! Issue #181's audit found this is 94-96% of `simulate_alignment`'s self
 //! time at both a CI-sized and a larger fixture, and the only candidate in
 //! that audit both genuinely hot end-to-end and CPU-bound with no autodiff
-//! dependency. It is the `oxi_snakes_and_ladders` case rather than the GPU one: the
+//! dependency. It is the `oxisal` case rather than the GPU one: the
 //! function is called once per tree edge -- 3 to 70 times per simulation --
 //! each call vectorized over sites, so there is too little work per call to
 //! amortize a GPU launch (`CLAUDE.md`, Performance).
@@ -176,7 +176,7 @@ fn search_into(
 
 /// [`sample_rows_into`] with the output allocated here.
 ///
-/// The form `cargo test` and `benches/oxi_snakes_and_ladders_bench.rs` call: they have no
+/// The form `cargo test` and `benches/oxisal_bench.rs` call: they have no
 /// caller-owned array to write into, and the allocation they pay for is not
 /// the one the Python boundary cares about.
 pub fn sample_rows_impl(
