@@ -227,11 +227,9 @@ jobs:
           restore-keys: |
             cargo-${{ runner.os }}-
       - run: pip install "uv==${UV_VERSION}"
-      # `frameworks` as well as `test`: four modules pin our implementations
-      # against Gymnasium, rustworkx, TorchRL and PyTorch Geometric (issue
-      # #322) and skip without them, so a job without the extra would pass
-      # while pinning nothing.
-      - run: uv sync --locked --extra test --extra frameworks
+      # `test` alone: every external framework is a `validation-*` extra run
+      # in a subprocess by the `validation` job (issues #972, #977).
+      - run: uv sync --locked --extra test
       # The early gate (issue #237). `critical` marks the tests whose failure
       # invalidates what runs after them -- the import graph, the documentation
       # index, the CLAUDE.md pointers, `select_tests` itself, the compiled
@@ -438,10 +436,9 @@ jobs:
           restore-keys: |
             cargo-${{ runner.os }}-
       - run: pip install "uv==${UV_VERSION}"
-      # `frameworks` as well: `docs/source/index.rst` autodocuments
-      # `snakes_and_ladders.search.gym`, which imports gymnasium at module
-      # level, and `-W` turns the failed import into an error.
-      - run: uv sync --locked --extra docs --extra frameworks
+      # `docs` alone: every validation script imports its framework inside
+      # `main`, so the index autodocuments it without the framework (#977).
+      - run: uv sync --locked --extra docs
       - run: uv run sphinx-build -b html docs/source docs/_build/html -W
 
   notebooks:

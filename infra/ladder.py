@@ -613,7 +613,7 @@ LADDER: tuple[Rung, ...] = (
         "learned GNN surrogate",
         "learn.surrogate.GraphSurrogate",
         None,
-        T + "learn/test_learn_surrogate_pyg.py"
+        "tests/validation/test_torch_geometric.py"
         "::test_pyg_s_gin_reproduces_the_graph_surrogate_on_tied_weights",
         cost=Cost.TRAINED,
     ),
