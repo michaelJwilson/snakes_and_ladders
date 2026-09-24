@@ -1,21 +1,11 @@
 """``burn``'s taped gradient: the refusals that are this route's alone.
 
-Route A of issue #449, declined and conserved. ``pruning_torch`` is the oracle
-and stays. The checks against it --- the value, the gradient against the tape
-and against central differences, ``gradcheck``, and the weighted patterns ---
-are one body each with the analytic route's, parametrised over the routes in
-``tests/regression/likelihood/test_pruning_analytic.py`` (issue #982). The
-`f64` question the route was adopted on is settled there and by the Rust unit
-tests in ``src/pruning_burn.rs``.
-
-**The route lives in ``snakes_and_ladders.sandbox`` and issue #516 moved this
-module beside it.** ``infra/select_tests.py`` selects it whenever
-``likelihood`` changes, because the sandbox imports ``likelihood``.
-
-**It skips unless the extension carries the ``sandbox`` Cargo feature.** The
-route is not in the default build, so the missing ``pruning_gradient`` skips
-the module rather than reaching a route that would fall back to the oracle it
-is checked against. ``infra/release.sh`` is where the feature is compiled.
+Route A of issue #449, declined and conserved; ``pruning_torch`` is the oracle.
+The shared checks run over the routes in
+``tests/regression/likelihood/test_pruning_analytic.py`` (#982); the `f64`
+question is settled there and in ``src/pruning_burn.rs``.
+``infra/select_tests.py`` selects this on a ``likelihood`` change (#516). Skips
+without the ``sandbox`` Cargo feature; ``infra/release.sh`` compiles it.
 """
 
 from __future__ import annotations
