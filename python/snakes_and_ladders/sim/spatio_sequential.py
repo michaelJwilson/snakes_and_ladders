@@ -12,6 +12,14 @@ per class for the observations -- under one generator, per ``sim/CLAUDE.md``.
 What draws data lives here; what evaluates it, the enumeration oracle, lives
 in :mod:`snakes_and_ladders.likelihood.spatio_sequential`, because ``sim`` may
 not import ``likelihood``.
+
+**Torch is imported where the emissions API is crossed, and nowhere else**
+(issue #1011). The module draws with NumPy and takes no derivative; torch
+enters only because an :class:`~snakes_and_ladders.emissions.EmissionFamily`
+takes its covariate and observations and returns its scores and parameters as
+tensors. So :mod:`snakes_and_ladders.emissions` and torch are imported inside
+the calls that build a family or hand one a tensor, and importing this module
+--- for :func:`circulant_transition`, say --- loads neither.
 """
 
 from __future__ import annotations
@@ -19,12 +27,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ClassVar, Self
+from typing import TYPE_CHECKING, Any, ClassVar, Self
 
 import numpy as np
-import torch
 
-from snakes_and_ladders.emissions import CategoricalEmission, EmissionFamily
 from snakes_and_ladders.ragged import MINIMUM_LENGTH
 from snakes_and_ladders.sim.factor_graph import FactorGraph, from_coupled
 from snakes_and_ladders.sim.graph import (
@@ -34,6 +40,11 @@ from snakes_and_ladders.sim.graph import (
     lattice_graph,
 )
 from snakes_and_ladders.sim.potts import simulate_potts
+
+if TYPE_CHECKING:
+    import torch
+
+    from snakes_and_ladders.emissions import EmissionFamily
 
 
 def circulant_transition(n_states: int, self_transition: float) -> np.ndarray:
@@ -240,6 +251,10 @@ class SpatioSequentialParams:
                 )
                 raise ValueError(msg)
         if self.shared_emissions:
+            # `named_parameters` is the emissions API's and returns tensors, so
+            # comparing them is torch's; a family exists, so torch is loaded.
+            import torch
+
             first = self.emissions[0]
             reference = first.named_parameters()
             for m, family in enumerate(self.emissions[1:], start=1):
@@ -339,6 +354,8 @@ class SpatioSequentialParams:
             If a required field is missing, or the file declares a number of
             emission families other than ``n_classes``.
         """
+        from snakes_and_ladders.emissions import CategoricalEmission
+
         n_classes = int(declared["n_classes"])
         emissions = tuple(
             CategoricalEmission(np.asarray(matrix, dtype=np.float64))
@@ -513,6 +530,8 @@ def _scoring_covariate(params: SpatioSequentialParams) -> torch.Tensor | None:
     """
     if params.covariate is None:
         return None
+    import torch
+
     covariate = params.covariate
     return torch.as_tensor(covariate[..., None] if covariate.ndim == 2 else covariate)
 
@@ -542,6 +561,8 @@ def _drawing_covariate(
     """
     if params.covariate is None:
         return None
+    import torch
+
     block = params.covariate[:, nodes]
     flat = block.reshape(-1, *block.shape[2:])
     return torch.as_tensor(flat[..., None] if block.ndim == 2 else flat)
@@ -567,6 +588,8 @@ def gated_log_density(
     np.ndarray
         Shape ``(n_nodes, S, M, K)``, the layout :func:`from_coupled` takes.
     """
+    import torch
+
     n_positions, n_nodes = observations.shape[:2]
     table = np.empty((n_nodes, n_positions, params.n_classes, params.n_states))
     covariate = _scoring_covariate(params)
@@ -600,6 +623,8 @@ def canonical_spatio_sequential() -> SpatioSequentialParams:
     inside the enumeration limit. Two categorical families over three symbols,
     separated so that a draw at ``S = 6`` identifies the classes.
     """
+    from snakes_and_ladders.emissions import CategoricalEmission
+
     return SpatioSequentialParams(
         graph=lattice_graph((2, 2), BoundaryCondition.OPEN, 1.0),
         n_classes=2,
