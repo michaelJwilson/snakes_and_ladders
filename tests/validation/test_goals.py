@@ -1363,7 +1363,7 @@ def test_random_walk_meets_blackjaxs_seconds_per_effective_sample() -> None:
 
     def chain() -> hmc.Chain:
         return metropolis.random_walk(
-            target, torch.Generator().manual_seed(1006), 20_000, step_size=0.12
+            target, np.random.default_rng(1006), 20_000, step_size=0.12
         )
 
     seconds = median_seconds(chain, repeats=3)

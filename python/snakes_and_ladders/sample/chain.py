@@ -22,7 +22,7 @@ import math
 import time
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Protocol, TypeVar
 
 import numpy as np
 import torch
@@ -31,6 +31,7 @@ from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.opt.objective import (
     Objective,
     declares_gradient,
+    energy_of,
     value_and_gradient,
 )
 from snakes_and_ladders.sample.declared import Power
@@ -65,6 +66,16 @@ DUAL_AVERAGING_T0 = 10.0
 
 
 DUAL_AVERAGING_KAPPA = 0.75
+
+#: The stream a chain draws from: torch's for a kernel that differentiates,
+#: NumPy's for one that reads values alone (root ``CLAUDE.md``, "No autodiff
+#: package where no derivative is taken"; issue #1011). The loop draws from
+#: it through :func:`_uniform` and :func:`_seed` and is otherwise blind to it.
+Stream = TypeVar("Stream", torch.Generator, np.random.Generator)
+
+_KernelStream_contra = TypeVar(
+    "_KernelStream_contra", torch.Generator, np.random.Generator, contravariant=True
+)
 
 
 @dataclass(frozen=True)
@@ -101,7 +112,7 @@ class Transition:
         yield from (self.position, self.energy_error, self.accepted, self.probability)
 
 
-class Kernel(Protocol):
+class Kernel(Protocol[_KernelStream_contra]):
     """One Metropolis transition at a step size, as a warm-up has to see it.
 
     The warm-up and the chain loop below are statements about a *step size*
@@ -115,7 +126,8 @@ class Kernel(Protocol):
 
     An implementation draws from ``generator`` and from nothing else, and
     consumes it in one order for one call, or a chain stops being
-    reproducible from a seed.
+    reproducible from a seed. The stream is torch's or NumPy's
+    (:data:`Stream`), the one the kernel's own draws are taken from.
     """
 
     def __call__(
@@ -123,7 +135,7 @@ class Kernel(Protocol):
         objective: Objective,
         position: torch.Tensor,
         temperature: float,
-        generator: torch.Generator,
+        generator: _KernelStream_contra,
         step_size: float,
     ) -> Transition:
         """The new position, the energy error, 1 if accepted, and the probability.
@@ -297,10 +309,10 @@ class Chain:
 
 
 def run_chain(
-    kernel: Kernel,
+    kernel: Kernel[Stream],
     per_proposal: int,
     objective: Objective,
-    generator: torch.Generator,
+    generator: Stream,
     n_samples: int,
     *,
     step_size: float,
@@ -453,7 +465,7 @@ def run_compiled(
     declared: tuple[Any, Any],
     extra: tuple[Any, ...],
     per_proposal: int,
-    generator: torch.Generator,
+    generator: Stream,
     n_samples: int,
     *,
     step_size: float,
@@ -480,7 +492,7 @@ def run_compiled(
     """
     family, parameters = declared
     dimension = int(theta0.shape[0])
-    seed = int(torch.randint(0, 2**62, (1,), generator=generator))
+    seed = _seed(generator)
     declared_operators = {
         name: operator
         for name, operator in (operators or {}).items()
@@ -598,6 +610,11 @@ class _Scaled(Objective):
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         return self.objective(theta * self.scale)
 
+    def energy(self, x: np.ndarray) -> float:
+        # The same product on the tensor's buffer, so a declared NumPy
+        # energy survives the change of coordinates (issue #1011).
+        return energy_of(self.objective, x * self.scale.numpy())
+
     def value_and_gradient(
         self, theta: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -645,12 +662,12 @@ class _DualAveraging:
 
 
 def _warm_up(
-    kernel: Kernel,
+    kernel: Kernel[Stream],
     per_proposal: int,
     objective: Objective,
     position: torch.Tensor,
     temperature: float,
-    generator: torch.Generator,
+    generator: Stream,
     step_size: float,
     adaptation: Adaptation,
 ) -> tuple[Adapted, torch.Tensor]:
@@ -713,7 +730,9 @@ def _warm_up(
     return report, position * scale
 
 
-def _jittered(step_size: float, jitter: float, generator: torch.Generator) -> float:
+def _jittered(
+    step_size: float, jitter: float, generator: torch.Generator | np.random.Generator
+) -> float:
     """A step drawn uniformly from ``step_size * (1 +/- jitter)``.
 
     At zero jitter it is ``step_size`` and draws nothing, so a chain without
@@ -721,5 +740,18 @@ def _jittered(step_size: float, jitter: float, generator: torch.Generator) -> fl
     """
     if jitter == 0.0:
         return step_size
-    uniform = float(torch.rand(1, generator=generator))
-    return step_size * (1.0 + jitter * (2.0 * uniform - 1.0))
+    return step_size * (1.0 + jitter * (2.0 * _uniform(generator) - 1.0))
+
+
+def _uniform(generator: torch.Generator | np.random.Generator) -> float:
+    """One uniform on ``[0, 1)`` from either :data:`Stream`: one ``torch.rand`` or one ``random()``."""
+    if isinstance(generator, np.random.Generator):
+        return float(generator.random())
+    return float(torch.rand(1, generator=generator))
+
+
+def _seed(generator: torch.Generator | np.random.Generator) -> int:
+    """A compiled chain's ChaCha8 seed on ``[0, 2**62)``, one draw from either :data:`Stream`."""
+    if isinstance(generator, np.random.Generator):
+        return int(generator.integers(0, 2**62))
+    return int(torch.randint(0, 2**62, (1,), generator=generator))

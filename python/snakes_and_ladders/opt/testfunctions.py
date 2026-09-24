@@ -35,6 +35,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar, Self
 
+import numpy as np
 import torch
 
 from snakes_and_ladders.opt.objective import Objective
@@ -82,6 +83,11 @@ class Rosenbrock(Objective):
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         head, tail = theta[:-1], theta[1:]
         return (self.b * (tail - head**2) ** 2 + (self.a - head) ** 2).sum()
+
+    def energy(self, x: np.ndarray) -> float:
+        """:meth:`__call__` on an array, the value :func:`~snakes_and_ladders.opt.objective.energy_of` reads (issue #1011)."""
+        head, tail = x[:-1], x[1:]
+        return float((self.b * (tail - head**2) ** 2 + (self.a - head) ** 2).sum())
 
     @property
     def rosenbrock_constants(self) -> tuple[float, float]:

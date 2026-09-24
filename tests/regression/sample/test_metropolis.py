@@ -2,15 +2,15 @@
 
 Referees:
 
-- the torch kernel is :func:`metropolis.replay` on the same draws, bitwise:
-  the replay is the step BlackJAX's ``rmh`` is pinned to draw for draw
-  (`tests/validation/test_blackjax.py`), so this chains the two;
+- the Python kernel is :func:`metropolis.replay` on the same NumPy draws,
+  bitwise: the replay is the step BlackJAX's ``rmh`` is pinned to draw for
+  draw (`tests/validation/test_blackjax.py`), so this chains the two;
 - each route recovers the Gaussian's moments: every coordinate's mean within
   4.5 standard errors of 0 and its second moment within 4.5 of ``1 / p``,
   the errors from the chain's own AR(1) fit (``KalmanMean``);
-- at ``T = 2`` the torch route's second moment is ``2 / p``, the tempered
+- at ``T = 2`` the Python route's second moment is ``2 / p``, the tempered
   target's, at the same 4.5;
-- the compiled route's warm-up and the torch route's settle on the same
+- the compiled route's warm-up and the Python route's settle on the same
   acceptance to 0.03, and on Rosenbrock at ``b = 1`` their first two moments
   agree within 4.5 combined standard errors;
 - a declared operator's filter kept in Rust, and an undeclared one filtered
@@ -41,7 +41,7 @@ STEP = 1.2 / np.sqrt(DIMENSION)
 def _chain(backend: Backend, n: int = 40_000, **options: object) -> hmc.Chain:
     return metropolis.random_walk(
         GaussianTarget(PRECISION),
-        torch.Generator().manual_seed(1006),
+        np.random.default_rng(1006),
         n,
         step_size=STEP,
         backend=backend,
@@ -57,20 +57,18 @@ def _assert_moments(chain: hmc.Chain, temperature: float = 1.0) -> None:
 
 
 @pytest.mark.oracle
-def test_the_torch_kernel_is_the_replay_on_its_own_draws() -> None:
+def test_the_python_kernel_is_the_replay_on_its_own_draws() -> None:
     chain = _chain(Backend.PYTHON, n=500)
-    generator = torch.Generator().manual_seed(1006)
+    generator = np.random.default_rng(1006)
     increments, uniforms = [], []
     for _ in range(500):
-        increments.append(
-            STEP * torch.randn(DIMENSION, generator=generator, dtype=torch.float64)
-        )
-        uniforms.append(float(torch.rand(1, generator=generator)))
+        increments.append(STEP * generator.standard_normal(DIMENSION))
+        uniforms.append(generator.random())
     replayed = metropolis.replay(
         GaussianTarget(PRECISION),
         np.zeros(DIMENSION),
         1.0,
-        torch.stack(increments).numpy(),
+        np.stack(increments),
         np.asarray(uniforms),
     )
     np.testing.assert_array_equal(chain.draws.numpy(), replayed.draws)
@@ -125,7 +123,7 @@ def test_both_routes_sample_one_rosenbrock_density() -> None:
     means = [
         metropolis.random_walk(
             target,
-            torch.Generator().manual_seed(1006),
+            np.random.default_rng(1006),
             30_000,
             step_size=1.0,
             burn_in=1_000,
@@ -189,7 +187,7 @@ def test_the_compiled_route_is_reproducible_from_the_generator() -> None:
 def test_a_bad_step_and_an_unknown_backend_are_refused() -> None:
     with pytest.raises(ValueError, match="step_size"):
         metropolis.random_walk(
-            GaussianTarget(PRECISION), torch.Generator(), 1, step_size=0.0
+            GaussianTarget(PRECISION), np.random.default_rng(), 1, step_size=0.0
         )
     with pytest.raises(ValueError, match="random_walk"):
         _chain(Backend.TORCH, n=1)
