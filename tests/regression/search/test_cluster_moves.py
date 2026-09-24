@@ -18,17 +18,15 @@ from snakes_and_ladders.cost import Cost
 from snakes_and_ladders.opt.budget import Budget
 from snakes_and_ladders.sample.potts_mcmc import PottsMove
 from snakes_and_ladders.sample.schedule import ScheduleParams, ScheduleShape
-from snakes_and_ladders.search.cluster_moves import (
-    EXPANSION_RESERVE_CYCLES,
-    run_cluster_tempering,
-    run_expansion_then_swendsen_wang,
-    run_swendsen_wang_then_expansion,
-)
+from snakes_and_ladders.search.cluster_moves import run_cluster_tempering
 from snakes_and_ladders.search.ground_state import (
+    EXPANSION_RESERVE_CYCLES,
     Rung,
     ends_labelling,
     run_alpha_expansion,
     run_annealed,
+    run_expansion_then_swendsen_wang,
+    run_swendsen_wang_then_expansion,
 )
 from snakes_and_ladders.search.potts_starts import spatio_rung
 from snakes_and_ladders.sim.fixtures import fixture

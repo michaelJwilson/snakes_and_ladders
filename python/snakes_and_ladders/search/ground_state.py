@@ -43,6 +43,14 @@ in the size tilt, and :func:`uniform_ground_energy` is the closed form its zero
 -field optimum has. The methods and the budget unit are shared, so a sizing
 sweep and the three-rung comparison are billed the same way.
 
+**One entry, from a start.** Every solver reads a :class:`Problem` --- the
+lattice, the field and ``q`` --- and a :class:`Rung` hands its own.
+:func:`ground_state` reaches every :data:`METHODS` entry and every
+:data:`ARMS` entry (issue #1038's tuned Swendsen-Wang, matched Wolff and warm
+chain, #1041's two expansion hybrids) from a ``(graph, field)``, and takes a
+``start``, a ``schedule`` and a step count; with all three left ``None`` a run
+is the entry's own bitwise (issue #1052).
+
 See Boykov, Veksler & Zabih (2001) for the expansion bound and Baxter ch. 12
 for the ordering coupling the rungs sit either side of.
 """
@@ -51,9 +59,9 @@ from __future__ import annotations
 
 import functools
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import Any, Protocol
 
 import numpy as np
 
@@ -114,6 +122,41 @@ _COMPILED_CLUSTERS = frozenset(
 
 
 @dataclass(frozen=True)
+class Problem:
+    """What a solver reads: the lattice, the field and the class count (issue #1052).
+
+    A :class:`Rung` also carries the ladder, the sizes and the optimum, which
+    the structural referee and the bracket read and no solver does. Every
+    solver here reads a ``Problem``; handed a :class:`Rung`, it reads
+    :attr:`Rung.problem`, so a caller with a graph and a field needs no
+    fixture.
+
+    Parameters
+    ----------
+    graph : PottsGraph
+        The lattice; every coupling non-negative.
+    field : np.ndarray
+        ``h``, shape ``(n_nodes, n_states)``.
+    n_states : int
+        ``q``.
+    """
+
+    graph: PottsGraph
+    field: np.ndarray
+    n_states: int
+
+    @property
+    def n_nodes(self) -> int:
+        """Sites."""
+        return int(self.field.shape[0])
+
+    @property
+    def visits_per_sweep(self) -> int:
+        """Site visits one heat-bath sweep costs: a write per site, a read per edge end."""
+        return self.n_nodes + 2 * len(self.graph.edges)
+
+
+@dataclass(frozen=True)
 class Rung:
     """One instance of the comparison, and what can referee its energy.
 
@@ -156,6 +199,29 @@ class Rung:
     def visits_per_sweep(self) -> int:
         """Site visits one heat-bath sweep costs: a write per site, a read per edge end."""
         return self.n_nodes + 2 * len(self.graph.edges)
+
+    @property
+    def problem(self) -> Problem:
+        """What a solver reads of this rung: the lattice, the field and ``q``."""
+        return Problem(self.graph, self.field, self.n_states)
+
+
+def _problem(instance: Problem | Rung) -> Problem:
+    """``instance`` as a :class:`Problem`: a rung's own, or the problem itself."""
+    return instance.problem if isinstance(instance, Rung) else instance
+
+
+def _refuse_start(method: str, start: np.ndarray | None, reason: str) -> None:
+    """Raise, naming ``method``, where a start is given to a method that has none.
+
+    Raises
+    ------
+    ValueError
+        If ``start`` is not ``None``.
+    """
+    if start is not None:
+        msg = f"{method!r} takes no start: {reason}"
+        raise ValueError(msg)
 
 
 #: The class ladder the sizing family tilts by, when it carries a field at all.
@@ -522,21 +588,21 @@ class MethodRun:
     termination: Termination | None = None
 
 
-def step_cost(rung: Rung, move: PottsMove) -> int:
+def step_cost(problem: Problem | Rung, move: PottsMove) -> int:
     """Site visits one step of ``move`` is budgeted at: a sweep's, and a ghost bond per site for the ghost-spin pass."""
-    extra = rung.n_nodes if move is PottsMove.GHOST_SPIN else 0
-    return rung.visits_per_sweep + extra
+    extra = problem.n_nodes if move is PottsMove.GHOST_SPIN else 0
+    return problem.visits_per_sweep + extra
 
 
 def run_annealed(
-    rung: Rung,
+    problem: Problem | Rung,
     budget: Budget,
     rng: np.random.Generator,
     move: PottsMove,
     *,
     schedule: ScheduleParams = ANNEAL_SCHEDULE,
     steps: int | None = None,
-    initial: np.ndarray | None = None,
+    start: np.ndarray | None = None,
 ) -> MethodRun:
     """One annealed run, its step count fixed before the run starts.
 
@@ -550,39 +616,45 @@ def run_annealed(
     :func:`step_cost` and it runs fewer steps on the same budget (issue
     #1041); every other move's step costs ``visits_per_sweep``.
 
-    ``schedule``, ``steps`` and ``initial`` are what issue #1038 varies, and
+    ``schedule``, ``steps`` and ``start`` are what issue #1038 varies, and
     their defaults are the run above bitwise. ``steps`` replaces the count
     with one a caller fixed beforehand, still not read from the run's state;
-    ``initial`` starts the chain from a labelling instead of a uniform draw.
+    ``start`` starts the chain from a labelling instead of a uniform draw
+    (``initial`` until issue #1052 gave every solver the one name).
     """
-    count = max(1, budget.size // step_cost(rung, move)) if steps is None else steps
-    start = time.perf_counter()
+    problem = _problem(problem)
+    count = max(1, budget.size // step_cost(problem, move)) if steps is None else steps
+    started = time.perf_counter()
     # Swendsen-Wang on the compiled pass: the same law on another order of
     # draws, and the comparison reads no cluster counter (issue #923). The
     # ghost-spin and label-directed passes merge their bonds on the compiled
     # union-find, which returns the Python roots, so the chain (issue #1041).
     run = anneal_potts(
-        rung.graph,
-        rung.field,
+        problem.graph,
+        problem.field,
         schedule.build(count),
         rng,
         move=move,
         cluster_backend=Backend.RUST if move in _COMPILED_CLUSTERS else Backend.PYTHON,
-        initial=initial,
+        initial=start,
     )
     return MethodRun(
         labelling=run.labelling,
         energy=run.energy,
         spent=run.site_visits,
-        seconds=time.perf_counter() - start,
+        seconds=time.perf_counter() - started,
         trace=run.trace,
     )
 
 
 def descend(
-    rung: Rung, rng: np.random.Generator, max_sweeps: int
+    problem: Problem | Rung,
+    rng: np.random.Generator,
+    max_sweeps: int,
+    *,
+    start: np.ndarray | None = None,
 ) -> tuple[np.ndarray, int]:
-    """Index-order ICM from a uniform draw, one sweep at a time, and the sweeps it ran.
+    """Index-order ICM from a uniform draw, or from ``start``, one sweep at a time, and the sweeps it ran.
 
     The descent :func:`run_icm` runs, on the same draws, with its sweep count
     read out: the count is what a warm chain is charged, where
@@ -595,11 +667,21 @@ def descend(
     tuple[np.ndarray, int]
         The labelling, and the sweeps run, at most ``max_sweeps``.
     """
-    labelling = rng.integers(0, rung.n_states, size=rung.n_nodes)
+    problem = _problem(problem)
+    labelling = (
+        rng.integers(0, problem.n_states, size=problem.n_nodes)
+        if start is None
+        else np.array(start, dtype=np.int64)
+    )
     sweeps = 0
     while sweeps < max_sweeps:
         settled = iterated_conditional_modes(
-            rung.graph, rung.field, rung.n_states, rng, start=labelling, max_sweeps=1
+            problem.graph,
+            problem.field,
+            problem.n_states,
+            rng,
+            start=labelling,
+            max_sweeps=1,
         )
         sweeps += 1
         if np.array_equal(settled.labelling, labelling):
@@ -609,15 +691,16 @@ def descend(
 
 
 def warm_anneal(
-    rung: Rung,
+    problem: Problem | Rung,
     budget: Budget,
     rng: np.random.Generator,
     move: PottsMove,
     schedule: ScheduleParams,
     *,
     steps: int | None = None,
+    start: np.ndarray | None = None,
 ) -> MethodRun:
-    """ICM from a uniform draw to its first clean sweep, then an anneal from its labelling.
+    """ICM from a uniform draw, or from ``start``, to its first clean sweep, then an anneal from its labelling.
 
     A warm chain (issue #1038): the descent's sweeps are charged at
     ``visits_per_sweep`` each, clean sweep included, and the anneal gets what
@@ -630,59 +713,93 @@ def warm_anneal(
     MethodRun
         The anneal's labelling and energy, ``spent`` the two charges summed.
     """
-    start = time.perf_counter()
-    labelling, sweeps = descend(rung, rng, budget.size // rung.visits_per_sweep)
-    descent = sweeps * rung.visits_per_sweep
+    problem = _problem(problem)
+    started = time.perf_counter()
+    labelling, sweeps = descend(
+        problem, rng, budget.size // problem.visits_per_sweep, start=start
+    )
+    descent = sweeps * problem.visits_per_sweep
     run = run_annealed(
-        rung,
+        problem,
         Budget(budget.unit, budget.size - descent),
         rng,
         move,
         schedule=schedule,
         steps=steps,
-        initial=labelling,
+        start=labelling,
     )
-    return replace(run, spent=descent + run.spent, seconds=time.perf_counter() - start)
+    return replace(
+        run, spent=descent + run.spent, seconds=time.perf_counter() - started
+    )
 
 
-def run_greedy(rung: Rung, budget: Budget, rng: np.random.Generator) -> MethodRun:
+def run_greedy(
+    problem: Problem | Rung,
+    budget: Budget,
+    rng: np.random.Generator,
+    *,
+    start: np.ndarray | None = None,
+) -> MethodRun:
     """The field-only labelling: every site takes its own best class, coupling ignored.
 
     The trap baseline. It maximizes the tilt by construction, so it is the
     control for the structural referee as well as for the energy: a method it
     ties on both is a method the instance cannot distinguish.
     """
+    _refuse_start(
+        "greedy",
+        start,
+        "it is built from the field alone, with no labelling to start from",
+    )
+    problem = _problem(problem)
     del budget, rng
-    start = time.perf_counter()
-    labelling = rung.field.argmax(axis=1).astype(np.int64)
+    started = time.perf_counter()
+    labelling = problem.field.argmax(axis=1).astype(np.int64)
     return MethodRun(
         labelling=labelling,
-        energy=energy(rung.graph, rung.field, labelling),
-        spent=rung.n_nodes,
-        seconds=time.perf_counter() - start,
+        energy=energy(problem.graph, problem.field, labelling),
+        spent=problem.n_nodes,
+        seconds=time.perf_counter() - started,
     )
 
 
-def run_icm(rung: Rung, budget: Budget, rng: np.random.Generator) -> MethodRun:
-    """Iterated conditional modes: single-site descent in index order."""
-    steps = max(1, budget.size // rung.visits_per_sweep)
-    start = time.perf_counter()
+def run_icm(
+    problem: Problem | Rung,
+    budget: Budget,
+    rng: np.random.Generator,
+    *,
+    start: np.ndarray | None = None,
+) -> MethodRun:
+    """Iterated conditional modes: single-site descent in index order.
+
+    From a uniform draw, or from ``start``.
+    """
+    problem = _problem(problem)
+    steps = max(1, budget.size // problem.visits_per_sweep)
+    started = time.perf_counter()
     settled = iterated_conditional_modes(
-        rung.graph,
-        rung.field,
-        rung.n_states,
+        problem.graph,
+        problem.field,
+        problem.n_states,
         rng,
+        start=start,
         max_sweeps=steps,
     )
     return MethodRun(
         labelling=settled.labelling,
         energy=settled.energy,
-        spent=steps * rung.visits_per_sweep,
-        seconds=time.perf_counter() - start,
+        spent=steps * problem.visits_per_sweep,
+        seconds=time.perf_counter() - started,
     )
 
 
-def run_icm_random(rung: Rung, budget: Budget, rng: np.random.Generator) -> MethodRun:
+def run_icm_random(
+    problem: Problem | Rung,
+    budget: Budget,
+    rng: np.random.Generator,
+    *,
+    start: np.ndarray | None = None,
+) -> MethodRun:
     """ICM in a random sweep order: the heat bath at T = 0, every sweep of the budget run.
 
     Reported on ICM's axis rather than beside it. The heat bath at ``T -> 0``
@@ -698,13 +815,15 @@ def run_icm_random(rung: Rung, budget: Budget, rng: np.random.Generator) -> Meth
     which also moved it onto the compiled sweep: the permutations are drawn
     in the Python sweep's order, and the labelling is that sweep's bitwise.
     """
-    steps = max(1, budget.size // rung.visits_per_sweep)
-    start = time.perf_counter()
+    problem = _problem(problem)
+    steps = max(1, budget.size // problem.visits_per_sweep)
+    started = time.perf_counter()
     settled = iterated_conditional_modes(
-        rung.graph,
-        rung.field,
-        rung.n_states,
+        problem.graph,
+        problem.field,
+        problem.n_states,
         rng,
+        start=start,
         max_sweeps=steps,
         sweep_order=SweepOrder.RANDOM,
         stop_when_clean=False,
@@ -713,13 +832,31 @@ def run_icm_random(rung: Rung, budget: Budget, rng: np.random.Generator) -> Meth
     return MethodRun(
         labelling=settled.labelling,
         energy=settled.energy,
-        spent=steps * rung.visits_per_sweep,
-        seconds=time.perf_counter() - start,
+        spent=steps * problem.visits_per_sweep,
+        seconds=time.perf_counter() - started,
     )
 
 
-Method = Callable[[Rung, Budget, np.random.Generator], MethodRun]
-"""One method of the comparison: a rung, a budget and a generator to a run."""
+class Method(Protocol):
+    """One method of the comparison: a problem, a budget and a generator to a run.
+
+    ``start`` is the labelling a method descends or anneals from in place of
+    its own; a method with no single starting labelling raises on one
+    (issue #1052).
+    """
+
+    def __call__(
+        self,
+        problem: Problem | Rung,
+        budget: Budget,
+        rng: np.random.Generator,
+        /,
+        *,
+        start: np.ndarray | None = None,
+    ) -> MethodRun:
+        """Run on ``problem`` within ``budget``."""
+        ...
+
 
 #: The three annealed entries are one run with a move set (issue #717):
 #: single-site is the fair annealed baseline, Swendsen-Wang recolours every
@@ -730,21 +867,29 @@ run_swendsen_wang = functools.partial(run_annealed, move=PottsMove.SWENDSEN_WANG
 run_wolff = functools.partial(run_annealed, move=PottsMove.WOLFF)
 
 
-def run_tempering(rung: Rung, budget: Budget, rng: np.random.Generator) -> MethodRun:
+def run_tempering(
+    problem: Problem | Rung,
+    budget: Budget,
+    rng: np.random.Generator,
+    *,
+    start: np.ndarray | None = None,
+) -> MethodRun:
     """Parallel tempering over a geometric ladder, charged for every replica.
 
     The budget buys ``budget // (N_REPLICAS * visits_per_sweep)`` sweeps per
     replica rather than that many per chain, which is the whole difference
     between a comparison at equal cost and one at equal sweeps.
     """
-    per_replica = max(1, budget.size // (N_REPLICAS * rung.visits_per_sweep))
+    _refuse_start("tempering", start, "its ladder draws one labelling per replica")
+    problem = _problem(problem)
+    per_replica = max(1, budget.size // (N_REPLICAS * problem.visits_per_sweep))
     ladder = tuple(
         float(value) for value in np.geomspace(ANNEAL_START, ANNEAL_END, N_REPLICAS)
     )
-    start = time.perf_counter()
+    started = time.perf_counter()
     run = parallel_tempering(
-        rung.graph,
-        rung.field,
+        problem.graph,
+        problem.field,
         ladder,
         rng,
         per_replica,
@@ -752,36 +897,50 @@ def run_tempering(rung: Rung, budget: Budget, rng: np.random.Generator) -> Metho
     return MethodRun(
         labelling=run.best,
         energy=run.best_energy,
-        spent=N_REPLICAS * per_replica * rung.visits_per_sweep,
-        seconds=time.perf_counter() - start,
+        spent=N_REPLICAS * per_replica * problem.visits_per_sweep,
+        seconds=time.perf_counter() - started,
     )
 
 
 def run_alpha_expansion(
-    rung: Rung, budget: Budget, rng: np.random.Generator
+    problem: Problem | Rung,
+    budget: Budget,
+    rng: np.random.Generator,
+    *,
+    start: np.ndarray | None = None,
 ) -> MethodRun:
-    """Alpha expansion: the only entry carrying a bound, and the bracket's lower end."""
+    """Alpha expansion: the only entry carrying a bound, and the bracket's lower end.
+
+    It starts from the field's argmax, the greedy labelling, or from
+    ``start``, and draws nothing from ``rng``.
+    """
+    problem = _problem(problem)
     del rng
-    cycles = max(1, budget.size // (rung.n_states * rung.visits_per_sweep))
-    start = time.perf_counter()
+    cycles = max(1, budget.size // (problem.n_states * problem.visits_per_sweep))
+    started = time.perf_counter()
     run = alpha_expansion(
-        rung.graph,
-        rung.field,
-        rung.n_states,
+        problem.graph,
+        problem.field,
+        problem.n_states,
+        start=start,
         max_cycles=cycles,
         backend=Backend.RUST,
     )
     return MethodRun(
         labelling=run.labelling,
         energy=run.energy,
-        spent=run.cycles * rung.n_states * rung.visits_per_sweep,
-        seconds=time.perf_counter() - start,
+        spent=run.cycles * problem.n_states * problem.visits_per_sweep,
+        seconds=time.perf_counter() - started,
         termination=run.termination,
     )
 
 
 def run_alpha_beta_swap(
-    rung: Rung, budget: Budget, rng: np.random.Generator
+    problem: Problem | Rung,
+    budget: Budget,
+    rng: np.random.Generator,
+    *,
+    start: np.ndarray | None = None,
 ) -> MethodRun:
     """Alpha-beta swap: the cheaper move, and the one with no bound.
 
@@ -790,16 +949,19 @@ def run_alpha_beta_swap(
     every site is therefore visited ``q - 1`` times, not once per pair, so a
     cycle costs ``(q - 1)`` sweeps against the expansion's ``q`` --- the swap
     is much cheaper per *cut* and barely cheaper per *cycle*, which is the
-    trade, and charging it by the pair count would have hidden it.
+    trade, and charging it by the pair count would have hidden it. It starts
+    where :func:`run_alpha_expansion` starts.
     """
+    problem = _problem(problem)
     del rng
-    per_cycle = (rung.n_states - 1) * rung.visits_per_sweep
+    per_cycle = (problem.n_states - 1) * problem.visits_per_sweep
     cycles = max(1, budget.size // per_cycle)
-    start = time.perf_counter()
+    started = time.perf_counter()
     run = alpha_beta_swap(
-        rung.graph,
-        rung.field,
-        rung.n_states,
+        problem.graph,
+        problem.field,
+        problem.n_states,
+        start=start,
         max_cycles=cycles,
         backend=Backend.RUST,
     )
@@ -808,11 +970,17 @@ def run_alpha_beta_swap(
         energy=run.energy,
         spent=run.cycles * per_cycle,
         termination=run.termination,
-        seconds=time.perf_counter() - start,
+        seconds=time.perf_counter() - started,
     )
 
 
-def run_max_product(rung: Rung, budget: Budget, rng: np.random.Generator) -> MethodRun:
+def run_max_product(
+    problem: Problem | Rung,
+    budget: Budget,
+    rng: np.random.Generator,
+    *,
+    start: np.ndarray | None = None,
+) -> MethodRun:
     """Max-product on the factor graph: MAP-exact on a tree, and this is not a tree.
 
     Included because it carries **no** bound on a loopy graph, which is what
@@ -825,56 +993,68 @@ def run_max_product(rung: Rung, budget: Budget, rng: np.random.Generator) -> Met
     enter the greedy baseline's numbers in max-product's row, which is the
     quiet failure this branch exists to prevent.
     """
+    _refuse_start("max-product", start, "it iterates messages, not a labelling")
+    problem = _problem(problem)
     del rng
-    iterations = max(1, budget.size // rung.visits_per_sweep)
-    graph = from_potts(rung.graph, rung.field)
-    start = time.perf_counter()
+    iterations = max(1, budget.size // problem.visits_per_sweep)
+    graph = from_potts(problem.graph, problem.field)
+    started = time.perf_counter()
     try:
         assignment, marginals = max_product(
             graph, schedule=MessageScheduleName.FLOODING, max_iterations=iterations
         )
     except ConvergenceError:
         return MethodRun(
-            labelling=rung.field.argmax(axis=1).astype(np.int64),
+            labelling=problem.field.argmax(axis=1).astype(np.int64),
             energy=float("inf"),
-            spent=iterations * rung.visits_per_sweep,
-            seconds=time.perf_counter() - start,
+            spent=iterations * problem.visits_per_sweep,
+            seconds=time.perf_counter() - started,
             converged=False,
             termination=Termination(
                 converged=False, iterations=iterations, reason=Stop.REFUSED
             ),
         )
     labelling = np.array(
-        [assignment[f"s{node}"] for node in range(rung.n_nodes)], dtype=np.int64
+        [assignment[f"s{node}"] for node in range(problem.n_nodes)], dtype=np.int64
     )
     return MethodRun(
         labelling=labelling,
-        energy=energy(rung.graph, rung.field, labelling),
-        spent=iterations * rung.visits_per_sweep,
-        seconds=time.perf_counter() - start,
+        energy=energy(problem.graph, problem.field, labelling),
+        spent=iterations * problem.visits_per_sweep,
+        seconds=time.perf_counter() - started,
         # Flooding refuses rather than truncating, so a return is a settled
         # fixed point and the sweeps it took are the marginals' own count.
         termination=Termination.after(marginals.iterations, converged=True),
     )
 
 
-def run_bifurcation(rung: Rung, budget: Budget, rng: np.random.Generator) -> MethodRun:
+def run_bifurcation(
+    problem: Problem | Rung,
+    budget: Budget,
+    rng: np.random.Generator,
+    *,
+    start: np.ndarray | None = None,
+) -> MethodRun:
     """Simulated bifurcation, one replica, the budget spent in integration steps.
 
     A step reads every edge twice and writes every site once, the heat-bath
     sweep's unit, so ``steps = budget // visits_per_sweep`` matches the rows
     beside it in what they spend (issue #823).
     """
-    steps = max(1, budget.size // rung.visits_per_sweep)
-    start = time.perf_counter()
+    _refuse_start(
+        "bifurcation", start, "it integrates continuous amplitudes, not labels"
+    )
+    problem = _problem(problem)
+    steps = max(1, budget.size // problem.visits_per_sweep)
+    started = time.perf_counter()
     result = simulated_bifurcation(
-        rung.graph, rung.field, rung.n_states, rng, steps=steps
+        problem.graph, problem.field, problem.n_states, rng, steps=steps
     )
     return MethodRun(
         labelling=result.labelling,
         energy=result.energy,
-        spent=steps * rung.visits_per_sweep,
-        seconds=time.perf_counter() - start,
+        spent=steps * problem.visits_per_sweep,
+        seconds=time.perf_counter() - started,
         termination=result.termination,
     )
 
@@ -900,22 +1080,180 @@ METHODS: dict[str, Method] = {
 ONE_AXIS = ("icm", "icm-random")
 
 
+#: Cycles of the expansion :func:`run_swendsen_wang_then_expansion` holds
+#: back from Swendsen-Wang's share. From a uniform start the expansion ends in
+#: 3 cycles on `spatio_only/release` at ten states; 10 leaves it room from a
+#: labelling that is not its own.
+EXPANSION_RESERVE_CYCLES = 10
+
+
+def run_swendsen_wang_then_expansion(
+    problem: Problem | Rung,
+    budget: Budget,
+    rng: np.random.Generator,
+    *,
+    schedule: ScheduleParams,
+    reserve_cycles: int = EXPANSION_RESERVE_CYCLES,
+    steps: int | None = None,
+    start: np.ndarray | None = None,
+) -> MethodRun:
+    """Swendsen-Wang on ``schedule``, then alpha-expansion from its labelling (issue #1041).
+
+    The anneal runs from a uniform draw or ``start`` on ``budget`` less
+    ``reserve_cycles`` expansion cycles, by :func:`run_annealed`'s rule or at
+    ``steps``; the expansion starts from the anneal's best labelling with
+    what is left as its cap, and is charged the cycles it ran.
+
+    Returns
+    -------
+    MethodRun
+        The expansion's labelling and energy, ``spent`` both parts summed.
+    """
+    problem = _problem(problem)
+    started = time.perf_counter()
+    per_cycle = problem.n_states * problem.visits_per_sweep
+    anneal = run_annealed(
+        problem,
+        Budget(budget.unit, budget.size - reserve_cycles * per_cycle),
+        rng,
+        PottsMove.SWENDSEN_WANG,
+        schedule=schedule,
+        steps=steps,
+        start=start,
+    )
+    left = budget.size - anneal.spent
+    expansion = alpha_expansion(
+        problem.graph,
+        problem.field,
+        problem.n_states,
+        start=anneal.labelling,
+        max_cycles=max(1, left // per_cycle),
+        backend=Backend.RUST,
+    )
+    return MethodRun(
+        labelling=expansion.labelling,
+        energy=expansion.energy,
+        spent=anneal.spent + expansion.cycles * per_cycle,
+        seconds=time.perf_counter() - started,
+        termination=expansion.termination,
+    )
+
+
+def run_expansion_then_swendsen_wang(
+    problem: Problem | Rung,
+    budget: Budget,
+    rng: np.random.Generator,
+    *,
+    schedule: ScheduleParams,
+    steps: int | None = None,
+    start: np.ndarray | None = None,
+) -> MethodRun:
+    """Alpha-expansion, then Swendsen-Wang on ``schedule`` from its labelling (issue #1041).
+
+    The expansion runs as :func:`run_alpha_expansion` does, from ``start``
+    where one is given, and is charged its cycles; the anneal gets the rest
+    of ``budget`` by :func:`run_annealed`'s rule or ``steps``. The anneal
+    returns the lowest energy it visited, its start included, so the arm
+    hands over the expansion's energy or lower.
+
+    Returns
+    -------
+    MethodRun
+        The anneal's labelling and energy, ``spent`` both parts summed.
+    """
+    problem = _problem(problem)
+    started = time.perf_counter()
+    expansion = run_alpha_expansion(problem, budget, rng, start=start)
+    anneal = run_annealed(
+        problem,
+        Budget(budget.unit, budget.size - expansion.spent),
+        rng,
+        PottsMove.SWENDSEN_WANG,
+        schedule=schedule,
+        steps=steps,
+        start=expansion.labelling,
+    )
+    return replace(
+        anneal,
+        spent=expansion.spent + anneal.spent,
+        seconds=time.perf_counter() - started,
+    )
+
+
+# The arms' constants are issue #1038's results, copied from
+# `docs/nb/data/potts_schedule.json` (written by `qa.potts_schedule`) and
+# frozen here so importing this module reads no file, and issue #1041's
+# hand-over schedule, which `qa.potts_clusters` reads from here.
+
+#: Swendsen-Wang's tuned schedule: the file's ``moves.swendsen-wang.chosen``,
+#: the lowest mean energy on the tuning seeds at `spatio_only/release`, q = 10.
+SWENDSEN_WANG_SCHEDULE = ScheduleParams(
+    ScheduleShape.LINEAR, 0.7835758686849045, 0.3235944681535294, 0.0
+)
+#: Wolff's step count at matched spend: the file's ``matched_wolff.steps``,
+#: at which Wolff's mean spend on the tuning seeds meets the 1,000-sweep
+#: budget of `spatio_only/release` at q = 10, on :data:`ANNEAL_SCHEDULE`.
+#: Fixed, so on another budget or instance it is matched to nothing.
+WOLFF_MATCHED_STEPS = 41250
+#: The warm chain's schedule: Swendsen-Wang's tuned shape, hold and end from
+#: ``t_start = 1.0``, the notebook's ``swendsen-wang warm 1.0`` arm.
+WARM_SCHEDULE = replace(SWENDSEN_WANG_SCHEDULE, t_start=1.0)
+#: Where :func:`run_expansion_then_swendsen_wang`'s chain starts and ends:
+#: Swendsen-Wang's tuned end, cooled to :data:`ANNEAL_END` (issue #1041).
+EXPANSION_SW_SCHEDULE = ScheduleParams(ScheduleShape.LINEAR, 0.3236, ANNEAL_END)
+
+#: The tuned, warm and hybrid solvers of issues #1038 and #1041, by name.
+#: Not in :data:`METHODS`, which is issue #906's table and whose rows
+#: `docs/nb/potts_starts.ipynb` reproduces; :func:`ground_state` reaches both.
+ARMS: dict[str, Method] = {
+    "tuned-swendsen-wang": functools.partial(
+        run_annealed, move=PottsMove.SWENDSEN_WANG, schedule=SWENDSEN_WANG_SCHEDULE
+    ),
+    "matched-wolff": functools.partial(
+        run_annealed, move=PottsMove.WOLFF, steps=WOLFF_MATCHED_STEPS
+    ),
+    "warm-anneal": functools.partial(
+        warm_anneal, move=PottsMove.SWENDSEN_WANG, schedule=WARM_SCHEDULE
+    ),
+    "swendsen-wang>expansion": functools.partial(
+        run_swendsen_wang_then_expansion, schedule=SWENDSEN_WANG_SCHEDULE
+    ),
+    "expansion>swendsen-wang": functools.partial(
+        run_expansion_then_swendsen_wang, schedule=EXPANSION_SW_SCHEDULE
+    ),
+}
+
+#: The names that run an anneal, and so take a ``schedule`` and ``steps``.
+ANNEALED = frozenset({"anneal", "swendsen-wang", "wolff", *ARMS})
+
+
 def ground_state(
     graph: PottsGraph,
     field: np.ndarray,
     method: str,
     budget: Budget,
     rng: np.random.Generator,
+    *,
+    start: np.ndarray | None = None,
+    schedule: ScheduleParams | None = None,
+    steps: int | None = None,
 ) -> MethodRun:
-    """One :data:`METHODS` entry on any Potts problem, with no fixture behind it (issue #933).
+    """One :data:`METHODS` or :data:`ARMS` entry on any Potts problem, with no fixture behind it (issues #933, #1052).
 
-    Every method reads the lattice, the field, the class count and the cost
-    of a sweep, and nothing else: the ladder, the sizes and the optimum a
-    :class:`Rung` also carries are what the structural referee and the
+    Every solver reads a :class:`Problem` --- the lattice, the field and the
+    class count --- and nothing else: the ladder, the sizes and the optimum
+    a :class:`Rung` also carries are what the structural referee and the
     bracket read. So a caller with a graph and a field --- a label step's
-    energy, say --- reaches every method here without constructing a
-    fixture's rung. The rung built inside carries no ladder and no optimum,
-    and is not returned: it is not an instance the referees can score.
+    energy, say --- reaches every solver here without constructing a
+    fixture's rung.
+
+    With ``start``, ``schedule`` and ``steps`` left ``None`` the run is the
+    entry's own, bitwise. ``start`` replaces the labelling the solver would
+    draw or build: ICM and ICM in random order descend from it, the annealers
+    and the warm chain's descent start from it, the expansion and the swap
+    cut from it, and each hybrid hands it to its first part. ``greedy``,
+    ``tempering``, ``max-product`` and ``bifurcation`` have no single
+    starting labelling and refuse one.
 
     Parameters
     ----------
@@ -924,12 +1262,20 @@ def ground_state(
     field : np.ndarray
         ``h``, shape ``(n_nodes, n_states)``.
     method : str
-        A key of :data:`METHODS`.
+        A key of :data:`METHODS` or :data:`ARMS`.
     budget : Budget
         In :attr:`~snakes_and_ladders.cost.Cost.SITE_VISITS`, the unit every
         entry is charged in.
     rng : np.random.Generator
         The method's generator.
+    start : np.ndarray | None
+        A labelling, shape ``(n_nodes,)``, states in ``[0, n_states)``.
+    schedule : ScheduleParams | None
+        The anneal's temperatures, in place of the entry's own; a name in
+        :data:`ANNEALED` only.
+    steps : int | None
+        The anneal's step count, fixed beforehand, in place of the budget's
+        rule; a name in :data:`ANNEALED` only.
 
     Returns
     -------
@@ -938,11 +1284,17 @@ def ground_state(
     Raises
     ------
     ValueError
-        If ``method`` is not an entry, ``field`` is not one row per node, or
-        the budget is in another unit.
+        If ``method`` is in neither table, ``field`` is not one row per node,
+        the budget is in another unit, ``start`` is not one state in range
+        per node, the method refuses a start, or ``schedule`` or ``steps``
+        is given to a method that runs no anneal.
     """
-    if method not in METHODS:
-        msg = f"no ground-state method {method!r}; the entries are {sorted(METHODS)}"
+    solvers = METHODS | ARMS
+    if method not in solvers:
+        msg = (
+            f"no ground-state method {method!r}; the methods are {sorted(METHODS)} "
+            f"and the arms {sorted(ARMS)}"
+        )
         raise ValueError(msg)
     values = np.asarray(field, dtype=np.float64)
     if values.ndim != 2 or values.shape[0] != graph.n_nodes:
@@ -954,17 +1306,45 @@ def ground_state(
     if budget.unit is not Cost.SITE_VISITS:
         msg = f"every entry is charged in site visits, not {budget.unit}"
         raise ValueError(msg)
-    n_states = int(values.shape[1])
-    problem = Rung(
-        name="problem",
-        graph=graph,
-        field=values,
-        alpha=np.zeros(n_states),
-        sizes=np.ones(graph.n_nodes),
-        n_states=n_states,
-        optimum=None,
-    )
-    return METHODS[method](problem, budget, rng)
+    if (schedule is not None or steps is not None) and method not in ANNEALED:
+        msg = (
+            f"{method!r} runs no anneal, so takes no schedule or steps; those "
+            f"apply to {sorted(ANNEALED)}"
+        )
+        raise ValueError(msg)
+    problem = Problem(graph, values, int(values.shape[1]))
+    if start is not None:
+        start = _checked_start(problem, start)
+    keywords: dict[str, Any] = {}
+    if schedule is not None:
+        keywords["schedule"] = schedule
+    if steps is not None:
+        keywords["steps"] = steps
+    return solvers[method](problem, budget, rng, start=start, **keywords)
+
+
+def _checked_start(problem: Problem, start: np.ndarray) -> np.ndarray:
+    """``start`` as an ``int64`` copy, checked to be one state in range per node.
+
+    Raises
+    ------
+    ValueError
+        If it is not integer, not shape ``(n_nodes,)``, or holds a state
+        outside ``[0, n_states)``.
+    """
+    labelling = np.asarray(start)
+    if (
+        labelling.shape != (problem.n_nodes,)
+        or not np.issubdtype(labelling.dtype, np.integer)
+        or not ((labelling >= 0).all() and (labelling < problem.n_states).all())
+    ):
+        msg = (
+            f"start must hold one integer state in [0, {problem.n_states}) per "
+            f"node of {problem.n_nodes}; got shape {labelling.shape}, dtype "
+            f"{labelling.dtype}"
+        )
+        raise ValueError(msg)
+    return np.array(labelling, dtype=np.int64)
 
 
 def outcome(run: MethodRun) -> Outcome:
