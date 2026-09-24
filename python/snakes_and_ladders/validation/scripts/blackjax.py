@@ -10,11 +10,21 @@ momentum and position updates, palindromic), built by
 
 ``mode`` 1 samples: ``blackjax.hmc`` from ``position`` with ``step_size`` and
 ``n_steps`` leapfrog steps, ``n_draws`` transitions keyed from ``key``.
-Outputs ``draws`` and ``acceptance``, the mean acceptance probability.
+Outputs ``draws`` and ``acceptance``, the mean acceptance probability. With
+``store_chain`` false the scan carries the state and emits only each
+transition's acceptance, so no draw is stacked and ``draws`` is empty
+(issue #997).
+
+``mode`` 2 samples by ``blackjax.mala`` at ``step_size``, which is BlackJAX's
+``epsilon`` in ``x + epsilon grad log p + sqrt(2 epsilon) xi``: the
+package's Langevin step ``h`` is ``epsilon = h^2 / 2``. Outputs as mode 1
+(issue #997).
 
 Each mode is compiled on one call first; the measured seconds are the second
 call, to ``block_until_ready``, so compilation is not charged. It is reported
-as ``compile_seconds``. The peak resident memory is the second call's too.
+as ``compile_seconds``. The peak resident memory is the second call's too;
+``first_peak_bytes`` is the first call's, compilation and the buffers XLA
+keeps for later calls included (issue #997).
 """
 
 from __future__ import annotations
@@ -27,7 +37,7 @@ import numpy as np
 from snakes_and_ladders.validation.protocol import dump, load, paths, peaked
 
 #: What ``mode`` selects.
-INTEGRATE, SAMPLE = 0, 1
+INTEGRATE, SAMPLE, LANGEVIN = 0, 1, 2
 
 
 def main() -> None:
@@ -68,28 +78,36 @@ def main() -> None:
 
         arguments = (jnp.asarray(inputs["position"]), jnp.asarray(inputs["momentum"]))
     else:
-        kernel = blackjax.hmc(
-            logdensity,
-            step_size=step_size,
-            inverse_mass_matrix=unit,
-            num_integration_steps=n_steps,
+        kernel = (
+            blackjax.mala(logdensity, step_size=step_size)
+            if int(inputs["mode"]) == LANGEVIN
+            else blackjax.hmc(
+                logdensity,
+                step_size=step_size,
+                inverse_mass_matrix=unit,
+                num_integration_steps=n_steps,
+            )
         )
         keys = jax.random.split(
             jax.random.key(int(inputs["key"])), int(inputs["n_draws"])
         )
 
+        store_chain = bool(inputs.get("store_chain", np.asarray(True)))
+
         @jax.jit
         def run(position: Any, keys: Any) -> Any:
             def transition(state: Any, key: Any) -> tuple[Any, Any]:
                 state, info = kernel.step(key, state)
-                return state, (state.position, info.acceptance_rate)
+                if store_chain:
+                    return state, (state.position, info.acceptance_rate)
+                return state, (jnp.zeros((0,)), info.acceptance_rate)
 
             return jax.lax.scan(transition, kernel.init(position), keys)[1]
 
         arguments = (jnp.asarray(inputs["position"]), keys)
 
     start = time.perf_counter()
-    jax.block_until_ready(run(*arguments))
+    _, first_peak_bytes = peaked(lambda: jax.block_until_ready(run(*arguments)))
     compile_seconds = time.perf_counter() - start
 
     def timed_run() -> tuple[Any, float]:
@@ -111,6 +129,7 @@ def main() -> None:
             "acceptance": np.asarray(np.mean(np.asarray(acceptance))),
         }
     outputs["compile_seconds"] = np.asarray(compile_seconds - seconds)
+    outputs["first_peak_bytes"] = np.asarray(first_peak_bytes)
     dump(returned, outputs, seconds, peak_bytes)
 
 

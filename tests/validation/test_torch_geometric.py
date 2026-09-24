@@ -21,7 +21,12 @@ import numpy as np
 import pytest
 import torch
 from snakes_and_ladders.learn.ranking import fixed_length_target, tree_examples
-from snakes_and_ladders.learn.surrogate import Examples, GraphSurrogate, _Batch
+from snakes_and_ladders.learn.surrogate import (
+    Examples,
+    GraphSurrogate,
+    SetSurrogate,
+    _Batch,
+)
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.topology import enumerate_topologies
 from snakes_and_ladders.validation import torch_geometric
@@ -126,3 +131,26 @@ def test_on_general_weights_gin_is_a_different_architecture() -> None:
     theirs = _twins([_ours(examples, 2), tied], batch)
     assert float(np.abs(general_out - theirs[0]).max()) > 1e-6
     assert float(np.abs(tied_out - theirs[1]).max()) < 1e-12
+
+
+@pytest.mark.oracle
+def test_pyg_s_sum_pool_reproduces_the_set_surrogate() -> None:
+    # Issue #997: `SetSurrogate` pools before its encoder's last affine map;
+    # the twin applies the map to every row and pools with PyG's
+    # `global_add_pool`, the textbook order. The same function, summed in
+    # another order.
+    examples = _tree_examples()
+    batch = _Batch(examples)
+    torch.manual_seed(0)
+    model = SetSurrogate(examples.features.shape[1], examples.tokens[0].shape[1])
+    theirs = torch_geometric.set_forward(
+        [model],
+        hidden=32,
+        tokens=batch.tokens.numpy(),
+        owner=batch.owner.numpy(),
+        features=batch.features.numpy(),
+    ).forward[0]
+    with torch.no_grad():
+        mine = model(batch).numpy()
+    assert float(mine.std()) > 1e-6
+    np.testing.assert_allclose(theirs, mine, rtol=0.0, atol=1e-11)

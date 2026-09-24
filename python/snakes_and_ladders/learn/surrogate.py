@@ -176,6 +176,7 @@ class _Batch:
         self.n = len(examples)
         self._adjacency: torch.Tensor | None = None
         self._membership: torch.Tensor | None = None
+        self._counts: torch.Tensor | None = None
         if examples.tokens:
             self.tokens = torch.cat(examples.tokens)
             self.owner = torch.as_tensor(
@@ -243,6 +244,14 @@ class _Batch:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
             return self._membership @ encoded
+
+    def counts(self) -> torch.Tensor:
+        """Rows per example, in the tokens' dtype: what a pooled bias is scaled by."""
+        if self._counts is None:
+            self._counts = torch.bincount(self.owner, minlength=self.n).to(
+                self.tokens.dtype
+            )
+        return self._counts
 
     def padded(self) -> tuple[torch.Tensor, torch.Tensor]:
         """Tokens as ``(n, max_tokens, d)`` with a mask of the padding, for attention."""
@@ -313,7 +322,23 @@ class SetSurrogate(torch.nn.Module):
         self.decode = _mlp(hidden + n_features, hidden, 2, 1)
 
     def forward(self, batch: _Batch) -> torch.Tensor:
-        pooled = batch.pool(self.encode(batch.tokens))
+        # The encoder ends in an affine map and the pool is a sum, so the map
+        # is applied once per example to the pooled rows rather than once per
+        # row: `sum_i (W h_i + b) = W sum_i h_i + n b`. The same function, in
+        # another order of summation; at 80,656 rows it removes the widest
+        # product of the forward pass (issue #997).
+        *body, last = self.encode
+        hidden = batch.tokens
+        for layer in body:
+            # In place where autograd has nothing to keep: no copy per layer.
+            hidden = (
+                torch.nn.functional.silu(hidden, inplace=not torch.is_grad_enabled())
+                if isinstance(layer, torch.nn.SiLU)
+                else layer(hidden)
+            )
+        assert isinstance(last, torch.nn.Linear)
+        pooled = torch.nn.functional.linear(batch.pool(hidden), last.weight)
+        pooled = pooled + batch.counts()[:, None] * last.bias
         out: torch.Tensor = self.decode(torch.cat([pooled, batch.features], dim=1))[
             :, 0
         ]

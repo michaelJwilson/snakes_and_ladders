@@ -5,11 +5,16 @@ the start; ``n_iter``. The fit runs exactly ``n_iter`` iterations from that
 start with no covariance regularization (``reg_covar=0``, ``tol=0``).
 Outputs: the fitted ``weights``, ``mean``, ``scale`` and ``iterations``. The
 measured seconds are ``fit`` alone.
+
+With ``call`` set to ``score`` (issue #997) the start is the fitted model
+and nothing is fitted: the output is ``log_likelihood``, the summed
+``score_samples``, and the measured seconds and peak are that call alone.
 """
 
 from __future__ import annotations
 
 import warnings
+from pathlib import Path
 
 import numpy as np
 
@@ -24,6 +29,9 @@ def main() -> None:
     given, returned = paths()
     inputs = load(given)
     scale = inputs["scale"]
+    if str(inputs.get("call", np.asarray("fit"))) == "score":
+        _score(inputs, returned)
+        return
     model = GaussianMixture(
         n_components=scale.size,
         covariance_type="diag",
@@ -47,6 +55,28 @@ def main() -> None:
             "scale": np.sqrt(np.asarray(model.covariances_, dtype=np.float64)).ravel(),
             "iterations": np.asarray(model.n_iter_, dtype=np.int64),
         },
+        seconds,
+        peak_bytes,
+    )
+
+
+def _score(inputs: dict[str, np.ndarray], returned: Path) -> None:
+    """The summed log-likelihood at the given parameters, ``score_samples`` timed."""
+    from sklearn.mixture import GaussianMixture  # the framework, only here
+
+    scale = inputs["scale"]
+    model = GaussianMixture(n_components=scale.size, covariance_type="diag")
+    model.weights_ = inputs["weights"]
+    model.means_ = inputs["mean"][:, None]
+    model.covariances_ = scale[:, None] ** 2
+    model.precisions_cholesky_ = 1.0 / scale[:, None]
+    column = inputs["observations"][:, None]
+    (scores, seconds), peak_bytes = peaked(
+        lambda: timed(lambda: model.score_samples(column))
+    )
+    dump(
+        returned,
+        {"log_likelihood": np.asarray(float(np.sum(scores)))},
         seconds,
         peak_bytes,
     )

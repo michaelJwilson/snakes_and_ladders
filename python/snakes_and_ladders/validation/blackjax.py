@@ -49,6 +49,9 @@ class Chain:
     seconds: float
     #: Peak resident bytes the compiled chain added, compilation excluded.
     peak_bytes: int
+    #: Peak resident bytes of the first call: compilation, and the buffers
+    #: XLA allocates then and reuses after, included (issue #997).
+    first_peak_bytes: int = 0
 
 
 def coefficients(weights: tuple[float, ...]) -> np.ndarray:
@@ -97,11 +100,15 @@ def sample(
     n_steps: int,
     n_draws: int,
     key: int,
+    *,
+    store_chain: bool = True,
 ) -> Chain:
     """``n_draws`` BlackJAX HMC transitions at unit mass, from ``jax.random.key(key)``.
 
     ``key`` is the integer JAX builds its own PRNG key from, in the
-    subprocess; no NumPy or torch generator crosses the boundary.
+    subprocess; no NumPy or torch generator crosses the boundary. With
+    ``store_chain`` false no draw is kept and ``draws`` has zero rows
+    (issue #997).
     """
     result = run(
         SCRIPT,
@@ -113,12 +120,56 @@ def sample(
             "n_steps": np.asarray(n_steps, dtype=np.int64),
             "n_draws": np.asarray(n_draws, dtype=np.int64),
             "key": np.asarray(key, dtype=np.int64),
+            "store_chain": np.asarray(store_chain),
         },
     )
     out = result.outputs
     return Chain(
-        out["draws"],
+        out["draws"].reshape(-1, position.shape[0])
+        if store_chain
+        else out["draws"].reshape(0, position.shape[0]),
         float(out["acceptance"]),
         result.seconds,
         int(result.peak_bytes or 0),
+        int(out["first_peak_bytes"]),
+    )
+
+
+def mala(
+    precision: np.ndarray,
+    position: np.ndarray,
+    step_size: float,
+    n_draws: int,
+    key: int,
+    *,
+    store_chain: bool = True,
+) -> Chain:
+    """``n_draws`` BlackJAX MALA transitions at the package's Langevin step ``h`` (issue #997).
+
+    BlackJAX's ``step_size`` is ``epsilon`` in ``x + epsilon grad log p +
+    sqrt(2 epsilon) xi``, so it is passed ``h^2 / 2``: the same proposal
+    :func:`snakes_and_ladders.sample.langevin.mala` makes at ``h``.
+    """
+    result = run(
+        SCRIPT,
+        {
+            "mode": np.asarray(2, dtype=np.int64),
+            "precision": np.ascontiguousarray(precision, dtype=np.float64),
+            "position": np.ascontiguousarray(position, dtype=np.float64),
+            "step_size": np.asarray(step_size**2 / 2.0, dtype=np.float64),
+            "n_steps": np.asarray(1, dtype=np.int64),
+            "n_draws": np.asarray(n_draws, dtype=np.int64),
+            "key": np.asarray(key, dtype=np.int64),
+            "store_chain": np.asarray(store_chain),
+        },
+    )
+    out = result.outputs
+    return Chain(
+        out["draws"].reshape(-1, position.shape[0])
+        if store_chain
+        else out["draws"].reshape(0, position.shape[0]),
+        float(out["acceptance"]),
+        result.seconds,
+        int(result.peak_bytes or 0),
+        int(out["first_peak_bytes"]),
     )

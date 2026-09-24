@@ -68,6 +68,10 @@ pub struct LatticeCut {
     capacity: Vec<f64>,
     /// The maximum flow each move key ended on, to start its next cut from.
     kept: Vec<Option<Kept>>,
+    /// Each arc's edge, so a swap walks a moving node's own arcs.
+    edge_of_arc: Vec<u32>,
+    /// A node's index in the swap's compact network, `NONE` if not in it.
+    local: Vec<u32>,
 }
 
 /// A maximum flow as it stood: per edge the flow `first -> second`.
@@ -120,6 +124,7 @@ impl LatticeCut {
         let mut head = vec![0_u32; n_arcs];
         let mut sister = vec![0_u32; n_arcs];
         let mut arc_of_edge = vec![[0_u32; 2]; first.len()];
+        let mut edge_of_arc = vec![0_u32; n_arcs];
         for (position, (&a, &b)) in first.iter().zip(second).enumerate() {
             let (out, back) = (next[a], next[b]);
             next[a] += 1;
@@ -129,6 +134,8 @@ impl LatticeCut {
             sister[out as usize] = back;
             sister[back as usize] = out;
             arc_of_edge[position] = [out, back];
+            edge_of_arc[out as usize] = position as u32;
+            edge_of_arc[back as usize] = position as u32;
         }
         Ok(Self {
             n_nodes,
@@ -151,7 +158,65 @@ impl LatticeCut {
             arc_of_edge,
             capacity: vec![0.0; n_arcs],
             kept: Vec::new(),
+            edge_of_arc,
+            local: vec![NONE; n_nodes],
         })
+    }
+
+    /// One alpha-beta swap's source side, cut on the moving nodes alone.
+    ///
+    /// A node at neither label carries no capacity, and an edge with an end
+    /// at neither carries none, so the swap's network is the subgraph on the
+    /// nodes at `alpha` or `beta` and the edges between them: built here from
+    /// the moving nodes' own arcs and cut by `bk::Graph`, where
+    /// `fill_swap` and `solve` walked the whole lattice five times per move
+    /// (issue #997). The side is read at the same floor, so it is the same
+    /// minimal minimum cut.
+    pub fn swap_side(
+        &mut self,
+        values: &[f64],
+        n_states: usize,
+        labels: &[usize],
+        alpha: usize,
+        beta: usize,
+    ) -> Vec<bool> {
+        let moving: Vec<u32> = (0..self.n_nodes as u32)
+            .filter(|&n| {
+                let label = labels[n as usize];
+                label == alpha || label == beta
+            })
+            .collect();
+        for (index, &node) in moving.iter().enumerate() {
+            self.local[node as usize] = index as u32;
+        }
+        let (mut ends, mut capacity) = (Vec::new(), Vec::new());
+        for &node in &moving {
+            let u = node as usize;
+            for arc in self.start[u] as usize..self.start[u + 1] as usize {
+                let v = self.head[arc] as usize;
+                if v > u && self.local[v] != NONE {
+                    ends.push(i64::from(self.local[u]));
+                    ends.push(i64::from(self.local[v]));
+                    capacity.push(self.coupling[self.edge_of_arc[arc] as usize]);
+                }
+            }
+        }
+        let mut graph = crate::bk::Graph::from_edges(moving.len(), &ends, &capacity, &capacity)
+            .expect("the moving subgraph's indices are in range");
+        for (index, &node) in moving.iter().enumerate() {
+            let u = node as usize;
+            let net = values[u * n_states + alpha] - values[u * n_states + beta];
+            graph
+                .add_terminal(index, net.max(0.0), (-net).max(0.0))
+                .expect("terminal capacities are non-negative");
+        }
+        let (_, local_side) = graph.solve();
+        let mut side = vec![false; self.n_nodes];
+        for (index, &node) in moving.iter().enumerate() {
+            side[node as usize] = local_side[index];
+            self.local[node as usize] = NONE;
+        }
+        side
     }
 
     /// Fill one alpha-expansion move: the source side keeps its label, the
@@ -625,10 +690,7 @@ impl LatticeCut {
                 "alpha and beta must lie in [0, n_states)",
             ));
         }
-        let side = py.detach(|| {
-            self.fill_swap(values, n_states, &labels, alpha, beta);
-            self.solve(None)
-        });
+        let side = py.detach(|| self.swap_side(values, n_states, &labels, alpha, beta));
         Ok(PyArray1::from_vec(py, side))
     }
 }

@@ -40,9 +40,10 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 
+from snakes_and_ladders import oxi_snakes_and_ladders
 from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.opt.termination import Termination
-from snakes_and_ladders.sim.graph import PottsGraph
+from snakes_and_ladders.sim.graph import CompressedAdjacency, PottsGraph
 from snakes_and_ladders.sim.potts import energy, site_field
 
 #: Ramp end and integration step of the ballistic dynamics, Goto et al. (2021)'s
@@ -106,9 +107,7 @@ def _coupling_scale(graph: PottsGraph, rows: np.ndarray) -> float:
 
 def _integrate_numpy(
     rows: np.ndarray,
-    first: np.ndarray,
-    second: np.ndarray,
-    couplings: np.ndarray,
+    adjacency: CompressedAdjacency,
     x: np.ndarray,
     *,
     steps: int,
@@ -116,15 +115,34 @@ def _integrate_numpy(
     c0: float,
     discrete: bool,
 ) -> np.ndarray:
-    """The ballistic update over NumPy arrays; ``x`` is ``(n_nodes, n_states)`` and returned."""
+    """The ballistic update over NumPy arrays; ``x`` is ``(n_nodes, n_states)`` and returned.
+
+    The coupling sum is read over the graph's own compressed rows
+    (:attr:`~snakes_and_ladders.sim.graph.PottsGraph.incidence`), one
+    neighbour slot at a time across every node, so each node's sum is formed
+    in row order from zero: the order ``bifurcation_integrate`` follows, and
+    stated here rather than left to a reduction whose order NumPy does not
+    promise (issue #997). Two `np.add.at` scatters were 8.1 s of a 16.0 s
+    run at 142^2.
+    """
+    degrees = np.diff(adjacency.offsets)
+    slots = [
+        (nodes, adjacency.offsets[nodes] + slot)
+        for slot in range(int(degrees.max()) if degrees.size else 0)
+        for nodes in [np.flatnonzero(degrees > slot)]
+    ]
     y = np.zeros_like(x)
-    weights = couplings[:, None]
+    summed = np.empty_like(x)
     for step in range(steps):
         ramp = A_END * step / steps
-        force = rows.copy()
         drive = np.sign(x) if discrete else x
-        np.add.at(force, first, weights * drive[second])
-        np.add.at(force, second, weights * drive[first])
+        summed.fill(0.0)
+        for nodes, entries in slots:
+            summed[nodes] += (
+                adjacency.couplings[entries, None]
+                * drive[adjacency.neighbours[entries]]
+            )
+        force = rows + summed
         y += dt * (-(A_END - ramp) * x + c0 * force)
         x += dt * A_END * y
         outside = np.abs(x) > 1.0
@@ -173,7 +191,7 @@ def simulated_bifurcation(
     n_replicas: int = 1,
     coupling_scale: float | None = None,
     discrete: bool = False,
-    backend: Backend = Backend.PYTHON,
+    backend: Backend = Backend.RUST,
     device: torch.device | str | None = None,
 ) -> BifurcationResult:
     """A low-energy labelling by ballistic simulated bifurcation.
@@ -206,6 +224,11 @@ def simulated_bifurcation(
         the discrete one (``True``, the neighbours entering by their signs,
         Goto et al. 2021) did not, and the reverse was measured nowhere.
     backend : Backend
+        :data:`~snakes_and_ladders.backend.Backend.RUST`, the default since
+        issue #997, runs the whole integration in
+        ``oxi_snakes_and_ladders.bifurcation_integrate`` over the graph's
+        compressed rows, bit for bit the NumPy route on a lattice: 1.3 s
+        against 10.2 s at 142^2 and q = 10.
         :data:`~snakes_and_ladders.backend.Backend.PYTHON` runs NumPy, the
         oracle; :data:`~snakes_and_ladders.backend.Backend.TORCH` the same
         arithmetic over tensors on ``device``.
@@ -231,7 +254,9 @@ def simulated_bifurcation(
     if dt <= 0.0:
         msg = f"dt must be > 0, got {dt}"
         raise ValueError(msg)
-    refuse_backend("simulated_bifurcation", backend, (Backend.PYTHON, Backend.TORCH))
+    refuse_backend(
+        "simulated_bifurcation", backend, (Backend.PYTHON, Backend.TORCH, Backend.RUST)
+    )
     rows = site_field(
         np.asarray(field_values, dtype=np.float64), graph.n_nodes, n_states=n_states
     )
@@ -244,12 +269,26 @@ def simulated_bifurcation(
     best_energy = np.inf
     for _ in range(n_replicas):
         start = rng.uniform(-START_SCALE, START_SCALE, size=rows.shape)
-        if backend is Backend.PYTHON:
+        if backend is Backend.RUST:
+            adjacency = graph.incidence
+            final = start.copy()
+            oxi_snakes_and_ladders.bifurcation_integrate(
+                np.ascontiguousarray(rows).reshape(-1),
+                adjacency.offsets,
+                adjacency.neighbours,
+                adjacency.couplings,
+                final.reshape(-1),
+                n_states,
+                steps,
+                dt,
+                c0,
+                A_END,
+                discrete,
+            )
+        elif backend is Backend.PYTHON:
             final = _integrate_numpy(
                 rows,
-                first,
-                second,
-                couplings,
+                graph.incidence,
                 start.copy(),
                 steps=steps,
                 dt=dt,

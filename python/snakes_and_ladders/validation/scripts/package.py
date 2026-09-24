@@ -55,9 +55,15 @@ def _ising_cut(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
 
 
 def _alpha_expansion(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
-    """Expansion on the Rust cut to convergence, as the gco pair times it (#974)."""
+    """Expansion on the Rust cut to convergence, as the gco pair times it (#974).
+
+    With ``move`` set to ``swap``, the alpha-beta swap instead (#997).
+    """
     from snakes_and_ladders.backend import Backend
-    from snakes_and_ladders.search.alpha_expansion import alpha_expansion
+    from snakes_and_ladders.search.alpha_expansion import (
+        alpha_beta_swap,
+        alpha_expansion,
+    )
     from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 
     shape = tuple(int(extent) for extent in inputs["shape"])
@@ -65,8 +71,14 @@ def _alpha_expansion(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     field = inputs["field"]
     n_states = int(field.shape[1])
 
+    solver = (
+        alpha_beta_swap
+        if str(inputs.get("move", np.asarray("expansion"))) == "swap"
+        else alpha_expansion
+    )
+
     def call() -> Outputs:
-        result = alpha_expansion(graph, field, n_states, backend=Backend.RUST)
+        result = solver(graph, field, n_states, backend=Backend.RUST)
         return {"labelling": result.labelling, "energy": np.asarray(result.energy)}
 
     return call
@@ -95,6 +107,207 @@ def _baum_welch(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
             tolerance=-np.inf,
         )
         return {"emission": np.exp(fit.log_emission.numpy())}
+
+    return call
+
+
+def _family_baum_welch(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
+    """Ten Baum--Welch iterations of a Gaussian or count HMM (#997).
+
+    ``family`` names it: ``gaussian`` (``mean``, ``variance``), ``poisson``
+    (``rate``), ``negative_binomial`` (``dispersion``, ``mean``) or
+    ``beta_binomial`` (``trials``, ``alpha``, ``beta``); read from the
+    parameters when absent. ``backend`` is ``rust`` (the default) or
+    ``python``; ``with_table``, ``table_size`` (``-1`` for every cell) and ``approx`` are
+    passed through.
+    """
+    import torch
+
+    from snakes_and_ladders.backend import Backend
+    from snakes_and_ladders.emissions import (
+        BetaBinomialEmission,
+        EmissionFamily,
+        GaussianEmission,
+        NegativeBinomialEmission,
+        PoissonEmission,
+    )
+    from snakes_and_ladders.opt.hmm import baum_welch_family
+
+    observations = inputs["observations"]
+    initial, transition = (
+        torch.log(torch.as_tensor(inputs[name])) for name in ("initial", "transition")
+    )
+    default = "poisson" if "rate" in inputs else "gaussian"
+    name = str(inputs.get("family", np.asarray(default)))
+    family: EmissionFamily
+    if name == "gaussian":
+        family = GaussianEmission(inputs["mean"], np.sqrt(inputs["variance"]), 1e-12)
+    elif name == "poisson":
+        family = PoissonEmission(inputs["rate"])
+    elif name == "negative_binomial":
+        family = NegativeBinomialEmission(inputs["dispersion"], inputs["mean"])
+    else:
+        family = BetaBinomialEmission(inputs["trials"], inputs["alpha"], inputs["beta"])
+    backend = Backend(str(inputs.get("backend", np.asarray("rust"))))
+    with_table = bool(inputs.get("with_table", np.asarray(True)))
+    approx = bool(inputs.get("approx", np.asarray(False)))
+    size = int(inputs.get("table_size", np.asarray(-1)))
+    table_size = None if size < 0 else size
+    n_iter = int(inputs["n_iter"])
+    # One iteration on the first two positions of two sequences, outside the
+    # measured call: torch's first operations in a process set up state that
+    # stays, as `_hmc_sample`'s warm-up does for the sampler.
+    baum_welch_family(
+        np.ascontiguousarray(observations[:2, :2]),
+        initial,
+        transition,
+        family,
+        max_iterations=1,
+        tolerance=-np.inf,
+        backend=backend,
+        with_table=with_table,
+        table_size=table_size,
+        approx=approx,
+    )
+
+    def call() -> Outputs:
+        fit = baum_welch_family(
+            observations,
+            initial,
+            transition,
+            family,
+            max_iterations=n_iter,
+            tolerance=-np.inf,
+            backend=backend,
+            with_table=with_table,
+            table_size=table_size,
+            approx=approx,
+        )
+        return {"log_likelihood": np.asarray(fit.log_likelihood)}
+
+    return call
+
+
+def _viterbi(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
+    """Viterbi paths at the given parameters, as hmmlearn's ``decode`` runs (#997).
+
+    ``family`` is ``gaussian`` (``mean``, ``variance``) or ``poisson``
+    (``rate``); ``initial`` and ``transition`` are probabilities. With
+    ``score`` set, the summed log-likelihood instead, as hmmlearn's ``score``.
+    """
+    import torch
+
+    from snakes_and_ladders.emissions import (
+        EmissionFamily,
+        GaussianEmission,
+        PoissonEmission,
+    )
+    from snakes_and_ladders.opt.hmm import hmm_log_likelihood, viterbi
+
+    observations = inputs["observations"]
+    initial, transition = (
+        torch.log(torch.as_tensor(inputs[name])) for name in ("initial", "transition")
+    )
+    family: EmissionFamily = (
+        PoissonEmission(inputs["rate"])
+        if str(inputs["family"]) == "poisson"
+        else GaussianEmission(inputs["mean"], np.sqrt(inputs["variance"]), 1e-12)
+    )
+    # Outside the measured call, as `_family_baum_welch`'s warm-up.
+    viterbi(np.ascontiguousarray(observations[:2, :2]), initial, transition, family)
+    if bool(inputs.get("score", np.asarray(False))):
+
+        def scored() -> Outputs:
+            value = hmm_log_likelihood(observations, initial, transition, family)
+            return {"log_likelihood": np.asarray(value)}
+
+        return scored
+
+    def call() -> Outputs:
+        states, log_probability = viterbi(observations, initial, transition, family)
+        return {"states": states, "log_probability": np.asarray(log_probability)}
+
+    return call
+
+
+def _mixture_score(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
+    """The summed mixture log-likelihood at given parameters, as scikit-learn's ``score_samples`` (#997)."""
+    import torch
+
+    from snakes_and_ladders.emissions import GaussianEmission
+    from snakes_and_ladders.opt.mixture import mixture_log_likelihood
+
+    observations = torch.from_numpy(np.ascontiguousarray(inputs["observations"]))
+    log_weight = torch.log(torch.as_tensor(inputs["weights"]))
+    components = GaussianEmission(inputs["mean"], inputs["scale"], 1e-12)
+    # Outside the measured call: torch's first operations set up state.
+    mixture_log_likelihood(observations[:2], log_weight, components)
+
+    def call() -> Outputs:
+        value = mixture_log_likelihood(observations, log_weight, components)
+        return {"log_likelihood": np.asarray(float(value))}
+
+    return call
+
+
+def _mala_sample(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
+    """MALA on a zero-mean Gaussian at the Langevin step ``h``, as the BlackJAX pair runs (#997)."""
+    import torch
+
+    from snakes_and_ladders.sample import langevin
+    from snakes_and_ladders.validation.gaussian import GaussianTarget
+
+    target = GaussianTarget(inputs["precision"])
+    step_size = float(inputs["step_size"])
+    n_draws, seed = int(inputs["n_draws"]), int(inputs["seed"])
+    store_chain = bool(inputs.get("store_chain", np.asarray(True)))
+    # Outside the measured call, as `_hmc_sample`'s warm-up.
+    langevin.mala(
+        GaussianTarget(np.ones(2)),
+        torch.Generator().manual_seed(0),
+        2,
+        step_size=0.1,
+        store_chain=store_chain,
+    )
+
+    def call() -> Outputs:
+        chain = langevin.mala(
+            target,
+            torch.Generator().manual_seed(seed),
+            n_draws,
+            step_size=step_size,
+            store_chain=store_chain,
+        )
+        return {"acceptance": np.asarray(chain.acceptance_rate)}
+
+    return call
+
+
+def _swendsen_wang(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
+    """One Swendsen--Wang sweep on the compiled pass, at q = 3 on an open lattice (#997).
+
+    rustworkx's figure for a sweep is its graph build and
+    ``connected_components`` over that sweep's bonds; this is the whole
+    sweep, the bond draw and the recolouring included.
+    """
+    from snakes_and_ladders.backend import Backend
+    from snakes_and_ladders.sample.potts_mcmc import swendsen_wang_sweep
+    from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+    from snakes_and_ladders.sim.potts import critical_coupling, site_field
+
+    side = int(inputs["side"])
+    graph = lattice_graph((side, side), BoundaryCondition.OPEN, critical_coupling(3))
+    rng = np.random.default_rng(int(inputs["seed"]))
+    state = rng.integers(0, 3, graph.n_nodes)
+    rows = site_field(np.zeros(3), graph.n_nodes)
+    # Outside the measured call: three sweeps toward equilibrium, which also
+    # pay any one-time set-up.
+    for _ in range(3):
+        swendsen_wang_sweep(state, graph, rows, rng, backend=Backend.RUST)
+
+    def call() -> Outputs:
+        swendsen_wang_sweep(state, graph, rows, rng, backend=Backend.RUST)
+        return {"state": state}
 
     return call
 
@@ -133,7 +346,23 @@ def _hmc_sample(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     # Issue #988: with ``store_chain`` false the chain keeps no draws and
     # estimates the mean of ``x`` instead.
     store_chain = bool(inputs.get("store_chain", np.asarray(True)))
-    operators = None if store_chain else {"x": lambda x: x}
+    # With ``observe`` false a chain-free run keeps nothing but its counters,
+    # which the compiled route runs (issue #997); true observes ``x``.
+    observe = bool(inputs.get("observe", np.asarray(True)))
+    operators = None if store_chain or not observe else {"x": lambda x: x}
+    # One-time set-up paid outside the measured call, as the JAX scripts
+    # exclude compilation (issue #997): a two-draw chain at d = 2 on the same
+    # route, since torch's first operations in a process cost 10.9 MB whatever
+    # the chain's size.
+    hmc.sample(
+        GaussianTarget(np.ones(2)),
+        torch.Generator().manual_seed(0),
+        2,
+        step_size=step_size,
+        n_steps=1,
+        store_chain=store_chain,
+        operators=operators,
+    )
 
     def call() -> Outputs:
         chain = hmc.sample(
@@ -185,6 +414,11 @@ def _gradient(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     if "precision" in inputs:
         target: object = GaussianTarget(inputs["precision"])
         precision = torch.as_tensor(inputs["precision"])
+    elif "n_states" in inputs:
+        from snakes_and_ladders.opt.hmm import GaussianHmmObjective
+
+        target = GaussianHmmObjective(inputs["observations"], int(inputs["n_states"]))
+        precision = None
     else:
         target = GaussianMixtureObjective(
             inputs["observations"], int(inputs["n_components"])
@@ -227,9 +461,14 @@ CALLS: dict[str, Build] = {
     "ising_cut": _ising_cut,
     "alpha_expansion": _alpha_expansion,
     "baum_welch": _baum_welch,
+    "family_baum_welch": _family_baum_welch,
+    "viterbi": _viterbi,
     "mixture_em": _mixture_em,
+    "mixture_score": _mixture_score,
     "hmc_sample": _hmc_sample,
+    "mala_sample": _mala_sample,
     "cluster_labels": _cluster_labels,
+    "swendsen_wang": _swendsen_wang,
     "gradient": _gradient,
 }
 

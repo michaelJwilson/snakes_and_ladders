@@ -20,7 +20,10 @@ import pytest
 import torch
 from snakes_and_ladders.emissions import GaussianEmission
 from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.opt.mixture import expectation_maximization
+from snakes_and_ladders.opt.mixture import (
+    expectation_maximization,
+    mixture_log_likelihood,
+)
 from snakes_and_ladders.sim.mixture import MixtureParams, simulate_mixture
 from snakes_and_ladders.validation import scikit_learn
 from snakes_and_ladders.validation.runner import available
@@ -114,3 +117,23 @@ def test_em_is_scikit_learns_on_the_fixture() -> None:
         np.full(n_components, 1.3),
         10,
     )
+
+
+@pytest.mark.oracle
+def test_the_mixture_log_likelihood_is_scikit_learns_score() -> None:
+    # Issue #997: the streamed, gradient-free log-likelihood against the sum
+    # of scikit-learn's `score_samples` at the same parameters.
+    rng = np.random.default_rng(997)
+    values = rng.normal(0.0, 3.0, 20_000)
+    weights, mean, scale = (
+        np.array([0.3, 0.3, 0.4]),
+        np.array([-3.0, 0.5, 4.0]),
+        np.array([1.2, 1.0, 1.3]),
+    )
+    ours = mixture_log_likelihood(
+        torch.as_tensor(values),
+        torch.log(torch.as_tensor(weights)),
+        GaussianEmission(mean, scale, 1e-12),
+    )
+    theirs = scikit_learn.score(values, weights, mean, scale)
+    np.testing.assert_allclose(float(ours), theirs.log_likelihood, rtol=1e-11)
