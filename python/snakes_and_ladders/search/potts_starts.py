@@ -40,8 +40,16 @@ from snakes_and_ladders.opt.budget import Budget
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.opt.starts import refuse_start
 from snakes_and_ladders.opt.termination import Termination
+from snakes_and_ladders.sample.potts_mcmc import PottsMove
+from snakes_and_ladders.sample.schedule import ScheduleParams
 from snakes_and_ladders.search.alpha_expansion import iterated_conditional_modes
-from snakes_and_ladders.search.ground_state import METHODS, Rung, rung_field
+from snakes_and_ladders.search.ground_state import (
+    METHODS,
+    Rung,
+    run_annealed,
+    rung_field,
+    warm_anneal,
+)
 from snakes_and_ladders.search.maxflow import ising_ground_state
 from snakes_and_ladders.sim.graph import lattice_graph
 from snakes_and_ladders.sim.potts import (
@@ -214,6 +222,69 @@ class SolverStart:
         list[torch.Tensor]
         """
         run = METHODS[self.method](_rung(objective, self.method), self.budget, self.rng)
+        current().record(0, solver_energy=run.energy, site_visits=float(run.spent))
+        return [torch.as_tensor(np.asarray(run.labelling, dtype=np.int64))]
+
+
+@dataclass(frozen=True)
+class ScheduleStart:
+    """One annealed run on a schedule of the caller's, cold from a uniform draw or warm from ICM, as a start (issue #1038).
+
+    :class:`SolverStart` runs a :data:`~snakes_and_ladders.search.ground_state.METHODS`
+    entry, whose schedule is fixed; this runs
+    :func:`~snakes_and_ladders.search.ground_state.run_annealed` or, with
+    ``warm``, :func:`~snakes_and_ladders.search.ground_state.warm_anneal`, on
+    ``schedule``. Built per cell as ``functools.partial(ScheduleStart, move,
+    budget, schedule, steps, warm)`` called with the generator.
+
+    Parameters
+    ----------
+    move : PottsMove
+        The move set.
+    budget : Budget
+        In :attr:`~snakes_and_ladders.cost.Cost.SITE_VISITS`.
+    schedule : ScheduleParams
+        The temperatures, built at the step count.
+    steps : int | None
+        A step count fixed beforehand, or ``None`` for the budget's rule.
+    warm : bool
+        Whether ICM's labelling is the chain's start.
+    rng : np.random.Generator
+        The cell's generator.
+    """
+
+    move: PottsMove
+    budget: Budget
+    schedule: ScheduleParams
+    steps: int | None
+    warm: bool
+    rng: np.random.Generator
+
+    def starts(self, objective: Objective) -> list[torch.Tensor]:
+        """The run's labelling on the objective's rung, one start.
+
+        Records the site visits it spent and its own energy into the
+        enclosing ``track`` run, as :meth:`SolverStart.starts` does.
+
+        Returns
+        -------
+        list[torch.Tensor]
+        """
+        rung = _rung(objective, f"{self.move} on a schedule")
+        run = (
+            warm_anneal(
+                rung, self.budget, self.rng, self.move, self.schedule, steps=self.steps
+            )
+            if self.warm
+            else run_annealed(
+                rung,
+                self.budget,
+                self.rng,
+                self.move,
+                schedule=self.schedule,
+                steps=self.steps,
+            )
+        )
         current().record(0, solver_energy=run.energy, site_visits=float(run.spent))
         return [torch.as_tensor(np.asarray(run.labelling, dtype=np.int64))]
 

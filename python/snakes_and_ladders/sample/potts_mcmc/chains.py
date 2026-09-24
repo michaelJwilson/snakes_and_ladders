@@ -281,6 +281,7 @@ def anneal_potts(
     move: PottsMove = PottsMove.SINGLE_SITE,
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.PYTHON,
+    initial: np.ndarray | None = None,
 ) -> AnnealedPotts:
     """Simulated annealing by heat-bath sweeps on a temperature schedule.
 
@@ -330,18 +331,38 @@ def anneal_potts(
         :data:`~snakes_and_ladders.backend.Backend.RUST` is a chain of the
         same law on another order of draws (:func:`_cluster_pass_rust`) and
         keeps no counter, so its steps leave ``trace`` empty (issue #923).
+    initial : np.ndarray | None
+        The labelling the chain starts from, copied, shape ``(n_nodes,)``;
+        ``None`` draws it uniformly from ``rng``, as before the parameter
+        existed. A given start draws nothing, so the chain's first draw is
+        the generator's next (issue #1038).
 
     Returns
     -------
     AnnealedPotts
+
+    Raises
+    ------
+    ValueError
+        If ``initial`` is not one state in range per node.
     """
     field = log_weight_of(field)
     refuse_negative_coupling(move, graph)
 
     rows = site_field(np.asarray(field, dtype=float), graph.n_nodes)
-    state = np.ascontiguousarray(
-        rng.integers(0, int(rows.shape[1]), size=graph.n_nodes), dtype=np.int64
-    )
+    if initial is None:
+        drawn = rng.integers(0, int(rows.shape[1]), size=graph.n_nodes)
+    else:
+        drawn = np.array(initial, dtype=np.int64)
+        if drawn.shape != (graph.n_nodes,) or not (
+            (drawn >= 0).all() and (drawn < rows.shape[1]).all()
+        ):
+            msg = (
+                f"initial must hold one state in [0, {rows.shape[1]}) per node "
+                f"of {graph.n_nodes}, got shape {drawn.shape}"
+            )
+            raise ValueError(msg)
+    state = np.ascontiguousarray(drawn, dtype=np.int64)
     offsets, neighbours, couplings = graph.compressed_adjacency()
     lists = adjacency_lists(offsets, neighbours, couplings)
 
