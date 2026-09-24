@@ -19,7 +19,7 @@ from snakes_and_ladders.qa.sim_example import (
     main,
 )
 from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import FIXTURES_DIR
@@ -66,13 +66,7 @@ def test_main_writes_a_figure_and_caption_with_generating_truth(
 @pytest.mark.oracle
 def test_sim_example_alignment_matches_independent_simulation() -> None:
     params = load_params(PARAMS_PATH, SimulationParams)
-    expected = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=params.n_sites,
-    )
+    expected = simulate_tree(params, np.random.default_rng(params.seed))
 
     for leaf, states in expected.alignment.items():
         rendered = [state_label(int(state), params.k) for state in states[:10]]

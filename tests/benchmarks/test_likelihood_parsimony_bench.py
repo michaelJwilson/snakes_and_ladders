@@ -26,6 +26,7 @@ from snakes_and_ladders.likelihood.parsimony import (
     unit_step_matrix,
 )
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.tree import Node
 
 from tests._fixtures import EIGHT_TAXA, load_fixture
@@ -64,9 +65,7 @@ def test_parsimony_score_eight_taxa_benchmark(
     # ratio is the price of the weighted recursion alone; the two scores
     # must agree, which tests/regression/likelihood/ pins on every topology.
     params = load_fixture(EIGHT_TAXA)
-    dataset = simulate_alignment(
-        params.tau, params.k, params.pi, np.random.default_rng(params.seed), n_sites
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=n_sites)
     alignment = dict(dataset.alignment)
 
     if scorer == "fitch":
