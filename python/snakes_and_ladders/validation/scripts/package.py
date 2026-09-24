@@ -120,6 +120,30 @@ def _mixture_em(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     return call
 
 
+def _hmc_sample(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
+    """HMC at unit mass on a zero-mean Gaussian, as the BlackJAX pair runs (#963)."""
+    import torch
+
+    from snakes_and_ladders.sample import hmc
+    from snakes_and_ladders.validation.gaussian import GaussianTarget
+
+    target = GaussianTarget(inputs["precision"])
+    step_size, n_steps = float(inputs["step_size"]), int(inputs["n_steps"])
+    n_draws, seed = int(inputs["n_draws"]), int(inputs["seed"])
+
+    def call() -> Outputs:
+        chain = hmc.sample(
+            target,
+            torch.Generator().manual_seed(seed),
+            n_draws,
+            step_size=step_size,
+            n_steps=n_steps,
+        )
+        return {"acceptance": np.asarray(chain.acceptance_rate)}
+
+    return call
+
+
 #: The calls this script measures, by name.
 CALLS: dict[str, Build] = {
     "allocate": _allocate,
@@ -127,6 +151,7 @@ CALLS: dict[str, Build] = {
     "alpha_expansion": _alpha_expansion,
     "baum_welch": _baum_welch,
     "mixture_em": _mixture_em,
+    "hmc_sample": _hmc_sample,
 }
 
 

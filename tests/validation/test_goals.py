@@ -21,11 +21,13 @@ from snakes_and_ladders.emissions import GaussianEmission
 from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.opt.hmm import baum_welch
 from snakes_and_ladders.opt.mixture import expectation_maximization
+from snakes_and_ladders.sample import hmc
 from snakes_and_ladders.search.alpha_expansion import alpha_expansion
 from snakes_and_ladders.search.ground_state import lattice_rung
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
 from snakes_and_ladders.sim.potts import critical_coupling, site_field
+from snakes_and_ladders.validation.gaussian import GaussianTarget, diagonal_precision
 from snakes_and_ladders.validation.runner import package
 
 from tests._fixtures import FIXTURES_DIR
@@ -183,6 +185,38 @@ def test_the_expansion_meets_gcos_runtime(side: int) -> None:
     assert_meets(ours, GCO_EXPANSION[side])
 
 
+#: BlackJAX's compiled HMC chain, compilation excluded: 1,000 transitions of
+#: ten leapfrog steps at unit mass on the diagonal Gaussian with precisions
+#: from 1 to 4, step 0.9 / (2 d^(1/4)), the medians of three subprocess runs
+#: in `test_hmc_blackjax_bench.py`.
+BLACKJAX_HMC = {
+    dimension: Goal(
+        "blackjax",
+        f"1,000 HMC transitions of ten leapfrog steps at d = {dimension:,}",
+        seconds,
+        "2026-09-23, 4-core reference host at a 1-minute load of 0.8, #963",
+    )
+    for dimension, seconds in ((100, 0.0141), (1_000, 0.0868), (10_000, 0.5839))
+}
+
+#: BlackJAX's peak added resident memory for the same compiled chain, the
+#: medians of three subprocess runs (#987). At d = 10^4 most of it is the
+#: 1,000 x 10^4 draws both sides keep.
+BLACKJAX_HMC_MEMORY = {
+    dimension: MemoryGoal(
+        "blackjax",
+        f"1,000 HMC transitions of ten leapfrog steps at d = {dimension:,}",
+        peak_bytes,
+        "2026-09-23, 4-core reference host, #987",
+    )
+    for dimension, peak_bytes in (
+        (100, 798_720),
+        (1_000, 8_085_504),
+        (10_000, 80_031_744),
+    )
+}
+
+
 @pytest.mark.experiment
 @pytest.mark.parametrize("side", sorted(PYMAXFLOW_CUT_MEMORY))
 def test_the_rust_cut_fits_pymaxflows_memory(side: int) -> None:
@@ -265,6 +299,24 @@ def test_mixture_em_meets_scikit_learns_runtime(n_samples: int) -> None:
 
 
 @pytest.mark.experiment
+@pytest.mark.parametrize("dimension", sorted(BLACKJAX_HMC))
+def test_hmc_meets_blackjaxs_runtime(dimension: int) -> None:
+    target = GaussianTarget(diagonal_precision(dimension))
+    step = 0.9 / (2.0 * dimension**0.25)
+    ours = median_seconds(
+        lambda: hmc.sample(
+            target,
+            torch.Generator().manual_seed(963),
+            1_000,
+            step_size=step,
+            n_steps=10,
+        ),
+        repeats=3,
+    )
+    assert_meets(ours, BLACKJAX_HMC[dimension])
+
+
+@pytest.mark.experiment
 @pytest.mark.parametrize("n_sequences", sorted(HMMLEARN_BAUM_WELCH_MEMORY))
 def test_baum_welch_fits_hmmlearns_memory(n_sequences: int) -> None:
     params = dataclasses.replace(
@@ -295,3 +347,17 @@ def test_mixture_em_fits_scikit_learns_memory(n_samples: int) -> None:
     }
     peaks = [package("mixture_em", inputs).peak_bytes or 0 for _ in range(3)]
     assert_fits(int(np.median(peaks)), SCIKIT_LEARN_EM_MEMORY[n_samples])
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("dimension", sorted(BLACKJAX_HMC_MEMORY))
+def test_hmc_fits_blackjaxs_memory(dimension: int) -> None:
+    inputs = {
+        "precision": diagonal_precision(dimension),
+        "step_size": np.asarray(0.9 / (2.0 * dimension**0.25)),
+        "n_steps": np.asarray(10),
+        "n_draws": np.asarray(1_000),
+        "seed": np.asarray(963),
+    }
+    peaks = [package("hmc_sample", inputs).peak_bytes or 0 for _ in range(3)]
+    assert_fits(int(np.median(peaks)), BLACKJAX_HMC_MEMORY[dimension])
