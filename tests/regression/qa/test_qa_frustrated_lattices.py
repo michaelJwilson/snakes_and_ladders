@@ -82,11 +82,8 @@ def test_a_non_lattice_graph_is_refused_by_the_layout() -> None:
 
 @pytest.mark.oracle
 def test_descent_reaches_the_planted_energy_where_nothing_is_frustrated() -> None:
-    # At frustration zero the instance is a gauge transform of the
-    # ferromagnet, so the planted state is the ground state and descent from
-    # any start reaches its energy; above zero descent may only tie or beat
-    # the planted energy, never sit above it after twenty restarts on this
-    # instance size.
+    # At frustration zero the instance is a gauge-transformed ferromagnet and
+    # descent reaches the planted energy; above it, never worse after twenty restarts.
     scan = glass_scan(PARAMS, np.random.default_rng(PARAMS.seed))
 
     assert FRUSTRATIONS[0] == 0.0

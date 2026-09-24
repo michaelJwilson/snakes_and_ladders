@@ -22,11 +22,8 @@ from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import FIXTURES_DIR
 
-# The instances the manifest renders each figure from. They differ since
-# issue #498: the comparison draws two trees and needs only an exhaustive
-# enumeration to pick the runner-up, which 5 taxa gives; the trajectory figure
-# needs a climb to draw, and at 5 taxa hill climbing terminates on the first
-# evaluation and there is none.
+# The manifest's instances since #498: 5 taxa enumerate the comparison's
+# runner-up; the trajectory needs a climb, which 5 taxa end at once.
 TRAJECTORY_FIXTURE = FIXTURES_DIR / "tree_search/stress.yaml"
 COMPARISON_FIXTURE = FIXTURES_DIR / "tree_search/ci.yaml"
 
