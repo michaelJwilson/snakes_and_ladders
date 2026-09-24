@@ -237,6 +237,7 @@ def test_least_squares_lengths_are_feasible_and_fit_the_distances() -> None:
 
 
 @pytest.mark.bug
+@pytest.mark.smoke
 def test_least_squares_lengths_are_bitwise_across_repeated_calls() -> None:
     # `torch.linalg.lstsq`'s CPU default, MKL `gelsy`, returned up to 42
     # ulp-different solutions in 1,000 calls on one 10x7 system, and 9 of the
