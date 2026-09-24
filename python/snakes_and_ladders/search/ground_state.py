@@ -72,7 +72,7 @@ from snakes_and_ladders.sample.potts_mcmc import (
     anneal_potts,
     parallel_tempering,
 )
-from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
+from snakes_and_ladders.sample.schedule import ScheduleParams, ScheduleShape
 from snakes_and_ladders.search.alpha_expansion import (
     SweepOrder,
     alpha_beta_swap,
@@ -93,6 +93,12 @@ from snakes_and_ladders.sim.potts import (
 #: them is the move set. It starts above the ordering coupling's temperature
 #: and ends cold enough that the last sweeps are a descent.
 ANNEAL_START, ANNEAL_END = 2.0, 0.05
+
+#: That schedule as parameters: exponential from :data:`ANNEAL_START` to
+#: :data:`ANNEAL_END`, no hold. It builds the same
+#: :class:`~snakes_and_ladders.sample.schedule.ExponentialTempSchedule` the
+#: annealed entries ran on before a schedule could be passed (issue #1038).
+ANNEAL_SCHEDULE = ScheduleParams(ScheduleShape.EXPONENTIAL, ANNEAL_START, ANNEAL_END)
 
 #: Replicas in the tempering ladder, geometric over the same endpoints. The
 #: budget is divided by this, so a replica gets one sixth of the sweeps the
@@ -466,8 +472,15 @@ class MethodRun:
     termination: Termination | None = None
 
 
-def _anneal(
-    rung: Rung, budget: Budget, rng: np.random.Generator, move: PottsMove
+def run_annealed(
+    rung: Rung,
+    budget: Budget,
+    rng: np.random.Generator,
+    move: PottsMove,
+    *,
+    schedule: ScheduleParams = ANNEAL_SCHEDULE,
+    steps: int | None = None,
+    initial: np.ndarray | None = None,
 ) -> MethodRun:
     """One annealed run, its step count fixed before the run starts.
 
@@ -476,20 +489,26 @@ def _anneal(
     its budget rather than stopping when it is exhausted: a stop on
     accumulated cluster size is a stop on the state, which `search/CLAUDE.md`
     refuses, and the underspend is reported as the finding it is.
+
+    ``schedule``, ``steps`` and ``initial`` are what issue #1038 varies, and
+    their defaults are the run above bitwise. ``steps`` replaces the count
+    with one a caller fixed beforehand, still not read from the run's state;
+    ``initial`` starts the chain from a labelling instead of a uniform draw.
     """
-    steps = max(1, budget.size // rung.visits_per_sweep)
+    count = max(1, budget.size // rung.visits_per_sweep) if steps is None else steps
     start = time.perf_counter()
     # Swendsen-Wang on the compiled pass: the same law on another order of
     # draws, and the comparison reads no cluster counter (issue #923).
     run = anneal_potts(
         rung.graph,
         rung.field,
-        ExponentialTempSchedule(ANNEAL_START, ANNEAL_END, steps),
+        schedule.build(count),
         rng,
         move=move,
         cluster_backend=Backend.RUST
         if move is PottsMove.SWENDSEN_WANG
         else Backend.PYTHON,
+        initial=initial,
     )
     return MethodRun(
         labelling=run.labelling,
@@ -498,6 +517,72 @@ def _anneal(
         seconds=time.perf_counter() - start,
         trace=run.trace,
     )
+
+
+def descend(
+    rung: Rung, rng: np.random.Generator, max_sweeps: int
+) -> tuple[np.ndarray, int]:
+    """Index-order ICM from a uniform draw, one sweep at a time, and the sweeps it ran.
+
+    The descent :func:`run_icm` runs, on the same draws, with its sweep count
+    read out: the count is what a warm chain is charged, where
+    :func:`run_icm` charges its whole budget. The sweep that changes nothing
+    is counted, as :func:`~snakes_and_ladders.search.potts_starts.polish_by_icm`
+    counts it.
+
+    Returns
+    -------
+    tuple[np.ndarray, int]
+        The labelling, and the sweeps run, at most ``max_sweeps``.
+    """
+    labelling = rng.integers(0, rung.n_states, size=rung.n_nodes)
+    sweeps = 0
+    while sweeps < max_sweeps:
+        settled = iterated_conditional_modes(
+            rung.graph, rung.field, rung.n_states, rng, start=labelling, max_sweeps=1
+        )
+        sweeps += 1
+        if np.array_equal(settled.labelling, labelling):
+            break
+        labelling = settled.labelling
+    return labelling, sweeps
+
+
+def warm_anneal(
+    rung: Rung,
+    budget: Budget,
+    rng: np.random.Generator,
+    move: PottsMove,
+    schedule: ScheduleParams,
+    *,
+    steps: int | None = None,
+) -> MethodRun:
+    """ICM from a uniform draw to its first clean sweep, then an anneal from its labelling.
+
+    A warm chain (issue #1038): the descent's sweeps are charged at
+    ``visits_per_sweep`` each, clean sweep included, and the anneal gets what
+    is left of ``budget`` by :func:`run_annealed`'s rule, or ``steps`` where the
+    caller fixed a count. Both draw from ``rng`` in that order, so the
+    descent is the one :func:`run_icm` runs on the same generator.
+
+    Returns
+    -------
+    MethodRun
+        The anneal's labelling and energy, ``spent`` the two charges summed.
+    """
+    start = time.perf_counter()
+    labelling, sweeps = descend(rung, rng, budget.size // rung.visits_per_sweep)
+    descent = sweeps * rung.visits_per_sweep
+    run = run_annealed(
+        rung,
+        Budget(budget.unit, budget.size - descent),
+        rng,
+        move,
+        schedule=schedule,
+        steps=steps,
+        initial=labelling,
+    )
+    return replace(run, spent=descent + run.spent, seconds=time.perf_counter() - start)
 
 
 def run_greedy(rung: Rung, budget: Budget, rng: np.random.Generator) -> MethodRun:
@@ -580,9 +665,9 @@ Method = Callable[[Rung, Budget, np.random.Generator], MethodRun]
 #: single-site is the fair annealed baseline, Swendsen-Wang recolours every
 #: cluster with its own accept step, Wolff one cluster per step with the
 #: accept step on its field.
-run_anneal = functools.partial(_anneal, move=PottsMove.SINGLE_SITE)
-run_swendsen_wang = functools.partial(_anneal, move=PottsMove.SWENDSEN_WANG)
-run_wolff = functools.partial(_anneal, move=PottsMove.WOLFF)
+run_anneal = functools.partial(run_annealed, move=PottsMove.SINGLE_SITE)
+run_swendsen_wang = functools.partial(run_annealed, move=PottsMove.SWENDSEN_WANG)
+run_wolff = functools.partial(run_annealed, move=PottsMove.WOLFF)
 
 
 def run_tempering(rung: Rung, budget: Budget, rng: np.random.Generator) -> MethodRun:

@@ -828,7 +828,7 @@ def test_the_arm_walking_the_declared_ladder_is_its_classical_run(
     the run's -262.3 +- 5.8 (Welch p = 0.38) at an identical 134,400 site
     visits, and Wolff -203.6 +- 13.2 against -206.5 +- 17.8 (p = 0.47) at
     25,393 +- 7,584 against 26,328 +- 11,998 (p = 0.72). Wolff underspends the
-    budget by five sixths, which is the finding ``ground_state._anneal``
+    budget by five sixths, which is the finding ``ground_state.run_annealed``
     reports rather than a defect here.
 
     The charge is read by the instrument the move's cost has. A
