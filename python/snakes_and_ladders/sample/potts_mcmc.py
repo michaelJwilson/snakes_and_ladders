@@ -834,7 +834,7 @@ def parallel_tempering(
     offsets, neighbours, couplings = graph.compressed_adjacency()
 
     recorded = np.empty((n_sweeps, n_replicas, graph.n_nodes), dtype=np.int64)
-    # Which walker sits at each rung, as `sample.tempered._exchange` tracks
+    # Which walker sits at each rung, as `sample.tempered.exchange` tracks
     # it: a swap moves configurations between temperatures, so this is what
     # says a configuration crossed the ladder.
     at_rung = list(range(n_replicas))

@@ -302,6 +302,10 @@ whether or not it has members yet.
 
 .. automodule:: snakes_and_ladders.sample.hmc
    :members:
+   :exclude-members: Adaptation, Adapted, BLOCK, Chain, DUAL_AVERAGING_GAMMA, DUAL_AVERAGING_KAPPA, DUAL_AVERAGING_T0, Kernel, Transition, gradient_at, run_chain, run_compiled, start_point
+
+.. automodule:: snakes_and_ladders.sample.chain
+   :members:
 
 .. automodule:: snakes_and_ladders.sample.expectation
    :members:

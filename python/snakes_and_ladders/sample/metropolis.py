@@ -36,16 +36,15 @@ from snakes_and_ladders.emissions import ParameterDomainError
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.sample import hmc
 from snakes_and_ladders.sample.accept import accept_ratio, acceptance_probability
-from snakes_and_ladders.sample.declared import declared_energy
-from snakes_and_ladders.sample.hmc import (
+from snakes_and_ladders.sample.chain import (
     Adaptation,
     Transition,
+    compiled_route,
     run_chain,
     run_compiled,
     start_point,
 )
-from snakes_and_ladders.track import NULL as UNTRACKED
-from snakes_and_ladders.track import current as current_tracked
+from snakes_and_ladders.sample.declared import declared_energy
 
 #: The asymptotically optimal acceptance for a random walk on a product
 #: target as the dimension grows (Roberts, Gelman & Gilks, 1997).
@@ -182,12 +181,7 @@ def random_walk(
         raise ValueError(msg)
     refuse_backend("random_walk", backend, (Backend.PYTHON, Backend.RUST))
     declared = declared_energy(objective)
-    if (
-        backend is Backend.RUST
-        and declared is not None
-        and temperature == 1.0
-        and current_tracked() is UNTRACKED
-    ):
+    if compiled_route(backend, temperature) and declared is not None:
         return run_compiled(
             oxisal.MetropolisWalk,
             declared,

@@ -31,10 +31,10 @@ from snakes_and_ladders.likelihood.pruning_common import (
     check_alignment_covers,
     leaf_indicator_array,
 )
-from snakes_and_ladders.likelihood.pruning_torch import _traversal
+from snakes_and_ladders.likelihood.pruning_torch import traversal
 from snakes_and_ladders.sim.tree import Node
 
-#: A post-order schedule as :func:`pruning_torch._traversal` builds it: per
+#: A post-order schedule as :func:`pruning_torch.traversal` builds it: per
 #: node, its slot, its leaf name or ``None``, and ``(child slot, branch)``
 #: pairs.
 type Steps = tuple[tuple[int, str | None, tuple[tuple[int, int], ...]], ...]
@@ -49,7 +49,7 @@ def _jax() -> Any:
 
 def steps(tau: Node) -> Steps:
     """``tau``'s post-order schedule, the key its program is compiled and cached on."""
-    return _traversal(tau).steps
+    return traversal(tau).steps
 
 
 def placed(arrays: Mapping[str, np.ndarray]) -> dict[str, Any]:
@@ -66,13 +66,13 @@ def leaves(
     Built once per objective: they are the data, constant in everything a
     fit moves.
     """
-    traversal = _traversal(tau)
-    check_alignment_covers(traversal.leaf_names, alignment)
-    n_sites = int(np.asarray(alignment[traversal.leaf_names[0]]).shape[0])
+    schedule = traversal(tau)
+    check_alignment_covers(schedule.leaf_names, alignment)
+    n_sites = int(np.asarray(alignment[schedule.leaf_names[0]]).shape[0])
     stacked = np.stack(
         [
             leaf_indicator_array(np.asarray(alignment[name]), n_sites, k)
-            for name in traversal.leaf_names
+            for name in schedule.leaf_names
         ]
     )
     weight = check_weights(weights, n_sites)
