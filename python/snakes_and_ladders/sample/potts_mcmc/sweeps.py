@@ -1061,6 +1061,144 @@ def _niedermayer_accept(delta: float, beta: float, rng: np.random.Generator) -> 
     return accept_at(beta, delta, rng)
 
 
+def _like_bonds(
+    state: np.ndarray, graph: PottsGraph, rng: np.random.Generator, beta: float
+) -> np.ndarray:
+    """The Fortuin-Kasteleyn bonds of one pass, as ``(n_bonds, 2)`` site pairs.
+
+    One uniform per edge, drawn as :func:`swendsen_wang_sweep` draws them, and
+    compared against :func:`bond_probability` on the edges whose ends agree.
+    """
+    first, second = graph.edge_index[:, 0], graph.edge_index[:, 1]
+    like = state[first] == state[second]
+    active = like & (rng.random(len(graph.edges)) < bond_probability(graph, beta))
+    return np.asarray(graph.edge_index[active])
+
+
+def ghost_couplings(rows: SiteField | np.ndarray) -> np.ndarray:
+    """``K[i, a] = h[i, a] - min_b h[i, b]``, each site's couplings to the ghosts of :func:`ghost_spin_sweep`.
+
+    A function so the ablation in
+    `tests/regression/sample/test_potts_cluster_field.py` can replace the
+    shift with ``max(0, h)`` alone, which drops the negative part of the
+    field, and show the enumeration refutes it.
+    """
+    rows = log_weight_of(rows)
+    return np.asarray(rows - rows.min(axis=1, keepdims=True))
+
+
+def ghost_spin_sweep(
+    state: np.ndarray,
+    graph: PottsGraph,
+    rows: SiteField | np.ndarray,
+    rng: np.random.Generator,
+    beta: float = 1.0,
+    backend: Backend = Backend.RUST,
+    ghost: np.ndarray | None = None,
+) -> None:
+    """Swendsen-Wang with the field as bonds to one ghost site per label (issue #1041).
+
+    The per-site field is a coupling to ``q`` ghost sites, ghost ``a`` fixed
+    at label ``a``: ``-h[i, s_i] = -sum_a h[i, a] [s_i = a]``. A per-site
+    constant leaves the law unchanged, so the row is shifted to
+    ``K[i, a] = h[i, a] - min_b h[i, b] >= 0``, every ghost coupling is
+    ferromagnetic, and the bond between site ``i`` and the ghost of its own
+    label forms with probability ``1 - exp(-beta K[i, s_i])``: the ticket's
+    ``1 - exp(-beta max(0, h_a))`` on the shifted row, where the ``max`` is
+    then the identity. Two ghosts carry different labels, so no cluster
+    reaches both.
+
+    **No accept step.** The field is inside the Fortuin-Kasteleyn measure, so
+    given the bonds a cluster bonded to a ghost keeps that ghost's label and
+    every other cluster takes a uniform label: the heat bath on the joint
+    measure, as Swendsen-Wang is in zero field. A site whose field prefers
+    another label rarely bonds to its current label's ghost, so its cluster is
+    the one that moves.
+
+    ``backend`` merges the bonds (:func:`bond_roots`); the two give the same
+    roots, so the same chain. ``ghost`` is :func:`ghost_couplings` computed
+    once by a caller running many passes: recomputed per pass, its row
+    minimum was 0.41 s of a 1.41 s release-size anneal of 873 passes.
+
+    Draws: one uniform per edge, one per site, one label per site.
+    """
+    rows = log_weight_of(rows)
+    n_nodes, n_states = graph.n_nodes, int(rows.shape[1])
+    bonds = _like_bonds(state, graph, rng, beta)
+    couplings = ghost_couplings(rows) if ghost is None else ghost
+    own = couplings[np.arange(n_nodes), state]
+    ghosted = rng.random(n_nodes) < 1.0 - np.exp(-beta * own)
+    roots = bond_roots(n_nodes, bonds, backend=backend)
+    frozen = np.zeros(n_nodes, dtype=bool)
+    frozen[roots[ghosted]] = True
+    # One label per site, read at each free cluster's root.
+    labels = rng.integers(0, n_states, size=n_nodes)
+    free = ~frozen[roots]
+    state[free] = labels[roots[free]]
+
+
+def _label_hastings(n_states: int) -> float:
+    """``log q``, the Hastings term of :func:`label_directed_sweep`, under a name.
+
+    A function so the ablation in
+    `tests/regression/sample/test_potts_cluster_field.py` can set it to zero
+    and show the enumeration refutes the kernel without it.
+    """
+    return float(np.log(n_states))
+
+
+def label_directed_sweep(
+    state: np.ndarray,
+    graph: PottsGraph,
+    rows: SiteField | np.ndarray,
+    rng: np.random.Generator,
+    target: int,
+    beta: float = 1.0,
+    backend: Backend = Backend.RUST,
+) -> None:
+    """Fortuin-Kasteleyn clusters, each proposed onto one label, by Metropolis-Hastings (issue #1041).
+
+    The bonds are :func:`swendsen_wang_sweep`'s. Given them, the clusters are
+    independent and cluster ``C`` at label ``c`` has weight
+    ``exp(beta sum_C h[i, c])``, the coupling having cancelled. A cluster off
+    ``target`` proposes ``target``; a cluster at ``target`` proposes a label
+    drawn uniformly from all ``q``, its own included. The proposal is not
+    symmetric, so the log ratio carries its Hastings term, ``-log q`` onto
+    ``target`` and ``+log q`` off it (:func:`_label_hastings`). The kernel at
+    one ``target`` keeps the Boltzmann law, so a caller cycling ``target``
+    through the labels keeps it too.
+
+    **The draw from all ``q`` labels is what makes the chain aperiodic.**
+    Drawn from the other ``q - 1``, at ``q = 2`` in zero field every
+    proposal is accepted and every cluster changes label each pass: the
+    lattice's global flip, the same two configurations in turn, which the
+    two-label chi-square of `tests/regression/sample/test_potts_mcmc.py`
+    rejected at p = 0.0.
+
+    ``backend`` merges the bonds, as in :func:`ghost_spin_sweep`.
+
+    Draws: one uniform per edge, one label per site and one uniform per site,
+    each read at a cluster's root.
+    """
+    rows = log_weight_of(rows)
+    n_nodes, n_states = graph.n_nodes, int(rows.shape[1])
+    bonds = _like_bonds(state, graph, rng, beta)
+    roots = bond_roots(n_nodes, bonds, backend=backend)
+    partners = rng.integers(0, n_states, size=n_nodes)
+    # A cluster is monochromatic, so each site's `at_target` is its cluster's.
+    at_target = state == target
+    proposed = np.where(at_target, partners[roots], target)
+    sites = np.arange(n_nodes)
+    gain = beta * (rows[sites, proposed] - rows[sites, state])
+    # Summed per cluster at its root's index; only roots are read below.
+    log_ratio = np.bincount(roots, weights=gain, minlength=n_nodes)
+    hastings = _label_hastings(n_states)
+    log_ratio += np.where(at_target, hastings, -hastings)
+    uniforms = rng.random(n_nodes)
+    moved = (uniforms < np.exp(np.minimum(log_ratio, 0.0)))[roots]
+    state[moved] = proposed[moved]
+
+
 def houdayer_cluster(
     first: np.ndarray, second: np.ndarray, offsets: np.ndarray, neighbours: np.ndarray
 ) -> np.ndarray:
