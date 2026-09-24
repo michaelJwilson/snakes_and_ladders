@@ -44,12 +44,11 @@ from snakes_and_ladders.sample.hmc import (
 from snakes_and_ladders.sim.simulator import simulate_tree
 
 from tests._fixtures import FOUR_TAXA, load_fixture
-from tests._objective_checks import AnalyticGaussian
+from tests._posteriors import GAUSSIAN
 from tests._scale import at_scale
 
 EXACT = 1e-13
 
-GAUSSIAN = AnalyticGaussian([1.0, -2.0], [[2.0, 0.6], [0.6, 0.5]])
 TARGET = 0.65
 ADAPTATION = Adaptation(warmup=300, target_acceptance=TARGET, step_jitter=0.4)
 
