@@ -219,6 +219,18 @@ class _HmmObjective(Objective):
             ),
         }
 
+    def jax_energy(self) -> tuple[Callable[[Any, Any], Any], dict[str, Any]] | None:
+        """The negative log-likelihood as a traceable JAX ``(theta, data)`` function and its data, under ``Backend.JAX``; ``None`` otherwise (issue #1008).
+
+        What a compiled HMC chain runs inside its own loop
+        (:class:`~snakes_and_ladders.sample.declared.DeclaredJaxEnergy`).
+        """
+        if self._backend is not Backend.JAX:
+            return None
+        from snakes_and_ladders.opt.hmm_jax import jax_energy
+
+        return jax_energy(self)
+
     def value_and_gradient(
         self, theta: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -461,6 +473,22 @@ class GaussianHmmObjective(_HmmObjective):
                 free_from_positive(named["scale"]).reshape(-1),
             ]
         )
+
+    @property
+    def gaussian_hmm_declaration(self) -> tuple[int, np.ndarray] | None:
+        """``(m, observations)`` for a compiled chain, where :meth:`gradient` streams (issue #1008).
+
+        What :meth:`gradient` computes through ``oxisal`` is what a compiled
+        HMC chain evaluates itself (:mod:`snakes_and_ladders.sample.declared`):
+        no covariate, ``float64``, sequences as rows.
+        """
+        if (
+            self._covariate is not None
+            or self._dtype != torch.float64
+            or self._observations.dim() != 2
+        ):
+            return None
+        return self._n_states, self._observations.numpy()
 
     def gradient(self, theta: torch.Tensor) -> torch.Tensor:
         """``d/dtheta`` of :meth:`__call__` by Fisher's identity, which ``hmc.gradient_at`` reads (issue #997).

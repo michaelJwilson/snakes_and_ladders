@@ -36,16 +36,12 @@ from snakes_and_ladders.emissions import ParameterDomainError
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.sample import hmc
 from snakes_and_ladders.sample.accept import accept_ratio, acceptance_probability
-from snakes_and_ladders.sample.declared import Power, declared_energy
-from snakes_and_ladders.sample.expectation import KalmanMean
+from snakes_and_ladders.sample.declared import declared_energy
 from snakes_and_ladders.sample.hmc import (
-    DUAL_AVERAGING_GAMMA,
-    DUAL_AVERAGING_KAPPA,
-    DUAL_AVERAGING_T0,
     Adaptation,
-    Adapted,
     Transition,
     run_chain,
+    run_compiled,
     start_point,
 )
 from snakes_and_ladders.track import NULL as UNTRACKED
@@ -163,7 +159,8 @@ def random_walk(
         the chain and its warm-up in ``oxisal.metropolis`` when the objective
         declares a family (:func:`~snakes_and_ladders.sample.declared.declared_energy`)
         and the chain is at unit temperature in no tracked run; its
-        ``operators`` observe the draws in blocks of :data:`BLOCK`, so a
+        ``operators`` observe the draws as :func:`~snakes_and_ladders.sample.hmc.run_compiled`
+        states, so a
         chain with ``store_chain=False`` holds that many draws at most. Its stream is ChaCha8 seeded by one draw from
         ``generator``, so it is pinned to the torch route in distribution.
         Any other chain, and :data:`~snakes_and_ladders.backend.Backend.PYTHON`,
@@ -191,8 +188,11 @@ def random_walk(
         and temperature == 1.0
         and current_tracked() is UNTRACKED
     ):
-        return _compiled_chain(
+        return run_compiled(
+            oxisal.MetropolisWalk,
             declared,
+            (),
+            EVALUATIONS_PER_PROPOSAL,
             generator,
             n_samples,
             step_size=step_size,
@@ -215,101 +215,6 @@ def random_walk(
         adaptation=adaptation,
         store_chain=store_chain,
         operators=operators,
-    )
-
-
-#: Draws a compiled chain hands back per block when operators observe it:
-#: the memory an unstored chain holds is of the order of this many draws.
-BLOCK = 1_024
-
-
-def _compiled_chain(
-    declared: tuple[int, np.ndarray],
-    generator: torch.Generator,
-    n_samples: int,
-    *,
-    step_size: float,
-    theta0: torch.Tensor,
-    burn_in: int,
-    adaptation: Adaptation | None,
-    store_chain: bool,
-    operators: Mapping[str, Callable[[torch.Tensor], torch.Tensor]] | None,
-) -> hmc.Chain:
-    """:func:`random_walk` on a declared family, the warm-up included, compiled.
-
-    A :class:`~snakes_and_ladders.sample.declared.Power` operator is
-    evaluated and Kalman-filtered in the compiled loop, and only its six
-    statistics per coordinate come back. Any other operator is a Python
-    callable, so the chain is advanced :data:`BLOCK` draws at a time for it
-    and each block is filtered here and dropped unless ``store_chain`` keeps
-    it (issues #988, #1006).
-    """
-    family, parameters = declared
-    dimension = int(theta0.shape[0])
-    seed = int(torch.randint(0, 2**62, (1,), generator=generator))
-    declared_operators = {
-        name: operator
-        for name, operator in (operators or {}).items()
-        if isinstance(operator, Power)
-    }
-    walk = oxisal.MetropolisWalk(
-        family,
-        parameters,
-        np.ascontiguousarray(theta0.numpy(), dtype=np.float64),
-        step_size,
-        seed,
-        0 if adaptation is None else adaptation.warmup,
-        RWM_TARGET_ACCEPTANCE if adaptation is None else adaptation.target_acceptance,
-        0.0 if adaptation is None else adaptation.step_jitter,
-        (DUAL_AVERAGING_GAMMA, DUAL_AVERAGING_T0, DUAL_AVERAGING_KAPPA),
-        [operator.exponent for operator in declared_operators.values()],
-    )
-    walk.advance(burn_in, False, False)
-    filters = {
-        name: KalmanMean()
-        for name in (operators or {})
-        if name not in declared_operators
-    }
-    blocks: list[torch.Tensor] = []
-    errors: list[np.ndarray] = []
-    accepted = 0
-    remaining = n_samples
-    while remaining > 0 or not errors:
-        size = min(remaining, BLOCK) if filters else remaining
-        draws, taken, error = walk.advance(size, store_chain or bool(filters), True)
-        accepted += taken
-        errors.append(error)
-        block = torch.from_numpy(draws.reshape(-1, dimension))
-        for name, kalman in filters.items() if block.shape[0] else ():
-            kalman.update_block(
-                torch.stack([operators[name](row) for row in block])  # type: ignore[index]
-            )
-        if store_chain:
-            blocks.append(block)
-        remaining -= size
-    for index, name in enumerate(declared_operators):
-        filters[name] = KalmanMean.from_statistics(*walk.statistics(index))
-    warmup_evaluations = 0 if adaptation is None else adaptation.warmup
-    return hmc.Chain(
-        # One block is the chain as Rust built it; `cat` would copy it.
-        draws=blocks[0]
-        if len(blocks) == 1
-        else torch.cat(blocks)
-        if blocks
-        else torch.empty((0, dimension)),
-        acceptance_rate=accepted / n_samples if n_samples else 0.0,
-        energy_error=torch.from_numpy(np.concatenate(errors)),
-        force_evaluations=(n_samples + burn_in) * EVALUATIONS_PER_PROPOSAL
-        + warmup_evaluations,
-        adapted=None
-        if adaptation is None
-        else Adapted(
-            step_size=walk.step_size,
-            mass_diagonal=torch.from_numpy(walk.mass_diagonal),
-            warmup_acceptance=walk.warmup_acceptance,
-            force_evaluations=warmup_evaluations,
-        ),
-        expectations={name: filters[name].estimate() for name in (operators or {})},
     )
 
 

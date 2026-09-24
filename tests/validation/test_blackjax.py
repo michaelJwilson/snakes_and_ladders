@@ -165,3 +165,26 @@ def test_the_random_walk_accepts_as_blackjaxs_does() -> None:
         np.zeros(100), 0.12, 20_000, 1006, precision=precision, store_chain=False
     )
     assert abs(ours.acceptance_rate - theirs.acceptance) < 0.02
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("integrator", [hmc.leapfrog, hmc.yoshida], ids=str)
+def test_the_integrator_is_blackjaxs_on_rosenbrock(integrator: hmc.Integrator) -> None:
+    # Issue #1008: a non-Gaussian force, the curved valley's, step for step.
+    rng = np.random.default_rng(1008)
+    position, momentum = rng.normal(size=10) * 0.3, rng.normal(size=10)
+    ours = integrator(
+        Rosenbrock(10), torch.as_tensor(position), torch.as_tensor(momentum), 0.002, 25
+    )
+    theirs = blackjax.integrate(
+        None,
+        position,
+        momentum,
+        0.002,
+        25,
+        integrator.weights,
+        rosenbrock=(1.0, 100.0),
+    )
+    np.testing.assert_allclose(ours.position.numpy(), theirs.position, atol=1e-12)
+    np.testing.assert_allclose(ours.momentum.numpy(), theirs.momentum, atol=1e-10)
+    assert np.abs(theirs.position - position).max() > 0.01

@@ -429,6 +429,77 @@ def _random_walk_sample(inputs: Mapping[str, np.ndarray]) -> Callable[[], Output
     return call
 
 
+def _declared_target(inputs: Mapping[str, np.ndarray]) -> object:
+    """The Gaussian of ``precision`` (``target`` 0), Rosenbrock's function with ``constants`` (1), or a mixture of ``values`` at ``n_components`` (2)."""
+    from snakes_and_ladders.opt.testfunctions import Rosenbrock
+    from snakes_and_ladders.validation.gaussian import GaussianTarget
+
+    if int(inputs["target"]) == 3:
+        from snakes_and_ladders.opt.hmm import GaussianHmmObjective
+
+        return GaussianHmmObjective(inputs["values"], int(inputs["n_states"]))
+    if int(inputs["target"]) == 2:
+        from snakes_and_ladders.opt.mixture import GaussianMixtureObjective
+
+        return GaussianMixtureObjective(inputs["values"], int(inputs["n_components"]))
+    if int(inputs["target"]) == 1:
+        return Rosenbrock(
+            inputs["position"].size, *(float(c) for c in inputs["constants"])
+        )
+    return GaussianTarget(inputs["precision"])
+
+
+def _hmc_declared(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
+    """HMC on a declared target from ``position``, after a warm-up of ``warmup`` proposals if above zero (#1008)."""
+    import torch
+
+    from snakes_and_ladders.sample import hmc
+    from snakes_and_ladders.validation.gaussian import GaussianTarget
+
+    target = _declared_target(inputs)
+    theta0 = torch.as_tensor(inputs["position"])
+    step_size, n_steps = float(inputs["step_size"]), int(inputs["n_steps"])
+    n_draws, seed, warmup = (
+        int(inputs["n_draws"]),
+        int(inputs["seed"]),
+        int(inputs["warmup"]),
+    )
+    store_chain = bool(inputs["store_chain"])
+    adaptation = (
+        hmc.Adaptation(warmup, float(inputs["target_acceptance"]), 0.0)
+        if warmup
+        else None
+    )
+    # Outside the measured call, as `_hmc_sample`'s set-up.
+    hmc.sample(
+        GaussianTarget(np.ones(2)),
+        torch.Generator().manual_seed(0),
+        2,
+        step_size=0.1,
+        n_steps=1,
+        store_chain=store_chain,
+    )
+
+    def call() -> Outputs:
+        chain = hmc.sample(
+            target,  # type: ignore[arg-type]
+            torch.Generator().manual_seed(seed),
+            n_draws,
+            step_size=step_size,
+            n_steps=n_steps,
+            theta0=theta0,
+            adaptation=adaptation,
+            store_chain=store_chain,
+        )
+        return {"acceptance": np.asarray(chain.acceptance_rate)}
+
+    # The same call once, untimed: a JAX-declared target compiles its chain
+    # on first use, and BlackJAX's figure is its second call (issue #1008).
+    call()
+
+    return call
+
+
 def _cluster_labels(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     """The Swendsen--Wang pass's union-find on a bond mask, as the rustworkx pair runs (#976)."""
     from snakes_and_ladders.sample.potts_mcmc import bond_roots
@@ -518,6 +589,7 @@ CALLS: dict[str, Build] = {
     "hmc_sample": _hmc_sample,
     "mala_sample": _mala_sample,
     "random_walk_sample": _random_walk_sample,
+    "hmc_declared": _hmc_declared,
     "cluster_labels": _cluster_labels,
     "swendsen_wang": _swendsen_wang,
     "gradient": _gradient,
