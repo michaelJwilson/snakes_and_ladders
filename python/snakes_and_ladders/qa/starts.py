@@ -25,8 +25,9 @@ axes, one colour per start from :data:`START_PALETTE` held across panels and
 every line solid, the runtime from :data:`RUNTIME_FLOOR`, a diamond at the
 mean handover joined to its curve, the gap on a symmetric-log axis,
 spread bands off unless asked for, and each panel's legend bottom left in one
-column from the lowest final gap to the highest. :func:`curve_band` reads the
-trials of an :class:`~snakes_and_ladders.opt.starts.SolverComparison` onto the
+column from the lowest final gap to the highest.
+:func:`~snakes_and_ladders.search.mixture_starts.curve_band` reads the trials
+of an :class:`~snakes_and_ladders.opt.starts.SolverComparison` onto the
 :class:`~snakes_and_ladders.search.mixture_starts.GapBand` the figure takes.
 """
 
@@ -39,7 +40,12 @@ import numpy as np
 from matplotlib.figure import Figure
 
 from snakes_and_ladders.opt.starts import Curve, SolverComparison
-from snakes_and_ladders.qa.figure import check_latex_safe, latex_escape
+from snakes_and_ladders.qa.figure import (
+    booktabs_tabular,
+    check_latex_safe,
+    latex_escape,
+    mathjax_array,
+)
 from snakes_and_ladders.qa.style import (
     INK_MUTED,
     LINESTYLES,
@@ -309,20 +315,14 @@ def starts_latex(result: SolverComparison) -> tuple[str, str]:
         :func:`~snakes_and_ladders.qa.figure.check_latex_safe` passes.
     """
     readings = {reading.start: reading for reading in result.readings()}
-    lines = [
-        r"\begin{tabular}{lcc}",
-        r"  \toprule",
-        r"  start & gap (nats) & seconds \\",
-        r"  \midrule",
-    ]
+    cells = []
     for row in result.table():
         reading = readings[row.start]
         seconds = reading.seeding_seconds + reading.polish_seconds
-        lines.append(
-            f"  {latex_escape(row.start)} & {_number(row.gap)} & "
-            f"{_number(round(seconds, 1))} \\\\"
+        cells.append(
+            [latex_escape(row.start), _number(row.gap), _number(round(seconds, 1))]
         )
-    lines += [r"  \bottomrule", r"\end{tabular}"]
+    body = booktabs_tabular("lcc", ["start", "gap (nats)", "seconds"], cells)
     budget = result.comparison.budget
     trials = max(row.trials for row in result.table())
     caption = (
@@ -332,7 +332,7 @@ def starts_latex(result: SolverComparison) -> tuple[str, str]:
         f"reproduced by a rerun."
     )
     check_latex_safe(caption)
-    return "\n".join(lines) + "\n", caption
+    return body + "\n", caption
 
 
 #: The five columns of :func:`gap_table`, the emission mixture's table's
@@ -403,34 +403,8 @@ def gap_table(result: SolverComparison, *, unit: str) -> tuple[str, str, str]:
     header = [
         f"{column} [{unit}]" if "gap" in column else column for column in GAP_COLUMNS
     ]
-    tabular = "\n".join(
-        [
-            r"\begin{tabular}{lrrrr}",
-            r"  \toprule",
-            "  " + " & ".join(header) + r" \\",
-            r"  \midrule",
-            *(
-                "  " + " & ".join(cells) + r" \\"
-                for cells in _gap_cells(result, r"$\pm$")
-            ),
-            r"  \bottomrule",
-            r"\end{tabular}",
-        ]
-    )
-    array = "\n".join(
-        [
-            r"\begin{array}{lrrrr}",
-            r"  \hline",
-            "  " + " & ".join(rf"\text{{{name}}}" for name in header) + r" \\",
-            r"  \hline",
-            *(
-                "  " + " & ".join(cells) + r" \\"
-                for cells in _gap_cells(result, r"\pm")
-            ),
-            r"  \hline",
-            r"\end{array}",
-        ]
-    )
+    tabular = booktabs_tabular("lrrrr", header, _gap_cells(result, r"$\pm$"))
+    array = mathjax_array("lrrrr", header, _gap_cells(result, r"\pm"))
     trials = max(len(result.trials(name)) for name in result.names)
     caption = (
         f"Per initializer, the gap in {unit} above the reference and the wall "
@@ -467,42 +441,6 @@ def start_styles(names: Sequence[str]) -> dict[str, tuple[str, str]]:
         )
         raise ValueError(msg)
     return {name: (START_PALETTE[i], "-") for i, name in enumerate(names)}
-
-
-def curve_band(curves: Sequence[Curve], seconds: np.ndarray) -> GapBand:
-    """Each trial's gap held from each entry to the next, read on ``seconds``, as :func:`~snakes_and_ladders.search.mixture_starts.gap_band` reads a mixture trial.
-
-    The mean and the sample standard deviation are taken where every trial
-    has an entry; the handover is the mean over trials of each one's.
-
-    Returns
-    -------
-    GapBand
-
-    Raises
-    ------
-    ValueError
-        If ``curves`` is empty.
-    """
-    if not curves:
-        msg = "a band needs at least one trial"
-        raise ValueError(msg)
-    held = np.full((len(curves), seconds.shape[0]), np.nan)
-    for row, curve in enumerate(curves):
-        index = np.searchsorted(curve.seconds, seconds, side="right") - 1
-        known = index >= 0
-        held[row, known] = curve.gaps[index[known]]
-    started = ~np.isnan(held).any(axis=0)
-    mean = np.full(seconds.shape[0], np.nan)
-    std = np.full(seconds.shape[0], np.nan)
-    mean[started] = held[:, started].mean(axis=0)
-    if len(curves) > 1:
-        std[started] = held[:, started].std(axis=0, ddof=1)
-    handover = (
-        float(np.mean([c.seconds[c.handover] for c in curves])),
-        float(np.mean([c.gaps[c.handover] for c in curves])),
-    )
-    return GapBand(seconds, mean, std, handover)
 
 
 def gap_panels(

@@ -45,7 +45,7 @@ from __future__ import annotations
 
 import math
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -78,7 +78,7 @@ from snakes_and_ladders.opt.mixture import (
 from snakes_and_ladders.opt.mixture import (
     expectation_maximization as gaussian_expectation_maximization,
 )
-from snakes_and_ladders.opt.starts import Polished, Trial
+from snakes_and_ladders.opt.starts import Curve, Polished, Trial
 from snakes_and_ladders.opt.termination import Stop, Termination
 from snakes_and_ladders.parallel import Pool, map_tasks
 from snakes_and_ladders.sample.initialize import FromAnnealing, FromChain, FromTempering
@@ -125,6 +125,14 @@ class MixtureInstance:
         The generating components.
     at : ComponentsAt
         Places a component on each of a set of pairs.
+    covariate : np.ndarray | None
+        Per-pair covariate, shape ``(n_samples, 2)``: every fit and every
+        likelihood conditions on it (issue #933).
+    seeding_rows : np.ndarray | None
+        Where the starts read the pairs from, when that is not the pairs
+        themselves: under a covariate,
+        :func:`~snakes_and_ladders.sim.count_pairs.rate_space`'s rows, so a
+        start places components at rates rather than at raw counts.
     """
 
     observations: np.ndarray
@@ -132,6 +140,20 @@ class MixtureInstance:
     weights: np.ndarray
     truth: EmissionFamily
     at: ComponentsAt
+    covariate: np.ndarray | None = None
+    seeding_rows: np.ndarray | None = None
+
+    @property
+    def rows(self) -> np.ndarray:
+        """The pairs a start seeds from: :attr:`seeding_rows`, or the observations."""
+        return self.observations if self.seeding_rows is None else self.seeding_rows
+
+    @property
+    def conditioned(self) -> torch.Tensor | None:
+        """:attr:`covariate` as the tensor the fits take."""
+        if self.covariate is None:
+            return None
+        return torch.as_tensor(self.covariate, dtype=torch.float64)
 
     @property
     def n_components(self) -> int:
@@ -148,7 +170,11 @@ class MixtureInstance:
         """The log-likelihood the generating parameters reach on this draw."""
         values = torch.as_tensor(self.observations, dtype=torch.float64)
         log_weight = torch.log(torch.as_tensor(self.weights, dtype=torch.float64))
-        return float(mixture_log_likelihood(values, log_weight, self.truth))
+        return float(
+            mixture_log_likelihood(
+                values, log_weight, self.truth, covariate=self.conditioned
+            )
+        )
 
 
 def instance_from(
@@ -200,7 +226,7 @@ def surrogate(instance: MixtureInstance) -> GaussianMixtureObjective:
     GaussianMixtureObjective
     """
     return GaussianMixtureObjective(
-        np.asarray(instance.observations, dtype=np.float64), instance.n_components
+        np.asarray(instance.rows, dtype=np.float64), instance.n_components
     )
 
 
@@ -215,7 +241,7 @@ def at_locations(instance: MixtureInstance, locations: torch.Tensor) -> Emission
     -------
     EmissionFamily
     """
-    rows = np.asarray(instance.observations, dtype=np.float64)
+    rows = np.asarray(instance.rows, dtype=np.float64)
     located = np.asarray(locations.detach().numpy(), dtype=np.float64)
     if located.ndim == 1:
         distance = np.abs(rows[None, :, 0] - located[:, None])
@@ -241,7 +267,7 @@ def prior_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded
     -------
     Seeded
     """
-    totals = np.asarray(instance.observations, dtype=np.float64)[:, 0]
+    totals = np.asarray(instance.rows, dtype=np.float64)[:, 0]
     low, high = float(max(totals.min(), 1.0)), float(max(totals.max(), 2.0))
     means = np.exp(rng.uniform(np.log(low), np.log(high), size=instance.n_components))
     rates = rng.uniform(0.0, 1.0, size=instance.n_components)
@@ -256,7 +282,7 @@ def data_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded:
     Seeded
     """
     return Seeded(
-        uniform_start(instance.observations, instance.n_components, instance.at, rng),
+        uniform_start(instance.rows, instance.n_components, instance.at, rng),
         0.0,
     )
 
@@ -269,7 +295,7 @@ def emission_seeding(instance: MixtureInstance, rng: np.random.Generator) -> See
     Seeded
     """
     return Seeded(
-        plus_plus_start(instance.observations, instance.n_components, instance.at, rng),
+        plus_plus_start(instance.rows, instance.n_components, instance.at, rng),
         1.0,
     )
 
@@ -282,7 +308,7 @@ def kmeans_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seede
     Seeded
     """
     centres = kmeans_plus_plus(
-        np.asarray(instance.observations, dtype=np.float64), instance.n_components, rng
+        np.asarray(instance.rows, dtype=np.float64), instance.n_components, rng
     )
     return Seeded(instance.at(centres), 1.0)
 
@@ -298,7 +324,7 @@ def gaussian_em_seeding(instance: MixtureInstance, rng: np.random.Generator) -> 
     -------
     Seeded
     """
-    channel = np.asarray(instance.observations, dtype=np.float64)[:, 0]
+    channel = np.asarray(instance.rows, dtype=np.float64)[:, 0]
     objective = GaussianMixtureObjective(channel, instance.n_components)
     start = KMeansPlusPlus(1, rng).starts(objective)[0]
     weights = torch.exp(objective.constrain(start)["log_weight"]).detach()
@@ -340,9 +366,9 @@ def burn_in_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seed
     """
     components = data_seeding(instance, rng).components
     size = max(instance.n_components, int(BURN_IN_FRACTION * instance.n_samples))
-    subsample = instance.observations[
-        rng.choice(instance.n_samples, size=size, replace=False)
-    ]
+    chosen = rng.choice(instance.n_samples, size=size, replace=False)
+    subsample = instance.observations[chosen]
+    covariate = None if instance.covariate is None else instance.covariate[chosen]
     weights = torch.full(
         (instance.n_components,), 1.0 / instance.n_components, dtype=torch.float64
     )
@@ -350,7 +376,12 @@ def burn_in_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seed
     path: list[tuple[int, EmissionFamily]] = []
     for iteration in range(BURN_IN_ITERATIONS):
         fitted = expectation_maximization(
-            subsample, weights, components, max_iterations=1, tolerance=0.0
+            subsample,
+            weights,
+            components,
+            max_iterations=1,
+            tolerance=0.0,
+            covariate=covariate,
         )
         weights, components = fitted.weights, fitted.components
         tracked.record(iteration, subsample_log_likelihood=fitted.log_likelihood)
@@ -452,7 +483,7 @@ def quantile_seeding(instance: MixtureInstance, _rng: np.random.Generator) -> Se
     Seeded
     """
     values = torch.as_tensor(
-        np.asarray(instance.observations, dtype=np.float64), dtype=torch.float64
+        np.asarray(instance.rows, dtype=np.float64), dtype=torch.float64
     )
     return Seeded(
         at_locations(
@@ -553,7 +584,12 @@ def annealed_gibbs_seeding(
         (instance.n_components,), 1.0 / instance.n_components, dtype=torch.float64
     )
     run = anneal_assignments(
-        instance.observations, weights, components, gibbs_schedule(), rng
+        instance.observations,
+        weights,
+        components,
+        gibbs_schedule(),
+        rng,
+        covariate=instance.covariate,
     )
     return Seeded(
         run.components,
@@ -1049,11 +1085,17 @@ def polish(
                 components,
                 max_iterations=1,
                 tolerance=0.0,
+                covariate=instance.covariate,
             )
         except ValueError:
             # The one refusal this stop reads: a component the E step leaves
             # no responsibility on, whose M step has nothing to solve on.
-            owned = responsibilities(values, torch.log(weights), components).sum(dim=0)
+            owned = responsibilities(
+                values,
+                torch.log(weights),
+                components,
+                covariate=instance.conditioned,
+            ).sum(dim=0)
             if seconds is None or float(owned.min()) > 0.0:
                 raise
             emptied = True
@@ -1070,7 +1112,11 @@ def polish(
         ):
             converged = True
             break
-    final = float(mixture_log_likelihood(values, torch.log(weights), components))
+    final = float(
+        mixture_log_likelihood(
+            values, torch.log(weights), components, covariate=instance.conditioned
+        )
+    )
     trace.append(final)
     tracked.record(iteration, log_likelihood=final)
     tensors = [weights, *components.named_parameters().values()]
@@ -1243,7 +1289,11 @@ class TimedStart:
         curve = [
             (
                 offset + start_seconds[step],
-                float(mixture_log_likelihood(values, uniform, family)),
+                float(
+                    mixture_log_likelihood(
+                        values, uniform, family, covariate=instance.conditioned
+                    )
+                ),
             )
             for step, family in seeded.path
         ]
@@ -1263,7 +1313,10 @@ class TimedStart:
             )
 
         posterior = responsibilities(
-            values, torch.log(polished.weights), polished.components
+            values,
+            torch.log(polished.weights),
+            polished.components,
+            covariate=instance.conditioned,
         )
         columns = match_components(polished.components, instance.truth)
         assigned = np.asarray(posterior.argmax(dim=1).numpy())
@@ -1402,15 +1455,75 @@ class GapBand:
     handover: tuple[float, float]
 
 
-def gap_band(
-    trials: list[MixtureTrial], reference: float, seconds: np.ndarray
-) -> GapBand:
-    """Each trial's gap below ``reference`` held from each point to the next, read on ``seconds``.
+def curve_band(curves: Sequence[Curve], seconds: np.ndarray) -> GapBand:
+    """Each trial's gap held from each entry to the next, read on ``seconds``.
 
     A trial's curve is a sequence of states, so between two samples the gap
     is the earlier one's, and after the last it is the last: the fit the cell
-    ended on. The mean and the band are taken over trials at the same wall
-    clock, which is what a reader of a runtime axis compares.
+    ended on. The mean and the sample standard deviation are taken over
+    trials at the same wall clock, where every trial has an entry, which is
+    what a reader of a runtime axis compares; the handover is the mean over
+    trials of each one's. The one band reader both starts notebooks draw
+    through (issue #926): :func:`gap_band` reads a mixture trial as a
+    :class:`~snakes_and_ladders.opt.starts.Curve` and calls this.
+
+    Returns
+    -------
+    GapBand
+
+    Raises
+    ------
+    ValueError
+        If ``curves`` is empty.
+    """
+    if not curves:
+        msg = "a band needs at least one trial"
+        raise ValueError(msg)
+    held = np.full((len(curves), seconds.shape[0]), np.nan)
+    for row, curve in enumerate(curves):
+        # The last sample at or before each grid time; -1 before the first.
+        index = np.searchsorted(curve.seconds, seconds, side="right") - 1
+        known = index >= 0
+        held[row, known] = curve.gaps[index[known]]
+    started = ~np.isnan(held).any(axis=0)
+    mean = np.full(seconds.shape[0], np.nan)
+    std = np.full(seconds.shape[0], np.nan)
+    mean[started] = held[:, started].mean(axis=0)
+    if len(curves) > 1:
+        std[started] = held[:, started].std(axis=0, ddof=1)
+    handover = (
+        float(np.mean([c.seconds[c.handover] for c in curves])),
+        float(np.mean([c.gaps[c.handover] for c in curves])),
+    )
+    return GapBand(seconds, mean, std, handover)
+
+
+def trial_curve(trial: MixtureTrial, reference: float, index: int = 0) -> Curve:
+    """A mixture trial as the :class:`~snakes_and_ladders.opt.starts.Curve` :func:`curve_band` reads.
+
+    Its samples' times, values, and gaps below ``reference``; its handover
+    index as it is. ``index`` fills the curve's trial slot, which a band
+    does not read.
+
+    Returns
+    -------
+    Curve
+    """
+    values = np.asarray([point[1] for point in trial.curve])
+    return Curve(
+        0,
+        index,
+        np.asarray([point[0] for point in trial.curve]),
+        values,
+        reference - values,
+        trial.handover,
+    )
+
+
+def gap_band(
+    trials: list[MixtureTrial], reference: float, seconds: np.ndarray
+) -> GapBand:
+    """Each trial's gap below ``reference``, read on ``seconds`` by :func:`curve_band`.
 
     Returns
     -------
@@ -1421,25 +1534,7 @@ def gap_band(
     ValueError
         If ``trials`` is empty.
     """
-    if not trials:
-        msg = "a band needs at least one trial"
-        raise ValueError(msg)
-    held = np.full((len(trials), seconds.shape[0]), np.nan)
-    for row, trial in enumerate(trials):
-        times = np.asarray([point[0] for point in trial.curve])
-        gaps = reference - np.asarray([point[1] for point in trial.curve])
-        # The last sample at or before each grid time; -1 before the first.
-        index = np.searchsorted(times, seconds, side="right") - 1
-        known = index >= 0
-        held[row, known] = gaps[index[known]]
-    started = ~np.isnan(held).any(axis=0)
-    mean = np.full(seconds.shape[0], np.nan)
-    std = np.full(seconds.shape[0], np.nan)
-    mean[started] = held[:, started].mean(axis=0)
-    if len(trials) > 1:
-        std[started] = held[:, started].std(axis=0, ddof=1)
-    handover = (
-        float(np.mean([t.curve[t.handover][0] for t in trials])),
-        float(np.mean([reference - t.curve[t.handover][1] for t in trials])),
+    return curve_band(
+        [trial_curve(trial, reference, index) for index, trial in enumerate(trials)],
+        seconds,
     )
-    return GapBand(seconds, mean, std, handover)

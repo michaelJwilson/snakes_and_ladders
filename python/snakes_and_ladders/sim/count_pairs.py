@@ -350,6 +350,281 @@ class IndependentCountPair(EmissionFamily):
         return named
 
 
+type Reflectable = BetaBinomialEmission | IndependentCountPair
+
+
+class ReflectedEmission(EmissionFamily):
+    """``2K`` states over a ``K``-state family: ``k + K`` is ``k`` with its success rate reflected (issue #933).
+
+    State ``k`` emits from the base family's state ``k``; state ``k + K`` from
+    the same parameters with the success channel's ``a`` and ``b`` exchanged,
+    so its rate is ``1 - p_k``. Everything else --- a pair's total channel ---
+    is state ``k``'s unchanged. The two halves are one set of parameters.
+
+    **The M step is the base family's, on the data and its reflection.** A
+    beta-binomial with ``a`` and ``b`` exchanged scores ``y`` exactly as the
+    unexchanged one scores ``n - y``, so the reflected half's expected
+    log-likelihood is the base's on the successes reflected about their trial
+    count. The base family re-estimates once, on the observations weighted by
+    ``gamma[..., :K]`` stacked on the reflected observations weighted by
+    ``gamma[..., K:]``; a total channel reads the same count in both halves.
+
+    Parameters
+    ----------
+    base : BetaBinomialEmission | IndependentCountPair
+        The ``K`` unreflected states.
+    """
+
+    def __init__(self, base: Reflectable) -> None:
+        self._base = base
+        self._unfolded = _unfolded(base)
+
+    @property
+    def base(self) -> Reflectable:
+        """The ``K`` unreflected states, which carry every parameter."""
+        return self._base
+
+    @property
+    def n_states(self) -> int:
+        """``2K``: each base state and its reflection."""
+        return 2 * self._base.n_states
+
+    @property
+    def is_discrete(self) -> bool:
+        """The base family's."""
+        return self._base.is_discrete
+
+    @property
+    def observation_dtype(self) -> torch.dtype:
+        """The base family's."""
+        return self._base.observation_dtype
+
+    def sample(
+        self,
+        states: np.ndarray,
+        rng: np.random.Generator,
+        covariate: torch.Tensor | None = None,
+    ) -> np.ndarray:
+        """Draw from the ``2K``-state family the two halves unfold to."""
+        return self._unfolded.sample(states, rng, covariate=covariate)
+
+    def log_density(
+        self, observations: torch.Tensor, covariate: torch.Tensor | None = None
+    ) -> torch.Tensor:
+        """Every observation under every one of the ``2K`` states."""
+        return self._unfolded.log_density(observations, covariate)
+
+    def bregman_divergence(self, observations: torch.Tensor) -> torch.Tensor:
+        """The unfolded family's, per state."""
+        return self._unfolded.bregman_divergence(observations)
+
+    def validate(self, observations: np.ndarray) -> None:
+        """The base family's check: a reflection reads the same support."""
+        self._base.validate(observations)
+
+    def reestimate(
+        self,
+        observations: torch.Tensor,
+        posterior: torch.Tensor,
+        covariate: torch.Tensor | None = None,
+    ) -> Reestimate[ReflectedEmission]:
+        """The base family's M step on the observations and their reflection.
+
+        Returns
+        -------
+        Reestimate
+
+        Raises
+        ------
+        ValueError
+            If there is no per-observation trial count and the base states'
+            declared counts differ: the reflection ``n - y`` would then depend
+            on the state, and one reflected block cannot carry it.
+        """
+        k = self._base.n_states
+        pair = isinstance(self._base, IndependentCountPair)
+        trailing = observations.shape[posterior.ndim - 1 :]
+        values = observations.reshape(-1, *trailing)
+        weights = posterior.reshape(-1, 2 * k)
+        conditioned = (
+            None
+            if covariate is None
+            else covariate.reshape(
+                values.shape[0], *covariate.shape[posterior.ndim - 1 :]
+            )
+        )
+        successes = values[:, SUCCESSES] if pair else values
+        if conditioned is not None:
+            trials = conditioned[:, SUCCESSES] if pair else conditioned[:, 0]
+        else:
+            declared = (
+                self._base.successes.trials
+                if isinstance(self._base, IndependentCountPair)
+                else self._base.trials
+            )
+            if not bool((declared == declared[0]).all()):
+                msg = (
+                    "a reflection maps successes about their trial count, and "
+                    f"without a per-observation one the states' differ: "
+                    f"{declared.tolist()}"
+                )
+                raise ValueError(msg)
+            trials = declared[0]
+        reflected_successes = trials.to(successes.dtype) - successes
+        if pair:
+            reflected = values.clone()
+            reflected[:, SUCCESSES] = reflected_successes
+        else:
+            reflected = reflected_successes
+        step = self._base.reestimate(
+            torch.cat([values, reflected]),
+            torch.cat([weights[:, :k], weights[:, k:]]),
+            covariate=None
+            if conditioned is None
+            else torch.cat([conditioned, conditioned]),
+        )
+        return Reestimate(
+            ReflectedEmission(step.emissions),
+            converged=step.converged,
+            at_boundary=step.at_boundary,
+            iterations=step.iterations,
+            residual=step.residual,
+        )
+
+    def alignment_key(self) -> torch.Tensor:
+        """The unfolded family's, so a reflection aligns as the state it emits as."""
+        return self._unfolded.alignment_key()
+
+    def named_parameters(self) -> Mapping[str, torch.Tensor]:
+        """The base family's: the reflection adds no parameter."""
+        return self._base.named_parameters()
+
+
+def _unfolded(base: Reflectable) -> Reflectable:
+    """The ``2K``-state family a reflection stands for: each state, then each with ``a`` and ``b`` exchanged."""
+    if isinstance(base, IndependentCountPair):
+        successes = _unfolded(base.successes)
+        assert isinstance(successes, BetaBinomialEmission)
+        return IndependentCountPair(
+            NegativeBinomialEmission(
+                torch.cat([base.total.dispersion, base.total.dispersion]),
+                torch.cat([base.total.mean, base.total.mean]),
+            ),
+            successes,
+        )
+    return BetaBinomialEmission(
+        torch.cat([base.trials, base.trials]),
+        torch.cat([base.alpha, base.beta]),
+        torch.cat([base.beta, base.alpha]),
+    )
+
+
+def rate_space(
+    observations: np.ndarray, covariate: np.ndarray, trials: float
+) -> np.ndarray:
+    """Pairs brought to unit exposure and a common trial count, for seeding (issue #933).
+
+    A seed placed on a raw pair under an exposure would take its count for a
+    rate: a deep observation seeds a high-rate component whatever its rate.
+    Row ``i`` becomes ``(y_i / e_i, s_i / n_i * trials)``: the total at unit
+    exposure, and the successes at the fraction they are of their own trials,
+    expressed over ``trials``, which is what
+    :class:`IndependentCountPairSeeding` reads a pair as. The result is a
+    location, not a count, so it need not be integral.
+
+    Parameters
+    ----------
+    observations : np.ndarray
+        Pairs, shape ``(n, 2)``.
+    covariate : np.ndarray
+        One exposure and one trial count per pair, shape ``(n, 2)``, as
+        :func:`split_covariate` reads it.
+    trials : float
+        The trial count the successes are expressed over.
+
+    Returns
+    -------
+    np.ndarray
+        Shape ``(n, 2)``.
+
+    Raises
+    ------
+    ValueError
+        If the shapes differ or a covariate is not strictly positive: a
+        channel with nothing observed has no rate to seed at.
+    """
+    pairs = np.asarray(observations, dtype=np.float64)
+    offsets = np.asarray(covariate, dtype=np.float64)
+    if pairs.shape != offsets.shape or pairs.ndim != 2 or pairs.shape[1] != 2:
+        msg = (
+            f"observations and covariate must both be (n, 2), got "
+            f"{pairs.shape} and {offsets.shape}"
+        )
+        raise ValueError(msg)
+    if bool((offsets <= 0.0).any()):
+        msg = "rate space needs every exposure and trial count strictly positive"
+        raise ValueError(msg)
+    return np.stack(
+        [
+            pairs[:, TOTAL] / offsets[:, TOTAL],
+            pairs[:, SUCCESSES] / offsets[:, SUCCESSES] * trials,
+        ],
+        axis=1,
+    )
+
+
+@dataclass(frozen=True)
+class IndependentCountPairSeeding:
+    """Places an :class:`IndependentCountPair` component on a pair in rate space (issue #933).
+
+    The independent form's counterpart of
+    :class:`~snakes_and_ladders.opt.emission_mixture.CountPairSeeding`, read
+    the same way: a row ``(total, successes)`` seeds the negative-binomial
+    mean at the total and the beta-binomial rate at the Jeffreys-smoothed
+    fraction ``(successes + 1/2) / (trials + 1)``. Given :func:`rate_space`'s
+    rows, the mean is a rate per unit exposure and the fraction the
+    successes' own, which is what a component under a covariate is stated in.
+    A total of zero seeds a mean of ``1e-6``, the family needing a positive
+    one. The dispersion and concentration start at declared values shared by every
+    component, since one row carries no shape.
+
+    Parameters
+    ----------
+    dispersion : float
+        Starting negative-binomial ``r``.
+    concentration : float
+        Starting beta-binomial ``a + b``.
+    trials : float
+        The trial count rows are expressed over, and the family's declared
+        one: a covariate overrides it per observation.
+    """
+
+    dispersion: float
+    concentration: float
+    trials: float
+
+    def __call__(self, rows: np.ndarray) -> IndependentCountPair:
+        """The family seeded on these rows, one component per row.
+
+        Returns
+        -------
+        IndependentCountPair
+        """
+        pairs = np.asarray(rows, dtype=np.float64).reshape(-1, 2)
+        n = pairs.shape[0]
+        rate = (pairs[:, SUCCESSES] + 0.5) / (self.trials + 1.0)
+        return IndependentCountPair(
+            NegativeBinomialEmission(
+                np.full(n, self.dispersion), np.maximum(pairs[:, TOTAL], 1e-6)
+            ),
+            BetaBinomialEmission(
+                np.full(n, self.trials),
+                rate * self.concentration,
+                (1.0 - rate) * self.concentration,
+            ),
+        )
+
+
 def _bin(params: SpatioSequentialParams, factor: int) -> int:
     """Positions a bin factor leaves, refusing one that leaves a partial bin.
 
