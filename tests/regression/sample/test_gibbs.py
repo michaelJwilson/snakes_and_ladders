@@ -87,6 +87,7 @@ from snakes_and_ladders.sim.topology import (
 from snakes_and_ladders.sim.tree import preorder
 
 from tests._fixtures import FOUR_TAXA, fixture_path, load_fixture
+from tests._rows import every_row
 
 SIGNIFICANCE = 0.001
 FIELD = np.array([0.6, -0.4])
@@ -225,11 +226,7 @@ def _lattice_graph(extent: int) -> FactorGraph:
 
 @pytest.mark.critical
 @pytest.mark.oracle
-@pytest.mark.parametrize("extent", [16, 32])
-@pytest.mark.parametrize("seed", range(4))
-def test_the_compiled_sweep_reproduces_the_numpy_one_bitwise(
-    extent: int, seed: int
-) -> None:
+def test_the_compiled_sweep_reproduces_the_numpy_one_bitwise() -> None:
     # What lets the kernels be the default (#561, #563): the same uniforms in
     # the same order give the same states, exactly, not to a tolerance. The
     # sweep kernel gathers the conditional from one array of tables and NumPy
@@ -241,22 +238,27 @@ def test_the_compiled_sweep_reproduces_the_numpy_one_bitwise(
     # the dictionary oracle does. Realized: 8 of 8 runs agree on every state
     # and every log-density, 15,360 draws at 16x16 and 61,440 at 32x32, and
     # every compiled density equals the dictionary one to the last bit.
-    graph = _lattice_graph(extent)
+    def check(extent: int, seed: int) -> None:
+        graph = _lattice_graph(extent)
 
-    numpy_chain = sample_factor_graph(
-        graph, np.random.default_rng(seed), 15, backend=Backend.PYTHON
-    )
-    compiled = sample_factor_graph(
-        graph, np.random.default_rng(seed), 15, backend=Backend.NUMBA
-    )
+        numpy_chain = sample_factor_graph(
+            graph, np.random.default_rng(seed), 15, backend=Backend.PYTHON
+        )
+        compiled = sample_factor_graph(
+            graph, np.random.default_rng(seed), 15, backend=Backend.NUMBA
+        )
 
-    assert np.array_equal(numpy_chain.states, compiled.states)
-    assert np.array_equal(numpy_chain.log_densities, compiled.log_densities)
-    oracle = [
-        graph.log_density(dict(zip(compiled.variables, map(int, state), strict=True)))
-        for state in compiled.states
-    ]
-    assert np.array_equal(compiled.log_densities, np.array(oracle))
+        assert np.array_equal(numpy_chain.states, compiled.states)
+        assert np.array_equal(numpy_chain.log_densities, compiled.log_densities)
+        oracle = [
+            graph.log_density(
+                dict(zip(compiled.variables, map(int, state), strict=True))
+            )
+            for state in compiled.states
+        ]
+        assert np.array_equal(compiled.log_densities, np.array(oracle))
+
+    every_row(product([16, 32], range(4)), check)
 
 
 @pytest.mark.smoke

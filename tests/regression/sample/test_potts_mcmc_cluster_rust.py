@@ -28,6 +28,7 @@ runs the pass with the hand-back forced on every cluster.
 from __future__ import annotations
 
 import itertools
+from itertools import product
 from typing import Any, cast
 
 import numpy as np
@@ -47,6 +48,7 @@ from snakes_and_ladders.sample.statistics import chi_square_p_value
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
 from tests._chains import enumerated_law, fit_p_value
+from tests._rows import every_row, every_value
 
 # `test_potts_mcmc.py`'s fixture, significance and thinning, so the two routes
 # are held to one standard: 16 configurations, 10,000 sweeps thinned by 5.
@@ -156,40 +158,38 @@ def _kernel_pass(
 
 @pytest.mark.oracle
 @pytest.mark.backend
-@pytest.mark.parametrize("shape", PIN_SHAPES)
-@pytest.mark.parametrize("temperature", PIN_TEMPERATURES)
-@pytest.mark.parametrize("seed", SEEDS)
-def test_the_rust_pass_is_the_oracles_pass_bitwise_on_the_same_draws(
-    shape: tuple[int, int], temperature: float, seed: int
-) -> None:
+def test_the_rust_pass_is_the_oracles_pass_bitwise_on_the_same_draws() -> None:
     """The pin: same bonds, same clusters, same recolourings, bit for bit."""
-    n_states, beta = 3, 1.0 / temperature
-    graph, rows, state = _instance(shape, n_states, seed)
-    bond, colours, accepts = _draws(graph, n_states, seed)
 
-    mine = state.copy()
-    labels, n_clusters, _ = _kernel_pass(
-        graph, rows, mine, beta, (bond, colours, accepts)
-    )
+    def check(shape: tuple[int, int], temperature: float, seed: int) -> None:
+        n_states, beta = 3, 1.0 / temperature
+        graph, rows, state = _instance(shape, n_states, seed)
+        bond, colours, accepts = _draws(graph, n_states, seed)
 
-    theirs = state.copy()
-    scripted = _ScriptedDraws(bond, colours, accepts)
-    swendsen_wang_sweep(
-        theirs, graph, rows, cast(np.random.Generator, scripted), None, beta
-    )
+        mine = state.copy()
+        labels, n_clusters, _ = _kernel_pass(
+            graph, rows, mine, beta, (bond, colours, accepts)
+        )
 
-    # The partition, then what it did with it: a pass that agreed on the
-    # configuration while building other clusters would pass the second
-    # assertion and not the first, and the test below pins the roots
-    # themselves.
-    assert scripted.clusters == n_clusters == np.unique(labels).size
-    assert np.array_equal(mine, theirs), "the recolourings differ"
+        theirs = state.copy()
+        scripted = _ScriptedDraws(bond, colours, accepts)
+        swendsen_wang_sweep(
+            theirs, graph, rows, cast(np.random.Generator, scripted), None, beta
+        )
+
+        # The partition, then what it did with it: a pass that agreed on the
+        # configuration while building other clusters would pass the second
+        # assertion and not the first, and the test below pins the roots
+        # themselves.
+        assert scripted.clusters == n_clusters == np.unique(labels).size
+        assert np.array_equal(mine, theirs), "the recolourings differ"
+
+    every_row(product(PIN_SHAPES, PIN_TEMPERATURES, SEEDS), check)
 
 
 @pytest.mark.oracle
 @pytest.mark.backend
-@pytest.mark.parametrize("seed", SEEDS)
-def test_the_labels_are_the_oracles_own_components(seed: int) -> None:
+def test_the_labels_are_the_oracles_own_components() -> None:
     """The bond pass and the union-find, against ``find_root`` on the same bonds.
 
     Root identity and not only the partition: the oracle's ``union_roots`` keeps
@@ -197,25 +197,31 @@ def test_the_labels_are_the_oracles_own_components(seed: int) -> None:
     the recolourings in their order --- so a kernel that partitioned the same
     way under another rule would draw a different colour for each cluster.
     """
-    n_states, beta = 3, 1.0
-    graph, rows, state = _instance((6, 6), n_states, seed)
-    bond, colours, accepts = _draws(graph, n_states, seed)
 
-    labels, n_clusters, _ = _kernel_pass(
-        graph, rows, state.copy(), beta, (bond, colours, accepts)
-    )
+    def check(seed: int) -> None:
+        n_states, beta = 3, 1.0
+        graph, rows, state = _instance((6, 6), n_states, seed)
+        bond, colours, accepts = _draws(graph, n_states, seed)
 
-    first, second = graph.edge_index[:, 0], graph.edge_index[:, 1]
-    active = (state[first] == state[second]) & (bond < bond_probability(graph, beta))
-    parent = np.arange(graph.n_nodes)
-    for edge in np.flatnonzero(active):
-        potts_mcmc.union_roots(parent, int(first[edge]), int(second[edge]))
-    expected = np.array(
-        [potts_mcmc.find_root(parent, node) for node in range(graph.n_nodes)]
-    )
+        labels, n_clusters, _ = _kernel_pass(
+            graph, rows, state.copy(), beta, (bond, colours, accepts)
+        )
 
-    assert np.array_equal(labels, expected)
-    assert n_clusters == np.unique(expected).size
+        first, second = graph.edge_index[:, 0], graph.edge_index[:, 1]
+        active = (state[first] == state[second]) & (
+            bond < bond_probability(graph, beta)
+        )
+        parent = np.arange(graph.n_nodes)
+        for edge in np.flatnonzero(active):
+            potts_mcmc.union_roots(parent, int(first[edge]), int(second[edge]))
+        expected = np.array(
+            [potts_mcmc.find_root(parent, node) for node in range(graph.n_nodes)]
+        )
+
+        assert np.array_equal(labels, expected)
+        assert n_clusters == np.unique(expected).size
+
+    every_value(SEEDS, check)
 
 
 @pytest.mark.oracle
@@ -295,22 +301,28 @@ def _goodness_of_fit(field: np.ndarray, seed: int) -> float:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("seed", SEEDS)
-def test_the_rust_pass_draws_the_exact_boltzmann_distribution(seed: int) -> None:
+def test_the_rust_pass_draws_the_exact_boltzmann_distribution() -> None:
     """The claim the port has to earn, against enumeration."""
-    assert _goodness_of_fit(NO_FIELD, seed) > SIGNIFICANCE
+
+    def check(seed: int) -> None:
+        assert _goodness_of_fit(NO_FIELD, seed) > SIGNIFICANCE
+
+    every_value(SEEDS, check)
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("seed", SEEDS)
-def test_the_rust_pass_is_still_exact_in_an_external_field(seed: int) -> None:
+def test_the_rust_pass_is_still_exact_in_an_external_field() -> None:
     """A field is not optional here.
 
     The Fortuin-Kasteleyn construction is exact at zero field and the accept
     step is what extends it, so a zero field alone could not tell a pass that
     dropped the accept step from one that kept it.
     """
-    assert _goodness_of_fit(WITH_FIELD, seed) > SIGNIFICANCE
+
+    def check(seed: int) -> None:
+        assert _goodness_of_fit(WITH_FIELD, seed) > SIGNIFICANCE
+
+    every_value(SEEDS, check)
 
 
 @pytest.mark.smoke

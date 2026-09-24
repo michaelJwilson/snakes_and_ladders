@@ -29,36 +29,42 @@ from snakes_and_ladders.sample.schedule import (
     temperatures,
 )
 
+from tests._rows import every_row, every_value
+
 CURVES = [LinearTempSchedule, ExponentialTempSchedule, CosineTempSchedule]
 ENDPOINTS = [(4.0, 0.05, 50), (0.1, 3.0, 7), (2.5, 2.5, 12), (1.0, 1e-3, 2)]
 
 
 @pytest.mark.oracle
 @pytest.mark.parametrize("curve", CURVES)
-@pytest.mark.parametrize(("start", "end", "n_steps"), ENDPOINTS)
 def test_both_endpoints_are_reached_exactly_at_the_declared_steps(
-    curve: type[LinearTempSchedule], start: float, end: float, n_steps: int
+    curve: type[LinearTempSchedule],
 ) -> None:
     # `==`, not a tolerance. A schedule that ends at `end * (1 - 1e-16)` is
     # not at `end`, and a consumer comparing "did we reach the target
     # temperature" by equality would say no forever.
-    schedule = curve(start, end, n_steps)
+    def check(start: float, end: float, n_steps: int) -> None:
+        schedule = curve(start, end, n_steps)
 
-    assert schedule(0) == start
-    assert schedule(n_steps - 1) == end
-    assert len(temperatures(schedule)) == n_steps
+        assert schedule(0) == start
+        assert schedule(n_steps - 1) == end
+        assert len(temperatures(schedule)) == n_steps
+
+    every_row(ENDPOINTS, check)
 
 
 @pytest.mark.analytic
 @pytest.mark.parametrize("curve", CURVES)
-@pytest.mark.parametrize(("start", "end"), [(4.0, 0.05), (0.1, 3.0)])
 def test_the_curve_is_strictly_monotone_in_the_declared_direction(
-    curve: type[LinearTempSchedule], start: float, end: float
+    curve: type[LinearTempSchedule],
 ) -> None:
-    values = np.array(temperatures(curve(start, end, 40)))
-    steps = np.diff(values)
+    def check(start: float, end: float) -> None:
+        values = np.array(temperatures(curve(start, end, 40)))
+        steps = np.diff(values)
 
-    assert bool((steps < 0.0).all()) if end < start else bool((steps > 0.0).all())
+        assert bool((steps < 0.0).all()) if end < start else bool((steps > 0.0).all())
+
+    every_row([(4.0, 0.05), (0.1, 3.0)], check)
 
 
 @pytest.mark.smoke
@@ -101,16 +107,18 @@ def test_every_schedule_satisfies_the_protocol(schedule: object) -> None:
 
 
 @pytest.mark.smoke
-@pytest.mark.parametrize("bad", [0.0, -1.0, math.nan])
-def test_a_non_positive_temperature_is_refused(bad: float) -> None:
+def test_a_non_positive_temperature_is_refused() -> None:
     # At zero every acceptance ratio is 0 or 1 and the chain is a descent;
     # NaN compares false to everything and would pass a `<= 0` check.
-    with pytest.raises(ValueError, match="positive temperature"):
-        ConstantTempSchedule(bad, 5)
-    with pytest.raises(ValueError, match="positive temperature"):
-        LinearTempSchedule(1.0, bad, 5)
-    with pytest.raises(ValueError, match="positive temperature"):
-        ExponentialTempSchedule(bad, 1.0, 5)
+    def check(bad: float) -> None:
+        with pytest.raises(ValueError, match="positive temperature"):
+            ConstantTempSchedule(bad, 5)
+        with pytest.raises(ValueError, match="positive temperature"):
+            LinearTempSchedule(1.0, bad, 5)
+        with pytest.raises(ValueError, match="positive temperature"):
+            ExponentialTempSchedule(bad, 1.0, 5)
+
+    every_value([0.0, -1.0, math.nan], check)
 
 
 @pytest.mark.smoke

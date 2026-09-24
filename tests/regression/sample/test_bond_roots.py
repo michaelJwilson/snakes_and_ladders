@@ -15,17 +15,21 @@ from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.sample.potts_mcmc import bond_roots
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 
+from tests._rows import every_value
+
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("density", [0.2, 0.5, 0.8])
-def test_the_compiled_roots_are_the_python_loop_s_on_a_lattice(density: float) -> None:
-    graph = lattice_graph((40, 40), BoundaryCondition.OPEN, 1.0)
-    rng = np.random.default_rng(986)
-    bonds = graph.edge_index[rng.random(len(graph.edges)) < density]
-    np.testing.assert_array_equal(
-        bond_roots(graph.n_nodes, bonds, backend=Backend.RUST),
-        bond_roots(graph.n_nodes, bonds, backend=Backend.PYTHON),
-    )
+def test_the_compiled_roots_are_the_python_loop_s_on_a_lattice() -> None:
+    def check(density: float) -> None:
+        graph = lattice_graph((40, 40), BoundaryCondition.OPEN, 1.0)
+        rng = np.random.default_rng(986)
+        bonds = graph.edge_index[rng.random(len(graph.edges)) < density]
+        np.testing.assert_array_equal(
+            bond_roots(graph.n_nodes, bonds, backend=Backend.RUST),
+            bond_roots(graph.n_nodes, bonds, backend=Backend.PYTHON),
+        )
+
+    every_value([0.2, 0.5, 0.8], check)
 
 
 @pytest.mark.oracle

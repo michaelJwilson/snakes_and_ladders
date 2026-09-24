@@ -86,6 +86,7 @@ from snakes_and_ladders.sim.potts import (
 )
 
 from tests._chains import enumerated_law, fit_p_value
+from tests._rows import every_value
 from tests._scale import at_scale
 
 # Declared significance. The worst p-value over 36 runs -- six seeds across
@@ -688,10 +689,7 @@ def test_houdayers_move_alone_never_leaves_the_orbit_of_its_draw() -> None:
 
 @pytest.mark.oracle
 @pytest.mark.critical
-@pytest.mark.parametrize("temperature", [0.25, 1.0, 4.0])
-def test_niedermayers_rule_is_wolffs_bitwise_on_a_ferromagnet(
-    temperature: float,
-) -> None:
+def test_niedermayers_rule_is_wolffs_bitwise_on_a_ferromagnet() -> None:
     # The reduction, at the strongest reading available: on a ferromagnet
     # `niedermayer_threshold` is 0, the unlike bonds get probability 0 and the
     # like ones `1 - exp(-beta J)`, and the boundary terms of the ratio cancel
@@ -700,45 +698,48 @@ def test_niedermayers_rule_is_wolffs_bitwise_on_a_ferromagnet(
     # equality of the labellings rather than of a distribution over them ---
     # 300 draws at each of three temperatures, `q = 3`, on the 4x4 open
     # square, with the root and the colour named so neither draws them.
-    graph = lattice_graph((4, 4), BoundaryCondition.OPEN, COUPLING)
-    rows = site_field(np.array([0.6, -0.4, 0.1]), graph.n_nodes)
-    offsets, neighbours, couplings = graph.compressed_adjacency()
-    assert niedermayer_threshold(couplings) == 0.0
-    rng = np.random.default_rng(SEED)
+    def check(temperature: float) -> None:
+        graph = lattice_graph((4, 4), BoundaryCondition.OPEN, COUPLING)
+        rows = site_field(np.array([0.6, -0.4, 0.1]), graph.n_nodes)
+        offsets, neighbours, couplings = graph.compressed_adjacency()
+        assert niedermayer_threshold(couplings) == 0.0
+        rng = np.random.default_rng(SEED)
 
-    for _ in range(300):
-        state = np.ascontiguousarray(
-            rng.integers(0, 3, size=graph.n_nodes), dtype=np.int64
-        )
-        root, colour = int(rng.integers(graph.n_nodes)), int(rng.integers(3))
-        wolff, niedermayer = state.copy(), state.copy()
+        for _ in range(300):
+            state = np.ascontiguousarray(
+                rng.integers(0, 3, size=graph.n_nodes), dtype=np.int64
+            )
+            root, colour = int(rng.integers(graph.n_nodes)), int(rng.integers(3))
+            wolff, niedermayer = state.copy(), state.copy()
 
-        theirs = potts_mcmc.wolff_sweep(
-            wolff,
-            rows,
-            offsets,
-            neighbours,
-            couplings,
-            np.random.default_rng(7),
-            beta=1.0 / temperature,
-            root=root,
-            proposed=colour,
-        )
-        ours = potts_mcmc.niedermayer_sweep(
-            niedermayer,
-            rows,
-            offsets,
-            neighbours,
-            couplings,
-            np.random.default_rng(7),
-            beta=1.0 / temperature,
-            threshold=0.0,
-            root=root,
-            partner=colour,
-        )
+            theirs = potts_mcmc.wolff_sweep(
+                wolff,
+                rows,
+                offsets,
+                neighbours,
+                couplings,
+                np.random.default_rng(7),
+                beta=1.0 / temperature,
+                root=root,
+                proposed=colour,
+            )
+            ours = potts_mcmc.niedermayer_sweep(
+                niedermayer,
+                rows,
+                offsets,
+                neighbours,
+                couplings,
+                np.random.default_rng(7),
+                beta=1.0 / temperature,
+                threshold=0.0,
+                root=root,
+                partner=colour,
+            )
 
-        assert np.array_equal(wolff, niedermayer)
-        assert theirs == ours
+            assert np.array_equal(wolff, niedermayer)
+            assert theirs == ours
+
+    every_value([0.25, 1.0, 4.0], check)
 
 
 @pytest.mark.analytic
@@ -1697,11 +1698,8 @@ def _swept(
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("beta", [1.0, 0.37, 2.5], ids=lambda value: f"beta{value}")
 @pytest.mark.parametrize("field", ["shared", "per_site"])
-def test_the_backends_agree_bitwise_at_every_temperature(
-    field: str, beta: float
-) -> None:
+def test_the_backends_agree_bitwise_at_every_temperature(field: str) -> None:
     # Two failures this covers, and the second is why `beta` moved into the
     # kernel. The per-site field the Rust sweep could not express at all
     # (issue #571); and the *order* `beta` is applied in, which the caller used
@@ -1710,17 +1708,20 @@ def test_the_backends_agree_bitwise_at_every_temperature(
     # in real arithmetic and differ in the last bits, so the old arrangement
     # could only ever have been bitwise at beta = 1.0, which is the only place
     # it was tested.
-    graph = lattice_graph((4, 4), BoundaryCondition.OPEN, 0.7)
-    rows = (
-        site_field(np.array([0.3, -0.2, 0.5]), graph.n_nodes)
-        if field == "shared"
-        else np.random.default_rng(11).normal(size=(graph.n_nodes, 3))
-    )
+    def check(beta: float) -> None:
+        graph = lattice_graph((4, 4), BoundaryCondition.OPEN, 0.7)
+        rows = (
+            site_field(np.array([0.3, -0.2, 0.5]), graph.n_nodes)
+            if field == "shared"
+            else np.random.default_rng(11).normal(size=(graph.n_nodes, 3))
+        )
 
-    np.testing.assert_array_equal(
-        _swept(graph, rows, Backend.PYTHON, beta),
-        _swept(graph, rows, Backend.RUST, beta),
-    )
+        np.testing.assert_array_equal(
+            _swept(graph, rows, Backend.PYTHON, beta),
+            _swept(graph, rows, Backend.RUST, beta),
+        )
+
+    every_value([1.0, 0.37, 2.5], check)
 
 
 @pytest.mark.smoke
