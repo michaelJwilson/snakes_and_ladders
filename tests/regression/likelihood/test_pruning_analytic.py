@@ -18,9 +18,15 @@ Agreement with the taped gradient is a different question and a much tighter
 one: the worst observed relative difference is 5.9e-13, inside
 ``CROSS_DEVICE_RTOL_FLOAT64``, which this module reads from
 ``likelihood.device`` rather than retyping.
+
+The five checks shared with `burn`'s conserved tape run over :data:`ROUTES`
+(issue #982); `burn`'s refusals stay in
+``tests/regression/sandbox/test_pruning_burn.py``.
 """
 
 from __future__ import annotations
+
+from collections.abc import Callable
 
 import numpy as np
 import pytest
@@ -29,27 +35,45 @@ from numpy.testing import assert_allclose
 from snakes_and_ladders.likelihood import pruning_analytic, pruning_torch
 from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
 from snakes_and_ladders.likelihood.patterns import compress
-from snakes_and_ladders.sim.simulator import simulate_tree
+from snakes_and_ladders.sandbox import pruning_burn
 from snakes_and_ladders.sim.tree import Node
 
-from tests._fixtures import EIGHT_TAXA, SMALL_SITES, load_fixture
+from tests._fixtures import EIGHT_TAXA, SMALL_SITES, simulated_alignment
 
 #: Step at which the difference quotient is most accurate here, and the
 #: relative bound the module docstring derives for it.
 CENTRAL_DIFFERENCE_STEP = 1e-6
 CENTRAL_DIFFERENCE_RTOL = 2e-6
 
+#: The routes held to the tape: the adopted analytic backward, and `burn`'s
+#: second tape (issue #449, declined and conserved in the sandbox), which
+#: skips unless the extension carries the ``sandbox`` Cargo feature. Merged
+#: here from ``tests/regression/sandbox/test_pruning_burn.py`` (issue #982).
+ROUTES = [
+    pytest.param(pruning_analytic.log_likelihood, id="analytic"),
+    pytest.param(
+        pruning_burn.log_likelihood,
+        id="burn",
+        marks=pytest.mark.skipif(
+            not pruning_burn.AVAILABLE,
+            reason="extension built without the `sandbox` Cargo feature",
+        ),
+    ),
+]
+_FIXTURES = pytest.mark.parametrize(
+    ("fixture_name", "n_sites"), [(SMALL_SITES, 2000), (EIGHT_TAXA, 2000)]
+)
+
 
 def _case(
     name: str, n_sites: int
 ) -> tuple[Node, int, np.ndarray, dict[str, np.ndarray], torch.Tensor]:
-    params = load_fixture(name)
-    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=n_sites)
+    params, alignment = simulated_alignment(name, n_sites)
     return (
         params.tau,
         params.k,
         params.pi,
-        dataset.alignment,
+        alignment,
         pruning_torch.branch_lengths_from_tree(params.tau),
     )
 
@@ -64,40 +88,45 @@ def _gradient(evaluate, case, **kwargs) -> tuple[float, np.ndarray]:  # type: ig
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize(
-    ("fixture_name", "n_sites"), [(SMALL_SITES, 2000), (EIGHT_TAXA, 2000)]
-)
-def test_value_is_the_taped_path_s(fixture_name: str, n_sites: int) -> None:
+@pytest.mark.parametrize("route", ROUTES)
+@_FIXTURES
+def test_value_is_the_taped_path_s(
+    route: Callable[..., torch.Tensor], fixture_name: str, n_sites: int
+) -> None:
     """The forward value is ``pruning_torch``'s, which is the oracle."""
     case = _case(fixture_name, n_sites)
     tau, k, pi, alignment, lengths = case
     expected = float(pruning_torch.log_likelihood(tau, k, pi, alignment, lengths))
-    actual = float(pruning_analytic.log_likelihood(tau, k, pi, alignment, lengths))
+    actual = float(route(tau, k, pi, alignment, lengths))
     assert_allclose(actual, expected, rtol=CROSS_DEVICE_RTOL_FLOAT64)
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize(
-    ("fixture_name", "n_sites"), [(SMALL_SITES, 2000), (EIGHT_TAXA, 2000)]
-)
-def test_gradient_matches_the_taped_gradient(fixture_name: str, n_sites: int) -> None:
-    """The gradient the tape produces, to the float64 agreement tolerance."""
+@pytest.mark.parametrize("route", ROUTES)
+@_FIXTURES
+def test_gradient_matches_the_taped_gradient(
+    route: Callable[..., torch.Tensor], fixture_name: str, n_sites: int
+) -> None:
+    """The gradient the tape produces, to the float64 agreement tolerance.
+
+    For `burn` this settles the `f64` question the route was adopted on: a
+    tape narrowed to `f32` could not agree with the taped `float64` gradient.
+    """
     case = _case(fixture_name, n_sites)
     _, expected = _gradient(pruning_torch.log_likelihood, case)
-    _, actual = _gradient(pruning_analytic.log_likelihood, case)
+    _, actual = _gradient(route, case)
     assert_allclose(actual, expected, rtol=CROSS_DEVICE_RTOL_FLOAT64)
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize(
-    ("fixture_name", "n_sites"), [(SMALL_SITES, 2000), (EIGHT_TAXA, 2000)]
-)
-def test_gradient_matches_central_differences(fixture_name: str, n_sites: int) -> None:
+@pytest.mark.parametrize("route", ROUTES)
+@_FIXTURES
+def test_gradient_matches_central_differences(
+    route: Callable[..., torch.Tensor], fixture_name: str, n_sites: int
+) -> None:
     """Against a quotient of the forward pass alone, at the derived tolerance."""
     tau, k, pi, alignment, lengths = _case(fixture_name, n_sites)
-    _, gradient = _gradient(
-        pruning_analytic.log_likelihood, (tau, k, pi, alignment, lengths)
-    )
+    _, gradient = _gradient(route, (tau, k, pi, alignment, lengths))
 
     def value(at: torch.Tensor) -> float:
         return float(pruning_torch.log_likelihood(tau, k, pi, alignment, at))
@@ -113,11 +142,12 @@ def test_gradient_matches_central_differences(fixture_name: str, n_sites: int) -
 
 
 @pytest.mark.analytic
-def test_gradcheck_in_float64() -> None:
+@pytest.mark.parametrize("route", ROUTES)
+def test_gradcheck_in_float64(route: Callable[..., torch.Tensor]) -> None:
     """``torch.autograd.gradcheck``, which is the referee this route is held to."""
     tau, k, pi, alignment, lengths = _case(SMALL_SITES, 200)
     assert torch.autograd.gradcheck(
-        lambda at: pruning_analytic.log_likelihood(tau, k, pi, alignment, at),
+        lambda at: route(tau, k, pi, alignment, at),
         (lengths.clone().requires_grad_(True),),
         eps=1e-6,
         atol=1e-7,
@@ -126,7 +156,10 @@ def test_gradcheck_in_float64() -> None:
 
 
 @pytest.mark.analytic
-def test_weighted_patterns_give_the_uncompressed_gradient() -> None:
+@pytest.mark.parametrize("route", ROUTES)
+def test_weighted_patterns_give_the_uncompressed_gradient(
+    route: Callable[..., torch.Tensor],
+) -> None:
     """The compressed alignment with its weights is the full alignment's gradient.
 
     The weights are constants of the data, so the gradient is the weighted sum
@@ -135,11 +168,9 @@ def test_weighted_patterns_give_the_uncompressed_gradient() -> None:
     """
     tau, k, pi, alignment, lengths = _case(EIGHT_TAXA, 2000)
     compressed = compress(alignment)
-    _, full = _gradient(
-        pruning_analytic.log_likelihood, (tau, k, pi, alignment, lengths)
-    )
+    _, full = _gradient(route, (tau, k, pi, alignment, lengths))
     _, weighted = _gradient(
-        pruning_analytic.log_likelihood,
+        route,
         (tau, k, pi, compressed.alignment, lengths),
         weights=compressed.weights,
     )

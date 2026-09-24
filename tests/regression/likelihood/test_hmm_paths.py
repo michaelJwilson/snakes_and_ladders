@@ -2,8 +2,10 @@
 
 The enumeration is the oracle two decoders are separated by, so it cannot be
 validated by a decoder. It is pinned instead against `snakes_and_ladders.opt.hmm`'s forward
-algorithm --- which shares no code with it --- and against quantities that can
-be worked out by hand.
+algorithm --- which shares no code with it, in
+`test_message_passing.py::test_every_chain_evaluator_is_the_path_enumeration`
+since issue #982 --- and here against quantities that can be worked out by
+hand.
 
 It referees a sampler here too (issue #734): `forward_backward.sample_path`
 draws whole paths, and the distribution it draws them from is the one
@@ -17,7 +19,6 @@ import itertools
 
 import numpy as np
 import pytest
-import torch
 from snakes_and_ladders.emissions import CategoricalEmission
 from snakes_and_ladders.likelihood.forward_backward import forward_backward, sample_path
 from snakes_and_ladders.likelihood.hmm_paths import (
@@ -26,10 +27,11 @@ from snakes_and_ladders.likelihood.hmm_paths import (
     enumerate_hidden_paths,
     path_log_probability,
 )
-from snakes_and_ladders.opt.hmm import forward_log_likelihood
 from snakes_and_ladders.sample.statistics import chi_square_p_value
 from snakes_and_ladders.sim.canonical import AMBIGUOUS_OBSERVATIONS, ambiguous_hmm
 from snakes_and_ladders.sim.hmm import HmmParams
+
+from tests.regression.likelihood.conftest import CHAIN_CASES, random_hmm
 
 #: Declared significance, the value every goodness-of-fit test in this
 #: repository is read at (`search/test_potts_mcmc.py`). Over 18 runs --- the
@@ -59,51 +61,9 @@ TOTAL_VARIATION = 0.06
 MARGINAL_DEVIATION = 0.03
 
 
-def _params(n_states: int, n_symbols: int, length: int, seed: int) -> HmmParams:
-    rng = np.random.default_rng(seed)
-    initial = rng.dirichlet(np.ones(n_states))
-    transition = rng.dirichlet(np.ones(n_states), size=n_states)
-    emission = rng.dirichlet(np.ones(n_symbols), size=n_states)
-    return HmmParams(
-        n_states=n_states,
-        lengths=(length,) * 1,
-        initial=initial,
-        transition=transition,
-        emissions=CategoricalEmission(emission),
-        seed=seed,
-        tolerance=1e-12,
-    )
-
-
-@pytest.mark.oracle
-@pytest.mark.parametrize(
-    ("n_states", "n_symbols", "length", "seed"),
-    [(2, 2, 5, 1), (3, 2, 4, 2), (2, 4, 6, 3), (4, 3, 3, 4)],
-)
-def test_the_enumerated_evidence_matches_the_forward_recursion(
-    n_states: int, n_symbols: int, length: int, seed: int
-) -> None:
-    # Summing over every path and the forward recursion compute the same
-    # quantity by different routes, and neither shares code with the other.
-    # Agreement to float64 is the check that the enumeration is summing the
-    # model it claims to.
-    params = _params(n_states, n_symbols, length, seed)
-    observations = np.random.default_rng(seed).integers(0, n_symbols, size=length)
-
-    enumerated = enumerate_hidden_paths(params, observations)
-    forward = forward_log_likelihood(
-        torch.from_numpy(observations[None, :]),
-        torch.log(torch.from_numpy(params.initial)),
-        torch.log(torch.from_numpy(params.transition)),
-        torch.log(torch.from_numpy(params.emission)),
-    )
-
-    assert enumerated.log_likelihood == pytest.approx(float(forward), rel=1e-12)
-
-
 @pytest.mark.analytic
 def test_the_marginals_sum_to_one_and_are_a_valid_distribution() -> None:
-    params = _params(3, 3, 5, 11)
+    params = random_hmm(3, 3, 5, 11)
     observations = np.array([0, 2, 1, 1, 2])
 
     result = enumerate_hidden_paths(params, observations)
@@ -118,7 +78,7 @@ def test_a_marginal_is_the_summed_joint_over_paths_through_that_state() -> None:
     # The definition, computed a second way: `P(state_t = s | y)` is the total
     # weight of paths passing through `s` at `t`, normalized. Written out here
     # rather than reusing the implementation's accumulation.
-    params = _params(2, 3, 4, 12)
+    params = random_hmm(2, 3, 4, 12)
     observations = np.array([1, 0, 2, 1])
 
     result = enumerate_hidden_paths(params, observations)
@@ -155,7 +115,7 @@ def _lumped(law: np.ndarray, n_draws: int) -> list[list[int]]:
 @pytest.mark.critical
 @pytest.mark.parametrize(
     ("n_states", "n_symbols", "length", "seed"),
-    [(2, 2, 5, 1), (3, 2, 4, 2), (2, 4, 6, 3)],
+    CHAIN_CASES[:3],
 )
 def test_the_sampled_paths_are_drawn_from_the_enumerated_path_posterior(
     n_states: int, n_symbols: int, length: int, seed: int
@@ -177,7 +137,7 @@ def test_the_sampled_paths_are_drawn_from_the_enumerated_path_posterior(
     # `forward_backward`'s posterior is the enumeration's to 2.3e-15, which
     # is asserted here rather than assumed, so the marginal comparison is
     # against a quantity this file's own oracle establishes.
-    params = _params(n_states, n_symbols, length, seed)
+    params = random_hmm(n_states, n_symbols, length, seed)
     observations = np.random.default_rng(seed).integers(0, n_symbols, size=length)
     enumerated = enumerate_hidden_paths(params, observations)
 
@@ -227,7 +187,7 @@ def test_the_sampled_paths_are_drawn_from_the_enumerated_path_posterior(
 
 @pytest.mark.oracle
 def test_the_viterbi_path_is_the_maximum_of_the_enumerated_joints() -> None:
-    params = _params(3, 3, 4, 13)
+    params = random_hmm(3, 3, 4, 13)
     observations = np.array([2, 0, 1, 2])
 
     result = enumerate_hidden_paths(params, observations)
@@ -247,7 +207,7 @@ def test_the_evidence_bounds_the_best_path_from_above() -> None:
     # `P(observations)` sums over every path and `P(viterbi, observations)` is
     # one term of that sum, so the second cannot exceed the first. A decoder
     # that returned a conditional where a joint belongs would break this.
-    params = _params(3, 2, 5, 14)
+    params = random_hmm(3, 2, 5, 14)
     observations = np.array([0, 1, 1, 0, 1])
 
     result = enumerate_hidden_paths(params, observations)
@@ -282,7 +242,7 @@ def test_a_single_observation_is_decoded_by_the_prior_and_the_emission() -> None
     # Length 1 has no transition, so both decoders reduce to
     # `argmax_s pi[s] B[s, y]` and the answer is arithmetic rather than a
     # recursion.
-    params = _params(3, 3, 1, 15)
+    params = random_hmm(3, 3, 1, 15)
     observations = np.array([1])
 
     result = enumerate_hidden_paths(params, observations)
@@ -306,7 +266,7 @@ def test_the_ambiguous_fixture_is_within_the_cap() -> None:
 
 @pytest.mark.smoke
 def test_a_sequence_too_long_to_enumerate_is_refused() -> None:
-    params = _params(4, 2, 12, 16)
+    params = random_hmm(4, 2, 12, 16)
 
     # The wording is `snakes_and_ladders.enumeration`'s, shared with every other
     # enumerator since issue #230; what is asserted here is that this caller
@@ -319,7 +279,7 @@ def test_a_sequence_too_long_to_enumerate_is_refused() -> None:
 
 @pytest.mark.smoke
 def test_a_symbol_outside_the_alphabet_is_refused() -> None:
-    params = _params(2, 2, 3, 17)
+    params = random_hmm(2, 2, 3, 17)
 
     with pytest.raises(ValueError, match=r"observations must lie in \[0, 2\)"):
         enumerate_hidden_paths(params, np.array([0, 5, 1]))
@@ -327,7 +287,7 @@ def test_a_symbol_outside_the_alphabet_is_refused() -> None:
 
 @pytest.mark.smoke
 def test_an_empty_observation_sequence_is_refused() -> None:
-    params = _params(2, 2, 3, 18)
+    params = random_hmm(2, 2, 3, 18)
 
     with pytest.raises(ValueError, match="must be non-empty"):
         enumerate_hidden_paths(params, np.array([], dtype=np.int64))

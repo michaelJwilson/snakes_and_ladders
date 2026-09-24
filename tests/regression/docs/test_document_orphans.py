@@ -60,6 +60,14 @@ def test_the_key_travels_one_way_and_the_textbook_names_no_code() -> None:
     # `test_problems_tables.py` asserts it of the *generated* table; this
     # asserts it of the hand-written sources, which is where a join would have
     # been the natural place to put a module path.
+    # A module path, a filename or a typeset identifier is application
+    # documentation wearing a textbook's clothes (the needles merged from
+    # `qa/test_qa_build.py`, issue #982).
     for name in TEXTBOOK_SOURCES:
         source = (document_orphans.TEX_DIR / name).read_text()
-        assert "snakes_and_ladders" not in source, f"{name} names code"
+        offenders = [
+            needle
+            for needle in ("snakes_and_ladders", ".py", "\\texttt{")
+            if needle in source
+        ]
+        assert offenders == [], f"{name} names code: {offenders}"

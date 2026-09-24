@@ -8,8 +8,10 @@ rotted figure is still caught -- by the per-PR path when the document cites
 it, by the release path when it does not.
 
 Since issue #492 the correspondence is a bijection and is asserted as one.
-``infra/check_citations.py`` covers cited-but-missing; the other direction is
-``test_every_manifest_figure_is_cited_by_a_document`` below. The two orphans
+``infra/check_citations.py`` covers cited-but-missing; the other direction,
+and that every committed figure file belongs to a manifest entry, is
+``tests/regression/docs/test_document_build_outputs.py::test_every_tracked_figure_file_belongs_to_a_manifest_stem``
+(issue #982 dropped the copies here). The two orphans
 it was written for, ``sim_problem_sizes`` and ``topology_accuracy``, were
 rendered on every release and read by nobody. The selection tests that relied
 on their existence construct the uncited case in ``tmp_path`` instead, so they
@@ -52,36 +54,6 @@ def test_every_figure_the_documents_cite_has_a_manifest_entry() -> None:
     # regenerates, left to drift from the code that produced it while the
     # staleness check passes because nothing rebuilt it.
     assert manifest.unknown_stems(cited_stems(*DOCUMENTS)) == set()
-
-
-@pytest.mark.critical
-@pytest.mark.infra
-def test_every_committed_figure_has_a_manifest_entry() -> None:
-    # The release gate renders the manifest, so a committed figure absent from
-    # it would be checked by nothing at all -- neither per PR nor at release.
-    committed = {
-        path.stem.removesuffix("_caption") for path in COMMITTED_FIGURES.iterdir()
-    }
-    known = {spec.stem for spec in FIGURES}
-    assert committed - known == set()
-
-
-@pytest.mark.critical
-@pytest.mark.infra
-def test_every_manifest_figure_is_cited_by_a_document() -> None:
-    # Issue #492's invariant, the half `infra/check_citations.py` does not
-    # cover: that script fails a citation with no figure, this fails a figure
-    # with no citation. An uncited figure is rendered by the release gate and
-    # read by nobody, so nothing decides whether it is right -- which is how
-    # `sim_problem_sizes` and `topology_accuracy` sat stale on `main` for
-    # eight releases.
-    uncited = {spec.stem for spec in FIGURES} - cited_stems(*DOCUMENTS)
-
-    assert uncited == set(), (
-        f"rendered and cited by nothing: {sorted(uncited)}; cite each from the "
-        "document that asked for it, or remove it with its renderer (DEV.md, "
-        "'A figure exists because a document asked for it')"
-    )
 
 
 @pytest.mark.infra
@@ -279,24 +251,3 @@ def test_the_documents_the_build_defaults_to_all_exist() -> None:
     # on. A path renamed on one side only would raise far from its cause.
     assert [document.name for document in DOCUMENTS] == ["paper.tex", "textbook.tex"]
     assert all(document.is_file() for document in DOCUMENTS)
-
-
-@pytest.mark.infra
-def test_the_textbook_names_no_code() -> None:
-    # The separation the split is for (issue #249): the textbook states
-    # problem formulations, algorithms and the properties that referee them,
-    # none of which depends on how they are implemented. A module path, a
-    # filename or a function call in it is application documentation wearing a
-    # textbook's clothes.
-    textbook = next(
-        document for document in DOCUMENTS if document.name == "textbook.tex"
-    )
-    text = textbook.read_text()
-
-    offenders = [
-        needle
-        for needle in ("snakes_and_ladders.", ".py", "\\texttt{")
-        if needle in text
-    ]
-
-    assert offenders == []

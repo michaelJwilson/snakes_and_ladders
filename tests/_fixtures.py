@@ -19,9 +19,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import numpy as np
 from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.sim import fixtures as registry
 from snakes_and_ladders.sim.params import SimulationParams
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import leaf_bipartitions
 from snakes_and_ladders.sim.tree import Node
 
@@ -83,6 +85,30 @@ def load_fixture(name: str) -> SimulationParams:
         The parsed, validated parameters.
     """
     return load_params(fixture_path(name), SimulationParams)
+
+
+def simulated_alignment(
+    name: str, n_sites: int | None = None
+) -> tuple[SimulationParams, dict[str, np.ndarray]]:
+    """A fixture's parameters and the alignment simulated at its own seed.
+
+    Parameters
+    ----------
+    name : str
+        Path of the fixture under the fixtures directory. Written as a literal
+        or a `tests._fixtures` constant at the call site, where
+        `tests/_problems.py` reads it.
+    n_sites : int, optional
+        Sites to simulate; the fixture's own ``n_sites`` when omitted.
+
+    Returns
+    -------
+    tuple[SimulationParams, dict[str, numpy.ndarray]]
+        The parameters and the leaf-name-to-states alignment.
+    """
+    params = load_fixture(name)
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites)
+    return params, dict(dataset.alignment)
 
 
 # --- the Felsenstein and Farris zones (issue #209) -------------------------

@@ -3,12 +3,13 @@
 Four independent checks per issue #62, no two sharing an implementation:
 
 - Brute-force agreement at ``n <= 6`` taxa, to machine precision
-  (``test_pruning_matches_brute_force``) -- a genuinely different algorithm
-  (direct marginalization, ``snakes_and_ladders.likelihood.brute_force``), not a second
-  opinion from the same recursion.
+  (``test_pruning_matches_brute_force``), for every route in ``ROUTES`` --- a
+  genuinely different algorithm (direct marginalization,
+  ``snakes_and_ladders.likelihood.brute_force``), not a second opinion from
+  the same recursion.
 - Rescaled and unrescaled paths agreeing on small problems where both run
-  (``test_rescaled_and_unrescaled_agree_on_small_problems``), the check
-  ``docs/tex/textbook.tex`` calls for after ``eq:pruning``.
+  (``test_rescaled_and_unrescaled_agree_on_small_problems``), per route, the
+  check ``docs/tex/textbook.tex`` calls for after ``eq:pruning``.
 - The pulley principle (``test_pulley_principle_is_invariant_to_root_position``):
   JC is reversible (pinned by
   ``tests/regression/test_jc_simulate.py``'s detailed-balance test), so
@@ -27,41 +28,19 @@ from dataclasses import replace
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.likelihood.brute_force import brute_force_log_likelihood
 from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
 from snakes_and_ladders.likelihood.pruning import log_likelihood
-from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
-from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.tree import Node, preorder
 
-from tests._fixtures import FIXTURES_DIR
-
-
-def _small_tree_n4() -> Node:
-    """4-taxon tree with a trifurcating root, mirroring the sim fixtures."""
-    return Node(
-        name="root",
-        branch_length=None,
-        children=(
-            Node(name="A", branch_length=0.10),
-            Node(name="B", branch_length=0.25),
-            Node(
-                name="ancestor_CD",
-                branch_length=0.05,
-                children=(
-                    Node(name="C", branch_length=0.15),
-                    Node(name="D", branch_length=0.40),
-                ),
-            ),
-        ),
-    )
+from tests._fixtures import SMALL_SITES, load_fixture, simulated_alignment
+from tests.regression.likelihood.conftest import ROUTES, Route
 
 
 def _small_tree_n6() -> Node:
     """6-taxon, fully binary tree -- exactly two children at the root, for
-    the pulley-principle test's branch-length split."""
+    the pulley-principle test's branch-length split; no fixture has one."""
     return Node(
         name="root",
         branch_length=None,
@@ -100,17 +79,30 @@ def _small_tree_n6() -> Node:
     )
 
 
+def _fixture_tree() -> Node:
+    """`tree_jc/ci`'s four-taxon tree, trifurcating at the root."""
+    return load_fixture(SMALL_SITES).tau
+
+
+#: Every route but the referee itself; each takes ``rescale``.
+_JUDGED = {name: route for name, route in ROUTES.items() if name != "brute_force"}
+
+
 @pytest.mark.oracle
+@pytest.mark.parametrize("route", _JUDGED.values(), ids=list(_JUDGED))
 @pytest.mark.parametrize(
     ("tree_factory", "seed", "n_sites"),
     [
-        (_small_tree_n4, 20260902, 20),
+        (_fixture_tree, 20260902, 20),
         (_small_tree_n6, 20260903, 15),
     ],
+    ids=["n4", "n6"],
 )
 def test_pruning_matches_brute_force(
-    tree_factory: Callable[[], Node], seed: int, n_sites: int
+    route: Route, tree_factory: Callable[[], Node], seed: int, n_sites: int
 ) -> None:
+    # Every route against direct marginalization, a different algorithm; one
+    # body since issue #982 merged the Rust and Torch copies into it.
     tau = tree_factory()
     k = 4
     pi = np.full(k, 0.25)
@@ -118,14 +110,15 @@ def test_pruning_matches_brute_force(
         tau=tau, k=k, pi=pi, rng=np.random.default_rng(seed), n_sites=n_sites
     )
 
-    pruned = log_likelihood(tau, k, pi, dataset.alignment)
+    pruned = float(route(tau, k, pi, dataset.alignment))
     brute = brute_force_log_likelihood(tau, k, pi, dataset.alignment)
 
     assert_allclose(pruned, brute, rtol=CROSS_DEVICE_RTOL_FLOAT64)
 
 
 @pytest.mark.analytic
-def test_rescaled_and_unrescaled_agree_on_small_problems() -> None:
+@pytest.mark.parametrize("route", _JUDGED.values(), ids=list(_JUDGED))
+def test_rescaled_and_unrescaled_agree_on_small_problems(route: Route) -> None:
     tau = _small_tree_n6()
     k = 4
     pi = np.full(k, 0.25)
@@ -133,8 +126,8 @@ def test_rescaled_and_unrescaled_agree_on_small_problems() -> None:
         tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260904), n_sites=100
     )
 
-    rescaled = log_likelihood(tau, k, pi, dataset.alignment, rescale=True)
-    unrescaled = log_likelihood(tau, k, pi, dataset.alignment, rescale=False)
+    rescaled = float(route(tau, k, pi, dataset.alignment, rescale=True))
+    unrescaled = float(route(tau, k, pi, dataset.alignment, rescale=False))
 
     assert_allclose(rescaled, unrescaled, rtol=1e-10)
 
@@ -182,12 +175,9 @@ def test_pulley_principle_is_invariant_to_root_position() -> None:
 
 @pytest.mark.end2end
 def test_generating_topology_outscores_random_wrong_topologies() -> None:
-    params = load_params(FIXTURES_DIR / "tree_jc/release.yaml", SimulationParams)
-    dataset = simulate_tree(params, np.random.default_rng(params.seed))
+    params, alignment = simulated_alignment("tree_jc/release.yaml")
 
-    true_log_likelihood = log_likelihood(
-        params.tau, params.k, params.pi, dataset.alignment
-    )
+    true_log_likelihood = log_likelihood(params.tau, params.k, params.pi, alignment)
 
     leaf_names = [node.name for node in preorder(params.tau) if node.is_leaf]
     rng = np.random.default_rng(20260906)
@@ -201,7 +191,7 @@ def test_generating_topology_outscores_random_wrong_topologies() -> None:
         mapping = dict(zip(leaf_names, permuted, strict=True))
         wrong_tau = _relabel_leaves(params.tau, mapping)
         wrong_log_likelihoods.append(
-            log_likelihood(wrong_tau, params.k, params.pi, dataset.alignment)
+            log_likelihood(wrong_tau, params.k, params.pi, alignment)
         )
 
     assert true_log_likelihood > max(wrong_log_likelihoods)

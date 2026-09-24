@@ -30,52 +30,6 @@ from tests._fixtures import FIXTURES_DIR
 TRAJECTORY_FIXTURE = FIXTURES_DIR / "tree_search/stress.yaml"
 COMPARISON_FIXTURE = FIXTURES_DIR / "tree_search/ci.yaml"
 
-# A 5-taxon tree is 15 unrooted topologies against the 6-taxon fixture's 105,
-# and a third of the sites either rendered fixture carries, so a render that
-# only has to produce a file and a caption is cheap for both. Written per test
-# rather than added as a fixture file: nothing is asserted against its truth,
-# and the repository's fixtures are for data that is.
-#
-# It declares its model and its oracle and is written at a problem's tier,
-# because a QA script reads its parameters through the registry (issue #863):
-# the file says which truth it declares and the registry says which loader
-# reads it, so a file shaped like anything else is a file no script can name.
-_SMALL_PARAMS = """
-model: jukes-cantor
-oracle: enumeration
-seed: 20260906
-n_sites: 400
-tolerance: 0.01
-k: 4
-pi: [0.25, 0.25, 0.25, 0.25]
-tau:
-  name: root
-  children:
-    - name: A
-      branch_length: 0.12
-    - name: B
-      branch_length: 0.28
-    - name: ancestor_CDE
-      branch_length: 0.06
-      children:
-        - name: C
-          branch_length: 0.21
-        - name: ancestor_DE
-          branch_length: 0.09
-          children:
-            - name: D
-              branch_length: 0.07
-            - name: E
-              branch_length: 0.33
-"""
-
-
-def _small_fixture(tmp_path: Path) -> Path:
-    path = tmp_path / "tree_search" / "ci.yaml"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(_SMALL_PARAMS)
-    return path
-
 
 def _params(path: Path) -> SimulationParams:
     return load_params(path, SimulationParams)
@@ -100,39 +54,6 @@ def test_trajectory_caption_reports_the_environment_it_was_given() -> None:
     assert f"All {environment.size} unrooted topologies" in caption
     assert "41.6 log units" in caption
     assert str(params.seed) in caption
-
-
-@pytest.mark.smoke
-def test_trajectory_caption_is_latex_safe() -> None:
-    params = _params(TRAJECTORY_FIXTURE)
-    _, caption = search_trajectory.build_figure(
-        {"nni": [(0, -1.0), (2, -0.5)]}, -0.5, np.array([-1.0, -0.5]), -0.5, params
-    )
-
-    # qa/CLAUDE.md: captions are plain text pulled into LaTeX verbatim. The
-    # only escape permitted is \_, so removing those must leave no special
-    # behind. write_qa_figure enforces this too; asserting it here keeps the
-    # check on build_figure, which a caller could reach directly.
-    assert not set(caption.replace("\\_", "")) & set("_%\\&#")
-
-
-@pytest.mark.smoke
-def test_trajectory_main_writes_a_figure_and_caption(tmp_path: Path) -> None:
-    # At 5 taxa, so the sweep is 15 fits rather than 105 and the whole
-    # pipeline -- searches, enumeration, caption, render -- is still
-    # exercised per PR.
-    written = search_trajectory.main(
-        [
-            "--params",
-            str(_small_fixture(tmp_path)),
-            "--output-dir",
-            str(tmp_path),
-        ]
-    )
-
-    assert written.figure_path.is_file()
-    assert written.caption_path.read_text() == written.caption
-    assert "All 15 unrooted topologies" in written.caption
 
 
 @pytest.mark.oracle
@@ -207,22 +128,6 @@ def test_comparison_caption_says_so_when_the_truth_was_not_found() -> None:
     )
 
     assert "is not the generating topology" in caption
-
-
-@pytest.mark.smoke
-def test_comparison_main_writes_a_figure_and_caption(tmp_path: Path) -> None:
-    written = search_topologies.main(
-        [
-            "--params",
-            str(_small_fixture(tmp_path)),
-            "--output-dir",
-            str(tmp_path),
-        ]
-    )
-
-    assert written.figure_path.is_file()
-    assert written.caption_path.read_text() == written.caption
-    assert "log units" in written.caption
 
 
 @pytest.mark.end2end

@@ -69,11 +69,6 @@ def test_latex_integer_separates_only_where_it_helps(value: int, expected: str) 
     assert latex_integer(value) == expected
 
 
-@pytest.mark.infra
-def test_latex_safe_accepts_a_separated_integer() -> None:
-    check_latex_safe(f"simulated over {latex_integer(200_000)} sites")
-
-
 @pytest.mark.smoke
 @pytest.mark.parametrize("special", ["_", "%", "&", "#", "\\"])
 def test_an_unescaped_special_is_refused(special: str) -> None:

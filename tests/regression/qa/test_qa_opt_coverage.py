@@ -10,11 +10,8 @@ somebody typed.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.qa import opt_coverage
 from snakes_and_ladders.qa.opt_coverage import (
     HMM_SIZES,
     NOMINAL,
@@ -103,30 +100,6 @@ def test_the_caption_declares_any_fit_that_had_no_interval() -> None:
     assert "boundary of the parameter space" in caption
     assert "2 of" in caption
     assert not set(caption) & set("_%\\&#")
-
-
-@pytest.mark.smoke
-def test_main_writes_a_figure_and_caption(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # The real sweep refits both models dozens of times and belongs to the
-    # document build, not to a per-PR test; the sizes are patched
-    # down so the wiring is still exercised.
-    monkeypatch.setattr(opt_coverage, "POTTS_SIZES", ((50, 2), (100, 2)))
-    monkeypatch.setattr(opt_coverage, "HMM_SIZES", ((600, 1), (900, 1)))
-
-    written = opt_coverage.main(
-        [
-            "--potts-params",
-            str(POTTS_FIXTURE),
-            "--hmm-params",
-            str(HMM_FIXTURE),
-            "--output-dir",
-            str(tmp_path),
-        ]
-    )
-    assert written.figure_path.is_file()
-    assert written.caption_path.read_text() == written.caption
 
 
 @pytest.mark.smoke

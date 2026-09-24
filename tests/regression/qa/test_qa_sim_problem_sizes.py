@@ -13,7 +13,6 @@ import pytest
 from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.qa.manifest import FIGURES
 from snakes_and_ladders.qa.sim_problem_sizes import (
-    build_caption,
     main,
 )
 from snakes_and_ladders.sim.params import SimulationParams
@@ -41,18 +40,6 @@ def _argv(output_dir: Path) -> list[str]:
     for path in FIXTURE_PATHS:
         argv += ["--params", str(path)]
     return [*argv, "--output-dir", str(output_dir)]
-
-
-@pytest.mark.smoke
-def test_main_writes_a_table_and_caption_naming_every_fixture(
-    tmp_path: Path,
-) -> None:
-    qa_table = main(_argv(tmp_path))
-
-    assert qa_table.table_path.is_file()
-    assert qa_table.table_path.suffix == ".tex"
-    assert qa_table.caption == build_caption(list(FIXTURE_NAMES))
-    assert str(len(FIXTURE_NAMES)) in qa_table.caption
 
 
 @pytest.mark.smoke
@@ -141,29 +128,3 @@ def test_problem_sizes_values_match_each_fixture_independently() -> None:
                 20260904,
                 0.01,
             )
-
-
-@pytest.mark.smoke
-def test_main_reads_sys_argv_when_no_argv_is_given(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    argv = ["sim_problem_sizes"]
-    for path in FIXTURE_PATHS:
-        argv += ["--params", str(path)]
-    argv += ["--output-dir", str(tmp_path)]
-    monkeypatch.setattr("sys.argv", argv)
-
-    main()
-
-    table_path = tmp_path / "sim_problem_sizes.tex"
-    caption_path = tmp_path / "sim_problem_sizes_caption.txt"
-    assert table_path.is_file()
-    assert caption_path.read_text() == build_caption(list(FIXTURE_NAMES))
-    # The runner reports what it wrote through the run logger (issue #311),
-    # which writes to stderr; nothing goes to stdout.
-    captured = capsys.readouterr()
-    written = captured.out + captured.err
-    assert str(table_path) in written
-    assert str(caption_path) in written

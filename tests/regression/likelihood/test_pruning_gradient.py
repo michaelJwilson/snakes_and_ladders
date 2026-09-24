@@ -1,9 +1,10 @@
-"""What must hold across all three routes to the pruning gradient (issue #449).
+"""A search fitting with any route to the pruning gradient returns the same answer (issue #449).
 
-Each route is pinned against ``pruning_torch`` in its own module. What is
-pinned here is the claim a per-route test cannot make: the three agree with
-each other on the same inputs, and a search that fits with any of them returns
-the same answer. A gradient that changes which topology
+Each route's gradient is pinned against ``pruning_torch`` in its own module
+(``test_pruning_analytic.py``; the ``[analytic]`` copy of that check here was
+dropped by issue #982 as the same fixture, size and tolerance). What is pinned
+here is the claim a per-route test cannot make: a search that fits with any
+of them returns the same answer. A gradient that changes which topology
 :func:`snakes_and_ladders.search.infer.infer` returns has changed the answer
 and not the cost, whatever it did to the wall clock.
 
@@ -24,9 +25,8 @@ from numpy.testing import assert_allclose
 from snakes_and_ladders.likelihood import pruning_analytic, pruning_torch
 from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
 from snakes_and_ladders.search.infer import infer
-from snakes_and_ladders.sim.simulator import simulate_tree
 
-from tests._fixtures import EIGHT_TAXA, SMALL_SITES, load_fixture
+from tests._fixtures import SMALL_SITES, simulated_alignment
 
 _ROUTES: dict[str, Callable[..., torch.Tensor]] = {
     "analytic": pruning_analytic.log_likelihood,
@@ -39,30 +39,11 @@ _SITES = 2000
 
 @pytest.mark.oracle
 @pytest.mark.parametrize("route", sorted(_ROUTES))
-def test_every_route_agrees_with_the_taped_gradient(route: str) -> None:
-    """One fixture, three gradients, the float64 agreement tolerance."""
-    params = load_fixture(EIGHT_TAXA)
-    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=_SITES)
-    lengths = pruning_torch.branch_lengths_from_tree(params.tau)
-
-    gradients = []
-    for evaluate in (pruning_torch.log_likelihood, _ROUTES[route]):
-        at = lengths.clone().requires_grad_(True)
-        evaluate(params.tau, params.k, params.pi, dataset.alignment, at).backward()  # type: ignore[no-untyped-call]
-        assert at.grad is not None
-        gradients.append(at.grad.numpy().copy())
-    assert_allclose(gradients[1], gradients[0], rtol=CROSS_DEVICE_RTOL_FLOAT64)
-
-
-@pytest.mark.oracle
-@pytest.mark.parametrize("route", sorted(_ROUTES))
 def test_infer_returns_the_same_topology_and_trace(
     route: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The search's answer does not depend on which route produced the gradient."""
-    params = load_fixture(SMALL_SITES)
-    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=_SITES)
-    alignment = dict(dataset.alignment)
+    params, alignment = simulated_alignment(SMALL_SITES, _SITES)
 
     expected = infer(alignment, params.k, rng=np.random.default_rng(449))
     monkeypatch.setattr(pruning_torch, "log_likelihood", _ROUTES[route])

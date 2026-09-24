@@ -1,18 +1,10 @@
 """Regression tests for ``snakes_and_ladders.likelihood.pruning_rust`` (the Rust CPU backend).
 
-Checks per ``likelihood/CLAUDE.md``, mirroring ``test_pruning_torch.py``'s
-structure for the PyTorch backend:
-
-- Agreement with ``pruning.py``, the NumPy oracle every backend is pinned
-  against (``test_rust_matches_numpy_oracle``).
-- Agreement with ``brute_force.py`` at ``n <= 6`` taxa
-  (``test_rust_matches_brute_force``) -- "correctness comes from brute
-  force, not from another backend."
-- Rescaled and unrescaled Rust paths agreeing
-  (``test_rescaled_and_unrescaled_rust_paths_agree``).
-- Validation-error parity with the NumPy oracle for malformed inputs,
-  mirroring ``test_likelihood_validation.py``'s split for the pure-Python
-  backends.
+What is the compiled route's alone. The checks every route shares are one
+body each, parametrised over ``ROUTES`` (issue #982): agreement with the NumPy
+oracle in ``test_pruning_common.py``, with brute force at ``n <= 6`` taxa and
+rescaled against unrescaled in ``test_likelihood_pruning.py``, and the
+refusals in ``test_likelihood_validation.py``.
 
 Requires the compiled extension (``maturin develop`` / ``pip install .``),
 like ``tests/test_oxisal_bindings.py``.
@@ -20,19 +12,14 @@ like ``tests/test_oxisal_bindings.py``.
 
 from __future__ import annotations
 
-import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.likelihood import pruning, pruning_rust
-from snakes_and_ladders.likelihood.brute_force import brute_force_log_likelihood
 from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
 from snakes_and_ladders.likelihood.patterns import compress
-from snakes_and_ladders.sim.simulate import simulate_alignment
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.tree import Node
 
-from tests._fixtures import FOUR_TAXA, SMALL_SITES, load_fixture
+from tests._fixtures import FOUR_TAXA, SMALL_SITES, load_fixture, simulated_alignment
 
 # Relative, not absolute. The log-likelihood is a sum over sites, so an
 # absolute bound fixed at one site count does not transfer to another
@@ -42,113 +29,6 @@ from tests._fixtures import FOUR_TAXA, SMALL_SITES, load_fixture
 # agreement bound stated in docs/tex/textbook.tex (sec:tolerance); it is
 # never relaxed to accommodate a discrepancy.
 _RTOL_ORACLE = CROSS_DEVICE_RTOL_FLOAT64
-
-
-def _small_tree_n4() -> Node:
-    """4-taxon tree with a trifurcating root, mirroring the pruning fixtures."""
-    return Node(
-        name="root",
-        branch_length=None,
-        children=(
-            Node(name="A", branch_length=0.10),
-            Node(name="B", branch_length=0.25),
-            Node(
-                name="ancestor_CD",
-                branch_length=0.05,
-                children=(
-                    Node(name="C", branch_length=0.15),
-                    Node(name="D", branch_length=0.40),
-                ),
-            ),
-        ),
-    )
-
-
-def _small_tree_n6() -> Node:
-    """6-taxon, fully binary tree."""
-    return Node(
-        name="root",
-        branch_length=None,
-        children=(
-            Node(
-                name="left",
-                branch_length=0.08,
-                children=(
-                    Node(name="A", branch_length=0.10),
-                    Node(name="B", branch_length=0.20),
-                ),
-            ),
-            Node(
-                name="right",
-                branch_length=0.12,
-                children=(
-                    Node(
-                        name="ancestor_CD",
-                        branch_length=0.05,
-                        children=(
-                            Node(name="C", branch_length=0.15),
-                            Node(name="D", branch_length=0.25),
-                        ),
-                    ),
-                    Node(
-                        name="ancestor_EF",
-                        branch_length=0.05,
-                        children=(
-                            Node(name="E", branch_length=0.30),
-                            Node(name="F", branch_length=0.10),
-                        ),
-                    ),
-                ),
-            ),
-        ),
-    )
-
-
-@pytest.mark.oracle
-def test_rust_matches_numpy_oracle() -> None:
-    tau = _small_tree_n4()
-    k = 4
-    pi = np.full(k, 0.25)
-    dataset = simulate_alignment(
-        tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260920), n_sites=50
-    )
-
-    numpy_ll = pruning.log_likelihood(tau, k, pi, dataset.alignment)
-    rust_ll = pruning_rust.log_likelihood(tau, k, pi, dataset.alignment)
-
-    assert_allclose(rust_ll, numpy_ll, rtol=_RTOL_ORACLE)
-
-
-@pytest.mark.oracle
-def test_rust_matches_brute_force() -> None:
-    tau = _small_tree_n6()
-    k = 4
-    pi = np.full(k, 0.25)
-    dataset = simulate_alignment(
-        tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260921), n_sites=15
-    )
-
-    rust_ll = pruning_rust.log_likelihood(tau, k, pi, dataset.alignment)
-    brute = brute_force_log_likelihood(tau, k, pi, dataset.alignment)
-
-    assert_allclose(rust_ll, brute, rtol=_RTOL_ORACLE)
-
-
-@pytest.mark.analytic
-def test_rescaled_and_unrescaled_rust_paths_agree() -> None:
-    tau = _small_tree_n6()
-    k = 4
-    pi = np.full(k, 0.25)
-    dataset = simulate_alignment(
-        tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260922), n_sites=100
-    )
-
-    rescaled = pruning_rust.log_likelihood(tau, k, pi, dataset.alignment, rescale=True)
-    unrescaled = pruning_rust.log_likelihood(
-        tau, k, pi, dataset.alignment, rescale=False
-    )
-
-    assert_allclose(rescaled, unrescaled, rtol=1e-10)
 
 
 @pytest.mark.smoke
@@ -163,14 +43,13 @@ def test_relative_tolerance_transfers_to_fixture_scale() -> None:
     rather than deleted: it costs a full-fixture score, and issue #109 keeps
     that off the per-PR path.
     """
-    params = load_fixture(FOUR_TAXA)
-    dataset = simulate_tree(params, np.random.default_rng(params.seed))
-    alignment = dict(dataset.alignment)
+    params, alignment = simulated_alignment(FOUR_TAXA)
 
     numpy_ll = pruning.log_likelihood(params.tau, params.k, params.pi, alignment)
     rust_ll = pruning_rust.log_likelihood(params.tau, params.k, params.pi, alignment)
 
-    # The relative bound holds, unchanged from the small-size tests above.
+    # The relative bound holds, unchanged from `test_pruning_common.py`'s
+    # 20,000-site check.
     assert_allclose(rust_ll, numpy_ll, rtol=_RTOL_ORACLE)
 
     # And the absolute bound this file used to carry would have failed here,
@@ -193,15 +72,12 @@ def test_the_enum_reaches_the_rust_kernel_bitwise() -> None:
     # into one kernel call per distinct weight, so the keywords have to cross
     # the door too. Any other member is refused by name.
     for name in (SMALL_SITES, "tree_search/ci.yaml"):
-        params = load_fixture(name)
-        dataset = simulate_tree(params, np.random.default_rng(params.seed))
-        patterns = compress(dataset.alignment)
+        params, alignment = simulated_alignment(name)
+        patterns = compress(alignment)
 
         assert pruning.log_likelihood(
-            params.tau, params.k, params.pi, dataset.alignment, backend=Backend.RUST
-        ) == pruning_rust.log_likelihood(
-            params.tau, params.k, params.pi, dataset.alignment
-        )
+            params.tau, params.k, params.pi, alignment, backend=Backend.RUST
+        ) == pruning_rust.log_likelihood(params.tau, params.k, params.pi, alignment)
         assert pruning.log_likelihood(
             params.tau,
             params.k,

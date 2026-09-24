@@ -1,11 +1,12 @@
 """The E step, the field and the joint of the coupled model, against the enumeration oracle.
 
-Forward--backward is pinned against the path enumeration on the plain HMM and
-against the conditional state posterior of #300 on the coupled fixture; the
-field is checked against its definition; the labelled joint against the
-enumeration's per-labelling term; and the M-step identity of
-the M-step identity of the textbook's coupled-model section against autograd through the forward recursion, which
-shares no code with the posterior-weighted score (issue #306).
+Forward--backward is pinned against the conditional state posterior of #300
+on the coupled fixture, and against the path enumeration on the plain HMM in
+`test_message_passing.py::test_every_chain_evaluator_is_the_path_enumeration`
+(issue #982); the field is checked against its definition; the labelled joint
+against the enumeration's per-labelling term; and the M-step identity of the
+textbook's coupled-model section against autograd through the forward
+recursion, which shares no code with the posterior-weighted score (issue #306).
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from itertools import product
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.emissions import CategoricalEmission, GaussianEmission
+from snakes_and_ladders.emissions import GaussianEmission
 from snakes_and_ladders.likelihood.forward_backward import forward_backward, sample_path
 from snakes_and_ladders.likelihood.hmm_paths import (
     emission_log_density,
@@ -35,53 +36,12 @@ from snakes_and_ladders.likelihood.spatio_sequential import (
 from snakes_and_ladders.numerics import logsumexp
 from snakes_and_ladders.sample.statistics import chi_square_p_value
 from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.hmm import HmmParams
 from snakes_and_ladders.sim.spatio_sequential import (
     gated_log_density,
     simulate_spatio_sequential,
 )
 
-
-def _hmm(n_states: int, n_symbols: int, length: int, seed: int) -> HmmParams:
-    rng = np.random.default_rng(seed)
-    return HmmParams(
-        n_states=n_states,
-        lengths=(length,) * 1,
-        initial=rng.dirichlet(np.ones(n_states)),
-        transition=rng.dirichlet(np.ones(n_states), size=n_states),
-        emissions=CategoricalEmission(rng.dirichlet(np.ones(n_symbols), size=n_states)),
-        seed=seed,
-        tolerance=1e-12,
-    )
-
-
-@pytest.mark.oracle
-@pytest.mark.parametrize(
-    ("n_states", "n_symbols", "length", "seed"),
-    [(2, 2, 5, 1), (3, 2, 4, 2), (2, 4, 6, 3), (4, 3, 3, 4)],
-)
-def test_forward_backward_is_the_path_enumeration(
-    n_states: int, n_symbols: int, length: int, seed: int
-) -> None:
-    params = _hmm(n_states, n_symbols, length, seed)
-    observations = np.random.default_rng(seed).integers(0, n_symbols, size=length)
-
-    run = forward_backward(
-        emission_log_density(params, observations),
-        np.log(params.initial),
-        np.log(params.transition),
-    )
-    enumerated = enumerate_hidden_paths(params, observations)
-
-    assert abs(run.log_evidence - enumerated.log_likelihood) < 1e-12 * abs(
-        enumerated.log_likelihood
-    )
-    np.testing.assert_allclose(
-        run.posterior, enumerated.posterior, rtol=1e-11, atol=1e-13
-    )
-    np.testing.assert_allclose(run.pairwise.sum(axis=(1, 2)), 1.0, rtol=1e-12)
-    np.testing.assert_allclose(run.pairwise.sum(axis=2), run.posterior[:-1], rtol=1e-11)
-    np.testing.assert_allclose(run.pairwise.sum(axis=1), run.posterior[1:], rtol=1e-11)
+from tests.regression.likelihood.conftest import random_hmm
 
 
 @pytest.mark.oracle
@@ -184,7 +144,7 @@ def test_the_m_step_identity_holds_through_autograd() -> None:
 
 @pytest.mark.end2end
 def test_the_backward_sampler_draws_paths_from_the_posterior() -> None:
-    params = _hmm(2, 2, 3, 7)
+    params = random_hmm(2, 2, 3, 7)
     observations = np.array([0, 1, 1])
     density = emission_log_density(params, observations)
     enumerated = enumerate_hidden_paths(params, observations)

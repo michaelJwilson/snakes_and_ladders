@@ -40,7 +40,13 @@ from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.tree import Node, preorder
 
-from tests._fixtures import EIGHT_TAXA, FOUR_TAXA, SMALL_SITES, load_fixture
+from tests._fixtures import (
+    EIGHT_TAXA,
+    FOUR_TAXA,
+    SMALL_SITES,
+    load_fixture,
+    simulated_alignment,
+)
 from tests._objective_checks import assert_gradient_matches_finite_differences
 
 # Enough sites that the maximum-likelihood estimate is well determined,
@@ -56,13 +62,12 @@ _FINITE_DIFFERENCE_STEP = 1e-6
 def _objective(
     fixture: str, sites: int = _SITES, gradient: GradientRoute = "taped"
 ) -> BranchLengthObjective:
-    params = load_fixture(fixture)
-    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=sites)
+    params, alignment = simulated_alignment(fixture, sites)
     return BranchLengthObjective(
         params.tau,
         params.k,
         params.pi,
-        dict(dataset.alignment),
+        alignment,
         gradient=gradient,
     )
 
@@ -87,9 +92,7 @@ def test_the_two_branches_below_a_rooted_root_are_confounded() -> None:
     # likelihood does not depend on where the root sits along the branch it
     # subdivides, so moving mass between the two root branches at fixed sum
     # changes nothing. This is the fact the parameterization is built on.
-    params = load_fixture(EIGHT_TAXA)
-    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=_SITES)
-    alignment = dict(dataset.alignment)
+    params, alignment = simulated_alignment(EIGHT_TAXA, _SITES)
     order = pruning_torch.branch_order(params.tau)
     lengths = pruning_torch.branch_lengths_from_tree(params.tau)
 
@@ -117,9 +120,7 @@ def test_the_two_branches_below_a_rooted_root_are_confounded() -> None:
 def test_two_non_root_siblings_are_not_confounded() -> None:
     # The control. Without it the test above would also pass on a likelihood
     # that ignored branch lengths entirely.
-    params = load_fixture(EIGHT_TAXA)
-    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=_SITES)
-    alignment = dict(dataset.alignment)
+    params, alignment = simulated_alignment(EIGHT_TAXA, _SITES)
     order = pruning_torch.branch_order(params.tau)
     lengths = pruning_torch.branch_lengths_from_tree(params.tau)
 
@@ -178,9 +179,7 @@ def test_fitting_the_root_branches_separately_has_no_intervals() -> None:
     # observed information singular, and `snakes_and_ladders.opt.fit` refuses to invert
     # it. This is what the merged parameterization exists to avoid, and the
     # reason it is not merely a tidier way to count parameters.
-    params = load_fixture(EIGHT_TAXA)
-    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=_SITES)
-    alignment = dict(dataset.alignment)
+    params, alignment = simulated_alignment(EIGHT_TAXA, _SITES)
     naive = _Unmerged(params.tau, params.k, params.pi, alignment)
     result = fit(naive)
 
@@ -479,13 +478,8 @@ def test_fitting_jc_simulated_data_recovers_a_jc_like_model() -> None:
     # A consistency check the other direction: given data generated under
     # Jukes-Cantor, the general model must not invent structure. Stated in
     # standard errors so it transfers if the fixture size changes.
-    params = load_fixture(SMALL_SITES)
-    dataset = simulate_tree(
-        params, np.random.default_rng(params.seed), n_sites=_GTR_SITES
-    )
-    objective = SubstitutionModelObjective(
-        params.tau, params.k, dict(dataset.alignment)
-    )
+    params, alignment = simulated_alignment(SMALL_SITES, _GTR_SITES)
+    objective = SubstitutionModelObjective(params.tau, params.k, alignment)
     result = fit(objective)
     estimate = objective.constrain(result.theta)
     error = constrained_standard_errors(objective, result.theta)

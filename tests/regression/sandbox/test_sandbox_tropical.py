@@ -68,7 +68,6 @@ from snakes_and_ladders.search.neighbor_joining import (
     neighbor_joining,
 )
 from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import (
     Topology,
     enumerate_topologies,
@@ -76,7 +75,7 @@ from snakes_and_ladders.sim.topology import (
     normalized_robinson_foulds,
 )
 
-from tests._fixtures import EIGHT_TAXA, load_fixture
+from tests._fixtures import EIGHT_TAXA, load_fixture, simulated_alignment
 
 FIVE_TAXA = "tree_search/ci.yaml"
 SIX_TAXA = "tree_search/stress.yaml"
@@ -141,25 +140,13 @@ class Instance:
         return condensed(matrix)
 
 
-def _alignment(
-    name: str, n_sites: int | None = None
-) -> tuple[SimulationParams, dict[str, np.ndarray]]:
-    params = load_fixture(name)
-    dataset = simulate_tree(
-        params,
-        np.random.default_rng(params.seed),
-        n_sites=params.n_sites if n_sites is None else n_sites,
-    )
-    return params, dict(dataset.alignment)
-
-
 def _instance(name: str, n_sites: int | None = None) -> Instance:
     """Load a fixture, fit its quartet table, and enumerate the quartet surface.
 
     ``n_sites`` shortens the alignment the fixture declares; see
     :data:`EIGHT_TAXON_SITES`.
     """
-    params, alignment = _alignment(name, n_sites)
+    params, alignment = simulated_alignment(name, n_sites)
     k = params.k
     table = quartet_table(alignment, k)
     scores = {

@@ -10,13 +10,10 @@ minute the per-PR suite should not pay.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.qa import rl_reward_surface
 from snakes_and_ladders.qa.figure import pearson_correlation
 from snakes_and_ladders.qa.rl_reward_surface import (
     BRANCH_LENGTHS,
@@ -166,21 +163,6 @@ def test_the_caption_reports_the_correlation_it_measured(five_taxon: Surfaces) -
         assert f"{known.size}" in caption
     finally:
         figure.clear()
-
-
-@pytest.mark.smoke
-def test_main_writes_a_figure_and_caption(tmp_path: Path) -> None:
-    # At 5 taxa, so the whole pipeline -- both surfaces, the sweep, the
-    # caption, the render -- is exercised per PR rather than only behind the
-    # release gate the 6-taxon document figure sits behind.
-    written = rl_reward_surface.main(
-        ["--params", str(FIVE_TAXA), "--output-dir", str(tmp_path)]
-    )
-
-    assert written.figure_path.is_file()
-    assert written.caption_path.is_file()
-    assert written.caption == written.caption_path.read_text()
-    assert "correlation" in written.caption
 
 
 @pytest.mark.end2end

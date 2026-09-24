@@ -9,7 +9,6 @@ checks are marked and skip when the hardware is absent.
 
 from __future__ import annotations
 
-import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
@@ -22,9 +21,8 @@ from snakes_and_ladders.likelihood.device import (
     default_dtype,
     select_device,
 )
-from snakes_and_ladders.sim.simulator import simulate_tree
 
-from tests._fixtures import FOUR_TAXA, SMALL_SITES, load_fixture
+from tests._fixtures import FOUR_TAXA, SMALL_SITES, simulated_alignment
 
 # --- selection policy: pure, so it is testable without the hardware ------
 
@@ -126,28 +124,27 @@ def test_every_device_the_policy_selects_holds_its_tolerance_to_the_numpy_oracle
 
     The arithmetic runs on CPU in both dtypes, so the number is evidence on a
     runner with neither accelerator; what is exercised here is the *policy*,
-    which is the part that is pure.
+    which is the part that is pure. The float32 route is the same arithmetic
+    Metal does, which makes the float32 tolerance evidence rather than a guess.
     """
     assert available_device() in {"cuda", "mps", "cpu"}
     print("\nrelative deviation from the NumPy oracle, per selected route:")
     for fixture in (SMALL_SITES, FOUR_TAXA):
-        params = load_fixture(fixture)
-        dataset = simulate_tree(params, np.random.default_rng(params.seed))
-        alignment = dict(dataset.alignment)
+        params, alignment = simulated_alignment(fixture)
         exact = pruning.log_likelihood(params.tau, params.k, params.pi, alignment)
 
         for cuda, mps in ((True, True), (False, True), (False, False)):
             device = select_device(cuda_available=cuda, mps_available=mps)
             dtype = default_dtype(device)
-            value = float(
-                pruning_torch.log_likelihood(
-                    params.tau,
-                    params.k,
-                    params.pi,
-                    alignment,
-                    pruning_torch.branch_lengths_from_tree(params.tau, dtype=dtype),
-                )
+            tensor = pruning_torch.log_likelihood(
+                params.tau,
+                params.k,
+                params.pi,
+                alignment,
+                pruning_torch.branch_lengths_from_tree(params.tau, dtype=dtype),
             )
+            assert tensor.dtype == dtype
+            value = float(tensor)
             deviation = abs(value - exact) / abs(exact)
             print(f"  {fixture} {device} {dtype}: {deviation:.2e}")
             assert_allclose(
@@ -155,112 +152,41 @@ def test_every_device_the_policy_selects_holds_its_tolerance_to_the_numpy_oracle
             )
             if dtype == torch.float64:
                 assert deviation == 0.0
-
-
-@pytest.mark.analytic
-@pytest.mark.parametrize("fixture", [SMALL_SITES, FOUR_TAXA])
-def test_float32_agrees_with_float64_inside_the_stated_tolerance(
-    fixture: str,
-) -> None:
-    # The check that makes the float32 tolerance evidence rather than a
-    # guess: float32 on CPU is the same arithmetic Metal will do, so this
-    # runs on a GPU-less runner and still exercises the number.
-    params = load_fixture(fixture)
-    dataset = simulate_tree(params, np.random.default_rng(params.seed))
-    alignment = dict(dataset.alignment)
-
-    wide = pruning_torch.log_likelihood(
-        params.tau,
-        params.k,
-        params.pi,
-        alignment,
-        pruning_torch.branch_lengths_from_tree(params.tau),
-    )
-    narrow = pruning_torch.log_likelihood(
-        params.tau,
-        params.k,
-        params.pi,
-        alignment,
-        pruning_torch.branch_lengths_from_tree(params.tau, dtype=torch.float32),
-    )
-
-    assert narrow.dtype == torch.float32
-    assert_allclose(
-        float(narrow),
-        float(wide),
-        rtol=cross_device_rtol(torch.float32, torch.float64),
-    )
-
-
-@pytest.mark.smoke
-def test_float32_would_fail_an_absolute_bound_that_float64_passes() -> None:
-    # Why the tolerance is relative (issue #111). At fixture scale the
-    # float32 discrepancy is ~1e-2 absolute, so any absolute bound tight
-    # enough to be meaningful for float64 rejects correct float32 code.
-    params = load_fixture(FOUR_TAXA)
-    dataset = simulate_tree(params, np.random.default_rng(params.seed))
-    alignment = dict(dataset.alignment)
-
-    wide = float(
-        pruning_torch.log_likelihood(
-            params.tau,
-            params.k,
-            params.pi,
-            alignment,
-            pruning_torch.branch_lengths_from_tree(params.tau),
-        )
-    )
-    narrow = float(
-        pruning_torch.log_likelihood(
-            params.tau,
-            params.k,
-            params.pi,
-            alignment,
-            pruning_torch.branch_lengths_from_tree(params.tau, dtype=torch.float32),
-        )
-    )
-
-    absolute = abs(wide - narrow)
-    relative = absolute / abs(wide)
-
-    assert absolute > 1e-3
-    assert relative < CROSS_DEVICE_RTOL_FLOAT32
-
-
-@pytest.mark.oracle
-@pytest.mark.smoke
-def test_float64_default_is_unchanged_by_the_dtype_parameter() -> None:
-    # No silent behaviour change: a caller who passes nothing still gets
-    # float64, and still matches the NumPy oracle.
-    params = load_fixture(SMALL_SITES)
-    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=200)
-    alignment = dict(dataset.alignment)
-
-    lengths = pruning_torch.branch_lengths_from_tree(params.tau)
-    assert lengths.dtype == torch.float64
-
-    torch_value = float(
-        pruning_torch.log_likelihood(
-            params.tau, params.k, params.pi, alignment, lengths
-        )
-    )
-    numpy_value = pruning.log_likelihood(params.tau, params.k, params.pi, alignment)
-    assert_allclose(torch_value, numpy_value, rtol=CROSS_DEVICE_RTOL_FLOAT64)
+            elif fixture == FOUR_TAXA:
+                # Why the tolerance is relative (issue #111): at 200,000 sites
+                # float32 is ~1e-2 off absolute, so any absolute bound tight
+                # enough to mean something for float64 rejects correct code.
+                assert abs(value - exact) > 1e-3
 
 
 # --- device-specific, skipped where the hardware is absent ---------------
 
 
 @pytest.mark.analytic
-@pytest.mark.skipif(
-    not torch.cuda.is_available(), reason="no CUDA device on this machine"
+@pytest.mark.parametrize(
+    "device",
+    [
+        pytest.param(
+            "cuda",
+            marks=pytest.mark.skipif(
+                not torch.cuda.is_available(), reason="no CUDA device on this machine"
+            ),
+        ),
+        pytest.param(
+            "mps",
+            marks=pytest.mark.skipif(
+                not torch.backends.mps.is_available(),
+                reason="no Metal device on this machine",
+            ),
+        ),
+    ],
 )
-def test_cuda_agrees_with_cpu() -> None:  # pragma: no cover
-    params = load_fixture(SMALL_SITES)
-    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=500)
-    alignment = dict(dataset.alignment)
+def test_the_device_agrees_with_cpu(device: str) -> None:  # pragma: no cover
+    params, alignment = simulated_alignment(SMALL_SITES, 500)
 
-    dtype = default_dtype("cuda")
+    # The device's own dtype on both sides: Metal cannot do float64, so the
+    # CPU side is narrowed to match rather than compared cross-precision.
+    dtype = default_dtype(device)
     on_cpu = pruning_torch.log_likelihood(
         params.tau,
         params.k,
@@ -268,40 +194,13 @@ def test_cuda_agrees_with_cpu() -> None:  # pragma: no cover
         alignment,
         pruning_torch.branch_lengths_from_tree(params.tau, dtype=dtype),
     )
-    on_cuda = pruning_torch.log_likelihood(
+    on_device = pruning_torch.log_likelihood(
         params.tau,
         params.k,
         params.pi,
         alignment,
-        pruning_torch.branch_lengths_from_tree(params.tau, dtype=dtype, device="cuda"),
+        pruning_torch.branch_lengths_from_tree(params.tau, dtype=dtype, device=device),
     )
-    assert_allclose(float(on_cuda), float(on_cpu), rtol=cross_device_rtol(dtype, dtype))
-
-
-@pytest.mark.analytic
-@pytest.mark.skipif(
-    not torch.backends.mps.is_available(), reason="no Metal device on this machine"
-)
-def test_mps_agrees_with_cpu() -> None:  # pragma: no cover
-    params = load_fixture(SMALL_SITES)
-    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=500)
-    alignment = dict(dataset.alignment)
-
-    # float32 on both sides: Metal cannot do float64, so the CPU side is
-    # narrowed to match rather than the comparison being cross-precision.
-    dtype = default_dtype("mps")
-    on_cpu = pruning_torch.log_likelihood(
-        params.tau,
-        params.k,
-        params.pi,
-        alignment,
-        pruning_torch.branch_lengths_from_tree(params.tau, dtype=dtype),
+    assert_allclose(
+        float(on_device), float(on_cpu), rtol=cross_device_rtol(dtype, dtype)
     )
-    on_mps = pruning_torch.log_likelihood(
-        params.tau,
-        params.k,
-        params.pi,
-        alignment,
-        pruning_torch.branch_lengths_from_tree(params.tau, dtype=dtype, device="mps"),
-    )
-    assert_allclose(float(on_mps), float(on_cpu), rtol=cross_device_rtol(dtype, dtype))

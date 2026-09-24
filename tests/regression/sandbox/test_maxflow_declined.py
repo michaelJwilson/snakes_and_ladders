@@ -78,20 +78,20 @@ def _spots(extent: int, n_states: int) -> tuple[PottsGraph, np.ndarray]:
 @pytest.mark.oracle
 @pytest.mark.parametrize("kernel", KERNELS, ids=str)
 @pytest.mark.parametrize("n_nodes", [6, 12, 24, 96])
-@pytest.mark.parametrize("seed", range(715, 725))
 def test_every_declined_kernel_returns_the_python_cut_on_seeded_networks(
-    kernel: DeclinedKernel, n_nodes: int, seed: int
+    kernel: DeclinedKernel, n_nodes: int
 ) -> None:
     # The value to the last bits and the side arc for arc: the side is the
     # minimal minimum cut every maximum flow shares, so it is compared
-    # element for element and not only by its capacity.
-    expected = max_flow(_seeded_network(n_nodes, seed), 0, n_nodes - 1)
-    realized = maxflow_declined.min_cut(
-        _seeded_network(n_nodes, seed), 0, n_nodes - 1, kernel
-    )
+    # element for element and not only by its capacity. Ten seeds per body.
+    for seed in range(715, 725):
+        expected = max_flow(_seeded_network(n_nodes, seed), 0, n_nodes - 1)
+        realized = maxflow_declined.min_cut(
+            _seeded_network(n_nodes, seed), 0, n_nodes - 1, kernel
+        )
 
-    assert realized.value == pytest.approx(expected.value, rel=1e-12)
-    assert realized.source_side.tolist() == expected.source_side.tolist()
+        assert realized.value == pytest.approx(expected.value, rel=1e-12), seed
+        assert realized.source_side.tolist() == expected.source_side.tolist(), seed
 
 
 @pytest.mark.oracle

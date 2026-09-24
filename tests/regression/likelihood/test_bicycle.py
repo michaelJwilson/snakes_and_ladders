@@ -7,7 +7,9 @@ both exact decodings, and the optimality of each -- the bitwise MAP minimizes
 bit errors, the maximum-likelihood codeword block errors -- bounds what
 belief propagation can do on a graph full of short cycles. At 96 and 996 bits
 no enumeration reaches, and the claim is a comparison: the bicycle code
-against a Gallager draw of the same length and degrees, on shared seeds.
+against a Gallager draw of the same length and degrees, on shared seeds. The
+decoder's agreement with the general flooding on this fixture is a row of
+`test_ldpc.py::test_flooding_reaches_the_general_fixed_point_on_a_loopy_code`.
 """
 
 from __future__ import annotations
@@ -15,11 +17,6 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from snakes_and_ladders.likelihood.ldpc import decode, exact_decoding
-from snakes_and_ladders.likelihood.message_passing import (
-    MessageScheduleName,
-    sum_product,
-)
-from snakes_and_ladders.sim.factor_graph import from_parity_check
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.ldpc import (
     BinaryErasureChannel,
@@ -86,37 +83,6 @@ def test_the_exact_decodings_bound_belief_propagation(channel_of: str) -> None:
     assert exact_bits <= decoder_bits
     assert exact_blocks <= decoder_blocks
     assert (exact_bits, decoder_bits, exact_blocks, decoder_blocks) == expected
-
-
-@pytest.mark.oracle
-def test_the_decoder_reaches_the_general_fixed_point_on_the_bicycle_graph() -> None:
-    """The specialized decoder and the general flooding sum-product agree to 2e-12
-    on the 12-bit fixture, which has cycles: the same Bethe fixed point from two
-    implementations, and so the adapter carries this construction as it does the
-    other."""
-    params = fixture("bicycle", "ci").params
-    code = params.code()
-    llr = all_zero_transmission(
-        code, params.symmetric_channel(), np.random.default_rng(1)
-    )
-    graph = from_parity_check(code, llr)
-    assert not graph.is_tree()
-
-    decoded = decode(code, llr, early_stop=False, max_iterations=3000, tolerance=1e-12)
-    general = sum_product(
-        graph,
-        schedule=MessageScheduleName.FLOODING,
-        tolerance=1e-12,
-        max_iterations=3000,
-    )
-
-    marginals = np.array(
-        [
-            np.log(general.variable[f"x{i}"][0]) - np.log(general.variable[f"x{i}"][1])
-            for i in range(code.n_bits)
-        ]
-    )
-    np.testing.assert_allclose(decoded.posterior_llr, marginals, rtol=0, atol=2e-12)
 
 
 # --- against a random construction of the same length and degrees ---------------

@@ -253,6 +253,7 @@ def test_the_pdfs_are_the_paths_the_gates_name() -> None:
         assert pdf in gates, f"infra/review_gates.sh does not name {pdf}"
 
 
+@pytest.mark.critical
 @pytest.mark.infra
 def test_every_tracked_figure_file_belongs_to_a_manifest_stem() -> None:
     """`docs/tex/figures/` holds two files per manifest entry and nothing else.

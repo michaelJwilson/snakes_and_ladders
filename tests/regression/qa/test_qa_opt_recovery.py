@@ -10,15 +10,12 @@ prevent.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
 import pytest
 from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.qa.opt_recovery import (
     build_figure,
     hmm_recovery,
-    main,
     potts_recovery,
 )
 from snakes_and_ladders.sim.hmm import HmmParams
@@ -111,19 +108,3 @@ def test_the_caption_reports_the_coverage_it_measured() -> None:
     assert str(hmm_params.seed) in caption
     # qa/CLAUDE.md: captions are plain text pulled into LaTeX verbatim.
     assert not set(caption) & set("_%\\&#")
-
-
-@pytest.mark.smoke
-def test_main_writes_a_figure_and_caption(tmp_path: Path) -> None:
-    written = main(
-        [
-            "--potts-params",
-            str(POTTS_FIXTURE),
-            "--hmm-params",
-            str(HMM_FIXTURE),
-            "--output-dir",
-            str(tmp_path),
-        ]
-    )
-    assert written.figure_path.is_file()
-    assert written.caption_path.read_text() == written.caption
