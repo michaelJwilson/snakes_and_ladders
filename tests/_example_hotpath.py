@@ -10,23 +10,8 @@ import numpy as np
 
 
 def pairwise_distance(x: np.ndarray, y: np.ndarray) -> np.ndarray:
-    """Compute pairwise Euclidean distances between two 2D point sets.
+    """Pairwise Euclidean distances, shape ``(n, m)``, between two 2D point sets.
 
-    Parameters
-    ----------
-    x : np.ndarray
-        Array of shape (n, d) -- n points in d dimensions.
-    y : np.ndarray
-        Array of shape (m, d) -- m points in d dimensions.
-
-    Returns
-    -------
-    np.ndarray
-        Array of shape (n, m) where entry [i, j] is the Euclidean
-        distance between x[i] and y[j].
-
-    Notes
-    -----
     Vectorized via NumPy broadcasting, with no Python-level loop over points.
     """
     x = np.asarray(x, dtype=np.float64)

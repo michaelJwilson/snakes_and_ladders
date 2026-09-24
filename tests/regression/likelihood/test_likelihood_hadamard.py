@@ -45,10 +45,7 @@ HARD = "tree_search/release.yaml"
 def _exact_spectrum(tau: Node, names: list[str], k: int) -> np.ndarray:
     """Pattern probabilities under ``tau`` at ``k`` states, by the pruning likelihood.
 
-    The two-state spectrum indexes patterns by the taxa differing from the
-    last; at ``k`` states every pattern over ``k^n`` assignments is scored
-    and folded onto that index through the recoding, which is the oracle
-    for the recoded spectrum too.
+    All ``k^n`` patterns folded through the recoding: the recoded spectrum's oracle too.
     """
     pi = np.full(k, 1.0 / k)
     spectrum = np.zeros(1 << (len(names) - 1))
@@ -74,9 +71,7 @@ ORDERS = tuple(1 << (n_taxa - 1) for n_taxa in range(3, MAX_TAXA + 1))
 def test_the_transform_is_the_sylvester_matrix_and_its_own_inverse_up_to_size() -> None:
     """``H`` has entries ``(-1)^|A and B|`` and ``H^-1 = H / N``, at every order.
 
-    The entry is the parity of the two bit masks' intersection, which is what
-    makes a subset index a split index. Realized at 2,048: 1.6e-13 on the
-    product and 8.9e-16 on the round trip.
+    At 2,048: 1.6e-13 on the product, 8.9e-16 on the round trip.
     """
     for order in ORDERS:
         rows = np.arange(order)
@@ -96,11 +91,7 @@ def test_the_conjugation_returns_the_true_split_weights_on_the_exact_spectrum(
 ) -> None:
     """On the pruning-computed two-state spectrum, ``q`` is the tree's lengths and zero elsewhere.
 
-    Every split the tree has carries its branch length --- the root pair of
-    a rooted binary fixture summed --- and every other of the
-    ``2^(n-1) - n`` non-trivial splits carries zero, to ``1e-12``. Both
-    directions are pinned: the inverse on the oracle spectrum, and the
-    forward transform reproducing the oracle.
+    Every other of the ``2^(n-1) - n`` splits is zero, to ``1e-12``; both directions.
     """
     params = load_fixture(name)
     names, truth = edge_spectrum(params.tau)
@@ -121,10 +112,7 @@ def test_the_conjugation_returns_the_true_split_weights_on_the_exact_spectrum(
 def test_the_four_state_recoding_returns_two_thirds_of_every_branch(name: str) -> None:
     """The recoded four-state spectrum conjugates to ``2 t / 3`` on every split.
 
-    Grouping the states in pairs makes a change of group a two-state
-    symmetric process at rate ``2/3`` of the four-state one, so the
-    conjugation of the recoded oracle spectrum is the edge spectrum scaled
-    by :func:`recoding_scale`, to ``1e-12``.
+    Paired states change group at ``2/3`` the rate: :func:`recoding_scale`, to ``1e-12``.
     """
     params = load_fixture(name)
     names, truth = edge_spectrum(params.tau)
@@ -157,10 +145,7 @@ def test_the_closest_tree_of_the_exact_weights_is_the_tree(name: str) -> None:
 def test_the_split_weights_converge_with_the_site_count() -> None:
     """On simulated two-state data the weight error falls as ``1/sqrt(L)``.
 
-    The five-taxon fixture at ``k = 2``, 1,000 to 100,000 sites, 40 seeds
-    each: the root-mean-square error over every split (true weight or zero)
-    and the ratio between successive sizes against ``sqrt(10)``. Realized:
-    RMS 0.0265, 0.00802 and 0.00257; ratios 3.30 and 3.13.
+    Five taxa, 40 seeds: RMS 0.0265, 0.00802, 0.00257; ratios 3.30 and 3.13.
     """
     params = load_fixture(FIVE_TAXA)
     names, truth = edge_spectrum(params.tau)
@@ -204,9 +189,7 @@ def test_the_closest_tree_of_the_fixture_alignment_is_the_generating_topology(
 def test_a_spectrum_the_logarithm_cannot_take_is_refused() -> None:
     """The hard fixture at its 2,000 sites: ``H s`` has a non-positive entry, and it is refused.
 
-    Branches of 0.4 make the transformed entries products of small factors,
-    and sampling noise pushes one below zero; a conjugation that clamped it
-    would return weights for a spectrum no tree has.
+    Clamping it would return weights for a spectrum no tree has.
     """
     params = load_fixture(HARD)
     dataset = simulate_tree(params, np.random.default_rng(params.seed))

@@ -1,20 +1,9 @@
 """Successive cancellation, the list that fixes it, and what each one is held to.
 
-Issue #593. Four referees, in order of strength, and each answers a different
-question:
-
-1. **enumeration** gives the maximum-likelihood codeword at the declared
-   instance, so the gap successive cancellation leaves is *measured* rather
-   than cited --- and that gap is the reason list decoding exists;
-2. **a naive recursive reference** shares the arithmetic and none of the
-   layout, so ``SC`` is pinned to it **bitwise**;
-3. **``SCL(1) == SC``** and **``SCL(2^k) == ML``** pin the fork-and-prune
-   machinery at both ends: at one path there is nothing to prune, and at
-   ``2^k`` nothing is pruned, so the search is exhaustive;
-4. **monotonicity in the list size** is what a list is for, checked over
-   shared seeds rather than asserted from theory --- a larger list explores a
-   superset only because the metric orders the same way, which is a property
-   of this implementation.
+Issue #593. Enumeration gives the ML codeword, so SC's gap is measured; a naive
+recursive reference pins ``SC`` bitwise; ``SCL(1) == SC`` and
+``SCL(2^k) == ML`` pin the list at both ends; monotonicity in the list size
+is checked over shared seeds, as a property of this implementation.
 """
 
 from __future__ import annotations
@@ -138,14 +127,8 @@ def test_an_exhaustive_list_is_maximum_likelihood() -> None:
 
 @pytest.mark.oracle
 def test_the_gap_to_maximum_likelihood_is_what_the_list_closes() -> None:
-    # The measurement the ticket exists for, and the reason `N = 16` is the
-    # `ci` size rather than `8`: successive cancellation commits to each bit
-    # in order and cannot revisit, so it is not maximum likelihood, and the
-    # list closes most of what it gives up.
-    #
-    # At sigma = 1.0 over 200 shared draws: SC 98 block errors, SCL(4) 64,
-    # enumeration ML 62 --- the list recovers 34 of the 36 blocks SC loses,
-    # and the 62 are the channel's, beyond any decoder's reach.
+    # Why `N = 16` is `ci`: at sigma = 1.0 over 200 shared draws SC makes 98
+    # block errors, SCL(4) 64, ML 62; the list recovers 34 of SC's 36.
     code, check = _instance()
     channel = BinaryInputGaussianChannel(1.0)
 
@@ -170,29 +153,12 @@ CYCLE_FREE = PolarCode(2, np.array([1, 2, 3]))
 @pytest.mark.critical
 @pytest.mark.oracle
 def test_successive_cancellation_against_min_sum_on_the_same_parity_check() -> None:
-    # The rung below (issue #734): `likelihood.ldpc.decode`, sum-product and
-    # min-sum, run on the parity check `polar.parity_check` builds from the
-    # same code. A polar code is linear, so both decoders read one instance
-    # and one set of channel ratios, and the comparison is paired over seeds.
-    #
-    # Cycle-free first, where the rung below is exact and therefore a referee:
-    # `CYCLE_FREE`'s dual is a single check, so min-sum is blockwise maximum
-    # likelihood and sum-product's decision is the bitwise one. Over 200 draws
-    # both hold against enumeration on all 200. Successive cancellation, on the
-    # same draws, returns a different word on 4 of the 200 --- it commits to
-    # each source bit in order and cannot revisit --- and those 4 split 2 where
-    # both are wrong, 1 where SC is right and the likeliest word is not, 1 the
-    # other way, so the block error counts tie at 55 and the disagreement is
-    # what the count hides.
-    #
-    # Then the declared `N = 16` instance, where the dual is dense --- 28 pairs
-    # of its 8 checks overlap in two or more positions, so the graph is thick
-    # with four-cycles --- and neither decoder is exact. The ticket's bullet
-    # expects SC bounded by sum-product's error rate; the measurement runs the
-    # other way and is pinned in the direction it runs. Over the same 200
-    # draws at sigma = 1.0: enumeration 62 block errors, min-sum 81,
-    # sum-product 89, successive cancellation 98. BP on the loopy dual is
-    # nearer maximum likelihood than SC is, by 17 blocks of the 36 SC gives up.
+    # The rung below (#734): `ldpc.decode` on `polar.parity_check`, paired.
+    # Cycle-free (`CYCLE_FREE`, a single dual check): min-sum is blockwise ML,
+    # sum-product bitwise, both right on 200 of 200; SC differs on 4 (2 both
+    # wrong, 1 each way), so counts tie at 55. Declared `N = 16` (28 check
+    # pairs overlap in 2+ positions): ML 62, min-sum 81, sum-product 89, SC
+    # 98, so BP is nearer ML than SC, against the ticket's expectation.
     channel = BinaryInputGaussianChannel(1.0)
     check = parity_check(CYCLE_FREE)
     exact_min_sum = exact_sum_product = differing = 0
@@ -300,11 +266,8 @@ def test_the_decoder_refuses_what_it_cannot_answer_for() -> None:
 
 @pytest.mark.oracle
 def test_the_frozen_positions_carry_their_evidence_into_the_metric() -> None:
-    # The usual bug in a list decoder: a frozen bit forks nothing, so its
-    # penalty is easy to skip -- and then an unlikely prefix costs the same as
-    # a likely one and the list prunes the wrong paths. Certain ratios that
-    # *disagree* with a frozen zero must raise the metric above what an
-    # agreeing channel gives.
+    # A frozen bit forks nothing, so its penalty is easy to skip: ratios
+    # disagreeing with a frozen zero must raise the metric.
     code, _ = _instance()
     frozen_row = polar_transform(code.n_stages)[int(code.frozen[0])]
     outside = (1.0 - 2.0 * frozen_row.astype(float)) * 30.0
@@ -334,11 +297,8 @@ def _crc_codebook(code: PolarCode) -> list[np.ndarray]:
 
 @pytest.mark.oracle
 def test_crc_aided_exhaustive_list_is_maximum_likelihood_over_the_outer_code() -> None:
-    # The referee shares nothing with the list: every CRC-valid codeword is
-    # enumerated and scored by the channel's log-likelihood, ``sum (1 - 2c) L``
-    # under `sim.ldpc`'s convention that a positive ratio favours zero. The
-    # CRC-aided decoder at the exhaustive list must return that codeword, and
-    # must say the check passed (#826).
+    # Every CRC-valid codeword scored by ``sum (1 - 2c) L`` (`sim.ldpc`'s sign);
+    # the exhaustive list must return it and report the check passed (#826).
     code = _declared().code()
     codebook = _crc_codebook(code)
     assert len(codebook) == 32

@@ -1,23 +1,11 @@
 """Max-Cut, and a certificate that is not enumeration.
 
-Three references, of three different kinds, which is the reason for the
-ticket. Every other discrete claim in this repository rests on exhaustive
-enumeration and therefore stops at about twenty sites.
-
-1. **A construction whose answer is known at any size.** A complete bipartite
-   graph's maximum cut is every edge, because every edge joins the two parts.
-   No solver is needed to know that, so it is the check that this one is not
-   merely self-consistent.
-2. **Enumeration**, where it fits, as the true optimum.
-3. **The relaxation's own value**, as a computable bound past enumeration ---
-   with the qualification below, which is the honest half of the ticket.
-
-**The certificate is weaker than the theorem.** Goemans-Williamson assumes
-the semidefinite program is solved to optimality; this one is solved
-approximately, by Burer-Monteiro gradient ascent, because the repository
-carries no SDP solver. The symptom is measurable and is asserted rather than
-hidden: on an instance whose optimum the relaxation should bound from above,
-the ratio comes out *slightly above 1* --- impossible for an exact solve.
+References: a complete bipartite graph (the cut is every edge, at any size);
+enumeration where it fits; and the relaxation's value as a bound past it. The
+certificate is weaker than the theorem: Goemans-Williamson assumes an exact
+SDP, and Burer-Monteiro ascent solves it approximately (no SDP solver is
+carried), so on a bipartite graph the ratio comes out slightly above 1,
+asserted.
 """
 
 from __future__ import annotations
@@ -45,10 +33,7 @@ from tests._rows import every_row, every_value
 def _random_graph(n_nodes: int, density: float, seed: int) -> PottsGraph:
     """An Erdos-Renyi-shaped instance, which is *not* bipartite.
 
-    A lattice is bipartite, so its maximum cut is every edge and any solver
-    that separates the two colours is optimal. That makes it useless for
-    telling a good solver from a lucky one, which is why the interesting
-    fixtures here carry triangles.
+    On a bipartite lattice any colour-separating solver is optimal.
     """
     rng = np.random.default_rng(seed)
     edges = tuple(
@@ -125,15 +110,9 @@ def test_the_certificate_holds_where_the_optimum_is_unknown() -> None:
 
 @pytest.mark.smoke
 def test_the_relaxation_is_solved_approximately_and_says_so() -> None:
-    # The honest limit of the certificate, asserted rather than left in prose.
-    # An exactly solved relaxation upper bounds the true optimum, so the ratio
-    # could never exceed 1. Burer-Monteiro gradient ascent stops short, and on
-    # a bipartite graph -- where the optimum is exactly `|E|` -- the relaxation
-    # lands a hair below it and the ratio comes out just above 1.
-    #
-    # That is the evidence the certificate is weaker than the theorem: it
-    # certifies the rounding against the relaxation actually computed, not
-    # against the relaxation's optimum.
+    # An exact relaxation bounds the optimum `|E|`, so a ratio above 1 shows the
+    # ascent stopped short: the rounding is certified against the relaxation
+    # computed, not its optimum.
     graph = complete_bipartite(8, 6)
 
     result = goemans_williamson(graph, generator=torch.Generator().manual_seed(1))
@@ -145,11 +124,8 @@ def test_the_relaxation_is_solved_approximately_and_says_so() -> None:
 
 @pytest.mark.oracle
 def test_max_cut_is_the_antiferromagnetic_ising_ground_state() -> None:
-    # The identity the module rests on, checked rather than asserted in prose:
-    # with every coupling negative and no field, the minimum energy is the
-    # total weight less the maximum cut. A non-bipartite graph is used because
-    # on a bipartite one the maximum cut is every edge and the relation
-    # degenerates to `0 = 0`.
+    # All-negative, no field: minimum energy = total weight - max cut. Not
+    # bipartite, where it degenerates to `0 = 0`.
     def check(weight: float) -> None:
         positive = _random_graph(10, 0.45, 4)
         positive = PottsGraph(
@@ -181,11 +157,7 @@ def test_max_cut_is_the_antiferromagnetic_ising_ground_state() -> None:
 
 
 def _bipartite(left: int, right: int, seed: int) -> tuple[PottsGraph, np.ndarray]:
-    """A connected bipartite graph with drawn weights, and the side of each node.
-
-    Weights differ per edge so a solver counting edges rather than weighing
-    them is not handed the same answer.
-    """
+    """A connected bipartite graph with drawn per-edge weights, and each node's side."""
     rng = np.random.default_rng(seed)
     edges, weights = [], []
     for first in range(left):
@@ -202,26 +174,12 @@ def _bipartite(left: int, right: int, seed: int) -> tuple[PottsGraph, np.ndarray
 @pytest.mark.oracle
 @pytest.mark.critical
 def test_the_rounded_cut_is_the_gauged_alpha_expansion_optimum_at_two_labels() -> None:
-    # The rung below (issue #734), on the instances where both callables
-    # apply -- which is not every two-label instance, and saying which it is
-    # is half the test.
-    #
-    # Max-Cut is the *antiferromagnetic* Ising ground state, and a negative
-    # coupling is not submodular: `alpha_expansion` refuses it outright, as
-    # the second half below asserts. The two meet where the antiferromagnet
-    # can be gauged into a ferromagnet, which for an all-negative instance is
-    # exactly where the graph is bipartite: flipping one side of the
-    # bipartition turns every disagreeing edge into an agreeing one, so the
-    # expansion's optimum maps to a cut of the same weight. On a
-    # non-bipartite instance no such gauge exists, which is the boundary this
-    # rung of the ladder stops at, and there the rounded cut carries the
-    # relaxation ratio instead of a rung below it.
-    #
-    # Realized: the expansion's energy -17.09743549305819 from a drawn start,
-    # the rounded cut 17.09743549305819, difference 0.0 against the 1e-12
-    # declared, and the two assignments equal up to the global flip. On the
-    # frustrated instance the rounded cut is the enumerated maximum, 18.0,
-    # at a ratio of 0.8898 against the 0.87856 the rounding guarantees.
+    # The rung below (#734). Max-Cut is the antiferromagnetic ground state,
+    # which `alpha_expansion` refuses (asserted); on a bipartite graph a gauge
+    # flip makes it ferromagnetic. Realized: expansion -17.09743549305819,
+    # rounded cut 17.09743549305819, 0.0 (1e-12), equal up to the global flip.
+    # Frustrated: the rounded cut is the enumerated 18.0, ratio 0.8898 against
+    # the guaranteed 0.87856.
     graph, side = _bipartite(4, 5, seed=17)
     total = float(graph.edge_coupling.sum())
     start = np.random.default_rng(3).integers(0, 2, size=graph.n_nodes)

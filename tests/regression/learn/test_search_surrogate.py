@@ -1,17 +1,10 @@
 """Surrogates in the topology search (issue #308).
 
-The analytic bounds and the learned predictors rank a neighbourhood the
-search then fits only the top of; what they cost, what they miss, and
-whether the search's answer moves are the measurements. The learned models
-are trained on alignments whose every topology has been fitted and scored
-on alignments they never saw.
-
-Fitting that training set is what made the learned half slow, not the
-learning: 45 maximum-likelihood fits at 200 sites are 7.5 s and the two
-surrogates fitted to them are 0.1 s. The fits are a reference computation on
-a declared fixture, so they are the ``tree_search/ci`` baseline record, and
-the per-pull-request test reads them (issue #401). The six-alignment run at
-the release gate still fits its own.
+Analytic bounds and learned predictors rank a neighbourhood the search fits
+only the top of; measured are cost, misses, and whether the answer moves.
+Learned models are scored on alignments they never saw. 45 fits at 200 sites
+cost 7.5 s against 0.1 s for the surrogates, so the per-PR test reads them
+from the ``tree_search/ci`` baseline (#401); the release run fits its own.
 """
 
 from __future__ import annotations
@@ -75,13 +68,7 @@ def _alignments(n: int) -> tuple[list[dict[str, np.ndarray]], int, np.ndarray]:
 def _recorded_target(problem: str, tier: str) -> TreeTarget:
     """The committed maximized log-likelihoods, replayed in the order they were taken.
 
-    `tree_examples` calls its target once per topology per alignment, outer
-    loop over alignments and inner over `enumerate_topologies`, which is the
-    order `infra/baselines.py` recorded them in. Replaying a cursor rather
-    than keying on the topology is deliberate: a mis-alignment between the
-    two orders is then a wrong number rather than a lookup miss, and the
-    caller checks every replayed number against the analytic bound it has to
-    exceed.
+    A cursor, not a key: a misordering is a wrong number the bound check catches.
     """
     remaining = iter(baseline(problem, tier).values("maximized_log_likelihood"))
 
@@ -94,13 +81,9 @@ def _recorded_target(problem: str, tier: str) -> TreeTarget:
 @pytest.mark.end2end
 @pytest.mark.release
 def test_learned_surrogates_rank_held_out_neighbourhoods() -> None:
-    # Six alignments, every topology of each fitted (90 fits at 200 sites),
-    # split by alignment: three to train, two to validate, one held out. The
-    # models learn the gap above the plug-in bound, so the linear model on
-    # the bound features and the set model on the branch tokens both explain
-    # the held-out maximized log-likelihood (R^2 0.86 and 0.9 measured, the
-    # 15 held-out values spanning 4 nats) and rank its best first; the set
-    # model gives the same value for a shuffled spelling of a tree.
+    # Six alignments, 90 fits at 200 sites, split 3/2/1 by alignment. On the
+    # gap above the plug-in bound: R^2 0.86 (linear) and 0.9 (set) over 15
+    # held-out values spanning 4 nats; the set model ignores child order.
     alignments, k, pi = _alignments(6)
     topologies = [list(enumerate_topologies(sorted(a))) for a in alignments]
     examples = tree_examples(alignments, topologies, k, pi, maximized_target(k))
@@ -135,15 +118,9 @@ def test_learned_surrogates_rank_held_out_neighbourhoods() -> None:
 
 @pytest.mark.end2end
 def test_learned_surrogates_rank_a_held_out_alignment_from_the_recorded_fits() -> None:
-    # The per-pull-request sibling of the six-alignment run above (issue
-    # #401). Three alignments, one each to train, validate and hold out, and
-    # the 45 maximum-likelihood fits read from the `tree_search/ci` baseline
-    # record rather than recomputed -- 7.5 s of the 12.2 s that moved the
-    # release-tier test out of the tier. Every replayed target is checked
-    # against the plug-in lower bound computed here, so a record read in the
-    # wrong order fails rather than trains a model on shuffled labels.
-    # Measured on the three alignments: R^2 0.912 for the linear model and
-    # 0.953 for the set model, each ranking the held-out best first.
+    # The per-PR sibling (#401): three alignments, the 45 fits read from the
+    # baseline (7.5 s of 12.2 s), each checked against the plug-in bound.
+    # Measured: R^2 0.912 (linear), 0.953 (set), both ranking the best first.
     alignments, k, pi = _alignments(3)
     topologies = [list(enumerate_topologies(sorted(a))) for a in alignments]
     examples = tree_examples(
@@ -195,22 +172,10 @@ def _spearman(first: np.ndarray, second: np.ndarray) -> float:
 @pytest.mark.oracle
 @pytest.mark.critical
 def test_the_learned_surrogate_ranks_the_topologies_the_plug_in_bound_ranks() -> None:
-    # The rung below (issue #734): the analytic surrogate the learned one
-    # replaces. `tree_examples` offsets every target by the plug-in bound, so
-    # the model predicts the *gap* above it and the two rankings are related
-    # by construction -- what is not given is how much of the ranking the
-    # learned gap moves, and that is what is pinned.
-    #
-    # One alignment held out of three, its 15 topologies ranked by
-    # `LearnedTreeSurrogate` and by `PlugInLikelihood`, against the 45
-    # maximum-likelihood fits read from the `tree_search/ci` baseline record
-    # rather than refitted (issue #401), as its sibling above reads them.
-    # Realized on the held-out alignment: rank correlation 0.896 between the
-    # two rankings, against the 0.8 declared, and both put the fitted best
-    # first. The correlation is also strictly below 1 -- 10 of the 105 pairs
-    # are ordered differently -- so the learned model is not the bound with a
-    # shift, and it is the closer of the two to the fitted truth, 0.893
-    # against the bound's 0.804.
+    # The rung below (#734): `PlugInLikelihood`, whose bound offsets the
+    # target. Held-out 15 topologies against the recorded fits: rank
+    # correlation 0.896 between the two (0.8 declared), 10 of 105 pairs
+    # differ, both put the best first; learned 0.893 to the truth, bound 0.804.
     alignments, k, pi = _alignments(3)
     topologies = [list(enumerate_topologies(sorted(a))) for a in alignments]
     examples = tree_examples(

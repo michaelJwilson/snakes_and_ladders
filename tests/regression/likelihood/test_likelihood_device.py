@@ -109,23 +109,14 @@ def test_every_device_the_policy_selects_holds_its_tolerance_to_the_numpy_oracle
     None
 ):
     """The three routes the policy can take, each judged against
-    `pruning.log_likelihood` --- the NumPy reference `likelihood/CLAUDE.md`
-    declares the oracle --- at the tolerance `cross_device_rtol` returns for
-    the dtype `default_dtype` hands that route.
+    `pruning.log_likelihood` (the NumPy oracle) at `cross_device_rtol` for the
+    dtype `default_dtype` hands that route.
 
-    Realized relative deviation, over `tree_jc/ci` (20,000 sites) and
-    `tree_jc/stress` (200,000): cuda and cpu take float64 and are bitwise the
-    oracle, 0.0 against a 1e-11 bound; mps takes float32 and reads 5.38e-08
-    and 3.23e-08 against a 1e-06 bound, 31x inside it at the worse of the two.
-    `device.py`'s table reads 4.41e-08 on the second fixture, measured at the
-    host's default thread count where the suite pins the BLAS to one
-    (`tests/conftest.py`): a reduction order, not a disagreement, and the
-    float32 figure is reported rather than pinned for that reason.
-
-    The arithmetic runs on CPU in both dtypes, so the number is evidence on a
-    runner with neither accelerator; what is exercised here is the *policy*,
-    which is the part that is pure. The float32 route is the same arithmetic
-    Metal does, which makes the float32 tolerance evidence rather than a guess.
+    Over `tree_jc/ci` (20,000 sites) and `tree_jc/stress` (200,000): cuda and
+    cpu (float64) are bitwise, 0.0 against 1e-11; mps (float32) reads 5.38e-08
+    and 3.23e-08 against 1e-06, 31x inside. `device.py`'s 4.41e-08 was at the
+    host's thread count, not the suite's one: a reduction order. The arithmetic
+    runs on CPU, which is the arithmetic Metal does in float32.
     """
     assert available_device() in {"cuda", "mps", "cpu"}
     print("\nrelative deviation from the NumPy oracle, per selected route:")

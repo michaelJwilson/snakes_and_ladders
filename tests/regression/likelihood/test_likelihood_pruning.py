@@ -1,23 +1,11 @@
 """Regression tests for ``snakes_and_ladders.likelihood.pruning``.
 
-Four independent checks per issue #62, no two sharing an implementation:
-
-- Brute-force agreement at ``n <= 6`` taxa, to machine precision
-  (``test_pruning_matches_brute_force``), for every route in ``ROUTES`` --- a
-  genuinely different algorithm (direct marginalization,
-  ``snakes_and_ladders.likelihood.brute_force``), not a second opinion from
-  the same recursion.
-- Rescaled and unrescaled paths agreeing on small problems where both run
-  (``test_rescaled_and_unrescaled_agree_on_small_problems``), per route, the
-  check ``docs/tex/textbook.tex`` calls for after ``eq:pruning``.
-- The pulley principle (``test_pulley_principle_is_invariant_to_root_position``):
-  JC is reversible (pinned by
-  ``tests/regression/test_jc_simulate.py``'s detailed-balance test), so
-  sliding the root along the branch joining its two children -- splitting
-  ``t`` into any ``t1 + t2`` -- must leave ``ln L`` unchanged.
-- Scientific validity (``test_generating_topology_outscores_random_wrong_topologies``):
-  on a simulated dataset, the generating topology scores above ``N`` random
-  wrong topologies at sufficient sites.
+Four independent checks per issue #62: brute force at ``n <= 6`` taxa to
+machine precision, per route in ``ROUTES``
+(``snakes_and_ladders.likelihood.brute_force``); rescaled against unrescaled
+(after ``eq:pruning``); the pulley principle, JC being reversible
+(``test_jc_simulate.py``); and the generating topology outscoring ``N`` random
+wrong ones at sufficient sites.
 """
 
 from __future__ import annotations

@@ -1,15 +1,9 @@
 """The count-emission mixture simulator, against the closed forms it declares.
 
-The Gaussian mixture's simulator is checked against the law of total variance
-(``tests/regression/sim/test_mixture_simulate.py``); the same two checks apply
-here, and the second is where a two-channel emission differs: the mixture's
-moments are per channel, and the depth and the allele count each have their
-own law of total variance over the component label.
-
-The instances are built inline where the sample size is the variable a Monte
-Carlo bound is checked over, and where the input is deliberately malformed.
-The declared instance is read from the registry, never restated
-(``sim/CLAUDE.md``).
+The Gaussian mixture's two checks (``test_mixture_simulate.py``), with the
+law of total variance applied per channel (depth and allele count). Inline
+instances where sample size is the variable or the input is malformed; the
+declared instance comes from the registry (``sim/CLAUDE.md``).
 """
 
 from __future__ import annotations
@@ -58,12 +52,8 @@ def test_the_component_labels_appear_at_their_declared_weights() -> None:
 
 @pytest.mark.analytic
 def test_each_channel_matches_its_own_law_of_total_variance() -> None:
-    # `E[Y] = sum_k w_k m_k` and
-    # `Var[Y] = sum_k w_k (v_k + m_k**2) - E[Y]**2`, once per channel, with
-    # `m_k` and `v_k` the component's own moments. The closed form is the
-    # family's, so what this checks is the *mixing*: a simulator that drew the
-    # right components in the wrong proportions would pass the frequency test
-    # above and fail this one.
+    # `E[Y] = sum_k w_k m_k`, `Var[Y] = sum_k w_k (v_k + m_k**2) - E[Y]**2` per
+    # channel: checks the mixing proportions the frequency test cannot.
     dataset = simulate_emission_mixture(_params())
     components = _params().components
     assert isinstance(components, CountPairEmission)

@@ -251,15 +251,7 @@ def test_mcnemar_reproduces_the_exact_binomial_test_on_every_small_table() -> No
     """`mcnemar` against `scipy.stats.binomtest`, the exact binomial test, on
     every contingency table with up to twelve discordant instances either way.
 
-    The referee is outside the implementation and outside this file: the
-    p-value is the two-sided exact binomial tail at ``p = 1/2`` on the
-    discordant count, and `scipy` computes it from the pmf where `mcnemar`
-    sums binomial coefficients. Concordant instances carry no evidence, so
-    five of them sit in every table and must not move the answer.
-
-    Realized over the 168 tables: the largest relative deviation is
-    **1.84e-16**, two ulps, against a declared 1e-12. The smallest p-value a
-    table reaches here is 2 / 2**24 = 1.19e-07 and the largest is 1.0.
+    168 tables, five concordant each: worst 1.84e-16 (two ulps) against 1e-12.
     """
     worst = 0.0
     for only_first in range(13):
@@ -293,15 +285,7 @@ def test_mcnemar_reproduces_the_exact_binomial_test_on_every_small_table() -> No
 def test_a_hand_built_comparison_reports_the_hits_gaps_and_p_value_it_must() -> None:
     """One comparison whose every cell is determined, against arithmetic done here.
 
-    The methods return a value fixed by the instance, so the table is not a
-    measurement and there is nothing to average: `first` reaches the known
-    optimum on all six instances, `second` on two and misses four by 1.0. The
-    hits, the mean gaps ``0`` and ``4/6`` and the p-value follow in closed
-    form, and the p-value is the exact binomial on the four discordant
-    instances --- all four `first`'s --- ``2 * C(4,0) / 2**4 = 0.125``.
-
-    Exact equality, not a tolerance: every quantity is a count or a ratio of
-    small integers. Realized 0.125 against `scipy.stats.binomtest`'s 0.125.
+    Hits 6 and 2, gaps 0 and 4/6, p = ``2 * C(4,0) / 2**4 = 0.125``, exactly.
     """
     instances = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
 
@@ -324,11 +308,7 @@ def test_a_hand_built_comparison_reports_the_hits_gaps_and_p_value_it_must() -> 
 def test_four_workers_report_the_comparison_one_worker_reports() -> None:
     """The cells of a comparison are independent by construction (issue #344).
 
-    Each seeds its own generator from ``[seed, index]``, so running them on a
-    process pool changes when they run and nothing about what they draw; the
-    two tables are equal bitwise, not within a tolerance. ``restarts`` is
-    included because it has to cross the process boundary, which a closure
-    could not.
+    Seeded from ``[seed, index]``: pooled and serial tables equal bitwise.
     """
     methods = {"single": _draw, "restarts": restarts(_draw, 1)}
     instances = [0.0, 10.0, 20.0]
@@ -349,10 +329,7 @@ def test_a_pooled_worker_runs_torch_at_one_intra_op_thread(
 ) -> None:
     """Four workers on four cores use four threads, not sixteen (issue #891).
 
-    A spawned worker reads ``OMP_NUM_THREADS`` and ``MKL_NUM_THREADS`` when it
-    imports torch, and the suite pins both to one, so they are widened here:
-    without the pin in :func:`compare` each worker reports the four it was
-    started at, which this test did before the pin.
+    The thread variables are widened here, since the suite pins them to one.
     """
     for variable in ("OMP_NUM_THREADS", "MKL_NUM_THREADS"):
         monkeypatch.setenv(variable, "4")

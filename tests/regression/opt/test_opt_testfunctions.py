@@ -1,20 +1,10 @@
 """The optimizer against minimizers known in closed form, not against a model.
 
-Every other test of `fit` measures a statistical property of a likelihood
-surface, so an optimizer that stops early and a parameter that is weakly
-identified produce the same symptom and nothing separates them. These
-functions have analytic minimizers and no model behind them, so a failure
-here is the optimizer's.
-
-Three properties, three functions, and the third is the one that changes what
-may be claimed elsewhere: on a multimodal surface `converged` means the
-first-order condition holds, not that the global minimum was found, and the
-measured rate below says how far apart those are.
-
-The functions are constructed inline at the dimensions and starts each
-property needs --- including ones chosen to be hard --- rather than read from
-the test-function fixture, which declares the two-dimensional instances the
-figure and the multi-start study are run on.
+With no model behind them a failure here is the optimizer's, not weak
+identification. On a multimodal surface `converged` means the first-order
+condition, not the global minimum, and the measured rate says how far apart
+those are. Built inline at the dimensions and starts each property needs;
+the fixture declares the 2-D instances the figure uses.
 """
 
 from __future__ import annotations
@@ -146,12 +136,8 @@ def test_all_four_himmelblau_minima_are_reachable() -> None:
 
 @pytest.mark.smoke
 def test_a_converged_fit_on_rastrigin_is_not_a_global_minimum() -> None:
-    # Measured, not asserted as a success: over 40 starts drawn uniformly from
-    # the standard domain, a single L-BFGS fit reached the global minimum 0
-    # times in 200 at this spread, and 4% when the draw is restricted to
-    # +/- 2. What is asserted is the consequence -- that `converged` reports
-    # the first-order condition and nothing about global optimality, so any
-    # claim built on a single fit of a multimodal surface has to say so.
+    # Measured: 0 of 200 fits reached the global minimum at this spread, 4%
+    # at +/- 2; asserted: `converged` says nothing about global optimality.
     rng = np.random.default_rng(20260904)
     objective = Rastrigin(dimension=2)
 
@@ -200,30 +186,12 @@ def test_the_fixtures_declared_instances_are_what_they_declare() -> None:
     """Every minimizer the fixture declares, against the closed forms, and a
     fit from each declared start against the minimizer it declares.
 
-    The fixture's ``minimizers`` are its oracle --- the multi-start study
-    scores against them and nothing recomputes them --- so a typo in the yaml
-    moves the answer every figure and every success rate is read against.
-    Three referees, none of them the loader and none of them
-    :data:`HIMMELBLAU_MINIMA`: the published values above, the function's own
-    value and closed-form gradient at the declared point, and the eigenvalues
-    of its Hessian there, which must be positive or the point is no minimum
-    (``sec:testfunctions``).
-
-    Rosenbrock's ``(1, 1)`` and Rastrigin's origin are exact and land bitwise:
-    value 0.0 and gradient norm 0.0. Himmelblau's first is exact and its other
-    three are published to six decimals, so the bound is that precision
-    squared through the function --- realized value at most **1.10e-11**
-    against 1e-09, gradient norm at most **4.19e-05** against 1e-03 --- and
-    every declared point equals the published one exactly. Smallest Hessian
-    eigenvalue over the six points: **0.40**, Rosenbrock's, whose valley floor
-    is nearly flat; Rastrigin's is 396.78.
-
-    The fit from each declared start is the pairing the catalogue makes and
-    this closes: one L-BFGS run per function, scored against the declared
-    minimizers at the fixture's own ``at_minimum`` of 1e-04. All three
-    converge and land on a declared minimizer at a distance of **0.0** ---
-    Rosenbrock from -1.2, Rastrigin from the origin it already sits in, and
-    Himmelblau from the origin, which is in no basin --- with value 0.0.
+    Referees: published values, the value and gradient at the point, and a
+    positive Hessian (``sec:testfunctions``). Rosenbrock and Rastrigin land
+    bitwise (0.0, 0.0); Himmelblau's six-decimal points give value <= 1.10e-11
+    (1e-09) and gradient <= 4.19e-05 (1e-03). Smallest eigenvalue 0.40
+    (Rosenbrock), Rastrigin 396.78. Each declared start converges to its
+    minimizer at distance 0.0 (``at_minimum`` 1e-04).
     """
     suite = load_params(path_of("test_functions", "ci"), TestFunctionSuite)
     declared = suite.named()

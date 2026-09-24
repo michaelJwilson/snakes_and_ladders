@@ -181,17 +181,9 @@ def test_potts_point_estimates_land_near_the_truth() -> None:
 @pytest.mark.end2end
 @pytest.mark.release
 def test_hmm_interval_coverage_approaches_nominal_with_sample_size() -> None:
-    # Release-gated: 15 fits at four times the fixture size is ~30 s.
-    #
-    # The measured progression, on this fixture, over the whole parameter
-    # set: 0.908 at 300 sequences, 0.939 at 1200, 0.984 at 4800. The
-    # shortfall at small samples is not a wrong formula -- it shrinks
-    # monotonically as the sample grows, which is what an asymptotic
-    # approximation does and a wrong one does not. Two reasons it is
-    # visible here and not for the Potts chain: some emission probabilities
-    # are fitted near zero, where a Wald interval on the log scale is a poor
-    # approximation, and aligning the state permutation to truth is a
-    # post-selection step that costs a little coverage.
+    # Release-gated: 15 fits at 4x the fixture, ~30 s. Measured coverage 0.908
+    # at 300 sequences, 0.939 at 1200, 0.984 at 4800: asymptotic, shrinking;
+    # near-zero emissions and post-selected state alignment cost some.
     base = load_params(HMM_FIXTURE, HmmParams)
     truth = {
         "log_initial": torch.log(torch.as_tensor(base.initial)),
@@ -263,12 +255,7 @@ def test_the_gradient_fit_agrees_with_baum_welch() -> None:
 
 
 class _Quadratic:
-    """A two-parameter objective whose second parameter does nothing.
-
-    The smallest thing that is genuinely unidentifiable, used to check that
-    the singular case is reported as a modelling fault rather than as a
-    linear-algebra error.
-    """
+    """A two-parameter objective whose second parameter does nothing."""
 
     def initial(self) -> torch.Tensor:
         return torch.zeros(2, dtype=torch.float64)
@@ -293,14 +280,9 @@ def test_a_singular_information_matrix_is_reported_as_unidentifiable() -> None:
 
 @pytest.mark.smoke
 def test_an_estimate_on_the_boundary_has_no_interval() -> None:
-    # Not a contrived matrix: at a small enough sample the HMM's
-    # maximum-likelihood estimate puts an emission probability at zero, and
-    # on the boundary the curvature in that direction vanishes. The
-    # information is then singular only *numerically* -- rounding leaves its
-    # smallest eigenvalue near 1e-14 rather than at 0 -- so torch inverts it
-    # successfully and returns an astronomically large covariance. Refusing
-    # is the whole point of checking the conditioning rather than trusting
-    # the inversion to fail.
+    # At a small sample an emission is fitted at zero and the information is
+    # singular numerically (eigenvalue ~1e-14): torch inverts it anyway, so the
+    # conditioning is checked.
     base = load_params(HMM_FIXTURE, HmmParams)
     params = replace(base, lengths=(5,) * 30)
     objective = HmmObjective(

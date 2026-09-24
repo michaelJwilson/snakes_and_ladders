@@ -1,18 +1,11 @@
 """The profiled mean is a matmul, and what that costs (#649, #651 candidate 3).
 
-Four count families compute a posterior-weighted mean in their M step. Written
-elementwise it materialises an ``(n_obs, n_states)`` intermediate --- 80.7 MB at
-the scale `ROADMAP.md` declares --- which ``weights.T @ values`` does not.
-
-A matmul reduces in a different order, so this is the trade `CLAUDE.md` permits:
-bitwise is the target, the declared tolerance is the floor, and the measured
-difference is stated rather than assumed small. It is **1.3e-14** relative,
-three orders inside the **1e-11** declared for a float64 comparison.
-
-What is asserted here is the bound, against the elementwise form computed in
-the test. There is no conserved copy to referee these two against ---
-`sandbox.count_emissions` holds the negative binomial and the beta-binomial
-only --- so the reference is written out rather than imported.
+Four count families compute a posterior-weighted mean in their M step;
+elementwise it materialises an ``(n_obs, n_states)`` intermediate --- 80.7 MB
+at `ROADMAP.md`'s scale --- which ``weights.T @ values`` does not. The matmul
+reorders the reduction: the measured difference is **1.3e-14** relative,
+inside the **1e-11** declared for float64. The referee is the elementwise form
+written in the test; `sandbox.count_emissions` holds only two of the families.
 """
 
 from __future__ import annotations

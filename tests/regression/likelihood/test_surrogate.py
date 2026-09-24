@@ -129,11 +129,9 @@ def test_parsimony_bound_is_above_every_fitted_likelihood(scored: Scored) -> Non
 @pytest.mark.oracle
 @pytest.mark.analytic
 def test_parsimony_bound_is_the_maximum_over_the_vertices() -> None:
-    # The site likelihood is multilinear in one variable per branch under
-    # Jukes--Cantor, so its maximum over lengths is at a vertex where each
-    # branch is the identity or the uniform matrix. Enumerating the 2^8
-    # vertices: the per-site maximum equals pi(x_1) k^{-F_s} on every site,
-    # and pruning at random lengths never exceeds it.
+    # Multilinear per branch under JC, so the maximum over lengths is at a
+    # vertex: over the 2^8 vertices it is pi(x_1) k^{-F_s} per site, and
+    # random lengths never exceed it.
     alignment, k, pi = _alignment(40)
     rng = np.random.default_rng(3)
     identity, uniform = np.eye(k), np.full((k, k), 1.0 / k)
@@ -184,18 +182,9 @@ def _scaled(tau: Node, factor: float) -> Node:
 @pytest.mark.oracle
 @pytest.mark.critical
 def test_prune_with_matrices_is_the_enumeration_at_the_jukes_cantor_matrices() -> None:
-    """Handed `P(t)` per branch, the arbitrary-matrix recursion is the
-    Jukes--Cantor likelihood: against direct marginalization over the internal
-    states, `brute_force_log_likelihood`, at three scalings of the five-taxon
-    fixture's branch lengths over 60 sites. Realized 3.29e-16, 1.87e-16 and
-    0.0 relative, against a declared 1e-12.
+    """Handed `P(t)` per branch, the arbitrary-matrix recursion is the JC likelihood.
 
-    The generality is what leaves it unrefereed by the module's own tests ---
-    the parsimony bound feeds it vertices of the matrix box, which nothing
-    else computes --- so it is pinned where the matrices are a model an oracle
-    also scores, and the rest of its domain rests on that recursion being the
-    one checked here. Enumeration and not `pruning`: it is the foot of the
-    tree ladder, and one referee per seam (issue #717).
+    `brute_force_log_likelihood`, 3 scalings: 3.29e-16, 1.87e-16, 0.0 (1e-12; #717).
     """
     alignment, k, pi = _alignment()
     params = load_fixture(FIVE_TAXA)
@@ -240,11 +229,8 @@ def test_least_squares_lengths_are_feasible_and_fit_the_distances() -> None:
 @pytest.mark.bug
 @pytest.mark.smoke
 def test_least_squares_lengths_are_bitwise_across_repeated_calls() -> None:
-    # `torch.linalg.lstsq`'s CPU default, MKL `gelsy`, returned up to 42
-    # ulp-different solutions in 1,000 calls on one 10x7 system, and 9 of the
-    # 15 topologies' lengths differed across three repeats (issue #1026). The
-    # fit is a NumPy `gelsd` solve now; 100 repeats give one answer bitwise,
-    # topology by topology, and so does the plug-in bound evaluated at them.
+    # MKL `gelsy` gave 42-ulp-different solutions in 1,000 calls and moved 9
+    # of 15 topologies (#1026); NumPy `gelsd` gives one answer in 100 repeats.
     alignment, k, pi = _alignment()
     distances = jc_distances(alignment, k)
     bound = PlugInLikelihood(k, pi)

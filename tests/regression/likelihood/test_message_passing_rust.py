@@ -1,28 +1,13 @@
 """The Rust tree schedule against the NumPy oracle and against enumeration (issue #754).
 
-`likelihood/CLAUDE.md`: the reference implementation is the oracle and it
-stays, and a backend is accepted or rejected against a stated bound rather
-than adjusted until it matches. Two claims are separated here rather than
-merged into the looser one.
-
-* **Exactly equal** where the output is a decision rather than a float: the
-  max-product assignment, the guarantee, the pass count and which marginals
-  are defined are the NumPy route's on every fixture below.
-* **Inside `CROSS_DEVICE_RTOL_FLOAT64`** on the marginals and `log Z`. The
-  kernel's arithmetic is the oracle's operation for operation --- the same
-  sums in the same order --- and what is left is that NumPy's vectorized
-  `exp` and `log` differ from `libm`'s in the last place, which
-  `snakes_and_ladders.backend` states as the standing reason a compiled
-  route is not bitwise. Realized over the fixtures below: **3.3e-15**
-  absolute and **7.2e-15** relative on the marginals, **1.4e-14** absolute
-  and **2.0e-16** relative on `log Z`.
-
-Both routes are then pinned to enumeration, which shares no recursion with
-either, so the pair is not established by agreeing with each other alone:
-`sum_product` and `max_product` default to this kernel, and
-`test_message_passing.py::test_every_chain_evaluator_is_the_path_enumeration`
-holds that default to the enumerated marginals, `log Z` and Viterbi path
-(issue #982 dropped the two chain tests here that repeated it).
+Decisions are exactly equal: the max-product assignment, the guarantee, the
+pass count and which marginals are defined. Floats are inside
+`CROSS_DEVICE_RTOL_FLOAT64`: the same sums in the same order, with NumPy's
+vectorized `exp` and `log` differing from `libm`'s in the last place
+(`snakes_and_ladders.backend`). Realized: 3.3e-15 absolute and 7.2e-15
+relative on the marginals, 1.4e-14 and 2.0e-16 on `log Z`. The default is
+held to enumeration in
+`test_message_passing.py::test_every_chain_evaluator_is_the_path_enumeration` (#982).
 """
 
 from __future__ import annotations
@@ -73,10 +58,7 @@ def _random_tree(
 ) -> FactorGraph:
     """A tree of factors of one degree, each joining a new variable to the graph.
 
-    Degree three and four are what a chain does not exercise: a factor there
-    reduces two or three axes to send along one, which is the reduction the
-    kernel walks in row-major order and NumPy reaches through
-    ``transpose(...).reshape(n, c, -1)``.
+    Degrees three and four reduce two or three axes: the row-major walk.
     """
     rng = np.random.default_rng(seed)
     variables = [Variable(f"v{i}", cardinality) for i in range(n_variables)]
@@ -150,11 +132,8 @@ def _assert_agrees(realized: Marginals, expected: Marginals, tag: str) -> None:
 def test_the_kernel_writes_the_oracle_s_messages_edge_for_edge(
     tag: str, maximum: bool
 ) -> None:
-    # The kernel against the loop it replaces, message for message and then
-    # belief for belief: the beliefs sum the messages, and a sum can agree
-    # where its terms do not. The oracle is the NumPy route of the same
-    # function, which `test_message_passing.py` pins bitwise against the
-    # dictionary reference and against enumeration.
+    # Message for message, then belief for belief: a sum can agree where its
+    # terms do not. The oracle is the NumPy route, pinned in `test_message_passing.py`.
     graph = TREES[tag]
 
     to_variable, to_factor = message_passing_rust.tree_messages(

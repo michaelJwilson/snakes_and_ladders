@@ -94,11 +94,8 @@ def test_the_relaxation_reaches_the_enumerated_ground_state_of_the_declared_glas
 
 @pytest.mark.oracle
 def test_at_two_labels_the_relaxation_is_read_against_the_exact_cut() -> None:
-    # The cut is exact, so the relaxation's energy is bounded below by it on
-    # every instance and the bound is asserted; on a lattice whose per-site
-    # field decides most sites, the relaxation lands above the cut on most
-    # fields --- measured 1 of 6 at the optimum, a mean gap of 1.09 --- which
-    # is the regime statement the textbook makes, recorded rather than hidden.
+    # The exact cut bounds the relaxation below, asserted; with a dominant
+    # field it lands above (1 of 6 at the optimum, mean gap 1.09), as stated.
     rng = np.random.default_rng(0)
     graph = lattice_graph((4, 4), BoundaryCondition.OPEN, 0.4)
     gaps = []

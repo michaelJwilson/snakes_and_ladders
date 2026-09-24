@@ -1,18 +1,11 @@
 """The projected fit read to its end, against the truth the draw was made from (issue #729).
 
-`test_projection_seeding.py` compares eight seedings at a fixed six-iteration
-budget, so three things in `search/projection.py` were entered by no test at
-#729's measurement: the convergence test that ends a fit, the log-likelihood
-a `Fitted` reports, and `SeededFit`, the `opt.budget` method the release
-sweep runs every candidate through.
-
-All three are read here on one draw whose components are planted, so the
-referee is that draw's own truth --- which observation each component
-generated, and the negative-binomial mean each was drawn from --- as
-`Fitted`'s own docstring states. The draw is 100 observations rather than the
-sibling module's 4,000 because the fit has to run to convergence and the cost
-is one pass per iteration: 134 iterations in 4 s here against 266 in 11 s at
-400.
+Three things `test_projection_seeding.py` never reached: the convergence test,
+the log-likelihood a `Fitted` reports, and `SeededFit`, the `opt.budget`
+method the release sweep uses. Referee: the planted draw's truth (each
+observation's component, each negative-binomial mean). 100 observations,
+since the fit runs to convergence: 134 iterations in 4 s, against 266 in
+11 s at 400.
 """
 
 from __future__ import annotations
@@ -82,13 +75,9 @@ def _seam() -> CountPairAt:
 
 @pytest.mark.end2end
 def test_a_converged_projected_fit_recovers_the_components_it_was_drawn_from() -> None:
-    # The fit driven to its own convergence test rather than to a budget, and
-    # judged against the planted truth: the generating component of every
-    # observation, and the generating negative-binomial mean of each
-    # component under the assignment `scipy`'s linear assignment gives.
-    # Realized: 134 iterations of a 150 budget, recovery 0.690 against a
-    # chance of 0.25, largest relative mean error 0.246, and a log-likelihood
-    # curve that never decreases over its 135 entries.
+    # To convergence against the planted truth (`scipy` linear assignment):
+    # 134 of 150 iterations, recovery 0.690 (chance 0.25), worst mean error
+    # 0.246, log-likelihood never falling over 135 entries.
     fitted = fit_projection(_instance(), "kmeans++", _seam(), CONVERGED_BUDGET, rng())
 
     assert fitted.iterations < CONVERGED_BUDGET.size, fitted.iterations
@@ -104,13 +93,8 @@ def test_a_converged_projected_fit_recovers_the_components_it_was_drawn_from() -
 
 @pytest.mark.end2end
 def test_the_budget_method_reports_the_fit_it_runs() -> None:
-    # `opt.budget.compare` ranks candidates by an `Outcome`, so what the
-    # release sweep compares is this method's value and not the fit's. It is
-    # the fit's negated log-likelihood and its iteration count, bitwise, on
-    # the same draw and the same seed; the fit beside it is judged against
-    # the planted truth, so a method reporting something else is reporting
-    # something unrefereed. Realized at the six-iteration budget: value
-    # 809.350605, 6 iterations, recovery 0.660 against a chance of 0.25.
+    # The method's `Outcome` is the fit's negated log-likelihood and iteration
+    # count, bitwise: 809.350605, 6 iterations, recovery 0.660 (chance 0.25).
     instance, at = _instance(), _seam()
 
     outcome = SeededFit("kmeans++", at)(instance, SHORT_BUDGET, rng())
@@ -125,11 +109,8 @@ def test_the_budget_method_reports_the_fit_it_runs() -> None:
 @pytest.mark.patch
 @pytest.mark.analytic
 def test_the_last_value_is_the_one_a_further_iteration_would_report() -> None:
-    # Issue #891: the value and posterior at the last parameters were read
-    # off one more EM iteration whose M step was discarded, 4.6 s of a 5.0 s
-    # iteration at 100 components. They are now the E step alone. What that
-    # iteration reported is what a fit one pass longer records at the same
-    # entry, so the two curves agree bitwise on every entry they share.
+    # #891: the final value and posterior are the E step alone (the discarded
+    # M step cost 4.6 of 5.0 s); curves agree bitwise on shared entries.
     instance, at = _instance(), _seam()
     short = fit_projection(instance, "kmeans++", at, SHORT_BUDGET, rng())
     longer = fit_projection(
@@ -146,11 +127,8 @@ def test_the_last_value_is_the_one_a_further_iteration_would_report() -> None:
 
 @pytest.mark.end2end
 def test_the_timed_method_reports_the_fit_and_the_seconds_it_ran() -> None:
-    # The method the starts notebook compares through `opt.budget.compare` in
-    # seconds (issue #891): its value is the fit's, bitwise, on the same seed;
-    # its spend is the recorded wall clock rounded up, which `compare` holds
-    # under the ceiling; and the `ProjectedTrial` it carries back is that fit, judged
-    # against the planted truth as the fit beside it is.
+    # The seconds method (#891): the fit's value bitwise, spend the wall clock
+    # rounded up under `compare`'s ceiling, its trial judged against the truth.
     instance, at = _instance(), _seam()
     method = TimedFit("kmeans++", at, SEEDINGS["kmeans++"], SHORT_BUDGET)
     comparison = compare(

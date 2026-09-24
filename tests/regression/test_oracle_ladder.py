@@ -1,16 +1,11 @@
 """The oracle ladder resolves: every rung to a callable, every pin to an `oracle` test.
 
-Issue #734. `infra/ladder.py` is a declaration, and a declaration nothing
-reads goes stale on the first rename. What is checked here is that each of
-its three columns is true of the tree: the callable imports, the test
-collects and carries `oracle`, and the rung below is a rung of the same
-problem. A rung no test pins carries its issue number instead, and the count
-of those is pinned so it moves only when a rung gains a test.
-
-The marker check runs one collection of the whole regression suite, which is
-the only way to read what an item carried: the problem and `infra` markers are
-added by the collection hook (`infra/coverage_recut.py`). It is the expensive
-test of the file and carries no `critical`; the rest are structural and do.
+Issue #734. Each of `infra/ladder.py`'s three columns is checked against the
+tree: the callable imports, the test collects and carries `oracle`, and the
+rung below belongs to the same problem. Unpinned rungs carry an issue number
+and their count is pinned. The marker check collects the whole regression
+suite (hook-added markers, `infra/coverage_recut.py`), so it carries no
+`critical`; the structural tests do.
 """
 
 from __future__ import annotations
@@ -39,9 +34,7 @@ PACKAGE = "snakes_and_ladders"
 def markers() -> dict[str, frozenset[str]]:
     """Every regression and validation test's markers, parametrization stripped.
 
-    A rung names a test function, not one of its cases: a pin holds for every
-    case or the pin is wrong. `tests/validation/` is read too, since a rung's
-    external oracle runs there, in a subprocess (issue #976).
+    A pin holds for every case; `tests/validation/` is read too (issue #976).
     """
     collected: dict[str, set[str]] = {}
     for directory in ("regression", "validation"):
@@ -55,11 +48,7 @@ def markers() -> dict[str, frozenset[str]]:
 def unpinned_tests(
     rungs: tuple[Rung, ...], markers: dict[str, frozenset[str]]
 ) -> list[str]:
-    """Rungs whose named test does not collect, or collects without `oracle`.
-
-    The checker the guard below runs, taken separately so it can be run
-    against a rung that is not in the ladder.
-    """
+    """Rungs whose named test does not collect, or collects without `oracle`."""
     failures = []
     for rung in rungs:
         if rung.test is None:
@@ -212,13 +201,8 @@ def test_every_rung_belongs_to_one_of_the_five_ladders() -> None:
 @pytest.mark.critical
 @pytest.mark.infra
 def test_every_rung_declares_a_unit_and_every_unit_is_spent() -> None:
-    # The field is keyword-only with no default, so a rung without a cost does
-    # not construct; what is asserted is the vocabulary: every rung's unit is
-    # one of the eight the ladder declares, and each of the eight is spent. An
-    # exact rung may sit above another exact rung (the k-means dynamic
-    # programme is pinned against assignment enumeration), so exactness is not
-    # a foot rule (issue #818). `Cost` is the package's vocabulary since #860
-    # and carries the units `opt.budget.Budget` names too, so the ladder's
-    # eight are named by `LADDER_UNITS` rather than read off the enum.
+    # Every rung's unit is one of the eight `LADDER_UNITS` and each is spent.
+    # Exact may sit above exact (k-means DP over enumeration), so exactness is
+    # not a foot rule (#818); `Cost` is the package's vocabulary since #860.
     assert [rung.name for rung in LADDER if not isinstance(rung.cost, Cost)] == []
     assert {rung.cost for rung in LADDER} == LADDER_UNITS

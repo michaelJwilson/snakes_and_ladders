@@ -83,11 +83,7 @@ def test_the_recut_counts_the_judged_lines_and_the_import(
 ) -> None:
     """Per file: 8 statements, 5 at import; a judging test adds one, smoke one.
 
-    `root.py`: the oracle test reaches `judged`'s body and the smoke test
-    `smoke`'s, so the gate counts 7 of 8 and the guard 6 of 8, one statement
-    in deficit and `never`'s body reached by nothing. `search/kernel.py`: the
-    `infra` test reaches `judged`'s body and does not count, so the guard
-    reads 5 of 8 there with two statements in deficit.
+    `root.py`: gate 7 of 8, guard 6 of 8. `search/kernel.py`: guard 5 of 8 (infra).
     """
     package, data_file = _run(tmp_path)
     monkeypatch.setattr(coverage_recut, "PACKAGE", package)
@@ -115,10 +111,7 @@ def test_the_guard_fails_one_statement_above_what_the_run_reaches(
 ) -> None:
     """The floors are compared, and an exempt package is left out of the whole.
 
-    `root.py` counts 6 of 8 and `search/kernel.py` 5 of 8; with `search`
-    exempt the whole is `root.py` alone at 75.00%. A floor of 75 passes, one
-    of 75.01 fails, and a package floor on `search` is judged on its own
-    62.50% whether or not the package is exempt from the whole.
+    `search` exempt: the whole is `root.py`, 75.00%; 75 passes, 75.01 fails.
     """
     package, data_file = _run(tmp_path)
     monkeypatch.setattr(coverage_recut, "PACKAGE", package)
@@ -153,8 +146,7 @@ def test_the_guard_fails_one_statement_above_what_the_run_reaches(
 def test_the_collection_names_the_markers_the_hook_adds(tmp_path: Path) -> None:
     """Markers are read from a collection, so the problem and `infra` axes are seen.
 
-    A parse of the source would miss both: the hook adds them. The mini-suite
-    imports this repository's `conftest`, as `test_problem_markers.py` does.
+    The hook adds them; the mini-suite imports this repository's `conftest`.
     """
     (tmp_path / "conftest.py").write_text(
         f"import sys\n\nsys.path.insert(0, {str(REPO_ROOT)!r})\n"
@@ -182,9 +174,7 @@ def test_the_collection_names_the_markers_the_hook_adds(tmp_path: Path) -> None:
 def test_the_counting_set_is_end2end_and_oracle_alone() -> None:
     """What counts is stated once in `infra/gates.py`, and this is what it says.
 
-    Read against the marker tables rather than restated: the two kinds that
-    judge the science against something outside the implementation, and no
-    finding, no scheduling marker and no `infra`.
+    The two kinds judged against something outside the implementation, nothing else.
     """
     from gates import FINDING_MARKERS, KIND_MARKERS, SCHEDULING_MARKERS
 
@@ -206,10 +196,7 @@ def test_the_complement_counts_what_the_judged_guard_leaves_out(
 ) -> None:
     """The third guard (issue #732): the smoke and infra lines, and the import.
 
-    `root.py`: the smoke test reaches `smoke`'s body, so the complement counts
-    6 of 8. `search/kernel.py`: the infra test reaches `judged`'s body and the
-    smoke test `smoke`'s, so it counts 7 of 8 and leaves `never`'s alone. The
-    two guards' counting sets partition the kinds and findings.
+    `root.py` counts 6 of 8, `search/kernel.py` 7 of 8; the sets partition kinds.
     """
     package, data_file = _run(tmp_path)
     monkeypatch.setattr(coverage_recut, "PACKAGE", package)
@@ -239,10 +226,7 @@ def test_public_callables_are_listed_by_the_set_that_enters_them(
 ) -> None:
     """`--functions`: per module, which guard's tests enter each body.
 
-    `root.py`: `judged` is entered by the judged set, `smoke` by the
-    complement alone, `never` by nothing. `search/kernel.py`: `judged` is
-    entered by the infra test, which is the complement's, so no judged test
-    enters any of its three.
+    `root.py`: `judged` judged, `smoke` complement, `never` none; kernel: complement.
     """
     package, data_file = _run(tmp_path)
     monkeypatch.setattr(coverage_recut, "PACKAGE", package)

@@ -1,18 +1,9 @@
 """An exposure per observation, and the per-state rate that survives it (#631).
 
-Step 4. ``mu_k`` stays the state's own rate --- the per-state association the
-fit targets and recovery checks --- and the *emission's* mean at observation
-``i`` in state ``k`` is ``e_i mu_k``. So :attr:`NegativeBinomialEmission.mean`
-keeps a value under a varying exposure rather than losing one: the exposure is
-conditioned on and never fitted, and unit exposure is the reference the family
-declares itself at.
-
-What makes the conserved family a referee here is an identity rather than a
-tolerance. Where ``e_i`` is constant the two models **are** the same model,
-absorbing the exposure as ``log mu - log(c)``, so the covariate-aware family at
-constant ``e`` is the conserved family at ``mu e`` --- checked bitwise, not
-approximately. Recovery under a varying exposure, where no oracle exists, is
-``test_emission_covariate_recovery.py``'s.
+``mu_k`` stays the state's rate and the emission's mean is ``e_i mu_k``; the
+exposure is conditioned on, never fitted. At constant ``e`` the family is the
+conserved family at ``mu e``, checked bitwise. Recovery under a varying
+exposure is ``test_emission_covariate_recovery.py``'s.
 """
 
 from __future__ import annotations
@@ -60,14 +51,9 @@ def test_a_constant_exposure_is_the_conserved_family_at_a_rescaled_mean() -> Non
 def test_unit_exposure_changes_nothing_in_scoring_or_the_m_step(
     observations: tuple[torch.Tensor, torch.Tensor],
 ) -> None:
-    # `e = 1` is the degenerate case. **Scoring is bitwise** and stays the
-    # strongest claim available. The M step backs off to the repository's
-    # declared float64 tolerance, because its profiled mean is now a matmul --
-    # 13.72x faster at the declared scale and 80.7 MB of temporary lighter --
-    # and a matmul reduces in a different order. Measured 2.7e-16 relative,
-    # five orders inside the 1e-11 declared; root `CLAUDE.md` permits that
-    # trade and forbids loosening a bound to admit a result, so the bound here
-    # is the declared one and not one fitted to this measurement (#649).
+    # `e = 1`: scoring is bitwise. The M step's profiled mean is a matmul
+    # (13.72x faster at scale, 80.7 MB lighter) that reorders the reduction:
+    # measured 2.7e-16 relative, held to the declared float64 1e-11 (#649).
     counts, posterior = observations
     live = NegativeBinomialEmission(DISPERSION, MEAN)
     conserved = Conserved(DISPERSION, MEAN)

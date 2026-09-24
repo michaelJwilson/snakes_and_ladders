@@ -1,17 +1,10 @@
 """The polar construction: one transform, three selection rules, one exact law.
 
-Issue #593. What is asserted here is chosen by what has an answer from
-outside this repository:
-
-* **the capacity sum is exact at every length.** Arikan's erasure recursion
-  conserves ``sum_i I(W_i) = N (1 - eps)``, so it is asserted as an equality
-  at four lengths and not sampled;
-* **Reed--Muller is the same transform under a different rule**, and the two
-  information sets are known: they coincide at ``N = 8, k = 4`` --- where the
-  code is the extended Hamming (8,4) --- and part at ``N = 16``;
-* **the Gaussian approximation is approximate**, so its *ordering* is
-  refereed rather than its values, against a decoder-visible one measured on
-  the rate-one code.
+Issue #593. Arikan's erasure recursion conserves ``sum_i I(W_i) = N (1 -
+eps)``, asserted exactly at four lengths. Reed--Muller is the same transform
+under another rule: the information sets coincide at ``N = 8, k = 4`` (the
+extended Hamming (8,4)) and part at ``N = 16``. The Gaussian approximation's
+ordering is refereed against error rates measured on the rate-one code.
 """
 
 from __future__ import annotations
@@ -151,16 +144,9 @@ def test_the_declared_instance_is_the_code_the_ticket_states() -> None:
 
 @pytest.mark.end2end
 def test_the_gaussian_approximation_orders_the_channels_as_a_decoder_does() -> None:
-    # The approximation is approximate, so the *ordering* is what is
-    # refereed: the frozen set depends on nothing else. The independent
-    # ordering is measured, not modelled -- per-channel error rates of plain
-    # successive cancellation on the rate-one code, where nothing is frozen
-    # and every channel is decided.
-    #
-    # It is not the synthetic-channel ordering, which is genie-aided, so
-    # agreement is high rather than perfect: 0.897 by Spearman here against
-    # 0.903 for the exact erasure recursion measured the same way. What is
-    # exact is the pair of extremes.
+    # The ordering against measured per-channel SC error rates on the
+    # rate-one code, not the genie-aided one: Spearman 0.897 against 0.903
+    # for the exact erasure recursion; the extremes are exact.
     stages, draws, sigma = 4, 2000, 1.0
     rate_one = PolarCode(stages, np.arange(2**stages))
     errors = np.zeros(2**stages)

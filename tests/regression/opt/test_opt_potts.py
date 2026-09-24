@@ -1,19 +1,10 @@
 """Regression tests for the Potts-chain reference instance.
 
-Per root ``CLAUDE.md`` ("Pin to Independent Sources"), the transfer-matrix
-normalizer is checked against brute-force enumeration over every
-configuration -- a computation that shares no code with the recursion under
-test -- and the objective's sufficient-statistic shortcut is checked against
-a naive per-chain sum. ``opt/CLAUDE.md`` makes the finite-difference
-derivative check mandatory; it is here, not deferred to the optimizer.
-
-The normalizer has two routes -- the per-site recursion and the same product
-reassociated by repeated squaring (issue #754) -- and every claim above is
-asserted of both, because ``log_partition`` picks between them on ``q`` and
-``length`` and a fixture exercises whichever its own size selects. The two are
-pinned against each other, and the squaring route against the rung below it in
-``infra/ladder.py``: ``likelihood.potts.strip_log_partition`` on a strip one
-site wide.
+The transfer-matrix normalizer is checked against brute-force enumeration and
+the sufficient-statistic shortcut against a per-chain sum (root ``CLAUDE.md``);
+the finite-difference derivative check ``opt/CLAUDE.md`` mandates is here. Both
+normalizer routes, per-site and repeated squaring (#754), are checked, against
+each other and against ``likelihood.potts.strip_log_partition`` at width one.
 """
 
 from __future__ import annotations
@@ -98,13 +89,8 @@ def _gauge_fixed(values: np.ndarray) -> np.ndarray:
 @pytest.mark.oracle
 @pytest.mark.patch
 def test_squaring_reproduces_the_per_site_recursion() -> None:
-    # The reassociation is exact and changes only the order the log-space
-    # sums are taken in, so the recursion is the referee and bitwise is the
-    # target (root `CLAUDE.md`). It is reached wherever the two orders
-    # coincide -- every chain whose exponent is 0 or 1 runs the same
-    # sequence of operations on both routes -- and where they do not, the
-    # guard is the declared cross-device tolerance and the realized
-    # difference is asserted to sit two orders inside it rather than at it.
+    # Reassociation only: bitwise where the orders coincide (exponent 0 or 1),
+    # else the cross-device tolerance with the difference two orders inside.
     def check(n_states: int, length: int) -> None:
         rng = np.random.default_rng(11)
         field = torch.as_tensor(_gauge_fixed(rng.normal(size=n_states)))
@@ -190,11 +176,8 @@ def test_squaring_is_the_transfer_matrix_on_a_strip_one_site_wide() -> None:
 
 @pytest.mark.analytic
 def test_the_squaring_gradient_matches_central_finite_differences() -> None:
-    # Autograd follows the reassociation, and what says so is the derivative
-    # of the reassociated product against central differences of its own
-    # value -- at lengths either side of the route rule and at couplings of
-    # both signs, since the transfer matrix's off-diagonal is where the sign
-    # enters.
+    # Autograd through the reassociation against central differences, either
+    # side of the route rule and at both coupling signs.
     def check(coupling: float, length: int) -> None:
         field = torch.as_tensor(
             _gauge_fixed(np.random.default_rng(3).normal(size=3))
@@ -321,11 +304,7 @@ def test_simulation_is_reproducible_from_the_seed() -> None:
 
 @pytest.mark.end2end
 def test_coupling_raises_the_frequency_of_adjacent_agreement() -> None:
-    # A generative check with an unambiguous direction: positive coupling
-    # rewards agreeing neighbours, so simulated chains must agree more often
-    # than independent draws from the same field would. The independent rate
-    # is computed in closed form, not simulated, so this is an analytic
-    # comparison rather than two runs of the same code.
+    # Positive coupling must beat the closed-form independent agreement rate.
     params = load_params(FIXTURE, PottsParams)
     chains = simulate_chains(params)
     observed = float((chains[:, :-1] == chains[:, 1:]).mean())

@@ -1,51 +1,13 @@
 """Suite-wide configuration: one process is one core, slow tests are named, and no benchmark runs distributed.
 
-Five things: two are issue #372's, and one each issues #405's, #614's and
-#635's. A sixth, the refusal of a compiled extension older than the Rust it
-was built from (issue #630), is documented where it is raised rather than
-here, because what a reader needs at that point is the repair.
-
-**One process is one core.** The BLAS behind NumPy and PyTorch starts a
-thread per core, so one test process reads as four on the load average and
-four of them saturate a 4-core host. The three thread-count variables are set
-to one here, before NumPy is imported, unless the caller set them. The figure
-renderers are exempt on purpose: ``snakes_and_ladders.qa.build`` strips these
-from the render environment, since a committed figure is rendered the way the
-manifest renders it.
-
-**A slow test carries its marker.** Every test's call duration is recorded;
-with ``SAL_DURATION_CAP`` set, a test over it that carries none of the
-out-of-tier markers fails the session, and with ``SAL_KEY_DURATION_CAP`` set,
-so does a ``key`` test over that (``tests/_durations.py``).
-``infra/validate.sh`` sets both caps on the reference host; CI does not, per
-`DEV.md`'s rule against timing on its runners, and prints ``--durations``
-instead.
-
-**A test is selectable by the problem it exercises.** Issue #614. Every test
-module's fixture calls are read at collection (``tests/_problems.py``) and one
-marker per problem named is added to its items, so ``pytest -m potts_lattice``
-selects that problem across `search/` and `likelihood/` at once and no author
-tags anything. The names are registered below with the rest, so
-``--strict-markers`` refuses a typo, and they are a third axis: ``-m
-"potts_lattice and critical"`` is the intersection.
-
-**An early-gate test is never scale-marked out of the tier.** Issue #635.
-``-m critical`` replaces ``addopts``' ``-m "not release"`` rather than
-intersecting with it, so a test carrying both `critical` and a scale marker
-runs in the early gate and not in a bare `pytest` --- the opposite of what
-each marker asks for. The scale markers come from the fixture file through
-``tests/_scale.py`` and never appear as a decorator, so this is read from the
-collected items and refused at collection (``tests/_durations.py``).
-
-**A benchmark is never collected under ``pytest-xdist``.** ``pytest-benchmark``
-disables itself whenever a run is distributed and says so in a line of its
-header, so a distributed run collects the 212 benchmark tests, passes every
-one of them and measures nothing --- a green suite whose timings do not exist.
-The tiers are split instead (``DEV.md``): the correctness tiers run under
-``-n 3`` with ``tests/benchmarks`` excluded, benchmarks run serially in their
-own invocation. That split is what makes the check below unreachable, which is
-why it is worth making: the next ``-n`` added to the wrong command fails here
-by name rather than quietly stopping the measurement.
+**One core per process:** BLAS thread counts are set to one before NumPy
+imports unless the caller set them (``qa.build`` strips them for renders).
+**A slow test carries its marker** (#372): with ``SAL_DURATION_CAP`` or
+``SAL_KEY_DURATION_CAP`` set (``infra/validate.sh``, not CI), an over-cap test
+with no out-of-tier marker fails (``tests/_durations.py``). **Problem markers**
+(#614, ``tests/_problems.py``). **No early-gate test out of the tier** (#635).
+**No benchmark under ``pytest-xdist``** (#405): `pytest-benchmark` disables
+itself there and 212 tests would pass measuring nothing. Stale extension: #630.
 """
 
 from __future__ import annotations
@@ -93,11 +55,8 @@ def pytest_configure(config: pytest.Config) -> None:
     refusal = stale_extension(Path(__file__).resolve().parent.parent)
     if refusal:
         raise pytest.UsageError(refusal)
-    # A fixture directory named `critical`, `key`, `stress` or `release` would
-    # register a second marker of that name and then be applied by the hook to
-    # every module that loads it --- and `tests/_durations.py` reads
-    # `iter_markers()` to decide what the duration cap exempts, so a directory
-    # name would start excusing tests from it. Refuse rather than collide.
+    # A fixture directory named after a tier marker would register it and
+    # excuse its loaders from the duration cap (`tests/_durations.py`).
     reserved = {
         line.split(":", 1)[0].strip() for line in config.getini("markers") if line
     }
@@ -119,17 +78,9 @@ def pytest_collection_modifyitems(
     config: pytest.Config,
     items: list[pytest.Item],
 ) -> None:
-    """Mark each item with the problems its module loads.
+    """Mark each item with the problems its module loads, cached for the next run.
 
-    ``tryfirst`` because `pytest`'s own mark plugin deselects on ``-m`` from
-    this same hook: a marker added after that runs has been added to an item
-    already thrown away, and ``-m potts_lattice`` would select nothing while
-    looking like it worked. The order is pinned by
-    ``tests/regression/test_problem_markers.py``, which runs the selection
-    rather than trusting registration order.
-
-    What each module names is written back to `pytest`'s cache here, so the
-    next invocation reads 232 file stats rather than 232 parses.
+    ``tryfirst``: `-m` deselects in this hook (`test_problem_markers.py`).
     """
     for item in items:
         path = getattr(item, "path", None)
@@ -161,16 +112,9 @@ def pytest_collection_modifyitems(
 
 
 def distributed(config: pytest.Config) -> bool:
-    """Whether this session is running under `pytest-xdist`.
+    """Whether this session runs under `pytest-xdist`.
 
-    Read three ways because the answer differs by process and by how the run
-    was asked for: a worker carries ``workerinput``, a controller started with
-    ``-n`` carries ``numprocesses``, and ``--dist`` alone sets neither.
-
-    Returns
-    -------
-    bool
-        True if the session is distributed.
+    Worker: ``workerinput``; controller: ``numprocesses``; ``--dist`` sets neither.
     """
     if hasattr(config, "workerinput"):
         return True
@@ -210,13 +154,7 @@ DISTRIBUTED_CAP = (
 def pytest_runtest_setup(item: pytest.Item) -> None:
     """Fail a benchmark that reached a distributed run.
 
-    `pytest-benchmark` turns itself off under `pytest-xdist` rather than
-    failing, so the benchmarks would pass while measuring nothing. A test is
-    a benchmark if it asks for the ``benchmark`` fixture, which is what that
-    plugin keys on too --- not its directory, so a benchmark written anywhere
-    is caught. Failing at setup rather than refusing the collection is what
-    makes the message readable: a worker that raises during collection is an
-    xdist ``INTERNALERROR`` and the reason does not survive it.
+    Keyed on the ``benchmark`` fixture; at setup, as collection errors are INTERNALERROR.
     """
     # `fixturenames` belongs to the item types that take fixtures, not to
     # `Item`, and this hook is given the base type.
@@ -246,11 +184,8 @@ def pytest_sessionfinish(
     if cap is None and key_cap is None:
         return
     if distributed(session.config) and not hasattr(session.config, "workerinput"):
-        # The second thing a distributed run turns off without saying so. The
-        # durations above are recorded by `pytest_runtest_makereport`, which
-        # runs in the workers, so the controller's stash is empty and every
-        # test is under every cap. `infra/validate.sh` sets both caps and runs
-        # the selection, so it runs serially and this is what holds it there.
+        # Durations are recorded in workers, so a distributed controller sees
+        # none; `infra/validate.sh` runs serially for this.
         reporter = session.config.pluginmanager.get_plugin("terminalreporter")
         assert reporter is not None
         reporter.write_sep("=", "duration cap under pytest-xdist", red=True)

@@ -62,11 +62,7 @@ def test_the_concern_split_is_the_rule_root_claude_md_states() -> None:
 def test_every_application_module_is_claimed_by_a_milestone() -> None:
     """`STATUS.md` records what every application module is for.
 
-    This is the guard the map was built to make writable. 35 application
-    modules were claimed by no milestone when the join was first run --- 28 of
-    them named nowhere in `STATUS.md` at all, `sim.jc` and `opt.objective`
-    among them --- so the roadmap recorded no purpose for a third of the
-    application code (issue #664).
+    35 modules were claimed by no milestone on the first join (issue #664).
     """
     unclaimed = [
         one.name
@@ -96,10 +92,7 @@ def test_every_claimed_milestone_is_one_the_roadmap_declares() -> None:
 def test_the_layout_is_a_tree_and_is_deterministic() -> None:
     """One centre, every other node parented, and two runs agree.
 
-    The map is radial: `snakes_and_ladders` at the centre, the two concerns
-    around it, the packages beyond and the modules on the outer ring. An
-    earlier draft laid the concerns as two side-by-side panels and this guard
-    asserted two roots; the shape changed and so did the claim.
+    Radial: the package, the concerns, the packages, the modules outermost.
     """
     nodes = placed()
     roots = [index for index, (*_, parent) in enumerate(nodes) if parent < 0]
@@ -113,14 +106,7 @@ def test_the_layout_is_a_tree_and_is_deterministic() -> None:
 def test_every_drawn_leaf_carries_its_docstring_as_a_tooltip() -> None:
     """The hover text is the module's own summary, escaped for both readers.
 
-    It crosses two escapes and a first attempt failed on the second: the text
-    is a LaTeX macro argument before it is a PDF literal string, so ``\\(`` was
-    read as math mode. Parentheses become brackets and the LaTeX specials go,
-    which is what this pins.
-
-    Only a **drawn** leaf can carry one. `qa` is collapsed to a counted node
-    and five sampled modules, so its other 24 appear nowhere on the page --- a
-    first version of this guard asked for all 139 and failed on that.
+    LaTeX reads ``\\(`` as math, so parentheses become brackets; drawn leaves only.
     """
     body = tree()
     drawn = [

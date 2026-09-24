@@ -1,18 +1,10 @@
 """`snakes_and_ladders.sandbox` is the oracle home, and only tests and QA may read it.
 
-Issue #322. An implementation a framework replaced on a hot path is kept there
-to referee the framework. Two things follow that no reviewer would notice in a
-diff: a hot-path module importing its own oracle has not been replaced, and a
-package root re-exporting it would put it back on the package surface. Both
-are asserted from the source tree rather than from the import system, so a
-lazy import inside a function is caught too.
-
-**This module stays at the top level, where issue #516 moved the rest of the
-sandbox tests out of.** What it asserts is the absence of an import in `sim`,
-`likelihood`, `opt`, `search` and `learn`, so a change to any of those five
-can fail it, and an absence is the one trigger `infra/select_tests.py` cannot
-derive from the sandbox's own imports. It is in that module's `ALWAYS` for
-the same reason, at 1.9 s.
+Issue #322. A hot-path module importing its own oracle has not been replaced,
+and a package root re-exporting it puts it on the surface; both are read from
+the source, so a lazy import is caught. This stays at the top level (#516): it
+asserts an absence in five packages, which `infra/select_tests.py` cannot
+derive, so it is in `ALWAYS`, at 1.9 s.
 """
 
 from __future__ import annotations
@@ -86,12 +78,8 @@ def test_the_guard_has_a_subject_and_it_still_imports() -> None:
 
 @pytest.mark.infra
 def test_the_sandbox_states_its_rules_where_the_root_says_they_live() -> None:
-    # The docstring names the file that carries the rules; the file must exist
-    # and carry the two rules the other tests here assert, or the pointer
-    # points at nothing. The package-root rule is not among them: it is root
-    # `CLAUDE.md`'s Package Surface rule, which binds every module, and
-    # `test_the_package_root_does_not_re_export_the_sandbox` reads it off the
-    # source rather than off prose.
+    # The docstring points at the rules file, which must carry the two rules
+    # asserted here; the package-root rule is root `CLAUDE.md`'s.
     rules = (PACKAGE / "sandbox" / "CLAUDE.md").read_text()
     assert "deleted" in rules
     assert "Only `tests/` and `snakes_and_ladders.qa` import from here" in rules

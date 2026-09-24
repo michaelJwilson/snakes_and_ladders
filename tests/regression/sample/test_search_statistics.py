@@ -38,12 +38,8 @@ CRITICAL_VALUES = [
 
 @pytest.mark.oracle
 def test_the_chi_square_tail_matches_published_critical_values() -> None:
-    # Two categories whose squared deviation over expectation is exactly the
-    # critical statistic, so the p-value must come back as the significance
-    # that value was tabulated at. The tolerance is 5e-4 because the published
-    # values are quoted to three decimals.
-    # Two cells, each deviating by `sqrt(statistic / 2)` from an expectation
-    # of 1, so the statistic is exactly the tabulated value.
+    # Two cells each `sqrt(statistic / 2)` from an expectation of 1: the p-value
+    # must be the tabulated significance, to 5e-4 (three published decimals).
     def check(degrees_of_freedom: int, statistic: float, tail: float) -> None:
         deviation = float(np.sqrt(statistic / 2.0))
         expected = np.array([1.0, 1.0])

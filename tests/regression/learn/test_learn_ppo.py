@@ -1,19 +1,11 @@
 """PPO against the identities that define it, and against REINFORCE at a matched budget (issue #313).
 
-The generalized advantage at ``lambda = 1`` is the return less the value
-and at ``lambda = 0`` the one-step temporal difference; the clipped
-objective at the collecting policy, with no clipping, has the actor-critic's
-gradient exactly; and the enumerated expected return -- exact on the Potts
-chain -- rises over training and ends above REINFORCE's at the same number
-of episodes.
-
-The last of those is release-gated at its 1,920-episode budget, so the
-sibling at the end of this module carries it per pull request (issue #401):
-a quarter of the budget on the *declared* chain, with the untrained policy's
-exact expected return read from the ``potts_chain/ci`` baseline record
-instead of computed a second time. The exact return is a sum over all 81
-configurations and costs 1.9 s whoever asks for it, so measuring the policy
-before and after training is most of a test that only needs the after.
+GAE at ``lambda = 1`` is return less value and at ``lambda = 0`` the one-step
+TD; the unclipped objective at the collecting policy has the actor-critic's
+gradient; the enumerated return rises and ends above REINFORCE's. That last
+is release-gated at 1,920 episodes; its per-PR sibling (#401) trains a quarter
+of the budget and reads the untrained return from the ``potts_chain/ci``
+baseline instead of the 1.9 s enumeration over 81 configurations.
 """
 
 from __future__ import annotations
@@ -150,11 +142,9 @@ def test_unclipped_ppo_at_the_collecting_policy_has_the_actor_critic_gradient() 
 def test_ppo_raises_the_enumerated_expected_return_and_beats_reinforce_at_a_matched_budget() -> (
     None
 ):
-    # 60 iterations of 32 episodes, as #135 trained REINFORCE. Measured:
-    # REINFORCE reaches the enumerated optimum from 88.9% of the 81 starts
-    # with mean exact return 2.21; PPO from 96.3% with 2.28; greedy from
-    # 80.2%. At a quarter of the budget (480 episodes) REINFORCE reaches it
-    # from 32.1% and PPO from 87.7%. Asserted at the margins below.
+    # 60 x 32 episodes, as #135 trained REINFORCE. Measured: REINFORCE 88.9% of
+    # 81 starts, return 2.21; PPO 96.3%, 2.28; greedy 80.2%. At 480 episodes
+    # REINFORCE 32.1%, PPO 87.7%. Asserted at the margins below.
     environment = potts_environment()
     ppo_policy = LinearPolicy(2)
     before = _mean_return(environment, ppo_policy)
@@ -292,13 +282,8 @@ def _declared_environment() -> PottsEnvironment:
 
 @pytest.mark.oracle
 def test_ppo_raises_the_recorded_expected_return_and_stays_ahead_of_reinforce() -> None:
-    # The fast sibling of the 1,920-episode comparison above. The untrained
-    # policy's exact expected return and its optimum-reaching rate are the
-    # fixture's committed baseline, so the 1.9 s enumeration behind the
-    # "before" is not paid here; `infra/baselines.py` recomputes it at the
-    # release gate. What is measured is the training: the return must rise
-    # above the recorded one and PPO must still be ahead of REINFORCE at a
-    # matched budget, which is the claim, not the exact number.
+    # The before is the committed baseline (`infra/baselines.py` recomputes it
+    # at release); asserted: the return rises above it and PPO leads REINFORCE.
     record = baseline(*DECLARED)
     environment = _declared_environment()
     before = record.value("untrained_expected_return")

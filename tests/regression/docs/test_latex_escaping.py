@@ -1,21 +1,12 @@
 """The two LaTeX escapers are one table, and the caption guard is its inverse.
 
-Six escapers disagreed about which characters LaTeX reads as syntax, and the
-generators that used the short ones would have written a document
-``pdflatex`` refuses --- or, for ``_``, one it typesets as a subscript
-without complaint (issue #863). `infra/tex.py` holds the table now.
-
-`python/snakes_and_ladders/qa/` cannot import it: ``infra/`` carries no
-application reference and the package depends on nothing in it
-(``infra/CLAUDE.md``), so `qa.figure` keeps a copy. A copy is one definition
-only while something fails on a disagreement, which is this module.
-
-`qa.figure.check_latex_safe` reads the same alphabet from the other side: it
-refuses a caption that arrives unescaped. It is not the exact inverse ---
-``\\&`` is what `escape` emits and what the guard refuses, because a caption
-is written by hand and ``\\_`` is the one sequence it is allowed --- so what
-is asserted is the containment that makes the pair sound: every character the
-guard refuses is one the escaper neutralises.
+Six escapers disagreed on LaTeX syntax characters (issue #863); `infra/tex.py`
+holds the table and `qa.figure` keeps a copy, since the package imports
+nothing from ``infra/`` (``infra/CLAUDE.md``). This module fails on a
+disagreement. `qa.figure.check_latex_safe` is not the exact inverse ---
+``\\_`` is the one sequence a hand-written caption may carry --- so the
+asserted containment is: every character the guard refuses is one the
+escaper neutralises.
 """
 
 from __future__ import annotations

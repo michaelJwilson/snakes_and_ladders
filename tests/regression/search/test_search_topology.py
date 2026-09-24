@@ -1,26 +1,11 @@
 """Regression tests for ``snakes_and_ladders.sim.topology``'s NNI and SPR generators.
 
-Per root ``CLAUDE.md`` ("Pin to Independent Sources") and the module
-``CLAUDE.md``'s local rules, every property here is checked exhaustively at
-sizes where brute-force enumeration is a feasible oracle (``n <= 10`` per
-``DEV.md``'s CI budget), rather than on a handful of hand-picked trees:
-
-* the closed-form neighbourhood counts, ``2 * (n - 3)`` for NNI and
-  ``2 * (n - 3) * (2 * n - 7)`` for SPR (issue #79), against every one of
-  the ``count_topologies(n - 1)`` distinct unrooted topologies on ``n``
-  taxa;
-* neighbour validity (same leaf set, valid grammar, differs from parent);
-* symmetry, ``tau' in N(tau) <=> tau in N(tau')``;
-* NNI-neighbour containment in the SPR neighbourhood.
-
-The exhaustive sweep runs at ``n = 5, 6, 7`` per PR; the same sweep at
-``n = 8`` (10395 topologies) is marked ``release`` (``DEV.md``'s Release-Gated
-budget line), taking ~2.5 minutes. The enumeration itself is cheap even at
-``n = 8`` (~1s) and stays in the per-PR suite as a check on the brute-force
-oracle.
-
-A random-walk connectivity test is deferred: it needs #73's canonical Newick
-key to identify "every topology" visited (see issue #79's plan comment).
+Exhaustive at sizes enumeration reaches (``n <= 10``, ``DEV.md``): the closed
+counts ``2 * (n - 3)`` (NNI) and ``2 * (n - 3) * (2 * n - 7)`` (SPR; issue #79)
+over every ``count_topologies(n - 1)`` topology; validity; symmetry; NNI
+inside SPR. Per PR at ``n = 5, 6, 7``; ``n = 8`` (10395 topologies, ~2.5
+minutes) is ``release``, its enumeration (~1 s) per PR. A random-walk
+connectivity test awaits #73's canonical key (#79).
 """
 
 from __future__ import annotations
@@ -60,12 +45,7 @@ EXHAUSTIVE_PARAMS = [
 
 
 def _enumerate_rooted(taxa: tuple[str, ...]) -> Iterator[Node]:
-    """Brute-force-enumerate every rooted binary topology on ``taxa``.
-
-    Identical construction to ``tests/regression/test_newick.py``'s
-    ``_enumerate_topologies``, duplicated locally to keep this module
-    independent.
-    """
+    """Brute-force every rooted binary topology on ``taxa`` (as ``test_newick.py``)."""
     if len(taxa) == 1:
         yield Node(name=taxa[0], branch_length=None)
         return
@@ -85,12 +65,7 @@ def _enumerate_rooted(taxa: tuple[str, ...]) -> Iterator[Node]:
 def _enumerate_unrooted(n_taxa: int) -> Iterator[Topology]:
     """Brute-force-enumerate every unrooted binary topology on ``n_taxa`` leaves.
 
-    Bijection with rooted binary topologies on ``n_taxa - 1`` leaves: a rooted
-    tree's root has no incoming edge, so grafting one more leaf onto it as a
-    third child recreates the trifurcating-root convention, one-to-one with
-    attaching that leaf via every edge of the corresponding unrooted tree.
-    Hence ``count_topologies(n_taxa - 1)`` is the oracle count (module docstring
-    of ``snakes_and_ladders.sim.newick``).
+    One more leaf as the root's third child: ``count_topologies(n_taxa - 1)``.
     """
     taxa = tuple(f"t{i}" for i in range(n_taxa))
     rooted_taxa, outgroup = taxa[:-1], taxa[-1]
@@ -190,11 +165,7 @@ def test_nni_neighbours_are_spr_neighbours(n_taxa: int) -> None:
 @pytest.mark.release
 @pytest.mark.parametrize("n_taxa", [8])
 def test_nni_and_spr_exhaustive_at_n8(n_taxa: int) -> None:
-    """The same properties as the per-PR sweep, at the next size up.
-
-    Marked ``release`` (``DEV.md``'s CI & Performance Budget): ~2.5 minutes for
-    10395 topologies.
-    """
+    """The per-PR sweep's properties at ``n = 8`` (~2.5 minutes, ``release``)."""
     nni_expected = 2 * (n_taxa - 3)
     spr_expected = 2 * (n_taxa - 3) * (2 * n_taxa - 7)
     nni_map = {}
@@ -243,9 +214,7 @@ def test_the_bitmask_split_key_is_leaf_bipartitions_on_every_topology() -> None:
 def _spr_by_definition(start: Topology) -> list[frozenset[frozenset[str]]]:
     """Every prune-and-regraft, deduplicated on `leaf_bipartitions`, in order.
 
-    The definition `spr_neighbours` implemented before #264, kept here as the
-    oracle for what it implements now: the same candidates in the same order
-    with the same first-seen rule, keyed the slow way.
+    The pre-#264 definition, the oracle for order and first-seen rule.
     """
     adjacency, _ = topology_module._to_adjacency(start)
     seen = {leaf_bipartitions(start)}

@@ -101,9 +101,7 @@ def test_a_build_artifact_does_not_keep_a_worktree(host: tuple[Path, Path]) -> N
 def test_a_stash_does_not_keep_a_worktree(host: tuple[Path, Path]) -> None:
     """A stash lives in the common `.git`, so it belongs to no single tree.
 
-    Guarding on one refuses *every* worktree on the host for a stash that
-    belongs to none of them, which is what a first version of the reaper did.
-    The stash survives the removal, which is why it is not a reason to refuse.
+    Guarding on one refused every worktree on the host.
     """
     clone, root = host
     (clone / "README.md").write_text("work in progress\n", encoding="utf-8")

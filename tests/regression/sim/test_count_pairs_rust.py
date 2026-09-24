@@ -1,19 +1,10 @@
 """The Rust count-pair simulator against the NumPy one (issue #399).
 
-The two draw the same distributions through different generators --- NumPy's
-PCG64 keyed by ``[seed, vertex]`` and ChaCha8 keyed by the same two numbers
---- so they are two samples of one model and the comparison is
-distributional, never bitwise. What is compared per ``(class, state)`` and per
-channel is the sample mean and the **index of dispersion**, the
-variance-to-mean ratio: it is the quantity that separates these families from
-a Poisson, so a simulator that got the mean right and the spread wrong fails
-here and would pass a mean-only check.
-
-`sim/CLAUDE.md`'s rule that the simulator is validated against the analytic
-result and not against our own is kept: both simulators are also held to the
-families' closed-form mean and variance --- the NumPy one in
-``test_count_pairs.py``, this one through the same tolerances below --- so
-the Rust-against-NumPy comparison is a second reading and not the only one.
+PCG64 and ChaCha8 keyed by ``[seed, vertex]``: two samples of one model, so
+the comparison is distributional. Per ``(class, state)`` and channel: the mean
+and the index of dispersion, which separates these families from a Poisson.
+Both are also held to the closed-form moments (`sim/CLAUDE.md`), the NumPy
+one in ``test_count_pairs.py``.
 """
 
 from __future__ import annotations
@@ -55,13 +46,7 @@ DISPERSION_TOLERANCE = 0.15
 
 
 def _moments(instance: CountPairInstance, channel: int) -> np.ndarray:
-    """Per ``(class, state)``, the sample mean and index of dispersion of one channel.
-
-    Returns
-    -------
-    np.ndarray
-        Shape ``(M, K, 2)``: the mean, then the variance-to-mean ratio.
-    """
+    """Per ``(class, state)``, one channel's mean and dispersion index, ``(M, K, 2)``."""
     model = instance.params
     moments = np.empty((model.n_classes, model.n_states, 2))
     for m in range(model.n_classes):

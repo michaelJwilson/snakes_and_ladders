@@ -1,21 +1,11 @@
 """What the citation-driven figure selection must guarantee.
 
-The build regenerates only the figures the documents under ``docs/tex/`` cite,
-and the release gate regenerates the rest (issue #154). Three things make that
-trade sound, each asserted here: a document can never cite a figure the build
-skips, no committed figure falls outside the release gate's reach, and a
-rotted figure is still caught -- by the per-PR path when the document cites
-it, by the release path when it does not.
-
-Since issue #492 the correspondence is a bijection and is asserted as one.
-``infra/check_citations.py`` covers cited-but-missing; the other direction,
-and that every committed figure file belongs to a manifest entry, is
-``tests/regression/docs/test_document_build_outputs.py::test_every_tracked_figure_file_belongs_to_a_manifest_stem``
-(issue #982 dropped the copies here). The two orphans
-it was written for, ``sim_problem_sizes`` and ``topology_accuracy``, were
-rendered on every release and read by nobody. The selection tests that relied
-on their existence construct the uncited case in ``tmp_path`` instead, so they
-check the mechanism rather than a state of the repository now forbidden.
+The build regenerates the figures ``docs/tex/`` cites and the release gate the
+rest (issue #154): no cited figure is skipped, no committed figure escapes the
+release gate, and a rotted figure is caught on one path or the other. Since
+#492 the correspondence is a bijection; ``infra/check_citations.py`` and
+``test_document_build_outputs.py`` hold its two directions (#982). The
+uncited case is built in ``tmp_path``, testing the mechanism.
 """
 
 from __future__ import annotations
@@ -158,16 +148,9 @@ def test_matching_figures_are_reported_as_clean(tmp_path: Path) -> None:
     "gate's job; the cited-figure paths are checked at CI tier above"
 )
 def test_check_catches_an_uncited_figure_that_has_rotted(tmp_path: Path) -> None:
-    # Both directions of the trade, on a real rendering: `--check` without
-    # `--all` passes over a figure the given document does not cite, and
-    # `--check --all` catches it.
-    #
-    # The document is written here rather than taken from `docs/tex/`: every
-    # committed figure is cited since #492. A version reading the real
-    # documents would still have passed, for the unrelated reason that the
-    # rotted figure's *stamp* was copied intact and the staleness cache
-    # skipped it -- the release gate's guarantee asserted by the cache's
-    # behaviour, the substitution this module exists to deny.
+    # `--check` alone passes a figure the document does not cite, `--check
+    # --all` catches it. Built here: every committed figure is cited (#492),
+    # and a copied stamp would let the cache skip it.
     output_dir = tmp_path / "figures"
     output_dir.mkdir()
     for path in COMMITTED_FIGURES.iterdir():
@@ -206,11 +189,8 @@ def test_check_catches_an_uncited_figure_that_has_rotted(tmp_path: Path) -> None
 def test_a_figure_only_the_textbook_cites_is_still_selected(
     tmp_path: Path,
 ) -> None:
-    # The selection is the *union* of what the documents cite, so a figure the
-    # paper does not mention is regenerated per pull request because the
-    # textbook does. Deriving it from one document would stop regenerating the
-    # other's figures and fail nothing -- issue #154's defect mirrored (issue
-    # #249).
+    # The selection is the union over documents; one document alone would
+    # drop the other's figures silently (#154 mirrored, #249).
     paper = tmp_path / "paper.tex"
     paper.write_text(r"\includegraphics{figures/sim_example}")
     textbook = tmp_path / "textbook.tex"

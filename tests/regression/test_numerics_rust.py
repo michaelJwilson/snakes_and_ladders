@@ -1,18 +1,10 @@
 """The Rust categorical sampler against the NumPy oracle it replaces.
 
-Root ``CLAUDE.md`` requires every accelerated kernel to keep its NumPy
-implementation as the oracle, and this comparison is stronger than most:
-because the uniforms are drawn in Python and handed to Rust, the two
-implementations differ in arithmetic alone. So the assertion is **exact
-equality**, not a tolerance — a categorical index is discrete, and a port
-that moved one draw into the neighbouring category would be a defect, not a
-rounding difference.
-
-What is checked is the arithmetic that can actually diverge: the left-to-right
-cumulative sum, the clamp on the last column, and the choice of the first
-crossing. A pairwise summation in Rust would be *more* accurate than
-``np.cumsum`` and would still be wrong here, because the oracle is the
-definition.
+The uniforms are drawn in Python and handed to Rust, so the implementations
+differ in arithmetic alone and the assertion is exact equality: a draw moved
+to the neighbouring category is a defect. Checked: the left-to-right cumulative
+sum, the clamp on the last column, and the first crossing. A pairwise sum would
+be more accurate than ``np.cumsum`` and still wrong: the oracle is the definition.
 """
 
 from __future__ import annotations
@@ -60,11 +52,8 @@ def test_the_rust_sampler_is_bit_identical_to_the_oracle() -> None:
 @pytest.mark.critical
 @pytest.mark.oracle
 def test_both_agree_on_a_row_that_does_not_quite_sum_to_one() -> None:
-    # The case `snakes_and_ladders.numerics`' docstring calls out as ordinary float64
-    # behaviour: the row leaves a sliver of the unit interval above its own
-    # total, and a draw landing there crosses no column. Both implementations
-    # must clamp it to the last category rather than report an index past the
-    # end of the alphabet.
+    # A row leaving a sliver above its own total: both implementations must
+    # clamp a draw there to the last category.
     distributions = np.array([[0.5, 0.5 - 4e-16]])
     assert float(distributions.sum()) < 1.0
     rows = np.zeros(200_000, dtype=np.int64)
@@ -110,11 +99,8 @@ def test_the_generator_is_consumed_identically_by_both() -> None:
 @pytest.mark.critical
 @pytest.mark.oracle
 def test_a_non_contiguous_input_gives_the_same_answer() -> None:
-    # Borrowing rather than copying makes stride a real concern where it was
-    # not before. `snakes_and_ladders.numerics_rust` normalizes with `ascontiguousarray`
-    # -- free when the array already is contiguous -- so a sliced view must
-    # still agree with the oracle rather than reading every other element of
-    # something else.
+    # `numerics_rust` borrows via `ascontiguousarray`, so a sliced view must
+    # still agree with the oracle.
     distributions = np.random.default_rng(1).dirichlet(np.ones(4), size=4)
     rows = np.random.default_rng(2).integers(4, size=2000)
     sliced = rows[::2]

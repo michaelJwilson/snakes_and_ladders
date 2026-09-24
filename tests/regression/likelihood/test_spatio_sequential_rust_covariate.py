@@ -1,15 +1,9 @@
 """The Rust coupled E step under a covariate (issue #658).
 
-The kernel tabulated `log p(count | class, state)` and indexed it by the count.
-Under a covariate the density is a function of the count *and* what it is
-scored against, so there is no table indexed by the count alone — which is why
-this looked like a kernel redesign. It is not. The kernel never knew what the
-index meant, only that the table was built from it, so the caller tabulates the
-distinct `(count, covariate)` pairs and hands the row each observation falls
-in. The only change in `src/coupled.rs` is the width of that index.
-
-Pinned against the NumPy path, which is the oracle (`likelihood/CLAUDE.md`),
-and against itself uncovaried, which must be what it was.
+Under a covariate the density depends on the count and what it is scored
+against; the caller tabulates the `(count, covariate)` pairs and hands each
+observation its row, so `src/coupled.rs` changes only its index width. Pinned
+against the NumPy oracle (`likelihood/CLAUDE.md`) and against itself uncovaried.
 """
 
 from __future__ import annotations
@@ -49,14 +43,7 @@ def _instance() -> CountPairInstance:
 def _covariate(instance: CountPairInstance) -> np.ndarray:
     """A per-vertex exposure and a per-vertex trial count, both varying.
 
-    Per-vertex rather than per-observation because that is the case the
-    tabulation is for --- a library size repeated down the positions --- and
-    because it is what makes the row count worth reporting.
-
-    The trial count must cover the successes actually drawn: the two channels
-    are drawn independently (`sim/count_pairs.py`), so a trial count taken from
-    the total scores `-inf` wherever the successes exceeded it, and the whole
-    comparison comes back `nan`.
+    Per vertex, the tabulated case; trials cover the independently drawn successes.
     """
     observations = instance.observations
     n_positions, n_nodes = observations.shape[:2]
@@ -105,10 +92,7 @@ def test_the_covaried_rust_e_step_and_field_match_the_numpy_oracle() -> None:
 def test_without_a_covariate_the_rows_are_the_counts() -> None:
     """The uncovaried path is unchanged, not merely equivalent.
 
-    The rows *are* the counts and the table is count-major, which is what this
-    module tabulated before #658. Asserted on the arrays rather than on a
-    result, because a result can agree while the tabulation has silently become
-    a different one --- and the row count is the whole memory argument.
+    Rows are the counts, count-major, asserted on the arrays themselves.
     """
     instance = _instance()
     observations = instance.observations
@@ -127,16 +111,9 @@ def test_without_a_covariate_the_rows_are_the_counts() -> None:
 def test_the_covaried_tabulation_stays_a_table() -> None:
     """The reason this is a table and not a per-observation score array.
 
-    The rows are every `(count, covariate)` combination --- the outer product,
-    20,736 and 41 against 64,000 observations at the ci instance --- not one
-    row per observation. Were it one per observation the table would be the
-    score array itself and the kernel's reason for existing would be gone.
-
-    The outer product is larger than the *distinct* pairs, which the first
-    version of this tabulated. It is also 10x faster to build, because those
-    were found by sorting an `(S * V, 2)` array once per call: 135.6 ms of a
-    141.4 ms E step, which put this backend at 0.6x the oracle it exists to
-    beat. Fewer rows was the wrong thing to optimize.
+    The outer product, 20,736 and 41, against 64,000 observations at ci. Sorting
+    the distinct pairs instead cost 135.6 ms of a 141.4 ms E step (0.6x the
+    oracle); the outer product is 10x faster to build.
     """
     instance = _instance()
     params = _covaried(instance)

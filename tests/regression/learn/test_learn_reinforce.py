@@ -1,17 +1,10 @@
 """REINFORCE against an enumerated oracle, and against the baseline it must beat.
 
-"The return went up" is the test root ``CLAUDE.md`` forbids: a sampled return
-under a changing policy rises for reasons that include a broken estimator. So
-every claim here is pinned to something computed a different way.
-
-* The gradient is checked twice -- autodiff against central finite
-  differences of the same enumerated ``J``, and the sampled estimator against
-  that enumerated gradient.
-* The baseline's unbiasedness is checked as the identity it rests on, which
-  holds exactly rather than to a tolerance.
-* Learning is checked against the **enumerated** ``J``, not the sampled mean.
-* Quality is checked against exhaustive enumeration of the environment and
-  against the greedy searcher, at a matched decision budget.
+A rising sampled return is not evidence (root ``CLAUDE.md``). The gradient is
+checked by autodiff against central differences of the enumerated ``J`` and
+the sampled estimator against that; the baseline's unbiasedness as an exact
+identity; learning against the enumerated ``J``; quality against exhaustive
+enumeration and greedy at a matched decision budget.
 """
 
 from __future__ import annotations
@@ -126,12 +119,9 @@ def test_the_score_function_has_zero_expectation() -> None:
 
 @pytest.mark.analytic
 def test_the_baseline_reduces_the_estimator_variance() -> None:
-    # sec:policy-gradient of docs/tex/textbook.tex gives variance, not bias, as
-    # the reason for a baseline, so variance is what is measured. The reduction
-    # is modest -- realized ratio 0.90 -- because at this horizon the returns
-    # are of similar size; the baseline earns its place where the return scale
-    # varies. Reported rather than asserted tightly: a threshold tuned to 0.90
-    # would be tuned to this environment.
+    # A baseline is for variance (sec:policy-gradient): realized ratio 0.90,
+    # since returns here are of similar size. Not asserted tightly: a threshold
+    # at 0.90 would be tuned to this environment.
     environment, policy = potts_environment(), _policy([0.3, -0.6])
     start = (2, 1, 1, 0)
 
@@ -203,17 +193,9 @@ def test_training_raises_the_enumerated_expected_return() -> None:
 
 @pytest.mark.end2end
 def test_the_learned_policy_is_at_least_as_good_as_hill_climbing() -> None:
-    # Milestone 8's criterion, at a size where the answer is enumerable.
-    #
-    # Measured over 8 training seeds: the learned policy reaches the global
-    # optimum from 83.6%-87.1% of the 81 starts against greedy's 80.2%, at a
-    # mean final energy of 3.519-3.584 against greedy's 3.396, with the
-    # optimum at 3.850. It beat greedy on both metrics in 8 of 8 seeds.
-    #
-    # The assertion is weaker than that: "at least as good". A policy merely
-    # matching hill climbing is still a true result, and a threshold tuned to
-    # the margin measured here would hide the day it stopped holding --- the
-    # reasoning issue #128 applied to the NNI-versus-SPR comparison.
+    # Milestone 8, enumerable. Over 8 seeds: 83.6%-87.1% of 81 starts reach the
+    # optimum (greedy 80.2%), mean final energy 3.519-3.584 (greedy 3.396,
+    # optimum 3.850), 8 of 8 beat greedy. Asserted: "at least as good" (#128).
     environment = potts_environment()
     starts = list(enumerate_configurations(N_STATES, CHAIN_LENGTH))
     policy = LinearPolicy(2)
@@ -275,17 +257,9 @@ def test_training_is_reproducible_from_its_seed() -> None:
 
 @pytest.mark.smoke
 def test_the_gradient_check_would_catch_a_biased_estimator() -> None:
-    # Guards the guard: a check that cannot fail reads as evidence while
-    # supplying none. The planted bias is myopia -- weighting each step by its
-    # own reward instead of by everything that followed, which discards the
-    # credit assignment sec:policy-gradient says tree search makes sharp.
-    # Realized: 7.1e-01 relative, against 9.9e-03 for the correct estimator on
-    # the same episodes.
-    #
-    # What is *not* an error, since it looks like one: weighting every step by
-    # the episode's total return rather than its return-to-go is also unbiased,
-    # the discarded past rewards being uncorrelated with the action. Measured
-    # at 1.4e-02 here, inside the sampling tolerance. Return-to-go buys
+    # Guards the guard with a myopic estimator (own reward, no credit
+    # assignment): 7.1e-01 relative against 9.9e-03 correct. Total-return
+    # weighting is unbiased too, 1.4e-02, inside tolerance: return-to-go buys
     # variance, not correctness.
     environment, policy = potts_environment(), _policy([0.3, -0.6])
     start = (2, 1, 1, 0)
@@ -317,11 +291,8 @@ def test_the_gradient_check_would_catch_a_biased_estimator() -> None:
 @pytest.mark.smoke
 @pytest.mark.patch
 def test_the_shared_decision_loop_reproduces_the_loop_it_replaced() -> None:
-    # `log_probabilities_of` is the one score-function loop the five
-    # estimators walked apiece (issue #862), so it is read against the loop
-    # written out here: the same neighbourhood, the same distribution, the
-    # same index. Bitwise, both the taken entry and the whole vector, since
-    # an entropy bonus and a cross-entropy read the vector.
+    # The one score-function loop five estimators walked (#862), against the
+    # loop written out; bitwise, taken entry and whole vector.
     environment, policy = potts_environment(), _policy([0.3, -0.6])
     rng = np.random.default_rng(4)
     episodes = [rollout(environment, policy, rng, EPISODE_HORIZON) for _ in range(8)]

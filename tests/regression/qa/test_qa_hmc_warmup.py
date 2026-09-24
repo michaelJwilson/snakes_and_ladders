@@ -1,16 +1,10 @@
 """Regression tests for snakes_and_ladders.qa.hmc_warmup.
 
-The figure compares two chains against a mean and a covariance it declares,
-so everything it claims is refereed by a closed form. Three things are pinned
-here. Its target is the same object as ``tests._objective_checks``'s
-``AnalyticGaussian``, the target the sampler's own tests use, so the figure
-cannot drift into checking a different Gaussian from the one the suite
-validates the sampler on. Both chains are correct samplers rather than one
-correct chain and one stuck one, which is the failure that would make the
-comparison meaningless while leaving the picture convincing --- a chain that
-never moves reports an effective sample size equal to its length. And the
-claim the caption makes, that the warm-up repays its discarded draws in
-effective draws per gradient, is asserted rather than read off the plot.
+Refereed by closed forms. The target is ``tests._objective_checks``'s
+``AnalyticGaussian``, the sampler tests' own; both chains are correct
+samplers (a stuck chain reports an effective size equal to its length); and
+the caption's claim, that the warm-up repays its discarded draws in effective
+draws per gradient, is asserted.
 """
 
 from __future__ import annotations

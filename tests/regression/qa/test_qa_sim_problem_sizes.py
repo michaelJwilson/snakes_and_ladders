@@ -29,13 +29,7 @@ FIXTURE_PATHS = [FIXTURES_DIR / name for name in FIXTURE_NAMES]
 
 
 def _argv(output_dir: Path) -> list[str]:
-    """Build the argument vector naming every fixture, in row order.
-
-    Returns
-    -------
-    list[str]
-        The ``--params``/``--output-dir`` arguments for :func:`main`.
-    """
+    """The ``--params``/``--output-dir`` argv naming every fixture, in row order."""
     argv: list[str] = []
     for path in FIXTURE_PATHS:
         argv += ["--params", str(path)]
@@ -83,12 +77,8 @@ def test_underscores_in_fixture_names_are_escaped(tmp_path: Path) -> None:
 
 @pytest.mark.smoke
 def test_the_manifest_tabulates_these_three_fixtures_in_this_order() -> None:
-    # The oracle below pins every cell against the yaml it is read from, but
-    # only for the fixtures *this module* names. The committed table is
-    # rendered from the manifest's arguments, and the caption's "3" counts
-    # them, so a fourth `--params` added there would change both while every
-    # assertion here still passed. Row order is part of it: the table is one
-    # row per flag, in the order the flags are given.
+    # The table renders the manifest's arguments and its caption counts them,
+    # in row order; a fourth `--params` there would pass every pin here.
     spec = next(spec for spec in FIGURES if spec.stem == "sim_problem_sizes")
     flags = [
         value

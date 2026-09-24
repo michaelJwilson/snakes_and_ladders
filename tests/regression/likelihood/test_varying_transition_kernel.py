@@ -40,11 +40,7 @@ def _chain(
 def _enumerate(
     log_density: np.ndarray, log_initial: np.ndarray, kernels: np.ndarray
 ) -> tuple[float, np.ndarray, np.ndarray]:
-    """Evidence, posterior and pairwise by summing over all ``K ** T`` paths.
-
-    The independent answer: no forward message, no backward message, every
-    path's joint written out from the definition.
-    """
+    """Evidence, posterior and pairwise by summing over all ``K ** T`` paths."""
     length, n_states = log_density.shape
     paths = list(itertools.product(range(n_states), repeat=length))
     joint = np.empty(len(paths))
@@ -73,10 +69,7 @@ def _enumerate(
 def test_a_repeated_kernel_reproduces_the_single_matrix_bitwise() -> None:
     """The second shape must cost the first nothing, and it costs it nothing.
 
-    ``step_kernels`` hands the recursion a stride-zero view of the same
-    ``(K, K)`` block, so the constant case sums the same terms in the same
-    order. Equality here is exact, not a tolerance: were it a tolerance, the
-    26 call sites that pass a matrix would have been re-refereed.
+    A stride-zero view sums alike: exact, so 26 matrix call sites need no re-referee.
     """
 
     def check(n_states: int, length: int, seed: int) -> None:
@@ -126,9 +119,7 @@ def test_the_torch_recursion_reproduces_its_matrix_form_bitwise() -> None:
 def test_the_constant_form_is_a_view_and_not_a_copy() -> None:
     """The ``T``-fold memory is paid by the caller who asks for it, by nobody else.
 
-    At ``T = 4096``, ``K = 5`` a copy would be 800 KiB against the matrix's
-    200 B. The stride-zero view is neither, and the hoisted ``constant`` means
-    the constant recursion does not even index it.
+    At ``T = 4096``, ``K = 5`` a copy is 800 KiB against 200 B.
     """
     log_transition = np.zeros((5, 5))
     kernels, constant = step_kernels(log_transition, 4096, 5)
@@ -170,11 +161,7 @@ def test_a_varying_kernel_is_the_path_enumeration() -> None:
 def test_a_planted_two_regime_kernel_is_recovered_per_regime() -> None:
     """Recover a kernel that changes halfway, which no single matrix expresses.
 
-    The chain is sticky over its first half and mixing over its second. The
-    per-step pairwise posteriors, summed within each half and row-normalized,
-    are the M-step estimate of that half's kernel; each recovers its plant.
-    The pooled estimate --- the single matrix a constant kernel would fit ---
-    recovers neither, which is the statement that the shape was missing.
+    Sticky then mixing: each half's M-step estimate recovers its plant; pooled, neither.
     """
     n_states, half = 3, 1500
     length = 2 * half

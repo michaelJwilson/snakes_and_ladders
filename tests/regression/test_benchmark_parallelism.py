@@ -1,21 +1,11 @@
 """What keeps `pytest-xdist` and `pytest-benchmark` from silently cancelling each other.
 
-Issue #405. `pytest-benchmark` turns itself off whenever a run is
-distributed. It does not fail and it does not warn anywhere a log is read, so
-a suite run under `-n` reports the 212 benchmark tests as passed while no
-timing was taken --- and the run is *faster* for it, which reads as the
-speed-up being claimed rather than as the measurement being gone.
-
-The adoption answers that by never distributing a benchmark: the correctness
-tiers run under `-n 3` with `tests/benchmarks` ignored, and the benchmarks run
-serially in their own invocation. That makes the guard in `tests/conftest.py`
-unreachable, which is the reason to assert it --- what it catches is the next
-`-n` added to the wrong command.
-
-The duration cap is the same defect a second time and is pinned here too. It
-is recorded per test in `pytest_runtest_makereport`, which runs in the
-workers, and read in `pytest_sessionfinish` on the controller, whose stash is
-then empty: every test passes every cap.
+Issue #405. `pytest-benchmark` turns itself off in a distributed run without
+failing, so a run under `-n` passes the 212 benchmark tests with no timing
+taken. The correctness tiers run under `-n 3` without `tests/benchmarks`, the
+benchmarks serially; the guard in `tests/conftest.py` catches the next `-n`
+added to the wrong command. The duration cap is pinned too: it is recorded in
+the workers and read on the controller, whose stash is empty.
 """
 
 from __future__ import annotations
@@ -41,10 +31,7 @@ def _distributed_pytest(
 ) -> subprocess.CompletedProcess[bytes]:
     """Run a distributed pytest in a subprocess, rooted at the repository.
 
-    Skips where `pytest-xdist` is absent: it is in the `test` extra, which CI
-    installs, and an environment synced without that extra cannot start the
-    run these two tests are about. The three tests that read the tree do not
-    go through here and always run.
+    Skips without `pytest-xdist` (the `test` extra, which CI installs).
     """
     import os
 
@@ -85,9 +72,7 @@ def test_a_capped_run_under_xdist_fails_instead_of_passing_every_cap() -> None:
 def test_ci_distributes_the_correctness_tier_and_leaves_the_benchmarks_serial() -> None:
     """The workflow's two invocations, and which of them may carry `-n`.
 
-    Read off `.github/workflows/ci.yml` because a benchmark step that acquired
-    an `-n` would still be green --- the guard above is what fails it, and
-    this is what stops the arrangement drifting in the first place.
+    Read off `.github/workflows/ci.yml`, so the arrangement cannot drift.
     """
     workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
     step = workflow.split("- name: Run the selected tests", 1)[1].split("\n  docs:")[0]

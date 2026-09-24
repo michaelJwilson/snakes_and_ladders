@@ -1,27 +1,12 @@
 """The floor the critical tier's coverage may not fall below.
 
-Issue #635. The tier gates early, so what it *misses* is what a merge finds
-out about late. Measured when #635 widened the marker: **177 tests, 13,324
-statements, 8,421 missed, 36.80%** --- 149 of those tests infrastructure and
-eight across the five application packages. The floor is that measurement, and
-it rises as tests land.
-
-It has since risen once, on the build-out in the same pull request: **298
-tests, 14,051 statements, 7,269 missed, 48.27%**. The tier's own clock went
-from 42.4 s to 48.3 s over the same 34 tests, so the eleven and a half points
-cost 5.9 s.
-
-**Why a floor here as well as the 90% on the whole tier.** The two answer
-different questions. The whole tier's gate asks whether the package is tested;
-this asks whether the *fast* gate tests it, and a tier that passed the first
-while failing the second is the state this was written in --- every claim
-refereed somewhere, none of it refereed in sixteen seconds.
-
-**This runs where the whole-tier coverage runs, not on the early gate.**
-Instrumentation costs about 4x: the tier is 15.9 s bare (`DEV.md`) and 61.56 s
-under `--cov` on the same host. Paying that on every local `-m critical` would
-defeat the tier's reason for existing, so the guard reads a report CI has
-already produced and skips where there is none.
+Issue #635. The tier gates early, so what it misses a merge finds late.
+Measured when #635 widened the marker: 177 tests, 13,324 statements, 8,421
+missed, 36.80%; after the build-out, 298 tests, 14,051 statements, 7,269
+missed, 48.27%, for 5.9 s of tier clock (42.4 s to 48.3 s). The whole-tier
+90% asks whether the package is tested; this, whether the fast gate tests it.
+It reads the report CI produces and skips where there is none: `--cov` costs
+about 4x (15.9 s bare, 61.56 s instrumented).
 """
 
 from __future__ import annotations
@@ -31,15 +16,8 @@ from pathlib import Path
 
 import pytest
 
-#: The measured floor, and the only number this file states. Raise it to what
-#: a pull request lands and never lower it --- the rule root `CLAUDE.md` gives
-#: for `--cov-fail-under`, one tier down.
-#:
-#: **Rounded down, not to nearest.** The measurement is 48.267027257846415 and
-#: the terminal report prints 48%; a floor set from what was printed is below
-#: what was measured and gives back a point, and one rounded up is above it and
-#: fails the run it was derived from --- which the 36.7 that stood here before
-#: the build-out did, and this guard caught.
+#: The measured floor: raised with a PR, never lowered. Rounded down from
+#: 48.267027257846415: rounded up it fails the run it came from, as a 36.7 once did.
 CRITICAL_COVERAGE_FLOOR = 48.2
 
 #: Where CI leaves the report this reads. Absent locally, which is a skip
@@ -53,8 +31,7 @@ COVERAGE_JSON = Path(__file__).resolve().parents[2] / "coverage-critical.json"
 def test_the_floor_is_stated_once_and_is_a_percentage() -> None:
     """The constant is the contract, so it is checked before it is used.
 
-    A floor above 100 or below zero would pass every run silently, which is
-    the failure mode a guard reading its own constant has.
+    A floor above 100 or below zero would pass every run silently.
     """
     assert 0.0 < CRITICAL_COVERAGE_FLOOR <= 100.0
 
@@ -63,9 +40,7 @@ def test_the_floor_is_stated_once_and_is_a_percentage() -> None:
 def test_the_critical_tier_covers_at_least_the_floor() -> None:
     """The tier's coverage, against the floor #635 measured.
 
-    Skipped where CI has left no report, which is every local run: the
-    measurement costs 4x the tier and belongs where the whole-tier coverage
-    is already paid for.
+    Skipped where CI has left no report, which is every local run.
     """
     if not COVERAGE_JSON.exists():
         pytest.skip(
@@ -88,9 +63,7 @@ def test_the_critical_tier_covers_at_least_the_floor() -> None:
 def test_dev_md_names_the_file_that_holds_the_floor() -> None:
     """`DEV.md` describes the guard and points here for the number.
 
-    It states the measurement this was set against, which is a fact of when
-    #635 landed and does not move; the floor, which does move, lives here. A
-    reader of either finds the other.
+    It keeps the #635 measurement, which does not move; the floor lives here.
     """
     dev = (Path(__file__).resolve().parents[2] / "DEV.md").read_text()
 

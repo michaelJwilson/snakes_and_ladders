@@ -37,11 +37,7 @@ def _enumerate_lattice(
     coupling: tuple[float, ...],
     field: np.ndarray,
 ) -> tuple[float, np.ndarray, dict[tuple[int, int], np.ndarray]]:
-    """Exact ``log Z``, single-site marginals, and the pair marginal per edge.
-
-    Sums over every one of ``n_states ** graph_n_nodes`` configurations --
-    the only oracle independent of the Gibbs sampler under test.
-    """
+    """Exact ``log Z``, site and per-edge pair marginals, over every configuration."""
     n_states = field.shape[0]
     weights = []
     configurations = list(product(range(n_states), repeat=graph_n_nodes))

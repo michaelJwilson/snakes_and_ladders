@@ -134,19 +134,10 @@ def test_the_manifest_renders_this_figure_from_the_fixture_the_caption_names() -
 @pytest.mark.end2end
 @pytest.mark.release
 def test_more_sites_recover_the_topology_more_often() -> None:
-    # The claim the figure makes, and since #492 the exact sentence its
-    # caption states: the mean over replicates meets the requirement at the
-    # longest alignment swept and misses it at the shortest. Asserted as a
-    # comparison between the ends of the sweep rather than as a threshold at
-    # any one size in between: the rate at a given site count is a property of
-    # this fixture, the two ends and the trend are properties of the method.
-    #
-    # The caption used to quote where the sweep first clears the requirement
-    # and how many of eight replicates recover the topology exactly at either
-    # end. Both are discontinuous in 48 L-BFGS fits taken at the margin ---
-    # `docs/CLAUDE.md`'s rule against publishing a number a rebuild on another
-    # machine can move --- so they left the caption rather than gaining a pin
-    # here that would itself be unstable.
+    # The caption's sentence since #492: the mean meets the requirement at
+    # the longest alignment and misses it at the shortest, compared end to
+    # end; mid-sweep rates are the fixture's and discontinuous over 48 fits
+    # (`docs/CLAUDE.md`).
     measured = topology_accuracy.accuracy(load_params(FIXTURE, SimulationParams))
     smallest = float(np.mean(measured[min(SITE_COUNTS)]))
     largest = float(np.mean(measured[max(SITE_COUNTS)]))
