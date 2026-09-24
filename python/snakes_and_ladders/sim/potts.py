@@ -998,3 +998,270 @@ def _spatio_only_sizes(path: Path, declared: Any, n_nodes: int) -> np.ndarray:
         return np.asarray(np.exp(drawn))
     msg = f"{path}: sizes.form {form!r} is not one of ['declared', 'lognormal']"
     raise ValueError(msg)
+
+
+# --- a Potts prior whose field favours one state per tile (issue #1050) -----
+
+_SPATIO_TILING_REQUIRED_FIELDS = frozenset(
+    {
+        "geometry",
+        "shape",
+        "boundary",
+        "n_states",
+        "coupling",
+        "tiles",
+        "states",
+        "strengths",
+    }
+)
+
+#: The keys a tiling fixture's ``tiles`` declares: the seed its centres are
+#: drawn from and ``k``, the tile count.
+_TILES_KEYS = frozenset({"seed", "k"})
+
+
+def tile_partition(graph: PottsGraph, k: int, rng: np.random.Generator) -> np.ndarray:
+    """Every node assigned to the nearest of ``k`` centres drawn from ``rng``: a seeded Voronoi tiling.
+
+    The centres are ``k`` distinct nodes drawn uniformly without replacement,
+    in draw order; a node joins the centre nearest it in graph distance
+    (hops), and a tie goes to the centre drawn first. Tile ``t`` holds centre
+    ``t``.
+
+    **Every tile is connected, and the tie rule is why.** Take a node ``v``
+    joined to centre ``c`` at distance ``d``, and its predecessor ``u`` on a
+    shortest path to ``c``, at ``d - 1``. A centre ``c'`` nearer ``u`` than
+    ``d - 1`` would be nearer ``v`` than ``d``; one at exactly ``d - 1`` would
+    be at most ``d`` from ``v``, so it ties with ``c`` there and was drawn
+    after it. So ``u`` joins ``c`` too, and induction on ``d`` walks ``v``
+    back to ``c`` inside the tile. A tie broken by anything other than one
+    order over the centres --- a random draw per node --- can strand a node.
+
+    Parameters
+    ----------
+    graph : PottsGraph
+        Connected.
+    k : int
+        The tile count, ``1 <= k <= graph.n_nodes``.
+    rng : np.random.Generator
+        Draws the centres, and nothing else.
+
+    Returns
+    -------
+    np.ndarray
+        ``int64``, shape ``(n_nodes,)``, the tile of each node.
+
+    Raises
+    ------
+    ValueError
+        If ``k`` is out of range, or a node is reached from no centre, which a
+        disconnected graph allows.
+
+    Examples
+    --------
+    >>> from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+    >>> chain = lattice_graph((6,), BoundaryCondition.OPEN, 1.0)
+
+    The generator draws centres 0 and 4; node 2 is two hops from each and
+    joins the first drawn.
+
+    >>> tile_partition(chain, 2, np.random.default_rng(3))
+    array([0, 0, 0, 1, 1, 1])
+    """
+    from scipy.sparse import csr_matrix
+    from scipy.sparse.csgraph import shortest_path
+
+    if not 1 <= k <= graph.n_nodes:
+        msg = f"k must be in [1, {graph.n_nodes}], got {k}"
+        raise ValueError(msg)
+    centres = rng.choice(graph.n_nodes, size=k, replace=False)
+    adjacency = graph.compressed_adjacency()
+    matrix = csr_matrix(
+        (
+            np.ones(adjacency.neighbours.shape[0]),
+            adjacency.neighbours,
+            adjacency.offsets,
+        ),
+        shape=(graph.n_nodes, graph.n_nodes),
+    )
+    # Hop counts from each centre, one row per centre in draw order; `argmin`
+    # returns the first row at the minimum, which is the tie rule above.
+    distances = shortest_path(matrix, unweighted=True, indices=centres)
+    if not bool(np.isfinite(distances.min(axis=0)).all()):
+        msg = "a node is reached from no centre; the graph is not connected"
+        raise ValueError(msg)
+    return np.asarray(np.argmin(distances, axis=0), dtype=np.int64)
+
+
+def tiling_field(
+    tiles: np.ndarray,
+    states: np.ndarray,
+    strengths: np.ndarray,
+    n_states: int,
+) -> np.ndarray:
+    """``h[i, m] = s_t [m = a_t]`` for ``i`` in tile ``t``: one favoured state per tile.
+
+    Not linear in the state, where :func:`spatio_only_field` is: a tile
+    rewards its own state and no other, so no two-state reduction holds and
+    the optimum at ``q >= 3`` can use every state the tiling plants.
+
+    Parameters
+    ----------
+    tiles : np.ndarray
+        Tile per node, ``int``, shape ``(n_nodes,)``, values in ``[0, k)``.
+    states : np.ndarray
+        ``a_t``, the favoured state per tile, ``int``, shape ``(k,)``, values
+        in ``[0, n_states)``.
+    strengths : np.ndarray
+        ``s_t`` per tile, shape ``(k,)``, each positive.
+    n_states : int
+        ``q``.
+
+    Returns
+    -------
+    np.ndarray
+        Shape ``(n_nodes, n_states)``: ``s_t`` at each node's favoured state,
+        zero elsewhere.
+
+    Raises
+    ------
+    ValueError
+        If the lengths disagree, a favoured state is out of range, a tile is
+        out of range, or a strength is not positive.
+
+    Examples
+    --------
+    >>> tiling_field(np.array([0, 0, 1]), np.array([2, 0]), np.array([1.5, 0.5]), 3)
+    array([[0. , 0. , 1.5],
+           [0. , 0. , 1.5],
+           [0.5, 0. , 0. ]])
+    """
+    tiles = np.asarray(tiles, dtype=np.int64)
+    states = np.asarray(states, dtype=np.int64)
+    strengths = np.asarray(strengths, dtype=np.float64)
+    if states.shape != strengths.shape or states.ndim != 1:
+        msg = (
+            f"one state and one strength per tile, got {states.shape} "
+            f"and {strengths.shape}"
+        )
+        raise ValueError(msg)
+    if states.size and not bool(((states >= 0) & (states < n_states)).all()):
+        msg = f"every favoured state must be in [0, {n_states}), got {states}"
+        raise ValueError(msg)
+    if not bool(((tiles >= 0) & (tiles < states.size)).all()):
+        msg = f"every tile must be in [0, {states.size})"
+        raise ValueError(msg)
+    if not bool((strengths > 0.0).all()):
+        msg = f"every strength must be positive, got a minimum of {strengths.min()}"
+        raise ValueError(msg)
+    field = np.zeros((tiles.size, n_states))
+    field[np.arange(tiles.size), states[tiles]] = strengths[tiles]
+    return field
+
+
+@dataclass(frozen=True)
+class SpatioTilingParams:
+    """A Potts prior whose field favours one planted state per tile.
+
+    The lattice of :class:`SpatioOnlyParams` with a field that is not linear
+    in the state: the sites are split into ``k`` connected tiles by
+    :func:`tile_partition`, and tile ``t`` rewards state ``a_t`` by ``s_t``
+    (:func:`tiling_field`). The strengths are declared across the coupling,
+    so some tiles are held by their field and others give way to a
+    neighbour's state.
+
+    An instance and not a draw: the planted states are the truth a ground
+    state is read against, and no sampler reads this fixture.
+
+    Parameters
+    ----------
+    graph : PottsGraph
+        The lattice, of the declared geometry, shape, boundary and coupling.
+    n_states : int
+        ``q``.
+    tiles : np.ndarray
+        Tile per site, shape ``(n_nodes,)``.
+    states : np.ndarray
+        ``a_t``, the favoured state per tile, shape ``(k,)``.
+    strengths : np.ndarray
+        ``s_t``, shape ``(k,)``.
+    field : np.ndarray
+        ``h``, shape ``(n_nodes, q)``, from the three above.
+    tiling_seed : int
+        Seed of the generator the tiles' centres are drawn from.
+    """
+
+    graph: PottsGraph
+    n_states: int
+    tiles: np.ndarray
+    states: np.ndarray
+    strengths: np.ndarray
+    field: np.ndarray
+    tiling_seed: int
+
+    #: The fields :func:`snakes_and_ladders.fixtures.load_params` checks are present before
+    #: calling :meth:`from_declared`.
+    required_fields: ClassVar[frozenset[str]] = _SPATIO_TILING_REQUIRED_FIELDS
+
+    @property
+    def n_tiles(self) -> int:
+        """``k``."""
+        return int(self.states.size)
+
+    @classmethod
+    def from_declared(cls, declared: Mapping[str, Any], path: Path, /) -> Self:
+        """Build the truth from a tiling-field Potts fixture's declared mapping.
+
+        Raises
+        ------
+        ValueError
+            If the geometry is not one this module builds, ``tiles`` does not
+            declare exactly a seed and ``k``, or the states and strengths are
+            not one per tile.
+        """
+        geometry = str(declared["geometry"])
+        if geometry not in _GEOMETRIES:
+            msg = f"{path}: geometry {geometry!r} is not one of {sorted(_GEOMETRIES)}"
+            raise ValueError(msg)
+        shape = tuple(int(extent) for extent in declared["shape"])
+        graph = _GEOMETRIES[geometry](
+            shape,
+            boundary_from_declared(path, declared["boundary"]),
+            float(declared["coupling"]),
+        )
+        n_states = int(declared["n_states"])
+        if n_states < 3:
+            msg = (
+                f"{path}: n_states must be >= 3, got {n_states}; at two the "
+                "field is linear in the state and the instance is spatio_only's"
+            )
+            raise ValueError(msg)
+        raw = declared["tiles"]
+        if not isinstance(raw, Mapping) or set(raw) != _TILES_KEYS:
+            msg = f"{path}: tiles declares exactly {sorted(_TILES_KEYS)}"
+            raise ValueError(msg)
+        k = int(raw["k"])
+        states = np.asarray(declared["states"], dtype=np.int64)
+        strengths = np.asarray(declared["strengths"], dtype=np.float64)
+        if states.shape != (k,) or strengths.shape != (k,):
+            msg = (
+                f"{path}: states {states.shape} and strengths {strengths.shape} "
+                f"must each be one per tile, ({k},)"
+            )
+            raise ValueError(msg)
+        seed = int(raw["seed"])
+        tiles = tile_partition(graph, k, np.random.default_rng(seed))
+        try:
+            field = tiling_field(tiles, states, strengths, n_states)
+        except ValueError as error:
+            msg = f"{path}: {error}"
+            raise ValueError(msg) from error
+        return cls(
+            graph=graph,
+            n_states=n_states,
+            tiles=tiles,
+            states=states,
+            strengths=strengths,
+            field=field,
+            tiling_seed=seed,
+        )
