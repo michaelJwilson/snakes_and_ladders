@@ -1,30 +1,14 @@
 """A feature set beyond the improvement a move buys, and what it changes (issue #328).
 
-With one feature the policy is an inverse temperature and no optimizer can
-learn what the class cannot express, which is why the hard fixture of issue
-#177 measured every policy at hill climbing's rate. ``FeatureSet.FULL`` adds
-six columns a move already computes without a fit. Three things are pinned
-before any training: every column is refereed by an independent computation
-in ``test_search_rl.py`` and ``test_search_support.py``; every column varies
-across a neighbourhood, and a planted constant column is refused, since
-``learn/CLAUDE.md`` says a constant is unidentifiable; and the greedy searcher
-stays inside the policy class, since standardizing a column is a positive
-affine map and cannot reorder it.
-
-Then the measurement: issue #178's comparison on the hard fixture, single
-feature against the full set, at 640 episodes and 50 starts, with an exact
-sign test over training seeds. The per-pull-request test runs one seed at a
-sixth of the budget and pins its rates; the 16-seed run at the full budget is
-release-gated, and ``docs/experiments/005-tree-policy-features.md`` records
-what it found.
-
-Both of those are release-gated, so what remains per pull request is the
-sibling at the end of this module (issue #401): the same training, one seed,
-on the six-taxon fixture, against the untrained rate and the hill-climbing
-rate read from that fixture's baseline record. It pins that the training runs
-and lands where expected; it cannot pin the full set *ahead* of the single
-feature, because at six taxa both reach the enumerated maximum from every
-start. That claim has no fast form and stays at the release gate.
+One feature makes the policy an inverse temperature (#177). ``FeatureSet.FULL``
+adds six columns a move computes without a fit, each refereed in
+``test_search_rl.py`` and ``test_search_support.py``; every column varies over
+a neighbourhood and a planted constant is refused (``learn/CLAUDE.md``); greedy
+stays inside the class, as standardization cannot reorder a column. Issue
+#178's comparison (640 episodes, 50 starts, exact sign test) is release-gated
+(``docs/experiments/005-tree-policy-features.md``). The per-PR sibling (#401)
+trains one seed on six taxa against the baseline record; there both sets reach
+the maximum from every start, so "full ahead" stays at release.
 """
 
 from __future__ import annotations
@@ -61,11 +45,8 @@ from tests._fixtures import FIXTURES_DIR
 
 FIXTURE = FIXTURES_DIR / "tree_search/release.yaml"
 
-# Issue #178's budget, unchanged: 50 starts at seed + 1000 and 30 decisions
-# per episode, as `test_search_hard_fixture.py` measures greedy; 640 training
-# episodes; and 16 rollouts per start for the stochastic policy, averaged
-# rather than best-of, so the per-episode rate is budget-matched against
-# greedy's one deterministic run.
+# Issue #178's budget: 50 starts at seed + 1000, 30 decisions per episode, 640
+# training episodes, 16 averaged rollouts per start, budget-matched to greedy.
 HORIZON = 30
 STARTS = 50
 START_SEED_OFFSET = 1000
@@ -89,11 +70,8 @@ _GREEDY = 0.48
 _UNTRAINED = 0.02
 _CI_RATES = {FeatureSet.IMPROVEMENT: 0.435, FeatureSet.FULL: 0.595}
 
-# Realized at the full budget over the 16 seeds: the mean rate per feature
-# set (single 0.465-0.535, full 0.695-0.849) and the exact sign test of the
-# full set against the single feature, ahead in 16 of 16 seeds; the single
-# feature against greedy is p = 0.79. The per-seed table is
-# `docs/experiments/005-tree-policy-features.md`.
+# Realized over 16 seeds: single 0.465-0.535, full 0.695-0.849; full ahead in
+# 16 of 16; single against greedy p = 0.79 (`docs/experiments/005-...`).
 _RELEASE_MEAN = {FeatureSet.IMPROVEMENT: 0.487, FeatureSet.FULL: 0.796}
 _RELEASE_P_FULL_VS_SINGLE = 3.05e-5
 
@@ -171,10 +149,7 @@ def trained_rate(
 ) -> float:
     """Train one policy from ``seed`` and measure it from the shared starts.
 
-    Self-contained: the release run spreads seeds over processes, and a
-    process must build everything it needs from the fixture alone. The
-    evaluation generator is seeded from the training seed, so a seed is one
-    number.
+    Self-contained for worker processes; the evaluation seed derives from ``seed``.
     """
     params = _params()
     built, taxa = environment(params, feature_set)
@@ -352,12 +327,8 @@ def test_shifting_a_column_by_a_constant_leaves_the_policy_unchanged(
 def test_the_greedy_weights_reproduce_the_greedy_searcher(
     full: tuple[TreeEnvironment, list[str]], starts: list[Topology]
 ) -> None:
-    # `learn/CLAUDE.md`: the greedy searcher must be inside the policy class.
-    # Weight on the improvement column only, and the policy's argmax is the
-    # move greedy takes at every state of every greedy trajectory -- the
-    # standardization cannot reorder a column. Asserted on the trajectories
-    # rather than on a rollout, since a sampled rollout at a large weight
-    # would only be greedy with high probability.
+    # Greedy inside the class (`learn/CLAUDE.md`): improvement-only weights take
+    # greedy's move at every state of its trajectories, checked on trajectories.
     built, _ = full
     policy = LinearPolicy(built.n_features())
     weights = torch.zeros(built.n_features(), dtype=torch.float64)
@@ -382,11 +353,8 @@ def test_the_greedy_weights_reproduce_the_greedy_searcher(
 def test_the_full_set_is_ahead_of_the_single_feature_at_the_ci_budget(
     full: tuple[TreeEnvironment, list[str]], starts: list[Topology]
 ) -> None:
-    # One seed at half the budget. Against the uniform control, both trained
-    # policies must land within 0.1 of the rates realized here and keep their
-    # order. The 16-seed claim is the release run's. The one seed measured
-    # 33.1 s on the reference host, over the 10 s cap, so this runs at the
-    # release gate too (issue #372).
+    # One seed, half the budget: within 0.1 of these rates, order kept. 33.1 s
+    # on the reference host, over the 10 s cap, so release too (issue #372).
     built, taxa = full
     best = enumerated_maximum(built, taxa)
     assert greedy_rate(built, starts, best) == pytest.approx(_GREEDY)
@@ -451,13 +419,8 @@ _SIBLING_RATE = 1.0
 
 @pytest.mark.end2end
 def test_both_feature_sets_train_away_from_the_recorded_untrained_rate() -> None:
-    # The fast sibling of the two release-tier measurements above. The control
-    # and the baseline are the fixture's committed record -- the untrained
-    # policy reaches the enumerated maximum on 0.17 of episodes and hill
-    # climbing on 1.00 -- so the 6 s of uniform rollouts and the enumeration
-    # behind them are not paid again. `infra/baselines.py` recomputes both at
-    # the release gate, and a changed environment makes this read raise rather
-    # than serve a stale number.
+    # The control and baseline are the committed record (untrained 0.17, hill
+    # climbing 1.00), recomputed at release; a changed environment raises.
     record = baseline(SIBLING, SIBLING_TIER)
     untrained, greedy = record.value("untrained_rate"), record.value("greedy_rate")
     assert untrained < 0.25 < greedy, (untrained, greedy)

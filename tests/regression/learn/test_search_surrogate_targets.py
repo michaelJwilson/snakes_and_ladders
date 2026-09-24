@@ -1,20 +1,11 @@
 """The surrogate's three exact targets and its augmentation, against enumeration (issue #729).
 
-`search/surrogate.py` turns instances into training data, and the number each
-example carries is the target. Three of those targets and the augmentation
-that reorders a tree were entered by no judging test at #729's measurement,
-so what a fit is fitted to was itself unrefereed. Each is pinned here to an
-answer computed without it:
-
-* :func:`strip_log_partition_target` against
-  :func:`~snakes_and_ladders.likelihood.potts.enumerate_potts` on the declared
-  3x3 lattice, where the transfer matrix and the enumeration are both exact.
-* :func:`ground_state_target` against the minimum over every configuration of
-  the same lattice.
-* :func:`ground_state_offset` against that minimum as the bound it claims to
-  be, instance by instance.
-* :func:`shuffle_children` against the maximized log-likelihood of the tree it
-  respells, which no reordering of a node's children may move.
+Each was unrefereed at #729's measurement and is pinned to an answer computed
+without it: :func:`strip_log_partition_target` against
+:func:`~snakes_and_ladders.likelihood.potts.enumerate_potts` on the 3x3
+lattice; :func:`ground_state_target` against the enumerated minimum;
+:func:`ground_state_offset` as a bound on it, per instance; and
+:func:`shuffle_children` against the maximized log-likelihood it may not move.
 """
 
 from __future__ import annotations
@@ -67,12 +58,8 @@ def _enumerated_minimum(graph: object, field: np.ndarray, n_states: int) -> floa
 
 @pytest.mark.oracle
 def test_the_strip_target_is_the_enumerated_log_partition() -> None:
-    # Two exact routes to one number, sharing no recursion: the column
-    # transfer matrix the target uses, and the sum over all 19,683
-    # configurations. The target exists because the transfer matrix runs past
-    # the size the enumeration stops at, so the size where both run is the
-    # only place it can be judged. Realized 13.5439055020 either way, 1.3e-16
-    # relative apart.
+    # Transfer matrix against 19,683 configurations, sharing no recursion:
+    # 13.5439055020 either way, 1.3e-16 relative apart.
     exact = enumerate_potts(CI.graph, CI.field).log_partition
 
     assert strip_log_partition_target()(CI.graph, CI.field) == pytest.approx(
@@ -106,13 +93,8 @@ def test_the_strip_target_refuses_the_lattices_it_is_not_exact_on() -> None:
 def test_the_ground_state_target_is_the_enumerated_minimum_energy(
     backend: Backend,
 ) -> None:
-    # The release rung's target is what alpha expansion reaches, which is an
-    # upper bound on the ground state and not the ground state. At the size
-    # the enumeration runs, that bound is attained: realized
-    # -7.9364200936 from both minimum-cut backends against -7.9364200936
-    # enumerated over 19,683 configurations, 1.8e-15 absolute apart. So the
-    # target the release fits are scored by is the true minimum here, and a
-    # regression that left expansion short of it fails this.
+    # Expansion is an upper bound, attained here: -7.9364200936 from both cut
+    # backends and enumerated, 1.8e-15 apart.
     exact = _enumerated_minimum(CI.graph, CI.field, CI.n_classes)
 
     reached = ground_state_target(CI.n_classes, backend=backend)(CI.graph, CI.field)
@@ -124,12 +106,8 @@ def test_the_ground_state_target_is_the_enumerated_minimum_energy(
 def test_the_ground_state_offset_bounds_the_enumerated_minimum_of_every_instance() -> (
     None
 ):
-    # The offset a ground-state fit predicts above, on four redrawn instances
-    # of the declared family. It is the sum of each term's own optimum, so no
-    # configuration can beat it, and it is stacked in the order the instances
-    # arrive. Judged against the enumerated minimum of each instance rather
-    # than against the function that computes the bound: realized gaps 2.8818,
-    # 3.3203, 3.3153 and 2.5391 below it, so the bound holds and is not tight.
+    # The sum of each term's optimum, judged against each instance's enumerated
+    # minimum: gaps 2.8818, 3.3203, 3.3153, 2.5391, so it holds and is not tight.
     graphs, fields, _ = lattice_instances(CI, 2, 2)
 
     offsets = ground_state_offset(graphs, fields)
@@ -149,13 +127,9 @@ def test_the_ground_state_offset_bounds_the_enumerated_minimum_of_every_instance
 
 @pytest.mark.oracle
 def test_shuffling_a_node_s_children_moves_no_likelihood() -> None:
-    # The augmentation claims to be a symmetry of the problem rather than of
-    # its spelling, and the referee is the quantity the problem is stated in:
-    # the maximized log-likelihood of the topology, refitted from the shuffled
-    # spelling by `score_topology`. Over 8 shuffles of the 4-taxon fixture the
-    # splits are identical, every spelling is a valid unrooted Newick string,
-    # 5 distinct spellings are produced, and the realized worst relative
-    # movement in the maximized log-likelihood is 1.3e-16.
+    # Refereed by the refitted maximized log-likelihood: over 8 shuffles of the
+    # 4-taxon fixture, splits identical, 5 distinct valid spellings, worst
+    # relative movement 1.3e-16.
     params = load_fixture(SMALL_SITES)
     alignment = dict(
         simulate_tree(params, np.random.default_rng(params.seed), n_sites=200).alignment

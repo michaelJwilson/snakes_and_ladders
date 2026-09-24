@@ -1,26 +1,13 @@
 """Learned surrogates on the `spatio_only` Potts lattices (issue #365).
 
-Three rungs of one fixture, and what referees a fit changes at each. At `ci`
-enumeration gives `log Z` over 3**9 configurations; at `stress` the column
-transfer matrix gives it at 72 sites; at `release` neither reaches 5,041
-sites and 10 classes, so the target is the energy alpha-expansion reaches,
-which the discrete solvers do compute there.
-
-Every prediction is bracketed before it is scored. `mean_field_log_partition`
-and `spanning_tree_log_partition` bracket `log Z` at the two lower rungs;
-`decoupled_ground_energy` and the energy of the per-site data optimum bracket
-the ground state at every size, the spanning-tree bound being one exact tree
-pass per edge and so out of reach at 14,840 edges. A fit outside its bracket
-is wrong whatever its held-out error.
-
-**What is reported is the gap, and the control says why.** At `ci` the
-analytic offset alone already ranks every held-out group's best first, so
-`argmax_agreement` there measures the instance and not the model; at
-`stress` it ranks 0.667 of them and at `release` 0.333. What a model adds at
-every rung is the gap above its offset --- 0.32 to 0.49 nats over 9 sites,
-2,066 to 2,200 over 5,041 --- which the offset itself says nothing about, so
-the number each fit is held to is the coefficient of determination on that
-gap over held-out groups.
+`log Z` is exact by enumeration at `ci` (3**9) and by transfer matrix at
+`stress` (72 sites); at `release` (5,041 sites, 10 classes) the target is the
+alpha-expansion energy. Every prediction is bracketed: mean-field and
+spanning-tree bounds on `log Z` below `release`, the decoupled energy and the
+per-site data optimum's at every size. The offset alone ranks the held-out
+best first at `ci` (0.667 at `stress`, 0.333 at `release`), so each fit is
+held to R^2 on the gap above it: 0.32 to 0.49 nats at 9 sites, 2,066 to
+2,200 at 5,041.
 """
 
 from __future__ import annotations
@@ -113,11 +100,7 @@ def _log_partition_bracket(
 def _energy_bracket(
     graphs: Sequence[PottsGraph], fields: Sequence[np.ndarray]
 ) -> tuple[np.ndarray, np.ndarray]:
-    """The decoupled energy below and the per-site data optimum's energy above.
-
-    Both are one pass over the sites and one over the edges, so unlike the
-    `log Z` bracket they exist at 5,041 sites.
-    """
+    """The decoupled energy below, the per-site data optimum's above: any size."""
     lower = [
         float(decoupled_ground_energy(graph, torch.as_tensor(field)))
         for graph, field in zip(graphs, fields, strict=True)
@@ -134,13 +117,8 @@ def _energy_bracket(
 
 @pytest.mark.oracle
 def test_four_bounds_bracket_the_enumerated_log_partition() -> None:
-    # Enumeration over 3**9 configurations of the declared instance, against
-    # the two brackets the fits below are held inside. Measured: the exact
-    # value is 13.5439, mean field 13.1100 and the spanning-tree bound
-    # 13.8358 either side of it, and the two decoupled bounds 10.9492 and
-    # 21.8499 outside those. The decoupled pair is looser by a factor of 15
-    # and costs one pass rather than one exact tree pass per edge, which is
-    # why it is the pair that reaches `release`.
+    # Measured: exact 13.5439; mean field 13.1100, spanning tree 13.8358;
+    # decoupled 10.9492 and 21.8499, 15x looser at one pass, so they reach `release`.
     field = torch.as_tensor(CI.field)
     exact = enumerate_potts(CI.graph, CI.field).log_partition
 
@@ -176,13 +154,9 @@ def test_the_decoupled_energy_bound_lies_below_every_configuration() -> None:
 
 @pytest.mark.oracle
 def test_a_surrogate_learns_the_gap_above_the_mean_field_bound_at_nine_sites() -> None:
-    # Six groups of four instances of the declared 3x3 family, `log Z` exact
-    # by enumeration, split whole groups three ways. Both models learn the
-    # gap above the mean-field bound, which spans 0.32 to 0.49 nats and which
-    # the bound itself says nothing about, and both stay inside the
-    # spanning-tree bracket. The control is the bound alone: it ranks every
-    # held-out group's best first, so the ranking is the instance's and the
-    # coefficient of determination on the gap is the model's.
+    # Six groups of four 3x3 instances, whole groups split three ways; both
+    # models learn the 0.32-0.49 nat gap above mean field inside the tree
+    # bracket. The bound alone ranks every held-out best first.
     graphs, fields, groups = lattice_instances(CI, 6, 4)
     examples = lattice_examples(
         graphs, fields, enumerated_log_partition_target(), groups=groups
@@ -220,16 +194,10 @@ def test_a_surrogate_learns_the_gap_above_the_mean_field_bound_at_nine_sites() -
 def test_a_ci_fit_collapses_at_the_transfer_matrix_rung_and_recovers_on_transfer() -> (
     None
 ):
-    # The claim ROADMAP 2.2 asks for and issue #414 records for 3x3 to 4x6
-    # lattices, on this fixture's own two square rungs: 9 sites to 72, `log Z`
-    # exact by enumeration below and by the column transfer matrix above. The
-    # features and the tokens are the same width at both, so one model reads
-    # both without an embedding --- and it still collapses. Measured on 12
-    # held-out instances of 48: zero-shot at `stress` the graph model explains
-    # -338.6 of the gap and the attention model -360.8, recovering to 0.722
-    # and 0.522 after training there from those weights. A `stress` fit from
-    # scratch reaches 0.958 for attention and 0.091 for the graph model, so
-    # the transfer helps the graph form and costs the attention one.
+    # ROADMAP 2.2 (#414), 9 sites to 72. Over 12 held-out instances of 48:
+    # zero-shot R^2 -338.6 (graph) and -360.8 (attention), 0.722 and 0.522
+    # fine-tuned; from scratch at `stress` 0.091 and 0.958. Transfer helps the
+    # graph form and costs the attention one.
     small = lattice_instances(CI, 12, 4)
     large = lattice_instances(STRESS, 12, 4)
     at_ci = lattice_examples(
@@ -273,25 +241,13 @@ def test_a_ci_fit_collapses_at_the_transfer_matrix_rung_and_recovers_on_transfer
 def test_the_surrogates_predict_the_ground_state_energy_at_five_thousand_sites() -> (
     None
 ):
-    # The release rung, and the first fit run at this size: the triangular
-    # 71x71 lattice, 5,041 sites and 10 classes. `oracle: none` there, so the
-    # target is the energy alpha expansion reaches --- what the discrete
-    # solvers do compute at this size --- and the offset the decoupled energy
-    # bound below it. Measured over 12 held-out instances of 48: the deep MLP
-    # explains 0.515 of the gap and the linear model 0.332, and every
-    # prediction of both lies inside a bracket 1.03 per site wide.
-    #
-    # The two token models are the finding, and it inverts what the ticket
-    # expected. `GraphSurrogate` diverges here --- R^2 -47.5 over 150 epochs and
-    # -976.7 over 30 --- because `_Batch.pool` sums over nodes, so
-    # the vector its decoder reads is three orders of magnitude larger at
-    # 5,041 sites than at the 9 the same architecture was fitted on.
-    # `AttentionSurrogate` does not run at all: one attention matrix is
-    # 5,041**2 float64 = 203.3 MB and 24 training examples over two heads is
-    # 9.76 GB, which the kernel killed at 9.96 GB resident, twice. Both are
-    # ticketed. What holds is the fallback: the diverged graph fit is still
-    # inside the bracket, because it predicts a gap above a bound rather than
-    # the energy itself.
+    # 71x71 triangular, 5,041 sites, 10 classes; target the alpha-expansion
+    # energy, offset the decoupled bound. Over 12 held-out of 48: deep MLP
+    # 0.515, linear 0.332, all inside a 1.03-per-site bracket. `GraphSurrogate`
+    # diverges (R^2 -47.5 at 150 epochs, -976.7 at 30: `_Batch.pool` sums over
+    # nodes); `AttentionSurrogate` needs 203.3 MB per matrix, 9.76 GB for 24
+    # examples, and was killed at 9.96 GB, twice. Both ticketed; the diverged
+    # fit stays inside the bracket, predicting a gap above a bound.
     graphs, fields, groups = lattice_instances(RELEASE, 12, 4)
     examples = lattice_examples(
         graphs,

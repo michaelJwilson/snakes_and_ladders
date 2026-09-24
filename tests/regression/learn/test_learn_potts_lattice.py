@@ -1,17 +1,10 @@
 """The Potts environment over a graph rather than a chain.
 
-`PottsEnvironment.on_graph` is a second constructor and not a second class: the
-energy, the move set, the features and the reward are shared with the chain,
-and only the adjacency differs. So most of what could break is already
-covered by `test_learn_potts.py`, and what is checked here is the part that
-is new --- that the adjacency is read correctly, that the local reward still
-matches a full evaluation when a site has more than two neighbours, and that
-a chain built as a graph is the chain.
-
-The graph arrives as plain edge indices. `learn/CLAUDE.md` forbids importing
-`snakes_and_ladders.sim`, so a `PottsGraph` is unpacked by the caller; these tests do that
-inline, which is also the demonstration that the adaptation is a two-field
-read rather than a layer.
+`PottsEnvironment.on_graph` shares energy, moves, features and reward with the
+chain (`test_learn_potts.py`); checked here: the adjacency is read correctly,
+the local reward matches a full evaluation at degree above two, and a chain
+built as a graph is the chain. `learn/` may not import `sim`, so a `PottsGraph`
+is unpacked inline: a two-field read.
 """
 
 from __future__ import annotations

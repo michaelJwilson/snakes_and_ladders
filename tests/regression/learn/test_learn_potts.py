@@ -98,12 +98,8 @@ def test_a_terminal_state_is_one_no_flip_improves() -> None:
 
 @pytest.mark.analytic
 def test_shifting_the_field_leaves_every_reward_unchanged() -> None:
-    # h and h + c are the same model, and `snakes_and_ladders.opt.potts` has to fix that
-    # gauge because a fitted field would otherwise have no value. Here it
-    # costs nothing: a shift moves every configuration's energy by L * c, so
-    # every *difference* is untouched. Recorded because the fixture is
-    # canonicalized on load and a reader is entitled to know whether the
-    # environment depended on it. It does not.
+    # h and h + c are one model; a shift moves every energy by L * c, so every
+    # difference, and the environment, is untouched by canonicalization.
     base = potts_environment()
     shifted = PottsEnvironment(0.75, FIELD + 1.7, 4)
     for state in itertools.islice(enumerate_configurations(3, 4), 25):
@@ -139,13 +135,9 @@ def test_the_optimum_is_the_best_of_every_configuration() -> None:
 
 @pytest.mark.smoke
 def test_the_environment_is_hard_enough_to_be_worth_searching() -> None:
-    # Measured: greedy hill climbing stalls below the global optimum from 16
-    # of the 81 starting configurations. A environment greedy always solved
-    # would make every comparison against it vacuous -- the trap issue #128
-    # found in the 6-taxon tree fixture, where the optimum led the runner-up
-    # by 41.6 log units and both move sets reached it every time. Asserting
-    # only that *some* start stalls: the count is the measurement, and
-    # pinning it would break on any harmless change to tie-breaking.
+    # Measured: greedy stalls below the optimum from 16 of 81 starts. A fixture
+    # greedy always solves makes comparisons vacuous (#128: a 41.6 log-unit
+    # lead). Asserted as "some start stalls"; the count moves with tie-breaking.
     environment = potts_environment()
     best = optimum(environment)[1]
     stalled = sum(
@@ -233,11 +225,8 @@ def test_features_have_one_row_per_action() -> None:
 
 @pytest.mark.oracle
 def test_the_vectorized_features_are_the_scalar_deltas_exactly() -> None:
-    # `features` computes every action's (agreement, field) change in one
-    # NumPy pass since #264; `_deltas` is the scalar statement it replaces
-    # and stays as the oracle. Exact, because both are integer counts and one
-    # subtraction of the same two floats -- realized deviation 0.0 over 200
-    # random states.
+    # `features` is one NumPy pass since #264; `_deltas` is the scalar oracle.
+    # Exact: integer counts and one subtraction; 0.0 over 200 random states.
     environment = PottsEnvironment(0.75, np.array([0.4, -0.1, -0.3]), chain_length=5)
     rng = np.random.default_rng(0)
 

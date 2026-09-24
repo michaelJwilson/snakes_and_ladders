@@ -30,26 +30,15 @@ FORBIDDEN_PREFIXES = (
     "snakes_and_ladders.sim",
     "snakes_and_ladders.likelihood",
     "snakes_and_ladders.search",
-    # `sample/` holds both kinds, so the rule names the application-shaped
-    # half rather than the package: a temperature schedule is a number per
-    # step and shapes no agent, which is why `ppo` and `relaxed` may import
-    # `sample.schedule`, while `sample.potts_mcmc` and `sample.potts_keyed`
-    # are the lattice's own move sets. Issue #777 moved those out of
-    # `search/`, where this rule already reached them.
+    # `sample/`'s application half: `sample.schedule` shapes no agent, while
+    # `potts_mcmc` and `potts_keyed` are the lattice's move sets (#777).
     "snakes_and_ladders.sample.potts",
 )
 
-#: The modules issue #779 exempted, each named with what it imports and why.
-#: `tree.py` and `ranking.py` moved here from `search/`: each is an instance of
-#: a `learn/` interface over one application's objects --- a topology, a
-#: lattice --- so each imports that application. `potts_nd.py` imports one
-#: enum, `sample.potts_mcmc.MoveKind`, which #779 moved down to sit beside the
-#: moves it names rather than be spelled out twice, and the accept step its
-#: flip takes (`sample.accept`, #857): neither is an application. The interface, the policy
-#: and the estimators import none, which is the claim this guard makes and the
-#: reason an agent is not shaped by one problem. Listed rather than
-#: pattern-matched, so a fourth is a failure a reader decides on rather than a
-#: name that slips through.
+#: The modules issue #779 exempted, listed so a fourth is a reader's decision.
+#: `tree.py` and `ranking.py` are `learn/` interfaces over one application's
+#: objects; `potts_nd.py` imports `sample.potts_mcmc.MoveKind` and
+#: `sample.accept` (#857), neither an application.
 APPLICATION_INSTANCES = ("potts.py", "potts_nd.py", "ranking.py", "tree.py")
 
 
@@ -101,11 +90,8 @@ def test_every_named_application_instance_exists_and_imports_one() -> None:
 
 @pytest.mark.smoke
 def test_the_reference_environment_satisfies_the_protocol() -> None:
-    # Annotated, so the module names the problem it exercises: a test module
-    # says which problem it is by the code it imports (`tests/_problems.py`),
-    # and a helper that moved into the conftest may not take that statement
-    # with it (issue #863). It is also the claim, spelled out: the concrete
-    # class the learners are written against satisfies the protocol.
+    # Annotated so the module names its problem by import (`tests/_problems.py`,
+    # #863); the claim: the concrete class satisfies the protocol.
     environment: PottsEnvironment = potts_environment()
 
     assert isinstance(environment, Environment)
@@ -233,11 +219,8 @@ def test_a_negative_budget_is_rejected_by_the_greedy_rollout() -> None:
 
 @pytest.mark.smoke
 def test_a_score_shared_by_every_action_is_unidentifiable() -> None:
-    # Adding the same feature row to every action shifts every score by the
-    # same amount, and the softmax is invariant to that. So a feature that
-    # does not vary across a state's actions carries no information and its
-    # weight has no value -- which is why there is no bias term. Exactly the
-    # softmax gauge of `snakes_and_ladders.opt.constrain`, restated for a policy.
+    # A feature constant across a state's actions shifts every score alike and
+    # the softmax cancels it: the gauge of `opt.constrain`, hence no bias term.
     policy = LinearPolicy(2)
     policy.set_weights(torch.tensor([0.7, -1.3], dtype=torch.float64))
     features = torch.tensor([[1.0, 0.0], [0.0, 2.0], [-1.0, 1.0]], dtype=torch.float64)
@@ -298,11 +281,8 @@ def test_set_weights_rejects_the_wrong_shape() -> None:
 @pytest.mark.smoke
 @pytest.mark.patch
 def test_every_rollout_loop_reads_terminated_from_the_state_it_ended_in() -> None:
-    # `Episode.from_rollout` is the one tail four loops wrote out (issue
-    # #862). `terminated` is a property of the last state, not of the loop
-    # that reached it, so it is read from that state here: under both
-    # stopping rules, at a budget that truncates, at a budget of none, and
-    # for the greedy searcher beside the policy.
+    # `terminated` is read from the last state under both stopping rules, at
+    # a truncating budget, none, and for greedy (issue #862).
     environment = potts_environment()
     rng = np.random.default_rng(0)
     policy = LinearPolicy(2)

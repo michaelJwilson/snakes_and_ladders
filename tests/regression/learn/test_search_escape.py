@@ -1,15 +1,10 @@
 """Leaving a local optimum, and the baseline that does it better.
 
-#193 measured that no policy over this action set can beat hill climbing on
-the #177 fixture, because every episode ends at the first state no move
-improves. Issue #194 removes that: `rollout` can run past a local optimum,
-and `EpsilonGreedyPolicy` can take the worsening move that leaves one.
-
-What is pinned here is that the mechanism works *and* that it is not the best
-available answer. Random-restart hill climbing solves this fixture outright at
-the same budget, so a reader is not left to infer from a rising escape rate
-that epsilon-greedy is what tree search should use. The rising rate and the
-baseline that beats it are the same result.
+#193 found no policy could beat hill climbing on the #177 fixture: every
+episode ended at the first local optimum. Issue #194 lets `rollout` run past
+one and `EpsilonGreedyPolicy` take a worsening move. Pinned: the mechanism
+works, and random-restart hill climbing solves the fixture outright at the
+same budget.
 """
 
 from __future__ import annotations
@@ -45,8 +40,7 @@ PROBE_STARTS = 20
 #   0.40      0.883                0.908
 #   restarts  --                   1.000
 #
-# The assertions below are bounds around these, at a smaller run count so the
-# test stays inside the per-pull-request suite.
+# Asserted as bounds around these at fewer runs.
 _HIGH_EPSILON = 0.4
 _LOW_EPSILON = 0.0
 
@@ -95,12 +89,9 @@ def traps(
 
 
 def _hill_climbing_policy(environment: TreeEnvironment) -> LinearPolicy:
-    """A policy whose greedy action is the best-rewarded one.
+    """A policy whose greedy action is the best-rewarded one: hill climbing.
 
-    The environment's single feature is the improvement a move buys, so any
-    positive weight makes ``greedy`` pick the highest-improvement action --
-    hill climbing exactly. A zero-weight policy would not: see
-    ``test_wrapping_an_untrained_policy_is_not_hill_climbing``.
+    A positive weight on the one feature; see the untrained-policy test below.
     """
     policy = LinearPolicy(environment.n_features())
     policy.set_weights(torch.tensor([1.0], dtype=torch.float64))
@@ -116,11 +107,8 @@ def _best_seen(environment: TreeEnvironment, states: tuple[Topology, ...]) -> fl
 def test_wrapping_an_untrained_policy_is_not_hill_climbing(
     environment: TreeEnvironment, traps: list[Topology]
 ) -> None:
-    # A trap for the next caller, pinned rather than left to be rediscovered.
-    # `EpsilonGreedyPolicy` takes the *wrapped policy's* greedy action, and an
-    # untrained `LinearPolicy` scores every action alike, so `greedy` returns
-    # the first one. The wrapper then explores around "always take action 0",
-    # which looks like a searcher and is not one.
+    # An untrained `LinearPolicy` scores every action alike, so the wrapper
+    # explores around "always take action 0", which is not a searcher.
     untrained = LinearPolicy(environment.n_features())
     climbing = _hill_climbing_policy(environment)
     features = [
@@ -155,13 +143,9 @@ def test_epsilon_zero_reproduces_hill_climbing_exactly(
 def test_an_episode_can_leave_a_local_optimum(
     environment: TreeEnvironment, traps: list[Topology], maximum: float
 ) -> None:
-    # The claim the ticket exists for, against a floor that cannot drift:
-    # with `stop_at_local_optimum` left at its default every one of these
-    # runs ends where it started, so the rate is exactly 0 by construction.
-    # Refereed by the `maximum` fixture, the exhaustive maximum over every
-    # unrooted topology on these leaves, so an escape is escape to the true
-    # optimum and not to a better trap. Realized over the 9 traps at 8 runs
-    # each: 0.111 at epsilon 0 and 0.875 at 0.4.
+    # By default every run ends where it started, so the floor is exactly 0.
+    # Refereed by the exhaustive `maximum` over every unrooted topology.
+    # Realized over 9 traps x 8 runs: 0.111 at epsilon 0, 0.875 at 0.4.
     policy = _hill_climbing_policy(environment)
     rates = {}
     for epsilon in (_LOW_EPSILON, _HIGH_EPSILON):
@@ -197,11 +181,8 @@ def test_an_episode_can_leave_a_local_optimum(
 def test_stopping_at_a_local_optimum_never_escapes(
     environment: TreeEnvironment, traps: list[Topology], maximum: float
 ) -> None:
-    # The floor the previous test is measured against, asserted rather than
-    # asserted-about: under the default rule an episode started at a local
-    # optimum has already terminated, so no exploration rate can help. The
-    # score line below restates the `traps` fixture's own filter, so what is
-    # checked here is the stopping rule and nothing outside it.
+    # The floor: under the default rule an episode started at a local optimum
+    # has terminated; the score line restates the `traps` filter.
     agent = EpsilonGreedyPolicy(_hill_climbing_policy(environment), _HIGH_EPSILON)
     rng = np.random.default_rng(7)
     for trap in traps:
@@ -214,13 +195,9 @@ def test_stopping_at_a_local_optimum_never_escapes(
 def test_random_restart_hill_climbing_solves_this_fixture(
     environment: TreeEnvironment, params: SimulationParams, maximum: float
 ) -> None:
-    # The result that matters more than the mechanism. #193 compared a policy
-    # against a *single* greedy run, which reaches the maximum from 48% of
-    # starts. Restarting greedy until the same budget is spent reaches it from
-    # all of them, so the baseline Stage 2 has to beat on this fixture is 1.00
-    # and not 0.48 -- and no epsilon measured here comes close. Refereed by
-    # the exhaustive maximum over every unrooted topology on these leaves;
-    # realized 20 of 20 starts within 1e-9 of it.
+    # A single greedy run reaches the maximum from 48% of starts (#193);
+    # restarts at the same budget from all of them, so Stage 2's baseline is
+    # 1.00. Realized 20 of 20 within 1e-9 of the exhaustive maximum.
     start_rng = np.random.default_rng(params.seed + 1000)
     restart_rng = np.random.default_rng(11)
     solved = []
