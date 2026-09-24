@@ -1859,6 +1859,19 @@ of vertices in the first class. The loader now refuses a trials ladder that
 varies, the trial count being a property of the observation and not of the
 state.
 
+**The phylogenetic objectives' value and gradient under JAX**
+([#1005](https://github.com/michaelJwilson/snakes_and_ladders/issues/1005)).
+`likelihood.pruning_jax` traces `pruning_torch`'s post-order once per
+topology under `jit`, the map from `theta` inside the same program;
+`BranchLengthObjective` and `SubstitutionModelObjective` take
+`backend=Backend.JAX`. Against the taped route on `tree_jc/release.yaml` at
+2,000 sites the value agrees exactly and the gradient to 8.3e-16 (JC) and
+9.8e-13 (GTR) relative; brute force pins the value at 1e-12. The default
+stays `Backend.TORCH`: `infra/jax_decision.py pruning` on balanced trees of
+4--32 taxa at 10^5 sites puts JAX at 0.95--1.59x the taped route's runtime and
+1.23--1.56x its peak memory, and all 16 cells miss #1000's rule (at most 0.5x
+runtime at 1.25x memory, or the converse). JAX stays the opt-in route.
+
 **The pruning routes share their plumbing; the oracle shares nothing**
 ([#858](https://github.com/michaelJwilson/snakes_and_ladders/issues/858)). The
 post-order, the leaf indicator, the rescaling step and the `pi`-shape,
