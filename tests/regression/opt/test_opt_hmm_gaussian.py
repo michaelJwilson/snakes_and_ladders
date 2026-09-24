@@ -33,6 +33,7 @@ from snakes_and_ladders.opt.hmm import (
 from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
 
 from tests._objective_checks import assert_gradient_matches_finite_differences
+from tests._rows import every_row
 
 INITIAL = np.array([0.5, 0.5])
 TRANSITION = np.array([[0.75, 0.25], [0.25, 0.75]])
@@ -105,43 +106,41 @@ def _coverage(separation: float, replicates: int) -> tuple[int, int, int]:
     return covered, total, boundary
 
 
-@pytest.mark.parametrize(
-    ("n_states", "length", "seed"), [(2, 5, 1), (2, 7, 2), (3, 4, 3), (3, 6, 4)]
-)
 @pytest.mark.oracle
-def test_the_forward_recursion_matches_enumeration_over_every_path(
-    n_states: int, length: int, seed: int
-) -> None:
+def test_the_forward_recursion_matches_enumeration_over_every_path() -> None:
     # The forward algorithm against a sum over all `k ** T` paths, sharing no
     # recursion with it. The continuous case needed only that the per-site term
     # be a density rather than a table lookup.
-    rng = np.random.default_rng(seed)
-    truth = GaussianEmission(
-        rng.normal(scale=2.0, size=n_states),
-        rng.uniform(0.5, 1.5, size=n_states),
-        INERT_FLOOR,
-    )
-    params = HmmParams(
-        n_states=n_states,
-        lengths=(length,) * 1,
-        initial=rng.dirichlet(np.ones(n_states)),
-        transition=rng.dirichlet(np.ones(n_states), size=n_states),
-        emissions=truth,
-        seed=seed,
-        tolerance=1e-12,
-    )
-    observations = simulate_sequences(params).observations
-
-    enumerated = enumerate_hidden_paths(params, observations[0])
-    recursed = float(
-        forward_log_likelihood_from_density(
-            truth.log_density(torch.as_tensor(observations)),
-            torch.log(torch.as_tensor(params.initial)),
-            torch.log(torch.as_tensor(params.transition)),
+    def check(n_states: int, length: int, seed: int) -> None:
+        rng = np.random.default_rng(seed)
+        truth = GaussianEmission(
+            rng.normal(scale=2.0, size=n_states),
+            rng.uniform(0.5, 1.5, size=n_states),
+            INERT_FLOOR,
         )
-    )
+        params = HmmParams(
+            n_states=n_states,
+            lengths=(length,) * 1,
+            initial=rng.dirichlet(np.ones(n_states)),
+            transition=rng.dirichlet(np.ones(n_states), size=n_states),
+            emissions=truth,
+            seed=seed,
+            tolerance=1e-12,
+        )
+        observations = simulate_sequences(params).observations
 
-    assert_allclose(recursed, enumerated.log_likelihood, rtol=1e-11)
+        enumerated = enumerate_hidden_paths(params, observations[0])
+        recursed = float(
+            forward_log_likelihood_from_density(
+                truth.log_density(torch.as_tensor(observations)),
+                torch.log(torch.as_tensor(params.initial)),
+                torch.log(torch.as_tensor(params.transition)),
+            )
+        )
+
+        assert_allclose(recursed, enumerated.log_likelihood, rtol=1e-11)
+
+    every_row([(2, 5, 1), (2, 7, 2), (3, 4, 3), (3, 6, 4)], check)
 
 
 @pytest.mark.analytic

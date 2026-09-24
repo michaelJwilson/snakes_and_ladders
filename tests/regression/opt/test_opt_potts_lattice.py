@@ -31,6 +31,8 @@ from snakes_and_ladders.opt.potts import (
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 from snakes_and_ladders.sim.potts import simulate_potts
 
+from tests._rows import every_value
+
 SHAPE = (3, 3)
 N_STATES = 3
 COUPLING = 0.6
@@ -73,23 +75,29 @@ def _fitted(n_samples: int, seed: int) -> tuple[np.ndarray, np.ndarray, np.ndarr
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("length", [2, 4, 6])
-def test_the_graph_normalizer_reduces_to_the_transfer_matrix(length: int) -> None:
+def test_the_graph_normalizer_reduces_to_the_transfer_matrix() -> None:
     # A chain is a 1-D lattice, and its `log Z` has a closed form by transfer
     # matrix. Two exact routes to the same number, sharing no code: one
     # enumerates `3 ** length` configurations, the other multiplies matrices.
-    graph = lattice_graph((length,), boundary=BoundaryCondition.OPEN, coupling=COUPLING)
-    agreements, counts = graph_statistics(N_STATES, graph.edges, graph.n_nodes)
-    field = torch.as_tensor(FIELD)
+    def check(length: int) -> None:
+        graph = lattice_graph(
+            (length,), boundary=BoundaryCondition.OPEN, coupling=COUPLING
+        )
+        agreements, counts = graph_statistics(N_STATES, graph.edges, graph.n_nodes)
+        field = torch.as_tensor(FIELD)
 
-    for coupling in (0.0, 0.75, -0.4):
-        as_tensor = torch.tensor(coupling, dtype=torch.float64)
-        enumerated = float(log_partition_graph(as_tensor, field, agreements, counts))
-        transfer = float(log_partition(as_tensor, field, length))
-        # Absolute, not relative: at `coupling = 0` with a gauge-fixed field
-        # both are zero to rounding, and a relative deviation there divides by
-        # nothing meaningful.
-        assert enumerated == pytest.approx(transfer, abs=1e-12)
+        for coupling in (0.0, 0.75, -0.4):
+            as_tensor = torch.tensor(coupling, dtype=torch.float64)
+            enumerated = float(
+                log_partition_graph(as_tensor, field, agreements, counts)
+            )
+            transfer = float(log_partition(as_tensor, field, length))
+            # Absolute, not relative: at `coupling = 0` with a gauge-fixed field
+            # both are zero to rounding, and a relative deviation there divides by
+            # nothing meaningful.
+            assert enumerated == pytest.approx(transfer, abs=1e-12)
+
+    every_value([2, 4, 6], check)
 
 
 @pytest.mark.oracle

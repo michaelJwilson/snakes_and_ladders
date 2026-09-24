@@ -41,6 +41,7 @@ from snakes_and_ladders.sim.potts_chain import PottsParams, simulate_chains
 
 from tests._fixtures import FIXTURES_DIR
 from tests._objective_checks import assert_gradient_matches_finite_differences
+from tests._rows import every_row, every_value
 
 FIXTURE = FIXTURES_DIR / "potts_chain/ci.yaml"
 
@@ -75,18 +76,18 @@ def _brute_force_log_partition(
 
 @pytest.mark.oracle
 @pytest.mark.parametrize("route", [*ROUTES, log_partition], ids=lambda f: f.__name__)
-@pytest.mark.parametrize("length", [1, 2, 3, 5, 8])
-def test_transfer_matrix_matches_brute_force_enumeration(
-    length: int, route: object
-) -> None:
-    params = load_params(FIXTURE, PottsParams)
-    expected = _brute_force_log_partition(params.coupling, params.field, length)
-    actual = route(  # type: ignore[operator]
-        torch.tensor(params.coupling, dtype=torch.float64),
-        torch.as_tensor(params.field, dtype=torch.float64),
-        length,
-    )
-    assert_allclose(float(actual), expected, rtol=_RTOL_ORACLE)
+def test_transfer_matrix_matches_brute_force_enumeration(route: object) -> None:
+    def check(length: int) -> None:
+        params = load_params(FIXTURE, PottsParams)
+        expected = _brute_force_log_partition(params.coupling, params.field, length)
+        actual = route(  # type: ignore[operator]
+            torch.tensor(params.coupling, dtype=torch.float64),
+            torch.as_tensor(params.field, dtype=torch.float64),
+            length,
+        )
+        assert_allclose(float(actual), expected, rtol=_RTOL_ORACLE)
+
+    every_value([1, 2, 3, 5, 8], check)
 
 
 def _gauge_fixed(values: np.ndarray) -> np.ndarray:
@@ -96,8 +97,7 @@ def _gauge_fixed(values: np.ndarray) -> np.ndarray:
 
 @pytest.mark.oracle
 @pytest.mark.patch
-@pytest.mark.parametrize(("n_states", "length"), ROUTE_CASES)
-def test_squaring_reproduces_the_per_site_recursion(n_states: int, length: int) -> None:
+def test_squaring_reproduces_the_per_site_recursion() -> None:
     # The reassociation is exact and changes only the order the log-space
     # sums are taken in, so the recursion is the referee and bitwise is the
     # target (root `CLAUDE.md`). It is reached wherever the two orders
@@ -105,24 +105,28 @@ def test_squaring_reproduces_the_per_site_recursion(n_states: int, length: int) 
     # sequence of operations on both routes -- and where they do not, the
     # guard is the declared cross-device tolerance and the realized
     # difference is asserted to sit two orders inside it rather than at it.
-    rng = np.random.default_rng(11)
-    field = torch.as_tensor(_gauge_fixed(rng.normal(size=n_states)))
-    coupling = torch.tensor(0.6, dtype=torch.float64)
+    def check(n_states: int, length: int) -> None:
+        rng = np.random.default_rng(11)
+        field = torch.as_tensor(_gauge_fixed(rng.normal(size=n_states)))
+        coupling = torch.tensor(0.6, dtype=torch.float64)
 
-    recursion = log_partition_by_recursion(coupling, field, length)
-    squaring = log_partition_by_squaring(coupling, field, length)
+        recursion = log_partition_by_recursion(coupling, field, length)
+        squaring = log_partition_by_squaring(coupling, field, length)
 
-    if length <= 2:
-        assert float(squaring) == float(recursion)
-    realized = abs(float(squaring) - float(recursion)) / abs(float(recursion))
-    assert realized < 1e-13
-    assert_allclose(float(squaring), float(recursion), rtol=CROSS_DEVICE_RTOL_FLOAT64)
+        if length <= 2:
+            assert float(squaring) == float(recursion)
+        realized = abs(float(squaring) - float(recursion)) / abs(float(recursion))
+        assert realized < 1e-13
+        assert_allclose(
+            float(squaring), float(recursion), rtol=CROSS_DEVICE_RTOL_FLOAT64
+        )
+
+    every_row(ROUTE_CASES, check)
 
 
 @pytest.mark.smoke
-@pytest.mark.parametrize(("n_states", "length"), ROUTE_CASES)
 def test_the_route_takes_no_more_logsumexp_calls_than_the_recursion(
-    n_states: int, length: int, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # What `squaring_is_cheaper` claims, counted rather than argued: where it
     # says yes, the route it picks makes no more `logsumexp` calls and touches
@@ -137,89 +141,97 @@ def test_the_route_takes_no_more_logsumexp_calls_than_the_recursion(
         return real(values, dim)  # type: ignore[arg-type]
 
     monkeypatch.setattr(torch, "logsumexp", _counted)
-    field = torch.zeros(n_states, dtype=torch.float64)
-    coupling = torch.tensor(0.6, dtype=torch.float64)
 
-    log_partition(coupling, field, length)
-    chosen = calls.pop("counted", [])
-    log_partition_by_recursion(coupling, field, length)
-    recursion = calls.pop("counted", [])
-    log_partition_by_squaring(coupling, field, length)
-    squaring = calls.pop("counted", [])
+    def check(n_states: int, length: int) -> None:
+        field = torch.zeros(n_states, dtype=torch.float64)
+        coupling = torch.tensor(0.6, dtype=torch.float64)
 
-    if squaring_is_cheaper(n_states, length):
-        assert chosen == squaring
-        assert len(squaring) <= len(recursion)
-        assert sum(squaring) <= sum(recursion)
-    else:
-        assert chosen == recursion
-        # Declined for a reason, and this is it: one of the two terms is
-        # worse, so the rule is not conservative to the point of vacuity.
-        assert len(squaring) > len(recursion) or sum(squaring) > sum(recursion)
+        calls.clear()
+        log_partition(coupling, field, length)
+        chosen = calls.pop("counted", [])
+        log_partition_by_recursion(coupling, field, length)
+        recursion = calls.pop("counted", [])
+        log_partition_by_squaring(coupling, field, length)
+        squaring = calls.pop("counted", [])
+
+        if squaring_is_cheaper(n_states, length):
+            assert chosen == squaring
+            assert len(squaring) <= len(recursion)
+            assert sum(squaring) <= sum(recursion)
+        else:
+            assert chosen == recursion
+            # Declined for a reason, and this is it: one of the two terms is
+            # worse, so the rule is not conservative to the point of vacuity.
+            assert len(squaring) > len(recursion) or sum(squaring) > sum(recursion)
+
+    every_row(ROUTE_CASES, check)
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("length", [2, 5, 16, 64])
-def test_squaring_is_the_transfer_matrix_on_a_strip_one_site_wide(
-    length: int,
-) -> None:
+def test_squaring_is_the_transfer_matrix_on_a_strip_one_site_wide() -> None:
     # The rung below in `infra/ladder.py`. A chain of `length` sites is an
     # open `length x 1` strip, where `strip_log_partition` transfers a whole
     # column and shares no code with either route here -- so it referees the
     # squaring at lengths brute force cannot reach.
-    params = load_params(FIXTURE, PottsParams)
-    expected = strip_log_partition(
-        (length, 1), BoundaryCondition.OPEN, params.coupling, params.field
-    )
-    actual = log_partition_by_squaring(
-        torch.tensor(params.coupling, dtype=torch.float64),
-        torch.as_tensor(params.field, dtype=torch.float64),
-        length,
-    )
-    assert_allclose(float(actual), expected, rtol=CROSS_DEVICE_RTOL_FLOAT64)
+    def check(length: int) -> None:
+        params = load_params(FIXTURE, PottsParams)
+        expected = strip_log_partition(
+            (length, 1), BoundaryCondition.OPEN, params.coupling, params.field
+        )
+        actual = log_partition_by_squaring(
+            torch.tensor(params.coupling, dtype=torch.float64),
+            torch.as_tensor(params.field, dtype=torch.float64),
+            length,
+        )
+        assert_allclose(float(actual), expected, rtol=CROSS_DEVICE_RTOL_FLOAT64)
+
+    every_value([2, 5, 16, 64], check)
 
 
 @pytest.mark.analytic
-@pytest.mark.parametrize("coupling", [-0.8, 0.0, 1.4])
-@pytest.mark.parametrize("length", [3, 16, 64])
-def test_the_squaring_gradient_matches_central_finite_differences(
-    coupling: float, length: int
-) -> None:
+def test_the_squaring_gradient_matches_central_finite_differences() -> None:
     # Autograd follows the reassociation, and what says so is the derivative
     # of the reassociated product against central differences of its own
     # value -- at lengths either side of the route rule and at couplings of
     # both signs, since the transfer matrix's off-diagonal is where the sign
     # enters.
-    field = torch.as_tensor(
-        _gauge_fixed(np.random.default_rng(3).normal(size=3))
-    ).requires_grad_(True)
-    j = torch.tensor(coupling, dtype=torch.float64, requires_grad=True)
+    def check(coupling: float, length: int) -> None:
+        field = torch.as_tensor(
+            _gauge_fixed(np.random.default_rng(3).normal(size=3))
+        ).requires_grad_(True)
+        j = torch.tensor(coupling, dtype=torch.float64, requires_grad=True)
 
-    gradient = torch.autograd.grad(log_partition_by_squaring(j, field, length), [j])[0]
+        gradient = torch.autograd.grad(
+            log_partition_by_squaring(j, field, length), [j]
+        )[0]
 
-    step = 1e-6
-    with torch.no_grad():
-        up = float(log_partition_by_squaring(j + step, field.detach(), length))
-        down = float(log_partition_by_squaring(j - step, field.detach(), length))
-    assert_allclose(float(gradient), (up - down) / (2 * step), rtol=1e-6)
+        step = 1e-6
+        with torch.no_grad():
+            up = float(log_partition_by_squaring(j + step, field.detach(), length))
+            down = float(log_partition_by_squaring(j - step, field.detach(), length))
+        assert_allclose(float(gradient), (up - down) / (2 * step), rtol=1e-6)
+
+    every_row(product([-0.8, 0.0, 1.4], [3, 16, 64]), check)
 
 
 @pytest.mark.analytic
-@pytest.mark.parametrize("shift", [-1.5, 0.75])
-def test_log_partition_shifts_exactly_with_the_field_gauge(shift: float) -> None:
+def test_log_partition_shifts_exactly_with_the_field_gauge() -> None:
     # Every configuration occupies all `length` sites, so adding a constant
     # to the field multiplies every weight by exp(length * shift). This is an
     # exact analytic identity, and it is why the field has to be gauge-fixed
     # before a fitted value means anything.
-    params = load_params(FIXTURE, PottsParams)
-    coupling = torch.tensor(params.coupling, dtype=torch.float64)
-    field = torch.as_tensor(params.field, dtype=torch.float64)
-    length = 6
-    assert_allclose(
-        float(log_partition(coupling, field + shift, length)),
-        float(log_partition(coupling, field, length)) + length * shift,
-        rtol=_RTOL_ORACLE,
-    )
+    def check(shift: float) -> None:
+        params = load_params(FIXTURE, PottsParams)
+        coupling = torch.tensor(params.coupling, dtype=torch.float64)
+        field = torch.as_tensor(params.field, dtype=torch.float64)
+        length = 6
+        assert_allclose(
+            float(log_partition(coupling, field + shift, length)),
+            float(log_partition(coupling, field, length)) + length * shift,
+            rtol=_RTOL_ORACLE,
+        )
+
+    every_value([-1.5, 0.75], check)
 
 
 @pytest.mark.oracle
@@ -249,19 +261,21 @@ def test_objective_matches_a_naive_per_chain_log_likelihood() -> None:
 
 
 @pytest.mark.analytic
-@pytest.mark.parametrize("at_truth", [True, False])
-def test_gradient_matches_central_finite_differences(at_truth: bool) -> None:
-    params = load_params(FIXTURE, PottsParams)
-    objective = PottsObjective(simulate_chains(params), params.n_states)
-    theta = (
-        objective.theta_from_truth(params.coupling, params.field)
-        if at_truth
-        else objective.initial()
-    )
+def test_gradient_matches_central_finite_differences() -> None:
+    def check(at_truth: bool) -> None:
+        params = load_params(FIXTURE, PottsParams)
+        objective = PottsObjective(simulate_chains(params), params.n_states)
+        theta = (
+            objective.theta_from_truth(params.coupling, params.field)
+            if at_truth
+            else objective.initial()
+        )
 
-    assert_gradient_matches_finite_differences(
-        objective, theta, _FINITE_DIFFERENCE_STEP, _RTOL_GRADIENT
-    )
+        assert_gradient_matches_finite_differences(
+            objective, theta, _FINITE_DIFFERENCE_STEP, _RTOL_GRADIENT
+        )
+
+    every_value([True, False], check)
 
 
 @pytest.mark.oracle

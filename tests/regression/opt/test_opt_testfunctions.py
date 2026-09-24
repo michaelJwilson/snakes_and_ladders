@@ -34,6 +34,8 @@ from snakes_and_ladders.opt.testfunctions import (
 )
 from snakes_and_ladders.sim.fixtures import path_of
 
+from tests._rows import every_row, every_value
+
 # The published Himmelblau minima are quoted to six decimals, so no test
 # against them can be tighter than that. Rosenbrock's and Rastrigin's are
 # exact, and are held to `likelihood/CLAUDE.md`'s float64 bound instead.
@@ -57,18 +59,23 @@ CLOSED_FORM_MINIMIZERS = {
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("dimension", [2, 3, 5])
-def test_rosenbrock_reaches_its_analytic_minimizer(dimension: int) -> None:
+def test_rosenbrock_reaches_its_analytic_minimizer() -> None:
     # The valley is curved and nearly flat along its floor, so a line search
     # that terminates on the wrong condition lands short of `(1, ..., 1)`
     # while still reporting a small gradient.
-    objective = Rosenbrock(dimension=dimension)
+    def check(dimension: int) -> None:
+        objective = Rosenbrock(dimension=dimension)
 
-    result = fit(objective)
+        result = fit(objective)
 
-    assert result.converged
-    assert float(torch.linalg.vector_norm(result.theta - objective.minimizer())) < EXACT
-    assert float(result.value) == pytest.approx(0.0, abs=1e-20)
+        assert result.converged
+        assert (
+            float(torch.linalg.vector_norm(result.theta - objective.minimizer()))
+            < EXACT
+        )
+        assert float(result.value) == pytest.approx(0.0, abs=1e-20)
+
+    every_value([2, 3, 5], check)
 
 
 @pytest.mark.oracle
@@ -107,20 +114,19 @@ def test_the_autodiff_gradient_matches_the_closed_form(objective: object) -> Non
 
 
 @pytest.mark.analytic
-@pytest.mark.parametrize(
-    ("start", "expected_index"),
-    [((1.0, 1.0), 0), ((-3.0, 2.0), 1), ((-3.0, -3.0), 2), ((3.0, -2.0), 3)],
-)
-def test_himmelblau_converges_to_the_basin_it_started_in(
-    start: tuple[float, float], expected_index: int
-) -> None:
-    result = fit(Himmelblau(start=start))
+def test_himmelblau_converges_to_the_basin_it_started_in() -> None:
+    def check(start: tuple[float, float], expected_index: int) -> None:
+        result = fit(Himmelblau(start=start))
 
-    index, distance = Himmelblau.nearest_minimum(result.theta)
+        index, distance = Himmelblau.nearest_minimum(result.theta)
 
-    assert index == expected_index
-    assert distance < PUBLISHED_PRECISION
-    assert float(result.value) == pytest.approx(0.0, abs=1e-20)
+        assert index == expected_index
+        assert distance < PUBLISHED_PRECISION
+        assert float(result.value) == pytest.approx(0.0, abs=1e-20)
+
+    every_row(
+        [((1.0, 1.0), 0), ((-3.0, 2.0), 1), ((-3.0, -3.0), 2), ((3.0, -2.0), 3)], check
+    )
 
 
 @pytest.mark.oracle

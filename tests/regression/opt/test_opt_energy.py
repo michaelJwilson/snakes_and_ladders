@@ -29,6 +29,8 @@ from snakes_and_ladders.validation.gaussian import (
     diagonal_precision,
 )
 
+from tests._rows import every_value
+
 TARGETS: dict[str, Callable[[int], Objective]] = {
     "rosenbrock": lambda d: Rosenbrock(d),
     "gaussian-diagonal": lambda d: GaussianTarget(diagonal_precision(d)),
@@ -43,22 +45,24 @@ def _points(dimension: int) -> np.ndarray:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("dimension", [2, 3, 10, 100, 1000])
 @pytest.mark.parametrize("name", sorted(TARGETS))
-def test_a_declared_energy_is_the_objectives_value(name: str, dimension: int) -> None:
-    objective = TARGETS[name](dimension)
-    assert isinstance(objective, DeclaredEnergy)
-    for x in _points(dimension):
-        expected = float(objective(torch.as_tensor(x)))
-        got = energy_of(objective, x)
-        assert isinstance(got, float)
-        # Three terms or fewer are summed left to right by both; the dense
-        # Gaussian's matrix products are ordered by each library's BLAS.
-        bitwise = name != "gaussian-dense" and dimension <= 3
-        if bitwise:
-            assert got == expected
-        else:
-            np.testing.assert_allclose(got, expected, rtol=1e-15, atol=0)
+def test_a_declared_energy_is_the_objectives_value(name: str) -> None:
+    def check(dimension: int) -> None:
+        objective = TARGETS[name](dimension)
+        assert isinstance(objective, DeclaredEnergy)
+        for x in _points(dimension):
+            expected = float(objective(torch.as_tensor(x)))
+            got = energy_of(objective, x)
+            assert isinstance(got, float)
+            # Three terms or fewer are summed left to right by both; the dense
+            # Gaussian's matrix products are ordered by each library's BLAS.
+            bitwise = name != "gaussian-dense" and dimension <= 3
+            if bitwise:
+                assert got == expected
+            else:
+                np.testing.assert_allclose(got, expected, rtol=1e-15, atol=0)
+
+    every_value([2, 3, 10, 100, 1000], check)
 
 
 @pytest.mark.oracle

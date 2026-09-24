@@ -20,6 +20,8 @@ from snakes_and_ladders.opt.hmm import HmmObjective
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.opt.potts import PottsObjective
 
+from tests._rows import every_value
+
 # The whole point of the abstraction: the optimizer may not know what it is
 # optimizing. Stated as module prefixes rather than names so a new
 # application module is covered the day it is added.
@@ -78,12 +80,14 @@ def test_the_check_would_catch_an_application_import(tmp_path: Path) -> None:
 
 
 @pytest.mark.analytic
-@pytest.mark.parametrize("n", [2, 3, 5])
-def test_log_simplex_yields_a_normalized_distribution(n: int) -> None:
-    free = torch.linspace(-1.5, 2.0, n - 1, dtype=torch.float64)
-    log_probs = log_simplex(free)
-    assert log_probs.shape == (n,)
-    assert_allclose(float(torch.exp(log_probs).sum()), 1.0, rtol=1e-15)
+def test_log_simplex_yields_a_normalized_distribution() -> None:
+    def check(n: int) -> None:
+        free = torch.linspace(-1.5, 2.0, n - 1, dtype=torch.float64)
+        log_probs = log_simplex(free)
+        assert log_probs.shape == (n,)
+        assert_allclose(float(torch.exp(log_probs).sum()), 1.0, rtol=1e-15)
+
+    every_value([2, 3, 5], check)
 
 
 @pytest.mark.analytic
