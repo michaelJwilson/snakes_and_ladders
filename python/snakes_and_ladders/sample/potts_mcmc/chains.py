@@ -286,6 +286,7 @@ def anneal_potts(
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.PYTHON,
     initial: np.ndarray | None = None,
+    threshold: float | None = None,
 ) -> AnnealedPotts:
     """Simulated annealing by heat-bath sweeps on a temperature schedule.
 
@@ -343,6 +344,12 @@ def anneal_potts(
         ``None`` draws it uniformly from ``rng``, as before the parameter
         existed. A given start draws nothing, so the chain's first draw is
         the generator's next (issue #1038).
+    threshold : float | None
+        Niedermayer's ``E_0`` (:func:`niedermayer_sweep`). ``None`` is
+        :func:`niedermayer_threshold` of the graph, the value before the
+        parameter existed, so the default chain is bitwise what it was; above
+        it a ferromagnet also bonds unlike neighbours, and the clusters grow
+        (issue #1046).
 
     Returns
     -------
@@ -351,10 +358,14 @@ def anneal_potts(
     Raises
     ------
     ValueError
-        If ``initial`` is not one state in range per node.
+        If ``initial`` is not one state in range per node, or ``threshold``
+        is given for a move other than Niedermayer's.
     """
     field = log_weight_of(field)
     refuse_negative_coupling(move, graph)
+    if threshold is not None and move is not PottsMove.NIEDERMAYER:
+        msg = f"threshold is Niedermayer's E_0, and the move is {move}"
+        raise ValueError(msg)
 
     rows = site_field(np.asarray(field, dtype=float), graph.n_nodes)
     if initial is None:
@@ -462,7 +473,9 @@ def anneal_potts(
                         counter,
                         graph,
                         beta,
-                        niedermayer_threshold(couplings),
+                        niedermayer_threshold(couplings)
+                        if threshold is None
+                        else threshold,
                         lists=lists,
                     )
                 else:

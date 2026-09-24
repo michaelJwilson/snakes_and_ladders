@@ -537,6 +537,7 @@ def run_annealed(
     schedule: ScheduleParams = ANNEAL_SCHEDULE,
     steps: int | None = None,
     initial: np.ndarray | None = None,
+    threshold: float | None = None,
 ) -> MethodRun:
     """One annealed run, its step count fixed before the run starts.
 
@@ -554,6 +555,9 @@ def run_annealed(
     their defaults are the run above bitwise. ``steps`` replaces the count
     with one a caller fixed beforehand, still not read from the run's state;
     ``initial`` starts the chain from a labelling instead of a uniform draw.
+    ``threshold`` is Niedermayer's ``E_0``, passed to
+    :func:`~snakes_and_ladders.sample.potts_mcmc.anneal_potts`; ``None`` is
+    the graph's own threshold, the run above bitwise (issue #1046).
     """
     count = max(1, budget.size // step_cost(rung, move)) if steps is None else steps
     start = time.perf_counter()
@@ -569,6 +573,7 @@ def run_annealed(
         move=move,
         cluster_backend=Backend.RUST if move in _COMPILED_CLUSTERS else Backend.PYTHON,
         initial=initial,
+        threshold=threshold,
     )
     return MethodRun(
         labelling=run.labelling,

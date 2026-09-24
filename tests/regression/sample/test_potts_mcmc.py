@@ -392,20 +392,25 @@ def test_each_replica_of_a_houdayer_pair_is_drawn_from_the_exact_boltzmann_distr
 @pytest.mark.oracle
 @pytest.mark.release
 @pytest.mark.parametrize(
-    ("name", "coupling"),
+    ("name", "coupling", "above"),
     [
-        ("ferromagnet", (0.8, 0.8, 0.8, 0.8)),
-        ("antiferromagnet", (-1.0, -1.0, -1.0, -1.0)),
-        ("mixed", (0.7, -1.0, 0.7, -1.0)),
+        ("ferromagnet", (0.8, 0.8, 0.8, 0.8), 0.0),
+        ("antiferromagnet", (-1.0, -1.0, -1.0, -1.0), 0.0),
+        ("mixed", (0.7, -1.0, 0.7, -1.0), 0.0),
+        # Above the threshold unlike neighbours bond too, which is what the
+        # #1046 search varies on the notebook's ferromagnet.
+        ("ferromagnet, E_0 = 0.4", (0.8, 0.8, 0.8, 0.8), 0.4),
+        ("ferromagnet, E_0 = 1.6", (0.8, 0.8, 0.8, 0.8), 1.6),
     ],
 )
 def test_niedermayers_kernel_is_reversible_against_the_enumerated_law(
-    name: str, coupling: tuple[float, ...]
+    name: str, coupling: tuple[float, ...], above: float
 ) -> None:
     # `pi(s) K(s, s')` against its transpose, `K` from 12,500 moves out of each
     # of 16 four-cycle states. Max asymmetry: ferromagnet 0.00137,
-    # antiferromagnet 0.00080, mixed 0.00160; the bound is the Monte Carlo
-    # error 1 / sqrt(12,500) = 0.0089.
+    # antiferromagnet 0.00080, mixed 0.00160, ferromagnet at E_0 = 0.4
+    # 0.00124 and at 1.6 0.00045; the bound is the Monte Carlo error
+    # 1 / sqrt(12,500) = 0.0089.
     graph = PottsGraph(
         n_nodes=4, edges=((0, 1), (1, 2), (2, 3), (3, 0)), coupling=coupling
     )
@@ -417,7 +422,7 @@ def test_niedermayers_kernel_is_reversible_against_the_enumerated_law(
     exact /= exact.sum()
     rows = site_field(WITH_FIELD, graph.n_nodes)
     offsets, neighbours, couplings = graph.compressed_adjacency()
-    threshold = niedermayer_threshold(couplings)
+    threshold = niedermayer_threshold(couplings) + above
     rng = np.random.default_rng(SEED)
 
     index = {values: position for position, values in enumerate(configurations)}
@@ -1093,6 +1098,47 @@ def test_a_non_positive_temperature_is_refused() -> None:
         )
     with pytest.raises(ValueError, match="temperature must be positive"):
         tempered(graph, NO_FIELD, -1.0)
+
+
+@pytest.mark.smoke
+@pytest.mark.patch
+def test_annealing_at_the_graphs_own_threshold_is_the_default_bitwise() -> None:
+    # `threshold=None` is `niedermayer_threshold`, the value before the
+    # parameter existed (#1046); a threshold above it is another chain.
+    graph = lattice_graph((4, 4), BoundaryCondition.OPEN, COUPLING)
+    field = np.array([0.6, -0.4, 0.1])
+    schedule = ExponentialTempSchedule(2.0, 0.05, 200)
+
+    def run(threshold: float | None) -> np.ndarray:
+        return anneal_potts(
+            graph,
+            field,
+            schedule,
+            np.random.default_rng(SEED),
+            move=PottsMove.NIEDERMAYER,
+            threshold=threshold,
+        ).final
+
+    default = run(None)
+
+    assert np.array_equal(default, run(0.0))
+    assert not np.array_equal(default, run(0.5))
+
+
+@pytest.mark.smoke
+@pytest.mark.warning
+def test_a_threshold_is_refused_for_a_move_without_one() -> None:
+    graph = lattice_graph((3, 3), BoundaryCondition.OPEN, COUPLING)
+
+    with pytest.raises(ValueError, match="Niedermayer"):
+        anneal_potts(
+            graph,
+            WITH_FIELD,
+            ExponentialTempSchedule(2.0, 0.05, 5),
+            np.random.default_rng(SEED),
+            move=PottsMove.WOLFF,
+            threshold=0.5,
+        )
 
 
 @pytest.mark.oracle
