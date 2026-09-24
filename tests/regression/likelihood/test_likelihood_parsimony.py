@@ -36,6 +36,7 @@ from snakes_and_ladders.likelihood.parsimony import (
 from snakes_and_ladders.likelihood.pruning import log_likelihood
 from snakes_and_ladders.search.infer import score_topology
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import enumerate_topologies, leaf_bipartitions
 from snakes_and_ladders.sim.tree import Node, edges, preorder
 
@@ -188,9 +189,7 @@ def test_sankoff_with_the_unit_matrix_is_fitch_on_every_five_taxon_topology() ->
     # return the set recursion's count, and exactly -- 15 of 15 topologies of
     # the five-taxon fixture at 1,200 sites, equality not tolerance.
     params = load_fixture(FIVE_TAXA)
-    dataset = simulate_alignment(
-        params.tau, params.k, params.pi, np.random.default_rng(params.seed), 1200
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=1200)
     alignment = dict(dataset.alignment)
     unit = unit_step_matrix(params.k)
 
@@ -430,8 +429,8 @@ def test_the_short_branch_likelihood_ranks_the_topologies_as_the_fitch_score_doe
 
     for seed in range(5):
         alignment = dict(
-            simulate_alignment(
-                params.tau, params.k, params.pi, np.random.default_rng(1000 + seed), 300
+            simulate_tree(
+                params, np.random.default_rng(1000 + seed), n_sites=300
             ).alignment
         )
         topologies = list(enumerate_topologies(sorted(alignment)))

@@ -24,7 +24,7 @@ from numpy.testing import assert_allclose
 from snakes_and_ladders.likelihood import pruning_analytic, pruning_torch
 from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
 from snakes_and_ladders.search.infer import infer
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 
 from tests._fixtures import EIGHT_TAXA, SMALL_SITES, load_fixture
 
@@ -42,13 +42,7 @@ _SITES = 2000
 def test_every_route_agrees_with_the_taped_gradient(route: str) -> None:
     """One fixture, three gradients, the float64 agreement tolerance."""
     params = load_fixture(EIGHT_TAXA)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=_SITES,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=_SITES)
     lengths = pruning_torch.branch_lengths_from_tree(params.tau)
 
     gradients = []
@@ -67,13 +61,7 @@ def test_infer_returns_the_same_topology_and_trace(
 ) -> None:
     """The search's answer does not depend on which route produced the gradient."""
     params = load_fixture(SMALL_SITES)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=_SITES,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=_SITES)
     alignment = dict(dataset.alignment)
 
     expected = infer(alignment, params.k, rng=np.random.default_rng(449))

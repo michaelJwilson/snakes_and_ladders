@@ -36,7 +36,7 @@ from snakes_and_ladders.qa.rl_tree_policy import (
     STARTS,
 )
 from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import MoveSet, Topology, enumerate_topologies
 from snakes_and_ladders.sim.tree import edges
 
@@ -59,26 +59,12 @@ def params() -> SimulationParams:
 
 @pytest.fixture(scope="module")
 def taxa(params: SimulationParams) -> list[str]:
-    return sorted(
-        simulate_alignment(
-            tau=params.tau,
-            k=params.k,
-            pi=params.pi,
-            rng=np.random.default_rng(params.seed),
-            n_sites=params.n_sites,
-        ).alignment
-    )
+    return sorted(simulate_tree(params, np.random.default_rng(params.seed)).alignment)
 
 
 @pytest.fixture(scope="module")
 def environment(params: SimulationParams) -> TreeEnvironment:
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=params.n_sites,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed))
     return TreeEnvironment(
         dict(dataset.alignment),
         params.k,

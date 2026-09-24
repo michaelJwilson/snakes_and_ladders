@@ -45,6 +45,7 @@ from snakes_and_ladders.search.infer import infer, score_topology
 from snakes_and_ladders.search.initialize import FromDistances, FromHadamard
 from snakes_and_ladders.search.neighbor_joining import split_lengths
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import (
     MoveSet,
     Topology,
@@ -246,13 +247,7 @@ def test_the_start_is_one_point_in_the_objective_s_coordinates(
     split, floored at the initializer's minimum.
     """
     params = load_fixture(FIVE_TAXA)
-    dataset = simulate_alignment(
-        params.tau,
-        params.k,
-        params.pi,
-        np.random.default_rng(params.seed),
-        params.n_sites,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed))
     objective = BranchLengthObjective(
         params.tau, params.k, params.pi, dataset.alignment
     )
@@ -275,13 +270,7 @@ def test_the_general_model_start_carries_the_log_det_lengths_and_jukes_cantor_ra
 ):
     """On a `SubstitutionModelObjective` only the branch block moves off `initial()`."""
     params = load_fixture(FIVE_TAXA)
-    dataset = simulate_alignment(
-        params.tau,
-        params.k,
-        params.pi,
-        np.random.default_rng(params.seed),
-        params.n_sites,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed))
     objective = SubstitutionModelObjective(params.tau, params.k, dataset.alignment)
 
     start = FromDistances(kind=DistanceKind.LOG_DET).starts(objective)[0]
@@ -297,9 +286,7 @@ def test_the_general_model_start_carries_the_log_det_lengths_and_jukes_cantor_ra
 def test_a_rooted_binary_topology_places_the_root_pair_as_its_sum() -> None:
     """The eight-taxon fixture roots at degree 2: the estimable sum carries the split's length."""
     params = load_fixture(EIGHT_TAXA)
-    dataset = simulate_alignment(
-        params.tau, params.k, params.pi, np.random.default_rng(params.seed), 2000
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=2000)
     objective = BranchLengthObjective(
         params.tau, params.k, params.pi, dataset.alignment
     )

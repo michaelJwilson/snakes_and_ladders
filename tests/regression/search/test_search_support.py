@@ -45,7 +45,7 @@ from snakes_and_ladders.sim.factor_graph import (
 )
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import (
     MoveSet,
     enumerate_topologies,
@@ -63,9 +63,7 @@ FIELD = np.array([0.6, -0.4, 0.1])
 def _alignment(
     params: SimulationParams, seed: int, n_sites: int
 ) -> dict[str, np.ndarray]:
-    dataset = simulate_alignment(
-        params.tau, params.k, params.pi, np.random.default_rng(seed), n_sites
-    )
+    dataset = simulate_tree(params, np.random.default_rng(seed), n_sites=n_sites)
     return dict(dataset.alignment)
 
 

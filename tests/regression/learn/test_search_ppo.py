@@ -24,7 +24,7 @@ from snakes_and_ladders.learn.tree import RewardModel, TreeEnvironment
 from snakes_and_ladders.qa.rl_tree_policy import BATCH, HORIZON, ITERATIONS, STARTS
 from snakes_and_ladders.sample.schedule import LinearTempSchedule
 from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import MoveSet, Topology, enumerate_topologies
 from snakes_and_ladders.sim.tree import edges
 
@@ -35,13 +35,7 @@ ROLLOUTS_PER_START = 4
 @pytest.fixture(scope="module")
 def environment() -> TreeEnvironment:
     params = load_params(FIXTURE, SimulationParams)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=params.n_sites,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed))
     lengths = [
         child.branch_length for _, child in edges(params.tau) if child.branch_length
     ]

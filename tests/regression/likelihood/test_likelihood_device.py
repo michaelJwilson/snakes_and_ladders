@@ -22,7 +22,7 @@ from snakes_and_ladders.likelihood.device import (
     default_dtype,
     select_device,
 )
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 
 from tests._fixtures import FOUR_TAXA, SMALL_SITES, load_fixture
 
@@ -132,13 +132,7 @@ def test_every_device_the_policy_selects_holds_its_tolerance_to_the_numpy_oracle
     print("\nrelative deviation from the NumPy oracle, per selected route:")
     for fixture in (SMALL_SITES, FOUR_TAXA):
         params = load_fixture(fixture)
-        dataset = simulate_alignment(
-            tau=params.tau,
-            k=params.k,
-            pi=params.pi,
-            rng=np.random.default_rng(params.seed),
-            n_sites=params.n_sites,
-        )
+        dataset = simulate_tree(params, np.random.default_rng(params.seed))
         alignment = dict(dataset.alignment)
         exact = pruning.log_likelihood(params.tau, params.k, params.pi, alignment)
 
@@ -172,13 +166,7 @@ def test_float32_agrees_with_float64_inside_the_stated_tolerance(
     # guess: float32 on CPU is the same arithmetic Metal will do, so this
     # runs on a GPU-less runner and still exercises the number.
     params = load_fixture(fixture)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=params.n_sites,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed))
     alignment = dict(dataset.alignment)
 
     wide = pruning_torch.log_likelihood(
@@ -210,13 +198,7 @@ def test_float32_would_fail_an_absolute_bound_that_float64_passes() -> None:
     # float32 discrepancy is ~1e-2 absolute, so any absolute bound tight
     # enough to be meaningful for float64 rejects correct float32 code.
     params = load_fixture(FOUR_TAXA)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=params.n_sites,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed))
     alignment = dict(dataset.alignment)
 
     wide = float(
@@ -251,13 +233,7 @@ def test_float64_default_is_unchanged_by_the_dtype_parameter() -> None:
     # No silent behaviour change: a caller who passes nothing still gets
     # float64, and still matches the NumPy oracle.
     params = load_fixture(SMALL_SITES)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=200,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=200)
     alignment = dict(dataset.alignment)
 
     lengths = pruning_torch.branch_lengths_from_tree(params.tau)
@@ -281,13 +257,7 @@ def test_float64_default_is_unchanged_by_the_dtype_parameter() -> None:
 )
 def test_cuda_agrees_with_cpu() -> None:  # pragma: no cover
     params = load_fixture(SMALL_SITES)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=500,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=500)
     alignment = dict(dataset.alignment)
 
     dtype = default_dtype("cuda")
@@ -314,13 +284,7 @@ def test_cuda_agrees_with_cpu() -> None:  # pragma: no cover
 )
 def test_mps_agrees_with_cpu() -> None:  # pragma: no cover
     params = load_fixture(SMALL_SITES)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=500,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=500)
     alignment = dict(dataset.alignment)
 
     # float32 on both sides: Metal cannot do float64, so the CPU side is

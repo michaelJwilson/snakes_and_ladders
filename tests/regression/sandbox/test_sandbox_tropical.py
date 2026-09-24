@@ -68,7 +68,7 @@ from snakes_and_ladders.search.neighbor_joining import (
     neighbor_joining,
 )
 from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import (
     Topology,
     enumerate_topologies,
@@ -145,11 +145,9 @@ def _alignment(
     name: str, n_sites: int | None = None
 ) -> tuple[SimulationParams, dict[str, np.ndarray]]:
     params = load_fixture(name)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
+    dataset = simulate_tree(
+        params,
+        np.random.default_rng(params.seed),
         n_sites=params.n_sites if n_sites is None else n_sites,
     )
     return params, dict(dataset.alignment)

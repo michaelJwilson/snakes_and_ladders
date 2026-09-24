@@ -46,7 +46,7 @@ from snakes_and_ladders.sim.factor_graph import (
 )
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 from snakes_and_ladders.sim.jc import jc_transition_probabilities
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.tree import preorder
 
 from tests._fixtures import SMALL_SITES, load_fixture
@@ -238,9 +238,7 @@ def test_the_upward_pass_is_felsenstein_pruning_on_a_real_tree() -> None:
     # recursion expressed as half a message-passing plan. Summed over sites
     # they are the same likelihood.
     params = load_fixture(SMALL_SITES)
-    dataset = simulate_alignment(
-        params.tau, params.k, params.pi, np.random.default_rng(params.seed), n_sites=7
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=7)
     alignment = dict(dataset.alignment)
     transitions = {
         node.name: jc_transition_probabilities(node.branch_length, params.k)

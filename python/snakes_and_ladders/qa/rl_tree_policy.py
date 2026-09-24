@@ -43,7 +43,7 @@ from snakes_and_ladders.qa.style import (
     series_style,
 )
 from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import MoveSet, Topology, enumerate_topologies
 from snakes_and_ladders.sim.tree import edges
 
@@ -89,13 +89,7 @@ def _environment(
         and the sorted taxon names -- returned rather than recovered from the
         environment, which keeps its alignment private.
     """
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=params.n_sites,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed))
     alignment = dict(dataset.alignment)
     environment = TreeEnvironment(
         alignment,

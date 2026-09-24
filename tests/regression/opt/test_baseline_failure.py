@@ -32,7 +32,7 @@ from snakes_and_ladders.learn.rollout import greedy_rollout
 from snakes_and_ladders.learn.tree import RewardModel, TreeEnvironment
 from snakes_and_ladders.opt.budget import Budget, Outcome, OverspendError, restarts
 from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import MoveSet, enumerate_topologies
 from snakes_and_ladders.sim.tree import edges
 
@@ -253,13 +253,7 @@ def test_the_harness_refuses_what_it_cannot_measure() -> None:
 def _tree_instance() -> tuple[TreeEnvironment, float]:
     """The 7-taxon environment and its enumerated maximum."""
     params: SimulationParams = load_params(FIXTURE, SimulationParams)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=params.n_sites,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed))
     environment = TreeEnvironment(
         dict(dataset.alignment),
         params.k,
