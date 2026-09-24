@@ -34,10 +34,6 @@ EXPECTED = (
     "matplotlib",
     "networkx",
     "scipy",
-    # In the `frameworks` extra, which CI's `python-tests` job installs and
-    # `search/gym.py` imports at module scope. Its absence surfaced as an
-    # error inside an unrelated test, which is the case this list exists for.
-    "gymnasium",
 )
 
 
@@ -66,7 +62,7 @@ def test_a_shared_environment_carries_every_declared_requirement() -> None:
     It runs only where the `.venv` is a symlink, which is what makes an
     environment shared and the damage everyone's. CI builds a real directory
     per job, deliberately narrow --- `python-tests` installs `test` and
-    `frameworks` and no more --- so there the question has no answer to give
+    no more --- so there the question has no answer to give
     and the test skips rather than asserting a falsehood.
     """
     if not (REPO_ROOT / ".venv").is_symlink():

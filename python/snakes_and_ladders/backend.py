@@ -34,6 +34,9 @@ here so it is read once rather than off 46 signatures.
     `sample.gibbs` and
     `search.alpha_expansion.iterated_conditional_modes`: arithmetic that is
     NumPy's operation for operation.
+``JAX``
+    the gradient of `opt.hmm`'s objectives (issue #1000), pinned to the
+    ``TORCH`` autograd route at 1e-10.
 ``PYTHON``
     everything else that takes the enum --- `likelihood.pruning`,
     `likelihood.spatio_sequential`, `search.maxflow`,
@@ -68,13 +71,20 @@ class Backend(StrEnum):
     """A ``numba.njit`` kernel over the compressed-row adjacency."""
 
     RUST = "rust"
-    """The ``oxi_snakes_and_ladders`` extension."""
+    """The ``oxisal`` extension."""
 
     TORCH = "torch"
     """A ``torch`` kernel: the same arithmetic as the NumPy oracle over a tensor,
     which is what puts it on a device. Admitted for a hot path that is
     elementwise over sites and earns the GPU rule, or is measured against it
     (issue #823); a kernel whose loop is over an adjacency belongs to Rust."""
+
+    JAX = "jax"
+    """A ``jax`` route: an objective's value and gradient under
+    ``jit(value_and_grad)``. The HMM objectives' default gradient since issue
+    #1000 measured it at 0.07x--0.18x PyTorch autograd's runtime at
+    10^4--10^5 positions; ``TORCH`` there is the autograd oracle it is pinned
+    to."""
 
 
 def refuse_backend(name: str, backend: Backend, allowed: tuple[Backend, ...]) -> None:

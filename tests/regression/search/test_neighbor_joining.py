@@ -30,7 +30,7 @@ from snakes_and_ladders.search.neighbor_joining import (
     neighbor_joining,
     split_lengths,
 )
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import (
     enumerate_topologies,
     leaf_bipartitions,
@@ -199,12 +199,8 @@ def test_recovery_rises_with_sites_and_is_certain_inside_attesons_radius() -> No
         recovered = 0
         inside = 0
         for seed in range(50):
-            dataset = simulate_alignment(
-                params.tau,
-                params.k,
-                params.pi,
-                np.random.default_rng([364, n_sites, seed]),
-                n_sites,
+            dataset = simulate_tree(
+                params, np.random.default_rng([364, n_sites, seed]), n_sites=n_sites
             )
             estimated_names, distances, _ = distance_matrix(dataset.alignment, params.k)
             assert estimated_names == names

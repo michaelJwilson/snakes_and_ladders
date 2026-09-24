@@ -31,6 +31,7 @@ from snakes_and_ladders.likelihood.hadamard import (
 from snakes_and_ladders.likelihood.pruning import log_likelihood
 from snakes_and_ladders.search.neighbor_joining import split_lengths
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import leaf_bipartitions
 from snakes_and_ladders.sim.tree import Node
 
@@ -190,13 +191,7 @@ def test_the_closest_tree_of_the_fixture_alignment_is_the_generating_topology(
 ) -> None:
     """The four-state fixtures, recoded, give the generating topology at their declared sites."""
     params = load_fixture(name)
-    dataset = simulate_alignment(
-        params.tau,
-        params.k,
-        params.pi,
-        np.random.default_rng(params.seed),
-        params.n_sites,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed))
     names, spectrum = sequence_spectrum(binary_recoding(dataset.alignment, params.k))
     weights = split_weights(hadamard_conjugation(spectrum), names)
 
@@ -214,13 +209,7 @@ def test_a_spectrum_the_logarithm_cannot_take_is_refused() -> None:
     would return weights for a spectrum no tree has.
     """
     params = load_fixture(HARD)
-    dataset = simulate_alignment(
-        params.tau,
-        params.k,
-        params.pi,
-        np.random.default_rng(params.seed),
-        params.n_sites,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed))
     _, spectrum = sequence_spectrum(binary_recoding(dataset.alignment, params.k))
 
     with pytest.raises(ValueError, match="non-positive"):

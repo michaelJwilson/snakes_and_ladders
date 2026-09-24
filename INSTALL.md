@@ -53,15 +53,21 @@ states.
 
 The extras are `dev` (ruff, mypy, pre-commit, pip-audit), `test` (pytest and
 plugins, NumPy), `docs` (Sphinx), `notebooks` (a kernel, for re-executing
-`docs/nb/`), `frameworks` (Gymnasium, rustworkx, TorchRL and PyTorch
-Geometric: the external implementations the suite pins its own against), and
-`track` (Aim, the run store). `--all-extras` installs all six; sync a single
-one with `uv sync --locked --extra test`. `notebooks` carries Jupyter
-Notebook itself, so a notebook opens where it is edited:
-`uv run --extra notebooks jupyter notebook docs/nb/`. Nothing in the core install needs
-`frameworks`: every test using one of its packages skips without it, and
-`snakes_and_ladders.learn.gym` is the only module that imports one at module
-level.
+`docs/nb/`), and `track` (Aim, the run store), beside the `validation-*` extras
+below. Sync a single one with `uv sync --locked --extra test`; `--all-extras`
+installs all of them. `notebooks` carries Jupyter Notebook itself, so a
+notebook opens where it is edited:
+`uv run --extra notebooks jupyter notebook docs/nb/`. Nothing in the core
+install needs an external framework, and no package module imports one.
+
+The `validation-<framework>` extras (issue #972) each install one external
+framework the package is checked or timed against, and nothing imports one
+into the package process: its script under
+`python/snakes_and_ladders/validation/scripts/` runs in a subprocess. Sync one
+with `uv sync --locked --extra test --extra validation-<name>`, or every one
+with `uv sync --locked --extra test $(python3 infra/validation_extras.py)`,
+then run `uv run pytest -m validation tests/validation`. Without its extra a
+test there skips.
 
 `track` is the one extra with an advisory against it, and the one to sync
 deliberately. It installs `aim`, the optional store behind
@@ -89,7 +95,7 @@ extension:
 pip install .
 ```
 
-This makes `snakes_and_ladders.oxi_snakes_and_ladders` importable from Python: `double`, an example
+This makes `snakes_and_ladders.oxisal` importable from Python: `double`, an example
 binding; `pruning_log_likelihood`, the Rust CPU Felsenstein pruning backend
 behind `snakes_and_ladders.likelihood.pruning_rust`; `sample_rows`, the categorical
 sampler behind `snakes_and_ladders.numerics_rust`, which `snakes_and_ladders.sim` and `snakes_and_ladders.opt` draw
@@ -115,7 +121,7 @@ pytest tests/regression/sandbox/test_pruning_burn.py
 pytest      # Python: regression tests (tests/regression), a pytest-benchmark
             # suite (tests/benchmarks), and an integration test that the
             # Rust extension imports correctly
-            # (tests/test_oxi_snakes_and_ladders_bindings.py)
+            # (tests/test_oxisal_bindings.py)
 cargo test  # Rust: unit tests for the PyO3 bindings (src/lib.rs)
 cargo bench # Rust: Criterion benchmarks (benches/)
 ```

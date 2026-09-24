@@ -187,10 +187,10 @@ def test_a_state_outside_the_alphabet_is_refused() -> None:
     draws a valid start itself: this asserts the boundary refuses rather than
     reading past the field.
     """
-    from snakes_and_ladders import oxi_snakes_and_ladders
+    from snakes_and_ladders import oxisal
 
     with pytest.raises(ValueError, match=r"expected \[0, 2\)"):
-        oxi_snakes_and_ladders.single_site_sweeps(
+        oxisal.single_site_sweeps(
             np.array([5], dtype=np.int64),
             np.zeros((1, 2)),
             np.array([0, 0], dtype=np.int64),
@@ -261,7 +261,7 @@ def test_a_guard_wide_enough_hands_every_site_back() -> None:
     which is what says the two halves of the sweep join up (issue #599, and
     #561's test of the same shape).
     """
-    from snakes_and_ladders import oxi_snakes_and_ladders
+    from snakes_and_ladders import oxisal
 
     graph = lattice_graph((4, 4), BoundaryCondition.OPEN, 0.7)
     rows = site_field(WITH_FIELD, graph.n_nodes)
@@ -274,7 +274,7 @@ def test_a_guard_wide_enough_hands_every_site_back() -> None:
         draws = np.ascontiguousarray(rng.random(graph.n_nodes), dtype=np.float64)
         node = 0
         while node < graph.n_nodes:
-            node = oxi_snakes_and_ladders.single_site_sweeps(
+            node = oxisal.single_site_sweeps(
                 state, rows, offsets, neighbours, couplings, draws, 1, 1.0, 1e18, node
             )
             if node < graph.n_nodes:
@@ -307,10 +307,10 @@ def test_a_guard_wide_enough_hands_every_site_back() -> None:
 @pytest.mark.smoke
 def test_the_kernel_refuses_a_negative_guard() -> None:
     """A guard is a width, and a negative one would decide every site."""
-    from snakes_and_ladders import oxi_snakes_and_ladders
+    from snakes_and_ladders import oxisal
 
     with pytest.raises(ValueError, match="guard must be >= 0"):
-        oxi_snakes_and_ladders.single_site_sweeps(
+        oxisal.single_site_sweeps(
             np.zeros(1, dtype=np.int64),
             np.zeros((1, 2)),
             np.array([0, 0], dtype=np.int64),
@@ -334,7 +334,7 @@ def test_the_default_guard_hands_nothing_back_on_a_realistic_chain() -> None:
     started handing sites back would be a correctness change dressed as a
     slowdown, so it is asserted rather than left to the benchmark.
     """
-    from snakes_and_ladders import oxi_snakes_and_ladders
+    from snakes_and_ladders import oxisal
 
     graph = lattice_graph((8, 8), BoundaryCondition.PERIODIC, 0.4)
     rows = site_field(WITH_FIELD, graph.n_nodes)
@@ -345,7 +345,7 @@ def test_the_default_guard_hands_nothing_back_on_a_realistic_chain() -> None:
     for _ in range(50):
         draws = np.ascontiguousarray(rng.random(graph.n_nodes), dtype=np.float64)
         assert (
-            oxi_snakes_and_ladders.single_site_sweeps(
+            oxisal.single_site_sweeps(
                 state, rows, offsets, neighbours, couplings, draws, 1, 1.0, _GUARD, 0
             )
             == graph.n_nodes

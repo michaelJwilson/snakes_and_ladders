@@ -58,18 +58,32 @@ import itertools
 import math
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 import numpy as np
 import torch
 
-from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders import oxisal
+from snakes_and_ladders.backend import Backend, refuse_backend
+from snakes_and_ladders.emissions import ParameterDomainError
+from snakes_and_ladders.opt.objective import (
+    Objective,
+    declares_gradient,
+    value_and_gradient,
+)
 from snakes_and_ladders.sample.accept import (
     accept_ratio,
     accept_with,
     acceptance_probability,
 )
+from snakes_and_ladders.sample.declared import (
+    Power,
+    declared_energy,
+    declared_jax_energy,
+)
+from snakes_and_ladders.sample.expectation import Expectation, KalmanMean
+from snakes_and_ladders.sample.hmc_jax import JaxWalk
 from snakes_and_ladders.sample.schedule import (
     Monotone,
     TempSchedule,
@@ -80,6 +94,7 @@ from snakes_and_ladders.sample.tempered import _exchange
 
 # `current` is aliased: `_coefficients` already binds that name to a
 # sub-step length, and one of the two has to give.
+from snakes_and_ladders.track import NULL as UNTRACKED
 from snakes_and_ladders.track import TrackedOptimization
 from snakes_and_ladders.track import current as current_tracked
 
@@ -357,6 +372,10 @@ class HmcChain:
     adapted : Adapted | None
         What the warm-up settled on, when :func:`sample` was given an
         :class:`Adaptation`; ``None`` for a fixed-parameter chain.
+    expectations : Mapping[str, Expectation]
+        Each operator's expectation over the recorded draws, by the Kalman
+        filter of :mod:`snakes_and_ladders.sample.expectation`, keyed as the
+        ``operators`` given to :func:`sample`; empty when none were.
     """
 
     theta: torch.Tensor
@@ -364,6 +383,7 @@ class HmcChain:
     energy_error: torch.Tensor
     force_evaluations: int
     adapted: Adapted | None
+    expectations: Mapping[str, Expectation] = field(default_factory=dict)
 
 
 #: The cube root that Yoshida's fourth-order composition is built from.
@@ -568,6 +588,9 @@ def sample(
     integrator: Integrator = leapfrog,
     temperature: float = 1.0,
     adaptation: Adaptation | None = None,
+    store_chain: bool = True,
+    operators: Mapping[str, Callable[[torch.Tensor], torch.Tensor]] | None = None,
+    backend: Backend = Backend.RUST,
 ) -> HmcChain:
     """Draw ``n_samples`` from the density ``exp(-objective / temperature)``.
 
@@ -606,12 +629,36 @@ def sample(
         ``burn_in`` and the draws, both of which then run at fixed values.
         ``None`` runs the fixed-parameter chain at unit mass, bitwise what it
         was before adaptation existed.
+    store_chain : bool
+        Keep the draws (issue #988). ``False`` keeps none --- ``theta`` has
+        zero rows --- and the chain holds memory of the order of one draw
+        rather than ``n_samples`` of them; what it was for is then
+        ``operators``' expectations.
+    operators : Mapping[str, Callable[[torch.Tensor], torch.Tensor]] | None
+        Functions of a draw, in the caller's coordinates, each fed to a
+        :class:`~snakes_and_ladders.sample.expectation.KalmanMean` at every
+        recorded draw; the burn-in's are not observed. ``None`` observes
+        nothing, the chain as it was.
+    backend : Backend
+        :data:`~snakes_and_ladders.backend.Backend.RUST`, the default since
+        issue #986, runs the whole chain in ``oxisal.HmcWalk`` (issue #1008)
+        when the objective declares an energy
+        (:func:`~snakes_and_ladders.sample.declared.declared_energy`) and the
+        chain is leapfrog at unit temperature in no enclosing
+        :func:`snakes_and_ladders.track.track`; the warm-up and ``Power``
+        operators' filters run there too, and other operators as
+        :func:`run_compiled` states. Its momenta and uniforms come
+        from ChaCha8 seeded by one draw from ``generator``, so it is its own
+        stream: reproducible from the generator, not the torch route's draws.
+        Any other chain, and :data:`~snakes_and_ladders.backend.Backend.PYTHON`
+        always, is the torch route, whose integrator pins the compiled one.
 
     Returns
     -------
     HmcChain
         The draws, the acceptance rate, the per-proposal energy error, the
-        gradients spent, and what the warm-up settled on if there was one.
+        gradients spent, what the warm-up settled on if there was one, and
+        the operators' expectations.
 
     Raises
     ------
@@ -622,24 +669,56 @@ def sample(
         every diagnostic.
     """
     _check_trajectory(step_size, n_steps)
-    chain = run_chain(
-        _HamiltonianKernel(n_steps=n_steps, integrator=integrator),
-        integrator.force_evaluations(n_steps),
-        objective,
-        generator,
-        n_samples,
-        step_size=step_size,
-        theta0=theta0,
-        burn_in=burn_in,
-        temperature=temperature,
-        adaptation=adaptation,
-    )
+    refuse_backend("hmc.sample", backend, (Backend.PYTHON, Backend.RUST))
+    declared = declared_energy(objective)
+    traced = None if declared is not None else declared_jax_energy(objective)
+    plain = integrator is leapfrog and temperature == 1.0
+    if (
+        backend is Backend.RUST
+        and (declared is not None or traced is not None)
+        and plain
+        and current_tracked() is UNTRACKED
+        and (
+            declared is not None
+            or all(isinstance(o, Power) for o in (operators or {}).values())
+        )
+    ):
+        chain = run_compiled(
+            oxisal.HmcWalk if declared is not None else JaxWalk,
+            declared if declared is not None else traced,  # type: ignore[arg-type]
+            (n_steps,),
+            integrator.force_evaluations(n_steps),
+            generator,
+            n_samples,
+            step_size=step_size,
+            theta0=start_point(objective, theta0),
+            burn_in=burn_in,
+            adaptation=adaptation,
+            store_chain=store_chain,
+            operators=operators,
+        )
+    else:
+        chain = run_chain(
+            _HamiltonianKernel(n_steps=n_steps, integrator=integrator),
+            integrator.force_evaluations(n_steps),
+            objective,
+            generator,
+            n_samples,
+            step_size=step_size,
+            theta0=theta0,
+            burn_in=burn_in,
+            temperature=temperature,
+            adaptation=adaptation,
+            store_chain=store_chain,
+            operators=operators,
+        )
     return HmcChain(
         theta=chain.draws,
         acceptance_rate=chain.acceptance_rate,
         energy_error=chain.energy_error,
         force_evaluations=chain.force_evaluations,
         adapted=chain.adapted,
+        expectations=chain.expectations,
     )
 
 
@@ -674,9 +753,11 @@ class Chain:
     energy_error: torch.Tensor
     force_evaluations: int
     adapted: Adapted | None
+    #: Each operator's expectation over the recorded draws (issue #988).
+    expectations: Mapping[str, Expectation] = field(default_factory=dict)
 
     def __iter__(self) -> Iterator[Any]:
-        """``(draws, acceptance_rate, energy_error, force_evaluations, adapted)``.
+        """``(draws, acceptance_rate, energy_error, force_evaluations, adapted, expectations)``.
 
         The order callers unpack. ``Any`` for :meth:`Transition.__iter__`'s
         reason.
@@ -687,6 +768,7 @@ class Chain:
             self.energy_error,
             self.force_evaluations,
             self.adapted,
+            self.expectations,
         )
 
 
@@ -702,6 +784,8 @@ def run_chain(
     burn_in: int,
     temperature: float,
     adaptation: Adaptation | None,
+    store_chain: bool = True,
+    operators: Mapping[str, Callable[[torch.Tensor], torch.Tensor]] | None = None,
 ) -> Chain:
     """The warm-up, the burn-in and the recorded draws, for any :class:`Kernel`.
 
@@ -722,6 +806,8 @@ def run_chain(
         :func:`snakes_and_ladders.sample.langevin.mala`.
     objective, generator, n_samples, step_size, theta0, burn_in, temperature, adaptation
         As :func:`sample`.
+    store_chain, operators
+        As :func:`sample` (issue #988).
 
     Returns
     -------
@@ -739,7 +825,7 @@ def run_chain(
         msg = f"temperature must be positive, got {temperature}"
         raise ValueError(msg)
 
-    position = _start(objective, theta0)
+    position = start_point(objective, theta0)
 
     adapted: Adapted | None = None
     target: Objective = objective
@@ -760,7 +846,10 @@ def run_chain(
         target = _Scaled(objective, scale)
         position = position / scale
 
-    draws = torch.empty((n_samples, position.shape[0]), dtype=torch.float64)
+    draws = torch.empty(
+        (n_samples if store_chain else 0, position.shape[0]), dtype=torch.float64
+    )
+    filters = {name: KalmanMean() for name in (operators or {})}
     errors = torch.empty(n_samples + burn_in, dtype=torch.float64)
     accepted = 0
 
@@ -786,7 +875,12 @@ def run_chain(
         if index >= burn_in:
             drawn = index - burn_in
             accepted += step.accepted
-            draws[drawn] = position
+            if store_chain:
+                draws[drawn] = position
+            if filters:
+                drawn_at = position * scale if scale is not None else position
+                for name, kalman in filters.items():
+                    kalman.update(operators[name](drawn_at))  # type: ignore[index]
             tracked.record(
                 drawn,
                 state=position,
@@ -805,6 +899,111 @@ def run_chain(
         energy_error=errors[burn_in:],
         force_evaluations=(n_samples + burn_in) * per_proposal + warmup_evaluations,
         adapted=adapted,
+        expectations={name: kalman.estimate() for name, kalman in filters.items()},
+    )
+
+
+#: Draws a compiled chain hands back per block when operators observe it:
+#: the memory an unstored chain holds is of the order of this many draws.
+BLOCK = 1_024
+
+
+def run_compiled(
+    walk_class: Callable[..., Any],
+    declared: tuple[Any, Any],
+    extra: tuple[Any, ...],
+    per_proposal: int,
+    generator: torch.Generator,
+    n_samples: int,
+    *,
+    step_size: float,
+    theta0: torch.Tensor,
+    burn_in: int,
+    adaptation: Adaptation | None,
+    store_chain: bool,
+    operators: Mapping[str, Callable[[torch.Tensor], torch.Tensor]] | None,
+) -> Chain:
+    """A chain on a declared family, the warm-up included, compiled (issues #1006, #1008).
+
+    ``walk_class`` is ``oxisal.MetropolisWalk`` or ``oxisal.HmcWalk``, built
+    with its own arguments ``extra`` after the shared ones; ``per_proposal``
+    is what one proposal costs, as :func:`run_chain` takes it. The warm-up,
+    the burn-in, the draws and the filters are ``src/chain.rs``'s, one loop
+    for both kernels as :func:`run_chain` is one for the torch ones.
+
+    A :class:`~snakes_and_ladders.sample.declared.Power` operator is
+    evaluated and Kalman-filtered in the compiled loop, and only its six
+    statistics per coordinate come back. Any other operator is a Python
+    callable, so the chain is advanced :data:`BLOCK` draws at a time for it
+    and each block is filtered here and dropped unless ``store_chain`` keeps
+    it (issues #988, #1006).
+    """
+    family, parameters = declared
+    dimension = int(theta0.shape[0])
+    seed = int(torch.randint(0, 2**62, (1,), generator=generator))
+    declared_operators = {
+        name: operator
+        for name, operator in (operators or {}).items()
+        if isinstance(operator, Power)
+    }
+    walk = walk_class(
+        family,
+        parameters,
+        np.ascontiguousarray(theta0.numpy(), dtype=np.float64),
+        step_size,
+        seed,
+        0 if adaptation is None else adaptation.warmup,
+        0.5 if adaptation is None else adaptation.target_acceptance,
+        0.0 if adaptation is None else adaptation.step_jitter,
+        (DUAL_AVERAGING_GAMMA, DUAL_AVERAGING_T0, DUAL_AVERAGING_KAPPA),
+        [operator.exponent for operator in declared_operators.values()],
+        *extra,
+    )
+    walk.advance(burn_in, False, False)
+    filters = {
+        name: KalmanMean()
+        for name in (operators or {})
+        if name not in declared_operators
+    }
+    blocks: list[torch.Tensor] = []
+    errors: list[np.ndarray] = []
+    accepted = 0
+    remaining = n_samples
+    while remaining > 0 or not errors:
+        size = min(remaining, BLOCK) if filters else remaining
+        draws, taken, error = walk.advance(size, store_chain or bool(filters), True)
+        accepted += taken
+        errors.append(error)
+        block = torch.from_numpy(draws.reshape(-1, dimension))
+        for name, kalman in filters.items() if block.shape[0] else ():
+            kalman.update_block(
+                torch.stack([operators[name](row) for row in block])  # type: ignore[index]
+            )
+        if store_chain:
+            blocks.append(block)
+        remaining -= size
+    for index, name in enumerate(declared_operators):
+        filters[name] = KalmanMean.from_statistics(*walk.statistics(index))
+    warmup_evaluations = 0 if adaptation is None else adaptation.warmup * per_proposal
+    return Chain(
+        # One block is the chain as Rust built it; `cat` would copy it.
+        draws=blocks[0]
+        if len(blocks) == 1
+        else torch.cat(blocks)
+        if blocks
+        else torch.empty((0, dimension)),
+        acceptance_rate=accepted / n_samples if n_samples else 0.0,
+        energy_error=torch.from_numpy(np.concatenate(errors)),
+        force_evaluations=(n_samples + burn_in) * per_proposal + warmup_evaluations,
+        adapted=None
+        if adaptation is None
+        else Adapted(
+            step_size=walk.step_size,
+            mass_diagonal=torch.from_numpy(walk.mass_diagonal),
+            warmup_acceptance=walk.warmup_acceptance,
+            force_evaluations=warmup_evaluations,
+        ),
+        expectations={name: filters[name].estimate() for name in (operators or {})},
     )
 
 
@@ -876,7 +1075,7 @@ def anneal(
     Annealed
     """
     _check_trajectory(step_size, n_steps)
-    position = _start(objective, theta0)
+    position = start_point(objective, theta0)
 
     best, best_value = position.clone(), float(objective(position))
     accepted = 0
@@ -1053,7 +1252,7 @@ def parallel_tempering(
         torch.Generator().manual_seed(int(child))
         for child in torch.randint(0, 2**31 - 1, (n_replicas,), generator=parent)
     ]
-    start = _start(objective, theta0)
+    start = start_point(objective, theta0)
     positions = [start.clone() for _ in range(n_replicas)]
     value = float(objective(start))
     best, best_value = start.clone(), value
@@ -1163,7 +1362,8 @@ def _check_trajectory(step_size: float, n_steps: int) -> None:
         raise ValueError(msg)
 
 
-def _start(objective: Objective, theta0: torch.Tensor | None) -> torch.Tensor:
+def start_point(objective: Objective, theta0: torch.Tensor | None) -> torch.Tensor:
+    """Where a chain starts: ``theta0``, or ``objective.initial()``, detached, in ``float64``."""
     return (
         objective.initial().detach().clone()
         if theta0 is None
@@ -1220,19 +1420,30 @@ def _transition(
         it was accepted, and the Metropolis acceptance probability
         ``min(1, exp(-dH / T))`` --- the statistic dual averaging drives,
         which has less variance than the accept/reject outcome. A proposal
-        whose energy is not finite has probability 0.
+        whose energy is not finite has probability 0, and so does one whose
+        trajectory left the objective's domain
+        (:class:`~snakes_and_ladders.emissions.ParameterDomainError`).
     """
     momentum = torch.randn(
         position.shape, generator=generator, dtype=torch.float64
     ) * math.sqrt(temperature)
     current = hamiltonian(objective, position, momentum)
 
-    trajectory = integrator(objective, position, momentum, step_size, n_steps)
-    proposal = trajectory.position
-    # Negating the momentum makes the proposal symmetric, which is what
-    # leaves the acceptance ratio as the energy difference alone. It has
-    # no effect on the next iteration, where the momentum is redrawn.
-    proposed = hamiltonian(objective, proposal, -trajectory.momentum)
+    try:
+        trajectory = integrator(objective, position, momentum, step_size, n_steps)
+        proposal = trajectory.position
+        # Negating the momentum makes the proposal symmetric, which is what
+        # leaves the acceptance ratio as the energy difference alone. It has
+        # no effect on the next iteration, where the momentum is redrawn.
+        proposed = hamiltonian(objective, proposal, -trajectory.momentum)
+    except ParameterDomainError:
+        # A divergent trajectory: it drove a parameter out of the family's
+        # domain, where the energy does not exist. Rejected as a proposal of
+        # infinite energy is, the uniform drawn as that path draws it (#912).
+        torch.rand(1, generator=generator)
+        return Transition(
+            position=position, energy_error=math.inf, accepted=0, probability=0.0
+        )
 
     error = abs(proposed - current)
     uniform = float(torch.rand(1, generator=generator))
@@ -1247,12 +1458,45 @@ def _transition(
     )
 
 
+def compiled_trajectory(
+    objective: Objective,
+    position: torch.Tensor,
+    momentum: torch.Tensor,
+    step_size: float,
+    n_steps: int,
+) -> PhaseSpace:
+    """:func:`leapfrog` on a declared energy, in ``oxisal`` at unit mass (issues #986, #1008).
+
+    The trajectory is the one arithmetic the compiled chain and the torch
+    route share, so it is what pins ``src/hmc.rs`` to :func:`leapfrog` step
+    for step; the chains themselves differ in their streams.
+
+    Raises
+    ------
+    TypeError
+        If the objective declares no energy
+        (:func:`~snakes_and_ladders.sample.declared.declared_energy`).
+    """
+    declared = declared_energy(objective)
+    if declared is None:
+        msg = f"{type(objective).__name__} declares no energy a compiled trajectory can run"
+        raise TypeError(msg)
+    end, velocity = oxisal.leapfrog_trajectory(
+        declared[0],
+        declared[1],
+        np.ascontiguousarray(position.detach().numpy(), dtype=np.float64),
+        np.ascontiguousarray(momentum.detach().numpy(), dtype=np.float64),
+        step_size,
+        n_steps,
+    )
+    return PhaseSpace(torch.from_numpy(end), torch.from_numpy(velocity))
+
+
 def gradient_at(objective: Objective, theta: torch.Tensor) -> torch.Tensor:
-    """``dU/dtheta``, by autograd through the objective."""
-    point = theta.detach().clone().requires_grad_(True)
-    value = objective(point)
-    (grad,) = torch.autograd.grad(value, point)
-    return grad.detach()
+    """``dU/dtheta``: the objective's declared gradient, its declared value and gradient, or autograd."""
+    if declares_gradient(objective):
+        return objective.gradient(theta.detach())  # type: ignore[attr-defined, no-any-return]
+    return value_and_gradient(objective, theta)[1]
 
 
 @dataclass(frozen=True)
@@ -1284,6 +1528,20 @@ class _Scaled(Objective):
 
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         return self.objective(theta * self.scale)
+
+    def value_and_gradient(
+        self, theta: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        # The chain rule through `theta * scale`, so a declared gradient
+        # survives the change of coordinates.
+        value, gradient = value_and_gradient(self.objective, theta * self.scale)
+        return value, gradient * self.scale
+
+    def gradient(self, theta: torch.Tensor) -> torch.Tensor:
+        # A kick needs the gradient alone: through `gradient_at` the inner
+        # objective's declared gradient is taken without its value, which
+        # `value_and_gradient` would evaluate beside it (issue #1008).
+        return gradient_at(self.objective, theta * self.scale) * self.scale
 
 
 class _DualAveraging:

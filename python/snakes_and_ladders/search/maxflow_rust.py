@@ -1,4 +1,4 @@
-"""Rust Boykov--Kolmogorov max flow (`snakes_and_ladders.oxi_snakes_and_ladders`), pinned against `snakes_and_ladders.search.maxflow`.
+"""Rust Boykov--Kolmogorov max flow (`snakes_and_ladders.oxisal`), pinned against `snakes_and_ladders.search.maxflow`.
 
 The NumPy/Python implementation --- Dinic, kept readable --- stays as the
 oracle, per root ``CLAUDE.md`` ("Every accelerated kernel keeps its pure
@@ -44,7 +44,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders import oxisal
 from snakes_and_ladders.search.maxflow import FlowNetwork, GroundState, MinCut
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import energy, site_field
@@ -75,7 +75,7 @@ def ising_ground_state(graph: PottsGraph, field_values: np.ndarray) -> GroundSta
     # `as_slice` on the Rust side succeeds only for a C-contiguous array, so
     # every argument is normalized here; `ascontiguousarray` is free when the
     # array already is one, and `site_field` already returns `float64`.
-    states = oxi_snakes_and_ladders.ising_ground_state(
+    states = oxisal.ising_ground_state(
         graph.n_nodes,
         np.ascontiguousarray(values, dtype=np.float64).reshape(-1),
         graph.edge_index.reshape(-1),
@@ -118,7 +118,7 @@ def ising_ground_states(
     if batch.ndim != 3 or batch.shape[1:] != (graph.n_nodes, 2):
         msg = f"fields must be (batch, {graph.n_nodes}, 2), got {batch.shape}"
         raise ValueError(msg)
-    states = oxi_snakes_and_ladders.ising_ground_states(
+    states = oxisal.ising_ground_states(
         graph.n_nodes,
         batch.reshape(-1),
         graph.edge_index.reshape(-1),
@@ -151,7 +151,7 @@ def min_cut(network: FlowNetwork, source: int, sink: int) -> MinCut:
     the cut rather than the value, could not use it at all.
     """
     paired = network.as_arrays()
-    value, side = oxi_snakes_and_ladders.max_flow(
+    value, side = oxisal.max_flow(
         network.n_nodes,
         paired.arcs,
         paired.capacity,

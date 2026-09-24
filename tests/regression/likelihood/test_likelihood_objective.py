@@ -37,6 +37,7 @@ from snakes_and_ladders.opt.fit import (
 from snakes_and_ladders.sim.gtr import gtr_rate_matrix
 from snakes_and_ladders.sim.jc import jc_rate_matrix
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import (
@@ -306,11 +307,9 @@ def test_branch_length_intervals_cover_at_the_nominal_rate() -> None:
     covered = 0
     total = 0
     for replicate in range(40):
-        dataset = simulate_alignment(
-            tau=params.tau,
-            k=params.k,
-            pi=params.pi,
-            rng=np.random.default_rng(params.seed + 7919 * replicate),
+        dataset = simulate_tree(
+            params,
+            np.random.default_rng(params.seed + 7919 * replicate),
             n_sites=_SITES,
         )
         objective = BranchLengthObjective(

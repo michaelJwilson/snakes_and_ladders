@@ -1,4 +1,4 @@
-//! The `oxi_snakes_and_ladders` extension: the kernels root `CLAUDE.md`'s
+//! The `oxisal` extension: the kernels root `CLAUDE.md`'s
 //! backend rule admits, each beside the NumPy oracle that pins it.
 //!
 //! **Every kernel releases the GIL.** PyO3 holds it for the whole body of a
@@ -16,29 +16,50 @@
 use pyo3::prelude::*;
 
 pub mod bcjr;
+pub mod bifurcation;
+pub mod bk;
+pub mod chain;
 pub mod count_mstep;
 pub mod count_pairs;
 pub mod coupled;
+pub mod energy;
+pub mod hmc;
+pub mod hmm_decode;
+pub mod hmm_stream;
+pub mod lattice_cut;
 pub mod maxflow;
 #[cfg(feature = "sandbox")]
 pub mod maxflow_declined;
 pub mod message_passing;
+pub mod metropolis;
+pub mod mixture_stream;
 pub mod potts;
 pub mod pruning;
 #[cfg(feature = "sandbox")]
 pub mod pruning_burn;
 pub mod ragged;
 pub mod sampling;
+pub mod special;
 
 pub use bcjr::bcjr_forward_backward;
-pub use count_mstep::{beta_binomial_parameters, negative_binomial_dispersions};
+pub use bifurcation::bifurcation_integrate;
+pub use count_mstep::{
+    beta_binomial_parameters, negative_binomial_dispersions, negative_binomial_dispersions_exposed,
+};
 pub use count_pairs::simulate_count_pairs;
 pub use coupled::{class_posteriors, external_field};
+pub use hmc::leapfrog_trajectory;
+pub use hmm_decode::{hmm_score, hmm_viterbi};
+pub use hmm_stream::{
+    categorical_em_step, count_cells, count_em_step, gaussian_em_step, gaussian_hmm_statistics,
+};
+pub use lattice_cut::LatticeCut;
 pub use maxflow::{ising_ground_state, ising_ground_states, max_flow};
 #[cfg(feature = "sandbox")]
 pub use maxflow_declined::{ising_ground_state_declined, max_flow_declined};
 pub use message_passing::tree_message_passing;
-pub use potts::{single_site_sweeps, swendsen_wang_sweep};
+pub use mixture_stream::{gaussian_mixture_em_step, gaussian_mixture_gradient};
+pub use potts::{bond_roots, single_site_sweeps, swendsen_wang_sweep};
 pub use pruning::pruning_log_likelihood;
 #[cfg(feature = "sandbox")]
 pub use pruning_burn::pruning_gradient;
@@ -50,7 +71,7 @@ pub use sampling::sample_rows;
 /// Placeholder binding: it demonstrates the Rust-to-Python pattern real
 /// numerical kernels follow (`pruning::pruning_log_likelihood` is now the
 /// substantive one) and implements no phylogenetics itself. Left in place
-/// because `snakes_and_ladders.__init__` re-exports it and `tests/test_oxi_snakes_and_ladders_bindings.py`
+/// because `snakes_and_ladders.__init__` re-exports it and `tests/test_oxisal_bindings.py`
 /// asserts it exists.
 #[pyfunction]
 pub fn double(x: i64) -> i64 {
@@ -58,9 +79,9 @@ pub fn double(x: i64) -> i64 {
 }
 
 /// The compiled extension module. `python/snakes_and_ladders/__init__.py` re-exports it as
-/// `snakes_and_ladders.oxi_snakes_and_ladders` (see `module-name` in `pyproject.toml`).
+/// `snakes_and_ladders.oxisal` (see `module-name` in `pyproject.toml`).
 #[pymodule]
-fn oxi_snakes_and_ladders(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn oxisal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(double, m)?)?;
     m.add_function(wrap_pyfunction!(pruning_log_likelihood, m)?)?;
     #[cfg(feature = "sandbox")]
@@ -68,6 +89,7 @@ fn oxi_snakes_and_ladders(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sample_rows, m)?)?;
     m.add_function(wrap_pyfunction!(ragged::ragged_posteriors, m)?)?;
     m.add_function(wrap_pyfunction!(max_flow, m)?)?;
+    m.add_class::<LatticeCut>()?;
     m.add_function(wrap_pyfunction!(ising_ground_state, m)?)?;
     m.add_function(wrap_pyfunction!(ising_ground_states, m)?)?;
     #[cfg(feature = "sandbox")]
@@ -80,9 +102,24 @@ fn oxi_snakes_and_ladders(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(external_field, m)?)?;
     m.add_function(wrap_pyfunction!(simulate_count_pairs, m)?)?;
     m.add_function(wrap_pyfunction!(negative_binomial_dispersions, m)?)?;
+    m.add_function(wrap_pyfunction!(negative_binomial_dispersions_exposed, m)?)?;
     m.add_function(wrap_pyfunction!(beta_binomial_parameters, m)?)?;
     m.add_function(wrap_pyfunction!(bcjr_forward_backward, m)?)?;
     m.add_function(wrap_pyfunction!(tree_message_passing, m)?)?;
+    m.add_function(wrap_pyfunction!(categorical_em_step, m)?)?;
+    m.add_function(wrap_pyfunction!(gaussian_em_step, m)?)?;
+    m.add_function(wrap_pyfunction!(count_cells, m)?)?;
+    m.add_function(wrap_pyfunction!(gaussian_hmm_statistics, m)?)?;
+    m.add_function(wrap_pyfunction!(hmm_viterbi, m)?)?;
+    m.add_function(wrap_pyfunction!(bifurcation_integrate, m)?)?;
+    m.add_function(wrap_pyfunction!(hmm_score, m)?)?;
+    m.add_function(wrap_pyfunction!(count_em_step, m)?)?;
+    m.add_function(wrap_pyfunction!(gaussian_mixture_em_step, m)?)?;
+    m.add_function(wrap_pyfunction!(gaussian_mixture_gradient, m)?)?;
+    m.add_function(wrap_pyfunction!(leapfrog_trajectory, m)?)?;
+    m.add_class::<hmc::HmcWalk>()?;
+    m.add_function(wrap_pyfunction!(bond_roots, m)?)?;
+    m.add_class::<metropolis::MetropolisWalk>()?;
     Ok(())
 }
 

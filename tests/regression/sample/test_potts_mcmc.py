@@ -100,6 +100,13 @@ SHAPE = (2, 2)
 COUPLING = 0.8
 NO_FIELD = np.zeros(2)
 WITH_FIELD = np.array([0.6, -0.4])
+#: A field per site on the same 2x2 graph (issue #919), one row per site, no
+#: two rows equal, drawn once from a declared seed: the form `spatio_only`
+#: and the coupled model hand the cluster moves, whose accept step sums the
+#: field over the cluster's own sites.
+PER_SITE_FIELD = np.random.default_rng(919).normal(0.0, 0.6, (4, 2))
+#: Both forms, for the exactness tests and their control.
+FIELDS = {"shared": WITH_FIELD, "per-site": PER_SITE_FIELD}
 
 # One Wolff sweep is one cluster flip; one sweep of either other move set
 # touches every site. Equal `thin` would compare a decorrelated chain against
@@ -185,18 +192,23 @@ def test_the_chain_is_drawn_from_the_exact_boltzmann_distribution(
 
 
 @pytest.mark.oracle
+@pytest.mark.parametrize("field", list(FIELDS))
 @pytest.mark.parametrize("move", list(PottsMove))
-def test_the_chain_is_still_exact_in_an_external_field(move: PottsMove) -> None:
+def test_the_chain_is_still_exact_in_an_external_field(
+    move: PottsMove, field: str
+) -> None:
     # Wolff's cluster construction alone does not preserve detailed balance in
     # a field, so this is where the accept step does work and the test above
-    # does not.
-    assert _goodness_of_fit(move, WITH_FIELD) > SIGNIFICANCE
+    # does not. The per-site field is the one whose accept step sums over the
+    # cluster's own sites rather than scaling one shared difference (#919).
+    assert _goodness_of_fit(move, FIELDS[field]) > SIGNIFICANCE
 
 
 @pytest.mark.smoke
+@pytest.mark.parametrize("field", list(FIELDS))
 @pytest.mark.parametrize("move", [PottsMove.SWENDSEN_WANG, PottsMove.WOLFF])
 def test_dropping_the_field_accept_step_is_caught(
-    move: PottsMove, monkeypatch: pytest.MonkeyPatch
+    move: PottsMove, field: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Evidence that the two tests above have the power they claim.
     def unconditional(
@@ -216,7 +228,7 @@ def test_dropping_the_field_accept_step_is_caught(
 
     monkeypatch.setattr(potts_mcmc, "_recolour", unconditional)
 
-    assert _goodness_of_fit(move, WITH_FIELD) < SIGNIFICANCE
+    assert _goodness_of_fit(move, FIELDS[field]) < SIGNIFICANCE
 
 
 @pytest.mark.smoke
@@ -1695,7 +1707,7 @@ def test_the_backends_agree_bitwise_at_every_temperature(
 def test_the_kernel_names_the_shape_it_wanted_and_the_shape_it_got() -> None:
     # PyO3 reports a dimensionality mismatch as "'ndarray' object is not an
     # instance of 'ndarray'", which names neither shape (issue #571).
-    from snakes_and_ladders import oxi_snakes_and_ladders
+    from snakes_and_ladders import oxisal
 
     graph = lattice_graph((2, 2), BoundaryCondition.OPEN, 0.5)
     offsets, index, couplings = graph.compressed_adjacency()
@@ -1703,7 +1715,7 @@ def test_the_kernel_names_the_shape_it_wanted_and_the_shape_it_got() -> None:
     draws = np.full(graph.n_nodes, 0.5)
 
     with pytest.raises(ValueError, match="one row per site"):
-        oxi_snakes_and_ladders.single_site_sweeps(
+        oxisal.single_site_sweeps(
             state,
             np.zeros((graph.n_nodes + 1, 3)),
             offsets,
@@ -1716,7 +1728,7 @@ def test_the_kernel_names_the_shape_it_wanted_and_the_shape_it_got() -> None:
             0,
         )
     with pytest.raises(ValueError, match="beta must be finite"):
-        oxi_snakes_and_ladders.single_site_sweeps(
+        oxisal.single_site_sweeps(
             state,
             np.zeros((graph.n_nodes, 3)),
             offsets,
@@ -1735,13 +1747,13 @@ def test_a_field_of_the_wrong_dimensionality_names_its_shape() -> None:
     # PyO3 would reject a 1-D field before the kernel body, as "'ndarray'
     # object is not an instance of 'ndarray'" (issue #571). The field is taken
     # as a dynamic array so the refusal names the shape instead.
-    from snakes_and_ladders import oxi_snakes_and_ladders
+    from snakes_and_ladders import oxisal
 
     graph = lattice_graph((2, 2), BoundaryCondition.OPEN, 0.5)
     offsets, index, couplings = graph.compressed_adjacency()
 
     with pytest.raises(ValueError, match=r"must be 2-D.*got shape \[3\]"):
-        oxi_snakes_and_ladders.single_site_sweeps(
+        oxisal.single_site_sweeps(
             np.zeros(graph.n_nodes, dtype=np.int64),
             np.zeros(3),
             offsets,
@@ -1753,3 +1765,44 @@ def test_a_field_of_the_wrong_dimensionality_names_its_shape() -> None:
             GUARD,
             0,
         )
+
+
+@pytest.mark.smoke
+@pytest.mark.backend
+@pytest.mark.parametrize("move", [PottsMove.WOLFF, PottsMove.NIEDERMAYER])
+def test_the_adjacency_converted_once_is_the_per_step_stream_bitwise(
+    move: PottsMove,
+) -> None:
+    # Issue #919: the lists a chain builds once are the ones each step used to
+    # build, so 300 steps at three temperatures draw the same stream and leave
+    # the same state and the same cluster sizes.
+    graph = lattice_graph((6, 6), BoundaryCondition.OPEN, COUPLING)
+    offsets, neighbours, couplings = graph.compressed_adjacency()
+    rows = site_field(np.random.default_rng(1).normal(0.0, 0.6, (36, 2)), graph.n_nodes)
+    lists = potts_mcmc.adjacency_lists(offsets, neighbours, couplings)
+    step = (
+        potts_mcmc.wolff_sweep
+        if move is PottsMove.WOLFF
+        else potts_mcmc.niedermayer_sweep
+    )
+    for beta in (0.5, 1.0, 2.0):
+        runs = []
+        for held in (None, lists):
+            rng = np.random.default_rng(919)
+            state = rng.integers(0, 2, graph.n_nodes)
+            sizes = [
+                step(
+                    state,
+                    rows,
+                    offsets,
+                    neighbours,
+                    couplings,
+                    rng,
+                    beta=beta,
+                    lists=held,
+                )
+                for _ in range(300)
+            ]
+            runs.append((state.copy(), sizes))
+        assert np.array_equal(runs[0][0], runs[1][0]), beta
+        assert runs[0][1] == runs[1][1], beta

@@ -39,7 +39,7 @@ from snakes_and_ladders.sandbox.tropical import (
 )
 from snakes_and_ladders.search.infer import score_topology
 from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import enumerate_topologies, leaf_bipartitions
 
 #: Temperatures panel (a) sweeps, geometrically, and the agreement panel (a)
@@ -102,13 +102,7 @@ def measure(params: SimulationParams) -> tuple[Sweep, Surfaces]:
     -------
     tuple[Sweep, Surfaces]
     """
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=params.n_sites,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed))
     alignment = dict(dataset.alignment)
     table = quartet_table(alignment, params.k)
     positions = pairing_positions(table.n_taxa)

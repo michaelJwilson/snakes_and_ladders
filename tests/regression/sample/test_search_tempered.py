@@ -55,7 +55,7 @@ from snakes_and_ladders.sim.canonical import (
 from snakes_and_ladders.sim.factor_graph import FactorGraph, from_hmm, from_potts
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import critical_coupling, site_field
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import enumerate_topologies, leaf_bipartitions
 
 from tests._fixtures import FOUR_TAXA, load_fixture
@@ -86,9 +86,7 @@ AUTOCORRELATION = 1.0
 
 def _four_taxa() -> tuple[dict[str, np.ndarray], int]:
     params = load_fixture(FOUR_TAXA)
-    dataset = simulate_alignment(
-        params.tau, params.k, params.pi, np.random.default_rng(1), 30
-    )
+    dataset = simulate_tree(params, np.random.default_rng(1), n_sites=30)
     return dict(dataset.alignment), params.k
 
 

@@ -87,9 +87,7 @@ def test_a_module_reaching_the_extension_carries_the_rust_sources(
     package = tmp_path / "python" / "snakes_and_ladders"
     package.mkdir(parents=True)
     (package / "__init__.py").write_text("")
-    (package / "fast.py").write_text(
-        "from snakes_and_ladders import oxi_snakes_and_ladders\n"
-    )
+    (package / "fast.py").write_text("from snakes_and_ladders import oxisal\n")
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "lib.rs").write_text("")
     (tmp_path / "Cargo.lock").write_text("")

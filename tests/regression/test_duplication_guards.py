@@ -224,6 +224,21 @@ EXCLUDED: dict[str, str] = {
 #: where a reader reaches for one.
 FOREIGN_SPARSE = re.compile(r"\b(?:csr|csc|coo)_(?:matrix|array)\s*\(")
 
+#: The validation seams of issue #1010: a goal's median of package runs, a
+#: framework test's skip, and a script's timed peak, each written out by
+#: hand 38, 24 and 6 times before it had one home.
+HAND_MEDIAN = re.compile(r"np\.median\(\s*\[\s*package\(")
+HAND_SKIP = re.compile(r"skipif\(\s*not available\(")
+HAND_MEASURE = re.compile(r"peaked\(\s*lambda: timed\(")
+MEASURE_OWNER = "validation/protocol.py"
+#: A fixture's alignment built field by field: its tree, states and root
+#: handed to `simulate_alignment` one by one rather than the fixture to
+#: `sim.simulator.simulate_tree`, which 104 sites spelled out (issue #1010).
+FIXTURE_ALIGNMENT = re.compile(
+    r"simulate_alignment\(\s*(?:tau=)?(\w+)\.tau,\s*(?:k=)?\1\.k,\s*(?:pi=)?\1\.pi\b"
+)
+FIXTURE_ALIGNMENT_OWNER = "sim/simulator.py"
+
 #: Where a caller of the transition may live: the package, the suite and the
 #: notebooks. Wider than the package alone, because both copies this guard
 #: exists for were outside it.
@@ -595,6 +610,46 @@ def test_no_module_builds_a_scipy_sparse_store() -> None:
 
 @pytest.mark.critical
 @pytest.mark.infra
+def test_a_latex_table_has_one_scaffold() -> None:
+    # Issue #926: four QA modules opened `tabular` and `array` by hand.
+    assert _offenders(TABULAR_LITERAL, TABULAR_OWNER) == []
+    # The owner builds the environment from its specification, so it holds
+    # no literal; what it holds is the two scaffolds.
+    owner = (PACKAGE / TABULAR_OWNER).read_text()
+    assert "def booktabs_tabular(" in owner
+    assert "def mathjax_array(" in owner
+
+
+@pytest.mark.critical
+@pytest.mark.infra
+def test_the_runtime_band_has_one_reader() -> None:
+    # Issue #926: `gap_band` and `qa.starts.curve_band` were the same loop
+    # written twice; the second is now an adapter onto the first.
+    assert _offenders(HELD_BAND, BAND_OWNER) == []
+    assert HELD_BAND.search((PACKAGE / BAND_OWNER).read_text())
+
+
+@pytest.mark.critical
+@pytest.mark.infra
+def test_the_validation_seams_have_one_home_each() -> None:
+    # Issue #1010: `median_package`, `requires` and `measured`.
+    tests = (REPO_ROOT / "tests",)
+    assert _found(HAND_MEDIAN, "tests/validation/_goals.py", tests, ("*.py",)) == []
+    assert _found(HAND_SKIP, "tests/_frameworks.py", tests, ("*.py",)) == []
+    assert _offenders(HAND_MEASURE, MEASURE_OWNER) == []
+
+
+@pytest.mark.critical
+@pytest.mark.infra
+def test_a_fixture_alignment_is_drawn_through_its_simulator() -> None:
+    # Issue #1010: `simulate_tree(params, rng, n_sites=...)` is the one way a
+    # fixture's alignment is drawn; the suite and the package spelled the
+    # fixture's three fields out 104 times.
+    assert _found(FIXTURE_ALIGNMENT, FIXTURE_ALIGNMENT_OWNER, SEARCHED, ("*.py",)) == []
+
+
+@pytest.mark.critical
+@pytest.mark.infra
 def test_each_guard_fails_on_violating_source() -> None:
     # The guards exercised. Each searches source text, so each passes
     # vacuously if the pattern is wrong -- which is the failure mode a guard
@@ -620,6 +675,18 @@ def test_each_guard_fails_on_violating_source() -> None:
         # Split inside the call for the reason the lines above are split: a
         # whole one here makes this module the reader the guard refuses.
         PIPE_SPLIT: "cells = line.split(" + '"|")\n',
+        # Unsplit: the guard reads the package, not this suite.
+        TABULAR_LITERAL: '            r"\\begin{tabular}{lrrrr}",\n',
+        HELD_BAND: (
+            '        index = np.searchsorted(times, grid, side="right") - 1\n'
+            "        known = index >= 0\n"
+            "        held[row, known] = gaps[index[known]]\n"
+        ),
+        # Split so this module is not its own offender.
+        HAND_MEDIAN: "s = np.median(" + '[package("viterbi", inputs).seconds])\n',
+        HAND_SKIP: "mark = pytest.mark.skipif(" + 'not available("gco"), reason="")\n',
+        HAND_MEASURE: "r, p = peaked(" + "lambda: timed(call))\n",
+        FIXTURE_ALIGNMENT: "d = simulate_" + "alignment(p.tau, p.k, p.pi, rng, 9)\n",
     }
     clean = {
         PRIVATE_LOGSUMEXP: "from snakes_and_ladders.numerics import logsumexp\n",
@@ -639,6 +706,12 @@ def test_each_guard_fails_on_violating_source() -> None:
         DERIVED_REPO_ROOT: "from tests._paths import REPO_ROOT\n",
         CATALOGUE_FILE: "rows = catalogue.rows()\n",
         PIPE_SPLIT: "cells = catalogue.cells(line)\n",
+        TABULAR_LITERAL: 'table = booktabs_tabular("lrrrr", HEADER, rows)\n',
+        HELD_BAND: "band = curve_band(curves, grid)\n",
+        HAND_MEDIAN: 'seconds = median_package("viterbi", inputs)\n',
+        HAND_SKIP: 'pytestmark = requires("blackjax")\n',
+        HAND_MEASURE: "result, seconds, peak = measured(call)\n",
+        FIXTURE_ALIGNMENT: "data = simulate_tree(params, rng, n_sites=9)\n",
     }
 
     assert [p for p, text in violating.items() if not p.search(text)] == []
@@ -779,6 +852,20 @@ DERIVED_REPO_ROOT = re.compile(
 #: The pieces of a reader of `PROBLEMS.md`: the file, and a split of a row on
 #: its pipes. Both, because the tree is full of each alone --- `DEV.md` has
 #: tables too, and `select_tests.py` names the catalogue without parsing it.
+#: A LaTeX table environment opened by hand: the one scaffold is
+#: `qa.figure.booktabs_tabular` and `mathjax_array` (issue #926), where four
+#: modules wrote the frame line for line.
+TABULAR_OWNER = "qa/figure.py"
+TABULAR_LITERAL = re.compile(r"\\begin\{(?:tabular|array)\}")
+
+#: A runtime band read by holding each trial's gap forward to a grid: the
+#: one reader is `search.mixture_starts.curve_band` (issue #926), where two
+#: copies of the loop sat in `search.mixture_starts` and `qa.starts`.
+BAND_OWNER = "search/mixture_starts.py"
+HELD_BAND = re.compile(
+    r"searchsorted\([^\n]*side=\"right\"\)\s*-\s*1\n(?:.*\n){0,2}\s*held\["
+)
+
 CATALOGUE_FILE = re.compile(r"PROBLEMS\.md")
 PIPE_SPLIT = re.compile(r"\.split\(\"\|\"\)")
 

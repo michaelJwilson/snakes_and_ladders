@@ -10,6 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.emissions import CategoricalEmission, PoissonEmission
 from snakes_and_ladders.likelihood.forward_backward import forward_backward
 from snakes_and_ladders.opt.hmm import baum_welch_family
@@ -56,7 +57,9 @@ def test_equal_lengths_reproduce_the_conserved_route_bitwise() -> None:
     """
     observations = _draw((40, 40, 40), seed=11).reshape(3, 40)
     initial, transition, family = _model()
-    ragged = baum_welch_family(observations, initial, transition, family)
+    ragged = baum_welch_family(
+        observations, initial, transition, family, backend=Backend.PYTHON
+    )
     conserved = baum_welch_rectangular(observations, initial, transition, family)
 
     assert ragged.log_likelihood == conserved.log_likelihood
@@ -65,6 +68,24 @@ def test_equal_lengths_reproduce_the_conserved_route_bitwise() -> None:
     assert isinstance(ragged.emissions, PoissonEmission)
     assert isinstance(conserved.emissions, PoissonEmission)
     np.testing.assert_array_equal(ragged.emissions.mean, conserved.emissions.mean)
+
+    # The default compiled E step (#933) sums in its own order: measured
+    # 4.4e-16 relative on the likelihood and 4.3e-14 on the log initial,
+    # held to the float64 tolerance of `test_opt_hmm_ragged_estep`.
+    compiled = baum_welch_family(observations, initial, transition, family)
+    assert abs(compiled.log_likelihood - conserved.log_likelihood) <= 1e-11 * abs(
+        conserved.log_likelihood
+    )
+    torch.testing.assert_close(
+        compiled.log_initial, conserved.log_initial, rtol=0.0, atol=1e-11
+    )
+    torch.testing.assert_close(
+        compiled.log_transition, conserved.log_transition, rtol=0.0, atol=1e-11
+    )
+    assert isinstance(compiled.emissions, PoissonEmission)
+    torch.testing.assert_close(
+        compiled.emissions.mean, conserved.emissions.mean, rtol=1e-11, atol=0.0
+    )
 
 
 @pytest.mark.critical

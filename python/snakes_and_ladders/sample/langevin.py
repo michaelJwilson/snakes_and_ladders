@@ -48,15 +48,22 @@ from dataclasses import dataclass
 
 import torch
 
+from snakes_and_ladders import oxisal
+from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.sample.accept import accept_ratio, acceptance_probability
+from snakes_and_ladders.sample.declared import declared_energy
 from snakes_and_ladders.sample.hmc import (
     Adaptation,
     Adapted,
     Transition,
     gradient_at,
     run_chain,
+    run_compiled,
+    start_point,
 )
+from snakes_and_ladders.track import NULL as UNTRACKED
+from snakes_and_ladders.track import current as current_tracked
 
 #: The acceptance a MALA step is adapted toward: the optimal scaling of the
 #: Langevin diffusion in the limit of many dimensions (Roberts & Rosenthal,
@@ -128,6 +135,8 @@ def mala(
     temperature: float = 1.0,
     adaptation: Adaptation | None = None,
     corrected: bool = True,
+    store_chain: bool = True,
+    backend: Backend = Backend.RUST,
 ) -> LangevinChain:
     """Draw ``n_samples`` from ``exp(-objective / temperature)`` by Langevin steps.
 
@@ -166,6 +175,24 @@ def mala(
         True is MALA. False is ULA: every proposal is accepted and the chain
         is biased, by an amount ``energy_error`` reports and no diagnostic
         inside the chain corrects.
+    store_chain : bool
+        Whether the draws are kept. False keeps none --- ``theta`` has zero
+        rows --- and the chain reports its acceptance and energy errors
+        alone, as :func:`~snakes_and_ladders.sample.hmc.sample`'s does (issues
+        #988, #997).
+    backend : Backend
+        :data:`~snakes_and_ladders.backend.Backend.RUST`, the default since
+        issue #997, runs the whole chain in ``oxisal.HmcWalk`` at one
+        leapfrog step --- the identity this module keeps --- when the
+        objective declares an energy
+        (:func:`~snakes_and_ladders.sample.declared.declared_energy`) and the
+        chain is the corrected one at unit temperature in no tracked run;
+        the warm-up runs there too (issue #1008). Its draws are its own ChaCha8 stream seeded by one draw
+        from ``generator``, so it is pinned to the torch route in
+        distribution, as :func:`~snakes_and_ladders.sample.hmc.sample`'s is.
+        Any other chain, and
+        :data:`~snakes_and_ladders.backend.Backend.PYTHON`, take the torch
+        kernel.
 
     Returns
     -------
@@ -179,6 +206,39 @@ def mala(
     if step_size <= 0.0:
         msg = f"step_size must be positive, got {step_size}"
         raise ValueError(msg)
+    refuse_backend("mala", backend, (Backend.PYTHON, Backend.RUST))
+    declared = declared_energy(objective)
+    if (
+        backend is Backend.RUST
+        and corrected
+        and declared is not None
+        and temperature == 1.0
+        and current_tracked() is UNTRACKED
+    ):
+        # MALA is one leapfrog step (the identity this module keeps), so the
+        # compiled Hamiltonian walk at one step is this chain, warm-up included.
+        chain = run_compiled(
+            oxisal.HmcWalk,
+            declared,
+            (LANGEVIN_STEPS,),
+            GRADIENTS_PER_PROPOSAL,
+            generator,
+            n_samples,
+            step_size=step_size,
+            theta0=start_point(objective, theta0),
+            burn_in=burn_in,
+            adaptation=adaptation,
+            store_chain=store_chain,
+            operators=None,
+        )
+        return LangevinChain(
+            theta=chain.draws,
+            acceptance_rate=chain.acceptance_rate,
+            energy_error=chain.energy_error,
+            force_evaluations=chain.force_evaluations,
+            adapted=chain.adapted,
+            corrected=True,
+        )
 
     chain = run_chain(
         _LangevinKernel(corrected=corrected),
@@ -191,6 +251,7 @@ def mala(
         burn_in=burn_in,
         temperature=temperature,
         adaptation=adaptation,
+        store_chain=store_chain,
     )
     return LangevinChain(
         theta=chain.draws,

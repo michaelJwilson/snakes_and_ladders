@@ -103,7 +103,7 @@ fn sink_distances(network: &FlowNetwork, sink: usize, unreached: usize) -> Vec<u
     let mut queue = VecDeque::with_capacity(network.n_nodes);
     queue.push_back(sink);
     while let Some(node) = queue.pop_front() {
-        for &arc in &network.outgoing[node] {
+        for &arc in network.outgoing(node) {
             // `arc` runs node -> neighbour; its reverse runs neighbour -> node,
             // which is the direction flow would travel toward the sink.
             let neighbour = network.target[arc];
@@ -149,8 +149,8 @@ fn augment(
         }
 
         let mut advanced = false;
-        while progress[node] < network.outgoing[node].len() {
-            let arc = network.outgoing[node][progress[node]];
+        while progress[node] < network.outgoing(node).len() {
+            let arc = network.outgoing(node)[progress[node]];
             let neighbour = network.target[arc];
             if network.capacity[arc] > 0.0
                 && level[neighbour] != usize::MAX
@@ -181,6 +181,7 @@ fn augment(
 
 /// Dinic's algorithm: repeated level graphs and blocking flows; the value.
 pub fn dinic(network: &mut FlowNetwork, source: usize, sink: usize) -> f64 {
+    network.compress();
     let mut total = 0.0;
     loop {
         let level = network.levels(source);
@@ -280,12 +281,12 @@ impl PushRelabel<'_> {
     fn discharge(&mut self, node: usize) {
         let n = self.n();
         while self.excess[node] > 0.0 {
-            let degree = self.network.outgoing[node].len();
+            let degree = self.network.outgoing(node).len();
             if self.current[node] >= degree {
                 // Relabel: one past the lowest label across residual arcs.
                 let old = self.label[node];
                 let mut lowest = 2 * n;
-                for &arc in &self.network.outgoing[node] {
+                for &arc in self.network.outgoing(node) {
                     if self.network.capacity[arc] > 0.0 {
                         lowest = lowest.min(self.label[self.network.target[arc]]);
                     }
@@ -308,7 +309,7 @@ impl PushRelabel<'_> {
                 }
                 continue;
             }
-            let arc = self.network.outgoing[node][self.current[node]];
+            let arc = self.network.outgoing(node)[self.current[node]];
             let neighbour = self.network.target[arc];
             let residual = self.network.capacity[arc];
             if residual > 0.0 && self.label[node] == self.label[neighbour] + 1 {
@@ -349,8 +350,8 @@ impl PushRelabel<'_> {
     fn run(&mut self) -> f64 {
         let n = self.n();
         self.label[self.source] = n;
-        for position in 0..self.network.outgoing[self.source].len() {
-            let arc = self.network.outgoing[self.source][position];
+        for position in 0..self.network.outgoing(self.source).len() {
+            let arc = self.network.outgoing(self.source)[position];
             let capacity = self.network.capacity[arc];
             if capacity > 0.0 {
                 let neighbour = self.network.target[arc];
@@ -406,6 +407,7 @@ impl PushRelabel<'_> {
 
 /// Goldberg--Tarjan push-relabel, highest label first; returns the flow value.
 pub fn push_relabel(network: &mut FlowNetwork, source: usize, sink: usize) -> f64 {
+    network.compress();
     let n = network.n_nodes;
     let mut state = PushRelabel {
         network,
@@ -438,10 +440,11 @@ struct Pushes {
 /// Runs on the current rayon pool, so a caller that wants a fixed thread
 /// count installs one around the call. The output does not depend on it.
 pub fn parallel_push_relabel(network: &mut FlowNetwork, source: usize, sink: usize) -> f64 {
+    network.compress();
     let n = network.n_nodes;
     let mut excess = vec![0.0f64; n];
-    for position in 0..network.outgoing[source].len() {
-        let arc = network.outgoing[source][position];
+    for position in 0..network.outgoing(source).len() {
+        let arc = network.outgoing(source)[position];
         let capacity = network.capacity[arc];
         if capacity > 0.0 {
             let neighbour = network.target[arc];
@@ -479,7 +482,7 @@ pub fn parallel_push_relabel(network: &mut FlowNetwork, source: usize, sink: usi
             .map(|&node| {
                 let mut remaining = excess_ref[node];
                 let mut arcs = Vec::new();
-                for &arc in &net.outgoing[node] {
+                for &arc in net.outgoing(node) {
                     if remaining <= 0.0 {
                         break;
                     }
@@ -507,7 +510,7 @@ pub fn parallel_push_relabel(network: &mut FlowNetwork, source: usize, sink: usi
         // Phase two: relabel, in parallel from the state that resulted.
         work += active
             .iter()
-            .map(|&node| network.outgoing[node].len() + 12)
+            .map(|&node| network.outgoing(node).len() + 12)
             .sum::<usize>();
         if work > threshold {
             work = 0;
@@ -536,7 +539,7 @@ pub fn parallel_push_relabel(network: &mut FlowNetwork, source: usize, sink: usi
                 .filter(|&&node| excess_ref[node] > 0.0)
                 .map(|&node| {
                     let mut lowest = 2 * n;
-                    for &arc in &net.outgoing[node] {
+                    for &arc in net.outgoing(node) {
                         if net.capacity[arc] > 0.0 {
                             lowest = lowest.min(label_ref[net.target[arc]]);
                         }

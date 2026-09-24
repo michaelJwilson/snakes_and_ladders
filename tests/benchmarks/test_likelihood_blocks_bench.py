@@ -47,7 +47,7 @@ from snakes_and_ladders.likelihood.pruning_torch import (
     branch_lengths_from_tree,
     log_likelihood,
 )
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 
 from tests._fixtures import load_fixture
 
@@ -61,12 +61,8 @@ def test_block_frequency_interval_benchmark(
 ) -> None:
     params = load_fixture(FIXTURE)
     alignment = dict(
-        simulate_alignment(
-            tau=params.tau,
-            k=params.k,
-            pi=params.pi,
-            rng=np.random.default_rng(params.seed),
-            n_sites=N_SITES,
+        simulate_tree(
+            params, np.random.default_rng(params.seed), n_sites=N_SITES
         ).alignment
     )
     pi = np.asarray(params.pi)

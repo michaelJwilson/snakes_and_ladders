@@ -1,5 +1,5 @@
 [package]
-name = "oxi_snakes_and_ladders"
+name = "oxisal"
 version = "0.3.0"
 edition = "2021"
 license = "MIT"
@@ -45,6 +45,14 @@ sandbox = ["dep:burn-autodiff", "dep:burn-ndarray", "dep:burn-tensor"]
 [dev-dependencies]
 criterion = "0.5"
 
+# Fat LTO over one codegen unit (issue #986): measured on the Boykov--Kolmogorov
+# cut, the solve falls 3.4% at 142x142 and 4.5% at 284x284, above the 2% an
+# adopted setting must earn. `target-cpu=native` was 3% slower and cannot ship
+# in a wheel; unwinding stays, since pyo3 raises a Rust panic through it.
+[profile.release]
+lto = "fat"
+codegen-units = 1
+
 [[bench]]
-name = "oxi_snakes_and_ladders_bench"
+name = "oxisal_bench"
 harness = false

@@ -19,7 +19,7 @@ from snakes_and_ladders.qa.sim_tree import (
     tree_layout,
 )
 from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import FIXTURES_DIR
@@ -85,12 +85,8 @@ def test_every_leaf_gets_its_own_sequence_aligned_to_its_row() -> None:
     # check is that each leaf's text is its own simulated states, placed at
     # that leaf's y. Pinned against the alignment, not against the drawing.
     params = load_params(PARAMS_PATH, SimulationParams)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=SITES_SHOWN,
+    dataset = simulate_tree(
+        params, np.random.default_rng(params.seed), n_sites=SITES_SHOWN
     )
     _, ax = plt.subplots()
     layout = render_sim_tree(params.tau, ax, alignment=dataset.alignment, k=params.k)

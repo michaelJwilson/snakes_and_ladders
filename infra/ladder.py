@@ -463,8 +463,8 @@ LADDER: tuple[Rung, ...] = (
         "topology equality",
         "sim.topology.robinson_foulds",
         None,
-        T + "search/test_search_topology_rustworkx.py"
-        "::test_two_topologies_our_code_calls_equal_are_isomorphic",
+        "tests/validation/test_rustworkx.py"
+        "::test_topology_equality_is_labelled_isomorphism",
         cost=Cost.PASS,
     ),
     Rung(
@@ -613,7 +613,7 @@ LADDER: tuple[Rung, ...] = (
         "learned GNN surrogate",
         "learn.surrogate.GraphSurrogate",
         None,
-        T + "learn/test_learn_surrogate_pyg.py"
+        "tests/validation/test_torch_geometric.py"
         "::test_pyg_s_gin_reproduces_the_graph_surrogate_on_tied_weights",
         cost=Cost.TRAINED,
     ),

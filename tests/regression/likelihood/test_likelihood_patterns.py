@@ -24,7 +24,7 @@ from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
 from snakes_and_ladders.likelihood.patterns import SitePatterns, check_weights, compress
 from snakes_and_ladders.likelihood.pruning_torch import branch_lengths_from_tree
 from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.tree import preorder
 
 from tests._fixtures import FIXTURES_DIR, load_fixture
@@ -50,9 +50,7 @@ def _alignment(
     name: str, n_sites: int = N_SITES
 ) -> tuple[SimulationParams, dict[str, np.ndarray]]:
     params = load_fixture(name)
-    dataset = simulate_alignment(
-        params.tau, params.k, params.pi, np.random.default_rng(params.seed), n_sites
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=n_sites)
     return params, dict(dataset.alignment)
 
 
@@ -129,13 +127,7 @@ def test_the_compression_ratio_at_each_fixtures_declared_size() -> None:
     print("\ncompression at the declared size (L -> patterns):")
     for name in TREE_FIXTURES:
         params = load_fixture(name)
-        dataset = simulate_alignment(
-            params.tau,
-            params.k,
-            params.pi,
-            np.random.default_rng(params.seed),
-            params.n_sites,
-        )
+        dataset = simulate_tree(params, np.random.default_rng(params.seed))
         patterns = compress(dict(dataset.alignment))
         ceiling = min(params.n_sites, params.k ** len(patterns.names))
         assert patterns.n_patterns <= ceiling

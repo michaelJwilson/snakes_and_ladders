@@ -1,7 +1,7 @@
 //! Single-site heat-bath sweeps for the Potts model, ported from
 //! `python/snakes_and_ladders/search/potts_mcmc.py::_single_site_sweep` (the
 //! oracle) and exposed to Python as
-//! `snakes_and_ladders.oxi_snakes_and_ladders.single_site_sweeps`.
+//! `snakes_and_ladders.oxisal.single_site_sweeps`.
 //!
 //! **Why this one is a Rust port.** Issue #232 profiled the sweep as the one
 //! place a Python-level loop dominates: 100 sweeps on a 32x32 periodic lattice
@@ -332,6 +332,47 @@ fn union(parent: &mut [usize], first: usize, second: usize) {
     if first_root != second_root {
         parent[second_root] = first_root;
     }
+}
+
+/// Every node's union-find root once the bonds `first[b] -- second[b]` are
+/// merged in order, by the rule `find_root` and `union_roots` apply, so the
+/// roots are the Python loop's bitwise (issue #986).
+pub fn bond_roots_impl(n_nodes: usize, first: &[i64], second: &[i64]) -> Result<Vec<i64>, String> {
+    if first.len() != second.len() {
+        return Err(format!(
+            "first has {} bond ends and second {}",
+            first.len(),
+            second.len()
+        ));
+    }
+    let mut parent: Vec<usize> = (0..n_nodes).collect();
+    for (&a, &b) in first.iter().zip(second) {
+        if a < 0 || b < 0 || a as usize >= n_nodes || b as usize >= n_nodes {
+            return Err(format!(
+                "bond ({a}, {b}) names a node outside [0, {n_nodes})"
+            ));
+        }
+        union(&mut parent, a as usize, b as usize);
+    }
+    Ok((0..n_nodes)
+        .map(|node| find(&mut parent, node) as i64)
+        .collect())
+}
+
+/// The union-find roots of a bond set; see [`bond_roots_impl`].
+#[pyfunction]
+#[pyo3(signature = (n_nodes, first, second))]
+pub fn bond_roots<'py>(
+    py: Python<'py>,
+    n_nodes: usize,
+    first: PyReadonlyArray1<'py, i64>,
+    second: PyReadonlyArray1<'py, i64>,
+) -> PyResult<Bound<'py, numpy::PyArray1<i64>>> {
+    let (first, second) = (first.as_slice()?, second.as_slice()?);
+    let roots = py
+        .detach(|| bond_roots_impl(n_nodes, first, second))
+        .map_err(PyValueError::new_err)?;
+    Ok(numpy::PyArray1::from_vec(py, roots))
 }
 
 /// One Swendsen-Wang bond-and-recolour pass over `state`, in place.

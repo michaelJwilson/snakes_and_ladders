@@ -7,7 +7,7 @@ rescaled against unrescaled in ``test_likelihood_pruning.py``, and the
 refusals in ``test_likelihood_validation.py``.
 
 Requires the compiled extension (``maturin develop`` / ``pip install .``),
-like ``tests/test_oxi_snakes_and_ladders_bindings.py``.
+like ``tests/test_oxisal_bindings.py``.
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""Rust tree schedule (``snakes_and_ladders.oxi_snakes_and_ladders.tree_message_passing``),
+"""Rust tree schedule (``snakes_and_ladders.oxisal.tree_message_passing``),
 pinned against :func:`snakes_and_ladders.likelihood.message_passing.sum_product`
 on its Python route, the NumPy oracle (``likelihood/CLAUDE.md``, "The reference
 implementation is the oracle and it stays"), which is itself pinned against
@@ -45,7 +45,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders import oxisal
 from snakes_and_ladders.likelihood.schedule import Layout
 
 
@@ -110,7 +110,7 @@ def tree_messages(layout: Layout, *, maximum: bool) -> TreeMessages:
         other.
     """
     n_edges = layout.n_edges
-    to_variable, to_factor = oxi_snakes_and_ladders.tree_message_passing(
+    to_variable, to_factor = oxisal.tree_message_passing(
         np.asarray(layout.cardinality, dtype=np.int64),
         _offsets(layout.variable_edges),
         np.fromiter(

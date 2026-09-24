@@ -1519,7 +1519,7 @@ placeholder integer multiply and does not. Each already extracted its slices
 and then touched no Python object, so `Ungil` makes a Python object inside
 the closure a compile error rather than a crash.
 
-| `oxi.single_site_sweeps`, 32x32, 200 sweeps | held | released | control |
+| `oxisal.single_site_sweeps`, 32x32, 200 sweeps | held | released | control |
 | --- | --- | --- | --- |
 | 1 thread | 13.3 ms, 1.00x | 13.1 ms, 1.00x | 1.00x |
 | 2 threads | 25.8 ms, 1.03x | 13.4 ms, **1.96x** | 1.87x |
@@ -1810,7 +1810,7 @@ self time (51.5%) and the two emission `log_density` bodies 18.9 s cumulative
 and the emission densities 188.1 s (98.3%). Forward–backward is 0.72 s (3.6%)
 and the `einsum` 1.1 s (0.6%), so the port is the emission density and nothing
 else. Both counts are integers in a range of a few thousand, so
-`oxi_snakes_and_ladders::coupled` tabulates the log-density by count — `[count,
+`oxisal::coupled` tabulates the log-density by count — `[count,
 M, K]`, count-major — and reads two doubles where the oracle calls `lgamma`
 three times. NumPy against Rust through the binding, one thread:
 
@@ -1859,6 +1859,19 @@ of vertices in the first class. The loader now refuses a trials ladder that
 varies, the trial count being a property of the observation and not of the
 state.
 
+**The phylogenetic objectives' value and gradient under JAX**
+([#1005](https://github.com/michaelJwilson/snakes_and_ladders/issues/1005)).
+`likelihood.pruning_jax` traces `pruning_torch`'s post-order once per
+topology under `jit`, the map from `theta` inside the same program;
+`BranchLengthObjective` and `SubstitutionModelObjective` take
+`backend=Backend.JAX`. Against the taped route on `tree_jc/release.yaml` at
+2,000 sites the value agrees exactly and the gradient to 8.3e-16 (JC) and
+9.8e-13 (GTR) relative; brute force pins the value at 1e-12. The default
+stays `Backend.TORCH`: `infra/jax_decision.py pruning` on balanced trees of
+4--32 taxa at 10^5 sites puts JAX at 0.95--1.59x the taped route's runtime and
+1.23--1.56x its peak memory, and all 16 cells miss #1000's rule (at most 0.5x
+runtime at 1.25x memory, or the converse). JAX stays the opt-in route.
+
 **The pruning routes share their plumbing; the oracle shares nothing**
 ([#858](https://github.com/michaelJwilson/snakes_and_ladders/issues/858)). The
 post-order, the leaf indicator, the rescaling step and the `pi`-shape,
@@ -1877,7 +1890,7 @@ and `tree_search/ci`, identical before and after.
 
 ## Milestone 1.3 — Continuous Optimization via Autodiff
 
-**Modules.** The optimization interface and what is fitted through it: `opt.objective`, `opt.constrain`, and `opt.testfunctions`, whose functions are the problem a fit is checked on before any model is. `sample.langevin` and `sample.slice`: the two samplers an HMC number is read against, one module each, both over the same `Objective` (#756; under `opt` until #777, with `sample.hmc` and `sample.schedule`). `opt.em`: the E step, M step alternation and the relative stopping rule the three expectation-maximization entry points ran a copy of each, which no oracle is pinned against (#859). `cost`: the unit a method spends, declared once for the oracle ladder and for `opt.budget.Budget`, which took a bare string until #860. `opt.termination`: whether a loop finished and why, one answer on fourteen results that carried five encodings between them (#860). `opt.starts`: one loop that seeds every start, polishes it at a held budget and records its curve, which four consumers wrote by hand (#894). `opt.split_merge`: split-and-merge moves on a converged mixture fit, kept only where the log-likelihood rises; the planted fixed point on `emission_mixture/ci` gains 165.7 nats on its first move (#904).
+**Modules.** The optimization interface and what is fitted through it: `opt.objective`, `opt.constrain`, and `opt.testfunctions`, whose functions are the problem a fit is checked on before any model is. `sample.langevin` and `sample.slice`: the two samplers an HMC number is read against, one module each, both over the same `Objective` (#756; under `opt` until #777, with `sample.hmc` and `sample.schedule`). `opt.em`: the E step, M step alternation and the relative stopping rule the three expectation-maximization entry points ran a copy of each, which no oracle is pinned against (#859). `cost`: the unit a method spends, declared once for the oracle ladder and for `opt.budget.Budget`, which took a bare string until #860. `opt.termination`: whether a loop finished and why, one answer on fourteen results that carried five encodings between them (#860). `opt.starts`: one loop that seeds every start, polishes it at a held budget and records its curve, which four consumers wrote by hand (#894). `opt.split_merge`: split-and-merge moves on a converged mixture fit, kept only where the log-likelihood rises; the planted fixed point on `emission_mixture/ci` gains 165.7 nats on its first move (#904). `opt.hmm_jax`: the HMM objectives' default value and gradient under JAX, the scaled forward recursion with the backward recursion as its reverse pass, at 0.07x--0.18x PyTorch autograd's runtime at 10^4--10^5 positions and pinned to autograd at 1e-10; `opt.objective.DeclaredGradient` is how `fit` and the samplers read it (#1000). `sample.metropolis`: gradient-free random-walk Metropolis over any `Objective`, a `Kernel` on the shared `run_chain` so its warm-up is `Adaptation`'s; on an energy declared in `sample.declared` (Gaussian, Rosenbrock) the chain, the warm-up and `Power` operators' Kalman statistics run in `oxisal.MetropolisWalk`, draw for draw with BlackJAX's `rmh` on shared randomness and at 0.03x--0.37x its runtime (#1006). `sample.hmc` on the same compiled loop (`src/chain.rs`): the declared Gaussian, Rosenbrock, mixture and Gaussian HMM run the whole chain, warm-up and `Power` filters in `oxisal.HmcWalk`, and an objective with a traceable JAX energy in `sample.hmc_jax.JaxWalk`; against BlackJAX 0.11x--0.39x on Rosenbrock and the Gaussian with warm-up, 0.34x--0.36x on the HMM, 0.56x--0.58x on the mixture after two attempts (#1008).
 
 **The interface is model-agnostic, and that is measured rather than asserted.**
 An `Objective` is an unconstrained parameter vector, a differentiable scalar,

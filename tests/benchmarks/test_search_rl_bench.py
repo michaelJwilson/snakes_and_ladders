@@ -20,7 +20,7 @@ from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.learn.tree import RewardModel, TreeEnvironment
 from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import random_topology
 
 from tests._fixtures import FIXTURES_DIR
@@ -39,13 +39,7 @@ def _alignment(
     fixture: Path = FIXTURE,
 ) -> tuple[dict[str, np.ndarray], int, np.ndarray]:
     params = load_params(fixture, SimulationParams)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=params.n_sites,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed))
     return dict(dataset.alignment), params.k, params.pi
 
 

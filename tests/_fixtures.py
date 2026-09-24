@@ -23,7 +23,7 @@ import numpy as np
 from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.sim import fixtures as registry
 from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import leaf_bipartitions
 from snakes_and_ladders.sim.tree import Node
 
@@ -107,13 +107,7 @@ def simulated_alignment(
         The parameters and the leaf-name-to-states alignment.
     """
     params = load_fixture(name)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=params.n_sites if n_sites is None else n_sites,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites)
     return params, dict(dataset.alignment)
 
 

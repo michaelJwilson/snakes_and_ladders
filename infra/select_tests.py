@@ -76,7 +76,7 @@ ALWAYS = (
     "tests/regression/test_claude_md_pointers.py",
     "tests/regression/test_sandbox.py",
     "tests/test_run_snakes_and_ladders.py",
-    "tests/test_oxi_snakes_and_ladders_bindings.py",
+    "tests/test_oxisal_bindings.py",
 )
 
 # A change to any of these could alter any result, so the whole suite runs.
@@ -93,7 +93,7 @@ EVERYTHING = (
     "python/snakes_and_ladders/backend.py",
     "python/snakes_and_ladders/emissions.py",
     "python/snakes_and_ladders/numerics.py",
-    "python/snakes_and_ladders/oxi_snakes_and_ladders.pyi",
+    "python/snakes_and_ladders/oxisal.pyi",
     "python/snakes_and_ladders/scripts/",
 )
 

@@ -39,6 +39,7 @@ from typing import Any, NamedTuple
 
 import numpy as np
 
+from snakes_and_ladders import oxisal
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.opt.termination import Termination
 from snakes_and_ladders.search.maxflow import (
@@ -46,9 +47,8 @@ from snakes_and_ladders.search.maxflow import (
     check_non_negative_couplings,
     max_flow,
 )
-from snakes_and_ladders.search.maxflow_rust import min_cut
 from snakes_and_ladders.sim.graph import PottsGraph
-from snakes_and_ladders.sim.potts import energy, site_field
+from snakes_and_ladders.sim.potts import SiteField, energy, log_weight_of, site_field
 
 # The bound is `2 * c_max / c_min` for a metric pairwise term; with a uniform
 # coupling the ratio is 1 and the factor is exactly 2.
@@ -117,26 +117,49 @@ class ExpansionResult:
     termination: Termination | None = None
 
 
+class _Arcs(NamedTuple):
+    """A move's network as arrays, one row per edge, in ``add_edge`` order (issue #935).
+
+    :meth:`~snakes_and_ladders.search.maxflow.FlowNetwork.from_arcs` builds
+    the Python solver's list store from these, the oracle route. The Rust
+    route refills a :class:`LatticeCut` instead and is pinned to this
+    network's minimal minimum cut.
+    """
+
+    n_nodes: int
+    tail: np.ndarray
+    head: np.ndarray
+    capacity: np.ndarray
+    reverse: np.ndarray
+
+    def network(self) -> FlowNetwork:
+        """The same network as a :class:`FlowNetwork`, for the Python solver."""
+        return FlowNetwork.from_arcs(
+            self.n_nodes, self.tail, self.head, self.capacity, self.reverse
+        )
+
+
 class _CutMove(NamedTuple):
-    """One binary move, built: the network, its terminals and where a cut lands.
+    """One binary move, built: its cut and where the cut lands.
 
     Parameters
     ----------
-    network : FlowNetwork
-        The move's network, whose arc order is part of the contract: a
-        minimum cut need not be unique, so the two solvers are pinned to one
-        labelling by building one network.
-    source, sink : int
-        The terminals. The source side keeps its label; the sink side takes
-        the move's.
+    source_side : Callable[[], np.ndarray]
+        Cuts the move's network and returns the source side of its minimal
+        minimum cut: the Python solver on the arcs :func:`_expansion_arcs`
+        or :func:`_swap_arcs` lays out, or a :class:`LatticeCut` refilled
+        in place (issue #935).
     place : Callable[[np.ndarray], np.ndarray]
-        The cut's source-side mask to the labelling it proposes.
+        The source-side mask to the labelling it proposes.
     """
 
-    network: FlowNetwork
-    source: int
-    sink: int
+    source_side: Callable[[], np.ndarray]
     place: Callable[[np.ndarray], np.ndarray]
+
+
+def _python_source_side(arcs: _Arcs, source: int, sink: int) -> np.ndarray:
+    """The Python solver's source side on ``arcs``: the oracle route."""
+    return max_flow(arcs.network(), source, sink).source_side
 
 
 def _check_cut_backend(backend: Backend, move: str) -> None:
@@ -174,12 +197,30 @@ def _terminal_capacities(
     return sink_side - offset, source_side - offset
 
 
+class _Carried(NamedTuple):
+    """What a cycle carries from one move to the next (issue #935).
+
+    Parameters
+    ----------
+    cut : LatticeCut | None
+        The Rust route's network, laid out once for the run; ``None`` on the
+        Python route.
+    energy : float
+        The energy of the labelling the move starts from, as
+        :func:`~snakes_and_ladders.sim.potts.energy` scored it on the last
+        move, so the next does not score it again.
+    """
+
+    cut: oxisal.LatticeCut | None
+    energy: float
+
+
 def _lowest_by_cut(
     graph: PottsGraph,
     field_values: np.ndarray,
     labelling: np.ndarray,
     build: Callable[[np.ndarray], _CutMove | None],
-    backend: Backend,
+    held: float | None,
 ) -> Labelling:
     """A binary move by one minimum cut, taken only where it lowers the energy.
 
@@ -188,26 +229,43 @@ def _lowest_by_cut(
     accept the proposal only against the energy. They differ in the network,
     which is ``build``'s, and in nothing else. ``build`` returning ``None``
     is a move with no site to make it on, which is the labelling unchanged.
+    ``held`` is the input labelling's energy where the caller has it.
     """
     values = site_field(np.asarray(field_values, dtype=float), graph.n_nodes)
     built = build(values)
+    current = energy(graph, values, labelling) if held is None else held
     if built is None:
-        return Labelling(labelling, energy(graph, values, labelling))
+        return Labelling(labelling, current)
 
-    cut = (
-        min_cut(built.network, built.source, built.sink)
-        if backend is Backend.RUST
-        else max_flow(built.network, built.source, built.sink)
-    )
-    proposed = built.place(cut.source_side)
+    proposed = built.place(built.source_side())
 
-    current, candidate = (
-        energy(graph, values, labelling),
-        energy(graph, values, proposed),
-    )
+    # Only the changed sites' terms move, so the proposal is scored by their
+    # difference: a full `energy` was 0.18 s of a 0.92 s swap at 142^2
+    # (issue #997). The cycle re-scores its result in full once.
+    candidate = current + _energy_change(graph, values, labelling, proposed)
     if candidate < current:
         return Labelling(proposed, candidate)
     return Labelling(labelling, current)
+
+
+def _energy_change(
+    graph: PottsGraph,
+    values: np.ndarray,
+    before: np.ndarray,
+    after: np.ndarray,
+) -> float:
+    """``energy(after) - energy(before)`` from the sites that differ and their edges."""
+    changed = before != after
+    sites = np.flatnonzero(changed)
+    if sites.size == 0:
+        return 0.0
+    field = values[sites, after[sites]].sum() - values[sites, before[sites]].sum()
+    first, second = graph.edge_index[:, 0], graph.edge_index[:, 1]
+    touched = np.flatnonzero(changed[first] | changed[second])
+    a, b = first[touched], second[touched]
+    coupling = graph.edge_coupling[touched]
+    agree = (after[a] == after[b]).astype(float) - (before[a] == before[b])
+    return float(-field - coupling @ agree)
 
 
 @dataclass(frozen=True)
@@ -232,7 +290,14 @@ class _Move:
     reason: str
     label_sets: Callable[[int], Iterator[tuple[int, ...]]]
     apply: Callable[
-        [PottsGraph, np.ndarray, np.ndarray, tuple[int, ...], Backend],
+        [
+            PottsGraph,
+            np.ndarray,
+            np.ndarray,
+            tuple[int, ...],
+            Backend,
+            _Carried | None,
+        ],
         Labelling,
     ]
 
@@ -264,14 +329,19 @@ def _cycle_to_a_local_minimum(
     labelling = (
         values.argmax(axis=1).astype(np.int64) if start is None else start.copy()
     )
-    current = energy(graph, values, labelling)
+    current = held = energy(graph, values, labelling)
+    # One network for every move of the run: the lattice's arcs are laid out
+    # once and each cut refills their capacities (issue #935).
+    cut = _lattice_cut(graph) if backend is Backend.RUST else None
 
     moves = 0
     for cycle in range(1, max_cycles + 1):
         improved = False
         for labels in move.label_sets(n_states):
-            moved = move.apply(graph, values, labelling, labels, backend)
-            labelling = moved.labelling
+            moved = move.apply(
+                graph, values, labelling, labels, backend, _Carried(cut, held)
+            )
+            labelling, held = moved.labelling, moved.energy
             if moved.energy < current - 1e-12:
                 current = moved.energy
                 improved = True
@@ -279,7 +349,8 @@ def _cycle_to_a_local_minimum(
         if not improved:
             return ExpansionResult(
                 labelling=labelling,
-                energy=current,
+                # In full: the moves carried it by differences (issue #997).
+                energy=energy(graph, values, labelling),
                 cycles=cycle,
                 moves=moves,
                 termination=Termination.after(cycle, converged=True),
@@ -296,6 +367,13 @@ def _cycle_to_a_local_minimum(
 def _expansion_network(
     graph: PottsGraph, values: np.ndarray, labelling: np.ndarray, alpha: int
 ) -> FlowNetwork:
+    """:func:`_expansion_arcs` as a :class:`FlowNetwork`, the Python solver's form."""
+    return _expansion_arcs(graph, values, labelling, alpha).network()
+
+
+def _expansion_arcs(
+    graph: PottsGraph, values: np.ndarray, labelling: np.ndarray, alpha: int
+) -> _Arcs:
     """The expansion network of :func:`expand`, built without a call per arc.
 
     Arc for arc and in the same order as the ``add_edge`` loop it replaces,
@@ -376,7 +454,7 @@ def _expansion_network(
     edge_tail[at + 2], edge_head[at + 2] = auxiliary, sink
     edge_capacity[at + 2] = coupling[split]
 
-    return FlowNetwork.from_arcs(
+    return _Arcs(
         n_nodes + 2 + n_auxiliary,
         np.concatenate((node_tail, edge_tail)),
         np.concatenate((node_head, edge_head)),
@@ -391,7 +469,7 @@ def expand(
     labelling: np.ndarray,
     alpha: int,
     *,
-    backend: Backend = Backend.PYTHON,
+    backend: Backend = Backend.RUST,
 ) -> Labelling:
     """The optimal ``alpha``-expansion of ``labelling``, by one minimum cut.
 
@@ -422,17 +500,22 @@ def expand(
     unaffordable rather than by dropping it, so the edge terms around it stay
     in the same network.
 
-    ``backend`` chooses the minimum-cut solver and nothing else; the network
-    is built here either way. :data:`~snakes_and_ladders.backend.Backend.RUST`
-    runs :func:`snakes_and_ladders.search.maxflow_rust.min_cut`, which issue
-    #528 measured at 49.0% of this function's caller by `cProfile` self time.
-    It is **opt-in**, unlike the `numba` sweep of
-    :func:`iterated_conditional_modes`: a minimum cut is a combinatorial
-    minimum whose *value* both solvers must report exactly, but the cut
-    attaining it need not be unique, and a degenerate network could hand back
-    a different labelling of the same energy. The tests pin both routes to the
-    same labelling on the seeded fixtures; the default does not move on the
-    strength of that.
+    ``backend`` chooses the network and its solver.
+    :data:`~snakes_and_ladders.backend.Backend.PYTHON` builds the network
+    above and cuts it with the Python Dinic: the oracle.
+    :data:`~snakes_and_ladders.backend.Backend.RUST`, the **default** since
+    #935, refills a :class:`~snakes_and_ladders.oxisal.LatticeCut`
+    laid out once over the lattice, with no auxiliary node: Kolmogorov &
+    Zabih's (2004) arc for the pairwise term, so the layout does not change
+    with the labelling. Within :func:`alpha_expansion` each label's cut also
+    starts from the flow its last cut ended on. A minimum cut need not be
+    unique, but both routes read the *minimal* one --- the set reachable from
+    the source in the residual graph, which every maximum flow of every
+    network encoding the move's energy shares --- at one saturation floor
+    (:data:`~snakes_and_ladders.search.maxflow.SATURATED`), so rounding in
+    their different sums does not move a site across the cut: 120 of 120
+    random cut moves on decimal-valued fields agree bitwise
+    (`test_the_cut_moves_agree_across_solvers_on_tied_fields`).
 
     Returns
     -------
@@ -445,20 +528,58 @@ def expand(
     ValueError
         If ``backend`` names an implementation this function does not have.
     """
+    return _expand(graph, field_values, labelling, alpha, backend, None)
+
+
+def _expand(
+    graph: PottsGraph,
+    field_values: np.ndarray,
+    labelling: np.ndarray,
+    alpha: int,
+    backend: Backend,
+    carried: _Carried | None,
+) -> Labelling:
+    """:func:`expand` with what a cycle carries across its moves."""
     _check_cut_backend(backend, "alpha expansion")
 
     def build(values: np.ndarray) -> _CutMove | None:
+        # The sink side switched, so it takes alpha and the rest is held.
+        def place(source_side: np.ndarray) -> np.ndarray:
+            return np.where(~source_side[: graph.n_nodes], alpha, labelling)
+
+        if backend is Backend.RUST:
+            workspace = (
+                _lattice_cut(graph)
+                if carried is None or carried.cut is None
+                else carried.cut
+            )
+
+            def solved() -> np.ndarray:
+                return np.asarray(
+                    workspace.expansion_source_side(
+                        np.ascontiguousarray(values, dtype=np.float64).reshape(-1),
+                        values.shape[1],
+                        np.ascontiguousarray(labelling, dtype=np.int64),
+                        alpha,
+                        _infinite_capacity(graph, values),
+                    ),
+                    dtype=bool,
+                )
+
+            return _CutMove(solved, place)
+        arcs = _expansion_arcs(graph, values, labelling, alpha)
         return _CutMove(
-            network=_expansion_network(graph, values, labelling, alpha),
-            source=graph.n_nodes,
-            sink=graph.n_nodes + 1,
-            # The sink side switched, so it takes alpha and the rest is held.
-            place=lambda source_side: np.where(
-                ~source_side[: graph.n_nodes], alpha, labelling
-            ),
+            lambda: _python_source_side(arcs, graph.n_nodes, graph.n_nodes + 1),
+            place,
         )
 
-    return _lowest_by_cut(graph, field_values, labelling, build, backend)
+    return _lowest_by_cut(
+        graph,
+        field_values,
+        labelling,
+        build,
+        None if carried is None else carried.energy,
+    )
 
 
 def _expansion_label_sets(n_states: int) -> Iterator[tuple[int, ...]]:
@@ -472,9 +593,10 @@ def _apply_expansion(
     labelling: np.ndarray,
     labels: tuple[int, ...],
     backend: Backend,
+    carried: _Carried | None,
 ) -> Labelling:
     """:func:`expand` in the shape :func:`_cycle_to_a_local_minimum` calls."""
-    return expand(graph, values, labelling, labels[0], backend=backend)
+    return _expand(graph, values, labelling, labels[0], backend, carried)
 
 
 EXPANSION = _Move(
@@ -491,12 +613,12 @@ EXPANSION = _Move(
 
 def alpha_expansion(
     graph: PottsGraph,
-    field_values: np.ndarray,
+    field_values: SiteField | np.ndarray,
     n_states: int,
     *,
     start: np.ndarray | None = None,
     max_cycles: int = DEFAULT_MAX_CYCLES,
-    backend: Backend = Backend.PYTHON,
+    backend: Backend = Backend.RUST,
 ) -> ExpansionResult:
     """Cycle over labels until a full sweep lowers nothing.
 
@@ -511,7 +633,7 @@ def alpha_expansion(
     graph : PottsGraph
         Every coupling must be non-negative --- the metric condition the
         bound rests on.
-    field_values : np.ndarray
+    field_values : SiteField | np.ndarray
         ``(n_states,)`` or ``(n_nodes, n_states)``.
     n_states : int
         Label count.
@@ -523,14 +645,15 @@ def alpha_expansion(
         exceeding it impossible on a correct implementation, so reaching it
         is a bug report rather than a tuning knob.
     backend : Backend
-        Which minimum-cut solver each :func:`expand` runs, and nothing else.
-        See :func:`expand` for why the Rust one is opt-in.
+        Which network and minimum-cut solver each :func:`expand` runs; see
+        :func:`expand` for the two and why the Rust one is the default.
 
     Raises
     ------
     ValueError
         If a coupling is negative, or the cap is reached.
     """
+    field_values = log_weight_of(field_values)
     return _cycle_to_a_local_minimum(
         graph,
         field_values,
@@ -560,7 +683,7 @@ class SweepOrder(StrEnum):
 
 def iterated_conditional_modes(
     graph: PottsGraph,
-    field_values: np.ndarray,
+    field_values: SiteField | np.ndarray,
     n_states: int,
     rng: np.random.Generator,
     *,
@@ -606,7 +729,7 @@ def iterated_conditional_modes(
     ----------
     graph : PottsGraph
         The lattice, read through its compressed adjacency.
-    field_values : np.ndarray
+    field_values : SiteField | np.ndarray
         External field, ``(n_states,)`` or ``(n_nodes, n_states)``.
     n_states : int
         Labels available at each site.
@@ -642,6 +765,7 @@ def iterated_conditional_modes(
         If ``backend`` names no sweep, or names the compiled one for a
         descent it does not implement.
     """
+    field_values = log_weight_of(field_values)
     values = site_field(np.asarray(field_values, dtype=float), graph.n_nodes)
     labelling = (
         rng.integers(0, n_states, size=graph.n_nodes)
@@ -725,6 +849,17 @@ def iterated_conditional_modes(
     return Labelling(labelling, energy(graph, values, labelling))
 
 
+def _lattice_cut(graph: PottsGraph) -> oxisal.LatticeCut:
+    """The Rust cut's network over ``graph``'s edges, laid out once (issue #935)."""
+    first, second, coupling = graph.endpoints
+    return oxisal.LatticeCut(
+        graph.n_nodes,
+        np.ascontiguousarray(first, dtype=np.int64),
+        np.ascontiguousarray(second, dtype=np.int64),
+        np.ascontiguousarray(coupling, dtype=np.float64),
+    )
+
+
 def _infinite_capacity(graph: PottsGraph, values: np.ndarray) -> float:
     """A capacity no cut would ever pay, scaled to this problem.
 
@@ -735,6 +870,62 @@ def _infinite_capacity(graph: PottsGraph, values: np.ndarray) -> float:
     return 1.0 + float(np.abs(values).sum()) + float(graph.edge_coupling.sum())
 
 
+def _swap_arcs(
+    graph: PottsGraph,
+    values: np.ndarray,
+    moving: np.ndarray,
+    alpha: int,
+    beta: int,
+) -> _Arcs:
+    """The network of :func:`swap` over the ``moving`` sites, built without a call per arc (issue #935).
+
+    Arc for arc and in the order of the ``add_edge`` loop it replaces, which
+    `tests/regression/search/test_alpha_expansion.py` asserts against a
+    transcription of that loop. At 80,656 sites and ten labels that loop was
+    18.8 s of a 20.8 s swap under ``cProfile``, the cut itself 0.7 s.
+
+    The data term of a moving site is its own field and nothing else. A
+    *held* neighbour carries neither alpha nor beta --- those are exactly the
+    labels that move --- so it agrees with the moving site under neither
+    choice and contributes the same constant to both. That is why this move
+    needs no auxiliary node and why the expansion does: there, a held
+    neighbour can already be alpha.
+
+    Returns
+    -------
+    _Arcs
+        Spanning the moving sites plus a source at ``moving.size`` and a sink
+        after it.
+    """
+    source, sink = moving.size, moving.size + 1
+    # Cut source -> index when the site lands on the sink side, taking beta,
+    # so that arc carries the cost of beta.
+    from_source, to_sink = _terminal_capacities(
+        -values[moving, alpha].astype(float), -values[moving, beta].astype(float)
+    )
+    # Each site's source and sink arc in turn, then every edge with both ends
+    # moving, in edge order, at its coupling both ways.
+    indices = np.arange(moving.size, dtype=np.int64)
+    node_tail = np.empty(2 * moving.size, dtype=np.int64)
+    node_head = np.empty(2 * moving.size, dtype=np.int64)
+    node_capacity = np.empty(2 * moving.size, dtype=np.float64)
+    node_tail[0::2], node_tail[1::2] = source, indices
+    node_head[0::2], node_head[1::2] = indices, sink
+    node_capacity[0::2], node_capacity[1::2] = from_source, to_sink
+    position = np.full(graph.n_nodes, -1, dtype=np.int64)
+    position[moving] = indices
+    first, second, coupling = graph.endpoints
+    inside = (position[first] >= 0) & (position[second] >= 0)
+    edge_capacity = np.asarray(coupling[inside], dtype=np.float64)
+    return _Arcs(
+        moving.size + 2,
+        np.concatenate((node_tail, position[first[inside]])),
+        np.concatenate((node_head, position[second[inside]])),
+        np.concatenate((node_capacity, edge_capacity)),
+        np.concatenate((np.zeros(2 * moving.size), edge_capacity)),
+    )
+
+
 def swap(
     graph: PottsGraph,
     field_values: np.ndarray,
@@ -742,7 +933,7 @@ def swap(
     alpha: int,
     beta: int,
     *,
-    backend: Backend = Backend.PYTHON,
+    backend: Backend = Backend.RUST,
 ) -> Labelling:
     """The optimal ``alpha``-``beta`` swap of ``labelling``, by one minimum cut.
 
@@ -773,6 +964,19 @@ def swap(
         or ``alpha`` and ``beta`` are the same label, where the move is the
         identity and a caller asking for it has a bug rather than a no-op.
     """
+    return _swap(graph, field_values, labelling, alpha, beta, backend, None)
+
+
+def _swap(
+    graph: PottsGraph,
+    field_values: np.ndarray,
+    labelling: np.ndarray,
+    alpha: int,
+    beta: int,
+    backend: Backend,
+    carried: _Carried | None,
+) -> Labelling:
+    """:func:`swap` with what a cycle carries across its moves."""
     _check_cut_backend(backend, "the alpha-beta swap")
     if alpha == beta:
         msg = f"a swap needs two distinct labels, got {alpha} twice"
@@ -782,40 +986,44 @@ def swap(
         moving = np.flatnonzero((labelling == alpha) | (labelling == beta))
         if moving.size == 0:
             return None
-        position = {int(node): index for index, node in enumerate(moving)}
-
-        source, sink = moving.size, moving.size + 1
-        network = FlowNetwork(n_nodes=moving.size + 2)
-
-        # The data term of a moving site is its own field and nothing else. A
-        # *held* neighbour carries neither alpha nor beta --- those are exactly
-        # the labels that move --- so it agrees with the moving site under
-        # neither choice and contributes the same constant to both. That is why
-        # this move needs no auxiliary node and why the expansion does: there,
-        # a held neighbour can already be alpha.
-        to_alpha = -values[moving, alpha].astype(float)
-        to_beta = -values[moving, beta].astype(float)
-        # Cut source -> index when the site lands on the sink side, taking
-        # beta, so that arc carries the cost of beta.
-        from_source, to_sink = _terminal_capacities(to_alpha, to_beta)
-        for index in range(moving.size):
-            network.add_edge(source, index, float(from_source[index]))
-            network.add_edge(index, sink, float(to_sink[index]))
-
-        for (first, second), coupling in graph.weighted_edges():
-            if first in position and second in position:
-                network.add_edge(
-                    position[first], position[second], coupling, reverse=coupling
-                )
 
         def place(source_side: np.ndarray) -> np.ndarray:
             proposed = labelling.copy()
             proposed[moving] = np.where(source_side[: moving.size], alpha, beta)
             return proposed
 
-        return _CutMove(network=network, source=source, sink=sink, place=place)
+        if backend is Backend.RUST:
+            # The kernel cuts the whole lattice with every held site at zero
+            # capacity, so its side is read at the moving sites' own indices.
+            workspace = (
+                _lattice_cut(graph)
+                if carried is None or carried.cut is None
+                else carried.cut
+            )
 
-    return _lowest_by_cut(graph, field_values, labelling, build, backend)
+            def solved() -> np.ndarray:
+                side = workspace.swap_source_side(
+                    np.ascontiguousarray(values, dtype=np.float64).reshape(-1),
+                    values.shape[1],
+                    np.ascontiguousarray(labelling, dtype=np.int64),
+                    alpha,
+                    beta,
+                )
+                return np.asarray(side, dtype=bool)[moving]
+
+            return _CutMove(solved, place)
+        arcs = _swap_arcs(graph, values, moving, alpha, beta)
+        return _CutMove(
+            lambda: _python_source_side(arcs, moving.size, moving.size + 1), place
+        )
+
+    return _lowest_by_cut(
+        graph,
+        field_values,
+        labelling,
+        build,
+        None if carried is None else carried.energy,
+    )
 
 
 def _swap_label_sets(n_states: int) -> Iterator[tuple[int, ...]]:
@@ -833,9 +1041,10 @@ def _apply_swap(
     labelling: np.ndarray,
     labels: tuple[int, ...],
     backend: Backend,
+    carried: _Carried | None,
 ) -> Labelling:
     """:func:`swap` in the shape :func:`_cycle_to_a_local_minimum` calls."""
-    return swap(graph, values, labelling, labels[0], labels[1], backend=backend)
+    return _swap(graph, values, labelling, labels[0], labels[1], backend, carried)
 
 
 SWAP = _Move(
@@ -854,7 +1063,7 @@ def alpha_beta_swap(
     *,
     start: np.ndarray | None = None,
     max_cycles: int = DEFAULT_MAX_CYCLES,
-    backend: Backend = Backend.PYTHON,
+    backend: Backend = Backend.RUST,
 ) -> ExpansionResult:
     """Cycle over every label pair until a full sweep lowers nothing.
 

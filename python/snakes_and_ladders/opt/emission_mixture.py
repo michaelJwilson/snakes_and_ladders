@@ -24,20 +24,36 @@ from __future__ import annotations
 
 import itertools
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
 import numpy as np
 import torch
 
-from snakes_and_ladders.emissions import CountPairEmission, EmissionFamily
+from snakes_and_ladders.emissions import (
+    BetaBinomialEmission,
+    BinomialEmission,
+    CountPairEmission,
+    EmissionFamily,
+    NegativeBinomialEmission,
+    PoissonEmission,
+)
 from snakes_and_ladders.enumeration import refuse_oversized
+from snakes_and_ladders.opt.constrain import (
+    free_from_log_simplex,
+    free_from_positive,
+    log_simplex,
+    positive,
+)
 from snakes_and_ladders.opt.em import em_loop
 from snakes_and_ladders.opt.mixture import (
+    component_log_density,
     e_step,
     emission_mixture_plus_plus,
+    mixture_log_likelihood,
     uniform_seeds,
 )
+from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.opt.termination import Termination
 from snakes_and_ladders.track import current
 
@@ -95,6 +111,8 @@ def expectation_maximization(
     components: EmissionFamily,
     max_iterations: int = 200,
     tolerance: float = 1e-10,
+    *,
+    covariate: np.ndarray | torch.Tensor | None = None,
 ) -> EmissionMixtureFit:
     """Fit a mixture of count emissions by EM.
 
@@ -122,6 +140,10 @@ def expectation_maximization(
         Stop when the log-likelihood improves by less than this *relative* to
         its magnitude --- absolute would not transfer across data sizes
         (``DEV.md``, issue #111).
+    covariate : np.ndarray | torch.Tensor | None
+        Per-observation covariate, scored in the E step and conditioned on in
+        the M step alike (issue #933): an exposure, a trial count, or one of
+        each per channel for a pair. ``None`` fits as before, bitwise.
 
     Returns
     -------
@@ -135,8 +157,33 @@ def expectation_maximization(
         If a component's M step did not converge. A number read off an inner
         solve that never settled is not an estimate, and returning it here
         would surface several iterations later as a non-monotone likelihood.
+
+    Notes
+    -----
+    Integer counts in one channel, under a Poisson, binomial, negative
+    binomial or beta-binomial family, are fitted on their distinct values
+    (issue #997): a responsibility is a function of the value alone, so the
+    E step scores each distinct count once and the M step reads the counts
+    weighted by how many observations hold them. The responsibilities are
+    gathered back to every observation once, after the last step. At 10^6
+    draws of a three-component negative binomial, 20 iterations took 2.1 s
+    per observation, 43% of it the `torch.unique` each log-density repeated.
+    A float array of the same counts takes the per-observation route, which
+    is the oracle.
     """
+    distinct = _distinct_counts(observations, components)
+    if distinct is not None:
+        return _cell_expectation_maximization(
+            *distinct,
+            weights,
+            components,
+            max_iterations=max_iterations,
+            tolerance=tolerance,
+        )
     values = torch.as_tensor(observations, dtype=torch.float64)
+    conditioned = (
+        None if covariate is None else torch.as_tensor(covariate, dtype=torch.float64)
+    )
     boundary = False
     attempt = 0
 
@@ -148,9 +195,13 @@ def expectation_maximization(
         attempt += 1
         current, family, _ = state
         log_weight = torch.log(current)
-        evidence, posterior = e_step(values, log_weight, family)
+        evidence, posterior = e_step(values, log_weight, family, covariate=conditioned)
         log_likelihood = float(evidence)
-        reestimated = family.reestimate(values, posterior)
+        reestimated = (
+            family.reestimate(values, posterior)
+            if conditioned is None
+            else family.reestimate(values, posterior, conditioned)
+        )
         if not reestimated.converged:
             msg = (
                 f"a component's M step did not settle at EM iteration "
@@ -177,6 +228,106 @@ def expectation_maximization(
         weights=weights,
         components=components,
         responsibilities=posterior,
+        log_likelihood=log_likelihood,
+        iterations=termination.iterations,
+        at_boundary=boundary,
+        termination=termination,
+    )
+
+
+#: The count families whose M step reads only weighted counts, so a fit on
+#: the distinct values with their multiplicities is the per-observation fit.
+_COUNTED = (
+    PoissonEmission,
+    BinomialEmission,
+    NegativeBinomialEmission,
+    BetaBinomialEmission,
+)
+
+
+def _distinct_counts(
+    observations: np.ndarray | torch.Tensor, components: EmissionFamily
+) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+    """The distinct counts, their multiplicities and each observation's index, or ``None``."""
+    if type(components) not in _COUNTED:
+        return None
+    values = (
+        observations.detach().numpy()
+        if isinstance(observations, torch.Tensor)
+        else np.asarray(observations)
+    )
+    if (
+        values.ndim != 1
+        or values.size == 0
+        or not np.issubdtype(values.dtype, np.integer)
+    ):
+        return None
+    if int(values.min()) < 0:
+        return None
+    cells, inverse, multiplicity = np.unique(
+        values, return_inverse=True, return_counts=True
+    )
+    return cells, multiplicity, inverse
+
+
+def _cell_expectation_maximization(
+    cells: np.ndarray,
+    multiplicity: np.ndarray,
+    inverse: np.ndarray,
+    weights: torch.Tensor,
+    components: EmissionFamily,
+    *,
+    max_iterations: int,
+    tolerance: float,
+) -> EmissionMixtureFit:
+    """:func:`expectation_maximization` on the distinct counts (issue #997)."""
+    support = torch.from_numpy(cells.astype(np.float64))
+    held = torch.from_numpy(multiplicity.astype(np.float64))
+    n_samples = float(multiplicity.sum())
+    boundary = False
+    attempt = 0
+
+    def step(
+        state: tuple[torch.Tensor, EmissionFamily, torch.Tensor],
+    ) -> tuple[tuple[torch.Tensor, EmissionFamily, torch.Tensor], float]:
+        nonlocal boundary, attempt
+        attempt += 1
+        current, family, _ = state
+        joint = torch.log(current) + family.log_density(support)
+        normalizer = torch.logsumexp(joint, dim=1, keepdim=True)
+        log_likelihood = float((held * normalizer[:, 0]).sum())
+        posterior = torch.exp(joint - normalizer)
+        weighted = posterior * held[:, None]
+        reestimated = family.reestimate(support, weighted)
+        if not reestimated.converged:
+            msg = (
+                f"a component's M step did not settle at EM iteration "
+                f"{attempt}: residual {reestimated.residual:.3e} after "
+                f"{reestimated.iterations} inner iterations"
+            )
+            raise ValueError(msg)
+        boundary = boundary or reestimated.at_boundary
+        return (weighted.sum(dim=0) / n_samples, reestimated.emissions, posterior), (
+            log_likelihood
+        )
+
+    start = (
+        weights,
+        components,
+        torch.empty((0, components.n_states), dtype=torch.float64),
+    )
+    (weights, components, posterior), log_likelihood, termination = em_loop(
+        step, start, tolerance=tolerance, max_iterations=max_iterations
+    )
+    responsibilities = (
+        posterior[torch.from_numpy(inverse)]
+        if posterior.shape[0]
+        else torch.empty((inverse.size, components.n_states), dtype=torch.float64)
+    )
+    return EmissionMixtureFit(
+        weights=weights,
+        components=components,
+        responsibilities=responsibilities,
         log_likelihood=log_likelihood,
         iterations=termination.iterations,
         at_boundary=boundary,
@@ -256,6 +407,8 @@ def anneal_assignments(
     components: EmissionFamily,
     temperatures: Sequence[float],
     rng: np.random.Generator,
+    *,
+    covariate: np.ndarray | torch.Tensor | None = None,
 ) -> AnnealedAssignments:
     """Simulated annealing over the component assignments, the components re-estimated at each sweep's.
 
@@ -276,6 +429,9 @@ def anneal_assignments(
     responsibility instead of the empty indicator, and its weight is that
     column's mean, so it survives the sweep and is not frozen at zero weight.
 
+    ``covariate`` is :func:`expectation_maximization`'s: scored at every
+    sweep and conditioned on in every M step (issue #933).
+
     Returns
     -------
     AnnealedAssignments
@@ -295,9 +451,12 @@ def anneal_assignments(
             msg = f"a temperature is positive and finite, got {value}"
             raise ValueError(msg)
     values = torch.as_tensor(observations, dtype=torch.float64)
+    conditioned = (
+        None if covariate is None else torch.as_tensor(covariate, dtype=torch.float64)
+    )
     n_components = components.n_states
     tracked = current()
-    joint = torch.log(weights) + components.log_density(values)
+    joint = torch.log(weights) + component_log_density(components, values, conditioned)
     best: tuple[torch.Tensor, EmissionFamily, float, int] | None = None
     trace: list[float] = []
     path: list[EmissionFamily] = []
@@ -310,13 +469,19 @@ def anneal_assignments(
         if bool(empty.any()):
             soft = torch.softmax(joint / temperature, dim=-1)
             posterior[:, empty] = soft[:, empty]
-        reestimated = components.reestimate(values, posterior)
+        reestimated = (
+            components.reestimate(values, posterior)
+            if conditioned is None
+            else components.reestimate(values, posterior, conditioned)
+        )
         if not reestimated.converged:
             msg = f"a component's M step did not settle at sweep {step}"
             raise ValueError(msg)
         components = reestimated.emissions
         weights = posterior.sum(dim=0) / posterior.sum()
-        joint = torch.log(weights) + components.log_density(values)
+        joint = torch.log(weights) + component_log_density(
+            components, values, conditioned
+        )
         log_likelihood = float(torch.logsumexp(joint, dim=-1).sum())
         tracked.record(step, log_likelihood=log_likelihood, temperature=temperature)
         trace.append(log_likelihood)
@@ -574,3 +739,112 @@ def uniform_start(
     indices = np.arange(rows.shape[0], dtype=np.float64)
     chosen = uniform_seeds(indices, n_components, rng)
     return at(rows[chosen.astype(np.int64)])
+
+
+class EmissionMixtureObjective(Objective):
+    """Negative log-likelihood of a mixture of any family whose parameters are positive (issue #964).
+
+    ``theta`` is ``K - 1`` free weights, then for each parameter name the
+    family states, ``K`` log values: the weights through
+    :func:`~snakes_and_ladders.opt.constrain.log_simplex` and every
+    parameter through :func:`~snakes_and_ladders.opt.constrain.positive`.
+    ``build`` turns the named parameters back into a family, so the
+    objective is differentiable in ``theta`` wherever the family's
+    ``log_density`` is, and a Hamiltonian or Langevin chain can sample a
+    count mixture the Gaussian :class:`~snakes_and_ladders.opt.mixture.GaussianMixtureObjective`
+    cannot express.
+
+    Parameters
+    ----------
+    observations : np.ndarray
+        Shape ``(n,)`` or ``(n, channels)``, in the family's dtype.
+    start : EmissionFamily
+        The family :meth:`initial` starts at, with uniform weights; its
+        :meth:`~snakes_and_ladders.emissions.EmissionFamily.named_parameters`
+        name the blocks of ``theta``, every one positive.
+    build : Callable[[Mapping[str, torch.Tensor]], EmissionFamily]
+        The family at named parameters of shape ``(K,)`` each; constants the
+        family carries (a trial count, the joint form) are the closure's.
+
+    Raises
+    ------
+    ValueError
+        If ``start`` has fewer than two states or a parameter is not positive.
+    """
+
+    def __init__(
+        self,
+        observations: np.ndarray,
+        start: EmissionFamily,
+        build: Callable[[Mapping[str, torch.Tensor]], EmissionFamily],
+    ) -> None:
+        if start.n_states < 2:
+            msg = f"a mixture has at least two components, got {start.n_states}"
+            raise ValueError(msg)
+        named = {
+            name: torch.as_tensor(value, dtype=torch.float64).reshape(-1)
+            for name, value in start.named_parameters().items()
+        }
+        if any(bool((value <= 0).any()) for value in named.values()):
+            msg = "every parameter of the family must be positive"
+            raise ValueError(msg)
+        self._observations = torch.as_tensor(
+            observations, dtype=start.observation_dtype
+        )
+        self._start = named
+        self._names = tuple(named)
+        self._k = start.n_states
+        self._build = build
+
+    @property
+    def observations(self) -> torch.Tensor:
+        """The observations being fitted."""
+        return self._observations
+
+    @property
+    def n_components(self) -> int:
+        """``K``."""
+        return self._k
+
+    @property
+    def n_parameters(self) -> int:
+        """``K - 1`` free weights and ``K`` per named parameter."""
+        return self._k - 1 + self._k * len(self._names)
+
+    def _blocks(self, theta: torch.Tensor) -> dict[str, torch.Tensor]:
+        offset = self._k - 1
+        blocks: dict[str, torch.Tensor] = {}
+        for name in self._names:
+            blocks[name] = positive(theta[offset : offset + self._k])
+            offset += self._k
+        return blocks
+
+    def components(self, theta: torch.Tensor) -> EmissionFamily:
+        """The family ``theta`` encodes, differentiable in ``theta``."""
+        return self._build(self._blocks(theta))
+
+    def initial(self) -> torch.Tensor:
+        """Uniform weights at ``start``'s parameters."""
+        uniform = torch.full((self._k,), -math.log(self._k), dtype=torch.float64)
+        return self.theta_from({"log_weight": uniform, **self._start})
+
+    def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
+        """The log weights and every named parameter."""
+        return {"log_weight": log_simplex(theta[: self._k - 1]), **self._blocks(theta)}
+
+    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        """The unconstrained vector whose :meth:`constrain` is ``named``."""
+        parts = [free_from_log_simplex(torch.as_tensor(named["log_weight"]))]
+        parts += [
+            free_from_positive(torch.as_tensor(named[name], dtype=torch.float64))
+            for name in self._names
+        ]
+        return torch.cat(parts)
+
+    def __call__(self, theta: torch.Tensor) -> torch.Tensor:
+        """The negative mixture log-likelihood at ``theta``."""
+        return -mixture_log_likelihood(
+            self._observations,
+            log_simplex(theta[: self._k - 1]),
+            self.components(theta),
+        )

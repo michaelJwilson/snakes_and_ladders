@@ -1,7 +1,7 @@
 //! The count families' M-step solves, ported from
 //! `python/snakes_and_ladders/emissions.py` (the batched `torch` solves, the
 //! oracle) to Rust, exposed to Python via PyO3 as
-//! `snakes_and_ladders.oxi_snakes_and_ladders.negative_binomial_dispersions`
+//! `snakes_and_ladders.oxisal.negative_binomial_dispersions`
 //! and `...beta_binomial_parameters` (issue #922).
 //!
 //! **The digamma differences are sums of reciprocals.** Every score term the
@@ -100,6 +100,88 @@ pub fn solve_dispersion(
         at_boundary: false,
         iterations,
         residual: dispersion_score(tails, total, mean, value).abs() / total,
+    }
+}
+
+/// One state's data under a per-observation exposure (issue #933).
+#[derive(Clone, Copy, Debug)]
+pub struct Exposed<'a> {
+    /// Tails of the state's count weights: the digamma half, as without one.
+    pub tails: &'a [f64],
+    /// The state's weight per observation.
+    pub weights: &'a [f64],
+    /// The exposure per observation.
+    pub exposures: &'a [f64],
+    /// The count per observation.
+    pub counts: &'a [f64],
+    /// The state's mean per unit exposure.
+    pub mean: f64,
+    /// The state's summed weight.
+    pub total: f64,
+    /// Whether the exposure varies, which keeps the term profiling drops.
+    pub varying: bool,
+}
+
+/// The score in `r` at rates `e_t mu`: the tails' digamma half, then
+/// `sum_t w_t log(r / (r + e_t mu))` and, where the exposure varies,
+/// `sum_t w_t (e_t mu - y_t) / (r + e_t mu)` --- `_weighted_dispersion_score`
+/// term for term.
+fn exposed_score(problem: Exposed<'_>, r: f64) -> f64 {
+    let mut logs = 0.0;
+    let mut drift = 0.0;
+    for t in 0..problem.weights.len() {
+        let rate = problem.exposures[t] * problem.mean;
+        let weight = problem.weights[t];
+        logs += weight * (r / (r + rate)).ln();
+        if problem.varying {
+            drift += weight * (rate - problem.counts[t]) / (r + rate);
+        }
+    }
+    rising(problem.tails, r) + logs + drift
+}
+
+/// Bisection on `log r` inside `[lower, upper]` at per-observation rates,
+/// as `_solve_dispersion` under an exposure.
+pub fn solve_exposed_dispersion(
+    problem: Exposed<'_>,
+    lower: f64,
+    upper: f64,
+    tolerance: f64,
+) -> Dispersion {
+    let score = |r: f64| exposed_score(problem, r);
+    if score(upper) > 0.0 {
+        return Dispersion {
+            value: upper,
+            at_boundary: true,
+            iterations: 0,
+            residual: 0.0,
+        };
+    }
+    if score(lower) < 0.0 {
+        return Dispersion {
+            value: lower,
+            at_boundary: true,
+            iterations: 0,
+            residual: 0.0,
+        };
+    }
+    let (mut low, mut high) = (lower.ln(), upper.ln());
+    let mut iterations = 0;
+    while high - low > tolerance {
+        let middle = 0.5 * (low + high);
+        if score(middle.exp()) > 0.0 {
+            low = middle;
+        } else {
+            high = middle;
+        }
+        iterations += 1;
+    }
+    let value = (0.5 * (low + high)).exp();
+    Dispersion {
+        value,
+        at_boundary: false,
+        iterations,
+        residual: score(value).abs() / problem.total,
     }
 }
 
@@ -288,6 +370,74 @@ pub fn negative_binomial_dispersions(
             })
             .collect();
         for (state, one) in solved.iter().enumerate() {
+            value[state] = one.value;
+            at_boundary[state] = u8::from(one.at_boundary);
+            iterations[state] = one.iterations;
+            residual[state] = one.residual;
+        }
+    });
+    Ok(())
+}
+
+/// Every state's dispersion under a per-observation exposure (issue #933).
+///
+/// `tails` is `(K, J)` and `weights` `(K, n)`, row-major; `exposures` and
+/// `counts` are `(n,)`; `total`, `mean`, `lower` and `upper` are `(K,)`.
+/// Results as [`negative_binomial_dispersions`]'s.
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+pub fn negative_binomial_dispersions_exposed(
+    py: Python<'_>,
+    tails: PyReadonlyArray1<'_, f64>,
+    weights: PyReadonlyArray1<'_, f64>,
+    exposures: PyReadonlyArray1<'_, f64>,
+    counts: PyReadonlyArray1<'_, f64>,
+    total: PyReadonlyArray1<'_, f64>,
+    mean: PyReadonlyArray1<'_, f64>,
+    lower: PyReadonlyArray1<'_, f64>,
+    upper: PyReadonlyArray1<'_, f64>,
+    tolerance: f64,
+    mut value: PyReadwriteArray1<'_, f64>,
+    mut at_boundary: PyReadwriteArray1<'_, u8>,
+    mut iterations: PyReadwriteArray1<'_, u32>,
+    mut residual: PyReadwriteArray1<'_, f64>,
+) -> PyResult<()> {
+    let tails = borrowed(&tails, "tails")?;
+    let weights = borrowed(&weights, "weights")?;
+    let exposures = borrowed(&exposures, "exposures")?;
+    let counts = borrowed(&counts, "counts")?;
+    let total = borrowed(&total, "total")?;
+    let mean = borrowed(&mean, "mean")?;
+    let lower = borrowed(&lower, "lower")?;
+    let upper = borrowed(&upper, "upper")?;
+    let (k, n) = (total.len(), exposures.len());
+    if k == 0 || tails.len() % k != 0 || weights.len() != k * n || counts.len() != n {
+        return Err(PyValueError::new_err(
+            "tails must be (K, J) and weights (K, n), with n exposures and counts",
+        ));
+    }
+    let width = tails.len() / k;
+    let varying = exposures.iter().any(|&e| e != exposures[0]);
+    let value = written(&mut value, "value")?;
+    let at_boundary = written(&mut at_boundary, "at_boundary")?;
+    let iterations = written(&mut iterations, "iterations")?;
+    let residual = written(&mut residual, "residual")?;
+    py.detach(|| {
+        for state in 0..k {
+            let one = solve_exposed_dispersion(
+                Exposed {
+                    tails: &tails[state * width..(state + 1) * width],
+                    weights: &weights[state * n..(state + 1) * n],
+                    exposures,
+                    counts,
+                    mean: mean[state],
+                    total: total[state],
+                    varying,
+                },
+                lower[state],
+                upper[state],
+                tolerance,
+            );
             value[state] = one.value;
             at_boundary[state] = u8::from(one.at_boundary);
             iterations[state] = one.iterations;

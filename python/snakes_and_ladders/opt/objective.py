@@ -111,3 +111,91 @@ class Objective(Protocol):
             Scalar tensor.
         """
         ...  # pragma: no cover
+
+
+@runtime_checkable
+class DeclaredGradient(Protocol):
+    """An objective that states its own gradient.
+
+    Autograd records and replays a graph per call, 57 µs at d = 10 where the
+    closed form of a Gaussian takes 1.7 µs (issue #991); an objective whose
+    gradient has a closed form states it here (issue #986). It must equal
+    autograd's through ``__call__``, which each implementation's test pins.
+    """
+
+    def gradient(self, theta: torch.Tensor) -> torch.Tensor:
+        """``dU/dtheta`` at ``theta``, detached."""
+        ...  # pragma: no cover
+
+
+@runtime_checkable
+class DeclaredValueAndGradient(Protocol):
+    """An objective that states its value and gradient together (issue #1000).
+
+    Optional beside :class:`Objective`: a consumer that reads a gradient ---
+    the L-BFGS closure, the convergence test, a Hamiltonian kick --- takes it
+    from :func:`value_and_gradient`. An HMM objective declares one so its
+    gradient can come from a compiled backend rather than the graph.
+    """
+
+    def value_and_gradient(
+        self, theta: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """``(U(theta), dU/dtheta)``, both detached."""
+        ...  # pragma: no cover
+
+
+def declares_gradient(objective: object) -> bool:
+    """Whether ``objective`` is a :class:`DeclaredGradient` with a *method* ``gradient``.
+
+    A runtime-checkable protocol checks only that the attribute exists, and
+    the phylogenetic objective's ``gradient`` is a property naming its route
+    (`likelihood.objective`), not a function of ``theta``. Read from the
+    class, so the answer is one per type (:func:`_routes`).
+    """
+    return _routes(type(objective))[0]
+
+
+def _declares(kind: type, name: str) -> bool:
+    """Whether ``kind`` has a *method* ``name``: a class attribute that is callable."""
+    return callable(getattr(kind, name, None))
+
+
+#: :func:`_routes`' answers, by type.
+_ROUTES: dict[type, tuple[bool, bool]] = {}
+
+
+def _routes(kind: type) -> tuple[bool, bool]:
+    """``(declares gradient, declares value and gradient)`` for a type, resolved once (issue #1008).
+
+    What the runtime protocols answer, read from the class: an
+    ``isinstance`` against a runtime-checkable protocol walks its members on
+    every call, 16% of a Rosenbrock chain when it was asked per leapfrog step.
+    """
+    routes = _ROUTES.get(kind)
+    if routes is None:
+        routes = _declares(kind, "gradient"), _declares(kind, "value_and_gradient")
+        _ROUTES[kind] = routes
+    return routes
+
+
+def value_and_gradient(
+    objective: Objective, theta: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """``(U(theta), dU/dtheta)`` detached.
+
+    The objective's own where it declares them together, its declared
+    gradient beside a graph-free value where it declares that alone, and
+    autograd through ``__call__`` otherwise.
+    """
+    gradient, together = _routes(type(objective))
+    if together:
+        return objective.value_and_gradient(theta)  # type: ignore[attr-defined, no-any-return]
+    if gradient:
+        with torch.no_grad():
+            value = objective(theta.detach())
+        return value, objective.gradient(theta.detach())  # type: ignore[attr-defined]
+    point = theta.detach().clone().requires_grad_(True)
+    value = objective(point)
+    (derivative,) = torch.autograd.grad(value, point)
+    return value.detach(), derivative

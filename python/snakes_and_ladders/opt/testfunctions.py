@@ -83,6 +83,11 @@ class Rosenbrock(Objective):
         head, tail = theta[:-1], theta[1:]
         return (self.b * (tail - head**2) ** 2 + (self.a - head) ** 2).sum()
 
+    @property
+    def rosenbrock_constants(self) -> tuple[float, float]:
+        """``(a, b)``: declares this a compiled chain's family (issue #1006)."""
+        return (self.a, self.b)
+
     def minimizer(self) -> torch.Tensor:
         """The analytic minimizer, ``(a, ..., a)``, where the value is 0."""
         return torch.full((self.dimension,), self.a, dtype=torch.float64)

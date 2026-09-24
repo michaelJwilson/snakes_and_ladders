@@ -159,6 +159,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.likelihood.pruning_torch
    :members:
 
+.. automodule:: snakes_and_ladders.likelihood.pruning_jax
+   :members:
+
 .. automodule:: snakes_and_ladders.likelihood.pruning_rust
    :members:
 
@@ -279,6 +282,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.opt.hmm
    :members:
 
+.. automodule:: snakes_and_ladders.opt.hmm_jax
+   :members:
+
 .. automodule:: snakes_and_ladders.opt.mixture
    :members:
 
@@ -297,7 +303,25 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sample.hmc
    :members:
 
+.. automodule:: snakes_and_ladders.sample.expectation
+   :members:
+
 .. automodule:: snakes_and_ladders.sample.langevin
+   :members:
+
+.. automodule:: snakes_and_ladders.sample.metropolis
+   :members:
+
+.. automodule:: snakes_and_ladders.sample.hmc_jax
+   :members:
+
+.. automodule:: snakes_and_ladders.sample.declared
+   :members:
+
+.. automodule:: snakes_and_ladders.sample.mixture_gibbs
+   :members:
+
+.. automodule:: snakes_and_ladders.sample.relabel
    :members:
 
 .. automodule:: snakes_and_ladders.sample.slice
@@ -420,9 +444,6 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.learn.tree
    :members:
 
-.. automodule:: snakes_and_ladders.learn.gym
-   :members:
-
 .. automodule:: snakes_and_ladders.backend
    :members:
 
@@ -486,6 +507,87 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.sandbox.polar_reference
+   :members:
+
+.. automodule:: snakes_and_ladders.validation
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.runner
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.protocol
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.scripts
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.scripts.selftest
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.scripts.package
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.pymaxflow
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.scripts.pymaxflow
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.gco
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.scripts.gco
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.hmmlearn
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.scripts.hmmlearn
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.scikit_learn
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.scripts.scikit_learn
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.blackjax
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.gaussian
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.rustworkx
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.scripts.rustworkx
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.jax
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.scripts.jax
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.scripts.blackjax
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.gymnasium
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.scripts.gymnasium
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.torchrl
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.scripts.torchrl
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.torch_geometric
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.scripts.torch_geometric
    :members:
 
 .. automodule:: snakes_and_ladders.qa
