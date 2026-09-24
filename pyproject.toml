@@ -63,18 +63,6 @@ notebooks = [
     # (issue #887). BSD-3-Clause, above the 1,000-star bar.
     "notebook>=7.2",
 ]
-# External frameworks that front or referee a hand-rolled implementation
-# (issue #322). An extra rather than a core dependency: the core install and
-# the per-pull-request suite pull none of them, and every test that needs one
-# `importorskip`s it. All four are OSI-licensed (MIT, Apache-2.0, MIT, MIT);
-# rustworkx sits near the 1,000-star bar and was flagged and approved on the
-# ticket.
-frameworks = [
-    "gymnasium>=1.0",
-    "rustworkx>=0.15",
-    "torchrl>=0.6",
-    "torch_geometric>=2.5",
-]
 # External frameworks the package is validated or benchmarked against, one
 # extra each and each run in a subprocess by `snakes_and_ladders.validation`
 # (issue #972); `infra/validation_extras.py` reads the list for CI's
@@ -106,6 +94,18 @@ validation-scikit-learn = ["scikit-learn>=1.9.1"]
 # in a subprocess: autodiff in the package stays PyTorch. Wheels for linux-64
 # and osx-arm64.
 validation-blackjax = ["blackjax>=1.6.2"]
+#
+# rustworkx: Apache-2.0, near the 1,000-star bar, flagged and approved on
+# #322 and moved here by #976 from the `frameworks` extra, so it runs in a
+# subprocess like the rest. Wheels for linux-64 and osx-arm64.
+validation-rustworkx = ["rustworkx>=0.18.1"]
+#
+# Gymnasium, TorchRL and PyTorch Geometric: all MIT, above the 1,000-star bar,
+# with wheels for linux-64 and osx-arm64; moved here by #977 from the
+# `frameworks` extra (#322), which it deletes.
+validation-gymnasium = ["gymnasium>=1.0"]
+validation-torchrl = ["torchrl>=0.6"]
+validation-torch-geometric = ["torch_geometric>=2.5"]
 #
 # JAX itself: Apache-2.0, far above the 1,000-star bar, approved on #991 for
 # validation and benchmarking in a subprocess only; autodiff in the package
@@ -247,11 +247,11 @@ module = ["nbformat.*", "nbclient.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-# The `frameworks` extra (issue #322) is absent where the `lint` job runs, so
-# its imports resolve to nothing there; and torchrl, tensordict,
-# torch_geometric and networkx ship no type information where they are
-# present. gymnasium and rustworkx do, and are checked against it wherever
-# they are installed.
+# Gymnasium, TorchRL and PyTorch Geometric (their `validation-*` extras, #977)
+# and rustworkx (#976) are absent where the `lint` job runs, so their imports
+# resolve to nothing there; and torchrl, tensordict, torch_geometric and
+# networkx ship no type information where they are present. gymnasium and
+# rustworkx do, and are checked against it wherever they are installed.
 module = [
     "gymnasium.*",
     "rustworkx.*",
@@ -307,8 +307,8 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 # Where gymnasium is absent its `Env` is `Any`, and --strict refuses to
-# subclass `Any`; where it is present the class is checked in full.
-module = "snakes_and_ladders.learn.gym"
+# subclass `Any`; where it is present the class is checked in full (#977).
+module = "snakes_and_ladders.validation.scripts.gymnasium"
 disallow_subclassing_any = false
 
 [tool.towncrier]

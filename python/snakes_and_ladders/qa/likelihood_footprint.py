@@ -35,7 +35,7 @@ import numpy as np
 
 from snakes_and_ladders.learn.tree import with_uniform_branch_lengths
 from snakes_and_ladders.likelihood import pruning
-from snakes_and_ladders.qa.figure import QATable, latex_integer
+from snakes_and_ladders.qa.figure import QATable, booktabs_tabular, latex_integer
 from snakes_and_ladders.qa.runner import FIXTURE_PARAMS, table_main
 from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
@@ -174,33 +174,23 @@ def render_footprint(n_states: int) -> str:
         A complete ``tabular`` environment.
     """
     rows = [
-        " & ".join(
-            [
-                latex_integer(n_taxa),
-                latex_integer(n_sites),
-                _megabytes(simulation_bytes(n_taxa, n_sites)),
-                _megabytes(evaluation_bytes(n_taxa, n_sites, n_states)),
-                _megabytes(
-                    simulation_bytes(n_taxa, n_sites)
-                    + evaluation_bytes(n_taxa, n_sites, n_states)
-                ),
-            ]
-        )
-        + r" \\"
+        [
+            latex_integer(n_taxa),
+            latex_integer(n_sites),
+            _megabytes(simulation_bytes(n_taxa, n_sites)),
+            _megabytes(evaluation_bytes(n_taxa, n_sites, n_states)),
+            _megabytes(
+                simulation_bytes(n_taxa, n_sites)
+                + evaluation_bytes(n_taxa, n_sites, n_states)
+            ),
+        ]
         for n_taxa, n_sites in (*MEASURED_SIZES, DECLARED_MAXIMUM)
     ]
-    return "\n".join(
-        [
-            r"\begin{tabular}{rrrrr}",
-            r"  \toprule",
-            r"  Taxa & Sites & Simulate (MB) & Evaluate (MB) & Total (MB) \\",
-            r"  \midrule",
-            *(f"  {row}" for row in rows[:-1]),
-            r"  \midrule",
-            f"  {rows[-1]}",
-            r"  \bottomrule",
-            r"\end{tabular}",
-        ]
+    return booktabs_tabular(
+        "rrrrr",
+        ["Taxa", "Sites", "Simulate (MB)", "Evaluate (MB)", "Total (MB)"],
+        rows,
+        rule_before_last=True,
     )
 
 

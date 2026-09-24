@@ -27,11 +27,13 @@ import math
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from itertools import permutations
-from typing import Any
+from typing import Any, Protocol
 
 import numpy as np
 import torch
 
+from snakes_and_ladders import oxi_snakes_and_ladders as oxi
+from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.emissions import (
     BetaBinomialEmission,
     BinomialEmission,
@@ -1222,6 +1224,123 @@ def baum_welch(
     )
 
 
+def _ragged_e_step(
+    emit: torch.Tensor,
+    mask: torch.Tensor,
+    lengths: np.ndarray,
+    log_initial: torch.Tensor,
+    log_transition: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor, float]:
+    """The E step in the compiled ragged kernel, returned in the padded layout (issue #933).
+
+    ``emit`` is the masked ``(n, length, m)`` block; its live rows, in
+    sequence order, are what the kernel walks. The log marginals are
+    scattered back to the block with ``-inf`` at padding, as the torch
+    recursion leaves them, so the M step reads one layout either way.
+
+    Returns
+    -------
+    tuple[torch.Tensor, torch.Tensor, float]
+        Log gamma ``(n, length, m)``, log transition counts ``(m, m)``
+        summed over sequences, and the log-likelihood.
+    """
+    values = np.ascontiguousarray(emit[mask].numpy(), dtype=np.float64)
+    m = values.shape[1]
+    gamma = np.empty_like(values)
+    counts = np.empty((m, m), dtype=np.float64)
+    evidence = np.empty(lengths.shape[0], dtype=np.float64)
+    oxi.ragged_posteriors(
+        values,
+        lengths,
+        np.ascontiguousarray(log_initial.numpy(), dtype=np.float64),
+        np.ascontiguousarray(log_transition.numpy(), dtype=np.float64),
+        gamma,
+        counts,
+        evidence,
+    )
+    padded = torch.full(emit.shape, -float("inf"), dtype=emit.dtype)
+    padded[mask] = torch.as_tensor(gamma)
+    return padded, torch.as_tensor(counts), float(evidence.sum())
+
+
+class CovariateUpdate(Protocol):
+    """A covariate that depends on the parameters, recomputed before every E step (issue #933).
+
+    Called with the current emission family, the posterior of the previous E
+    step --- shape ``(n_sequences, length, m)``, zero at padded positions,
+    and uniform over the states before the first --- and the covariate as
+    :func:`baum_welch_family` holds it. It returns the covariate the next E
+    step scores against and the M step after it conditions on, in the same
+    layout. A normalizer that is a function of the parameters, as
+    :class:`ExpectedRateNormalizer` is, enters the fit this way.
+    """
+
+    def __call__(
+        self,
+        emissions: EmissionFamily,
+        posterior: torch.Tensor,
+        covariate: torch.Tensor,
+    ) -> torch.Tensor:
+        """The covariate to score the next E step against."""
+        ...
+
+
+@dataclass(frozen=True)
+class ExpectedRateNormalizer:
+    """Divide each sequence's exposure by ``Z_c = sum_g lambda_g E[mu_{s_c(g)}]`` (issue #933).
+
+    A consumer whose rate at position ``g`` of sequence ``c`` is ``lambda_g
+    mu_s / Z_c`` normalizes each sequence to one: ``Z_c`` sums the unnormalized
+    rates over the sequence's positions, and it depends on the states the
+    sequence takes, so no fixed covariate can hold it. This is its plug-in
+    form: the state at each position is averaged over the previous E step's
+    posterior, so ``Z_c`` moves with the parameters and the posterior and the
+    fit is expectation--conditional-maximization around it, the emission M
+    step conditioning on ``Z`` held at its current value.
+
+    ``mu_k`` is the family's first alignment coordinate: the mean, in
+    observation units, of every count family and of a count pair's total
+    channel. The rates are unchanged by scaling every ``mu_k`` together,
+    since ``Z_c`` scales with them, so only their ratios are identified.
+
+    Parameters
+    ----------
+    weights : torch.Tensor
+        ``lambda``, shape ``(length,)`` for one per position or
+        ``(n_sequences, length)`` for one per position of each sequence.
+    channel : int | None
+        The covariate channel holding the exposure, for a family whose
+        covariate carries one per channel (a count pair's is channel 0);
+        ``None`` for a single-channel family.
+    """
+
+    weights: torch.Tensor
+    channel: int | None = None
+
+    def normalizer(
+        self, emissions: EmissionFamily, posterior: torch.Tensor
+    ) -> torch.Tensor:
+        """``Z_c`` per sequence, shape ``(n_sequences,)``."""
+        means = emissions.alignment_key()[:, 0].to(posterior.dtype)
+        expected = posterior @ means  # (n_sequences, length)
+        return (self.weights.to(posterior.dtype) * expected).sum(dim=-1)
+
+    def __call__(
+        self,
+        emissions: EmissionFamily,
+        posterior: torch.Tensor,
+        covariate: torch.Tensor,
+    ) -> torch.Tensor:
+        """``covariate`` with its exposure divided by each sequence's ``Z_c``."""
+        divisor = self.normalizer(emissions, posterior)[:, None]
+        updated = covariate.clone()
+        if self.channel is None:
+            updated[..., 0] = covariate[..., 0] / divisor
+        else:
+            updated[..., self.channel] = covariate[..., self.channel] / divisor
+        return updated
+
+
 def baum_welch_family(
     observations: np.ndarray | Ragged,
     log_initial: torch.Tensor,
@@ -1230,6 +1349,10 @@ def baum_welch_family(
     max_iterations: int = 500,
     tolerance: float = 1e-12,
     covariate: np.ndarray | Ragged | None = None,
+    *,
+    update: CovariateUpdate | None = None,
+    fit_transition: bool = True,
+    backend: Backend = Backend.RUST,
 ) -> EmFit:
     """Baum-Welch over any emission family, with no autodiff involved.
 
@@ -1262,9 +1385,11 @@ def baum_welch_family(
         to its magnitude -- absolute would not transfer across data sizes
         (``DEV.md``, issue #111).
     log_initial, log_transition : torch.Tensor
-        Starting parameters, as log-probabilities. ``log_transition`` is either
-        ``(m, m)``, one kernel for the whole chain, or ``(length - 1, m, m)``,
-        one per step (issue #658).
+        Starting parameters, as log-probabilities. ``log_transition`` is
+        ``(m, m)``, one kernel for the whole chain; ``(length - 1, m, m)``, one
+        per step (issue #658); or ``(n_sequences, length - 1, m, m)``, one per
+        step of each sequence (issue #933), where a sequence's steps past its
+        own end are never read. ``length`` is the longest sequence's.
 
         **A per-step kernel is conditioned on, not fitted.** It carries
         ``(length - 1) * m * (m - 1)`` free values against ``length - 1``
@@ -1272,8 +1397,9 @@ def baum_welch_family(
         runs it is not identifiable and an M step that re-estimated it would
         return the posterior it was handed. Given one, this function holds it
         fixed and fits the initial distribution and the emissions --- the same
-        standing a covariate has, and for the same reason. Given a single
-        matrix it fits that matrix, exactly as before.
+        standing a covariate has, and for the same reason. A kernel per
+        sequence is held fixed on the same terms. Given a single matrix it
+        fits that matrix, exactly as before.
     covariate : np.ndarray | None
         What each observation is scored against, carrying the observations'
         leading ``(n_sequences, length)`` -- an exposure for a rate family, a trial count for a
@@ -1282,6 +1408,25 @@ def baum_welch_family(
         against an exposure and re-estimates without it is fitting two
         different models. ``None`` is the model this function had before.
         The family broadcasts a covariate along the states, so it wants a trailing singleton axis; the covariate is stored with the observations' own axes and the singleton is added here, where the observation layout is known. A caller should not have to carry a shape that exists for the family's broadcast.
+    update : CovariateUpdate | None
+        A covariate that depends on the parameters (issue #933): before every
+        E step it maps the family, the previous posterior and ``covariate`` to
+        the covariate that E step and the next M step use. It needs a
+        ``covariate`` to update. The reported log-likelihood is each E step's,
+        at the covariate it was scored against, so it is the objective of the
+        plug-in fit and need not rise monotonically.
+    fit_transition : bool
+        Whether the M step re-estimates a single ``(m, m)`` transition. With
+        ``False`` it is held, as a per-step or per-sequence kernel always is
+        (issue #933).
+    backend : Backend
+        The E step's recursion. The default,
+        :data:`~snakes_and_ladders.backend.Backend.RUST`, walks each sequence
+        in the compiled ragged kernel (issue #933): 19.4x the torch recursion
+        on 200 chains of 100-3,000 positions. It takes one kernel for the
+        whole chain, so a per-step or per-sequence kernel keeps the torch
+        recursion under either. :data:`~snakes_and_ladders.backend.Backend.PYTHON`
+        is the padded torch recursion and the oracle, agreeing within 2e-12.
 
     Returns
     -------
@@ -1326,11 +1471,22 @@ def baum_welch_family(
     steps = torch.arange(length)
     m = emissions.n_states
     varying = log_transition.shape != (m, m)
-    if varying and log_transition.shape != (max(length - 1, 0), m, m):
+    per_sequence = log_transition.shape == (n_sequences, max(length - 1, 0), m, m)
+    if (
+        varying
+        and not per_sequence
+        and log_transition.shape
+        != (
+            max(length - 1, 0),
+            m,
+            m,
+        )
+    ):
         msg = (
-            f"log_transition {tuple(log_transition.shape)} is neither ({m}, {m}) "
-            f"nor ({max(length - 1, 0)}, {m}, {m}) for a chain of {length} "
-            f"positions over {m} states"
+            f"log_transition {tuple(log_transition.shape)} is neither ({m}, {m}), "
+            f"({max(length - 1, 0)}, {m}, {m}) nor ({n_sequences}, "
+            f"{max(length - 1, 0)}, {m}, {m}) for {n_sequences} chains of up to "
+            f"{length} positions over {m} states"
         )
         raise ValueError(msg)
     kernels = (
@@ -1356,6 +1512,15 @@ def baum_welch_family(
         exposure = torch.as_tensor(given, dtype=torch.float64)
         if exposure.ndim == data.ndim == 2:
             exposure = exposure[..., None]
+    if update is not None and exposure is None:
+        msg = "a covariate update needs a covariate to update"
+        raise ValueError(msg)
+    refuse_backend("the Baum-Welch E step", backend, (Backend.PYTHON, Backend.RUST))
+    compiled = backend is Backend.RUST and not varying
+    lengths = np.asarray(batch.lengths, dtype=np.int64)
+    # The posterior an update reads before the first E step: uniform over the
+    # states, and zero at padded positions as every later one is.
+    previous = mask.unsqueeze(2).expand(-1, -1, m).to(torch.float64) / m
 
     at_boundary = False
 
@@ -1368,72 +1533,97 @@ def baum_welch_family(
         per-step kernels it is expanded to and the emission family --- every
         parameter the recursion below reads and the M step rewrites.
         """
-        nonlocal at_boundary
+        nonlocal at_boundary, previous
         log_initial, log_transition, kernels, emissions = state
+        scored = (
+            exposure
+            if update is None or exposure is None
+            else update(emissions, previous, exposure)
+        )
         # --- E step: forward and backward messages in log space ----------
-        emit = emissions.log_density(data, covariate=exposure)
+        emit = emissions.log_density(data, covariate=scored)
         # A padded position scores log 1, so it adds nothing wherever it is
         # reached. Its `alpha` beyond the segment's end is still nonsense, which
         # is why the evidence is gathered at each segment's own last position
         # rather than read off the block's last column.
         emit = torch.where(mask.unsqueeze(2), emit, torch.zeros_like(emit))
-        alpha = torch.empty((n_sequences, length, m), dtype=log_initial.dtype)
-        alpha[:, 0] = log_initial.unsqueeze(0) + emit[:, 0]
-        for t in range(1, length):
-            kernel = kernels[t - 1] if varying else log_transition
-            alpha[:, t] = (
-                torch.logsumexp(
-                    alpha[:, t - 1].unsqueeze(2) + kernel.unsqueeze(0), dim=1
+        transition_counts: torch.Tensor | None
+        if compiled:
+            # The ragged kernel walks each sequence in place and returns the
+            # log marginals, the log transition counts summed over sequences,
+            # and each sequence's evidence (issue #933). It takes one kernel.
+            gamma, transition_counts, log_likelihood = _ragged_e_step(
+                emit, mask, lengths, log_initial, log_transition
+            )
+        else:
+            alpha = torch.empty((n_sequences, length, m), dtype=log_initial.dtype)
+            alpha[:, 0] = log_initial.unsqueeze(0) + emit[:, 0]
+            for t in range(1, length):
+                # One kernel for every sequence, or each sequence's own (#933).
+                kernel = (
+                    kernels[:, t - 1]
+                    if per_sequence
+                    else (kernels[t - 1] if varying else log_transition).unsqueeze(0)
                 )
-                + emit[:, t]
-            )
-        beta = torch.zeros((n_sequences, length, m), dtype=log_initial.dtype)
-        for t in range(length - 2, -1, -1):
-            kernel = kernels[t] if varying else log_transition
-            onward = torch.logsumexp(
-                kernel.unsqueeze(0) + (emit[:, t + 1] + beta[:, t + 1]).unsqueeze(1),
-                dim=2,
-            )
-            # At or past a segment's last position the chain has ended: beta is
-            # one, not whatever the next column carries. This is the backward
-            # half of "the recursions restart at each boundary".
-            ended = (t >= final).unsqueeze(1)
-            beta[:, t] = torch.where(ended, torch.zeros_like(onward), onward)
+                alpha[:, t] = (
+                    torch.logsumexp(alpha[:, t - 1].unsqueeze(2) + kernel, dim=1)
+                    + emit[:, t]
+                )
+            beta = torch.zeros((n_sequences, length, m), dtype=log_initial.dtype)
+            for t in range(length - 2, -1, -1):
+                kernel = (
+                    kernels[:, t]
+                    if per_sequence
+                    else (kernels[t] if varying else log_transition).unsqueeze(0)
+                )
+                onward = torch.logsumexp(
+                    kernel + (emit[:, t + 1] + beta[:, t + 1]).unsqueeze(1),
+                    dim=2,
+                )
+                # At or past a segment's last position the chain has ended: beta is
+                # one, not whatever the next column carries. This is the backward
+                # half of "the recursions restart at each boundary".
+                ended = (t >= final).unsqueeze(1)
+                beta[:, t] = torch.where(ended, torch.zeros_like(onward), onward)
 
-        evidence = torch.logsumexp(alpha[rows, final], dim=1)
-        log_likelihood = float(evidence.sum())
+            evidence = torch.logsumexp(alpha[rows, final], dim=1)
+            log_likelihood = float(evidence.sum())
 
-        gamma = torch.where(
-            mask.unsqueeze(2),
-            alpha + beta - evidence[:, None, None],
-            torch.full_like(alpha, -float("inf")),
-        )
-        # A pair spans positions t and t+1, so it exists only where t is before
-        # the segment's last position. The pair that would straddle a boundary
-        # is not a transition the model took and is not counted as one.
-        pairs = (steps[:-1] < final.unsqueeze(1))[:, :, None, None]
-        xi = torch.where(
-            pairs,
-            alpha[:, :-1].unsqueeze(3)
-            + kernels.unsqueeze(0)
-            + (emit[:, 1:] + beta[:, 1:]).unsqueeze(2)
-            - evidence[:, None, None, None],
-            torch.full(
-                (n_sequences, length - 1, m, m), -float("inf"), dtype=alpha.dtype
-            ),
-        )
+            gamma = torch.where(
+                mask.unsqueeze(2),
+                alpha + beta - evidence[:, None, None],
+                torch.full_like(alpha, -float("inf")),
+            )
+            # A pair spans positions t and t+1, so it exists only where t is before
+            # the segment's last position. The pair that would straddle a boundary
+            # is not a transition the model took and is not counted as one.
+            pairs = (steps[:-1] < final.unsqueeze(1))[:, :, None, None]
+            xi = torch.where(
+                pairs,
+                alpha[:, :-1].unsqueeze(3)
+                + (kernels if per_sequence else kernels.unsqueeze(0))
+                + (emit[:, 1:] + beta[:, 1:]).unsqueeze(2)
+                - evidence[:, None, None, None],
+                torch.full(
+                    (n_sequences, length - 1, m, m), -float("inf"), dtype=alpha.dtype
+                ),
+            )
+
+            transition_counts = (
+                None if varying else torch.logsumexp(xi.reshape(-1, m, m), dim=0)
+            )
 
         # --- M step: normalized expected counts, then the family's own ---
         log_initial = torch.logsumexp(gamma[:, 0], dim=0) - torch.log(
             torch.tensor(float(n_sequences), dtype=gamma.dtype)
         )
-        if not varying:
-            transition_counts = torch.logsumexp(xi.reshape(-1, m, m), dim=0)
+        if fit_transition and transition_counts is not None:
             log_transition = transition_counts - torch.logsumexp(
                 transition_counts, dim=1, keepdim=True
             )
             kernels = log_transition.expand(max(length - 1, 0), m, m)
-        step = emissions.reestimate(data, torch.exp(gamma), covariate=exposure)
+        previous = torch.exp(gamma)
+        step = emissions.reestimate(data, previous, covariate=scored)
         if not step.converged:
             msg = (
                 f"the emission M step did not settle after {step.iterations} "

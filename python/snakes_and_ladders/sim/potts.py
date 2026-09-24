@@ -99,6 +99,54 @@ def site_field(
     return rows
 
 
+@dataclass(frozen=True)
+class SiteField:
+    """A per-site field whose sign convention is part of its type (issue #921).
+
+    The package reads a field two ways. The samplers and the ground-state
+    solvers read a **log-weight** ``h``: ``E(s) = -sum_i h_i[s_i] - sum J
+    [s_i = s_j]`` (:func:`energies`), and a cluster move accepts on
+    ``exp(beta sum_C [h(new) - h(old)])``. The coupled model's field ``H`` of
+    the external-field equation is an **energy** the labels minimize, its
+    negation. A caller declares which it holds by the constructor it calls,
+    and every consumer reads :attr:`log_weight`, so the sign is decided once
+    and cannot be dropped at a call site. A bare array where a
+    ``SiteField`` is accepted is read as a log-weight, as before.
+
+    Parameters
+    ----------
+    log_weight : np.ndarray
+        ``h``, shape ``(n_nodes, n_states)``.
+    """
+
+    log_weight: np.ndarray
+
+    def __post_init__(self) -> None:
+        if self.log_weight.ndim != 2:
+            msg = f"a site field is (n_nodes, n_states); got {self.log_weight.shape}"
+            raise ValueError(msg)
+
+    @classmethod
+    def from_log_weight(cls, field: np.ndarray) -> SiteField:
+        """The field ``h`` a sampler reads, per site, as given."""
+        return cls(np.ascontiguousarray(field, dtype=np.float64))
+
+    @classmethod
+    def from_energy(cls, field: np.ndarray) -> SiteField:
+        """The field of an energy ``H`` the labels minimize: ``h = -H``."""
+        return cls(np.ascontiguousarray(-np.asarray(field, dtype=np.float64)))
+
+    @classmethod
+    def widened(cls, field: np.ndarray, n_nodes: int) -> SiteField:
+        """A log-weight shared by every site, ``(n_states,)``, as one row per site."""
+        return cls(site_field(np.asarray(field, dtype=np.float64), n_nodes))
+
+
+def log_weight_of(field: SiteField | np.ndarray) -> np.ndarray:
+    """The log-weight a consumer reads: a :class:`SiteField`'s, or a bare array as given."""
+    return field.log_weight if isinstance(field, SiteField) else np.asarray(field)
+
+
 def energies(graph: PottsGraph, field: np.ndarray, states: np.ndarray) -> np.ndarray:
     """``E(s) = -sum_i h_i[s_i] - sum_(ij) J_ij [s_i == s_j]``, per configuration.
 

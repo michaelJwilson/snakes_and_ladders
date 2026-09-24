@@ -64,6 +64,7 @@ from typing import Any, Protocol
 import numpy as np
 import torch
 
+from snakes_and_ladders.emissions import ParameterDomainError
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.sample.accept import (
     accept_ratio,
@@ -1258,19 +1259,30 @@ def _transition(
         it was accepted, and the Metropolis acceptance probability
         ``min(1, exp(-dH / T))`` --- the statistic dual averaging drives,
         which has less variance than the accept/reject outcome. A proposal
-        whose energy is not finite has probability 0.
+        whose energy is not finite has probability 0, and so does one whose
+        trajectory left the objective's domain
+        (:class:`~snakes_and_ladders.emissions.ParameterDomainError`).
     """
     momentum = torch.randn(
         position.shape, generator=generator, dtype=torch.float64
     ) * math.sqrt(temperature)
     current = hamiltonian(objective, position, momentum)
 
-    trajectory = integrator(objective, position, momentum, step_size, n_steps)
-    proposal = trajectory.position
-    # Negating the momentum makes the proposal symmetric, which is what
-    # leaves the acceptance ratio as the energy difference alone. It has
-    # no effect on the next iteration, where the momentum is redrawn.
-    proposed = hamiltonian(objective, proposal, -trajectory.momentum)
+    try:
+        trajectory = integrator(objective, position, momentum, step_size, n_steps)
+        proposal = trajectory.position
+        # Negating the momentum makes the proposal symmetric, which is what
+        # leaves the acceptance ratio as the energy difference alone. It has
+        # no effect on the next iteration, where the momentum is redrawn.
+        proposed = hamiltonian(objective, proposal, -trajectory.momentum)
+    except ParameterDomainError:
+        # A divergent trajectory: it drove a parameter out of the family's
+        # domain, where the energy does not exist. Rejected as a proposal of
+        # infinite energy is, the uniform drawn as that path draws it (#912).
+        torch.rand(1, generator=generator)
+        return Transition(
+            position=position, energy_error=math.inf, accepted=0, probability=0.0
+        )
 
     error = abs(proposed - current)
     uniform = float(torch.rand(1, generator=generator))

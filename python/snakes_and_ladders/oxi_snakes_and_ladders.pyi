@@ -186,6 +186,21 @@ def negative_binomial_dispersions(
     iterations: np.ndarray,
     residual: np.ndarray,
 ) -> None: ...
+def negative_binomial_dispersions_exposed(
+    tails: np.ndarray,
+    weights: np.ndarray,
+    exposures: np.ndarray,
+    counts: np.ndarray,
+    total: np.ndarray,
+    mean: np.ndarray,
+    lower: np.ndarray,
+    upper: np.ndarray,
+    tolerance: float,
+    value: np.ndarray,
+    at_boundary: np.ndarray,
+    iterations: np.ndarray,
+    residual: np.ndarray,
+) -> None: ...
 def beta_binomial_parameters(
     success: np.ndarray,
     failure: np.ndarray,
@@ -201,6 +216,32 @@ def beta_binomial_parameters(
     margin: float,
     out: np.ndarray,
 ) -> None: ...
+
+class LatticeCut:
+    def __init__(
+        self,
+        n_nodes: int,
+        first: np.ndarray,
+        second: np.ndarray,
+        coupling: np.ndarray,
+    ) -> None: ...
+    def expansion_source_side(
+        self,
+        values: np.ndarray,
+        n_states: int,
+        labels: np.ndarray,
+        alpha: int,
+        pinned: float,
+    ) -> np.ndarray: ...
+    def swap_source_side(
+        self,
+        values: np.ndarray,
+        n_states: int,
+        labels: np.ndarray,
+        alpha: int,
+        beta: int,
+    ) -> np.ndarray: ...
+
 def ragged_posteriors(
     log_density: np.ndarray,
     lengths: np.ndarray,

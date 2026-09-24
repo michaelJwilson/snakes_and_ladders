@@ -27,9 +27,9 @@ from snakes_and_ladders.search.projection import (
     SEEDINGS,
     CountPairAt,
     ProjectedCounts,
+    ProjectedTrial,
     SeededFit,
     TimedFit,
-    Trial,
     fit_projection,
     flatten,
     project,
@@ -149,7 +149,7 @@ def test_the_timed_method_reports_the_fit_and_the_seconds_it_ran() -> None:
     # The method the starts notebook compares through `opt.budget.compare` in
     # seconds (issue #891): its value is the fit's, bitwise, on the same seed;
     # its spend is the recorded wall clock rounded up, which `compare` holds
-    # under the ceiling; and the `Trial` it carries back is that fit, judged
+    # under the ceiling; and the `ProjectedTrial` it carries back is that fit, judged
     # against the planted truth as the fit beside it is.
     instance, at = _instance(), _seam()
     method = TimedFit("kmeans++", at, SEEDINGS["kmeans++"], SHORT_BUDGET)
@@ -165,7 +165,7 @@ def test_the_timed_method_reports_the_fit_and_the_seconds_it_ran() -> None:
     )
 
     first = comparison.outcomes[0]
-    assert isinstance(first.detail, Trial)
+    assert isinstance(first.detail, ProjectedTrial)
     assert first.value == -fitted.log_likelihood
     assert first.detail.fitted.recovery == fitted.recovery > 0.25
     assert 0.0 < first.detail.seconds <= first.spent <= 600

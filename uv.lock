@@ -4401,12 +4401,6 @@ dev = [
 docs = [
     { name = "sphinx" },
 ]
-frameworks = [
-    { name = "gymnasium" },
-    { name = "rustworkx" },
-    { name = "torch-geometric" },
-    { name = "torchrl" },
-]
 notebooks = [
     { name = "ipykernel" },
     { name = "nbclient" },
@@ -4428,6 +4422,9 @@ validation-blackjax = [
 validation-gco = [
     { name = "gco-wrapper", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
 ]
+validation-gymnasium = [
+    { name = "gymnasium" },
+]
 validation-hmmlearn = [
     { name = "hmmlearn" },
 ]
@@ -4437,8 +4434,17 @@ validation-jax = [
 validation-pymaxflow = [
     { name = "pymaxflow" },
 ]
+validation-rustworkx = [
+    { name = "rustworkx" },
+]
 validation-scikit-learn = [
     { name = "scikit-learn" },
+]
+validation-torch-geometric = [
+    { name = "torch-geometric" },
+]
+validation-torchrl = [
+    { name = "torchrl" },
 ]
 
 [package.metadata]
@@ -4446,7 +4452,7 @@ requires-dist = [
     { name = "aim", marker = "extra == 'track'", specifier = ">=3.29,<4" },
     { name = "blackjax", marker = "extra == 'validation-blackjax'", specifier = ">=1.6.2" },
     { name = "gco-wrapper", marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'validation-gco'", specifier = ">=3.0.9" },
-    { name = "gymnasium", marker = "extra == 'frameworks'", specifier = ">=1.0" },
+    { name = "gymnasium", marker = "extra == 'validation-gymnasium'", specifier = ">=1.0" },
     { name = "hmmlearn", marker = "extra == 'validation-hmmlearn'", specifier = ">=0.3.3" },
     { name = "ipykernel", marker = "extra == 'notebooks'", specifier = ">=6.29" },
     { name = "jax", marker = "extra == 'validation-jax'", specifier = ">=0.11.2" },
@@ -4466,17 +4472,17 @@ requires-dist = [
     { name = "pytest-xdist", marker = "extra == 'test'", specifier = ">=3.6" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.9.9,<0.10" },
-    { name = "rustworkx", marker = "extra == 'frameworks'", specifier = ">=0.15" },
+    { name = "rustworkx", marker = "extra == 'validation-rustworkx'", specifier = ">=0.18.1" },
     { name = "scikit-learn", marker = "extra == 'validation-scikit-learn'", specifier = ">=1.9.1" },
     { name = "scipy", specifier = ">=1.13.0" },
     { name = "sphinx", marker = "extra == 'docs'", specifier = ">=7,<9" },
     { name = "torch", specifier = ">=2.4.0" },
-    { name = "torch-geometric", marker = "extra == 'frameworks'", specifier = ">=2.5" },
-    { name = "torchrl", marker = "extra == 'frameworks'", specifier = ">=0.6" },
+    { name = "torch-geometric", marker = "extra == 'validation-torch-geometric'", specifier = ">=2.5" },
+    { name = "torchrl", marker = "extra == 'validation-torchrl'", specifier = ">=0.6" },
     { name = "towncrier", marker = "extra == 'dev'", specifier = ">=24.8.0" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0" },
 ]
-provides-extras = ["dev", "docs", "frameworks", "notebooks", "test", "track", "validation-blackjax", "validation-gco", "validation-hmmlearn", "validation-jax", "validation-pymaxflow", "validation-scikit-learn"]
+provides-extras = ["dev", "docs", "notebooks", "test", "track", "validation-blackjax", "validation-gco", "validation-gymnasium", "validation-hmmlearn", "validation-jax", "validation-pymaxflow", "validation-rustworkx", "validation-scikit-learn", "validation-torch-geometric", "validation-torchrl"]
 
 [[package]]
 name = "snowballstemmer"

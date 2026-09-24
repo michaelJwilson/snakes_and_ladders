@@ -19,9 +19,13 @@ from snakes_and_ladders import oxi_snakes_and_ladders
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.emissions import GaussianEmission
 from snakes_and_ladders.fixtures import load_params
+from snakes_and_ladders.learn.policy import LinearPolicy
+from snakes_and_ladders.learn.reinforce import surrogate_loss
+from snakes_and_ladders.learn.surrogate import Examples, GraphSurrogate, _Batch
 from snakes_and_ladders.opt.hmm import baum_welch
 from snakes_and_ladders.opt.mixture import expectation_maximization
 from snakes_and_ladders.sample import hmc
+from snakes_and_ladders.sample.potts_mcmc import _bond_probability
 from snakes_and_ladders.search.alpha_expansion import alpha_expansion
 from snakes_and_ladders.search.ground_state import lattice_rung
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
@@ -31,12 +35,19 @@ from snakes_and_ladders.validation.gaussian import GaussianTarget, diagonal_prec
 from snakes_and_ladders.validation.runner import package
 
 from tests._fixtures import FIXTURES_DIR
+from tests.regression.learn.conftest import potts_environment
 from tests.validation._goals import (
     Goal,
     MemoryGoal,
     assert_fits,
     assert_meets,
     median_seconds,
+)
+from tests.validation._rl import (
+    WEIGHTS,
+    greedy_episodes,
+    potts_decisions,
+    ppo_loss_and_gradient,
 )
 
 pytestmark = pytest.mark.goal
@@ -63,6 +74,20 @@ PYMAXFLOW_CUT_MEMORY = {
         "2026-09-23, 4-core reference host, #987",
     )
     for side, peak_bytes in ((142, 4_874_240), (284, 20_439_040))
+}
+
+
+#: rustworkx's graph build and `connected_components` on one Swendsen--Wang
+#: bond mask at beta = 1, the medians of three subprocess runs (#976). Its
+#: peak memory is above the union-find's at every size and sets no goal.
+RUSTWORKX_COMPONENTS = {
+    side: Goal(
+        "rustworkx",
+        f"the union-find labelling of one bond mask, {side}x{side}",
+        seconds,
+        "2026-09-23, 4-core reference host, #976",
+    )
+    for side, seconds in ((142, 11.176e-3), (284, 46.366e-3))
 }
 
 
@@ -418,6 +443,111 @@ def test_hmc_fits_blackjaxs_memory(dimension: int) -> None:
     }
     peaks = [package("hmc_sample", inputs).peak_bytes or 0 for _ in range(3)]
     assert_fits(int(np.median(peaks)), BLACKJAX_HMC_MEMORY[dimension])
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("side", sorted(RUSTWORKX_COMPONENTS))
+def test_the_union_find_meets_rustworkxs_runtime(side: int) -> None:
+    # Timed in a fresh interpreter by `scripts/package.py`, as the pair was.
+    graph = lattice_graph((side, side), BoundaryCondition.OPEN, critical_coupling(3))
+    rng = np.random.default_rng(976)
+    state = rng.integers(0, 3, graph.n_nodes)
+    first, second = graph.edge_index[:, 0], graph.edge_index[:, 1]
+    like = state[first] == state[second]
+    active = like & (rng.random(len(graph.edges)) < _bond_probability(graph, 1.0))
+    bonds = graph.edge_index[active]
+    inputs = {
+        "n_nodes": np.asarray(graph.n_nodes),
+        "first": np.ascontiguousarray(bonds[:, 0]),
+        "second": np.ascontiguousarray(bonds[:, 1]),
+    }
+    seconds = [package("cluster_labels", inputs).seconds for _ in range(3)]
+    assert_meets(float(np.median(seconds)), RUSTWORKX_COMPONENTS[side])
+
+
+#: TorchRL's warm call on 10⁵ Potts decisions, `WEIGHTS` in
+#: `tests/validation/_rl.py`: `ClipPPOLoss` at clip 0.2 in episodes of 100,
+#: and `ReinforceLoss` on greedy episodes of 10 at baseline 0.5, each with its
+#: gradient; the median of ten warm calls over two interpreters (#977). The
+#: package's REINFORCE recomputes every decision's features through the
+#: environment, which TorchRL is handed.
+TORCHRL_LOSS = {
+    "clip_ppo": Goal(
+        "torchrl",
+        "ppo_loss and its gradient on 10^5 Potts decisions",
+        14.66e-3,
+        "2026-09-23, 4-core reference host, #977",
+    ),
+    "reinforce": Goal(
+        "torchrl",
+        "surrogate_loss and its gradient on 10^5 Potts decisions",
+        17.97e-3,
+        "2026-09-23, 4-core reference host, #977",
+    ),
+}
+
+#: PyG's `GINConv` twin's forward pass on one open lattice with 4 random
+#: token features per node, hidden 8, two layers, tied weights; the median of
+#: ten warm calls over two interpreters (#977).
+TORCH_GEOMETRIC_FORWARD = {
+    side: Goal(
+        "torch_geometric",
+        f"GraphSurrogate's forward on the {side}x{side} open lattice",
+        seconds,
+        "2026-09-23, 4-core reference host, #977",
+    )
+    for side, seconds in ((142, 5.845e-3), (284, 18.87e-3))
+}
+
+
+@pytest.mark.experiment
+def test_ppo_loss_meets_torchrls_runtime() -> None:
+    features, taken = potts_decisions(100_000)
+    rng = np.random.default_rng(9770)
+    old = torch.as_tensor(rng.normal(scale=0.1, size=100_000)) - 1.5
+    advantages = torch.as_tensor(rng.normal(size=100_000))
+    ppo_loss_and_gradient(features, taken, old, advantages, 100, 0.2)  # warm-up
+    seconds = median_seconds(
+        lambda: ppo_loss_and_gradient(features, taken, old, advantages, 100, 0.2)
+    )
+    assert_meets(seconds, TORCHRL_LOSS["clip_ppo"])
+
+
+@pytest.mark.experiment
+def test_reinforce_loss_meets_torchrls_runtime() -> None:
+    environment = potts_environment()
+    policy = LinearPolicy(2)
+    policy.set_weights(torch.tensor(WEIGHTS, dtype=torch.float64))
+    episodes = greedy_episodes(environment, policy.weights, 10_000, 10, 977)
+
+    def loss_and_gradient() -> None:
+        value = surrogate_loss(environment, policy, episodes, 0.5)
+        torch.autograd.grad(value, policy.weights)
+
+    assert_meets(
+        median_seconds(loss_and_gradient, repeats=3), TORCHRL_LOSS["reinforce"]
+    )
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("side", sorted(TORCH_GEOMETRIC_FORWARD))
+def test_the_graph_surrogate_meets_pygs_runtime(side: int) -> None:
+    graph = lattice_graph((side, side), BoundaryCondition.OPEN, 1.0)
+    rng = np.random.default_rng(977)
+    examples = Examples(
+        features=torch.as_tensor(rng.normal(size=(1, 3))),
+        targets=torch.zeros(1, dtype=torch.float64),
+        groups=np.zeros(1, dtype=np.int64),
+        tokens=(torch.as_tensor(rng.normal(size=(graph.n_nodes, 4))),),
+        adjacency=(np.asarray(graph.edge_index, dtype=np.int64),),
+    )
+    batch = _Batch(examples)
+    torch.manual_seed(977)
+    model = GraphSurrogate(3, 4, hidden=8, n_layers=2)
+    with torch.no_grad():
+        model(batch)  # warm-up
+        seconds = median_seconds(lambda: model(batch))
+    assert_meets(seconds, TORCH_GEOMETRIC_FORWARD[side])
 
 
 @pytest.mark.experiment
