@@ -18,6 +18,13 @@ final temperature at *exactly* the last step. A schedule that never quite
 arrives has no final temperature to check, and that off-by-one is a fault no
 downstream distributional test would localize.
 
+**A schedule a consumer builds at its own length is four numbers.** A
+consumer that fixes its step count from a budget is handed a
+:class:`ScheduleParams` --- a :class:`ScheduleShape`, both endpoints and the
+fraction of steps held at the end --- and builds it; with no hold the build is
+the shape's own schedule, so the default consumer's floats do not move
+(issue #1038).
+
 **A tempering ladder is chosen from what it measures, not set by hand.** A
 ladder is a set of temperatures rather than a sequence in time, and what makes
 one right is the exchange acceptance between each neighbouring pair: near zero
@@ -208,6 +215,106 @@ class CosineTempSchedule(_InterpolatedTempSchedule):
     def __call__(self, step: int) -> float:
         weight = 0.5 * (1.0 + math.cos(math.pi * self._fraction(step)))
         return weight * self.start + (1.0 - weight) * self.end
+
+
+class ScheduleShape(StrEnum):
+    """The curve an annealing ramp follows between its two endpoints."""
+
+    EXPONENTIAL = "exponential"
+    LINEAR = "linear"
+    COSINE = "cosine"
+
+
+_RAMPS: dict[ScheduleShape, type[_InterpolatedTempSchedule]] = {
+    ScheduleShape.EXPONENTIAL: ExponentialTempSchedule,
+    ScheduleShape.LINEAR: LinearTempSchedule,
+    ScheduleShape.COSINE: CosineTempSchedule,
+}
+
+
+@dataclass(frozen=True)
+class HeldTempSchedule(TempSchedule):
+    """A ramp, then its final temperature held for ``hold`` further steps.
+
+    The ramp's steps are returned as the ramp returns them, so a hold of zero
+    is the ramp itself step for step.
+
+    Parameters
+    ----------
+    ramp : TempSchedule
+        The schedule up to the hold.
+    hold : int
+        Steps at the ramp's last temperature after it, ``>= 0``.
+    """
+
+    ramp: TempSchedule
+    hold: int
+
+    def __post_init__(self) -> None:
+        if self.hold < 0:
+            msg = f"a hold is a count of steps, got {self.hold}"
+            raise ValueError(msg)
+
+    @property
+    def n_steps(self) -> int:  # type: ignore[override]
+        """The ramp's steps and the held ones."""
+        return self.ramp.n_steps + self.hold
+
+    def __call__(self, step: int) -> float:
+        _check_step(step, self.n_steps)
+        return self.ramp(min(step, self.ramp.n_steps - 1))
+
+
+@dataclass(frozen=True)
+class ScheduleParams:
+    """An annealing schedule as four numbers, built at whatever length a budget buys.
+
+    A consumer that fixes its step count from a budget cannot be handed a
+    :class:`TempSchedule`, whose length is part of it; it is handed these
+    and calls :meth:`build`. They are also what a search over schedules
+    varies (issue #1038).
+
+    Parameters
+    ----------
+    shape : ScheduleShape
+        The ramp's curve.
+    t_start, t_end : float
+        Temperatures at the first step and from the ramp's last step on,
+        positive.
+    hold : float
+        Fraction of the steps held at ``t_end`` after the ramp, in
+        ``[0, 1)``. The held count is ``floor(hold * n_steps)``.
+    """
+
+    shape: ScheduleShape
+    t_start: float
+    t_end: float
+    hold: float = 0.0
+
+    def __post_init__(self) -> None:
+        _check_temperature("t_start", self.t_start)
+        _check_temperature("t_end", self.t_end)
+        if not 0.0 <= self.hold < 1.0:
+            msg = f"hold is a fraction of the steps in [0, 1), got {self.hold}"
+            raise ValueError(msg)
+
+    def build(self, n_steps: int) -> TempSchedule:
+        """The schedule of exactly ``n_steps`` steps.
+
+        With ``hold == 0`` this is the shape's own schedule, the object a
+        caller building it by hand gets, so a default consumer's floats are
+        unchanged.
+
+        Raises
+        ------
+        ValueError
+            If ``n_steps < 1``, or if the hold leaves a one-step ramp between
+            two different temperatures.
+        """
+        _check_length(n_steps)
+        held = math.floor(self.hold * n_steps)
+        ramp = _RAMPS[self.shape](self.t_start, self.t_end, n_steps - held)
+        return ramp if held == 0 else HeldTempSchedule(ramp, held)
 
 
 @dataclass(frozen=True)

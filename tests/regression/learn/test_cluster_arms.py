@@ -745,7 +745,7 @@ def test_the_arm_walking_the_declared_ladder_is_its_classical_run(
     identical 134,400 visits, so visits are asserted equal (Welch would divide
     by zero). Wolff: -203.6 +- 13.2 against -206.5 +- 17.8 (p = 0.47) at
     25,393 +- 7,584 against 26,328 +- 11,998 visits (p = 0.72), a
-    five-sixths underspend that ``ground_state._anneal`` reports.
+    five-sixths underspend that ``ground_state.run_annealed`` reports.
     """
     energy, spend, rung, budget = _declared_control(kind, 12, 3)
     runs = [

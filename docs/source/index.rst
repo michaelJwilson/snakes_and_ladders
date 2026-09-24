@@ -719,6 +719,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.qa.hmc_warmup
    :members:
 
+.. automodule:: snakes_and_ladders.qa.potts_schedule
+   :members:
+
 .. automodule:: snakes_and_ladders.scripts
    :members:
 
