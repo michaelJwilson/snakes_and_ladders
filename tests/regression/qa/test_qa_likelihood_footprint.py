@@ -36,6 +36,8 @@ from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import Node
 
+from tests._rows import every_value
+
 #: The band the model is held to. Wide enough for the transients it does not
 #: model, narrow enough that a missing array term fails: at 4 states the
 #: evaluator's own array is 8 times the simulator's, so omitting either shows
@@ -79,12 +81,7 @@ def _balanced(n_taxa: int) -> Node:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize(
-    "size", MEASURED_SIZES, ids=lambda s: f"{s[0]}taxa_{s[1]}sites"
-)
-def test_the_published_simulation_figure_matches_the_allocator(
-    size: tuple[int, int],
-) -> None:
+def test_the_published_simulation_figure_matches_the_allocator() -> None:
     """Every cell of the Simulate column, against `tracemalloc`.
 
     The model is `(2n - 1) x L x 8`: the simulator retains every node's states,
@@ -92,27 +89,30 @@ def test_the_published_simulation_figure_matches_the_allocator(
     tests compare against. A simulator that kept only the leaves would come in
     at half this and fail here rather than quietly making the table wrong.
     """
-    measured, _ = measure(*size, N_STATES)
-    assert measured / simulation_bytes(*size) == pytest.approx(1.0, rel=TOLERANCE)
+
+    def check(size: tuple[int, int]) -> None:
+        measured, _ = measure(*size, N_STATES)
+        assert measured / simulation_bytes(*size) == pytest.approx(1.0, rel=TOLERANCE)
+
+    every_value(MEASURED_SIZES, check)
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize(
-    "size", MEASURED_SIZES, ids=lambda s: f"{s[0]}taxa_{s[1]}sites"
-)
-def test_the_published_evaluation_figure_matches_the_allocator(
-    size: tuple[int, int],
-) -> None:
+def test_the_published_evaluation_figure_matches_the_allocator() -> None:
     """Every cell of the Evaluate column, against `tracemalloc`.
 
     The model is `(2n - 2) x L x k x 8`: on a caterpillar every node but the
     root is open at the deepest point of the post-order, which is the claim
     that makes this the worst case and the table a bound.
     """
-    _, measured = measure(*size, N_STATES)
-    assert measured / evaluation_bytes(*size, N_STATES) == pytest.approx(
-        1.0, rel=TOLERANCE
-    )
+
+    def check(size: tuple[int, int]) -> None:
+        _, measured = measure(*size, N_STATES)
+        assert measured / evaluation_bytes(*size, N_STATES) == pytest.approx(
+            1.0, rel=TOLERANCE
+        )
+
+    every_value(MEASURED_SIZES, check)
 
 
 @pytest.mark.analytic

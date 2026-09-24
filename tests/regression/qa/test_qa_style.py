@@ -20,6 +20,8 @@ from snakes_and_ladders.qa.style import (
     series_style,
 )
 
+from tests._rows import every_value
+
 
 @pytest.mark.infra
 def test_palette_is_the_validated_okabe_ito_order() -> None:
@@ -40,12 +42,14 @@ def test_secondary_encoding_is_index_matched_to_colour() -> None:
 
 
 @pytest.mark.infra
-@pytest.mark.parametrize("index", range(len(PALETTE)))
-def test_series_style_pairs_each_colour_with_its_own_encoding(index: int) -> None:
-    style = series_style(index)
-    assert style["color"] == PALETTE[index]
-    assert style["marker"] == MARKERS[index]
-    assert style["linestyle"] == LINESTYLES[index]
+def test_series_style_pairs_each_colour_with_its_own_encoding() -> None:
+    def check(index: int) -> None:
+        style = series_style(index)
+        assert style["color"] == PALETTE[index]
+        assert style["marker"] == MARKERS[index]
+        assert style["linestyle"] == LINESTYLES[index]
+
+    every_value(range(len(PALETTE)), check)
 
 
 @pytest.mark.smoke

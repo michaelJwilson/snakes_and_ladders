@@ -30,6 +30,8 @@ from snakes_and_ladders.search.spatio_sequential import label_accuracy
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 
+from tests._rows import every_value
+
 FIXTURE = fixture("spatio_sequential", "stress")
 PARAMS = FIXTURE.params
 SIDE = PARAMS.graph.shape[0]
@@ -66,23 +68,23 @@ def test_the_planting_is_the_one_the_suite_plants() -> None:
 
 
 @pytest.mark.analytic
-@pytest.mark.parametrize("flipped", [0, 7, 100])
-def test_the_permutation_the_panels_are_drawn_under_is_the_accuracy_one(
-    flipped: int,
-) -> None:
+def test_the_permutation_the_panels_are_drawn_under_is_the_accuracy_one() -> None:
     # A fit names its classes in whatever order it found them. Panels (b) and
     # (c) are drawn in the planted classes' palette and sign, so the
     # permutation they are drawn under must be the one the reported accuracy
     # is achieved by --- else the pictures and the number disagree.
-    planted = planted_labelling(PARAMS)
-    fitted = planted.copy()
-    fitted[:flipped] = 1 - fitted[:flipped]
-    mapping = best_permutation(fitted, planted, 2)
+    def check(flipped: int) -> None:
+        planted = planted_labelling(PARAMS)
+        fitted = planted.copy()
+        fitted[:flipped] = 1 - fitted[:flipped]
+        mapping = best_permutation(fitted, planted, 2)
 
-    assert sorted(mapping.tolist()) == [0, 1]
-    assert float((mapping[fitted] == planted).mean()) == label_accuracy(
-        fitted, planted, 2
-    )
+        assert sorted(mapping.tolist()) == [0, 1]
+        assert float((mapping[fitted] == planted).mean()) == label_accuracy(
+            fitted, planted, 2
+        )
+
+    every_value([0, 7, 100], check)
 
 
 @pytest.mark.end2end
