@@ -11,6 +11,7 @@ where a fit started at the truth ends.
 from __future__ import annotations
 
 import itertools
+import math
 
 import numpy as np
 import pytest
@@ -199,27 +200,59 @@ def test_the_criteria_read_shared_and_misfit_components() -> None:
     # Two identical columns have cosine one and orthogonal ones zero; a
     # component whose density is the data it owns has divergence zero, and
     # one that spreads mass where it owns none has a positive one.
-    posterior = torch.tensor(
-        [[0.5, 0.5, 0.0], [0.5, 0.5, 0.0], [0.0, 0.0, 1.0], [0.0, 0.0, 1.0]],
-        dtype=torch.float64,
+    posterior = np.array(
+        [[0.5, 0.5, 0.0], [0.5, 0.5, 0.0], [0.0, 0.0, 1.0], [0.0, 0.0, 1.0]]
     )
     merge = merge_criterion(posterior)
     assert float(merge[0, 1]) == pytest.approx(1.0, abs=1e-15)
     assert float(merge[0, 2]) == 0.0
-    assert bool(torch.isinf(merge.diagonal()).all())
-    exact = torch.log(
-        torch.tensor(
-            [[0.5, 0.5, 0.25]] * 2 + [[0.25, 0.25, 0.5]] * 2, dtype=torch.float64
-        )
-    )
+    assert bool(np.isneginf(merge.diagonal()).all())
+    exact = np.log(np.array([[0.5, 0.5, 0.25]] * 2 + [[0.25, 0.25, 0.5]] * 2))
     divergence = split_criterion(posterior, exact)
     assert divergence.tolist() == pytest.approx([0.0, 0.0, 0.0], abs=1e-15)
-    spread = exact.clone()
-    spread[:, 2] = torch.log(torch.tensor(0.25, dtype=torch.float64))
+    spread = exact.copy()
+    spread[:, 2] = np.log(0.25)
     assert float(split_criterion(posterior, spread)[2]) == pytest.approx(np.log(2.0))
     # The best pair is (0, 1) and the split the one outside it.
     assert candidate_moves(posterior, spread, 1) == [(0, 1, 2)]
     assert candidate_moves(posterior[:, :2], spread[:, :2], 5) == []
+
+
+#: The criteria against a sum of ``n`` terms written out one at a time: BLAS
+#: and NumPy's pairwise sum reorder it, each term within ``n`` ulp.
+CRITERIA_RTOL = 1e-12
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize(("n_samples", "k"), [(50, 3), (1000, 5), (3000, 10)])
+def test_the_criteria_match_their_definitions_term_by_term(
+    n_samples: int, k: int
+) -> None:
+    # The referee is each criterion's formula over Python floats, summed by
+    # `math.fsum`, on a seeded Dirichlet posterior with exact zeros planted:
+    # a zero responsibility contributes nothing to either criterion.
+    rng = np.random.default_rng(1011)
+    posterior = rng.dirichlet(np.full(k, 0.3), size=n_samples)
+    posterior[: n_samples // 10, 0] = 0.0
+    log_densities = np.log(rng.dirichlet(np.ones(n_samples), size=k).T)
+    merge = merge_criterion(posterior)
+    split = split_criterion(posterior, log_densities)
+    columns = [[float(v) for v in posterior[:, c]] for c in range(k)]
+    norms = [math.sqrt(math.fsum(v * v for v in col)) for col in columns]
+    for i, j in itertools.permutations(range(k), 2):
+        dot = math.fsum(a * b for a, b in zip(columns[i], columns[j], strict=True))
+        assert merge[i, j] == pytest.approx(
+            dot / (norms[i] * norms[j]), rel=CRITERIA_RTOL
+        )
+    assert bool(np.isneginf(merge.diagonal()).all())
+    for c, col in enumerate(columns):
+        total = math.fsum(col)
+        expected = math.fsum(
+            (v / total) * (math.log(v / total) - float(log_densities[s, c]))
+            for s, v in enumerate(col)
+            if v > 0.0
+        )
+        assert split[c] == pytest.approx(expected, rel=CRITERIA_RTOL)
 
 
 @pytest.mark.smoke

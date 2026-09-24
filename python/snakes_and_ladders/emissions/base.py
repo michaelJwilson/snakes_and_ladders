@@ -15,6 +15,7 @@ from typing import Generic, Protocol, TypeVar, runtime_checkable
 
 import numpy as np
 import torch
+from numpy.typing import ArrayLike
 
 #: What a family accepts for a parameter vector. A plain list is admitted
 #: because a fixture states its truth in one; the constructor converts, and
@@ -214,7 +215,52 @@ def validated_trials(covariate: torch.Tensor, declared: torch.Tensor) -> torch.T
     return counts
 
 
-def refuse_covariate(family: object, covariate: torch.Tensor | None) -> None:
+def as_tensor(values: ArrayLike, dtype: torch.dtype | None = None) -> torch.Tensor:
+    """``values`` as the tensor an M step or a draw computes on; a tensor is returned as given.
+
+    The array half of :meth:`EmissionFamily.reestimate` and
+    :meth:`EmissionFamily.sample` (issue #1011): neither takes a derivative,
+    so a caller holding arrays hands them over as they are, and the family
+    converts once at entry and computes as it did on a tensor. A tensor is
+    **not** cast, so a caller that passed one before gets the same arithmetic.
+    An array is read in ``dtype`` --- a family passes its
+    :attr:`~EmissionFamily.observation_dtype` for the observations --- which
+    is the tensor a caller built with that dtype before. A read-only array is
+    copied, since a tensor over it would be writable.
+
+    Returns
+    -------
+    torch.Tensor
+    """
+    if isinstance(values, torch.Tensor):
+        return values
+    array = np.asarray(values)
+    if not array.flags.writeable:
+        array = array.copy()
+    return torch.as_tensor(array, dtype=dtype)
+
+
+def as_array(values: ArrayLike, dtype: torch.dtype | None = None) -> np.ndarray:
+    """``values`` as a NumPy array, in ``dtype`` where one is given.
+
+    The inverse seam to :func:`as_tensor`, for an implementer whose own M step
+    is array arithmetic before it calls a family's
+    (:class:`~snakes_and_ladders.sim.count_pairs.ReflectedEmission`). A tensor
+    is detached, since nothing on this path is differentiated.
+
+    Returns
+    -------
+    np.ndarray
+    """
+    if isinstance(values, torch.Tensor):
+        tensor = values.detach() if dtype is None else values.detach().to(dtype)
+        return tensor.numpy()
+    if dtype is None:
+        return np.asarray(values)
+    return np.asarray(values, dtype=torch.empty(0, dtype=dtype).numpy().dtype)
+
+
+def refuse_covariate(family: object, covariate: ArrayLike | None) -> None:
     """Raise unless ``covariate`` is ``None``.
 
     Public because an implementer outside this module calls it ---
@@ -302,7 +348,7 @@ class EmissionFamily(Protocol):
         self,
         states: np.ndarray,
         rng: np.random.Generator,
-        covariate: torch.Tensor | None = None,
+        covariate: ArrayLike | None = None,
     ) -> np.ndarray:
         """Draw one observation per entry of ``states``.
 
@@ -312,9 +358,10 @@ class EmissionFamily(Protocol):
             Emitting state per draw, shape ``(n_draws,)``.
         rng : np.random.Generator
             Generator, passed in rather than seeded here (``sim/CLAUDE.md``).
-        covariate : torch.Tensor | None
-            One conditioning value per draw, shape ``(n_draws,)``. Conditioned
-            on and never fitted. A family that cannot use one raises
+        covariate : ArrayLike | None
+            One conditioning value per draw, shape ``(n_draws,)``: an array or
+            a tensor, converted by :func:`as_tensor`. Conditioned on and never
+            fitted. A family that cannot use one raises
             :class:`CovariateNotSupportedError` rather than dropping it
             (issue #631).
 
@@ -390,20 +437,25 @@ class EmissionFamily(Protocol):
     @abstractmethod
     def reestimate(
         self,
-        observations: torch.Tensor,
-        posterior: torch.Tensor,
-        covariate: torch.Tensor | None = None,
+        observations: ArrayLike,
+        posterior: ArrayLike,
+        covariate: ArrayLike | None = None,
     ) -> Reestimate[EmissionFamily]:
         """The Baum-Welch M step for this family alone.
 
+        No derivative is taken through it, so every argument is an array or a
+        tensor (issue #1011): an array is converted by :func:`as_tensor`, the
+        observations in :attr:`observation_dtype`, and a tensor is used as
+        given. The family it returns holds tensors, as every family does.
+
         Parameters
         ----------
-        observations : torch.Tensor
+        observations : ArrayLike
             Observations, shape ``(n_sequences, length)``.
-        posterior : torch.Tensor
+        posterior : ArrayLike
             State posteriors ``P(state_t | observations)`` as probabilities,
             shape ``(n_sequences, length, n_states)``.
-        covariate : torch.Tensor | None
+        covariate : ArrayLike | None
             One conditioning value per observation, shape
             ``(n_sequences, length)``. A family that cannot use one raises
             :class:`CovariateNotSupportedError`.

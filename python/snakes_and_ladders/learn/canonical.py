@@ -56,7 +56,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
-import torch
+from numpy.typing import NDArray
 
 from snakes_and_ladders.learn.environment import Environment
 
@@ -304,7 +304,7 @@ class ChainMdp(Environment[int, int]):
             return -1, self.consolation
         return position, 0.0
 
-    def features(self, state: int, actions: Sequence[int]) -> torch.Tensor:
+    def features(self, state: int, actions: Sequence[int]) -> NDArray[np.float64]:
         """``(len(actions), 2)``: the step's reward, and how far it goes out.
 
         The second is what a policy needs to prefer the far end before it has
@@ -312,12 +312,12 @@ class ChainMdp(Environment[int, int]):
         so neither feature sits in the direction the softmax cancels.
         """
         if not actions:
-            return torch.empty((0, 2), dtype=torch.float64)
+            return np.empty((0, 2), dtype=np.float64)
         rows = []
         for action in actions:
             successor, reward = self.step(state, action)
             rows.append([reward, successor / self.n_states])
-        return torch.tensor(rows, dtype=torch.float64)
+        return np.array(rows, dtype=np.float64)
 
     def n_features(self) -> int:
         return 2
@@ -390,7 +390,7 @@ class GridWorld(Environment[tuple[int, int], tuple[int, int]]):
 
     def features(
         self, state: tuple[int, int], actions: Sequence[tuple[int, int]]
-    ) -> torch.Tensor:
+    ) -> NDArray[np.float64]:
         """``(len(actions), 2)``: the step's reward, and the distance it leaves.
 
         The distance is the instrumentation's, not the learner's problem: what
@@ -399,13 +399,13 @@ class GridWorld(Environment[tuple[int, int], tuple[int, int]]):
         features instead.
         """
         if not actions:
-            return torch.empty((0, 2), dtype=torch.float64)
+            return np.empty((0, 2), dtype=np.float64)
         rows = []
         for action in actions:
             cell, reward = self.step(state, action)
             distance = abs(cell[0] - self.goal[0]) + abs(cell[1] - self.goal[1])
             rows.append([reward, -float(distance)])
-        return torch.tensor(rows, dtype=torch.float64)
+        return np.array(rows, dtype=np.float64)
 
     def n_features(self) -> int:
         return 2
@@ -488,16 +488,16 @@ class CliffWalk(Environment[tuple[int, int], tuple[int, int]]):
 
     def features(
         self, state: tuple[int, int], actions: Sequence[tuple[int, int]]
-    ) -> torch.Tensor:
+    ) -> NDArray[np.float64]:
         """``(len(actions), 2)``: the step's reward, and the distance it leaves."""
         if not actions:
-            return torch.empty((0, 2), dtype=torch.float64)
+            return np.empty((0, 2), dtype=np.float64)
         rows = []
         for action in actions:
             cell, reward = self.step(state, action)
             distance = abs(cell[0] - self.goal[0]) + abs(cell[1] - self.goal[1])
             rows.append([reward, -float(distance)])
-        return torch.tensor(rows, dtype=torch.float64)
+        return np.array(rows, dtype=np.float64)
 
     def n_features(self) -> int:
         return 2
@@ -598,16 +598,16 @@ class TowersOfHanoi(Environment[tuple[int, ...], tuple[int, int]]):
 
     def features(
         self, state: tuple[int, ...], actions: Sequence[tuple[int, int]]
-    ) -> torch.Tensor:
+    ) -> NDArray[np.float64]:
         """``(len(actions), 2)``: the step's reward, and disks left off the goal peg."""
         if not actions:
-            return torch.empty((0, 2), dtype=torch.float64)
+            return np.empty((0, 2), dtype=np.float64)
         rows = []
         for action in actions:
             successor, reward = self.step(state, action)
             away = sum(1 for peg in successor if peg != 2)
             rows.append([reward, -float(away)])
-        return torch.tensor(rows, dtype=torch.float64)
+        return np.array(rows, dtype=np.float64)
 
     def n_features(self) -> int:
         return 2

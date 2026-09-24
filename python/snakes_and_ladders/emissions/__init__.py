@@ -45,6 +45,14 @@ and ``likelihood`` slice a covariate and each obeys this; #670 is what a
 fifth copy of the rule costs when one of them drifts, and issue #677 is why
 they now point here rather than restate it.
 
+**A draw and an M step take arrays; a score takes a tensor.**
+:meth:`EmissionFamily.sample` and :meth:`EmissionFamily.reestimate` take no
+derivative, so each takes a NumPy array or a tensor and converts once at entry
+through :func:`~snakes_and_ladders.emissions.base.as_tensor`, reproducing the
+tensor call bitwise (issue #1011). :meth:`EmissionFamily.log_density` is
+differentiated through by the objectives and stays a tensor in, tensor out, and
+a family's parameters stay tensors, so importing this package imports torch.
+
 Parameterization for an unconstrained optimizer belongs to
 ``snakes_and_ladders.opt.constrain``; here it would make
 :mod:`snakes_and_ladders.sim` import ``snakes_and_ladders.opt`` transitively

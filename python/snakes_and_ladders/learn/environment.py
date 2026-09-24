@@ -30,13 +30,17 @@ single episode evaluates the whole neighbourhood at every step.
 
 from __future__ import annotations
 
+import warnings
 from abc import abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import numpy as np
-import torch
+from numpy.typing import NDArray
+
+if TYPE_CHECKING:
+    import torch
 
 
 @runtime_checkable
@@ -88,11 +92,16 @@ class Environment[S, A](Protocol):
         ...  # pragma: no cover
 
     @abstractmethod
-    def features(self, state: S, actions: Sequence[A]) -> torch.Tensor:
+    def features(self, state: S, actions: Sequence[A]) -> NDArray[np.float64]:
         """Features of each available action, shape ``(len(actions), n)``.
 
         Batched over the neighbourhood because a policy scores the whole
         neighbourhood at once; ``n`` is :meth:`n_features`.
+
+        An array, not a tensor: no gradient flows into a feature, which is a
+        constant to every loss the learners differentiate, so the policy
+        converts it once where it scores (issue #1011). A tensor an
+        implementation still returns is accepted there too.
 
         A feature that takes the same value for every action in a state is
         **unidentifiable**: the policy is a softmax over these scores, and a
@@ -114,6 +123,40 @@ class Environment[S, A](Protocol):
         A property of the state, not of the action taken to reach it.
         """
         ...  # pragma: no cover
+
+
+def features_tensor[S, A](
+    environment: Environment[S, A], state: S, actions: Sequence[A], /
+) -> torch.Tensor:
+    """Deprecated: :meth:`Environment.features` as the tensor release 0.3.0 returned.
+
+    Kept for one release after 0.3.0 and removed in the one after that
+    (issue #1011). ``torch.as_tensor`` shares the array's memory, so the values
+    are the array's bit for bit.
+
+    Parameters
+    ----------
+    environment : Environment[S, A]
+        The environment whose features to read.
+    state : S
+        The state the actions are available in.
+    actions : Sequence[A]
+        The actions to describe.
+
+    Returns
+    -------
+    torch.Tensor
+        Shape ``(len(actions), environment.n_features())``, ``float64``.
+    """
+    warnings.warn(
+        "features_tensor is deprecated: Environment.features returns a NumPy "
+        "array; call torch.as_tensor on it where a tensor is needed",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    import torch
+
+    return torch.as_tensor(environment.features(state, actions))
 
 
 @dataclass(frozen=True)

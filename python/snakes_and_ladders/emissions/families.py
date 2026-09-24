@@ -11,12 +11,14 @@ from collections.abc import Mapping
 
 import numpy as np
 import torch
+from numpy.typing import ArrayLike
 
 from snakes_and_ladders.emissions.base import (
     EmissionFamily,
     ParameterDomainError,
     Reestimate,
     Values,
+    as_tensor,
     refuse_covariate,
 )
 from snakes_and_ladders.numerics import sample_rows
@@ -106,7 +108,7 @@ class CategoricalEmission(EmissionFamily):
         self,
         states: np.ndarray,
         rng: np.random.Generator,
-        covariate: torch.Tensor | None = None,
+        covariate: ArrayLike | None = None,
     ) -> np.ndarray:
         """Draw one symbol per entry of ``states`` by inverse-CDF sampling."""
         refuse_covariate(self, covariate)
@@ -143,9 +145,9 @@ class CategoricalEmission(EmissionFamily):
 
     def reestimate(
         self,
-        observations: torch.Tensor,
-        posterior: torch.Tensor,
-        covariate: torch.Tensor | None = None,
+        observations: ArrayLike,
+        posterior: ArrayLike,
+        covariate: ArrayLike | None = None,
     ) -> Reestimate[CategoricalEmission]:
         """Normalized expected symbol counts, in log space.
 
@@ -153,8 +155,10 @@ class CategoricalEmission(EmissionFamily):
         report: this is the case the seam was designed against.
         """
         refuse_covariate(self, covariate)
+        posterior = as_tensor(posterior)
         mask = torch.nn.functional.one_hot(
-            observations.reshape(-1).to(torch.long), self.n_symbols
+            as_tensor(observations, self.observation_dtype).reshape(-1).to(torch.long),
+            self.n_symbols,
         ).to(posterior.dtype)
         weights = posterior.reshape(-1, self.n_states)
         counts = torch.log(weights.t() @ mask + torch.finfo(posterior.dtype).tiny)
@@ -275,7 +279,7 @@ class GaussianEmission(EmissionFamily):
         self,
         states: np.ndarray,
         rng: np.random.Generator,
-        covariate: torch.Tensor | None = None,
+        covariate: ArrayLike | None = None,
     ) -> np.ndarray:
         """Draw one real observation per entry of ``states``.
 
@@ -389,9 +393,9 @@ class GaussianEmission(EmissionFamily):
 
     def reestimate(
         self,
-        observations: torch.Tensor,
-        posterior: torch.Tensor,
-        covariate: torch.Tensor | None = None,
+        observations: ArrayLike,
+        posterior: ArrayLike,
+        covariate: ArrayLike | None = None,
     ) -> Reestimate[GaussianEmission]:
         """Posterior-weighted mean and variance, in closed form.
 
@@ -404,9 +408,14 @@ class GaussianEmission(EmissionFamily):
             report a point estimate at a degenerate optimum (issue #122).
         """
         refuse_covariate(self, covariate)
+        posterior = as_tensor(posterior)
         weights = posterior.reshape(-1, self.n_states)
         mass = weights.sum(dim=0)
-        values = observations.reshape(-1, self.n_channels).to(posterior.dtype)
+        values = (
+            as_tensor(observations, self.observation_dtype)
+            .reshape(-1, self.n_channels)
+            .to(posterior.dtype)
+        )
         # Channel by channel, so a channel's statistics never materialize the
         # (n_samples, n_states, n_channels) array their product would: at the
         # key rung that array is 3.2 GB against the 1.6 GB of one channel's.

@@ -296,7 +296,7 @@ def test_the_features_carry_no_constant_column() -> None:
     environment, _, _ = _instance(6, 3)
     state = environment.reset(np.random.default_rng(5))
 
-    features = environment.features(state, environment.actions(state)).numpy()
+    features = environment.features(state, environment.actions(state))
 
     assert features.shape[1] == environment.n_features() == 3
     assert (features.std(axis=0) > 0.0).all()

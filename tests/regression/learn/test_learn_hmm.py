@@ -78,7 +78,7 @@ def test_the_features_span_the_reward_so_greedy_is_in_the_policy_class() -> None
     features = environment.features(state, actions)
 
     rewards = np.array([environment.step(state, action)[1] for action in actions])
-    scored = (features @ environment.greedy_weights()).numpy()
+    scored = features @ environment.greedy_weights()
 
     assert_allclose(scored, rewards, atol=1e-12)
 

@@ -312,10 +312,29 @@ def covariate_block(
         ``(S, len(members), ...)`` for one with its own axes, or ``None``
         where the params carry no covariate.
     """
+    columns = covariate_columns(params, members)
+    return None if columns is None else torch.as_tensor(columns)
+
+
+def covariate_columns(
+    params: SpatioSequentialParams, members: np.ndarray
+) -> np.ndarray | None:
+    """:func:`covariate_block`'s slice as an array, for a seam that takes no derivative.
+
+    The one slice every seam shares; :func:`covariate_block` wraps it for a
+    family's ``log_density``, and an M step, which takes arrays, reads it as
+    it is (issue #1011).
+
+    Returns
+    -------
+    np.ndarray | None
+        The shape :func:`covariate_block` states, or ``None`` where the params
+        carry no covariate.
+    """
     if params.covariate is None:
         return None
     block = params.covariate[:, members]
-    return torch.as_tensor(block[..., None] if block.ndim == 2 else block)
+    return block[..., None] if block.ndim == 2 else block
 
 
 def class_log_density(

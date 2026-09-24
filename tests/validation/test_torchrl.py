@@ -81,7 +81,7 @@ def _sampled_decisions(
             taken.append(available_actions.index(action))
             owner.append(index)
     # Every neighbourhood on the chain has the same width: no padding, no mask.
-    return torch.stack(features), torch.tensor(taken), owner
+    return torch.as_tensor(np.stack(features)), torch.tensor(taken), owner
 
 
 @pytest.mark.oracle

@@ -18,6 +18,7 @@ from dataclasses import dataclass
 import numpy as np
 import pytest
 import torch
+from numpy.typing import NDArray
 from snakes_and_ladders.fixtures import Scale, load_params
 from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.reinforce import reinforce
@@ -290,13 +291,13 @@ def test_a_planted_constant_column_is_refused(
         actions = staticmethod(built.actions)
 
         @staticmethod
-        def features(state: Topology, actions: list[Topology]) -> torch.Tensor:
-            distances = torch.tensor(
+        def features(state: Topology, actions: list[Topology]) -> NDArray[np.float64]:
+            distances = np.array(
                 [[normalized_robinson_foulds(state, action)] for action in actions],
-                dtype=torch.float64,
+                dtype=np.float64,
             )
-            assert torch.all(distances == distances[0])
-            return torch.cat([built.features(state, actions), distances], dim=1)
+            assert np.all(distances == distances[0])
+            return np.concatenate([built.features(state, actions), distances], axis=1)
 
     assert _constant_columns(Planted, starts) == {7}  # type: ignore[arg-type]
 
@@ -316,7 +317,7 @@ def test_shifting_a_column_by_a_constant_leaves_the_policy_unchanged(
         rows = built.features(state, built.actions(state))
         reference = policy.log_probabilities(rows).detach()
         for column in range(rows.shape[1]):
-            shifted = rows.clone()
+            shifted = rows.copy()
             shifted[:, column] += 3.5
             assert torch.allclose(
                 policy.log_probabilities(shifted).detach(), reference, atol=1e-12

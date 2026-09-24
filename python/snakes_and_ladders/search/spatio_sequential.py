@@ -35,7 +35,6 @@ from enum import StrEnum
 from functools import partial
 
 import numpy as np
-import torch
 from scipy.optimize import linear_sum_assignment
 
 from snakes_and_ladders.backend import Backend
@@ -51,7 +50,7 @@ from snakes_and_ladders.likelihood.spatio_sequential import (
     ClassPosteriors,
     class_log_density,
     class_posteriors,
-    covariate_block,
+    covariate_columns,
     external_field,
     labelled_log_likelihood,
 )
@@ -134,30 +133,34 @@ def m_step(
     module can go quietly wrong: a covariate sliced differently from the block
     it accompanies is a fit that conditions on the wrong exposures and
     converges anyway, which is why the slice is
-    :func:`~snakes_and_ladders.likelihood.spatio_sequential.covariate_block`'s
-    and not this module's own (issue #670).
+    :func:`~snakes_and_ladders.likelihood.spatio_sequential.covariate_columns`'s,
+    the slice ``covariate_block`` wraps, and not this module's own (issue
+    #670).
     """
     labels = np.asarray(labels, dtype=np.int64)
-    blocks: list[tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]] = []
-    for m, family in enumerate(params.emissions):
+    # Arrays throughout: an M step takes no derivative, and each family's
+    # `reestimate` converts what it is handed, the observations in its own
+    # `observation_dtype` (issue #1011).
+    blocks: list[tuple[np.ndarray, np.ndarray, np.ndarray | None]] = []
+    for m in range(len(params.emissions)):
         members = np.flatnonzero(labels == m)
         if members.size == 0:
-            blocks.append((torch.empty(0), torch.empty(0), None))
+            blocks.append((np.empty(0), np.empty(0), None))
             continue
-        block = torch.as_tensor(
-            np.moveaxis(observations[:, members], 1, 0), dtype=family.observation_dtype
+        block = np.moveaxis(
+            observations[:, members], 1, 0
         )  # (n_m, S), plus any channel axes the family's observation carries
-        block_covariate = covariate_block(params, members)
-        # `covariate_block` returns the block position-major, as the
+        block_covariate = covariate_columns(params, members)
+        # `covariate_columns` returns the block position-major, as the
         # observations are held; the family wants it member-major, as the block
         # above is. Moving the axis is all this does -- appending the singleton
         # here was the defect of issue #670, since a covariate carrying the
         # family's own channel axis already has one inside each channel.
         exposure = (
-            None if block_covariate is None else block_covariate.movedim(1, 0)
+            None if block_covariate is None else np.moveaxis(block_covariate, 1, 0)
         )  # (n_m, S, 1), or (n_m, S, ...) for a family with axes of its own
-        weights = torch.as_tensor(posteriors.posterior[m])[None].expand(
-            members.size, -1, -1
+        weights = np.repeat(
+            posteriors.posterior[m][None], members.size, axis=0
         )  # (n_m, S, K)
         blocks.append((block, weights, exposure))
     emissions: list[EmissionFamily]
@@ -165,7 +168,7 @@ def m_step(
         # One family for every class (issue #933): its M step is the family's
         # own on the classes' blocks stacked along the member axis, which is
         # the sum over classes of each class's expected log-likelihood.
-        filled = [one for one in blocks if one[0].numel() > 0]
+        filled = [one for one in blocks if one[0].size > 0]
         if not filled:
             emissions = list(params.emissions)
         else:
@@ -173,11 +176,11 @@ def m_step(
             pooled = (
                 params.emissions[0]
                 .reestimate(
-                    torch.cat([one[0] for one in filled]),
-                    torch.cat([one[1] for one in filled]),
+                    np.concatenate([one[0] for one in filled]),
+                    np.concatenate([one[1] for one in filled]),
                     covariate=None
                     if covariates[0] is None
-                    else torch.cat([c for c in covariates if c is not None]),
+                    else np.concatenate([c for c in covariates if c is not None]),
                 )
                 .emissions
             )
@@ -185,7 +188,7 @@ def m_step(
     else:
         emissions = [
             family
-            if block.numel() == 0
+            if block.size == 0
             else family.reestimate(block, weights, covariate=exposure).emissions
             for family, (block, weights, exposure) in zip(
                 params.emissions, blocks, strict=True

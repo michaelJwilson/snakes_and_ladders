@@ -238,7 +238,7 @@ def test_the_only_feature_is_the_reward_the_move_would_buy() -> None:
     assert environment.n_features() == 1
     assert features.shape == (len(actions), 1)
     assert_allclose(
-        features[:, 0].numpy(),
+        features[:, 0],
         [environment.step(state, action)[1] for action in actions],
         atol=1e-12,
     )
@@ -484,11 +484,11 @@ def test_the_full_set_is_seven_standardized_columns() -> None:
         actions = environment.actions(state)
         rows = environment.features(state, actions)
         assert rows.shape == (len(actions), 7)
-        assert_allclose(rows.mean(dim=0).numpy(), np.zeros(7), atol=1e-12)
-        spread = rows.std(dim=0, unbiased=False).numpy()
+        assert_allclose(rows.mean(axis=0), np.zeros(7), atol=1e-12)
+        spread = rows.std(axis=0)
         assert np.all((np.abs(spread - 1.0) < 1e-12) | (spread == 0.0))
         assert_allclose(
-            rows.numpy(),
+            rows,
             standardize(environment.raw_features(state, actions)).numpy(),
             atol=1e-12,
         )
