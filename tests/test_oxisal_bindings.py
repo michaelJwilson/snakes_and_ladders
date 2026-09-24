@@ -19,14 +19,14 @@ def test_double() -> None:
 @pytest.mark.infra
 def test_the_extension_has_one_name() -> None:
     # Issue #1003: the extension is `oxisal`, imported under that name
-    # everywhere; the old name survives only in `CHANGELOG.md`'s history.
+    # everywhere; the old name survives only in the changelog.
     import subprocess
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1]
     old = "oxi_snakes" + "_and_ladders"
     found = subprocess.run(
-        ["git", "grep", "-l", old, "--", ":!CHANGELOG.md"],
+        ["git", "grep", "-l", old, "--", ":!CHANGELOG.md", ":!changelog.d"],
         cwd=root,
         capture_output=True,
         text=True,
