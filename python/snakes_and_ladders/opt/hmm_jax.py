@@ -45,6 +45,9 @@ type Twinned = (
     | BetaBinomialHmmObjective
 )
 
+#: Above this argument the log rising factorial is taken through ``betaln``.
+RISING_FROM = 1e3
+
 #: A table is kept where the distinct cells are at most this share of the positions.
 TABLE_SHARE = 0.25
 
@@ -229,9 +232,10 @@ def _density(
 ) -> Callable[[Any, dict[str, Any]], Any]:
     """``(theta, data) -> (..., m)`` log-densities, as the objective's family scores them."""
     jnp = jax.numpy
-    gammaln = jax.scipy.special.gammaln
     m, k = structure.n_states, structure.n_symbols
     family = structure.family
+
+    rising = functools.partial(_rising, jax=jax)
     if family == "gaussian":
         means, scales = emission
 
@@ -257,13 +261,13 @@ def _density(
             r, mu = jnp.exp(theta[dispersions]), jnp.exp(theta[means])
             if structure.covariate:
                 mu = data["covariate"] * mu
-            total = r + mu
+            # `-r log1p(mu / r)` is `r log(r / (r + mu))` without the
+            # cancellation at large `r`.
             return (
-                gammaln(y + r)
-                - gammaln(r)
+                rising(y, r)
                 + data["constant"]
-                + r * jnp.log(r / total)
-                + y * jnp.log(mu / total)
+                - r * jnp.log1p(mu / r)
+                + y * jnp.log(mu / (r + mu))
             )
 
         return negative_binomial
@@ -273,15 +277,7 @@ def _density(
         def beta_binomial(theta: Any, data: dict[str, Any]) -> Any:
             y, n = data["y"], data["trials"]
             a, b = jnp.exp(theta[alphas]), jnp.exp(theta[betas])
-            return (
-                data["constant"]
-                + gammaln(y + a)
-                + gammaln(n - y + b)
-                - gammaln(n + a + b)
-                + gammaln(a + b)
-                - gammaln(a)
-                - gammaln(b)
-            )
+            return data["constant"] + rising(y, a) + rising(n - y, b) - rising(n, a + b)
 
         return beta_binomial
     if family == "binomial":
@@ -302,6 +298,24 @@ def _density(
         return jnp.moveaxis(log_emission[:, data["symbols"]], 0, -1)
 
     return categorical
+
+
+def _rising(count: Any, x: Any, jax: Any) -> Any:
+    """``gammaln(count + x) - gammaln(x)``, the log rising factorial, for ``count >= 0``.
+
+    The difference cancels: at ``x = 5.8e7`` it is off by 1e-7 and at
+    ``4e11`` by 1e-3, against 40-digit ``mpmath``, which stalls a fit
+    whose dispersion runs to a flat likelihood (issue #1000). Above
+    :data:`RISING_FROM` it is ``gammaln(count) - betaln(count, x)``, whose
+    error there is under 5e-13; below, ``betaln`` is the worse of the two
+    (8e-10 at ``x = 95``) and the difference is kept.
+    """
+    jnp, gammaln = jax.numpy, jax.scipy.special.gammaln
+    betaln = jax.scipy.special.betaln
+    positive = jnp.where(count > 0, count, 1.0)
+    large = jnp.where(count > 0, gammaln(positive) - betaln(positive, x), 0.0)
+    small = gammaln(count + x) - gammaln(x)
+    return jnp.where(x > RISING_FROM, large, small)
 
 
 def _forward(jax: Any) -> Any:

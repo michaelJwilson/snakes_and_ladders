@@ -143,3 +143,22 @@ def test_a_fit_under_either_backend_reaches_one_optimum() -> None:
     ]
     assert all(f.converged for f in fits)
     assert_allclose(fits[0].value, fits[1].value, rtol=1e-9)
+
+
+@pytest.mark.oracle
+def test_the_rising_factorial_holds_where_the_difference_cancels() -> None:
+    # Referee: SciPy's `gammaln(k) - betaln(k, x)`, accurate at every `x`
+    # here, where `gammaln(k + x) - gammaln(x)` in float64 is off by 1e-3 at
+    # 4e11 (issue #1000).
+    import jax
+    from scipy.special import betaln, gammaln
+
+    counts = np.array([0.0, 1.0, 7.0, 30.0])[:, None]
+    x = np.array([2.0, 95.0, 999.0, 1.001e3, 5.8e7, 4e11, 1e15])[None, :]
+    expected = np.where(
+        counts > 0,
+        gammaln(np.maximum(counts, 1.0)) - betaln(np.maximum(counts, 1.0), x),
+        0.0,
+    )
+    got = np.asarray(hmm_jax._rising(counts, x, jax))
+    assert_allclose(got, expected, rtol=1e-12, atol=1e-8)
