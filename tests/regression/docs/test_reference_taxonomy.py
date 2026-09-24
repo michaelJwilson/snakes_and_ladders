@@ -1,38 +1,11 @@
 """The reference routing table is kept in three places, and this keeps them one.
 
-Root `CLAUDE.md` routes each concern to its sources; `REFERENCES.md` carries
-the table; and `docs/tex/references.bib` carries the entries it resolves to.
-Before this guard the table named three works the bibliography did not carry
-(Ramalho, Gorelick & Ozsvald, Antão) and nothing said so (issue #360). An
-addition lands in all three or in none, and that is now checked rather than
-asked for.
-
-The third leg used to be a Reference Taxonomy appendix in the textbook, which
-restated the grouping as a list of `\\citet` calls. The review of issue #575
-struck it: a work is cited where it is used, in the usual way, and a document
-that also carries a list of its own citations has two places to keep in step.
-The leg is now the documents' own citations, which is what the list stood in
-for and is strictly more of them --- every `\\cite` in `textbook.tex` and
-`paper.tex`.
-
-The matching rule, chosen so that no file has to carry another's keys:
-
-* every citation key in a document is an entry in the bibliography; and
-* every item in the table -- an author string, an optional year, a
-  parenthesized title or phrase -- names surnames that all appear in one
-  bibliography entry's `author` field, of that year where a year is given.
-
-The two sets are no longer required to coincide, and that is a consequence of
-the appendix going rather than a relaxation for its own sake. The table routes
-a *concern* to what to read, so it names texts no document cites --- a Rust
-book, a systems book --- and a document cites the primary papers behind one
-algorithm, which the table groups rather than lists. While the appendix
-existed the two were forced equal by a list written to make them so. What both
-still resolve against is the bibliography, which is where issue #360's defect
-was.
-
-Surnames are compared after stripping accents and TeX accent commands, so
-`M{\\'e}zard` and `Mézard` are one name.
+Root `CLAUDE.md` routes concerns, `REFERENCES.md` carries the table and
+`docs/tex/references.bib` the entries; the table named three works the
+bibliography lacked (issue #360). Every citation key in `textbook.tex` and
+`paper.tex` is an entry; every table item names surnames all in one entry's
+`author` field, of its year if given. The table may name texts no document
+cites. Surnames compare accent-stripped: `M{\\'e}zard` is `Mézard`.
 """
 
 from __future__ import annotations
@@ -93,10 +66,9 @@ def document_keys() -> set[str]:
 
 
 def table_items() -> list[tuple[str, str]]:
-    """Every item in the `REFERENCES.md` table, as ``(author string, year or '')``.
+    """Every `REFERENCES.md` table item as ``(author string, year or '')``.
 
-    An item is one semicolon-separated cell of a row, with the parenthesized
-    title or phrase removed and any leading `Review:`/`Papers:` label dropped.
+    One semicolon-separated cell, title and `Review:`/`Papers:` label dropped.
     """
     text = REFERENCES_MD.read_text()
     start = text.index(TABLE_HEADING)
