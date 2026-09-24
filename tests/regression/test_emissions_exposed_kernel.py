@@ -18,6 +18,8 @@ from snakes_and_ladders import emissions
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.emissions import NegativeBinomialEmission, mstep
 
+from tests._rows import every_row
+
 #: The declared floor for a reordered sum through a bisection (#648).
 FLOOR = 2e-06
 
@@ -43,25 +45,25 @@ def _draw(
 @pytest.mark.critical
 @pytest.mark.oracle
 @pytest.mark.backend
-@pytest.mark.parametrize(
-    ("scale", "varying"), [(5.0, True), (500.0, True), (50.0, False)]
-)
-def test_the_kernel_is_the_per_state_solve(scale: float, varying: bool) -> None:
+def test_the_kernel_is_the_per_state_solve() -> None:
     # Measured: bitwise at scale 5, a relative 1.8e-12 at 500, bitwise at a
     # constant exposure; every state's steps and boundary decision agree.
-    values, weights, offsets = _draw(2_000, scale, 0, varying)
-    means = ((weights.T @ values) / (weights.T @ offsets)).tolist()
-    rust = mstep.solve_dispersion_exposed_rust(values, weights, means, offsets)
-    oracle = [
-        mstep.solve_dispersion(values, weights[:, k], offsets * means[k])
-        for k in range(4)
-    ]
-    assert [r.at_boundary for r in rust] == [o.at_boundary for o in oracle]
-    assert [r.iterations for r in rust] == [o.iterations for o in oracle]
-    moved = max(
-        abs(r.value - o.value) / o.value for r, o in zip(rust, oracle, strict=True)
-    )
-    assert moved < FLOOR
+    def check(scale: float, varying: bool) -> None:
+        values, weights, offsets = _draw(2_000, scale, 0, varying)
+        means = ((weights.T @ values) / (weights.T @ offsets)).tolist()
+        rust = mstep.solve_dispersion_exposed_rust(values, weights, means, offsets)
+        oracle = [
+            mstep.solve_dispersion(values, weights[:, k], offsets * means[k])
+            for k in range(4)
+        ]
+        assert [r.at_boundary for r in rust] == [o.at_boundary for o in oracle]
+        assert [r.iterations for r in rust] == [o.iterations for o in oracle]
+        moved = max(
+            abs(r.value - o.value) / o.value for r, o in zip(rust, oracle, strict=True)
+        )
+        assert moved < FLOOR
+
+    every_row([(5.0, True), (500.0, True), (50.0, False)], check)
 
 
 @pytest.mark.critical

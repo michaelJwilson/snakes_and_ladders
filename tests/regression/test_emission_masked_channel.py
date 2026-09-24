@@ -15,6 +15,8 @@ import torch
 from snakes_and_ladders.emissions import BetaBinomialEmission, NegativeBinomialEmission
 from snakes_and_ladders.sim.count_pairs import IndependentCountPair
 
+from tests._rows import every_value
+
 DISPERSION = torch.tensor([2.0, 5.0, 0.8], dtype=torch.float64)
 MEAN = torch.tensor([1.5, 6.0, 20.0], dtype=torch.float64)
 ALPHA = torch.tensor([2.0, 3.0, 0.7], dtype=torch.float64)
@@ -54,67 +56,71 @@ def _equal_parameters(first: object, second: object) -> None:
 
 @pytest.mark.critical
 @pytest.mark.oracle
-@pytest.mark.parametrize("seed", range(3))
-def test_an_unobserved_total_scores_log_one_and_the_rest_as_without_it(
-    seed: int,
-) -> None:
-    data = _draw(seed)
-    family = NegativeBinomialEmission(DISPERSION, MEAN)
-    observed = data["exposure"][:, 0] > 0
-    scores = family.log_density(data["totals"], data["exposure"])
-    assert torch.equal(
-        scores[~observed], torch.zeros(int((~observed).sum()), 3, dtype=torch.float64)
-    )
-    assert torch.equal(
-        scores[observed],
-        family.log_density(data["totals"][observed], data["exposure"][observed]),
-    )
+def test_an_unobserved_total_scores_log_one_and_the_rest_as_without_it() -> None:
+    def check(seed: int) -> None:
+        data = _draw(seed)
+        family = NegativeBinomialEmission(DISPERSION, MEAN)
+        observed = data["exposure"][:, 0] > 0
+        scores = family.log_density(data["totals"], data["exposure"])
+        assert torch.equal(
+            scores[~observed],
+            torch.zeros(int((~observed).sum()), 3, dtype=torch.float64),
+        )
+        assert torch.equal(
+            scores[observed],
+            family.log_density(data["totals"][observed], data["exposure"][observed]),
+        )
+
+    every_value(range(3), check)
 
 
 @pytest.mark.critical
 @pytest.mark.oracle
-@pytest.mark.parametrize("seed", range(3))
-def test_the_negative_binomial_m_step_is_the_fit_without_unobserved_totals(
-    seed: int,
-) -> None:
-    data = _draw(seed)
-    family = NegativeBinomialEmission(DISPERSION, MEAN)
-    observed = data["exposure"][:, 0] > 0
-    masked = family.reestimate(data["totals"], data["posterior"], data["exposure"])
-    removed = family.reestimate(
-        data["totals"][observed],
-        data["posterior"][observed],
-        data["exposure"][observed],
-    )
-    _equal_parameters(masked.emissions, removed.emissions)
-    assert (masked.iterations, masked.at_boundary) == (
-        removed.iterations,
-        removed.at_boundary,
-    )
+def test_the_negative_binomial_m_step_is_the_fit_without_unobserved_totals() -> None:
+    def check(seed: int) -> None:
+        data = _draw(seed)
+        family = NegativeBinomialEmission(DISPERSION, MEAN)
+        observed = data["exposure"][:, 0] > 0
+        masked = family.reestimate(data["totals"], data["posterior"], data["exposure"])
+        removed = family.reestimate(
+            data["totals"][observed],
+            data["posterior"][observed],
+            data["exposure"][observed],
+        )
+        _equal_parameters(masked.emissions, removed.emissions)
+        assert (masked.iterations, masked.at_boundary) == (
+            removed.iterations,
+            removed.at_boundary,
+        )
+
+    every_value(range(3), check)
 
 
 @pytest.mark.critical
 @pytest.mark.oracle
-@pytest.mark.parametrize("seed", range(3))
-def test_unobserved_successes_score_log_one_and_fit_as_without_them(seed: int) -> None:
-    data = _draw(seed)
-    family = BetaBinomialEmission(TRIALS, ALPHA, BETA)
-    observed = data["trials"][:, 0] > 0
-    scores = family.log_density(data["successes"], data["trials"])
-    assert torch.equal(
-        scores[~observed], torch.zeros(int((~observed).sum()), 3, dtype=torch.float64)
-    )
-    assert torch.equal(
-        scores[observed],
-        family.log_density(data["successes"][observed], data["trials"][observed]),
-    )
-    masked = family.reestimate(data["successes"], data["posterior"], data["trials"])
-    removed = family.reestimate(
-        data["successes"][observed],
-        data["posterior"][observed],
-        data["trials"][observed],
-    )
-    _equal_parameters(masked.emissions, removed.emissions)
+def test_unobserved_successes_score_log_one_and_fit_as_without_them() -> None:
+    def check(seed: int) -> None:
+        data = _draw(seed)
+        family = BetaBinomialEmission(TRIALS, ALPHA, BETA)
+        observed = data["trials"][:, 0] > 0
+        scores = family.log_density(data["successes"], data["trials"])
+        assert torch.equal(
+            scores[~observed],
+            torch.zeros(int((~observed).sum()), 3, dtype=torch.float64),
+        )
+        assert torch.equal(
+            scores[observed],
+            family.log_density(data["successes"][observed], data["trials"][observed]),
+        )
+        masked = family.reestimate(data["successes"], data["posterior"], data["trials"])
+        removed = family.reestimate(
+            data["successes"][observed],
+            data["posterior"][observed],
+            data["trials"][observed],
+        )
+        _equal_parameters(masked.emissions, removed.emissions)
+
+    every_value(range(3), check)
 
 
 @pytest.mark.critical
