@@ -258,6 +258,7 @@ def test_what_a_method_cannot_run_on_is_refused() -> None:
 
 
 @pytest.mark.patch
+@pytest.mark.smoke
 def test_a_tensor_is_relabelled_bitwise_as_its_array() -> None:
     # A `Chain`'s draws are tensors, a fitted one's with a grad: converted on
     # entry, they give the array call's permutations and objective bitwise.
