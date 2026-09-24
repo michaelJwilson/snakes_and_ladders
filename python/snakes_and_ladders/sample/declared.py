@@ -26,10 +26,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, Self, TypeVar, runtime_checkable
 
 import numpy as np
-import torch
+from numpy.typing import ArrayLike
 
 #: The family codes ``oxisal``'s energy kernels read.
 GAUSSIAN, ROSENBROCK, MIXTURE, GAUSSIAN_HMM = 0, 1, 2, 3
@@ -44,8 +44,8 @@ class DeclaredGaussian(Protocol):
     """
 
     @property
-    def gaussian_precision(self) -> torch.Tensor:
-        """``P``."""
+    def gaussian_precision(self) -> ArrayLike:
+        """``P``, a constant: an array or a tensor that tracks no gradient."""
         ...
 
 
@@ -99,11 +99,20 @@ def declared_energy(objective: object) -> tuple[int, np.ndarray] | None:
                 ([float(k)], np.asarray(values, float).ravel())
             )
     if isinstance(objective, DeclaredGaussian):
-        precision = objective.gaussian_precision.detach().numpy()
-        return GAUSSIAN, np.ascontiguousarray(precision, dtype=np.float64).reshape(-1)
+        precision = np.ascontiguousarray(objective.gaussian_precision, dtype=np.float64)
+        return GAUSSIAN, precision.reshape(-1)
     if isinstance(objective, DeclaredRosenbrock):
         return ROSENBROCK, np.asarray(objective.rosenbrock_constants, dtype=np.float64)
     return None
+
+
+class _Raisable(Protocol):
+    """What :class:`Power` applies to: an array or a tensor alike."""
+
+    def __pow__(self, exponent: int, /) -> Self: ...
+
+
+_R = TypeVar("_R", bound=_Raisable)
 
 
 @dataclass(frozen=True)
@@ -116,7 +125,7 @@ class Power:
 
     exponent: int
 
-    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+    def __call__(self, x: _R) -> _R:
         return x**self.exponent
 
 

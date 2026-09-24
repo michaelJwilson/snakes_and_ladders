@@ -78,8 +78,8 @@ def test_the_compiled_chain_recovers_the_gaussian_moments() -> None:
         first.update(row)
         second.update(row * row)
     mean, square = first.estimate(), second.estimate()
-    assert np.abs(mean.mean.numpy() / mean.standard_error.numpy()).max() < 4.5
-    residual = (square.mean.numpy() - 1.0 / precision) / square.standard_error.numpy()
+    assert np.abs(mean.mean / mean.standard_error).max() < 4.5
+    residual = (square.mean - 1.0 / precision) / square.standard_error
     assert np.abs(residual).max() < 4.5
 
 
@@ -146,8 +146,8 @@ def test_the_compiled_mala_chain_recovers_the_gaussian_moments() -> None:
         first.update(row)
         second.update(row * row)
     mean, square = first.estimate(), second.estimate()
-    assert np.abs(mean.mean.numpy() / mean.standard_error.numpy()).max() < 4.5
-    residual = (square.mean.numpy() - 1.0 / precision) / square.standard_error.numpy()
+    assert np.abs(mean.mean / mean.standard_error).max() < 4.5
+    residual = (square.mean - 1.0 / precision) / square.standard_error
     assert np.abs(residual).max() < 4.5
 
 
@@ -238,7 +238,7 @@ def test_compiled_operators_are_kalman_mean_over_the_stored_draws() -> None:
         for row in chain.theta:
             kalman.update(operator(row))
         np.testing.assert_array_equal(
-            chain.expectations[name].mean.numpy(), kalman.estimate().mean.numpy()
+            chain.expectations[name].mean, kalman.estimate().mean
         )
 
 
@@ -264,8 +264,8 @@ def test_both_routes_sample_one_rosenbrock_density() -> None:
     ]
     for name in ("x", "x2"):
         rust, python = expectations[0][name], expectations[1][name]
-        spread = np.hypot(rust.standard_error.numpy(), python.standard_error.numpy())
-        assert np.all(np.abs(rust.mean.numpy() - python.mean.numpy()) < 4.5 * spread)
+        spread = np.hypot(rust.standard_error, python.standard_error)
+        assert np.all(np.abs(rust.mean - python.mean) < 4.5 * spread)
 
 
 @pytest.mark.end2end
@@ -336,8 +336,8 @@ def test_both_routes_sample_the_mixture_posterior_alike() -> None:
         for backend in (Backend.RUST, Backend.PYTHON)
     ]
     rust, python = expectations
-    spread = np.hypot(rust.standard_error.numpy(), python.standard_error.numpy())
-    assert np.all(np.abs(rust.mean.numpy() - python.mean.numpy()) < 4.5 * spread)
+    spread = np.hypot(rust.standard_error, python.standard_error)
+    assert np.all(np.abs(rust.mean - python.mean) < 4.5 * spread)
 
 
 def _sequences(n: int, length: int, counts: bool = False) -> np.ndarray:
@@ -420,8 +420,8 @@ def test_both_routes_sample_the_hmm_posterior_alike(family: str) -> None:
         for backend in (Backend.RUST, Backend.PYTHON)
     ]
     rust, python = expectations
-    spread = np.hypot(rust.standard_error.numpy(), python.standard_error.numpy())
-    assert np.all(np.abs(rust.mean.numpy() - python.mean.numpy()) < 4.5 * spread)
+    spread = np.hypot(rust.standard_error, python.standard_error)
+    assert np.all(np.abs(rust.mean - python.mean) < 4.5 * spread)
 
 
 @pytest.mark.oracle
@@ -446,7 +446,7 @@ def test_the_jax_walk_filters_and_warms_up_as_the_rust_one_does() -> None:
     for row in chain.theta:
         kalman.update(row**2)
     np.testing.assert_allclose(
-        chain.expectations["x2"].mean.numpy(),
-        kalman.estimate().mean.numpy(),
+        chain.expectations["x2"].mean,
+        kalman.estimate().mean,
         rtol=1e-12,
     )

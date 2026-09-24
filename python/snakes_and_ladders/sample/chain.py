@@ -404,7 +404,9 @@ def run_chain(
             if filters:
                 drawn_at = position * scale if scale is not None else position
                 for name, kalman in filters.items():
-                    kalman.update(operators[name](drawn_at))  # type: ignore[index]
+                    kalman.update(
+                        operators[name](drawn_at).detach().cpu().numpy()  # type: ignore[index]
+                    )
             tracked.record(
                 drawn,
                 state=position,
@@ -515,7 +517,12 @@ def run_compiled(
         block = torch.from_numpy(draws.reshape(-1, dimension))
         for name, kalman in filters.items() if block.shape[0] else ():
             kalman.update_block(
-                torch.stack([operators[name](row) for row in block])  # type: ignore[index]
+                np.stack(
+                    [
+                        operators[name](row).detach().cpu().numpy()  # type: ignore[index]
+                        for row in block
+                    ]
+                )
             )
         if store_chain:
             blocks.append(block)

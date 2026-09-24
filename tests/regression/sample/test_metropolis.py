@@ -13,9 +13,10 @@ Referees:
 - the compiled route's warm-up and the torch route's settle on the same
   acceptance to 0.03, and on Rosenbrock at ``b = 1`` their first two moments
   agree within 4.5 combined standard errors;
-- a declared operator's filter kept in Rust is the Python ``KalmanMean`` over
-  the stored draws, bitwise; an undeclared one, filtered per block, agrees
-  to 1e-12; ``store_chain=False`` keeps no draw and the same expectations.
+- a declared operator's filter kept in Rust, and an undeclared one filtered
+  per block, is the Python ``KalmanMean`` over the stored draws, bitwise
+  (issue #1011); ``store_chain=False`` keeps no draw and the same
+  expectations.
 """
 
 from __future__ import annotations
@@ -50,11 +51,9 @@ def _chain(backend: Backend, n: int = 40_000, **options: object) -> hmc.Chain:
 
 def _assert_moments(chain: hmc.Chain, temperature: float = 1.0) -> None:
     first, second = chain.expectations["x"], chain.expectations["x2"]
-    assert np.all(np.abs(first.mean.numpy()) < 4.5 * first.standard_error.numpy())
+    assert np.all(np.abs(first.mean) < 4.5 * first.standard_error)
     target = temperature / PRECISION
-    assert np.all(
-        np.abs(second.mean.numpy() - target) < 4.5 * second.standard_error.numpy()
-    )
+    assert np.all(np.abs(second.mean - target) < 4.5 * second.standard_error)
 
 
 @pytest.mark.oracle
@@ -138,8 +137,8 @@ def test_both_routes_sample_one_rosenbrock_density() -> None:
     ]
     for name in ("x", "x2"):
         rust, python = means[0][name], means[1][name]
-        spread = np.hypot(rust.standard_error.numpy(), python.standard_error.numpy())
-        assert np.all(np.abs(rust.mean.numpy() - python.mean.numpy()) < 4.5 * spread)
+        spread = np.hypot(rust.standard_error, python.standard_error)
+        assert np.all(np.abs(rust.mean - python.mean) < 4.5 * spread)
 
 
 @pytest.mark.oracle
@@ -159,29 +158,24 @@ def test_operators_are_filtered_as_kalman_mean_filters_the_stored_draws() -> Non
         expected = kalman.estimate()
         for chain in (stored, free):
             got = chain.expectations[name]
-            if isinstance(operator, Power):
-                np.testing.assert_array_equal(got.mean.numpy(), expected.mean.numpy())
-                np.testing.assert_array_equal(got.phi.numpy(), expected.phi.numpy())
-            else:
-                np.testing.assert_allclose(
-                    got.mean.numpy(), expected.mean.numpy(), rtol=1e-12
-                )
+            np.testing.assert_array_equal(got.mean, expected.mean)
+            np.testing.assert_array_equal(got.phi, expected.phi)
             assert got.n == 3_000
 
 
 @pytest.mark.analytic
 def test_a_block_update_is_the_one_at_a_time_update() -> None:
-    values = torch.as_tensor(np.random.default_rng(1006).normal(size=(2_500, 3)))
+    # Bitwise: a block is added row by row in the order `update` adds
+    # (issue #1011); torch's cascade sum had held this to 1e-12.
+    values = np.random.default_rng(1006).normal(size=(2_500, 3))
     one, block = KalmanMean(), KalmanMean()
     for value in values:
         one.update(value)
     block.update_block(values[:1_000])
     block.update_block(values[1_000:])
     for field in ("mean", "standard_error", "phi"):
-        np.testing.assert_allclose(
-            getattr(block.estimate(), field).numpy(),
-            getattr(one.estimate(), field).numpy(),
-            rtol=1e-12,
+        np.testing.assert_array_equal(
+            getattr(block.estimate(), field), getattr(one.estimate(), field)
         )
 
 
