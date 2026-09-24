@@ -34,11 +34,11 @@ from snakes_and_ladders import oxisal
 from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.emissions import ParameterDomainError
 from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.sample import hmc
 from snakes_and_ladders.sample.accept import accept_ratio, acceptance_probability
 from snakes_and_ladders.sample.declared import declared_energy
 from snakes_and_ladders.sample.hmc import (
     Adaptation,
-    Chain,
     Transition,
     run_chain,
     run_compiled,
@@ -133,7 +133,7 @@ def random_walk(
     store_chain: bool = True,
     operators: Mapping[str, Callable[[torch.Tensor], torch.Tensor]] | None = None,
     backend: Backend = Backend.RUST,
-) -> Chain:
+) -> hmc.Chain:
     """Draw ``n_samples`` from ``exp(-objective / temperature)`` by random-walk Metropolis.
 
     Parameters
@@ -168,7 +168,7 @@ def random_walk(
 
     Returns
     -------
-    Chain
+    ~snakes_and_ladders.sample.hmc.Chain
         The draws, acceptance, per-proposal energy error, energy evaluations
         spent (warm-up included) and what the warm-up settled on.
 
