@@ -67,7 +67,7 @@ def test_analytic_tree_bound_benchmark(benchmark: BenchmarkFixture, kind: str) -
     surrogate = (
         PlugInLikelihood(k, pi) if kind == "plug_in" else ParsimonyUpperBound(k, pi)
     )
-    assert torch.isfinite(benchmark(surrogate, topology, alignment))
+    assert np.isfinite(benchmark(surrogate, topology, alignment))
 
 
 def test_learned_tree_prediction_benchmark(benchmark: BenchmarkFixture) -> None:
@@ -84,7 +84,7 @@ def test_learned_tree_prediction_benchmark(benchmark: BenchmarkFixture) -> None:
         max_epochs=20,
     )
     surrogate = LearnedTreeSurrogate(fitted, k, pi)
-    assert torch.isfinite(benchmark(surrogate, topologies[0], alignment))
+    assert np.isfinite(benchmark(surrogate, topologies[0], alignment))
 
 
 @pytest.mark.parametrize("kind", ["enumeration", "mean_field", "spanning_tree"])

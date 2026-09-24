@@ -483,7 +483,9 @@ class BlockFrequencyBound(Surrogate):
         self, topology: Topology, alignment: Mapping[str, np.ndarray]
     ) -> torch.Tensor:
         """The feasible branch lengths the interval is evaluated at."""
-        return least_squares_lengths(topology, jc_distances(alignment, self.k))
+        return torch.from_numpy(
+            least_squares_lengths(topology, jc_distances(alignment, self.k))
+        )
 
     def interval(
         self, topology: Topology, alignment: Mapping[str, np.ndarray]
@@ -499,16 +501,16 @@ class BlockFrequencyBound(Surrogate):
             min_count=self.min_count,
         )
 
-    def __call__(self, structure: object, data: object) -> torch.Tensor:
+    def __call__(self, structure: object, data: object) -> float:
         if not isinstance(structure, Node) or not isinstance(data, Mapping):
             msg = "a tree surrogate takes a topology and an alignment"
             raise TypeError(msg)
         interval = self.interval(structure, data)
         if self._claim is Bound.LOWER:
-            return interval.lower
+            return float(interval.lower)
         if self._claim is Bound.UPPER:
-            return interval.upper
-        return interval.extrapolated
+            return float(interval.upper)
+        return float(interval.extrapolated)
 
 
 __all__ = [

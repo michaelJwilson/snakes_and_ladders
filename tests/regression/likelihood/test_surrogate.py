@@ -230,10 +230,29 @@ def test_least_squares_lengths_are_feasible_and_fit_the_distances() -> None:
     topology = next(enumerate_topologies(sorted(alignment)))
     lengths = least_squares_lengths(topology, distances)
     assert bool((lengths >= 0).all())
-    uniform = torch.full_like(lengths, 0.1)
+    uniform = np.full_like(lengths, 0.1)
     assert least_squares_residual(topology, distances, lengths) < (
         least_squares_residual(topology, distances, uniform)
     )
+
+
+@pytest.mark.bug
+def test_least_squares_lengths_are_bitwise_across_repeated_calls() -> None:
+    # `torch.linalg.lstsq`'s CPU default, MKL `gelsy`, returned up to 42
+    # ulp-different solutions in 1,000 calls on one 10x7 system, and 9 of the
+    # 15 topologies' lengths differed across three repeats (issue #1026). The
+    # fit is a NumPy `gelsd` solve now; 100 repeats give one answer bitwise,
+    # topology by topology, and so does the plug-in bound evaluated at them.
+    alignment, k, pi = _alignment()
+    distances = jc_distances(alignment, k)
+    bound = PlugInLikelihood(k, pi)
+    for topology in enumerate_topologies(sorted(alignment)):
+        lengths = {
+            least_squares_lengths(topology, distances).tobytes() for _ in range(100)
+        }
+        assert len(lengths) == 1
+        values = {float(bound(topology, alignment)) for _ in range(10)}
+        assert len(values) == 1
 
 
 @pytest.mark.analytic
@@ -350,8 +369,8 @@ def test_ground_state_bracket_contains_the_enumerated_minimum() -> None:
 class _WrongSide:
     kind = Bound.LOWER
 
-    def __call__(self, structure: object, data: object) -> torch.Tensor:
-        return torch.tensor(_identity(structure, data) + 1.0)
+    def __call__(self, structure: object, data: object) -> float:
+        return _identity(structure, data) + 1.0
 
 
 @pytest.mark.smoke
@@ -368,9 +387,9 @@ def test_certify_allows_the_stated_violation_rate() -> None:
     class _Mostly:
         kind = Bound.LOWER
 
-        def __call__(self, structure: object, data: object) -> torch.Tensor:
+        def __call__(self, structure: object, data: object) -> float:
             value = _identity(structure, data)
-            return torch.tensor(value + 1.0 if value == 4.0 else value - 1.0)
+            return value + 1.0 if value == 4.0 else value - 1.0
 
     certificate = certify(
         _Mostly(),
