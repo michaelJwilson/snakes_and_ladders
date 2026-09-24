@@ -106,6 +106,11 @@ validation-rustworkx = ["rustworkx>=0.18.1"]
 validation-gymnasium = ["gymnasium>=1.0"]
 validation-torchrl = ["torchrl>=0.6"]
 validation-torch-geometric = ["torch_geometric>=2.5"]
+#
+# JAX itself: Apache-2.0, far above the 1,000-star bar, approved on #991 for
+# validation and benchmarking in a subprocess only; autodiff in the package
+# stays PyTorch. Already resolved beneath BlackJAX, now its own extra.
+validation-jax = ["jax>=0.11.2"]
 # The run store behind `snakes_and_ladders.track` (issue #778). An extra
 # rather than a core dependency: `track.Run` is a Protocol written with
 # `aim.Run`'s own signatures, so the package imports, records and tests
@@ -271,6 +276,7 @@ module = [
     "hmmlearn.*",
     "sklearn.*",
     "blackjax.*",
+    "jax",
     "jax.*",
 ]
 ignore_missing_imports = true
@@ -278,9 +284,12 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 # JAX types its arrays but leaves `config.update` and `block_until_ready`
 # untyped, so --strict rejects a correct call where JAX is installed; where it
-# is absent its decorators are `Any`. Narrowed to the one script that imports
-# it (issue #963).
-module = "snakes_and_ladders.validation.scripts.blackjax"
+# is absent its decorators are `Any`. Narrowed to the scripts that import
+# it (issues #963, #991).
+module = [
+    "snakes_and_ladders.validation.scripts.blackjax",
+    "snakes_and_ladders.validation.scripts.jax",
+]
 disallow_untyped_calls = false
 # Where JAX is absent, as in the `lint` job, `jax.jit` is `Any`.
 disallow_untyped_decorators = false
