@@ -5,7 +5,13 @@ recursion. Referees:
 
 - ten iterations from one start on `hmm/ci.yaml` (3 states, 4 symbols, 600
   sequences of 15): every probability within 1e-11, and one iteration alone
-  within the same, so the agreement is per step and not a shared fixed point.
+  within the same, so the agreement is per step and not a shared fixed point;
+- ten iterations of the streamed Gaussian and Poisson steps against
+  `GaussianHMM` and `PoissonHMM` with every prior and floor zero: every
+  parameter within 1e-9 relative (issue #997);
+- the compiled Viterbi against `decode`: every path position, and the total
+  log-probability within 1e-11; the compiled forward pass against `score`
+  within 1e-11 (issue #997).
 
 The runtime goal hmmlearn sets is in `test_goals.py`.
 """
@@ -17,8 +23,14 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
+from snakes_and_ladders.emissions import GaussianEmission, PoissonEmission
 from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.opt.hmm import baum_welch
+from snakes_and_ladders.opt.hmm import (
+    baum_welch,
+    baum_welch_family,
+    hmm_log_likelihood,
+    viterbi,
+)
 from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
 from snakes_and_ladders.validation import hmmlearn
 from snakes_and_ladders.validation.runner import available
@@ -87,3 +99,123 @@ def test_baum_welch_is_hmmlearns_iteration_for_iteration(n_iter: int) -> None:
         np.testing.assert_allclose(mine, other, rtol=0.0, atol=ATOL)
     # The start is not a fixed point: ten iterations moved the emissions.
     assert np.abs(theirs.emission - start[2]).max() > 1e-3
+
+
+def _family_sequences(family: str) -> np.ndarray:
+    """200 sequences of 30 from a sticky three-state chain, seed 997."""
+    rng = np.random.default_rng(997)
+    cumulative = np.array(
+        [[0.9, 0.05, 0.05], [0.1, 0.8, 0.1], [0.05, 0.15, 0.8]]
+    ).cumsum(axis=1)
+    states = np.empty((200, 30), dtype=np.int64)
+    states[:, 0] = rng.choice(3, size=200)
+    for t in range(1, 30):
+        above = rng.random(200)[:, None] > cumulative[states[:, t - 1]]
+        states[:, t] = above.sum(axis=1)
+    if family == "gaussian":
+        return np.asarray(rng.normal(np.array([-2.0, 0.0, 3.0])[states], 1.0))
+    return np.asarray(rng.poisson(np.array([1.0, 5.0, 12.0])[states]))
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("family", ["gaussian", "poisson"])
+def test_the_streamed_family_fit_is_hmmlearns(family: str) -> None:
+    # Issue #997: the streamed Gaussian and Poisson steps against hmmlearn's
+    # `GaussianHMM` and `PoissonHMM` with every prior and floor zero, ten
+    # iterations from one start: each parameter within 1e-9 relative.
+    observations = _family_sequences(family)
+    initial = np.array([0.4, 0.3, 0.3])
+    transition = np.array([[0.8, 0.1, 0.1], [0.1, 0.8, 0.1], [0.1, 0.1, 0.8]])
+    start = (
+        {"mean": np.array([-1.5, 0.5, 2.5]), "variance": np.array([1.2, 1.0, 1.8])}
+        if family == "gaussian"
+        else {"rate": np.array([2.0, 4.0, 10.0])}
+    )
+    family_start = (
+        GaussianEmission(start["mean"], np.sqrt(start["variance"]), 1e-12)
+        if family == "gaussian"
+        else PoissonEmission(start["rate"])
+    )
+    ours = baum_welch_family(
+        observations,
+        torch.log(torch.as_tensor(initial)),
+        torch.log(torch.as_tensor(transition)),
+        family_start,
+        max_iterations=10,
+        tolerance=-np.inf,
+    )
+    theirs = hmmlearn.family_baum_welch(observations, initial, transition, start, 10)
+    np.testing.assert_allclose(
+        ours.log_initial.exp().numpy(), theirs.initial, rtol=1e-9
+    )
+    np.testing.assert_allclose(
+        ours.log_transition.exp().numpy(), theirs.transition, rtol=1e-9
+    )
+    fitted = ours.emissions.named_parameters()
+    if family == "gaussian":
+        np.testing.assert_allclose(
+            fitted["mean"].numpy(), theirs.emission["mean"], rtol=1e-9
+        )
+        np.testing.assert_allclose(
+            fitted["scale"].numpy() ** 2, theirs.emission["variance"], rtol=1e-9
+        )
+    else:
+        np.testing.assert_allclose(
+            fitted["mean"].numpy(), theirs.emission["rate"], rtol=1e-9
+        )
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("family", ["gaussian", "poisson"])
+def test_viterbi_is_hmmlearns(family: str) -> None:
+    # Issue #997: the compiled Viterbi against hmmlearn's `decode`: every
+    # path position equal and the total joint log-probability within 1e-11.
+    observations = _family_sequences(family)
+    initial = np.array([0.4, 0.3, 0.3])
+    transition = np.array([[0.8, 0.1, 0.1], [0.1, 0.8, 0.1], [0.1, 0.1, 0.8]])
+    start = (
+        {"mean": np.array([-1.5, 0.5, 2.5]), "variance": np.array([1.2, 1.0, 1.8])}
+        if family == "gaussian"
+        else {"rate": np.array([2.0, 4.0, 10.0])}
+    )
+    family_start = (
+        GaussianEmission(start["mean"], np.sqrt(start["variance"]), 1e-12)
+        if family == "gaussian"
+        else PoissonEmission(start["rate"])
+    )
+    states, log_probability = viterbi(
+        observations,
+        torch.log(torch.as_tensor(initial)),
+        torch.log(torch.as_tensor(transition)),
+        family_start,
+    )
+    theirs = hmmlearn.viterbi(observations, initial, transition, start)
+    np.testing.assert_array_equal(states, theirs.states)
+    np.testing.assert_allclose(log_probability, theirs.log_probability, rtol=1e-11)
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("family", ["gaussian", "poisson"])
+def test_the_hmm_log_likelihood_is_hmmlearns_score(family: str) -> None:
+    # Issue #997: the compiled forward pass against hmmlearn's `score`.
+    observations = _family_sequences(family)
+    initial = np.array([0.4, 0.3, 0.3])
+    transition = np.array([[0.8, 0.1, 0.1], [0.1, 0.8, 0.1], [0.1, 0.1, 0.8]])
+    start = (
+        {"mean": np.array([-1.5, 0.5, 2.5]), "variance": np.array([1.2, 1.0, 1.8])}
+        if family == "gaussian"
+        else {"rate": np.array([2.0, 4.0, 10.0])}
+    )
+    family_start = (
+        GaussianEmission(start["mean"], np.sqrt(start["variance"]), 1e-12)
+        if family == "gaussian"
+        else PoissonEmission(start["rate"])
+    )
+    ours = hmm_log_likelihood(
+        observations,
+        torch.log(torch.as_tensor(initial)),
+        torch.log(torch.as_tensor(transition)),
+        family_start,
+    )
+    theirs = hmmlearn.score(observations, initial, transition, start)
+    np.testing.assert_allclose(ours, theirs.log_likelihood, rtol=1e-11)

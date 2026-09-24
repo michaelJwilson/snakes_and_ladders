@@ -64,3 +64,32 @@ def gin_forward(
             inputs[f"{index}:{key}"] = value.detach().numpy()
     out = run(SCRIPT, inputs).outputs
     return Forward(out["forward"], out["case_seconds"])
+
+
+def set_forward(
+    models: Sequence[torch.nn.Module],
+    *,
+    hidden: int,
+    tokens: np.ndarray,
+    owner: np.ndarray,
+    features: np.ndarray,
+) -> Forward:
+    """Each ``SetSurrogate``'s twin around PyG's ``global_add_pool``, on one batch (issue #997)."""
+    inputs: dict[str, np.ndarray] = {
+        "model": np.asarray("set"),
+        "n_models": np.asarray(len(models)),
+        "n_features": np.asarray(features.shape[1]),
+        "n_token_features": np.asarray(tokens.shape[1]),
+        "hidden": np.asarray(hidden),
+        "n_layers": np.asarray(0),
+        "n": np.asarray(features.shape[0]),
+        "tokens": np.ascontiguousarray(tokens, dtype=np.float64),
+        "edges": np.zeros((0, 2), dtype=np.int64),
+        "owner": np.ascontiguousarray(owner, dtype=np.int64),
+        "features": np.ascontiguousarray(features, dtype=np.float64),
+    }
+    for index, model in enumerate(models):
+        for key, value in model.state_dict().items():
+            inputs[f"{index}:{key}"] = value.detach().numpy()
+    out = run(SCRIPT, inputs).outputs
+    return Forward(out["forward"], out["case_seconds"])

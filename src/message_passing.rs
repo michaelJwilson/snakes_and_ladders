@@ -126,7 +126,15 @@ fn logsumexp(values: &[f64]) -> f64 {
     }
     let mut total = 0.0;
     for &value in values {
-        total += (value - peak).exp();
+        // `exp(0)` is exactly one, so the maximum's term is added as one in
+        // its own place: the sum's order and every bit of it are unchanged,
+        // and one exponential per reduction is not taken (issue #997). A
+        // non-finite peak takes the exponential, whose `nan` is the answer.
+        total += if value == peak && peak.is_finite() {
+            1.0
+        } else {
+            (value - peak).exp()
+        };
     }
     peak + total.ln()
 }

@@ -61,3 +61,36 @@ def expectation_maximization(
         result.seconds,
         int(result.peak_bytes or 0),
     )
+
+
+@dataclass(frozen=True)
+class Score:
+    """scikit-learn's summed log-likelihood at given mixture parameters."""
+
+    log_likelihood: float
+    #: Wall seconds of ``score_samples`` alone.
+    seconds: float
+    #: Peak resident bytes it added.
+    peak_bytes: int
+
+
+def score(
+    observations: np.ndarray, weights: np.ndarray, mean: np.ndarray, scale: np.ndarray
+) -> Score:
+    """``sum(score_samples)`` of a diagonal mixture at these parameters (issue #997)."""
+    result = run(
+        SCRIPT,
+        {
+            "observations": np.ascontiguousarray(observations, dtype=np.float64),
+            "weights": np.ascontiguousarray(weights, dtype=np.float64),
+            "mean": np.ascontiguousarray(mean, dtype=np.float64),
+            "scale": np.ascontiguousarray(scale, dtype=np.float64),
+            "n_iter": np.asarray(0),
+            "call": np.asarray("score"),
+        },
+    )
+    return Score(
+        float(result.outputs["log_likelihood"]),
+        result.seconds,
+        int(result.peak_bytes or 0),
+    )

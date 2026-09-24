@@ -20,6 +20,7 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.cost import Cost
 from snakes_and_ladders.emissions import GaussianEmission, Reestimate
 from snakes_and_ladders.likelihood.mixture_assignments import (
@@ -134,7 +135,9 @@ def test_the_component_m_step_is_the_emission_family_s_own() -> None:
     # The mixture's EM and a direct call into `GaussianEmission.reestimate` on
     # the same responsibilities must produce the same numbers, because they
     # *are* the same call. A divergence means the seam has acquired a
-    # mixture-specific branch.
+    # mixture-specific branch. It is the tensor route's claim: the compiled
+    # route streams its own moments and is pinned to this one within 1e-10
+    # (`test_the_streamed_mixture_em_is_the_tensor_one`, issue #986).
     observations = _dataset(n_samples=200)
     values = torch.as_tensor(observations, dtype=torch.float64)
     components = GaussianEmission([-1.0, 1.0], [2.0, 2.0], 1e-9)
@@ -145,7 +148,11 @@ def test_the_component_m_step_is_the_emission_family_s_own() -> None:
         values.reshape(1, -1), posterior.reshape(1, *posterior.shape)
     ).emissions
     one_step = expectation_maximization(
-        observations, torch.exp(log_weight), components, max_iterations=1
+        observations,
+        torch.exp(log_weight),
+        components,
+        max_iterations=1,
+        backend=Backend.PYTHON,
     )
 
     assert_allclose(one_step.components.mean.numpy(), direct.mean.numpy(), rtol=1e-15)
@@ -747,11 +754,92 @@ def test_a_component_m_step_at_a_boundary_is_reported_on_the_fit() -> None:
         _ReportingGaussian(MEAN, SCALE, 1e-9, at_boundary=True),
         max_iterations=3,
     )
+    # The tensor route, which the flagging subclass also takes, so the flag
+    # is the only difference the comparison can see (issue #986).
     clear = expectation_maximization(
-        observations, weights, GaussianEmission(MEAN, SCALE, 1e-9), max_iterations=3
+        observations,
+        weights,
+        GaussianEmission(MEAN, SCALE, 1e-9),
+        max_iterations=3,
+        backend=Backend.PYTHON,
     )
 
     assert flagged.at_boundary
     assert not clear.at_boundary
     assert torch.equal(flagged.components.mean, clear.components.mean)
     assert torch.equal(flagged.components.scale, clear.components.scale)
+
+
+@pytest.mark.oracle
+def test_the_streamed_mixture_em_is_the_tensor_one() -> None:
+    # Issue #986: the compiled route streams each draw into its components'
+    # mass, mean and centred sum of squares; the tensor route is its oracle,
+    # over ten iterations from a spread start on three well-separated modes.
+    rng = np.random.default_rng(986)
+    component = rng.choice(3, size=5_000, p=[0.3, 0.3, 0.4])
+    draws = (
+        np.array([-4.0, 0.0, 5.0])[component]
+        + rng.normal(size=5_000) * np.array([1.0, 1.5, 1.0])[component]
+    )
+    start = GaussianEmission([-1.0, 0.5, 2.0], [2.0, 2.0, 2.0], 1e-12)
+    weights = torch.full((3,), 1.0 / 3.0, dtype=torch.float64)
+    oracle, streamed = (
+        expectation_maximization(
+            draws, weights, start, max_iterations=10, tolerance=-np.inf, backend=backend
+        )
+        for backend in (Backend.PYTHON, Backend.RUST)
+    )
+    assert_allclose(
+        streamed.weights.numpy(), oracle.weights.numpy(), rtol=0, atol=1e-12
+    )
+    assert_allclose(
+        streamed.components.mean.numpy(), oracle.components.mean.numpy(), atol=1e-10
+    )
+    assert_allclose(
+        streamed.components.scale.numpy(), oracle.components.scale.numpy(), atol=1e-10
+    )
+    assert_allclose(streamed.log_likelihood, oracle.log_likelihood, rtol=1e-12)
+    assert streamed.iterations == oracle.iterations == 10
+
+
+@pytest.mark.oracle
+def test_the_mixture_gradient_is_autograd_s() -> None:
+    # Issue #986: `GaussianMixtureObjective.gradient` streams responsibilities
+    # into three sums per component; autograd through `__call__` pins it.
+    rng = np.random.default_rng(9863)
+    draws = np.concatenate(
+        [
+            rng.normal(-3.0, 1.0, 4_000),
+            rng.normal(0.0, 1.5, 3_000),
+            rng.normal(4.0, 1.0, 3_000),
+        ]
+    )
+    objective = GaussianMixtureObjective(draws, 3)
+    for _ in range(3):
+        theta = torch.as_tensor(rng.normal(size=objective.n_parameters) * 0.5)
+        point = theta.clone().requires_grad_(True)
+        (autograd,) = torch.autograd.grad(objective(point), point)
+        assert_allclose(
+            objective.gradient(theta).numpy(), autograd.numpy(), rtol=1e-12, atol=1e-9
+        )
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("n_samples", [1, 4_097, 100_000])
+def test_the_streamed_mixture_score_is_the_torch_one(n_samples: int) -> None:
+    # Issue #997: with no gradient to take, the log-likelihood streams
+    # through the compiled kernel over chunks of 4,096; torch's logsumexp is
+    # the oracle, and a tracked call still takes it.
+    rng = np.random.default_rng(997)
+    values = torch.as_tensor(rng.normal(0.0, 3.0, n_samples), dtype=torch.float64)
+    family = GaussianEmission(
+        torch.tensor([-3.0, 0.5, 4.0], dtype=torch.float64),
+        torch.tensor([1.2, 1.0, 1.3], dtype=torch.float64),
+        1e-12,
+    )
+    log_weight = torch.log(torch.tensor([0.3, 0.3, 0.4], dtype=torch.float64))
+    streamed = mixture_log_likelihood(values, log_weight, family)
+    oracle = mixture_log_likelihood(values, log_weight, family, backend=Backend.PYTHON)
+    assert_allclose(float(streamed), float(oracle), rtol=1e-13)
+    tracked = log_weight.clone().requires_grad_(True)
+    assert mixture_log_likelihood(values, tracked, family).grad_fn is not None

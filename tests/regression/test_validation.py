@@ -36,6 +36,7 @@ from validation_extras import PREFIX, validation_extras
 
 from tests._paths import REPO_ROOT
 from tests.validation._goals import (
+    GOAL_RATIO,
     Goal,
     MemoryGoal,
     assert_fits,
@@ -198,14 +199,16 @@ def test_the_home_states_its_rules_where_its_docstring_says() -> None:
 
 @pytest.mark.infra
 def test_a_goal_fails_by_how_far_the_package_is_off() -> None:
+    # Met at `GOAL_RATIO` times the framework's figure and not above it
+    # (issue #986), and the message says the ratio to the figure itself.
     goal = Goal("selftest", "a call", 1.0e-3, "a hardcoded figure")
-    assert_meets(0.9e-3, goal)
-    assert_meets(1.0e-3, goal)
+    assert_meets(0.9 * GOAL_RATIO * 1.0e-3, goal)
+    assert_meets(GOAL_RATIO * 1.0e-3, goal)
     with pytest.raises(AssertionError, match=r"1\.50x"):
         assert_meets(1.5e-3, goal)
     assert median_seconds(lambda: None, repeats=3) >= 0.0
     memory = MemoryGoal("selftest", "a call", 2_000_000, "a hardcoded figure")
-    assert_fits(1_000_000, memory)
+    assert_fits(int(GOAL_RATIO * 2_000_000), memory)
     with pytest.raises(AssertionError, match=r"1\.50x"):
         assert_fits(3_000_000, memory)
 

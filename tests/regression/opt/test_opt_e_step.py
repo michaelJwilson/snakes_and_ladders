@@ -11,6 +11,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.emissions import CountPairEmission, GaussianEmission
 from snakes_and_ladders.opt.mixture import (
     e_step,
@@ -49,7 +50,12 @@ def test_the_e_step_is_both_functions_bitwise_on_a_gaussian() -> None:
     )
     log_weight = torch.log(torch.tensor([0.3, 0.7], dtype=torch.float64))
     evidence, posterior = e_step(values, log_weight, family)
-    assert torch.equal(evidence, mixture_log_likelihood(values, log_weight, family))
+    # The torch route is the one `e_step` shares; the streamed default is
+    # pinned to it at a tolerance in test_opt_mixture.py (#997).
+    assert torch.equal(
+        evidence,
+        mixture_log_likelihood(values, log_weight, family, backend=Backend.PYTHON),
+    )
     assert torch.equal(posterior, responsibilities(values, log_weight, family))
 
 

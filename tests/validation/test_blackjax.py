@@ -23,9 +23,13 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.sample import hmc
+from snakes_and_ladders.sample import hmc, langevin
 from snakes_and_ladders.validation import blackjax
-from snakes_and_ladders.validation.gaussian import GaussianTarget, dense_precision
+from snakes_and_ladders.validation.gaussian import (
+    GaussianTarget,
+    dense_precision,
+    diagonal_precision,
+)
 from snakes_and_ladders.validation.runner import available
 
 pytestmark = [
@@ -78,3 +82,40 @@ def test_both_chains_centre_on_the_mean_and_accept_alike() -> None:
         error = np.sqrt(variance / size)
         assert np.abs(draws.mean(axis=0)).max() < 4.0 * error.max()
     assert abs(ours.acceptance_rate - theirs.acceptance) < 0.01
+
+
+@pytest.mark.smoke
+def test_blackjax_s_chain_free_run_is_the_same_chain_unstored() -> None:
+    # Issue #997: with no draw kept the scan runs the same transitions on the
+    # same keys, so the acceptance is the stored run's exactly.
+    precision = np.linspace(1.0, 4.0, 20)
+    stored, free = (
+        blackjax.sample(precision, np.zeros(20), 0.3, 5, 200, 997, store_chain=keep)
+        for keep in (True, False)
+    )
+    assert stored.draws.shape == (200, 20)
+    assert free.draws.shape == (0, 20)
+    assert free.acceptance == stored.acceptance
+
+
+@pytest.mark.oracle
+def test_mala_accepts_as_blackjaxs_mala_does() -> None:
+    # Issue #997: `langevin.mala` at step h and `blackjax.mala` at
+    # epsilon = h^2 / 2 make the same proposal, so on one Gaussian their
+    # acceptance rates agree to the chains' sampling error. The streams
+    # differ; 5,000 transitions put a rate near 0.9 within about 0.01.
+    dimension = 100
+    precision = diagonal_precision(dimension)
+    step = 1.6 / dimension**0.25
+    ours = langevin.mala(
+        GaussianTarget(precision),
+        torch.Generator().manual_seed(997),
+        5_000,
+        step_size=step,
+        store_chain=False,
+    )
+    theirs = blackjax.mala(
+        precision, np.zeros(dimension), step, 5_000, 997, store_chain=False
+    )
+    assert 0.3 < theirs.acceptance < 0.97
+    assert abs(ours.acceptance_rate - theirs.acceptance) < 0.03

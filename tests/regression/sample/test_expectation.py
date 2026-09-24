@@ -19,6 +19,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.sample import hmc
 from snakes_and_ladders.sample.expectation import KalmanMean
 from snakes_and_ladders.validation.gaussian import GaussianTarget, diagonal_precision
@@ -109,6 +110,9 @@ def test_an_operator_leaves_the_chain_bitwise_as_it_was() -> None:
             200,
             step_size=0.3,
             n_steps=5,
+            # The torch route: an operator keeps a chain on it, so the plain
+            # chain it is compared with must take it too (issue #986).
+            backend=Backend.PYTHON,
             **options,  # type: ignore[arg-type]
         )
 

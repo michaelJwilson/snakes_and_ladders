@@ -23,6 +23,11 @@ class GaussianTarget(Objective):
         self.precision = torch.as_tensor(precision, dtype=torch.float64)
 
     @property
+    def gaussian_precision(self) -> torch.Tensor:
+        """``P``, which declares this a :class:`~snakes_and_ladders.sample.hmc.DeclaredGaussian`."""
+        return self.precision
+
+    @property
     def dimension(self) -> int:
         """``d``."""
         return int(self.precision.shape[0])
@@ -38,6 +43,17 @@ class GaussianTarget(Objective):
     def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
         """The vector behind ``named``."""
         return named["x"]
+
+    def gradient(self, theta: torch.Tensor) -> torch.Tensor:
+        """``P theta``, the closed form ``hmc.gradient_at`` reads (issue #986).
+
+        In NumPy over the tensors' own buffers: a first torch operation in a
+        process costs megabytes of resident memory that the product does not.
+        """
+        precision, point = self.precision.numpy(), theta.detach().numpy()
+        if precision.ndim == 1:
+            return torch.from_numpy(precision * point)
+        return torch.from_numpy(precision @ point)
 
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         """The negative log density at ``theta``."""

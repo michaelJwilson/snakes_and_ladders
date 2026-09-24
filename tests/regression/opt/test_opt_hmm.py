@@ -10,21 +10,34 @@ recursion checked only against itself is checked against nothing.
 from __future__ import annotations
 
 from dataclasses import replace
-from itertools import permutations, product
+from itertools import pairwise, permutations, product
 
 import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
+from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.emissions import (
+    BetaBinomialEmission,
+    BinomialEmission,
+    CategoricalEmission,
+    EmissionFamily,
+    GaussianEmission,
+    NegativeBinomialEmission,
+    PoissonEmission,
+)
 from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.likelihood.hmm_paths import enumerate_hidden_paths
 from snakes_and_ladders.opt.hmm import (
     EmFit,
+    GaussianHmmObjective,
     HmmObjective,
     align_states,
     baum_welch,
     baum_welch_family,
     forward_log_likelihood,
+    hmm_log_likelihood,
+    viterbi,
 )
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
@@ -503,3 +516,307 @@ def test_baum_welch_ascends_and_settles_on_the_re_estimation_equations() -> None
         torch.exp(log_transition).numpy(), transition, atol=_ATOL_FIXED_POINT
     )
     assert_allclose(torch.exp(log_emission).numpy(), emission, atol=_ATOL_FIXED_POINT)
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("n_sequences", [1, 40])
+def test_the_streamed_baum_welch_is_the_batched_one(n_sequences: int) -> None:
+    # Issue #986: the compiled route streams scaled messages into expected
+    # counts; the log-space batch in `baum_welch_family` is its oracle, over
+    # ten iterations from a perturbed start on the fixture's model.
+    params = replace(
+        load_params(FIXTURES_DIR / "hmm" / "ci.yaml", HmmParams),
+        lengths=(60,) * n_sequences,
+    )
+    observations = simulate_sequences(params).observations
+    rng = np.random.default_rng(986)
+    draws = [rng.random(shape) + 0.5 for shape in ((3,), (3, 3), (3, 4))]
+    initial, transition, emission = (
+        torch.log(torch.as_tensor(d / d.sum(-1, keepdims=True))) for d in draws
+    )
+    fits = [
+        baum_welch(
+            observations,
+            initial,
+            transition,
+            emission,
+            max_iterations=10,
+            tolerance=-np.inf,
+            backend=backend,
+        )
+        for backend in (Backend.PYTHON, Backend.RUST)
+    ]
+    for name in ("log_initial", "log_transition", "log_emission"):
+        assert_allclose(
+            getattr(fits[1], name).numpy(),
+            getattr(fits[0], name).numpy(),
+            rtol=0.0,
+            atol=1e-10,
+        )
+    assert_allclose(fits[1].log_likelihood, fits[0].log_likelihood, rtol=1e-12)
+
+
+def _count_chain(
+    n_sequences: int, length: int, seed: int
+) -> tuple[np.random.Generator, np.ndarray]:
+    """Hidden states of a sticky three-state chain, for the streamed-family pins."""
+    rng = np.random.default_rng(seed)
+    cumulative = np.array(
+        [[0.9, 0.05, 0.05], [0.1, 0.8, 0.1], [0.05, 0.15, 0.8]]
+    ).cumsum(axis=1)
+    states = np.empty((n_sequences, length), dtype=np.int64)
+    states[:, 0] = rng.choice(3, size=n_sequences)
+    for t in range(1, length):
+        above = rng.random(n_sequences)[:, None] > cumulative[states[:, t - 1]]
+        states[:, t] = above.sum(axis=1)
+    return rng, states
+
+
+def _streamed_case(
+    name: str, covariate: bool
+) -> tuple[np.ndarray, EmissionFamily, np.ndarray | None]:
+    """Observations, a start and any covariate for one family (issue #997)."""
+    rng, states = _count_chain(40, 60, 997)
+    depth = rng.integers(5, 40, size=states.shape) if covariate else None
+    if name == "gaussian":
+        values = rng.normal(np.array([-2.0, 0.0, 3.0])[states], 1.0)
+        return values, GaussianEmission([-1.5, 0.5, 2.5], [1.2, 1.0, 1.4], 1e-12), None
+    if name == "poisson":
+        family: EmissionFamily = PoissonEmission([2.0, 4.0, 10.0])
+        return rng.poisson(np.array([1.0, 5.0, 12.0])[states]), family, None
+    if name == "negative_binomial":
+        r, mu = np.array([2.0, 5.0, 10.0])[states], np.array([1.0, 5.0, 12.0])[states]
+        mu = mu if depth is None else mu * depth / 20.0
+        family = NegativeBinomialEmission([1.0, 3.0, 5.0], [2.0, 4.0, 10.0])
+        return rng.negative_binomial(r, r / (r + mu)), family, depth
+    if name == "binomial":
+        family = BinomialEmission([30.0] * 3, [0.3, 0.5, 0.7])
+        return rng.binomial(30, np.array([0.2, 0.5, 0.8])[states]), family, None
+    p = rng.beta(np.array([2.0, 5.0, 8.0])[states], np.array([8.0, 5.0, 2.0])[states])
+    trials = 30 if depth is None else depth
+    family = BetaBinomialEmission([30.0] * 3, [1.5, 4.0, 6.0], [6.0, 4.0, 1.5])
+    return rng.binomial(trials, p), family, depth
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize(
+    ("name", "covariate"),
+    [
+        ("gaussian", False),
+        ("poisson", False),
+        ("negative_binomial", False),
+        ("negative_binomial", True),
+        ("binomial", False),
+        ("beta_binomial", False),
+        ("beta_binomial", True),
+    ],
+)
+def test_the_streamed_family_step_is_the_batched_one(
+    name: str, covariate: bool
+) -> None:
+    # Issue #997: a one-channel Gaussian streams moments, a count family
+    # streams its posterior weight on each occupied (count, covariate) cell
+    # and re-estimates on those; the batched log-space route is the oracle
+    # over ten iterations from a start away from the truth.
+    observations, family, depth = _streamed_case(name, covariate)
+    initial = torch.log(torch.tensor([0.4, 0.3, 0.3], dtype=torch.float64))
+    transition = torch.log(
+        torch.tensor(
+            [[0.8, 0.1, 0.1], [0.1, 0.8, 0.1], [0.1, 0.1, 0.8]], dtype=torch.float64
+        )
+    )
+    fits = [
+        baum_welch_family(
+            observations,
+            initial,
+            transition,
+            family,
+            max_iterations=10,
+            tolerance=-np.inf,
+            covariate=depth,
+            backend=backend,
+        )
+        for backend in (Backend.PYTHON, Backend.RUST)
+    ]
+    if name != "gaussian":
+        # Every observation scored rather than each cell, the three cells
+        # that repeat most tabled and the rest scored, and each with the
+        # Stirling lgamma from 10 (#997).
+        fits.extend(
+            baum_welch_family(
+                observations,
+                initial,
+                transition,
+                family,
+                max_iterations=10,
+                tolerance=-np.inf,
+                covariate=depth,
+                with_table=with_table,
+                table_size=size,
+                approx=approx,
+            )
+            for with_table, size, approx in (
+                (False, None, False),
+                (True, 3, False),
+                (True, None, True),
+                (False, None, True),
+            )
+        )
+    assert type(fits[1].emissions) is type(family)
+    for streamed in fits[1:]:
+        for name_ in ("log_initial", "log_transition"):
+            assert_allclose(
+                getattr(streamed, name_).numpy(),
+                getattr(fits[0], name_).numpy(),
+                rtol=0.0,
+                atol=1e-10,
+            )
+        for key, value in fits[0].emissions.named_parameters().items():
+            assert_allclose(
+                streamed.emissions.named_parameters()[key].numpy(),
+                value.numpy(),
+                rtol=1e-9,
+                err_msg=key,
+            )
+        assert_allclose(streamed.log_likelihood, fits[0].log_likelihood, rtol=1e-12)
+        assert streamed.emission_at_boundary == fits[0].emission_at_boundary
+
+
+@pytest.mark.oracle
+def test_real_valued_counts_take_the_batched_route() -> None:
+    # The table is indexed by integer counts: a float array of the same
+    # counts is scored on the batched route (issue #997). There the Rust
+    # backend runs the compiled ragged E step (#933), which sums in another
+    # order than the torch recursion: measured 2 ulps apart (3.0e-16
+    # relative), so the declared tolerance, not bitwise.
+    observations, family, _ = _streamed_case("poisson", covariate=False)
+    initial = torch.log(torch.full((3,), 1.0 / 3.0, dtype=torch.float64))
+    transition = torch.log(torch.full((3, 3), 1.0 / 3.0, dtype=torch.float64))
+    fits = [
+        baum_welch_family(
+            observations.astype(np.float64),
+            initial,
+            transition,
+            family,
+            max_iterations=3,
+            tolerance=-np.inf,
+            backend=backend,
+        )
+        for backend in (Backend.PYTHON, Backend.RUST)
+    ]
+    assert_allclose(fits[1].log_likelihood, fits[0].log_likelihood, rtol=1e-12)
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize(
+    "name", ["gaussian", "poisson", "negative_binomial", "binomial", "beta_binomial"]
+)
+def test_the_compiled_viterbi_is_the_numpy_one(name: str) -> None:
+    # Issue #997: the compiled route decodes sequences in parallel; the NumPy
+    # recursion is its oracle, path for path and in the total log-probability.
+    observations, family, _ = _streamed_case(name, covariate=False)
+    initial = torch.log(torch.tensor([0.4, 0.3, 0.3], dtype=torch.float64))
+    transition = torch.log(
+        torch.tensor(
+            [[0.8, 0.1, 0.1], [0.1, 0.8, 0.1], [0.1, 0.1, 0.8]], dtype=torch.float64
+        )
+    )
+    ours, theirs = (
+        viterbi(observations, initial, transition, family, backend=backend)
+        for backend in (Backend.RUST, Backend.PYTHON)
+    )
+    assert_allclose(ours[1], theirs[1], rtol=1e-12)
+    # The compiled lgamma differs from torch's in the last bits, which can
+    # flip a tie between two paths: a path that differs must score, under
+    # the oracle's own densities, what the oracle's path scores.
+    emit = family.log_density(
+        torch.as_tensor(observations, dtype=family.observation_dtype)
+    ).numpy()
+    for row in np.flatnonzero((ours[0] != theirs[0]).any(axis=1)):
+        scored = [
+            float(
+                initial[path[0]]
+                + emit[row, np.arange(path.size), path].sum()
+                + transition.numpy()[path[:-1], path[1:]].sum()
+            )
+            for path in (ours[0][row], theirs[0][row])
+        ]
+        assert_allclose(scored[0], scored[1], rtol=1e-12)
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("backend", [Backend.RUST, Backend.PYTHON])
+def test_viterbi_is_the_enumerated_best_path(backend: Backend) -> None:
+    # Every path of four sequences of five over three states, scored by the
+    # model directly: the decoded path is the argmax and its score the max.
+    params = load_params(FIXTURES_DIR / "hmm" / "ci.yaml", HmmParams)
+    observations = simulate_sequences(replace(params, lengths=(5,) * 4)).observations
+    log_initial = torch.log(torch.as_tensor(params.initial))
+    log_transition = torch.log(torch.as_tensor(params.transition))
+    log_emission = torch.log(torch.as_tensor(params.emission))
+    states, total = viterbi(
+        observations,
+        log_initial,
+        log_transition,
+        CategoricalEmission.from_log(log_emission),
+        backend=backend,
+    )
+    best_total = 0.0
+    for row, path in zip(observations, states, strict=True):
+        scores = {
+            candidate: float(
+                log_initial[candidate[0]]
+                + sum(log_transition[a, b] for a, b in pairwise(candidate))
+                + sum(
+                    log_emission[s, int(x)] for s, x in zip(candidate, row, strict=True)
+                )
+            )
+            for candidate in product(range(3), repeat=5)
+        }
+        best = max(scores, key=lambda c: (scores[c], [-s for s in c]))
+        assert tuple(path) == best
+        best_total += scores[best]
+    assert_allclose(total, best_total, rtol=1e-12)
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize(
+    "name", ["gaussian", "poisson", "negative_binomial", "binomial", "beta_binomial"]
+)
+def test_the_compiled_hmm_score_is_the_forward_recursion(name: str) -> None:
+    # Issue #997: the scaled forward pass over sequences in parallel against
+    # the log-space recursion in torch, at the declared float64 tolerance.
+    observations, family, _ = _streamed_case(name, covariate=False)
+    initial = torch.log(torch.tensor([0.4, 0.3, 0.3], dtype=torch.float64))
+    transition = torch.log(
+        torch.tensor(
+            [[0.8, 0.1, 0.1], [0.1, 0.8, 0.1], [0.1, 0.1, 0.8]], dtype=torch.float64
+        )
+    )
+    ours, oracle = (
+        hmm_log_likelihood(observations, initial, transition, family, backend=backend)
+        for backend in (Backend.RUST, Backend.PYTHON)
+    )
+    assert_allclose(ours, oracle, rtol=1e-12)
+
+
+@pytest.mark.oracle
+def test_the_gaussian_hmm_gradient_is_autograds() -> None:
+    # Issue #997: `GaussianHmmObjective.gradient` by Fisher's identity from
+    # one streamed pass of expected statistics; autograd through `__call__`
+    # is the oracle, at points away from the start in every coordinate.
+    observations, _, _ = _streamed_case("gaussian", covariate=False)
+    objective = GaussianHmmObjective(observations, 3)
+    rng = np.random.default_rng(997)
+    for _ in range(3):
+        theta = objective.initial() + 0.3 * torch.as_tensor(
+            rng.normal(size=objective.n_parameters)
+        )
+        point = theta.clone().requires_grad_(True)
+        (autograd,) = torch.autograd.grad(objective(point), point)
+        assert_allclose(
+            objective.gradient(theta).numpy(),
+            autograd.numpy(),
+            rtol=1e-10,
+            atol=1e-10 * float(autograd.abs().max()),
+        )

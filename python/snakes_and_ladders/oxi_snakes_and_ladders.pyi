@@ -79,6 +79,100 @@ def ising_ground_state(
     edges: np.ndarray,
     coupling: np.ndarray,
 ) -> np.ndarray: ...
+def categorical_em_step(
+    observations: np.ndarray,
+    log_initial: np.ndarray,
+    log_transition: np.ndarray,
+    log_emission: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]: ...
+def gaussian_em_step(
+    observations: np.ndarray,
+    log_initial: np.ndarray,
+    log_transition: np.ndarray,
+    mean: np.ndarray,
+    scale: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]: ...
+def count_cells(
+    observations: np.ndarray, covariate: np.ndarray | None, stride: int
+) -> tuple[np.ndarray, np.ndarray]: ...
+def count_em_step(
+    observations: np.ndarray,
+    covariate: np.ndarray | None,
+    stride: int,
+    cells: np.ndarray,
+    rows: np.ndarray,
+    log_initial: np.ndarray,
+    log_transition: np.ndarray,
+    family: str,
+    parameters: np.ndarray,
+    tabled: np.ndarray,
+    approx: bool = False,
+    stirling_from: float = 10.0,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]: ...
+def hmm_viterbi(
+    observations: np.ndarray,
+    log_initial: np.ndarray,
+    log_transition: np.ndarray,
+    family: str,
+    parameters: np.ndarray,
+) -> tuple[np.ndarray, float]: ...
+def hmm_score(
+    observations: np.ndarray,
+    log_initial: np.ndarray,
+    log_transition: np.ndarray,
+    family: str,
+    parameters: np.ndarray,
+) -> float: ...
+def gaussian_hmm_statistics(
+    observations: np.ndarray,
+    log_initial: np.ndarray,
+    log_transition: np.ndarray,
+    mean: np.ndarray,
+    scale: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]: ...
+def bifurcation_integrate(
+    rows: np.ndarray,
+    offsets: np.ndarray,
+    neighbours: np.ndarray,
+    couplings: np.ndarray,
+    x: np.ndarray,
+    n_states: int,
+    steps: int,
+    dt: float,
+    c0: float,
+    a_end: float,
+    discrete: bool,
+) -> None: ...
+def gaussian_mixture_em_step(
+    values: np.ndarray,
+    log_weight: np.ndarray,
+    mean: np.ndarray,
+    scale: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]: ...
+def gaussian_mixture_gradient(
+    values: np.ndarray,
+    log_weight: np.ndarray,
+    mean: np.ndarray,
+    scale: np.ndarray,
+) -> tuple[float, np.ndarray]: ...
+def gaussian_hmc(
+    precision: np.ndarray,
+    theta0: np.ndarray,
+    n_samples: int,
+    burn_in: int,
+    step_size: float,
+    n_steps: int,
+    seed: int,
+    store_chain: bool,
+) -> tuple[np.ndarray, int, np.ndarray]: ...
+def gaussian_leapfrog(
+    precision: np.ndarray,
+    theta: np.ndarray,
+    momentum: np.ndarray,
+    step_size: float,
+    n_steps: int,
+) -> tuple[np.ndarray, np.ndarray]: ...
+def bond_roots(n_nodes: int, first: np.ndarray, second: np.ndarray) -> np.ndarray: ...
 def ising_ground_states(
     n_nodes: int,
     fields: np.ndarray,

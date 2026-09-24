@@ -591,13 +591,20 @@ def test_straight_through_is_one_hot_forward_and_soft_backward() -> None:
     # The identity the mode is built on, checked on both halves: the value is
     # a corner, and the gradient is not the corner's (which would be zero
     # everywhere).
+    # The logits come from the test's own generator, not the global stream a
+    # worker's earlier tests have advanced. The loss weights the classes
+    # unequally: each row of a softmax sums to one, so `sample.sum()` has a
+    # soft-half gradient of zero and `max > 0` held only on rounding (#997).
     generator = torch.Generator().manual_seed(3)
-    logits = torch.randn((4, 3), dtype=torch.float64, requires_grad=True)
+    logits = torch.randn(
+        (4, 3), dtype=torch.float64, generator=generator
+    ).requires_grad_()
 
     sample = gumbel_softmax(
         logits, 0.5, generator, mode=RelaxationMode.STRAIGHT_THROUGH
     )
-    sample.sum().backward()  # type: ignore[no-untyped-call]
+    weights = torch.tensor([1.0, 2.0, 3.0], dtype=torch.float64)
+    (sample * weights).sum().backward()  # type: ignore[no-untyped-call]
 
     assert set(np.unique(sample.detach().numpy())) == {0.0, 1.0}
     assert logits.grad is not None

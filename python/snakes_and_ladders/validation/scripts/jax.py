@@ -9,7 +9,12 @@ package's:
   one-dimensional mixture of ``n_components`` Gaussians, over ``theta =
   (k - 1 free weights, k means, k log scales)`` with the weights
   ``log_softmax([0, free])``
-  (:class:`snakes_and_ladders.opt.mixture.GaussianMixtureObjective`).
+  (:class:`snakes_and_ladders.opt.mixture.GaussianMixtureObjective`);
+- ``"hmm"``: the negative log-likelihood of ``observations``, ``(n_sequences,
+  length)``, under an ``n_states`` Gaussian HMM, over ``theta = (m - 1
+  initial, m (m - 1) transition, m means, m log scales)``, each simplex row
+  ``log_softmax([0, free])``, by the log-space forward recursion
+  (:class:`snakes_and_ladders.opt.hmm.GaussianHmmObjective`; issue #997).
 
 At each row of ``points`` it returns ``values`` and ``gradients`` from
 ``jax.value_and_grad`` in float64. Three timings, each the median over the
@@ -70,6 +75,34 @@ def _mixture(observations: Any, k: int, jax: Any) -> Callable[[Any], Any]:
     return objective
 
 
+def _hmm(observations: Any, m: int, jax: Any) -> Callable[[Any], Any]:
+    """A Gaussian HMM's negative log-likelihood over ``GaussianHmmObjective``'s ``theta``."""
+    jnp = jax.numpy
+
+    def simplex(free: Any) -> Any:
+        pinned = jnp.concatenate([jnp.zeros(free.shape[:-1] + (1,)), free], axis=-1)
+        return jax.nn.log_softmax(pinned, axis=-1)
+
+    def objective(theta: Any) -> Any:
+        log_initial = simplex(theta[: m - 1])
+        start = m - 1
+        log_transition = simplex(theta[start : start + m * (m - 1)].reshape(m, m - 1))
+        start += m * (m - 1)
+        mean, log_scale = theta[start : start + m], theta[start + m : start + 2 * m]
+        standard = (observations[..., None] - mean) / jnp.exp(log_scale)
+        emit = -0.5 * standard * standard - log_scale - 0.5 * jnp.log(2.0 * jnp.pi)
+        alpha = log_initial + emit[:, 0]
+
+        def step(alpha: Any, column: Any) -> tuple[Any, None]:
+            reach = jax.nn.logsumexp(alpha[:, :, None] + log_transition, axis=1)
+            return reach + column, None
+
+        alpha, _ = jax.lax.scan(step, alpha, jnp.moveaxis(emit[:, 1:], 1, 0))
+        return -jnp.sum(jax.nn.logsumexp(alpha, axis=1))
+
+    return objective
+
+
 def main() -> None:
     """Differentiate the target at every point three ways and write the answers back."""
     import jax  # the framework, imported only in this interpreter
@@ -81,13 +114,16 @@ def main() -> None:
     inputs = load(given)
     target = str(inputs["target"])
 
-    objective = (
-        _gaussian(jnp.asarray(inputs["precision"]), jnp)
-        if target == "gaussian"
-        else _mixture(
+    if target == "gaussian":
+        objective = _gaussian(jnp.asarray(inputs["precision"]), jnp)
+    elif target == "hmm":
+        objective = _hmm(
+            jnp.asarray(inputs["observations"]), int(inputs["n_states"]), jax
+        )
+    else:
+        objective = _mixture(
             jnp.asarray(inputs["observations"]), int(inputs["n_components"]), jax
         )
-    )
 
     points = jnp.asarray(inputs["points"])
     eager = jax.value_and_grad(objective)

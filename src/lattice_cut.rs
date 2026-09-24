@@ -47,8 +47,8 @@ pub struct LatticeCut {
     start: Vec<u32>,
     head: Vec<u32>,
     sister: Vec<u32>,
-    first: Vec<usize>,
-    second: Vec<usize>,
+    first: Vec<u32>,
+    second: Vec<u32>,
     coupling: Vec<f64>,
     residual: Vec<f64>,
     terminal: Vec<f64>,
@@ -66,16 +66,25 @@ pub struct LatticeCut {
     arc_of_edge: Vec<[u32; 2]>,
     /// The capacities the last fill wrote, before any flow is placed.
     capacity: Vec<f64>,
-    terminal_capacity: Vec<f64>,
     /// The maximum flow each move key ended on, to start its next cut from.
     kept: Vec<Option<Kept>>,
+    /// Each arc's edge, so a swap walks a moving node's own arcs.
+    edge_of_arc: Vec<u32>,
+    /// A node's index in the swap's compact network, `NONE` if not in it.
+    local: Vec<u32>,
 }
 
-/// A maximum flow as it stood: per edge the flow `first -> second`, and per
-/// node the net flow in from the terminals.
+/// A maximum flow as it stood: per edge the flow `first -> second`.
+///
+/// The terminals' flows are not held (issue #986): ten labels' edge and
+/// terminal flows were 4.8 of the 10.6 MB a 142x142 expansion peaked at,
+/// and the terminals' third of that is implied by the edges'. [`LatticeCut::restore`] derives each
+/// node's terminal flow from the edge flows it places, so the start it
+/// builds conserves flow at every node whatever the rounding; a start is a
+/// start, and every maximum flow reached from it leaves the same minimal
+/// minimum cut.
 struct Kept {
     flow: Vec<f64>,
-    terminal: Vec<f64>,
 }
 
 impl LatticeCut {
@@ -115,6 +124,7 @@ impl LatticeCut {
         let mut head = vec![0_u32; n_arcs];
         let mut sister = vec![0_u32; n_arcs];
         let mut arc_of_edge = vec![[0_u32; 2]; first.len()];
+        let mut edge_of_arc = vec![0_u32; n_arcs];
         for (position, (&a, &b)) in first.iter().zip(second).enumerate() {
             let (out, back) = (next[a], next[b]);
             next[a] += 1;
@@ -124,14 +134,16 @@ impl LatticeCut {
             sister[out as usize] = back;
             sister[back as usize] = out;
             arc_of_edge[position] = [out, back];
+            edge_of_arc[out as usize] = position as u32;
+            edge_of_arc[back as usize] = position as u32;
         }
         Ok(Self {
             n_nodes,
             start,
             head,
             sister,
-            first: first.to_vec(),
-            second: second.to_vec(),
+            first: first.iter().map(|&n| n as u32).collect(),
+            second: second.iter().map(|&n| n as u32).collect(),
             coupling: coupling.to_vec(),
             residual: vec![0.0; n_arcs],
             terminal: vec![0.0; n_nodes],
@@ -145,9 +157,66 @@ impl LatticeCut {
             time: 0,
             arc_of_edge,
             capacity: vec![0.0; n_arcs],
-            terminal_capacity: vec![0.0; n_nodes],
             kept: Vec::new(),
+            edge_of_arc,
+            local: vec![NONE; n_nodes],
         })
+    }
+
+    /// One alpha-beta swap's source side, cut on the moving nodes alone.
+    ///
+    /// A node at neither label carries no capacity, and an edge with an end
+    /// at neither carries none, so the swap's network is the subgraph on the
+    /// nodes at `alpha` or `beta` and the edges between them: built here from
+    /// the moving nodes' own arcs and cut by `bk::Graph`, where
+    /// `fill_swap` and `solve` walked the whole lattice five times per move
+    /// (issue #997). The side is read at the same floor, so it is the same
+    /// minimal minimum cut.
+    pub fn swap_side(
+        &mut self,
+        values: &[f64],
+        n_states: usize,
+        labels: &[usize],
+        alpha: usize,
+        beta: usize,
+    ) -> Vec<bool> {
+        let moving: Vec<u32> = (0..self.n_nodes as u32)
+            .filter(|&n| {
+                let label = labels[n as usize];
+                label == alpha || label == beta
+            })
+            .collect();
+        for (index, &node) in moving.iter().enumerate() {
+            self.local[node as usize] = index as u32;
+        }
+        let (mut ends, mut capacity) = (Vec::new(), Vec::new());
+        for &node in &moving {
+            let u = node as usize;
+            for arc in self.start[u] as usize..self.start[u + 1] as usize {
+                let v = self.head[arc] as usize;
+                if v > u && self.local[v] != NONE {
+                    ends.push(i64::from(self.local[u]));
+                    ends.push(i64::from(self.local[v]));
+                    capacity.push(self.coupling[self.edge_of_arc[arc] as usize]);
+                }
+            }
+        }
+        let mut graph = crate::bk::Graph::from_edges(moving.len(), &ends, &capacity, &capacity)
+            .expect("the moving subgraph's indices are in range");
+        for (index, &node) in moving.iter().enumerate() {
+            let u = node as usize;
+            let net = values[u * n_states + alpha] - values[u * n_states + beta];
+            graph
+                .add_terminal(index, net.max(0.0), (-net).max(0.0))
+                .expect("terminal capacities are non-negative");
+        }
+        let (_, local_side) = graph.solve();
+        let mut side = vec![false; self.n_nodes];
+        for (index, &node) in moving.iter().enumerate() {
+            side[node as usize] = local_side[index];
+            self.local[node as usize] = NONE;
+        }
+        side
     }
 
     /// Fill one alpha-expansion move: the source side keeps its label, the
@@ -173,8 +242,8 @@ impl LatticeCut {
         }
         for position in 0..self.first.len() {
             let (a, b, weight) = (
-                self.first[position],
-                self.second[position],
+                self.first[position] as usize,
+                self.second[position] as usize,
                 self.coupling[position],
             );
             let [out, back] = self.arc_of_edge[position];
@@ -215,7 +284,10 @@ impl LatticeCut {
             };
         }
         for position in 0..self.first.len() {
-            let (a, b) = (labels[self.first[position]], labels[self.second[position]]);
+            let (a, b) = (
+                labels[self.first[position] as usize],
+                labels[self.second[position] as usize],
+            );
             let moving = |l: usize| l == alpha || l == beta;
             let capacity = if moving(a) && moving(b) {
                 self.coupling[position]
@@ -243,9 +315,18 @@ impl LatticeCut {
             .chain(&self.terminal)
             .fold(0.0_f64, |m, &c| m.max(c.abs()));
         self.capacity.copy_from_slice(&self.residual);
-        self.terminal_capacity.copy_from_slice(&self.terminal);
         if let Some(key) = key {
             self.restore(key);
+            // A terminal flow summed from the edges' can miss the exact
+            // net by rounding; below the side's floor that residue is not a
+            // capacity, and left in place it roots a tree of tiny
+            // augmentations (issue #986).
+            let floor = SATURATED * largest;
+            for terminal in &mut self.terminal {
+                if terminal.abs() <= floor {
+                    *terminal = 0.0;
+                }
+            }
         }
         self.max_flow();
         let side = self.source_side(SATURATED * largest);
@@ -263,18 +344,13 @@ impl LatticeCut {
         let Some(kept) = self.kept.get(key).and_then(Option::as_ref) else {
             return;
         };
-        for (terminal, &flow) in self.terminal.iter_mut().zip(&kept.terminal) {
-            *terminal -= flow;
-        }
         for (position, &[out, back]) in self.arc_of_edge.iter().enumerate() {
             let (out, back) = (out as usize, back as usize);
-            let flow = kept.flow[position];
-            let placed = flow.clamp(-self.residual[back], self.residual[out]);
-            let excess = flow - placed;
-            if excess != 0.0 {
-                self.terminal[self.first[position]] += excess;
-                self.terminal[self.second[position]] -= excess;
-            }
+            let placed = kept.flow[position].clamp(-self.residual[back], self.residual[out]);
+            // The flow leaving `first` along the edge arrives from its
+            // terminal, and the flow reaching `second` leaves through its.
+            self.terminal[self.first[position] as usize] -= placed;
+            self.terminal[self.second[position] as usize] += placed;
             self.residual[out] -= placed;
             self.residual[back] += placed;
         }
@@ -287,13 +363,9 @@ impl LatticeCut {
         }
         let kept = self.kept[key].get_or_insert_with(|| Kept {
             flow: vec![0.0; self.first.len()],
-            terminal: vec![0.0; self.n_nodes],
         });
         for (position, &[out, _]) in self.arc_of_edge.iter().enumerate() {
             kept.flow[position] = self.capacity[out as usize] - self.residual[out as usize];
-        }
-        for node in 0..self.n_nodes {
-            kept.terminal[node] = self.terminal_capacity[node] - self.terminal[node];
         }
     }
 
@@ -618,10 +690,7 @@ impl LatticeCut {
                 "alpha and beta must lie in [0, n_states)",
             ));
         }
-        let side = py.detach(|| {
-            self.fill_swap(values, n_states, &labels, alpha, beta);
-            self.solve(None)
-        });
+        let side = py.detach(|| self.swap_side(values, n_states, &labels, alpha, beta));
         Ok(PyArray1::from_vec(py, side))
     }
 }

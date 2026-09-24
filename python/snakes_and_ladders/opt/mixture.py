@@ -35,6 +35,8 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 
+from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.emissions import (
     EmissionFamily,
     GaussianEmission,
@@ -222,6 +224,27 @@ class GaussianMixtureObjective(Objective):
             **self.components(theta).named_parameters(),
         }
 
+    def gradient(self, theta: torch.Tensor) -> torch.Tensor:
+        """``d/dtheta`` of :meth:`__call__`, which ``hmc.gradient_at`` reads (issue #986).
+
+        One-channel ``float64`` mixtures stream every draw's responsibilities
+        into the three per-component sums the gradient needs in
+        ``oxi_snakes_and_ladders.gaussian_mixture_gradient``, pinned to
+        autograd; any other takes autograd through :meth:`__call__`.
+        """
+        if self._n_channels != 1 or self._dtype != torch.float64:
+            point = theta.detach().clone().requires_grad_(True)
+            (grad,) = torch.autograd.grad(self(point), point)
+            return grad
+        padded = np.concatenate(([0.0], theta[self._weight_slice].detach().numpy()))
+        _, gradient = oxi_snakes_and_ladders.gaussian_mixture_gradient(
+            np.ascontiguousarray(self._observations.numpy()).reshape(-1),
+            padded - np.logaddexp.reduce(padded),
+            np.ascontiguousarray(theta[self._mean_slice()].detach().numpy()),
+            np.exp(theta[self._log_scale_slice()].detach().numpy()),
+        )
+        return torch.from_numpy(gradient)
+
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         """Negative log-likelihood, marginalizing the component of each point."""
         return -mixture_log_likelihood(
@@ -307,6 +330,7 @@ def mixture_log_likelihood(
     components: EmissionFamily,
     *,
     covariate: torch.Tensor | None = None,
+    backend: Backend = Backend.RUST,
 ) -> torch.Tensor:
     """``sum_i log sum_k w_k N(y_i; mu_k, s_k)``, in log space throughout (``eq:mixture``).
 
@@ -325,6 +349,19 @@ def mixture_log_likelihood(
         Per-observation covariate the components condition on, in the layout
         the family's ``log_density`` documents (issue #933).
 
+    backend : Backend
+        :data:`~snakes_and_ladders.backend.Backend.RUST`, the default since
+        issue #997, streams the sum in
+        ``oxi_snakes_and_ladders.gaussian_mixture_gradient`` where no
+        gradient is to be taken --- autograd off, or nothing here requiring
+        one --- and the components are exactly a one-channel ``float64``
+        :class:`~snakes_and_ladders.emissions.GaussianEmission` over a
+        one-dimensional array: no ``(n_samples, n_components)`` array is
+        formed. At 10^6 draws of three components the torch route peaked at
+        71.9 MB. Any other case, and
+        :data:`~snakes_and_ladders.backend.Backend.PYTHON`, take torch, which
+        is the oracle and the route a gradient needs.
+
     Returns
     -------
     torch.Tensor
@@ -333,9 +370,42 @@ def mixture_log_likelihood(
         probability where they are discrete. The mixture inherits which from
         its components.
     """
+    refuse_backend("mixture_log_likelihood", backend, (Backend.PYTHON, Backend.RUST))
+    # The streamed score conditions on no covariate.
+    if (
+        backend is Backend.RUST
+        and covariate is None
+        and _streams_score(observations, log_weight, components)
+    ):
+        assert isinstance(components, GaussianEmission)
+        negative, _ = oxi_snakes_and_ladders.gaussian_mixture_gradient(
+            np.ascontiguousarray(observations.numpy()),
+            np.ascontiguousarray(log_weight.numpy(), dtype=np.float64),
+            np.ascontiguousarray(components.mean.numpy()),
+            np.ascontiguousarray(components.scale.numpy()),
+        )
+        return torch.tensor(-negative, dtype=torch.float64)
     return torch.logsumexp(
         log_weight + component_log_density(components, observations, covariate), dim=-1
     ).sum()
+
+
+def _streams_score(
+    observations: torch.Tensor, log_weight: torch.Tensor, components: EmissionFamily
+) -> bool:
+    """Whether :func:`mixture_log_likelihood` has a streamed, gradient-free route (issue #997)."""
+    if type(components) is not GaussianEmission or components.n_channels != 1:
+        return False
+    tracked = torch.is_grad_enabled() and any(
+        tensor.requires_grad
+        for tensor in (observations, log_weight, components.mean, components.scale)
+    )
+    return (
+        not tracked
+        and observations.dim() == 1
+        and observations.dtype == torch.float64
+        and log_weight.dtype == torch.float64
+    )
 
 
 def responsibilities(
@@ -476,6 +546,7 @@ def expectation_maximization(
     components: GaussianEmission,
     max_iterations: int = 500,
     tolerance: float = 1e-12,
+    backend: Backend = Backend.RUST,
 ) -> MixtureFit:
     """Fit a mixture by EM, with no autodiff involved.
 
@@ -500,6 +571,16 @@ def expectation_maximization(
         Stop when the log-likelihood improves by less than this *relative* to
         its magnitude — absolute would not transfer across data sizes
         (``DEV.md``, issue #111).
+    backend : Backend
+        :data:`~snakes_and_ladders.backend.Backend.RUST`, the default since
+        issue #986 for one-channel components, runs each step in
+        ``oxi_snakes_and_ladders.gaussian_mixture_em_step``: the draws
+        streamed into each component's mass, mean and centred sum of squares,
+        with no ``(n_samples, n_components)`` array held. Ten iterations at
+        10^5 draws peaked at 31.1 MB on the tensor route.
+        :data:`~snakes_and_ladders.backend.Backend.PYTHON` is that route, and
+        the oracle that pins the compiled one; multi-channel components, and
+        a subclass that may carry its own M step, take it whichever is asked.
 
     Returns
     -------
@@ -518,6 +599,21 @@ def expectation_maximization(
         :func:`snakes_and_ladders.opt.emission_mixture.expectation_maximization`
         reads, on the terms ``likelihood/CLAUDE.md`` states (issue #856).
     """
+    refuse_backend("expectation_maximization", backend, (Backend.PYTHON, Backend.RUST))
+    # The exact class only: a subclass may carry its own M step, which the
+    # compiled route would bypass.
+    if (
+        backend is Backend.RUST
+        and type(components) is GaussianEmission
+        and components.mean.ndim == 1
+    ):
+        return _streamed_expectation_maximization(
+            observations,
+            weights,
+            components,
+            max_iterations=max_iterations,
+            tolerance=tolerance,
+        )
     values = torch.as_tensor(observations, dtype=torch.float64).reshape(-1)
     boundary = False
     attempt = 0
@@ -557,6 +653,67 @@ def expectation_maximization(
         log_likelihood,
         termination.iterations,
         boundary,
+        termination,
+    )
+
+
+def _streamed_expectation_maximization(
+    observations: np.ndarray,
+    weights: torch.Tensor,
+    components: GaussianEmission,
+    *,
+    max_iterations: int,
+    tolerance: float,
+) -> MixtureFit:
+    """:func:`expectation_maximization` on the compiled step, under the same :func:`em_loop`.
+
+    The state is NumPy throughout and a torch object is built once, at the
+    end: a first torch operation in a process costs 2.1 MB of resident memory.
+    """
+    values = np.ascontiguousarray(observations, dtype=np.float64).reshape(-1)
+    floor = components.variance_floor
+    attempt = 0
+
+    def step(
+        state: tuple[np.ndarray, np.ndarray, np.ndarray],
+    ) -> tuple[tuple[np.ndarray, np.ndarray, np.ndarray], float]:
+        nonlocal attempt
+        attempt += 1
+        weight, mean, scale = state
+        new_weight, new_mean, variance, log_likelihood = (
+            oxi_snakes_and_ladders.gaussian_mixture_em_step(
+                values, np.log(weight), mean, scale
+            )
+        )
+        collapsed = variance <= floor
+        if collapsed.any():
+            msg = (
+                f"state(s) {np.flatnonzero(collapsed).tolist()} re-estimated to "
+                f"variance {variance[collapsed].tolist()}, at or below the floor "
+                f"{floor:.6g}: the Gaussian likelihood is unbounded as a "
+                f"variance goes to zero, so this fit is heading to a degenerate "
+                f"optimum rather than converging"
+            )
+            raise ValueError(msg)
+        return (new_weight, new_mean, np.sqrt(variance)), log_likelihood
+
+    def flat(tensor: torch.Tensor) -> np.ndarray:
+        return np.ascontiguousarray(tensor.detach().numpy(), dtype=np.float64).reshape(
+            -1
+        )
+
+    (weight, mean, scale), log_likelihood, termination = em_loop(
+        step,
+        (flat(weights), flat(components.mean), flat(components.scale)),
+        tolerance=tolerance,
+        max_iterations=max_iterations,
+    )
+    return MixtureFit(
+        torch.from_numpy(weight),
+        GaussianEmission(mean, scale, floor),
+        log_likelihood,
+        termination.iterations,
+        False,
         termination,
     )
 

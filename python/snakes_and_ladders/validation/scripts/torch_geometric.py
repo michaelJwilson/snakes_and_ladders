@@ -10,6 +10,10 @@ half. The batch is ``tokens``, the undirected ``edges`` (one row each),
 
 Outputs ``forward``, one row per model, and ``case_seconds``, the twin's
 forward alone per model; the measured seconds are their sum.
+
+With ``model`` set to ``set`` (issue #997) each model is a ``SetSurrogate``
+and its twin keeps the encoder and the decoder around PyG's
+``global_add_pool``; ``edges`` is then unread.
 """
 
 from __future__ import annotations
@@ -19,7 +23,7 @@ from typing import Any
 import numpy as np
 import torch
 
-from snakes_and_ladders.learn.surrogate import GraphSurrogate
+from snakes_and_ladders.learn.surrogate import GraphSurrogate, SetSurrogate
 from snakes_and_ladders.validation.protocol import dump, load, paths, timed
 
 
@@ -60,6 +64,21 @@ class _Twin(torch.nn.Module):
         return out[:, 0]
 
 
+class _SetTwin(torch.nn.Module):
+    """``SetSurrogate`` with PyG's ``global_add_pool`` for its sum."""
+
+    def __init__(self, ours: SetSurrogate, nn: Any) -> None:
+        super().__init__()
+        self.encode = ours.encode
+        self.decode = ours.decode
+        self._pool = nn.global_add_pool
+
+    def forward(self, batch: dict[str, torch.Tensor], n: int) -> torch.Tensor:
+        pooled = self._pool(self.encode(batch["tokens"]), batch["owner"], size=n)
+        out: torch.Tensor = self.decode(torch.cat([pooled, batch["features"]], dim=1))
+        return out[:, 0]
+
+
 def main() -> None:
     """Run each model's twin forward on the batch and write the outputs back."""
     from torch_geometric import nn  # the framework, imported only in this interpreter
@@ -75,13 +94,22 @@ def main() -> None:
         "features": torch.as_tensor(inputs["features"], dtype=torch.float64),
     }
     forward, case_seconds = [], []
+    kind = str(inputs.get("model", np.asarray("graph")))
     for index in range(int(inputs["n_models"])):
         prefix = f"{index}:"
-        ours = GraphSurrogate(
-            int(inputs["n_features"]),
-            int(inputs["n_token_features"]),
-            hidden=hidden,
-            n_layers=int(inputs["n_layers"]),
+        ours: torch.nn.Module = (
+            SetSurrogate(
+                int(inputs["n_features"]),
+                int(inputs["n_token_features"]),
+                hidden=hidden,
+            )
+            if kind == "set"
+            else GraphSurrogate(
+                int(inputs["n_features"]),
+                int(inputs["n_token_features"]),
+                hidden=hidden,
+                n_layers=int(inputs["n_layers"]),
+            )
         )
         ours.load_state_dict(
             {
@@ -90,7 +118,11 @@ def main() -> None:
                 if key.startswith(prefix)
             }
         )
-        twin = _Twin(ours, hidden, nn)
+        twin: torch.nn.Module = (
+            _SetTwin(ours, nn)  # type: ignore[arg-type]
+            if kind == "set"
+            else _Twin(ours, hidden, nn)  # type: ignore[arg-type]
+        )
         with torch.no_grad():
             out, seconds = timed(lambda: twin(batch, n))  # noqa: B023
         forward.append(out.numpy())
