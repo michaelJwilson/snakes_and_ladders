@@ -1068,28 +1068,33 @@ def tile_partition(graph: PottsGraph, k: int, rng: np.random.Generator) -> np.nd
     >>> tile_partition(chain, 2, np.random.default_rng(3))
     array([0, 0, 0, 1, 1, 1])
     """
-    from scipy.sparse import csr_matrix
-    from scipy.sparse.csgraph import shortest_path
-
     if not 1 <= k <= graph.n_nodes:
         msg = f"k must be in [1, {graph.n_nodes}], got {k}"
         raise ValueError(msg)
     centres = rng.choice(graph.n_nodes, size=k, replace=False)
-    adjacency = graph.compressed_adjacency()
-    matrix = csr_matrix(
-        (
-            np.ones(adjacency.neighbours.shape[0]),
-            adjacency.neighbours,
-            adjacency.offsets,
-        ),
-        shape=(graph.n_nodes, graph.n_nodes),
-    )
-    # Hop counts from each centre, one row per centre in draw order; `argmin`
-    # returns the first row at the minimum, which is the tie rule above.
-    distances = shortest_path(matrix, unweighted=True, indices=centres)
+    offsets, neighbours, _ = graph.compressed_adjacency()
+    # Hop counts from each centre, one row per centre in draw order, by a
+    # breadth-first search whose frontier expands one layer per step.
+    distances = np.full((k, graph.n_nodes), np.inf)
+    for row, centre in enumerate(centres):
+        reached = distances[row]
+        reached[centre] = 0.0
+        frontier = np.array([centre])
+        hops = 0
+        while frontier.size:
+            hops += 1
+            # Every neighbour of the frontier, gathered through the offsets.
+            starts = offsets[frontier]
+            counts = offsets[frontier + 1] - starts
+            first = np.cumsum(counts) - counts
+            gathered = np.arange(int(counts.sum())) - np.repeat(first - starts, counts)
+            found = np.unique(neighbours[gathered])
+            frontier = found[np.isinf(reached[found])]
+            reached[frontier] = hops
     if not bool(np.isfinite(distances.min(axis=0)).all()):
         msg = "a node is reached from no centre; the graph is not connected"
         raise ValueError(msg)
+    # `argmin` returns the first row at the minimum, which is the tie rule above.
     return np.asarray(np.argmin(distances, axis=0), dtype=np.int64)
 
 

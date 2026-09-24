@@ -99,6 +99,16 @@
     over the sites and one over the edges brackets instead --- looser by an
     order of magnitude, and the only bracket available.
 
+"Potts lattice in a tiling field":
+  optimizers: >-
+    No two-state reduction holds, since the field rewards one state per tile
+    and is not linear in the state, so alpha expansion gives a factor-of-two
+    bracket and not an optimum. The planted states referee it instead: a tile
+    whose strength exceeds the most coupling any of its sites has to other
+    tiles is recovered in full at every expansion and swap local minimum,
+    checked against enumeration at twelve sites and against the planted
+    states at 5{,}041, where annealing ends below the expansion.
+
 "Frustrated Potts: triangular antiferromagnet":
   samplers: >-
     No sampler of its own: the lattice's samplers apply unchanged, and the

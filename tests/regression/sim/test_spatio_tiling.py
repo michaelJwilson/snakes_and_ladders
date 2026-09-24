@@ -2,9 +2,9 @@
 
 `sim.potts.tile_partition` splits a lattice into connected tiles from seeded
 centres, and `sim.potts.tiling_field` plants one favoured state per tile. The
-tiling is judged by a breadth-first search written here, which shares no code
-with the `scipy` shortest paths the tiling is built on; the field by its
-definition, entry by entry, at both declared tiers.
+tiling is judged by a breadth-first search written here over the edge list,
+which shares no code with the compressed-adjacency search the tiling is built
+on; the field by its definition, entry by entry, at both declared tiers.
 """
 
 from __future__ import annotations

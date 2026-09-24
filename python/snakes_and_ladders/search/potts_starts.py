@@ -224,11 +224,12 @@ def recovery_bound(rung: TilingRung) -> np.ndarray:
     np.ndarray
         Shape ``(k,)``, in the coupling's units.
     """
-    adjacency = rung.graph.compressed_adjacency()
-    owner = np.repeat(np.arange(rung.n_nodes), np.diff(adjacency.offsets))
-    leaves = rung.tiles[owner] != rung.tiles[adjacency.neighbours]
+    # Each bond joining two tiles counts its coupling at both of its ends.
+    ends = rung.graph.edge_index
+    crossing = rung.tiles[ends[:, 0]] != rung.tiles[ends[:, 1]]
+    weights = np.asarray(rung.graph.edge_coupling) * crossing
     per_site = np.bincount(
-        owner, weights=adjacency.couplings * leaves, minlength=rung.n_nodes
+        ends.ravel(), weights=np.repeat(weights, 2), minlength=rung.n_nodes
     )
     bound = np.zeros(rung.states.size)
     np.maximum.at(bound, rung.tiles, per_site)

@@ -18,6 +18,7 @@ import numpy as np
 import pytest
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.cost import Cost
+from snakes_and_ladders.likelihood.potts import enumerate_potts
 from snakes_and_ladders.opt.budget import Budget
 from snakes_and_ladders.search.alpha_expansion import alpha_beta_swap, alpha_expansion
 from snakes_and_ladders.search.cluster_moves import (
@@ -38,6 +39,7 @@ from snakes_and_ladders.search.potts_starts import (
     tiling_rung,
 )
 from snakes_and_ladders.sim.fixtures import fixture
+from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import energies
 
 #: Heat-bath sweeps' worth of site visits per run, the notebook's budget.
@@ -100,6 +102,23 @@ def test_the_ci_optimum_is_unique_and_uses_all_three_states() -> None:
     assert levels[1] - levels[0] == pytest.approx(0.6, abs=1e-9)
     assert on_two - levels[0] == pytest.approx(1.4, abs=1e-9)
     assert np.unique(every[np.argmin(values)]).size == 3
+
+    # The same optimum from `likelihood.potts`'s own enumeration, which scores
+    # through `log_weights` and shares no code with `sim.potts.energies`: at
+    # beta = 40 the 0.6 margin puts every other labelling below e**-24 of the
+    # optimum's weight, so each site's marginal mode is the optimum's state.
+    beta = 40.0
+    cold = PottsGraph(
+        n_nodes=rung.n_nodes,
+        edges=rung.graph.edges,
+        coupling=tuple(beta * np.asarray(rung.graph.edge_coupling)),
+    )
+    marginals = enumerate_potts(
+        cold, beta * rung.field, max_configurations=len(every)
+    ).single_site
+
+    assert (marginals.argmax(axis=1) == every[np.argmin(values)]).all()
+    assert marginals.max(axis=1).min() > 1.0 - 1e-6
 
 
 @pytest.mark.oracle
