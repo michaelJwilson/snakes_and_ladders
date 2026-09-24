@@ -46,7 +46,10 @@ notebook polishes, so a row here is the row the notebook would compute.
 :mod:`~snakes_and_ladders.qa.potts_schedule` (issue #1044).
 
 Run as ``uv run --no-sync python -m snakes_and_ladders.qa.potts_converge
-[search] [arms]``; with no part named, both run, in that order.
+[search] [arms]``; with no part named, both run, in that order. ``collect``
+in place of ``search`` reads every search from its checkpoint without
+running one, and closes a search stopped from outside (:func:`collect`): on
+#1046 the user stopped Wolff's and Niedermayer's that way.
 """
 
 from __future__ import annotations
@@ -410,6 +413,50 @@ def converge(name: str) -> dict[str, Any]:
     return state
 
 
+#: The stop recorded for a search stopped from outside before any of its own
+#: stops held: on #1046, Wolff's and Niedermayer's, stopped by the user.
+STOPPED = "stopped"
+
+
+def collect(name: str) -> dict[str, Any]:
+    """``name``'s search as its checkpoint holds it, closed if it was stopped from outside.
+
+    A search stopped before any stop of its own held keeps every evaluation;
+    it is closed at the lowest mean of its last Nelder-Mead search, at that
+    search's count, and its stop is :data:`STOPPED`. Nothing is run.
+
+    Returns
+    -------
+    dict[str, Any]
+    """
+    state: dict[str, Any] = json.loads((STATE_DIR / f"{name}.json").read_text())
+    if "stop" in state:
+        return state
+    last = state["searches"][-1]
+    best = min(last["trace"], key=lambda record: record["mean"])
+    records = {
+        replay_key(record)
+        for record in [
+            *(record for search in state["searches"] for record in search["trace"]),
+            *(record for match in state["matches"] for record in match["probes"]),
+        ]
+    }
+    state.update(
+        {
+            "stop": STOPPED,
+            "count": last["count"],
+            "threshold": best.get("threshold"),
+            "evaluations": len(records),
+            "chosen": best,
+            "standard_error": float(
+                np.std(best["energies"], ddof=1) / math.sqrt(len(best["energies"]))
+            ),
+        }
+    )
+    last["stop"] = STOPPED
+    return state
+
+
 def schedule_of(entry: dict[str, Any]) -> ScheduleParams:
     """The schedule a record names."""
     return ScheduleParams(
@@ -490,7 +537,8 @@ def run_arms(
     return {"reference": reference, "arms": rows}
 
 
-#: The parts :func:`main` runs, in the order each needs the last.
+#: The parts :func:`main` runs, in the order each needs the last. ``collect``
+#: reads the searches from their checkpoints without running any.
 PARTS = ("search", "arms")
 
 
@@ -542,10 +590,12 @@ def main(parts: Sequence[str] = PARTS) -> None:
             if result["moves"]["swendsen-wang"]["stop"] == CAPPED:
                 # The plan's condition for searching the other shapes.
                 print("swendsen-wang stopped at the cap: its other shapes are due")
+        elif part == "collect":
+            result["moves"] = {name: collect(name) for name in ORDER}
         elif part == "arms":
             result["arms"] = run_arms(result)
         else:
-            msg = f"no part {part!r}; the parts are {PARTS}"
+            msg = f"no part {part!r}; the parts are {(*PARTS, 'collect')}"
             raise ValueError(msg)
         result.setdefault("host", {}).setdefault(part, []).append(
             {

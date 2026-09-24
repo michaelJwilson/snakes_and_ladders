@@ -3,8 +3,9 @@
 `docs/nb/potts_starts.ipynb` reads `docs/nb/data/potts_converge.json` rather
 than re-running the searches, so what is pinned here is that the file is what
 `qa.potts_converge` computes: the chosen evaluation re-run on a tuning seed
-gives the recorded energy bitwise, every search began at its plan's warm
-start and recorded the stop it met, and the first step-count match of Wolff
+gives the recorded chain, every search began at its plan's warm start and
+recorded the stop it met --- its own, or :data:`STOPPED` for a search stopped
+from outside --- and the first step-count match of Wolff
 and of Niedermayer reproduces #1038's and #1041's probe at the same count.
 """
 
@@ -17,6 +18,7 @@ import pytest
 from snakes_and_ladders.qa.potts_converge import (
     CLUSTERS,
     ORDER,
+    STOPPED,
     load,
     plans,
     schedule_of,
@@ -64,14 +66,28 @@ def test_every_search_starts_at_its_warm_start_and_records_its_stop() -> None:
         entry, plan = result["moves"][name], plans()[name]
         first = entry["matches"][0]["probes"][0] if plan.joint else None
         first = first or entry["searches"][0]["trace"][0]
-        assert schedule_of(first) == params_of(plan.start, plan.shape)
+        start = params_of(plan.start, plan.shape)
+        # `exp(log t)` is `t` to the last bit or one ulp either side.
+        assert schedule_of(first).shape is start.shape
+        np.testing.assert_allclose(
+            [first["t_start"], first["t_end"], first["hold"]],
+            [start.t_start, start.t_end, start.hold],
+            rtol=1e-15,
+        )
         assert first.get("threshold") == (0.0 if plan.thresholds else None)
-        assert entry["stop"] in (CONVERGED, CAPPED, WALL, COUNT_FIXED, ROUNDS_SPENT)
+        assert entry["stop"] in (
+            CONVERGED,
+            CAPPED,
+            WALL,
+            COUNT_FIXED,
+            ROUNDS_SPENT,
+            STOPPED,
+        )
         assert entry["evaluations"] <= CONVERGE_CAP * len(entry["searches"]) + sum(
             len(match["probes"]) for match in entry["matches"]
         )
         for search in entry["searches"]:
-            assert search["stop"] in (CONVERGED, CAPPED, WALL)
+            assert search["stop"] in (CONVERGED, CAPPED, WALL, STOPPED)
 
 
 @pytest.mark.smoke
