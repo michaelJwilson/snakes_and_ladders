@@ -1,4 +1,4 @@
-//! The `oxi_snakes_and_ladders` extension: the kernels root `CLAUDE.md`'s
+//! The `oxisal` extension: the kernels root `CLAUDE.md`'s
 //! backend rule admits, each beside the NumPy oracle that pins it.
 //!
 //! **Every kernel releases the GIL.** PyO3 holds it for the whole body of a
@@ -68,7 +68,7 @@ pub use sampling::sample_rows;
 /// Placeholder binding: it demonstrates the Rust-to-Python pattern real
 /// numerical kernels follow (`pruning::pruning_log_likelihood` is now the
 /// substantive one) and implements no phylogenetics itself. Left in place
-/// because `snakes_and_ladders.__init__` re-exports it and `tests/test_oxi_snakes_and_ladders_bindings.py`
+/// because `snakes_and_ladders.__init__` re-exports it and `tests/test_oxisal_bindings.py`
 /// asserts it exists.
 #[pyfunction]
 pub fn double(x: i64) -> i64 {
@@ -76,9 +76,9 @@ pub fn double(x: i64) -> i64 {
 }
 
 /// The compiled extension module. `python/snakes_and_ladders/__init__.py` re-exports it as
-/// `snakes_and_ladders.oxi_snakes_and_ladders` (see `module-name` in `pyproject.toml`).
+/// `snakes_and_ladders.oxisal` (see `module-name` in `pyproject.toml`).
 #[pymodule]
-fn oxi_snakes_and_ladders(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn oxisal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(double, m)?)?;
     m.add_function(wrap_pyfunction!(pruning_log_likelihood, m)?)?;
     #[cfg(feature = "sandbox")]

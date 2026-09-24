@@ -32,7 +32,7 @@ from typing import Any, cast
 
 import numpy as np
 import pytest
-from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders import oxisal
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.likelihood.potts import log_weights
 from snakes_and_ladders.sample import potts_mcmc
@@ -140,7 +140,7 @@ def _kernel_pass(
     """One pass through the binding, with the draws supplied rather than drawn."""
     bond, colours, accepts = draws
     labels = np.empty(graph.n_nodes, dtype=np.int64)
-    n_clusters, stop = oxi_snakes_and_ladders.swendsen_wang_sweep(
+    n_clusters, stop = oxisal.swendsen_wang_sweep(
         state,
         np.ascontiguousarray(beta * rows),
         np.ascontiguousarray(graph.edge_index).reshape(-1),
@@ -406,7 +406,7 @@ def test_the_kernel_refuses_a_malformed_call(broken: str, message: str) -> None:
         labels = np.empty(graph.n_nodes - 1, dtype=np.int64)
 
     with pytest.raises(ValueError, match=message):
-        oxi_snakes_and_ladders.swendsen_wang_sweep(
+        oxisal.swendsen_wang_sweep(
             state,
             np.ascontiguousarray(rows),
             np.ascontiguousarray(graph.edge_index).reshape(-1),

@@ -40,7 +40,7 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 
-from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders import oxisal
 from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.opt.termination import Termination
 from snakes_and_ladders.sim.graph import CompressedAdjacency, PottsGraph
@@ -226,7 +226,7 @@ def simulated_bifurcation(
     backend : Backend
         :data:`~snakes_and_ladders.backend.Backend.RUST`, the default since
         issue #997, runs the whole integration in
-        ``oxi_snakes_and_ladders.bifurcation_integrate`` over the graph's
+        ``oxisal.bifurcation_integrate`` over the graph's
         compressed rows, bit for bit the NumPy route on a lattice: 1.3 s
         against 10.2 s at 142^2 and q = 10.
         :data:`~snakes_and_ladders.backend.Backend.PYTHON` runs NumPy, the
@@ -272,7 +272,7 @@ def simulated_bifurcation(
         if backend is Backend.RUST:
             adjacency = graph.incidence
             final = start.copy()
-            oxi_snakes_and_ladders.bifurcation_integrate(
+            oxisal.bifurcation_integrate(
                 np.ascontiguousarray(rows).reshape(-1),
                 adjacency.offsets,
                 adjacency.neighbours,

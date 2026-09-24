@@ -242,12 +242,10 @@ def test_every_declined_kernel_gives_the_package_expansion(
 
 @pytest.mark.smoke
 def test_an_unknown_kernel_is_refused_by_name() -> None:
-    from snakes_and_ladders import oxi_snakes_and_ladders
+    from snakes_and_ladders import oxisal
 
     network = FlowNetwork(n_nodes=2)
     network.add_edge(0, 1, 1.0)
     arcs, capacity, reverse = network.as_arrays()
     with pytest.raises(ValueError, match="unknown max-flow algorithm"):
-        oxi_snakes_and_ladders.max_flow_declined(
-            2, arcs, capacity, 0, 1, reverse, "ford-fulkerson"
-        )
+        oxisal.max_flow_declined(2, arcs, capacity, 0, 1, reverse, "ford-fulkerson")

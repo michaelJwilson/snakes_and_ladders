@@ -47,9 +47,9 @@ done
 if [ -z "$extension" ]; then
   echo "no extension newer than $newest_source; building one (about 13 s incremental)" >&2
   (cd "$path" && cargo build --release) || exit 1
-  built=$(ls "$path"/target/release/liboxi_snakes_and_ladders.* 2>/dev/null | head -1)
+  built=$(ls "$path"/target/release/liboxisal.* 2>/dev/null | head -1)
   [ -n "$built" ] || { echo "cargo build produced no library" >&2; exit 1; }
-  cp "$built" "$path/python/snakes_and_ladders/oxi_snakes_and_ladders.cpython-312-x86_64-linux-gnu.so"
+  cp "$built" "$path/python/snakes_and_ladders/oxisal.cpython-312-x86_64-linux-gnu.so"
 else
   cp "$extension" "$path/python/snakes_and_ladders/"
 fi

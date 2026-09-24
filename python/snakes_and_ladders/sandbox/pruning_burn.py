@@ -53,7 +53,7 @@ from typing import Any
 import numpy as np
 import torch
 
-from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders import oxisal
 from snakes_and_ladders.likelihood.patterns import check_weights
 from snakes_and_ladders.likelihood.pruning_common import postorder
 from snakes_and_ladders.likelihood.pruning_torch import branch_order
@@ -62,7 +62,7 @@ from snakes_and_ladders.sim.tree import Node, preorder
 #: Whether the extension was built with the ``sandbox`` Cargo feature. A
 #: missing ``pruning_gradient`` is the only signal it gives, and it is what
 #: ``tests/regression/sandbox/test_pruning_burn.py`` skips on.
-AVAILABLE = hasattr(oxi_snakes_and_ladders, "pruning_gradient")
+AVAILABLE = hasattr(oxisal, "pruning_gradient")
 
 _UNAVAILABLE = (
     "the compiled extension carries no `pruning_gradient`: it was built "
@@ -150,7 +150,7 @@ class _PruningLogLikelihood(torch.autograd.Function):
         lengths = np.zeros(flattened.n_nodes, dtype=np.float64)
         detached = branch_lengths.detach().to(dtype=torch.float64).cpu().numpy()
         lengths[flattened.to_postorder] = detached
-        value, gradient = oxi_snakes_and_ladders.pruning_gradient(
+        value, gradient = oxisal.pruning_gradient(
             lengths,
             flattened.children,
             flattened.leaf_states,

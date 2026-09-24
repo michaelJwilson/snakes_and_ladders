@@ -24,7 +24,7 @@ from pathlib import Path
 
 import numpy as np
 
-from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders import oxisal
 from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.sim.count_pairs import (
     CountPairInstance,
@@ -141,7 +141,7 @@ def simulate_count_pairs(
     successes = np.empty_like(totals)
     tables = _tables(declared)
     exposure, trial_counts = _channels(params.covariate)
-    oxi_snakes_and_ladders.simulate_count_pairs(
+    oxisal.simulate_count_pairs(
         declared.seed,
         np.ascontiguousarray(states, dtype=np.int64).reshape(-1),
         np.ascontiguousarray(labels, dtype=np.int64),

@@ -19,7 +19,7 @@ import threading
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders import oxisal
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.sample.potts_keyed import SwendsenWangMove
 from snakes_and_ladders.sample.potts_mcmc import (
@@ -150,7 +150,7 @@ def _sweep_task(seed: int) -> np.ndarray:
     draws = np.ascontiguousarray(
         rng.random(THREADED_SWEEPS * graph.n_nodes), dtype=np.float64
     )
-    oxi_snakes_and_ladders.single_site_sweeps(
+    oxisal.single_site_sweeps(
         state,
         rows,
         offsets,

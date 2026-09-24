@@ -10,7 +10,7 @@ lost on. One evaluation is a forward pass and a ``backward()``, which is what
 a fitting step costs.
 
 The through-the-binding numbers are these; the `burn` kernel alone is
-``benches/oxi_snakes_and_ladders_bench.rs``, and the difference between the
+``benches/oxisal_bench.rs``, and the difference between the
 two is the FFI boundary.
 
 Correctness is pinned in

@@ -9,7 +9,7 @@ phylogenetic trees, Potts models in an external field, hidden Markov models,
 and low-density parity-check decoding. Autodiff fits the continuous half;
 learned proposals, a critic, a planner and surrogates propose the discrete half
 beside the classical baselines they are measured against; a Rust backend
-(`snakes_and_ladders.oxi_snakes_and_ladders`, via
+(`snakes_and_ladders.oxisal`, via
 [PyO3](https://pyo3.rs)/[maturin](https://www.maturin.rs)) carries the
 CPU-bound recursions.
 

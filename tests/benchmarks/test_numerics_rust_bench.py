@@ -4,7 +4,7 @@ See `tests/regression/test_numerics_rust.py` for correctness. What is timed
 here is the *Python-visible* cost, which is the number that decides whether
 the port is worth having and is smaller than the kernel's own speedup: the
 arrays have to cross the FFI boundary and the oracle's do not.
-`benches/oxi_snakes_and_ladders_bench.rs` measures the kernel alone, and reporting only
+`benches/oxisal_bench.rs` measures the kernel alone, and reporting only
 that one would overstate what a caller gets.
 
 The sizes are the ones issue #181's audit profiled, where `sample_rows` was
@@ -56,7 +56,7 @@ def test_numpy_sample_rows_benchmark(benchmark: BenchmarkFixture, n_draws: int) 
 
 @pytest.mark.parametrize("n_draws", [200_000, 2_000_000])
 def test_rust_sample_rows_benchmark(benchmark: BenchmarkFixture, n_draws: int) -> None:
-    """The same call through `oxi_snakes_and_ladders`, including the boundary it crosses."""
+    """The same call through `oxisal`, including the boundary it crosses."""
     distributions, rows = _inputs(n_draws)
 
     sampled = benchmark(accelerated, np.random.default_rng(SEED), distributions, rows)

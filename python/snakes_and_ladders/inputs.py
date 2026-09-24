@@ -48,7 +48,7 @@ from importlib import metadata
 from pathlib import Path
 
 PACKAGE = "snakes_and_ladders"
-EXTENSION = "oxi_snakes_and_ladders"
+EXTENSION = "oxisal"
 
 
 def _module_path(name: str, package_root: Path) -> Path | None:

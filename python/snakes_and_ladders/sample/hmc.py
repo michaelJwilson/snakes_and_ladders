@@ -64,7 +64,7 @@ from typing import Any, Protocol, runtime_checkable
 import numpy as np
 import torch
 
-from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders import oxisal
 from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.emissions import ParameterDomainError
 from snakes_and_ladders.opt.objective import (
@@ -653,7 +653,7 @@ def sample(
     backend : Backend
         :data:`~snakes_and_ladders.backend.Backend.RUST`, the default since
         issue #986, runs the whole chain in
-        ``oxi_snakes_and_ladders.gaussian_hmc`` when the objective is a
+        ``oxisal.gaussian_hmc`` when the objective is a
         :class:`DeclaredGaussian` and the chain is the plain one: leapfrog,
         unit temperature, no adaptation, no operators, and no enclosing
         :func:`snakes_and_ladders.track.track`. Its momenta and uniforms come
@@ -1281,7 +1281,7 @@ def _compiled_gaussian_chain(
     precision = objective.gaussian_precision.detach().numpy()
     dimension = int(theta0.shape[0])
     seed = int(torch.randint(0, 2**62, (1,), generator=generator))
-    draws, accepted, errors = oxi_snakes_and_ladders.gaussian_hmc(
+    draws, accepted, errors = oxisal.gaussian_hmc(
         np.ascontiguousarray(precision, dtype=np.float64).reshape(-1),
         np.ascontiguousarray(theta0.detach().numpy(), dtype=np.float64),
         n_samples,

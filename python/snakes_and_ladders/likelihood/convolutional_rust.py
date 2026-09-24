@@ -1,4 +1,4 @@
-"""Rust log-MAP BCJR (``snakes_and_ladders.oxi_snakes_and_ladders.bcjr_forward_backward``),
+"""Rust log-MAP BCJR (``snakes_and_ladders.oxisal.bcjr_forward_backward``),
 pinned against :func:`snakes_and_ladders.likelihood.convolutional.bcjr`, the
 NumPy oracle (``likelihood/CLAUDE.md``, "The reference implementation is the
 oracle and it stays").
@@ -43,7 +43,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders import oxisal
 from snakes_and_ladders.likelihood.convolutional import TrellisDecoding
 from snakes_and_ladders.sim.convolutional import Trellis
 
@@ -90,7 +90,7 @@ def bcjr(
     # `reshape(-1)` on a C-contiguous array is a view, so the trellis crosses
     # without a copy; `ascontiguousarray` is the guard that keeps `as_slice`
     # on the Rust side from failing on a strided caller.
-    posterior, extrinsic, log_evidence = oxi_snakes_and_ladders.bcjr_forward_backward(
+    posterior, extrinsic, log_evidence = oxisal.bcjr_forward_backward(
         np.ascontiguousarray(trellis.next_state, dtype=np.int64).reshape(-1),
         np.ascontiguousarray(trellis.parity, dtype=np.uint8).reshape(-1),
         np.ascontiguousarray(systematic_llr, dtype=np.float64),

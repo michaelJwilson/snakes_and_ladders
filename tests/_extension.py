@@ -3,7 +3,7 @@
 Issue #630. The shared environment holds one editable install, pointing at the
 primary worktree, and a worktree is reached with ``PYTHONPATH=<worktree>/python``
 which shadows it --- the extension included. So every worktree carries its own
-``oxi_snakes_and_ladders`` and nothing rebuilds it: a merge that changes
+``oxisal`` and nothing rebuilds it: a merge that changes
 ``src/`` leaves the binary behind, and the suite then runs new Python against
 old Rust.
 
@@ -26,7 +26,7 @@ from __future__ import annotations
 from pathlib import Path
 
 #: Where a built extension sits in a worktree, by any platform's suffix.
-EXTENSION_GLOB = "python/snakes_and_ladders/oxi_snakes_and_ladders*"
+EXTENSION_GLOB = "python/snakes_and_ladders/oxisal*"
 
 #: What the extension is built from. `Cargo.lock` is here because a dependency
 #: bump changes the binary without touching a line of `src/`.

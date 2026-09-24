@@ -95,7 +95,7 @@ extension:
 pip install .
 ```
 
-This makes `snakes_and_ladders.oxi_snakes_and_ladders` importable from Python: `double`, an example
+This makes `snakes_and_ladders.oxisal` importable from Python: `double`, an example
 binding; `pruning_log_likelihood`, the Rust CPU Felsenstein pruning backend
 behind `snakes_and_ladders.likelihood.pruning_rust`; `sample_rows`, the categorical
 sampler behind `snakes_and_ladders.numerics_rust`, which `snakes_and_ladders.sim` and `snakes_and_ladders.opt` draw
@@ -121,7 +121,7 @@ pytest tests/regression/sandbox/test_pruning_burn.py
 pytest      # Python: regression tests (tests/regression), a pytest-benchmark
             # suite (tests/benchmarks), and an integration test that the
             # Rust extension imports correctly
-            # (tests/test_oxi_snakes_and_ladders_bindings.py)
+            # (tests/test_oxisal_bindings.py)
 cargo test  # Rust: unit tests for the PyO3 bindings (src/lib.rs)
 cargo bench # Rust: Criterion benchmarks (benches/)
 ```

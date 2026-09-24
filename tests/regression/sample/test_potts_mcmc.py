@@ -1707,7 +1707,7 @@ def test_the_backends_agree_bitwise_at_every_temperature(
 def test_the_kernel_names_the_shape_it_wanted_and_the_shape_it_got() -> None:
     # PyO3 reports a dimensionality mismatch as "'ndarray' object is not an
     # instance of 'ndarray'", which names neither shape (issue #571).
-    from snakes_and_ladders import oxi_snakes_and_ladders
+    from snakes_and_ladders import oxisal
 
     graph = lattice_graph((2, 2), BoundaryCondition.OPEN, 0.5)
     offsets, index, couplings = graph.compressed_adjacency()
@@ -1715,7 +1715,7 @@ def test_the_kernel_names_the_shape_it_wanted_and_the_shape_it_got() -> None:
     draws = np.full(graph.n_nodes, 0.5)
 
     with pytest.raises(ValueError, match="one row per site"):
-        oxi_snakes_and_ladders.single_site_sweeps(
+        oxisal.single_site_sweeps(
             state,
             np.zeros((graph.n_nodes + 1, 3)),
             offsets,
@@ -1728,7 +1728,7 @@ def test_the_kernel_names_the_shape_it_wanted_and_the_shape_it_got() -> None:
             0,
         )
     with pytest.raises(ValueError, match="beta must be finite"):
-        oxi_snakes_and_ladders.single_site_sweeps(
+        oxisal.single_site_sweeps(
             state,
             np.zeros((graph.n_nodes, 3)),
             offsets,
@@ -1747,13 +1747,13 @@ def test_a_field_of_the_wrong_dimensionality_names_its_shape() -> None:
     # PyO3 would reject a 1-D field before the kernel body, as "'ndarray'
     # object is not an instance of 'ndarray'" (issue #571). The field is taken
     # as a dynamic array so the refusal names the shape instead.
-    from snakes_and_ladders import oxi_snakes_and_ladders
+    from snakes_and_ladders import oxisal
 
     graph = lattice_graph((2, 2), BoundaryCondition.OPEN, 0.5)
     offsets, index, couplings = graph.compressed_adjacency()
 
     with pytest.raises(ValueError, match=r"must be 2-D.*got shape \[3\]"):
-        oxi_snakes_and_ladders.single_site_sweeps(
+        oxisal.single_site_sweeps(
             np.zeros(graph.n_nodes, dtype=np.int64),
             np.zeros(3),
             offsets,

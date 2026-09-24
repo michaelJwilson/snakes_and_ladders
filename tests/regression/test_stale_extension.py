@@ -44,22 +44,21 @@ def test_an_extension_older_than_its_rust_is_refused(tmp_path: Path) -> None:
     as it was. The refusal must name both files, so the reader is not left to
     infer which of the two is behind.
     """
-    tree(tmp_path, extension="oxi_snakes_and_ladders.cpython-312-x86_64-linux-gnu.so")
+    tree(tmp_path, extension="oxisal.cpython-312-x86_64-linux-gnu.so")
     # The merge rewrote `src/`, so that is what must be named; the manifests
     # are back-dated to leave it the newest rather than whichever the fixture
     # happened to write last.
     age(tmp_path / "Cargo.toml", 300.0)
     age(tmp_path / "Cargo.lock", 300.0)
     age(
-        tmp_path
-        / "python/snakes_and_ladders/oxi_snakes_and_ladders.cpython-312-x86_64-linux-gnu.so",
+        tmp_path / "python/snakes_and_ladders/oxisal.cpython-312-x86_64-linux-gnu.so",
         60.0,
     )
 
     refusal = stale_extension(tmp_path)
 
     assert refusal, "a stale extension was accepted"
-    assert "oxi_snakes_and_ladders" in refusal
+    assert "oxisal" in refusal
     assert "src/lib.rs" in refusal
     assert "infra/build_extension.sh" in refusal
 
@@ -72,7 +71,7 @@ def test_an_extension_newer_than_its_rust_is_silent(tmp_path: Path) -> None:
     Most pull requests touch no Rust, so most runs reach this branch; a guard
     that fired on them would be removed within the day.
     """
-    tree(tmp_path, extension="oxi_snakes_and_ladders.cpython-312-x86_64-linux-gnu.so")
+    tree(tmp_path, extension="oxisal.cpython-312-x86_64-linux-gnu.so")
     for name in ("src/lib.rs", "Cargo.toml", "Cargo.lock"):
         age(tmp_path / name, 60.0)
 
@@ -86,12 +85,11 @@ def test_a_lockfile_bump_alone_outdates_the_extension(tmp_path: Path) -> None:
     This is why `SOURCES` names the two manifests beside `src/`, and it is the
     case a check written against `src/**/*.rs` alone would miss.
     """
-    tree(tmp_path, extension="oxi_snakes_and_ladders.cpython-312-x86_64-linux-gnu.so")
+    tree(tmp_path, extension="oxisal.cpython-312-x86_64-linux-gnu.so")
     age(tmp_path / "src/lib.rs", 120.0)
     age(tmp_path / "Cargo.toml", 120.0)
     age(
-        tmp_path
-        / "python/snakes_and_ladders/oxi_snakes_and_ladders.cpython-312-x86_64-linux-gnu.so",
+        tmp_path / "python/snakes_and_ladders/oxisal.cpython-312-x86_64-linux-gnu.so",
         60.0,
     )
 
@@ -119,9 +117,7 @@ def test_a_tree_with_no_rust_is_not_stale(tmp_path: Path) -> None:
     """Nothing to be behind: the check is about `src/`, not about age."""
     built = tmp_path / "python" / "snakes_and_ladders"
     built.mkdir(parents=True)
-    (built / "oxi_snakes_and_ladders.cpython-312-x86_64-linux-gnu.so").write_bytes(
-        b"\x7fELF"
-    )
+    (built / "oxisal.cpython-312-x86_64-linux-gnu.so").write_bytes(b"\x7fELF")
 
     assert stale_extension(tmp_path) == ""
 

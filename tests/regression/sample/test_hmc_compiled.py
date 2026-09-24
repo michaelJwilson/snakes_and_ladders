@@ -17,7 +17,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders import oxisal
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.opt.objective import DeclaredGradient
 from snakes_and_ladders.sample import hmc, langevin
@@ -42,7 +42,7 @@ def test_the_compiled_trajectory_is_the_torch_leapfrog(dense: bool) -> None:
         0.21,
         17,
     )
-    position, velocity = oxi_snakes_and_ladders.gaussian_leapfrog(
+    position, velocity = oxisal.gaussian_leapfrog(
         np.ascontiguousarray(precision).reshape(-1), theta, momentum, 0.21, 17
     )
     np.testing.assert_allclose(position, torch_end.position.numpy(), rtol=0, atol=1e-12)

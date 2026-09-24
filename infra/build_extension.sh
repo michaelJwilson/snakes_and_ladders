@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build `oxi_snakes_and_ladders` for THIS worktree and put it where the
+# Build `oxisal` for THIS worktree and put it where the
 # package will import it.
 #
 # Issue #630. The shared `.venv` holds one editable install, pointing at the
@@ -23,8 +23,8 @@ if [ ! -x "$interpreter" ]; then
   interpreter="$(command -v python3)"
 fi
 suffix="$("$interpreter" -c 'import sysconfig; print(sysconfig.get_config_var("EXT_SUFFIX"))')"
-target="python/snakes_and_ladders/oxi_snakes_and_ladders${suffix}"
+target="python/snakes_and_ladders/oxisal${suffix}"
 
 cargo build --release --locked "$@"
-cp "target/release/liboxi_snakes_and_ladders.so" "$target"
+cp "target/release/liboxisal.so" "$target"
 echo "built $target"

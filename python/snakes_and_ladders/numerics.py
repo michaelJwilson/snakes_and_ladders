@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders import oxisal
 from snakes_and_ladders.backend import Backend, refuse_backend
 
 
@@ -107,7 +107,7 @@ def sample_rows(
         # `as_slice` accepts only a C-contiguous array, and this is free when
         # the input already is one.
         sampled = np.empty(int(rows.shape[0]), dtype=np.int64)
-        oxi_snakes_and_ladders.sample_rows(
+        oxisal.sample_rows(
             np.ascontiguousarray(distributions, dtype=np.float64).reshape(-1),
             int(distributions.shape[1]),
             np.ascontiguousarray(rows, dtype=np.int64),

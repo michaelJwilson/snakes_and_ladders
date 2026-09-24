@@ -1,5 +1,5 @@
 [package]
-name = "oxi_snakes_and_ladders"
+name = "oxisal"
 version = "0.3.0"
 edition = "2021"
 license = "MIT"
@@ -54,5 +54,5 @@ lto = "fat"
 codegen-units = 1
 
 [[bench]]
-name = "oxi_snakes_and_ladders_bench"
+name = "oxisal_bench"
 harness = false

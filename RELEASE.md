@@ -189,7 +189,7 @@ multi-threaded reduction degrades superlinearly on an oversubscribed host.
 
 Edit `[package].version` in `Cargo.toml` — the single version source
 (`CLAUDE.md`), and nowhere else — then run `cargo build` so `Cargo.lock`'s
-`oxi_snakes_and_ladders` entry picks the new version up, and commit both.
+`oxisal` entry picks the new version up, and commit both.
 `maturin` reads the Python package version from that same field
 (`dynamic = ["version"]` in `pyproject.toml`), so nothing else is edited.
 

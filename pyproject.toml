@@ -149,7 +149,7 @@ run_snakes_and_ladders = "snakes_and_ladders.scripts.run_snakes_and_ladders:main
 
 [tool.maturin]
 python-source = "python"
-module-name = "snakes_and_ladders.oxi_snakes_and_ladders"
+module-name = "snakes_and_ladders.oxisal"
 
 [tool.ruff]
 target-version = "py312"

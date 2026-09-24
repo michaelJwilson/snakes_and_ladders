@@ -81,7 +81,7 @@ jobs:
         with:
           path: ~/.cache/uv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-      - name: Cache Cargo registry and the oxi_snakes_and_ladders build
+      - name: Cache Cargo registry and the oxisal build
         uses: actions/cache@v4
         with:
           path: |
@@ -135,7 +135,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
-      - name: Cache Cargo registry and the oxi_snakes_and_ladders build
+      - name: Cache Cargo registry and the oxisal build
         uses: actions/cache@v4
         with:
           path: |
@@ -154,7 +154,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Cache Cargo registry and the oxi_snakes_and_ladders build
+      - name: Cache Cargo registry and the oxisal build
         uses: actions/cache@v4
         with:
           path: |
@@ -177,7 +177,7 @@ jobs:
         with:
           python-version: "3.12"
       - uses: dtolnay/rust-toolchain@stable
-      - name: Cache Cargo registry and the oxi_snakes_and_ladders build
+      - name: Cache Cargo registry and the oxisal build
         uses: actions/cache@v4
         with:
           path: |
@@ -190,8 +190,8 @@ jobs:
       # Deliberately plain pip, not the lockfile: this job checks the path a
       # fresh consumer takes when installing the package from source.
       - run: pip install .
-      - name: Smoke-test snakes_and_ladders.oxi_snakes_and_ladders is importable
-        run: python -c "from snakes_and_ladders.oxi_snakes_and_ladders import double; assert double(21) == 42"
+      - name: Smoke-test snakes_and_ladders.oxisal is importable
+        run: python -c "from snakes_and_ladders.oxisal import double; assert double(21) == 42"
 
   python-tests:
     name: Python tests (pytest)
@@ -216,7 +216,7 @@ jobs:
         with:
           path: ~/.cache/uv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-      - name: Cache Cargo registry and the oxi_snakes_and_ladders build
+      - name: Cache Cargo registry and the oxisal build
         uses: actions/cache@v4
         with:
           path: |
@@ -425,7 +425,7 @@ jobs:
         with:
           path: ~/.cache/uv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-      - name: Cache Cargo registry and the oxi_snakes_and_ladders build
+      - name: Cache Cargo registry and the oxisal build
         uses: actions/cache@v4
         with:
           path: |
@@ -455,7 +455,7 @@ jobs:
         with:
           path: ~/.cache/uv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-      - name: Cache Cargo registry and the oxi_snakes_and_ladders build
+      - name: Cache Cargo registry and the oxisal build
         uses: actions/cache@v4
         with:
           path: |
@@ -499,7 +499,7 @@ jobs:
         with:
           path: ~/.cache/uv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-      - name: Cache Cargo registry and the oxi_snakes_and_ladders build
+      - name: Cache Cargo registry and the oxisal build
         uses: actions/cache@v4
         with:
           path: |
@@ -593,7 +593,7 @@ jobs:
         with:
           path: ~/.cache/uv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-      - name: Cache Cargo registry and the oxi_snakes_and_ladders build
+      - name: Cache Cargo registry and the oxisal build
         if: steps.scope.outputs.build == 'true'
         uses: actions/cache@v4
         with:

@@ -15,7 +15,7 @@ import dataclasses
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders import oxisal
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.emissions import GaussianEmission
 from snakes_and_ladders.fixtures import load_params
@@ -373,9 +373,7 @@ def test_the_rust_cut_meets_pymaxflows_runtime(side: int) -> None:
     edges = rung.graph.edge_index.reshape(-1)
     coupling = rung.graph.edge_coupling
     ours = median_seconds(
-        lambda: oxi_snakes_and_ladders.ising_ground_state(
-            rung.graph.n_nodes, field, edges, coupling
-        )
+        lambda: oxisal.ising_ground_state(rung.graph.n_nodes, field, edges, coupling)
     )
     assert_meets(ours, PYMAXFLOW_CUT[side])
 
