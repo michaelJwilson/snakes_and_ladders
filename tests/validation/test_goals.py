@@ -5,12 +5,16 @@ declared fixture, measured on the 4-core reference host by the benchmark pair
 its row names and written here as a number. The test times the package alone,
 so no framework is installed to run it, and it fails until the package's
 median meets the figure. It carries `goal` and runs in a non-blocking step of
-CI's `validation` job.
+CI's `validation` job. Each goal is one row of `RUNTIME_GOALS` or
+`MEMORY_GOALS`, its id the framework, the call and the key (issue #982).
 """
 
 from __future__ import annotations
 
 import dataclasses
+import functools
+from collections.abc import Callable, Mapping
+from typing import Any, NamedTuple
 
 import numpy as np
 import pytest
@@ -123,25 +127,6 @@ RUSTWORKX_SWEEP_MEMORY = {
 }
 
 
-@pytest.mark.experiment
-@pytest.mark.parametrize("side", sorted(RUSTWORKX_SWEEP))
-def test_the_sweep_meets_rustworkxs_runtime(side: int) -> None:
-    inputs = {"side": np.asarray(side), "seed": np.asarray(976)}
-    assert_meets(
-        median_package("swendsen_wang", inputs, repeats=5), RUSTWORKX_SWEEP[side]
-    )
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize("side", sorted(RUSTWORKX_SWEEP_MEMORY))
-def test_the_sweep_fits_rustworkxs_memory(side: int) -> None:
-    inputs = {"side": np.asarray(side), "seed": np.asarray(976)}
-    assert_fits(
-        int(median_package("swendsen_wang", inputs, "peak_bytes")),
-        RUSTWORKX_SWEEP_MEMORY[side],
-    )
-
-
 #: TorchRL's `GAE` at `gamma = 1`, `lmbda = 0.95`, one call per episode of
 #: 100 decisions, `_gae_rollouts`' rewards and values with every other
 #: episode terminated: the summed per-episode seconds, the median of three
@@ -167,18 +152,6 @@ def _gae_rollouts(n_episodes: int) -> list[tuple[list[float], list[float], bool]
     ]
 
 
-@pytest.mark.experiment
-@pytest.mark.parametrize("n_episodes", sorted(TORCHRL_GAE))
-def test_the_advantages_meet_torchrls_gae_runtime(n_episodes: int) -> None:
-    rollouts = _gae_rollouts(n_episodes)
-
-    def every() -> None:
-        for rewards, values, terminated in rollouts:
-            generalized_advantages(rewards, values, lam=0.95, terminated=terminated)
-
-    assert_meets(median_seconds(every, repeats=3), TORCHRL_GAE[n_episodes])
-
-
 #: PyG's twin of `SetSurrogate` (hidden 8): its encoder and decoder around
 #: `global_add_pool`, one example of `side^2` tokens, the median of five
 #: subprocess runs of the median of nine warm forwards, at one intra-op
@@ -195,27 +168,6 @@ TORCH_GEOMETRIC_SET = {
     )
     for side, seconds in ((142, 2.714e-3), (284, 12.576e-3))
 }
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize("side", sorted(TORCH_GEOMETRIC_SET))
-def test_the_set_surrogate_meets_pygs_runtime(side: int) -> None:
-    graph = lattice_graph((side, side), BoundaryCondition.OPEN, 1.0)
-    rng = np.random.default_rng(977)
-    examples = Examples(
-        features=torch.as_tensor(rng.normal(size=(1, 3))),
-        targets=torch.zeros(1, dtype=torch.float64),
-        groups=np.zeros(1, dtype=np.int64),
-        tokens=(torch.as_tensor(rng.normal(size=(graph.n_nodes, 4))),),
-        adjacency=(np.asarray(graph.edge_index, dtype=np.int64),),
-    )
-    batch = _Batch(examples)
-    torch.manual_seed(977)
-    model = SetSurrogate(3, 4, hidden=8)
-    with torch.no_grad():
-        model(batch)  # warm-up
-        seconds = median_seconds(lambda: model(batch))
-    assert_meets(seconds, TORCH_GEOMETRIC_SET[side])
 
 
 #: JAX's per-point gradient under `jit` and its peak added memory over 100
@@ -364,34 +316,6 @@ SCIKIT_LEARN_EM_MEMORY = {
 }
 
 
-@pytest.mark.experiment
-@pytest.mark.parametrize("side", sorted(PYMAXFLOW_CUT))
-def test_the_rust_cut_meets_pymaxflows_runtime(side: int) -> None:
-    # The Rust kernel with its arrays prebuilt, which is its graph build and
-    # cut in one call, against PyMaxflow's build and cut.
-    rung = lattice_rung(side, 2, seed=973)
-    field = np.ascontiguousarray(
-        site_field(rung.field, rung.graph.n_nodes, n_states=2), dtype=np.float64
-    ).reshape(-1)
-    edges = rung.graph.edge_index.reshape(-1)
-    coupling = rung.graph.edge_coupling
-    ours = median_seconds(
-        lambda: oxisal.ising_ground_state(rung.graph.n_nodes, field, edges, coupling)
-    )
-    assert_meets(ours, PYMAXFLOW_CUT[side])
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize("side", sorted(GCO_EXPANSION))
-def test_the_expansion_meets_gcos_runtime(side: int) -> None:
-    graph = lattice_graph((side, side), BoundaryCondition.OPEN, critical_coupling(10))
-    field = np.random.default_rng(974).normal(size=(graph.n_nodes, 10))
-    ours = median_seconds(
-        lambda: alpha_expansion(graph, field, 10, backend=Backend.RUST), repeats=3
-    )
-    assert_meets(ours, GCO_EXPANSION[side])
-
-
 #: gco's alpha-beta `swap()` to convergence on the expansion goals' instance
 #: (q = 10, `critical_coupling(10)`, field seed 974), graph build excluded,
 #: and its peak added memory with the build: medians of three subprocess
@@ -422,27 +346,7 @@ GCO_SWAP_MEMORY = {
 
 def _swap_inputs(side: int) -> dict[str, np.ndarray]:
     """The expansion goals' instance, run as a swap."""
-    return {
-        "shape": np.asarray([side, side]),
-        "coupling": np.asarray(critical_coupling(10)),
-        "field": np.random.default_rng(974).normal(size=(side * side, 10)),
-        "move": np.asarray("swap"),
-    }
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize("side", sorted(GCO_SWAP))
-def test_the_swap_meets_gcos_runtime(side: int) -> None:
-    assert_meets(median_package("alpha_expansion", _swap_inputs(side)), GCO_SWAP[side])
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize("side", sorted(GCO_SWAP_MEMORY))
-def test_the_swap_fits_gcos_memory(side: int) -> None:
-    assert_fits(
-        int(median_package("alpha_expansion", _swap_inputs(side), "peak_bytes")),
-        GCO_SWAP_MEMORY[side],
-    )
+    return {**_expansion_inputs(side), "move": np.asarray("swap")}
 
 
 #: BlackJAX's compiled HMC chain, compilation excluded: 1,000 transitions of
@@ -477,63 +381,12 @@ BLACKJAX_HMC_MEMORY = {
 }
 
 
-@pytest.mark.experiment
-@pytest.mark.parametrize("side", sorted(PYMAXFLOW_CUT_MEMORY))
-def test_the_rust_cut_fits_pymaxflows_memory(side: int) -> None:
-    # Read in a fresh interpreter by `scripts/package.py`, as PyMaxflow's was.
-    inputs = _cut_inputs(side)
-    assert_fits(
-        int(median_package("ising_cut", inputs, "peak_bytes")),
-        PYMAXFLOW_CUT_MEMORY[side],
-    )
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize("side", sorted(GCO_EXPANSION_MEMORY))
-def test_the_expansion_fits_gcos_memory(side: int) -> None:
-    field = np.random.default_rng(974).normal(size=(side * side, 10))
-    inputs = {
-        "shape": np.asarray([side, side]),
-        "coupling": np.asarray(critical_coupling(10)),
-        "field": field,
-    }
-    assert_fits(
-        int(median_package("alpha_expansion", inputs, "peak_bytes")),
-        GCO_EXPANSION_MEMORY[side],
-    )
-
-
 def _hmm_start() -> tuple[np.ndarray, ...]:
     """The benchmark's start: each row a perturbed uniform, seed 975."""
     rng = np.random.default_rng(975)
     shapes = ((3,), (3, 3), (3, 4))
     draws = [rng.random(shape) + 0.5 for shape in shapes]
     return tuple(draw / draw.sum(axis=-1, keepdims=True) for draw in draws)
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize("n_sequences", sorted(HMMLEARN_BAUM_WELCH))
-def test_baum_welch_meets_hmmlearns_runtime(n_sequences: int) -> None:
-    params = dataclasses.replace(
-        load_params(FIXTURES_DIR / "hmm" / "ci.yaml", HmmParams),
-        lengths=(100,) * n_sequences,
-    )
-    observations = simulate_sequences(params).observations
-    initial, transition, emission = (
-        torch.log(torch.as_tensor(p)) for p in _hmm_start()
-    )
-    ours = median_seconds(
-        lambda: baum_welch(
-            observations,
-            initial,
-            transition,
-            emission,
-            max_iterations=10,
-            tolerance=-np.inf,
-        ),
-        repeats=3,
-    )
-    assert_meets(ours, HMMLEARN_BAUM_WELCH[n_sequences])
 
 
 def _mixture_draws(n_samples: int) -> np.ndarray:
@@ -543,78 +396,6 @@ def _mixture_draws(n_samples: int) -> np.ndarray:
     centre = np.array([-4.0, 0.0, 5.0])[component]
     spread = np.array([1.0, 1.5, 1.0])[component]
     return np.asarray(rng.normal(centre, spread))
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize("n_samples", sorted(SCIKIT_LEARN_EM))
-def test_mixture_em_meets_scikit_learns_runtime(n_samples: int) -> None:
-    observations = _mixture_draws(n_samples)
-    start = GaussianEmission(
-        np.array([-3.0, 0.5, 4.0]), np.array([1.2, 1.0, 1.3]), 1e-12
-    )
-    weights = torch.tensor([0.3, 0.3, 0.4], dtype=torch.float64)
-    ours = median_seconds(
-        lambda: expectation_maximization(
-            observations, weights, start, max_iterations=10, tolerance=-np.inf
-        ),
-        repeats=3,
-    )
-    assert_meets(ours, SCIKIT_LEARN_EM[n_samples])
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize("dimension", sorted(BLACKJAX_HMC))
-def test_hmc_meets_blackjaxs_runtime(dimension: int) -> None:
-    target = GaussianTarget(diagonal_precision(dimension))
-    step = 0.9 / (2.0 * dimension**0.25)
-    ours = median_seconds(
-        lambda: hmc.sample(
-            target,
-            torch.Generator().manual_seed(963),
-            1_000,
-            step_size=step,
-            n_steps=10,
-        ),
-        repeats=3,
-    )
-    assert_meets(ours, BLACKJAX_HMC[dimension])
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize("n_sequences", sorted(HMMLEARN_BAUM_WELCH_MEMORY))
-def test_baum_welch_fits_hmmlearns_memory(n_sequences: int) -> None:
-    params = dataclasses.replace(
-        load_params(FIXTURES_DIR / "hmm" / "ci.yaml", HmmParams),
-        lengths=(100,) * n_sequences,
-    )
-    initial, transition, emission = _hmm_start()
-    inputs = {
-        "observations": simulate_sequences(params).observations,
-        "initial": initial,
-        "transition": transition,
-        "emission": emission,
-        "n_iter": np.asarray(10),
-    }
-    assert_fits(
-        int(median_package("baum_welch", inputs, "peak_bytes")),
-        HMMLEARN_BAUM_WELCH_MEMORY[n_sequences],
-    )
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize("n_samples", sorted(SCIKIT_LEARN_EM_MEMORY))
-def test_mixture_em_fits_scikit_learns_memory(n_samples: int) -> None:
-    inputs = {
-        "observations": _mixture_draws(n_samples),
-        "weights": np.array([0.3, 0.3, 0.4]),
-        "mean": np.array([-3.0, 0.5, 4.0]),
-        "scale": np.array([1.2, 1.0, 1.3]),
-        "n_iter": np.asarray(10),
-    }
-    assert_fits(
-        int(median_package("mixture_em", inputs, "peak_bytes")),
-        SCIKIT_LEARN_EM_MEMORY[n_samples],
-    )
 
 
 #: hmmlearn's ten Baum--Welch iterations of a three-state Gaussian (diagonal)
@@ -782,77 +563,11 @@ def _family_inputs(family: str, n_sequences: int) -> dict[str, np.ndarray]:
     }
 
 
-@pytest.mark.experiment
-@pytest.mark.parametrize(("family", "n_sequences"), sorted(HMMLEARN_FAMILY_BAUM_WELCH))
-def test_family_baum_welch_meets_hmmlearns_runtime(
-    family: str, n_sequences: int
-) -> None:
-    inputs = _family_inputs(family, n_sequences)
-    assert_meets(
-        median_package("family_baum_welch", inputs),
-        HMMLEARN_FAMILY_BAUM_WELCH[(family, n_sequences)],
-    )
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize(
-    ("family", "n_sequences"), sorted(HMMLEARN_FAMILY_BAUM_WELCH_MEMORY)
-)
-def test_family_baum_welch_fits_hmmlearns_memory(family: str, n_sequences: int) -> None:
-    inputs = _family_inputs(family, n_sequences)
-    assert_fits(
-        int(median_package("family_baum_welch", inputs, "peak_bytes")),
-        HMMLEARN_FAMILY_BAUM_WELCH_MEMORY[(family, n_sequences)],
-    )
-
-
 def _viterbi_inputs(family: str, n_sequences: int) -> dict[str, np.ndarray]:
     """The harness's inputs for one decode, at the fits' start."""
     inputs = _family_inputs(family, n_sequences)
     del inputs["n_iter"]
     return inputs
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize(("family", "n_sequences"), sorted(HMMLEARN_VITERBI))
-def test_viterbi_meets_hmmlearns_runtime(family: str, n_sequences: int) -> None:
-    inputs = _viterbi_inputs(family, n_sequences)
-    assert_meets(
-        median_package("viterbi", inputs), HMMLEARN_VITERBI[(family, n_sequences)]
-    )
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize(("family", "n_sequences"), sorted(HMMLEARN_VITERBI_MEMORY))
-def test_viterbi_fits_hmmlearns_memory(family: str, n_sequences: int) -> None:
-    inputs = _viterbi_inputs(family, n_sequences)
-    assert_fits(
-        int(median_package("viterbi", inputs, "peak_bytes")),
-        HMMLEARN_VITERBI_MEMORY[(family, n_sequences)],
-    )
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize(("family", "n_sequences"), sorted(HMMLEARN_SCORE))
-def test_hmm_log_likelihood_meets_hmmlearns_runtime(
-    family: str, n_sequences: int
-) -> None:
-    inputs = {**_viterbi_inputs(family, n_sequences), "score": np.asarray(True)}
-    assert_meets(
-        median_package("viterbi", inputs), HMMLEARN_SCORE[(family, n_sequences)]
-    )
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize(("family", "n_sequences"), sorted(HMMLEARN_SCORE_MEMORY))
-def test_hmm_log_likelihood_fits_hmmlearns_memory(
-    family: str, n_sequences: int
-) -> None:
-    inputs = {**_viterbi_inputs(family, n_sequences), "score": np.asarray(True)}
-    assert_fits(
-        int(median_package("viterbi", inputs, "peak_bytes")),
-        HMMLEARN_SCORE_MEMORY[(family, n_sequences)],
-    )
 
 
 def _score_inputs(n_samples: int) -> dict[str, np.ndarray]:
@@ -863,23 +578,6 @@ def _score_inputs(n_samples: int) -> dict[str, np.ndarray]:
         "mean": np.array([-3.0, 0.5, 4.0]),
         "scale": np.array([1.2, 1.0, 1.3]),
     }
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize("n_samples", sorted(SCIKIT_LEARN_SCORE))
-def test_mixture_log_likelihood_meets_scikit_learns_runtime(n_samples: int) -> None:
-    inputs = _score_inputs(n_samples)
-    assert_meets(median_package("mixture_score", inputs), SCIKIT_LEARN_SCORE[n_samples])
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize("n_samples", sorted(SCIKIT_LEARN_SCORE_MEMORY))
-def test_mixture_log_likelihood_fits_scikit_learns_memory(n_samples: int) -> None:
-    inputs = _score_inputs(n_samples)
-    assert_fits(
-        int(median_package("mixture_score", inputs, "peak_bytes")),
-        SCIKIT_LEARN_SCORE_MEMORY[n_samples],
-    )
 
 
 #: BlackJAX's MALA, `blackjax.mala` at `epsilon = h^2 / 2` for the package's
@@ -939,33 +637,6 @@ def _mala_inputs(dimension: int, store_chain: bool) -> dict[str, np.ndarray]:
     }
 
 
-@pytest.mark.experiment
-@pytest.mark.parametrize("dimension", sorted(BLACKJAX_MALA))
-def test_mala_meets_blackjaxs_runtime(dimension: int) -> None:
-    inputs = _mala_inputs(dimension, store_chain=True)
-    assert_meets(median_package("mala_sample", inputs), BLACKJAX_MALA[dimension])
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize("dimension", sorted(BLACKJAX_MALA_MEMORY))
-def test_mala_fits_blackjaxs_memory(dimension: int) -> None:
-    inputs = _mala_inputs(dimension, store_chain=True)
-    assert_fits(
-        int(median_package("mala_sample", inputs, "peak_bytes")),
-        BLACKJAX_MALA_MEMORY[dimension],
-    )
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize("dimension", sorted(BLACKJAX_MALA_CHAIN_FREE_MEMORY))
-def test_mala_without_its_chain_fits_blackjaxs_memory(dimension: int) -> None:
-    inputs = _mala_inputs(dimension, store_chain=False)
-    assert_fits(
-        int(median_package("mala_sample", inputs, "peak_bytes")),
-        BLACKJAX_MALA_CHAIN_FREE_MEMORY[dimension],
-    )
-
-
 #: JAX's `jit(value_and_grad)` of `GaussianHmmObjective`'s negative
 #: log-likelihood (three states, sequences of 100) at 20 points about its
 #: `initial()`, the per-point median, and the loop's peak added memory,
@@ -1003,24 +674,6 @@ def _hmm_gradient_inputs(n_sequences: int) -> dict[str, np.ndarray]:
     }
 
 
-@pytest.mark.experiment
-@pytest.mark.parametrize("n_sequences", sorted(JAX_HMM_GRADIENT))
-def test_the_hmm_gradient_meets_jaxs_runtime(n_sequences: int) -> None:
-    inputs = _hmm_gradient_inputs(n_sequences)
-    per_point = median_package("gradient", inputs, "per_point")
-    assert_meets(per_point, JAX_HMM_GRADIENT[n_sequences])
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize("n_sequences", sorted(JAX_HMM_GRADIENT_MEMORY))
-def test_the_hmm_gradient_fits_jaxs_memory(n_sequences: int) -> None:
-    inputs = _hmm_gradient_inputs(n_sequences)
-    assert_fits(
-        int(median_package("gradient", inputs, "peak_bytes")),
-        JAX_HMM_GRADIENT_MEMORY[n_sequences],
-    )
-
-
 #: BlackJAX's peak added resident memory for the same compiled chain with no
 #: draw kept: its scan carries the state and emits only the acceptance, the
 #: medians of three subprocess runs (#997). Kept, the draws were 1.0x
@@ -1040,62 +693,6 @@ BLACKJAX_HMC_CHAIN_FREE_MEMORY = {
         (10_000, 31_281_152),
     )
 }
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize("dimension", sorted(BLACKJAX_HMC_CHAIN_FREE_MEMORY))
-def test_hmc_without_its_chain_fits_blackjaxs_memory(dimension: int) -> None:
-    # Issue #997: the chain with its draws switched off on both sides
-    # (`store_chain=False` here, no operators; a scan emitting only the
-    # acceptance in BlackJAX's script).
-    inputs = {
-        "precision": diagonal_precision(dimension),
-        "step_size": np.asarray(0.9 / (2.0 * dimension**0.25)),
-        "n_steps": np.asarray(10),
-        "n_draws": np.asarray(1_000),
-        "seed": np.asarray(963),
-        "store_chain": np.asarray(False),
-        "observe": np.asarray(False),
-    }
-    assert_fits(
-        int(median_package("hmc_sample", inputs, "peak_bytes")),
-        BLACKJAX_HMC_CHAIN_FREE_MEMORY[dimension],
-    )
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize("dimension", sorted(BLACKJAX_HMC_MEMORY))
-def test_hmc_fits_blackjaxs_memory(dimension: int) -> None:
-    inputs = {
-        "precision": diagonal_precision(dimension),
-        "step_size": np.asarray(0.9 / (2.0 * dimension**0.25)),
-        "n_steps": np.asarray(10),
-        "n_draws": np.asarray(1_000),
-        "seed": np.asarray(963),
-    }
-    assert_fits(
-        int(median_package("hmc_sample", inputs, "peak_bytes")),
-        BLACKJAX_HMC_MEMORY[dimension],
-    )
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize("side", sorted(RUSTWORKX_COMPONENTS))
-def test_the_union_find_meets_rustworkxs_runtime(side: int) -> None:
-    # Timed in a fresh interpreter by `scripts/package.py`, as the pair was.
-    graph = lattice_graph((side, side), BoundaryCondition.OPEN, critical_coupling(3))
-    rng = np.random.default_rng(976)
-    state = rng.integers(0, 3, graph.n_nodes)
-    first, second = graph.edge_index[:, 0], graph.edge_index[:, 1]
-    like = state[first] == state[second]
-    active = like & (rng.random(len(graph.edges)) < _bond_probability(graph, 1.0))
-    bonds = graph.edge_index[active]
-    inputs = {
-        "n_nodes": np.asarray(graph.n_nodes),
-        "first": np.ascontiguousarray(bonds[:, 0]),
-        "second": np.ascontiguousarray(bonds[:, 1]),
-    }
-    assert_meets(median_package("cluster_labels", inputs), RUSTWORKX_COMPONENTS[side])
 
 
 #: TorchRL's warm call on 10⁵ Potts decisions, `WEIGHTS` in
@@ -1131,73 +728,6 @@ TORCH_GEOMETRIC_FORWARD = {
     )
     for side, seconds in ((142, 5.845e-3), (284, 18.87e-3))
 }
-
-
-@pytest.mark.experiment
-def test_ppo_loss_meets_torchrls_runtime() -> None:
-    features, taken = potts_decisions(100_000)
-    rng = np.random.default_rng(9770)
-    old = torch.as_tensor(rng.normal(scale=0.1, size=100_000)) - 1.5
-    advantages = torch.as_tensor(rng.normal(size=100_000))
-    ppo_loss_and_gradient(features, taken, old, advantages, 100, 0.2)  # warm-up
-    seconds = median_seconds(
-        lambda: ppo_loss_and_gradient(features, taken, old, advantages, 100, 0.2)
-    )
-    assert_meets(seconds, TORCHRL_LOSS["clip_ppo"])
-
-
-@pytest.mark.experiment
-def test_reinforce_loss_meets_torchrls_runtime() -> None:
-    environment = potts_environment()
-    policy = LinearPolicy(2)
-    policy.set_weights(torch.tensor(WEIGHTS, dtype=torch.float64))
-    episodes = greedy_episodes(environment, policy.weights, 10_000, 10, 977)
-
-    def loss_and_gradient() -> None:
-        value = surrogate_loss(environment, policy, episodes, 0.5)
-        torch.autograd.grad(value, policy.weights)
-
-    assert_meets(
-        median_seconds(loss_and_gradient, repeats=3), TORCHRL_LOSS["reinforce"]
-    )
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize("side", sorted(TORCH_GEOMETRIC_FORWARD))
-def test_the_graph_surrogate_meets_pygs_runtime(side: int) -> None:
-    graph = lattice_graph((side, side), BoundaryCondition.OPEN, 1.0)
-    rng = np.random.default_rng(977)
-    examples = Examples(
-        features=torch.as_tensor(rng.normal(size=(1, 3))),
-        targets=torch.zeros(1, dtype=torch.float64),
-        groups=np.zeros(1, dtype=np.int64),
-        tokens=(torch.as_tensor(rng.normal(size=(graph.n_nodes, 4))),),
-        adjacency=(np.asarray(graph.edge_index, dtype=np.int64),),
-    )
-    batch = _Batch(examples)
-    torch.manual_seed(977)
-    model = GraphSurrogate(3, 4, hidden=8, n_layers=2)
-    with torch.no_grad():
-        model(batch)  # warm-up
-        seconds = median_seconds(lambda: model(batch))
-    assert_meets(seconds, TORCH_GEOMETRIC_FORWARD[side])
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize("case", sorted(JAX_GRADIENT))
-def test_the_gradient_meets_jaxs_runtime(case: str) -> None:
-    inputs = _gradient_inputs(case)
-    per_point = median_package("gradient", inputs, "per_point")
-    assert_meets(per_point, JAX_GRADIENT[case])
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize("case", sorted(JAX_GRADIENT_MEMORY))
-def test_the_gradient_fits_jaxs_memory(case: str) -> None:
-    inputs = _gradient_inputs(case)
-    assert_fits(
-        int(median_package("gradient", inputs, "peak_bytes")), JAX_GRADIENT_MEMORY[case]
-    )
 
 
 #: The random-walk targets (#1006): name, dimension, the harness's target
@@ -1321,56 +851,6 @@ def _rwm_inputs(name: str, *, warmup: int, store_chain: bool) -> dict[str, np.nd
     }
 
 
-@pytest.mark.experiment
-@pytest.mark.parametrize("name", sorted(BLACKJAX_RWM))
-def test_random_walk_meets_blackjaxs_runtime(name: str) -> None:
-    inputs = _rwm_inputs(name, warmup=0, store_chain=True)
-    assert_meets(median_package("random_walk_sample", inputs), BLACKJAX_RWM[name])
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize("name", sorted(BLACKJAX_RWM_WARMUP))
-def test_random_walk_with_its_warm_up_meets_blackjaxs_runtime(name: str) -> None:
-    inputs = _rwm_inputs(name, warmup=1_000, store_chain=True)
-    assert_meets(
-        median_package("random_walk_sample", inputs), BLACKJAX_RWM_WARMUP[name]
-    )
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize("name", sorted(BLACKJAX_RWM_MEMORY))
-def test_random_walk_fits_blackjaxs_memory(name: str) -> None:
-    inputs = _rwm_inputs(name, warmup=0, store_chain=True)
-    assert_fits(
-        int(median_package("random_walk_sample", inputs, "peak_bytes")),
-        BLACKJAX_RWM_MEMORY[name],
-    )
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize("name", sorted(BLACKJAX_RWM_CHAIN_FREE_MEMORY))
-def test_random_walk_without_its_chain_fits_blackjaxs_memory(name: str) -> None:
-    inputs = _rwm_inputs(name, warmup=0, store_chain=False)
-    assert_fits(
-        int(median_package("random_walk_sample", inputs, "peak_bytes")),
-        BLACKJAX_RWM_CHAIN_FREE_MEMORY[name],
-    )
-
-
-@pytest.mark.experiment
-def test_random_walk_meets_blackjaxs_seconds_per_effective_sample() -> None:
-    target = GaussianTarget(diagonal_precision(100))
-
-    def chain() -> hmc.Chain:
-        return metropolis.random_walk(
-            target, torch.Generator().manual_seed(1006), 20_000, step_size=0.12
-        )
-
-    seconds = median_seconds(chain, repeats=3)
-    size = float(hmc.effective_sample_size(chain().draws).min())
-    assert_meets(seconds / size, BLACKJAX_RWM_PER_EFFECTIVE_SAMPLE)
-
-
 #: HMC on declared targets (#1008), ten leapfrog steps per transition: name,
 #: the harness's target inputs, the start and the step. Rosenbrock at a = 1,
 #: b = 100 from every coordinate at -1.2 at 0.01 / sqrt(d / 10); the Gaussian
@@ -1462,40 +942,6 @@ def _hmc_inputs(name: str, *, warmup: int, store_chain: bool) -> dict[str, np.nd
     }
 
 
-@pytest.mark.experiment
-@pytest.mark.parametrize("name", sorted(BLACKJAX_HMC_ROSENBROCK))
-def test_hmc_on_rosenbrock_meets_blackjaxs_runtime(name: str) -> None:
-    inputs = _hmc_inputs(name, warmup=0, store_chain=True)
-    assert_meets(median_package("hmc_declared", inputs), BLACKJAX_HMC_ROSENBROCK[name])
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize("name", sorted(BLACKJAX_HMC_WARMUP))
-def test_hmc_with_its_warm_up_meets_blackjaxs_runtime(name: str) -> None:
-    inputs = _hmc_inputs(name, warmup=500, store_chain=True)
-    assert_meets(median_package("hmc_declared", inputs), BLACKJAX_HMC_WARMUP[name])
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize("name", sorted(BLACKJAX_HMC_ROSENBROCK_MEMORY))
-def test_hmc_on_rosenbrock_fits_blackjaxs_memory(name: str) -> None:
-    inputs = _hmc_inputs(name, warmup=0, store_chain=True)
-    assert_fits(
-        int(median_package("hmc_declared", inputs, "peak_bytes")),
-        BLACKJAX_HMC_ROSENBROCK_MEMORY[name],
-    )
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize("name", sorted(BLACKJAX_HMC_ROSENBROCK_CHAIN_FREE_MEMORY))
-def test_hmc_on_rosenbrock_without_its_chain_fits_blackjaxs_memory(name: str) -> None:
-    inputs = _hmc_inputs(name, warmup=0, store_chain=False)
-    assert_fits(
-        int(median_package("hmc_declared", inputs, "peak_bytes")),
-        BLACKJAX_HMC_ROSENBROCK_CHAIN_FREE_MEMORY[name],
-    )
-
-
 #: HMC on a Gaussian mixture's negative log-likelihood (#1008): 10^5 draws
 #: from weights (0.3, 0.3, 0.4), means (-4, 0, 5), scales (1, 1.5, 1), seed
 #: 1008, from the generating theta, 100 transitions of ten steps at 0.001.
@@ -1548,24 +994,6 @@ BLACKJAX_HMC_MIXTURE = {
 BLACKJAX_HMC_MIXTURE_MEMORY = MemoryGoal(
     "blackjax", "100 HMC transitions, mixture of 10^5", 11_218_944, _MIXTURE_MEASURED
 )
-
-
-@pytest.mark.experiment
-@pytest.mark.parametrize("label", sorted(BLACKJAX_HMC_MIXTURE))
-def test_hmc_on_the_mixture_meets_blackjaxs_runtime(label: str) -> None:
-    inputs = _mixture_hmc_inputs(
-        warmup=100 if label == "warm-up" else 0, store_chain=True
-    )
-    assert_meets(median_package("hmc_declared", inputs), BLACKJAX_HMC_MIXTURE[label])
-
-
-@pytest.mark.experiment
-def test_hmc_on_the_mixture_fits_blackjaxs_memory() -> None:
-    inputs = _mixture_hmc_inputs(warmup=0, store_chain=True)
-    assert_fits(
-        int(median_package("hmc_declared", inputs, "peak_bytes")),
-        BLACKJAX_HMC_MIXTURE_MEMORY,
-    )
 
 
 def _hmm_hmc_inputs(*, warmup: int, store_chain: bool) -> dict[str, np.ndarray]:
@@ -1626,17 +1054,406 @@ BLACKJAX_HMC_HMM_MEMORY = MemoryGoal(
 )
 
 
-@pytest.mark.experiment
-@pytest.mark.parametrize("label", sorted(BLACKJAX_HMC_HMM))
-def test_hmc_on_the_hmm_meets_blackjaxs_runtime(label: str) -> None:
-    inputs = _hmm_hmc_inputs(warmup=100 if label == "warm-up" else 0, store_chain=True)
-    assert_meets(median_package("hmc_declared", inputs), BLACKJAX_HMC_HMM[label])
+# --- The package's figures -------------------------------------------------
+#
+# A runtime goal is read in process by the helpers below or in a fresh
+# interpreter by `scripts/package.py`, as its benchmark pair read it; every
+# memory goal is read in a fresh interpreter.
 
 
-@pytest.mark.experiment
-def test_hmc_on_the_hmm_fits_blackjaxs_memory() -> None:
-    inputs = _hmm_hmc_inputs(warmup=0, store_chain=True)
-    assert_fits(
-        int(median_package("hmc_declared", inputs, "peak_bytes")),
-        BLACKJAX_HMC_HMM_MEMORY,
+def _package(
+    call: str, inputs: Callable[..., dict[str, np.ndarray]], read: str = "seconds"
+) -> Callable[[Any], float]:
+    """The median figure ``read`` of the package's ``call`` on one key's inputs."""
+    return lambda key: median_package(
+        call, inputs(*key) if isinstance(key, tuple) else inputs(key), read
     )
+
+
+def _cut_seconds(side: int) -> float:
+    # The Rust kernel with its arrays prebuilt, which is its graph build and
+    # cut in one call, against PyMaxflow's build and cut.
+    rung = lattice_rung(side, 2, seed=973)
+    field = np.ascontiguousarray(
+        site_field(rung.field, rung.graph.n_nodes, n_states=2), dtype=np.float64
+    ).reshape(-1)
+    edges = rung.graph.edge_index.reshape(-1)
+    coupling = rung.graph.edge_coupling
+    return median_seconds(
+        lambda: oxisal.ising_ground_state(rung.graph.n_nodes, field, edges, coupling)
+    )
+
+
+def _bond_inputs(side: int) -> dict[str, np.ndarray]:
+    """One Swendsen--Wang bond mask at beta = 1, seed 976, as the pair drew it."""
+    graph = lattice_graph((side, side), BoundaryCondition.OPEN, critical_coupling(3))
+    rng = np.random.default_rng(976)
+    state = rng.integers(0, 3, graph.n_nodes)
+    first, second = graph.edge_index[:, 0], graph.edge_index[:, 1]
+    like = state[first] == state[second]
+    active = like & (rng.random(len(graph.edges)) < _bond_probability(graph, 1.0))
+    bonds = graph.edge_index[active]
+    return {
+        "n_nodes": np.asarray(graph.n_nodes),
+        "first": np.ascontiguousarray(bonds[:, 0]),
+        "second": np.ascontiguousarray(bonds[:, 1]),
+    }
+
+
+def _sweep_inputs(side: int) -> dict[str, np.ndarray]:
+    return {"side": np.asarray(side), "seed": np.asarray(976)}
+
+
+def _gae_seconds(n_episodes: int) -> float:
+    rollouts = _gae_rollouts(n_episodes)
+
+    def every() -> None:
+        for rewards, values, terminated in rollouts:
+            generalized_advantages(rewards, values, lam=0.95, terminated=terminated)
+
+    return median_seconds(every, repeats=3)
+
+
+def _ppo_seconds(_: object) -> float:
+    features, taken = potts_decisions(100_000)
+    rng = np.random.default_rng(9770)
+    old = torch.as_tensor(rng.normal(scale=0.1, size=100_000)) - 1.5
+    advantages = torch.as_tensor(rng.normal(size=100_000))
+    ppo_loss_and_gradient(features, taken, old, advantages, 100, 0.2)  # warm-up
+    return median_seconds(
+        lambda: ppo_loss_and_gradient(features, taken, old, advantages, 100, 0.2)
+    )
+
+
+def _reinforce_seconds(_: object) -> float:
+    environment = potts_environment()
+    policy = LinearPolicy(2)
+    policy.set_weights(torch.tensor(WEIGHTS, dtype=torch.float64))
+    episodes = greedy_episodes(environment, policy.weights, 10_000, 10, 977)
+
+    def loss_and_gradient() -> None:
+        value = surrogate_loss(environment, policy, episodes, 0.5)
+        torch.autograd.grad(value, policy.weights)
+
+    return median_seconds(loss_and_gradient, repeats=3)
+
+
+def _forward_seconds(model: Callable[[], torch.nn.Module], side: int) -> float:
+    """A warm forward on one open lattice's tokens, 4 features per node, seed 977."""
+    graph = lattice_graph((side, side), BoundaryCondition.OPEN, 1.0)
+    rng = np.random.default_rng(977)
+    examples = Examples(
+        features=torch.as_tensor(rng.normal(size=(1, 3))),
+        targets=torch.zeros(1, dtype=torch.float64),
+        groups=np.zeros(1, dtype=np.int64),
+        tokens=(torch.as_tensor(rng.normal(size=(graph.n_nodes, 4))),),
+        adjacency=(np.asarray(graph.edge_index, dtype=np.int64),),
+    )
+    batch = _Batch(examples)
+    torch.manual_seed(977)
+    forward = model()
+    with torch.no_grad():
+        forward(batch)  # warm-up
+        return median_seconds(lambda: forward(batch))
+
+
+def _expansion_seconds(side: int) -> float:
+    graph = lattice_graph((side, side), BoundaryCondition.OPEN, critical_coupling(10))
+    field = np.random.default_rng(974).normal(size=(graph.n_nodes, 10))
+    return median_seconds(
+        lambda: alpha_expansion(graph, field, 10, backend=Backend.RUST), repeats=3
+    )
+
+
+def _expansion_inputs(side: int) -> dict[str, np.ndarray]:
+    return {
+        "shape": np.asarray([side, side]),
+        "coupling": np.asarray(critical_coupling(10)),
+        "field": np.random.default_rng(974).normal(size=(side * side, 10)),
+    }
+
+
+def _hmm_params(n_sequences: int) -> HmmParams:
+    return dataclasses.replace(
+        load_params(FIXTURES_DIR / "hmm" / "ci.yaml", HmmParams),
+        lengths=(100,) * n_sequences,
+    )
+
+
+def _baum_welch_seconds(n_sequences: int) -> float:
+    observations = simulate_sequences(_hmm_params(n_sequences)).observations
+    initial, transition, emission = (
+        torch.log(torch.as_tensor(p)) for p in _hmm_start()
+    )
+    return median_seconds(
+        lambda: baum_welch(
+            observations,
+            initial,
+            transition,
+            emission,
+            max_iterations=10,
+            tolerance=-np.inf,
+        ),
+        repeats=3,
+    )
+
+
+def _baum_welch_inputs(n_sequences: int) -> dict[str, np.ndarray]:
+    initial, transition, emission = _hmm_start()
+    return {
+        "observations": simulate_sequences(_hmm_params(n_sequences)).observations,
+        "initial": initial,
+        "transition": transition,
+        "emission": emission,
+        "n_iter": np.asarray(10),
+    }
+
+
+def _mixture_em_seconds(n_samples: int) -> float:
+    observations = _mixture_draws(n_samples)
+    start = GaussianEmission(
+        np.array([-3.0, 0.5, 4.0]), np.array([1.2, 1.0, 1.3]), 1e-12
+    )
+    weights = torch.tensor([0.3, 0.3, 0.4], dtype=torch.float64)
+    return median_seconds(
+        lambda: expectation_maximization(
+            observations, weights, start, max_iterations=10, tolerance=-np.inf
+        ),
+        repeats=3,
+    )
+
+
+def _log_likelihood_inputs(family: str, n_sequences: int) -> dict[str, np.ndarray]:
+    return {**_viterbi_inputs(family, n_sequences), "score": np.asarray(True)}
+
+
+def _mixture_em_inputs(n_samples: int) -> dict[str, np.ndarray]:
+    return {**_score_inputs(n_samples), "n_iter": np.asarray(10)}
+
+
+def _hmc_seconds(dimension: int) -> float:
+    target = GaussianTarget(diagonal_precision(dimension))
+    step = 0.9 / (2.0 * dimension**0.25)
+    return median_seconds(
+        lambda: hmc.sample(
+            target,
+            torch.Generator().manual_seed(963),
+            1_000,
+            step_size=step,
+            n_steps=10,
+        ),
+        repeats=3,
+    )
+
+
+def _hmc_chain_inputs(dimension: int, **switches: bool) -> dict[str, np.ndarray]:
+    """The compiled chain's inputs; issue #997 switches its draws off on both sides."""
+    return {
+        "precision": diagonal_precision(dimension),
+        "step_size": np.asarray(0.9 / (2.0 * dimension**0.25)),
+        "n_steps": np.asarray(10),
+        "n_draws": np.asarray(1_000),
+        "seed": np.asarray(963),
+        **{name: np.asarray(value) for name, value in switches.items()},
+    }
+
+
+def _seconds_per_effective_sample(_: object) -> float:
+    target = GaussianTarget(diagonal_precision(100))
+
+    def chain() -> hmc.Chain:
+        return metropolis.random_walk(
+            target, torch.Generator().manual_seed(1006), 20_000, step_size=0.12
+        )
+
+    seconds = median_seconds(chain, repeats=3)
+    size = float(hmc.effective_sample_size(chain().draws).min())
+    return seconds / size
+
+
+def _goals(
+    goals: Mapping[Any, Goal | MemoryGoal], measure: Callable[[Any], float]
+) -> list[Any]:
+    """One row per goal, its id the framework and the fixture the goal names."""
+    return [
+        pytest.param(
+            goals[key],
+            functools.partial(measure, key),
+            id=f"{goals[key].framework}: {goals[key].what}",
+        )
+        for key in sorted(goals)
+    ]
+
+
+def _by_label(
+    inputs: Callable[..., dict[str, np.ndarray]],
+) -> Callable[[str], dict[str, np.ndarray]]:
+    """A declared-target chain, with 100 warm-up steps under the `warm-up` label."""
+    return lambda label: inputs(
+        warmup=100 if label == "warm-up" else 0, store_chain=True
+    )
+
+
+class _Call(NamedTuple):
+    """Goals read off one call of `scripts/package.py`, in a fresh interpreter."""
+
+    runtime: Mapping[Any, Goal]
+    memory: Mapping[Any, MemoryGoal]
+    call: str
+    inputs: Callable[..., dict[str, np.ndarray]]
+    #: The output a runtime goal reads: the call's seconds or a scalar it reports.
+    read: str = "seconds"
+
+
+_partial = functools.partial
+
+#: Every goal read in a fresh interpreter, runtime and memory from one row.
+PACKAGE_GOALS = (
+    _Call({}, PYMAXFLOW_CUT_MEMORY, "ising_cut", _cut_inputs),
+    _Call(RUSTWORKX_COMPONENTS, {}, "cluster_labels", _bond_inputs),
+    _Call(RUSTWORKX_SWEEP, RUSTWORKX_SWEEP_MEMORY, "swendsen_wang", _sweep_inputs),
+    _Call(JAX_GRADIENT, JAX_GRADIENT_MEMORY, "gradient", _gradient_inputs, "per_point"),
+    _Call(
+        JAX_HMM_GRADIENT,
+        JAX_HMM_GRADIENT_MEMORY,
+        "gradient",
+        _hmm_gradient_inputs,
+        "per_point",
+    ),
+    _Call({}, GCO_EXPANSION_MEMORY, "alpha_expansion", _expansion_inputs),
+    _Call(GCO_SWAP, GCO_SWAP_MEMORY, "alpha_expansion", _swap_inputs),
+    _Call({}, HMMLEARN_BAUM_WELCH_MEMORY, "baum_welch", _baum_welch_inputs),
+    _Call(
+        HMMLEARN_FAMILY_BAUM_WELCH,
+        HMMLEARN_FAMILY_BAUM_WELCH_MEMORY,
+        "family_baum_welch",
+        _family_inputs,
+    ),
+    _Call(HMMLEARN_VITERBI, HMMLEARN_VITERBI_MEMORY, "viterbi", _viterbi_inputs),
+    _Call(HMMLEARN_SCORE, HMMLEARN_SCORE_MEMORY, "viterbi", _log_likelihood_inputs),
+    _Call({}, SCIKIT_LEARN_EM_MEMORY, "mixture_em", _mixture_em_inputs),
+    _Call(
+        SCIKIT_LEARN_SCORE, SCIKIT_LEARN_SCORE_MEMORY, "mixture_score", _score_inputs
+    ),
+    _Call({}, BLACKJAX_HMC_MEMORY, "hmc_sample", _hmc_chain_inputs),
+    _Call(
+        {},
+        BLACKJAX_HMC_CHAIN_FREE_MEMORY,
+        "hmc_sample",
+        _partial(_hmc_chain_inputs, store_chain=False, observe=False),
+    ),
+    _Call(
+        BLACKJAX_MALA,
+        BLACKJAX_MALA_MEMORY,
+        "mala_sample",
+        _partial(_mala_inputs, store_chain=True),
+    ),
+    _Call(
+        {},
+        BLACKJAX_MALA_CHAIN_FREE_MEMORY,
+        "mala_sample",
+        _partial(_mala_inputs, store_chain=False),
+    ),
+    _Call(
+        BLACKJAX_RWM,
+        BLACKJAX_RWM_MEMORY,
+        "random_walk_sample",
+        _partial(_rwm_inputs, warmup=0, store_chain=True),
+    ),
+    _Call(
+        BLACKJAX_RWM_WARMUP,
+        {},
+        "random_walk_sample",
+        _partial(_rwm_inputs, warmup=1_000, store_chain=True),
+    ),
+    _Call(
+        {},
+        BLACKJAX_RWM_CHAIN_FREE_MEMORY,
+        "random_walk_sample",
+        _partial(_rwm_inputs, warmup=0, store_chain=False),
+    ),
+    _Call(
+        BLACKJAX_HMC_ROSENBROCK,
+        BLACKJAX_HMC_ROSENBROCK_MEMORY,
+        "hmc_declared",
+        _partial(_hmc_inputs, warmup=0, store_chain=True),
+    ),
+    _Call(
+        {},
+        BLACKJAX_HMC_ROSENBROCK_CHAIN_FREE_MEMORY,
+        "hmc_declared",
+        _partial(_hmc_inputs, warmup=0, store_chain=False),
+    ),
+    _Call(
+        BLACKJAX_HMC_WARMUP,
+        {},
+        "hmc_declared",
+        _partial(_hmc_inputs, warmup=500, store_chain=True),
+    ),
+    _Call(
+        BLACKJAX_HMC_MIXTURE,
+        {"plain": BLACKJAX_HMC_MIXTURE_MEMORY},
+        "hmc_declared",
+        _by_label(_mixture_hmc_inputs),
+    ),
+    _Call(
+        BLACKJAX_HMC_HMM,
+        {"plain": BLACKJAX_HMC_HMM_MEMORY},
+        "hmc_declared",
+        _by_label(_hmm_hmc_inputs),
+    ),
+)
+
+#: Every runtime goal and how the package's seconds are read: in process
+#: where the benchmark pair timed the package in process, else as its row
+#: in `PACKAGE_GOALS` reads it.
+RUNTIME_GOALS = [
+    *_goals(PYMAXFLOW_CUT, _cut_seconds),
+    *_goals(TORCHRL_GAE, _gae_seconds),
+    *_goals({"clip_ppo": TORCHRL_LOSS["clip_ppo"]}, _ppo_seconds),
+    *_goals({"reinforce": TORCHRL_LOSS["reinforce"]}, _reinforce_seconds),
+    *_goals(
+        TORCH_GEOMETRIC_SET,
+        _partial(_forward_seconds, lambda: SetSurrogate(3, 4, hidden=8)),
+    ),
+    *_goals(
+        TORCH_GEOMETRIC_FORWARD,
+        _partial(_forward_seconds, lambda: GraphSurrogate(3, 4, hidden=8, n_layers=2)),
+    ),
+    *_goals(GCO_EXPANSION, _expansion_seconds),
+    *_goals(HMMLEARN_BAUM_WELCH, _baum_welch_seconds),
+    *_goals(SCIKIT_LEARN_EM, _mixture_em_seconds),
+    *_goals(BLACKJAX_HMC, _hmc_seconds),
+    *_goals(
+        {"gaussian-100": BLACKJAX_RWM_PER_EFFECTIVE_SAMPLE},
+        _seconds_per_effective_sample,
+    ),
+    *(
+        row
+        for c in PACKAGE_GOALS
+        for row in _goals(c.runtime, _package(c.call, c.inputs, c.read))
+    ),
+]
+
+#: Every memory goal: the peak added bytes of its row's call.
+MEMORY_GOALS = [
+    row
+    for c in PACKAGE_GOALS
+    for row in _goals(c.memory, _package(c.call, c.inputs, "peak_bytes"))
+]
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize(("goal", "measure"), RUNTIME_GOALS)
+def test_the_package_meets_each_runtime_goal(
+    goal: Goal, measure: Callable[[], float]
+) -> None:
+    assert_meets(measure(), goal)
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize(("goal", "measure"), MEMORY_GOALS)
+def test_the_package_fits_each_memory_goal(
+    goal: MemoryGoal, measure: Callable[[], float]
+) -> None:
+    assert_fits(int(measure()), goal)
