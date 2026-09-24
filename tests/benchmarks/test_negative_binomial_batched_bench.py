@@ -12,8 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders import emissions
-from snakes_and_ladders.emissions import NegativeBinomialEmission
+from snakes_and_ladders.emissions import NegativeBinomialEmission, mstep
 from snakes_and_ladders.opt.mixture import responsibilities
 from snakes_and_ladders.search.projection import flatten, project
 from snakes_and_ladders.sim.count_pairs import binned_model
@@ -43,10 +42,10 @@ def m_step() -> tuple[torch.Tensor, torch.Tensor, NegativeBinomialEmission]:
 
 def _per_state(
     values: torch.Tensor, posterior: torch.Tensor
-) -> list[emissions._SolvedDispersion]:
+) -> list[mstep.SolvedDispersion]:
     mean = (posterior.T @ values) / posterior.sum(dim=0)
     return [
-        emissions._solve_dispersion(values, posterior[:, k], float(mean[k]))
+        mstep.solve_dispersion(values, posterior[:, k], float(mean[k]))
         for k in range(posterior.shape[1])
     ]
 

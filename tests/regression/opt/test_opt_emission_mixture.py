@@ -165,7 +165,7 @@ def test_the_fit_recovers_the_planted_mixture_at_the_ci_size(
     # The two shape parameters carry the loosest bounds because this much data
     # resolves them least: the dispersion's likelihood flattens toward the
     # Poisson limit and the concentration's toward the binomial one, the
-    # hazard `emissions.py` derives a bound for. The fixture's declared
+    # hazard `emissions.mstep` derives a bound for. The fixture's declared
     # `tolerance` is the loosest of these; the better-resolved parameters are
     # held tighter here.
     params, _, fit = ci_instance

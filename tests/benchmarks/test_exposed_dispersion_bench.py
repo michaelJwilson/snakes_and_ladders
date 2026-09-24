@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders import emissions
+from snakes_and_ladders.emissions import mstep
 
 
 @pytest.fixture(scope="module")
@@ -45,12 +45,12 @@ def test_exposed_dispersion_solve(
     values, weights, offsets, means = problem
     if route == "rust":
         solved = benchmark(  # type: ignore[operator]
-            emissions._solve_dispersion_exposed_rust, values, weights, means, offsets
+            mstep.solve_dispersion_exposed_rust, values, weights, means, offsets
         )
     else:
         solved = benchmark(  # type: ignore[operator]
             lambda: [
-                emissions._solve_dispersion(values, weights[:, k], offsets * means[k])
+                mstep.solve_dispersion(values, weights[:, k], offsets * means[k])
                 for k in range(4)
             ]
         )

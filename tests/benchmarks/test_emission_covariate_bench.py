@@ -20,7 +20,7 @@ import time
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders import emissions
+from snakes_and_ladders.emissions import mstep
 
 #: Past every declared fixture, which is the point: both terms below are
 #: invisible at a `ci.yaml` size.
@@ -81,7 +81,7 @@ def test_dispersion_solve_under_a_varying_exposure(
     values, weights, offsets = solve_inputs
     rate = offsets * 2.5
 
-    benchmark(emissions._solve_dispersion, values, weights, rate)  # type: ignore[operator]
+    benchmark(mstep.solve_dispersion, values, weights, rate)  # type: ignore[operator]
 
 
 @pytest.mark.release
@@ -93,4 +93,4 @@ def test_dispersion_solve_at_a_scalar_mean(
     """The same solve without an exposure, as the reference it is read against."""
     values, weights, _ = solve_inputs
 
-    benchmark(emissions._solve_dispersion, values, weights, 2.5)  # type: ignore[operator]
+    benchmark(mstep.solve_dispersion, values, weights, 2.5)  # type: ignore[operator]
