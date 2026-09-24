@@ -256,7 +256,7 @@ SEEDS = (0, 1, 2, 3, 4)
 #: Sweeps per tier, `test_ground_state_start.py`'s.
 SWEEPS = {"ci": 50, "release": 40}
 
-#: Each cell's run on `SEEDS` at the commit before #1055 (f0aba7f5's tree,
+#: Each cell's run on `SEEDS` at the commit before #1055 (600b790e, whose tree is
 #: `origin/main` 44fed650), as sha256 over the labelling's bytes, the
 #: energy's repr and the spend, first 16 hex digits. The `python` cells were
 #: `iterated_conditional_modes(..., backend=PYTHON)` with the arguments
