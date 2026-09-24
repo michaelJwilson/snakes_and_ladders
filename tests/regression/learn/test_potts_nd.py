@@ -65,7 +65,8 @@ def _instance(
 def test_the_score_is_the_negated_energy_bitwise() -> None:
     """`score` equals `-energies` to the last bit on 200 seeded labellings.
 
-    Same order of arithmetic as `sim.potts.energies`; reassociation moves a bit.
+    Same order of arithmetic as `sim.potts.energies` (a gather and a pairwise
+    sum over the edges); reassociation moves a bit.
     """
 
     def check(side: int, n_states: int) -> None:

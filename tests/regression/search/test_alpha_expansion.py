@@ -525,8 +525,9 @@ def test_the_compiled_sweep_refuses_an_order_it_does_not_walk() -> None:
 
 #: Both moves on a 4x4 open lattice at 0.8, recorded before the fold: the same
 #: labelling in 2 moves (expansion) and 3 (swap), so the counts check the template.
+#: The energy moved one ulp (7.1e-15) when `energies` left BLAS (#1044).
 RECORDED_LABELLING = [1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0]
-RECORDED_ENERGY = -25.228722898156448
+RECORDED_ENERGY = -25.22872289815644
 RECORDED_CYCLES = 2
 RECORDED_MOVES = {"expansion": 2, "swap": 3}
 

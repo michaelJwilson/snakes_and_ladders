@@ -312,7 +312,7 @@ class PottsNDEnvironment(Environment[Configuration, PottsAction]):
         self._degree = mask.sum(axis=1)
         self._n_edges = len(edges)
         # The edge order as given, so `score` can sum the coupling term the way
-        # `sim.potts.energies` sums it -- one gather and a dot product, in that
+        # `sim.potts.energies` sums it -- one gather and a pairwise sum, in that
         # order -- and land on its negation bitwise rather than to a tolerance.
         self._edge_ends = np.asarray(edges, dtype=np.int64).reshape(-1, 2)
         self._edge_coupling = np.full(len(edges), self._coupling, dtype=np.float64)
@@ -361,9 +361,10 @@ class PottsNDEnvironment(Environment[Configuration, PottsAction]):
         vocabulary too many.
 
         The field term is summed first and the coupling term added as one
-        gather and a dot product over the edges *in the order they were
-        given* --- `sim.potts.energies`'s own arithmetic, so this is its
-        negation **bitwise** and not to a tolerance. Reassociating it, by
+        gather and a pairwise sum over the edges *in the order they were
+        given* --- `sim.potts.energies`'s own arithmetic, outside BLAS since
+        issue #1044, so this is its negation **bitwise** and not to a
+        tolerance. Reassociating it, by
         halving a doubled count off the adjacency table for instance, moves
         the last bit and a test pins that it does not.
         """
@@ -372,7 +373,7 @@ class PottsNDEnvironment(Environment[Configuration, PottsAction]):
         if self._n_edges:
             ends = self._edge_ends
             agree = labels[ends[:, 0]] == labels[ends[:, 1]]
-            total = total + agree.astype(float) @ self._edge_coupling
+            total = total + (agree * self._edge_coupling).sum()
         return float(total)
 
     def reset(self, rng: np.random.Generator) -> Configuration:
