@@ -18,11 +18,12 @@ use pyo3::prelude::*;
 pub mod bcjr;
 pub mod bifurcation;
 pub mod bk;
+pub mod chain;
 pub mod count_mstep;
 pub mod count_pairs;
 pub mod coupled;
 pub mod energy;
-pub mod hmc_gaussian;
+pub mod hmc;
 pub mod hmm_decode;
 pub mod hmm_stream;
 pub mod lattice_cut;
@@ -47,7 +48,7 @@ pub use count_mstep::{
 };
 pub use count_pairs::simulate_count_pairs;
 pub use coupled::{class_posteriors, external_field};
-pub use hmc_gaussian::{gaussian_hmc, gaussian_leapfrog};
+pub use hmc::leapfrog_trajectory;
 pub use hmm_decode::{hmm_score, hmm_viterbi};
 pub use hmm_stream::{
     categorical_em_step, count_cells, count_em_step, gaussian_em_step, gaussian_hmm_statistics,
@@ -115,8 +116,8 @@ fn oxisal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(count_em_step, m)?)?;
     m.add_function(wrap_pyfunction!(gaussian_mixture_em_step, m)?)?;
     m.add_function(wrap_pyfunction!(gaussian_mixture_gradient, m)?)?;
-    m.add_function(wrap_pyfunction!(gaussian_hmc, m)?)?;
-    m.add_function(wrap_pyfunction!(gaussian_leapfrog, m)?)?;
+    m.add_function(wrap_pyfunction!(leapfrog_trajectory, m)?)?;
+    m.add_class::<hmc::HmcWalk>()?;
     m.add_function(wrap_pyfunction!(bond_roots, m)?)?;
     m.add_class::<metropolis::MetropolisWalk>()?;
     Ok(())

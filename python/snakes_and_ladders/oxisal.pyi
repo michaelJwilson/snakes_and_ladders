@@ -155,53 +155,6 @@ def gaussian_mixture_gradient(
     mean: np.ndarray,
     scale: np.ndarray,
 ) -> tuple[float, np.ndarray]: ...
-def gaussian_hmc(
-    precision: np.ndarray,
-    theta0: np.ndarray,
-    n_samples: int,
-    burn_in: int,
-    step_size: float,
-    n_steps: int,
-    seed: int,
-    store_chain: bool,
-) -> tuple[np.ndarray, int, np.ndarray]: ...
-
-class MetropolisWalk:
-    def __init__(
-        self,
-        family: int,
-        parameters: np.ndarray,
-        theta0: np.ndarray,
-        step_size: float,
-        seed: int,
-        warmup: int,
-        target_acceptance: float,
-        step_jitter: float,
-        constants: tuple[float, float, float],
-        powers: list[int],
-    ) -> None: ...
-    def advance(
-        self, n: int, store: bool, observe: bool
-    ) -> tuple[np.ndarray, int, np.ndarray]: ...
-    def statistics(
-        self, index: int
-    ) -> tuple[
-        int, tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]
-    ]: ...
-    @property
-    def step_size(self) -> float: ...
-    @property
-    def mass_diagonal(self) -> np.ndarray: ...
-    @property
-    def warmup_acceptance(self) -> float: ...
-
-def gaussian_leapfrog(
-    precision: np.ndarray,
-    theta: np.ndarray,
-    momentum: np.ndarray,
-    step_size: float,
-    n_steps: int,
-) -> tuple[np.ndarray, np.ndarray]: ...
 def bond_roots(n_nodes: int, first: np.ndarray, second: np.ndarray) -> np.ndarray: ...
 def ising_ground_states(
     n_nodes: int,
@@ -375,3 +328,71 @@ def ragged_posteriors(
     counts: np.ndarray,
     evidence: np.ndarray,
 ) -> None: ...
+
+class MetropolisWalk:
+    def __init__(
+        self,
+        family: int,
+        parameters: np.ndarray,
+        theta0: np.ndarray,
+        step_size: float,
+        seed: int,
+        warmup: int,
+        target_acceptance: float,
+        step_jitter: float,
+        constants: tuple[float, float, float],
+        powers: list[int],
+    ) -> None: ...
+    def advance(
+        self, n: int, store: bool, observe: bool
+    ) -> tuple[np.ndarray, int, np.ndarray]: ...
+    def statistics(
+        self, index: int
+    ) -> tuple[
+        int, tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]
+    ]: ...
+    @property
+    def step_size(self) -> float: ...
+    @property
+    def mass_diagonal(self) -> np.ndarray: ...
+    @property
+    def warmup_acceptance(self) -> float: ...
+
+class HmcWalk:
+    def __init__(
+        self,
+        family: int,
+        parameters: np.ndarray,
+        theta0: np.ndarray,
+        step_size: float,
+        seed: int,
+        warmup: int,
+        target_acceptance: float,
+        step_jitter: float,
+        constants: tuple[float, float, float],
+        powers: list[int],
+        n_steps: int,
+    ) -> None: ...
+    def advance(
+        self, n: int, store: bool, observe: bool
+    ) -> tuple[np.ndarray, int, np.ndarray]: ...
+    def statistics(
+        self, index: int
+    ) -> tuple[
+        int, tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]
+    ]: ...
+    @property
+    def step_size(self) -> float: ...
+    @property
+    def mass_diagonal(self) -> np.ndarray: ...
+    @property
+    def warmup_acceptance(self) -> float: ...
+
+def leapfrog_trajectory(
+    family: int,
+    parameters: np.ndarray,
+    theta: np.ndarray,
+    momentum: np.ndarray,
+    step_size: float,
+    n_steps: int,
+) -> tuple[np.ndarray, np.ndarray]: ...

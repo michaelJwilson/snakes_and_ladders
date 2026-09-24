@@ -2,7 +2,7 @@
 
 Referees:
 
-- ``gaussian_leapfrog`` is ``hmc.leapfrog`` on the same position and
+- ``leapfrog_trajectory`` is ``hmc.leapfrog`` on the same position and
   momentum, diagonal and dense, within 1e-12: the trajectory is the only
   arithmetic the two routes share, since their streams differ;
 - the compiled chain at d = 200 returns every coordinate's mean within 4.5
@@ -42,8 +42,8 @@ def test_the_compiled_trajectory_is_the_torch_leapfrog(dense: bool) -> None:
         0.21,
         17,
     )
-    position, velocity = oxisal.gaussian_leapfrog(
-        np.ascontiguousarray(precision).reshape(-1), theta, momentum, 0.21, 17
+    position, velocity = oxisal.leapfrog_trajectory(
+        0, np.ascontiguousarray(precision).reshape(-1), theta, momentum, 0.21, 17
     )
     np.testing.assert_allclose(position, torch_end.position.numpy(), rtol=0, atol=1e-12)
     np.testing.assert_allclose(velocity, torch_end.momentum.numpy(), rtol=0, atol=1e-12)

@@ -48,17 +48,18 @@ from dataclasses import dataclass
 
 import torch
 
+from snakes_and_ladders import oxisal
 from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.sample.accept import accept_ratio, acceptance_probability
-from snakes_and_ladders.sample.declared import DeclaredGaussian
+from snakes_and_ladders.sample.declared import declared_energy
 from snakes_and_ladders.sample.hmc import (
     Adaptation,
     Adapted,
     Transition,
-    _compiled_gaussian_chain,
     gradient_at,
     run_chain,
+    run_compiled,
     start_point,
 )
 from snakes_and_ladders.track import NULL as UNTRACKED
@@ -181,12 +182,12 @@ def mala(
         #988, #997).
     backend : Backend
         :data:`~snakes_and_ladders.backend.Backend.RUST`, the default since
-        issue #997, runs the whole chain in
-        ``oxisal.gaussian_hmc`` at one leapfrog step --- the
-        identity this module keeps --- when the objective is a
-        :class:`~snakes_and_ladders.sample.declared.DeclaredGaussian` and the chain
-        is the plain corrected one: unit temperature, no adaptation, and no
-        tracked run. Its draws are its own ChaCha8 stream seeded by one draw
+        issue #997, runs the whole chain in ``oxisal.HmcWalk`` at one
+        leapfrog step --- the identity this module keeps --- when the
+        objective declares an energy
+        (:func:`~snakes_and_ladders.sample.declared.declared_energy`) and the
+        chain is the corrected one at unit temperature in no tracked run;
+        the warm-up runs there too (issue #1008). Its draws are its own ChaCha8 stream seeded by one draw
         from ``generator``, so it is pinned to the torch route in
         distribution, as :func:`~snakes_and_ladders.sample.hmc.sample`'s is.
         Any other chain, and
@@ -206,30 +207,36 @@ def mala(
         msg = f"step_size must be positive, got {step_size}"
         raise ValueError(msg)
     refuse_backend("mala", backend, (Backend.PYTHON, Backend.RUST))
+    declared = declared_energy(objective)
     if (
         backend is Backend.RUST
         and corrected
-        and isinstance(objective, DeclaredGaussian)
+        and declared is not None
         and temperature == 1.0
-        and adaptation is None
         and current_tracked() is UNTRACKED
     ):
-        compiled = _compiled_gaussian_chain(
-            objective,
+        # MALA is one leapfrog step (the identity this module keeps), so the
+        # compiled Hamiltonian walk at one step is this chain, warm-up included.
+        chain = run_compiled(
+            oxisal.HmcWalk,
+            declared,
+            (LANGEVIN_STEPS,),
+            GRADIENTS_PER_PROPOSAL,
             generator,
             n_samples,
             step_size=step_size,
-            n_steps=LANGEVIN_STEPS,
             theta0=start_point(objective, theta0),
             burn_in=burn_in,
+            adaptation=adaptation,
             store_chain=store_chain,
+            operators=None,
         )
         return LangevinChain(
-            theta=compiled.theta,
-            acceptance_rate=compiled.acceptance_rate,
-            energy_error=compiled.energy_error,
-            force_evaluations=(n_samples + burn_in) * GRADIENTS_PER_PROPOSAL,
-            adapted=None,
+            theta=chain.draws,
+            acceptance_rate=chain.acceptance_rate,
+            energy_error=chain.energy_error,
+            force_evaluations=chain.force_evaluations,
+            adapted=chain.adapted,
             corrected=True,
         )
 
