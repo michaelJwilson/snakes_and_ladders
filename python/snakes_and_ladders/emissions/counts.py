@@ -12,6 +12,7 @@ from collections.abc import Mapping
 
 import numpy as np
 import torch
+from numpy.typing import ArrayLike
 
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.emissions import mstep
@@ -21,6 +22,7 @@ from snakes_and_ladders.emissions.base import (
     ParameterDomainError,
     Reestimate,
     Values,
+    as_tensor,
     exposure,
     refuse_covariate,
     trial_count,
@@ -207,7 +209,7 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
         self,
         states: np.ndarray,
         rng: np.random.Generator,
-        covariate: torch.Tensor | None = None,
+        covariate: ArrayLike | None = None,
     ) -> np.ndarray:
         """Draw one count per entry of ``states``.
 
@@ -223,7 +225,8 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
             # `(n_sequences, length)` for a fit over sequences. Flattening
             # assumed one dimension and broadcast against nothing at two
             # (issue #658).
-            rate = rate * exposure(covariate, self._mean).reshape(states.shape).numpy()
+            offsets = exposure(as_tensor(covariate), self._mean)
+            rate = rate * offsets.reshape(states.shape).numpy()
         return np.asarray(rng.negative_binomial(r, r / (r + rate)))
 
     def log_density(
@@ -294,9 +297,9 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
 
     def reestimate(
         self,
-        observations: torch.Tensor,
-        posterior: torch.Tensor,
-        covariate: torch.Tensor | None = None,
+        observations: ArrayLike,
+        posterior: ArrayLike,
+        covariate: ArrayLike | None = None,
     ) -> Reestimate[NegativeBinomialEmission]:
         """The M step: a closed form for the mean, and a solve for the dispersion.
 
@@ -315,12 +318,17 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
             bound the data can identify it over, the iterations taken, and the
             weighted score at the answer.
         """
-        values = observations.reshape(-1).to(posterior.dtype)
+        posterior = as_tensor(posterior)
+        values = (
+            as_tensor(observations, self.observation_dtype)
+            .reshape(-1)
+            .to(posterior.dtype)
+        )
         weights = posterior.reshape(-1, self.n_states)
         offsets = (
             None
             if covariate is None
-            else validated_exposure(covariate, self._mean).reshape(-1)
+            else validated_exposure(as_tensor(covariate), self._mean).reshape(-1)
         )
         if offsets is not None and bool((offsets == 0.0).any()):
             # An unobserved total carries no information about the state:
@@ -478,7 +486,7 @@ class PoissonEmission(EmissionFamily, CountEmissionFamily):
         self,
         states: np.ndarray,
         rng: np.random.Generator,
-        covariate: torch.Tensor | None = None,
+        covariate: ArrayLike | None = None,
     ) -> np.ndarray:
         """Draw one count per entry of ``states``."""
         refuse_covariate(self, covariate)
@@ -512,13 +520,18 @@ class PoissonEmission(EmissionFamily, CountEmissionFamily):
 
     def reestimate(
         self,
-        observations: torch.Tensor,
-        posterior: torch.Tensor,
-        covariate: torch.Tensor | None = None,
+        observations: ArrayLike,
+        posterior: ArrayLike,
+        covariate: ArrayLike | None = None,
     ) -> Reestimate[PoissonEmission]:
         """The posterior-weighted mean, in closed form."""
         refuse_covariate(self, covariate)
-        values = observations.reshape(-1).to(posterior.dtype)
+        posterior = as_tensor(posterior)
+        values = (
+            as_tensor(observations, self.observation_dtype)
+            .reshape(-1)
+            .to(posterior.dtype)
+        )
         weights = posterior.reshape(-1, self.n_states)
         # `weights.T @ values` is the same number as the elementwise form
         # with no `(n_obs, n_states)` intermediate -- 80.7 MB at the declared
@@ -629,7 +642,7 @@ class BinomialEmission(EmissionFamily, CountEmissionFamily):
         self,
         states: np.ndarray,
         rng: np.random.Generator,
-        covariate: torch.Tensor | None = None,
+        covariate: ArrayLike | None = None,
     ) -> np.ndarray:
         """Draw one count per entry of ``states``."""
         refuse_covariate(self, covariate)
@@ -687,13 +700,18 @@ class BinomialEmission(EmissionFamily, CountEmissionFamily):
 
     def reestimate(
         self,
-        observations: torch.Tensor,
-        posterior: torch.Tensor,
-        covariate: torch.Tensor | None = None,
+        observations: ArrayLike,
+        posterior: ArrayLike,
+        covariate: ArrayLike | None = None,
     ) -> Reestimate[BinomialEmission]:
         """``p = weighted mean / n``, in closed form; ``n`` is not estimated."""
         refuse_covariate(self, covariate)
-        values = observations.reshape(-1).to(posterior.dtype)
+        posterior = as_tensor(posterior)
+        values = (
+            as_tensor(observations, self.observation_dtype)
+            .reshape(-1)
+            .to(posterior.dtype)
+        )
         weights = posterior.reshape(-1, self.n_states)
         # `weights.T @ values` is the same number as the elementwise form
         # with no `(n_obs, n_states)` intermediate -- 80.7 MB at the declared
@@ -842,7 +860,7 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
         self,
         states: np.ndarray,
         rng: np.random.Generator,
-        covariate: torch.Tensor | None = None,
+        covariate: ArrayLike | None = None,
     ) -> np.ndarray:
         """Draw a rate from the Beta, then a binomial count at that rate.
 
@@ -855,7 +873,9 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
             if covariate is None
             # Reshaped to the states, for the reason `NegativeBinomialEmission`
             # gives at its own draw (issue #658).
-            else trial_count(covariate, self._trials).reshape(states.shape).numpy()
+            else trial_count(as_tensor(covariate), self._trials)
+            .reshape(states.shape)
+            .numpy()
         )
         return np.asarray(rng.binomial(counts.astype(np.int64), rate))
 
@@ -920,9 +940,9 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
 
     def reestimate(
         self,
-        observations: torch.Tensor,
-        posterior: torch.Tensor,
-        covariate: torch.Tensor | None = None,
+        observations: ArrayLike,
+        posterior: ArrayLike,
+        covariate: ArrayLike | None = None,
     ) -> Reestimate[BetaBinomialEmission]:
         """Alternating bisection for ``(a, b)``; see :func:`solve_beta_binomial`.
 
@@ -934,10 +954,15 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
             the relative change at the last step.
         """
         per_observation = covariate is not None
-        values = observations.reshape(-1).to(posterior.dtype)
+        posterior = as_tensor(posterior)
+        values = (
+            as_tensor(observations, self.observation_dtype)
+            .reshape(-1)
+            .to(posterior.dtype)
+        )
         weights = posterior.reshape(-1, self.n_states)
         supplied = (
-            validated_trials(covariate, self._trials).reshape(-1)
+            validated_trials(as_tensor(covariate), self._trials).reshape(-1)
             if covariate is not None
             else self._trials
         )
@@ -1191,7 +1216,7 @@ class CountPairEmission(EmissionFamily, CountEmissionFamily):
         self,
         states: np.ndarray,
         rng: np.random.Generator,
-        covariate: torch.Tensor | None = None,
+        covariate: ArrayLike | None = None,
     ) -> np.ndarray:
         """Draw one ``(total, successes)`` pair per entry of ``states``.
 
@@ -1311,9 +1336,9 @@ class CountPairEmission(EmissionFamily, CountEmissionFamily):
 
     def reestimate(
         self,
-        observations: torch.Tensor,
-        posterior: torch.Tensor,
-        covariate: torch.Tensor | None = None,
+        observations: ArrayLike,
+        posterior: ArrayLike,
+        covariate: ArrayLike | None = None,
     ) -> Reestimate[CountPairEmission]:
         """The M step: each channel's own, on the trials the form supplies.
 
@@ -1332,7 +1357,12 @@ class CountPairEmission(EmissionFamily, CountEmissionFamily):
             iteration count and residual of the two.
         """
         refuse_covariate(self, covariate)
-        values = observations.reshape(-1, self.N_CHANNELS).to(posterior.dtype)
+        posterior = as_tensor(posterior)
+        values = (
+            as_tensor(observations, self.observation_dtype)
+            .reshape(-1, self.N_CHANNELS)
+            .to(posterior.dtype)
+        )
         weights = posterior.reshape(-1, self.n_states)
         totals, successes = values[:, 0], values[:, 1]
 

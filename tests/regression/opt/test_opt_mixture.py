@@ -20,6 +20,7 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
+from numpy.typing import ArrayLike
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.cost import Cost
 from snakes_and_ladders.emissions import GaussianEmission, Reestimate
@@ -712,9 +713,9 @@ class _ReportingGaussian(GaussianEmission):
 
     def reestimate(
         self,
-        observations: torch.Tensor,
-        posterior: torch.Tensor,
-        covariate: torch.Tensor | None = None,
+        observations: ArrayLike,
+        posterior: ArrayLike,
+        covariate: ArrayLike | None = None,
     ) -> Reestimate[GaussianEmission]:
         """The closed-form step, reported as the planted flags say."""
         step = super().reestimate(observations, posterior, covariate)
