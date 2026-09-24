@@ -22,9 +22,7 @@ if TYPE_CHECKING:
 class Counted:
     """An objective that records how often it was evaluated.
 
-    Every call counts one, with or without a gradient taken through it, so
-    a budget in *evaluations* is what the wrapped objective saw and not what
-    a method's own arithmetic claims (issue #281).
+    Every call counts, gradient or not: the budget the objective saw (issue #281).
     """
 
     def __init__(self, inner: Objective) -> None:
@@ -48,11 +46,7 @@ class Counted:
 class AnalyticGaussian:
     """``-log N(mean, covariance)`` up to a constant: the one analytic target.
 
-    The objective every approximation here is exact on. Its Hessian *is* the
-    precision, so a Laplace interval equals ``sqrt(diag(covariance))`` to
-    round-off and a chain's spread must match it to Monte Carlo error; a
-    method that disagrees with it is wrong, not approximate. Shared between
-    the sampler's tests and the interval tests rather than written twice.
+    Its Hessian is the precision: a Laplace interval is ``sqrt(diag(covariance))``.
     """
 
     def __init__(self, mean: list[float], covariance: list[list[float]]) -> None:
@@ -80,23 +74,7 @@ def central_difference_gradient(
 ) -> torch.Tensor:
     """Numerical gradient of ``objective`` at ``theta`` by central differences.
 
-    Parameters
-    ----------
-    objective : Objective
-        The objective to differentiate.
-    theta : torch.Tensor
-        Point to differentiate at, 1-D.
-    step : float
-        Half-width of the difference. Central differences carry a truncation
-        error of order ``step**2`` and a rounding error of order
-        ``eps / step``, so in ``float64`` the optimum sits near ``1e-5``;
-        this is a parameter rather than a constant because the right value
-        depends on the curvature of the objective.
-
-    Returns
-    -------
-    torch.Tensor
-        Numerical gradient, same shape as ``theta``.
+    Error ``O(step**2) + O(eps / step)``; in ``float64`` the optimum is near ``1e-5``.
     """
     gradient = torch.zeros_like(theta)
     for i in range(theta.numel()):
@@ -109,20 +87,7 @@ def central_difference_gradient(
 
 
 def analytic_gradient(objective: Objective, theta: torch.Tensor) -> torch.Tensor:
-    """Autograd gradient of ``objective`` at ``theta``.
-
-    Parameters
-    ----------
-    objective : Objective
-        The objective to differentiate.
-    theta : torch.Tensor
-        Point to differentiate at, 1-D.
-
-    Returns
-    -------
-    torch.Tensor
-        Gradient from reverse-mode autodiff, same shape as ``theta``.
-    """
+    """Autograd gradient of ``objective`` at ``theta``."""
     point = theta.detach().clone().requires_grad_(True)
     gradient: torch.Tensor = torch.autograd.grad(objective(point), point)[0]
     return gradient
@@ -131,32 +96,9 @@ def analytic_gradient(objective: Objective, theta: torch.Tensor) -> torch.Tensor
 def assert_gradient_matches_finite_differences(
     objective: Objective, theta: torch.Tensor, step: float, rtol: float
 ) -> float:
-    """Assert autograd and central differences agree, and return the realized ratio.
+    """Assert autograd and central differences agree; return the realized ratio.
 
-    The comparison is relative to the **norm** of the gradient rather than
-    entrywise. Two reasons, both encountered rather than anticipated: at a
-    symmetric starting point (uniform distributions everywhere) many entries
-    are exactly zero, so an entrywise relative bound is undefined there; and
-    the gradient of a summed log-likelihood scales with the data size, so an
-    absolute bound fixed at one fixture size would not transfer to another
-    (`DEV.md`, issue #111). Scaling by the gradient's own magnitude is the
-    form that survives both.
-
-    Parameters
-    ----------
-    objective : Objective
-        The objective to differentiate.
-    theta : torch.Tensor
-        Point to differentiate at, 1-D.
-    step : float
-        Half-width passed to :func:`central_difference_gradient`.
-    rtol : float
-        Bound on ``max|analytic - numerical| / max|analytic|``.
-
-    Returns
-    -------
-    float
-        The realized ratio, for a test to report in a PR's tolerance table.
+    Relative to the norm: zero entries, and scale with data size (issue #111).
     """
     analytic = analytic_gradient(objective, theta)
     numerical = central_difference_gradient(objective, theta, step)
