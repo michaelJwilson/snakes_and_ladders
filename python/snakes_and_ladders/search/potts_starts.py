@@ -56,6 +56,7 @@ from snakes_and_ladders.sim.graph import lattice_graph
 from snakes_and_ladders.sim.potts import (
     PottsLatticeParams,
     SpatioOnlyParams,
+    SpatioTilingParams,
     energy,
     spatio_only_field,
 )
@@ -127,6 +128,112 @@ def spatio_rung(params: SpatioOnlyParams, name: str) -> Rung:
         n_states=params.n_classes,
         optimum=None,
     )
+
+
+@dataclass(frozen=True)
+class TilingRung(Rung):
+    """A :class:`~snakes_and_ladders.search.ground_state.Rung` whose field plants one state per tile (issue #1050).
+
+    Every solver reads the lattice, the field and the state count, so this is
+    a ``Rung`` to all of them. The field has no class ladder and no size
+    covariate: ``alpha`` is zero and ``sizes`` one, as
+    :func:`~snakes_and_ladders.search.ground_state.ground_state` builds its
+    rung, and the structural referee that reads them does not apply. What
+    referees a labelling here is the planted truth below, through
+    :func:`recovery` and :func:`recovery_bound`.
+
+    Parameters
+    ----------
+    tiles : np.ndarray
+        Tile per site, shape ``(n_nodes,)``.
+    states : np.ndarray
+        ``a_t``, the state each tile favours, shape ``(k,)``.
+    strengths : np.ndarray
+        ``s_t``, shape ``(k,)``.
+    """
+
+    tiles: np.ndarray
+    states: np.ndarray
+    strengths: np.ndarray
+
+
+def tiling_rung(params: SpatioTilingParams, name: str) -> TilingRung:
+    """The :class:`TilingRung` a ``spatio_tiling`` fixture declares, at its own state count.
+
+    The counterpart of :func:`spatio_rung`: the field is the fixture's, built
+    once by :func:`~snakes_and_ladders.sim.potts.tiling_field`, and no exact
+    optimum is known past enumeration.
+
+    Returns
+    -------
+    TilingRung
+    """
+    return TilingRung(
+        name=name,
+        graph=params.graph,
+        field=params.field,
+        alpha=np.zeros(params.n_states),
+        sizes=np.ones(params.graph.n_nodes),
+        n_states=params.n_states,
+        optimum=None,
+        tiles=params.tiles,
+        states=params.states,
+        strengths=params.strengths,
+    )
+
+
+def recovery(rung: TilingRung, labelling: np.ndarray) -> np.ndarray:
+    """The fraction of each tile's sites labelled its favoured state.
+
+    Returns
+    -------
+    np.ndarray
+        Shape ``(k,)``, each in ``[0, 1]``.
+    """
+    planted = rung.states[rung.tiles]
+    hits = np.bincount(
+        rung.tiles,
+        weights=(np.asarray(labelling) == planted).astype(float),
+        minlength=rung.states.size,
+    )
+    return np.asarray(hits / np.bincount(rung.tiles, minlength=rung.states.size))
+
+
+def recovery_bound(rung: TilingRung) -> np.ndarray:
+    """Per tile, the strength above which every graph-cut local minimum labels it its favoured state in full.
+
+    ``b_t = max over i in T_t of sum_(j ~ i, j not in T_t) J_ij``: the most
+    coupling any one site of the tile has to sites outside it.
+
+    **The bound.** Take a labelling ``x`` that no alpha-expansion move lowers,
+    and ``U``, the sites of tile ``T_t`` not labelled its state ``a_t``.
+    Expanding ``a_t`` onto ``U`` is one expansion move. Each site of ``U``
+    gains ``s_t`` of field, having carried none (the field in ``T_t``
+    rewards ``a_t`` alone). A bond inside ``U`` agrees afterwards; a bond
+    from ``U`` to the rest of ``T_t`` joins a site labelled ``a_t`` and
+    agrees afterwards and not before; only a bond leaving ``T_t`` can stop
+    agreeing, and it costs its coupling at most. So the move changes the
+    energy by at most ``-s_t |U| + sum_(i in U) b_i <= |U| (b_t - s_t)``,
+    which is negative for ``s_t > b_t`` unless ``U`` is empty. The same
+    holds for alpha-beta swap, one label of ``U`` at a time, and for the
+    ground state, which no move lowers. At ``s_t = b_t`` the bound says
+    nothing, so a fixture keeps its strengths off it.
+
+    Returns
+    -------
+    np.ndarray
+        Shape ``(k,)``, in the coupling's units.
+    """
+    # Each bond joining two tiles counts its coupling at both of its ends.
+    ends = rung.graph.edge_index
+    crossing = rung.tiles[ends[:, 0]] != rung.tiles[ends[:, 1]]
+    weights = np.asarray(rung.graph.edge_coupling) * crossing
+    per_site = np.bincount(
+        ends.ravel(), weights=np.repeat(weights, 2), minlength=rung.n_nodes
+    )
+    bound = np.zeros(rung.states.size)
+    np.maximum.at(bound, rung.tiles, per_site)
+    return bound
 
 
 def binary_sibling(rung: Rung, name: str) -> Rung:

@@ -1,0 +1,56 @@
+model: spatio-tiling
+oracle: none
+
+# The same construction as `ci` on `spatio_only/release`'s lattice: a 71 x 71
+# open triangular lattice, 5,041 vertices, q = 10 states, J = 0.7, the
+# coupling that file measured on the disordered side of J_c = 0.913. The two
+# instances then differ in the field alone: linear in the state there, one
+# planted state per tile here.
+#
+# 10**5041 labellings, so the stated oracle is none. What referees a result
+# is the planted truth through a bound: a tile whose strength exceeds J times
+# the largest count of outside neighbours any of its sites has is labelled its
+# state in full at every alpha-expansion and alpha-beta-swap local minimum
+# (`search.potts_starts.recovery_bound`). Enumeration referees the same bound
+# exactly at `ci`.
+geometry: triangular
+shape: [71, 71]
+boundary: open
+n_states: 10
+coupling: 0.7
+
+# Sixteen tiles, 145 to 665 sites, from centres drawn by default_rng(1050).
+# Sixteen is more than the ten states, so favoured states repeat and a tile
+# can border another favouring the same state.
+tiles:
+  seed: 1050
+  k: 16
+
+# The ten states in order, then the first six again: every state planted at
+# least once, so the optimum can use all ten.
+states: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5]
+
+# Log-spaced from 0.1 J to 10 J, np.geomspace(0.07, 7.0, 16) rounded to four
+# places, tile t at the t-th. The top is 10 J and not the 3 J issue #1050's
+# plan named: the tiles' largest outside-neighbour counts are 3 to 5, so their
+# recovery bounds are 2.1 to 3.5, and at 3 J = 2.1 the one tile reaching a
+# bound would sit on it with equality, where the bound says nothing. At 10 J
+# the last four tiles, 2.79 to 7.0, clear bounds of 2.1 and 2.8, and the first
+# twelve do not, so the bound divides the ladder.
+strengths:
+  - 0.07
+  - 0.0952
+  - 0.1293
+  - 0.1758
+  - 0.239
+  - 0.3249
+  - 0.4417
+  - 0.6004
+  - 0.8161
+  - 1.1094
+  - 1.5081
+  - 2.0501
+  - 2.7868
+  - 3.7882
+  - 5.1495
+  - 7.0

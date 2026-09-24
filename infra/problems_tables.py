@@ -156,6 +156,8 @@ ALGORITHMS: dict[str, str] = {
     "sim.graph.erdos_renyi_graph": "simulation",
     "sim.graph.triangular_lattice_graph": "simulation",
     "sim.potts.spatio_only_field": "simulation",
+    "sim.potts.tiling_field": "simulation",
+    "sim.potts.tile_partition": "simulation",
     "sim.canonical.frustrated_triangular_lattice": "simulation",
     "sim.canonical.planted_spin_glass": "simulation",
     "sim.hmm.simulate_sequences": "simulation",

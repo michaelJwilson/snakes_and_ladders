@@ -70,6 +70,7 @@ from snakes_and_ladders.sim.polar import PolarParams
 from snakes_and_ladders.sim.potts import (
     PottsLatticeParams,
     SpatioOnlyParams,
+    SpatioTilingParams,
 )
 from snakes_and_ladders.sim.potts_chain import PottsParams
 from snakes_and_ladders.sim.spatio_sequential import SpatioSequentialParams
@@ -92,6 +93,7 @@ PARAMS: dict[str, type[Params]] = {
     "potts-chain": PottsParams,
     "potts-lattice": PottsLatticeParams,
     "spatio-only": SpatioOnlyParams,
+    "spatio-tiling": SpatioTilingParams,
     "hidden-markov": HmmParams,
     "gaussian-mixture": MixtureParams,
     "emission-mixture": EmissionMixtureParams,
