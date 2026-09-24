@@ -43,3 +43,13 @@
 - name: "release"
   color: "5319e7"
   description: "infra/release.sh passed clean; ready to tag and publish."
+
+# External frameworks (issue #972). A ticket that adds or drives one carries
+# the label for each role it takes: an oracle it is checked against, or a
+# reference it is timed against at stress sizes.
+- name: "validation"
+  color: "0052cc"
+  description: "An external framework as an oracle, run in a subprocess (#972)."
+- name: "benchmarking"
+  color: "fbca04"
+  description: "A timing against a reference at stress sizes, both numbers reported."
