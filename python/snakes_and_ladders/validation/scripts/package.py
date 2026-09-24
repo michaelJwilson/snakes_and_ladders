@@ -408,7 +408,7 @@ def _random_walk_sample(inputs: Mapping[str, np.ndarray]) -> Callable[[], Output
     # Outside the measured call, as `_hmc_sample`'s set-up.
     metropolis.random_walk(
         GaussianTarget(np.ones(2)),
-        torch.Generator().manual_seed(0),
+        np.random.default_rng(0),
         2,
         step_size=0.1,
         store_chain=store_chain,
@@ -417,7 +417,7 @@ def _random_walk_sample(inputs: Mapping[str, np.ndarray]) -> Callable[[], Output
     def call() -> Outputs:
         chain = metropolis.random_walk(
             target,
-            torch.Generator().manual_seed(seed),
+            np.random.default_rng(seed),
             n_draws,
             step_size=step_size,
             theta0=theta0,

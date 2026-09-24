@@ -77,7 +77,7 @@ def test_random_walk_beside_blackjax_benchmark(
     chain = benchmark.pedantic(  # type: ignore[no-untyped-call]
         lambda: metropolis.random_walk(
             objective,
-            torch.Generator().manual_seed(1006),
+            np.random.default_rng(1006),
             N_DRAWS,
             step_size=step,
             theta0=torch.as_tensor(start),
