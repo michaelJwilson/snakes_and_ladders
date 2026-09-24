@@ -309,10 +309,27 @@ class GaussianMixtureObjective(Objective):
         )
 
 
+def component_log_density(
+    components: EmissionFamily,
+    observations: torch.Tensor,
+    covariate: torch.Tensor | None,
+) -> torch.Tensor:
+    """The components' log-density, conditioned on ``covariate`` where one is given.
+
+    A family that takes no covariate is called as it always was, so a mixture
+    without one is unchanged bitwise (issue #933).
+    """
+    if covariate is None:
+        return components.log_density(observations)
+    return components.log_density(observations, covariate)
+
+
 def mixture_log_likelihood(
     observations: torch.Tensor,
     log_weight: torch.Tensor,
     components: EmissionFamily,
+    *,
+    covariate: torch.Tensor | None = None,
     backend: Backend = Backend.RUST,
 ) -> torch.Tensor:
     """``sum_i log sum_k w_k N(y_i; mu_k, s_k)``, in log space throughout (``eq:mixture``).
@@ -328,6 +345,9 @@ def mixture_log_likelihood(
         for a log-density and nothing else, which lets
         :mod:`snakes_and_ladders.opt.emission_mixture` fit a mixture of count
         emissions through this function unchanged.
+    covariate : torch.Tensor | None
+        Per-observation covariate the components condition on, in the layout
+        the family's ``log_density`` documents (issue #933).
 
     backend : Backend
         :data:`~snakes_and_ladders.backend.Backend.RUST`, the default since
@@ -351,7 +371,12 @@ def mixture_log_likelihood(
         its components.
     """
     refuse_backend("mixture_log_likelihood", backend, (Backend.PYTHON, Backend.RUST))
-    if backend is Backend.RUST and _streams_score(observations, log_weight, components):
+    # The streamed score conditions on no covariate.
+    if (
+        backend is Backend.RUST
+        and covariate is None
+        and _streams_score(observations, log_weight, components)
+    ):
         assert isinstance(components, GaussianEmission)
         negative, _ = oxi_snakes_and_ladders.gaussian_mixture_gradient(
             np.ascontiguousarray(observations.numpy()),
@@ -361,7 +386,7 @@ def mixture_log_likelihood(
         )
         return torch.tensor(-negative, dtype=torch.float64)
     return torch.logsumexp(
-        log_weight + components.log_density(observations), dim=-1
+        log_weight + component_log_density(components, observations, covariate), dim=-1
     ).sum()
 
 
@@ -387,15 +412,18 @@ def responsibilities(
     observations: torch.Tensor,
     log_weight: torch.Tensor,
     components: EmissionFamily,
+    *,
+    covariate: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """``P(component | observation)``, shape ``(n_samples, n_components)`` (``eq:responsibilities``).
 
     The E step. An HMM's is a forward-backward recursion; a mixture's is one
     normalization, because independent observations carry no message between
     them. What the M step then receives is the same object either way, which
-    is why the same emission family serves both.
+    is why the same emission family serves both. ``covariate`` is
+    :func:`mixture_log_likelihood`'s.
     """
-    joint = log_weight + components.log_density(observations)
+    joint = log_weight + component_log_density(components, observations, covariate)
     return torch.exp(joint - torch.logsumexp(joint, dim=-1, keepdim=True))
 
 
@@ -403,6 +431,8 @@ def e_step(
     observations: torch.Tensor,
     log_weight: torch.Tensor,
     components: EmissionFamily,
+    *,
+    covariate: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """:func:`mixture_log_likelihood` and :func:`responsibilities` from one log-density pass (issue #924).
 
@@ -418,7 +448,7 @@ def e_step(
         The scalar log-likelihood, and the responsibilities, shape
         ``(n_samples, n_components)``.
     """
-    joint = log_weight + components.log_density(observations)
+    joint = log_weight + component_log_density(components, observations, covariate)
     normalizer = torch.logsumexp(joint, dim=-1, keepdim=True)
     return normalizer.sum(), torch.exp(joint - normalizer)
 

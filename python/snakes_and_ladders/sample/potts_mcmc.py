@@ -90,9 +90,11 @@ from snakes_and_ladders.sample.schedule import (
 )
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import (
+    SiteField,
     energies,
     heat_bath_log_weights,
     local_fields,
+    log_weight_of,
     owner_rows,
     site_field,
 )
@@ -381,7 +383,7 @@ def tempered(graph: PottsGraph, field: np.ndarray, temperature: float) -> Temper
 
 def sample_potts(
     graph: PottsGraph,
-    field: np.ndarray,
+    field: SiteField | np.ndarray,
     move: PottsMove,
     rng: np.random.Generator,
     n_sweeps: int,
@@ -398,7 +400,7 @@ def sample_potts(
     ----------
     graph : PottsGraph
         The lattice. Couplings may vary per edge.
-    field : np.ndarray
+    field : SiteField | np.ndarray
         External field ``h``, shape ``(n_states,)``.
     move : PottsMove
         The move set. All six leave the same Boltzmann distribution
@@ -454,6 +456,7 @@ def sample_potts(
         bond probability ``1 - exp(-J)`` is not a probability there, and an
         antiferromagnet has no like-spin clusters to flip.
     """
+    field = log_weight_of(field)
     refuse_negative_coupling(move, graph)
 
     model = tempered(graph, field, temperature)
@@ -524,7 +527,7 @@ class AnnealedPotts:
 
 def anneal_potts(
     graph: PottsGraph,
-    field: np.ndarray,
+    field: SiteField | np.ndarray,
     schedule: TempSchedule,
     rng: np.random.Generator,
     *,
@@ -559,7 +562,7 @@ def anneal_potts(
     ----------
     graph : PottsGraph
         The instance. Couplings of either sign.
-    field : np.ndarray
+    field : SiteField | np.ndarray
         External field, shape ``(n_states,)``.
     schedule : TempSchedule
         Temperature per sweep. Its length is the budget.
@@ -585,6 +588,7 @@ def anneal_potts(
     -------
     AnnealedPotts
     """
+    field = log_weight_of(field)
     refuse_negative_coupling(move, graph)
 
     rows = site_field(np.asarray(field, dtype=float), graph.n_nodes)
@@ -592,6 +596,7 @@ def anneal_potts(
         rng.integers(0, int(rows.shape[1]), size=graph.n_nodes), dtype=np.int64
     )
     offsets, neighbours, couplings = graph.compressed_adjacency()
+    lists = adjacency_lists(offsets, neighbours, couplings)
 
     best_state = state.copy()
     best_energy = float(energies(graph, rows, state[None])[0])
@@ -653,6 +658,7 @@ def anneal_potts(
                         graph,
                         beta,
                         niedermayer_threshold(couplings),
+                        lists=lists,
                     )
                 else:
                     wolff_sweep(
@@ -665,6 +671,7 @@ def anneal_potts(
                         counter,
                         graph,
                         beta,
+                        lists=lists,
                     )
                 # A single-cluster step reads each member's neighbours and
                 # writes the members; a heat-bath sweep is charged the same
@@ -985,6 +992,8 @@ def sweep_for(
 
         return bond_pass
 
+    # The adjacency as lists, once for every cluster the closure grows (#919).
+    lists = adjacency_lists(offsets, neighbours, couplings)
     if move is PottsMove.NIEDERMAYER:
         threshold = niedermayer_threshold(couplings)
 
@@ -1000,6 +1009,7 @@ def sweep_for(
                 rng,
                 beta=beta,
                 threshold=threshold,
+                lists=lists,
             )
 
         return generalized
@@ -1007,7 +1017,9 @@ def sweep_for(
     def one_cluster(
         state: np.ndarray, rng: np.random.Generator, beta: float = 1.0
     ) -> int:
-        return wolff_sweep(state, rows, offsets, neighbours, couplings, rng, beta=beta)
+        return wolff_sweep(
+            state, rows, offsets, neighbours, couplings, rng, beta=beta, lists=lists
+        )
 
     return one_cluster
 
@@ -1585,7 +1597,7 @@ def _apply_flip(
 def swendsen_wang_sweep(
     state: np.ndarray,
     graph: PottsGraph,
-    rows: np.ndarray,
+    rows: SiteField | np.ndarray,
     rng: np.random.Generator,
     counter: ClusterCounter | None = None,
     beta: float = 1.0,
@@ -1620,6 +1632,7 @@ def swendsen_wang_sweep(
     of a 42.2 ms pass against 0.001 ms to read the store (#754). Recompute or
     store, decided as store, and the same ``int64`` indices either way.
     """
+    rows = log_weight_of(rows)
     if backend is Backend.RUST:
         if counter is not None:
             msg = (
@@ -1756,9 +1769,42 @@ def _cluster_pass_rust(
         cluster += 1
 
 
+@dataclass(frozen=True)
+class AdjacencyLists:
+    """The compressed adjacency as Python lists, converted once per chain (issue #919).
+
+    A cluster grown site by site in Python indexes the adjacency one entry
+    at a time, which is faster on lists than on NumPy scalars; converting
+    the arrays on every step cost O(n_nodes + n_edges) before the first bond,
+    which at small clusters was the step. A chain builds this once and hands
+    it to every :func:`wolff_sweep` and :func:`niedermayer_sweep`.
+
+    Parameters
+    ----------
+    bounds : list[int]
+        ``offsets``: the incident edges of site ``i`` are ``bounds[i]`` to
+        ``bounds[i + 1]``.
+    incident : list[int]
+        ``neighbours``, the far site of each incident edge.
+    weights : list[float]
+        ``couplings``, each incident edge's coupling.
+    """
+
+    bounds: list[int]
+    incident: list[int]
+    weights: list[float]
+
+
+def adjacency_lists(
+    offsets: np.ndarray, neighbours: np.ndarray, couplings: np.ndarray
+) -> AdjacencyLists:
+    """The compressed adjacency as the lists a cluster move walks."""
+    return AdjacencyLists(offsets.tolist(), neighbours.tolist(), couplings.tolist())
+
+
 def wolff_sweep(
     state: np.ndarray,
-    rows: np.ndarray,
+    rows: SiteField | np.ndarray,
     offsets: np.ndarray,
     neighbours: np.ndarray,
     couplings: np.ndarray,
@@ -1768,6 +1814,7 @@ def wolff_sweep(
     beta: float = 1.0,
     root: int | None = None,
     proposed: int | None = None,
+    lists: AdjacencyLists | None = None,
 ) -> int:
     """Grow one cluster from a random seed, recolour it, and stop.
 
@@ -1792,13 +1839,19 @@ def wolff_sweep(
     randomness. Omitted, both are drawn as before and every existing caller's
     stream is bitwise unchanged.
 
+    ``lists`` is the adjacency converted once by :func:`adjacency_lists`;
+    omitted, it is converted here, O(n_nodes + n_edges) per step (#919). The
+    arrays and the lists are the same adjacency, so the stream is bitwise
+    the same either way.
+
     Returns
     -------
     int
         The size of the cluster this step built.
     """
-    bounds = offsets.tolist()
-    incident, weights = neighbours.tolist(), couplings.tolist()
+    rows = log_weight_of(rows)
+    walk = adjacency_lists(offsets, neighbours, couplings) if lists is None else lists
+    bounds, incident, weights = walk.bounds, walk.incident, walk.weights
     seed_node = int(rng.integers(state.shape[0])) if root is None else int(root)
     colour = int(state[seed_node])
     cluster = [seed_node]
@@ -1857,7 +1910,7 @@ def niedermayer_threshold(couplings: np.ndarray) -> float:
 
 def niedermayer_sweep(
     state: np.ndarray,
-    rows: np.ndarray,
+    rows: SiteField | np.ndarray,
     offsets: np.ndarray,
     neighbours: np.ndarray,
     couplings: np.ndarray,
@@ -1868,6 +1921,7 @@ def niedermayer_sweep(
     threshold: float = 0.0,
     root: int | None = None,
     partner: int | None = None,
+    lists: AdjacencyLists | None = None,
 ) -> int:
     """Grow one cluster under Niedermayer's bond rule, transpose two colours on it.
 
@@ -1884,6 +1938,8 @@ def niedermayer_sweep(
     of ``J``. **Wolff is the case ``E_0 = 0`` on a ferromagnet**: the unlike
     bonds get ``p = 0`` and the like ones ``1 - exp(-beta J)``, which is
     :func:`wolff_sweep`'s own probability.
+
+    ``lists`` is the adjacency converted once, as :func:`wolff_sweep` takes it.
 
     ``E_0`` is the one knob, and it runs between two algorithms. At or above
     :func:`niedermayer_threshold` every ``max`` is on its linear branch, the
@@ -1946,10 +2002,11 @@ def niedermayer_sweep(
     int
         The size of the cluster this step built.
     """
+    rows = log_weight_of(rows)
     n_nodes = int(state.shape[0])
     n_states = int(rows.shape[1])
-    bounds = offsets.tolist()
-    incident, weights = neighbours.tolist(), couplings.tolist()
+    walk = adjacency_lists(offsets, neighbours, couplings) if lists is None else lists
+    bounds, incident, weights = walk.bounds, walk.incident, walk.weights
     labels = state.tolist()
 
     seed_node = int(rng.integers(n_nodes)) if root is None else int(root)

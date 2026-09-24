@@ -685,8 +685,10 @@ def test_the_streamed_family_step_is_the_batched_one(
 @pytest.mark.oracle
 def test_real_valued_counts_take_the_batched_route() -> None:
     # The table is indexed by integer counts: a float array of the same
-    # counts is scored on the batched route, so the two backends agree
-    # bitwise there (issue #997).
+    # counts is scored on the batched route (issue #997). There the Rust
+    # backend runs the compiled ragged E step (#933), which sums in another
+    # order than the torch recursion: measured 2 ulps apart (3.0e-16
+    # relative), so the declared tolerance, not bitwise.
     observations, family, _ = _streamed_case("poisson", covariate=False)
     initial = torch.log(torch.full((3,), 1.0 / 3.0, dtype=torch.float64))
     transition = torch.log(torch.full((3, 3), 1.0 / 3.0, dtype=torch.float64))
@@ -702,7 +704,7 @@ def test_real_valued_counts_take_the_batched_route() -> None:
         )
         for backend in (Backend.PYTHON, Backend.RUST)
     ]
-    assert fits[1].log_likelihood == fits[0].log_likelihood
+    assert_allclose(fits[1].log_likelihood, fits[0].log_likelihood, rtol=1e-12)
 
 
 @pytest.mark.oracle

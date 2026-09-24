@@ -303,6 +303,12 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sample.langevin
    :members:
 
+.. automodule:: snakes_and_ladders.sample.mixture_gibbs
+   :members:
+
+.. automodule:: snakes_and_ladders.sample.relabel
+   :members:
+
 .. automodule:: snakes_and_ladders.sample.slice
    :members:
 
