@@ -28,8 +28,13 @@ at three hours; the stop is recorded.
   the schedule (:func:`~snakes_and_ladders.qa.potts_schedule.joint_rounds`).
   Wolff starts at the current schedule and #1038's matched 41,250 steps, on
   the exponential shape #1038 chose for it; Niedermayer at Swendsen-Wang's
-  tuned schedule and #1041's matched 46,083 steps. Niedermayer also searches
-  its threshold ``E_0``, in units of the coupling, from Wolff's value 0.
+  tuned schedule and #1041's matched 46,083 steps. Each of Niedermayer's
+  thresholds :data:`THRESHOLD_SCAN` is first scored at its own matched count,
+  and its schedule is searched at the best.
+
+A search stopped by the host is resumed from its checkpoint
+(:func:`replayed`), and the checkpoint's seconds count against its three
+hours.
 
 **The arms.** Per move, the default schedule, the #1038/#1041 schedule and
 the converged one run on
@@ -213,9 +218,8 @@ def plans() -> dict[str, Plan]:
 
 @functools.cache
 def coupling() -> float:
-    """The rung's coupling, the unit of Niedermayer's threshold coordinate."""
-    _, _, couplings = release_rung().graph.compressed_adjacency()
-    return float(np.max(couplings))
+    """The rung's largest edge coupling, the unit of Niedermayer's thresholds."""
+    return float(np.max(release_rung().graph.edge_coupling))
 
 
 def replayed(name: str) -> tuple[dict[tuple[Any, ...], dict[str, Any]], float]:
