@@ -525,7 +525,9 @@ def test_the_swap_refuses_a_backend_it_has_no_cut_for() -> None:
     rung = _rung(CI, 3)
     labelling = np.zeros(rung.n_nodes, dtype=np.int64)
 
-    with pytest.raises(ValueError, match="no numba minimum-cut backend"):
+    with pytest.raises(
+        ValueError, match="minimum cut runs on python or rust, not numba"
+    ):
         swap(rung.graph, rung.field, labelling, 0, 1, backend=Backend.NUMBA)
 
 

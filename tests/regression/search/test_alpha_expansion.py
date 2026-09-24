@@ -339,7 +339,9 @@ def test_the_rust_cut_reproduces_the_python_expansion(seed: int, n_states: int) 
 def test_expansion_has_no_numba_backend() -> None:
     graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.5)
 
-    with pytest.raises(ValueError, match="no numba minimum-cut backend"):
+    with pytest.raises(
+        ValueError, match="minimum cut runs on python or rust, not numba"
+    ):
         alpha_expansion(graph, np.zeros(3), 3, backend=Backend.NUMBA)
 
 
