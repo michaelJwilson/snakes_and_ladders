@@ -44,7 +44,7 @@ from snakes_and_ladders.search.ground_state import ANNEAL_SCHEDULE
 
 @pytest.mark.smoke
 @pytest.mark.snapshot
-def test_a_recorded_evaluation_reruns_bitwise() -> None:
+def test_a_recorded_evaluation_reruns_its_chain() -> None:
     tuned = load()
     entry = tuned.raw["moves"]["swendsen-wang"]["chosen"]
     params = ScheduleParams(
@@ -58,7 +58,10 @@ def test_a_recorded_evaluation_reruns_bitwise() -> None:
         np.random.default_rng([TUNING_SEEDS[0], 0]),
     )
 
-    assert energy == entry["energies"][0]
+    # The chain and its spend are the recorded ones bitwise. The energy was
+    # recorded before #1044 reordered `sim.potts.energies`' edge sum, which
+    # moved it by 6.9e-11 (7e-15 relative): the declared tolerance is 1e-13.
+    np.testing.assert_allclose(energy, entry["energies"][0], rtol=1e-13, atol=0)
     assert spent == entry["spent"][0]
 
 

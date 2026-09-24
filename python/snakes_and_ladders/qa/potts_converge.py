@@ -73,7 +73,6 @@ from snakes_and_ladders.qa.potts_schedule import (
     SIMPLEX_STEPS,
     STATE_DIR,
     THREAD_VARIABLES,
-    THRESHOLD_BOUNDS,
     TUNING_SEEDS,
     VERTEX_TOLERANCE,
     WALL_LIMIT,
@@ -112,6 +111,15 @@ CLUSTERS = REPO_ROOT / "docs" / "nb" / "data" / "potts_clusters.json"
 #: ICM's cap in sweeps and the seeding budget, the notebook's.
 POLISH = Budget(Cost.SWEEPS, 200)
 SEEDING = Budget(Cost.EVALUATIONS, 1)
+#: Niedermayer's thresholds, ``E_0`` over the coupling, each scored at its
+#: own matched step count. The first plan searched ``E_0`` beside the
+#: schedule at a fixed count, and its first ``E_0`` vertex, 0.1, ran one
+#: evaluation for more than 25 minutes against 3 for ``E_0 = 0``: above 0 the
+#: clusters grow and the spend at a count fixed for 0 runs past the budget.
+THRESHOLD_SCAN = (0.0, 0.02, 0.1)
+#: Where a threshold's step-count match starts: low, so the bracket grows to
+#: the budget rather than starting far past it.
+SCAN_START = 2000
 #: The searches in the order the pool takes them: the longest first, so the
 #: short ones fill the other worker beside it.
 ORDER = ("niedermayer", "swendsen-wang", "ghost-spin", "label-directed", "wolff")
@@ -137,6 +145,10 @@ class Plan:
         search's first count.
     joint : bool
         Whether the step count is matched in rounds with the schedule.
+    thresholds : tuple[float, ...]
+        Niedermayer's ``E_0`` values, in units of the coupling, each scored
+        at its own matched count before the schedule search; empty for every
+        other move.
     """
 
     move: PottsMove
@@ -146,11 +158,7 @@ class Plan:
     previous: ScheduleParams
     count: int | None
     joint: bool
-
-    @property
-    def threshold(self) -> bool:
-        """Whether the search varies Niedermayer's ``E_0``."""
-        return len(self.start) == 4
+    thresholds: tuple[float, ...] = ()
 
 
 def point_of(params: ScheduleParams) -> tuple[float, float, float]:
@@ -193,11 +201,12 @@ def plans() -> dict[str, Plan]:
     table["niedermayer"] = Plan(
         PottsMove.NIEDERMAYER,
         sw.shape,
-        (*point_of(sw), 0.0),
-        WARM_STEPS,
+        point_of(sw),
+        warm,
         sw,
         niedermayer_count,
         True,
+        THRESHOLD_SCAN,
     )
     return table
 
@@ -209,16 +218,43 @@ def coupling() -> float:
     return float(np.max(couplings))
 
 
-def decode(
-    point: Sequence[float] | np.ndarray, shape: ScheduleShape
-) -> tuple[ScheduleParams, float | None]:
-    """The schedule and threshold at a search point; ``None`` where the point has no threshold."""
-    threshold = float(point[3]) * coupling() if len(point) == 4 else None
-    return params_of(point[:3], shape), threshold
+def replayed(name: str) -> tuple[dict[tuple[Any, ...], dict[str, Any]], float]:
+    """Every evaluation a stopped run of ``name``'s search checkpointed, by :func:`replay_key`, and its seconds.
+
+    The objective is deterministic, so a search restarted with these
+    replays its own path to where it stopped without a run; the seconds
+    count against its wall clock.
+    """
+    path = STATE_DIR / f"{name}.json"
+    if not path.exists():
+        return {}, 0.0
+    state = json.loads(path.read_text())
+    records = [record for search in state["searches"] for record in search["trace"]] + [
+        record for match in state["matches"] for record in match["probes"]
+    ]
+    records += [entry["evaluation"] for entry in state.get("threshold_scan", [])]
+    return {replay_key(record): record for record in records}, float(state["seconds"])
+
+
+def replay_key(record: dict[str, Any]) -> tuple[Any, ...]:
+    """What names an evaluation: its schedule, step count and threshold."""
+    return (
+        str(record["shape"]),
+        record["t_start"],
+        record["t_end"],
+        record["hold"],
+        record["steps"],
+        record.get("threshold"),
+    )
 
 
 def converge(name: str) -> dict[str, Any]:
     """One move's search, every evaluation in order, checkpointed to :data:`STATE_DIR`.
+
+    A checkpoint of a stopped run is replayed (:func:`replayed`), and its
+    seconds count against :data:`WALL_LIMIT`. For Niedermayer each
+    threshold of the plan is first scored at its own matched count on the
+    warm start, and the schedule is searched at the best one.
 
     Returns
     -------
@@ -229,9 +265,9 @@ def converge(name: str) -> dict[str, Any]:
     plan = plans()[name]
     rung = release_rung()
     budget = solver_budget(rung)
-    opened = time.perf_counter()
-    deadline = time.monotonic() + WALL_LIMIT
-    bounds = [*BOUNDS, THRESHOLD_BOUNDS] if plan.threshold else list(BOUNDS)
+    replay, before = replayed(name)
+    opened = time.perf_counter() - before
+    deadline = time.monotonic() + WALL_LIMIT - before
     state: dict[str, Any] = {
         "move": str(plan.move),
         "shape": str(plan.shape),
@@ -239,11 +275,15 @@ def converge(name: str) -> dict[str, Any]:
         "simplex_steps": list(plan.steps),
         "previous": {**asdict(plan.previous), "steps": plan.count},
         "joint": plan.joint,
+        "resumed_after": before,
+        "replayed": 0,
         "searches": [],
         "matches": [],
     }
-    # Every evaluation by (point, count), so the chosen one can be read back.
-    scored: dict[tuple[tuple[float, ...], int | None], Evaluation] = {}
+    # Every evaluation by (point, count, threshold), so the chosen one can be
+    # read back.
+    scored: dict[tuple[tuple[float, ...], int | None, float | None], Evaluation] = {}
+    threshold: float | None = None
 
     def checkpoint() -> None:
         # The state so far, so a search the host stops is not lost.
@@ -252,10 +292,29 @@ def converge(name: str) -> dict[str, Any]:
         (STATE_DIR / f"{name}.json").write_text(json.dumps(state, indent=1) + "\n")
 
     def run(point: Sequence[float] | np.ndarray, count: int | None) -> Evaluation:
-        # One point on the tuning seeds, serially, remembered.
-        params, threshold = decode(point, plan.shape)
-        evaluation = evaluate(plan.move, params, count, threshold=threshold)
-        scored[(tuple(float(value) for value in point), count)] = evaluation
+        # One point on the tuning seeds, serially, or its checkpointed record.
+        params = params_of(point, plan.shape)
+        key = (
+            str(params.shape),
+            params.t_start,
+            params.t_end,
+            params.hold,
+            count,
+            threshold,
+        )
+        if key in replay:
+            record = replay[key]
+            evaluation = Evaluation(
+                params,
+                count,
+                tuple(record["energies"]),
+                tuple(record["spent"]),
+                threshold,
+            )
+            state["replayed"] += 1
+        else:
+            evaluation = evaluate(plan.move, params, count, threshold=threshold)
+        scored[(tuple(float(value) for value in point), count, threshold)] = evaluation
         return evaluation
 
     def search(point: np.ndarray, count: int | None) -> tuple[np.ndarray, str]:
@@ -271,7 +330,7 @@ def converge(name: str) -> dict[str, Any]:
             return evaluation.mean, evaluation.standard_error
 
         simplex = np.vstack([point, point + np.diag(steps)])
-        result = nelder_mead(objective, simplex, bounds, deadline=deadline)
+        result = nelder_mead(objective, simplex, BOUNDS, deadline=deadline)
         state["searches"][-1].update(
             {
                 "stop": result.stop,
@@ -286,7 +345,9 @@ def converge(name: str) -> dict[str, Any]:
     def match(point: np.ndarray, count: int) -> int:
         # The count whose mean spend on the tuning seeds is nearest the budget.
         probes: list[dict[str, Any]] = []
-        state["matches"].append({"point": point.tolist(), "probes": probes})
+        state["matches"].append(
+            {"point": point.tolist(), "threshold": threshold, "probes": probes}
+        )
 
         def spend(steps: int) -> float:
             evaluation = run(point, steps)
@@ -299,20 +360,43 @@ def converge(name: str) -> dict[str, Any]:
         return steps
 
     start = np.array(plan.start, dtype=float)
+    count = plan.count
+    if plan.thresholds:
+        # Each threshold at its own matched count on the warm start; the
+        # schedule is then searched at the one of lowest mean energy.
+        scan: list[dict[str, Any]] = []
+        state["threshold_scan"] = scan
+        for units in plan.thresholds:
+            threshold = units * coupling()
+            assert plan.count is not None
+            steps = match(start, plan.count if units == 0.0 else SCAN_START)
+            scan.append(
+                {
+                    "threshold": threshold,
+                    "steps": steps,
+                    "evaluation": scored[
+                        (tuple(float(value) for value in start), steps, threshold)
+                    ].record(),
+                }
+            )
+            checkpoint()
+        best = min(scan, key=lambda entry: entry["evaluation"]["mean"])
+        threshold, count = best["threshold"], best["steps"]
     if plan.joint:
-        assert plan.count is not None
+        assert count is not None
         point, count, stop, rounds = joint_rounds(
-            match, search, start, plan.count, deadline=deadline
+            match, search, start, count, deadline=deadline
         )
         state["rounds"] = rounds
     else:
         point, stop = search(start, None)
         count = None
-    key = (tuple(float(value) for value in point), count)
+    key = (tuple(float(value) for value in point), count, threshold)
     state.update(
         {
             "stop": stop,
             "count": count,
+            "threshold": threshold,
             "evaluations": len(scored),
             "chosen": scored[key].record(),
             "standard_error": scored[key].standard_error,
@@ -425,7 +509,8 @@ def main(parts: Sequence[str] = PARTS) -> None:
             "wall_limit": WALL_LIMIT,
             "rounds": ROUNDS,
             "count_tolerance": COUNT_TOLERANCE,
-            "bounds": [list(bound) for bound in (*BOUNDS, THRESHOLD_BOUNDS)],
+            "bounds": [list(bound) for bound in BOUNDS],
+            "threshold_scan": list(THRESHOLD_SCAN),
             "coupling": coupling(),
         }
     )
@@ -433,14 +518,23 @@ def main(parts: Sequence[str] = PARTS) -> None:
         load_before = os.getloadavg()
         opened = time.perf_counter()
         if part == "search":
+            # A move whose checkpoint records a stop is read back, not rerun.
+            done = {
+                name: json.loads((STATE_DIR / f"{name}.json").read_text())
+                for name in ORDER
+                if (STATE_DIR / f"{name}.json").exists()
+                and "stop" in json.loads((STATE_DIR / f"{name}.json").read_text())
+            }
+            due = [name for name in ORDER if name not in done]
             searches = map_tasks(
                 converge,
-                list(ORDER),
+                due,
                 workers=WORKERS,
                 backend="processes",
                 intra_op_threads=1,
             )
-            result["moves"] = dict(zip(ORDER, searches, strict=True))
+            done.update(zip(due, searches, strict=True))
+            result["moves"] = {name: done[name] for name in ORDER}
             if result["moves"]["swendsen-wang"]["stop"] == CAPPED:
                 # The plan's condition for searching the other shapes.
                 print("swendsen-wang stopped at the cap: its other shapes are due")
@@ -449,16 +543,18 @@ def main(parts: Sequence[str] = PARTS) -> None:
         else:
             msg = f"no part {part!r}; the parts are {PARTS}"
             raise ValueError(msg)
-        result.setdefault("host", {})[part] = {
-            "cores": os.cpu_count(),
-            "workers": WORKERS,
-            "threads": {
-                variable: os.environ[variable] for variable in THREAD_VARIABLES
-            },
-            "load_before": list(load_before),
-            "load_after": list(os.getloadavg()),
-            "seconds": time.perf_counter() - opened,
-        }
+        result.setdefault("host", {}).setdefault(part, []).append(
+            {
+                "cores": os.cpu_count(),
+                "workers": WORKERS,
+                "threads": {
+                    variable: os.environ[variable] for variable in THREAD_VARIABLES
+                },
+                "load_before": list(load_before),
+                "load_after": list(os.getloadavg()),
+                "seconds": time.perf_counter() - opened,
+            }
+        )
         OUTPUT.parent.mkdir(parents=True, exist_ok=True)
         OUTPUT.write_text(json.dumps(result, indent=1) + "\n")
 

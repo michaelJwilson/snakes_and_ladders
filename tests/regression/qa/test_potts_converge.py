@@ -17,7 +17,6 @@ import pytest
 from snakes_and_ladders.qa.potts_converge import (
     CLUSTERS,
     ORDER,
-    decode,
     load,
     plans,
     schedule_of,
@@ -31,6 +30,7 @@ from snakes_and_ladders.qa.potts_schedule import (
     TUNING_SEEDS,
     WALL,
     handover,
+    params_of,
 )
 from snakes_and_ladders.qa.potts_schedule import load as load_tuned
 from snakes_and_ladders.sample.schedule import ScheduleShape
@@ -38,7 +38,7 @@ from snakes_and_ladders.sample.schedule import ScheduleShape
 
 @pytest.mark.smoke
 @pytest.mark.snapshot
-def test_the_chosen_swendsen_wang_evaluation_reruns_bitwise() -> None:
+def test_the_chosen_swendsen_wang_evaluation_reruns_its_chain() -> None:
     entry = load()["moves"]["swendsen-wang"]
     chosen = entry["chosen"]
 
@@ -49,7 +49,10 @@ def test_the_chosen_swendsen_wang_evaluation_reruns_bitwise() -> None:
         np.random.default_rng([TUNING_SEEDS[0], 0]),
     )
 
-    assert energy == chosen["energies"][0]
+    # Bitwise where the evaluation ran after #1044's edge sum; a replayed
+    # record from before it is held to the 1e-13 relative tolerance #1038's
+    # rerun declares (`test_potts_schedule.py`).
+    np.testing.assert_allclose(energy, chosen["energies"][0], rtol=1e-13, atol=0)
     assert spent == chosen["spent"][0]
 
 
@@ -61,10 +64,8 @@ def test_every_search_starts_at_its_warm_start_and_records_its_stop() -> None:
         entry, plan = result["moves"][name], plans()[name]
         first = entry["matches"][0]["probes"][0] if plan.joint else None
         first = first or entry["searches"][0]["trace"][0]
-        params, threshold = decode(plan.start, plan.shape)
-
-        assert schedule_of(first) == params
-        assert first.get("threshold") == threshold
+        assert schedule_of(first) == params_of(plan.start, plan.shape)
+        assert first.get("threshold") == (0.0 if plan.thresholds else None)
         assert entry["stop"] in (CONVERGED, CAPPED, WALL, COUNT_FIXED, ROUNDS_SPENT)
         assert entry["evaluations"] <= CONVERGE_CAP * len(entry["searches"]) + sum(
             len(match["probes"]) for match in entry["matches"]
