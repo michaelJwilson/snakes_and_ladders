@@ -560,8 +560,11 @@ def test_the_compiled_sweep_refuses_an_order_it_does_not_walk() -> None:
 #: reach the same labelling by different routes --- the expansion in 2 moves
 #: and the swap in 3 --- which is what makes the pair a check on the template:
 #: a body that lost the label set would collapse the counts onto each other.
+#: The energy was re-recorded when `sim.potts.energies` left BLAS (issue
+#: #1044): one ulp, 7.1e-15, onto the exactly rounded sum of this labelling's
+#: terms; the labelling, cycles and moves are unchanged.
 RECORDED_LABELLING = [1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0]
-RECORDED_ENERGY = -25.228722898156448
+RECORDED_ENERGY = -25.22872289815644
 RECORDED_CYCLES = 2
 RECORDED_MOVES = {"expansion": 2, "swap": 3}
 

@@ -84,7 +84,7 @@ def test_the_score_is_the_negated_energy_bitwise() -> None:
     """`score` equals `-energies` to the last bit on 200 seeded labellings.
 
     Bitwise and not to a tolerance: the field term is summed first and the
-    coupling term added as one gather and a dot product over the edges in the
+    coupling term added as one gather and a pairwise sum over the edges in the
     order they were given, which is `sim.potts.energies`'s own arithmetic.
     Reassociating it --- halving a doubled count off the adjacency table, say
     --- moves the last bit, and this is the test that would catch it.
