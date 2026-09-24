@@ -19,6 +19,7 @@ import pytest
 import torch
 from snakes_and_ladders import oxi_snakes_and_ladders
 from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.opt.objective import DeclaredGradient
 from snakes_and_ladders.sample import hmc, langevin
 from snakes_and_ladders.sample.expectation import KalmanMean
 from snakes_and_ladders.validation.gaussian import (
@@ -104,7 +105,7 @@ def test_a_declared_gradient_is_autograd_s(dense: bool) -> None:
     rng = np.random.default_rng(9862)
     precision = dense_precision(15, rng) if dense else diagonal_precision(15)
     target = GaussianTarget(precision)
-    assert isinstance(target, hmc.DeclaredGradient)
+    assert isinstance(target, DeclaredGradient)
     theta = torch.as_tensor(rng.normal(size=15))
     point = theta.clone().requires_grad_(True)
     (autograd,) = torch.autograd.grad(target(point), point)

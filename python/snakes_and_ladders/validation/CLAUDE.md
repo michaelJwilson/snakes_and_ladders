@@ -15,6 +15,9 @@ module. It is referenced here, never restated. What follows is local.
   back. The script is the only file that imports the framework, whatever its
   licence: GPL and research-only terms stay out of the package process, and
   so do a framework's native library, threads and second autodiff stack.
+  The one exception is a framework that is also a core dependency: JAX is
+  the HMM objectives' gradient (#1000), so the package imports it; its
+  validation pair still runs in a subprocess.
 - **A script imports its framework inside `main`.** The docs build imports
   every module under `docs/source/index.rst` without the extras, so a
   module-level import of the framework would fail it.

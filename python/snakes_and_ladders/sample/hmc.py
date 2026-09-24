@@ -67,7 +67,12 @@ import torch
 from snakes_and_ladders import oxi_snakes_and_ladders
 from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.emissions import ParameterDomainError
-from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.opt.objective import (
+    DeclaredGradient,
+    Objective,
+    declares_gradient,
+    value_and_gradient,
+)
 from snakes_and_ladders.sample.accept import (
     accept_ratio,
     accept_with,
@@ -89,21 +94,6 @@ from snakes_and_ladders.track import TrackedOptimization
 from snakes_and_ladders.track import current as current_tracked
 
 DEFAULT_STEPS = 20
-
-
-@runtime_checkable
-class DeclaredGradient(Protocol):
-    """An objective that states its own gradient, which :func:`gradient_at` then reads.
-
-    Autograd records and replays a graph per call, 57 µs at d = 10 where the
-    closed form of a Gaussian takes 1.7 µs (issue #991); an objective whose
-    gradient has a closed form states it here (issue #986). It must equal
-    autograd's through ``__call__``, which each implementation's test pins.
-    """
-
-    def gradient(self, theta: torch.Tensor) -> torch.Tensor:
-        """``dU/dtheta`` at ``theta``, detached."""
-        ...
 
 
 @runtime_checkable
@@ -1398,13 +1388,11 @@ def _transition(
 
 
 def gradient_at(objective: Objective, theta: torch.Tensor) -> torch.Tensor:
-    """``dU/dtheta``: the objective's own where it is a :class:`DeclaredGradient`, else by autograd."""
-    if isinstance(objective, DeclaredGradient):
+    """``dU/dtheta``: the objective's declared gradient, its declared value and gradient, or autograd."""
+    if declares_gradient(objective):
+        assert isinstance(objective, DeclaredGradient)
         return objective.gradient(theta.detach())
-    point = theta.detach().clone().requires_grad_(True)
-    value = objective(point)
-    (grad,) = torch.autograd.grad(value, point)
-    return grad.detach()
+    return value_and_gradient(objective, theta)[1]
 
 
 @dataclass(frozen=True)
@@ -1436,6 +1424,14 @@ class _Scaled(Objective):
 
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         return self.objective(theta * self.scale)
+
+    def value_and_gradient(
+        self, theta: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        # The chain rule through `theta * scale`, so a declared gradient
+        # survives the change of coordinates.
+        value, gradient = value_and_gradient(self.objective, theta * self.scale)
+        return value, gradient * self.scale
 
 
 class _DualAveraging:

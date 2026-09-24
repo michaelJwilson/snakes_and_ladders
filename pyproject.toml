@@ -34,6 +34,11 @@ dependencies = [
     # on the continuous test functions), declared by the release audit of
     # issue #376 when the maintainer approved it.
     "scipy>=1.13.0",
+    # Apache-2.0, far above the 1,000-star bar, approved on #1000: the HMM
+    # objectives' default gradient, 0.07x-0.18x autograd's runtime at
+    # 1e4-1e5 positions. CPU wheels on linux-64 and osx-arm64; jax-metal is
+    # experimental and not pulled.
+    "jax>=0.7.2",
     "torch>=2.4.0",
 ]
 

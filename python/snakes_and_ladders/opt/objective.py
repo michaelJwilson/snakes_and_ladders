@@ -111,3 +111,69 @@ class Objective(Protocol):
             Scalar tensor.
         """
         ...  # pragma: no cover
+
+
+@runtime_checkable
+class DeclaredGradient(Protocol):
+    """An objective that states its own gradient.
+
+    Autograd records and replays a graph per call, 57 µs at d = 10 where the
+    closed form of a Gaussian takes 1.7 µs (issue #991); an objective whose
+    gradient has a closed form states it here (issue #986). It must equal
+    autograd's through ``__call__``, which each implementation's test pins.
+    """
+
+    def gradient(self, theta: torch.Tensor) -> torch.Tensor:
+        """``dU/dtheta`` at ``theta``, detached."""
+        ...  # pragma: no cover
+
+
+@runtime_checkable
+class DeclaredValueAndGradient(Protocol):
+    """An objective that states its value and gradient together (issue #1000).
+
+    Optional beside :class:`Objective`: a consumer that reads a gradient ---
+    the L-BFGS closure, the convergence test, a Hamiltonian kick --- takes it
+    from :func:`value_and_gradient`. An HMM objective declares one so its
+    gradient can come from a compiled backend rather than the graph.
+    """
+
+    def value_and_gradient(
+        self, theta: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """``(U(theta), dU/dtheta)``, both detached."""
+        ...  # pragma: no cover
+
+
+def declares_gradient(objective: object) -> bool:
+    """Whether ``objective`` is a :class:`DeclaredGradient` with a *method* ``gradient``.
+
+    A runtime-checkable protocol checks only that the attribute exists, and
+    the phylogenetic objective's ``gradient`` is a property naming its route
+    (`likelihood.objective`), not a function of ``theta``.
+    """
+    return isinstance(objective, DeclaredGradient) and callable(
+        getattr(type(objective), "gradient", None)
+    )
+
+
+def value_and_gradient(
+    objective: Objective, theta: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """``(U(theta), dU/dtheta)`` detached.
+
+    The objective's own where it declares them together, its declared
+    gradient beside a graph-free value where it declares that alone, and
+    autograd through ``__call__`` otherwise.
+    """
+    if isinstance(objective, DeclaredValueAndGradient):
+        return objective.value_and_gradient(theta)
+    if declares_gradient(objective):
+        assert isinstance(objective, DeclaredGradient)
+        with torch.no_grad():
+            value = objective(theta.detach())
+        return value, objective.gradient(theta.detach())
+    point = theta.detach().clone().requires_grad_(True)
+    value = objective(point)
+    (gradient,) = torch.autograd.grad(value, point)
+    return value.detach(), gradient

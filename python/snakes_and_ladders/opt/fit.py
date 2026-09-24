@@ -23,7 +23,7 @@ from dataclasses import dataclass, replace
 import torch
 
 from snakes_and_ladders.opt.initialize import Initializer
-from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.opt.objective import Objective, value_and_gradient
 from snakes_and_ladders.opt.termination import Termination
 from snakes_and_ladders.parallel import Pool, map_tasks
 from snakes_and_ladders.track import TrackedOptimization, current
@@ -155,9 +155,10 @@ def fit(
     )
 
     def closure() -> torch.Tensor:
-        optimizer.zero_grad()
-        value = objective(theta)
-        value.backward()  # type: ignore[no-untyped-call]
+        # The objective's declared gradient where it has one (issue #1000),
+        # autograd otherwise; L-BFGS reads `theta.grad` either way.
+        value, gradient = value_and_gradient(objective, theta)
+        theta.grad = gradient
         return value
 
     # One lookup for the whole fit (`snakes_and_ladders.track`), and one
@@ -231,9 +232,7 @@ def _with_intervals(objective: Objective, result: FitResult) -> FitResult:
 
 
 def _relative_gradient_norm(objective: Objective, theta: torch.Tensor) -> float:
-    point = theta.detach().clone().requires_grad_(True)
-    value = objective(point)
-    gradient = torch.autograd.grad(value, point)[0]
+    value, gradient = value_and_gradient(objective, theta)
     return float(gradient.abs().max()) / max(1.0, abs(float(value.detach())))
 
 
