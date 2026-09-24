@@ -21,15 +21,17 @@ carries no upper bound of one (``likelihood/CLAUDE.md``).
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import numpy as np
-import torch
 
-from snakes_and_ladders.emissions import GaussianEmission
 from snakes_and_ladders.enumeration import (
     MAX_ENUMERABLE_CONFIGURATIONS,
     refuse_oversized,
 )
+
+if TYPE_CHECKING:
+    from snakes_and_ladders.emissions import GaussianEmission
 
 
 @dataclass(frozen=True)
@@ -106,7 +108,11 @@ def enumerate_mixture_assignments(
 
     # (n_samples, n_components): log w_k + log N(y_i; mu_k, s_k), the only
     # per-observation quantity used. Everything below is a sum over whole
-    # assignments.
+    # assignments. `log_density` is the families' tensor API, which the
+    # objectives differentiate through, so torch is loaded here, at the one
+    # call that needs it, and not at import (issue #1011).
+    import torch
+
     scored = log_weight + components.log_density(
         torch.as_tensor(values, dtype=torch.float64)
     ).numpy().reshape(n_samples, n_components)

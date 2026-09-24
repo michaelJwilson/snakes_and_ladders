@@ -23,16 +23,25 @@ device behaviour it had.
 
 The fifth copy of the checks, in ``brute_force``, stays where it is for the
 first reason above: it is the referee that pins the NumPy oracle.
+
+**The module imports no torch** (issue #1011). The checks, the post-order and
+the NumPy indicator serve routes that take no derivative --- ``pruning_rust``,
+``likelihood.blocks``, ``likelihood.surrogate`` --- and loading torch for them
+cost 1.3 s and 590 MB. :func:`leaf_indicator` imports it where it builds a
+tensor, and :func:`rescale_partial` reaches it through its argument's methods.
 """
 
 from __future__ import annotations
 
 from collections.abc import Container, Iterable
+from typing import TYPE_CHECKING
 
 import numpy as np
-import torch
 
 from snakes_and_ladders.sim.tree import Node
+
+if TYPE_CHECKING:
+    import torch
 
 
 def postorder(root: Node) -> list[Node]:
@@ -211,6 +220,8 @@ def leaf_indicator(
         ``(n_sites, k)``, one at the observed state of each site. Constant in
         the branch lengths, so it carries no gradient.
     """
+    import torch
+
     observed = torch.as_tensor(states, dtype=torch.long, device=device)
     partial = torch.zeros((n_sites, k), dtype=dtype, device=device)
     partial[torch.arange(n_sites, device=index_device), observed] = 1.0
@@ -255,12 +266,14 @@ def rescale_partial(
         The rescaled partial, the new accumulated log scale, and the scale
         divided by --- which the analytic backward keeps per node.
     """
+    # Tensor methods, which are the same kernels as `torch.where`, `ones_like`
+    # and `torch.log`, so this module names no torch at import (issue #1011).
     scale = partial.amax(dim=1)
-    safe_scale = torch.where(
-        scale > 0, scale, torch.ones_like(scale) if fallback is None else fallback
+    safe_scale = scale.where(
+        scale > 0, scale.new_ones(scale.shape) if fallback is None else fallback
     )
     return (
         partial / safe_scale.unsqueeze(1),
-        log_scale + torch.log(safe_scale),
+        log_scale + safe_scale.log(),
         safe_scale,
     )

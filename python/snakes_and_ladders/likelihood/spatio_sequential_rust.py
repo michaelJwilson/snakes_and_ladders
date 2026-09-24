@@ -44,7 +44,6 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 
 import numpy as np
-import torch
 
 from snakes_and_ladders import oxisal
 from snakes_and_ladders.likelihood.spatio_sequential import (
@@ -106,9 +105,15 @@ def _channel_rows(
     The rows are the families' own arithmetic either way, which is the property
     that keeps this a table rather than a second implementation of the oracle.
     """
+    # `log_density` is the families' tensor API, which the objectives
+    # differentiate through: the table's arguments are built as arrays and
+    # cross into it once per family, and torch is imported at this call rather
+    # than with the module (issue #1011).
+    import torch
+
     if covariate is None:
         extent = int(values.max()) + 1
-        counts = torch.arange(extent, dtype=torch.float64)
+        counts = torch.from_numpy(np.arange(extent, dtype=np.float64))
         table = np.empty((extent, params.n_classes, params.n_states))
         for m, family in enumerate(families):
             side = family.total if channel == TOTAL else family.successes
@@ -125,8 +130,12 @@ def _channel_rows(
     distinct, codes = np.unique(covariate.reshape(-1), return_inverse=True)
     extent = int(values.max()) + 1
     n_distinct = distinct.size
-    counts = torch.arange(extent, dtype=torch.float64).repeat_interleave(n_distinct)
-    exposure = torch.as_tensor(distinct, dtype=torch.float64).repeat(extent)[:, None]
+    counts = torch.from_numpy(
+        np.repeat(np.arange(extent, dtype=np.float64), n_distinct)
+    )
+    exposure = torch.from_numpy(
+        np.tile(np.asarray(distinct, dtype=np.float64), extent)[:, None]
+    )
     table = np.empty((extent * n_distinct, params.n_classes, params.n_states))
     for m, family in enumerate(families):
         side = family.total if channel == TOTAL else family.successes

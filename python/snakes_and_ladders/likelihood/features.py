@@ -25,6 +25,12 @@ branch or per node, for the set, attention and graph models that must not
 care in what order the rows come. Every feature is a function of the
 unrooted topology, so it is unchanged by re-rooting or by swapping a node's
 children; ``tests/regression/likelihood/test_surrogate.py`` pins that.
+
+Every feature is a constant to the models that read it: no loss
+differentiates through a feature, so each is a ``float64`` ``np.ndarray`` and
+the module imports no ``torch`` (issue #1011). The mean-field bound is the one
+differentiable function called here, and :func:`lattice_features` hands it
+the field as a tensor at that call.
 """
 
 from __future__ import annotations
@@ -34,7 +40,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-import torch
 
 from snakes_and_ladders.likelihood.surrogate import (
     ParsimonyUpperBound,
@@ -46,9 +51,9 @@ from snakes_and_ladders.likelihood.surrogate import (
     mean_field_log_partition,
     saturated_log_partition,
     site_fitch_scores,
-    site_rows,
 )
 from snakes_and_ladders.sim.graph import PottsGraph
+from snakes_and_ladders.sim.potts import site_field
 from snakes_and_ladders.sim.topology import Topology, branch_splits
 
 TREE_FEATURE_NAMES = (
@@ -90,7 +95,7 @@ LATTICE_TOKEN_NAMES = (
 
 def tree_features(
     topology: Topology, alignment: Mapping[str, np.ndarray], k: int, pi: np.ndarray
-) -> torch.Tensor:
+) -> np.ndarray:
     """One vector per topology, in ``TREE_FEATURE_NAMES`` order, per-site where it scales with sites."""
     n_sites = int(next(iter(alignment.values())).shape[0])
     distances = jc_distances(alignment, k)
@@ -98,7 +103,7 @@ def tree_features(
     plug_in = float(PlugInLikelihood(k, pi)(topology, alignment))
     bound = float(ParsimonyUpperBound(k, pi)(topology, alignment))
     fitch = float(site_fitch_scores(topology, alignment).sum())
-    return torch.tensor(
+    return np.array(
         [
             plug_in / n_sites,
             bound / n_sites,
@@ -108,13 +113,13 @@ def tree_features(
             float(len(alignment)),
             float(n_sites),
         ],
-        dtype=torch.float64,
+        dtype=np.float64,
     )
 
 
 def tree_tokens(
     topology: Topology, alignment: Mapping[str, np.ndarray], k: int
-) -> torch.Tensor:
+) -> np.ndarray:
     """One row per branch, in ``TREE_TOKEN_NAMES`` order: its least-squares length, how evenly its split divides the taxa, and the mean distance across and within the split."""
     distances = jc_distances(alignment, k)
     lengths = least_squares_lengths(topology, distances)
@@ -136,44 +141,48 @@ def tree_tokens(
                 float(np.mean(within)) if within else 0.0,
             ]
         )
-    return torch.tensor(rows, dtype=torch.float64)
+    return np.array(rows, dtype=np.float64)
 
 
-def lattice_features(graph: PottsGraph, field: np.ndarray) -> torch.Tensor:
+def lattice_features(graph: PottsGraph, field: np.ndarray) -> np.ndarray:
     """One vector per lattice, in ``LATTICE_FEATURE_NAMES`` order, per node where it scales with size.
 
     Three bounds on ``log Z`` and five statistics of the instance. ``field``
     is shared or per site, widened once by
-    :func:`~snakes_and_ladders.likelihood.surrogate.site_rows`; the last two
+    :func:`~snakes_and_ladders.sim.potts.site_field`; the last two
     entries are the mean and the standard deviation across sites of the
     field's per-site range, which are what tell a model how hard the
     covariate pushes and how unevenly. A shared field makes the second of
     them zero, which is the statement that there is no covariate.
     """
-    rows = site_rows(torch.as_tensor(np.asarray(field, dtype=float)), graph.n_nodes)
+    # The mean-field bound is differentiable and takes a tensor; it is the one
+    # call here that loads torch, and the field crosses into it once.
+    import torch
+
+    rows = site_field(np.asarray(field, dtype=np.float64), graph.n_nodes)
     n_nodes = float(graph.n_nodes)
-    span = (rows.max(dim=1).values - rows.min(dim=1).values).numpy()
-    return torch.tensor(
+    span = rows.max(axis=1) - rows.min(axis=1)
+    return np.array(
         [
             float(
                 mean_field_log_partition(
-                    graph, rows, n_iterations=MEAN_FIELD_ITERATIONS
+                    graph, torch.from_numpy(rows), n_iterations=MEAN_FIELD_ITERATIONS
                 )
             )
             / n_nodes,
-            float(decoupled_log_partition(graph, rows)) / n_nodes,
-            float(saturated_log_partition(graph, rows)) / n_nodes,
+            decoupled_log_partition(graph, rows) / n_nodes,
+            saturated_log_partition(graph, rows) / n_nodes,
             n_nodes,
             len(graph.edges) / n_nodes,
             float(np.mean(graph.coupling)),
             float(np.mean(span)),
             float(np.std(span)),
         ],
-        dtype=torch.float64,
+        dtype=np.float64,
     )
 
 
-def lattice_tokens(graph: PottsGraph, field: np.ndarray) -> torch.Tensor:
+def lattice_tokens(graph: PottsGraph, field: np.ndarray) -> np.ndarray:
     """One row per node, in ``LATTICE_TOKEN_NAMES`` order: its degree, the sum and absolute sum of its couplings, and three summaries of its own field.
 
     The field enters as ``max``, ``min`` and ``mean`` over classes rather
@@ -183,17 +192,17 @@ def lattice_tokens(graph: PottsGraph, field: np.ndarray) -> torch.Tensor:
     covariate times a vector fixed across the lattice, so the three
     summaries carry it exactly.
     """
-    rows = site_rows(torch.as_tensor(np.asarray(field, dtype=float)), graph.n_nodes)
+    rows = site_field(np.asarray(field, dtype=np.float64), graph.n_nodes)
     tokens = np.zeros((graph.n_nodes, len(LATTICE_TOKEN_NAMES)))
     for (first, second), coupling in graph.weighted_edges():
         for node in (first, second):
             tokens[node, 0] += 1.0
             tokens[node, 1] += coupling
             tokens[node, 2] += abs(coupling)
-    tokens[:, 3] = rows.max(dim=1).values.numpy()
-    tokens[:, 4] = rows.min(dim=1).values.numpy()
-    tokens[:, 5] = rows.mean(dim=1).numpy()
-    return torch.as_tensor(tokens)
+    tokens[:, 3] = rows.max(axis=1)
+    tokens[:, 4] = rows.min(axis=1)
+    tokens[:, 5] = rows.mean(axis=1)
+    return tokens
 
 
 @dataclass(frozen=True)
