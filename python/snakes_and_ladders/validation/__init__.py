@@ -61,4 +61,16 @@ class Framework:
 
 
 #: Every framework the package is validated or benchmarked against, by name.
-FRAMEWORKS: Mapping[str, Framework] = {}
+FRAMEWORKS: Mapping[str, Framework] = {
+    framework.name: framework
+    for framework in (
+        Framework(
+            name="pymaxflow",
+            distribution="PyMaxflow",
+            module="maxflow",
+            licence="GPL-3.0",
+            source="https://github.com/pmneila/PyMaxflow",
+            ticket=973,
+        ),
+    )
+}

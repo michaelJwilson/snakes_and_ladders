@@ -3503,6 +3503,25 @@ wheels = [
 ]
 
 [[package]]
+name = "pymaxflow"
+version = "1.3.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f4/d8/a719512ee03084541fc8e6f1fa06be366fb97f9c39f0b3b3bba7364769e8/pymaxflow-1.3.2.tar.gz", hash = "sha256:19f1668dd718d1451a1ad18902ac674b1b380cda1150c855b5e817f1b0de3095", size = 1342765, upload-time = "2024-11-25T11:08:36.105Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6d/37/e0ea14f87718f161e12b8f8b3271b6757db3caa03deea2eb85434a1c0143/PyMaxflow-1.3.2-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:5098692e804682a1a4129e52c4a3b6f33b3269af467cf48a1a7fd453728a053d", size = 132941, upload-time = "2024-11-25T11:12:33.797Z" },
+    { url = "https://files.pythonhosted.org/packages/f2/ac/50e6685e98ab7735f3178d2f6df395222a3455eacbd471287fdd8f074897/PyMaxflow-1.3.2-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:0f9e26ea0cbd8c28771e8244b2de55ac146e77048452054b4dda7fcabd24f557", size = 123463, upload-time = "2024-11-25T11:09:35.54Z" },
+    { url = "https://files.pythonhosted.org/packages/8b/aa/90df81ac75f0a12961c04b339394510e8f526bb251f61f750787b5cbcc90/PyMaxflow-1.3.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:5fb2116d3949f2ae8a4897c7e54ffa9892c866b17c48bdf6bd182d730aae6581", size = 939222, upload-time = "2024-11-25T11:10:39.423Z" },
+    { url = "https://files.pythonhosted.org/packages/47/1c/b384d2cd6f9cbbf4a2c80dff70d5cecb74320061d68bc33e5bce18b16dc1/PyMaxflow-1.3.2-cp312-cp312-win_amd64.whl", hash = "sha256:95072906a5df055b656e1aa4e1b010d7b883d9cfb2ca990d915f79663bdd72aa", size = 104954, upload-time = "2024-11-25T11:13:08.776Z" },
+    { url = "https://files.pythonhosted.org/packages/31/5b/fd45da95eae07a22c5adbdc354763b205c8d267a79741b1fa6deef909950/PyMaxflow-1.3.2-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:a0374ba195103374a4d66e87e5cb70cc876c4f963834b95a7d7c0cb28405b465", size = 131637, upload-time = "2024-11-25T11:12:35.326Z" },
+    { url = "https://files.pythonhosted.org/packages/29/1a/151bcdb6e13dc9d5919868f24ac49dcb342c19f53531d4f2736833fd4b10/PyMaxflow-1.3.2-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:90138b38fb1a5067acec05a4c938fff24d8f1f2dca8c4dd81f763d5f452d8464", size = 122641, upload-time = "2024-11-25T11:09:37.173Z" },
+    { url = "https://files.pythonhosted.org/packages/a2/9f/6bc30bff12281449e38db93313bae71e08c776ecae310bd7f2efd7ef5ad4/PyMaxflow-1.3.2-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:771f7711a78bc8ef1b698d75c4139d949b7aeb0e11def4e70709d4c74e022b67", size = 937281, upload-time = "2024-11-25T11:10:40.742Z" },
+    { url = "https://files.pythonhosted.org/packages/ce/ed/dd5c1d0ee1f31d78b05a0fc26b2d0f93d0e54d81fed47f02dbcf7e80a8ab/PyMaxflow-1.3.2-cp313-cp313-win_amd64.whl", hash = "sha256:32961f56bd5033a70931f1b98f9ec666c2fa2dfc0843b92d7cc32a81ad2d7dee", size = 104815, upload-time = "2024-11-25T11:13:09.66Z" },
+]
+
+[[package]]
 name = "pyparsing"
 version = "3.3.2"
 source = { registry = "https://pypi.org/simple" }
@@ -4140,6 +4159,9 @@ test = [
 track = [
     { name = "aim" },
 ]
+validation-pymaxflow = [
+    { name = "pymaxflow" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -4155,6 +4177,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.26.0" },
     { name = "pip-audit", marker = "extra == 'dev'", specifier = ">=2.7" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.5.0" },
+    { name = "pymaxflow", marker = "extra == 'validation-pymaxflow'", specifier = ">=1.3.2" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=9.0.3" },
     { name = "pytest-benchmark", marker = "extra == 'test'", specifier = ">=4" },
     { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=4.0.0" },
@@ -4170,7 +4193,7 @@ requires-dist = [
     { name = "towncrier", marker = "extra == 'dev'", specifier = ">=24.8.0" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0" },
 ]
-provides-extras = ["dev", "docs", "frameworks", "notebooks", "test", "track"]
+provides-extras = ["dev", "docs", "frameworks", "notebooks", "test", "track", "validation-pymaxflow"]
 
 [[package]]
 name = "snowballstemmer"
