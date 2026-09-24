@@ -21,8 +21,12 @@ from snakes_and_ladders.sim.hmm import simulate_sequences
 from snakes_and_ladders.sim.mixture import simulate_mixture
 from snakes_and_ladders.sim.potts import simulate_potts
 from snakes_and_ladders.sim.potts_chain import simulate_chains
-from snakes_and_ladders.sim.simulate import simulate_alignment
-from snakes_and_ladders.sim.simulator import NOT_SIMULATED, SIMULATORS, Simulator
+from snakes_and_ladders.sim.simulator import (
+    NOT_SIMULATED,
+    SIMULATORS,
+    Simulator,
+    simulate_tree,
+)
 from snakes_and_ladders.sim.spatio_sequential import simulate_spatio_sequential
 
 #: One declared problem per simulated model, at the tier every test can afford.
@@ -94,9 +98,7 @@ def test_the_seam_draws_what_the_problems_own_call_draws(model: str) -> None:
     rng = np.random.default_rng(seed)
     direct: object
     if model == "jukes-cantor":
-        direct = simulate_alignment(
-            params.tau, params.k, params.pi, rng, params.n_sites
-        )
+        direct = simulate_tree(params, rng)
     elif model == "potts-chain":
         direct = simulate_chains(params)
     elif model == "potts-lattice":

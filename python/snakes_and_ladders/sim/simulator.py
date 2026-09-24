@@ -59,10 +59,21 @@ class Simulator(Protocol[P_contra, D_co]):
 
 
 def simulate_tree(
-    params: SimulationParams, rng: np.random.Generator
+    params: SimulationParams, rng: np.random.Generator, n_sites: int | None = None
 ) -> SimulatedDataset:
-    """:func:`~snakes_and_ladders.sim.simulate.simulate_alignment` on the fixture's tree, states, root and sites."""
-    return simulate_alignment(params.tau, params.k, params.pi, rng, params.n_sites)
+    """:func:`~snakes_and_ladders.sim.simulate.simulate_alignment` on the fixture's tree, states and root.
+
+    ``n_sites`` overrides the fixture's site count: the one argument a caller
+    varies without changing the model (issue #1010), so no call site spells
+    out the fixture's other three fields.
+    """
+    return simulate_alignment(
+        params.tau,
+        params.k,
+        params.pi,
+        rng,
+        params.n_sites if n_sites is None else n_sites,
+    )
 
 
 def simulate_potts_lattice(

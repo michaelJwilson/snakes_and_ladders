@@ -231,6 +231,13 @@ HAND_MEDIAN = re.compile(r"np\.median\(\s*\[\s*package\(")
 HAND_SKIP = re.compile(r"skipif\(\s*not available\(")
 HAND_MEASURE = re.compile(r"peaked\(\s*lambda: timed\(")
 MEASURE_OWNER = "validation/protocol.py"
+#: A fixture's alignment built field by field: its tree, states and root
+#: handed to `simulate_alignment` one by one rather than the fixture to
+#: `sim.simulator.simulate_tree`, which 104 sites spelled out (issue #1010).
+FIXTURE_ALIGNMENT = re.compile(
+    r"simulate_alignment\(\s*(?:tau=)?(\w+)\.tau,\s*(?:k=)?\1\.k,\s*(?:pi=)?\1\.pi\b"
+)
+FIXTURE_ALIGNMENT_OWNER = "sim/simulator.py"
 
 #: Where a caller of the transition may live: the package, the suite and the
 #: notebooks. Wider than the package alone, because both copies this guard
@@ -634,6 +641,15 @@ def test_the_validation_seams_have_one_home_each() -> None:
 
 @pytest.mark.critical
 @pytest.mark.infra
+def test_a_fixture_alignment_is_drawn_through_its_simulator() -> None:
+    # Issue #1010: `simulate_tree(params, rng, n_sites=...)` is the one way a
+    # fixture's alignment is drawn; the suite and the package spelled the
+    # fixture's three fields out 104 times.
+    assert _found(FIXTURE_ALIGNMENT, FIXTURE_ALIGNMENT_OWNER, SEARCHED, ("*.py",)) == []
+
+
+@pytest.mark.critical
+@pytest.mark.infra
 def test_each_guard_fails_on_violating_source() -> None:
     # The guards exercised. Each searches source text, so each passes
     # vacuously if the pattern is wrong -- which is the failure mode a guard
@@ -670,6 +686,7 @@ def test_each_guard_fails_on_violating_source() -> None:
         HAND_MEDIAN: "s = np.median(" + '[package("viterbi", inputs).seconds])\n',
         HAND_SKIP: "mark = pytest.mark.skipif(" + 'not available("gco"), reason="")\n',
         HAND_MEASURE: "r, p = peaked(" + "lambda: timed(call))\n",
+        FIXTURE_ALIGNMENT: "d = simulate_" + "alignment(p.tau, p.k, p.pi, rng, 9)\n",
     }
     clean = {
         PRIVATE_LOGSUMEXP: "from snakes_and_ladders.numerics import logsumexp\n",
@@ -694,6 +711,7 @@ def test_each_guard_fails_on_violating_source() -> None:
         HAND_MEDIAN: 'seconds = median_package("viterbi", inputs)\n',
         HAND_SKIP: 'pytestmark = requires("blackjax")\n',
         HAND_MEASURE: "result, seconds, peak = measured(call)\n",
+        FIXTURE_ALIGNMENT: "data = simulate_tree(params, rng, n_sites=9)\n",
     }
 
     assert [p for p, text in violating.items() if not p.search(text)] == []

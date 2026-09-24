@@ -33,7 +33,7 @@ from snakes_and_ladders.likelihood.pruning_torch import (
 )
 from snakes_and_ladders.search.infer import infer, score_topology
 from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import (
     MoveSet,
     enumerate_topologies,
@@ -65,9 +65,7 @@ def _instance(
     name: str, n_sites: int = N_SITES
 ) -> tuple[SimulationParams, dict[str, np.ndarray], torch.Tensor]:
     params = load_fixture(name)
-    dataset = simulate_alignment(
-        params.tau, params.k, params.pi, np.random.default_rng(params.seed), n_sites
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=n_sites)
     return params, dict(dataset.alignment), branch_lengths_from_tree(params.tau)
 
 

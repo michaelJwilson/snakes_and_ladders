@@ -16,7 +16,7 @@ from numpy.testing import assert_allclose
 from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.sim.jc import jc_rate_matrix, jc_transition_probabilities
 from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.tree import edges
 
 from tests._fixtures import FIXTURES_DIR
@@ -81,13 +81,7 @@ def test_simulated_substitution_frequencies_match_analytic_jc(
     fixture_name: str,
 ) -> None:
     params = load_params(FIXTURES_DIR / fixture_name, SimulationParams)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=params.n_sites,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed))
 
     for parent, child in edges(dataset.tau):
         assert child.branch_length is not None  # every non-root node has one
@@ -113,20 +107,8 @@ def test_simulated_substitution_frequencies_match_analytic_jc(
 @pytest.mark.smoke
 def test_simulation_is_reproducible_given_seed() -> None:
     params = load_params(FIXTURE, SimulationParams)
-    first = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=1000,
-    )
-    second = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=1000,
-    )
+    first = simulate_tree(params, np.random.default_rng(params.seed), n_sites=1000)
+    second = simulate_tree(params, np.random.default_rng(params.seed), n_sites=1000)
 
     for name, states in first.node_states.items():
         assert_allclose(states, second.node_states[name])
@@ -135,13 +117,7 @@ def test_simulation_is_reproducible_given_seed() -> None:
 @pytest.mark.smoke
 def test_alignment_holds_exactly_the_leaf_states() -> None:
     params = load_params(FIXTURE, SimulationParams)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=10,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=10)
 
     assert set(dataset.alignment) == {"A", "B", "C", "D"}
     for name, states in dataset.alignment.items():
@@ -151,13 +127,7 @@ def test_alignment_holds_exactly_the_leaf_states() -> None:
 @pytest.mark.smoke
 def test_newick_carries_every_leaf_and_terminates() -> None:
     params = load_params(FIXTURE, SimulationParams)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=10,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=10)
 
     assert dataset.newick.endswith(";")
     for leaf_name in dataset.alignment:

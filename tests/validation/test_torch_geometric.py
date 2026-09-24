@@ -27,7 +27,7 @@ from snakes_and_ladders.learn.surrogate import (
     SetSurrogate,
     _Batch,
 )
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import enumerate_topologies
 from snakes_and_ladders.validation import torch_geometric
 
@@ -47,11 +47,7 @@ N_LAYERS = 2
 def _tree_examples() -> Examples:
     params = load_fixture(FIVE_TAXA)
     alignments = [
-        dict(
-            simulate_alignment(
-                params.tau, params.k, params.pi, np.random.default_rng(seed), 60
-            ).alignment
-        )
+        dict(simulate_tree(params, np.random.default_rng(seed), n_sites=60).alignment)
         for seed in (1000, 1001)
     ]
     topologies = [list(enumerate_topologies(sorted(a)))[:6] for a in alignments]

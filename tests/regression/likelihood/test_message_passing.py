@@ -54,7 +54,7 @@ from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.hmm import HmmParams
 from snakes_and_ladders.sim.jc import jc_transition_probabilities
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.spatio_sequential import simulate_spatio_sequential
 from snakes_and_ladders.sim.tree import Node, preorder
 
@@ -260,9 +260,7 @@ def _transitions(tau: Node, k: int) -> dict[str, np.ndarray]:
 @pytest.mark.oracle
 def test_sum_product_per_site_sums_to_pruning() -> None:
     params = load_fixture(SMALL_SITES)
-    dataset = simulate_alignment(
-        params.tau, params.k, params.pi, np.random.default_rng(params.seed), n_sites=7
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=7)
     alignment = dict(dataset.alignment)
     transitions = _transitions(params.tau, params.k)
 
@@ -284,9 +282,7 @@ def test_the_leaf_marginals_on_the_tree_are_the_observed_indicators() -> None:
     # An observed leaf has a hard indicator factor, so its marginal is a delta
     # at the observation whatever the branch lengths say.
     params = load_fixture(SMALL_SITES)
-    dataset = simulate_alignment(
-        params.tau, params.k, params.pi, np.random.default_rng(params.seed), n_sites=3
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=3)
     site = {name: int(states[0]) for name, states in dict(dataset.alignment).items()}
 
     result = sum_product(
@@ -628,9 +624,7 @@ def test_sum_and_max_product_on_the_chain_reproduce_the_dictionary_oracle_bitwis
 def test_the_tree_site_reproduces_the_dictionary_oracle_bitwise() -> None:
     # Hard zeros: the leaf indicators put ``-inf`` in the tables.
     params = load_fixture(SMALL_SITES)
-    dataset = simulate_alignment(
-        params.tau, params.k, params.pi, np.random.default_rng(params.seed), n_sites=1
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=1)
     site = {name: int(states[0]) for name, states in dict(dataset.alignment).items()}
     graph = from_tree(
         params.tau, params.k, params.pi, site, _transitions(params.tau, params.k)

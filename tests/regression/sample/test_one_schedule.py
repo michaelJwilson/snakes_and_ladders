@@ -41,7 +41,7 @@ from snakes_and_ladders.sample.tempered import (
 )
 from snakes_and_ladders.sim.factor_graph import from_potts
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import enumerate_topologies
 
 from tests._fixtures import FOUR_TAXA, load_fixture
@@ -117,9 +117,7 @@ def test_the_tempered_ensembles_read_both_spellings_to_the_same_draws() -> None:
         for spelling in (LADDER, LadderTempSchedule(LADDER))
     ]
     params = load_fixture(FOUR_TAXA)
-    dataset = simulate_alignment(
-        params.tau, params.k, params.pi, np.random.default_rng(1), 30
-    )
+    dataset = simulate_tree(params, np.random.default_rng(1), n_sites=30)
     alignment = dict(dataset.alignment)
     start = next(iter(enumerate_topologies(sorted(alignment))))
     topologies = [
