@@ -1,16 +1,11 @@
 """Neighbor joining is exact on additive distances and recovers the truth inside Atteson's radius.
 
-Issue #364. On the path-length matrix of any tree the algorithm must return
-that tree with every branch length exact --- the fixtures at four to eight
-taxa and random trees at 20 and 50 --- which is the closed-form statement
-a moment estimator is held to. On simulated alignments the guarantee is
-Atteson's: the topology is recovered whenever every distance error is under
-half the shortest branch, and the recovery rate rises with the site count.
-
-Against enumeration (issue #734) the same additive matrices say more: at five
-to seven taxa every topology is scored by the least-squares fit of its path
-lengths, and the tree the algorithm joins is the argmin, unique by 27 orders
-of magnitude.
+Issue #364. On any tree's path-length matrix the tree returns with every length
+exact (fixtures at four to eight taxa, random trees at 20 and 50). On
+simulated alignments: Atteson's guarantee inside half the shortest branch,
+and a recovery rate rising with sites. Against enumeration (issue #734) the
+joined tree is the least-squares argmin at five to seven taxa, unique by 27
+orders of magnitude.
 """
 
 from __future__ import annotations
@@ -80,8 +75,7 @@ def _assert_recovered(truth: Node, estimate: Node) -> None:
 def test_the_fixture_tree_is_recovered_exactly_from_its_path_lengths(name: str) -> None:
     """Topology and every branch length, to ``1e-12``, on the additive matrix.
 
-    The rooted binary eight-taxon fixture recovers as its unrooted form,
-    the two branches below the root as their sum.
+    The rooted eight-taxon fixture returns unrooted, its root pair summed.
     """
     params = load_fixture(name)
     names, distances = tree_distances(params.tau)
@@ -120,20 +114,10 @@ def _pairwise(
 def test_the_joined_tree_is_the_least_squares_optimum_over_the_enumerated_topologies() -> (
     None
 ):
-    # The rung below (issue #734): enumeration, which at these sizes scores
-    # every topology there is -- 15, 105 and 945. The criterion has to be
-    # named, since a topology on its own has no score: it is the least-squares
-    # fit of the topology's path lengths to the matrix
-    # (`likelihood.surrogate.least_squares_lengths`, the fit the plug-in bound
-    # already runs), and on an additive matrix exactly one topology attains
-    # zero. That is the statement pinned -- the joined tree is the enumerated
-    # argmin, and the argmin is the generating tree -- rather than a maximum
-    # under a likelihood, which the matrix does not carry.
-    #
-    # Realized over the six trees, two seeds at each size: the argmin's
-    # residual is at most 3.3e-31 against the 1e-20 declared, and the runner-up
-    # at least 1.9e-3 against the 1e-4 declared, so the argmin is unique by
-    # 27 orders of magnitude and not by a rounding.
+    # The rung below (#734): every topology (15, 105, 945) scored by the
+    # least-squares fit of its path lengths (`least_squares_lengths`); on an
+    # additive matrix exactly one attains zero. Over six trees: argmin residual
+    # <= 3.3e-31 (1e-20), runner-up >= 1.9e-3 (1e-4).
     def check(n_taxa: int) -> None:
         for seed in range(2):
             truth = random_tree(n_taxa, np.random.default_rng([734, n_taxa, seed]))
@@ -188,13 +172,8 @@ def test_attesons_radius_is_half_the_shortest_branch() -> None:
 def test_recovery_rises_with_sites_and_is_certain_inside_attesons_radius() -> None:
     """The six-taxon fixture over 50 seeds at 100, 300, 1,500 and 10,000 sites.
 
-    Two claims. The theorem: on every replicate whose largest distance error
-    is under the radius, 0.03, the topology is the generating one --- no
-    exception allowed. The trend: the recovery rate does not fall as the
-    sites grow, and is 1 at the largest size. Realized recovery: 0.72, 0.96,
-    1.00 and 1.00; replicates inside the radius: 0, 0, 2 and 46 of 50 --- the
-    radius is a sufficient condition, and the topology is recovered on every
-    replicate at 1,500 sites while only 2 sit inside it.
+    Inside radius 0.03 recovery is certain; the rate does not fall and is 1 at
+    the largest. Recovery 0.72, 0.96, 1.00, 1.00; inside the radius 0, 0, 2, 46 of 50.
     """
     params = load_fixture(SIX_TAXA)
     radius = atteson_radius(params.tau)

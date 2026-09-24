@@ -1,15 +1,8 @@
 """`search/`'s named results iterate in their declared field order (issue #865).
 
-Nine entry points in this package returned a bare tuple and now return a
-frozen dataclass, and every caller that unpacks one is left unpacking. What
-makes that safe is a single property: ``__iter__`` yields the fields in the
-order they are declared, which is the order the tuple had. It is asserted
-here over the types themselves, so a field inserted in the middle without
-the matching line in ``__iter__`` fails here rather than at whichever call
-site unpacks next.
-
-The values are sentinels: this checks the order, and the arithmetic that
-fills the fields is checked by the module's own tests.
+Nine entry points return a frozen dataclass where they returned a tuple, and
+callers still unpack them, so ``__iter__`` must yield fields in declared
+order. Sentinel values: this checks order; each module's tests check values.
 """
 
 from __future__ import annotations

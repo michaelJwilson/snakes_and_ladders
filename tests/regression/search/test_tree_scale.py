@@ -1,19 +1,10 @@
 """The leaf-count ladder, and the optimizations measured on it (issue #582).
 
-Step 1 of #582 asked where a ladder over leaf count should stop, and answered
-that it does not: neighbour joining recovers the generating topology exactly
-at 8, 20, 50, 100 and 200 leaves, so leaf count is a *cost* axis and not a
-difficulty axis. The fixtures under ``tests/regression/fixtures/tree_scale/``
-are that ladder, kept for what it does measure --- the size the post-order
-optimizations of this branch are paid for at --- with 20 leaves the rung a
-pull request runs and 50 and 200 behind the stress and release gates.
-
-What each case asserts is the simulated truth, which is what
-``oracle: none`` commits the fixture to: the topology the file declares is
-recovered, and the fit reaches the same maximum a full re-score does. There
-is no enumeration at 20 leaves --- 2.2e20 unrooted topologies --- and root
-`CLAUDE.md` admits recovery of the generating structure where no oracle is
-affordable.
+Neighbour joining recovers the topology exactly at 8 to 200 leaves, so leaf
+count is a cost axis. ``tests/regression/fixtures/tree_scale/`` is that
+ladder: 20 leaves per PR, 50 and 200 at stress and release. Asserted: the
+declared topology is recovered and the fit reaches a full re-score's maximum
+(``oracle: none``; 2.2e20 topologies at 20 leaves).
 """
 
 from __future__ import annotations
@@ -72,11 +63,8 @@ def test_neighbour_joining_recovers_the_declared_topology(
 def test_a_budgeted_search_reaches_its_own_maximum_at_this_size(
     instance: Fixture[SimulationParams],
 ) -> None:
-    # What the optimizations are exercised by. The leaf-partial cache and the
-    # post-order's dropped allocations are always on, `lazy_top` is the knob
-    # of issue #289, and every one of them is claimed bitwise or identical --
-    # so the assertion here is the ordinary one, and a change that broke any
-    # of them shows up as a fit that no longer maximizes.
+    # The leaf-partial cache, dropped allocations and `lazy_top` (#289) are all
+    # claimed bitwise, so a break shows as a fit that no longer maximizes.
     truth, alignment, _ = _dataset(instance)
 
     result = infer(
@@ -95,11 +83,8 @@ def test_a_budgeted_search_reaches_its_own_maximum_at_this_size(
 
 @pytest.mark.smoke
 def test_the_declared_height_bounds_every_root_to_tip_path() -> None:
-    # Why the ladder is expressible at all: holding the *edge* length fixed
-    # grows the diameter with the leaf count, and by 20 leaves distant pairs
-    # saturate -- a run that did so refused a pair differing on 0.7550 of
-    # sites, past the Jukes-Cantor 0.75. Every rung shares one height, so the
-    # rungs differ in leaf count and in nothing else.
+    # One height for every rung: fixed edge lengths saturate by 20 leaves (a
+    # pair at 0.7550 differing, past JC's 0.75).
     for n_taxa in (8, 20, 50, 200):
         tree = balanced_tree(n_taxa, 0.25)
         assert sum(1 for node in preorder(tree) if node.is_leaf) == n_taxa

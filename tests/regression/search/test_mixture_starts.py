@@ -153,11 +153,8 @@ def test_a_row_reads_its_trials_against_the_reference(
 
 @pytest.mark.analytic
 def test_the_one_budget_polishes_to_the_tolerance_and_charges_the_whole_cell() -> None:
-    # Issue #898: one budget in seconds covers the start and its polish. The
-    # referee is the stopping rule itself, read off the trace: the polish
-    # stops at the *first* iteration whose relative change in the
-    # log-likelihood is at most the tolerance, EM never lowers the
-    # likelihood, and the spend compare checks is the cell's whole seconds.
+    # #898: one budget in seconds covers start and polish; the polish stops at
+    # the first iteration within tolerance, EM never falls, spend is the cell's.
     instance = _instance()
     comparison = compare(
         {name: TimedStart(name) for name in CONVERGING},
@@ -204,11 +201,8 @@ def test_a_polish_stops_at_one_of_its_two_stops_and_a_timed_start_is_in_seconds(
 def test_a_band_holds_each_trial_between_its_samples_and_averages_across_trials(
     trials: dict[str, MixtureTrial],
 ) -> None:
-    # Issue #898's figure: the referee is the curve itself. At a sample's own
-    # time the band is that sample's gap; between samples it is the earlier
-    # one's; before a trial's first sample the band is undefined; at one
-    # trial there is no spread; over two copies of one trial the mean is the
-    # trial and the spread zero.
+    # #898's curve: the band at a sample is its gap, between samples the
+    # earlier; undefined before the first; one trial, no spread.
     reference = _instance().reference
     trial = trials["hmc"]
     times = np.asarray([point[0] for point in trial.curve])
@@ -231,14 +225,9 @@ def test_a_band_holds_each_trial_between_its_samples_and_averages_across_trials(
 
 @pytest.mark.analytic
 def test_a_polish_stops_where_em_empties_a_component() -> None:
-    # Issue #898: EM can drive a weight to underflow while the likelihood
-    # rises, and the M step then refuses a component the E step leaves no
-    # responsibility on. A component seeded at (1e5, 5e4), far past every
-    # pair of the ci draw, keeps a weight of 6.5e-276 after eight
-    # iterations and is empty at the ninth E step. The polish under its
-    # seconds stops there with the eighth iteration's fit; EM never lowered
-    # the likelihood on the way; a polish of fixed passes has no such stop
-    # and raises the refusal, as it did before the stop existed.
+    # #898: a component seeded at (1e5, 5e4) keeps weight 6.5e-276 after eight
+    # iterations and is empty at the ninth E step; the seconds polish stops
+    # with the eighth fit, EM never lowering; a fixed-pass polish raises.
     instance = _instance()
     rows = np.array([[30.0, 5.0], [200.0, 160.0], [1e5, 5e4]])
     polished = polish(instance, instance.at(rows), seconds=CEILING.size)
@@ -275,12 +264,8 @@ def _equal(first: EmissionFamily, second: EmissionFamily) -> bool:
 def test_best_of_one_is_the_start_and_best_of_five_is_the_best_of_its_seedings() -> (
     None
 ):
-    # Issues #905, #912. The referee is the start run directly on the
-    # generators spawned from the cell's: best-of-one hands over what the
-    # start does on the first child, bitwise; best-of-five's five seedings are
-    # the start on each of five children, and it hands over the one of
-    # highest log-likelihood at equal weights, never below any of them.
-    # Passes are the seedings' and one scoring pass each.
+    # #905, #912: referee the start on the cell's spawned generators: best-of-one
+    # is the first child's, bitwise; best-of-five the highest of five, never below.
     instance = _instance()
     values = torch.as_tensor(instance.observations, dtype=torch.float64)
     uniform = torch.full((instance.n_components,), 1.0 / instance.n_components)

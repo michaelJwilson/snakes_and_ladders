@@ -79,11 +79,7 @@ def six_taxon() -> tuple[
 def five_taxon() -> tuple[
     dict[str, np.ndarray], int, float, dict[frozenset[frozenset[str]], float]
 ]:
-    """The 5-taxon alignment and its 15 scored topologies, computed once.
-
-    Module-scoped: recomputing the sweep per test tripled the module's wall
-    clock.
-    """
+    """The 5-taxon alignment and its 15 scored topologies, computed once per module."""
     full, k, _ = _alignment()
     alignment = {name: full[name] for name in sorted(full)[:5]}
     best, scores = _exhaustive_maximum(alignment, k)
@@ -207,16 +203,9 @@ def test_hill_climbing_success_rate_at_six_taxa(
         dict[frozenset[frozenset[str]], float],
     ],
 ) -> None:
-    # The measured rate is the deliverable, not the pass. Both move sets
-    # reached the enumerated maximum from 12 of 12 starts and recovered the
-    # generating topology every time, at a median of 14 fits for NNI against 48
-    # for SPR, so SPR's larger neighbourhood costs 3.4 times as much and buys
-    # nothing here: the optimum leads the runner-up by 41.6 log units, so hill
-    # climbing is not being challenged at this size.
-    #
-    # The assertion is weaker than the observation: a move set that fails
-    # sometimes is a true result about a weak neighbourhood, and a threshold
-    # tuned to what was measured would hide it.
+    # Measured: both move sets reach the maximum from 12 of 12 starts, median
+    # 14 fits (NNI) against 48 (SPR), 3.4x for nothing: the optimum leads by
+    # 41.6 log units. Asserted weaker, so a failing neighbourhood can show.
     alignment, k, _, best, _ = six_taxon
 
     successes = 0
@@ -290,11 +279,8 @@ def test_search_recovers_the_generating_topology(
 
 # --- the cheaper searches of issue #408, against the same oracle ----------
 
-#: Each change of issue #408 alone, and all three together. The keys name the
-#: change; the values are the ``infer`` keyword arguments that turn it on. A
-#: parsimony start is not a keyword -- it is the ``topology`` argument, built
-#: by :func:`_parsimony_start` -- so it is listed here and applied by
-#: :func:`_search`.
+#: Each change of #408 alone and all together, as ``infer`` keywords; the
+#: parsimony start is the ``topology`` argument (:func:`_parsimony_start`).
 CHEAPER: dict[str, dict[str, object]] = {
     "unbounded": {},
     "parsimony-start": {"parsimony_start": True},
@@ -365,13 +351,9 @@ def test_what_the_cheaper_searches_cost_and_what_they_lose_at_six_taxa(
         dict[frozenset[frozenset[str]], float],
     ],
 ) -> None:
-    # The measured table is the deliverable, reported in `STATUS.md` against
-    # issue #408. The assertion is that no change loses the optimum where the
-    # unbounded search finds it. Measured: every configuration 8 of 8, at
-    # medians of 49 fits and 2,848 forward passes unbounded against 15 and 755
-    # at radius 1 and 31 and 1,009 for all three. The assertion is weaker than
-    # that, since a threshold tuned to 8 of 8 would hide a bound that fails
-    # sometimes.
+    # `STATUS.md` (#408): every configuration 8 of 8; medians 49 fits and 2,848
+    # passes unbounded, 15 and 755 at radius 1, 31 and 1,009 for all three.
+    # Asserted: no change loses the optimum.
     alignment, k, _, best, _ = six_taxon
 
     trials = 8

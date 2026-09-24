@@ -134,11 +134,9 @@ def test_count_seeding_places_components_on_rate_space_rows() -> None:
 
 @pytest.mark.end2end
 def test_a_shared_count_pair_model_is_recovered_under_a_varying_covariate() -> None:
-    # Planted: total means 24 and 72 per unit exposure, dispersions 6 and 12,
-    # allele rates 0.22 and 0.57, one family for both classes, exposures in
-    # [0.5, 2] and trials in [20, 60). Seeded in rate space and fitted for four
-    # blocks from the planted labels, each state lands within 10% on its mean
-    # and 15% on its dispersion, and the fit's joint is at least the truth's.
+    # Planted means 24, 72, dispersions 6, 12, rates 0.22, 0.57, exposures
+    # [0.5, 2], trials [20, 60); four blocks: means within 10%, dispersions 15%,
+    # the joint at least the truth's.
     shared, instance = _count_instance()
     seeded = seed_emissions(
         shared, instance.observations, np.random.default_rng(1), seed_counts=True

@@ -1,15 +1,11 @@
 """The coupled model hands the cluster move its field negated (issue #919).
 
-The external-field equation defines ``H`` as an energy the labels minimize;
-the cluster moves read a field as a log-weight ``h``. `label_step` and the
-annealed start declare it with `SiteField.from_energy`, which negates it
-(#921), and this pins it: at a temperature low
-enough that every bond between equal labels forms, a Wolff step recolours a
-whole monochrome region, which cannot lower the agreement, and accepts only
-a field change that does not rise, so the label objective of the textbook's
-ground-state equation never increases. Declared as a log-weight, ``+H``, the same steps raise the
-field term; the objective can still fall there, the merged regions lowering
-the coupling term by more, which is why the control reads the field term.
+``H`` is an energy; the cluster moves read a log-weight ``h``, so `label_step`
+and the annealed start use `SiteField.from_energy` (#921). At a temperature
+where every equal-label bond forms, a Wolff step cannot lower agreement and
+accepts no rising field, so the textbook's label objective never increases.
+Declared as ``+H`` the field term rises; the objective can still fall via the
+coupling, so the control reads the field term.
 """
 
 from __future__ import annotations

@@ -1,28 +1,13 @@
 """Where the Potts baseline first fails, and which instrument says so.
 
-Issue #596, first per-problem arm. The ticket asks for the size at which the
-classical baseline *measurably fails*, because a gate cannot be argued on a
-fixture where it does not. Two answers came out of the sweep and they are kept
-apart, since each excludes something different:
-
-* **In zero field the optimum is a closed form**, ``-J * n_edges``, checked
-  three ways --- against the exact two-label graph cut and against a uniform
-  labelling's own energy, agreeing to 2.7e-16 relative. Restart-ICM and Wolff
-  reach it from every start, here at 64 sites and to 1,024 in the experiment
-  file's sweep, so the instance cannot host the gate: nothing outperforms a
-  closed form, which is the argument #596 makes about Viterbi.
-* **In a field at two labels alpha-expansion is exact**, equalling the graph
-  cut bitwise at every size measured. Excluded for the same reason.
-* **In a field at three labels the baseline does fail**, and by how much
-  depends on the instrument. Against alpha-expansion's energy at 144 sites
-  every method reads a `0.00` fraction by exact hit, while the same eight runs
-  sit 0.04--9.06% above it and annealing reaches 0.38 under a 1% allowance. A
-  curve that does not say which reading it used has not reported a failure
-  size.
-
-One test carries `release` --- the same claim at 25x the budget --- and the
-rest run in 2.0 s together, so the arm's headline reading gates a merge rather
-than waiting for one.
+Issue #596, first arm. In zero field the optimum is ``-J * n_edges``, three
+ways to 2.7e-16; restart-ICM and Wolff reach it from every start (64 sites
+here, 1,024 in the sweep), so nothing can outperform it. In a field at two
+labels alpha-expansion is exact, bitwise. At three labels the baseline fails,
+and by how much depends on the instrument: at 144 sites exact hit reads 0.00
+for every method while the runs sit 0.04-9.06% above the expansion and
+annealing reaches 0.38 within 1%. One test is `release` (25x the budget); the
+rest take 2.0 s.
 """
 
 from __future__ import annotations
@@ -65,12 +50,7 @@ def _budget(rung: object) -> Budget:
 def test_the_zero_field_optimum_is_a_closed_form_three_ways() -> None:
     """``-J * n_edges``, the exact cut, and a uniform labelling agree.
 
-    Three routes to one number: the closed form, the two-label graph cut which
-    is exact for a ferromagnet, and the energy of the all-zero labelling read
-    by `maxflow.energy`. They agree to 1.7e-16, 2.7e-16 and 1.4e-16 relative at
-    the three sides, which is a reduction's ordering and not a disagreement ---
-    the closed form sums the couplings in a different order from either of the
-    others.
+    1.7e-16, 2.7e-16 and 1.4e-16 relative: summation order, not disagreement.
     """
 
     def check(side: int) -> None:
@@ -90,9 +70,7 @@ def test_the_zero_field_optimum_is_a_closed_form_three_ways() -> None:
 def test_the_closed_form_is_refused_in_a_field() -> None:
     """A field breaks the derivation, so the closed form refuses rather than lies.
 
-    The wrong target under a failure curve reads as a baseline that never
-    succeeds, which is the most expensive kind of wrong answer this harness can
-    give: it looks exactly like the finding #596 is looking for.
+    A wrong target reads as a baseline that never succeeds: #596's finding, falsely.
     """
     with pytest.raises(ValueError, match="zero field only"):
         uniform_ground_energy(lattice_rung(6, 3, seed=6))
@@ -102,10 +80,7 @@ def test_the_closed_form_is_refused_in_a_field() -> None:
 def test_the_zero_field_baseline_does_not_fail() -> None:
     """Restart-ICM and Wolff reach the closed-form optimum from every start.
 
-    So this instance is excluded from the gate, and the exclusion is the
-    result: the ticket asks for the size where the baseline fails, and in zero
-    field it does not fail at any size measured here --- nor could a policy
-    beat it, since the answer is a closed form.
+    So zero field is excluded from the gate: the baseline never fails there.
     """
     rung = lattice_rung(8, 3)
     target = uniform_ground_energy(rung)
@@ -132,12 +107,7 @@ def test_the_zero_field_baseline_does_not_fail() -> None:
 def test_alpha_expansion_is_exact_at_two_labels() -> None:
     """In a field at ``q = 2`` the expansion equals the graph cut, gap 0.0.
 
-    Bitwise, not to a tolerance, at both sides here and at 16, 24 and 32 in the
-    experiment file's sweep: one expansion cycle over two labels *is* the cut
-    the exact method solves. So two labels are excluded from the gate for the reason #596
-    gives about any exact baseline, and the number is worth pinning because it
-    is what makes the three-label measurement below a measurement of the
-    *labels* rather than of the implementation.
+    Bitwise here and at 16, 24, 32 in the sweep: excluded, as #596 says of exact baselines.
     """
 
     def check(side: int) -> None:
@@ -157,15 +127,8 @@ def test_alpha_expansion_is_exact_at_two_labels() -> None:
 def test_the_two_instruments_disagree_on_the_same_runs() -> None:
     """Exact hit reads 0.00 where the relative reading reads the failure.
 
-    At 144 sites and three labels, against alpha-expansion's energy: ICM misses
-    by 5.31% and both instruments call that a failure, while annealing comes
-    within 0.04% and lands inside a 1% allowance on 0.38 of starts. Exact hit
-    reports annealing at 0.00 and the relative reading at 0.38 --- the same
-    eight runs, two different answers to "where does it first fail".
-
-    This is why `probe_failure` takes `relative` and why a curve states which
-    it used. A continuous energy is approached, not hit, and the instrument
-    that suits an enumerated optimum does not suit this.
+    144 sites, three labels: ICM 5.31% off; annealing within 0.04%, 0.38 of
+    starts within 1%; exact hit reads 0.00. Hence `probe_failure`'s `relative`.
     """
     rung = lattice_rung(12, 3, seed=12)
     budget = _budget(rung)
@@ -223,11 +186,7 @@ def test_a_negative_relative_allowance_is_refused() -> None:
 def test_beating_the_target_counts_as_reaching_it() -> None:
     """A start better than the target has not failed, and the reading is one-sided.
 
-    The target may be the best value *known* at a size rather than an optimum
-    --- which is what #596's sweep uses where no exact method reaches the size
-    --- and a two-sided comparison would score the run that improved on it as a
-    miss. Against an exact optimum the two readings agree, since nothing goes
-    below it by more than a reduction's ordering.
+    #596's target may be the best known value, not an optimum.
     """
     rung = lattice_rung(6, 2)
     optimum = uniform_ground_energy(rung)
@@ -251,23 +210,10 @@ def test_beating_the_target_counts_as_reaching_it() -> None:
 def test_the_field_baseline_fails_and_wolff_fails_hardest() -> None:
     """At 576 sites every local method sits 3--34% above alpha-expansion.
 
-    The table this arm reports, at the ticket's budget rather than the per-PR
-    one. Two results in it are not what the plan expected:
-
-    * **Wolff degrades with size in a field** --- 3.4% above the target at 144
-      sites and 34.4% at 576 --- the opposite of its zero-field behaviour,
-      because a cluster flip is blind to the unary term it moves sites against.
-    * **annealing is the baseline**, not ICM: it is the only method that
-      reaches alpha-expansion's energy at all, on 0.17 of starts by exact hit
-      and every start within 1%.
-
-    So the gate on this problem is argued against annealing and the expansion,
-    and a policy over single-site flips is competing on the wrong axis. Asserted
-    as an ordering rather than as the digits, which are in the experiment file.
-
-    Eight starts, stated because the number is a *best of*: at twelve starts
-    ICM reads 8.06% here rather than 10.59%, and a shortfall quoted without its
-    start count is not a measurement.
+    Wolff degrades in a field (3.4% at 144 sites, 34.4% at 576); annealing is
+    the baseline (0.17 exact hits, all within 1%). The gate is argued against
+    annealing and the expansion; the ordering is asserted. Eight starts: at
+    twelve ICM reads 8.06% rather than 10.59%.
     """
     rung = lattice_rung(24, 3, seed=24)
     budget = _budget(rung)
@@ -296,21 +242,8 @@ def test_the_field_baseline_fails_and_wolff_fails_hardest() -> None:
 def test_icm_s_shortfall_is_flat_in_the_budget() -> None:
     """A single descent gains nothing from 25x the budget; its restarts do.
 
-    The arm's sharpest claim, and the one that says the failure is structural
-    rather than a budget the sweep was too mean with. ICM sits **5.31%** above
-    alpha-expansion's energy at 144 sites at 200 sweeps and at **5.31%** at
-    5,000 --- identical, because a descent converges and further sweeps buy no
-    moves. The restart baseline over the same budget closes from 3.06% to
-    1.24%, which is what a budget is supposed to buy and is why the comparison
-    #596 insists on is against restarts.
-
-    The flatness is the method's and not the accounting's: `run_icm` bills the
-    whole budget whether or not the descent used it, so 25x the sweeps is 25x
-    the charge for the same answer --- which understates ICM rather than
-    flattering it.
-
-    `release` because it is the test above's claim at 25x the budget, so it is
-    not needed to gate a merge; it costs 1.1 s.
+    ICM 5.31% above at 200 and at 5,000 sweeps; restarts close from 3.06% to
+    1.24%, the comparison #596 insists on. `release`, 1.1 s.
     """
     rung = lattice_rung(12, 3, seed=12)
     reference = _budget(rung)

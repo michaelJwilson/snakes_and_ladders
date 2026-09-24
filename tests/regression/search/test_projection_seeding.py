@@ -1,26 +1,13 @@
 """The eight seedings of the emission parameters, in projection (issue #541).
 
-Two sizes and two claims. At the CI size --- the count fixture's own ``ci``
-model, four components --- every candidate is held to the simulated truth it
-was drawn from, and the cost each charges is checked against what it spent.
-At release the key model's 100 components carry the ordering
-`docs/nb/spatio_sequential.ipynb` states and
-`docs/experiments/009-projection-emission-seedings.md` records, through
-`opt.budget.compare` so no candidate wins by fitting longer.
-
-**What refereed what.** A *fit* of the projection has no exact evidence at
-either size, so the referee for every candidate is the draw's own truth: the
-generating component of every observation and the generating negative-binomial
-means. Two exact statements stand beside that. The *draw* has a closed form ---
-one mixture over the ``M x K`` (class, state) pairs, its weights the class
-shares over the uniform stationary states --- and `project` is pinned to it
-here (issue #734). The Euclidean candidate has a reduction --- squared
-Euclidean distance over a pair whose second channel is constant is the
-one-dimensional k-means++ of `opt.mixture`, draw for draw --- asserted because
-it is what says that candidate is k-means++ as it stands and not a second
-algorithm. The candidates that are not Euclidean are that rule with the
-distance substituted, and the divergence each declares is written out here
-from its two channels' definitions and pinned to their draws (issue #734).
+At CI (the count fixture's four components) every candidate is held to the
+simulated truth and its charged cost to its spend. At release the key model's
+100 components carry the ordering `docs/nb/spatio_sequential.ipynb` states
+and `docs/experiments/009-projection-emission-seedings.md` records, through
+`opt.budget.compare`. Referee: the draw's truth. Exact beside it: `project`'s
+draw is one closed-form mixture over ``M x K`` pairs; the Euclidean candidate
+is `opt.mixture`'s 1-D k-means++ draw for draw; each other candidate's
+divergence is written out and pinned to its draws (issue #734).
 """
 
 from __future__ import annotations
@@ -161,12 +148,7 @@ def _beta_binomial(
 def _pooled(
     mass: np.ndarray, counts: np.ndarray, n_samples: int
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Cells merged left to right until each expects five, the tail in the last.
-
-    Five is the usual floor for the chi-square approximation, and the mass
-    beyond the largest count observed goes in the last cell so the expected
-    counts sum to the sample size rather than to a truncation of it.
-    """
+    """Cells merged left to right until each expects five, the tail in the last."""
     observed, expected, pending_o, pending_e = [], [], 0.0, 0.0
     for probability, count in zip(mass, counts, strict=True):
         pending_e += probability * n_samples
@@ -185,30 +167,11 @@ def _pooled(
 def test_the_projected_draw_is_the_closed_form_mixture_of_the_flattened_families() -> (
     None
 ):
-    # The rung has nothing below it in the ladder and its referee is a closed
-    # form (issue #734): what `project` returns is a draw from one mixture over
-    # the `M x K` (class, state) pairs, and that mixture is written out here
-    # from the definitions rather than read back from the package.
-    #
-    # Three statements, in that order.
-    #
-    # 1. The weights are the closed form -- the share of vertices
-    #    `planted_labels` gives each class, divided equally among the states
-    #    because the shared transition is circulant and its stationary
-    #    distribution is uniform. Equality, and realized as equality: the four
-    #    weights are 0.25 bitwise on the `ci` model's two classes of 32 nodes.
-    # 2. The components drawn are that categorical law. Chi-square over the
-    #    four cells, realized p 0.389, 0.171 and 0.874 on the three draws,
-    #    against the 0.001 declared.
-    # 3. Conditional on the component, each channel is its family's own law --
-    #    the negative binomial on the total and the beta-binomial on the
-    #    successes, at the parameters `flatten` puts at that component.
-    #    Chi-square per channel per component, 24 tests in all, the smallest
-    #    realized p 0.064 against the 0.001 declared.
-    #
-    # What this does *not* establish is the independence of the two channels,
-    # which the draw asserts and no marginal can refute; that gap is the
-    # ticket's, not this test's.
+    # The rung's closed form (#734). Weights: class shares split over uniform
+    # stationary states, 0.25 bitwise. Components: chi-square p 0.389, 0.171,
+    # 0.874 over three draws (0.001). Channels per component: NB and
+    # beta-binomial, 24 tests, smallest p 0.064. Channel independence is
+    # unrefuted by marginals: the ticket's gap.
     params = binned_model(fixture(PROBLEM, "ci").params.model, 1)
     truth = flatten(params)
     trials = float(truth.successes.trials[0])
@@ -441,13 +404,8 @@ KEY_CONTROL = "prior"
 def test_the_likelihood_and_the_truth_order_the_seedings_oppositely() -> None:
     """The key model's finding, and the reason no default moves.
 
-    At 100 components on 4,000 observations --- 40 a component --- the
-    projected likelihood prefers the draw that read none of the data, and the
-    simulated truth prefers the one that spent 144 passes sampling a
-    surrogate. Both directions hold on every instance in experiment 009's six;
-    three are run here. A claim on one of the two alone would be a claim the
-    other contradicts, so both are asserted together or neither means
-    anything.
+    100 components, 4,000 observations: likelihood prefers the data-blind draw,
+    truth the 144-pass surrogate sampler, on all six of experiment 009; three here.
     """
     declared = fixture(PROBLEM, KEY).params
     params = binned_model(declared.model, declared.key_factor)
@@ -493,12 +451,9 @@ SEEDING_SAMPLES = 120
 #: one stream agrees by luck.
 SEEDING_SEEDS = range(8)
 
-#: The tolerance the metric written out here is held to against the family's
-#: own `bregman_divergence`. The beta-binomial channel is a deviance whose
-#: saturated rate the package finds by 60 bisection steps and this finds by a
-#: bounded minimization, so the two agree to their solvers' precision on that
-#: rate and not bitwise: realized 7.8e-14 absolute, which is 4.7e-09 relative
-#: where the divergence itself is near zero.
+#: Against `bregman_divergence`: the beta-binomial saturated rate is found by
+#: 60 bisections there and bounded minimization here: 7.8e-14 absolute,
+#: 4.7e-09 relative near zero.
 DIVERGENCE_RTOL = 1e-6
 DIVERGENCE_ATOL = 1e-12
 
@@ -508,12 +463,7 @@ def _beta_binomial_deviance(
 ) -> float:
     """The log-density gap to the best rate at this concentration, written out.
 
-    The beta-binomial at fixed concentration is a compound distribution and
-    not an exponential family in its success count, so its divergence is the
-    unit deviance: the mass function of :func:`_beta_binomial`, maximized over
-    the rate by a bounded minimization here and by bisection in the package,
-    less its value at ``rate``. Zero at the two ends of the support, where the
-    best member puts all its mass on the observation.
+    The unit deviance (no log-partition); zero at both ends of the support.
     """
 
     def negative(candidate: float) -> float:
@@ -545,11 +495,8 @@ def _declared_divergence(
 ) -> np.ndarray:
     """``D_phi`` of every pair against the component the seam places on ``seed_row``.
 
-    The metric the non-Euclidean route declares, written from the two
-    channels' definitions: the negative binomial's divergence in closed form
-    at the seam's dispersion, ``r log((r + mu) / (r + y)) + y log(y (r + mu) /
-    (mu (r + y)))``, and the beta-binomial's deviance at its concentration,
-    summed because the channels are independent given the component.
+    NB: ``r log((r + mu) / (r + y)) + y log(y (r + mu) / (mu (r + y)))``;
+    plus the beta-binomial deviance.
     """
     mean = max(float(seed_row[TOTAL]), 1.0)
     rate = (float(seed_row[SUCCESSES]) + 0.5) / (at.trials + 1.0)
@@ -581,12 +528,7 @@ def _d_squared_draws(
     rng: np.random.Generator,
     score: Callable[[np.ndarray, np.ndarray], np.ndarray],
 ) -> np.ndarray:
-    """The D-squared rule written out: uniform first, then proportional to ``score``.
-
-    Arthur & Vassilvitskii's scheme with the distance left open, which is the
-    only thing the candidates differ in. Returns the chosen row indices, in
-    the order chosen.
-    """
+    """Arthur & Vassilvitskii's D-squared rule, distance open: uniform, then by ``score``."""
     indices = np.arange(rows.shape[0], dtype=np.float64)
     chosen = [rng.choice(indices)]
     nearest = score(rows[int(chosen[0])], rows)
@@ -616,30 +558,13 @@ def _same_components(first: IndependentCountPair, second: IndependentCountPair) 
 @pytest.mark.oracle
 @pytest.mark.critical
 def test_the_non_euclidean_seedings_draw_the_law_of_the_metric_they_declare() -> None:
-    # The rung below (issue #734): `opt.mixture.kmeans_plus_plus`. The
-    # candidates that read the data are one rule with one thing substituted,
-    # and that is what is asserted here rather than described. The rule
-    # written out above, handed the squared Euclidean distance over the first
-    # channel alone, is `kmeans_plus_plus` draw for draw on all 8 generators;
-    # handed the pair's squared distance it is `euclidean_seeding`; handed the
-    # seam family's divergence it is `emission_seeding`. Every comparison is
-    # bitwise on the seeded components.
-    #
-    # The divergence itself is written from the two channels' definitions --
-    # the negative binomial's closed form, the beta-binomial's deviance at its
-    # own saturated rate -- and agrees with the family's own to 7.8e-14
-    # absolute, 4.7e-09 relative where the divergence is near zero, against
-    # 1e-6 declared: the two solvers' precision on the saturated rate.
-    #
-    # The substitution is not cosmetic: the divergence and the Euclidean
-    # distance choose different components on 8 of 8 generators, and the
-    # divergence's law is far from the uniform one -- from 2.1e-07 to 0.033
-    # against 0.0083, a total variation of 0.37.
-    #
-    # Where it stops: `data_seeding` declares no metric at all. It is
-    # `uniform_seeds` bitwise, which is the D-squared rule's *first* draw and
-    # nothing after it, so the ladder step for that candidate is the control's
-    # and not k-means++'s.
+    # The rung below (#734): `kmeans_plus_plus`. The written-out rule with the
+    # first channel's squared distance is it, draw for draw, on 8 of 8
+    # generators; with the pair's, `euclidean_seeding`; with the family
+    # divergence, `emission_seeding`; all bitwise. The divergence matches the
+    # family's to 7.8e-14 absolute (4.7e-09 relative; 1e-6). It picks
+    # differently from Euclidean on 8 of 8, its law spanning 2.1e-07 to 0.033
+    # against 0.0083 (TV 0.37). `data_seeding` is `uniform_seeds` bitwise.
     instance = _projection("ci", SEEDING_SAMPLES, 4)
     at = _seam("ci")
     rows = np.asarray(instance.observations, dtype=np.float64)
@@ -825,12 +750,8 @@ def test_a_start_outside_the_candidate_set_compares_at_the_same_budget() -> None
 
 @pytest.mark.end2end
 def test_a_start_built_from_the_surrogate_s_locations_recovers_the_truth() -> None:
-    # What the issue #887 notebook stated of its location starts, before issue
-    # #891 moved it to the emission mixture alone: a
-    # start that reaches the seam from locations rather than from a rule over
-    # the pairs leaves a fit that assigns the observations to their generating
-    # component as the candidates do. The referee is the draw's own truth, and
-    # the bound is the one every candidate is held to.
+    # #887's claim for location starts (moved by #891): assignment recovery as
+    # the candidates achieve, against the draw's truth and the same bound.
     instance = _projection("ci", CI_SAMPLES, 0)
     at = _seam("ci")
     objective = GaussianMixtureObjective(

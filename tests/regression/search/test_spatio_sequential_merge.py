@@ -1,16 +1,12 @@
 """A move that lowers the number of classes: merge the pair that most raises the joint (issue #933, R7).
 
-`merge_step` tries every pair of occupied classes, refits once, and keeps the
-best merge whose labelled joint, less a per-class penalty, is at least the
-input's. The instance is the stress fixture's lattice and emissions at 16
-positions per chain, drawn on a planted half/half labelling: at its own four
-positions the emissions cannot tell the two classes apart and the joint
-prefers merging them on 4 of 8 draws, at 8 positions on none (smallest margin
-8.0 nats), at 16 on none (96). Referees: a class planted as a copy of another
---- one population split in two at random --- is merged back, into the right
-partner; two classes the truth keeps apart are not merged at zero penalty;
-the kept merge is the best of every pair, each scored here by
-`labelled_log_likelihood` directly; and a large enough penalty merges them.
+`merge_step` tries every occupied pair, refits once, and keeps the best merge
+whose penalized joint is at least the input's. Stress lattice at 16 positions
+on a half/half planting (at four the joint merges on 4 of 8, at 8 on none,
+margin 8.0 nats; at 16, 96). Referees: a class planted as a split copy is
+merged back into its partner; two true classes are not merged at zero
+penalty; the kept merge is the best by `labelled_log_likelihood`; a large
+penalty merges.
 """
 
 from __future__ import annotations

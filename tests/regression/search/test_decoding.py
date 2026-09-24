@@ -84,11 +84,8 @@ def test_the_two_estimators_disagree_on_a_frustrated_field() -> None:
 @pytest.mark.oracle
 @pytest.mark.frustrated_lattice
 def test_the_marginal_labelling_can_be_a_configuration_nobody_would_pick() -> None:
-    # The sharpest statement of what the loss buys and what it costs. The
-    # marginal labelling here ranks 19,555th of 19,683 by posterior --- inside
-    # the worst one per cent --- and is still the better per-site estimator.
-    # Minimizing per-site error does not require the answer to be jointly
-    # plausible, and a decoder reported without its loss hides exactly this.
+    # The marginal labelling ranks 19,555th of 19,683 by posterior and is still
+    # the better per-site estimator: the loss decides.
     graph = triangular_lattice_graph((3, 3), BoundaryCondition.OPEN, -0.9)
     exact = enumerate_potts(graph, FIELD)
     labellings, energies = _exhaustive(graph)
