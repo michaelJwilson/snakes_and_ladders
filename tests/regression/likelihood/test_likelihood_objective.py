@@ -37,6 +37,7 @@ from snakes_and_ladders.opt.fit import (
 from snakes_and_ladders.sim.gtr import gtr_rate_matrix
 from snakes_and_ladders.sim.jc import jc_rate_matrix
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import EIGHT_TAXA, FOUR_TAXA, SMALL_SITES, load_fixture
@@ -56,13 +57,7 @@ def _objective(
     fixture: str, sites: int = _SITES, gradient: GradientRoute = "taped"
 ) -> BranchLengthObjective:
     params = load_fixture(fixture)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=sites,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=sites)
     return BranchLengthObjective(
         params.tau,
         params.k,
@@ -93,13 +88,7 @@ def test_the_two_branches_below_a_rooted_root_are_confounded() -> None:
     # subdivides, so moving mass between the two root branches at fixed sum
     # changes nothing. This is the fact the parameterization is built on.
     params = load_fixture(EIGHT_TAXA)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=_SITES,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=_SITES)
     alignment = dict(dataset.alignment)
     order = pruning_torch.branch_order(params.tau)
     lengths = pruning_torch.branch_lengths_from_tree(params.tau)
@@ -129,13 +118,7 @@ def test_two_non_root_siblings_are_not_confounded() -> None:
     # The control. Without it the test above would also pass on a likelihood
     # that ignored branch lengths entirely.
     params = load_fixture(EIGHT_TAXA)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=_SITES,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=_SITES)
     alignment = dict(dataset.alignment)
     order = pruning_torch.branch_order(params.tau)
     lengths = pruning_torch.branch_lengths_from_tree(params.tau)
@@ -196,13 +179,7 @@ def test_fitting_the_root_branches_separately_has_no_intervals() -> None:
     # it. This is what the merged parameterization exists to avoid, and the
     # reason it is not merely a tidier way to count parameters.
     params = load_fixture(EIGHT_TAXA)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=_SITES,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=_SITES)
     alignment = dict(dataset.alignment)
     naive = _Unmerged(params.tau, params.k, params.pi, alignment)
     result = fit(naive)
@@ -331,11 +308,9 @@ def test_branch_length_intervals_cover_at_the_nominal_rate() -> None:
     covered = 0
     total = 0
     for replicate in range(40):
-        dataset = simulate_alignment(
-            tau=params.tau,
-            k=params.k,
-            pi=params.pi,
-            rng=np.random.default_rng(params.seed + 7919 * replicate),
+        dataset = simulate_tree(
+            params,
+            np.random.default_rng(params.seed + 7919 * replicate),
             n_sites=_SITES,
         )
         objective = BranchLengthObjective(
@@ -505,12 +480,8 @@ def test_fitting_jc_simulated_data_recovers_a_jc_like_model() -> None:
     # Jukes-Cantor, the general model must not invent structure. Stated in
     # standard errors so it transfers if the fixture size changes.
     params = load_fixture(SMALL_SITES)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=_GTR_SITES,
+    dataset = simulate_tree(
+        params, np.random.default_rng(params.seed), n_sites=_GTR_SITES
     )
     objective = SubstitutionModelObjective(
         params.tau, params.k, dict(dataset.alignment)

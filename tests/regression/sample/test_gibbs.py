@@ -74,7 +74,7 @@ from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_
 from snakes_and_ladders.sim.hmm import simulate_sequences
 from snakes_and_ladders.sim.jc import jc_transition_probabilities
 from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.spatio_sequential import (
     SpatioSequentialParams,
     coupled_factor_graph,
@@ -435,9 +435,7 @@ def test_the_block_move_draws_the_whole_chain_from_the_enumerated_path_posterior
 def test_the_generic_sweep_recovers_the_exact_marginals_on_a_tree() -> None:
     params = load_fixture(FOUR_TAXA)
     alignment = dict(
-        simulate_alignment(
-            params.tau, params.k, params.pi, np.random.default_rng(1), 5
-        ).alignment
+        simulate_tree(params, np.random.default_rng(1), n_sites=5).alignment
     )
     site = {name: int(states[0]) for name, states in alignment.items()}
     transitions = {
@@ -646,9 +644,7 @@ def test_the_temperature_scales_every_table_so_a_hot_chain_is_nearly_uniform() -
 
 def _five_taxa(n_sites: int) -> tuple[dict[str, np.ndarray], int]:
     params = load_params(fixture_path("tree_search/ci.yaml"), SimulationParams)
-    dataset = simulate_alignment(
-        params.tau, params.k, params.pi, np.random.default_rng(2), n_sites
-    )
+    dataset = simulate_tree(params, np.random.default_rng(2), n_sites=n_sites)
     return dict(dataset.alignment), params.k
 
 

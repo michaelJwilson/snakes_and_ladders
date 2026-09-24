@@ -59,7 +59,7 @@ import math
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol
 
 import numpy as np
 import torch
@@ -78,6 +78,7 @@ from snakes_and_ladders.sample.accept import (
     accept_with,
     acceptance_probability,
 )
+from snakes_and_ladders.sample.declared import DeclaredGaussian
 from snakes_and_ladders.sample.expectation import Expectation, KalmanMean
 from snakes_and_ladders.sample.schedule import (
     Monotone,
@@ -94,22 +95,6 @@ from snakes_and_ladders.track import TrackedOptimization
 from snakes_and_ladders.track import current as current_tracked
 
 DEFAULT_STEPS = 20
-
-
-@runtime_checkable
-class DeclaredGaussian(Protocol):
-    """An objective that declares itself ``U(x) = x' P x / 2``, a zero-mean Gaussian.
-
-    What :func:`sample` compiles (issue #986): a torch closure cannot cross
-    the FFI boundary, so the compiled chain runs a declared family, and an
-    objective opts in by stating its precision rather than by being
-    recognized. ``P`` is ``(d,)`` for a diagonal or ``(d, d)`` symmetric.
-    """
-
-    @property
-    def gaussian_precision(self) -> torch.Tensor:
-        """``P``."""
-        ...
 
 
 @dataclass(frozen=True)
@@ -694,7 +679,7 @@ def sample(
             n_samples,
             step_size=step_size,
             n_steps=n_steps,
-            theta0=_start(objective, theta0),
+            theta0=start_point(objective, theta0),
             burn_in=burn_in,
             store_chain=store_chain,
         )
@@ -825,7 +810,7 @@ def run_chain(
         msg = f"temperature must be positive, got {temperature}"
         raise ValueError(msg)
 
-    position = _start(objective, theta0)
+    position = start_point(objective, theta0)
 
     adapted: Adapted | None = None
     target: Objective = objective
@@ -971,7 +956,7 @@ def anneal(
     Annealed
     """
     _check_trajectory(step_size, n_steps)
-    position = _start(objective, theta0)
+    position = start_point(objective, theta0)
 
     best, best_value = position.clone(), float(objective(position))
     accepted = 0
@@ -1148,7 +1133,7 @@ def parallel_tempering(
         torch.Generator().manual_seed(int(child))
         for child in torch.randint(0, 2**31 - 1, (n_replicas,), generator=parent)
     ]
-    start = _start(objective, theta0)
+    start = start_point(objective, theta0)
     positions = [start.clone() for _ in range(n_replicas)]
     value = float(objective(start))
     best, best_value = start.clone(), value
@@ -1258,7 +1243,8 @@ def _check_trajectory(step_size: float, n_steps: int) -> None:
         raise ValueError(msg)
 
 
-def _start(objective: Objective, theta0: torch.Tensor | None) -> torch.Tensor:
+def start_point(objective: Objective, theta0: torch.Tensor | None) -> torch.Tensor:
+    """Where a chain starts: ``theta0``, or ``objective.initial()``, detached, in ``float64``."""
     return (
         objective.initial().detach().clone()
         if theta0 is None

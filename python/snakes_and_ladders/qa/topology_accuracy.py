@@ -40,7 +40,7 @@ from snakes_and_ladders.qa.style import (
 )
 from snakes_and_ladders.search.infer import infer
 from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import normalized_robinson_foulds
 
 # Spanning the point where the signal runs out. The low end is deliberately
@@ -74,12 +74,8 @@ def accuracy(params: SimulationParams) -> dict[int, list[float]]:
     for n_sites in SITE_COUNTS:
         distances = []
         for replicate in range(REPLICATES):
-            dataset = simulate_alignment(
-                tau=params.tau,
-                k=params.k,
-                pi=params.pi,
-                rng=np.random.default_rng(params.seed + replicate),
-                n_sites=n_sites,
+            dataset = simulate_tree(
+                params, np.random.default_rng(params.seed + replicate), n_sites=n_sites
             )
             result = infer(
                 dict(dataset.alignment), params.k, rng=np.random.default_rng(0)

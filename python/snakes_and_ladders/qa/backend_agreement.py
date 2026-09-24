@@ -32,7 +32,7 @@ from snakes_and_ladders.qa.style import (
     series_style,
 )
 from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 
 # Site counts the comparison is run at. Chosen to span two orders of
 # magnitude, because the quantity being compared is a sum over sites: an
@@ -72,12 +72,8 @@ def agreement(params: SimulationParams) -> dict[str, list[tuple[int, float]]]:
     """
     measured: dict[str, list[tuple[int, float]]] = {name: [] for name in BACKENDS}
     for n_sites in SITE_COUNTS:
-        dataset = simulate_alignment(
-            tau=params.tau,
-            k=params.k,
-            pi=params.pi,
-            rng=np.random.default_rng(params.seed),
-            n_sites=n_sites,
+        dataset = simulate_tree(
+            params, np.random.default_rng(params.seed), n_sites=n_sites
         )
         alignment = dict(dataset.alignment)
         oracle = brute_force_log_likelihood(params.tau, params.k, params.pi, alignment)

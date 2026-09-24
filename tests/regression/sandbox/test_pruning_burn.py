@@ -34,7 +34,7 @@ from snakes_and_ladders.likelihood import pruning_torch
 from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
 from snakes_and_ladders.likelihood.patterns import compress
 from snakes_and_ladders.sandbox import pruning_burn
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 
 from tests._fixtures import EIGHT_TAXA, SMALL_SITES, load_fixture
 from tests.regression.likelihood.test_pruning_analytic import (
@@ -50,13 +50,7 @@ pytestmark = pytest.mark.skipif(
 
 def _case(name: str, n_sites: int):  # type: ignore[no-untyped-def]
     params = load_fixture(name)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=n_sites,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=n_sites)
     return (
         params.tau,
         params.k,

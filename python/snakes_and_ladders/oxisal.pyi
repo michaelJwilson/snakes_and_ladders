@@ -165,6 +165,36 @@ def gaussian_hmc(
     seed: int,
     store_chain: bool,
 ) -> tuple[np.ndarray, int, np.ndarray]: ...
+
+class MetropolisWalk:
+    def __init__(
+        self,
+        family: int,
+        parameters: np.ndarray,
+        theta0: np.ndarray,
+        step_size: float,
+        seed: int,
+        warmup: int,
+        target_acceptance: float,
+        step_jitter: float,
+        constants: tuple[float, float, float],
+        powers: list[int],
+    ) -> None: ...
+    def advance(
+        self, n: int, store: bool, observe: bool
+    ) -> tuple[np.ndarray, int, np.ndarray]: ...
+    def statistics(
+        self, index: int
+    ) -> tuple[
+        int, tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]
+    ]: ...
+    @property
+    def step_size(self) -> float: ...
+    @property
+    def mass_diagonal(self) -> np.ndarray: ...
+    @property
+    def warmup_acceptance(self) -> float: ...
+
 def gaussian_leapfrog(
     precision: np.ndarray,
     theta: np.ndarray,

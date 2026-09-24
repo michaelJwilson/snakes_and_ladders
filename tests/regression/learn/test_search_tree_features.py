@@ -47,7 +47,7 @@ from snakes_and_ladders.learn.tree import (
 from snakes_and_ladders.sample.statistics import sign_test_p_value
 from snakes_and_ladders.sim.fixtures import baseline, fixture
 from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import (
     MoveSet,
     Topology,
@@ -106,13 +106,7 @@ def environment(
     params: SimulationParams, feature_set: FeatureSet
 ) -> tuple[TreeEnvironment, list[str]]:
     """The reward surface an agent sees, and the taxa it is over."""
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=params.n_sites,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed))
     alignment = dict(dataset.alignment)
     built = TreeEnvironment(
         alignment,

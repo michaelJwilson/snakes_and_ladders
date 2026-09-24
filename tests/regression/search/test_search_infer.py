@@ -35,7 +35,7 @@ from snakes_and_ladders.sim.newick import (
     to_newick,
     validate_unrooted_newick,
 )
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import (
     Model,
     MoveSet,
@@ -55,13 +55,7 @@ _SITES = 2000
 
 def _alignment() -> tuple[dict[str, np.ndarray], int]:
     params = load_fixture(SMALL_SITES)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=_SITES,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=_SITES)
     return dict(dataset.alignment), params.k
 
 
@@ -272,13 +266,7 @@ def test_too_few_taxa_is_refused() -> None:
 
 def _eight_taxa() -> tuple[dict[str, np.ndarray], int]:
     params = load_fixture(EIGHT_TAXA)
-    dataset = simulate_alignment(
-        params.tau,
-        params.k,
-        params.pi,
-        np.random.default_rng(params.seed),
-        n_sites=1000,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=1000)
     return dict(dataset.alignment), params.k
 
 

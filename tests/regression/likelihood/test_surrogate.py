@@ -45,7 +45,7 @@ from snakes_and_ladders.search.alpha_expansion import alpha_expansion
 from snakes_and_ladders.search.infer import score_topology
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.jc import jc_transition_probabilities
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.topology import enumerate_topologies
 from snakes_and_ladders.sim.tree import Node, preorder
 
@@ -58,9 +58,7 @@ FIELD = np.array([0.3, -0.2, 0.1])
 
 def _alignment(n_sites: int = N_SITES) -> tuple[dict[str, np.ndarray], int, np.ndarray]:
     params = load_fixture(FIVE_TAXA)
-    dataset = simulate_alignment(
-        params.tau, params.k, params.pi, np.random.default_rng(params.seed), n_sites
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=n_sites)
     return dict(dataset.alignment), params.k, np.asarray(params.pi)
 
 

@@ -6,7 +6,8 @@ from `opt/` (continuous: `hmc`, `langevin`, `slice`, `schedule`) and `search/`
 (discrete: `potts_mcmc`, `gibbs`, `balanced`, `potts_keyed`; tempering and
 annealing: `tempered`, `annealed`; diagnostics: `statistics`), where the rules
 for one kind of sampler were stated in one file and the rules for the other in
-the other. An optimizer is judged by the optimum it reaches and a sampler by
+the other. `metropolis` (#1006) joined the continuous samplers, and `declared`
+names the energy families and operators a compiled chain runs. An optimizer is judged by the optimum it reaches and a sampler by
 the distribution it converges to, which is why the two directories are two.
 
 Root `CLAUDE.md` holds the repository-wide rules, and its **Writing Style**

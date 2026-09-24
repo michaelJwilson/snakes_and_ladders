@@ -30,7 +30,7 @@ from snakes_and_ladders.likelihood.pruning_torch import (
     log_likelihood,
     transition_probabilities,
 )
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.tree import Node
 
 from tests._fixtures import EIGHT_TAXA, load_fixture
@@ -42,13 +42,7 @@ _SITES = 2000
 
 def _dataset() -> tuple[Node, int, np.ndarray, dict[str, np.ndarray], torch.Tensor]:
     params = load_fixture(EIGHT_TAXA)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=_SITES,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=_SITES)
     return (
         params.tau,
         params.k,

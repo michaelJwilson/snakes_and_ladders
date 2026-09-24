@@ -51,15 +51,15 @@ import torch
 from snakes_and_ladders.backend import Backend, refuse_backend
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.sample.accept import accept_ratio, acceptance_probability
+from snakes_and_ladders.sample.declared import DeclaredGaussian
 from snakes_and_ladders.sample.hmc import (
     Adaptation,
     Adapted,
-    DeclaredGaussian,
     Transition,
     _compiled_gaussian_chain,
-    _start,
     gradient_at,
     run_chain,
+    start_point,
 )
 from snakes_and_ladders.track import NULL as UNTRACKED
 from snakes_and_ladders.track import current as current_tracked
@@ -184,7 +184,7 @@ def mala(
         issue #997, runs the whole chain in
         ``oxisal.gaussian_hmc`` at one leapfrog step --- the
         identity this module keeps --- when the objective is a
-        :class:`~snakes_and_ladders.sample.hmc.DeclaredGaussian` and the chain
+        :class:`~snakes_and_ladders.sample.declared.DeclaredGaussian` and the chain
         is the plain corrected one: unit temperature, no adaptation, and no
         tracked run. Its draws are its own ChaCha8 stream seeded by one draw
         from ``generator``, so it is pinned to the torch route in
@@ -220,7 +220,7 @@ def mala(
             n_samples,
             step_size=step_size,
             n_steps=LANGEVIN_STEPS,
-            theta0=_start(objective, theta0),
+            theta0=start_point(objective, theta0),
             burn_in=burn_in,
             store_chain=store_chain,
         )

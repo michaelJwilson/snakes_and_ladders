@@ -20,6 +20,19 @@ transition's acceptance, so no draw is stacked and ``draws`` is empty
 package's Langevin step ``h`` is ``epsilon = h^2 / 2``. Outputs as mode 1
 (issue #997).
 
+``mode`` 3 samples by ``blackjax.additive_step_random_walk`` with a normal
+step of standard deviation ``step_size`` per coordinate (a scalar or one per
+coordinate), ``n_draws`` transitions keyed from ``key``; outputs as mode 1
+(issue #1006). ``target`` 1 is Rosenbrock's function with ``constants``
+``(a, b)`` in place of the Gaussian: ``log p = -U``.
+
+``mode`` 4 replays: ``blackjax``'s ``build_rmh`` kernel with the increments
+``increments`` supplied, one row per transition, and each transition's key
+from ``key`` as mode 3 splits it. Outputs ``draws`` and ``uniforms``, the
+uniform ``jax.random.bernoulli`` compared against on each transition's
+acceptance key, so the package's :func:`~snakes_and_ladders.sample.metropolis.replay`
+runs the same chain on the same randomness (issue #1006).
+
 Each mode is compiled on one call first; the measured seconds are the second
 call, to ``block_until_ready``, so compilation is not charged. It is reported
 as ``compile_seconds``. The peak resident memory is the second call's too;
@@ -37,7 +50,10 @@ import numpy as np
 from snakes_and_ladders.validation.protocol import dump, load, paths, peaked
 
 #: What ``mode`` selects.
-INTEGRATE, SAMPLE, LANGEVIN = 0, 1, 2
+INTEGRATE, SAMPLE, LANGEVIN, RANDOM_WALK, REPLAY = 0, 1, 2, 3, 4
+
+#: What ``target`` selects.
+GAUSSIAN, ROSENBROCK = 0, 1
 
 
 def main() -> None:
@@ -51,19 +67,29 @@ def main() -> None:
 
     given, returned = paths()
     inputs = load(given)
-    precision = jnp.asarray(inputs["precision"])
     dimension = int(inputs["position"].size)
+    mode = int(inputs["mode"])
 
-    def logdensity(x: Any) -> Any:
-        if precision.ndim == 1:
-            return -0.5 * jnp.sum(precision * x * x)
-        return -0.5 * x @ (precision @ x)
+    if int(inputs.get("target", np.asarray(GAUSSIAN))) == ROSENBROCK:
+        a, b = (float(c) for c in inputs["constants"])
 
-    step_size = float(inputs["step_size"])
+        def logdensity(x: Any) -> Any:
+            head, tail = x[:-1], x[1:]
+            return -jnp.sum(b * (tail - head**2) ** 2 + (a - head) ** 2)
+
+    else:
+        precision = jnp.asarray(inputs["precision"])
+
+        def logdensity(x: Any) -> Any:
+            if precision.ndim == 1:
+                return -0.5 * jnp.sum(precision * x * x)
+            return -0.5 * x @ (precision @ x)
+
+    step_size = float(np.asarray(inputs["step_size"]).reshape(-1)[0])
     n_steps = int(inputs["n_steps"])
     unit = jnp.ones(dimension)
 
-    if int(inputs["mode"]) == INTEGRATE:
+    if mode == INTEGRATE:
         metric = metrics.default_metric(unit)
         one_step = integrators.generate_euclidean_integrator(
             tuple(float(c) for c in inputs["coefficients"])
@@ -76,18 +102,56 @@ def main() -> None:
                 0, n_steps, lambda _, s: one_step(s, step_size), state
             )
 
-        arguments = (jnp.asarray(inputs["position"]), jnp.asarray(inputs["momentum"]))
+        arguments: tuple[Any, ...] = (
+            jnp.asarray(inputs["position"]),
+            jnp.asarray(inputs["momentum"]),
+        )
+    elif mode == REPLAY:
+        from blackjax.mcmc import random_walk
+
+        rmh = random_walk.build_rmh()
+        keys = jax.random.split(
+            jax.random.key(int(inputs["key"])), int(inputs["n_draws"])
+        )
+
+        @jax.jit
+        def run(position: Any, steps: Any) -> Any:
+            def transition(state: Any, step: Any) -> tuple[Any, Any]:
+                key, increment = step
+                state, _ = rmh(key, state, logdensity, lambda _, x: x + increment)
+                # `rmh_proposal` splits the key into the proposal's and the
+                # acceptance's, and `bernoulli` compares one uniform on the
+                # second against the probability.
+                accept_key = jax.random.split(key, 2)[1]
+                return state, (state.position, jax.random.uniform(accept_key))
+
+            return jax.lax.scan(
+                transition, random_walk.init(position, logdensity), steps
+            )[1]
+
+        arguments = (
+            jnp.asarray(inputs["position"]),
+            (keys, jnp.asarray(inputs["increments"])),
+        )
     else:
-        kernel = (
-            blackjax.mala(logdensity, step_size=step_size)
-            if int(inputs["mode"]) == LANGEVIN
-            else blackjax.hmc(
+        if mode == RANDOM_WALK:
+            from blackjax.mcmc import random_walk
+
+            kernel = blackjax.additive_step_random_walk(
+                logdensity,
+                random_walk.normal(
+                    jnp.broadcast_to(jnp.asarray(inputs["step_size"]), (dimension,))
+                ),
+            )
+        elif mode == LANGEVIN:
+            kernel = blackjax.mala(logdensity, step_size=step_size)
+        else:
+            kernel = blackjax.hmc(
                 logdensity,
                 step_size=step_size,
                 inverse_mass_matrix=unit,
                 num_integration_steps=n_steps,
             )
-        )
         keys = jax.random.split(
             jax.random.key(int(inputs["key"])), int(inputs["n_draws"])
         )
@@ -117,11 +181,14 @@ def main() -> None:
 
     (result, seconds), peak_bytes = peaked(timed_run)
 
-    if int(inputs["mode"]) == INTEGRATE:
+    if mode == INTEGRATE:
         outputs = {
             "position": np.asarray(result.position),
             "momentum": np.asarray(result.momentum),
         }
+    elif mode == REPLAY:
+        draws, uniforms = result
+        outputs = {"draws": np.asarray(draws), "uniforms": np.asarray(uniforms)}
     else:
         draws, acceptance = result
         outputs = {

@@ -19,7 +19,7 @@ from matplotlib.figure import Figure
 from snakes_and_ladders.qa.figure import QAFigure, state_label
 from snakes_and_ladders.qa.runner import FIXTURE_PARAMS, figure_main
 from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 from snakes_and_ladders.sim.tree import Node, edges, preorder
 
 _MODEL_NAME = "Jukes-Cantor"
@@ -207,12 +207,8 @@ def build_figure(params: SimulationParams) -> tuple[Figure, str]:
     # Simulated here rather than passed in: the figure's whole claim is that
     # these sequences came from this tree, so they are drawn from the same
     # params the topology is.
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=max(SITES_SHOWN, 1),
+    dataset = simulate_tree(
+        params, np.random.default_rng(params.seed), n_sites=max(SITES_SHOWN, 1)
     )
     fig, ax = plt.subplots(figsize=(6.5, 4))
     render_sim_tree(params.tau, ax, alignment=dataset.alignment, k=params.k)

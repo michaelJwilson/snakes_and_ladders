@@ -42,7 +42,7 @@ from snakes_and_ladders.sample.hmc import (
     leapfrog,
     sample,
 )
-from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulator import simulate_tree
 
 from tests._fixtures import FOUR_TAXA, load_fixture
 from tests._objective_checks import AnalyticGaussian
@@ -58,13 +58,7 @@ ADAPTATION = Adaptation(warmup=300, target_acceptance=TARGET, step_jitter=0.4)
 def _four_taxon_posterior() -> WithGaussianPrior:
     """Log branch lengths of the four-taxon fixture at 500 sites, under a N(0, 2^2) prior."""
     params = load_fixture(FOUR_TAXA)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=500,
-    )
+    dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=500)
     return WithGaussianPrior(
         BranchLengthObjective(params.tau, params.k, params.pi, dict(dataset.alignment)),
         scale=2.0,
