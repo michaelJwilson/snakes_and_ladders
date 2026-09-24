@@ -65,8 +65,15 @@ from snakes_and_ladders.sim.fixtures import FIXTURES_DIR, problems
 from tests._paths import REPO_ROOT
 
 #: Calls whose *first* positional argument names the problem.
-#: `snakes_and_ladders.sim.fixtures.fixture` and `path_of`.
-NAMES_FIRST = ("fixture", "path_of", "load_fixture", "fixture_path")
+#: `snakes_and_ladders.sim.fixtures.fixture` and `path_of`, and the
+#: `tests/_fixtures.py` loaders.
+NAMES_FIRST = (
+    "fixture",
+    "path_of",
+    "load_fixture",
+    "fixture_path",
+    "simulated_alignment",
+)
 
 #: Calls whose *second* positional argument names the problem: the
 #: parameterizing wrappers in `tests/_scale.py`, which pass it through to

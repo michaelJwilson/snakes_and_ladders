@@ -18,12 +18,15 @@ merged into the looser one.
   and **2.0e-16** relative on `log Z`.
 
 Both routes are then pinned to enumeration, which shares no recursion with
-either, so the pair is not established by agreeing with each other alone.
+either, so the pair is not established by agreeing with each other alone:
+`sum_product` and `max_product` default to this kernel, and
+`test_message_passing.py::test_every_chain_evaluator_is_the_path_enumeration`
+holds that default to the enumerated marginals, `log Z` and Viterbi path
+(issue #982 dropped the two chain tests here that repeated it).
 """
 
 from __future__ import annotations
 
-import itertools
 import math
 
 import numpy as np
@@ -54,11 +57,6 @@ from tests.regression.likelihood.conftest import FIELD, TREE
 #: The field and the tree `test_message_passing.py` runs the same claims on,
 #: so the two files exercise one graph and not two.
 LOOPY = lattice_graph((3, 3), coupling=0.4, boundary=BoundaryCondition.OPEN)
-
-#: What a marginal is held to against enumeration, as `test_message_passing.py`
-#: states it.
-RTOL = 1e-11
-ATOL = 1e-12
 
 
 def _chain(length: int, states: int, seed: int) -> FactorGraph:
@@ -148,47 +146,15 @@ def _assert_agrees(realized: Marginals, expected: Marginals, tag: str) -> None:
 @pytest.mark.oracle
 @pytest.mark.backend
 @pytest.mark.parametrize("tag", sorted(TREES))
-def test_the_rust_tree_schedule_agrees_with_the_numpy_oracle(tag: str) -> None:
-    # The oracle is the NumPy route of the same function, which
-    # `test_message_passing.py` pins bitwise against the dictionary reference
-    # and against enumeration; this is the one hop the kernel adds.
-    graph = TREES[tag]
-
-    _assert_agrees(
-        sum_product(graph, backend=Backend.RUST),
-        sum_product(graph, backend=Backend.PYTHON),
-        tag,
-    )
-
-
-@pytest.mark.critical
-@pytest.mark.oracle
-@pytest.mark.backend
-@pytest.mark.parametrize("tag", sorted(TREES))
-def test_the_rust_max_product_decodes_the_oracle_s_assignment(tag: str) -> None:
-    # The assignment is a decision and not a float, so it is asserted equal
-    # rather than close: a last-place difference in a max-marginal that moved
-    # an argmax would be a different MAP and is not tolerable at any bound.
-    graph = TREES[tag]
-
-    assignment, marginals = max_product(graph, backend=Backend.RUST)
-    expected_assignment, expected = max_product(graph, backend=Backend.PYTHON)
-
-    assert assignment == expected_assignment
-    _assert_agrees(marginals, expected, tag)
-
-
-@pytest.mark.critical
-@pytest.mark.oracle
-@pytest.mark.backend
-@pytest.mark.parametrize("tag", sorted(TREES))
 @pytest.mark.parametrize("maximum", [False, True])
 def test_the_kernel_writes_the_oracle_s_messages_edge_for_edge(
     tag: str, maximum: bool
 ) -> None:
-    # The kernel against the loop it replaces, message for message rather than
+    # The kernel against the loop it replaces, message for message and then
     # belief for belief: the beliefs sum the messages, and a sum can agree
-    # where its terms do not.
+    # where its terms do not. The oracle is the NumPy route of the same
+    # function, which `test_message_passing.py` pins bitwise against the
+    # dictionary reference and against enumeration.
     graph = TREES[tag]
 
     to_variable, to_factor = message_passing_rust.tree_messages(
@@ -205,6 +171,21 @@ def test_the_kernel_writes_the_oracle_s_messages_edge_for_edge(
         to_factor, expected_factor, rtol=CROSS_DEVICE_RTOL_FLOAT64, atol=0.0
     )
 
+    if not maximum:
+        _assert_agrees(
+            sum_product(graph, backend=Backend.RUST),
+            sum_product(graph, backend=Backend.PYTHON),
+            tag,
+        )
+        return
+    # The assignment is a decision and not a float, so it is asserted equal
+    # rather than close: a last-place difference in a max-marginal that moved
+    # an argmax would be a different MAP and is not tolerable at any bound.
+    assignment, marginals = max_product(graph, backend=Backend.RUST)
+    expected_assignment, expected = max_product(graph, backend=Backend.PYTHON)
+    assert assignment == expected_assignment
+    _assert_agrees(marginals, expected, tag)
+
 
 @pytest.mark.critical
 @pytest.mark.oracle
@@ -217,65 +198,6 @@ def test_the_rust_route_reproduces_the_dictionary_reference() -> None:
 
     _assert_agrees(
         sum_product(graph, backend=Backend.RUST), reference.sum_product(graph), "potts"
-    )
-
-
-@pytest.mark.critical
-@pytest.mark.oracle
-@pytest.mark.backend
-@pytest.mark.parametrize(("states", "length"), [(2, 4), (3, 3)])
-def test_the_rust_marginals_and_log_z_are_the_enumeration(
-    states: int, length: int
-) -> None:
-    # Exact on a tree, asserted against the sum over every configuration
-    # rather than against the other route: `log Z` and every marginal.
-    graph = _chain(length, states, 11)
-    weights = np.array(
-        [
-            graph.log_density(
-                {f"z{position}": state for position, state in enumerate(assignment)}
-            )
-            for assignment in itertools.product(range(states), repeat=length)
-        ]
-    )
-    peak = weights.max()
-    evidence = peak + np.log(np.exp(weights - peak).sum())
-
-    marginals = sum_product(graph, backend=Backend.RUST)
-
-    assert marginals.log_partition == pytest.approx(evidence, rel=RTOL, abs=ATOL)
-    for position in range(length):
-        expected = np.zeros(states)
-        for index, assignment in enumerate(
-            itertools.product(range(states), repeat=length)
-        ):
-            expected[assignment[position]] += float(np.exp(weights[index] - evidence))
-        np.testing.assert_allclose(
-            marginals.variable[f"z{position}"], expected, rtol=RTOL, atol=ATOL
-        )
-
-
-@pytest.mark.critical
-@pytest.mark.oracle
-@pytest.mark.backend
-def test_the_rust_max_product_is_the_enumerated_mode() -> None:
-    states, length = 3, 5
-    graph = _chain(length, states, 13)
-    best = max(
-        itertools.product(range(states), repeat=length),
-        key=lambda assignment: graph.log_density(
-            {f"z{position}": state for position, state in enumerate(assignment)}
-        ),
-    )
-
-    assignment, marginals = max_product(graph, backend=Backend.RUST)
-
-    assert tuple(assignment[f"z{position}"] for position in range(length)) == best
-    assert marginals.log_partition == pytest.approx(
-        graph.log_density(
-            {f"z{position}": state for position, state in enumerate(best)}
-        ),
-        rel=RTOL,
     )
 
 

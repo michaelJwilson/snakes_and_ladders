@@ -74,8 +74,9 @@ def _covaried(instance: CountPairInstance) -> SpatioSequentialParams:
 
 
 @pytest.mark.oracle
-def test_the_covaried_rust_e_step_matches_the_numpy_oracle() -> None:
-    """The claim: the fast backend conditions, and on the same numbers."""
+def test_the_covaried_rust_e_step_and_field_match_the_numpy_oracle() -> None:
+    """The fast backend conditions, and on the same numbers; the field is the
+    seam #658 found unthreaded, and both paths now score with it."""
     instance = _instance()
     params = _covaried(instance)
     observations, labels = instance.observations, instance.labels
@@ -92,19 +93,9 @@ def test_the_covaried_rust_e_step_matches_the_numpy_oracle() -> None:
     np.testing.assert_allclose(
         actual.pairwise, expected.pairwise, rtol=_RELATIVE, atol=_ABSOLUTE
     )
-
-
-@pytest.mark.oracle
-def test_the_covaried_rust_field_matches_the_numpy_oracle() -> None:
-    """The field is the seam #658 found unthreaded; both paths now score with it."""
-    instance = _instance()
-    params = _covaried(instance)
-    observations, labels = instance.observations, instance.labels
-    posterior = class_posteriors(params, observations, labels).posterior
-
     np.testing.assert_allclose(
-        rust.external_field(params, observations, labels, posterior),
-        external_field(params, observations, labels, posterior),
+        rust.external_field(params, observations, labels, expected.posterior),
+        external_field(params, observations, labels, expected.posterior),
         rtol=_RELATIVE,
     )
 

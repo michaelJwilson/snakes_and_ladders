@@ -15,10 +15,10 @@ float64 implementation-agreement bound of ``docs/tex/textbook.tex``
 (``sec:tolerance``). Loosening either to admit a result is forbidden; both are
 where the comparison lands.
 
-``test_pruning_rust.py``, ``test_pruning_torch.py`` and
-``test_pruning_analytic.py`` keep their own oracle tests on their own
-fixtures. This module adds the one they cannot carry between them: the routes
-through the shared plumbing, read against the oracle that does not use it.
+These are the Rust and Torch routes' oracle tests since issue #982 dropped
+the per-route copies on a hand-built copy of this fixture's tree;
+``test_pruning_analytic.py`` keeps its own against the tape. The torch test
+also holds the default dtype: a caller passing none gets ``float64``.
 """
 
 from __future__ import annotations
@@ -58,6 +58,8 @@ def _instance() -> tuple[Node, int, np.ndarray, dict[str, np.ndarray]]:
 def test_the_torch_route_reproduces_the_oracle_bitwise() -> None:
     tau, k, pi, alignment = _instance()
     lengths = pruning_torch.branch_lengths_from_tree(tau)
+    # No silent behaviour change: no dtype argument is float64.
+    assert lengths.dtype == torch.float64
 
     value = pruning_torch.log_likelihood(tau, k, pi, alignment, lengths)
 

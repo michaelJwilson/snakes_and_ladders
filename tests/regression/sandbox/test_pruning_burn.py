@@ -1,22 +1,16 @@
-"""``burn``'s taped gradient, against the taped gradient it would have replaced.
+"""``burn``'s taped gradient: the refusals that are this route's alone.
 
 Route A of issue #449, declined and conserved. ``pruning_torch`` is the oracle
-and stays; what is checked is that a second reverse-mode tape, in Rust over
-``Autodiff<NdArray<f64>>``, computes the same derivative. The tolerances and
-the central-difference step are the ones ``test_pruning_analytic.py`` derives,
-read from there rather than re-derived: the sweep behind them measured all
-three routes at once and found them equal to four significant figures.
-
-The `f64` question the route was adopted on is settled by
-``test_gradient_matches_the_taped_gradient`` below and by the Rust unit tests
-in ``src/pruning_burn.rs``: a tape that had narrowed to `f32` could not agree
-with the taped `float64` gradient to 1e-13.
+and stays. The checks against it --- the value, the gradient against the tape
+and against central differences, ``gradcheck``, and the weighted patterns ---
+are one body each with the analytic route's, parametrised over the routes in
+``tests/regression/likelihood/test_pruning_analytic.py`` (issue #982). The
+`f64` question the route was adopted on is settled there and by the Rust unit
+tests in ``src/pruning_burn.rs``.
 
 **The route lives in ``snakes_and_ladders.sandbox`` and issue #516 moved this
-module beside it.** It still runs whenever ``likelihood`` changes --- which is
-when a second tape disagreeing with the first is worth knowing --- because
-``infra/select_tests.py`` derives that from the sandbox importing
-``likelihood``, not from which directory the test sits in.
+module beside it.** ``infra/select_tests.py`` selects it whenever
+``likelihood`` changes, because the sandbox imports ``likelihood``.
 
 **It skips unless the extension carries the ``sandbox`` Cargo feature.** The
 route is not in the default build, so the missing ``pruning_gradient`` skips
@@ -26,21 +20,12 @@ is checked against. ``infra/release.sh`` is where the feature is compiled.
 
 from __future__ import annotations
 
-import numpy as np
 import pytest
 import torch
-from numpy.testing import assert_allclose
 from snakes_and_ladders.likelihood import pruning_torch
-from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from snakes_and_ladders.likelihood.patterns import compress
 from snakes_and_ladders.sandbox import pruning_burn
-from snakes_and_ladders.sim.simulate import simulate_alignment
 
-from tests._fixtures import EIGHT_TAXA, SMALL_SITES, load_fixture
-from tests.regression.likelihood.test_pruning_analytic import (
-    CENTRAL_DIFFERENCE_RTOL,
-    CENTRAL_DIFFERENCE_STEP,
-)
+from tests._fixtures import SMALL_SITES, simulated_alignment
 
 pytestmark = pytest.mark.skipif(
     not pruning_burn.AVAILABLE,
@@ -49,103 +34,14 @@ pytestmark = pytest.mark.skipif(
 
 
 def _case(name: str, n_sites: int):  # type: ignore[no-untyped-def]
-    params = load_fixture(name)
-    dataset = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=n_sites,
-    )
+    params, alignment = simulated_alignment(name, n_sites)
     return (
         params.tau,
         params.k,
         params.pi,
-        dataset.alignment,
+        alignment,
         pruning_torch.branch_lengths_from_tree(params.tau),
     )
-
-
-def _gradient(evaluate, case, **kwargs) -> tuple[float, np.ndarray]:  # type: ignore[no-untyped-def]
-    tau, k, pi, alignment, lengths = case
-    branch_lengths = lengths.clone().requires_grad_(True)
-    value = evaluate(tau, k, pi, alignment, branch_lengths, **kwargs)
-    value.backward()
-    assert branch_lengths.grad is not None
-    return float(value.detach()), branch_lengths.grad.numpy().copy()
-
-
-@pytest.mark.oracle
-@pytest.mark.parametrize(
-    ("fixture_name", "n_sites"), [(SMALL_SITES, 2000), (EIGHT_TAXA, 2000)]
-)
-def test_value_is_the_taped_path_s(fixture_name: str, n_sites: int) -> None:
-    """The forward value is ``pruning_torch``'s, which is the oracle."""
-    tau, k, pi, alignment, lengths = _case(fixture_name, n_sites)
-    expected = float(pruning_torch.log_likelihood(tau, k, pi, alignment, lengths))
-    actual = float(pruning_burn.log_likelihood(tau, k, pi, alignment, lengths))
-    assert_allclose(actual, expected, rtol=CROSS_DEVICE_RTOL_FLOAT64)
-
-
-@pytest.mark.oracle
-@pytest.mark.parametrize(
-    ("fixture_name", "n_sites"), [(SMALL_SITES, 2000), (EIGHT_TAXA, 2000)]
-)
-def test_gradient_matches_the_taped_gradient(fixture_name: str, n_sites: int) -> None:
-    """A second tape reaches the first tape's derivative, in ``float64``."""
-    case = _case(fixture_name, n_sites)
-    _, expected = _gradient(pruning_torch.log_likelihood, case)
-    _, actual = _gradient(pruning_burn.log_likelihood, case)
-    assert_allclose(actual, expected, rtol=CROSS_DEVICE_RTOL_FLOAT64)
-
-
-@pytest.mark.oracle
-def test_gradient_matches_central_differences() -> None:
-    """Against a quotient of the forward pass alone, at the derived tolerance."""
-    tau, k, pi, alignment, lengths = _case(EIGHT_TAXA, 2000)
-    _, gradient = _gradient(
-        pruning_burn.log_likelihood, (tau, k, pi, alignment, lengths)
-    )
-
-    def value(at: torch.Tensor) -> float:
-        return float(pruning_torch.log_likelihood(tau, k, pi, alignment, at))
-
-    quotient = np.empty_like(gradient)
-    for position in range(len(lengths)):
-        step = torch.zeros_like(lengths)
-        step[position] = CENTRAL_DIFFERENCE_STEP
-        quotient[position] = (value(lengths + step) - value(lengths - step)) / (
-            2.0 * CENTRAL_DIFFERENCE_STEP
-        )
-    assert_allclose(gradient, quotient, rtol=CENTRAL_DIFFERENCE_RTOL)
-
-
-@pytest.mark.analytic
-def test_gradcheck_in_float64() -> None:
-    """``torch.autograd.gradcheck`` over the Rust tape's ``backward``."""
-    tau, k, pi, alignment, lengths = _case(SMALL_SITES, 200)
-    assert torch.autograd.gradcheck(
-        lambda at: pruning_burn.log_likelihood(tau, k, pi, alignment, at),
-        (lengths.clone().requires_grad_(True),),
-        eps=1e-6,
-        atol=1e-7,
-        rtol=1e-5,
-    )
-
-
-@pytest.mark.analytic
-def test_weighted_patterns_give_the_uncompressed_gradient() -> None:
-    """The compressed alignment with its weights is the full alignment's gradient."""
-    tau, k, pi, alignment, lengths = _case(EIGHT_TAXA, 2000)
-    compressed = compress(alignment)
-    case = (tau, k, pi, alignment, lengths)
-    _, full = _gradient(pruning_burn.log_likelihood, case)
-    _, weighted = _gradient(
-        pruning_burn.log_likelihood,
-        (tau, k, pi, compressed.alignment, lengths),
-        weights=compressed.weights,
-    )
-    assert_allclose(weighted, full, rtol=CROSS_DEVICE_RTOL_FLOAT64)
 
 
 @pytest.mark.smoke

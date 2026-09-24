@@ -15,14 +15,16 @@ from __future__ import annotations
 
 import itertools
 import math
+from collections.abc import Callable
 
 import numpy as np
 import pytest
+import torch
 from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.emissions import CategoricalEmission
 from snakes_and_ladders.enumeration import configurations
 from snakes_and_ladders.likelihood import message_passing_reference as reference
 from snakes_and_ladders.likelihood.belief_propagation import belief_propagation
+from snakes_and_ladders.likelihood.forward_backward import forward_backward
 from snakes_and_ladders.likelihood.hmm_paths import (
     emission_log_density,
     enumerate_hidden_paths,
@@ -36,11 +38,13 @@ from snakes_and_ladders.likelihood.message_passing import (
 )
 from snakes_and_ladders.likelihood.potts import enumerate_potts, log_weights
 from snakes_and_ladders.likelihood.pruning import log_likelihood
+from snakes_and_ladders.likelihood.schedule import Guarantee
 from snakes_and_ladders.likelihood.spatio_sequential import (
     class_log_density,
     class_posteriors,
 )
 from snakes_and_ladders.numerics import logsumexp
+from snakes_and_ladders.opt.hmm import forward_log_likelihood
 from snakes_and_ladders.sim.factor_graph import (
     Factor,
     FactorGraph,
@@ -52,14 +56,18 @@ from snakes_and_ladders.sim.factor_graph import (
 )
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
-from snakes_and_ladders.sim.hmm import HmmParams
 from snakes_and_ladders.sim.jc import jc_transition_probabilities
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.spatio_sequential import simulate_spatio_sequential
 from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import SMALL_SITES, load_fixture
-from tests.regression.likelihood.conftest import FIELD, TREE
+from tests.regression.likelihood.conftest import (
+    CHAIN_CASES,
+    FIELD,
+    TREE,
+    random_hmm,
+)
 
 RTOL = 1e-11
 ATOL = 1e-12
@@ -69,19 +77,6 @@ ATOL = 1e-12
 # of mixed sign so a symmetric mistake cannot pass.
 
 LOOPY = lattice_graph((3, 3), coupling=0.4, boundary=BoundaryCondition.OPEN)
-
-
-def _hmm(n_states: int, n_symbols: int, length: int, seed: int) -> HmmParams:
-    rng = np.random.default_rng(seed)
-    return HmmParams(
-        n_states=n_states,
-        lengths=(length,) * 1,
-        initial=rng.dirichlet(np.ones(n_states)),
-        transition=rng.dirichlet(np.ones(n_states), size=n_states),
-        emissions=CategoricalEmission(rng.dirichlet(np.ones(n_symbols), size=n_states)),
-        seed=seed,
-        tolerance=1e-12,
-    )
 
 
 # --- the Potts shape -----------------------------------------------------------
@@ -124,33 +119,27 @@ def test_sum_product_on_the_potts_tree_is_the_enumeration() -> None:
 
 @pytest.mark.critical
 @pytest.mark.oracle
-def test_flooding_on_the_loopy_lattice_is_belief_propagation() -> None:
+@pytest.mark.parametrize(
+    "schedule",
+    [
+        MessageScheduleName.FLOODING,
+        MessageScheduleName.SEQUENTIAL,
+        MessageScheduleName.RESIDUAL,
+    ],
+    ids=str,
+)
+def test_an_iterative_schedule_on_the_loopy_lattice_is_belief_propagation(
+    schedule: MessageScheduleName,
+) -> None:
     # Both are the Bethe approximation. Neither is the truth, so the assertion
-    # is agreement between the two codes, not with the enumeration.
+    # is agreement between the two codes, not with the enumeration. Jacobi,
+    # Gauss-Seidel and the residual order share their stationary points and
+    # differ only in path (#825), so each is read against the reference
+    # module's flooding, which shares no schedule code with the seam.
     reference = belief_propagation(LOOPY, FIELD, damping=0.5, tolerance=1e-12)
 
-    result = sum_product(
-        from_potts(LOOPY, FIELD), schedule=MessageScheduleName.FLOODING, tolerance=1e-12
-    )
+    result = sum_product(from_potts(LOOPY, FIELD), schedule=schedule, tolerance=1e-12)
 
-    assert not result.exact
-    assert math.isclose(
-        result.log_partition, reference.bethe_log_partition, rel_tol=1e-9
-    )
-    single = np.stack([result.variable[f"s{i}"] for i in range(LOOPY.n_nodes)])
-    np.testing.assert_allclose(single, reference.single_site, rtol=1e-8, atol=1e-10)
-
-
-@pytest.mark.critical
-@pytest.mark.oracle
-def test_residual_on_the_loopy_lattice_is_belief_propagation() -> None:
-    # The residual order reaches the same Bethe fixed point as flooding, read
-    # against the reference module's flooding as flooding itself is (#825);
-    # the referee shares no schedule code with the seam.
-    reference = belief_propagation(LOOPY, FIELD, damping=0.5, tolerance=1e-12)
-    result = sum_product(
-        from_potts(LOOPY, FIELD), schedule=MessageScheduleName.RESIDUAL, tolerance=1e-12
-    )
     assert not result.exact
     assert math.isclose(
         result.log_partition, reference.bethe_log_partition, rel_tol=1e-9
@@ -194,55 +183,65 @@ def test_damping_outside_the_unit_interval_is_refused(damping: float) -> None:
 
 @pytest.mark.critical
 @pytest.mark.oracle
-@pytest.mark.parametrize(
-    ("n_states", "n_symbols", "length", "seed"),
-    [(2, 2, 5, 1), (3, 2, 4, 2), (2, 4, 6, 3), (4, 3, 3, 4)],
-)
-def test_sum_product_on_the_chain_is_the_path_enumeration(
+@pytest.mark.parametrize(("n_states", "n_symbols", "length", "seed"), CHAIN_CASES)
+def test_every_chain_evaluator_is_the_path_enumeration(
     n_states: int, n_symbols: int, length: int, seed: int
 ) -> None:
-    params = _hmm(n_states, n_symbols, length, seed)
+    # One table, one referee (issue #982 merged five tests over these four
+    # chains): `hmm_paths.enumerate_hidden_paths` sums every path, and each
+    # evaluator below shares no code with it.
+    params = random_hmm(n_states, n_symbols, length, seed)
     observations = np.random.default_rng(seed).integers(0, n_symbols, size=length)
     enumerated = enumerate_hidden_paths(params, observations)
-    graph = from_hmm(
-        np.log(params.initial),
-        np.log(params.transition),
-        emission_log_density(params, observations),
+    log_density = emission_log_density(params, observations)
+    log_initial, log_transition = np.log(params.initial), np.log(params.transition)
+
+    # `opt.hmm`'s forward recursion: the check that the enumeration sums the
+    # model it claims to.
+    forward = forward_log_likelihood(
+        torch.from_numpy(observations[None, :]),
+        torch.log(torch.from_numpy(params.initial)),
+        torch.log(torch.from_numpy(params.transition)),
+        torch.log(torch.from_numpy(params.emission)),
     )
+    assert enumerated.log_likelihood == pytest.approx(float(forward), rel=1e-12)
 
+    # Forward--backward: evidence, posterior, and the pairwise marginals
+    # summing to the posterior on either side.
+    run = forward_backward(log_density, log_initial, log_transition)
+    assert abs(run.log_evidence - enumerated.log_likelihood) < 1e-12 * abs(
+        enumerated.log_likelihood
+    )
+    np.testing.assert_allclose(
+        run.posterior, enumerated.posterior, rtol=1e-11, atol=1e-13
+    )
+    np.testing.assert_allclose(run.pairwise.sum(axis=(1, 2)), 1.0, rtol=1e-12)
+    np.testing.assert_allclose(run.pairwise.sum(axis=2), run.posterior[:-1], rtol=1e-11)
+    np.testing.assert_allclose(run.pairwise.sum(axis=1), run.posterior[1:], rtol=1e-11)
+
+    # Sum- and max-product on the chain's factor graph, on the default route,
+    # which is the Rust kernel: the marginals and `log Z`, and Viterbi.
+    graph = from_hmm(log_initial, log_transition, log_density)
     result = sum_product(graph)
-
     assert result.exact
     assert math.isclose(result.log_partition, enumerated.log_likelihood, rel_tol=1e-13)
     posterior = np.stack([result.variable[f"z{t}"] for t in range(length)])
     np.testing.assert_allclose(posterior, enumerated.posterior, rtol=RTOL, atol=ATOL)
-
-
-@pytest.mark.critical
-@pytest.mark.oracle
-@pytest.mark.parametrize(
-    ("n_states", "n_symbols", "length", "seed"),
-    [(2, 2, 5, 1), (3, 2, 4, 2), (2, 4, 6, 3), (4, 3, 3, 4)],
-)
-def test_max_product_on_the_chain_is_viterbi(
-    n_states: int, n_symbols: int, length: int, seed: int
-) -> None:
-    params = _hmm(n_states, n_symbols, length, seed)
-    observations = np.random.default_rng(seed).integers(0, n_symbols, size=length)
-    enumerated = enumerate_hidden_paths(params, observations)
-    graph = from_hmm(
-        np.log(params.initial),
-        np.log(params.transition),
-        emission_log_density(params, observations),
-    )
-
     assignment, marginals = max_product(graph)
-
     path = np.array([assignment[f"z{t}"] for t in range(length)])
     np.testing.assert_array_equal(path, enumerated.viterbi)
     assert math.isclose(
         marginals.log_partition, enumerated.viterbi_log_probability, rel_tol=1e-13
     )
+
+    # The NumPy route against the dictionary reference, bitwise (issue #341).
+    _assert_same_marginals(
+        sum_product(graph, backend=Backend.PYTHON), reference.sum_product(graph)
+    )
+    assignment, marginals = max_product(graph, backend=Backend.PYTHON)
+    expected_assignment, expected = reference.max_product(graph)
+    assert assignment == expected_assignment
+    _assert_same_marginals(marginals, expected)
 
 
 # --- the tree shape -------------------------------------------------------------
@@ -258,7 +257,16 @@ def _transitions(tau: Node, k: int) -> dict[str, np.ndarray]:
 
 @pytest.mark.critical
 @pytest.mark.oracle
-def test_sum_product_per_site_sums_to_pruning() -> None:
+@pytest.mark.parametrize(
+    ("schedule", "guarantee"),
+    [("tree", Guarantee.EXACT), ("upward", Guarantee.PARTIAL)],
+)
+def test_sum_product_per_site_sums_to_pruning(
+    schedule: str, guarantee: Guarantee
+) -> None:
+    # `likelihood.pruning` is the leaf-to-root recursion written on the tree;
+    # the upward schedule is that recursion as half a message-passing plan,
+    # exact at the root only (issue #592, merged from `test_schedule.py`).
     params = load_fixture(SMALL_SITES)
     dataset = simulate_alignment(
         params.tau, params.k, params.pi, np.random.default_rng(params.seed), n_sites=7
@@ -270,9 +278,10 @@ def test_sum_product_per_site_sums_to_pruning() -> None:
     for s in range(7):
         site = {name: int(states[s]) for name, states in alignment.items()}
         result = sum_product(
-            from_tree(params.tau, params.k, params.pi, site, transitions)
+            from_tree(params.tau, params.k, params.pi, site, transitions),
+            schedule=schedule,
         )
-        assert result.exact
+        assert result.guarantee is guarantee
         total += result.log_partition
 
     reference = log_likelihood(params.tau, params.k, params.pi, alignment)
@@ -504,29 +513,30 @@ def test_a_graph_with_no_variable_above_degree_two_is_its_own_forney_form() -> N
 
 
 @pytest.mark.smoke
-def test_a_factor_over_an_unknown_variable_is_refused() -> None:
-    with pytest.raises(ValueError, match="unknown variable"):
-        FactorGraph([Variable("a", 2)], [Factor("f", ("a", "b"), np.zeros((2, 2)))])
-
-
-@pytest.mark.smoke
-def test_a_table_whose_shape_disagrees_with_the_domains_is_refused() -> None:
-    with pytest.raises(ValueError, match="table shape"):
-        FactorGraph([Variable("a", 3)], [Factor("f", ("a",), np.zeros(2))])
-
-
-@pytest.mark.smoke
-def test_a_variable_in_no_factor_is_refused() -> None:
-    with pytest.raises(ValueError, match="in no factor"):
-        FactorGraph(
-            [Variable("a", 2), Variable("b", 2)], [Factor("f", ("a",), np.zeros(2))]
-        )
-
-
-@pytest.mark.smoke
-def test_an_empty_domain_is_refused() -> None:
-    with pytest.raises(ValueError, match="domain"):
-        Variable("a", 0)
+def test_a_malformed_graph_is_refused_at_construction() -> None:
+    refusals: list[tuple[str, Callable[[], object]]] = [
+        (
+            "unknown variable",
+            lambda: FactorGraph(
+                [Variable("a", 2)], [Factor("f", ("a", "b"), np.zeros((2, 2)))]
+            ),
+        ),
+        (
+            "table shape",
+            lambda: FactorGraph([Variable("a", 3)], [Factor("f", ("a",), np.zeros(2))]),
+        ),
+        (
+            "in no factor",
+            lambda: FactorGraph(
+                [Variable("a", 2), Variable("b", 2)],
+                [Factor("f", ("a",), np.zeros(2))],
+            ),
+        ),
+        ("domain", lambda: Variable("a", 0)),
+    ]
+    for message, construct in refusals:
+        with pytest.raises(ValueError, match=message):
+            construct()
 
 
 # --- the edge-array layout against the dictionary oracle (issue #341) ------------
@@ -599,32 +609,6 @@ def test_the_tree_schedule_reproduces_the_dictionary_oracle_bitwise(
 
 @pytest.mark.critical
 @pytest.mark.oracle
-@pytest.mark.parametrize(
-    ("n_states", "n_symbols", "length", "seed"),
-    [(2, 2, 5, 1), (3, 2, 4, 2), (2, 4, 6, 3), (4, 3, 3, 4)],
-)
-def test_sum_and_max_product_on_the_chain_reproduce_the_dictionary_oracle_bitwise(
-    n_states: int, n_symbols: int, length: int, seed: int
-) -> None:
-    params = _hmm(n_states, n_symbols, length, seed)
-    observations = np.random.default_rng(seed).integers(0, n_symbols, size=length)
-    graph = from_hmm(
-        np.log(params.initial),
-        np.log(params.transition),
-        emission_log_density(params, observations),
-    )
-
-    _assert_same_marginals(
-        sum_product(graph, backend=Backend.PYTHON), reference.sum_product(graph)
-    )
-    assignment, marginals = max_product(graph, backend=Backend.PYTHON)
-    expected_assignment, expected = reference.max_product(graph)
-    assert assignment == expected_assignment
-    _assert_same_marginals(marginals, expected)
-
-
-@pytest.mark.critical
-@pytest.mark.oracle
 def test_the_tree_site_reproduces_the_dictionary_oracle_bitwise() -> None:
     # Hard zeros: the leaf indicators put ``-inf`` in the tables.
     params = load_fixture(SMALL_SITES)
@@ -672,7 +656,6 @@ def test_the_tree_schedule_on_a_deep_chain_is_the_forward_recursion() -> None:
     # reference's depth-first order, and the levelled schedule is
     # breadth-first. The forward recursion is the oracle, so this is a claim
     # about the evidence and not only about not raising.
-    import torch
     from snakes_and_ladders.opt.hmm import forward_log_likelihood_from_density
 
     rng = np.random.default_rng(5)

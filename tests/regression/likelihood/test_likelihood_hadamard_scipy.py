@@ -36,39 +36,23 @@ ORDERS = tuple(1 << (n_taxa - 1) for n_taxa in range(3, MAX_TAXA + 1))
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("order", ORDERS)
-def test_the_fast_transform_is_the_dense_product_with_scipy_s_matrix(
-    order: int,
-) -> None:
-    rng = np.random.default_rng(order)
-    vector = rng.normal(size=order)
+def test_the_transform_and_both_directions_of_the_conjugation_are_scipy_s_algebra() -> (
+    None
+):
+    # Issue #982 folded three tests into this one. The sign convention the
+    # indexing assumes is asserted against the bit-mask definition in
+    # `test_likelihood_hadamard.py` at every order; agreeing with scipy's
+    # product here at every order carries it to scipy's matrix too.
+    for order in ORDERS:
+        vector = np.random.default_rng(order).normal(size=order)
 
-    ours = walsh_hadamard(vector)
-    theirs = linalg.hadamard(order, dtype=np.float64) @ vector
+        ours = walsh_hadamard(vector)
+        theirs = linalg.hadamard(order, dtype=np.float64) @ vector
 
-    # Both sum the same +-1 terms; the butterfly sums them in a different
-    # order, so the agreement is to the accumulation of that reordering.
-    np.testing.assert_allclose(ours, theirs, rtol=0.0, atol=1e-12 * order)
+        # Both sum the same +-1 terms; the butterfly sums them in a different
+        # order, so the agreement is to the accumulation of that reordering.
+        np.testing.assert_allclose(ours, theirs, rtol=0.0, atol=1e-12 * order)
 
-
-@pytest.mark.oracle
-@pytest.mark.parametrize("order", ORDERS)
-def test_scipy_s_matrix_is_the_sign_convention_our_indexing_assumes(
-    order: int,
-) -> None:
-    # The docstring's claim: entry (A, B) is (-1) to the size of A and B as
-    # bit masks, which is what makes a subset index a split index.
-    theirs = linalg.hadamard(order, dtype=np.float64)
-    rows = np.arange(order)
-    expected = np.array(
-        [[(-1.0) ** bin(row & column).count("1") for column in rows] for row in rows]
-    )
-
-    np.testing.assert_array_equal(theirs, expected)
-
-
-@pytest.mark.oracle
-def test_both_directions_of_the_conjugation_invert_through_scipy_s_matrix() -> None:
     # `eq:hadamard` is s = H^-1 exp(H q) and q = H^-1 log(H s), with
     # H^-1 = H / N. Built here from scipy's matrix rather than from the
     # butterfly, so the round trip is checked against the dense algebra.

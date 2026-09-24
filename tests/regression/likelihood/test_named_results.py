@@ -52,13 +52,13 @@ NAMED = [
 
 
 @pytest.mark.smoke
-@pytest.mark.parametrize("result", NAMED, ids=lambda cls: cls.__name__)
-def test_a_named_result_unpacks_to_its_fields_in_order(result: type) -> None:
-    names = [field.name for field in fields(result)]
-    instance = result(*names)
+def test_a_named_result_unpacks_to_its_fields_in_order() -> None:
+    for result in NAMED:
+        names = [field.name for field in fields(result)]
+        instance = result(*names)
 
-    assert list(instance) == names
-    assert [getattr(instance, name) for name in names] == names
+        assert list(instance) == names, result.__name__
+        assert [getattr(instance, name) for name in names] == names, result.__name__
 
 
 @pytest.mark.smoke

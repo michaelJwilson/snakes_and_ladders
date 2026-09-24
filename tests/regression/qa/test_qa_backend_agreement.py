@@ -7,13 +7,10 @@ reported relative because the quantity is a sum over sites.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.qa import backend_agreement
 from snakes_and_ladders.qa.backend_agreement import (
     BACKENDS,
     SITE_COUNTS,
@@ -65,16 +62,6 @@ def test_the_caption_reports_the_worst_deviation_it_measured(
         assert "brute-force" in caption.lower()
     finally:
         figure.clear()
-
-
-@pytest.mark.smoke
-def test_main_writes_a_figure_and_caption(tmp_path: Path) -> None:
-    written = backend_agreement.main(
-        ["--params", str(FIXTURE), "--output-dir", str(tmp_path)]
-    )
-    assert written.figure_path.is_file()
-    assert written.caption_path.is_file()
-    assert written.caption == written.caption_path.read_text()
 
 
 @pytest.mark.smoke

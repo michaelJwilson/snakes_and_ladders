@@ -8,8 +8,6 @@ no-coverage-theatre rule).
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
@@ -17,8 +15,6 @@ from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.qa.figure import state_label
 from snakes_and_ladders.qa.sim_tree import (
     SITES_SHOWN,
-    build_caption,
-    main,
     render_sim_tree,
     tree_layout,
 )
@@ -81,51 +77,6 @@ def test_tree_layout_gives_every_leaf_a_distinct_ordered_y() -> None:
 
     leaf_ys = [layout[name][1] for name in leaves]
     assert leaf_ys == list(range(len(leaves)))
-
-
-@pytest.mark.smoke
-def test_main_writes_a_figure_and_caption_with_generating_truth(
-    tmp_path: Path,
-) -> None:
-    params_path = FIXTURES_DIR / "tree_jc/release.yaml"
-    params = load_params(params_path, SimulationParams)
-
-    qa_figure = main(["--params", str(params_path), "--output-dir", str(tmp_path)])
-
-    assert qa_figure.figure_path.is_file()
-    assert qa_figure.figure_path.stat().st_size > 0
-    assert qa_figure.caption == build_caption(params)
-    assert str(params.seed) in qa_figure.caption
-    assert "8 taxa" in qa_figure.caption
-    assert "Jukes-Cantor" in qa_figure.caption
-
-
-@pytest.mark.smoke
-def test_main_reads_sys_argv_when_no_argv_is_given(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    params_path = FIXTURES_DIR / "tree_jc/release.yaml"
-    monkeypatch.setattr(
-        "sys.argv",
-        ["sim_tree", "--params", str(params_path), "--output-dir", str(tmp_path)],
-    )
-
-    main()
-
-    figure_path = tmp_path / "sim_tree.pdf"
-    caption_path = tmp_path / "sim_tree_caption.txt"
-    assert figure_path.is_file()
-    assert caption_path.read_text() == build_caption(
-        load_params(params_path, SimulationParams)
-    )
-    # The runner reports what it wrote through the run logger (issue #311),
-    # which writes to stderr; nothing goes to stdout.
-    captured = capsys.readouterr()
-    written = captured.out + captured.err
-    assert str(figure_path) in written
-    assert str(caption_path) in written
 
 
 @pytest.mark.smoke

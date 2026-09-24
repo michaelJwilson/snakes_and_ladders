@@ -1,25 +1,21 @@
 """Regression test for snakes_and_ladders.qa.sim_example.
 
 Pins the caption's content against the generating parameters and the
-alignment table against sequences recomputed independently, not just that
-the figure renders without raising (CLAUDE.md's no-coverage-theatre rule).
+displayed tree against the fixture's, not just that the figure renders without
+raising (CLAUDE.md's no-coverage-theatre rule). The script's `main` is a row
+of `test_qa_runner.py::test_main_writes_its_output_and_caption`.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
-
-import numpy as np
 import pytest
 from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.qa.figure import latex_integer, state_label
+from snakes_and_ladders.qa.figure import state_label
 from snakes_and_ladders.qa.sim_example import (
     build_caption,
     display_newick,
-    main,
 )
 from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import FIXTURES_DIR
@@ -38,88 +34,10 @@ def test_state_label_falls_back_to_digit_for_other_k() -> None:
 
 
 @pytest.mark.smoke
-def test_main_writes_a_figure_and_caption_with_generating_truth(
-    tmp_path: Path,
-) -> None:
-    params = load_params(PARAMS_PATH, SimulationParams)
-
-    qa_figure = main(
-        [
-            "--params",
-            str(PARAMS_PATH),
-            "--output-dir",
-            str(tmp_path),
-            "--n-sites-shown",
-            "10",
-        ]
-    )
-
-    assert qa_figure.figure_path.is_file()
-    assert qa_figure.figure_path.stat().st_size > 0
-    assert qa_figure.caption == build_caption(params, n_sites_shown=10)
-    assert str(params.seed) in qa_figure.caption
-    assert latex_integer(params.n_sites) in qa_figure.caption
-    assert "4-taxon" in qa_figure.caption
-    assert "10" in qa_figure.caption
-
-
-@pytest.mark.oracle
-def test_sim_example_alignment_matches_independent_simulation() -> None:
-    params = load_params(PARAMS_PATH, SimulationParams)
-    expected = simulate_alignment(
-        tau=params.tau,
-        k=params.k,
-        pi=params.pi,
-        rng=np.random.default_rng(params.seed),
-        n_sites=params.n_sites,
-    )
-
-    for leaf, states in expected.alignment.items():
-        rendered = [state_label(int(state), params.k) for state in states[:10]]
-        assert all(letter in "ACGT" for letter in rendered)
-        assert leaf in expected.newick
-
-
-@pytest.mark.smoke
 def test_n_sites_shown_is_capped_at_the_fixture_site_count() -> None:
     params = load_params(PARAMS_PATH, SimulationParams)
     caption = build_caption(params, n_sites_shown=params.n_sites + 1000)
     assert str(params.n_sites) in caption
-
-
-@pytest.mark.smoke
-def test_main_reads_sys_argv_when_no_argv_is_given(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    monkeypatch.setattr(
-        "sys.argv",
-        [
-            "sim_example",
-            "--params",
-            str(PARAMS_PATH),
-            "--output-dir",
-            str(tmp_path),
-            "--n-sites-shown",
-            "5",
-        ],
-    )
-
-    main()
-
-    figure_path = tmp_path / "sim_example.pdf"
-    caption_path = tmp_path / "sim_example_caption.txt"
-    assert figure_path.is_file()
-    assert caption_path.read_text() == build_caption(
-        load_params(PARAMS_PATH, SimulationParams), n_sites_shown=5
-    )
-    # The runner reports what it wrote through the run logger (issue #311),
-    # which writes to stderr; nothing goes to stdout.
-    captured = capsys.readouterr()
-    written = captured.out + captured.err
-    assert str(figure_path) in written
-    assert str(caption_path) in written
 
 
 @pytest.mark.smoke

@@ -2,14 +2,15 @@
 
 Issue #592. Three things are checked and they are different things. That the
 refactor changed no number --- the two schedules that predate it reproduce
-their old output bitwise, which the rest of
-`tests/regression/likelihood/test_message_passing.py` already asserts against
-the dictionary reference. That the new schedules are *right*, which for the
+their old output bitwise, which
+`tests/regression/likelihood/test_message_passing.py` asserts against the
+dictionary reference. That the new schedules are *right*, which for the
 upward pass means agreeing with an oracle written in another module
-(`likelihood.pruning`) and, for the iterative pair, reaching one fixed point.
-And that the seam reaches the graphs it claims to, which is the last test:
-every adapter in `sim.factor_graph`, run under every schedule its graph
-admits.
+(`likelihood.pruning`) and, for the iterative three, reaching belief
+propagation's fixed point: both are asserted in `test_message_passing.py`,
+parametrised over the schedule (issue #982). And that the seam reaches the
+graphs it claims to: every adapter in `sim.factor_graph`, run under every
+schedule its graph admits.
 
 A partial schedule is the interesting case. `upward` is exact where it speaks
 and silent elsewhere, so the test asserts the silence too: a marginal it does
@@ -23,7 +24,6 @@ from collections.abc import Generator
 import numpy as np
 import pytest
 from snakes_and_ladders.likelihood.message_passing import sum_product
-from snakes_and_ladders.likelihood.pruning import log_likelihood
 from snakes_and_ladders.likelihood.schedule import (
     SCHEDULES,
     DownwardMessageSchedule,
@@ -42,14 +42,8 @@ from snakes_and_ladders.sim.factor_graph import (
     FactorGraph,
     Variable,
     from_potts,
-    from_tree,
 )
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
-from snakes_and_ladders.sim.jc import jc_transition_probabilities
-from snakes_and_ladders.sim.simulate import simulate_alignment
-from snakes_and_ladders.sim.tree import preorder
-
-from tests._fixtures import SMALL_SITES, load_fixture
 
 TREE_SCHEDULES = ("tree", "upward", "downward")
 LOOPY_SCHEDULES = ("flooding", "sequential", "residual")
@@ -186,23 +180,6 @@ def test_an_iterative_schedule_reaches_the_exact_answer_on_a_tree(
         np.testing.assert_allclose(settled.variable[name], row, atol=1e-8)
 
 
-@pytest.mark.analytic
-def test_the_iterative_schedules_find_the_same_fixed_point_on_a_loopy_graph() -> None:
-    # Jacobi, Gauss-Seidel and the residual order over the same update have the
-    # same stationary points; only the path differs (#825). On a graph where both settle, the answers
-    # must agree -- if they did not, one of them is not computing Bethe.
-    graph = _lattice()
-
-    jacobi = sum_product(graph, schedule="flooding", max_iterations=5000)
-    seidel = sum_product(graph, schedule="sequential", max_iterations=5000)
-    residual = sum_product(graph, schedule="residual", max_iterations=5000)
-
-    for other in (seidel, residual):
-        assert other.log_partition == pytest.approx(jacobi.log_partition, abs=1e-6)
-        for name, row in jacobi.variable.items():
-            np.testing.assert_allclose(other.variable[name], row, atol=1e-5)
-
-
 @pytest.mark.smoke
 @pytest.mark.parametrize("schedule", TREE_SCHEDULES)
 def test_a_tree_schedule_is_refused_on_a_loopy_graph(schedule: str) -> None:
@@ -228,37 +205,6 @@ def test_every_schedule_runs_on_a_tree_adapted_from_another_problem(
 
     assert marginals.guarantee is resolve(schedule).guarantee
     assert set(marginals.variable) <= {v.name for v in graph.variables}
-
-
-@pytest.mark.oracle
-def test_the_upward_pass_is_felsenstein_pruning_on_a_real_tree() -> None:
-    # The strongest claim in #592, against an oracle that shares no code with
-    # the schedule: `likelihood.pruning.log_likelihood` is the leaf-to-root
-    # recursion written directly on the tree, and the upward schedule is that
-    # recursion expressed as half a message-passing plan. Summed over sites
-    # they are the same likelihood.
-    params = load_fixture(SMALL_SITES)
-    dataset = simulate_alignment(
-        params.tau, params.k, params.pi, np.random.default_rng(params.seed), n_sites=7
-    )
-    alignment = dict(dataset.alignment)
-    transitions = {
-        node.name: jc_transition_probabilities(node.branch_length, params.k)
-        for node in preorder(params.tau)
-        if node.branch_length is not None
-    }
-
-    total = 0.0
-    for site_index in range(7):
-        site = {name: int(states[site_index]) for name, states in alignment.items()}
-        graph = from_tree(params.tau, params.k, params.pi, site, transitions)
-        half = sum_product(graph, schedule="upward")
-        assert half.guarantee is Guarantee.PARTIAL
-        total += half.log_partition
-
-    assert total == pytest.approx(
-        log_likelihood(params.tau, params.k, params.pi, alignment), rel=1e-13
-    )
 
 
 @pytest.mark.analytic

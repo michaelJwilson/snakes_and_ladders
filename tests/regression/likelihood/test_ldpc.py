@@ -18,7 +18,7 @@ declared members are what the notebook and the figures run on.
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 
 import numpy as np
 import pytest
@@ -38,6 +38,7 @@ from snakes_and_ladders.likelihood.message_passing import (
     sum_product,
 )
 from snakes_and_ladders.sim.factor_graph import from_parity_check
+from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.ldpc import (
     LLR_CAP,
     BinaryErasureChannel,
@@ -195,27 +196,62 @@ def test_the_enumeration_oracle_on_a_single_parity_check_by_hand() -> None:
 # --- the same approximation on a loopy code ------------------------------------
 
 
+#: The bicycle fixture's agreement with the general flooding, realized under
+#: 2e-12 on its 12 bits (moved from `test_bicycle.py`, issue #982).
+BICYCLE_TOLERANCE = 2e-12
+
+
+def _gallager(
+    n_bits: int, channel: Channel, seed: int
+) -> Callable[[], tuple[ParityCheck, np.ndarray]]:
+    """A seeded (3,6) Gallager draw and a transmission over ``channel``."""
+
+    def build() -> tuple[ParityCheck, np.ndarray]:
+        rng = np.random.default_rng(seed)
+        code = gallager_code(n_bits, 3, 6, rng)
+        return code, all_zero_transmission(code, channel, rng)
+
+    return build
+
+
+def _bicycle() -> tuple[ParityCheck, np.ndarray]:
+    """The 12-bit bicycle fixture over its symmetric channel, seed 1."""
+    params = fixture("bicycle", "ci").params
+    code = params.code()
+    return code, all_zero_transmission(
+        code, params.symmetric_channel(), np.random.default_rng(1)
+    )
+
+
 @pytest.mark.oracle
 @pytest.mark.parametrize(
-    ("n_bits", "channel", "seed"),
+    ("build", "tolerance"),
     [
-        (12, BinarySymmetricChannel(0.15), 1),
-        (12, BinaryInputGaussianChannel(1.0), 5),
-        (12, BinaryErasureChannel(0.4), 6),
-        (18, BinarySymmetricChannel(0.15), 7),
-        (18, BinaryInputGaussianChannel(1.2), 8),
-        (12, BinarySymmetricChannel(0.2), 10),
+        *(
+            pytest.param(
+                _gallager(n_bits, channel, seed),
+                LOOPY_TOLERANCE,
+                id=f"{n_bits}-{type(channel).__name__}-{seed}",
+            )
+            for n_bits, channel, seed in (
+                (12, BinarySymmetricChannel(0.15), 1),
+                (12, BinaryInputGaussianChannel(1.0), 5),
+                (12, BinaryErasureChannel(0.4), 6),
+                (18, BinarySymmetricChannel(0.15), 7),
+                (18, BinaryInputGaussianChannel(1.2), 8),
+                (12, BinarySymmetricChannel(0.2), 10),
+            )
+        ),
+        pytest.param(_bicycle, BICYCLE_TOLERANCE, id="bicycle"),
     ],
-    ids=lambda v: v if isinstance(v, int) else type(v).__name__,
 )
 def test_flooding_reaches_the_general_fixed_point_on_a_loopy_code(
-    n_bits: int, channel: Channel, seed: int
+    build: Callable[[], tuple[ParityCheck, np.ndarray]], tolerance: float
 ) -> None:
-    """On six loopy (3,6) codes the decoder's posteriors equal the general
-    damped flooding's to 1e-9 -- the same Bethe fixed point from two codes."""
-    rng = np.random.default_rng(seed)
-    code = gallager_code(n_bits, 3, 6, rng)
-    llr = all_zero_transmission(code, channel, rng)
+    """On six loopy (3,6) codes and the bicycle fixture the decoder's posteriors
+    equal the general damped flooding's --- the same Bethe fixed point from two
+    codes, so the adapter carries the bicycle construction as it does the other."""
+    code, llr = build()
     graph = from_parity_check(code, llr)
     assert not graph.is_tree()
 
@@ -230,9 +266,9 @@ def test_flooding_reaches_the_general_fixed_point_on_a_loopy_code(
     assert decoded.residual <= 1e-12
     np.testing.assert_allclose(
         decoded.posterior_llr,
-        _general_llr(general.variable, n_bits),
+        _general_llr(general.variable, code.n_bits),
         rtol=0,
-        atol=LOOPY_TOLERANCE,
+        atol=tolerance,
     )
 
 

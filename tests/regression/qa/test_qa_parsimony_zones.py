@@ -8,8 +8,6 @@ values it was handed.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
 import pytest
 from snakes_and_ladders.fixtures import load_params
@@ -22,7 +20,6 @@ from snakes_and_ladders.qa.parsimony_zones import (
     SITE_COUNTS,
     Ranking,
     build_figure,
-    main,
     ranking,
     zone_gaps,
 )
@@ -111,13 +108,3 @@ def test_the_caption_reports_the_numbers_it_was_handed() -> None:
     assert "reaches 12 after scoring 7 candidates" in caption
     assert "the generating tree;" not in caption
     assert str(params.seed) in caption
-
-
-@pytest.mark.smoke
-def test_main_writes_a_figure_and_caption(tmp_path: Path) -> None:
-    qa_figure = main(["--params", str(PARAMS_PATH), "--output-dir", str(tmp_path)])
-
-    assert qa_figure.figure_path.is_file()
-    assert qa_figure.figure_path.stat().st_size > 0
-    assert "10\\_395 unrooted topologies" in qa_figure.caption
-    assert "seed 20260904" in qa_figure.caption

@@ -8,19 +8,16 @@ the failure this file exists to prevent.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
 import pytest
 from snakes_and_ladders.qa.opt_branch_recovery import (
     SPLITS,
     build_figure,
-    main,
     recovery,
     split_profile,
 )
 
-from tests._fixtures import EIGHT_TAXA, SMALL_SITES, fixture_path, load_fixture
+from tests._fixtures import EIGHT_TAXA, SMALL_SITES, load_fixture
 
 
 @pytest.mark.smoke
@@ -100,19 +97,3 @@ def test_the_caption_reports_what_it_measured() -> None:
     assert str(rooted_params.seed) in caption
     # qa/CLAUDE.md: captions are plain text pulled into LaTeX verbatim.
     assert not set(caption) & set("_%\\&#")
-
-
-@pytest.mark.smoke
-def test_main_writes_a_figure_and_caption(tmp_path: Path) -> None:
-    written = main(
-        [
-            "--unrooted-params",
-            str(fixture_path(SMALL_SITES)),
-            "--rooted-params",
-            str(fixture_path(EIGHT_TAXA)),
-            "--output-dir",
-            str(tmp_path),
-        ]
-    )
-    assert written.figure_path.is_file()
-    assert written.caption_path.read_text() == written.caption
