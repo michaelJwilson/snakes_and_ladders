@@ -190,7 +190,7 @@ def _leaf_partial(
 _Step = tuple[int, str | None, tuple[tuple[int, int], ...]]
 
 
-class _Traversal(NamedTuple):
+class Traversal(NamedTuple):
     """What a topology fixes, so an evaluation reads it instead of walking.
 
     Parameters
@@ -224,7 +224,7 @@ class _Traversal(NamedTuple):
 #: enumerable tier the Python recursion was 15.0% of an NNI search (0.75 s of
 #: 4.97 s) and 14.9% of an SPR one, one frame and two dictionary lookups per
 #: node per evaluation (issue #754).
-_TRAVERSALS: dict[int, tuple[Node, _Traversal]] = {}
+_TRAVERSALS: dict[int, tuple[Node, Traversal]] = {}
 
 #: Schedules kept before the oldest is dropped. One entry is a few hundred
 #: integers; a 20-taxon search holds one per candidate topology it is still
@@ -232,7 +232,7 @@ _TRAVERSALS: dict[int, tuple[Node, _Traversal]] = {}
 _TRAVERSAL_LIMIT = 256
 
 
-def _build_traversal(tau: Node) -> _Traversal:
+def _build_traversal(tau: Node) -> Traversal:
     """The post-order schedule of ``tau``, with each branch's index baked in."""
     order = branch_order(tau)
     index = {name: i for i, name in enumerate(order)}
@@ -250,10 +250,10 @@ def _build_traversal(tau: Node) -> _Traversal:
         return slot
 
     root_slot = _visit(tau)
-    return _Traversal(order, tuple(leaf_names), tuple(steps), root_slot)
+    return Traversal(order, tuple(leaf_names), tuple(steps), root_slot)
 
 
-def _traversal(tau: Node) -> _Traversal:
+def traversal(tau: Node) -> Traversal:
     """``_build_traversal(tau)``, built once per topology object."""
     key = id(tau)
     hit = _TRAVERSALS.get(key)
@@ -333,11 +333,11 @@ def log_likelihood(
     pi_t = torch.as_tensor(pi, dtype=dtype, device=device)
     check_pi_shape(tuple(pi_t.shape), k)
 
-    traversal = _traversal(tau)
-    check_branch_lengths_shape(tuple(branch_lengths.shape), len(traversal.order))
-    check_alignment_covers(traversal.leaf_names, alignment)
+    schedule = traversal(tau)
+    check_branch_lengths_shape(tuple(branch_lengths.shape), len(schedule.order))
+    check_alignment_covers(schedule.leaf_names, alignment)
 
-    n_sites = int(torch.as_tensor(alignment[traversal.leaf_names[0]]).shape[0])
+    n_sites = int(torch.as_tensor(alignment[schedule.leaf_names[0]]).shape[0])
     weight = check_weights(weights, n_sites)
     log_scale = torch.zeros(n_sites, dtype=dtype, device=device)
     # The scalar the rescale falls back to, built once per call rather
@@ -353,7 +353,7 @@ def log_likelihood(
     # arithmetic, its operands and its order are the recursion's, so the
     # log-likelihood is bitwise unchanged.
     partials: dict[int, torch.Tensor] = {}
-    for slot, leaf_name, children in traversal.steps:
+    for slot, leaf_name, children in schedule.steps:
         if leaf_name is not None:
             partials[slot] = _leaf_partial(
                 alignment[leaf_name], n_sites, k, dtype, device
@@ -381,7 +381,7 @@ def log_likelihood(
 
         partials[slot] = partial
 
-    root_partial = partials.pop(traversal.root_slot)
+    root_partial = partials.pop(schedule.root_slot)
     site_likelihood = root_partial @ pi_t  # eq:root
     site_log_likelihood = torch.log(site_likelihood) + log_scale
     if weight is None:
