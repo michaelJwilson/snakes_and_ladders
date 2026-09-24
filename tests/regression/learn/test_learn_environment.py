@@ -376,6 +376,7 @@ def test_the_deprecated_tensor_accessors_return_the_arrays_bitwise() -> None:
 
 
 @pytest.mark.smoke
+@pytest.mark.hmm
 @pytest.mark.parametrize(
     "module", ["canonical", "environment", "hmm", "potts", "potts_nd"]
 )
