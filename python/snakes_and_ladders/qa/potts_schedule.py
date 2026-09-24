@@ -148,23 +148,24 @@ class Evaluation:
         }
 
 
-def handover(
-    move: PottsMove, params: ScheduleParams, steps: int | None, seed: int
-) -> tuple[float, int]:
-    """One annealed run on the notebook's generator for ``seed``: its energy and spend.
+def _cell_generator(seed: int) -> np.random.Generator:
+    """``default_rng([seed, 0])``: the generator :class:`~snakes_and_ladders.opt.starts.StartsBenchmark` hands cell ``(instance 0, seed)``.
 
-    The generator is ``default_rng([seed, 0])``, the one
-    :class:`~snakes_and_ladders.opt.starts.StartsBenchmark` hands cell
-    ``(instance 0, seed)``, so a run here is the notebook's run at that seed.
+    A run here on it is therefore the notebook's run at that seed.
     """
+    return np.random.default_rng([seed, 0])
+
+
+def handover(
+    move: PottsMove,
+    params: ScheduleParams,
+    steps: int | None,
+    rng: np.random.Generator,
+) -> tuple[float, int]:
+    """One annealed run on the notebook's rung and budget: its energy and spend."""
     rung = release_rung()
     run = run_annealed(
-        rung,
-        solver_budget(rung),
-        np.random.default_rng([seed, 0]),
-        move,
-        schedule=params,
-        steps=steps,
+        rung, solver_budget(rung), rng, move, schedule=params, steps=steps
     )
     return run.energy, run.spent
 
@@ -185,7 +186,7 @@ def evaluate(
     if set(seeds) & set(REPORTED_SEEDS):
         msg = f"seeds {sorted(set(seeds) & set(REPORTED_SEEDS))} are reported, not tuned on"
         raise ValueError(msg)
-    runs = [handover(move, params, steps, seed) for seed in seeds]
+    runs = [handover(move, params, steps, _cell_generator(seed)) for seed in seeds]
     return Evaluation(
         params,
         steps,
@@ -235,7 +236,7 @@ def tune(task: tuple[PottsMove, ScheduleShape]) -> list[Evaluation]:
 def _wolff_spend(task: tuple[int, int]) -> tuple[float, int]:
     """Wolff on the current schedule at ``steps`` steps for one tuning seed."""
     steps, seed = task
-    return handover(PottsMove.WOLFF, ANNEAL_SCHEDULE, steps, seed)
+    return handover(PottsMove.WOLFF, ANNEAL_SCHEDULE, steps, _cell_generator(seed))
 
 
 def matched_steps(budget: Budget, lower: int) -> tuple[int, list[dict[str, Any]]]:

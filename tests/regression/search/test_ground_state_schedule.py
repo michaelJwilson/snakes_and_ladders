@@ -64,6 +64,7 @@ def _budget(rung: Rung) -> Budget:
     return Budget(Cost.SITE_VISITS, SWEEPS * rung.visits_per_sweep)
 
 
+@pytest.mark.smoke
 @pytest.mark.patch
 @pytest.mark.parametrize("name", list(ENTRIES))
 @pytest.mark.parametrize("seed", SEEDS)
@@ -91,6 +92,7 @@ def test_the_default_schedule_is_the_run_it_replaces_bitwise(
     assert entry.spent == replaced.site_visits
 
 
+@pytest.mark.smoke
 @pytest.mark.patch
 @pytest.mark.parametrize("move", [PottsMove.SWENDSEN_WANG, PottsMove.WOLFF])
 def test_a_start_given_is_the_start_drawn_bitwise(move: PottsMove) -> None:
@@ -129,6 +131,7 @@ def test_a_start_of_the_wrong_shape_or_range_is_refused() -> None:
             )
 
 
+@pytest.mark.smoke
 @pytest.mark.patch
 @pytest.mark.parametrize("seed", SEEDS)
 def test_the_warm_chains_descent_is_icms_run_on_the_same_generator(seed: int) -> None:
@@ -183,6 +186,7 @@ def test_a_fixed_step_count_replaces_the_budgets() -> None:
     assert len(run.trace) == 3 * SWEEPS
 
 
+@pytest.mark.smoke
 @pytest.mark.patch
 @pytest.mark.parametrize("name", ["swendsen-wang", "wolff"])
 def test_a_schedule_start_on_the_default_is_the_solver_start_bitwise(
