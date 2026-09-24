@@ -183,8 +183,10 @@ def status_claims(
 SAMPLE = 5
 
 #: Packages collapsed to one node and a sample. `qa` is 29 modules of
-#: infrastructure --- a fifth of the budget on the part a newcomer reads last.
-COLLAPSED = ("qa",)
+#: infrastructure --- a fifth of the budget on the part a newcomer reads last
+#: --- and `validation` is 28 more, the external frameworks' adapters and
+#: scripts, collapsed when #1008's modules took the page past its cap.
+COLLAPSED = ("qa", "validation")
 
 
 def sampled(carried: tuple[Module, ...], take: int = SAMPLE) -> tuple[Module, ...]:

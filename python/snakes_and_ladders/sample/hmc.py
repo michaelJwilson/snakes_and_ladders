@@ -1458,6 +1458,40 @@ def _transition(
     )
 
 
+def compiled_trajectory(
+    objective: Objective,
+    position: torch.Tensor,
+    momentum: torch.Tensor,
+    step_size: float,
+    n_steps: int,
+) -> PhaseSpace:
+    """:func:`leapfrog` on a declared energy, in ``oxisal`` at unit mass (issues #986, #1008).
+
+    The trajectory is the one arithmetic the compiled chain and the torch
+    route share, so it is what pins ``src/hmc.rs`` to :func:`leapfrog` step
+    for step; the chains themselves differ in their streams.
+
+    Raises
+    ------
+    TypeError
+        If the objective declares no energy
+        (:func:`~snakes_and_ladders.sample.declared.declared_energy`).
+    """
+    declared = declared_energy(objective)
+    if declared is None:
+        msg = f"{type(objective).__name__} declares no energy a compiled trajectory can run"
+        raise TypeError(msg)
+    end, velocity = oxisal.leapfrog_trajectory(
+        declared[0],
+        declared[1],
+        np.ascontiguousarray(position.detach().numpy(), dtype=np.float64),
+        np.ascontiguousarray(momentum.detach().numpy(), dtype=np.float64),
+        step_size,
+        n_steps,
+    )
+    return PhaseSpace(torch.from_numpy(end), torch.from_numpy(velocity))
+
+
 def gradient_at(objective: Objective, theta: torch.Tensor) -> torch.Tensor:
     """``dU/dtheta``: the objective's declared gradient, its declared value and gradient, or autograd."""
     if declares_gradient(objective):

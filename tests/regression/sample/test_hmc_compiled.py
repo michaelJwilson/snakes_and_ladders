@@ -2,7 +2,7 @@
 
 Referees:
 
-- ``leapfrog_trajectory`` is ``hmc.leapfrog`` on the same position and
+- ``hmc.compiled_trajectory`` (``oxisal.leapfrog_trajectory``) is ``hmc.leapfrog`` on the same position and
   momentum, diagonal and dense, within 1e-12: the trajectory is the only
   arithmetic the two routes share, since their streams differ;
 - the compiled chain at d = 200 returns every coordinate's mean within 4.5
@@ -19,14 +19,13 @@ from typing import Any
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders import oxisal
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.opt.hmm import GaussianHmmObjective, PoissonHmmObjective
 from snakes_and_ladders.opt.mixture import GaussianMixtureObjective
 from snakes_and_ladders.opt.objective import DeclaredGradient
 from snakes_and_ladders.opt.testfunctions import Rosenbrock
 from snakes_and_ladders.sample import hmc, langevin
-from snakes_and_ladders.sample.declared import Power, declared_energy
+from snakes_and_ladders.sample.declared import Power
 from snakes_and_ladders.sample.expectation import KalmanMean
 from snakes_and_ladders.validation.gaussian import (
     GaussianTarget,
@@ -48,9 +47,14 @@ def test_the_compiled_trajectory_is_the_torch_leapfrog(dense: bool) -> None:
         0.21,
         17,
     )
-    position, velocity = oxisal.leapfrog_trajectory(
-        0, np.ascontiguousarray(precision).reshape(-1), theta, momentum, 0.21, 17
+    compiled = hmc.compiled_trajectory(
+        GaussianTarget(precision),
+        torch.as_tensor(theta),
+        torch.as_tensor(momentum),
+        0.21,
+        17,
     )
+    position, velocity = compiled.position.numpy(), compiled.momentum.numpy()
     np.testing.assert_allclose(position, torch_end.position.numpy(), rtol=0, atol=1e-12)
     np.testing.assert_allclose(velocity, torch_end.momentum.numpy(), rtol=0, atol=1e-12)
 
@@ -177,9 +181,10 @@ def test_the_compiled_trajectory_is_the_torch_leapfrog_on_rosenbrock() -> None:
     torch_end = hmc.leapfrog(
         Rosenbrock(10), torch.as_tensor(theta), torch.as_tensor(momentum), 0.002, 25
     )
-    position, velocity = oxisal.leapfrog_trajectory(
-        1, np.asarray([1.0, 100.0]), theta, momentum, 0.002, 25
+    compiled = hmc.compiled_trajectory(
+        Rosenbrock(10), torch.as_tensor(theta), torch.as_tensor(momentum), 0.002, 25
     )
+    position, velocity = compiled.position.numpy(), compiled.momentum.numpy()
     np.testing.assert_allclose(position, torch_end.position.numpy(), rtol=0, atol=1e-12)
     np.testing.assert_allclose(velocity, torch_end.momentum.numpy(), rtol=0, atol=1e-10)
 
@@ -288,8 +293,6 @@ def test_the_compiled_mixture_trajectory_is_the_torch_leapfrog() -> None:
     # Issue #1008: the declared mixture's force is the objective's streamed
     # gradient in `theta`'s layout, step for step through a trajectory.
     objective = _mixture(5_000)
-    declared = declared_energy(objective)
-    assert declared is not None
     rng = np.random.default_rng(10080)
     theta = np.array([0.0, 0.3, -4.0, 0.0, 5.0, 0.0, 0.1, 0.0]) + 0.01 * rng.normal(
         size=8
@@ -298,9 +301,10 @@ def test_the_compiled_mixture_trajectory_is_the_torch_leapfrog() -> None:
     torch_end = hmc.leapfrog(
         objective, torch.as_tensor(theta), torch.as_tensor(momentum), 0.002, 10
     )
-    position, velocity = oxisal.leapfrog_trajectory(
-        declared[0], declared[1], theta, momentum, 0.002, 10
+    compiled = hmc.compiled_trajectory(
+        objective, torch.as_tensor(theta), torch.as_tensor(momentum), 0.002, 10
     )
+    position, velocity = compiled.position.numpy(), compiled.momentum.numpy()
     np.testing.assert_allclose(
         position, torch_end.position.numpy(), rtol=1e-12, atol=1e-12
     )
@@ -366,17 +370,16 @@ def test_the_compiled_hmm_trajectory_is_the_torch_leapfrog() -> None:
     # Issue #1008: the declared Gaussian HMM's force is Fisher's identity
     # over the streamed statistics, step for step with autograd's leapfrog.
     objective = GaussianHmmObjective(_sequences(20, 50), 2, backend=Backend.TORCH)
-    declared = declared_energy(objective)
-    assert declared is not None
     rng = np.random.default_rng(10081)
     theta = np.asarray(_HMM_START) + 0.05 * rng.normal(size=7)
     momentum = rng.normal(size=7)
     torch_end = hmc.leapfrog(
         objective, torch.as_tensor(theta), torch.as_tensor(momentum), 0.01, 10
     )
-    position, velocity = oxisal.leapfrog_trajectory(
-        declared[0], declared[1], theta, momentum, 0.01, 10
+    compiled = hmc.compiled_trajectory(
+        objective, torch.as_tensor(theta), torch.as_tensor(momentum), 0.01, 10
     )
+    position, velocity = compiled.position.numpy(), compiled.momentum.numpy()
     np.testing.assert_allclose(
         position, torch_end.position.numpy(), rtol=1e-10, atol=1e-12
     )
