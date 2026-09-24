@@ -297,6 +297,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sample.hmc
    :members:
 
+.. automodule:: snakes_and_ladders.sample.expectation
+   :members:
+
 .. automodule:: snakes_and_ladders.sample.langevin
    :members:
 

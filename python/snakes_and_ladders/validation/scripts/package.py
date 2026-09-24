@@ -130,6 +130,10 @@ def _hmc_sample(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     target = GaussianTarget(inputs["precision"])
     step_size, n_steps = float(inputs["step_size"]), int(inputs["n_steps"])
     n_draws, seed = int(inputs["n_draws"]), int(inputs["seed"])
+    # Issue #988: with ``store_chain`` false the chain keeps no draws and
+    # estimates the mean of ``x`` instead.
+    store_chain = bool(inputs.get("store_chain", np.asarray(True)))
+    operators = None if store_chain else {"x": lambda x: x}
 
     def call() -> Outputs:
         chain = hmc.sample(
@@ -138,6 +142,8 @@ def _hmc_sample(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
             n_draws,
             step_size=step_size,
             n_steps=n_steps,
+            store_chain=store_chain,
+            operators=operators,
         )
         return {"acceptance": np.asarray(chain.acceptance_rate)}
 
