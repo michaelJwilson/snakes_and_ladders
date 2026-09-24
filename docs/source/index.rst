@@ -542,6 +542,12 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.validation.gaussian
    :members:
 
+.. automodule:: snakes_and_ladders.validation.rustworkx
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.scripts.rustworkx
+   :members:
+
 .. automodule:: snakes_and_ladders.validation.scripts.blackjax
    :members:
 

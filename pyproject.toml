@@ -66,12 +66,10 @@ notebooks = [
 # External frameworks that front or referee a hand-rolled implementation
 # (issue #322). An extra rather than a core dependency: the core install and
 # the per-pull-request suite pull none of them, and every test that needs one
-# `importorskip`s it. All four are OSI-licensed (MIT, Apache-2.0, MIT, MIT);
-# rustworkx sits near the 1,000-star bar and was flagged and approved on the
-# ticket.
+# `importorskip`s it. All three are OSI-licensed (MIT). rustworkx left this
+# extra for `validation-rustworkx` (issue #976).
 frameworks = [
     "gymnasium>=1.0",
-    "rustworkx>=0.15",
     "torchrl>=0.6",
     "torch_geometric>=2.5",
 ]
@@ -106,6 +104,11 @@ validation-scikit-learn = ["scikit-learn>=1.9.1"]
 # in a subprocess: autodiff in the package stays PyTorch. Wheels for linux-64
 # and osx-arm64.
 validation-blackjax = ["blackjax>=1.6.2"]
+#
+# rustworkx: Apache-2.0, near the 1,000-star bar, flagged and approved on
+# #322 and moved here by #976 from the `frameworks` extra, so it runs in a
+# subprocess like the rest. Wheels for linux-64 and osx-arm64.
+validation-rustworkx = ["rustworkx>=0.18.1"]
 # The run store behind `snakes_and_ladders.track` (issue #778). An extra
 # rather than a core dependency: `track.Run` is a Protocol written with
 # `aim.Run`'s own signatures, so the package imports, records and tests

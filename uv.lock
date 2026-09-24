@@ -4403,7 +4403,6 @@ docs = [
 ]
 frameworks = [
     { name = "gymnasium" },
-    { name = "rustworkx" },
     { name = "torch-geometric" },
     { name = "torchrl" },
 ]
@@ -4434,6 +4433,9 @@ validation-hmmlearn = [
 validation-pymaxflow = [
     { name = "pymaxflow" },
 ]
+validation-rustworkx = [
+    { name = "rustworkx" },
+]
 validation-scikit-learn = [
     { name = "scikit-learn" },
 ]
@@ -4462,7 +4464,7 @@ requires-dist = [
     { name = "pytest-xdist", marker = "extra == 'test'", specifier = ">=3.6" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.9.9,<0.10" },
-    { name = "rustworkx", marker = "extra == 'frameworks'", specifier = ">=0.15" },
+    { name = "rustworkx", marker = "extra == 'validation-rustworkx'", specifier = ">=0.18.1" },
     { name = "scikit-learn", marker = "extra == 'validation-scikit-learn'", specifier = ">=1.9.1" },
     { name = "scipy", specifier = ">=1.13.0" },
     { name = "sphinx", marker = "extra == 'docs'", specifier = ">=7,<9" },
@@ -4472,7 +4474,7 @@ requires-dist = [
     { name = "towncrier", marker = "extra == 'dev'", specifier = ">=24.8.0" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0" },
 ]
-provides-extras = ["dev", "docs", "frameworks", "notebooks", "test", "track", "validation-blackjax", "validation-gco", "validation-hmmlearn", "validation-pymaxflow", "validation-scikit-learn"]
+provides-extras = ["dev", "docs", "frameworks", "notebooks", "test", "track", "validation-blackjax", "validation-gco", "validation-hmmlearn", "validation-pymaxflow", "validation-rustworkx", "validation-scikit-learn"]
 
 [[package]]
 name = "snowballstemmer"
