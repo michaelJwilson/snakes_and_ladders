@@ -1,15 +1,10 @@
 """The mixture fit, and what k-means++ actually buys.
 
-Two abstractions meet here (issue #262). The component M step is the emission
-family's, called with responsibilities where an HMM passes state posteriors,
-so what is pinned is that it is *the same step*. And the initializer is the
-first that reads its objective's data, the case issue #251 built the protocol
-for and had nothing to exercise it with.
-
-The k-means++ guarantee is the reason this can be tested rather than admired:
-Arthur & Vassilvitskii (2007) bound the *expected* seeding cost at
-``8 (ln k + 2)`` times optimal, and in one dimension the optimal clustering is
-computable exactly, so the bound has something to be checked against.
+Issue #262. The component M step is the emission family's, called with
+responsibilities, so it is pinned as the same step; the initializer is the
+first to read its objective's data (#251). Arthur & Vassilvitskii (2007) bound
+the expected seeding cost at ``8 (ln k + 2)`` times optimal, and the 1-D
+optimum is computable exactly, so the bound is checked.
 """
 
 from __future__ import annotations
@@ -133,12 +128,8 @@ def test_the_fit_recovers_the_generating_mixture_up_to_the_label_permutation() -
 
 @pytest.mark.oracle
 def test_the_component_m_step_is_the_emission_family_s_own() -> None:
-    # The mixture's EM and a direct call into `GaussianEmission.reestimate` on
-    # the same responsibilities must produce the same numbers, because they
-    # *are* the same call. A divergence means the seam has acquired a
-    # mixture-specific branch. It is the tensor route's claim: the compiled
-    # route streams its own moments and is pinned to this one within 1e-10
-    # (`test_the_streamed_mixture_em_is_the_tensor_one`, issue #986).
+    # The same call, so the same numbers; the compiled route streams its own
+    # moments, pinned within 1e-10 (issue #986).
     observations = _dataset(n_samples=200)
     values = torch.as_tensor(observations, dtype=torch.float64)
     components = GaussianEmission([-1.0, 1.0], [2.0, 2.0], 1e-9)
@@ -260,11 +251,8 @@ def test_kmeans_plus_plus_stays_inside_its_published_guarantee() -> None:
 
 @pytest.mark.smoke
 def test_kmeans_plus_plus_beats_uniform_seeding_on_the_cost_it_optimizes() -> None:
-    # The paired control, kept beside the strategy: a comparison whose baseline
-    # lives only in the test that wins it is not a comparison. Realized: mean
-    # ratio 2.91 against 11.03, and the
-    # worst uniform draw (58.1x optimal) is outside the k-means++ guarantee
-    # while the worst k-means++ draw (14.4x) is inside it.
+    # The paired control: mean ratio 2.91 against 11.03; worst uniform 58.1x
+    # optimal (outside the guarantee), worst k-means++ 14.4x (inside).
     observations = _dataset(
         mean=SEPARATED_MEAN,
         scale=np.ones(3),
@@ -289,20 +277,10 @@ def test_kmeans_plus_plus_beats_uniform_seeding_on_the_cost_it_optimizes() -> No
 
 @pytest.mark.smoke
 def test_the_seeding_advantage_does_not_reach_the_mixture_likelihood() -> None:
-    # **The negative result.** k-means++ is 3.8x better on the cost it
-    # optimizes, and on this mixture that buys
-    # nothing downstream: EM reaches the same optimum from either seeding, and
-    # from the objective's own quantile start too. Measured over 200
-    # replicates: 200/200 for k-means++, 195/200 for uniform.
-    #
-    # Harder fixtures do not reverse it, they only make both fail: at five
-    # components 1.5 standard deviations apart, neither seeding reached the
-    # best optimum found in 200 draws, and at five with unequal weights
-    # uniform reached it 9 times in 150 against k-means++'s 3 -- noise, in the
-    # direction opposite to the one a default change would need.
-    #
-    # So no default moves. `GaussianMixtureObjective.initial()` stays the
-    # quantile start, and k-means++ lands as a strategy a caller may choose.
+    # The negative result: 3.8x better on its cost, nothing downstream (200/200
+    # against 195/200 over 200 replicates). Harder fixtures make both fail (five
+    # at 1.5 sd: neither; unequal weights: 9/150 uniform, 3/150 k-means++). The
+    # quantile start stays default; k-means++ is a strategy a caller may choose.
     observations = _dataset(
         mean=SEPARATED_MEAN,
         scale=np.ones(3),
@@ -376,12 +354,8 @@ def test_the_initializer_satisfies_the_protocol_and_seeds_the_objective() -> Non
 def test_an_initializer_that_reads_the_data_refuses_an_objective_it_cannot_read() -> (
     None
 ):
-    # The finding #251's Open Question 4 turns into: the protocol needed no
-    # change, because a data-dependent strategy is model-*specific* rather
-    # than protocol-incompatible. It takes an `Objective` like every other
-    # initializer and refuses the ones whose parameter vector it cannot
-    # interpret, so it lives beside the mixture rather than in
-    # `opt/initialize.py` with the model-free strategies.
+    # #251's Open Question 4: no protocol change; a data-dependent strategy is
+    # model-specific, refuses objectives it cannot interpret, and lives here.
     params = PottsParams(
         n_states=3,
         chain_length=6,
@@ -415,12 +389,9 @@ def test_a_known_truth_round_trips_through_the_unconstrained_coordinates() -> No
     assert_allclose(estimate["scale"].numpy(), SCALE, rtol=1e-13)
 
 
-#: The enumerable instance: two components at three standard deviations,
-#: sixteen observations, so ``2 ** 16 = 65,536`` assignments fit inside
-#: :data:`snakes_and_ladders.enumeration.MAX_ENUMERABLE_CONFIGURATIONS`. The
-#: declared fixture is 500 observations over five components and is
-#: ``5 ** 500`` assignments past enumeration, so the oracle instance is built
-#: here rather than read from the registry (issue #393).
+#: Two components at three sd, sixteen observations: ``2 ** 16 = 65,536``
+#: assignments, inside ``MAX_ENUMERABLE_CONFIGURATIONS``; the declared fixture
+#: is ``5 ** 500`` (issue #393).
 ENUMERABLE_SAMPLES = 16
 ENUMERABLE_WEIGHTS = np.array([0.4, 0.6])
 ENUMERABLE_MEAN = np.array([-3.0, 3.0])
@@ -444,14 +415,9 @@ def _enumerable_mixture() -> tuple[np.ndarray, GaussianEmission]:
 
 @pytest.mark.oracle
 def test_the_evidence_and_the_e_step_match_the_enumerated_assignments() -> None:
-    # The mixture's evidence and responsibilities have a one-line factorized
-    # form because the observations are independent, and that form is what
-    # this module computes. Summing 65,536 whole assignments term by term uses
-    # none of it, so agreement catches a normalization over the wrong axis, a
-    # weight broadcast against the components rather than along them, and a
-    # log-sum-exp shift shared where it may not be. Realized: evidence to
-    # 1.2e-16 relative, responsibilities to 4.4e-16 absolute, at the
-    # generating parameters and at the EM fixed point alike.
+    # The sum over 65,536 assignments uses no factorization, catching a wrong
+    # normalization axis, broadcast or shared shift. Realized: evidence 1.2e-16
+    # relative, responsibilities 4.4e-16, at truth and at the EM fixed point.
     observations, components = _enumerable_mixture()
     values = torch.as_tensor(observations, dtype=torch.float64)
     objective = GaussianMixtureObjective(observations, 2)
@@ -493,14 +459,9 @@ def test_the_evidence_and_the_e_step_match_the_enumerated_assignments() -> None:
 def test_the_seeded_start_lands_in_the_enumerated_maximum_posterior_assignment() -> (
     None
 ):
-    # A data-reading start is for the basin, and over 65,536 assignments the
-    # basin is an exact object: the single assignment of highest posterior
-    # probability under the parameters the start encodes. k-means++ reaches
-    # the fitted mixture's enumerated
-    # maximum-posterior assignment on 20 of 20 seeds; uniform seeding, the
-    # control that already lives beside it, reaches it on 10 of 20. The
-    # responsibilities at each seeded start agree with the enumeration to
-    # 6.8e-15, so it is the same posterior being maximized in both.
+    # The basin is exact here: k-means++ reaches the enumerated maximum-posterior
+    # assignment on 20 of 20 seeds, uniform on 10 of 20; responsibilities agree
+    # with the enumeration to 6.8e-15.
     observations, components = _enumerable_mixture()
     objective = GaussianMixtureObjective(observations, 2)
     fitted = expectation_maximization(
@@ -544,11 +505,8 @@ def test_the_seeded_start_lands_in_the_enumerated_maximum_posterior_assignment()
     assert uniform <= 15, uniform
 
 
-#: The instances the optimal cost is enumerated on: observations, clusters,
-#: and the seed the draw is made with. ``3 ** 10`` is 59,049 assignments and
-#: ``2 ** 12`` is 4,096, both inside
-#: :data:`snakes_and_ladders.enumeration.MAX_ENUMERABLE_CONFIGURATIONS`; the
-#: dynamic program is ``O(n ** 2 k)`` and does not care, which is the point.
+#: (observations, clusters, seed): ``3 ** 10`` = 59,049 and ``2 ** 12`` = 4,096
+#: assignments; the ``O(n ** 2 k)`` dynamic program does not care.
 ENUMERATED_CLUSTERINGS = ((10, 3, 734), (12, 2, 11), (9, 3, 5))
 
 #: The weights the equal-weight assumption is tilted by, and the instance of
@@ -573,10 +531,7 @@ def _assignment_matrix(n_samples: int, n_centres: int) -> np.ndarray:
 def _within_cluster_cost(values: np.ndarray, assignments: np.ndarray) -> np.ndarray:
     """Each assignment's sum of squares about its own clusters' means.
 
-    The definition, over whole assignments and with no ordering argument: an
-    empty cluster contributes nothing, so an assignment using fewer clusters
-    than it may is scored rather than excluded. ``values`` carries a channel
-    axis or does not, and the squared distance sums over it either way.
+    The definition: empty clusters contribute nothing; any channel axis is summed.
     """
     n_centres = int(assignments.max()) + 1
     rows = values.reshape(values.shape[0], -1)
@@ -614,29 +569,13 @@ def _is_contiguous(partition: np.ndarray) -> bool:
 def test_the_optimal_clustering_cost_is_the_minimum_over_the_enumerated_assignments() -> (
     None
 ):
-    # The rung below (issue #734): assignment enumeration. The dynamic program
-    # searches ``k - 1`` cut positions in the sorted order and claims the
-    # minimum over *all* ``k ** n`` assignments; enumerating them uses no
-    # ordering argument at all, so agreement is evidence for that argument
-    # rather than a restatement of it. Realized over the three instances:
-    # 0.0, 2.8e-16 and 1.6e-16 relative, against 1e-12 declared.
-    #
-    # Two statements beside it. The enumerated minimizer is contiguous in the
-    # sorted order on all three -- the premise the dynamic program rests on,
-    # asserted rather than assumed. And that partition is the enumerated
-    # maximum-posterior assignment of a Gaussian mixture whose components sit
-    # at its own cluster means, at equal weights and a shared scale, which is
-    # where nearest-centre and maximum-posterior are one rule: the enumeration
-    # that referees the cost returns the partition too.
-    #
-    # Where the second statement stops is one assumption out. At weights
-    # (0.05, 0.15, 0.8) and at (0.02, 0.49, 0.49) the maximum-posterior
-    # assignment of the nine-observation instance is no longer the optimal
-    # partition -- the weight tilts the posterior and the cost does not see
-    # it -- so the equality is the equal-weight case and is asserted as one.
-    # The tilt moves nothing on the ten-observation instance, whose clusters
-    # are far enough apart to absorb a weight ratio of 16, and both outcomes
-    # are asserted rather than the convenient one.
+    # The rung below (#734): enumeration over ``k ** n`` assignments uses no
+    # ordering argument: 0.0, 2.8e-16, 1.6e-16 relative (1e-12). The minimizer
+    # is contiguous on all three, asserted; it is the enumerated MAP of a
+    # mixture at its cluster means at equal weights and shared scale. At
+    # weights (0.05, 0.15, 0.8) and (0.02, 0.49, 0.49) the nine-observation
+    # MAP departs from it, while the ten-observation one absorbs a ratio of
+    # 16; both asserted.
     for n_samples, n_centres, seed in ENUMERATED_CLUSTERINGS:
         values, partition, cost = _enumerated_optimum(n_samples, n_centres, seed)
 
@@ -659,15 +598,9 @@ def test_the_optimal_clustering_cost_is_the_minimum_over_the_enumerated_assignme
             moved = not np.array_equal(tilted.assignment, partition)
             assert moved == (n_samples == TILTED_INSTANCE[0]), (seed, weights)
 
-    # Where the cost statement itself stops, and why the docstring says "only
-    # in one dimension". The dynamic program searches contiguous runs of the
-    # sorted observations, and in two dimensions no ordering makes the optimum
-    # contiguous. Enumerated over the 256 assignments of eight points sorted
-    # by their first coordinate: the optimum is [0 0 0 0 1 0 0 0] at 10.883,
-    # which no run of that order can express, and the best contiguous
-    # partition costs 14.422, 32.5% above it. The callable flattens what it is
-    # given, so on this data it returns 5.328 -- the exact optimum of sixteen
-    # scalars, which is a different question.
+    # "Only in one dimension": over 256 assignments of eight 2-D points the
+    # optimum [0 0 0 0 1 0 0 0] costs 10.883, the best contiguous 14.422
+    # (32.5% above); flattened, the callable returns 5.328, another question.
     points = np.random.default_rng(NON_CONTIGUOUS_SEED).normal(size=(8, 2)) * 2.0
     points = points[np.argsort(points[:, 0])]
     assignments = _assignment_matrix(8, 2)
@@ -689,12 +622,7 @@ def test_the_optimal_clustering_cost_is_the_minimum_over_the_enumerated_assignme
 class _ReportingGaussian(GaussianEmission):
     """`GaussianEmission` carrying the M-step report an iterative solve gives.
 
-    The Gaussian M step is closed form: it settles by construction and reaches
-    no boundary, so the two flags are planted rather than provoked. A count
-    family's M step is an optimization and reports both
-    (`emissions.Reestimate`), and the loop must read the report whichever
-    family it holds -- which is what `opt.emission_mixture` does with the same
-    step (issue #856).
+    Planted flags: the loop must read the report for any family (issue #856).
     """
 
     def __init__(

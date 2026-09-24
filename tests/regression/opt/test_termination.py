@@ -1,16 +1,10 @@
 """The five ways a result said "did it finish", each read off one `Termination`.
 
-Issue #860. `docs/reviews/2026-09-20-design.md` counted the encodings: a
-`converged: bool` field, a raise on exhaustion, an exception caught to a bool,
-an iteration count the caller compared against the cap, and a derived
-`optimal` property. One test per encoding holds that the old form and the new
-say the same thing about the same run, so a caller may move to the one form
-without reading the producer.
-
-`smoke`: what is asserted is the mapping between two statements a producer
-makes, not the science of the run that made them. The numbers these runs
-reach are refereed where they always were --- `test_opt_fit.py`,
-`test_opt_mixture.py`, `test_ground_state.py`, `test_tightening.py`.
+Issue #860 (`docs/reviews/2026-09-20-design.md`): a `converged` bool, a raise
+on exhaustion, a caught exception, an iteration count against the cap, and an
+`optimal` property; one test each holds the old and new forms equal. `smoke`:
+the science is refereed in `test_opt_fit.py`, `test_opt_mixture.py`,
+`test_ground_state.py` and `test_tightening.py`.
 """
 
 from __future__ import annotations

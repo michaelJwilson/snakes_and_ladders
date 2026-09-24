@@ -225,16 +225,9 @@ def test_the_new_door_is_the_old_one(objective: Objective, theta: torch.Tensor) 
 
 @pytest.mark.analytic
 def test_an_em_fit_and_a_gradient_fit_agree_on_the_interval_at_their_optimum() -> None:
-    # The two algorithms share the model and nothing else -- no optimizer, no
-    # parameterization, no constraint map -- and converge to the same optimum.
-    # The Hessian is a property of the objective at a point, so the intervals
-    # must agree, and a broken round trip fails this loudly.
-    #
-    # Realized: the log-likelihoods differ by 3.6e-9 relative, the points by
-    # at most 2.4e-3 along the flat ridge EM approaches slowly, and the
-    # standard errors by **0.31% relative**. The 1% bound below is the ridge's
-    # width and not a tolerance chosen to pass; the 1e-8 on the likelihood is
-    # how close two algorithms sharing only the model actually get.
+    # EM and gradient fit share only the model. Realized: likelihoods 3.6e-9
+    # apart, points 2.4e-3 along the flat ridge, standard errors 0.31%. The 1%
+    # bound is the ridge's width; 1e-8 on the likelihood is what they reach.
     params = load_params(HMM_FIXTURE, HmmParams)
     observations = simulate_sequences(params).observations
     objective = HmmObjective(observations, params.n_states, params.n_symbols)
@@ -323,12 +316,8 @@ def test_a_multi_start_interval_belongs_beside_the_spread_that_qualifies_it() ->
 
 @pytest.mark.smoke
 def test_a_fit_asked_for_its_interval_gets_the_one_the_door_gives() -> None:
-    # `include_intervals` is a convenience over `constrained_standard_errors`,
-    # not a second implementation: bitwise the same numbers at the same
-    # `theta`. (The `named` door is the same to 1e-10, not bitwise -- its
-    # round trip is exact to 4e-16, and `test_the_new_door_is_the_old_one`
-    # holds it to that.) And off is off: `None` and no Hessian, so a fit
-    # inside a search loop costs what it cost before.
+    # A convenience, bitwise at the same `theta` (the `named` door to 1e-10;
+    # round trip 4e-16). Off means `None` and no Hessian.
     params = load_params(HMM_FIXTURE, HmmParams)
     objective = HmmObjective(
         simulate_sequences(params).observations, params.n_states, params.n_symbols
@@ -367,13 +356,9 @@ def test_an_unconverged_fit_is_refused_an_interval_but_not_a_result() -> None:
 
 @pytest.mark.oracle
 def test_where_the_laplace_approximation_is_exact_the_chain_agrees_with_it() -> None:
-    # The comparison on the one target where it has an exact answer. A
-    # Gaussian's Hessian *is* its precision, so the Laplace interval equals
-    # sqrt(diag(covariance)) to round-off and is asserted so; the chain then
-    # has nothing to be approximate about, and its spread must match to Monte
-    # Carlo error. Realized ratios 1.0004 and 0.9953 at 4000 draws; the 5%
-    # bound is 2.7 times the largest deviation seen over three seeds, and the
-    # Potts case below is where the two are *allowed* to differ.
+    # A Gaussian's Hessian is its precision: Laplace equals sqrt(diag) to
+    # round-off. Chain ratios 1.0004 and 0.9953 at 4000 draws; the 5% bound is
+    # 2.7x the largest over three seeds.
     from snakes_and_ladders.sample.hmc import sample
 
     target = AnalyticGaussian([1.0, -2.0], [[2.0, 0.6], [0.6, 0.5]])
@@ -396,15 +381,9 @@ def test_where_the_laplace_approximation_is_exact_the_chain_agrees_with_it() -> 
 
 @pytest.mark.smoke
 def test_the_delta_method_interval_and_the_sampled_posterior_agree() -> None:
-    # The comparison `hmc.py`'s docstring promises, where the approximation is
-    # allowed to be one. A raw Hessian in *unconstrained* coordinates against
-    # grid quadrature already existed, at rtol=0.15; the missing half is the
-    # delta-method interval on the parameters a person names, against a chain.
-    #
-    # Realized: the sampled spread is 1.057, 1.031 and 1.036 times the Laplace
-    # one across the three parameters. The Laplace approximation is slightly
-    # *optimistic* here, which is the expected direction for a mildly
-    # non-Gaussian posterior and is reported rather than asserted away.
+    # `hmc.py`'s promise, where the approximation may be one: the delta-method
+    # interval on named parameters against a chain. Sampled spread 1.057,
+    # 1.031, 1.036 times Laplace: slightly optimistic, as expected, reported.
     from snakes_and_ladders.sample.hmc import WithGaussianPrior, sample
 
     field = np.array([0.3, -0.3])
@@ -442,12 +421,8 @@ def test_the_delta_method_interval_and_the_sampled_posterior_agree() -> None:
 @pytest.mark.end2end
 @pytest.mark.release
 def test_the_intervals_from_an_em_fit_cover_truth_at_the_nominal_rate() -> None:
-    # An interval that exists and does not cover is worse than no interval, so
-    # the EM path is held to exactly the standard the gradient path is.
-    # Realized over 12 replicates: 243/264 = 0.920 cover, with 1 of 12
-    # reaching the boundary of the parameter space and contributing none --
-    # counted rather than dropped, since excluding them unannounced would
-    # select for the well-behaved samples.
+    # The EM path is held to the gradient path's standard: 243/264 = 0.920
+    # cover over 12 replicates, 1 at the boundary counted, not dropped.
     base = load_params(HMM_FIXTURE, HmmParams)
     truth = {
         "log_initial": torch.log(torch.as_tensor(base.initial)),
