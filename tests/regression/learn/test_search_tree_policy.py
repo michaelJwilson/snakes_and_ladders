@@ -1,20 +1,10 @@
 """What a learned policy does on a environment hill climbing does not solve.
 
-Milestone 2.1's phylogenetic half asks whether a learned proposal policy beats
-hill climbing. Issue #177 supplied a fixture on which hill climbing fails, so
-the question is finally askable. The answer measured here is that it does not,
-and the tests below pin the two facts that make that answer meaningful rather
-than merely disappointing.
-
-The first is that the policy learns: an untrained policy, uniform over the same
-moves, is far worse than greedy, so "ties greedy" is most of the distance from
-chance rather than a failure to train.
-
-The second is that this environment cannot support a better answer. An episode
-ends when no move improves, so every run terminates at a state greedy would
-also have stopped at, and the agent chooses which local optimum to enter rather
-than how to leave one. Both halves are asserted, because together they say the
-null result is a property of the environment and not of the training run.
+Milestone 2.1 asks whether a learned proposal policy beats hill climbing on
+#177's fixture; measured, it does not. Pinned: the policy learns (untrained is
+far below greedy), and the environment cannot support better: an episode ends
+when no move improves, so the agent chooses which local optimum to enter, not
+how to leave one. Together they place the null result in the environment.
 """
 
 from __future__ import annotations
@@ -42,11 +32,8 @@ from snakes_and_ladders.sim.tree import edges
 
 FIXTURE = Path("tests/regression/fixtures/tree_search/release.yaml")
 
-# Realized over 16 training seeds at 640 episodes: the policy reaches the
-# enumerated maximum on 0.485 of episodes against greedy's 0.480, a difference
-# of +0.005 with a standard deviation of 0.014, 8 of 16 seeds ahead, and an
-# exact two-sided sign test at p = 1.0. An untrained policy reaches it on
-# 0.018.
+# Realized over 16 seeds at 640 episodes: 0.485 against greedy's 0.480 (+0.005,
+# sd 0.014, 8 of 16 ahead, sign test p = 1.0); untrained 0.018.
 _GREEDY = 0.48
 _UNTRAINED = 0.018
 _TRAINED_LOWER = 0.44
@@ -155,12 +142,8 @@ def test_an_untrained_policy_is_far_worse_than_greedy(
 def test_a_trained_policy_is_no_worse_than_hill_climbing(
     environment: TreeEnvironment, starts: list[Topology], maximum: float
 ) -> None:
-    # Deliberately weaker than the measurement, following
-    # `test_the_learned_policy_is_at_least_as_good_as_hill_climbing`: over 16
-    # seeds the difference is +0.005 with a standard deviation of 0.014 and an
-    # exact sign test at p = 1.0, so a threshold asserting the policy *wins*
-    # would be asserting noise. What is checked is that it climbs out of the
-    # untrained regime and lands on the baseline.
+    # Weaker than the measurement (+0.005, sd 0.014, p = 1.0): a "wins"
+    # threshold would assert noise. Checked: out of the untrained regime.
     best = maximum
     greedy = _rate(
         environment,

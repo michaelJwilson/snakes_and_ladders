@@ -1,8 +1,9 @@
 """Learned surrogates for the two searches: the data they are fitted to, and the seam that ranks by them (issue #308).
 
 ``snakes_and_ladders.learn.surrogate`` sees tensors; this module, which imports the
-application packages, turns topologies and lattices into them. :func:`tree_examples` scores
-every topology it is handed by an exact target -- the maximized
+application packages, turns topologies and lattices into them. The features
+arrive as arrays (issue #1011) and become tensors here, once each.
+:func:`tree_examples` scores every topology it is handed by an exact target -- the maximized
 log-likelihood, or the log-likelihood at given lengths -- and pairs it with
 the features and tokens of ``likelihood.features``. :func:`lattice_examples`
 does the same for ``log Z`` --- :func:`enumerated_log_partition_target` and
@@ -78,9 +79,8 @@ def tree_node_tokens(
 ) -> tuple[torch.Tensor, np.ndarray]:
     """Per-node tokens and the tree's edges, for the graph model: a node carries its branch's token, the root zeros."""
     names, adjacency = tree_adjacency(topology)
-    by_branch = dict(
-        zip(branch_order(topology), tree_tokens(topology, alignment, k), strict=True)
-    )
+    tokens = torch.from_numpy(tree_tokens(topology, alignment, k))
+    by_branch = dict(zip(branch_order(topology), tokens, strict=True))
     width = next(iter(by_branch.values())).shape[0]
     rows = torch.stack(
         [by_branch.get(name, torch.zeros(width, dtype=torch.float64)) for name in names]
@@ -106,7 +106,7 @@ def tree_examples(
         zip(alignments, topologies, strict=True)
     ):
         for topology in candidates:
-            features.append(tree_features(topology, alignment, k, pi))
+            features.append(torch.from_numpy(tree_features(topology, alignment, k, pi)))
             targets.append(target(topology, alignment))
             groups.append(group)
             rows, edges = tree_node_tokens(topology, alignment, k)
@@ -145,11 +145,12 @@ def ground_state_offset(
     bound rather than to nothing, exactly as
     :func:`mean_field_offset` does for ``log Z``.
     """
-    return torch.stack(
+    return torch.tensor(
         [
-            decoupled_ground_energy(graph, torch.as_tensor(np.asarray(field, float)))
+            decoupled_ground_energy(graph, field)
             for graph, field in zip(graphs, fields, strict=True)
-        ]
+        ],
+        dtype=torch.float64,
     )
 
 
@@ -247,9 +248,9 @@ def lattice_examples(
     """
     features, targets, tokens, adjacency = [], [], [], []
     for graph, field in zip(graphs, fields, strict=True):
-        features.append(lattice_features(graph, field))
+        features.append(torch.from_numpy(lattice_features(graph, field)))
         targets.append(target(graph, field))
-        tokens.append(lattice_tokens(graph, field))
+        tokens.append(torch.from_numpy(lattice_tokens(graph, field)))
         adjacency.append(graph.edge_index)
     return Examples(
         torch.stack(features),
@@ -291,7 +292,9 @@ class LearnedTreeSurrogate(Surrogate):
             msg = "a tree surrogate takes a topology and an alignment"
             raise TypeError(msg)
         rows, edges = tree_node_tokens(structure, data, self.k)
-        features = tree_features(structure, data, self.k, self.pi)[None, :]
+        features = torch.from_numpy(tree_features(structure, data, self.k, self.pi))[
+            None, :
+        ]
         examples = Examples(
             features,
             torch.zeros(1, dtype=torch.float64),

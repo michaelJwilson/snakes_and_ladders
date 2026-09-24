@@ -1,17 +1,9 @@
 """Reed--Solomon, and the field under it, against what each one guarantees.
 
-Issue #594. Three kinds of claim, kept apart:
-
-* **The field is checked exhaustively.** ``GF(16)`` has sixteen elements, so
-  associativity and distributivity are asserted over all 4,096 triples rather
-  than sampled. A field that fails one of those fails silently everywhere.
-* **The code's distance is an equality.** Reed--Solomon meets the Singleton
-  bound exactly, and on ``RS(7, 3)`` all 512 codewords are enumerated to read
-  the minimum distance off rather than take it from the construction.
-* **The decoder is exact to ``t`` and measured past it.** Within the guarantee
-  every draw is asserted to recover the sent word; beyond it the behaviour is
-  *reported*, because a bounded-distance decoder is confidently wrong on some
-  inputs and asserting otherwise would assert something false.
+Issue #594. ``GF(16)``'s associativity and distributivity over all 4,096
+triples. Distance is an equality (Singleton), read off all 512 codewords of
+``RS(7, 3)``. The decoder is exact to ``t`` and past it the behaviour is
+reported: a bounded-distance decoder is confidently wrong on some inputs.
 """
 
 from __future__ import annotations
@@ -157,28 +149,11 @@ def _nearest(words: np.ndarray, received: np.ndarray) -> tuple[np.ndarray, int, 
 @pytest.mark.critical
 @pytest.mark.oracle
 def test_the_algebraic_decode_is_the_nearest_codeword_enumeration_returns() -> None:
-    # The rung below (issue #734): brute-force maximum likelihood, here the
-    # 512 codewords of RS(7,3) enumerated and ranked by symbol distance --- on
-    # a symmetric channel a word's likelihood falls with that distance, so the
-    # nearest codeword is the maximum-likelihood one and the tie count says
-    # whether it is the only one.
-    #
-    # The existing pin says the decoder recovers what was *sent* within `t`.
-    # That is a weaker statement than this one: a decoder could recover the
-    # sent word and still not be returning the likeliest codeword off it. Over
-    # all 1,079 error patterns of weight at most 2 on two sent codewords,
-    # 2,158 decodes, the algebraic answer is the nearest codeword, the nearest
-    # codeword is unique, and both are the word that was sent.
-    #
-    # Where it stops is one symbol further out, and the correspondence there is
-    # exact rather than approximate. Over 300 seeded weight-three patterns:
-    # 35 decode and 265 refuse, and the split is maximum likelihood's own. The
-    # 35 are the draws whose nearest codeword sits at distance 2 and is unique
-    # --- the received word fell inside another codeword's sphere, the decoder
-    # returns that codeword, and it is the likeliest one; none of the 35 is the
-    # word that was sent. The 265 are the draws whose nearest sits at distance
-    # 3, where 2 to 7 codewords tie for it, so maximum likelihood has no unique
-    # answer and the decoder refuses rather than choosing one.
+    # The rung below (#734): ML over RS(7,3)'s 512 codewords by symbol
+    # distance. All 1,079 patterns of weight <= 2 on two codewords (2,158
+    # decodes): the algebraic answer is the unique nearest and the sent word.
+    # At weight three, 300 draws: 35 decode (unique nearest at distance 2,
+    # never the sent word) and 265 refuse (2 to 7 tie at distance 3): ML's own split.
     code = reed_solomon(3, 3)
     words = _codebook(code)
     assert words.shape == (512, 7)
@@ -224,11 +199,8 @@ def test_the_algebraic_decode_is_the_nearest_codeword_enumeration_returns() -> N
 
 @pytest.mark.analytic
 def test_past_the_guarantee_it_refuses_or_is_confidently_wrong() -> None:
-    # Reported, not asserted to refuse: a bounded-distance decoder returns the
-    # nearest codeword, and past `t` the nearest one can be the wrong one. The
-    # test pins the *shape* of that -- most refused, some miscorrected, none
-    # recovered by luck -- so a change that started recovering three errors on
-    # a two-error code would fail here rather than look like an improvement.
+    # Past `t` the shape is pinned (mostly refused, some miscorrected, none
+    # right by luck), so decoding three errors would fail, not pass.
     code = reed_solomon(3, 3)
     rng = np.random.default_rng(7)
     refused = wrong = recovered = 0
@@ -317,31 +289,11 @@ def test_the_planted_message_survives_every_channel_word_inside_the_guarantee() 
     guarantee all returned the planted message and none of the 269 past it was
     right by chance.
 
-    The path is the package's, end to end: a message of three `GF(8)` symbols
-    from a seeded generator, :func:`encode` to a seven-symbol codeword,
-    `sim.galois.bits_from_symbols` to 21 bits, `sim.ldpc`'s binary symmetric
-    channel at `END2END_FLIP`, the hard decision back through
-    `symbols_from_bits`, and :func:`decode` --- syndromes, Berlekamp--Massey, a
-    Chien search and Forney. This is the first code here whose channel is
-    binary and whose alphabet is not: a symbol fails when any of its three
-    bits does, which is what makes Reed--Solomon a burst code and what the
-    rate below is computed from.
-
-    Three claims, and they are not the same claim:
-
-    * **Inside the guarantee it is a solver.** Every draw whose received word
-      differs from the sent one in two symbols or fewer decodes to the planted
-      message. Anything short of all 3,731 is a defect, not a rate.
-    * **Past the guarantee it is not lucky.** Of the 269 draws with three or
-      more symbol errors, none returned the planted message: the decoder
-      refused 226 of them and returned another codeword on 43. So the realized
-      block error rate
-      *equals* the realized share of draws past `t`, which is asserted as an
-      equality and is what lets the closed form referee it.
-    * **The rate is the bounded-distance one.** `1 - P(at most t symbol
-      errors)` under `eq:bounded-distance`, an equality rather than a bound
-      because Reed--Solomon meets Singleton with equality and its spheres of
-      radius `t` are therefore disjoint.
+    End to end: three `GF(8)` symbols, :func:`encode`, 21 bits, `sim.ldpc`'s
+    BSC at `END2END_FLIP`, back through `symbols_from_bits`, :func:`decode`
+    (Berlekamp--Massey, Chien, Forney); a symbol fails if any of its bits does.
+    Of the 269 past `t`, 226 refused and 43 miscorrected, so the error rate
+    equals the share past `t`, asserted; `eq:bounded-distance` is an equality.
     """
     code = reed_solomon(3, 3)
     channel = BinarySymmetricChannel(END2END_FLIP)
@@ -387,26 +339,15 @@ def test_the_planted_message_survives_every_channel_word_inside_the_guarantee() 
     )
 
 
-#: ``alpha^i`` in ``GF(16)`` under ``x^4 + x + 1``, as the standard table
-#: prints it (Lin and Costello 2004, Table 2.8; MacKay 2003 §Appendix). The
-#: integers are the coefficient vectors read most significant bit last, which
-#: is the representation `sim/galois.py` states. Written out because a table
-#: recomputed by the same recursion the code uses is not a referee.
+#: ``alpha^i`` in ``GF(16)`` under ``x^4 + x + 1`` from the printed table (Lin
+#: and Costello 2004, Table 2.8; MacKay 2003), least significant bit first.
 GF16_POWERS: tuple[int, ...] = (1, 2, 4, 8, 3, 6, 12, 11, 5, 10, 7, 14, 15, 13, 9)
 
 
 @pytest.mark.oracle
 def test_the_field_reproduces_the_published_gf_sixteen_table() -> None:
-    # `field(4)` against the table the literature prints, entry by entry, and
-    # the logarithm against its inverse. Integers, so the comparison is exact
-    # equality with no tolerance to declare. A different primitive polynomial
-    # builds a field just as valid and renames every element, which is what
-    # this catches.
-    #
-    # The cache is cleared first so the tables compared here are ones this
-    # test built: `field` is `@cache`d, so without it whichever test called
-    # `field(4)` first in the process is the only one that runs the
-    # recursion, and this would referee a table rather than a construction.
+    # `field(4)` against the printed table and log against its inverse, exact.
+    # The `@cache` is cleared so this test runs the recursion itself.
     field.cache_clear()
     gf = field(4)
 
@@ -426,11 +367,8 @@ def test_the_field_reproduces_the_published_gf_sixteen_table() -> None:
 
 @pytest.mark.oracle
 def test_every_nonzero_element_satisfies_fermat_and_its_own_inverse() -> None:
-    # Fermat's little theorem in `GF(2^m)`: `a^(2^m - 1) = 1` for every
-    # nonzero `a`, the statement that the nonzero elements form a group of
-    # that order. Exhaustive over all 2^m - 1 of them at each recorded
-    # degree, 501 elements in total, and `a * a^-1 = 1` beside it, so the
-    # inverse is the group's and not the table's. Exact over integers.
+    # Fermat in `GF(2^m)`: `a^(2^m - 1) = 1` over all 501 nonzero elements,
+    # and `a * a^-1 = 1`. Exact.
     def check(m: int) -> None:
         field.cache_clear()
         gf = field(m)

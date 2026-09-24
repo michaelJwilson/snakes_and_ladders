@@ -1,18 +1,9 @@
 """Fitting a Potts model on a lattice, against an exact normalizer.
 
-`STATUS.md`'s requirements ledger read "**Met** for the 1-D chain and the
-discrete HMM; lattice outstanding". This closes it, and the thing that makes
-the claim checkable is that `log Z` is *exact* here: enumerated over all
-`q ** n_nodes` configurations rather than approximated, so a fitted optimum
-is compared against a brute-force scan of the likelihood rather than against
-the optimizer's own convergence. Those are different claims and only the
-second is worth much.
-
-Coverage is a rate, not a draw. A single dataset covering 4 of 4 intervals
-says nothing about a 95% interval; what is asserted is the realized fraction
-over independent replicates, and the direction it approaches nominal from --
-which `opt_coverage`'s committed caption already reports for the chain and
-the hidden Markov model, from opposite sides.
+Closes `STATUS.md`'s "lattice outstanding": `log Z` is enumerated over all
+`q ** n_nodes` configurations, so a fitted optimum is compared against a
+brute-force scan of the likelihood. Coverage is a rate over replicates, and
+its direction toward nominal is asserted, as `opt_coverage`'s caption reports.
 """
 
 from __future__ import annotations

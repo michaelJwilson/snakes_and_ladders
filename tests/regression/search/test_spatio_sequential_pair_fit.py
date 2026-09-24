@@ -1,16 +1,10 @@
 """The coupled fit under a per-channel covariate (issue #670).
 
-`m_step` re-derived the covariate's slice rather than calling
-`likelihood.spatio_sequential.covariate_block`, and appended the trailing
-singleton unconditionally. On an ``(S, V, 2)`` covariate that gives
-``(n_m, S, 2, 1)``, whose last axis names no channel, so the pair family
-refused it: the params admitted a covariate, the E step scored with it, and
-the M step could not re-estimate under it.
-
-What referees the fix is recovery and not shape. A planted pair of rates is
-recovered by a fit told the exposure and missed by the same fit on the same
-data not told it, by the factor the exposure averages to --- the referee #658
-states for the families, raised here to the coupled fit.
+`m_step` appended a singleton to an ``(S, V, 2)`` covariate, giving
+``(n_m, S, 2, 1)``, which the pair family refused: the E step scored with it
+and the M step could not use it. Refereed by recovery: planted rates
+recovered when told the exposure, missed by the exposure's mean factor when
+not (#658's referee, raised to the coupled fit).
 """
 
 from __future__ import annotations
@@ -95,13 +89,8 @@ def test_a_fit_told_the_exposure_recovers_the_planted_rates() -> None:
 
 @pytest.mark.end2end
 def test_the_same_fit_not_told_the_exposure_inflates_the_rates_by_its_mean() -> None:
-    # The other half of the referee: the covariate must change the answer, and
-    # change it by about the amount the model says. Without it the fit explains
-    # the counts with a rate averaged over the exposures, so every planted rate
-    # comes back scaled rather than recovered. The factor is near E[U(0.25, 4)]
-    # = 2.125 and not equal to it --- the rate that best explains a mixture of
-    # exposures is not the mixture's mean --- so the band is stated at 12%,
-    # against the measured 1.994 and 2.107.
+    # Untold, rates come back scaled near E[U(0.25, 4)] = 2.125, not equal (a
+    # mixture's best rate is not its mean): measured 1.994 and 2.107; band 12%.
     params, observations = _planted()
     blind = fit_spatio_sequential(
         replace(params, covariate=None),

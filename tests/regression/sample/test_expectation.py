@@ -1,17 +1,11 @@
 """Operator expectations by a Kalman filter, and a chain run without its draws (issue #988).
 
-Referees:
-
-- the filter's posterior mean and variance are the conditional generalized
-  least squares estimator under AR(1) noise, computed here from the whole
-  stored stream by the direct formula, within 1e-12;
-- over 400 synthetic AR(1) streams at phi = 0.9, its 95 per cent intervals
-  cover the true mean at a rate within 3 binomial standard errors of 0.95,
-  where the white-noise interval covers about 0.35;
-- HMC at d = 1,000 with the chain discarded returns every coordinate's mean
-  of ``x`` within 4.5 standard errors of 0 and of ``x^2`` within 4.5 of
-  ``1 / p``, and no draws;
-- the default chain is bitwise unchanged by an operator.
+The filter's mean and variance are the conditional GLS estimator under AR(1)
+noise, computed from the stored stream, within 1e-12; over 400 AR(1) streams at
+phi = 0.9 its 95% intervals cover within 3 binomial standard errors of 0.95
+(white noise: about 0.35); HMC at d = 1,000 without its chain returns ``x``
+within 4.5 standard errors of 0 and ``x^2`` of ``1 / p``, and no draws; an
+operator leaves the default chain bitwise unchanged.
 """
 
 from __future__ import annotations

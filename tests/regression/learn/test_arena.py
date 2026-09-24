@@ -1,24 +1,11 @@
 """The table's harness: a seam that re-spells nothing, and a metric with a cost.
 
-Issue #705. Four kinds of claim:
-
-* **the registry re-spells, it does not re-implement.** Each learner reached
-  through :data:`~snakes_and_ladders.learn.arena.LEARNERS` returns **bitwise**
-  what calling its function directly returns under the same seed --- the same
-  states, the same actions, the same rewards. That is the whole claim the table
-  rests on: a harness that re-derived anything would make its rows
-  incomparable with every number already published against these functions;
-* **the metric reproduces the table it generalizes.** The Potts chain's five
-  rows come back at 80.2 / 88.9 / 88.9 / 96.3 / 97.5% of its 81 starts (#313).
-  A harness that cannot reproduce that is not measuring it;
-* **greedy is a row and not a policy.** `greedy_rollout` stops at a local
-  maximum and a rolled-out policy walks past one, so the two are different
-  baselines and the suite pins that they differ rather than assuming the
-  distinction;
-* **the cost is reported in a stated unit.** `evaluations` is the mean scored
-  actions per evaluation episode, counted from the trajectory, and greedy's is
-  17.4 on the chain rather than the 48 the published comparison quotes ---
-  which is ``max_steps x |actions|``, the budget greedy does not spend.
+Issue #705. Each learner through :data:`~snakes_and_ladders.learn.arena.LEARNERS`
+returns bitwise what its direct call returns under the same seed. The metric
+reproduces the Potts chain's five rows, 80.2 / 88.9 / 88.9 / 96.3 / 97.5% of 81
+starts (#313). Greedy is a row, not a policy: `greedy_rollout` stops at a local
+maximum. The cost is mean scored actions per episode: greedy's is 17.4, not the
+48 (``max_steps x |actions|``) the published comparison quotes.
 """
 
 from __future__ import annotations
@@ -89,13 +76,7 @@ def _starts(environment: PottsEnvironment) -> list[tuple[int, ...]]:
 
 
 def _streams(seed: int = 0) -> Streams:
-    """The four streams the published rows were measured on.
-
-    Written out here rather than defaulted in the package: the shape is a
-    property of how #313 was run --- four independent generators, the two
-    `torch` ones seeded alike --- and a harness that chose it silently would be
-    choosing what the reproduction means.
-    """
+    """The four streams #313 was run with; the two `torch` ones seeded alike."""
     return Streams(
         training=np.random.default_rng(seed),
         evaluation=np.random.default_rng(seed + 1),
@@ -117,9 +98,7 @@ def _direct(
 ) -> Policy:
     """The policy a caller writing the training call by hand would end up with.
 
-    Spelled out per learner rather than dispatched, because that is the point:
-    these are the four call shapes issue #705 found in four test files, and the
-    registry has to reproduce each exactly.
+    The four call shapes issue #705 found in four test files, spelled out.
     """
     rng = np.random.default_rng(seed)
     if name == "reinforce":
@@ -170,10 +149,7 @@ def _direct(
 def test_a_registered_learner_is_bitwise_the_direct_call(name: str) -> None:
     """Same seed, same episodes: states, actions and rewards to the bit.
 
-    Not a tolerance. The registry's job is to be a list of these four calls,
-    so any difference at all is a second implementation --- and a second
-    implementation is what makes a table's rows incomparable with the numbers
-    published against the functions it wraps.
+    Any difference is a second implementation, incomparable with published rows.
     """
     environment = potts_environment()
     starts = _starts(environment)
@@ -203,11 +179,7 @@ def test_a_registered_learner_is_bitwise_the_direct_call(name: str) -> None:
 def test_the_greedy_row_is_the_greedy_rollout_and_not_a_policy() -> None:
     """The row runs `greedy_rollout`, which stops where a policy walks on.
 
-    Pinned rather than argued. `greedy_rollout` ends at a local maximum and a
-    rolled-out policy takes the least-bad move and keeps going, so a "greedy
-    policy" is a different baseline from the one 80.2% was measured on --- and
-    on this fixture they differ on most starts, which is what makes the
-    distinction load-bearing rather than pedantic.
+    On this fixture the two differ on most starts, so the distinction carries weight.
     """
     environment = potts_environment()
     starts = _starts(environment)
@@ -245,12 +217,7 @@ def test_the_cost_is_the_scored_actions_and_greedy_spends_fewer_than_its_budget(
 ):
     """`evaluations` counts what an episode scored, not what it was allowed.
 
-    Greedy's mean on the chain is **17.4** scored actions --- eight actions at
-    each of 2.2 steps --- where the published comparison quotes **48**, which
-    is ``max_steps x |actions|``: the budget, which greedy does not spend
-    because it stops at a local maximum. The two readings are both defensible
-    and they are not the same number, so the unit is stated here and the
-    figure with it.
+    Greedy: 17.4 (eight actions at 2.2 steps) against the 48 budget it never spends.
     """
     environment = potts_environment()
     starts = _starts(environment)
@@ -270,11 +237,7 @@ def test_the_cost_is_the_scored_actions_and_greedy_spends_fewer_than_its_budget(
 def test_the_two_scorings_differ_exactly_where_an_episode_walks_out() -> None:
     """`VISITED` is the module's best-state rule, `FINAL` the published one.
 
-    Constructed rather than trained, because the case that separates them is
-    the one a fixture may not contain: an episode that touches the optimum and
-    then leaves it. On the chain the five rows agree under both, which is
-    measured in the row test below and is a property of that fixture, not of
-    the metric.
+    Constructed: an episode touching the optimum then leaving is not in the fixture.
     """
     episode: Episode[int, int] = Episode(
         states=(0, 1, 2), actions=(0, 1), rewards=(1.0, -1.0), terminated=False
@@ -290,10 +253,7 @@ def test_the_two_scorings_differ_exactly_where_an_episode_walks_out() -> None:
 def test_a_row_reads_beat_match_or_lose_against_its_baseline() -> None:
     """Three outcomes, compared as fractions so unequal start counts are safe.
 
-    A match is the outcome the ticket exists for, and it stays a match when it
-    cost less: the cost sits beside the outcome rather than inside it, so a
-    reader sees "the same answer at a fraction of the price" as a sentence
-    rather than as a rank the comparison invented.
+    The cost sits beside the outcome, so a cheaper match stays a match.
     """
     baseline = Row("greedy", 65, 81, 17.4, 0, Scoring.VISITED)
     better = Row("ppo", 78, 81, 23.9, 11_520, Scoring.VISITED)
@@ -375,15 +335,7 @@ def test_an_untrained_row_spends_no_training_decisions() -> None:
 def test_the_chains_five_rows_come_back_at_the_published_fractions() -> None:
     """80.2 / 88.9 / 88.9 / 96.3 / 97.5% of 81 starts, from one call (#313).
 
-    The reproduction the harness exists to pass. Each row was measured in its
-    own test file against its own hand-written training call; here they come
-    from :func:`~snakes_and_ladders.learn.arena.table` and agree to the start.
-
-    Measured with it: the two scorings give the *same* fraction for all five
-    rows on this fixture, so nothing here depends on which was chosen --- a
-    policy that touches the chain's optimum inside six steps does not leave it
-    again. The chain's evaluations are 17.4 (greedy), 23.5, 23.5, 23.9 and
-    21.9.
+    Both scorings agree on all five; evaluations 17.4, 23.5, 23.5, 23.9, 21.9.
     """
     environment = potts_environment()
     starts = _starts(environment)
@@ -418,12 +370,7 @@ TINY = (0.75, np.array([0.4, -0.1]), 3)
 def _hill_climb(
     environment: PottsEnvironment, start: tuple[int, ...], max_steps: int
 ) -> tuple[list[tuple[int, ...]], int]:
-    """Hill climbing and its evaluation count, written out rather than called.
-
-    The referee for `arena`'s greedy row: the same rule --- take the
-    best-rewarded action, stop where none improves --- expressed here so the
-    row is compared with a second computation and not with itself.
-    """
+    """Hill climbing and its evaluation count, written out: the greedy row's referee."""
     state, visited, evaluated, decisions = start, [start], 0, 0
     while not environment.is_terminal(state) and decisions < max_steps:
         available = environment.actions(state)
@@ -440,26 +387,13 @@ def _hill_climb(
 def test_the_greedy_row_is_the_table_computed_by_hand() -> None:
     """Every field of the greedy row, against a table small enough to write down.
 
-    The chain is three sites and two states, so the eight starts, what hill
-    climbing does from each and what it evaluates on the way are a table
-    rather than a measurement. The optimum is `(0, 0, 0)` at 2.70 and
-    `(1, 1, 1)` at 1.20 is the local maximum that is not it:
+    Three sites, two states: the optimum `(0, 0, 0)` at 2.70 and the local
+    maximum `(1, 1, 1)` at 1.20. Starts reaching the optimum and evaluations:
 
-        start      final      evaluations  reached
-        (0,0,0)    (0,0,0)              0  yes
-        (0,0,1)    (0,0,0)              3  yes
-        (0,1,0)    (0,0,0)              3  yes
-        (0,1,1)    (0,0,0)              6  yes
-        (1,0,0)    (0,0,0)              3  yes
-        (1,0,1)    (0,0,0)              6  yes
-        (1,1,0)    (0,0,0)              6  yes
-        (1,1,1)    (1,1,1)              0  no
+        (0,0,0) 0, (0,0,1) 3, (0,1,0) 3, (0,1,1) 6, (1,0,0) 3, (1,0,1) 6,
+        (1,1,0) 6; (1,1,1) stays, 0.
 
-    So the row reads **7 of 8 at 3.375 evaluations**, and both numbers are
-    asserted exactly: the fraction is a ratio of integers and the mean is a
-    sum of integers over eight. The hand column is recomputed by
-    :func:`_hill_climb` as well as written out, so a change that moved the
-    table would fail on the numbers and not only on the row.
+    So **7 of 8 at 3.375 evaluations**, exactly; :func:`_hill_climb` recomputes it.
     """
     environment = PottsEnvironment(*TINY)
     starts = list(
@@ -499,12 +433,7 @@ def test_the_greedy_row_is_the_table_computed_by_hand() -> None:
 def test_the_wandering_greedy_row_is_the_restart_loop_written_by_hand() -> None:
     """Under ``stop_at_local_optimum=False`` the greedy row is restarted hill climbing.
 
-    On the three-site chain the rule is written out here rather than called:
-    climb from the start, charge the decisions spent (one where none was), draw
-    the next start from the evaluation stream, and stop when the budget is gone.
-    Every run's states and the row's two numbers must agree with the table
-    (#820); the by-hand loop reads the same stream in the same order, which is
-    what makes the restarts the same restarts.
+    The by-hand loop reads the same evaluation stream in the same order (#820).
     """
     environment = PottsEnvironment(*TINY)
     starts = list(

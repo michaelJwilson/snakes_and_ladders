@@ -1,15 +1,9 @@
 """What the notebook check must catch, and what it must ignore.
 
-`infra/check_notebooks.py` re-executes the committed notebooks and diffs what
-they printed. The comparison is separated from the execution so it can be
-tested in milliseconds rather than the 92 seconds a real run costs — which
-matters, because the rule it implements was wrong twice while being written
-and neither error would have been caught by a test nobody runs.
-
-A figure's `text/plain` is `<Figure size 560x340 with 1 Axes>`, a repr of the
-artist that moves with the figure size. Comparing it reported every figure
-cell as changed. Excluding it too broadly would stop the check noticing a
-cell that lost its figure entirely.
+`infra/check_notebooks.py` re-executes the committed notebooks and diffs their
+output; the comparison is tested here in milliseconds, not the 92 s of a run.
+A figure's `text/plain` (`<Figure size 560x340 with 1 Axes>`) moves with the
+figure size and is ignored; ignoring more would miss a cell losing its figure.
 """
 
 from __future__ import annotations
@@ -247,11 +241,7 @@ def test_every_notebook_given_is_executed(
 ) -> None:
     """Which notebooks a run checks is its arguments, and nothing else.
 
-    A digest decided it until issue #480. `turbo.ipynb` was skipped for as
-    long as no diff reached its import closure, so the disagreement it had
-    been carrying (#507) surfaced only when an unrelated merge moved the hash
-    and the check ran for the first time in months. Issue #490 deleted the
-    digest and the stamps; this pins that every notebook named is run.
+    A digest once skipped `turbo.ipynb` for months, hiding #507 (#480, #490).
     """
     executed: list[Path] = []
 

@@ -1,21 +1,12 @@
 """The number `rl_tree_policy` plots, pinned (issue #729, step 4).
 
-The renderer had 75 statements, 48 of them reached by nothing and the rest
-by another module's import. A renderer has no oracle --- the rates are what
-`learn.reinforce` and `learn.rollout` produced, and those are held to
-enumeration in their own modules --- so what is pinned here is that the
-figure keeps plotting the rates `STATUS.md` and
-`docs/experiments/005-tree-policy-features.md` record for the improvement
-feature on the 7-taxon fixture: the policy at **0.487** against greedy's
-**0.480**, a tie, which is the negative result the figure exists to report.
-
-**The instance is the rendered one, so the test is `release`.** `measure`
-trains eight policies at 640 episodes each on `tree_search/release.yaml`,
-which is 92.6 s on the 4-core reference host --- the same run the manifest
-pays 101.4 s for. The `ci` instance would run in 20.2 s and still not fit
-`DEV.md`'s 10 s per-PR cap, and it pins nothing: at five taxa greedy and
-every trained policy reach the maximum from all 50 starts, which is the
-case issue #177 built this fixture to escape.
+The renderer had 48 of 75 statements unreached. With no oracle of its own
+(the rates are refereed in `learn.reinforce` and `learn.rollout`), pinned:
+the rates `STATUS.md` and `docs/experiments/005-tree-policy-features.md`
+record on the 7-taxon fixture, policy 0.487 against greedy 0.480. `release`:
+eight policies at 640 episodes on `tree_search/release.yaml` take 92.6 s
+(the manifest pays 101.4 s); `ci` takes 20.2 s, over the 10 s cap, and pins
+nothing, since at five taxa everything reaches the maximum (issue #177).
 """
 
 from __future__ import annotations
@@ -53,11 +44,7 @@ class Comparison(NamedTuple):
 
 @pytest.fixture(scope="module")
 def comparison() -> Comparison:
-    """One comparison, run once, and only where a test of it is selected.
-
-    A module-level call would be paid at *collection*, so every per-pull-request
-    run would train the eight policies this module is `release` to avoid.
-    """
+    """One comparison, run once when selected; at module level collection would pay it."""
     return Comparison(*measure(FIXTURE.params))
 
 
@@ -68,12 +55,8 @@ def test_panel_b_plots_the_rates_the_experiment_record_reports(
 ) -> None:
     """The figure's answer, to be conserved.
 
-    Over eight training seeds at 640 episodes, 50 shared starts and 16
-    rollouts each, the learned policy reaches the enumerated maximum from
-    **0.486875** of its episodes against greedy's **0.480000**. The
-    experiment record's sixteen seeds give 0.487 against 0.480, so the eight
-    drawn here reproduce it to **3e-4**. Pinned per seed by equality: each
-    rate is an integer count of 800 episodes and admits no tolerance.
+    8 seeds x 50 starts x 16 rollouts: 0.486875 against 0.480000 (record 0.487,
+    3e-4 off). Per seed by equality: integer counts of 800 episodes.
     """
     assert (TRAINING_SEEDS, STARTS, ROLLOUTS_PER_START) == (8, 50, 16)
     assert comparison.episodes == ITERATIONS * BATCH == 640
@@ -100,10 +83,7 @@ def test_the_untrained_control_separates_learning_from_the_baseline(
 ) -> None:
     """The control the caption reads, to be conserved.
 
-    An untrained policy reaches the maximum from **0.0175** of its 800
-    episodes, 28 times below the trained one. Without it "the policy ties
-    greedy" would be consistent with a policy that learned nothing at all,
-    since greedy is what the single feature amounts to.
+    Untrained: 0.0175 of 800 episodes, 28x below; "ties greedy" needs it.
     """
     assert round(comparison.control * 800) == 14
     assert comparison.control == pytest.approx(0.0175, abs=0.0)
@@ -117,11 +97,7 @@ def test_panel_a_plots_the_enumerated_surface_and_its_local_optima(
 ) -> None:
     """The environment panel (a) draws, to be conserved.
 
-    All **945** unrooted topologies of the 7-taxon fixture, scored at the
-    generating tree's mean branch length, of which **10** admit no improving
-    NNI move and are where every episode ends. The best score is
-    **-16433.2666633598**, pinned to 1e-12 relative, and it is the value
-    both rates above are the frequency of reaching.
+    945 topologies, 10 NNI local optima, best -16433.2666633598 (1e-12 relative).
     """
     assert comparison.taxa == 7
     assert comparison.scores.shape == (945,)

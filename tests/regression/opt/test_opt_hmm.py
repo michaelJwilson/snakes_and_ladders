@@ -215,12 +215,8 @@ def test_the_initial_point_is_uninformative_but_not_symmetric() -> None:
 
 @pytest.mark.analytic
 def test_the_uniform_point_is_a_stationary_point_of_the_likelihood() -> None:
-    # This is why `initial` breaks the symmetry, and it is a property of the
-    # model rather than a quirk of the optimizer: with every hidden state
-    # identical, no infinitesimal change to the initial or transition
-    # parameters changes the likelihood at all. An optimizer started there
-    # never moves those blocks, and the fit silently returns a model with one
-    # effective state. Found by watching a fit do exactly that.
+    # With every hidden state identical no change to the initial or transition
+    # parameters moves the likelihood; a fit started there keeps one state.
     params = load_params(FIXTURE, HmmParams)
     objective = HmmObjective(
         simulate_sequences(params).observations[:40], params.n_states, params.n_symbols
@@ -332,24 +328,11 @@ def _stepped(params: HmmParams, fitted: EmFit) -> HmmParams:
 
 @pytest.mark.oracle
 def test_baum_welch_reaches_the_enumerated_path_evidence_and_its_fixed_point() -> None:
-    # The E step is a forward-backward recursion and the number it reports is
-    # `sum_sequences log P(sequence)`. The path enumeration is that same sum
-    # with no recursion in it, so it referees three separate claims the fit
-    # makes about itself and cannot check on its own.
-    #
-    # Realized on this slice: the reported likelihood at the starting
-    # parameters equals the enumerated evidence exactly (0.0 relative); the
-    # enumerated evidence at three successive iterates increases every step,
-    # -179.735, -178.981, -178.497, so the monotonicity is pinned by an
-    # independent computation rather than by the fit's own number; at
-    # convergence the two agree to 8.5e-13 relative, the residue of the one M
-    # step of lag between the likelihood a Baum-Welch iteration reports and
-    # the parameters it returns; and the fitted initial distribution equals
-    # the enumerated posterior at the first site, averaged over sequences, to
-    # 2.2e-12 -- the M step's own fixed point, read off the enumeration.
-    # `lengths` is the only shape a batch declares (#666): `n_sequences` and
-    # `sequence_length` are derived and cannot be replaced. A count with a
-    # shared length is the equal-length case, written out.
+    # Path enumeration is the E step's sum with no recursion. Realized: equal
+    # at the start (0.0); the enumerated evidence rises over three iterates,
+    # -179.735, -178.981, -178.497; at convergence 8.5e-13 (one M step of lag);
+    # fitted initial = enumerated first-site posterior to 2.2e-12. `lengths`
+    # is the batch's only declared shape (#666).
     params = replace(
         fixture("hmm", "ci").params,
         lengths=(_EM_LENGTH,) * _EM_SEQUENCES,
@@ -414,12 +397,7 @@ def _re_estimated(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
     """Baum's re-estimation equations, written out in NumPy over the definition.
 
-    A second implementation and not a route into `opt.hmm`: forward and
-    backward messages held as probabilities rather than in logs, one sequence
-    at a time, and each M step the ratio of expected counts it is defined as
-    --- ``pi_i = mean_n gamma_n(1, i)``, ``A_ij = sum xi / sum gamma`` and
-    ``B_iv = sum_{t: y_t = v} gamma / sum_t gamma``. Returns them and the
-    evidence the same messages give.
+    Probability-space messages per sequence and ratios of expected counts; not `opt.hmm`.
     """
     initial = np.exp(log_initial.numpy())
     transition = np.exp(log_transition.numpy())
@@ -469,26 +447,11 @@ def _re_estimated(
 @pytest.mark.oracle
 @pytest.mark.critical
 def test_baum_welch_ascends_and_settles_on_the_re_estimation_equations() -> None:
-    # This rung has nothing below it (issue #734): the pin against the path
-    # enumeration is the row above, and the referee here is outside the
-    # ladder -- EM's own two properties, against the re-estimation equations
-    # written out in `_re_estimated` rather than against another rung. What
-    # they say is that the iteration is EM and not an iteration that happens
-    # to end somewhere: the objective never decreases, and what it stops at
-    # solves the M step it claims to.
-    #
-    # Realized on the same 20-sequence, length-7 slice the enumeration is
-    # taken on: twelve single-iteration runs report -181.992 rising to
-    # -175.403, every increment positive, the smallest 0.314 nats; the
-    # written-out messages put the evidence at the converged fit at
-    # -173.0932201685 against the -173.0932201686 reported, 8.5e-13 relative
-    # against the 1e-11 declared -- the one M step of lag between the
-    # likelihood an iteration reports and the parameters it returns; and the
-    # re-estimation equations applied to the converged parameters return them
-    # to 2.2e-12 (initial), 4.1e-11 (transition) and 4.3e-11 (emission),
-    # against the 1e-9 declared. That residue is the movement left at the
-    # relative stopping tolerance, not a disagreement: it is what one more M
-    # step would have travelled.
+    # Outside the ladder (#734): EM's own properties against `_re_estimated`.
+    # On the 20-sequence, length-7 slice: twelve iterations -181.992 to
+    # -175.403, each rise positive (smallest 0.314 nats); evidence -173.0932201685
+    # against -173.0932201686 reported, 8.5e-13 (1e-11 declared); the equations
+    # return the fit to 2.2e-12, 4.1e-11, 4.3e-11 (1e-9): the stopping residue.
     params = replace(
         fixture("hmm", "ci").params,
         lengths=(_EM_LENGTH,) * _EM_SEQUENCES,
@@ -693,11 +656,8 @@ def test_the_streamed_family_step_is_the_batched_one(
 
 @pytest.mark.oracle
 def test_real_valued_counts_take_the_batched_route() -> None:
-    # The table is indexed by integer counts: a float array of the same
-    # counts is scored on the batched route (issue #997). There the Rust
-    # backend runs the compiled ragged E step (#933), which sums in another
-    # order than the torch recursion: measured 2 ulps apart (3.0e-16
-    # relative), so the declared tolerance, not bitwise.
+    # Float counts take the batched route (#997), the compiled ragged E step
+    # (#933): 2 ulps (3.0e-16) from torch, so the declared tolerance.
     observations, family, _ = _streamed_case("poisson", covariate=False)
     initial = torch.log(torch.full((3,), 1.0 / 3.0, dtype=torch.float64))
     transition = torch.log(torch.full((3, 3), 1.0 / 3.0, dtype=torch.float64))

@@ -58,9 +58,7 @@ def test_headings_and_blank_lines_are_not_charged() -> None:
 def test_the_committed_template_is_inside_the_cap() -> None:
     """A pull request that starts from the template has room left to write in.
 
-    The template's instructions are HTML comments, which the counter excuses:
-    charged, they alone are 64 lines and every conforming pull request would
-    be refused unwritten.
+    The HTML-comment instructions are excused; charged, they are 64 lines.
     """
     template = (REPO_ROOT / ".github" / "pull_request_template.md").read_text()
     assert check_pr_body.problem(template) == ""

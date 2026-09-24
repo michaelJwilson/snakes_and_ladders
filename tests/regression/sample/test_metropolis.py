@@ -1,22 +1,12 @@
 """Random-walk Metropolis on both routes, its warm-up, and its operators (issue #1006).
 
-Referees:
-
-- the Python kernel is :func:`metropolis.replay` on the same NumPy draws,
-  bitwise: the replay is the step BlackJAX's ``rmh`` is pinned to draw for
-  draw (`tests/validation/test_blackjax.py`), so this chains the two;
-- each route recovers the Gaussian's moments: every coordinate's mean within
-  4.5 standard errors of 0 and its second moment within 4.5 of ``1 / p``,
-  the errors from the chain's own AR(1) fit (``KalmanMean``);
-- at ``T = 2`` the Python route's second moment is ``2 / p``, the tempered
-  target's, at the same 4.5;
-- the compiled route's warm-up and the Python route's settle on the same
-  acceptance to 0.03, and on Rosenbrock at ``b = 1`` their first two moments
-  agree within 4.5 combined standard errors;
-- a declared operator's filter kept in Rust, and an undeclared one filtered
-  per block, is the Python ``KalmanMean`` over the stored draws, bitwise
-  (issue #1011); ``store_chain=False`` keeps no draw and the same
-  expectations.
+The Python kernel is :func:`metropolis.replay` bitwise, the step BlackJAX's
+``rmh`` is pinned to (`tests/validation/test_blackjax.py`). Each route's
+moments are within 4.5 standard errors (``KalmanMean``) of 0 and ``1 / p``,
+``2 / p`` at ``T = 2``. The warm-ups settle on one acceptance to 0.03 and on
+Rosenbrock (``b = 1``) agree within 4.5 combined errors. An operator's filter,
+in Rust or per block, is ``KalmanMean`` bitwise (#1011); ``store_chain=False``
+keeps no draw and the same expectations.
 """
 
 from __future__ import annotations

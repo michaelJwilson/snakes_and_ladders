@@ -1,24 +1,11 @@
 """Fitch and Sankoff parsimony, and the region where being wrong is the prediction.
 
-The algorithms are pinned against exhaustive enumeration over internal-node
-labellings, sharing no traversal with it --- the relationship
-`brute_force_log_likelihood` has to the pruning recursion. The score is an
-integer, so agreement is equality and not a tolerance. Sankoff is pinned
-twice: by reduction to Fitch under the unit step matrix on every topology of
-the five-taxon fixture, and against a brute force written here, over the
-directed edge costs of a planted asymmetric matrix.
-
-Then the zones. In the *Felsenstein zone* parsimony is statistically
-inconsistent: its error rate converges to 1, not 0, as sites increase. That is
-a theorem, so a test asserts it as a prediction rather than discovering it as
-a defect. The *Farris zone* is the control that makes the first interpretable
---- move the same two long branches to be adjacent and parsimony becomes
-correct and fast. An implementation that is simply broken fails both.
-
-Then the rung against likelihood (issue #734): at a common short branch length
-the pruning log-likelihood is `F log t` plus a constant, so its slope in
-`log t` is the Fitch score and its ranking of topologies is parsimony's. The
-length at which that stops holding is pinned beside it.
+Both are pinned against enumeration over internal labellings, by equality
+(integer scores); Sankoff also by reduction to Fitch under unit steps and
+against a directed brute force. In the Felsenstein zone parsimony is
+inconsistent, a theorem asserted as a prediction; the Farris zone is the
+control. The rung against likelihood (issue #734): at a short common length
+pruning is `F log t` plus a constant, and where that stops is pinned.
 """
 
 from __future__ import annotations
@@ -167,9 +154,7 @@ def _directed_brute_force(
 ) -> float:
     """Minimum over every internal labelling of the summed directed edge costs.
 
-    Independent of :func:`sankoff_score`: it assigns states to internal nodes
-    and reads ``step_matrix[parent, child]`` on every edge of the rooted
-    tree, sharing no recursion with the dynamic programme.
+    Reads ``step_matrix[parent, child]`` per edge; no recursion shared with Sankoff.
     """
     internal = [node.name for node in preorder(tau) if not node.is_leaf]
     edge_list = [(parent.name, child.name) for parent, child in edges(tau)]
@@ -221,11 +206,8 @@ def test_sankoff_matches_a_brute_force_minimum_under_an_asymmetric_matrix() -> N
 
 @pytest.mark.oracle
 def test_sankoff_matches_a_weighted_score_worked_out_by_hand() -> None:
-    # The same three sites as the Fitch case under transition/transversion
-    # weights: 1 for the AA|BB split (one transition), 0 for the constant
-    # site, and 4 for the site with four distinct states -- one transition
-    # inside each cherry and one transversion across the root -- where Fitch
-    # counts 3.
+    # Transition/transversion weights: 1 for AA|BB, 0 constant, 4 for four
+    # distinct states (two transitions, one transversion), where Fitch counts 3.
     tau = balanced_four_taxa(0.1, 0.1, 0.1, 0.1)
     alignment = {
         "A": np.array([0, 0, 0]),
@@ -313,11 +295,8 @@ def test_likelihood_is_consistent_in_the_felsenstein_zone() -> None:
 
 @pytest.mark.end2end
 def test_parsimony_is_correct_and_fast_in_the_farris_zone() -> None:
-    # The control. Without it, "parsimony got the Felsenstein zone wrong" is
-    # indistinguishable from "this parsimony implementation is broken".
-    # Measured: 12/12 at every site count, and likelihood 4/12, 6/12, 10/12 --
-    # so in this zone parsimony is the *faster* of the two, which is the
-    # published result and not an artifact.
+    # The control, separating inconsistency from a broken implementation.
+    # Measured: 12/12 at every size; likelihood 4/12, 6/12, 10/12 (published).
     parsimony, _ = _recovery_rates(FARRIS_ZONE, n_sites=200, replicates=6)
 
     assert parsimony == 6
@@ -325,14 +304,8 @@ def test_parsimony_is_correct_and_fast_in_the_farris_zone() -> None:
 
 @pytest.mark.analytic
 def test_a_zero_length_internal_branch_leaves_the_three_topologies_tied() -> None:
-    # An analytic corner: with no internal branch there is no split to detect,
-    # so a strict preference would be reading noise as signal.
-    #
-    # Asserted across seeds rather than by a spread threshold on one. A single
-    # replicate always has a winner -- measured spreads of 0.5% to 3.3% -- so
-    # a threshold either passes trivially or fails on an unlucky draw. What
-    # says "no signal" is a *uniform* winner: over 30 seeds the three
-    # topologies won 12, 9 and 9 times.
+    # No internal branch, no split. One replicate always has a winner (spreads
+    # 0.5% to 3.3%), so uniformity is asserted: over 30 seeds 12, 9 and 9 wins.
     star = Node(
         "root",
         None,
@@ -393,37 +366,16 @@ def _likelihoods(
 def test_the_short_branch_likelihood_ranks_the_topologies_as_the_fitch_score_does() -> (
     None
 ):
-    # The rung below (issue #734): Felsenstein pruning, on the five-taxon
-    # fixture's 15 topologies at 300 sites, five alignments.
-    #
-    # **Which relation is pinned.** Tuffley and Steel's theorem -- maximum
-    # likelihood under no common mechanism is maximum parsimony -- is not a
-    # statement about these two callables: `pruning.log_likelihood` reads one
-    # branch length per branch, shared by every site, and no-common-mechanism
-    # gives each site its own. What holds for the callables as implemented is
-    # the short-branch limit. Under Jukes--Cantor a site's likelihood at a
-    # common branch length `t` is `C t^F (1 + O(t))` for that site's Fitch
-    # score `F`, so summed over sites `log L = F log t + log C + O(t)`, and
-    # two statements follow, in that order.
-    #
-    # 1. The slope of the log-likelihood in `log t` *is* the Fitch score.
-    #    Read as a difference quotient between t = 1e-5 and 1e-6, over all 75
-    #    topology-alignment pairs, the largest departure from the integer
-    #    score is 7.43e-3 against the 1e-2 declared -- and it is O(t), 7.3e-2
-    #    at 1e-4/1e-5 and 7.3e-4 at 1e-6/1e-7, which is the limit and not a
-    #    coincidence at one length.
-    # 2. The ranking agrees once `t` is small enough that `F log t` dominates
-    #    the reconstruction counts `log C`. At t = 1e-8 every pair whose Fitch
-    #    scores differ is ordered the same way by both, the smallest realized
-    #    margin 3.812 nats against the 0.0 declared.
-    #
-    # **Where it stops, which is half the statement.** The agreement is a
-    # limit and not a general fact: at t = 1e-2 twelve of the pairs invert
-    # over the five alignments -- five on the first alignment, at Fitch
-    # differences of one and log-likelihood gaps to -9.8 nats -- and that is
-    # asserted here rather than described. The argmax survives it: the
-    # maximum-likelihood topology is the maximum-parsimony one at every
-    # length tried.
+    # The rung below (#734): pruning on 15 five-taxon topologies, 300 sites,
+    # five alignments. Not Tuffley-Steel (no common mechanism has per-site
+    # lengths): the short-branch limit, `log L = F log t + log C + O(t)`.
+    # 1. The slope in `log t` is the Fitch score: between 1e-5 and 1e-6 over
+    #    75 pairs, worst 7.43e-3 against 1e-2 declared; O(t): 7.3e-2 at
+    #    1e-4/1e-5, 7.3e-4 at 1e-6/1e-7.
+    # 2. At t = 1e-8 every pair with differing Fitch scores orders alike,
+    #    smallest margin 3.812 nats (0.0 declared).
+    # Where it stops: at t = 1e-2 twelve pairs invert (five on the first
+    # alignment, gaps to -9.8 nats), asserted; the argmax agrees at every t.
     params = load_fixture(FIVE_TAXA)
     pi = np.asarray(params.pi)
     inverted = 0

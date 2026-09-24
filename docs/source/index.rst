@@ -471,6 +471,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.search.ground_state
    :members:
 
+.. automodule:: snakes_and_ladders.search.cluster_moves
+   :members:
+
 .. automodule:: snakes_and_ladders.learn.tree
    :members:
 
@@ -717,6 +720,12 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.qa.hmc_warmup
+   :members:
+
+.. automodule:: snakes_and_ladders.qa.potts_schedule
+   :members:
+
+.. automodule:: snakes_and_ladders.qa.potts_clusters
    :members:
 
 .. automodule:: snakes_and_ladders.scripts

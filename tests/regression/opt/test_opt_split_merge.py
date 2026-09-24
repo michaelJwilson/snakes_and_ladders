@@ -91,10 +91,7 @@ def planted() -> tuple[
 ]:
     """Plain EM from one component across generating components 0 and 1 and two identical ones on 2.
 
-    Two identical components receive identical responsibilities and so stay
-    identical under EM: the start is a fixed point of the symmetric subspace,
-    which no EM step leaves. Seeded at two different pairs of component 2
-    instead, EM separates them and reaches the truth on this draw.
+    Identical components stay identical under EM; seeded apart, EM reaches the truth.
     """
     draw, at = _draw()
     pairs = draw.observations.astype(float)

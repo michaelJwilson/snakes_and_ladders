@@ -1,17 +1,9 @@
 """Shared access to the tree fixtures of the problem registry.
 
-`DEV.md`'s Test Layout says a fixture shared across modules lives in a
-top-level underscore-prefixed module, imported rather than collected. Every
-regression and benchmark module that needs a simulation fixture went through
-its own copy of the path instead -- under two different names, and with the
-benchmark copies reaching back up through ``parent.parent``. One spelling of
-the location lives here; the directory itself is the registry's
-(:mod:`snakes_and_ladders.sim.fixtures`), so the suite and the figures cannot
-disagree about where a fixture is.
-
-The Felsenstein- and Farris-zone trees (issue #209) live here for the same
-reason: the small-parsimony tests and the large-parsimony search are scored
-against the same two trees, and each fixed the same tree once before.
+One spelling of the fixture location, per `DEV.md`'s Test Layout; the
+directory is the registry's (:mod:`snakes_and_ladders.sim.fixtures`), so the
+suite and the figures agree. The Felsenstein- and Farris-zone trees (issue
+#209) live here because small- and large-parsimony tests score the same two.
 """
 
 from __future__ import annotations
@@ -41,25 +33,9 @@ EIGHT_TAXA = "tree_jc/release.yaml"
 
 
 def fixture_path(name: str) -> Path:
-    """Absolute path to a named fixture.
+    """Absolute path to a named fixture, e.g. ``"tree_jc/stress.yaml"``.
 
-    Parameters
-    ----------
-    name : str
-        Path of the fixture under the fixtures directory, e.g.
-        ``"tree_jc/stress.yaml"`` --- a problem and a tier, per
-        :mod:`snakes_and_ladders.sim.fixtures`.
-
-    Returns
-    -------
-    Path
-        Path to the fixture.
-
-    Raises
-    ------
-    FileNotFoundError
-        If no such fixture exists -- a typo names a file that never loads,
-        which would otherwise surface as an unrelated parse error.
+    Raises `FileNotFoundError` on a typo rather than a later parse error.
     """
     path = FIXTURES_DIR / name
     if not path.is_file():
@@ -72,18 +48,7 @@ def fixture_path(name: str) -> Path:
 
 
 def load_fixture(name: str) -> SimulationParams:
-    """Load a named fixture's simulation parameters.
-
-    Parameters
-    ----------
-    name : str
-        Path of the fixture under the fixtures directory.
-
-    Returns
-    -------
-    SimulationParams
-        The parsed, validated parameters.
-    """
+    """Load a named fixture's simulation parameters."""
     return load_params(fixture_path(name), SimulationParams)
 
 
@@ -92,19 +57,7 @@ def simulated_alignment(
 ) -> tuple[SimulationParams, dict[str, np.ndarray]]:
     """A fixture's parameters and the alignment simulated at its own seed.
 
-    Parameters
-    ----------
-    name : str
-        Path of the fixture under the fixtures directory. Written as a literal
-        or a `tests._fixtures` constant at the call site, where
-        `tests/_problems.py` reads it.
-    n_sites : int, optional
-        Sites to simulate; the fixture's own ``n_sites`` when omitted.
-
-    Returns
-    -------
-    tuple[SimulationParams, dict[str, numpy.ndarray]]
-        The parameters and the leaf-name-to-states alignment.
+    ``name`` is a literal or constant at the call site: `tests/_problems.py` reads it.
     """
     params = load_fixture(name)
     dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites)
@@ -125,19 +78,7 @@ ZONE_LONG, ZONE_SHORT, ZONE_INTERNAL = 0.75, 0.02, 0.02
 def balanced_four_taxa(
     first: float, second: float, third: float, fourth: float
 ) -> Node:
-    """``((A,B),(C,D))`` with the four pendant branch lengths given.
-
-    Parameters
-    ----------
-    first, second, third, fourth : float
-        Pendant branch lengths of ``A``, ``B``, ``C`` and ``D``; both
-        internal branches are ``ZONE_INTERNAL``.
-
-    Returns
-    -------
-    Node
-        The rooted tree, root of degree 2.
-    """
+    """``((A,B),(C,D))`` with the four pendant lengths; internals ``ZONE_INTERNAL``."""
     return Node(
         "root",
         None,

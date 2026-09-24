@@ -56,13 +56,9 @@ SIZES_FIXTURES = [
     for name in ("tree_jc/stress.yaml", "tree_jc/ci.yaml", "tree_jc/release.yaml")
 ]
 
-# A 5-taxon tree is 15 unrooted topologies against the 6-taxon fixture's 105,
-# and a third of the sites either rendered fixture carries, so a render that
-# only has to produce a file and a caption is cheap for both search figures.
-# Written per test rather than added as a fixture file: nothing is asserted
-# against its truth. It declares its model and its oracle and is written at a
-# problem's tier, because a QA script reads its parameters through the
-# registry (issue #863).
+# A 5-taxon tree (15 topologies against 105) at a third of the sites: cheap
+# renders. Nothing is asserted against its truth; it is read through the
+# registry at a problem's tier (issue #863).
 _SMALL_PARAMS = """
 model: jukes-cantor
 oracle: enumeration
@@ -227,24 +223,12 @@ SCRIPTS: dict[str, Script] = {
 
 
 def _one_line(path: Path) -> str:
-    """Load a file as its stripped contents.
-
-    Returns
-    -------
-    str
-        The file's text, stripped.
-    """
+    """Load a file as its stripped contents."""
     return path.read_text().strip()
 
 
 def _write_params(tmp_path: Path, name: str, text: str) -> Path:
-    """Write a stand-in parameters file.
-
-    Returns
-    -------
-    Path
-        The written file.
-    """
+    """Write a stand-in parameters file and return its path."""
     path = tmp_path / name
     path.write_text(text)
     return path

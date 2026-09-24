@@ -1,18 +1,10 @@
 """Erdos-Renyi draws, and the belief-propagation ensemble they make possible.
 
-Belief propagation was tested on exactly three graphs: one connected tree, one
-connected lattice, and one fully edgeless. Everything between was unexercised
---- a graph with isolated vertices *and* edges, two disjoint components, a
-forest of several trees, a unicyclic graph. A hand-built fixture has to think
-of each; an ensemble generates them. Measured over 120 draws below, **104
-carried an isolated vertex**, which is the case sitting directly on the
-`_disconnected` special-case boundary and which no committed fixture reached.
-
-**No asymptotic result is tested.** The giant-component and connectivity
-thresholds hold in the limit and mean nothing at the `n <= 10` cap
-`infra/CLAUDE.md` sets so enumeration stays affordable. Acyclicity is checked
-*per draw* instead, so the oracle is enumeration and no limit theorem is
-invoked.
+BP was tested on one tree, one lattice and one edgeless graph; an ensemble
+generates the cases between. Over 120 draws 104 carried an isolated vertex,
+the `_disconnected` boundary no fixture reached. No asymptotic result is
+tested at the `n <= 10` cap (`infra/CLAUDE.md`): acyclicity is checked per
+draw and enumeration is the oracle.
 """
 
 from __future__ import annotations
@@ -66,12 +58,8 @@ def _ensemble(draws: int, seed: int) -> list[PottsGraph]:
 
 @pytest.mark.oracle
 def test_belief_propagation_is_exact_on_every_acyclic_draw() -> None:
-    # The strong claim, and far broader than one hand-built tree supports: the
-    # ensemble supplies isolated vertices, several components, and varying
-    # degree, and BP must be exact on all of them.
-    #
-    # Measured over 106 acyclic draws: worst relative deviation 3.7e-15 in
-    # `log Z` and 4.9e-13 in the single-site marginals.
+    # BP exact on every acyclic draw (isolated vertices, components, varying
+    # degree): over 106, worst 3.7e-15 in `log Z`, 4.9e-13 in marginals.
     acyclic = [graph for graph in _ensemble(60, 20260904) if _is_acyclic(graph)]
 
     assert len(acyclic) >= 30, "the draw range should be mostly acyclic"
@@ -115,17 +103,10 @@ def test_the_ensemble_reaches_structures_no_committed_fixture_does() -> None:
 
 @pytest.mark.smoke
 def test_the_deviation_on_a_cyclic_draw_is_reported_not_asserted() -> None:
-    # On a loop BP is approximate, so the deviation is a measurement -- the
-    # same disposition #172 takes for the lattice.
-    #
-    # **A correction to this ticket's stated expectation.** It proposed
-    # asserting the deviation here is "bounded well below the lattice's". That
-    # is not supported at these sizes: measured over 14 cyclic draws the
-    # relative deviation ran 2.7e-04 to 7.4e-03 with a median of 3.6e-03,
-    # against the lattice's peak of 5.2e-03. At `n <= 10` a single cycle is a
-    # large fraction of the graph, so the locally-tree-like argument -- which
-    # is asymptotic -- does not apply yet. What is asserted is only that the
-    # deviation is finite and small, and the number is reported.
+    # On a loop BP is approximate (as #172 for the lattice). The ticket's
+    # "well below the lattice's" fails at these sizes: 14 cyclic draws ran
+    # 2.7e-04 to 7.4e-03 (median 3.6e-03) against the lattice's 5.2e-03. Only
+    # finite and small is asserted.
     cyclic = [graph for graph in _ensemble(60, 20260904) if not _is_acyclic(graph)]
 
     assert cyclic, "the draw range should produce some cycles"

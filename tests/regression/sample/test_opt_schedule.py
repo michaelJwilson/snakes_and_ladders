@@ -234,12 +234,7 @@ def test_cosine_mirrors_torch_cosine_annealing_lr() -> None:
 
 
 def _ratio_acceptance(ladder: tuple[float, ...]) -> list[float]:
-    """A synthetic exchange acceptance: the ratio of neighbouring temperatures, inverted.
-
-    ``a = min(T) / max(T)`` per pair, so a factor of 2 between neighbours
-    accepts at 0.5 and the ladder the band asks for is geometric --- which
-    is what makes the outcome checkable in closed form.
-    """
+    """A synthetic exchange acceptance, ``min(T) / max(T)`` per pair: closed form."""
     return [min(a, b) / max(a, b) for a, b in itertools.pairwise(ladder)]
 
 
@@ -333,18 +328,14 @@ def test_a_ladder_or_band_the_warm_up_cannot_use_is_refused() -> None:
 
 # --- the other criterion: a ladder placed by its round trips (#756) ---------
 #
-# An exchange acceptance is a per-pair number and a round trip is a statement
-# about the whole ladder, so the two criteria are measured differently and
-# placed differently. Both synthetic measurements below are closed forms, so
-# what the placement does is checkable rather than sampled.
+# Per-pair acceptance against a whole-ladder statistic; both synthetic
+# measurements below are closed forms.
 
 
 def _linear_up_fraction(ladder: tuple[float, ...]) -> list[float]:
     """The up-fraction falling linearly in temperature: 1 at the first rung, 0 at the last.
 
-    The one profile whose optimum is in closed form. With ``f`` linear, every
-    interval's mass ``sqrt(-df dT)`` is proportional to its width, so equal
-    mass is equal width and the placement is the ladder uniform in ``T``.
+    Mass ``sqrt(-df dT)`` is proportional to width, so the optimum is uniform in ``T``.
     """
     values = np.array(ladder)
     return list((values - values[-1]) / (values[0] - values[-1]))

@@ -1,16 +1,10 @@
 """The path enumeration, against the forward recursion and against algebra.
 
-The enumeration is the oracle two decoders are separated by, so it cannot be
-validated by a decoder. It is pinned instead against `snakes_and_ladders.opt.hmm`'s forward
-algorithm --- which shares no code with it, in
-`test_message_passing.py::test_every_chain_evaluator_is_the_path_enumeration`
-since issue #982 --- and here against quantities that can be worked out by
-hand.
-
-It referees a sampler here too (issue #734): `forward_backward.sample_path`
-draws whole paths, and the distribution it draws them from is the one
-enumerated below. The sampler has no module of its own, and the law it is
-held to is this one.
+The enumeration is the oracle decoders are separated by, so it is pinned
+against `opt.hmm`'s forward algorithm, which shares no code with it
+(`test_message_passing.py::test_every_chain_evaluator_is_the_path_enumeration`,
+#982), and here against hand-worked quantities. It also referees
+`forward_backward.sample_path`, which has no module of its own (issue #734).
 """
 
 from __future__ import annotations
@@ -34,11 +28,8 @@ from snakes_and_ladders.sim.hmm import HmmParams
 from tests._rows import every_row
 from tests.regression.likelihood.conftest import CHAIN_CASES, random_hmm
 
-#: Declared significance, the value every goodness-of-fit test in this
-#: repository is read at (`search/test_potts_mcmc.py`). Over 18 runs --- the
-#: three instances below at six generator seeds each --- the smallest p-value
-#: was 0.0077 for the joint and 0.0053 for a site marginal, so a correct
-#: sampler is not rejected here.
+#: Declared significance, as in `search/test_potts_mcmc.py`. Over 18 runs (three
+#: instances x six seeds) the smallest p was 0.0077 joint, 0.0053 marginal.
 SIGNIFICANCE = 0.001
 
 #: Draws per instance. Every draw is independent --- a forward filter and a
@@ -115,23 +106,12 @@ def _lumped(law: np.ndarray, n_draws: int) -> list[list[int]]:
 @pytest.mark.oracle
 @pytest.mark.critical
 def test_the_sampled_paths_are_drawn_from_the_enumerated_path_posterior() -> None:
-    # The rung below (issue #734): the enumeration, which on a chain short
-    # enough to enumerate carries the whole posterior over paths and not only
-    # its marginals. `sample_path` filters forward and samples backward, so
-    # what it claims is exactness -- the draw is from `p(z | y)` itself --
-    # and the claim is refutable only against the joint. The per-site
-    # marginals are the second half: a sampler that drew each position from
-    # its own marginal would pass a marginal test and fail this one.
-    #
-    # Three instances, 32, 81 and 64 paths, 6,000 independent draws each.
-    # Realized: the joint chi-square over the lumped cells at p 0.0127, 0.1378
-    # and 0.7805 against the 0.001 declared; the per-position marginals at a
-    # smallest p of 0.0754, 0.0255 and 0.0861, deviating from
-    # `forward_backward`'s posterior by at most 0.0164 against the 0.03
-    # declared; total variation 0.0099, 0.0443 and 0.0229 against the 0.06.
-    # `forward_backward`'s posterior is the enumeration's to 2.3e-15, which
-    # is asserted here rather than assumed, so the marginal comparison is
-    # against a quantity this file's own oracle establishes.
+    # The rung below (#734): the joint over paths refutes an exact sampler; a
+    # per-site sampler passes marginals and fails the joint. 32, 81 and 64
+    # paths, 6,000 draws each. Joint chi-square p 0.0127, 0.1378, 0.7805
+    # (0.001 declared); marginal smallest p 0.0754, 0.0255, 0.0861, deviation
+    # <= 0.0164 (0.03); TV 0.0099, 0.0443, 0.0229 (0.06). `forward_backward`
+    # is the enumeration's to 2.3e-15, asserted.
     def check(n_states: int, n_symbols: int, length: int, seed: int) -> None:
         params = random_hmm(n_states, n_symbols, length, seed)
         observations = np.random.default_rng(seed).integers(0, n_symbols, size=length)

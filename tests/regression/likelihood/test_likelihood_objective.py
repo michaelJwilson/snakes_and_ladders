@@ -74,11 +74,7 @@ def _objective(
 
 @cache
 def _fitted(fixture: str) -> tuple[BranchLengthObjective, FitResult]:
-    """The `_SITES`-site objective and its fit, run once per fixture.
-
-    Three tests below fit the same objective and read different things off
-    the same optimum; the fit is the expensive half, so it is computed once.
-    """
+    """The `_SITES`-site objective and its fit, run once per fixture for three tests."""
     objective = _objective(fixture)
     return objective, fit(objective)
 
@@ -142,11 +138,7 @@ def test_two_non_root_siblings_are_not_confounded() -> None:
 
 
 class _Unmerged:
-    """The naive parameterization: one free length per branch, root included.
-
-    Kept as a test fixture rather than shipped, to show what the merged
-    parameterization avoids.
-    """
+    """The naive parameterization: one free length per branch, root included."""
 
     def __init__(
         self,
@@ -277,13 +269,8 @@ def test_the_fit_beats_the_generating_branch_lengths(fixture: str) -> None:
 def test_every_branch_length_is_recovered_to_within_four_standard_errors(
     fixture: str,
 ) -> None:
-    # Not "every 95% interval covers": on one dataset that is a draw, and
-    # with five parameters it fails about a quarter of the time on correct
-    # code -- as it did while this file was being written. Four standard
-    # errors is the same statement made at a tail small enough to be a
-    # deterministic assertion (realized worst deviation across these three
-    # fixtures: 2.45). The nominal *rate* is the release-gated test below,
-    # which is where coverage belongs.
+    # Four standard errors, not a 95% interval (five parameters fail that a
+    # quarter of the time); realized worst 2.45. Coverage is the release test.
     params = load_fixture(fixture)
     objective, result = _fitted(fixture)
     estimate = objective.constrain(result.theta)["branch_lengths"]
@@ -578,12 +565,8 @@ def test_fitted_tree_halves_the_merged_root_pair() -> None:
 def test_the_phylogenetic_objectives_invert_their_own_constraint_map(
     which: str,
 ) -> None:
-    # The seam #268 declares on every objective, checked on the two that live
-    # here rather than in `opt/`: the branch-length map is a log, the
-    # substitution model's a log-simplex and a positive map with a gauge
-    # fixed, and an inverse that dropped the gauge or mis-ordered the
-    # exchangeabilities would round-trip nothing. Held to the same 1e-14 the
-    # eight `opt` objectives are.
+    # #268's seam on the two objectives here: a log map, and a log-simplex and
+    # positive map with a gauge; to the 1e-14 the `opt` objectives meet.
     case: tuple[BranchLengthObjective | SubstitutionModelObjective, torch.Tensor]
     if which == "branch_lengths":
         branch = _objective(SMALL_SITES)
@@ -602,11 +585,8 @@ def test_the_phylogenetic_objectives_invert_their_own_constraint_map(
 
 @pytest.mark.oracle
 def test_the_two_gradient_routes_agree_through_the_objective() -> None:
-    # `pruning_analytic` is pinned against `pruning_torch` at the level of
-    # `log_likelihood`; this pins the same agreement where a fit sees it,
-    # through the constraint map and the merged root pair. The value is the
-    # same forward pass and is therefore exact; the gradient is a different
-    # computation and carries the tolerance the closed form is stated at.
+    # `pruning_analytic` against `pruning_torch` through the constraint map
+    # and merged root: value exact, gradient at the closed form's tolerance.
     taped = _objective(EIGHT_TAXA, gradient="taped")
     analytic = _objective(EIGHT_TAXA, gradient="analytic")
     theta = taped.initial()

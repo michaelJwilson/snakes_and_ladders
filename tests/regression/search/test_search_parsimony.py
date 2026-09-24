@@ -111,11 +111,8 @@ def _reaches_the_minimum(
 def test_every_start_reaches_the_enumerated_minimum_at_five_taxa(
     moves: MoveSet, step_matrix: np.ndarray | None
 ) -> None:
-    # 15 topologies, each the start of one search. Measured: 15 of 15 under
-    # each of the four combinations; the minimum (1163 changes under Fitch,
-    # 1901 weighted, at 1,200 sites) is unique and is the generating tree.
-    # A median search scores 8 candidates under NNI and 14 under SPR, the
-    # latter being every other topology.
+    # 15 starts: 15 of 15 per combination; unique minimum 1163 (Fitch), 1901
+    # (weighted) at 1,200 sites, the generating tree; median 8 (NNI), 14 (SPR).
     alignment, k = _alignment(FIVE_TAXA)
     best, scores = _enumerated(alignment, k, step_matrix)
     assert sum(value == best for value in scores.values()) == 1
@@ -138,13 +135,8 @@ def test_every_start_reaches_the_enumerated_minimum_at_five_taxa(
 def test_every_start_reaches_the_enumerated_minimum_at_six_taxa(
     moves: MoveSet, step_matrix: np.ndarray | None
 ) -> None:
-    # 105 starts. Measured: 105 of 105 under each combination; the minimum
-    # (1792 under Fitch, 2920 weighted, at 1,500 sites) is unique and is the
-    # generating tree, 37 changes ahead of the runner-up. Median 17
-    # candidates under NNI against 61 under SPR. Per PR rather than
-    # release-gated, unlike the likelihood study on the same fixture: one
-    # parsimony pass is 0.15 ms where a fit is 250 ms, so the whole study is
-    # a few seconds.
+    # 105 starts: 105 of 105; unique minimum 1792 / 2920 at 1,500 sites, 37
+    # ahead; median 17 (NNI), 61 (SPR). Per PR: 0.15 ms a pass against 250 ms a fit.
     alignment, k = _alignment(SIX_TAXA)
     best, scores = _enumerated(alignment, k, step_matrix)
     assert sum(value == best for value in scores.values()) == 1
@@ -166,14 +158,9 @@ def test_every_start_reaches_the_enumerated_minimum_at_six_taxa(
 
 @pytest.mark.oracle
 def test_spr_escapes_the_local_minima_nni_stops_in_at_eight_taxa() -> None:
-    # The first size at which the two neighbourhoods separate. Over the
-    # 10,395 topologies of the eight-taxon fixture at 1,000 sites the Fitch
-    # minimum is 1607, unique, the generating tree, 9 changes ahead of the
-    # runner-up. From 12 random starts NNI reached it 9 times and stopped at
-    # a local minimum 3 times; SPR reached it 12 times, at a median of 289
-    # candidates against NNI's 60. Asserted at the margin the measurement
-    # supports, so a weaker neighbourhood is reported as one rather than
-    # hidden by a threshold tuned to the observation.
+    # Where the neighbourhoods separate: 10,395 topologies, unique minimum 1607
+    # (9 ahead). From 12 starts NNI reached it 9 times, SPR 12 (median 289
+    # candidates against 60). Asserted at the margin.
     alignment, k = _alignment(EIGHT_TAXA, n_sites=1000)
     best, scores = _enumerated(alignment, k, None)
     assert sum(value == best for value in scores.values()) == 1
@@ -240,12 +227,8 @@ def test_the_unit_step_matrix_walks_the_same_path_as_fitch() -> None:
 
 @pytest.mark.oracle
 def test_no_topology_is_scored_twice() -> None:
-    # Refereed by the closed-form count `(2n - 5)!!` through
-    # `sim.newick.count_topologies`: at five taxa there are 15 topologies, so
-    # a converged SPR search -- whose neighbourhood at this size is every
-    # other topology -- can never have scored more than 14 candidates however
-    # often the moves repeat one. Realized 14 evaluations against the bound
-    # of 14, so the bound binds.
+    # `(2n - 5)!!`: 15 topologies at five taxa, so at most 14 candidates;
+    # realized 14, so the bound binds.
     alignment, k = _alignment(FIVE_TAXA)
 
     result = parsimony_search(
@@ -343,16 +326,10 @@ def test_too_few_taxa_and_a_missing_rng_are_refused() -> None:
 def test_large_parsimony_returns_the_wrong_tree_in_the_felsenstein_zone(
     moves: MoveSet,
 ) -> None:
-    # The search is right and the criterion is wrong, and the test tells the
-    # two apart. Measured at 2,000 sites from the generating tree of #209
-    # (seed 1000): from each of the 3 starts, under either neighbourhood,
-    # the search returns AC|BD -- the two long branches grouped -- at Fitch
-    # score 1869, where the generating tree AB|CD scores 1982 and AD|BC 2005.
-    # Under transition/transversion weights the same tree wins, 3013 against
-    # 3273. Maximum likelihood on the same alignment puts the generating
-    # tree first at -8325.16, with AC|BD at -8338.15: 12.99 log units, and
-    # the opposite order. At 200 sites the gap is 1.71 log units and 10
-    # changes, in the same directions.
+    # The search is right, the criterion wrong. At 2,000 sites (#209, seed
+    # 1000) every start returns AC|BD at Fitch 1869 (AB|CD 1982, AD|BC 2005);
+    # weighted 3013 against 3273. ML puts AB|CD first, -8325.16 against
+    # -8338.15 (12.99). At 200 sites: 1.71 log units, 10 changes, same signs.
     n_sites = 2000
     dataset = simulate_alignment(
         FELSENSTEIN_ZONE, 4, np.full(4, 0.25), np.random.default_rng(1000), n_sites

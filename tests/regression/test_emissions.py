@@ -82,11 +82,9 @@ def test_the_gaussian_density_matches_the_closed_form() -> None:
 
 @pytest.mark.infra
 def test_a_categorical_score_is_a_probability_and_a_gaussian_one_is_a_density() -> None:
-    # The place the discrete assumption was load-bearing. A categorical score
-    # is bounded above by zero; a Gaussian one is not. Exhibited rather than
-    # asserted from `is_discrete` alone: at scale 0.5 the density at the mean
-    # is 1 / (0.5 sqrt(2 pi)) = 0.798 -- still below 1 -- so the fixture that
-    # shows it needs a narrower state than this module's.
+    # A categorical score is bounded above by zero; a Gaussian one is not. At
+    # scale 0.5 the density at the mean is 0.798, still below 1, so the fixture
+    # needs a narrower state than this module's.
     categorical = CategoricalEmission(MATRIX)
     assert categorical.is_discrete
     assert float(categorical.log_density(torch.tensor([0, 1, 2, 3])).max()) <= 0.0
@@ -263,18 +261,14 @@ def test_a_gaussian_family_refuses_parameters_it_cannot_be() -> None:
 
 # --- negative binomial ----------------------------------------------------
 #
-# The family whose M step is a solve rather than a formula, and whose
-# identifiability hazard is a *flat* likelihood where the Gaussian's is
-# unbounded. Its two exact limits are both used below.
+# The M step is a solve; the likelihood can be flat. Two exact limits below.
 
 NB_DISPERSION = np.array([1.5, 10.0])
 NB_MEAN = np.array([6.0, 25.0])
 
-#: Monte Carlo standard deviation of a sample variance at 200000 draws,
-#: measured over 20 replicates of each fixture: 0.149 at ``(r, mu) = (1.5, 6)``
-#: and 0.197 at ``(10, 25)``. The bound below is four of the larger, so the
-#: tolerance comes from the sampling noise rather than from what happened to
-#: pass (``hmm/ci.yaml``).
+#: Monte Carlo sd of a sample variance at 200000 draws, over 20 replicates:
+#: 0.149 at ``(r, mu) = (1.5, 6)``, 0.197 at ``(10, 25)``; the bound is four
+#: of the larger (``hmm/ci.yaml``).
 NB_VARIANCE_TOLERANCE = 0.8
 NB_DRAWS = 200_000
 
@@ -307,12 +301,9 @@ def test_a_dispersion_of_one_is_the_geometric_distribution_exactly() -> None:
 
 @pytest.mark.infra
 def test_the_poisson_limit_is_approached_at_the_rate_the_expansion_predicts() -> None:
-    # The tolerance is *derived* from the truncation rather than chosen. The
-    # deviation from the Poisson log-pmf is O(1 / r), so the order is what is
-    # asserted -- doubling r halves the deviation -- and the bound at any one
-    # r follows from the constant that pins. Realized: r times the deviation
-    # is 18.75, 18.88, 18.94, 18.97, 18.98 over r from 500 to 8000, converging
-    # rather than drifting.
+    # Derived from the truncation: the deviation from the Poisson is O(1 / r),
+    # so doubling r halves it. Realized r times the deviation: 18.75, 18.88,
+    # 18.94, 18.97, 18.98 over r from 500 to 8000.
     counts = torch.arange(0.0, 12.0, dtype=torch.float64)
     mean = 4.0
     poisson = counts * math.log(mean) - mean - torch.lgamma(counts + 1.0)
@@ -517,9 +508,7 @@ def test_the_textbook_parameterization_is_accepted_at_the_boundary() -> None:
 
 # --- the rest of the dispersion axis (#260) -------------------------------
 #
-# Binomial below equidispersion, Poisson exactly at it, negative binomial and
-# beta-binomial above. An interface exercised only by overdispersed families
-# has not been asked whether it assumes overdispersion somewhere.
+# Binomial below equidispersion, Poisson at it, NB and beta-binomial above.
 
 TRIALS = np.array([12, 12])
 POISSON_MEAN = np.array([4.0, 9.0])
@@ -691,16 +680,9 @@ def test_the_beta_binomial_m_step_settles_and_is_a_stationary_point() -> None:
 
 @pytest.mark.analytic
 def test_data_with_no_overdispersion_drives_the_concentration_to_its_bound() -> None:
-    # The beta-binomial's flat-likelihood hazard, one family over: as `a + b`
-    # grows the family becomes a binomial, so binomial data has no
-    # concentration to find.
-    #
-    # **The flag is a property of the sample, not of the population.** A given
-    # draw from the boundary case is slightly over- or under-dispersed with
-    # roughly equal chance, and only the under-dispersed half has its maximum
-    # at infinity. Measured over 12 seeds: 10 reach the bound and the other
-    # two stop at 0.40 and 0.45 of it -- deep in the unidentified region
-    # either way, which is the claim that survives the draw.
+    # As `a + b` grows the family becomes a binomial. The flag is a property of
+    # the sample: over 12 seeds, 10 reach the bound and two stop at 0.40 and
+    # 0.45 of it, unidentified either way.
     bound = identifiable_concentration_bound(12.0, 4000.0)
     reached = 0
     fractions = []
@@ -752,11 +734,8 @@ def test_the_bounded_families_refuse_a_count_above_their_trials() -> None:
         PoissonEmission([0.0])
 
 
-#: Step the log-partition's derivative is taken over, in the natural
-#: parameter. A central difference, so the truncation error falls as the step
-#: squared --- 1.6e-7 relative at the largest count here at a step of 1e-4,
-#: and 1.6e-9 at this one --- while the cancellation in the subtraction grows
-#: as the step's reciprocal, which here is still 2e-12.
+#: Central-difference step in the natural parameter: truncation 1.6e-7
+#: relative at the largest count at 1e-4 and 1.6e-9 here; cancellation 2e-12.
 DIFFERENCE_STEP = 1e-5
 
 #: Relative agreement required between a family's divergence and the finite
@@ -796,17 +775,10 @@ def _poisson_log_partition(natural: np.ndarray, _: float) -> np.ndarray:
 def test_a_count_divergence_is_the_finite_difference_bregman_of_its_log_partition() -> (
     None
 ):
-    # The general case of issue #560's correction, refereed where the
-    # Gaussian's collapse to squared Euclidean says nothing. A count family at
-    # fixed shape is an exponential family in its mean, so the quantity
-    # `Emission_Mixture++` scores by is
-    #
+    # Issue #560 where the Gaussian says nothing: at fixed shape a count family
+    # is exponential in its mean, so the score is the Bregman divergence
     #     D(y, mu) = A(theta(mu)) - A(theta(y)) - A'(theta(y)) (theta(mu) - theta(y)),
-    #
-    # the Bregman divergence of the log-partition between the state's natural
-    # parameter and the observation's. Here `A` is evaluated as a formula and
-    # `A'` by central difference, so nothing the family computes is reused:
-    # the oracle shares no line with `bregman_divergence`.
+    # `A` as a formula, `A'` by central difference: no line shared with the family.
     counts = np.array([1.0, 3.0, 8.0, 25.0])
     for family, log_partition, natural_of, shape in (
         (
@@ -839,12 +811,8 @@ def test_a_count_divergence_is_the_finite_difference_bregman_of_its_log_partitio
 
 @pytest.mark.analytic
 def test_the_beta_binomial_divergence_is_the_gap_to_the_best_rate_it_admits() -> None:
-    # The beta-binomial is a compound distribution, not an exponential family
-    # in its success count, so it has no log-partition and the test above has
-    # nothing to difference. What `bregman_divergence` returns there is the
-    # unit deviance the divergence generalizes to --- the log-density gap to
-    # the best member of the family at the observation --- and what that
-    # claims is checkable by search: no rate at the same concentration and
+    # The beta-binomial has no log-partition; `bregman_divergence` returns the
+    # unit deviance, checked by search: no rate at the same concentration and
     # trials scores the observation higher than the gap says.
     family = BetaBinomialEmission(TRIALS, [2.0, 6.0], [6.0, 2.0])
     counts = torch.arange(0.0, float(TRIALS[0]) + 1.0)
@@ -875,12 +843,9 @@ def test_the_beta_binomial_divergence_is_the_gap_to_the_best_rate_it_admits() ->
 
 @pytest.mark.analytic
 def test_every_family_scores_zero_divergence_at_its_own_mean() -> None:
-    # What makes the divergence a distance to a component rather than a
-    # likelihood: it vanishes where the state is the family's best member for
-    # the observation, so D-squared sampling never redraws a seed it has
-    # already taken. The Gaussian carries the same property at its mean, where
-    # the negative log density it replaced is `log(scale) + log(2 pi) / 2`
-    # instead --- the term that diluted the rule.
+    # The divergence vanishes at the family's best member for the observation,
+    # so D-squared sampling never redraws a taken seed; the Gaussian's former
+    # score was `log(scale) + log(2 pi) / 2` there.
     for family in (
         GaussianEmission(MEAN, SCALE, FLOOR),
         NegativeBinomialEmission([4.0, 9.0], MEAN + 6.0),
@@ -895,12 +860,8 @@ def test_every_family_scores_zero_divergence_at_its_own_mean() -> None:
 
 @pytest.mark.analytic
 def test_a_categorical_divergence_is_its_negative_log_probability() -> None:
-    # The one family where the corrected rule and the rule it replaced agree,
-    # and the reason is that its ``log b_phi`` is zero: the member matched to
-    # a symbol is the point mass on that symbol, which scores it at
-    # probability one. Nothing is subtracted, so #560 moves nothing here --- a
-    # claim worth pinning, because a seeding of a categorical emission that
-    # changed under the correction would say the correction was wrong.
+    # The categorical's ``log b_phi`` is zero (a point mass scores its symbol
+    # at probability one), so #560 moves nothing here.
     family = CategoricalEmission(MATRIX)
     symbols = torch.arange(MATRIX.shape[1])
     divergence = family.bregman_divergence(symbols)
@@ -918,12 +879,9 @@ def test_a_categorical_divergence_is_its_negative_log_probability() -> None:
 
 @pytest.mark.analytic
 def test_a_multi_channel_gaussian_divergence_whitens_each_channel() -> None:
-    # Why the identity with `opt.mixture.kmeans_plus_plus` is a *one-scale*
-    # identity. Each channel enters divided by its own scale, so with equal
-    # scales the divergence is the squared Euclidean distance over twice the
-    # variance --- a factor D-squared sampling normalizes away --- and with
-    # unequal scales it is a different rule, which is what separates the two
-    # on the two-channel rung of `docs/experiments/010` (issue #560).
+    # With equal scales the divergence is squared Euclidean over twice the
+    # variance, which D-squared sampling normalizes away; unequal scales make
+    # a different rule (`docs/experiments/010`, issue #560).
     observations = torch.as_tensor([[1.0, 8.0], [-3.0, 0.0]])
     located = np.array([[0.0, 0.0], [2.0, 5.0]])
     equal = GaussianEmission(located, np.full((2, 2), 2.0), FLOOR)

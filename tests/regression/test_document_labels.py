@@ -1,16 +1,10 @@
 """Code cites a label in the documents, and every label it cites exists.
 
-`ROADMAP.md` §1.3 binds the application logic to `docs/tex/`. A citation is
-that binding made checkable --- and only if it names something the build
-resolves. Before this test the code cited nine equations that had never
-carried a `\\label`, nine sections by a title the next retitle would break,
-and two equations by a *number* from a numbering that no longer existed
-(issue #274). None of those ever failed anything.
-
-Two things are asserted. Every label token in `python/`, `src/` and `tests/`
-is defined in a document under `docs/tex/`; and no citation uses the
-informal forms that cannot be resolved --- an equation named in parentheses
-after the abbreviation, or a section quoted by its title.
+`ROADMAP.md` §1.3 binds the application logic to `docs/tex/`. Issue #274 found
+nine equations never labelled, nine sections cited by title and two equations
+by a stale number. Asserted: every label token in `python/`, `src/` and
+`tests/` is defined under `docs/tex/`, and no citation uses a parenthesized
+equation abbreviation or a quoted section title.
 """
 
 from __future__ import annotations
@@ -44,17 +38,9 @@ def defined_labels(documents: tuple[Path, ...] = DOCUMENTS) -> set[str]:
     return labels
 
 
-#: Modules whose *content* is documents rather than references to one. Each
-#: writes a `\label` and a `\ref` into a document it builds in `tmp_path`,
-#: so the tokens in it name nothing under `docs/tex/` by design and scanning
-#: them reports a fixture as a defect. This file is one (its guard-the-guard
-#: test below cites a label that deliberately does not exist); the citation
-#: integrity checker's tests are the others, and were reported as three
-#: dangling labels from the day they landed. The problem-join tests are the
-#: third, and were reported the same way from the day they landed: the list
-#: is edited when a module joins it, so a new one turns the guard red until
-#: someone does. `test_every_document_fixture_is_one` below holds the
-#: entries to the property that admits them.
+#: Modules whose content is documents: each writes a `\label` and a `\ref`
+#: into a document in `tmp_path`, naming nothing under `docs/tex/` by design.
+#: `test_every_document_fixture_is_one` holds each entry to that property.
 DOCUMENT_FIXTURES = (
     Path(__file__).resolve(),
     REPO_ROOT / "tests" / "regression" / "docs" / "test_citation_integrity.py",
@@ -98,14 +84,8 @@ def test_every_label_the_code_cites_is_defined_in_a_document() -> None:
 
 @pytest.mark.infra
 def test_every_document_fixture_is_one() -> None:
-    # The exemption list is edited by hand, so it has gone stale three times:
-    # the citation checker's tests and then the problem-join tests each turned
-    # this file red on the day they landed, and the join's removal left an
-    # entry behind that no longer authors anything. An entry earns its place by
-    # authoring document text -- writing a `\label{` into a document it
-    # builds -- so that property is checked rather than trusted, and an
-    # entry that stops authoring one is reported instead of silently
-    # exempting a module that now only cites.
+    # An entry earns its place by writing a `\label{` into a document it
+    # builds; checked, since the hand-kept list went stale three times.
     for fixture in DOCUMENT_FIXTURES:
         assert fixture.exists(), f"exempted path does not exist: {fixture}"
         if fixture == Path(__file__).resolve():

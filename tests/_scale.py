@@ -1,15 +1,8 @@
 """Running one test body at two sizes, under two time budgets.
 
-`DEV.md` sets the budgets this exists to keep: the per-pull-request suite
-inside 5 minutes, the ``stress`` tier inside 10, and the release gate outside
-both. Those are enforced by *size*, so a size has to be selectable rather
-than written into each test.
-
-The alternative is two tests, and it fails in the direction that matters: the
-small one keeps being maintained and the large one drifts until it asserts
-something the small one no longer does. :func:`at_scale` parameterizes one
-body over both, so a change to the assertion reaches the large size by
-construction.
+`DEV.md` budgets the per-PR suite at 5 minutes and ``stress`` at 10, enforced
+by size. :func:`at_scale` parameterizes one body over both, so an assertion
+change reaches the large size by construction; two tests would drift.
 """
 
 from __future__ import annotations
@@ -20,11 +13,8 @@ import pytest
 from snakes_and_ladders.fixtures import Scale
 from snakes_and_ladders.sim.fixtures import KEY, Fixture, fixture, tiers
 
-#: What this module offers, re-exports included. Declared rather than left to
-#: a ``noqa``: a bare re-export is a private name under ``mypy --strict``, so
-#: a test importing the type its own decorator hands it --- `Fixture`, which
-#: :func:`at_fixture` names --- failed type-checking while the functions
-#: beside it passed. Naming them here says the re-export is the interface.
+#: The interface, re-exports included: a bare re-export such as `Fixture` is
+#: private under ``mypy --strict``.
 __all__ = [
     "KEY",
     "Fixture",
@@ -42,34 +32,9 @@ T = TypeVar("T")
 
 
 def at_scale(argument: str, ci: T, stress: T) -> pytest.MarkDecorator:
-    """Parameterize one test over its CI size and its stress size.
+    """Parameterize one test over its CI size and its ``stress``-marked size.
 
-    The CI case runs on every pull request; the stress case carries the
-    ``stress`` marker, so it is deselected there and runs under the 10-minute
-    developer budget instead.
-
-    Parameters
-    ----------
-    argument : str
-        Name of the test argument receiving the size.
-    ci : T
-        The size at which an exact oracle is still available and the test
-        fits the per-pull-request budget. A size that *is* a problem
-        instance belongs in the registry instead: see :func:`at_fixture`.
-    stress : T
-        The size that shows the same property where the CI size cannot ---
-        more replicates, a longer chain, a larger structure.
-
-    Returns
-    -------
-    pytest.MarkDecorator
-        A ``parametrize`` decorator carrying both cases.
-
-    Examples
-    --------
-    >>> @at_scale("n_taxa", ci=6, stress=7)
-    ... def test_neighbour_count(n_taxa: int) -> None:
-    ...     ...
+    ``ci`` keeps an exact oracle in budget; an instance belongs in :func:`at_fixture`.
     """
     return pytest.mark.parametrize(
         argument,
@@ -92,35 +57,7 @@ _MARKS: dict[Scale, tuple[pytest.MarkDecorator, ...]] = {
 def at_fixture(argument: str, problem: str) -> pytest.MarkDecorator:
     """Parameterize one test over every instance a problem declares.
 
-    The registry-driven form of :func:`at_scale`: the sizes are the fixture
-    files' (`snakes_and_ladders.sim.fixtures`) rather than literals in the
-    test, so a problem that gains a tier gains a case in every test written
-    this way, and the tier a case runs at is the fixture's own.
-
-    Parameters
-    ----------
-    argument : str
-        Name of the test argument receiving the
-        :class:`~snakes_and_ladders.sim.fixtures.Fixture`. The body names
-        the params type the problem declares, which is what the class is
-        generic in (issue #864).
-    problem : str
-        The registry problem, which is the fixture directory's name.
-
-    Returns
-    -------
-    pytest.MarkDecorator
-        A ``parametrize`` decorator with one case per declared tier, each
-        identified as ``<problem>-<tier>`` and carrying that tier's
-        scheduling marker.
-
-    Examples
-    --------
-    >>> @at_fixture("instance", "potts_lattice")
-    ... def test_marginals_match_enumeration(
-    ...     instance: Fixture[PottsLatticeParams],
-    ... ) -> None:
-    ...     assert instance.oracle == "enumeration"
+    One case ``<problem>-<tier>`` per tier, with that tier's marker (issue #864).
     """
     return pytest.mark.parametrize(
         argument,
@@ -138,21 +75,7 @@ def at_fixture(argument: str, problem: str) -> pytest.MarkDecorator:
 def stress_only(reason: str) -> pytest.MarkDecorator:
     """Mark a whole test as stress-tier, with the reason it does not fit CI.
 
-    Used where a test has no smaller size that still asserts the same thing
-    --- a chain long enough to have converged, a sweep whose shape is the
-    result --- so parameterizing it would leave a CI case asserting less than
-    the test claims.
-
-    Parameters
-    ----------
-    reason : str
-        Why the CI budget cannot hold this test. Recorded on the marker so a
-        reader of the test does not have to reconstruct it.
-
-    Returns
-    -------
-    pytest.MarkDecorator
-        The ``stress`` marker.
+    For a test with no smaller size that asserts the same thing.
     """
     return pytest.mark.stress(reason=reason)
 
@@ -170,24 +93,7 @@ _BIN_MARKS: dict[str, tuple[pytest.MarkDecorator, ...]] = {
 def at_bin(argument: str, problem: str) -> pytest.MarkDecorator:
     """Parameterize one test over every bin factor a count-pair fixture declares.
 
-    The registry-driven form of :func:`at_scale` for a problem whose sizes are
-    *one* declared instance binned to several resolutions
-    (:mod:`snakes_and_ladders.sim.count_pairs`): the cases are the file's
-    ``bin`` entries and each carries the tier the file marks it with, which is
-    a measurement of the instance rather than a literal in the test.
-
-    Parameters
-    ----------
-    argument : str
-        Name of the test argument receiving the bin factor.
-    problem : str
-        The registry problem whose key file declares the factors.
-
-    Returns
-    -------
-    pytest.MarkDecorator
-        A ``parametrize`` decorator with one case per declared factor,
-        identified as ``bin-<factor>``.
+    Cases ``bin-<factor>``, each with the tier the key file marks it with.
     """
     declared = fixture(problem, KEY).params
     return pytest.mark.parametrize(
@@ -204,46 +110,13 @@ def at_bin(argument: str, problem: str) -> pytest.MarkDecorator:
 
 
 def key_only(reason: str) -> pytest.MarkDecorator:
-    """Mark a test as the key fixture's, with the reason it is not in the tier.
+    """Mark a test as the key fixture's, held to ``SAL_KEY_DURATION_CAP``.
 
-    The key tier is the one exempt from ``SAL_DURATION_CAP`` and held to
-    ``SAL_KEY_DURATION_CAP`` instead (`DEV.md`, and ``tests/_durations.py``).
-    Used where the test *is* the declared instance run end to end, so no
-    smaller size asserts the same thing and the instance's own budget is the
-    only one that applies.
-
-    Parameters
-    ----------
-    reason : str
-        Why the per-pull-request budget cannot hold this test. Recorded on the
-        marker, as :func:`stress_only` records its own.
-
-    Returns
-    -------
-    pytest.MarkDecorator
-        The ``key`` marker.
+    For the declared instance run end to end (`DEV.md`, ``tests/_durations.py``).
     """
     return pytest.mark.key(reason=reason)
 
 
 def scaled_values(scale: Scale, ci: dict[str, Any], stress: dict[str, Any]) -> Any:
-    """Pick the parameter set matching ``scale``.
-
-    For a test that varies several sizes together, where parameterizing each
-    separately would multiply cases that are only meaningful as a set.
-
-    Parameters
-    ----------
-    scale : Scale
-        Which budget the caller is running under.
-    ci : dict[str, Any]
-        Parameters at the CI size.
-    stress : dict[str, Any]
-        Parameters at the stress size.
-
-    Returns
-    -------
-    Any
-        ``ci`` or ``stress``.
-    """
+    """Pick ``ci`` or ``stress`` by ``scale``, for sizes that vary as a set."""
     return ci if scale is Scale.CI else stress

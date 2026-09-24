@@ -46,10 +46,7 @@ def test_the_kept_form_is_the_derived_form_bitwise() -> None:
 def test_every_writer_drops_the_kept_form() -> None:
     """A cache that outlives its store is the defect this would be trading for.
 
-    `add_edge` appends to all three lists and `max_flow` turns capacities into
-    residual capacities, so both have to forget. Asserted by reading
-    `as_arrays` after each and comparing against the lists, which is what a
-    stale form would disagree with.
+    After `add_edge` and `max_flow`, `as_arrays` must match the lists.
     """
     network = _network()
     network.add_edge(0, 1, 0.5, 0.25)

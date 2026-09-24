@@ -127,12 +127,7 @@ def _pmf(
 
 
 def _convolved(pmf: np.ndarray, factor: int) -> np.ndarray:
-    """The mass of a sum of ``factor`` independent draws, by direct convolution.
-
-    The oracle for :func:`aggregate`: it shares no code with the closed forms
-    the families state, so a family that is closed under addition can be
-    checked against the addition itself.
-    """
+    """The mass of a sum of ``factor`` draws by direct convolution: `aggregate`'s oracle."""
     total = pmf
     for _ in range(factor - 1):
         total = np.convolve(total, pmf)
@@ -160,11 +155,8 @@ def test_the_negative_binomial_channel_aggregates_exactly(factor: int) -> None:
 
 @pytest.mark.end2end
 def test_the_binned_counts_follow_the_aggregated_negative_binomial() -> None:
-    # The claim above on the data rather than the family: over the bins whose
-    # positions share a hidden state --- only within one state are the summands
-    # identically distributed --- the binned totals' mean and variance are the
-    # aggregated family's. The tolerances are Monte Carlo bounds at the few
-    # thousand such draws the ci instance carries at factor 5.
+    # On the data, within one hidden state: binned mean and variance are the
+    # aggregated family's, to Monte Carlo bounds at factor 5.
     declared, fine = _fine()
     model = declared.model
     factor = 5
@@ -190,12 +182,8 @@ def test_the_binned_counts_follow_the_aggregated_negative_binomial() -> None:
 
 @pytest.mark.oracle
 def test_the_beta_binomial_channel_is_misspecified_under_aggregation() -> None:
-    # A sum of f beta-binomials is not beta-binomial. Against the same
-    # convolution oracle: the mean of BetaBinomial(f n, a, b) --- the family
-    # `aggregate` returns --- is right, its variance several times too large,
-    # and the two distributions far apart in total variation. Hence a coarse
-    # instance's second channel is checked for label recovery and never for a
-    # parameter.
+    # Summed beta-binomials are not beta-binomial: `aggregate`'s mean is right,
+    # its variance several times too large, far in total variation.
     declared, _ = _fine()
     model = declared.model
     factor = 10

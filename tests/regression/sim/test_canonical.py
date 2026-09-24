@@ -1,16 +1,9 @@
 """The three canonical fixtures, against the answers that come from outside.
 
-Each of the three is admitted under both clauses of ``sim/CLAUDE.md``'s rule:
-its answer is known independently of anything here, and more than one module
-consumes it. The second clause is visible below --- ``sim`` builds the
-instance, ``likelihood`` and ``search`` supply the oracle.
-
-The instances here are built inline, the exception ``sim/CLAUDE.md`` allows:
-these are the tests *of* the constructors, run over a range of sizes and
-boundaries, so a fixture file would fix the one size the constructor must not
-be checked at alone. The declared instance of the frustrated problem is the
-fixture, and ``tests/regression/test_fixture_registry.py`` pins the file to
-what these constructors build.
+Each meets ``sim/CLAUDE.md``'s rule: an answer known independently (from
+``likelihood`` and ``search``), and more than one consumer. Built inline, the
+allowed exception: these test the constructors over sizes and boundaries.
+``test_fixture_registry.py`` pins the frustrated fixture file to them.
 """
 
 from __future__ import annotations
@@ -169,16 +162,10 @@ def test_single_site_sampling_still_runs_on_the_frustrated_instance() -> None:
 
 @pytest.mark.smoke
 def test_the_residual_entropy_is_reported_and_not_asserted() -> None:
-    # Wannier (1950) gives 0.3231 per site for the *infinite* lattice. The
-    # finite-size values are not close to it and, measured here, are not even
-    # monotone on the way: ground-state degeneracy 42 at N = 9, 68 at N = 12
-    # and 42 again at N = 16, giving 0.4153, 0.3516 and 0.2336 per site. The
-    # 4x4 torus is the anomaly -- neither extent is divisible by 3, so it is
-    # incommensurate with the three-sublattice ground-state structure.
-    #
-    # So this asserts the degeneracies, which are exact, and reports the
-    # entropy. Asserting convergence to Wannier's constant at these sizes is
-    # the mistake #214 made with a graph limit theorem.
+    # Wannier (1950): 0.3231 per site, infinite lattice. Degeneracy 42 at
+    # N = 9, 68 at 12, 42 at 16 (0.4153, 0.3516, 0.2336 per site; 4x4 is
+    # incommensurate with three sublattices). Degeneracies asserted, entropy
+    # reported: convergence at these sizes was #214's mistake.
     degeneracies = {
         shape: _agreeing_edges(frustrated_triangular_lattice(shape))[1]
         for shape in [(3, 3), (3, 4), (4, 4)]
@@ -336,14 +323,10 @@ def test_an_out_of_range_parameter_is_refused(
 @pytest.mark.smoke
 @pytest.mark.release
 def test_past_enumeration_the_planted_state_is_a_reference_not_a_hard_case() -> None:
-    # The claim this fixture was proposed to support, and the measurement
-    # narrowing it. At `n = 100` enumeration is impossible, so the planted
-    # energy is the only reference -- that part holds.
+    # At `n = 100` the planted energy is the only reference. It does not defeat
+    # a baseline; 20-restart ICM at mean degree 4, mean over 10 instances:
     #
-    # What does *not* hold is that it defeats a baseline. Measured against
-    # 20-restart iterated conditional modes at mean degree 4:
-    #
-    #   frustration   ICM - planted (mean over 10 instances)
+    #   frustration   ICM - planted
     #   0.00                  +0.30
     #   0.05                  -0.12
     #   0.10                  +0.12
@@ -351,17 +334,9 @@ def test_past_enumeration_the_planted_state_is_a_reference_not_a_hard_case() -> 
     #   0.20                  -8.20
     #   0.30                 -25.70
     #
-    # Below 0.2 single-site descent lands on the planted energy, so the
-    # instance is not hard. At and above it descent *beats* the planted state,
-    # so the planted energy is no longer near the optimum and is a weak
-    # reference. Raising connectivity does not open a window either: at mean
-    # degree 12 and frustration 0.05, descent matches the planted energy
-    # exactly on every instance.
-    #
-    # So the ticket's open question is answered in the negative: a planted
-    # Viana-Bray instance does not replace #177 as the case no baseline
-    # solves. It supplies a known-energy reference past enumeration, which is
-    # what it is used for.
+    # Below 0.2 descent lands on it; above, descent beats it. At degree 12,
+    # frustration 0.05, descent matches on every instance. Not a #177
+    # replacement: a known-energy reference past enumeration.
     rng = np.random.default_rng(20260904)
     field = np.zeros((100, 2))
 

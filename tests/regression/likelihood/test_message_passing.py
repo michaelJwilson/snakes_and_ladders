@@ -132,11 +132,8 @@ def test_sum_product_on_the_potts_tree_is_the_enumeration() -> None:
 def test_an_iterative_schedule_on_the_loopy_lattice_is_belief_propagation(
     schedule: MessageScheduleName,
 ) -> None:
-    # Both are the Bethe approximation. Neither is the truth, so the assertion
-    # is agreement between the two codes, not with the enumeration. Jacobi,
-    # Gauss-Seidel and the residual order share their stationary points and
-    # differ only in path (#825), so each is read against the reference
-    # module's flooding, which shares no schedule code with the seam.
+    # Both are the Bethe approximation, so agreement between codes is asserted;
+    # the schedules share stationary points (#825) and meet the reference flooding.
     reference = belief_propagation(LOOPY, FIELD, damping=0.5, tolerance=1e-12)
 
     result = sum_product(from_potts(LOOPY, FIELD), schedule=schedule, tolerance=1e-12)
@@ -386,11 +383,7 @@ def _path_law(
 ) -> np.ndarray:
     """``log Q(k_1..k_S)`` for every path, from one class's E-step posteriors.
 
-    The posterior over a chain's paths is itself a Markov chain, so it is
-    determined by what the E step already returns:
-    ``Q(k) = Q(k_1) prod_s Q(k_{s-1}, k_s) / Q(k_{s-1})``. Written out here so
-    the comparison is against the E step's own numbers and not against a
-    second run of a decoder.
+    ``Q(k) = Q(k_1) prod_s Q(k_{s-1}, k_s) / Q(k_{s-1})``: the E step's own numbers.
     """
     log_q = np.log(posterior[0])[paths[:, 0]]
     for position in range(1, paths.shape[1]):
@@ -405,27 +398,13 @@ def _path_law(
 @pytest.mark.critical
 @pytest.mark.oracle
 def test_max_product_decodes_the_mode_of_the_coupled_e_step_s_path_law() -> None:
-    # The rung below (issue #734): the coupled model's E step, which returns
-    # `Q(k_s | l, x)` and `Q(k_{s-1}, k_s | l, x)` per class and never a path.
-    # Those two determine the whole law over paths -- the posterior of a chain
-    # is a chain -- and the relation pinned is that max-product on the same
-    # class's chain decodes that law's mode, and reports its mass: with
-    # `E = class_posteriors(...).log_evidence[m]`,
-    # `max_product(...).log_partition - E == log Q(decoded path)` exactly.
-    #
-    # Realized over 12 generator seeds of the declared coupled instance, both
-    # classes, 24 chains of 2**6 paths: the law normalizes to within 9.2e-15
-    # of one; the mass identity holds to 8.9e-15 against the 1e-12 declared;
-    # and the decoded path is the law's argmax on 22 of the 24.
-    #
-    # Where it stops, asserted rather than only stated. On the other two
-    # chains the two leading paths are tied -- 1.1e-16 and 8.9e-16 apart in
-    # log mass, which is float64 noise and not a preference -- so which one is
-    # returned is the tie rule's and not the model's, and only the mass
-    # identity survives. The E step's *per-site* argmax is a weaker statement
-    # again: posterior decoding differs from the decoded path on exactly those
-    # two chains, at one position each, which is the distinction
-    # `hmm_paths` exists to keep.
+    # The rung below (#734): the coupled E step's pair posteriors determine the
+    # law over paths; max-product decodes its mode with mass
+    # `log_partition - E == log Q(decoded path)`. Over 12 seeds, both classes,
+    # 24 chains of 2**6 paths: normalized to 9.2e-15, mass identity 8.9e-15
+    # (1e-12 declared), argmax on 22 of 24. The other two tie (1.1e-16,
+    # 8.9e-16 apart): only the mass identity survives, and per-site decoding
+    # differs there at one position each, which `hmm_paths` keeps apart.
     params = fixture("spatio_sequential", "ci").params
     paths = configurations(params.n_states, params.n_positions)
     modes = ties = disagreements = 0
@@ -548,17 +527,10 @@ def test_a_malformed_graph_is_refused_at_construction() -> None:
 
 # --- the edge-array layout against the dictionary oracle (issue #341) ------------
 #
-# `message_passing` runs one vectorized pass per group of like-shaped edges;
-# `message_passing_reference` is the dictionary-per-message implementation it
-# replaced. The arithmetic per message is the same in the same order, so the
-# pin is bitwise on every marginal and every schedule; only ``log_partition``
-# sums its Bethe terms in a different order and is held to 1e-12 relative.
-#
-# The bitwise claim is the NumPy route's, so the tree schedule is asked for it
-# by name here (issue #754): `sum_product`'s default is the Rust kernel, whose
-# `exp` and `log` differ from NumPy's vectorized ones in the last place, and it
-# is pinned to this same route at `CROSS_DEVICE_RTOL_FLOAT64` in
-# `test_message_passing_rust.py` rather than by loosening this.
+# Same arithmetic per message in the same order: bitwise marginals on every
+# schedule; ``log_partition`` reorders its Bethe terms, 1e-12 relative. The
+# NumPy route is named (#754): the Rust default differs in `exp`/`log` last
+# places and is pinned in `test_message_passing_rust.py`.
 
 
 def _assert_same_marginals(realized: Marginals, expected: Marginals) -> None:

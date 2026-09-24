@@ -1,59 +1,14 @@
 """The duplications issues #230, #413 and #277 closed, asserted rather than remembered.
 
-What this module holds is a guard per seam: a copy of a routine, a value or a
-store that the tree once carried several times is refused the next time it is
-written. What it no longer holds is a survey. The pinned row counts of #717 and
-the pinned cluster sizes of #755 read the tree through `infra/duplication_survey.py`
-and `infra/appraise_structures.py`, and #813 retired both: an overlap audit is
-a reading of the code, recorded in a dated review with the command that
-reproduces each number, not a script whose pins move with every edit to the
-file that holds them.
-
-A consolidation that nothing enforces is a consolidation with a half-life.
-Each of the three below was written between four and twelve times before it
-had one home, and each grew *after* the survey that counted it was filed:
-edge iteration doubled from six sites to twelve while the ticket waited.
-
-The fourth is a *value* rather than a routine, and its guard reaches wider
-than the package: the exact transition a fixture is declared at was written
-as a float in a test and again in a notebook cell, and the two agreed by
-coincidence of two literals rather than by construction (issue #413). A
-closed form computed in three places is the same defect as a function
-implemented in three places, so it is checked the same way.
-
-The fifth is a *seam* rather than a duplication, and what it guards is a
-shape rather than a text (issue #755). `likelihood.schedule.MessageSchedule`
-is the base the five schedules inherit and five modules call through, so a
-sixth written beside it rather than under it would type-check, run, and carry
-none of the guarantee its consumers read. That claim is structural, so it is
-read from the class tree rather than from a regex; the one half a regex
-answers is that no consumer branches on a schedule's name, which is the `if`
-issue #592 deleted.
-
-
-A *seam* rather than a duplication: no module builds a compressed-sparse
-store by hand (issue #755). `incidence.SparseIncidence` is the one compressed
-layout (#586) and `as_arrays()` the one way across the FFI boundary, so a
-second `csr` or `coo` written beside them carries no transpose, no stable
-order within a row and no oracle. The claim is structural --- an offsets array
-is a `cumsum` over degrees whatever the line is spelled like --- so it is read
-from the syntax tree, and only the imported `csr_matrix` spelling is read as a
-text.
-
-The sixth and seventh are *derivations* rather than routines, and what they
-guard is that a fact is computed once (issue #863). The repository root was
-counted from each file's own depth fifty-three times, which is right until
-the file moves and wrong silently after; `PROBLEMS.md` was split on its pipes
-by nine readers with nine filters, one of them with no short-row guard, so a
-row that lost a column was read as a row with a missing key rather than
-refused. Two homes carry the root, one per side of the tree, and one reader
-carries the table --- beside the second reading `test_problem_markers.py`
-keeps on purpose and says why.
-
-Each guard is paired with a test that the guard fails on a violating input.
-That pairing is the discipline `tests/regression/docs` established: a check
-that has never been seen to fail is not known to work, and a regex over
-source files is exactly the kind that silently matches nothing.
+A guard per seam refuses the next copy of a routine, value or store written
+four to twelve times (edge iteration grew from six sites to twelve). The value is
+the exact transition a fixture declares, once a float in a test and a notebook
+(#413). The seams: `MessageSchedule` and `SparseIncidence` (#755, #586), read
+from the class and syntax trees, not a regex; no consumer branches on a
+schedule's name (#592). The derivations (#863): the repository root, once
+counted from each file's depth fifty-three times, and one `PROBLEMS.md`
+reader, once nine. Each guard is paired with a failing input; overlap
+surveys live in dated reviews (#813).
 """
 
 from __future__ import annotations
@@ -74,13 +29,9 @@ from tests._paths import REPO_ROOT
 
 PACKAGE = REPO_ROOT / "python" / "snakes_and_ladders"
 
-#: `enumeration.argmax` outside its own module. Issue #755 folded the three
-#: `learn` oracles that enumerated, scored and took the first maximizer onto
-#: `enumeration.enumerated_optimum`, so the composition is written once.
-#: `likelihood.hmm_paths` keeps its own call and is named here rather than
-#: folded: it reads the score vector again for the posterior, so the scores
-#: outlive the argmax and `enumerated_optimum`, which returns one score,
-#: cannot carry it.
+#: `enumeration.argmax` outside its own module (#755 folded three `learn`
+#: oracles onto `enumerated_optimum`). `likelihood.hmm_paths` reuses the score
+#: vector for the posterior, which `enumerated_optimum` does not return.
 ARGMAX_CONSUMERS = {"likelihood/hmm_paths.py"}
 
 # The consolidated home of each pattern, which legitimately contains it once.
@@ -95,32 +46,19 @@ ENUMERATION_OWNER = "enumeration.py"
 #: carries; `\w*` is what a suffix costs it.
 PRIVATE_LOGSUMEXP = re.compile(r"^def _logsumexp\w*\(", re.MULTILINE)
 
-#: The one private `logsumexp` the widened pattern admits, against the
-#: reason, as `ARGMAX_CONSUMERS` admits its one. `message_passing`'s is the
-#: owner's five operations in the owner's order over the last axis, so a row
-#: agrees with `numerics.logsumexp` bitwise and its docstring says which
-#: function it is; what it drops is the general axis handling, a third of the
-#: call where a tree schedule on a chain pays it once per position. Folding
-#: it is row R10 of `docs/reviews/2026-09-20-design.md`, which states a 1e-12
-#: tolerance and is not this ticket.
+#: `message_passing`'s private `logsumexp` is the owner's five operations in
+#: order over the last axis, bitwise equal to `numerics.logsumexp`, without the
+#: general axis handling; folding it is row R10 of the 2026-09-20 design review.
 LOGSUMEXP_INLINES = {"likelihood/message_passing.py"}
 OPEN_CODED_EDGES = re.compile(r"zip\(\s*\w+\.edges,\s*\w+\.coupling")
 CAP_LITERAL = re.compile(r"^\s*MAX_ENUMERABLE\w* = \d", re.MULTILINE)
 SQUARE_TRANSITION = re.compile(r"log\(\s*1(\.0)?\s*\+\s*(np\.|numpy\.|math\.)?sqrt")
-#: The annotation every list-of-lists adjacency carries. It is the whole
-#: catch rather than half of one: the builders all start from an empty
-#: comprehension, which `mypy --strict` refuses without a type, so a copy
-#: cannot enter the package unannotated. A `torch.Tensor` coupling does not
-#: match, which is deliberate --- `likelihood.surrogate.tree_log_partition`
-#: walks a tree whose couplings carry gradients, and the compressed rows are
-#: `float64` arrays that would cut the autodiff graph.
+#: Every list-of-lists adjacency carries this annotation (`mypy --strict`
+#: refuses the empty comprehension without it). A `torch.Tensor` coupling does
+#: not match: `tree_log_partition` needs couplings that carry gradients.
 NEIGHBOUR_LISTS = re.compile(r"list\[list\[tuple\[int, ?float\]\]\]")
-#: Names an environment carried before it was named for its problem. Issue
-#: #644 retired the first two and #705 the third, each on the same rule: the
-#: problem is `potts`, `hmm` or `tree`, and a class named for its mechanism
-#: sends a reader looking for a mechanism. A retired name is guarded rather
-#: than remembered --- `Topology` was the *third* spelling of one seam, so the
-#: spellings return unless something refuses them.
+#: Environment names retired for naming a mechanism, not the problem (#644,
+#: #705); `Topology` was the third spelling of one seam.
 RETIRED_ENVIRONMENTS = re.compile(
     r"\b(PottsLandscape|StatePathLandscape|TopologyEnvironment)\b"
 )
@@ -129,25 +67,14 @@ RETIRED_ENVIRONMENTS = re.compile(
 SCHEDULE_OWNER = "likelihood/schedule.py"
 SCHEDULE_BASE = "MessageSchedule"
 
-#: The registered schedules, pinned at what the 2026-09-19 audit read from the
-#: tree plus the one #825 registered: `tree`, `upward`, `downward`, `flooding`,
-#: `sequential` and `residual`. The audit's
-#: `fields:name` cluster has seven members; the seventh,
-#: `search.ground_state.Entry`, shares the field `name` and nothing else and is
-#: not a schedule, so this pin was five and not seven; #825's sixth raised it.
-#: A seventh raises it in the pull request that registers it.
+#: The registered schedules: `tree`, `upward`, `downward`, `flooding`,
+#: `sequential` and `residual` (#825 added the sixth). `search.ground_state.Entry`
+#: shares only the field `name`. A seventh raises this in its own PR.
 SCHEDULE_COUNT = 6
 
-#: A consumer branching on which schedule it holds, by name. The base's
-#: methods are the seam --- `message_passing._run` reads `requires_tree`,
-#: `bounded`, `guarantee` and `steps`, and `name` only to build a message ---
-#: so a branch on the name is the `if` issue #592 deleted, returning. The
-#: names come from `MessageScheduleName` rather than from a list here, so a
-#: sixth schedule is guarded as soon as it is registered.
-#: `likelihood.message_passing_reference` is not a consumer of the base: it
-#: takes the enum, implements the two orders that predate the seam and is the
-#: oracle the seam is pinned against, which is why the pattern reads `.name`
-#: and not the enum members it compares.
+#: A consumer branching on a schedule's name: the `if` #592 deleted. Names come
+#: from `MessageScheduleName`, so a new schedule is guarded on registration.
+#: `message_passing_reference` is the oracle, not a consumer; see below.
 SCHEDULE_NAMES = "|".join(str(member) for member in MessageScheduleName)
 SCHEDULE_NAME_BRANCH = re.compile(
     r"(?:if|elif|while)\b[^\n]*(?:"
@@ -157,13 +84,8 @@ SCHEDULE_NAME_BRANCH = re.compile(
     r")"
 )
 
-#: The one module the widened pattern admits, against the reason the comment
-#: above already gives: `message_passing_reference` takes the enum, writes
-#: the two orders that predate the seam and is the oracle the seam is pinned
-#: against, so its `is MessageScheduleName.TREE` is the referee choosing
-#: which order to write out rather than a consumer branching on the base's
-#: name. The `is` form was outside the pattern until issue #864, which is
-#: why it was neither caught nor declared.
+#: `message_passing_reference`'s `is MessageScheduleName.TREE` chooses which
+#: order the oracle writes out; the `is` form entered the pattern in #864.
 SCHEDULE_NAME_CONSUMERS = {"likelihood/message_passing_reference.py"}
 SCHEDULE_NAME_MATCH = re.compile(r"match\s+[^\n]*\b(?:schedule|plan)\w*\.name\s*:")
 
@@ -173,17 +95,9 @@ SCHEDULE_NAME_MATCH = re.compile(r"match\s+[^\n]*\b(?:schedule|plan)\w*\.name\s*
 #: `PottsGraph.compressed_adjacency`, which holds one.
 INCIDENCE_OWNER = "incidence.py"
 
-#: Package modules building a store through the seam, pinned at what this
-#: guard reads on `main` at 048a342: `sim/graph.py`,
-#: `sim/ldpc.py`, `sim/factor_graph.py`, `sim/potts.py`, `search/maxflow.py`,
-#: `sample/potts_mcmc.py`, `sample/potts_keyed.py`,
-#: `search/alpha_expansion.py` and `search/spatio_sequential.py`; the tenth
-#: and eleventh are `sample/tempered.py` and `sample/annealed.py`, which #766
-#: added. `search/ground_state.py` was the twelfth until #858 folded its
-#: second single-site sweep onto `alpha_expansion`'s, which leaves it no
-#: adjacency of its own to walk. The pull request that adds a consumer raises
-#: the pin; one that removes the last caller of the seam lowers it to a number
-#: a reader can question.
+#: Package modules building a store through the seam, as of 048a342 plus
+#: `sample/tempered.py` and `sample/annealed.py` (#766); `search/ground_state.py`
+#: left with #858. A PR adding or removing a consumer moves the pin.
 SEAM_CONSUMERS = 11
 
 #: Files this guard does not read, each against the reason, rather than an
@@ -208,20 +122,10 @@ EXCLUDED: dict[str, str] = {
     ),
 }
 
-#: The object graphs are not excluded because nothing reads them: the rule
-#: says nothing about them. Eleven of the `role:incidence` cluster's fifteen
-#: members --- `sim.tree.Node`, `sim.factor_graph.Factor`,
-#: `sandbox.region_graph.Region` and eight more --- are graphs where the
-#: relation *is* the model, which the compressed layout serves rather than
-#: replaces (the 2026-09-19 review, `role:incidence`). They build no store, so
-#: they trip neither rule below and need no entry above.
-#:
-#: The one spelling a syntax tree cannot decide: `scipy.sparse` builds the
-#: store, and the name it is built under is whatever the import aliased. The
-#: package carries `scipy` for `linear_sum_assignment` and nothing else, and a
-#: `csr_matrix` here would be a second compressed layout with a second set of
-#: conventions. Searched over the suite and the notebooks too, because that is
-#: where a reader reaches for one.
+#: Object graphs where the relation is the model (`sim.tree.Node`, `Factor`,
+#: `Region`, eight more) build no store and trip neither rule. `scipy.sparse`
+#: is read as text, since the alias is arbitrary; the package uses `scipy` for
+#: `linear_sum_assignment` only. Suite and notebooks are searched too.
 FOREIGN_SPARSE = re.compile(r"\b(?:csr|csc|coo)_(?:matrix|array)\s*\(")
 
 #: The validation seams of issue #1010: a goal's median of package runs, a
@@ -307,12 +211,7 @@ def _members(node: ast.ClassDef) -> set[str]:
 def _schedule_shaped(source: str) -> dict[str, list[str]]:
     """Classes shaped like a schedule in one source, and the bases each lists.
 
-    Shaped is read two ways, because a sixth schedule may arrive under either:
-    a name ending in ``MessageSchedule``, or the pair `resolve` needs --- a
-    ``guarantee`` and a ``name``. `search.ground_state.Entry` carries ``name``
-    alone, so it is not shaped and this guard says nothing about it; that is
-    the audited `fields:name` cluster's seventh member and the reason the pin
-    below is five.
+    Shaped: a name ending ``MessageSchedule``, or both ``guarantee`` and ``name``.
     """
     shaped: dict[str, list[str]] = {}
     for node in ast.walk(ast.parse(source)):
@@ -369,11 +268,7 @@ ROW_INDEX = re.compile(r"\brows?\b|\brow_|_rows?\b")
 def _hand_built_stores(source: str) -> list[str]:
     """The compressed-sparse stores one source builds by hand, with their lines.
 
-    Two rules, and each is what `incidence._row_major` does in one line, so the
-    owner's own source trips both --- which is the positive control the guard
-    asserts rather than a coincidence. A `cumsum` bound to an `offsets` or
-    `indptr` name is the row starts; a `lexsort` or `argsort` over a row index
-    bound to an `order` name is the COO pair sorted into row-major order.
+    `cumsum` to `offsets`/`indptr`, or `lexsort`/`argsort` to `order`; the owner trips both.
     """
     found: set[tuple[int, str]] = set()
     for node in ast.walk(ast.parse(source)):
@@ -493,12 +388,9 @@ def test_each_guarded_pattern_is_absent_outside_its_owner() -> None:
 @pytest.mark.critical
 @pytest.mark.infra
 def test_no_schedule_is_written_outside_the_base() -> None:
-    # Five schedules, one base, five modules calling through it (issue #755).
-    # A class written beside the base carries no `guarantee`, no `bounded` and
-    # no `requires_tree` the consumers read, and `sum_product` would take the
-    # default for each -- a bounded, approximate schedule run on a loopy graph
-    # -- rather than refuse it. Read from the class tree and from the registry
-    # rather than from a regex, because the claim is what a class *is*.
+    # A class beside the base carries no `guarantee`, `bounded` or
+    # `requires_tree`, so `sum_product` would run a bounded schedule on a
+    # loopy graph rather than refuse it (issue #755).
     classes = _schedule_classes()
 
     assert [name for name, bases in classes.items() if SCHEDULE_BASE not in bases] == []
@@ -521,13 +413,8 @@ def test_no_schedule_is_written_outside_the_base() -> None:
 @pytest.mark.critical
 @pytest.mark.infra
 def test_no_compressed_store_is_built_outside_the_incidence_seam() -> None:
-    # One compressed layout, ten modules building through it (issue #755).
-    # Three wrote the counting sort separately before #586 -- `ParityCheck`
-    # by `lexsort` and `searchsorted`, `PottsGraph` per call, `FactorGraph`
-    # not at all -- and they agreed, so nothing failed; what a fourth costs
-    # is the contract `SparseIncidence` states and a copy does not: a stable
-    # order within a row, a transpose sharing one per-entry array, and the
-    # refusals `from_pairs` makes at the build.
+    # One compressed layout, ten modules through it (#755). A copy lacks the
+    # contract: stable order in a row, a shared transpose, `from_pairs`'s refusals.
     sources = _package_sources()
     by_hand = {
         path: stores
@@ -564,11 +451,8 @@ def test_no_compressed_store_is_built_outside_the_incidence_seam() -> None:
 @pytest.mark.critical
 @pytest.mark.infra
 def test_no_consumer_branches_on_a_schedules_name() -> None:
-    # The seam is the base's methods. `sum_product` chose between two orders
-    # with an `if` until #592, and the defect that surfaced was in that branch:
-    # a plain string compares equal to a `StrEnum` member without being it, so
-    # `schedule="tree"` ran flooding. A branch on the name brings the shape
-    # back one schedule at a time.
+    # A branch on the name ran `schedule="tree"` as flooding: a plain string
+    # equals a `StrEnum` member without being it (#592).
     found = _offenders(SCHEDULE_NAME_BRANCH, SCHEDULE_OWNER)
 
     assert [
@@ -710,12 +594,8 @@ def test_each_guard_fails_on_violating_source() -> None:
     assert _schedule_shaped(inside) == {"LayeredMessageSchedule": [SCHEDULE_BASE]}
     assert _schedule_shaped("@dataclass\nclass Entry:\n    name: str\n") == {}
 
-    # The structural guard on the same discipline, since the claim is what a
-    # line computes and not how it is spelled: the row starts by `cumsum`
-    # under three names, the pairs sorted into row-major order, and the two
-    # clean forms -- a build through the seam, and a `cumsum` that addresses
-    # no relation, which is the `restarts`-for-`starts` failure the structure
-    # survey exists to avoid.
+    # Structural: row starts by `cumsum` under three names, row-major sorted
+    # pairs, and two clean forms (a seam build, an unrelated `cumsum`).
     builds = (
         "degrees = np.bincount(rows, minlength=n)\n"
         "offsets = np.cumsum(degrees)\n"
@@ -744,9 +624,7 @@ def test_each_guard_fails_on_violating_source() -> None:
 def _imports_argmax(path: Path) -> bool:
     """Whether ``path`` imports ``argmax`` from the enumeration seam.
 
-    By `ast` rather than by a line regex: the one legitimate consumer spells
-    the import over five lines, and a guard that a parenthesised import slips
-    past is a guard that passes vacuously.
+    By `ast`: the consumer spells the import over five lines.
     """
     for node in ast.walk(ast.parse(path.read_text())):
         if (
@@ -761,11 +639,8 @@ def _imports_argmax(path: Path) -> bool:
 @pytest.mark.critical
 @pytest.mark.infra
 def test_the_enumerated_argmax_is_composed_in_one_place() -> None:
-    # `learn.potts.optimum`, `learn.hmm.optimum` and
-    # `learn.relaxed.enumerate_optimum` each enumerated, scored and took the
-    # first maximizer in full: three bodies, one arithmetic, and three places
-    # a tie rule could drift apart from the determinism their docstrings
-    # promise. The fourth copy is what this refuses (issue #755).
+    # Three `learn` oracles each enumerated, scored and took the first
+    # maximizer; the fourth copy is what this refuses (issue #755).
     realized = {
         str(path.relative_to(PACKAGE))
         for path in sorted(PACKAGE.rglob("*.py"))
@@ -800,22 +675,16 @@ def test_the_argmax_query_reads_a_parenthesised_import(tmp_path: Path) -> None:
 
 # --- one home per derivation, issue #863 --------------------------------------
 
-#: The repository root derived from a file's own location. Two homes carry it
-#: --- `infra/_paths.py` and `tests/_paths.py`, one per side of the tree, each
-#: counting from itself --- and every other module imports it. Fifty-three
-#: counted their own parents, so a module moved one directory deeper read a
-#: tree one directory up and failed nowhere.
+#: The root derived from a file's own location. `infra/_paths.py` and
+#: `tests/_paths.py` carry it; fifty-three modules once counted their parents.
 DERIVED_REPO_ROOT = re.compile(
     r"^REPO_ROOT = Path\(__file__\)\.resolve\(\)\.(?:parents\[\d+\]|parent\.parent)",
     re.MULTILINE,
 )
 
-#: The pieces of a reader of `PROBLEMS.md`: the file, and a split of a row on
-#: its pipes. Both, because the tree is full of each alone --- `DEV.md` has
-#: tables too, and `select_tests.py` names the catalogue without parsing it.
-#: A LaTeX table environment opened by hand: the one scaffold is
-#: `qa.figure.booktabs_tabular` and `mathjax_array` (issue #926), where four
-#: modules wrote the frame line for line.
+#: The pieces of a `PROBLEMS.md` reader: the file and a pipe split, both
+#: needed. A hand-opened LaTeX table: the scaffold is `booktabs_tabular` and
+#: `mathjax_array` (issue #926), after four modules wrote it line for line.
 TABULAR_OWNER = "qa/figure.py"
 TABULAR_LITERAL = re.compile(r"\\begin\{(?:tabular|array)\}")
 
@@ -893,13 +762,9 @@ def test_the_problem_catalogue_has_one_reader() -> None:
     assert readers == CATALOGUE_READERS
 
 
-#: Private names one module may import from another, each with its reason
-#: (issue #1010, CLEAN's E). `_submodules` is the package's lazy-import
-#: plumbing every subpackage `__init__` calls; `_HmmObjective` is the HMM
-#: base `hmm_jax` narrows on until C5 gives each family a declared JAX form
-#: (#1004). Since C3 split `opt.hmm` into a package it is defined in
-#: `opt.hmm.objectives`, and the package `__init__` re-exports it so the
-#: `hmm_jax` import is unchanged: one name, two crossings, both admitted.
+#: Private cross-module imports, each with its reason (#1010, CLEAN's E):
+#: `_submodules` is the lazy-import plumbing; `_HmmObjective` is what
+#: `hmm_jax` narrows on until C5 (#1004), re-exported from `opt.hmm`.
 PRIVATE_IMPORTS_ADMITTED = {
     ("snakes_and_ladders", "_submodules"),
     ("snakes_and_ladders.opt.hmm", "_HmmObjective"),

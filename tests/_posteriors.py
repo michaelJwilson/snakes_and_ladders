@@ -1,24 +1,12 @@
 """What a sampled chain is judged against: the mixture posterior, and the error bar.
 
-`DEV.md`'s Test Layout puts a fixture shared across modules in a top-level
-underscore-prefixed module, imported rather than collected. Issue #734 wrote
-this one for HMC; issue #756 gave it two more readers --- MALA and slice
-sampling --- and a fixture copied per sampler is a fixture that stops being
-the same fixture, so it moved here rather than being written a second time.
-
-Everything a sampler is judged against comes from
-`likelihood.mixture_assignments.enumerate_mixture_assignments`: the evidence
-is the sum over all 4,096 whole assignments and the marginals are that sum's
-own, integrated over the one free coordinate on a grid. No factorized form
-and no second sampler appears anywhere in the reference.
-
-:func:`monte_carlo_sigmas` sits beside it because the two are one statement.
-A deviation from an exact reference is a finding only against the error the
-chain itself carries, and that error is the draws' spread over the
-*effective* sample size rather than over the draw count --- correlated draws
-divided by their number give a standard error several times too small, and a
-sampler passes a comparison it should fail. The assertions each sampler's
-module makes against these references are written once below (issue #982).
+Shared by HMC (issue #734), MALA and slice sampling (issue #756). The
+reference is `likelihood.mixture_assignments.enumerate_mixture_assignments`:
+the evidence sums all 4,096 assignments and the marginals are that sum's own,
+integrated over the one free coordinate on a grid; no factorized form and no
+second sampler. :func:`monte_carlo_sigmas` scales a deviation by the chain's
+own error over the effective sample size, not the draw count, which would
+understate it several times. The assertions are written once (issue #982).
 """
 
 from __future__ import annotations
@@ -52,13 +40,9 @@ MIXTURE_WEIGHTS = np.array([0.4, 0.6])
 MIXTURE_MEAN = np.array([-1.5, 1.5])
 MIXTURE_SCALE = np.array([1.0, 1.0])
 
-#: The prior that makes the one free coordinate a posterior rather than the
-#: improper flat-prior one, and the window and spacing the quadrature runs on.
-#: The posterior's mean is 0.415 and its standard deviation 0.660, so the
-#: window is 13 of them wide, and the quadrature is converged: over half-widths
-#: 4.0 to 12.0 and 301 to 1,201 points the mean weight moves by at most
-#: 1.4e-06 and a marginal by 1.4e-06, against the 2.0e-02 the chain is judged
-#: to below.
+#: The prior and quadrature window. Posterior mean 0.415, sd 0.660; over
+#: half-widths 4.0 to 12.0 and 301 to 1,201 points the mean weight and a
+#: marginal move by at most 1.4e-06, against the 2.0e-02 the chain is judged to.
 MIXTURE_PRIOR_SCALE = 2.0
 QUADRATURE_WINDOW = 9.0
 QUADRATURE_POINTS = 451
@@ -67,17 +51,7 @@ QUADRATURE_POINTS = 451
 class WeightPosterior:
     """The enumerable mixture with its components known and its weight free.
 
-    One free coordinate, so the posterior integrates on a line and the
-    enumeration supplies every value on it. The mixture's own objective carries
-    six coordinates and no reference but a sampler; what is wanted from it here
-    is the *assignment* posterior, which does not need the other five free.
-
-    Parameters
-    ----------
-    observations : np.ndarray
-        The draw, shape ``(n_samples,)``.
-    components : GaussianEmission
-        The known component densities.
+    One free coordinate, so the assignment posterior integrates on a line.
     """
 
     def __init__(self, observations: np.ndarray, components: GaussianEmission) -> None:
@@ -115,9 +89,7 @@ def enumerated_quadrature(
 ) -> tuple[float, np.ndarray]:
     """The posterior mean weight and marginal assignment probabilities, by quadrature.
 
-    Every value on the grid comes from the enumeration: the evidence is the
-    sum over all 4,096 assignments and the marginals are that sum's own, so
-    the reference uses no factorized form anywhere.
+    Every grid value is the enumeration over all 4,096 assignments.
     """
     grid = np.linspace(-QUADRATURE_WINDOW, QUADRATURE_WINDOW, QUADRATURE_POINTS)
     log_posterior = np.empty(grid.shape)
@@ -163,21 +135,7 @@ def monte_carlo_sigmas(
 ) -> tuple[np.ndarray, np.ndarray]:
     """A chain's marginal mean and variance against the truth, in its own standard errors.
 
-    Parameters
-    ----------
-    draws : torch.Tensor
-        One chain, shape ``(n, dimension)``.
-    mean, variance : np.ndarray
-        The closed-form marginal mean and variance, shape ``(dimension,)``.
-
-    Returns
-    -------
-    tuple[np.ndarray, np.ndarray]
-        ``|estimate - truth| / standard error`` for the mean and for the
-        variance, per coordinate. Each standard error is the estimator's own
-        spread over the square root of the effective sample size *of that
-        estimator*: the draws for the mean, the squared deviations for the
-        variance, which are a slower-mixing series and carry the larger error.
+    Each error is over its own estimator's effective sample size, not the draw count.
     """
     centred = draws - draws.mean(dim=0)
     squares = centred * centred
@@ -218,10 +176,7 @@ def assert_recovers_assignment_posterior(
 ) -> None:
     """Fail when a chain's weight or assignment marginals miss the enumeration's.
 
-    ``reference`` is :func:`enumerated_quadrature`'s. The drawn marginals come
-    from the factorized E step at each draw, and each tolerance is ``sigmas``
-    of the drawn spread over ``sqrt(size)``: the draw count or the effective
-    sample size, whichever the caller declares.
+    Tolerance: ``sigmas`` of the drawn spread over ``sqrt(size)``, size the caller's.
     """
     quadrature_weight, quadrature_marginal = reference
     log_weights = log_simplex(theta)
@@ -267,9 +222,7 @@ def assert_gaussian_moments(
 ) -> None:
     """Fail when a centred diagonal Gaussian's moments are ``bound`` errors off.
 
-    Every coordinate's mean against 0 and its second moment against
-    ``temperature / precision``, each in the standard error of its own
-    filter (``KalmanMean``).
+    Mean against 0, second moment against ``temperature / precision`` (``KalmanMean``).
     """
     assert np.abs(first.mean / first.standard_error).max() < bound
     residual = (second.mean - temperature / precision) / second.standard_error

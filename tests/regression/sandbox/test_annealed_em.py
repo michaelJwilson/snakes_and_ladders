@@ -1,15 +1,12 @@
 """Deterministic annealing EM for the count-pair mixture, conserved in the sandbox (issues #903, #916).
 
-`sandbox.annealed_em.annealed_expectation_maximization` runs one E and one M
-step at each temperature, the responsibilities `softmax((log w + log p) / T)`,
-then plain EM at one. Declined on `emission_mixture/ci`, where it reaches the
-maximum plain EM reaches, and kept for these referees, from the strongest: at
-`T = 1` the tempered step is plain EM's step, so an empty schedule and `[1.0]`
-reproduce `opt.emission_mixture.expectation_maximization` bitwise; at `T -> inf` every responsibility is `1/K` and the M step is
-the one-component fit to the pooled pairs; within one temperature the free
-energy the tempered step ascends does not fall (Ueda & Nakano, 1998); and
-from the `data` start on `emission_mixture/ci` the annealed fit is read
-against the plain one from the same start.
+One E and M step per temperature on `softmax((log w + log p) / T)`, then plain
+EM. Declined on `emission_mixture/ci` (same maximum as plain EM). Referees: at
+`T = 1` an empty schedule and `[1.0]` equal
+`opt.emission_mixture.expectation_maximization` bitwise; at `T -> inf` the M
+step is the one-component pooled fit; within a temperature the free energy
+does not fall (Ueda & Nakano, 1998); and the `data` start is read against
+plain EM.
 """
 
 from __future__ import annotations
@@ -42,11 +39,8 @@ from snakes_and_ladders.sim.fixtures import fixture
 #: The relative stopping rule `test_opt_emission_mixture.py` fits under.
 EM_TOLERANCE = 1e-8
 
-#: A temperature at which the tempered responsibilities are 1/K to 1e-12. The
-#: joint log-densities at the data start span up to 51.2 nats across the
-#: components of one pair of the ci draw, and the largest departure from 1/K
-#: is about that span over 5T: measured 9.8e-6 at the ticket's 1e6, 9.8e-12 at
-#: 1e12 and 9.8e-13 at 1e13.
+#: Responsibilities 1/K to 1e-12: log-densities span 51.2 nats, departure
+#: ~span / 5T; measured 9.8e-6 at 1e6, 9.8e-12 at 1e12, 9.8e-13 at 1e13.
 HOT = 1e13
 
 #: The schedule the notebook offers (issue #903): twenty steps from 8 to 1.
@@ -177,11 +171,8 @@ def test_a_hot_step_spreads_every_pair_evenly_and_fits_the_pooled_pairs(
 def test_the_free_energy_does_not_fall_within_a_temperature(
     data_start: tuple[np.ndarray, CountPairEmission],
 ) -> None:
-    # A tempered E step is the maximizer over q of the free energy's bound
-    # and the M step raises the expected complete-data term, so at a fixed
-    # temperature F_T is non-decreasing (Ueda & Nakano, 1998). Ten steps at
-    # each of four temperatures; the M step's inner solve settles to its own
-    # tolerance, so a fall is held to 1e-10 of the value.
+    # F_T is non-decreasing at fixed temperature (Ueda & Nakano, 1998): ten
+    # steps at four temperatures; the inner solve's tolerance allows 1e-10.
     observations, start = data_start
     k = start.n_states
     steps = [8.0] * 10 + [4.0] * 10 + [2.0] * 10 + [1.0] * 10
@@ -208,14 +199,9 @@ def test_the_free_energy_does_not_fall_within_a_temperature(
 def test_annealing_from_the_data_start_is_read_against_plain_em(
     data_start: tuple[np.ndarray, CountPairEmission], plain: EmissionMixtureFit
 ) -> None:
-    # The `data` start, the notebook's worst row, under both polishes, read
-    # against the generating parameters' value on the draw (-7847.92) and
-    # their recovery (0.956). Measured over data seeds 0 to 5: both reach
-    # -7836.806 with recovery 0.953 from every seed, plain EM in 27 to 160
-    # iterations and annealed EM in 56 to 58, the 20 tempered steps included.
-    # On this draw annealing buys no higher maximum; it is not below plain EM
-    # beyond EM's own tolerance, and both pass the generating parameters by
-    # the maximum-likelihood excess.
+    # Truth on the draw: -7847.92, recovery 0.956. Over data seeds 0-5 both
+    # reach -7836.806, recovery 0.953; plain EM in 27-160 iterations, annealed
+    # in 56-58. No higher maximum; both pass the truth by the ML excess.
     observations, start = data_start
     params, _, _ = _instance()
     k = start.n_states

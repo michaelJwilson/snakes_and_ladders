@@ -141,12 +141,7 @@ def test_a_graph_whose_edge_names_a_missing_node_is_refused() -> None:
 @pytest.mark.critical
 @pytest.mark.analytic
 def test_the_derived_arrays_are_the_edges_and_couplings_the_graph_declares() -> None:
-    """`edge_index` and `edge_coupling` restate the graph, in array form.
-
-    The conversion every consumer used to write per call, done once. Asserted
-    against the declaration rather than against a stored expectation, so the
-    test cannot drift from what a `PottsGraph` says about itself.
-    """
+    """`edge_index` and `edge_coupling` restate the graph in array form."""
     graph = lattice_graph((4, 3), BoundaryCondition.OPEN, 0.75)
 
     assert graph.edge_index.shape == (len(graph.edges), 2)
@@ -159,11 +154,7 @@ def test_the_derived_arrays_are_the_edges_and_couplings_the_graph_declares() -> 
 @pytest.mark.critical
 @pytest.mark.smoke
 def test_a_graph_with_no_edges_still_has_two_columns() -> None:
-    """Empty is ``(0, 2)``, not ``(0,)``.
-
-    A caller indexing `edge_index[:, 0]` must not need a special case for the
-    graph that happens to have no edges; `np.asarray(())` would give it one.
-    """
+    """Empty is ``(0, 2)``, not ``(0,)``, so `edge_index[:, 0]` needs no special case."""
     graph = PottsGraph(n_nodes=3, edges=(), coupling=())
 
     assert graph.edge_index.shape == (0, 2)
@@ -174,13 +165,7 @@ def test_a_graph_with_no_edges_still_has_two_columns() -> None:
 @pytest.mark.critical
 @pytest.mark.smoke
 def test_a_consumer_cannot_write_through_the_cached_arrays() -> None:
-    """The cache is handed out, so it is handed out unwritable.
-
-    A `cached_property` returns the same array to every caller, and the graph
-    is frozen: a consumer writing through one would corrupt every later call
-    with nothing to say it had. The flag makes that a `ValueError` at the
-    write instead.
-    """
+    """The cache is handed out, so it is handed out unwritable (`ValueError`)."""
     graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 1.0)
 
     with pytest.raises(ValueError, match="read-only"):
@@ -194,9 +179,7 @@ def test_a_consumer_cannot_write_through_the_cached_arrays() -> None:
 def test_the_arrays_are_derived_once_and_handed_back() -> None:
     """The same object, not an equal one: that is the whole optimization.
 
-    604 rebuilds of these two arrays were 81% of a 200-step `anneal_potts` at
-    32x32 (issue #608). Identity is what this change buys, so identity is what
-    is asserted.
+    604 rebuilds were 81% of a 200-step `anneal_potts` at 32x32 (issue #608).
     """
     graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 1.0)
 
@@ -210,12 +193,7 @@ def _reference_lattice(
     boundary: BoundaryCondition,
     coupling: float,
 ) -> tuple[int, tuple[tuple[int, int], ...], tuple[float, ...]]:
-    """The sweep the two builders each wrote out, written out once more here.
-
-    A second implementation, so the fold is read against something other
-    than itself: the row-major index by hand, the wrap under a periodic
-    boundary and the skip under an open one, in the caller's offset order.
-    """
+    """The builders' sweep written once more: row-major index, periodic wrap, open skip."""
     nodes = list(product(*(range(extent) for extent in shape)))
     edges = []
     for coordinate in nodes:

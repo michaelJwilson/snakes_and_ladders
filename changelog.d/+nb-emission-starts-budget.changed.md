@@ -1,0 +1,1 @@
+`docs/nb/emission_mixture_starts.ipynb` gives each (start, seed) cell `Budget(Cost.SECONDS, 160)`, up from 120: on a 4-CPU host under load the `hmcx5` cell spent 121 s and 138 s, so the notebook raised `OverspendError` where the method had not failed.

@@ -18,8 +18,7 @@ import pytest
 def every_row(rows: Iterable[tuple[object, ...]], check: Callable[..., object]) -> None:
     """Call ``check(*row)`` on every row; fail once, listing each row that raised.
 
-    An exception of any type counts as that row failing, as it would have
-    failed its own parametrised case; the loop does not stop at it.
+    Any exception fails its row, as its own case would; the loop does not stop.
     """
     failures = []
     count = 0

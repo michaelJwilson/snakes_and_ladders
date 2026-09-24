@@ -1,23 +1,11 @@
 """The canonical fixtures, their two oracles, and the learners against them.
 
-Issue #597. Every environment the learners here are measured on is a research
-problem, so a tie leaves two readings open: the problem is hard, or the
-learner is broken. These fixtures close that: each optimum is known from
-outside, so a learner that fails here is wrong.
-
-Three kinds of claim, kept apart:
-
-* **the two oracles agree.** `canonical.value_iteration` sweeps the Bellman
-  operator over an enumerated state set; `learn.exact.exact_optimal_value`
-  recurses over trajectories to a horizon. They share no code, so agreement
-  to 1e-12 is a check and not a tautology;
-* **the fixtures are the problems they claim to be.** The chain's optimum is
-  the far prize and its myopic choice is the near one; the cliff's optimal
-  route leaves the bottom row; Hanoi's is `2^d - 1` moves, an integer with no
-  tolerance;
-* **the learners reach the optimum**, to a stated fraction, on the plain
-  case. A learner that does not is reported rather than hidden --- that is
-  the suite doing its job.
+Issue #597. Each optimum is known from outside, so a learner failing here is
+wrong rather than facing a hard problem. `canonical.value_iteration` (a Bellman
+sweep) and `learn.exact.exact_optimal_value` (a trajectory recursion) share no
+code and agree to 1e-12. The fixtures are what they claim: the chain's optimum
+is the far prize, the cliff's route leaves the bottom row, Hanoi's is
+`2^d - 1` moves. The learners reach the optimum to a stated fraction.
 """
 
 from __future__ import annotations
@@ -60,10 +48,7 @@ def _policy_reaches_every_start(
 ) -> list[bool]:
     """Whether the policy's own greedy episode is optimal from each start.
 
-    Under the *policy's* greedy action and not `greedy_rollout`'s, which takes
-    the best immediate reward: on this grid every move costs the same, so
-    reward-greedy is a coin toss between four directions and measures the
-    environment rather than the learner.
+    Not `greedy_rollout`: every move costs the same, so reward-greedy is a coin toss.
     """
     rng = np.random.default_rng(0)
     reached = []
@@ -92,11 +77,8 @@ def _policy_reaches_every_start(
 def test_the_two_oracles_agree_on_the_optimal_value(
     environment: Environment[Any, Any], start: Any, horizon: int
 ) -> None:
-    # A sweep over an enumerated state set against a recursion over
-    # trajectories: two computations of `V*` sharing no line of code. The
-    # horizon is chosen per fixture to be long enough to reach the optimum,
-    # since a shorter one would make the recursion's answer the smaller and
-    # the disagreement a statement about the horizon.
+    # Two computations of `V*` sharing no code; the horizon per fixture is long
+    # enough to reach the optimum.
     swept = value_iteration(environment, start)
     recursed = exact_optimal_value(environment, start, horizon)
 
@@ -207,11 +189,8 @@ def test_the_cliff_walk_optimum_leaves_the_bottom_row() -> None:
 
 @pytest.mark.end2end
 def test_reinforce_reaches_the_optimum_on_the_plain_case() -> None:
-    # The learner against a known optimum rather than against greedy: on the
-    # gridworld the optimal return from every start is the closed form above,
-    # so "learned" is checkable. The fraction is stated rather than tuned --
-    # the greedy policy after training must reach the optimum from every
-    # start, which is what an exactly-expressive feature set should buy.
+    # On the gridworld the optimal return from every start is the closed form
+    # above; the trained greedy policy must reach it from every start.
     grid = GridWorld(shape=(4, 4), goal=(3, 3))
     settled = value_iteration(grid, (0, 0))
     policy = LinearPolicy(grid.n_features())
@@ -282,11 +261,7 @@ def test_the_fixtures_refuse_a_shape_they_cannot_be() -> None:
 
 
 class _Rewarding(Environment[int, int]):
-    """A chain whose every move pays, so its undiscounted optimum diverges.
-
-    Written here rather than in the package: it exists to trip the refusal and
-    is not a problem anything solves.
-    """
+    """A chain whose every move pays, so its undiscounted optimum diverges."""
 
     def __init__(self, inner: ChainMdp) -> None:
         self._inner = inner

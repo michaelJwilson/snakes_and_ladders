@@ -59,12 +59,9 @@ def _oracle(
 @pytest.mark.backend
 @pytest.mark.parametrize("tier", ["ci", "stress"])
 def test_the_batched_dispersion_is_the_per_state_solve_at_the_floor(tier: str) -> None:
-    # K = 3 over 900 totals and K = 10 over 3,000. Measured: bitwise on ci,
-    # and on stress 7 of 10 states bitwise and the other three within a
-    # relative 5.9e-13, six orders inside the floor. Each state keeps the
-    # oracle's bracket and its boundary decision; the interior states'
-    # dispersions agree to the floor, and the iteration counts are the
-    # oracle's, since every bracket has the same width in log r.
+    # K = 3 over 900 totals, K = 10 over 3,000. Measured: bitwise on ci; on
+    # stress 7 of 10 bitwise, three within 5.9e-13 relative. Brackets, boundary
+    # decisions and iteration counts are the oracle's.
     values, posterior, _ = _draw(tier)
     mean, oracle = _oracle(values, posterior)
     batched = mstep.solve_dispersion_batched(

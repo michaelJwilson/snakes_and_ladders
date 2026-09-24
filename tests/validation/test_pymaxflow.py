@@ -1,19 +1,11 @@
 """The package's minimum cut against PyMaxflow's, run in a subprocess (issue #973).
 
-PyMaxflow wraps Kolmogorov's own Boykov--Kolmogorov code and shares none with
-`search.maxflow` (Dinic) or `src/maxflow.rs`. Referees:
-
-- the two-state ferromagnet `lattice_rung(side, 2, seed=973)` at 10², 71² and
-  142²: the same configuration node for node, from both backends, and so the
-  same energy bitwise, since both are `sim.potts.energy` on one labelling;
-- directed networks with asymmetric capacities and arcs at both terminals:
-  the flow value within 1e-12 relative and the source side node for node,
-  against the Python Dinic and the Rust kernel;
-- a control: every capacity doubled doubles PyMaxflow's value exactly, and
-  the back arcs dropped lowers it to the Rust kernel's value on the same
-  network, so the adapter reads both capacities it is handed.
-
-The runtime goal PyMaxflow sets is in `test_goals.py`.
+Kolmogorov's Boykov--Kolmogorov code, sharing none with Dinic or
+`src/maxflow.rs`. `lattice_rung(side, 2, seed=973)` at 10², 71², 142²: same
+configuration from both backends, so the same energy bitwise. Directed
+asymmetric networks: flow within 1e-12 relative, source side node for node.
+Control: doubled capacities double the value; dropped back arcs match the
+Rust kernel. Runtime goal: `test_goals.py`.
 """
 
 from __future__ import annotations

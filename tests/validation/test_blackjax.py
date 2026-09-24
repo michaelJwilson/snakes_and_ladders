@@ -1,26 +1,13 @@
 """`sample.hmc` against BlackJAX, run in a subprocess (issue #963).
 
-BlackJAX shares no code with `sample/hmc.py` and runs on JAX, which the
-package does not take on. Referees:
-
-- the integrators: leapfrog and the Yoshida triple jump, 25 steps from one
-  phase-space point on a dense 10-dimensional Gaussian, the endpoint's
-  position and momentum within 1e-12 of BlackJAX's `generate_euclidean_integrator`
-  on the same composition;
-- the chains: 5,000 transitions each at step 0.15 and seven leapfrog steps,
-  both means within 4 Monte Carlo standard errors of zero, the error read at
-  each chain's own effective size, and the two acceptance rates within 0.01.
-
-The trajectory length stays off the target's half-period: at step 0.2 and ten
-steps the chain is antithetic, and `effective_sample_size` returns a negative
-size there (#984).
-
-- the random walk (#1006): BlackJAX's `rmh` on supplied increments and
-  `metropolis.replay` on the same increments and uniforms, draw for draw at
-  1e-10 on a Gaussian and on Rosenbrock, and the two chains' acceptance at
-  one scale within 0.02.
-
-The runtime goals BlackJAX sets are in `test_goals.py`.
+BlackJAX shares no code with `sample/hmc.py`. Leapfrog and Yoshida, 25 steps
+on a dense 10-D Gaussian: endpoint within 1e-12 of
+`generate_euclidean_integrator`. Chains of 5,000 at step 0.15, seven steps:
+means within 4 standard errors at each chain's ESS, acceptance within 0.01
+(off the half-period: at 0.2 x 10 the chain is antithetic and ESS negative,
+#984). Random walk (#1006): `rmh` against `metropolis.replay` on shared
+increments and uniforms, draw for draw at 1e-10 on a Gaussian and on
+Rosenbrock, acceptance within 0.02. Runtime goals: `test_goals.py`.
 """
 
 from __future__ import annotations

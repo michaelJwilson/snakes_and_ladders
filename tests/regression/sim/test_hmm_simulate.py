@@ -81,11 +81,8 @@ def test_simulation_is_reproducible_from_the_seed() -> None:
 @pytest.mark.oracle
 @pytest.mark.end2end
 def test_simulated_symbol_frequencies_match_the_analytic_marginal() -> None:
-    # The stationary-free marginal is exact: average the emission rows over
-    # the hidden-state distribution at each step, which is the initial
-    # distribution pushed through the transition matrix. Computed in closed
-    # form, so this pins the simulator against the model rather than against
-    # a second simulation.
+    # The exact marginal: emission rows averaged over the initial distribution
+    # pushed through the transitions, in closed form.
     params = load_params(FIXTURE, HmmParams)
     dataset = simulate_sequences(params)
 
@@ -106,14 +103,9 @@ def test_simulated_symbol_frequencies_match_the_analytic_marginal() -> None:
 @pytest.mark.oracle
 @pytest.mark.end2end
 def test_realized_state_occupancy_matches_the_stationary_distribution() -> None:
-    # The exact per-position marginals below do not pin this: at the
-    # fixture's own sequence_length = 15, the chain has not mixed away from
-    # its non-stationary initial distribution (the length-15 time-averaged
-    # marginal is [0.377, 0.423, 0.2], not the stationary [0.356, 0.444,
-    # 0.2] -- a real transient, not sampling noise). Occupancy is drawn at
-    # _MIXING_LENGTH instead, long enough for that transient to have decayed,
-    # so what remains to check is the stationary distribution itself: the
-    # left eigenvector of the transition matrix A at eigenvalue 1.
+    # At length 15 the chain has not mixed (time-averaged [0.377, 0.423, 0.2]
+    # against stationary [0.356, 0.444, 0.2]), so occupancy is drawn at
+    # _MIXING_LENGTH and checked against A's left eigenvector at 1.
     params = load_params(FIXTURE, HmmParams)
     dataset = simulate_sequences(
         replace(params, lengths=(_MIXING_LENGTH,) * params.n_sequences)
@@ -133,11 +125,8 @@ def test_realized_state_occupancy_matches_the_stationary_distribution() -> None:
 
 @pytest.mark.oracle
 def test_realized_state_marginals_match_brute_force_enumeration() -> None:
-    # The exact marginal p(state_t = s) at each of the first _ENUMERATION_LENGTH
-    # positions, summed over every one of n_states ** length hidden paths --
-    # independent of the transition matrix's stationary distribution, and
-    # exact at any length rather than only in the long-run limit the
-    # occupancy check above relies on.
+    # p(state_t = s) at each early position, summed over every hidden path:
+    # exact at any length.
     params = load_params(FIXTURE, HmmParams)
     length = _ENUMERATION_LENGTH
     paths, probabilities = _enumerate_paths(params.initial, params.transition, length)
@@ -158,11 +147,7 @@ def test_realized_state_marginals_match_brute_force_enumeration() -> None:
 
 @pytest.mark.oracle
 def test_marginal_emission_distribution_matches_brute_force_enumeration() -> None:
-    # The exact marginal emission distribution at each position, from the
-    # same path enumeration as the state-marginal check, pushed through the
-    # emission matrix -- the two-step (state, then symbol) counterpart of
-    # the whole-sequence-averaged check above, at single-position
-    # resolution.
+    # The same enumeration pushed through the emission matrix, per position.
     params = load_params(FIXTURE, HmmParams)
     length = _ENUMERATION_LENGTH
     paths, probabilities = _enumerate_paths(params.initial, params.transition, length)
@@ -183,17 +168,9 @@ def test_marginal_emission_distribution_matches_brute_force_enumeration() -> Non
 
 @pytest.mark.oracle
 def test_realized_path_posterior_matches_brute_force_enumeration() -> None:
-    # The exact posterior p(state_t = s | observations) for one realized
-    # observation sequence, computed by brute-force enumeration over every
-    # hidden path consistent with the model (no forward-backward recursion
-    # involved). Estimated from the simulator's own draws by self-normalized
-    # importance sampling: every simulated path is reweighted by the
-    # likelihood it assigns the *target* sequence's emissions -- a quantity
-    # computable from the path and the (known) emission matrix alone, not
-    # from what that path actually emitted -- which is an unbiased estimator
-    # of the posterior in the number of paths sampled (Koller & Friedman,
-    # ch. 12). The check is at one interior position, where both the
-    # forward and backward halves of the recursion matter.
+    # The exact posterior at one interior position by enumeration, against
+    # self-normalized importance sampling of the simulator's paths weighted by
+    # the target emissions' likelihood (Koller & Friedman, ch. 12).
     params = load_params(FIXTURE, HmmParams)
     length = _ENUMERATION_LENGTH
     position = length // 2
@@ -225,11 +202,8 @@ def test_realized_path_posterior_matches_brute_force_enumeration() -> None:
     )
     estimated_posterior /= weights.sum()
 
-    # Self-normalized importance sampling with n_sequences proposals; the
-    # tolerance is the fixture's own, widened by an effective-sample-size
-    # factor since the emission-likelihood weights concentrate the sample
-    # (measured effective sample size at this fixture's seed and size is
-    # in the low hundreds, against 600 proposals).
+    # The fixture's tolerance widened for weight concentration: effective
+    # sample size in the low hundreds of 600 proposals.
     assert_allclose(estimated_posterior, exact_posterior, atol=5 * params.tolerance)
 
 

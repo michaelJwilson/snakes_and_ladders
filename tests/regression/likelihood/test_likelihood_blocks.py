@@ -1,16 +1,10 @@
 """The block-frequency bound, soundness first (issue #408).
 
-An unsound bound silently returns a wrong tree and nothing else in the suite
-would catch it: a search ranked by an interval that does not contain the exact
-value discards the right candidate and reports a converged optimum. So the
-containment check is the first test in this file and was written first --
-before the bound existed, and failing.
-
-Containment is checked wherever the exact value is computable: the `ci` and
-`stress` tree fixtures, over a grid of block sizes and frequency cutoffs, and
-on random alignments over several seeds. The random alignments matter more:
-the bound must hold for an arbitrary column, not only one the generating
-model is likely to produce.
+An unsound bound discards the right candidate and reports a converged optimum,
+so containment was written first, failing. It is checked wherever the exact
+value is computable: the `ci` and `stress` tree fixtures over block sizes and
+cutoffs, and random alignments over seeds, since the bound must hold for any
+column.
 """
 
 from __future__ import annotations
@@ -166,9 +160,9 @@ def test_the_containment_check_has_teeth() -> None:
     # bound.
     exact = -1000.0
     assert Interval(
-        lower=torch.tensor(-1100.0),
-        upper=torch.tensor(-900.0),
-        exact=torch.tensor(-1000.0),
+        lower=-1100.0,
+        upper=-900.0,
+        exact=-1000.0,
         exact_sites=1,
         bounded_sites=0,
         exact_blocks=1,
@@ -176,9 +170,9 @@ def test_the_containment_check_has_teeth() -> None:
         evaluated_columns=1,
     ).contains(exact)
     narrowed = Interval(
-        lower=torch.tensor(-999.0),
-        upper=torch.tensor(-900.0),
-        exact=torch.tensor(-950.0),
+        lower=-999.0,
+        upper=-900.0,
+        exact=-950.0,
         exact_sites=1,
         bounded_sites=0,
         exact_blocks=1,
@@ -253,12 +247,8 @@ def test_the_width_grows_with_the_cutoff_and_with_the_block_size() -> None:
 
 @pytest.mark.oracle
 def test_the_lower_end_is_a_bound_on_the_fitted_log_likelihood() -> None:
-    # Certified in the sense bound.py defines, against a full fit of all 15
-    # five-taxon topologies: the lower end is a value at feasible lengths, so
-    # it cannot exceed the maximum over lengths, and one violation refuses the
-    # certificate. The fits are computed once and looked up, since certify
-    # calls the exact target per structure and six certificates would fit each
-    # topology six times.
+    # Certified against a full fit of all 15 five-taxon topologies; the fits
+    # are cached, as certify calls the exact target per structure.
     params, alignment, _ = _instance("tree_search/ci.yaml", 400)
     pi = np.asarray(params.pi)
     topologies = list(enumerate_topologies(sorted(alignment)))
@@ -286,12 +276,8 @@ def test_the_lower_end_is_a_bound_on_the_fitted_log_likelihood() -> None:
 
 @pytest.mark.oracle
 def test_neither_end_ranks_and_the_frequent_half_does() -> None:
-    # The tail term is (bounded sites) x (per-site extreme); the extreme
-    # varies with the tree and exceeds the differences between neighbouring
-    # topologies, so an ordering by either end is an ordering by the tail's
-    # looseness. Asserting that it ranks would assert something false
-    # (`likelihood/CLAUDE.md`); asserted instead is that the POINT claim,
-    # which drops the tail, puts the fitted best first.
+    # The tail term exceeds the differences between neighbours, so a ranking
+    # by either end is false (`likelihood/CLAUDE.md`); the POINT claim is.
     params, alignment, _ = _instance("tree_search/ci.yaml", 2000)
     pi = np.asarray(params.pi)
     topologies = list(enumerate_topologies(sorted(alignment)))
@@ -323,18 +309,9 @@ def _ranked_against_exact(
     fixture: str = "tree_search/ci.yaml",
     n_sites: int = 1200,
 ) -> list[tuple[MoveSet, int, int, int, int, int]]:
-    """One row per start: the exact search's cost and the ranked search's.
+    """One row per start: the exact search's cost and the ranked search's (#289).
 
-    The search the ranking is for --- `infer`'s lazy seam, fitting one
-    candidate per neighbourhood instead of all --- against the search that
-    fits every candidate. Each row asserts the same topology and the same
-    fitted log-likelihood, and records the fits and forward passes a
-    budget-matched comparison counts (issue #289).
-
-    The cutoff is a *count*, so what it means depends on the alignment's
-    length: at 1200 sites a cutoff of 8 keeps 6 of 12 starts, at 2000 all 12.
-    As a fraction of the sites retained, 4 at 1200 and 8 at 2000 are the same
-    setting.
+    Same topology and fit asserted. A cutoff is a count: 4 at 1200 sites is 8 at 2000.
     """
     params, alignment, _ = _instance(fixture, n_sites)
     pi = np.asarray(params.pi)

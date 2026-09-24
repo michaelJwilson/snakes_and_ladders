@@ -1,19 +1,9 @@
 """What the module closure must reach before a selection may be trusted.
 
-`snakes_and_ladders.inputs` hashed committed figures and notebooks until
-issue #490 deleted the stamps, and hashed a baseline record until #460
-deleted its digest. What is left is the closure `infra/baselines.py
---changed` selects records on, and a closure that misses a module is a
-record whose numbers a pull request moved and no recomputation checked ---
-which is the failure pinned below, in both the direction it must reach and
-the direction it must not.
-
-The tests the figure cache had --- that a changed renderer stales its own
-figure and no other, that prose in a shared module stales none, that an
-unchanged tree renders nothing --- went with the stamps they refereed. The
-claim they stood for is now `infra/release.sh` rendering every figure and
-comparing bytes (issue #484), which `tests/regression/test_release_gate.py`
-pins.
+The closure `infra/baselines.py --changed` selects records on (stamps went
+with #490, the record digest with #460). A closure missing a module is a
+record a PR moved and nothing recomputed; pinned in both directions. Figures
+are compared by bytes at release (#484, `test_release_gate.py`).
 """
 
 from __future__ import annotations

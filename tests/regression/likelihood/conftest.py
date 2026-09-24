@@ -1,27 +1,13 @@
 """What several likelihood test modules share, declared once.
 
 `TREE` and `FIELD` are the six-node tree the message-passing tests are exact
-on; `ROUTES` is every route to the tree likelihood; `random_hmm` and
-`CHAIN_CASES` are the categorical chains the path enumeration referees, which
-three modules built with three copies of one builder (issue #982).
-
-`TREE` and the field over it were written out in three modules ---
-`test_belief_propagation.py`, `test_message_passing.py` and
-`test_message_passing_rust.py` --- and every exactness claim in all three is
-read against them (issue #863, design-audit row R19). They agreed by
-coincidence of three literals: an edge added to one copy would have left two
-routes still exact on the tree they were told about and one measured against
-a different graph, which reads as a backend disagreeing.
-
-It is the smallest graph with all of what these tests need: six nodes, so a
-node has two children and another has one and the recursion is not a chain;
-a mixed-sign coupling, so a message is not monotone; and few enough
-configurations --- ``3 ** 6`` --- that enumeration is the referee.
-
-A loopy graph is *not* here. Each module builds its own from
-`sim.graph.lattice_graph`, which is the code `PROBLEMS.md` says defines the
-lattice problem: a module that stops importing it stops saying which problem
-it exercises (`tests/_problems.py`).
+on, once written in three modules that agreed by coincidence (issue #863,
+design-audit row R19); `ROUTES` is every route to the tree likelihood;
+`random_hmm` and `CHAIN_CASES` are the categorical chains path enumeration
+referees (issue #982). Six nodes give branching, a mixed-sign coupling makes
+messages non-monotone, and ``3 ** 6`` configurations make enumeration the
+referee. Loopy graphs are built per module from `sim.graph.lattice_graph`, so
+each module names its problem by import (`tests/_problems.py`).
 """
 
 from __future__ import annotations

@@ -1,16 +1,10 @@
 """The one enumeration behind the oracles, pinned to the loops it replaced.
 
-Issue #387: five modules built the product space with their own
-``itertools.product`` and three took the argmax with their own loop. The
-seam is checked against ``itertools.product`` itself --- order, count and
-values --- and its reductions against the arithmetic the adapters carried,
-so an adapter that calls it returns what it returned before.
-
-Issue #755 folded the *composition* those three wrote around the two parts:
-enumerate, score, take the first maximizer. The referee below is the body
-that was deleted, run beside the seam on the same scores, and the comparison
-is ``==`` rather than a tolerance --- the fold reorders nothing, so bitwise
-is what it costs.
+Issue #387: five modules built the product space with ``itertools.product``
+and three took the argmax by hand. The seam is checked against
+``itertools.product`` (order, count, values) and its reductions against the
+adapters' arithmetic. Issue #755 folded the composition (enumerate, score,
+first maximizer); the referee is the deleted body, compared with ``==``.
 """
 
 from __future__ import annotations
@@ -114,9 +108,7 @@ def _the_deleted_body(
 ) -> tuple[tuple[int, ...], float]:
     """`learn.relaxed.enumerate_optimum`'s body before issue #755, verbatim.
 
-    Kept here rather than remembered: a fold is bitwise against what it
-    replaced or it is not bitwise, and the only way to assert that after the
-    old code is gone is to carry the old code into the test.
+    Carried here so the fold can be asserted bitwise against what it replaced.
     """
     candidates = [tuple(row.tolist()) for row in configurations(n_states, n_sites)]
     scores = np.array([score(candidate) for candidate in candidates])

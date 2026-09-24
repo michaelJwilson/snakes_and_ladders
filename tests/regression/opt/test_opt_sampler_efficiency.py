@@ -1,20 +1,10 @@
 """What a draw costs, in the unit each sampler spends, on one target at a time.
 
-The reason the two baselines exist. `opt/CLAUDE.md` counts a budget in
-evaluations, so a sampler is compared on effective samples per evaluation and
-never per draw: HMC buys a trajectory for ``n_steps + 1`` gradients, MALA buys
-one step for two, and slice sampling buys a sweep for objective evaluations
-and no gradient at all.
-
-**The units are not interchangeable and the comparison says so.** A gradient
-is a forward evaluation plus a backward pass through the same tape, so slice
-sampling's evaluation is the cheaper purchase and its column is not HMC's
-column. The wall clock is recorded beside both for that reason --- it is the
-one unit all three spend --- and experiment 024 carries the table.
-
-What is asserted is the ordering, which holds over both targets, both sizes
-and both seeds; the numbers are in the comments and in `STATUS.md`, where a
-number that moves with the host belongs.
+Effective samples per evaluation (`opt/CLAUDE.md`): HMC buys ``n_steps + 1``
+gradients per trajectory, MALA two per step, slice sampling objective
+evaluations only. The units differ, so wall clock is recorded beside them
+(experiment 024). The ordering is asserted over both targets, sizes and seeds;
+the numbers are in comments and `STATUS.md`.
 """
 
 from __future__ import annotations
@@ -40,12 +30,7 @@ MALA_ADAPTATION = Adaptation(
 
 
 def effective_per_thousand(draws: torch.Tensor, evaluations: int) -> float:
-    """Effective samples per 1,000 evaluations, on the worst coordinate.
-
-    The worst rather than the mean: a chain that mixes on one coordinate and
-    not on another is the chain that mixes on neither, and averaging hides
-    exactly that.
-    """
+    """Effective samples per 1,000 evaluations, on the worst coordinate."""
     return 1000.0 * float(effective_sample_size(draws).numpy().min()) / evaluations
 
 
@@ -56,9 +41,7 @@ def test_one_gradient_buys_more_from_a_langevin_step_than_from_a_trajectory(
     draws: tuple[int, int],
 ) -> None:
     # Effective samples per 1,000 evaluations, worst coordinate, two seeds,
-    # each sampler warm-started by its own two windows. Gradients for HMC and
-    # MALA, objective evaluations for slice sampling; 1-minute load 3.90 to
-    # 4.32 on a 4-core host shared with two other agents.
+    # own warm-up; load 3.90 to 4.32 on a shared 4-core host.
     #
     #                        HMC         MALA        slice      wall (HMC/MALA/slice)
     #   Gaussian, 2,000   25.3 / 22.0  59.1 / 71.8  30.8 / 29.4   4.8 / 1.0 / 0.65 s
@@ -66,10 +49,7 @@ def test_one_gradient_buys_more_from_a_langevin_step_than_from_a_trajectory(
     #   mixture,    800   19.4 / 20.5  191.8 / 166.5  100.8 / 116.5  4.6 / 1.2 / 0.61 s
     #   mixture,  3,200   38.8 / 30.2  196.2 / 235.0  125.2 / 115.1 15.1 / 3.8 / 2.5 s
     #
-    # The trajectory is not paid for at these dimensions: MALA takes 1.7x to
-    # 2.6x HMC's effective samples per gradient on the two-coordinate Gaussian
-    # and 5.1x to 7.8x on the one-coordinate mixture posterior, where a
-    # ten-step trajectory retraces a line it has already crossed.
+    # MALA: 1.7x-2.6x HMC per gradient (Gaussian), 5.1x-7.8x (mixture).
     gaussian_draws, mixture_draws = draws
     target, _, _ = weight_posterior()
 

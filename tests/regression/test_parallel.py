@@ -196,17 +196,7 @@ def test_each_backend_maps_the_seeded_tasks_onto_the_serial_map_bitwise(
 ) -> None:
     """The three backends are one map, refereed from outside it (issue #729).
 
-    Two referees, neither of them `map_tasks`. The deterministic half is
-    checked against ``sum_{i<n} i^2 = n (n - 1) (2n - 1) / 6``, **22,140** at
-    ``n = 41``, which a reordered, repeated or dropped task breaks; the
-    seeded half against the children :meth:`numpy.random.Generator.spawn`
-    yields for the same seed, reconstructed here. Both are compared with
-    ``==``: the pooled map and the serial map differ by **0.0** on every one
-    of the 41 entries under either backend, the tolerance declared for this
-    comparison being bitwise equality. ``intra_op_threads=1`` is passed so
-    the pool and the serial run execute the same kernels in the same
-    reduction order, which is the condition that makes bitwise the right
-    tolerance to declare.
+    ``sum i^2`` = 22,140 at ``n = 41`` and `Generator.spawn`'s children; ``==``, 0.0.
     """
     items = list(range(41))
     closed_form = len(items) * (len(items) - 1) * (2 * len(items) - 1) / 6
@@ -288,13 +278,7 @@ def test_torch_is_imported_only_by_a_body_that_imports_it(
 ) -> None:
     """A NumPy body loads no ``torch``; a ``torch`` body runs at the count (issue #1011).
 
-    A fresh process, since this one has imported ``torch``, with
-    ``OMP_NUM_THREADS`` and ``MKL_NUM_THREADS`` at 3 so ``torch``'s default
-    is not the count of 1 the map asks for. The NumPy body reports ``torch`` absent in every worker and
-    the caller after the map. The body that imports ``torch`` itself -- which
-    the import hook pins, where the thread count used to be set by importing
-    ``torch`` up front -- reports 1 in every worker, and the caller reads 3
-    afterwards: the default of a ``torch`` first imported inside the call.
+    Fresh process, thread variables at 3: workers read 1, the caller 3 afterwards.
     """
     (tmp_path / "_bodies.py").write_text(_BODIES)
     environment = {

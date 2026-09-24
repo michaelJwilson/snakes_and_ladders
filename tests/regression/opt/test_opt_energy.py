@@ -1,16 +1,10 @@
 """The NumPy energy seam, ``opt.objective.energy_of`` (issue #1011).
 
-Referees:
-
-- a declared :meth:`energy` is ``__call__`` on the same point: bitwise where
-  a sum has at most three terms and no matrix product is taken, and within
-  ``rtol = 1e-15`` otherwise, where NumPy's pairwise sum and torch's vectorized one order the
-  terms differently --- measured 6.1e-16 at most over 500 points per size,
-  ``d`` in 2 to 1000, on Rosenbrock and the diagonal and dense Gaussians;
-- an objective declaring none is ``float(__call__)``, bitwise, which is what
-  a value-only consumer computed before the seam;
-- the warm-up's change of coordinates keeps a declared energy: ``_Scaled``'s
-  is the inner one at ``x * scale``, bitwise.
+A declared :meth:`energy` is ``__call__`` on the same point: bitwise for up to
+three terms and no matrix product, else within ``rtol = 1e-15`` (measured
+6.1e-16 over 500 points per size, ``d`` 2 to 1000, Rosenbrock and Gaussians).
+Undeclared, it is ``float(__call__)`` bitwise. ``_Scaled``'s is the inner one
+at ``x * scale``, bitwise.
 """
 
 from __future__ import annotations

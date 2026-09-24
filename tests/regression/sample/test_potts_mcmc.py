@@ -1,22 +1,11 @@
 """Correctness by distribution, not by inspection of cluster sizes.
 
-At an enumerable lattice size the exact Boltzmann distribution is available,
-so each move set is tested by whether the chain's realized visit frequencies
-are drawn from it --- a chi-square goodness-of-fit at a declared significance
-and chain length.
-
-Two things this file also pins, both wrong while it was written:
-
-The **field accept step**. `test_dropping_the_field_accept_step_is_caught`
-replaces it with an unconditional recolouring and asserts this same test
-rejects, so the tests above are known to have the power they claim.
-
-The **thinning**. A chi-square assumes independent draws and successive
-sweeps are not independent. Run on every sweep it rejects a *correct*
-sampler: single-site at `thin = 1` returned p = 0.038 and Swendsen-Wang
-p = 0.0024 on chains that are right. The thinning below is part of the test,
-not a speed knob, and Wolff needs more of it because one Wolff sweep flips
-one cluster while the other two touch every site.
+At an enumerable size each move set's visit frequencies are tested against the
+exact Boltzmann law by chi-square at a declared significance and length.
+`test_dropping_the_field_accept_step_is_caught` shows the tests have power.
+Thinning is part of the test: at `thin = 1` correct chains returned p = 0.038
+(single-site) and 0.0024 (Swendsen-Wang); Wolff needs more, flipping one
+cluster per sweep.
 """
 
 from __future__ import annotations
@@ -125,19 +114,21 @@ THINNING = {
     # p = 0.0 with a mean cluster of 8.3 sites in 9, the near-percolating
     # cluster being exactly what correlates successive sweeps there.
     PottsMove.NIEDERMAYER: 25,
+    # A pass over every site, as Swendsen-Wang's is (issue #1041).
+    PottsMove.GHOST_SPIN: 5,
+    PottsMove.LABEL_DIRECTED: 5,
 }
 
-#: The gradient-informed sweeps run in NumPy, one proposal over the whole
-#: neighbourhood at a time, so a chain of `SWEEPS` of them costs seconds where
-#: the others cost fractions of one. 4,000 recorded sweeps still puts an
-#: expected 250 in each of the sixteen cells, which is what the chi-square
-#: needs; the length is the test's budget and not part of its claim.
+#: The NumPy gradient-informed sweeps cost seconds; 4,000 sweeps still expect
+#: 250 per cell of sixteen, which the chi-square needs.
 BALANCED_SWEEPS = 4_000
 SWEEPS_BY_MOVE = {
     PottsMove.SINGLE_SITE: SWEEPS,
     PottsMove.SWENDSEN_WANG: SWEEPS,
     PottsMove.WOLFF: SWEEPS,
     PottsMove.NIEDERMAYER: SWEEPS,
+    PottsMove.GHOST_SPIN: SWEEPS,
+    PottsMove.LABEL_DIRECTED: SWEEPS,
     PottsMove.LOCALLY_BALANCED: BALANCED_SWEEPS,
     PottsMove.GIBBS_WITH_GRADIENTS: BALANCED_SWEEPS,
 }
@@ -252,12 +243,8 @@ def test_a_cluster_move_refuses_a_negative_coupling(move: PottsMove) -> None:
 
 @pytest.mark.oracle
 def test_single_site_is_still_exact_on_a_negative_coupling() -> None:
-    # The refusal above is a property of the cluster construction, not of the
-    # model, and what says so is that the heat bath is still drawing from the
-    # right distribution at J = -0.5: the same enumeration of all 16
-    # configurations refereeing the ferromagnetic tests, at the coupling the
-    # cluster moves decline. Realized p = 0.524 at the declared seed and
-    # 0.608 at the next, against the 0.001 significance.
+    # The refusal is the cluster construction's: the heat bath at J = -0.5 is
+    # still exact, p = 0.524 and 0.608 over two seeds (0.001).
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, -0.5)
     index, probability = enumerated_law(graph, NO_FIELD)
 
@@ -279,22 +266,15 @@ def test_single_site_is_still_exact_on_a_negative_coupling() -> None:
 
 # --- the gradient-informed proposals ----------------------------------------
 #
-# Zanella (2020) and Grathwohl et al. (2021), which on this energy are one
-# kernel: the Taylor estimate the second proposes from *is* the difference the
-# first proposes from, because the relaxed log weight is affine in each site's
-# row. That is the claim of
-# `test_the_taylor_estimate_is_the_single_flip_energy_difference`, pinned three
-# ways --- against the heat bath's own conditional, against the tape, and
-# against the enumerated energy --- and it is why two move sets share one
-# sweep rather than one move set carrying two names.
+# Zanella (2020) and Grathwohl et al. (2021) are one kernel on this energy: the
+# relaxed log weight is affine per site's row, so the Taylor estimate is the
+# single-flip difference, pinned three ways below.
 
 
 def _wider_lattice() -> PottsGraph:
     """The 3x3 open square: 512 configurations, and an interior site of degree 4.
 
-    A weaker coupling than `COUPLING`, so the enumerated law is spread over
-    the 512 cells rather than concentrated on the two aligned configurations:
-    a chi-square over cells the model almost never visits measures rounding.
+    Weaker coupling spreads the law over the cells, so chi-square measures sampling.
     """
     return lattice_graph((3, 3), BoundaryCondition.OPEN, 0.4)
 
@@ -302,11 +282,7 @@ def _wider_lattice() -> PottsGraph:
 def _frustrated_lattice() -> PottsGraph:
     """The 3x3 periodic triangular antiferromagnet: every coupling negative.
 
-    The instance both cluster moves refuse
-    (`test_a_cluster_move_refuses_a_negative_coupling`). The gradient-informed
-    moves are single-flip and run on it, which is the point of testing them
-    here: a frustrated law is the one a proposal that follows the energy is
-    likeliest to get wrong.
+    Both cluster moves refuse it; a frustrated law tests the gradient-informed moves.
     """
     return frustrated_triangular_lattice((3, 3), BoundaryCondition.PERIODIC, -1.0)
 
@@ -323,26 +299,15 @@ WIDE_SWEEPS = 10_000
 
 # --- Niedermayer's bond rule and Houdayer's pair ----------------------------
 #
-# Issue #756. Wolff's construction needs every coupling non-negative and is
-# refused on the frustrated lattice
-# (`test_a_cluster_move_refuses_a_negative_coupling`), so the one cluster move
-# this package had did not reach the instance cluster moves exist for.
-# Niedermayer (1988) activates a bond on its energy relative to a threshold
-# `E_0` and carries the Metropolis ratio that leaves; Houdayer (2001) moves a
-# *pair* of replicas at one temperature and is isoenergetic for the pair, so
-# its acceptance is 1 by an identity rather than by a construction.
-#
-# The referees below are the file's own, in order: the enumerated law on the
-# 512-configuration lattices, the ablations that show those tests have power,
-# and the two exact identities the moves rest on.
+# Issue #756. Wolff is refused on the frustrated lattice. Niedermayer (1988)
+# activates bonds against a threshold `E_0`, with a Metropolis ratio;
+# Houdayer (2001) moves a replica pair, isoenergetic, accepted at 1 by identity.
+# Referees: the 512-configuration laws, ablations, and the two identities.
 
 
-#: The mixed instance: the frustrated lattice with half its bonds turned
-#: ferromagnetic. At the threshold its cluster percolates --- 8.94 sites of 9
-#: --- so a chain of these alone is a global spin reversal and a chi-square
-#: rejects it at p = 9e-218 however long it runs. It is refereed by
-#: reversibility instead (`test_niedermayers_kernel_is_reversible...`), which
-#: is the claim a chain cannot carry here.
+#: The frustrated lattice with half its bonds ferromagnetic: its threshold
+#: cluster percolates (8.94 of 9 sites), so a chain is rejected at p = 9e-218;
+#: refereed by reversibility instead.
 def _mixed_lattice() -> PottsGraph:
     """The frustrated triangular lattice with every other coupling ferromagnetic."""
     frustrated = _frustrated_lattice()
@@ -393,15 +358,9 @@ def _pair_chi_square(
 def test_the_niedermayer_chain_is_drawn_from_the_exact_boltzmann_distribution(
     instance: str,
 ) -> None:
-    # The same referee as the heat bath and Wolff, on the instances Wolff
-    # refuses: every configuration enumerated by `log_weights`, which shares no
-    # bond rule, transposition or accept step with the sampler. `release`
-    # because 275,000 cluster growths in Python do not fit the per-test cap;
-    # the 2x2 case of
-    # `test_the_chain_is_drawn_from_the_exact_boltzmann_distribution` is the
-    # per-pull-request sibling and runs the same move set.
-    # Realized p at the declared seed and the next: 3x3-open 0.0221 and 0.1116,
-    # frustrated-triangular 0.0936 and 0.9945.
+    # Enumeration by `log_weights` on the instances Wolff refuses; `release`
+    # (275,000 Python cluster growths), with the 2x2 sibling per PR. Realized
+    # p over two seeds: 3x3-open 0.0221, 0.1116; triangular 0.0936, 0.9945.
     graph = ENUMERABLE[instance]()
 
     p_value = _chi_square_against(
@@ -418,15 +377,11 @@ def test_the_niedermayer_chain_is_drawn_from_the_exact_boltzmann_distribution(
 def test_each_replica_of_a_houdayer_pair_is_drawn_from_the_exact_boltzmann_distribution(
     instance: str, move: PottsMove
 ) -> None:
-    # The marginal of *one* replica of the pair is the claim: the joint target
-    # is the product of the two Boltzmann laws, Houdayer's move is an
-    # involution on it with a symmetric proposal, so the product is invariant
-    # and the marginal follows. Both replicas are read, since a move that
-    # exchanges between them could leave one right and the other wrong.
-    # Realized p per replica at the declared seed and the next --- single-site:
-    # 3x3-open 0.5086/0.1672 and 0.9580/0.0171, frustrated-triangular
-    # 0.0039/0.9058 and 0.8477/0.9913; Niedermayer: 3x3-open 0.5061/0.1717 and
-    # 0.1394/0.7302, frustrated-triangular 0.3116/0.9231 and 0.3202/0.0386.
+    # One replica's marginal: the product law is invariant under the
+    # involution. Both replicas read. p per replica over two seeds:
+    # single-site 3x3-open 0.5086/0.1672, 0.9580/0.0171; triangular
+    # 0.0039/0.9058, 0.8477/0.9913. Niedermayer 3x3-open 0.5061/0.1717,
+    # 0.1394/0.7302; triangular 0.3116/0.9231, 0.3202/0.0386.
     graph = ENUMERABLE[instance]()
 
     first, second = _pair_chi_square(graph, WITH_FIELD, move, SEED)
@@ -447,17 +402,10 @@ def test_each_replica_of_a_houdayer_pair_is_drawn_from_the_exact_boltzmann_distr
 def test_niedermayers_kernel_is_reversible_against_the_enumerated_law(
     name: str, coupling: tuple[float, ...]
 ) -> None:
-    # The claim a chain carries where the move mixes and cannot carry where it
-    # percolates, made directly instead: the kernel's own flow `pi(s) K(s, s')`
-    # against its transpose, `K` estimated from 12,500 moves out of each of the
-    # 16 configurations of a four-cycle and `pi` enumerated by `log_weights`.
-    # The mixed instance is the one this exists for --- its cluster is the
-    # whole lattice nine times in ten, so a chain there is a global spin
-    # reversal whatever its length --- and the other two are the controls.
-    # Realized max asymmetry: ferromagnet 0.00137, antiferromagnet 0.00080,
-    # mixed 0.00160, against a Monte Carlo standard error of 1 / sqrt(12,500)
-    # = 0.0089 on a probability of one, so the bound is the error and not a
-    # tolerance fitted to the result.
+    # `pi(s) K(s, s')` against its transpose, `K` from 12,500 moves out of each
+    # of 16 four-cycle states. Max asymmetry: ferromagnet 0.00137,
+    # antiferromagnet 0.00080, mixed 0.00160; the bound is the Monte Carlo
+    # error 1 / sqrt(12,500) = 0.0089.
     graph = PottsGraph(
         n_nodes=4, edges=((0, 1), (1, 2), (2, 3), (3, 0)), coupling=coupling
     )
@@ -498,11 +446,8 @@ def test_niedermayers_kernel_is_reversible_against_the_enumerated_law(
 def test_a_mixed_couplings_cluster_percolates_and_an_antiferromagnets_nearly_does() -> (
     None
 ):
-    # Why Houdayer's move exists beside Niedermayer's, as a number. A single
-    # cluster that is the whole lattice is a global spin reversal, and the
-    # threshold's bond probabilities put the mixed instance there: 8.94 sites
-    # of 9 against the uniform antiferromagnet's 8.31 and the ferromagnet's
-    # 2.25, over 4,000 clusters from the declared seed.
+    # Mean cluster over 4,000: mixed 8.94 of 9 sites, antiferromagnet 8.31,
+    # ferromagnet 2.25; a whole-lattice cluster is a global reversal.
     sizes = {}
     for name, graph in (
         ("mixed", _mixed_lattice()),
@@ -519,12 +464,8 @@ def test_a_mixed_couplings_cluster_percolates_and_an_antiferromagnets_nearly_doe
 @pytest.mark.analytic
 @pytest.mark.critical
 def test_the_threshold_at_zero_on_an_antiferromagnet_is_a_single_site_flip() -> None:
-    # The other end of Niedermayer's one knob, and the reason it is a knob:
-    # at `E_0 = 0` an antiferromagnet's like bonds ask for a margin of `J < 0`
-    # and its unlike bonds for one of 0, so no bond forms, the cluster is its
-    # seed, and the ratio is the exact single-flip energy difference. Read
-    # against `energies` on the flipped configuration rather than against the
-    # sweep's own arithmetic.
+    # At `E_0 = 0` an antiferromagnet forms no bond: the ratio is the exact
+    # single-flip difference, read against `energies`.
     graph = _frustrated_lattice()
     rows = site_field(WITH_FIELD, graph.n_nodes)
     offsets, neighbours, couplings = graph.compressed_adjacency()
@@ -569,13 +510,8 @@ def test_the_threshold_at_zero_on_an_antiferromagnet_is_a_single_site_flip() -> 
 def test_dropping_niedermayers_accept_step_is_caught(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Evidence that the two tests above have the power they claim, and the
-    # ablation issue #756's plan names. At the threshold the boundary terms of
-    # the ratio cancel, so what this removes is the field term --- the step
-    # that makes a Fortuin-Kasteleyn cluster move exact in a field, and the
-    # one `test_dropping_the_field_accept_step_is_caught` removes from Wolff.
-    # Realized p = 0.0 against the 0.001 significance, where the unablated
-    # chain returns 0.0936.
+    # Ablation (#756): at the threshold the boundary terms cancel, so this
+    # removes the field term; p = 0.0 against 0.0936 unablated.
     def unconditional(delta: float, beta: float, rng: np.random.Generator) -> bool:
         # The accept step gone, both terms with it: the field difference the
         # ferromagnetic case also carries, and the boundary terms only a mixed
@@ -603,13 +539,8 @@ def test_dropping_niedermayers_accept_step_is_caught(
 def test_swapping_a_site_rather_than_a_component_is_caught(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # The second ablation: Houdayer's cluster replaced by singletons, so the
-    # move swaps one defect site rather than a connected component of the
-    # defect region. It is the *component* that makes the move isoenergetic
-    # --- a neighbour that disagreed would be in the same component, so a
-    # boundary neighbour agrees and its two bond terms are exchanged --- and
-    # this is what says so. Realized p = 0.0 on the first replica against the
-    # 0.001 significance, where the unablated pair returns 0.0039.
+    # Singletons instead of Houdayer's component break isoenergy: p = 0.0 on
+    # the first replica against 0.0039 unablated.
     def singletons(
         first: np.ndarray,
         second: np.ndarray,
@@ -634,13 +565,8 @@ def test_swapping_a_site_rather_than_a_component_is_caught(
 @pytest.mark.analytic
 @pytest.mark.critical
 def test_houdayers_move_leaves_the_pairs_energy_where_it_found_it() -> None:
-    # The identity the acceptance of 1 rests on, checked rather than derived.
-    # A bond inside the cluster has its two agreements exchanged between the
-    # replicas; a bond leaving it has its far end where the replicas agree, so
-    # its two terms are exchanged too; and the field term is exchanged site by
-    # site. Worst |dE| over 500 drawn pairs: 3.6e-15 against an energy of
-    # order 20, which is the double-precision floor for a sum of that size and
-    # not a tolerance chosen to admit anything.
+    # Inside bonds, leaving bonds and field terms are exchanged: worst |dE|
+    # over 500 pairs 3.6e-15 at energies ~20, the double-precision floor.
     graph = _frustrated_lattice()
     rows = site_field(WITH_FIELD, graph.n_nodes)
     offsets, neighbours, _ = graph.compressed_adjacency()
@@ -667,12 +593,8 @@ def test_houdayers_move_leaves_the_pairs_energy_where_it_found_it() -> None:
 @pytest.mark.analytic
 @pytest.mark.critical
 def test_houdayers_move_alone_never_leaves_the_orbit_of_its_draw() -> None:
-    # Why `sample_potts_pair` takes a within-replica move set rather than
-    # offering Houdayer's move on its own: the move exchanges labels between
-    # the replicas, so the unordered pair `{s_i, s'_i}` at every site is
-    # exactly what it cannot change. A chain of these alone is confined to the
-    # 2**n_nodes orbit of its initial draw and is not a sampler of anything,
-    # which is a property of the move and not a gap in the implementation.
+    # Houdayer alone keeps each site's unordered pair, confined to a 2**n orbit:
+    # hence the within-replica move set.
     graph = _frustrated_lattice()
     offsets, neighbours, _ = graph.compressed_adjacency()
     rng = np.random.default_rng(SEED)
@@ -690,14 +612,9 @@ def test_houdayers_move_alone_never_leaves_the_orbit_of_its_draw() -> None:
 @pytest.mark.oracle
 @pytest.mark.critical
 def test_niedermayers_rule_is_wolffs_bitwise_on_a_ferromagnet() -> None:
-    # The reduction, at the strongest reading available: on a ferromagnet
-    # `niedermayer_threshold` is 0, the unlike bonds get probability 0 and the
-    # like ones `1 - exp(-beta J)`, and the boundary terms of the ratio cancel
-    # to leave Wolff's field accept step. So the two sweeps draw the same
-    # uniforms against the same numbers in the same order, and the claim is
-    # equality of the labellings rather than of a distribution over them ---
-    # 300 draws at each of three temperatures, `q = 3`, on the 4x4 open
-    # square, with the root and the colour named so neither draws them.
+    # On a ferromagnet the threshold is 0 and Niedermayer is Wolff: equal
+    # labellings over 300 draws at three temperatures, `q = 3`, 4x4 open,
+    # root and colour named.
     def check(temperature: float) -> None:
         graph = lattice_graph((4, 4), BoundaryCondition.OPEN, COUPLING)
         rows = site_field(np.array([0.6, -0.4, 0.1]), graph.n_nodes)
@@ -747,11 +664,8 @@ def test_niedermayers_rule_is_wolffs_bitwise_on_a_ferromagnet() -> None:
 def test_the_threshold_is_where_the_antiferromagnets_bonds_become_a_probability() -> (
     None
 ):
-    # `E_0 = max(0, -min J)` is not a tuning constant: it is the smallest
-    # threshold at which every bond probability is defined. Below it the like
-    # bonds of an antiferromagnet ask for `1 - exp(beta |J|)`, which is
-    # negative, and at it they ask for zero while the unlike ones carry the
-    # construction --- which is what an antiferromagnet's satisfied bonds are.
+    # `E_0 = max(0, -min J)` is the smallest threshold at which every bond
+    # probability is defined.
     frustrated = _frustrated_lattice()
     _, _, couplings = frustrated.compressed_adjacency()
     ferromagnet = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
@@ -799,12 +713,8 @@ def _cluster_counter(
 def test_the_accepted_fraction_and_the_cluster_are_what_the_instance_makes_them() -> (
     None
 ):
-    # What the moves are read against, side by side, because the reason for
-    # Houdayer's move is a number rather than an argument. On the frustrated
-    # lattice Wolff is refused outright; Niedermayer runs there and builds a
-    # cluster of 8.31 sites in 9 --- a near-percolating cluster, which is a
-    # global spin reversal by another name and is what makes the pair move
-    # worth having. On the ferromagnet the two agree on both readings.
+    # Frustrated: Wolff refused, Niedermayer's cluster 8.31 of 9 sites; on the
+    # ferromagnet the two agree on both readings.
     frustrated, ferromagnet = _frustrated_lattice(), _wider_lattice()
     readings = {
         "frustrated": _cluster_counter(frustrated, PottsMove.NIEDERMAYER),
@@ -884,15 +794,9 @@ def test_the_pair_sampler_refuses_houdayers_move_above_two_states() -> None:
 def test_the_locally_balanced_chain_is_drawn_from_the_exact_boltzmann_distribution(
     instance: str,
 ) -> None:
-    # The same referee as the heat bath and Wolff: every configuration
-    # enumerated by `log_weights`, which shares no proposal, weight or accept
-    # step with the sampler. `release` because the sweep is NumPy over the
-    # whole neighbourhood per proposal and 360,000 proposals do not fit the
-    # per-test cap; the 2x2 case of
-    # `test_the_chain_is_drawn_from_the_exact_boltzmann_distribution` is the
-    # per-pull-request sibling.
-    # Realized p at the declared seed and the next: 3x3-open 0.0240 and
-    # 0.2629, frustrated-triangular 0.0758 and 0.9926.
+    # Enumeration by `log_weights`; `release` (360,000 NumPy proposals), 2x2
+    # sibling per PR. p over two seeds: 3x3-open 0.0240, 0.2629; triangular
+    # 0.0758, 0.9926.
     graph = ENUMERABLE[instance]()
 
     p_value = _chi_square_against(
@@ -908,16 +812,9 @@ def test_the_locally_balanced_chain_is_drawn_from_the_exact_boltzmann_distributi
 def test_the_gibbs_with_gradients_chain_is_drawn_from_the_exact_boltzmann_distribution(
     instance: str,
 ) -> None:
-    # As above, for the proposal that weights the neighbourhood by the Taylor
-    # estimate rather than by the difference. The two agree to 1e-12 on this
-    # energy, so what this adds over the test above is that the *route* --- a
-    # gradient rebuilt at each state, forward and reverse --- reaches the same
-    # law rather than being assumed to.
-    # Realized p at the declared seed and the next: 3x3-open 0.0240 and
-    # 0.2629, frustrated-triangular 0.0758 and 0.9926 --- the locally balanced
-    # chain's, to four figures, on every instance and seed. The two routes
-    # draw the same uniforms against the same weights here, so the chains do
-    # not merely share a law; they are the same chain.
+    # The Taylor-weighted route reaches the same law: p identical to four
+    # figures on every instance and seed (same uniforms, same weights: the
+    # same chain).
     graph = ENUMERABLE[instance]()
 
     p_value = _chi_square_against(
@@ -933,11 +830,8 @@ def test_the_gibbs_with_gradients_chain_is_drawn_from_the_exact_boltzmann_distri
 def test_the_taylor_estimate_is_the_single_flip_energy_difference(
     instance: str,
 ) -> None:
-    # The claim that makes Gibbs-with-gradients and the locally balanced
-    # proposal one kernel here, and it is refereed rather than derived: the
-    # heat bath's own per-site conditional, the tape's gradient at the one-hot
-    # state, and the enumerated energy of each flipped configuration. Nothing
-    # in the chain of equalities is the sampler's own arithmetic.
+    # Refereed by the heat bath's conditional, the tape's gradient and the
+    # enumerated energy: none is the sampler's arithmetic.
     graph = ENUMERABLE[instance]()
     rows = site_field(WITH_FIELD, graph.n_nodes)
     offsets, neighbours, couplings = graph.compressed_adjacency()
@@ -981,12 +875,8 @@ def test_the_taylor_estimate_is_the_single_flip_energy_difference(
 def test_the_accept_step_is_the_ratio_of_the_two_neighbourhood_normalizers(
     function: BalancingFunction,
 ) -> None:
-    # Zanella's collapse, for *both* balancing functions: a balanced weight
-    # satisfies `g(t) = t g(1 / t)`, so the target and the weights cancel and
-    # the Metropolis-Hastings ratio is `Z(s) / Z(s')` whichever `g` is used.
-    # The sweep computes it the general way --- the way Gibbs-with-gradients
-    # needs, since an estimate does not cancel --- and this is what says the
-    # general form is the collapsed one where the estimate is exact.
+    # Zanella: `g(t) = t g(1 / t)` collapses the ratio to `Z(s) / Z(s')` for
+    # both balancing functions; the general form is checked to equal it.
     graph = _frustrated_lattice()
     rows = site_field(WITH_FIELD, graph.n_nodes)
     offsets, neighbours, couplings = graph.compressed_adjacency()
@@ -1027,11 +917,8 @@ def test_the_accept_step_is_the_ratio_of_the_two_neighbourhood_normalizers(
 def test_dropping_the_metropolis_correction_is_caught(
     move: PottsMove, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Evidence that the chi-square tests above have the power they claim. A
-    # locally balanced proposal accepted unconditionally is stationary at
-    # `pi(s) Z(s)` rather than at `pi(s)`, and the normalizer varies over the
-    # 16 configurations of a 2x2 lattice in a field, so the enumeration
-    # rejects it.
+    # Unconditional acceptance is stationary at `pi(s) Z(s)`, which varies over
+    # the 16 states in a field: the enumeration rejects it.
     def always_accept(*arguments: float) -> float:
         del arguments
         called.append(None)
@@ -1044,11 +931,8 @@ def test_dropping_the_metropolis_correction_is_caught(
     assert called, "the stub never ran: the patch missed the sweep"
 
 
-# The instance at the transition, declared rather than built here (issue
-# #413). `potts_lattice/stress` is the 12x12 open square at the exact
-# 3-state transition in zero field, and section 9 of
-# `docs/nb/potts_chain.ipynb` reads the same file, so the notebook and this
-# module share one instance rather than two literals that agree.
+# `potts_lattice/stress`: 12x12 open at the 3-state transition, zero field,
+# shared with `docs/nb/potts_chain.ipynb` section 9 (issue #413).
 CRITICAL = fixture("potts_lattice", "stress").params
 
 #: A Wolff sweep flips one cluster while the other two move every site, so
@@ -1064,12 +948,7 @@ def _critical_lattice() -> PottsGraph:
 
 
 def _autocorrelation_in_site_updates(move: PottsMove, graph: PottsGraph) -> float:
-    """Energy autocorrelation time, normalized to the work a sweep costs.
-
-    Reporting all three in sweeps would make Wolff look free --- one Wolff
-    sweep flips one cluster --- so each is scaled by the sites its sweep
-    touched.
-    """
+    """Energy autocorrelation time in site updates: a one-cluster Wolff sweep is not free."""
     field = CRITICAL.field
     factor = WOLFF_SWEEPS if move is PottsMove.WOLFF else 1
 
@@ -1087,13 +966,8 @@ def _autocorrelation_in_site_updates(move: PottsMove, graph: PottsGraph) -> floa
 
 @pytest.mark.analytic
 def test_cluster_updates_decorrelate_faster_at_the_transition() -> None:
-    # The ordering is the claim; the seeded values are pinned beside it
-    # because the sibling test below is worth nothing unless both halves of
-    # the comparison are pinned the same way.
-    #
-    # What is *not* claimed is the ratio: it widens with lattice extent
-    # (docs/experiments/001-potts-cluster-autocorrelation.md), so a ratio
-    # pinned here would pin a finite-size effect.
+    # The ordering is claimed, seeded values pinned; the ratio widens with
+    # extent (docs/experiments/001-potts-cluster-autocorrelation.md).
     graph = _critical_lattice()
 
     single = _autocorrelation_in_site_updates(PottsMove.SINGLE_SITE, graph)
@@ -1109,13 +983,8 @@ def test_cluster_updates_decorrelate_faster_at_the_transition() -> None:
 
 @pytest.mark.analytic
 def test_the_cluster_advantage_is_absent_at_the_registry_instance() -> None:
-    # The other half of the claim above, and why the comparison runs at the
-    # transition. The registry's lattice is 9 sites at J = 0.6, well below
-    # J_c = 1.005: the
-    # correlation length is shorter than the lattice, there is no critical
-    # slowing to remove, and the cluster moves buy nothing for the bonds they
-    # cost. Pinned as the measurement `docs/nb/potts_chain.ipynb` reports, so
-    # the notebook states nothing the suite does not.
+    # The registry lattice is 9 sites at J = 0.6, below J_c = 1.005: no
+    # critical slowing, clusters buy nothing (`docs/nb/potts_chain.ipynb`).
     instance = fixture("potts_lattice", "ci").params
     graph = lattice_graph(instance.shape, instance.boundary, instance.coupling)
     field = instance.field - math.log(float(np.exp(instance.field).sum()))
@@ -1139,11 +1008,8 @@ def test_the_cluster_advantage_is_absent_at_the_registry_instance() -> None:
 
 @pytest.mark.analytic
 def test_a_wolff_cluster_is_smaller_than_the_lattice_but_larger_than_a_site() -> None:
-    # What makes the normalization above necessary, pinned so a change that
-    # made every cluster a single site -- which would silently turn Wolff into
-    # an expensive single-site sampler -- is visible.
-    # Extent 8 rather than the declared 12: the claim is about the cluster
-    # construction, and a smaller lattice makes it in a quarter of the sweeps.
+    # Single-site clusters would make Wolff an expensive single-site sampler;
+    # extent 8, a quarter of the sweeps of 12.
     graph = lattice_graph((8, 8), BoundaryCondition.OPEN, critical_coupling(3))
 
     chain = sample_potts(
@@ -1187,13 +1053,8 @@ def test_tempering_is_model_scaling_exactly(temperature: float) -> None:
 def test_a_tempered_chain_is_drawn_from_the_tempered_boltzmann_distribution(
     move: PottsMove, temperature: float
 ) -> None:
-    # Refereed by `tests._chains.enumerated_law`, the enumeration of all 16
-    # configurations at the same temperature, which shares no sweep, cluster
-    # or accept step with the sampler.
-    # Hot and cold, in a field, for every move set: the bond probabilities
-    # and the field accept step are tempered by the same division as the heat
-    # bath. Realized p-values over two seeds range 0.016 to 0.89 against the
-    # 0.001 significance the untempered tests use.
+    # `enumerated_law` over 16 states; hot and cold, in a field, every move
+    # set: p over two seeds 0.016 to 0.89 (0.001).
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
     index, probability = enumerated_law(graph, WITH_FIELD, temperature)
     sweeps = SWEEPS_BY_MOVE[move]
@@ -1239,19 +1100,10 @@ def test_a_non_positive_temperature_is_refused() -> None:
 def test_annealing_reaches_the_closed_form_ground_energy_where_descent_does_not() -> (
     None
 ):
-    # The optimizer built from the sampler, against the frustrated instance
-    # with a ground-state energy known at every size: the periodic triangular
-    # antiferromagnet, where at least one edge in three is unsatisfied
-    # (`sim.canonical.minimum_frustrated_edges`). At 9x9 over 20
-    # seeds and 200 sweeps: annealing 20/20, single-site descent (ICM) 2/20,
-    # and the same 200 sweeps at a *constant* temperature of 1 -- the control
-    # that separates the schedule from the wandering -- 7/20.
-    #
-    # What this does not say: that annealing beats descent at equal budget.
-    # ICM converges in 2.6 sweeps here, so 200 sweeps buy 78 restarts, and
-    # the best of 78 also reaches the ground state 20/20. The comparison at
-    # equal evaluations, on instances restarts can lose, is #267's second
-    # pull request.
+    # Periodic triangular antiferromagnet (`minimum_frustrated_edges`), 9x9, 20
+    # seeds, 200 sweeps: annealing 20/20, ICM 2/20, constant T = 1 7/20. Not
+    # equal budget: ICM converges in 2.6 sweeps, and the best of 78 restarts
+    # also reaches 20/20 (#267).
     graph = frustrated_triangular_lattice((9, 9), BoundaryCondition.PERIODIC, -1.0)
     field = np.zeros(2)
     ground = float(minimum_frustrated_edges(graph))  # |J| = 1
@@ -1310,14 +1162,8 @@ def _replica_p_values(
 def test_every_replica_is_drawn_from_its_own_tempered_distribution(
     backend: Backend,
 ) -> None:
-    # Refereed by the same enumeration, once per rung of the ladder.
-    # The joint target is a product of tempered marginals, so with exchanges
-    # *on* each replica must still pass the chi-square against exp(-E / T_r)
-    # enumerated from the unscaled model; a wrong exchange ratio contaminates
-    # the cold replica with hot configurations. Realized p-values over two
-    # seeds: 0.024 to 0.70 at the 0.001 significance; exchange acceptance
-    # 0.78 and 0.57 for the two pairs, so the exchanges happen and the test
-    # has power.
+    # Each replica against exp(-E / T_r) from the unscaled model: p over two
+    # seeds 0.024 to 0.70 (0.001); exchange acceptance 0.78 and 0.57.
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
 
     run = parallel_tempering(
@@ -1403,22 +1249,10 @@ def test_the_best_configuration_is_the_lowest_energy_any_replica_visited() -> No
 @pytest.mark.oracle
 @pytest.mark.critical
 def test_tempering_reaches_the_ground_energy_annealing_reaches() -> None:
-    # The rung below (issue #734), on the rung below's own instance: the
-    # periodic triangular antiferromagnet, whose ground energy is |J| * N at
-    # every size (`sim.canonical.minimum_frustrated_edges`). Annealing
-    # reaches it here from every seed, and the claim is that the coldest
-    # replica of a tempered run reaches the same energy at the same budget --
-    # 200 sweeps, spent as one annealed chain or as four replicas of 50.
-    #
-    # The coldest replica rather than `best_energy`: an exchange moves
-    # configurations between temperatures, so the run's best can be a state
-    # only a hot replica ever held, and what the cold end returns is the
-    # claim. Realized over six seeds: every annealed run and every coldest
-    # replica at 81.0 exactly, difference 0.0 against the 1e-12 declared.
-    # The cold pair exchanges at 0.26 to 0.38 of proposals, asserted so the
-    # ladder is known to be four coupled chains rather than four independent
-    # ones; the middle pair reaches 0.0 on one seed, which is why the
-    # acceptance is read at the cold end rather than over every pair.
+    # The rung below (#734): ground energy |J| * N. 200 sweeps as one annealed
+    # chain or four replicas of 50; the coldest replica, not `best_energy`.
+    # Over six seeds every run at 81.0 exactly (0.0, 1e-12). Cold pair
+    # exchanges 0.26-0.38; the middle pair reaches 0.0 on one seed.
     graph = frustrated_triangular_lattice((9, 9), BoundaryCondition.PERIODIC, -1.0)
     field = np.zeros(2)
     ground = float(minimum_frustrated_edges(graph))  # |J| = 1
@@ -1459,23 +1293,12 @@ def test_a_ladder_of_one_or_a_cold_temperature_is_refused() -> None:
 
 @pytest.mark.end2end
 def test_tempering_and_annealing_beat_restarts_at_equal_budget_on_the_glass() -> None:
-    # The instance where restarts can lose: the planted Viana-Bray spin
-    # glass, 60 sites at mean degree 4 and frustration 0.2, whose planted
-    # energy upper-bounds a ground state enumeration cannot reach. Budget:
-    # 400 heat-bath sweeps per method, held equal by `opt.budget.compare`
-    # (issue #281) -- annealing on one chain, tempering on four replicas of
-    # 100, single-site descent on 100 restarts of at most 4 sweeps (it
-    # converges in 2 to 4). Realized over 12 instances, against the best
-    # energy any method found: tempering 12/12, annealing 10/12, restarts
-    # 4/12 with a mean gap of 0.75. The plan predicted tempering would be
-    # hard to justify at these sizes; it is not, and the prediction is
-    # retracted.
-    #
-    # Asserted at the margin the measurement supports: restarts below both,
-    # and the two tempered methods at or below the planted energy on every
-    # instance. The referee is that planted energy: `planted_spin_glass`
-    # plants a configuration and reports its energy, so a solver at or below
-    # it has recovered the truth the instance was generated from.
+    # The planted Viana-Bray glass (60 sites, degree 4, frustration 0.2);
+    # 400 heat-bath sweeps per method (`opt.budget.compare`, #281): annealing
+    # one chain, tempering 4 x 100, descent 100 restarts of <= 4. Over 12
+    # instances against the best found: tempering 12/12, annealing 10/12,
+    # restarts 4/12 (mean gap 0.75); the plan's prediction is retracted.
+    # Asserted: restarts below both; both tempered at or below the planted energy.
     budget = Budget(Cost.SWEEPS, 400)
     ladder = (2.0, 1.2, 0.7, 0.4)
     instances = [
@@ -1561,15 +1384,10 @@ HAND_LADDER = (2.0, 1.2, 0.7, 0.4)
 def test_the_adapted_ladder_exchanges_within_the_band_on_the_frustrated_lattice(
     n_seeds: int,
 ) -> None:
-    # The 9x9 periodic triangular antiferromagnet, from the endpoints alone.
-    # The warm-up reports every pair inside the band, and a *fresh* run on
-    # the ladder it returned -- a different seed, four times the sweeps --
-    # exchanges inside the band widened by the measurement's noise. The
-    # second is what matters: a warm-up that stopped on a lucky measurement
-    # would pass the first alone. Realized over 20 seeds: 5 to 8 rungs,
-    # fresh acceptances 0.16 to 0.72.
-    # The hand ladder's pairs, for comparison, exchange at 0.28, 0.15 and
-    # 0.12 -- two of three below the band.
+    # 9x9 triangular antiferromagnet: the warm-up's ladder is in band, and a
+    # fresh run (another seed, 4x sweeps) exchanges in band widened by noise.
+    # Over 20 seeds: 5 to 8 rungs, fresh 0.16 to 0.72; the hand ladder's pairs
+    # 0.28, 0.15, 0.12, two below the band.
     graph = frustrated_triangular_lattice((9, 9), BoundaryCondition.PERIODIC, -1.0)
     field = np.zeros(2)
 
@@ -1607,18 +1425,10 @@ def test_the_adapted_ladder_exchanges_within_the_band_on_the_frustrated_lattice(
 def test_the_adapted_ladder_reaches_the_ground_state_at_equal_sweeps(
     n_seeds: int,
 ) -> None:
-    # Refereed by `sim.canonical.minimum_frustrated_edges`, the closed-form
-    # ground energy |J| * N of the periodic triangular antiferromagnet --- the
-    # same referee the annealing and tempering rungs above are judged against
-    # --- so a hit is the exact minimum and not a solver's own best.
-    # The warm-up is charged: 2400 sweeps per seed, of which the adapted
-    # ladder spends its warm-up (895 on average, 500 to 1900) and splits the
-    # rest across its rungs, while the hand ladder spends 600 per replica on
-    # four. Realized over 20 seeds: adapted 20/20, hand 20/20; at 1600 sweeps
-    # 19/20 against 20/20, and the hand ladder hits 18/20 at 100 sweeps, so
-    # the instance does not separate them. What the adapted ladder buys is
-    # the band, which the hand ladder is outside on two pairs. Asserted at
-    # the margin the measurement supports.
+    # Referee `minimum_frustrated_edges` (|J| * N). 2400 sweeps per seed, the
+    # warm-up charged (895 mean, 500-1900); hand ladder 600 per replica on
+    # four. Over 20 seeds: 20/20 both; at 1600, 19/20 against 20/20; hand
+    # 18/20 at 100. The instance does not separate them; the band does.
     graph = frustrated_triangular_lattice((9, 9), BoundaryCondition.PERIODIC, -1.0)
     field = np.zeros(2)
     ground = float(minimum_frustrated_edges(graph))
@@ -1626,13 +1436,8 @@ def test_the_adapted_ladder_reaches_the_ground_state_at_equal_sweeps(
 
     adapted_hits = 0
     for seed in range(n_seeds):
-        # The warm-up is run here and not read from a helper the smoke test
-        # above shares: it is half of what this test judges -- the adapted
-        # ladder is charged for the sweeps it spends adapting -- and a
-        # cached run is recorded against whichever test asked for it first,
-        # so sharing it across the judged boundary moved the four statements
-        # of `adapt_ladder_potts` out of the judged set (issue #745, #729's
-        # floor was measured before #735 merged).
+        # Run here, not shared: the warm-up is half of what is judged, and a
+        # shared cache moved `adapt_ladder_potts` out of the judged set (#745).
         rng = np.random.default_rng(seed)
         adapted = adapt_ladder_potts(
             graph,
@@ -1682,12 +1487,7 @@ def test_the_adapted_ladder_reaches_the_ground_state_at_equal_sweeps(
 def _swept(
     graph: PottsGraph, rows: np.ndarray, backend: Backend, beta: float
 ) -> np.ndarray:
-    """Five sweeps from one seed, on the backend named.
-
-    The adjacency is passed in the compressed form both backends now read
-    (issue #277); the list-of-lists this test used to build for the Python
-    closure is the shape that builder replaced.
-    """
+    """Five sweeps from one seed, on the backend named, over compressed adjacency (#277)."""
     offsets, neighbours, couplings = graph.compressed_adjacency()
     sweep = sweeps.sweep_at(rows, offsets, neighbours, couplings, backend)
     state = np.zeros(graph.n_nodes, dtype=np.int64)
@@ -1700,14 +1500,9 @@ def _swept(
 @pytest.mark.oracle
 @pytest.mark.parametrize("field", ["shared", "per_site"])
 def test_the_backends_agree_bitwise_at_every_temperature(field: str) -> None:
-    # Two failures this covers, and the second is why `beta` moved into the
-    # kernel. The per-site field the Rust sweep could not express at all
-    # (issue #571); and the *order* `beta` is applied in, which the caller used
-    # to get wrong by pre-scaling the arguments -- computing `beta * h + sum
-    # (beta * J)` where the oracle computes `(h + sum J) * beta`. Those agree
-    # in real arithmetic and differ in the last bits, so the old arrangement
-    # could only ever have been bitwise at beta = 1.0, which is the only place
-    # it was tested.
+    # The per-site field (#571), and `beta` inside the kernel: `(h + sum J) *
+    # beta`, not `beta * h + sum (beta * J)`, which differ in the last bits
+    # away from beta = 1.0.
     def check(beta: float) -> None:
         graph = lattice_graph((4, 4), BoundaryCondition.OPEN, 0.7)
         rows = (

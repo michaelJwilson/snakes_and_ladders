@@ -24,7 +24,10 @@ from snakes_and_ladders.sample.potts_mcmc.sweeps import (
     ClusterCounter,
     adjacency_lists,
     balanced_sweep_at,
+    ghost_couplings,
+    ghost_spin_sweep,
     houdayer_move,
+    label_directed_sweep,
     niedermayer_sweep,
     niedermayer_threshold,
     sweep_at,
@@ -33,6 +36,7 @@ from snakes_and_ladders.sample.potts_mcmc.sweeps import (
 )
 from snakes_and_ladders.sample.schedule import (
     AdaptedLadder,
+    Monotone,
     TempSchedule,
     adapt_ladder,
     check_ladder,
@@ -281,6 +285,7 @@ def anneal_potts(
     move: PottsMove = PottsMove.SINGLE_SITE,
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.PYTHON,
+    initial: np.ndarray | None = None,
 ) -> AnnealedPotts:
     """Simulated annealing by heat-bath sweeps on a temperature schedule.
 
@@ -330,18 +335,41 @@ def anneal_potts(
         :data:`~snakes_and_ladders.backend.Backend.RUST` is a chain of the
         same law on another order of draws (:func:`_cluster_pass_rust`) and
         keeps no counter, so its steps leave ``trace`` empty (issue #923).
+        For the ghost-spin and label-directed passes it merges the bonds
+        (:func:`bond_roots`), on the same roots either way, and neither
+        keeps a counter (issue #1041).
+    initial : np.ndarray | None
+        The labelling the chain starts from, copied, shape ``(n_nodes,)``;
+        ``None`` draws it uniformly from ``rng``, as before the parameter
+        existed. A given start draws nothing, so the chain's first draw is
+        the generator's next (issue #1038).
 
     Returns
     -------
     AnnealedPotts
+
+    Raises
+    ------
+    ValueError
+        If ``initial`` is not one state in range per node.
     """
     field = log_weight_of(field)
     refuse_negative_coupling(move, graph)
 
     rows = site_field(np.asarray(field, dtype=float), graph.n_nodes)
-    state = np.ascontiguousarray(
-        rng.integers(0, int(rows.shape[1]), size=graph.n_nodes), dtype=np.int64
-    )
+    if initial is None:
+        drawn = rng.integers(0, int(rows.shape[1]), size=graph.n_nodes)
+    else:
+        drawn = np.array(initial, dtype=np.int64)
+        if drawn.shape != (graph.n_nodes,) or not (
+            (drawn >= 0).all() and (drawn < rows.shape[1]).all()
+        ):
+            msg = (
+                f"initial must hold one state in [0, {rows.shape[1]}) per node "
+                f"of {graph.n_nodes}, got shape {drawn.shape}"
+            )
+            raise ValueError(msg)
+    state = np.ascontiguousarray(drawn, dtype=np.int64)
     offsets, neighbours, couplings = graph.compressed_adjacency()
     lists = adjacency_lists(offsets, neighbours, couplings)
 
@@ -357,6 +385,8 @@ def anneal_potts(
     # the same two labels per edge. Counting both in one unit is what makes
     # the budget comparable across move sets (issue #551).
     per_sweep = graph.n_nodes + 2 * len(graph.edges)
+    # The ghost couplings are fixed by the field, so stored once (#1041).
+    ghost = ghost_couplings(rows) if move is PottsMove.GHOST_SPIN else None
     visits, trace = 0, []
     # One lookup for the run (`snakes_and_ladders.track`) and one `record` a
     # sweep. `energy` is the best energy so far, which is what
@@ -392,6 +422,34 @@ def anneal_potts(
                 )
                 visits += per_sweep
                 kept = not compiled
+            elif move is PottsMove.GHOST_SPIN:
+                # No counter: the pass builds its clusters as roots, and a
+                # ghost bond read per site is charged beside the edges.
+                ghost_spin_sweep(
+                    state,
+                    graph,
+                    rows,
+                    rng,
+                    beta,
+                    backend=cluster_backend,
+                    ghost=ghost,
+                )
+                visits += per_sweep + graph.n_nodes
+                kept = False
+            elif move is PottsMove.LABEL_DIRECTED:
+                # The target label cycles with the step, so every label is
+                # proposed once per `n_states` steps.
+                label_directed_sweep(
+                    state,
+                    graph,
+                    rows,
+                    rng,
+                    step % int(rows.shape[1]),
+                    beta,
+                    backend=cluster_backend,
+                )
+                visits += per_sweep
+                kept = False
             else:
                 if move is PottsMove.NIEDERMAYER:
                     niedermayer_sweep(
@@ -636,6 +694,197 @@ def parallel_tempering(
     )
 
 
+@dataclass(frozen=True)
+class ClusterTempered:
+    """What :func:`cluster_tempering` produced.
+
+    Parameters
+    ----------
+    states : np.ndarray
+        Recorded configurations, ``(n_recorded, n_replicas, n_nodes)``;
+        empty along the first axis unless the run was asked to record.
+    temperatures : tuple[float, ...]
+        The ladder, as given.
+    swap_acceptance : np.ndarray
+        Exchanges accepted over proposed, per adjacent pair.
+    houdayer_acceptance : np.ndarray
+        Houdayer moves accepted over proposed, per pair that runs one.
+    houdayer_sizes : tuple[int, ...]
+        Every proposed Houdayer cluster's size, in order; a pair that agrees
+        everywhere proposes none.
+    houdayer_accepts : int
+        Of those, the moves accepted.
+    best : np.ndarray
+        The lowest-energy configuration seen at any temperature.
+    best_energy : float
+        Its energy.
+    n_sweeps : int
+        Steps run, each one Swendsen-Wang pass per replica.
+    site_visits : int
+        Every replica's passes plus every Houdayer move, each charged one
+        sweep's ``n_nodes + 2 n_edges``: the move reads every site and the
+        defect sites' edges.
+    """
+
+    states: np.ndarray
+    temperatures: tuple[float, ...]
+    swap_acceptance: np.ndarray
+    houdayer_acceptance: np.ndarray
+    houdayer_sizes: tuple[int, ...]
+    houdayer_accepts: int
+    best: np.ndarray
+    best_energy: float
+    n_sweeps: int
+    site_visits: int
+
+
+def cluster_tempering(
+    graph: PottsGraph,
+    field: SiteField | np.ndarray,
+    temperatures: Sequence[float],
+    rng: np.random.Generator,
+    n_sweeps: int,
+    *,
+    houdayer_pairs: int = 1,
+    burn_in: int = 0,
+    thin: int = 1,
+    record: bool = False,
+    cluster_backend: Backend = Backend.RUST,
+) -> ClusterTempered:
+    """Parallel tempering on Swendsen-Wang passes, with Houdayer moves at the cold end (issue #1041).
+
+    Per step: one :func:`swendsen_wang_sweep` per replica at its own
+    temperature, then one :func:`houdayer_move` on each of the
+    ``houdayer_pairs`` coldest adjacent pairs, then an exchange proposal on
+    every adjacent pair, accepted on :func:`swap_log_ratio`.
+
+    **Houdayer across two temperatures needs an accept step.** The move
+    exchanges the two replicas' labels on one component of the sites where
+    they disagree; ``E(s) + E(s')`` is invariant, for Potts labels as for
+    Ising spins, because a boundary bond's outside end is a site where the
+    two agree. The proposal is symmetric --- the disagreement set is what the
+    exchange leaves alone. At one temperature that makes the acceptance one;
+    at ``beta`` and ``beta'`` the product law changes by
+    ``exp(-(beta - beta') (E(s_new) - E(s)))``, and that is the Metropolis
+    ratio applied here.
+
+    Parameters
+    ----------
+    graph : PottsGraph
+        Every coupling non-negative.
+    field : SiteField | np.ndarray
+        ``(n_states,)`` or ``(n_nodes, n_states)``.
+    temperatures : Sequence[float]
+        The ladder, coldest first; at least two, all positive.
+    rng : np.random.Generator
+        Spawns one child per replica, then draws the Houdayer seed sites and
+        every accept uniform.
+    n_sweeps, burn_in, thin : int
+        As :func:`parallel_tempering`.
+    houdayer_pairs : int
+        How many of the coldest adjacent pairs run a Houdayer move a step.
+    record : bool
+        Whether to keep the thinned configurations, which the enumeration
+        test reads and a ground-state search does not.
+    cluster_backend : Backend
+        Runs the Swendsen-Wang pass, as :func:`anneal_potts` states.
+
+    Returns
+    -------
+    ClusterTempered
+
+    Raises
+    ------
+    ValueError
+        If the ladder is not strictly increasing, coldest first, or
+        ``houdayer_pairs`` is outside ``[0, n_replicas - 1]``.
+    """
+    refuse_negative_coupling(PottsMove.SWENDSEN_WANG, graph)
+    temperatures = check_ladder(
+        ladder(temperatures),
+        needed_by="cluster tempering",
+        monotone=Monotone.INCREASING,
+    )
+    n_replicas = len(temperatures)
+    if not 0 <= houdayer_pairs <= n_replicas - 1:
+        msg = f"houdayer_pairs is in [0, {n_replicas - 1}], got {houdayer_pairs}"
+        raise ValueError(msg)
+    rows = site_field(np.asarray(log_weight_of(field), dtype=float), graph.n_nodes)
+    betas = [1.0 / temperature for temperature in temperatures]
+    children = rng.spawn(n_replicas)
+    n_states = int(rows.shape[1])
+    states = np.ascontiguousarray(
+        np.stack(
+            [child.integers(0, n_states, size=graph.n_nodes) for child in children]
+        ),
+        dtype=np.int64,
+    )
+    offsets, neighbours, _ = graph.compressed_adjacency()
+    per_sweep = graph.n_nodes + 2 * len(graph.edges)
+    kept = n_sweeps if record else 0
+    recorded = np.empty((kept, n_replicas, graph.n_nodes), dtype=np.int64)
+    swaps = np.zeros((2, n_replicas - 1))
+    houdayer = np.zeros((2, houdayer_pairs))
+    sizes: list[int] = []
+    current = energies(graph, rows, states)
+    lowest = int(np.argmin(current))
+    best, best_energy = states[lowest].copy(), float(current[lowest])
+    visits = 0
+    for step in range(-burn_in * thin, n_sweeps * thin):
+        for replica in range(n_replicas):
+            swendsen_wang_sweep(
+                states[replica],
+                graph,
+                rows,
+                children[replica],
+                None,
+                betas[replica],
+                backend=cluster_backend,
+            )
+        visits += n_replicas * per_sweep
+        current = energies(graph, rows, states)
+        for pair in range(houdayer_pairs):
+            first, second = states[pair].copy(), states[pair + 1].copy()
+            size = houdayer_move(first, second, offsets, neighbours, rng)
+            visits += per_sweep
+            if size == 0:
+                continue
+            sizes.append(size)
+            houdayer[0, pair] += 1
+            moved = energies(graph, rows, np.stack([first, second]))
+            log_ratio = -(betas[pair] - betas[pair + 1]) * (moved[0] - current[pair])
+            if accept(float(log_ratio), rng):
+                houdayer[1, pair] += 1
+                states[pair], states[pair + 1] = first, second
+                current[pair], current[pair + 1] = moved[0], moved[1]
+        for pair in range(n_replicas - 1):
+            log_ratio = swap_log_ratio(
+                betas[pair], betas[pair + 1], current[pair], current[pair + 1]
+            )
+            swaps[0, pair] += 1
+            if accept(log_ratio, rng):
+                swaps[1, pair] += 1
+                states[[pair, pair + 1]] = states[[pair + 1, pair]]
+                current[[pair, pair + 1]] = current[[pair + 1, pair]]
+        lowest = int(np.argmin(current))
+        if current[lowest] < best_energy:
+            best, best_energy = states[lowest].copy(), float(current[lowest])
+        if record and step >= 0 and (step + 1) % thin == 0:
+            recorded[step // thin] = states
+    return ClusterTempered(
+        states=recorded[: n_sweeps if record else 0],
+        temperatures=tuple(temperatures),
+        swap_acceptance=swaps[1] / np.maximum(swaps[0], 1),
+        houdayer_acceptance=houdayer[1] / np.maximum(houdayer[0], 1),
+        houdayer_sizes=tuple(sizes),
+        houdayer_accepts=int(houdayer[1].sum()),
+        best=best,
+        best_energy=best_energy,
+        n_sweeps=n_sweeps,
+        site_visits=visits,
+    )
+
+
 def adapt_ladder_potts(
     graph: PottsGraph,
     field: np.ndarray,
@@ -738,6 +987,33 @@ def sweep_for(
             return 0
 
         return bond_pass
+
+    if move is PottsMove.GHOST_SPIN:
+
+        def ghost_pass(
+            state: np.ndarray, rng: np.random.Generator, beta: float = 1.0
+        ) -> int:
+            ghost_spin_sweep(state, graph, rows, rng, beta, backend=cluster_backend)
+            return 0
+
+        return ghost_pass
+
+    if move is PottsMove.LABEL_DIRECTED:
+        # The target cycles through the labels, one per call, as
+        # `anneal_potts` cycles it by step.
+        calls = [0]
+
+        def directed_pass(
+            state: np.ndarray, rng: np.random.Generator, beta: float = 1.0
+        ) -> int:
+            target = calls[0] % int(rows.shape[1])
+            calls[0] += 1
+            label_directed_sweep(
+                state, graph, rows, rng, target, beta, backend=cluster_backend
+            )
+            return 0
+
+        return directed_pass
 
     # The adjacency as lists, once for every cluster the closure grows (#919).
     lists = adjacency_lists(offsets, neighbours, couplings)

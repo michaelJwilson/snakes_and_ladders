@@ -77,11 +77,7 @@ def _truth(name: str) -> CountEmission:
 def _start(name: str) -> CountEmission:
     """A symmetry-broken EM start for one count family.
 
-    Broken deliberately: a shared emission leaves the states exchangeable and
-    the gradient in that block exactly zero, and an EM run started there
-    converges to one state duplicated. That was observed while building this
-    module, which is why the starts here are asymmetric and why a test below
-    pins the property.
+    A shared emission converges to one state duplicated; a test below pins it.
     """
     starts: dict[str, CountEmission] = {
         "poisson": PoissonEmission([2.0, 8.0]),
@@ -281,11 +277,7 @@ def test_an_m_step_that_did_not_settle_is_refused_rather_than_returned() -> None
         _posterior: torch.Tensor,
         covariate: torch.Tensor | None = None,  # noqa: ARG001 -- see below
     ) -> Reestimate[BetaBinomialEmission]:
-        # `covariate` is unused and cannot be renamed to the unused convention:
-        # the caller passes it by keyword, so this double has to spell it the
-        # way the method it replaces does (#631, #652). A double narrower than
-        # its original fails on the call rather than on the claim, which is
-        # what this one did when `baum_welch_family` began threading one.
+        # `covariate` keeps its name: the caller passes it by keyword (#631, #652).
         return Reestimate(self, converged=False, iterations=1, residual=0.5)
 
     original = BetaBinomialEmission.reestimate
@@ -303,15 +295,7 @@ def test_an_m_step_that_did_not_settle_is_refused_rather_than_returned() -> None
 
 
 def _dispersion_coverage(dispersion: float, replicates: int) -> tuple[int, int, int]:
-    """Fit ``replicates`` datasets at one true dispersion and count coverage.
-
-    Returns
-    -------
-    tuple[int, int, int]
-        Intervals covering, intervals checked, and replicates whose observed
-        information was too ill-conditioned to invert, which contribute no
-        interval and are reported rather than dropped.
-    """
+    """Fit ``replicates`` datasets at one dispersion: (covering, checked, uninvertible)."""
     truth = NegativeBinomialEmission(np.array([dispersion, dispersion]), NB_MEAN)
     covered = total = boundary = 0
     for replicate in range(replicates):
@@ -339,14 +323,9 @@ def _dispersion_coverage(dispersion: float, replicates: int) -> tuple[int, int, 
 
 @pytest.mark.smoke
 def test_an_interval_stops_existing_at_both_ends_of_the_dispersion_range() -> None:
-    # The cheap two-point form of the release sweep below, and the finding it
-    # carries: what degrades with the dispersion is not the coverage of the
-    # intervals that exist but *whether one exists*, and it degrades at both
-    # ends -- a heavy tail at small `r`, a flat likelihood at large.
-    # Eight replicates, and the assertion is the *contrast* rather than a
-    # rate: the release sweep measures 7 of 16 replicates yielding no interval
-    # at a dispersion of 100 against 0 of 16 at 2, so at eight draws the
-    # expected count is under four and pinning one would be pinning noise.
+    # What degrades at both ends is whether an interval exists. The release
+    # sweep: 7 of 16 without one at dispersion 100, 0 of 16 at 2; at eight
+    # replicates the contrast is asserted, not a count.
     middle = _dispersion_coverage(2.0, replicates=8)
     flat = _dispersion_coverage(100.0, replicates=8)
 

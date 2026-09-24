@@ -1,20 +1,12 @@
 """Five-component mixture at equal evaluations: tempering against restarts (issue #332).
 
-The comparison #284 and #303 deferred, on the one problem class where restarts
-are the standard answer. Three methods spend the same number of likelihood
-evaluations per start, held equal by `opt.budget.compare`: multi-start EM,
-simulated annealing with Hamiltonian proposals, and parallel tempering. Every
-method ends with the same charged L-BFGS polish: EM converges linearly on
-components 1.5 standard deviations apart and a raw EM value 500 iterations in
-is still 4 to 6 nats above its own basin's optimum, so without the polish
-"within 1e-6 relative" would measure convergence speed rather than which basin
-a method found.
-
-The referee is the best-known optimum: the polished simulated parameters and
-the best of 1,000 polished restarts, whichever is lower, with every method's
-own best checked against it so a stale referee fails loudly. The test at 8
-starts pins the direction per pull request; the release-gated test at 40 starts
-is the measurement `docs/experiments/004` reports, McNemar p-value included.
+Deferred by #284 and #303. Multi-start EM, annealing with Hamiltonian
+proposals and parallel tempering spend equal evaluations per start
+(`opt.budget.compare`), each ending in a charged L-BFGS polish: raw EM at 500
+iterations is still 4 to 6 nats above its basin's optimum. The referee is the
+best known optimum (polished truth and 1,000 polished restarts), each method
+checked against it. 8 starts pin the direction per PR; 40 are the release
+measurement in `docs/experiments/004`, McNemar included.
 """
 
 from __future__ import annotations
@@ -50,11 +42,8 @@ from snakes_and_ladders.sim.mixture import simulate_mixture
 
 from tests._objective_checks import Counted
 
-#: The five-component fixture, read from the registry rather than rebuilt from
-#: literals (issue #622). #262 measured five components 1.5 standard deviations
-#: apart with unequal weights and committed neither; `mixture/ci.yaml` now
-#: declares that instance, and `simulate_mixture` on it is bitwise the
-#: observations this module used to build.
+#: Five components 1.5 sd apart, unequal weights (#262), declared in
+#: `mixture/ci.yaml` (issue #622).
 PARAMS = fixtures.fixture("mixture", "ci").params
 WEIGHTS = np.asarray(PARAMS.weights)
 MEAN = np.asarray(PARAMS.components.mean)
@@ -88,11 +77,8 @@ TOLERANCE = 1e-6
 #: Restarts behind the release referee, on the stream ``[REFEREE_SEED, i]``.
 REFEREE_RESTARTS = 1000
 REFEREE_SEED = 20260908
-#: The best-known negative log-likelihood, from the release run's referee: 16
-#: of the 1,000 polished restarts reach it, and every method reaches it from at
-#: least one of the 40 starts. A method beating it by more than the tolerance
-#: means it is stale, which the 8-start test says rather than scoring against a
-#: wrong number.
+#: The best-known negative log-likelihood: 16 of 1,000 polished restarts reach
+#: it and every method from at least one of 40 starts; beating it means stale.
 BEST_KNOWN = 1111.596410
 
 METHODS = ("restarts", "anneal", "tempering")
@@ -146,9 +132,7 @@ def _theta_of(fixture: Fixture, em: MixtureFit) -> torch.Tensor:
 def _polish(fixture: Fixture, theta: torch.Tensor, value: float) -> tuple[float, int]:
     """L-BFGS from ``theta``: the lower of its value and ``value``, and the evaluations.
 
-    The objective refuses a scale of zero rather than clamping it, and the line
-    search probes one on roughly 1 start in 50; a refused polish keeps the
-    unpolished value and is charged what it spent.
+    A zero-scale probe (~1 start in 50) is refused, keeping the unpolished value.
     """
     counted = Counted(fixture.objective)
     try:
@@ -274,8 +258,7 @@ class Measurement:
 def measure(n_starts: int, reference: float) -> Measurement:
     """Every method on ``n_starts`` starts at the shared budget, scored against ``reference``.
 
-    Start ``i`` draws from ``np.random.default_rng([0, i])`` whichever method
-    runs, so the three see the same random start and the same stream.
+    Start ``i`` uses ``np.random.default_rng([0, i])`` for every method.
     """
     fixture = _fixture()
     seconds = dict.fromkeys(METHODS, 0.0)
@@ -335,12 +318,9 @@ def test_at_eight_starts_restarts_reach_the_optimum_from_the_most_starts() -> No
 @pytest.mark.release
 @pytest.mark.end2end
 def test_at_forty_starts_restarts_reach_the_optimum_from_the_most_starts() -> None:
-    # The measurement `docs/experiments/004` reports. The referee is rebuilt
-    # from 1,000 polished restarts and the polished truth, and must agree
-    # with the pinned constant the 8-start test scores against. Realized:
-    # restarts 7/40, tempering 4/40 (McNemar p = 0.549 against restarts),
-    # annealing 1/40 (p = 0.031). Asserted at the margin the measurement
-    # supports: the ordering, and which p-values cross 0.05.
+    # `docs/experiments/004`: referee rebuilt, must match the constant.
+    # Realized: restarts 7/40, tempering 4/40 (McNemar p = 0.549), annealing
+    # 1/40 (p = 0.031); asserted: the ordering and which p cross 0.05.
     fixture = _fixture()
     from_truth, best_of_restarts, at_truth = _referee(fixture, REFEREE_RESTARTS)
     reference = min(from_truth, best_of_restarts)

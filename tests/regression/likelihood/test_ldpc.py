@@ -1,18 +1,11 @@
 """The specialised decoder, held to the general sum-product and to enumeration.
 
-Three oracles, none sharing code with the decoder: on a cycle-free code the
-tree schedule of `message_passing.sum_product` is exact and so is
-enumeration, and the decoder must equal both; on a loopy code both the
-decoder and the general flooding are the Bethe approximation, so the
-assertion is that they are the *same* approximation; and the erasure
-threshold the size measurement brackets is a closed form of density
-evolution (``app:density-evolution``), pinned to its published value before
-the code at size is held to it.
-
-Codes are drawn here at several block lengths and seeds rather than read from
-the LDPC fixture: the claim is about the (3,6) *ensemble*, and an ensemble
-reaches structures one declared member does not (``sim/CLAUDE.md``). The
-declared members are what the notebook and the figures run on.
+On a cycle-free code the tree schedule and enumeration are exact and the
+decoder equals both; on a loopy code decoder and general flooding are the same
+Bethe approximation; the erasure threshold is density evolution's closed form
+(``app:density-evolution``), pinned to its published value. Codes are drawn
+at several lengths and seeds: the claim is about the (3,6) ensemble
+(``sim/CLAUDE.md``).
 """
 
 from __future__ import annotations
@@ -401,15 +394,9 @@ def test_density_evolution_is_its_scalar_recursion_and_its_variational_threshold
     None
 ):
     """Two referees neither function shares code with: the recursion of
-    `eq:density-evolution` written out here as a scalar loop, bitwise over 60
-    iterations at four `(epsilon, j, k)`; and the closed form
-    `epsilon* = min_{x in (0,1]} x / (1 - (1 - x)^(k-1))^(j-1)`, which the
-    bisection matches to 2.70e-05 and the published values to 4.66e-05.
-
-    The bisection reads the threshold off the *trajectory*; the minimum reads
-    it off the fixed-point condition, so a recursion transcribed wrongly moves
-    one and not the other. Tolerances: exact equality on the trajectory, 1e-04
-    on the threshold either way, which is the bisection's own `precision`.
+    `eq:density-evolution` as a scalar loop, bitwise over 60 iterations at four
+    `(epsilon, j, k)`; and `epsilon* = min_{x in (0,1]} x / (1 - (1 - x)^(k-1))^(j-1)`,
+    matched to 2.70e-05 (published: 4.66e-05), within the bisection's 1e-04.
     """
 
     def recursion(epsilon: float, column: int, row: int, steps: int) -> list[float]:

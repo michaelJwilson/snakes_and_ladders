@@ -33,22 +33,15 @@ from tests._rows import every_row, every_value
 
 FIXTURE = FIXTURES_DIR / "tree_jc/stress.yaml"
 
-# tree_jc/stress.yaml's root has 3 children (A, B, ancestor_CD): the
-# common "unrooted tree drawn at a trifurcating root" convention, correctly
-# rejected by validate_newick as not strictly binary. The 8-taxon fixture is
-# binary at every node including the root, so it exercises validate_newick
-# and the state-labelled round trip below.
+# tree_jc/stress.yaml has a trifurcating root, rightly not strictly binary;
+# the 8-taxon fixture is binary everywhere, for validate_newick and round trips.
 BINARY_FIXTURE = FIXTURES_DIR / "tree_jc/release.yaml"
 
 
 def _enumerate_topologies(taxa: tuple[str, ...]) -> Iterator[Node]:
     """Brute-force-enumerate every rooted binary topology on ``taxa``.
 
-    Fixes ``taxa[0]`` into the left bipartition of every split, which visits
-    each unordered topology exactly once: this is the standard construction
-    behind the ``(2n-3)!!`` count (see ``newick.py``'s module docstring), so
-    counting the topologies it yields is an independent check on
-    ``count_topologies``, not a restatement of it.
+    ``taxa[0]`` fixed left: each topology once, the ``(2n-3)!!`` construction.
     """
     if len(taxa) == 1:
         yield Node(name=taxa[0], branch_length=1.0)
@@ -194,11 +187,8 @@ def test_validate_unrooted_newick_accepts_binary_subtrees_under_the_root() -> No
     assert validate_unrooted_newick("(A,B,(C,D)anc:0.1)root;")
 
 
-# The two trees the Newick format's own documentation carries (Felsenstein,
-# PHYLIP's `newicktree.html`; the six-species primate tree of Olsen's
-# description of the format). They are written here as the literature states
-# them, to the digit, so what the parser returns is read against a source
-# outside this repository rather than against a tree this repository built.
+# The two trees the Newick documentation carries (Felsenstein's PHYLIP
+# `newicktree.html`; Olsen's six-species primates), to the digit.
 PUBLISHED_ROOTED = "(((One:0.2,Two:0.3):0.3,(Three:0.5,Four:0.3):0.2):0.3,Five:0.7);"
 PUBLISHED_UNROOTED = (
     "(Bovine:0.69395,(Gibbon:0.36079,(Orang:0.33636,(Gorilla:0.17147,"
@@ -222,11 +212,8 @@ PUBLISHED_UNROOTED_LEAVES = {
 
 @pytest.mark.end2end
 def test_the_published_rooted_tree_round_trips_byte_for_byte() -> None:
-    # Parse and write against a string this repository did not produce: the
-    # rooted five-taxon tree of the Newick format's documentation. Byte
-    # equality is the tolerance -- every length in it is a float whose
-    # shortest repr is the published digits -- so a reordered child, a
-    # dropped internal branch or a rounded length all fail.
+    # Byte equality against the documentation's rooted five-taxon tree: every
+    # length's shortest repr is the published digits.
     parsed = _parse_newick(PUBLISHED_ROOTED)
 
     assert validate_newick(PUBLISHED_ROOTED)
@@ -255,11 +242,8 @@ def test_the_published_rooted_tree_round_trips_byte_for_byte() -> None:
 
 @pytest.mark.end2end
 def test_the_published_primate_tree_reads_back_its_topology_and_lengths() -> None:
-    # The trifurcating-root convention, on the six-species primate tree the
-    # format's description carries. The topology is read back as the nested
-    # leaf sets of the root's three subtrees and every leaf's length by name,
-    # exactly: these are decimal literals a double represents to 1e-17, so
-    # the comparison is equality and not a tolerance.
+    # The primate tree's three root subtrees as leaf sets and each length by
+    # name, by equality (decimal literals to 1e-17).
     parsed = _parse_unrooted_newick(PUBLISHED_UNROOTED)
 
     assert validate_unrooted_newick(PUBLISHED_UNROOTED)

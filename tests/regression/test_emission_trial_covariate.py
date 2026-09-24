@@ -1,15 +1,9 @@
 """A trial count per observation, and what it does and does not reproduce (#631).
 
-Step 3 of the plan on that ticket. ``BetaBinomialEmission`` keeps its per-state
-trial count as the declared reference --- so :attr:`mean` and :attr:`variance`
-keep a value --- and a covariate **overrides** it per observation.
-
-The ticket asks the covariate-aware family to reproduce the conserved one *bit
-for bit* where the covariate is constant. That holds for scoring and not for
-the M step, and both are asserted here as measured rather than as hoped:
-scoring is one broadcast expression with no reduction, while the M step's score
-functions sum over the observations and the summation order differs when ``n``
-is a vector. Issue #648 carries the gap.
+``BetaBinomialEmission`` keeps its per-state trial count as the reference (so
+:attr:`mean` and :attr:`variance` keep a value) and a covariate overrides it.
+At a constant covariate, scoring is bitwise (one broadcast, no reduction); the
+M step is not, since its sums reorder when ``n`` is a vector (issue #648).
 """
 
 from __future__ import annotations
@@ -57,13 +51,9 @@ def test_scoring_at_a_constant_covariate_is_the_conserved_family_bitwise() -> No
 def test_the_m_step_at_a_constant_covariate_agrees_to_a_tolerance(
     observations: tuple[torch.Tensor, torch.Tensor],
 ) -> None:
-    # The half that is a tolerance and not a bitwise claim, stated as the
-    # measurement rather than as a hope. **It is data-dependent**: on this draw
-    # the two agree exactly, and on another 200-observation draw at the same
-    # sizes the fitted `alpha` moves a relative 1.0e-06 -- which is four orders
-    # outside `_solve_beta_binomial`'s own 1e-10 tolerance, and is issue #648.
-    # So what is asserted is the bound, which holds either way; asserting
-    # equality would pass here and fail on the other draw.
+    # A tolerance, and data-dependent: exact on this draw, 1.0e-06 relative in
+    # `alpha` on another 200-observation draw, four orders outside
+    # `_solve_beta_binomial`'s 1e-10 (issue #648). The bound holds on both.
     counts, posterior = observations
     live = BetaBinomialEmission(TRIALS, ALPHA, BETA)
     conserved = Conserved(TRIALS, ALPHA, BETA)

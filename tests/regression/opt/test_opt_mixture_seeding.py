@@ -1,34 +1,14 @@
 """Eight ways to seed a Gaussian mixture, at one fit budget (issues #548, #541).
 
-The control #541 needs. Its candidate 3, emission-aware D-squared sampling,
-rests on one claim: squared Euclidean is the right divergence for isotropic
-Gaussians and the wrong one for counts, so the family's own Bregman divergence
-should seed a count mixture better. **A Gaussian fixture is where that claim
-predicts no gain**, which is what makes it a control: it can come out against
-the hypothesis.
-
-The method is #541's, deliberately. The same eight candidates --- random
-restart as the baseline, k-means++, emission-aware D-squared, the burn-in
-initializer, sampling from the family, spectral, a short HMC chain and
-parallel tempering with annealing as its single-chain control --- each seeding
-one expectation-maximization fit held to the same evaluation budget through
-`opt.budget.compare`, over shared seeds, with `opt.budget.mcnemar` before
-anything is called a winner. Where #541 scores twice, projected and coupled,
-this scores once: there is no spatial term to restore.
-
-**The fit is budget-matched and the seeding is not**, so each seeding's own
-cost is reported beside it, in the fit's unit and as a fraction of it.
-:data:`SEEDING_COST` states how each is counted.
-
-The comparison runs through `opt.starts.StartsBenchmark` (issue #894): each
-candidate is a :class:`SeedingStart`, the fit is :func:`polish`, and the
-columns `opt.budget.Comparison` drops ride back on each cell's trial.
-
-Two rungs. `mixture/ci.yaml` is one-dimensional and small enough that
-`opt.mixture.optimal_clustering_cost` still referees a seeding exactly;
-`mixture/release.yaml` is the two-channel instance sized to what #541
-projects, refereed by the planted component labels and the generating
-parameters.
+#541's candidate 3 claims the family's Bregman divergence seeds counts better
+than squared Euclidean; on Gaussians it predicts no gain, so this is a control
+that can come out against it. #541's method: eight candidates (random restart,
+k-means++, emission D-squared, burn-in, family sample, spectral, short HMC,
+tempering with annealing as control) each seed one EM fit at one budget
+(`opt.budget.compare`), shared seeds, `mcnemar` before a winner. The seeding's
+own cost is reported (:data:`SEEDING_COST`). Run through
+`opt.starts.StartsBenchmark` (#894). Rungs: `mixture/ci.yaml`, refereed by
+`optimal_clustering_cost`; `mixture/release.yaml`, by planted labels and parameters.
 """
 
 from __future__ import annotations
@@ -90,11 +70,8 @@ RESTART_COST = 10
 #: sample size does not transfer to another (``DEV.md``, issue #111).
 TOLERANCE = 1e-6
 
-#: The burn-in initializer's annealing: expectation-maximization steps taken
-#: on tempered responsibilities while the temperature falls to 1, which is
-#: `search.spatio_sequential.graph_burn_in`'s emission block with the labels
-#: and the field removed --- the projection has one class, so nothing else of
-#: that algorithm survives the projection.
+#: EM steps on tempered responsibilities as the temperature falls to 1:
+#: `graph_burn_in`'s emission block with one class and no field.
 BURN_IN_STEPS = 6
 BURN_IN_TEMPERATURE = 8.0
 
@@ -175,10 +152,7 @@ def _rows(observations: np.ndarray) -> np.ndarray:
 def _family_at(instance: Instance) -> Callable[[np.ndarray], GaussianEmission]:
     """Places a component on each given observation, at the pooled scale.
 
-    The `ComponentsAt` seam `opt.emission_mixture` needs: one observation says
-    where a component starts and carries no *spread*, so every component
-    starts at the data's own, as `search.spatio_sequential.seed_emissions`
-    does.
+    One observation carries no spread (`seed_emissions` does the same).
     """
     scale = instance.pooled_scale
     floor = pooled_variance_floor(np.asarray(instance.observations))
@@ -195,21 +169,9 @@ def _family_at(instance: Instance) -> Callable[[np.ndarray], GaussianEmission]:
 
 @dataclass(frozen=True)
 class Seeding:
-    """Where a fit starts, and what placing it there cost.
+    """Where a fit starts, what it cost in passes (:data:`SEEDING_COST`), and chain rates.
 
-    Parameters
-    ----------
-    components : GaussianEmission
-        The seeded component family.
-    passes : float
-        Component passes the seeding spent; see :data:`SEEDING_COST`.
-    acceptance : float
-        A chain candidate's Hamiltonian acceptance rate; ``nan`` for a
-        seeding that ran no chain. A seed taken from a chain that has not
-        mixed is a random restart with a longer bill, so the rate is carried
-        rather than discarded.
-    swap_acceptance : float
-        Parallel tempering's worst adjacent exchange rate; ``nan`` otherwise.
+    Acceptance rates are ``nan`` without a chain; an unmixed chain is a costly restart.
     """
 
     components: GaussianEmission
@@ -241,14 +203,7 @@ def seed_kmeans_plus_plus(instance: Instance, rng: np.random.Generator) -> Seedi
 def seed_emission_d2(instance: Instance, rng: np.random.Generator) -> Seeding:
     """Candidate 3: the same scheme under the family's own divergence.
 
-    For a Gaussian of common scale the Bregman divergence of the log-partition
-    is the squared Euclidean distance up to that scale, and D-squared sampling
-    normalizes its scores, so on the one-channel rung this is
-    :func:`seed_kmeans_plus_plus` **draw for draw**, which
-    :func:`test_the_shipped_rule_is_k_means_plus_plus_on_a_gaussian` pins.
-    Where the channels carry different scales it is k-means++ on the channels
-    divided by theirs, which is a different rule and is measured as one
-    (issue #560).
+    One channel: k-means++ draw for draw; unequal scales: a different rule (#560).
     """
     family = plus_plus_start(
         instance.observations, instance.n_components, _family_at(instance), rng
@@ -261,20 +216,7 @@ def seed_emission_d2(instance: Instance, rng: np.random.Generator) -> Seeding:
 def seed_burn_in(instance: Instance, rng: np.random.Generator) -> Seeding:
     """Candidate 4: the coupled model's initializer, projected.
 
-    `Graph_BurnIn++` seeds the emissions by ``Emission_Mixture++`` and then
-    runs the blocks while the inverse temperature rises: a Wolff pass on the
-    labels, a **block Gibbs draw** of every class's chain, then an E step and
-    an M step. The projection has one class and no field, so what survives is
-    the draw: a component label is sampled per observation from its tempered
-    responsibility and the family is re-estimated against those labels, with
-    the temperature falling to 1.
-
-    **The draw is the part that cannot be replaced by an average.** Tempered
-    responsibilities go uniform as the temperature rises, every component
-    re-estimates to the same point, and equal components are a stationary
-    point of the likelihood --- `opt/initialize.py` records the repository
-    being bitten by exactly that. Sampling the labels leaves the components
-    apart at every temperature.
+    Labels drawn from tempered responsibilities: averaging would collapse the components.
     """
     start = seed_emission_d2(instance, rng)
     components = start.components
@@ -303,13 +245,7 @@ def _sample_labels(posterior: np.ndarray, rng: np.random.Generator) -> np.ndarra
 
 
 def seed_family_sample(instance: Instance, rng: np.random.Generator) -> Seeding:
-    """Candidate 5: component means drawn from the family, not from the data.
-
-    The cheap control on whether structure in the seeding earns its cost.
-    Drawing them from the *data* is the random-restart baseline, so what is
-    left to test here is the prior: a Normal at the observations' own centre
-    and spread, which touches the data only through two moments.
-    """
+    """Candidate 5: component means drawn from a Normal at the data's two moments."""
     rows = _rows(instance.observations)
     drawn = rng.normal(
         loc=rows.mean(axis=0),
@@ -322,15 +258,7 @@ def seed_family_sample(instance: Instance, rng: np.random.Generator) -> Seeding:
 def seed_spectral(instance: Instance, rng: np.random.Generator) -> Seeding:
     """Candidate 6: seed in the leading principal subspace, then map back.
 
-    The mixture's counterpart of the spectral route cited for an HMM (Hsu,
-    Kakade & Zhang, 2012): the observations are projected onto the leading
-    singular directions of the centred data, seeded there by D-squared
-    sampling, and the centres are mapped back. **Whether that is a projection
-    at all depends on the fixture**: the subspace is
-    ``min(n_components - 1, n_channels)``-dimensional, so on a two-channel
-    instance it is the whole space and the route reduces to a rotation of
-    :func:`seed_kmeans_plus_plus`. The experiment reports that rather than
-    hiding it.
+    Hsu, Kakade & Zhang (2012); on two channels it is a rotation, reported.
     """
     rows = _rows(instance.observations)
     centre = rows.mean(axis=0)
@@ -377,12 +305,7 @@ def _theta_at(
 def _from_theta(
     instance: Instance, objective: GaussianMixtureObjective, theta: torch.Tensor
 ) -> GaussianEmission:
-    """The seeded family a chain's position encodes, canonically ordered.
-
-    **Label switching is the trap.** A mixture posterior is invariant under
-    relabelling, so a chain that crosses modes returns arbitrary labels; the
-    components are ordered canonically before anything is recovered from them.
-    """
+    """The seeded family a chain's position encodes, ordered against label switching."""
     located = canonical_order(objective.components(theta).mean.detach().numpy())
     return _family_at(instance)(located)
 
@@ -390,10 +313,7 @@ def _from_theta(
 def chain_temperature(instance: Instance) -> float:
     """The temperature a chain candidate runs at: the observation count.
 
-    The target is then the *per-observation* average negative log-likelihood.
-    At temperature 1 the posterior over half a million observations is
-    narrower than any leapfrog step stable at the start and every proposal is
-    rejected; the release test measures that rather than asserting it.
+    At 1 no leapfrog step is stable over half a million points; measured at release.
     """
     return float(np.asarray(instance.observations).shape[0])
 
@@ -411,11 +331,7 @@ def seed_hmc(instance: Instance, rng: np.random.Generator) -> Seeding:
         theta0=_theta_at(instance, objective, start.components),
         temperature=chain_temperature(instance),
     )
-    # **From one mode, not from the last draw.** The posterior is invariant
-    # under relabelling, so a chain that crossed a mode returns a position
-    # whose components are a permutation of the ones it left; the
-    # lowest-valued draw is one point of one mode, and `_from_theta` orders
-    # its components before anything is read off them.
+    # One mode's lowest-valued draw, components ordered by `_from_theta`.
     values = torch.stack([objective(draw) for draw in chain.theta])
     return Seeding(
         _from_theta(instance, objective, chain.theta[int(values.argmin())]),
@@ -485,20 +401,7 @@ SEEDINGS: dict[str, Callable[[Instance, np.random.Generator], Seeding]] = {
 class Fitted:
     """One seeded fit: what it reached, what it cost, and what it recovered.
 
-    Parameters
-    ----------
-    value : float
-        Negative log-likelihood at convergence; lower is better.
-    evaluations : int
-        Fit evaluations spent, against :data:`BUDGET`.
-    seeding : float
-        The seeding's own cost in the same unit, per :data:`SEEDING_COST`.
-    recovery : float
-        Fraction of observations assigned their planted component.
-    acceptance : float
-        A chain candidate's Hamiltonian acceptance rate; ``nan`` for the rest.
-    swap_acceptance : float
-        Parallel tempering's worst adjacent exchange rate; ``nan`` otherwise.
+    Lower value is better; evaluations against :data:`BUDGET`; ``nan`` rates: no chain.
     """
 
     value: float
@@ -545,11 +448,7 @@ def fit_from(instance: Instance, seeding: Seeding, iterations: int) -> Fitted:
 def bayes_recovery(instance: Instance) -> float:
     """Label recovery from the *generating* parameters: the ceiling any fit has.
 
-    Components 1.5 standard deviations apart overlap, so the planted label of
-    an observation in the overlap is not recoverable from the observation at
-    any sample size. The rate the truth itself achieves is therefore what a
-    seeding is held against --- a fixed floor would be a number about the
-    separation rather than about the seeding.
+    At 1.5 sd the components overlap, so a fixed floor would measure separation.
     """
     return label_recovery(
         instance,
@@ -564,10 +463,7 @@ def bayes_recovery(instance: Instance) -> float:
 def label_recovery(instance: Instance, posterior: torch.Tensor) -> float:
     """Fraction of observations assigned their planted component.
 
-    A mixture is invariant under relabelling, so the fitted components are
-    matched to the planted ones first, by the assignment maximizing agreement
-    --- `search.spatio_sequential`'s rule for the same problem on labels, and
-    cubic where enumerating the ``k!`` relabellings is not.
+    Matched first by linear assignment, cubic where ``k!`` relabellings are not.
     """
     assigned = posterior.argmax(dim=-1).numpy()
     agreements = np.zeros((instance.n_components, instance.n_components))
@@ -580,12 +476,7 @@ def label_recovery(instance: Instance, posterior: torch.Tensor) -> float:
 class SeedingStart(Initializer):
     """One candidate seeding as an initializer of the instance's Gaussian mixture.
 
-    Each start is the candidate drawn from ``rng`` and placed at uniform
-    weights; ``random-restart`` offers ``BUDGET.size // RESTART_COST`` of
-    them, which the seam polishes at ``RESTART_COST`` each and keeps the best
-    of --- the baseline's count derived from the declared cost rather than
-    chosen. What the seeding charged, and a chain's acceptance, are recorded
-    for the trial.
+    ``random-restart`` offers ``BUDGET.size // RESTART_COST`` starts, derived not chosen.
     """
 
     instance: Instance
@@ -609,11 +500,7 @@ class SeedingStart(Initializer):
 
 
 def polish(objective: Objective, theta: torch.Tensor, budget: Budget) -> PolishedPoint:
-    """Expectation--maximization from ``theta``, or an infinite value where it is refused.
-
-    A component collapsed onto a point: the Gaussian likelihood is unbounded
-    there, so the fit is refused and charged what it was given.
-    """
+    """EM from ``theta``, or an infinite value where a collapsed component is refused."""
     try:
         return polish_by_emission_em(objective, theta, budget)
     except ValueError:
@@ -639,10 +526,7 @@ def recovered(instance: Instance, objective: Objective, theta: torch.Tensor) -> 
 class Ledger:
     """The best run each method had over its starts, read off the seam's trials.
 
-    `opt.budget.Comparison` carries the value and the spend, which is what a
-    budget comparison needs; the seeding cost, the label recovery and a
-    chain's diagnostics are this experiment's own columns and ride back on
-    each cell's `opt.starts.StartTrial`.
+    Seeding cost, recovery and chain diagnostics ride on each `StartTrial`.
     """
 
     def __init__(self, instance: Instance, result: SolverComparison) -> None:
@@ -722,15 +606,9 @@ class Measurement:
 
 
 def measure(instance: Instance, n_starts: int) -> Measurement:
-    """Every method on ``instance`` from ``n_starts`` shared starts.
+    """Every method on ``instance`` from ``n_starts`` shared starts (``[0, i]``).
 
-    Start ``i`` draws from ``np.random.default_rng([0, i])`` whichever method
-    runs, so every candidate sees the same stream --- experiment 004's
-    construction, and the reason the paired test is paired.
-
-    The referee is the value expectation--maximization reaches from the
-    *generating parameters*, the basin the planted truth sits in. A method
-    below it is reported rather than scored against a stale number.
+    Referee: EM from the generating parameters; a method below it is reported.
     """
     from_truth = fit_from(
         instance,
@@ -753,13 +631,7 @@ def measure(instance: Instance, n_starts: int) -> Measurement:
 def bregman_d2(instance: Instance, rng: np.random.Generator) -> Seeding:
     """D-squared sampling under the Gaussian's own Bregman divergence.
 
-    The divergence written out here rather than asked of the family: the
-    Bregman divergence of the log-partition of an isotropic Gaussian is
-    ``||y - c|| ** 2 / (2 * scale ** 2)`` (Banerjee et al., 2005), with no
-    additive constant. It is what
-    :func:`snakes_and_ladders.opt.emission_mixture.plus_plus_start` scores
-    with since #560, and sharing no line with it is what makes it the
-    reference in :func:`test_the_divergence_ties_and_the_log_density_does_not`.
+    ``||y - c|| ** 2 / (2 * scale ** 2)`` (Banerjee et al., 2005), written out.
     """
     rows = _rows(instance.observations)
     scale = instance.pooled_scale
@@ -784,10 +656,7 @@ def bregman_d2(instance: Instance, rng: np.random.Generator) -> Seeding:
 def log_density_d2(instance: Instance, rng: np.random.Generator) -> Seeding:
     """D-squared sampling under the family's negative log density.
 
-    What ``plus_plus_start`` scored with before #560: the divergence plus the
-    log normalizer. Kept because the comparison it loses is the evidence for
-    the correction, and a rule no longer in the package cannot be measured
-    from outside the test that measures it.
+    The pre-#560 rule, kept as the comparison that evidences the correction.
     """
     rows = np.asarray(instance.observations, dtype=np.float64)
     at = _family_at(instance)
@@ -831,15 +700,9 @@ def _seeding_ratios(
 
 @pytest.mark.oracle
 def test_the_shipped_rule_is_k_means_plus_plus_on_a_gaussian() -> None:
-    # **The identity that referees the correction, and it is exact.** For an
-    # isotropic Gaussian the Bregman divergence of the log-partition *is* the
-    # squared Euclidean distance over twice the variance, so
-    # `plus_plus_start` and `kmeans_plus_plus` are one algorithm: D-squared
-    # sampling normalizes its scores, a factor shared by every candidate
-    # cancels, and `rng.choice` spends one integer whether it is handed the
-    # observations or their indices. Two generators started at the same seed
-    # therefore draw the same seeding, centre for centre, and an approximate
-    # agreement would not tell a corrected rule from a partly corrected one.
+    # Exact: for an isotropic Gaussian the divergence is squared Euclidean over
+    # twice the variance, cancelled by normalization, and `rng.choice` spends
+    # one integer either way: same seed, same seeding, centre for centre.
     instance = instance_of(fixture("mixture", "ci").params)
     at = _family_at(instance)
     for index in range(N_IDENTICAL_SEEDINGS):
@@ -862,14 +725,9 @@ def test_the_shipped_rule_is_k_means_plus_plus_on_a_gaussian() -> None:
 
 @pytest.mark.oracle
 def test_the_divergence_ties_and_the_log_density_does_not() -> None:
-    # **The control's result, where an exact oracle referees it.** The three
-    # rules are scored against `optimal_clustering_cost`, which is exact in
-    # one dimension: the divergence the package now seeds under, the same
-    # divergence written out from the closed form rather than asked of the
-    # family, and the negative log density it scored with until #560 --- which
-    # is the divergence plus the log normalizer, an additive term that does
-    # *not* cancel under normalization but dilutes the rule toward uniform in
-    # proportion to its size against a typical divergence.
+    # Against `optimal_clustering_cost` (exact in 1-D): the divergence, the same
+    # written out, and the pre-#560 negative log density, whose normalizer
+    # dilutes the rule toward uniform.
     instance = instance_of(fixture("mixture", "ci").params)
     optimal = optimal_clustering_cost(instance.observations, instance.n_components)
     ratios = {
@@ -1018,13 +876,9 @@ def test_the_ordering_on_the_key_rung() -> None:
     # observations, so the mean gap is what separates the candidates and the
     # paired test has nothing discordant to work with.
     assert measurement.hits() == dict.fromkeys(METHODS, 0), measurement.hits()
-    # **The control's pair, and here the divergence does not tie.** The two
-    # channels carry different pooled scales, so the Gaussian's divergence
-    # divides each by its own and is k-means++ on whitened channels, which is
-    # a different rule from k-means++ on the raw ones --- the identity of the
-    # refereed rung is a one-scale identity. Squared Euclidean 424 nats of
-    # 1.96e6, the divergence 749, where the negative log density it replaced
-    # was 668 (issue #560).
+    # Unequal channel scales: the divergence is k-means++ on whitened channels.
+    # Squared Euclidean 424 nats of 1.96e6, divergence 749, the replaced log
+    # density 668 (issue #560).
     assert gaps["kmeans++"] == pytest.approx(424.0, rel=0.02), gaps
     assert gaps["emission-d2"] == pytest.approx(749.0, rel=0.02), gaps
     # Correcting the scoring moved candidate 3 *down* one place here, past
@@ -1036,11 +890,8 @@ def test_the_ordering_on_the_key_rung() -> None:
     # of a two-channel sample is the whole of it, so the two seed the same
     # points up to the rounding of the map back.
     assert gaps["spectral"] == pytest.approx(gaps["kmeans++"], rel=1e-4), gaps
-    # **The chains did not mix.** At the step that accepted every proposal on
-    # the refereed rung, none is accepted here, so all three returned their
-    # own starting point and are one uniform-seeded fit bought at 110% to 220%
-    # of the fit budget -- a random restart with a longer bill, which is what
-    # the diagnostics are reported for rather than averaged in.
+    # No chain accepted a proposal here: each is a uniform-seeded fit at 110%
+    # to 220% of the budget, so the diagnostics are reported.
     for name in ("hmc", "tempering", "anneal"):
         assert measurement.ledger.best[name].acceptance < 0.05, name
         assert gaps[name] == pytest.approx(gaps["hmc"], rel=1e-9), name

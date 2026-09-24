@@ -1,15 +1,10 @@
 """The two-channel count emission: a depth, and the successes within it.
 
-What a coverage-and-allele-count assay produces, and the first emission here
-whose observation is not a scalar. Two claims carry the family. Each form is
-a probability distribution: the log-density sums to one over the support. And
-the forms are *different models* rather than a parameterization choice ---
-data simulated under the joint form is preferred by the joint fit on every
-seed, and data simulated under the independent form is not, so the preference
-measures the coupling and not one form's extra flexibility.
-
-Sizes and tolerances are stated where they are used, from the sampling noise
-at that size rather than from what happened to pass.
+A coverage-and-allele-count assay's observation. Each form is a distribution:
+the log-density sums to one. The forms are different models: joint-simulated
+data is preferred by the joint fit on every seed and independent-simulated
+data is not, so the preference measures the coupling. Sizes and tolerances are
+stated where used, from the sampling noise at that size.
 """
 
 from __future__ import annotations
@@ -57,16 +52,9 @@ def test_the_count_pair_family_satisfies_both_protocols() -> None:
 
 @pytest.mark.oracle
 def test_each_form_sums_to_one_over_the_support() -> None:
-    # Summed over the pairs rather than reduced analytically. The grid is
-    # square in both channels and the family scores an impossible pair at
-    # `-inf`, so one grid serves both forms: the joint form's `y > n` and the
-    # independent form's `y > trials` contribute exactly zero.
-    #
-    # Truncation is at 900 rather than infinity, and the cap is measured: the
-    # missing mass of the deeper state (mean 150,
-    # dispersion 12) is 2.8e-5 at a cap of 400, 4.0e-10 at 600 and 2.8e-14 at
-    # 900, so at 900 the sums are at the round-off of the 1.6 million terms
-    # they add and the tolerance below is not a truncation budget.
+    # One square grid serves both forms: impossible pairs score `-inf`. Missing
+    # mass of the deeper state (mean 150, dispersion 12): 2.8e-5 at a cap of
+    # 400, 4.0e-10 at 600, 2.8e-14 at 900, round-off of the 1.6 million terms.
     grid = np.arange(0.0, 901.0)
     pairs = torch.as_tensor(
         np.stack(np.meshgrid(grid, grid, indexing="ij"), axis=-1).reshape(-1, 2)
@@ -80,12 +68,9 @@ def test_each_form_sums_to_one_over_the_support() -> None:
 
 @pytest.mark.analytic
 def test_the_closed_form_moments_are_the_drawn_ones_in_both_forms() -> None:
-    # The joint form's success channel is not a beta-binomial: its variance
-    # picks up the varying depth through the law of total variance, and a
-    # family that reported the conditional variance alone would understate the
-    # spread by `p**2 Var(n)` -- 4.7 of 10.4 for the shallow state here. Both
-    # terms are checked against draws, at 200,000 per state, where the
-    # standard error of a variance is `sqrt(2 / n)` relative, i.e. 0.3%.
+    # The joint success channel's variance adds `p**2 Var(n)` (4.7 of 10.4 for
+    # the shallow state). Checked at 200,000 draws per state, where a variance's
+    # standard error is `sqrt(2 / n)` relative, 0.3%.
     draws = 200_000
     states = np.repeat([0, 1], draws)
 
@@ -105,21 +90,10 @@ def test_the_closed_form_moments_are_the_drawn_ones_in_both_forms() -> None:
 
 @pytest.mark.end2end
 def test_the_m_step_recovers_the_planted_parameters_in_both_forms() -> None:
-    # 4,000 pairs split between the two states by a planted label, scored with
-    # that label as the posterior, so what is measured is the M step and not a
-    # forward-backward recursion feeding it.
-    #
-    # The success channel is stated as `(rate, concentration)` rather than
-    # `(alpha, beta)`: the rate is what the data resolves -- a weighted mean
-    # of about 2,000 allele fractions -- and the concentration is the
-    # parameter whose likelihood flattens as the family approaches a binomial,
-    # as the beta-binomial's own recovery test finds at 3,000 draws.
-    # Measured relative errors per state --- joint form: mean 0.008 and 0.012,
-    # dispersion 0.021 and 0.059, rate 0.002 and 0.005, concentration 0.117
-    # and 0.038; independent form: mean 0.020 and 0.006, dispersion 0.048 and
-    # 0.042, rate 0.023 and 0.004, concentration 0.047 and 0.036. The
-    # tolerances below are between two and five times the larger of the two
-    # forms, so neither form is held to a bound the other set.
+    # 4,000 pairs, planted label as posterior: the M step alone. Relative errors
+    # joint | independent: mean 0.008, 0.012 | 0.020, 0.006; dispersion 0.021,
+    # 0.059 | 0.048, 0.042; rate 0.002, 0.005 | 0.023, 0.004; concentration
+    # 0.117, 0.038 | 0.047, 0.036. Tolerances: 2-5x the larger form's.
     n_samples = 4_000
     rng = np.random.default_rng(4021)
     states = rng.integers(0, 2, size=n_samples)
@@ -158,11 +132,8 @@ def test_the_m_step_recovers_the_planted_parameters_in_both_forms() -> None:
 LRT_SAMPLES = 300
 LRT_SEEDS = range(1000, 1010)
 
-#: The single-state truth the comparison simulates from. The depth mean is
-#: 120 at dispersion 8, so `P(n < 10)` is 3.4e-6 and the independent form's
-#: 10-trial draws lie inside the joint form's support on every one of the
-#: 3,000 pairs -- which the test asserts, since a comparison where one model
-#: scores a pair at `-inf` is settled by the support, not by the coupling.
+#: The single-state truth. Depth mean 120 at dispersion 8, so `P(n < 10)` is
+#: 3.4e-6 and every one of 3,000 pairs lies in both supports (asserted).
 LRT_DISPERSION = [8.0]
 LRT_MEAN = [120.0]
 LRT_ALPHA = [3.0]
@@ -175,9 +146,7 @@ def _maximized_log_likelihood(
 ) -> float:
     """Fit one state by a single M step, and score the data at it.
 
-    With one state and a posterior of ones the M step *is* the maximum
-    likelihood estimate, so the comparison is between two maxima rather than
-    two runs of an iteration.
+    One state, posterior of ones: the M step is the maximum likelihood estimate.
     """
     posterior = torch.ones((observations.shape[0], 1), dtype=torch.float64)
     fitted = start.reestimate(observations, posterior).emissions
@@ -187,14 +156,7 @@ def _maximized_log_likelihood(
 def _preference(observations: torch.Tensor) -> float:
     """``2 (log L_joint - log L_independent)`` at each form's own maximum.
 
-    The two forms have four free parameters each, so the difference of maxima
-    is the difference of AICs and the comparison needs no penalty. It is not a
-    nested test and no chi-squared quantile is read off it; the sign over
-    seeds is what is asserted.
-
-    The independent form is given the most generous fixed trial count the data
-    admits --- the largest success count observed --- so it is refuted on its
-    shape and not on a support that cannot hold the data.
+    Four parameters each, so no penalty; independent trials = max observed success.
     """
     depth = float(observations[:, 0].mean())
     largest = float(observations[:, 1].max())
@@ -210,12 +172,8 @@ def _preference(observations: torch.Tensor) -> float:
 
 @pytest.mark.end2end
 def test_the_likelihood_ratio_prefers_the_form_the_data_came_from() -> None:
-    # On joint data the depth carries information about the allele count and
-    # the independent form throws it away; on independent data it carries none
-    # and the joint form's conditioning is a misspecification. Over ten seeds
-    # the statistic is 124 to 211 on joint data (joint preferred 10 of 10) and
-    # -133 to -77 on independent data (0 of 10), so the two populations do not
-    # overlap.
+    # Over ten seeds: 124 to 211 on joint data (joint preferred 10 of 10),
+    # -133 to -77 on independent data (0 of 10); the populations do not overlap.
     outcome = {}
     for joint in (True, False):
         truth = CountPairEmission(

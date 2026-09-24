@@ -1,18 +1,10 @@
 """The Rust coupled E step against the NumPy oracle (issue #399).
 
-`likelihood/CLAUDE.md`: the reference implementation is the oracle and it
-stays, and a backend is accepted or rejected against a stated tolerance
-rather than adjusted until it matches. The tolerances below are the measured
-ones, and the measurement says which quantity carries which form.
-
-The two paths do not share their arithmetic. The oracle evaluates three
-`lgamma` calls per count and runs forward--backward through `logsumexp`; the
-kernel reads a table the oracle's own families filled and runs the scaled
-recursion, each position's row maximum divided out. So agreement is a
-tolerance, and one of the two is measurably better normalized: at the ci
-instance the oracle's state posterior departs from summing to one by up to
-1.3e-9, which is the whole of the difference between them, and the kernel's
-rows sum to one exactly.
+The oracle (`likelihood/CLAUDE.md`) evaluates three `lgamma` calls per count
+and runs forward--backward through `logsumexp`; the kernel reads a table the
+oracle's families filled and runs the scaled recursion. At ci the oracle's
+state posterior departs from summing to one by up to 1.3e-9, the whole of the
+difference; the kernel's rows sum to one exactly.
 """
 
 from __future__ import annotations
@@ -48,11 +40,8 @@ PROBLEM = "spatio_sequential_counts"
 #: on the evidence and 3.8e-15 on the field.
 LOG_TOLERANCE = 1e-12
 
-#: Absolute agreement required of a state posterior and a pairwise posterior.
-#: Absolute rather than relative because both are probabilities on ``[0, 1]``
-#: and the entries the two paths differ on are the ones near zero, where a
-#: relative bound is a bound on nothing. Measured at the ci instance: 1.3e-9,
-#: which is exactly the oracle's own departure from normalization.
+#: Absolute on probabilities: they differ near zero, where relative bounds
+#: nothing. Measured at ci: 1.3e-9, the oracle's normalization error.
 POSTERIOR_TOLERANCE = 1e-8
 
 #: Vertices of the 5K instance the slice test scores, spread across every

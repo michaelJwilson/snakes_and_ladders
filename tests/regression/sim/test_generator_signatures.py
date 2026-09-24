@@ -1,24 +1,11 @@
 """Randomness enters through a generator, and this is what says so.
 
-Issue #240. `sim/CLAUDE.md` states the rule -- a generator, never a seed --
-because seeding inside a call makes every draw of an ensemble identical, which
-looks like a passing test over many draws and is one draw. That mistake has
-been made here, which is why `erdos_renyi_graph` was given the generator
-signature and `test_independent_draws_come_from_one_generator` pins it.
-
-Five public functions kept the seed shape. These tests extend the pairing to
-each: two draws from one generator differ, and two generators seeded alike
-agree. The first half matters -- under the old signature it fails, every call
-rebuilding the same stream -- so it discriminates rather than restating the
-code.
-
-The guard below is the other half. A rule nothing checks is a rule the next
-module quietly breaks: at filing, #230 counted 12 seed-taking signatures
-against 10 generator-taking ones, and by implementation it was 16 against 16.
-
-Issue #337 converted the three the first pass deferred, the `torch` stream --
-`sample.hmc.sample`, `sample.hmc.anneal` and `search.max_cut.goemans_williamson` --
-so the pairing runs over both streams and the guard has no exemption left.
+Issue #240 (`sim/CLAUDE.md`): seeding inside a call makes an ensemble one
+draw. Per function: two draws from one generator differ (fails under a seed
+signature) and two generators seeded alike agree. The guard: #230 counted 12
+seed signatures against 10 at filing, 16 against 16 at implementation. #337
+converted the `torch` stream (`sample.hmc.sample`, `sample.hmc.anneal`,
+`search.max_cut.goemans_williamson`); no exemption remains.
 """
 
 from __future__ import annotations
@@ -79,12 +66,7 @@ def _mcmc_draw(rng: np.random.Generator) -> tuple[int, ...]:
 def _icm_draw(rng: np.random.Generator) -> tuple[int, ...]:
     """One descent from a random start, on a surface where the start matters.
 
-    Iterated conditional modes is an optimizer rather than a sampler, so it
-    reports the generator it was given only where the surface has more than one
-    local optimum. A *uniform* field has one, as does a field strong enough to
-    decide each site alone. A random field against a coupling of comparable size
-    has content: the two terms disagree, the surface is rugged, and 6 draws
-    reach 3 distinct optima.
+    A random field against a comparable coupling: 6 draws reach 3 optima.
     """
     labelling, _ = iterated_conditional_modes(_graph(), ICM_FIELD, 3, rng)
     return tuple(int(v) for v in labelling)
@@ -109,10 +91,7 @@ def _anneal_draw(generator: torch.Generator) -> tuple[float, ...]:
 def _max_cut_draw(generator: torch.Generator) -> tuple[float, ...]:
     """The relaxation an under-solved ascent reaches from a random start.
 
-    The rounded cut is the wrong witness: on a small graph every hyperplane
-    finds the optimum, so two draws agree whatever stream they came from. The
-    relaxation after 20 ascent steps still remembers its starting vectors,
-    which is where the generator shows.
+    Rounded cuts all agree on small graphs; 20 ascent steps remember the start.
     """
     result = goemans_williamson(_graph(), generator, iterations=20, roundings=4)
     return (result.relaxation, result.value)
@@ -135,11 +114,7 @@ TORCH_DRAWS = {
 def _draws_from_one_stream(
     name: str, seed: int, count: int
 ) -> list[tuple[int, ...] | tuple[float, ...]]:
-    """``count`` draws of ``name`` from one stream seeded with ``seed``.
-
-    The stream is a `numpy` or a `torch` generator by the function's
-    convention; what the tests state does not depend on which.
-    """
+    """``count`` draws of ``name`` from one `numpy` or `torch` stream at ``seed``."""
     if name in NUMPY_DRAWS:
         rng = np.random.default_rng(seed)
         return [NUMPY_DRAWS[name](rng) for _ in range(count)]
@@ -152,9 +127,7 @@ def _draws_from_one_stream(
 def test_two_draws_from_one_generator_differ(name: str) -> None:
     """The property the rule exists for, per converted function.
 
-    This is the half that fails under the old signature: a function seeding
-    itself returns the same draw every call, so an ensemble of eight is one
-    draw reported eight times.
+    Fails under a seed signature: eight draws would be one.
     """
     drawn = set(_draws_from_one_stream(name, 20260905, 6))
 
@@ -164,21 +137,12 @@ def test_two_draws_from_one_generator_differ(name: str) -> None:
 @pytest.mark.smoke
 @pytest.mark.parametrize("name", sorted({**NUMPY_DRAWS, **TORCH_DRAWS}))
 def test_generators_seeded_alike_agree(name: str) -> None:
-    """Reproducibility survives the conversion.
-
-    A declared seed still determines the run; what moved is where it becomes a
-    generator. Without this the test above would pass for a function that had
-    simply become non-deterministic.
-    """
+    """Reproducibility survives the conversion, or the test above passes on noise."""
     assert _draws_from_one_stream(name, 7, 1) == _draws_from_one_stream(name, 7, 1)
 
 
 def _seed_parameters(path: Path) -> list[str]:
-    """Public function parameters named ``seed`` and typed ``int`` in ``path``.
-
-    Dataclass fields are excluded by construction -- only ``FunctionDef``
-    arguments are read -- so a fixture's declared seed does not register.
-    """
+    """Public function parameters ``seed: int`` in ``path``; fields are not read."""
     tree = ast.parse(path.read_text())
     found: list[str] = []
     for node in ast.walk(tree):
@@ -196,12 +160,7 @@ def _seed_parameters(path: Path) -> list[str]:
 def test_no_public_signature_takes_a_seed() -> None:
     """The rule, enforced where it can be, over both streams.
 
-    No function is exempt: the `torch` stream #254 deferred -- `sample.hmc.sample`,
-    `sample.hmc.anneal` and `search.max_cut.goemans_williamson` -- takes a
-    `torch.Generator` since #337. The one thing that keeps its `seed` is a
-    declared fixture parameter's *field*, which is how a run is declared
-    reproducible and which `_seed_parameters` does not read; only the
-    boundary at which it becomes a generator moved.
+    No exemption since #337; a fixture's declared `seed` field is not a parameter.
     """
     offenders = [
         entry
@@ -218,10 +177,7 @@ def test_no_public_signature_takes_a_seed() -> None:
 def test_the_guard_fails_on_a_signature_that_takes_a_seed(tmp_path: Path) -> None:
     """The guard rejects what it exists to reject, and spares what it should.
 
-    A guard that only passes on the converted tree says nothing about the next
-    module -- and one that could not tell a function's parameter from a
-    dataclass's field would force the fixture seed out too, which the ticket
-    names as a non-goal.
+    A dataclass field `seed` is spared: the fixture seed is a non-goal.
     """
     offending = tmp_path / "offending.py"
     offending.write_text("def draw(n: int, seed: int) -> int:\n    return n\n")

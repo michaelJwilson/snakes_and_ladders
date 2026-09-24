@@ -1,15 +1,9 @@
 """The textbook's applicability tables are what ``PROBLEMS.md`` generates (issue #358).
 
-The file is generated and not committed (issue #425), so what is checked is
-what the tool writes: the textbook names no code, every catalogue row reaches
-the table, and a catalogue symbol the generator cannot name fails rather than
-dropping out of it.
-
-Since issue #376 the file carries a third table, in four parts, pairing each
-problem with each method family. Two things there can go wrong quietly and
-are checked: a pairing nothing tests could be dropped instead of marked, so
-the table would read as though the question had not been asked; and a note
-could cite an experiment a later pull request renumbered or retracted.
+The file is generated and not committed (issue #425): the textbook names no
+code, every catalogue row reaches the table, and a symbol the generator cannot
+name fails. The method-family table (issue #376) marks a pairing nothing tests
+rather than dropping it, and fails a note citing a renumbered experiment.
 """
 
 from __future__ import annotations
@@ -116,11 +110,9 @@ def test_a_pairing_with_a_method_carries_a_note() -> None:
 
 @pytest.mark.infra
 def test_every_untested_pairing_states_why_it_is_untested() -> None:
-    # "Every compatible method is applied to every supported problem" is a
-    # claim, and this is where it is checked rather than reviewed: a fixture
-    # and a family the catalogue pairs, with no significant test naming both,
-    # is listed with the reason it is not tested. A pairing loses its entry
-    # only by gaining a test (issue #382).
+    # A fixture and family the catalogue pairs with no significant test naming
+    # both is listed with its reason; it loses the entry only by gaining a
+    # test (issue #382).
     pairs = [
         f"{problem} / {name}" for problem, name in problems_tables.untested_pairs()
     ]
@@ -185,11 +177,8 @@ def test_a_pairing_with_no_note_is_refused() -> None:
 
 @pytest.mark.smoke
 def test_a_family_the_suite_runs_and_no_note_claims_is_refused() -> None:
-    # Guards the guard, and the direction reversed with issue #640. The
-    # catalogue no longer inventories a problem's methods, so it can no longer
-    # name one the tables cannot place; what it can now do is go quiet about a
-    # family that is *running*. The notes carry the claim and the suite the
-    # coverage, so a family the suite reaches with no note must raise.
+    # Guards the guard (issue #640): a family the suite reaches with no note
+    # must raise.
     silent = {
         problem: {
             name: note
@@ -205,13 +194,8 @@ def test_a_family_the_suite_runs_and_no_note_claims_is_refused() -> None:
 
 @pytest.mark.smoke
 def test_a_row_reads_its_key_and_its_defining_code(tmp_path: Path) -> None:
-    # The two hand-written columns, read from a table of one row. `Defines`
-    # names code and fills no column of either table -- a simulator is not a
-    # method -- and is read here so one reader parses the catalogue.
-    #
-    # The statement is a real label, and it has to be. An invented one reads
-    # as a citation to `test_document_labels.py`, which fails any label no
-    # document defines -- including one written only to explain this comment.
+    # The two hand-written columns, from a one-row table. The statement is a
+    # real label: `test_document_labels.py` fails any label no document defines.
     catalogue = tmp_path / "PROBLEMS.md"
     catalogue.write_text(
         "| Problem | Key | Statement | Defines |\n| --- | --- | --- | --- |\n"
