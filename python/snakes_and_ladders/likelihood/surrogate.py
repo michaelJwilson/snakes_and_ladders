@@ -7,8 +7,10 @@ bound, an **upper** bound, or a **point** prediction. An analytic bound
 carries a proof in the textbook's derivations appendix and is certified by
 :func:`~snakes_and_ladders.bound.certify`, which refuses a bound violated once
 against the exact value; a learned one is calibrated to a stated coverage.
-Every surrogate is differentiable through ``torch`` in the continuous
-parameters it reads.
+A tree surrogate is called at a structure and the data, takes no continuous
+argument to differentiate in, and returns a ``float`` (issue #1011); the
+lattice bounds are functions of a field and couplings and are differentiable
+through ``torch`` in both.
 
 Two hard evaluations, two families of surrogate:
 
@@ -151,10 +153,12 @@ class PlugInLikelihood(Surrogate):
             least_squares_lengths(topology, jc_distances(alignment, self.k))
         )
 
-    def __call__(self, structure: object, data: object) -> torch.Tensor:
+    def __call__(self, structure: object, data: object) -> float:
         topology, alignment = _tree_arguments(structure, data)
-        return log_likelihood(
-            topology, self.k, self.pi, alignment, self.lengths(topology, alignment)
+        return float(
+            log_likelihood(
+                topology, self.k, self.pi, alignment, self.lengths(topology, alignment)
+            )
         )
 
 
@@ -230,12 +234,11 @@ class ParsimonyUpperBound(Surrogate):
         self.k = k
         self.pi = np.asarray(pi, dtype=float)
 
-    def __call__(self, structure: object, data: object) -> torch.Tensor:
+    def __call__(self, structure: object, data: object) -> float:
         topology, alignment = _tree_arguments(structure, data)
         first = np.asarray(alignment[sorted(alignment)[0]], dtype=np.int64)
         changes = int(site_fitch_scores(topology, alignment).sum())
-        value = float(np.sum(np.log(self.pi[first]))) - changes * float(np.log(self.k))
-        return torch.tensor(value, dtype=torch.float64)
+        return float(np.sum(np.log(self.pi[first]))) - changes * float(np.log(self.k))
 
 
 def _tree_arguments(

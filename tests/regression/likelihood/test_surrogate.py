@@ -369,8 +369,8 @@ def test_ground_state_bracket_contains_the_enumerated_minimum() -> None:
 class _WrongSide:
     kind = Bound.LOWER
 
-    def __call__(self, structure: object, data: object) -> torch.Tensor:
-        return torch.tensor(_identity(structure, data) + 1.0)
+    def __call__(self, structure: object, data: object) -> float:
+        return _identity(structure, data) + 1.0
 
 
 @pytest.mark.smoke
@@ -387,9 +387,9 @@ def test_certify_allows_the_stated_violation_rate() -> None:
     class _Mostly:
         kind = Bound.LOWER
 
-        def __call__(self, structure: object, data: object) -> torch.Tensor:
+        def __call__(self, structure: object, data: object) -> float:
             value = _identity(structure, data)
-            return torch.tensor(value + 1.0 if value == 4.0 else value - 1.0)
+            return value + 1.0 if value == 4.0 else value - 1.0
 
     certificate = certify(
         _Mostly(),
