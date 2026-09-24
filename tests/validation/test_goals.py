@@ -1343,3 +1343,126 @@ def test_random_walk_meets_blackjaxs_seconds_per_effective_sample() -> None:
     seconds = median_seconds(chain, repeats=3)
     size = float(hmc.effective_sample_size(chain().draws).min())
     assert_meets(seconds / size, BLACKJAX_RWM_PER_EFFECTIVE_SAMPLE)
+
+
+#: HMC on declared targets (#1008), ten leapfrog steps per transition: name,
+#: the harness's target inputs, the start and the step. Rosenbrock at a = 1,
+#: b = 100 from every coordinate at -1.2 at 0.01 / sqrt(d / 10); the Gaussian
+#: is `diagonal_precision(d)` from the origin at 0.9 / (2 d^(1/4)).
+HMC_TARGETS = {
+    **{
+        f"rosenbrock-{d}": (
+            {"target": np.asarray(1), "constants": np.asarray([1.0, 100.0])},
+            np.full(d, -1.2),
+            0.01 / np.sqrt(d / 10),
+        )
+        for d in (10, 100)
+    },
+    **{
+        f"gaussian-{d}": (
+            {"target": np.asarray(0), "precision": diagonal_precision(d)},
+            np.zeros(d),
+            0.9 / (2.0 * d**0.25),
+        )
+        for d in (100, 1_000, 10_000)
+    },
+}
+
+_HMC_MEASURED = "2026-09-24, 4-core reference host at a 1-minute load of 1.3-1.6, #1008"
+
+#: BlackJAX's compiled HMC, compilation excluded, the medians of three
+#: subprocess runs in `test_hmc_declared_blackjax_bench.py`: 1,000
+#: transitions on Rosenbrock's function.
+BLACKJAX_HMC_ROSENBROCK = {
+    name: Goal("blackjax", f"1,000 HMC transitions, {name}", seconds, _HMC_MEASURED)
+    for name, seconds in (("rosenbrock-10", 0.0077), ("rosenbrock-100", 0.01326))
+}
+
+#: `blackjax.window_adaptation` over 500 steps at a 0.65 target, then 1,000
+#: transitions at what it settled on, one compiled call; the package runs
+#: `Adaptation(500, 0.65, 0.0)` and the same 1,000.
+BLACKJAX_HMC_WARMUP = {
+    name: Goal(
+        "blackjax",
+        f"500 warm-up steps and 1,000 HMC transitions, {name}",
+        seconds,
+        _HMC_MEASURED,
+    )
+    for name, seconds in (
+        ("rosenbrock-10", 0.0108),
+        ("rosenbrock-100", 0.01982),
+        ("gaussian-100", 0.01967),
+        ("gaussian-1000", 0.09326),
+        ("gaussian-10000", 0.83678),
+    )
+}
+
+#: Stored, both sides hold the same `n x d` doubles, bounded near 1.0x as
+#: `BLACKJAX_HMC_MEMORY`'s is; with no draw kept, BlackJAX's first call.
+BLACKJAX_HMC_ROSENBROCK_MEMORY = {
+    name: MemoryGoal(
+        "blackjax",
+        f"1,000 HMC transitions, {name}, the chain stored",
+        peak,
+        _HMC_MEASURED,
+    )
+    for name, peak in (("rosenbrock-10", 94_208), ("rosenbrock-100", 823_296))
+}
+
+BLACKJAX_HMC_ROSENBROCK_CHAIN_FREE_MEMORY = {
+    name: MemoryGoal(
+        "blackjax",
+        f"1,000 HMC transitions, {name}, no draws kept",
+        peak,
+        f"{_HMC_MEASURED}, first call, compilation included",
+    )
+    for name, peak in (("rosenbrock-10", 30_060_544), ("rosenbrock-100", 34_598_912))
+}
+
+
+def _hmc_inputs(name: str, *, warmup: int, store_chain: bool) -> dict[str, np.ndarray]:
+    """The harness's inputs for the declared-target HMC goals."""
+    target, position, step = HMC_TARGETS[name]
+    return {
+        **target,
+        "position": position,
+        "step_size": np.asarray(step),
+        "n_steps": np.asarray(10),
+        "n_draws": np.asarray(1_000),
+        "seed": np.asarray(1008),
+        "warmup": np.asarray(warmup),
+        "target_acceptance": np.asarray(0.65),
+        "store_chain": np.asarray(store_chain),
+    }
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("name", sorted(BLACKJAX_HMC_ROSENBROCK))
+def test_hmc_on_rosenbrock_meets_blackjaxs_runtime(name: str) -> None:
+    inputs = _hmc_inputs(name, warmup=0, store_chain=True)
+    seconds = [package("hmc_declared", inputs).seconds for _ in range(3)]
+    assert_meets(float(np.median(seconds)), BLACKJAX_HMC_ROSENBROCK[name])
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("name", sorted(BLACKJAX_HMC_WARMUP))
+def test_hmc_with_its_warm_up_meets_blackjaxs_runtime(name: str) -> None:
+    inputs = _hmc_inputs(name, warmup=500, store_chain=True)
+    seconds = [package("hmc_declared", inputs).seconds for _ in range(3)]
+    assert_meets(float(np.median(seconds)), BLACKJAX_HMC_WARMUP[name])
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("name", sorted(BLACKJAX_HMC_ROSENBROCK_MEMORY))
+def test_hmc_on_rosenbrock_fits_blackjaxs_memory(name: str) -> None:
+    inputs = _hmc_inputs(name, warmup=0, store_chain=True)
+    peaks = [package("hmc_declared", inputs).peak_bytes or 0 for _ in range(3)]
+    assert_fits(int(np.median(peaks)), BLACKJAX_HMC_ROSENBROCK_MEMORY[name])
+
+
+@pytest.mark.experiment
+@pytest.mark.parametrize("name", sorted(BLACKJAX_HMC_ROSENBROCK_CHAIN_FREE_MEMORY))
+def test_hmc_on_rosenbrock_without_its_chain_fits_blackjaxs_memory(name: str) -> None:
+    inputs = _hmc_inputs(name, warmup=0, store_chain=False)
+    peaks = [package("hmc_declared", inputs).peak_bytes or 0 for _ in range(3)]
+    assert_fits(int(np.median(peaks)), BLACKJAX_HMC_ROSENBROCK_CHAIN_FREE_MEMORY[name])

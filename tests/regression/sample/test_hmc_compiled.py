@@ -20,7 +20,9 @@ import torch
 from snakes_and_ladders import oxisal
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.opt.objective import DeclaredGradient
+from snakes_and_ladders.opt.testfunctions import Rosenbrock
 from snakes_and_ladders.sample import hmc, langevin
+from snakes_and_ladders.sample.declared import Power
 from snakes_and_ladders.sample.expectation import KalmanMean
 from snakes_and_ladders.validation.gaussian import (
     GaussianTarget,
@@ -161,3 +163,110 @@ def test_the_compiled_mala_chain_routes_what_it_cannot_run() -> None:
             run(**options).theta, run(**options, backend=Backend.PYTHON).theta
         )
     assert not torch.equal(run().theta, run(backend=Backend.PYTHON).theta)
+
+
+@pytest.mark.oracle
+def test_the_compiled_trajectory_is_the_torch_leapfrog_on_rosenbrock() -> None:
+    # Issue #1008: the declared Rosenbrock force, step for step.
+    rng = np.random.default_rng(1008)
+    theta, momentum = 0.3 * rng.normal(size=10), rng.normal(size=10)
+    torch_end = hmc.leapfrog(
+        Rosenbrock(10), torch.as_tensor(theta), torch.as_tensor(momentum), 0.002, 25
+    )
+    position, velocity = oxisal.leapfrog_trajectory(
+        1, np.asarray([1.0, 100.0]), theta, momentum, 0.002, 25
+    )
+    np.testing.assert_allclose(position, torch_end.position.numpy(), rtol=0, atol=1e-12)
+    np.testing.assert_allclose(velocity, torch_end.momentum.numpy(), rtol=0, atol=1e-10)
+
+
+@pytest.mark.oracle
+@pytest.mark.backend
+def test_the_compiled_warm_up_settles_where_the_torch_one_does() -> None:
+    # Issue #1008: `Adaptation` on the compiled chain is `hmc._warm_up`'s
+    # arithmetic on its own stream, so the two routes agree in distribution:
+    # the acceptance each reaches, and the mass diagonal's estimate of the
+    # precision.
+    precision = diagonal_precision(20)
+    adaptation = hmc.Adaptation(1_000, 0.65, 0.2)
+    chains = [
+        hmc.sample(
+            GaussianTarget(precision),
+            torch.Generator().manual_seed(1008),
+            2_000,
+            step_size=0.1,
+            n_steps=10,
+            adaptation=adaptation,
+            store_chain=False,
+            backend=backend,
+        )
+        for backend in (Backend.RUST, Backend.PYTHON)
+    ]
+    for chain in chains:
+        assert chain.adapted is not None
+        ratio = chain.adapted.mass_diagonal.numpy() / precision
+        assert ratio.min() > 0.5
+        assert ratio.max() < 2.0
+        assert chain.force_evaluations == 3_000 * hmc.leapfrog.force_evaluations(10)
+    assert abs(chains[0].acceptance_rate - chains[1].acceptance_rate) < 0.05
+
+
+@pytest.mark.oracle
+@pytest.mark.backend
+def test_compiled_operators_are_kalman_mean_over_the_stored_draws() -> None:
+    target = GaussianTarget(diagonal_precision(12))
+    operators = {"x": Power(1), "x2": Power(2)}
+    chain = hmc.sample(
+        target,
+        torch.Generator().manual_seed(1008),
+        1_000,
+        step_size=0.3,
+        n_steps=5,
+        operators=operators,
+    )
+    for name, operator in operators.items():
+        kalman = KalmanMean()
+        for row in chain.theta:
+            kalman.update(operator(row))
+        np.testing.assert_array_equal(
+            chain.expectations[name].mean.numpy(), kalman.estimate().mean.numpy()
+        )
+
+
+@pytest.mark.oracle
+@pytest.mark.backend
+def test_both_routes_sample_one_rosenbrock_density() -> None:
+    # b = 1 so 20,000 transitions mix; the first two moments agree within
+    # 4.5 combined standard errors.
+    target = Rosenbrock(2, b=1.0)
+    expectations = [
+        hmc.sample(
+            target,
+            torch.Generator().manual_seed(1008),
+            8_000,
+            step_size=0.2,
+            n_steps=5,
+            burn_in=200,
+            store_chain=False,
+            operators={"x": Power(1), "x2": Power(2)},
+            backend=backend,
+        ).expectations
+        for backend in (Backend.RUST, Backend.PYTHON)
+    ]
+    for name in ("x", "x2"):
+        rust, python = expectations[0][name], expectations[1][name]
+        spread = np.hypot(rust.standard_error.numpy(), python.standard_error.numpy())
+        assert np.all(np.abs(rust.mean.numpy() - python.mean.numpy()) < 4.5 * spread)
+
+
+@pytest.mark.end2end
+def test_compiled_mala_with_its_warm_up_reaches_its_target() -> None:
+    chain = langevin.mala(
+        GaussianTarget(diagonal_precision(50)),
+        torch.Generator().manual_seed(1008),
+        4_000,
+        step_size=0.1,
+        adaptation=hmc.Adaptation(1_000, langevin.MALA_TARGET_ACCEPTANCE, 0.0),
+    )
+    assert chain.adapted is not None
+    assert abs(chain.acceptance_rate - langevin.MALA_TARGET_ACCEPTANCE) < 0.06

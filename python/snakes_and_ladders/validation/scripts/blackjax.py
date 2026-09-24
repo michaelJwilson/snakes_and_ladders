@@ -33,6 +33,12 @@ uniform ``jax.random.bernoulli`` compared against on each transition's
 acceptance key, so the package's :func:`~snakes_and_ladders.sample.metropolis.replay`
 runs the same chain on the same randomness (issue #1006).
 
+``mode`` 5 is mode 1 after ``blackjax.window_adaptation`` over ``warmup``
+steps from ``position`` at ``target_acceptance``, the adapted step and
+inverse mass then fixed for the draws; the warm-up and the draws run in one
+compiled call. Outputs as mode 1, and ``step_size`` and
+``inverse_mass_matrix``, the adapted values (issue #1008).
+
 Each mode is compiled on one call first; the measured seconds are the second
 call, to ``block_until_ready``, so compilation is not charged. It is reported
 as ``compile_seconds``. The peak resident memory is the second call's too;
@@ -50,7 +56,7 @@ import numpy as np
 from snakes_and_ladders.validation.protocol import dump, load, paths, peaked
 
 #: What ``mode`` selects.
-INTEGRATE, SAMPLE, LANGEVIN, RANDOM_WALK, REPLAY = 0, 1, 2, 3, 4
+INTEGRATE, SAMPLE, LANGEVIN, RANDOM_WALK, REPLAY, ADAPTED = 0, 1, 2, 3, 4, 5
 
 #: What ``target`` selects.
 GAUSSIAN, ROSENBROCK = 0, 1
@@ -133,6 +139,34 @@ def main() -> None:
             jnp.asarray(inputs["position"]),
             (keys, jnp.asarray(inputs["increments"])),
         )
+    elif mode == ADAPTED:
+        warmup = blackjax.window_adaptation(
+            blackjax.hmc,
+            logdensity,
+            num_integration_steps=n_steps,
+            target_acceptance_rate=float(inputs["target_acceptance"]),
+        )
+        n_warmup, n_draws = int(inputs["warmup"]), int(inputs["n_draws"])
+        store_chain = bool(inputs.get("store_chain", np.asarray(True)))
+
+        @jax.jit
+        def run(position: Any, key: Any) -> Any:
+            warm_key, draw_key = jax.random.split(key)
+            (state, parameters), _ = warmup.run(warm_key, position, num_steps=n_warmup)
+            kernel = blackjax.hmc(logdensity, **parameters)
+
+            def transition(state: Any, key: Any) -> tuple[Any, Any]:
+                state, info = kernel.step(key, state)
+                if store_chain:
+                    return state, (state.position, info.acceptance_rate)
+                return state, (jnp.zeros((0,)), info.acceptance_rate)
+
+            draws = jax.lax.scan(
+                transition, state, jax.random.split(draw_key, n_draws)
+            )[1]
+            return draws, parameters["step_size"], parameters["inverse_mass_matrix"]
+
+        arguments = (jnp.asarray(inputs["position"]), jax.random.key(int(inputs["key"])))
     else:
         if mode == RANDOM_WALK:
             from blackjax.mcmc import random_walk
@@ -185,6 +219,14 @@ def main() -> None:
         outputs = {
             "position": np.asarray(result.position),
             "momentum": np.asarray(result.momentum),
+        }
+    elif mode == ADAPTED:
+        (draws, acceptance), adapted_step, inverse_mass = result
+        outputs = {
+            "draws": np.asarray(draws),
+            "acceptance": np.asarray(np.mean(np.asarray(acceptance))),
+            "step_size": np.asarray(adapted_step),
+            "inverse_mass_matrix": np.asarray(inverse_mass),
         }
     elif mode == REPLAY:
         draws, uniforms = result
