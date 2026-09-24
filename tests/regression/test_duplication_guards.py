@@ -973,4 +973,6 @@ def test_no_module_imports_another_modules_private_name() -> None:
     }
     assert crossing == set()
     assert _private_imports("from snakes_and_ladders.sample.hmc import _warm_up\n")
-    assert not _private_imports("from snakes_and_ladders.sample.chain import run_chain\n")
+    assert not _private_imports(
+        "from snakes_and_ladders.sample.chain import run_chain\n"
+    )
