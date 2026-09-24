@@ -80,20 +80,20 @@ from snakes_and_ladders.sample.potts_mcmc import (
     swendsen_wang_sweep,
     wolff_sweep,
 )
-from snakes_and_ladders.sample.schedule import ScheduleParams, ScheduleShape
 from snakes_and_ladders.search.cluster_moves import (
     CLUSTER_LADDER_REPLICAS,
-    EXPANSION_RESERVE_CYCLES,
     run_cluster_tempering,
-    run_expansion_then_swendsen_wang,
-    run_swendsen_wang_then_expansion,
 )
 from snakes_and_ladders.search.ground_state import (
     ANNEAL_SCHEDULE,
+    EXPANSION_RESERVE_CYCLES,
+    EXPANSION_SW_SCHEDULE,
     MethodRun,
     Rung,
     run_alpha_expansion,
     run_annealed,
+    run_expansion_then_swendsen_wang,
+    run_swendsen_wang_then_expansion,
 )
 from snakes_and_ladders.search.potts_starts import (
     PottsObjective,
@@ -122,9 +122,6 @@ SOLVER_STEPS = 1000
 #: ICM's cap in sweeps and the seeding budget, the notebook's.
 POLISH = Budget(Cost.SWEEPS, 200)
 SEEDING = Budget(Cost.EVALUATIONS, 1)
-#: Where :func:`run_expansion_then_swendsen_wang`'s chain starts and ends:
-#: Swendsen-Wang's tuned end, cooled to the current schedule's end.
-EXPANSION_SW_SCHEDULE = ScheduleParams(ScheduleShape.LINEAR, 0.3236, 0.05)
 
 
 @dataclass
