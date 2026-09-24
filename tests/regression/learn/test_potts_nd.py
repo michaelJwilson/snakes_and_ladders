@@ -50,6 +50,8 @@ from snakes_and_ladders.search.maxflow import ising_ground_state
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import critical_coupling, energies, spatio_only_field
 
+from tests._rows import every_row, every_value
+
 #: The class ladder the fixtures tilt by, `search.ground_state.SWEEP_ALPHA`'s
 #: shape: three equally spaced values so the null class sits in the middle.
 ALPHA = (-1.0, 0.0, 1.0)
@@ -78,8 +80,7 @@ def _instance(
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize(("side", "n_states"), [(3, 3), (6, 3), (8, 2)])
-def test_the_score_is_the_negated_energy_bitwise(side: int, n_states: int) -> None:
+def test_the_score_is_the_negated_energy_bitwise() -> None:
     """`score` equals `-energies` to the last bit on 200 seeded labellings.
 
     Bitwise and not to a tolerance: the field term is summed first and the
@@ -88,13 +89,17 @@ def test_the_score_is_the_negated_energy_bitwise(side: int, n_states: int) -> No
     Reassociating it --- halving a doubled count off the adjacency table, say
     --- moves the last bit, and this is the test that would catch it.
     """
-    environment, graph, field = _instance(side, n_states)
-    rng = np.random.default_rng(0)
 
-    for _ in range(200):
-        state = environment.reset(rng)
-        theirs = -float(energies(graph, field, np.asarray(state)[None])[0])
-        assert environment.score(state) == theirs
+    def check(side: int, n_states: int) -> None:
+        environment, graph, field = _instance(side, n_states)
+        rng = np.random.default_rng(0)
+
+        for _ in range(200):
+            state = environment.reset(rng)
+            theirs = -float(energies(graph, field, np.asarray(state)[None])[0])
+            assert environment.score(state) == theirs
+
+    every_row([(3, 3), (6, 3), (8, 2)], check)
 
 
 @pytest.mark.analytic
@@ -163,8 +168,7 @@ def test_the_key_is_stable_across_processes() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("side", [4, 6])
-def test_the_sweep_at_zero_is_one_icm_sweep(side: int) -> None:
+def test_the_sweep_at_zero_is_one_icm_sweep() -> None:
     """Repeating the rung-zero sweep reproduces ICM's labelling, label for label.
 
     Both take each site's conditional mode in index order, so the two
@@ -177,25 +181,31 @@ def test_the_sweep_at_zero_is_one_icm_sweep(side: int) -> None:
     baseline is a point in this action space rather than a separate program
     the comparison has to trust.
     """
-    n_states = 3
-    environment, graph, field = _instance(side, n_states)
 
-    state = tuple(
-        int(value)
-        for value in np.random.default_rng(0).integers(0, n_states, size=side * side)
-    )
-    for _ in range(200):
-        successor, _ = environment.step(state, environment.icm_action())
-        if successor == state:
-            break
-        state = successor
+    def check(side: int) -> None:
+        n_states = 3
+        environment, graph, field = _instance(side, n_states)
 
-    theirs, value = iterated_conditional_modes(
-        graph, field, n_states, np.random.default_rng(0)
-    )
+        state = tuple(
+            int(value)
+            for value in np.random.default_rng(0).integers(
+                0, n_states, size=side * side
+            )
+        )
+        for _ in range(200):
+            successor, _ = environment.step(state, environment.icm_action())
+            if successor == state:
+                break
+            state = successor
 
-    assert state == tuple(int(label) for label in theirs)
-    assert environment.score(state) == pytest.approx(-value, abs=1e-9)
+        theirs, value = iterated_conditional_modes(
+            graph, field, n_states, np.random.default_rng(0)
+        )
+
+        assert state == tuple(int(label) for label in theirs)
+        assert environment.score(state) == pytest.approx(-value, abs=1e-9)
+
+    every_value([4, 6], check)
 
 
 @pytest.mark.analytic
@@ -467,8 +477,7 @@ def test_the_planted_labelling_is_the_enumerated_maximum() -> None:
 
 @pytest.mark.critical
 @pytest.mark.end2end
-@pytest.mark.parametrize("side", [3, 6])
-def test_both_grains_recover_the_planted_ground_state(side: int) -> None:
+def test_both_grains_recover_the_planted_ground_state() -> None:
     """A learned schedule and steepest ascent each return the planted labelling.
 
     The truth is the labelling `_planted` built the field from, so this is
@@ -489,32 +498,36 @@ def test_both_grains_recover_the_planted_ground_state(side: int) -> None:
     19 to 32 site visits at nine sites, and 21 to 29 decisions and 91 to 125
     visits at thirty-six, against a sweep's 33 and 156.
     """
-    environment, _, _, planted, _ = _planted(side, 3)
-    policy = LinearPolicy(environment.n_features())
-    policy.set_weights(torch.tensor([1.0, -1.0, 0.0], dtype=torch.float64))
-    schedule = EpsilonGreedyPolicy(policy, 0.0)
 
-    for start in range(8):
-        episode = rollout(
-            environment,
-            schedule,
-            np.random.default_rng(1000 + start),
-            max_steps=3,
-            stop_at_local_optimum=False,
-        )
-        assert [action.kind for action in episode.actions] == [MoveKind.SWEEP] * 3
-        assert episode.rewards[1:] == (0.0, 0.0), "the first sweep did all of it"
-        assert max(episode.states, key=environment.score) == planted
+    def check(side: int) -> None:
+        environment, _, _, planted, _ = _planted(side, 3)
+        policy = LinearPolicy(environment.n_features())
+        policy.set_weights(torch.tensor([1.0, -1.0, 0.0], dtype=torch.float64))
+        schedule = EpsilonGreedyPolicy(policy, 0.0)
 
-        state = environment.reset(np.random.default_rng(2000 + start))
-        spent = 0
-        for _ in range(4 * environment.n_nodes):
-            action = environment.steepest_action(state)
-            spent += environment.visits(state, action)
-            state, gain = environment.step(state, action)
-            if gain == 0.0:
-                break
-        assert state == planted
-        assert spent >= environment.n_nodes
+        for start in range(8):
+            episode = rollout(
+                environment,
+                schedule,
+                np.random.default_rng(1000 + start),
+                max_steps=3,
+                stop_at_local_optimum=False,
+            )
+            assert [action.kind for action in episode.actions] == [MoveKind.SWEEP] * 3
+            assert episode.rewards[1:] == (0.0, 0.0), "the first sweep did all of it"
+            assert max(episode.states, key=environment.score) == planted
 
-    assert not environment.is_terminal(planted), "a sampler never stops itself"
+            state = environment.reset(np.random.default_rng(2000 + start))
+            spent = 0
+            for _ in range(4 * environment.n_nodes):
+                action = environment.steepest_action(state)
+                spent += environment.visits(state, action)
+                state, gain = environment.step(state, action)
+                if gain == 0.0:
+                    break
+            assert state == planted
+            assert spent >= environment.n_nodes
+
+        assert not environment.is_terminal(planted), "a sampler never stops itself"
+
+    every_value([3, 6], check)

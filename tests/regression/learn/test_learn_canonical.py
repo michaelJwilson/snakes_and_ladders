@@ -46,6 +46,8 @@ from snakes_and_ladders.learn.ppo import ppo
 from snakes_and_ladders.learn.reinforce import reinforce
 from snakes_and_ladders.learn.rollout import rollout
 
+from tests._rows import every_value
+
 #: The horizon `exact_optimal_value` is given: long enough that the optimum is
 #: reachable inside it on every fixture below, short enough that the
 #: enumeration stays affordable.
@@ -147,20 +149,22 @@ def test_the_gridworld_optimum_is_its_closed_form() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("disks", [1, 2, 3, 4])
-def test_hanoi_costs_two_to_the_disks_minus_one(disks: int) -> None:
+def test_hanoi_costs_two_to_the_disks_minus_one() -> None:
     # The only fixture whose oracle is an integer, so the assertion carries no
     # tolerance: the shortest solution is `2^d - 1` moves, breadth first and
     # by the closed form, and the optimal value is its cost.
-    hanoi = TowersOfHanoi(n_disks=disks)
-    settled = value_iteration(hanoi, hanoi.start)
+    def check(disks: int) -> None:
+        hanoi = TowersOfHanoi(n_disks=disks)
+        settled = value_iteration(hanoi, hanoi.start)
 
-    assert shortest_path_length(hanoi, hanoi.start) == hanoi.optimal_moves
-    assert hanoi.optimal_moves == 2**disks - 1
-    assert settled.values[hanoi.start] == pytest.approx(
-        -float(hanoi.optimal_moves), abs=1e-12
-    )
-    assert len(reachable_states(hanoi, hanoi.start)) == 3**disks
+        assert shortest_path_length(hanoi, hanoi.start) == hanoi.optimal_moves
+        assert hanoi.optimal_moves == 2**disks - 1
+        assert settled.values[hanoi.start] == pytest.approx(
+            -float(hanoi.optimal_moves), abs=1e-12
+        )
+        assert len(reachable_states(hanoi, hanoi.start)) == 3**disks
+
+    every_value([1, 2, 3, 4], check)
 
 
 @pytest.mark.analytic

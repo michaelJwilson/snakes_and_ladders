@@ -52,6 +52,7 @@ from snakes_and_ladders.sim.topology import (
 from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import FIXTURES_DIR
+from tests._rows import every_value
 from tests._scale import stress_only
 
 FIXTURE = FIXTURES_DIR / "tree_search/ci.yaml"
@@ -148,12 +149,14 @@ def test_uniform_branch_lengths_relabel_every_edge_but_the_root() -> None:
 
 
 @pytest.mark.smoke
-@pytest.mark.parametrize("branch_length", [0.0, -0.1])
-def test_a_non_positive_branch_length_is_rejected(branch_length: float) -> None:
+def test_a_non_positive_branch_length_is_rejected() -> None:
     # A zero-length branch identifies two nodes, and a likelihood evaluated
     # there no longer distinguishes the topology it was given.
-    with pytest.raises(ValueError, match="branch_length must be > 0"):
-        with_uniform_branch_lengths(_params().tau, branch_length)
+    def check(branch_length: float) -> None:
+        with pytest.raises(ValueError, match="branch_length must be > 0"):
+            with_uniform_branch_lengths(_params().tau, branch_length)
+
+    every_value([0.0, -0.1], check)
 
 
 # --- the rewards are the log-likelihoods they claim to be ----------------
