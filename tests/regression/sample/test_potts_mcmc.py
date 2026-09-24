@@ -1514,7 +1514,7 @@ def test_the_sweep_has_no_numba_backend() -> None:
     # measurement. Refused by name rather than falling back silently.
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
 
-    with pytest.raises(ValueError, match="no numba backend"):
+    with pytest.raises(ValueError, match="runs on python or rust, not numba"):
         anneal_potts(
             graph,
             NO_FIELD,

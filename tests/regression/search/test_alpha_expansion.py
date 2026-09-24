@@ -308,7 +308,7 @@ def test_the_numba_descent_in_any_order_every_sweep_run_is_the_python_one(
 def test_descent_has_no_rust_backend() -> None:
     graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.5)
 
-    with pytest.raises(ValueError, match="no rust backend"):
+    with pytest.raises(ValueError, match="runs on numba or python, not rust"):
         iterated_conditional_modes(
             graph, np.zeros(3), 3, np.random.default_rng(0), backend=Backend.RUST
         )

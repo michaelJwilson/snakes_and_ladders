@@ -267,7 +267,7 @@ def test_the_log_density_has_no_rust_backend() -> None:
     graph = _lattice_graph(4)
     indexed = Indexed(graph)
 
-    with pytest.raises(ValueError, match="no rust backend"):
+    with pytest.raises(ValueError, match="runs on numba or python, not rust"):
         indexed.log_density(np.zeros(len(indexed.names), dtype=np.int64), Backend.RUST)
 
 
@@ -297,7 +297,7 @@ def test_a_site_the_kernel_declines_is_decided_by_numpy(
 def test_the_sweep_has_no_rust_backend() -> None:
     graph = _lattice_graph(4)
 
-    with pytest.raises(ValueError, match="no rust backend"):
+    with pytest.raises(ValueError, match="runs on numba or python, not rust"):
         sample_factor_graph(graph, np.random.default_rng(0), 2, backend=Backend.RUST)
 
 
