@@ -166,9 +166,9 @@ def test_the_containment_check_has_teeth() -> None:
     # bound.
     exact = -1000.0
     assert Interval(
-        lower=torch.tensor(-1100.0),
-        upper=torch.tensor(-900.0),
-        exact=torch.tensor(-1000.0),
+        lower=-1100.0,
+        upper=-900.0,
+        exact=-1000.0,
         exact_sites=1,
         bounded_sites=0,
         exact_blocks=1,
@@ -176,9 +176,9 @@ def test_the_containment_check_has_teeth() -> None:
         evaluated_columns=1,
     ).contains(exact)
     narrowed = Interval(
-        lower=torch.tensor(-999.0),
-        upper=torch.tensor(-900.0),
-        exact=torch.tensor(-950.0),
+        lower=-999.0,
+        upper=-900.0,
+        exact=-950.0,
         exact_sites=1,
         bounded_sites=0,
         exact_blocks=1,
