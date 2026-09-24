@@ -41,7 +41,8 @@ class Framework:
     """One external framework: its extra, what its script imports, where it comes from."""
 
     #: The adapter's name: ``validation/<name>.py``, ``scripts/<name>.py`` and
-    #: ``tests/validation/test_<name>.py``, and the extra ``validation-<name>``.
+    #: ``tests/validation/test_<name>.py``, and the extra ``validation-<name>``
+    #: with each underscore a hyphen.
     name: str
     #: The distribution the extra names, as PyPI spells it.
     distribution: str
@@ -56,8 +57,8 @@ class Framework:
 
     @property
     def extra(self) -> str:
-        """The ``pyproject.toml`` extra that installs it."""
-        return f"validation-{self.name}"
+        """The ``pyproject.toml`` extra that installs it, hyphenated as PEP 685 spells it."""
+        return f"validation-{self.name.replace('_', '-')}"
 
 
 #: Every framework the package is validated or benchmarked against, by name.
@@ -79,6 +80,22 @@ FRAMEWORKS: Mapping[str, Framework] = {
             licence="MIT (wrapper); gco-v3.0 research-use",
             source="https://github.com/Borda/pyGCO",
             ticket=974,
+        ),
+        Framework(
+            name="hmmlearn",
+            distribution="hmmlearn",
+            module="hmmlearn",
+            licence="BSD-3-Clause",
+            source="https://github.com/hmmlearn/hmmlearn",
+            ticket=975,
+        ),
+        Framework(
+            name="scikit_learn",
+            distribution="scikit-learn",
+            module="sklearn",
+            licence="BSD-3-Clause",
+            source="https://github.com/scikit-learn/scikit-learn",
+            ticket=975,
         ),
     )
 }

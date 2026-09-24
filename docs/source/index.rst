@@ -524,6 +524,18 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.validation.scripts.gco
    :members:
 
+.. automodule:: snakes_and_ladders.validation.hmmlearn
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.scripts.hmmlearn
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.scikit_learn
+   :members:
+
+.. automodule:: snakes_and_ladders.validation.scripts.scikit_learn
+   :members:
+
 .. automodule:: snakes_and_ladders.qa
    :members:
 

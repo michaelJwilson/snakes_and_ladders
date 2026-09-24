@@ -94,6 +94,12 @@ validation-pymaxflow = ["PyMaxflow>=1.3.2"]
 validation-gco = [
     "gco-wrapper>=3.0.9; sys_platform == 'linux' and platform_machine == 'x86_64'",
 ]
+#
+# hmmlearn and scikit-learn: both BSD-3-Clause, above the 1,000-star bar, with
+# wheels for linux-64 and osx-arm64; approved on #975. hmmlearn depends on
+# scikit-learn, so its extra installs both; each is still one framework.
+validation-hmmlearn = ["hmmlearn>=0.3.3"]
+validation-scikit-learn = ["scikit-learn>=1.9.1"]
 # The run store behind `snakes_and_ladders.track` (issue #778). An extra
 # rather than a core dependency: `track.Run` is a Protocol written with
 # `aim.Run`'s own signatures, so the package imports, records and tests
@@ -248,9 +254,17 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 # The validation frameworks (issue #972) are imported only by their scripts
 # under `snakes_and_ladders/validation/scripts/`, installed only by their
-# `validation-*` extras and absent where the `lint` job runs; PyMaxflow and
-# gco-wrapper ship no type information where they are present.
-module = ["maxflow", "maxflow.*", "gco", "gco.*"]
+# `validation-*` extras and absent where the `lint` job runs; PyMaxflow,
+# gco-wrapper and hmmlearn ship no type information where they are present,
+# and scikit-learn only in part.
+module = [
+    "maxflow",
+    "maxflow.*",
+    "gco",
+    "gco.*",
+    "hmmlearn.*",
+    "sklearn.*",
+]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
