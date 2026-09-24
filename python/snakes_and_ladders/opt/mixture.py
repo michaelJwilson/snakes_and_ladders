@@ -224,6 +224,17 @@ class GaussianMixtureObjective(Objective):
             **self.components(theta).named_parameters(),
         }
 
+    @property
+    def gaussian_mixture_declaration(self) -> tuple[int, np.ndarray] | None:
+        """``(k, observations)`` for a compiled chain, one-channel ``float64`` only (issue #1008).
+
+        What :meth:`gradient` streams through ``oxisal`` is what a compiled
+        HMC chain evaluates itself (:mod:`snakes_and_ladders.sample.declared`).
+        """
+        if self._n_channels != 1 or self._dtype != torch.float64:
+            return None
+        return self._n_components, self._observations.numpy().reshape(-1)
+
     def gradient(self, theta: torch.Tensor) -> torch.Tensor:
         """``d/dtheta`` of :meth:`__call__`, which ``hmc.gradient_at`` reads (issue #986).
 

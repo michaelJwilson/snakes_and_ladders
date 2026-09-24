@@ -24,7 +24,9 @@ package's Langevin step ``h`` is ``epsilon = h^2 / 2``. Outputs as mode 1
 step of standard deviation ``step_size`` per coordinate (a scalar or one per
 coordinate), ``n_draws`` transitions keyed from ``key``; outputs as mode 1
 (issue #1006). ``target`` 1 is Rosenbrock's function with ``constants``
-``(a, b)`` in place of the Gaussian: ``log p = -U``.
+``(a, b)`` in place of the Gaussian: ``log p = -U``; ``target`` 2 is a
+Gaussian mixture's log-likelihood of ``values`` at ``n_components``, in
+``GaussianMixtureObjective``'s ``theta`` (issue #1008).
 
 ``mode`` 4 replays: ``blackjax``'s ``build_rmh`` kernel with the increments
 ``increments`` supplied, one row per transition, and each transition's key
@@ -59,7 +61,7 @@ from snakes_and_ladders.validation.protocol import dump, load, paths, peaked
 INTEGRATE, SAMPLE, LANGEVIN, RANDOM_WALK, REPLAY, ADAPTED = 0, 1, 2, 3, 4, 5
 
 #: What ``target`` selects.
-GAUSSIAN, ROSENBROCK = 0, 1
+GAUSSIAN, ROSENBROCK, MIXTURE = 0, 1, 2
 
 
 def main() -> None:
@@ -76,7 +78,21 @@ def main() -> None:
     dimension = int(inputs["position"].size)
     mode = int(inputs["mode"])
 
-    if int(inputs.get("target", np.asarray(GAUSSIAN))) == ROSENBROCK:
+    target = int(inputs.get("target", np.asarray(GAUSSIAN)))
+    if target == MIXTURE:
+        values = jnp.asarray(inputs["values"])
+        k = int(inputs["n_components"])
+
+        def logdensity(x: Any) -> Any:
+            # `GaussianMixtureObjective`'s theta: k - 1 free weights, k
+            # means, k log scales, the weights a softmax pinned at zero.
+            log_weight = jax.nn.log_softmax(jnp.concatenate([jnp.zeros(1), x[: k - 1]]))
+            mean, log_scale = x[k - 1 : 2 * k - 1], x[2 * k - 1 :]
+            z = (values[:, None] - mean) * jnp.exp(-log_scale)
+            joint = log_weight - log_scale - 0.5 * jnp.log(2 * jnp.pi) - 0.5 * z * z
+            return jnp.sum(jax.scipy.special.logsumexp(joint, axis=1))
+
+    elif target == ROSENBROCK:
         a, b = (float(c) for c in inputs["constants"])
 
         def logdensity(x: Any) -> Any:
@@ -166,7 +182,10 @@ def main() -> None:
             )[1]
             return draws, parameters["step_size"], parameters["inverse_mass_matrix"]
 
-        arguments = (jnp.asarray(inputs["position"]), jax.random.key(int(inputs["key"])))
+        arguments = (
+            jnp.asarray(inputs["position"]),
+            jax.random.key(int(inputs["key"])),
+        )
     else:
         if mode == RANDOM_WALK:
             from blackjax.mcmc import random_walk

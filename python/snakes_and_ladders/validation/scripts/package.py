@@ -430,12 +430,18 @@ def _random_walk_sample(inputs: Mapping[str, np.ndarray]) -> Callable[[], Output
 
 
 def _declared_target(inputs: Mapping[str, np.ndarray]) -> object:
-    """The Gaussian of ``precision`` (``target`` 0) or Rosenbrock's function with ``constants`` (1)."""
+    """The Gaussian of ``precision`` (``target`` 0), Rosenbrock's function with ``constants`` (1), or a mixture of ``values`` at ``n_components`` (2)."""
     from snakes_and_ladders.opt.testfunctions import Rosenbrock
     from snakes_and_ladders.validation.gaussian import GaussianTarget
 
+    if int(inputs["target"]) == 2:
+        from snakes_and_ladders.opt.mixture import GaussianMixtureObjective
+
+        return GaussianMixtureObjective(inputs["values"], int(inputs["n_components"]))
     if int(inputs["target"]) == 1:
-        return Rosenbrock(inputs["position"].size, *(float(c) for c in inputs["constants"]))
+        return Rosenbrock(
+            inputs["position"].size, *(float(c) for c in inputs["constants"])
+        )
     return GaussianTarget(inputs["precision"])
 
 
@@ -449,10 +455,16 @@ def _hmc_declared(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     target = _declared_target(inputs)
     theta0 = torch.as_tensor(inputs["position"])
     step_size, n_steps = float(inputs["step_size"]), int(inputs["n_steps"])
-    n_draws, seed, warmup = int(inputs["n_draws"]), int(inputs["seed"]), int(inputs["warmup"])
+    n_draws, seed, warmup = (
+        int(inputs["n_draws"]),
+        int(inputs["seed"]),
+        int(inputs["warmup"]),
+    )
     store_chain = bool(inputs["store_chain"])
     adaptation = (
-        hmc.Adaptation(warmup, float(inputs["target_acceptance"]), 0.0) if warmup else None
+        hmc.Adaptation(warmup, float(inputs["target_acceptance"]), 0.0)
+        if warmup
+        else None
     )
     # Outside the measured call, as `_hmc_sample`'s set-up.
     hmc.sample(

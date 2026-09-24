@@ -19,10 +19,11 @@ import pytest
 import torch
 from snakes_and_ladders import oxisal
 from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.opt.mixture import GaussianMixtureObjective
 from snakes_and_ladders.opt.objective import DeclaredGradient
 from snakes_and_ladders.opt.testfunctions import Rosenbrock
 from snakes_and_ladders.sample import hmc, langevin
-from snakes_and_ladders.sample.declared import Power
+from snakes_and_ladders.sample.declared import Power, declared_energy
 from snakes_and_ladders.sample.expectation import KalmanMean
 from snakes_and_ladders.validation.gaussian import (
     GaussianTarget,
@@ -270,3 +271,63 @@ def test_compiled_mala_with_its_warm_up_reaches_its_target() -> None:
     )
     assert chain.adapted is not None
     assert abs(chain.acceptance_rate - langevin.MALA_TARGET_ACCEPTANCE) < 0.06
+
+
+def _mixture(n: int) -> GaussianMixtureObjective:
+    rng = np.random.default_rng(1008)
+    labels = rng.choice(3, size=n, p=[0.3, 0.3, 0.4])
+    values = np.array([-4.0, 0.0, 5.0])[labels] + rng.normal(size=n)
+    return GaussianMixtureObjective(values, 3)
+
+
+@pytest.mark.oracle
+def test_the_compiled_mixture_trajectory_is_the_torch_leapfrog() -> None:
+    # Issue #1008: the declared mixture's force is the objective's streamed
+    # gradient in `theta`'s layout, step for step through a trajectory.
+    objective = _mixture(5_000)
+    declared = declared_energy(objective)
+    assert declared is not None
+    rng = np.random.default_rng(10080)
+    theta = np.array([0.0, 0.3, -4.0, 0.0, 5.0, 0.0, 0.1, 0.0]) + 0.01 * rng.normal(
+        size=8
+    )
+    momentum = rng.normal(size=8)
+    torch_end = hmc.leapfrog(
+        objective, torch.as_tensor(theta), torch.as_tensor(momentum), 0.002, 10
+    )
+    position, velocity = oxisal.leapfrog_trajectory(
+        declared[0], declared[1], theta, momentum, 0.002, 10
+    )
+    np.testing.assert_allclose(
+        position, torch_end.position.numpy(), rtol=1e-12, atol=1e-12
+    )
+    np.testing.assert_allclose(
+        velocity, torch_end.momentum.numpy(), rtol=1e-10, atol=1e-8
+    )
+
+
+@pytest.mark.oracle
+@pytest.mark.backend
+def test_both_routes_sample_the_mixture_posterior_alike() -> None:
+    objective = _mixture(2_000)
+    theta0 = torch.tensor(
+        [0.0, 0.3, -4.0, 0.0, 5.0, 0.0, 0.0, 0.0], dtype=torch.float64
+    )
+    expectations = [
+        hmc.sample(
+            objective,
+            torch.Generator().manual_seed(1008),
+            1_500,
+            step_size=0.01,
+            n_steps=8,
+            theta0=theta0,
+            burn_in=200,
+            store_chain=False,
+            operators={"x": Power(1)},
+            backend=backend,
+        ).expectations["x"]
+        for backend in (Backend.RUST, Backend.PYTHON)
+    ]
+    rust, python = expectations
+    spread = np.hypot(rust.standard_error.numpy(), python.standard_error.numpy())
+    assert np.all(np.abs(rust.mean.numpy() - python.mean.numpy()) < 4.5 * spread)

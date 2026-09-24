@@ -58,6 +58,7 @@ pub(crate) fn precision_of<'a>(
 /// The family codes `sample.declared` writes.
 pub const GAUSSIAN: u8 = 0;
 pub const ROSENBROCK: u8 = 1;
+pub const MIXTURE: u8 = 2;
 
 /// `U(x)` for one declared family.
 pub enum Energy<'a> {
@@ -65,6 +66,25 @@ pub enum Energy<'a> {
     Gaussian(Precision<'a>),
     /// `sum_i b (x_{i+1} - x_i^2)^2 + (a - x_i)^2` (`eq:rosenbrock`).
     Rosenbrock { a: f64, b: f64 },
+    /// A one-channel Gaussian mixture's negative log-likelihood of `values`
+    /// in `theta = (k - 1 free weights, k means, k log scales)`, as
+    /// `opt.mixture.GaussianMixtureObjective` states it (issue #1008).
+    Mixture { values: &'a [f64], k: usize },
+}
+
+/// A mixture's `theta` split into what `mixture_stream::gaussian_gradient` reads.
+fn mixture_parameters(theta: &[f64], k: usize) -> (Vec<f64>, &[f64], Vec<f64>) {
+    let mut padded = Vec::with_capacity(k);
+    padded.push(0.0);
+    padded.extend_from_slice(&theta[..k - 1]);
+    let high = padded.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let total = high + padded.iter().map(|v| (v - high).exp()).sum::<f64>().ln();
+    let log_weight = padded.iter().map(|v| v - total).collect();
+    let scale = theta[2 * k - 1..3 * k - 1]
+        .iter()
+        .map(|v| v.exp())
+        .collect();
+    (log_weight, &theta[k - 1..2 * k - 1], scale)
 }
 
 impl Energy<'_> {
@@ -81,20 +101,54 @@ impl Energy<'_> {
                     b * residual * residual + offset * offset
                 })
                 .sum(),
+            Energy::Mixture { values, k } => {
+                let (log_weight, mean, scale) = mixture_parameters(x, *k);
+                crate::mixture_stream::gaussian_gradient(values, &log_weight, mean, &scale, true)
+                    .map_or(f64::NAN, |(value, _)| value)
+            }
         }
     }
 
-    /// `out = grad U(x)`.
+    /// `out = grad U(x)`, and `U(x)` when `with_value`, nan otherwise: a
+    /// trajectory's last force is at the point whose potential the
+    /// acceptance reads, so the two are taken in one pass there, and the
+    /// forces before it skip the value (issue #1008).
     #[inline]
-    pub fn force(&self, x: &[f64], out: &mut [f64]) {
+    pub fn force(&self, x: &[f64], out: &mut [f64], with_value: bool) -> f64 {
         match self {
-            Energy::Gaussian(precision) => precision.force(x, out),
+            Energy::Gaussian(precision) => {
+                precision.force(x, out);
+                0.5 * x.iter().zip(out.iter()).map(|(a, b)| a * b).sum::<f64>()
+            }
             Energy::Rosenbrock { a, b } => {
                 out.iter_mut().for_each(|o| *o = 0.0);
+                let mut potential = 0.0;
                 for i in 0..x.len() - 1 {
                     let residual = x[i + 1] - x[i] * x[i];
-                    out[i] += -4.0 * b * residual * x[i] - 2.0 * (a - x[i]);
+                    let offset = a - x[i];
+                    potential += b * residual * residual + offset * offset;
+                    out[i] += -4.0 * b * residual * x[i] - 2.0 * offset;
                     out[i + 1] += 2.0 * b * residual;
+                }
+                potential
+            }
+            Energy::Mixture { values, k } => {
+                let (log_weight, mean, scale) = mixture_parameters(x, *k);
+                match crate::mixture_stream::gaussian_gradient(
+                    values,
+                    &log_weight,
+                    mean,
+                    &scale,
+                    with_value,
+                ) {
+                    Ok((value, gradient)) => {
+                        out.copy_from_slice(&gradient);
+                        value
+                    }
+                    Err(_) => {
+                        out.iter_mut().for_each(|o| *o = f64::NAN);
+                        f64::NAN
+                    }
                 }
             }
         }
@@ -110,6 +164,17 @@ pub fn energy_of(code: u8, parameters: &[f64], dimension: usize) -> Result<Energ
             _ => Err(format!(
                 "Rosenbrock takes (a, b) and d >= 2, got {} parameters at d = {dimension}",
                 parameters.len()
+            )),
+        },
+        MIXTURE => match parameters.split_first() {
+            Some((&k, values)) if k >= 1.0 && dimension as f64 == 3.0 * k - 1.0 => {
+                Ok(Energy::Mixture {
+                    values,
+                    k: k as usize,
+                })
+            }
+            _ => Err(format!(
+                "a mixture takes (k, values...) with d = 3k - 1, got d = {dimension}"
             )),
         },
         _ => Err(format!("no declared energy family {code}")),
@@ -134,7 +199,7 @@ mod tests {
         let energy = energy_of(ROSENBROCK, &[1.0, 100.0], 4).unwrap();
         let x = [0.3, -0.7, 1.1, 0.4];
         let (mut force, mut scratch) = ([0.0; 4], [0.0; 4]);
-        energy.force(&x, &mut force);
+        energy.force(&x, &mut force, false);
         for i in 0..4 {
             let (mut up, mut down) = (x, x);
             up[i] += 1e-6;

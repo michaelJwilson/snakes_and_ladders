@@ -39,30 +39,32 @@ def test_hmc_on_a_declared_target_beside_blackjax_benchmark(
 ) -> None:
     if family == "rosenbrock":
         start, step = np.full(dimension, -1.2), 0.01 / np.sqrt(dimension / 10)
-        options: dict[str, object] = {"rosenbrock": (1.0, 100.0)}
+        precision, rosenbrock = None, (1.0, 100.0)
         target = {"target": np.asarray(1), "constants": np.asarray([1.0, 100.0])}
     else:
         precision = diagonal_precision(dimension)
         start, step = np.zeros(dimension), 0.9 / (2.0 * dimension**0.25)
-        options = {"precision": precision}
+        rosenbrock = None
         target = {"target": np.asarray(0), "precision": precision}
     if warmup:
         runs = [
             blackjax.adapted_sample(
-                start, step, 10, warmup, 1_000, 1008, 0.65, **options
-            ).chain  # type: ignore[arg-type]
+                start,
+                step,
+                10,
+                warmup,
+                1_000,
+                1008,
+                0.65,
+                precision=precision,
+                rosenbrock=rosenbrock,
+            ).chain
             for _ in range(REPEATS)
         ]
     else:
         runs = [
             blackjax.sample(
-                options.get("precision"),  # type: ignore[arg-type]
-                start,
-                step,
-                10,
-                1_000,
-                1008,
-                rosenbrock=options.get("rosenbrock"),  # type: ignore[arg-type]
+                precision, start, step, 10, 1_000, 1008, rosenbrock=rosenbrock
             )
             for _ in range(REPEATS)
         ]

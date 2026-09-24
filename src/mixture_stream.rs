@@ -104,11 +104,16 @@ pub fn gaussian_step(
 /// `-(R_c - n w_c)` for the free weight of component `c >= 1`,
 /// `-sum_i r_ik (x_i - mu_k) / s_k^2` for a mean and
 /// `-sum_i r_ik ((x_i - mu_k)^2 / s_k^2 - 1)` for a log scale.
+///
+/// Without `with_value` the per-draw logarithm the value needs is skipped
+/// and the value returned is nan: a leapfrog reads the value at its last
+/// force alone (issue #1008).
 pub fn gaussian_gradient(
     values: &[f64],
     log_weight: &[f64],
     mean: &[f64],
     scale: &[f64],
+    with_value: bool,
 ) -> Result<(f64, Vec<f64>), String> {
     let k = log_weight.len();
     if k == 0 || mean.len() != k || scale.len() != k {
@@ -146,7 +151,9 @@ pub fn gaussian_gradient(
                     *value = if c == top { 1.0 } else { (*value - high).exp() };
                     total += *value;
                 }
-                sums[0] += high + total.ln();
+                if with_value {
+                    sums[0] += high + total.ln();
+                }
                 for c in 0..k {
                     let r = joint[c] / total;
                     sums[1 + c] += r;
@@ -174,7 +181,7 @@ pub fn gaussian_gradient(
     for c in 0..k {
         gradient.push(-(sums[1 + 2 * k + c] - sums[1 + c]));
     }
-    Ok((-sums[0], gradient))
+    Ok((if with_value { -sums[0] } else { f64::NAN }, gradient))
 }
 
 /// The mixture's negative log-likelihood and gradient; see [`gaussian_gradient`].
@@ -194,7 +201,7 @@ pub fn gaussian_mixture_gradient<'py>(
         scale.as_slice()?,
     );
     let (value, gradient) = py
-        .detach(|| gaussian_gradient(values, log_weight, mean, scale))
+        .detach(|| gaussian_gradient(values, log_weight, mean, scale, true))
         .map_err(PyValueError::new_err)?;
     Ok((value, PyArray1::from_vec(py, gradient)))
 }

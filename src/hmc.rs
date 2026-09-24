@@ -31,29 +31,36 @@ use crate::walk_class;
 
 /// Leapfrog over `n_steps` from `(x, p)` in place, as `hmc.leapfrog` steps
 /// it, on the metric of scale `s`: drifts of `s * p`, kicks of `s * grad U`.
+/// `start` is `grad U` at `x`, which the caller holds from the step that
+/// reached `x` rather than recomputing it, as BlackJAX's integrator state
+/// holds it (issue #1008). Leaves `grad U` at the end point in `force` and
+/// returns `U` there, taken with it.
+#[allow(clippy::too_many_arguments)]
 pub fn leapfrog(
     energy: &Energy<'_>,
     x: &mut [f64],
     p: &mut [f64],
     step_size: f64,
     n_steps: usize,
+    start: &[f64],
     force: &mut [f64],
     scale: &[f64],
-) {
-    energy.force(x, force);
-    for ((pi, fi), si) in p.iter_mut().zip(force.iter()).zip(scale) {
+) -> f64 {
+    for ((pi, fi), si) in p.iter_mut().zip(start).zip(scale) {
         *pi -= 0.5 * step_size * (si * fi);
     }
+    let mut potential = f64::NAN;
     for step in 0..n_steps {
         for ((xi, pi), si) in x.iter_mut().zip(p.iter()).zip(scale) {
             *xi += step_size * si * pi;
         }
-        energy.force(x, force);
+        potential = energy.force(x, force, step + 1 == n_steps);
         let kick = if step + 1 == n_steps { 0.5 } else { 1.0 };
         for ((pi, fi), si) in p.iter_mut().zip(force.iter()).zip(scale) {
             *pi -= kick * step_size * (si * fi);
         }
     }
+    potential
 }
 
 /// `hmc._HamiltonianKernel` at unit temperature: where it is, its potential,
@@ -64,6 +71,8 @@ pub struct Hamiltonian {
     current: f64,
     x: Vec<f64>,
     p: Vec<f64>,
+    /// `grad U` at `position`, carried from the trajectory that reached it.
+    held: Vec<f64>,
     force: Vec<f64>,
     scale: Vec<f64>,
 }
@@ -72,15 +81,16 @@ impl Hamiltonian {
     /// At `theta0` on `energy`, at unit scale.
     pub fn new(energy: &Energy<'_>, theta0: &[f64], n_steps: usize) -> Self {
         let d = theta0.len();
-        let mut force = vec![0.0; d];
-        let current = energy.potential(theta0, &mut force);
+        let mut held = vec![0.0; d];
+        let current = energy.force(theta0, &mut held, true);
         Self {
             n_steps,
             position: theta0.to_vec(),
             current,
             x: vec![0.0; d],
             p: vec![0.0; d],
-            force,
+            held,
+            force: vec![0.0; d],
             scale: vec![1.0; d],
         }
     }
@@ -98,21 +108,22 @@ impl Kernel for Hamiltonian {
         }
         let current = self.current + 0.5 * self.p.iter().map(|v| v * v).sum::<f64>();
         self.x.copy_from_slice(&self.position);
-        leapfrog(
+        let proposed_potential = leapfrog(
             energy,
             &mut self.x,
             &mut self.p,
             step_size,
             self.n_steps,
+            &self.held,
             &mut self.force,
             &self.scale,
         );
-        let proposed_potential = energy.potential(&self.x, &mut self.force);
         let proposed = proposed_potential + 0.5 * self.p.iter().map(|v| v * v).sum::<f64>();
         let uniform: f64 = StandardUniform.sample(rng);
         let (take, probability) = decide(current - proposed, uniform);
         if take {
             std::mem::swap(&mut self.position, &mut self.x);
+            std::mem::swap(&mut self.held, &mut self.force);
             self.current = proposed_potential;
         }
         (take, probability, (proposed - current).abs())
@@ -176,9 +187,11 @@ pub fn leapfrog_trajectory<'py>(
     }
     let energy =
         energy_of(family, parameters.as_slice()?, x.len()).map_err(PyValueError::new_err)?;
-    let (mut force, scale) = (vec![0.0; x.len()], vec![1.0; x.len()]);
+    let (mut start, mut force) = (vec![0.0; x.len()], vec![0.0; x.len()]);
+    let scale = vec![1.0; x.len()];
+    energy.force(&x, &mut start, false);
     leapfrog(
-        &energy, &mut x, &mut p, step_size, n_steps, &mut force, &scale,
+        &energy, &mut x, &mut p, step_size, n_steps, &start, &mut force, &scale,
     );
     Ok((PyArray1::from_vec(py, x), PyArray1::from_vec(py, p)))
 }
@@ -236,11 +249,14 @@ mod tests {
         let (x0, p0) = ([0.3, -1.2, 0.8], [1.1, 0.4, -0.7]);
         let (mut x, mut p, mut f) = (x0.to_vec(), p0.to_vec(), vec![0.0; 3]);
         let scale = [1.0, 0.5, 2.0];
-        leapfrog(&dense, &mut x, &mut p, 0.1, 25, &mut f, &scale);
+        let mut start = vec![0.0; 3];
+        dense.force(&x, &mut start, false);
+        leapfrog(&dense, &mut x, &mut p, 0.1, 25, &start, &mut f, &scale);
         for v in &mut p {
             *v = -*v;
         }
-        leapfrog(&dense, &mut x, &mut p, 0.1, 25, &mut f, &scale);
+        start.copy_from_slice(&f);
+        leapfrog(&dense, &mut x, &mut p, 0.1, 25, &start, &mut f, &scale);
         for i in 0..3 {
             assert!((x[i] - x0[i]).abs() < 1e-12);
             assert!((-p[i] - p0[i]).abs() < 1e-12);

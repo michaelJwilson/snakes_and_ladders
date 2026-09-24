@@ -8,6 +8,9 @@ code and parameters as ``oxisal``'s energy kernels take them (``src/energy.rs``)
 
 * :class:`DeclaredGaussian` --- ``U(x) = x' P x / 2``, ``P`` diagonal
   ``(d,)`` or dense ``(d, d)`` symmetric (issue #986).
+* :class:`DeclaredMixture` --- a one-channel Gaussian mixture's negative
+  log-likelihood of its observations, in ``theta = (k - 1 free weights, k
+  means, k log scales)`` (issue #1008).
 * :class:`Power` --- an *operator* ``f(x) = x ** k`` elementwise, whose
   :class:`~snakes_and_ladders.sample.expectation.KalmanMean` a compiled
   chain keeps itself rather than handing its draws back (issue #1006).
@@ -25,7 +28,7 @@ import numpy as np
 import torch
 
 #: The family codes ``oxisal``'s energy kernels read.
-GAUSSIAN, ROSENBROCK = 0, 1
+GAUSSIAN, ROSENBROCK, MIXTURE = 0, 1, 2
 
 
 @runtime_checkable
@@ -52,8 +55,25 @@ class DeclaredRosenbrock(Protocol):
         ...
 
 
+@runtime_checkable
+class DeclaredMixture(Protocol):
+    """An objective that declares itself a one-channel Gaussian mixture's negative log-likelihood."""
+
+    @property
+    def gaussian_mixture_declaration(self) -> tuple[int, np.ndarray] | None:
+        """``(k, observations)``, or ``None`` where the objective is not that family."""
+        ...
+
+
 def declared_energy(objective: object) -> tuple[int, np.ndarray] | None:
     """The family code and its flat ``float64`` parameters, or ``None`` if none is declared."""
+    if isinstance(objective, DeclaredMixture):
+        declared = objective.gaussian_mixture_declaration
+        if declared is not None:
+            k, values = declared
+            return MIXTURE, np.concatenate(
+                ([float(k)], np.asarray(values, float).ravel())
+            )
     if isinstance(objective, DeclaredGaussian):
         precision = objective.gaussian_precision.detach().numpy()
         return GAUSSIAN, np.ascontiguousarray(precision, dtype=np.float64).reshape(-1)
