@@ -1,3 +1,14 @@
+// The algorithm and its coefficients are fdlibm's `e_log.c`, which carries:
+//
+// ====================================================
+// Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+//
+// Developed at SunSoft, a Sun Microsystems, Inc. business.
+// Permission to use, copy, modify, and distribute this
+// software is freely granted, provided that this notice
+// is preserved.
+// ====================================================
+
 //! `ln x` for positive normal `x` in plain arithmetic, so a loop over it vectorizes (issue #1064).
 //!
 //! `f64::ln` is a call into the platform's libm, opaque to LLVM, and a loop
