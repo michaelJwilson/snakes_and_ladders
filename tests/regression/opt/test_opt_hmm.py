@@ -251,7 +251,7 @@ def test_baum_welch_increases_the_likelihood_monotonically() -> None:
     log_transition = start["log_transition"]
     log_emission = start["log_emission"]
     for _ in range(8):
-        log_initial, log_transition, log_emission, value = baum_welch(
+        log_initial, log_transition, log_emission, value, _ = baum_welch(
             observations,
             log_initial,
             log_transition,
@@ -291,8 +291,8 @@ def test_baum_welch_stops_once_the_likelihood_stops_moving() -> None:
         start["log_emission"],
     )
 
-    *_, loose = baum_welch(*arguments, config=replace(EM, tolerance=1e-1))
-    *_, tight = baum_welch(*arguments, config=replace(EM, tolerance=1e-14))
+    loose = baum_welch(*arguments, config=replace(EM, tolerance=1e-1)).log_likelihood
+    tight = baum_welch(*arguments, config=replace(EM, tolerance=1e-14)).log_likelihood
     assert loose < tight
 
 
@@ -471,7 +471,7 @@ def test_baum_welch_ascends_and_settles_on_the_re_estimation_equations() -> None
     walked = start
     reported = []
     for _ in range(_EM_ASCENT):
-        initial_step, transition_step, emission_step, likelihood = baum_welch(
+        initial_step, transition_step, emission_step, likelihood, _ = baum_welch(
             observations, *walked, config=replace(EM, max_iterations=1)
         )
         walked = (initial_step, transition_step, emission_step)
@@ -479,7 +479,7 @@ def test_baum_welch_ascends_and_settles_on_the_re_estimation_equations() -> None
     increments = np.diff(np.array(reported))
     assert (increments > 0.0).all(), reported
 
-    log_initial, log_transition, log_emission, log_likelihood = baum_welch(
+    log_initial, log_transition, log_emission, log_likelihood, _ = baum_welch(
         observations, *start
     )
     initial, transition, emission, evidence = _re_estimated(

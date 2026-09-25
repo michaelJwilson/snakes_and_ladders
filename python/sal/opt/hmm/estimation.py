@@ -99,7 +99,7 @@ class CategoricalFit:
     termination: Termination | None = None
 
     def __iter__(self) -> Iterator[Any]:
-        """The order callers unpack: the three parameters, then the value.
+        """The declared order (#865): the three parameters, the value, the termination.
 
         ``Any`` and not a union: an unpacking gives every name the element
         type, so a union would mistype each of them.
@@ -109,6 +109,7 @@ class CategoricalFit:
             self.log_transition,
             self.log_emission,
             self.log_likelihood,
+            self.termination,
         )
 
 

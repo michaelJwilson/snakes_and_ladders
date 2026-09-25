@@ -96,12 +96,12 @@ class Labelling:
     termination: Termination | None = None
 
     def __iter__(self) -> Iterator[Any]:
-        """``(labelling, energy)``: the order callers unpack.
+        """``(labelling, energy, sweeps, termination)``: the declared order (#865).
 
-        ``Any`` and not a union: an unpacking gives both names the element
+        ``Any`` and not a union: an unpacking gives every name the element
         type, so a union would mistype each of them.
         """
-        yield from (self.labelling, self.energy)
+        yield from (self.labelling, self.energy, self.sweeps, self.termination)
 
 
 @dataclass(frozen=True)

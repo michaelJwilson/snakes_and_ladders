@@ -54,7 +54,7 @@ def test_single_site_descent_settles_at_a_local_minimum() -> None:
     graph = lattice_graph((5, 5), BoundaryCondition.OPEN, 0.9)
     field_values = rng.normal(size=(graph.n_nodes, 3))
 
-    labelling, settled = iterated_conditional_modes(
+    labelling, settled, *_ = iterated_conditional_modes(
         graph, field_values, 3, np.random.default_rng(1)
     )
 
@@ -178,7 +178,7 @@ def test_the_local_delta_sweep_is_the_recomputing_descent() -> None:
         field = np.random.default_rng(700 + seed).normal(size=(graph.n_nodes, 3))
         start = np.random.default_rng(seed).integers(0, 3, size=graph.n_nodes)
 
-        swept, _ = iterated_conditional_modes(
+        swept, *_ = iterated_conditional_modes(
             graph,
             field,
             3,
@@ -207,7 +207,7 @@ def test_a_random_order_runs_every_sweep_when_a_clean_one_does_not_end_it() -> N
     graph = lattice_graph((5, 5), BoundaryCondition.PERIODIC, 0.9)
     field = np.random.default_rng(31).normal(size=(graph.n_nodes, 3))
 
-    labelling, value = iterated_conditional_modes(
+    labelling, value, *_ = iterated_conditional_modes(
         graph,
         field,
         3,
@@ -217,7 +217,7 @@ def test_a_random_order_runs_every_sweep_when_a_clean_one_does_not_end_it() -> N
         stop_when_clean=False,
         backend=Backend.PYTHON,
     )
-    settled, settled_value = iterated_conditional_modes(
+    settled, settled_value, *_ = iterated_conditional_modes(
         graph,
         field,
         3,

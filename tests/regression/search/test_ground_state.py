@@ -501,7 +501,7 @@ def test_a_swap_of_two_labels_no_site_carries_is_the_identity() -> None:
     rung = _rung(CI, 3)
     labelling = np.zeros(rung.n_nodes, dtype=np.int64)
 
-    moved, value = swap(rung.graph, rung.field, labelling, 1, 2)
+    moved, value, *_ = swap(rung.graph, rung.field, labelling, 1, 2)
 
     assert np.array_equal(moved, labelling)
     assert value == pytest.approx(energy(rung.graph, rung.field, labelling))
