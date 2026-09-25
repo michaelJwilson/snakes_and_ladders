@@ -355,7 +355,7 @@ def test_the_exact_ground_state_at_five_thousand_sites() -> None:
 @pytest.mark.end2end
 @pytest.mark.release
 def test_the_exact_ground_state_at_five_thousand_sites_tilts_with_size() -> None:
-    # #551's Step 1 gate: greedy agreement under ~95% (not field-dominated);
+    # #551's Step 1 gate: field_argmax agreement under ~95% (not field-dominated);
     # tilt positive and below 0.4935, the cut exact at nine sites.
     rung = _rung(RELEASE, 2)
     labelling, _ = rust_ground_state(rung.graph, rung.field)
@@ -373,7 +373,7 @@ def test_the_exact_ground_state_at_five_thousand_sites_tilts_with_size() -> None
 @pytest.mark.critical
 def test_the_runners_record_the_energy_their_kernels_return() -> None:
     # The rung below (#734): a runner records its kernel's number and labelling
-    # on the same rung, seed and budget. `run_tempering`, `run_greedy` and
+    # on the same rung, seed and budget. `run_tempering`, `run_field_argmax` and
     # `run_max_product` against `parallel_tempering`, the field argmax and
     # flooding `max_product`: difference 0.0, exact equality declared.
     rung = _rung(CI, 3)
@@ -400,12 +400,12 @@ def test_the_runners_record_the_energy_their_kernels_return() -> None:
         tempering.spent == ground_state.N_REPLICAS * per_replica * rung.visits_per_sweep
     )
 
-    greedy = ground_state.run_greedy(rung, budget, np.random.default_rng(seed))
+    argmax = ground_state.run_field_argmax(rung, budget, np.random.default_rng(seed))
     field_only = rung.field.argmax(axis=1).astype(np.int64)
 
-    assert greedy.energy == energy(rung.graph, rung.field, field_only)
-    assert np.array_equal(greedy.labelling, field_only)
-    assert greedy.spent == rung.n_nodes
+    assert argmax.energy == energy(rung.graph, rung.field, field_only)
+    assert np.array_equal(argmax.labelling, field_only)
+    assert argmax.spent == rung.n_nodes
 
     product = ground_state.run_max_product(rung, budget, np.random.default_rng(seed))
     iterations = max(1, budget.size // rung.visits_per_sweep)
