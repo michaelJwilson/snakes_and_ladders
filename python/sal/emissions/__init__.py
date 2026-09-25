@@ -58,13 +58,17 @@ Parameterization for an unconstrained optimizer belongs to
 :mod:`sal.sim` import ``sal.opt`` transitively
 to draw a sequence.
 
-**The package is four modules, and each imports only those before it.**
+**The package is six modules, and each imports only those before it.**
 :mod:`~sal.emissions.base` declares the interface,
 :mod:`~sal.emissions.families` the categorical and Gaussian
 families, :mod:`~sal.emissions.mstep` the count families' M-step
-solves and the backend they run on, and
+solves and the backend they run on,
 :mod:`~sal.emissions.counts` the count families, which call
-those solves. Every name this module exported before the split (issue #1010)
+those solves, and :mod:`~sal.emissions.nb` and
+:mod:`~sal.emissions.bb` the negative binomial's exposure and the
+beta-binomial's trial count factored out of their densities into tables by
+integer, which the compiled coupled E step reads (issue #1064). Neither is
+re-exported here: each is one caller's, imported where it is used. Every name this module exported before the split (issue #1010)
 is re-exported here, so ``from sal.emissions import X`` is
 unchanged; :data:`M_STEP_BACKEND` is read from and written to
 :mod:`~sal.emissions.mstep`, the one module that reads it.

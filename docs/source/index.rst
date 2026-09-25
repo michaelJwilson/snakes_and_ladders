@@ -43,6 +43,12 @@ whether or not it has members yet.
 .. automodule:: sal.emissions.counts
    :members: lgamma_shifted
 
+.. automodule:: sal.emissions.nb
+   :members:
+
+.. automodule:: sal.emissions.bb
+   :members:
+
 .. automodule:: sal.fixtures
    :members:
 
@@ -510,6 +516,12 @@ whether or not it has members yet.
 .. automodule:: sal.search.icm.numba
    :members:
 
+.. automodule:: sal.search.trws
+   :members:
+
+.. automodule:: sal.search.trws.numba
+   :members:
+
 .. automodule:: sal.search.max_cut
    :members:
 
@@ -546,6 +558,9 @@ whether or not it has members yet.
    :no-index:
 
 .. automodule:: sal.sandbox.circulant_schedule
+   :members:
+
+.. automodule:: sal.sandbox.covariate_grid
    :members:
 
 .. automodule:: sal.sandbox.maxflow_declined

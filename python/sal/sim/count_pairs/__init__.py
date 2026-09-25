@@ -925,6 +925,13 @@ class SpatioSequentialCountsParams:
         ``class_rate_shift[m]``. Everything is still a literal in the file,
         and the number of them is ``5 K + 2 M``.
 
+        **A covariate is declared as a seeded draw, not as a table**
+        (issue #1064), for the reason the ladders are: ``S x V x 2`` values
+        are 128,000 at the per-pull-request size. The optional ``covariate``
+        block states a seed and one log-normal per channel, and
+        :func:`_declared_covariate` draws it; a file without the block
+        declares no covariate.
+
         ``declared`` is the mapping
         :func:`sal.fixtures.load_params` read from ``path``
         with :attr:`required_fields` present; ``path`` names the file in
@@ -987,19 +994,27 @@ class SpatioSequentialCountsParams:
                 )
             )
 
+        graph = triangular_lattice_graph(
+            (int(declared["shape"][0]), int(declared["shape"][1])),
+            boundary_from_declared(path, declared["boundary"]),
+            float(declared["coupling"]),
+        )
+        n_positions = int(declared["n_positions"])
+        declared_covariate = declared.get("covariate")
         model = SpatioSequentialParams(
-            graph=triangular_lattice_graph(
-                (int(declared["shape"][0]), int(declared["shape"][1])),
-                boundary_from_declared(path, declared["boundary"]),
-                float(declared["coupling"]),
-            ),
+            graph=graph,
             n_classes=n_classes,
             n_states=n_states,
-            n_positions=int(declared["n_positions"]),
+            n_positions=n_positions,
             beta=float(declared["beta"]),
             self_transition=float(declared["self_transition"]),
             initial=np.asarray(declared["initial"], dtype=np.float64),
             emissions=tuple(families),
+            covariate=None
+            if declared_covariate is None
+            else _declared_covariate(
+                declared_covariate, path, n_positions, graph.n_nodes
+            ),
         )
         digest = declared.get("counts_digest")
         return cls(
@@ -1298,6 +1313,61 @@ def counts_digest(instance: CountPairInstance) -> str:
 
 
 _REQUIRED_LADDERS = ("mean", "dispersion", "trials", "rate", "concentration")
+
+#: The fields of a declared covariate: its seed and one log-normal per channel.
+_COVARIATE_FIELDS = frozenset({"form", "seed", "exposure", "trials"})
+
+
+def _declared_covariate(
+    declared: object, path: Path, n_positions: int, n_nodes: int
+) -> np.ndarray:
+    """The ``(S, V, 2)`` covariate a fixture's ``covariate`` block declares (issue #1064).
+
+    One independent log-normal draw per position, vertex and channel, from the
+    block's own seed, so the covariate is continuous and takes ``S * V``
+    distinct values per channel --- the regime where tabulating by the distinct
+    covariate values stops being a table. Channel ``TOTAL`` is the exposure,
+    ``median * exp(sigma * z)``. Channel ``SUCCESSES`` is the trial count,
+    drawn the same way and rounded to an integer no smaller than one, since
+    the beta-binomial draws its successes out of a whole number of trials.
+
+    The draw is the declaration's and not the simulator's: the model
+    conditions on the covariate, so it is part of the parameters every scorer
+    reads, and the counts are drawn against it.
+
+    Raises
+    ------
+    ValueError
+        If the block is not a mapping of exactly :data:`_COVARIATE_FIELDS`, its
+        form is not ``lognormal``, or a median or sigma is not positive and
+        finite.
+    """
+    if not isinstance(declared, Mapping) or set(declared) != _COVARIATE_FIELDS:
+        msg = (
+            f"{path}: covariate must declare exactly {sorted(_COVARIATE_FIELDS)}, "
+            f"got {declared!r}"
+        )
+        raise ValueError(msg)
+    if declared["form"] != "lognormal":
+        msg = f"{path}: covariate form {declared['form']!r} is not 'lognormal'"
+        raise ValueError(msg)
+    rng = np.random.default_rng(int(declared["seed"]))
+    channels = []
+    for name in ("exposure", "trials"):
+        entry = declared[name]
+        median = float(entry["median"])
+        sigma = float(entry["sigma"])
+        if not (np.isfinite(median) and np.isfinite(sigma)) or min(median, sigma) <= 0:
+            msg = (
+                f"{path}: covariate.{name} needs a positive finite median and "
+                f"sigma, got median={median}, sigma={sigma}"
+            )
+            raise ValueError(msg)
+        channels.append(
+            median * np.exp(sigma * rng.standard_normal((n_positions, n_nodes)))
+        )
+    exposure, trials = channels
+    return np.stack([exposure, np.maximum(np.rint(trials), 1.0)], axis=-1)
 
 
 def _ladder(declared: Mapping[str, object], name: str, n_states: int) -> np.ndarray:

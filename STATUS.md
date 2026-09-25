@@ -2378,7 +2378,7 @@ since the hand ladder hits 18/20 at 100 sweeps. NUTS remains out of scope.
 
 ## Milestone 1.4 — Discrete Move Sets & Classical Baselines
 
-**Modules.** The discrete solvers and their compiled counterparts: `search.ground_state`, `search.projection`, `sim.topology` and `sample.gibbs.numba` (`sample.kernels`, then `sample.numba.{gibbs,factor_graph}`, until #1059, `search.topology` and `search.kernels` until #830, which also put the chain's params in `sim.potts_chain`, the sampler-built initializers in `sample.initialize` and the algebraic decoders in `likelihood.algebraic`) (`search.potts_mcmc_rust`, a one-line twin, folded by #717). `search.decoding`: two estimators of a labelling, and which loss each one minimizes (#696). `search.tightening`: a dual bound on a Potts ground state, and the plaquettes that tighten it (#696). `sample.potts_keyed`: the cluster moves, as something a deterministic ``step`` can call (#706). `sample.balanced`: the locally balanced proposal kernel the Potts lattice and the factor graph share (#756). Those two, `sample.potts_mcmc`, `sample.gibbs`, `sample.tempered`, `sample.annealed` and `sample.statistics` were under `search` until #777. `search.mixture_starts`: the joint count-pair mixture started every way the package can start it, each start polished by EM at one budget and timed through `track` (#891). `search.potts_starts`: every ground-state solver as a start of the `opt.starts` seam on a size-tilted lattice, the energy an `Objective` over labellings and ICM the polish; at `potts_lattice/release`, q = 3, the graph cuts hand over the q = 2 sibling's exact optimum (#906). `search.icm`: iterated conditional modes and its minimum-sites floor, moved out of `search.alpha_expansion` (#1055); its `numba` kernel is `search.icm.numba`, the `<subpackage>.<backend>` layout (#1059).
+**Modules.** The discrete solvers and their compiled counterparts: `search.ground_state`, `search.projection`, `sim.topology` and `sample.gibbs.numba` (`sample.kernels`, then `sample.numba.{gibbs,factor_graph}`, until #1059, `search.topology` and `search.kernels` until #830, which also put the chain's params in `sim.potts_chain`, the sampler-built initializers in `sample.initialize` and the algebraic decoders in `likelihood.algebraic`) (`search.potts_mcmc_rust`, a one-line twin, folded by #717). `search.decoding`: two estimators of a labelling, and which loss each one minimizes (#696). `search.tightening`: a dual bound on a Potts ground state, and the plaquettes that tighten it (#696). `sample.potts_keyed`: the cluster moves, as something a deterministic ``step`` can call (#706). `sample.balanced`: the locally balanced proposal kernel the Potts lattice and the factor graph share (#756). Those two, `sample.potts_mcmc`, `sample.gibbs`, `sample.tempered`, `sample.annealed` and `sample.statistics` were under `search` until #777. `search.mixture_starts`: the joint count-pair mixture started every way the package can start it, each start polished by EM at one budget and timed through `track` (#891). `search.potts_starts`: every ground-state solver as a start of the `opt.starts` seam on a size-tilted lattice, the energy an `Objective` over labellings and ICM the polish; at `potts_lattice/release`, q = 3, the graph cuts hand over the q = 2 sibling's exact optimum (#906). `search.icm`: iterated conditional modes and its minimum-sites floor, moved out of `search.alpha_expansion` (#1055); its `numba` kernel is `search.icm.numba`, the `<subpackage>.<backend>` layout (#1059). `search.trws`: the local-polytope lower bound on a Potts ground state by sequential tree-reweighted message passing, its Python reference the oracle of the `numba` kernel `search.trws.numba` (#1060).
 
 **NNI and SPR: landed and counted.** Both neighbourhoods sit behind one
 `Topology -> Iterator[Topology]` interface and are verified exhaustively
@@ -4092,6 +4092,27 @@ states every triangle is 3-colourable, so the relaxation satisfies every edge
 at no cost whatever the coupling, and only a constraint *over* the triangle
 can charge for the frustration. It is asserted as a prediction, not recorded
 as an observation.
+
+**The local-polytope bound at 5,041 sites, #1060.** `search.trws` maximizes
+the pairwise relaxation `dual_bound` maximizes with no plaquettes, by TRW-S
+(Kolmogorov 2006) over monotone chains, with an `O(q)` Potts message. Measured
+2026-09-25 on the compiled kernel at its defaults (tolerance 1e-12 relative,
+5,000 iterations):
+
+| instance | TRW-S bound | best known labelling | gap | iterations | seconds |
+| --- | --- | --- | --- | --- | --- |
+| `spatio_only/release`, q = 10 | **-10,454.16** | -10,454.16, the graph cut (#1041) | 0.00 | 43 | 0.23 |
+| `spatio_tiling/release`, q = 10 | **-17,022.98** | -17,022.18, annealing after ICM (#1050) | 0.81 | 1,825 | 8.7 |
+
+The first row certifies the ten-state optimum with no reduction; the second
+narrows the tiling bracket from 293.3, the factor-2 bound, to 0.81. At that
+size `dual_bound` ran 200 iterations in 177.9 s to -10,455.25 on the first
+row and in 176.3 s to -17,025.92 on the second, both unconverged. The compiled
+kernel runs 10 iterations in 68.6 ms against the Python reference's 10,338 ms,
+151x (`test_trws_bench.py`, 1-minute load 4). On two frustrated 3x3
+triangular lattices TRW-S converges below `dual_bound`'s value of the same
+relaxation, and both below the explicit LP (`test_trws.py`); the LP
+comparison at size is #1063.
 
 Two implementation notes worth keeping. The block update is the exact
 minimizer of its own block, checked against a numerical minimum over the
