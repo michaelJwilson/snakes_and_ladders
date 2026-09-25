@@ -42,9 +42,11 @@ from sal.sim.spatio_sequential import SpatioSequentialParams
 PROBLEM = "spatio_sequential_counts_covariate"
 
 #: Relative agreement of one observation's score with the family's
-#: ``log_density``. The terms are the family's, in its order; what differs is
-#: Rust's ``ln`` against torch's ``log``. Measured 2.3 ulp at the ci instance.
-_ULPS = 8
+#: ``log_density``. The kernel forms ``B + y ln c - (y + r) ln t``, one
+#: logarithm per score, where the family forms ``A + r ln(r/t) + y ln(mu c/t)``;
+#: ``y ln mu`` in ``B`` cancels against ``-y ln t``. Measured 262.9 ulp at the ci
+#: instance (2.3 in the family's order, traded for speed; issue #1064).
+_ULPS = 512
 _PER_SCORE = _ULPS * np.finfo(np.float64).eps
 
 #: Relative agreement of an evidence and a field with the NumPy oracle: the
@@ -127,7 +129,7 @@ def _sides(params: SpatioSequentialParams, channel: int) -> list[EmissionFamily]
 
 
 @pytest.mark.oracle
-def test_each_factored_score_is_the_familys_to_a_few_ulp() -> None:
+def test_each_factored_score_is_the_familys_within_the_declared_ulp() -> None:
     # The factorization claims each score, not only their sum: A[y] plus the
     # two exposure terms is the family's log_density at that exposure.
     instance = _instance()

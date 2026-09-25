@@ -35,12 +35,14 @@ that the table was built from it.
 one value per observation, and a table by count and distinct exposure then has
 ``extent * S * V`` rows: 2.3 GB per channel at the ci instance of
 ``spatio_sequential_counts_covariate``. The negative binomial splits as
-``A_k(y) + r_k log(r_k / t) + y log(mu_k c / t)`` with ``t = r_k + mu_k c``
-(:meth:`~sal.emissions.NegativeBinomialEmission.count_log_factor`), so
-the total's table is ``A`` by count and the kernel forms the two exposure terms
-per observation, in the family's order. Each score is then the family's to
-2.3 ulp relative at that instance, the difference between two ``log``
-implementations.
+``B_k(y) + y log c - (y + r_k) log t`` with ``t = r_k + mu_k c`` and
+``B_k(y) = A_k(y) + r_k log r_k + y log mu_k``, ``A`` being
+:meth:`~sal.emissions.NegativeBinomialEmission.count_log_factor`. So the
+total's table is ``B`` by count and the kernel forms ``y log c - (y + r) log t``
+per observation: one logarithm per score, chosen for speed over the family's
+order of operations. The sum cancels where ``y log mu`` and ``y log(mu c / t)``
+are large and opposite, so each score is the family's to 263 ulp relative at
+that instance rather than the 2.3 ulp the family's order gives.
 
 **A trial count may be tabulated on a grid** (issue #1064). With
 ``covariate_tolerance`` set, a covariate is coded ``round(c * scale)`` for the
@@ -366,7 +368,7 @@ def _channel_rows(
 
     With one on a negative binomial, the table is
     :meth:`~sal.emissions.NegativeBinomialEmission.count_log_factor`
-    by count, the row is the count, and the exposure travels as an
+    plus ``r log r + y log mu`` by count, the row is the count, and the exposure travels as an
     :class:`ExposureTerm` the kernel completes the density with (issue #1064).
 
     With one on any other family, the density is a function of the count
@@ -406,7 +408,13 @@ def _channel_rows(
         counts = torch.from_numpy(np.arange(extent, dtype=np.float64))
         table = np.empty((extent, params.n_classes, params.n_states))
         for m, side in enumerate(negative_binomials):
-            table[:, m, :] = side.count_log_factor(counts).numpy()
+            # `B = A + r log r + y log mu`: the exposure-free terms of the
+            # kernel's `B + y log c - (y + r) log t`.
+            table[:, m, :] = (
+                side.count_log_factor(counts)
+                + side.dispersion * torch.log(side.dispersion)
+                + counts.unsqueeze(-1) * torch.log(side.mean)
+            ).numpy()
         term = ExposureTerm(
             exposure,
             np.ascontiguousarray(

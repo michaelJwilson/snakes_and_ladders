@@ -125,9 +125,9 @@ pub struct EmissionTables<'a> {
 
 /// The negative binomial's exposure, factored out of the first channel's table.
 ///
-/// `log p(y | m, k, c) = A[y, m, k] + r ln(r / t) + y ln(mu c / t)`, with
-/// `t = r_mk + mu_mk c` and `A[y, m, k] = lgamma(y + r) - lgamma(r) -
-/// lgamma(y + 1)` the first channel's table. A zero exposure marks the count
+/// `log p(y | m, k, c) = B[y, m, k] + y ln c - (y + r) ln t`, with
+/// `t = r_mk + mu_mk c` and `B[y, m, k] = lgamma(y + r) - lgamma(r) -
+/// lgamma(y + 1) + r ln r + y ln mu` the first channel's table. A zero exposure marks the count
 /// unobserved and it scores zero under every class and state, as the family
 /// scores it.
 #[derive(Clone, Copy)]
@@ -143,9 +143,10 @@ pub struct ExposureTerm<'a> {
 impl ExposureTerm<'_> {
     /// The first channel's score at one observation, for every state of class `m`.
     ///
-    /// Two logarithms and two divisions per class and state, in the order
-    /// `NegativeBinomialEmission.log_density` takes them, which is the whole
-    /// cost the factorization adds.
+    /// One logarithm per class and state, `ln t`, and `ln c` once per call:
+    /// the form chosen for speed over the family's order of operations, which
+    /// costs two logarithms and two divisions per score and agrees to fewer
+    /// ulp (issue #1064).
     #[inline]
     fn score_into(&self, table: &[f64], count: u32, c: f64, from: usize, out: &mut [f64]) {
         if c == 0.0 {
@@ -153,12 +154,12 @@ impl ExposureTerm<'_> {
             return;
         }
         let y = f64::from(count);
+        let y_log_c = y * c.ln();
         for (k, cell) in out.iter_mut().enumerate() {
             let index = from + k;
             let r = self.dispersion[index];
-            let rate = c * self.mean[index];
-            let total = r + rate;
-            *cell = table[k] + r * (r / total).ln() + y * (rate / total).ln();
+            let total = r + c * self.mean[index];
+            *cell = table[k] + y_log_c - (y + r) * total.ln();
         }
     }
 
@@ -854,9 +855,9 @@ mod tests {
 
         external_field_into(shape, &tables, &totals, &successes, &weights, &mut field).unwrap();
 
-        let score = |a: f64, y: f64, c: f64| {
-            let (r, rate) = (dispersion[0], mean[0] * c);
-            a + r * (r / (r + rate)).ln() + y * (rate / (r + rate)).ln()
+        let score = |b: f64, y: f64, c: f64| {
+            let r = dispersion[0];
+            b + y * c.ln() - (y + r) * (r + mean[0] * c).ln()
         };
         // Vertex 0: count 0 at exposure 0.5, then count 1 at exposure 0,
         // which is unobserved and scores zero.
