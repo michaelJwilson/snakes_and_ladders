@@ -506,7 +506,7 @@ whether or not it has members yet.
 .. automodule:: sal.search.trws
    :members:
 
-.. automodule:: sal.search.numba.trws
+.. automodule:: sal.search.trws.numba
    :members:
 
 .. automodule:: sal.search.max_cut
