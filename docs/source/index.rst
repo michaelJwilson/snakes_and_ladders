@@ -289,6 +289,9 @@ whether or not it has members yet.
 .. automodule:: sal.opt.budget
    :members:
 
+.. automodule:: sal.opt.compose
+   :members:
+
 .. automodule:: sal.opt.starts
    :members:
 

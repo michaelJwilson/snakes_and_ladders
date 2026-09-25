@@ -90,10 +90,10 @@ from sal.search.ground_state import (
     EXPANSION_SW_SCHEDULE,
     MethodRun,
     Rung,
+    expansion_then_swendsen_wang,
     run_alpha_expansion,
     run_annealed,
-    run_expansion_then_swendsen_wang,
-    run_swendsen_wang_then_expansion,
+    swendsen_wang_then_expansion,
 )
 from sal.search.potts_starts import (
     LabellingEnergy,
@@ -458,12 +458,8 @@ def arms() -> dict[str, Callable[[np.random.Generator], RunStart]]:
         "niedermayer matched": functools.partial(
             run_annealed, move=PottsMove.NIEDERMAYER, schedule=sw, steps=matched
         ),
-        "swendsen-wang>expansion": functools.partial(
-            run_swendsen_wang_then_expansion, schedule=sw
-        ),
-        "expansion>swendsen-wang": functools.partial(
-            run_expansion_then_swendsen_wang, schedule=EXPANSION_SW_SCHEDULE
-        ),
+        "swendsen-wang>expansion": swendsen_wang_then_expansion(sw),
+        "expansion>swendsen-wang": expansion_then_swendsen_wang(EXPANSION_SW_SCHEDULE),
         "ghost-spin": functools.partial(
             run_annealed, move=PottsMove.GHOST_SPIN, schedule=sw
         ),

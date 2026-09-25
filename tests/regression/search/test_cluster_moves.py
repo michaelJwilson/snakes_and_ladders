@@ -23,10 +23,10 @@ from sal.search.ground_state import (
     EXPANSION_RESERVE_CYCLES,
     Rung,
     ends_labelling,
+    expansion_then_swendsen_wang,
     run_alpha_expansion,
     run_annealed,
-    run_expansion_then_swendsen_wang,
-    run_swendsen_wang_then_expansion,
+    swendsen_wang_then_expansion,
 )
 from sal.search.potts_starts import spatio_rung
 from sal.sim.fixtures import fixture
@@ -125,8 +125,8 @@ def test_expansion_then_swendsen_wang_hands_over_no_more_than_the_expansion(
     rung = _release()
     budget = _budget(rung)
     expansion = run_alpha_expansion(rung, budget, np.random.default_rng(seed))
-    run = run_expansion_then_swendsen_wang(
-        rung, budget, np.random.default_rng(seed), schedule=SCHEDULE
+    run = expansion_then_swendsen_wang(SCHEDULE)(
+        rung, budget, np.random.default_rng(seed)
     )
 
     assert run.energy <= expansion.energy
@@ -142,9 +142,7 @@ def test_swendsen_wang_then_expansion_is_charged_both_parts() -> None:
         Cost.SITE_VISITS,
         EXPANSION_RESERVE_CYCLES * per_cycle + SWEEPS * rung.visits_per_sweep,
     )
-    run = run_swendsen_wang_then_expansion(
-        rung, budget, np.random.default_rng(3), schedule=SCHEDULE
-    )
+    run = swendsen_wang_then_expansion(SCHEDULE)(rung, budget, np.random.default_rng(3))
     anneal = run_annealed(
         rung,
         _budget(rung),

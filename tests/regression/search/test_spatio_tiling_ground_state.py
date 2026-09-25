@@ -25,10 +25,10 @@ from sal.search.ground_state import (
     ANNEAL_SCHEDULE,
     MethodRun,
     expansion_bracket,
+    expansion_then_swendsen_wang,
     run_alpha_beta_swap,
     run_alpha_expansion,
-    run_expansion_then_swendsen_wang,
-    run_swendsen_wang_then_expansion,
+    swendsen_wang_then_expansion,
 )
 from sal.search.potts_starts import (
     TilingRung,
@@ -160,11 +160,11 @@ def test_the_annealed_handovers_end_no_lower_than_the_optimum_and_no_higher_than
     held = _held(rung)
     expansion = _graph_cuts(rung)["alpha-expansion"]
     for seed in range(3):
-        then_cut = run_swendsen_wang_then_expansion(
-            rung, _budget(rung), np.random.default_rng(seed), schedule=ANNEAL_SCHEDULE
+        then_cut = swendsen_wang_then_expansion(ANNEAL_SCHEDULE)(
+            rung, _budget(rung), np.random.default_rng(seed)
         )
-        then_anneal = run_expansion_then_swendsen_wang(
-            rung, _budget(rung), np.random.default_rng(seed), schedule=ANNEAL_SCHEDULE
+        then_anneal = expansion_then_swendsen_wang(ANNEAL_SCHEDULE)(
+            rung, _budget(rung), np.random.default_rng(seed)
         )
 
         assert then_cut.termination is not None
