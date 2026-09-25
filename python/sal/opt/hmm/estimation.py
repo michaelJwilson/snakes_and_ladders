@@ -72,10 +72,10 @@ class CategoricalFit:
     """What :func:`baum_welch` fitted, as log-probabilities.
 
     :class:`EmFit` is the general form, carrying a family rather than a
-    matrix and two fields a categorical M step cannot fill: no categorical
-    re-estimate sits at a boundary, and the outer loop's termination is
-    :class:`EmFit`'s to report. This is the narrowing, and it carries what
-    the four-tuple carried and nothing else (issue #865).
+    matrix and a field a categorical M step cannot fill: no categorical
+    re-estimate sits at a boundary. The outer loop's termination is carried
+    as every EM fit carries it (issue #1059); the four-tuple an unpacking
+    reads is what it was (issue #865).
 
     Parameters
     ----------
@@ -87,12 +87,16 @@ class CategoricalFit:
         Shape ``(m, n_symbols)``, the fitted emission matrix.
     log_likelihood : float
         The final log-likelihood.
+    termination : Termination | None
+        Why the EM loop stopped and after how many iterations, as
+        :class:`EmFit` reports it.
     """
 
     log_initial: torch.Tensor
     log_transition: torch.Tensor
     log_emission: torch.Tensor
     log_likelihood: float
+    termination: Termination | None = None
 
     def __iter__(self) -> Iterator[Any]:
         """The order callers unpack: the three parameters, then the value.
@@ -180,6 +184,7 @@ def baum_welch(
         result.log_transition,
         family.log_matrix,
         result.log_likelihood,
+        termination=result.termination,
     )
 
 
@@ -327,7 +332,7 @@ def _streamed_baum_welch(
             -1
         )
 
-    (initial, transition, emission), log_likelihood, _ = em_loop(
+    (initial, transition, emission), log_likelihood, termination = em_loop(
         step,
         (flat(log_initial), flat(log_transition), flat(log_emission)),
         tolerance=tolerance,
@@ -340,6 +345,7 @@ def _streamed_baum_welch(
         torch.from_numpy(transition.reshape(m, m)),
         torch.from_numpy(emission.reshape(m, n_symbols)),
         log_likelihood,
+        termination=termination,
     )
 
 

@@ -38,6 +38,7 @@ from sal.opt.hmm import (
     baum_welch_family,
     forward_log_likelihood,
 )
+from sal.opt.termination import Stop, Termination
 from sal.sim.fixtures import fixture
 from sal.sim.hmm import HmmParams, simulate_sequences
 
@@ -523,6 +524,10 @@ def test_the_streamed_baum_welch_is_the_batched_one() -> None:
                 atol=1e-10,
             )
         assert_allclose(fits[1].log_likelihood, fits[0].log_likelihood, rtol=1e-12)
+        # Issue #1059: both routes report the loop's termination, as every EM
+        # fit does; ten steps at a tolerance nothing meets is the budget.
+        for fit in fits:
+            assert fit.termination == Termination(False, 10, Stop.BUDGET)
 
     every_value([1, 40], check)
 
