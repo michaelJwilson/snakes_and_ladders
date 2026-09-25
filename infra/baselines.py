@@ -207,7 +207,10 @@ def tree_policy_baseline(loaded: Fixture[Any]) -> dict[str, Measurement]:
     starts = _starts(built, params.seed)
     greedy = _rate(
         built,
-        [greedy_rollout(built, start, HORIZON).states[-1] for start in starts],
+        [
+            greedy_rollout(built, start=start, max_steps=HORIZON).states[-1]
+            for start in starts
+        ],
         best,
     )
     generator = np.random.default_rng(UNTRAINED_SEED)
@@ -215,7 +218,9 @@ def tree_policy_baseline(loaded: Fixture[Any]) -> dict[str, Measurement]:
     untrained = _rate(
         built,
         [
-            rollout(built, untrained_policy, generator, HORIZON, start=start).states[-1]
+            rollout(
+                built, untrained_policy, generator, max_steps=HORIZON, start=start
+            ).states[-1]
             for start in starts
             for _ in range(ROLLOUTS_PER_START)
         ],
@@ -325,7 +330,7 @@ def potts_environment_baseline(loaded: Fixture[Any]) -> dict[str, Measurement]:
                             environment,
                             untrained,
                             generator,
-                            RL_ROLLOUT_HORIZON,
+                            max_steps=RL_ROLLOUT_HORIZON,
                             start=s,
                         ).states[-1]
                     )

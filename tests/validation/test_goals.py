@@ -32,6 +32,7 @@ from sal.learn.surrogate import (
     SetSurrogate,
     _Batch,
 )
+from sal.opt.em import EmConfig
 from sal.opt.hmm import GaussianHmmObjective, baum_welch
 from sal.opt.mixture import expectation_maximization
 from sal.sample import hmc, metropolis
@@ -1193,8 +1194,7 @@ def _baum_welch_seconds(n_sequences: int) -> float:
             initial,
             transition,
             emission,
-            max_iterations=10,
-            tolerance=-np.inf,
+            config=EmConfig(max_iterations=10, tolerance=-np.inf),
         ),
         repeats=3,
     )
@@ -1219,7 +1219,10 @@ def _mixture_em_seconds(n_samples: int) -> float:
     weights = torch.tensor([0.3, 0.3, 0.4], dtype=torch.float64)
     return median_seconds(
         lambda: expectation_maximization(
-            observations, weights, start, max_iterations=10, tolerance=-np.inf
+            observations,
+            weights,
+            start,
+            config=EmConfig(max_iterations=10, tolerance=-np.inf),
         ),
         repeats=3,
     )

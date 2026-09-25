@@ -65,7 +65,7 @@ def _expansion(backend: Backend) -> float:
     labelling = rng.integers(0, _LABELS, size=n_nodes)
     total = 0.0
     for alpha in range(_LABELS):
-        _, value = expand(graph, field, labelling, alpha, backend=backend)
+        _, value, *_ = expand(graph, field, labelling, alpha, backend=backend)
         total += value
     return total
 

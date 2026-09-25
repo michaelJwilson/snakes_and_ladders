@@ -19,6 +19,7 @@ from sal.emissions import (
     NegativeBinomialEmission,
     PoissonEmission,
 )
+from sal.opt.em import EmConfig
 from sal.opt.emission_mixture import expectation_maximization
 
 
@@ -55,7 +56,10 @@ def test_the_distinct_count_fit_is_the_per_observation_one(name: str) -> None:
     weights = torch.tensor([0.3, 0.3, 0.4], dtype=torch.float64)
     cells, oracle = (
         expectation_maximization(
-            values, weights, family, max_iterations=15, tolerance=-np.inf
+            values,
+            weights,
+            family,
+            config=EmConfig(max_iterations=15, tolerance=-np.inf),
         )
         for values in (counts, counts.astype(np.float64))
     )

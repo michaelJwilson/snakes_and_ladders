@@ -6,7 +6,7 @@ what it offers, and hands it to a polisher, over an
 labelling is a vector of integers with an energy, and nothing the seam does
 with ``theta`` --- score it, detach it, count its bytes, hand it on --- needs
 more than a tensor. So the lattice enters the seam through an adapter, not a
-second type parameter on it: :class:`PottsObjective` is the energy as an
+second type parameter on it: :class:`LabellingEnergy` is the energy as an
 ``Objective`` whose ``theta`` is the labelling, :class:`SolverStart` is one
 entry of :data:`~sal.search.ground_state.METHODS` as an
 ``Initializer``, and :func:`polish_by_icm` is iterated conditional modes as a
@@ -263,11 +263,15 @@ def binary_sibling(rung: Rung, name: str) -> Rung:
 
 
 @dataclass(frozen=True)
-class PottsObjective:
+class LabellingEnergy:
     """The energy of a rung as an :class:`~sal.opt.objective.Objective` over labellings.
 
     ``theta`` is the labelling, one ``int64`` per site; the value is
     :func:`~sal.sim.potts.energy` there, lower being better.
+
+    Named ``PottsObjective`` until #1059, the name
+    :class:`sal.opt.potts.PottsObjective` gives the chain's likelihood in
+    the coupling, a different objective over different parameters.
 
     Parameters
     ----------
@@ -450,8 +454,8 @@ class RunStart:
 
 
 def _rung(objective: Objective, who: str) -> Rung:
-    """The rung a :class:`PottsObjective` carries, or a refusal naming ``who``."""
-    if not isinstance(objective, PottsObjective):
+    """The rung a :class:`LabellingEnergy` carries, or a refusal naming ``who``."""
+    if not isinstance(objective, LabellingEnergy):
         refuse_start(who, objective, "it is not a Potts energy over labellings")
     return objective.rung
 

@@ -12,13 +12,13 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from sal.likelihood import spatio_sequential_rust as rust
 from sal.likelihood.spatio_sequential import (
     class_posteriors,
     external_field,
+    rust,
 )
 from sal.sim.count_pairs import CountPairInstance
-from sal.sim.count_pairs_rust import fine_instance
+from sal.sim.count_pairs.rust import fine_instance
 from sal.sim.fixtures import fixture
 from sal.sim.spatio_sequential import SpatioSequentialParams
 
@@ -97,33 +97,34 @@ def test_without_a_covariate_the_rows_are_the_counts() -> None:
     instance = _instance()
     observations = instance.observations
 
-    totals, successes, total_table, success_table = rust.emission_rows(
-        instance.params, observations
-    )
+    rows = rust.emission_rows(instance.params, observations)
 
-    assert np.array_equal(totals, observations[..., 0])
-    assert np.array_equal(successes, observations[..., 1])
-    assert total_table.shape[0] == int(observations[..., 0].max()) + 1
-    assert success_table.shape[0] == int(observations[..., 1].max()) + 1
+    assert rows.exposure is None
+    assert np.array_equal(rows.total_rows, observations[..., 0])
+    assert np.array_equal(rows.success_rows, observations[..., 1])
+    assert rows.total_table.shape[0] == int(observations[..., 0].max()) + 1
+    assert rows.success_table.shape[0] == int(observations[..., 1].max()) + 1
 
 
 @pytest.mark.smoke
 def test_the_covaried_tabulation_stays_a_table() -> None:
     """The reason this is a table and not a per-observation score array.
 
-    The outer product, 20,736 and 41, against 64,000 observations at ci. Sorting
-    the distinct pairs instead cost 135.6 ms of a 141.4 ms E step (0.6x the
-    oracle); the outer product is 10x faster to build.
+    The total's table is by count, 324 rows, its exposure factored (issue
+    #1064); the successes' is the outer product, 246 rows; against 64,000
+    observations at ci. Sorting the distinct pairs instead cost 135.6 ms of a
+    141.4 ms E step (0.6x the oracle); the outer product is 10x faster to
+    build.
     """
     instance = _instance()
     params = _covaried(instance)
     observations = instance.observations
     n_observations = observations.shape[0] * observations.shape[1]
 
-    _, _, total_table, success_table = rust.emission_rows(params, observations)
+    rows = rust.emission_rows(params, observations)
 
-    assert total_table.shape[0] < n_observations
-    assert success_table.shape[0] < n_observations
+    assert rows.total_table.shape[0] < n_observations
+    assert rows.success_table.shape[0] < n_observations
 
 
 @pytest.mark.analytic

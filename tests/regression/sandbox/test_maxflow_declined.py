@@ -20,13 +20,13 @@ from sal.backend import Backend
 from sal.sandbox import maxflow_declined
 from sal.sandbox.maxflow_declined import DeclinedKernel
 from sal.search import alpha_expansion as expansion_module
-from sal.search import maxflow_rust
 from sal.search.alpha_expansion import alpha_beta_swap, alpha_expansion
 from sal.search.maxflow import (
     FlowNetwork,
     ising_ground_state,
     max_flow,
 )
+from sal.search.maxflow import rust as maxflow_rust
 from sal.sim.graph import (
     BoundaryCondition,
     PottsGraph,

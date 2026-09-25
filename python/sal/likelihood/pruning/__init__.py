@@ -21,10 +21,10 @@ every accelerated backend (Rust, PyTorch, CUDA, Metal) is validated against,
 per ``likelihood/CLAUDE.md``.
 
 ``log_likelihood`` takes a ``backend``, which is a **door and not a rung**
-(issue #860): ``Backend.RUST`` calls ``pruning_rust``'s own entry point with
+(issue #860): ``Backend.RUST`` calls ``likelihood.pruning.rust``'s own entry point with
 the arguments it was given and returns what it returns, and the recursion
 below is reached on ``Backend.PYTHON``, the default. No arithmetic moved and
-no rung merged --- ``pruning_rust`` keeps its entry point and its bitwise
+no rung merged --- ``likelihood.pruning.rust`` keeps its entry point and its bitwise
 pin, and this oracle gained no code from the route it referees.
 """
 
@@ -80,10 +80,13 @@ def log_likelihood(
         Which implementation runs it. ``PYTHON`` is this module's own
         recursion, the oracle, and is the default: a caller who does not ask
         gets the reference (issue #860). ``RUST`` is
-        ``sal.likelihood.pruning_rust``'s call, the one the
+        ``sal.likelihood.pruning.rust``'s call, the one the
         caller made by importing that module, reached through the enum every
-        other twin is reached through. Nothing else: the twin is the only
-        other implementation of *this* signature.
+        other twin is reached through. ``TORCH`` is
+        ``sal.likelihood.pruning.torch`` at the branch lengths ``tau``
+        carries, its tape detached: the value alone, for a caller comparing
+        backends (issue #1059); a caller that differentiates takes the tensor
+        from that module.
 
     Returns
     -------
@@ -96,10 +99,25 @@ def log_likelihood(
     ValueError
         If ``pi`` does not have shape ``(k,)``, ``alignment`` is missing a
         leaf of ``tau``, or ``weights`` does not have one entry per column.
-        Or if ``backend`` is neither ``PYTHON`` nor ``RUST``.
+        Or if ``backend`` is not ``PYTHON``, ``TORCH`` or ``RUST``.
     """
     # A door, before any arithmetic: the recursion below is the oracle and
     # gains nothing from the route it referees.
+    if backend is Backend.TORCH:
+        # Imported here so the oracle's import loads no torch.
+        from sal.likelihood.pruning import torch as taped
+
+        return float(
+            taped.log_likelihood(
+                tau,
+                k,
+                pi,
+                alignment,
+                taped.branch_lengths_from_tree(tau),
+                weights=weights,
+                rescale=rescale,
+            ).detach()
+        )
     if (rust := twin("pruning log_likelihood", backend, __name__)) is not None:
         return cast(
             "float",

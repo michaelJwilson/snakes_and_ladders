@@ -85,13 +85,13 @@ def test_one_gradient_buys_more_from_a_langevin_step_than_from_a_trajectory(
         )
 
         per_gradient = effective_per_thousand(
-            hamiltonian.theta, hamiltonian.force_evaluations
+            hamiltonian.draws, hamiltonian.force_evaluations
         )
         langevin_per_gradient = effective_per_thousand(
-            langevin.theta, langevin.force_evaluations
+            langevin.draws, langevin.force_evaluations
         )
         slice_per_evaluation = effective_per_thousand(
-            sliced.theta, sliced.objective_evaluations
+            sliced.draws, sliced.objective_evaluations
         )
 
         assert langevin_per_gradient > per_gradient, (
@@ -109,4 +109,4 @@ def test_one_gradient_buys_more_from_a_langevin_step_than_from_a_trajectory(
         # Every number above is a chain that mixed, not a chain that stood
         # still: an effective sample size at the draw count would make the
         # ratios meaningless.
-        assert np.all(effective_sample_size(hamiltonian.theta).numpy() > 10.0)
+        assert np.all(effective_sample_size(hamiltonian.draws).numpy() > 10.0)

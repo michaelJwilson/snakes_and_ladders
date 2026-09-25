@@ -157,7 +157,7 @@ def test_the_sweep_at_zero_is_one_icm_sweep() -> None:
                 break
             state = successor
 
-        theirs, value = iterated_conditional_modes(
+        theirs, value, *_ = iterated_conditional_modes(
             graph, field, n_states, np.random.default_rng(0)
         )
 

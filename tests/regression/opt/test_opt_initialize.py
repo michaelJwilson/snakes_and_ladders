@@ -371,7 +371,7 @@ def test_a_chain_start_warms_up_by_default_and_none_is_the_chain_it_drew_before(
     warmed = FromChain(
         draws, step, torch.Generator().manual_seed(898), steps, burn_in
     ).chain(objective)
-    assert torch.equal(warmed.theta, chain(CHAIN_ADAPTATION).theta)
+    assert torch.equal(warmed.draws, chain(CHAIN_ADAPTATION).draws)
     assert warmed.adapted is not None
     assert (
         warmed.force_evaluations
@@ -381,7 +381,7 @@ def test_a_chain_start_warms_up_by_default_and_none_is_the_chain_it_drew_before(
     fixed = FromChain(
         draws, step, torch.Generator().manual_seed(898), steps, burn_in, None
     ).chain(objective)
-    assert torch.equal(fixed.theta, chain(None).theta)
+    assert torch.equal(fixed.draws, chain(None).draws)
     assert fixed.adapted is None
     assert fixed.force_evaluations == (burn_in + draws) * per_proposal
 
@@ -420,7 +420,7 @@ def test_the_sampled_starts_are_their_runs_own_records_and_leave_the_cell_descen
     objective = Rastrigin()
 
     drawn = _chain_start(0).starts(objective)
-    recorded = _chain_start(0).chain(objective).theta
+    recorded = _chain_start(0).chain(objective).draws
     assert len(drawn) == recorded.shape[0] == 6
     for start, draw in zip(drawn, recorded, strict=True):
         assert torch.equal(start, draw)

@@ -14,6 +14,7 @@ import pytest
 import torch
 from numpy.testing import assert_allclose
 from sal.emissions import CountPairEmission
+from sal.opt.em import EmConfig
 from sal.opt.emission_mixture import (
     CountPairSeeding,
     EmissionMixtureFit,
@@ -80,8 +81,7 @@ def _fit(
             (params.n_components,), 1.0 / params.n_components, dtype=torch.float64
         ),
         start,
-        max_iterations=max_iterations,
-        tolerance=EM_TOLERANCE,
+        config=EmConfig(max_iterations=max_iterations, tolerance=EM_TOLERANCE),
     )
 
 
@@ -267,8 +267,7 @@ def test_the_seeded_start_is_measured_against_the_uniform_one() -> None:
                 observations,
                 weights,
                 seeder(observations, params.n_components, at, np.random.default_rng(s)),
-                max_iterations=200,
-                tolerance=EM_TOLERANCE,
+                config=EmConfig(max_iterations=200, tolerance=EM_TOLERANCE),
             ).log_likelihood
             for s in SEEDING_SEEDS
         ]

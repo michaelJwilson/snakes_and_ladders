@@ -272,7 +272,7 @@ def _control[S, A](
     epsilon: float,
     max_steps: int,
     initial_value: float,
-    generator: np.random.Generator,
+    rng: np.random.Generator,
 ) -> ActionValues[S, A]:
     """The shared loop. ``on_policy`` picks the continuation term, and nothing else."""
     if episodes < 1:
@@ -303,10 +303,10 @@ def _control[S, A](
 
     updates = 0
     for _ in range(episodes):
-        state = environment.reset(generator) if start is None else start
+        state = environment.reset(rng) if start is None else start
         if environment.is_terminal(state):
             continue
-        action = _choose(row(state), environment.actions(state), generator, epsilon)
+        action = _choose(row(state), environment.actions(state), rng, epsilon)
         for _ in range(max_steps):
             successor, reward = environment.step(state, action)
             successor_row = row(successor)
@@ -317,7 +317,7 @@ def _control[S, A](
                 else _choose(
                     successor_row,
                     environment.actions(successor),
-                    generator,
+                    rng,
                     epsilon,
                 )
             )
@@ -347,7 +347,7 @@ def _control[S, A](
 
 def q_learning[S, A](
     environment: Environment[S, A],
-    generator: np.random.Generator,
+    rng: np.random.Generator,
     *,
     start: S | None = None,
     episodes: int = DEFAULT_EPISODES,
@@ -374,7 +374,7 @@ def q_learning[S, A](
     environment : Environment[S, A]
         Deterministic, as the protocol declares, and with an enumerable
         reachable set: the table is keyed on the state.
-    generator : np.random.Generator
+    rng : np.random.Generator
         The only source of randomness -- the starts, the exploration, and
         every tie-break.
     start : S | None
@@ -416,13 +416,13 @@ def q_learning[S, A](
         epsilon=epsilon,
         max_steps=max_steps,
         initial_value=initial_value,
-        generator=generator,
+        rng=rng,
     )
 
 
 def sarsa[S, A](
     environment: Environment[S, A],
-    generator: np.random.Generator,
+    rng: np.random.Generator,
     *,
     start: S | None = None,
     episodes: int = DEFAULT_EPISODES,
@@ -458,5 +458,5 @@ def sarsa[S, A](
         epsilon=epsilon,
         max_steps=max_steps,
         initial_value=initial_value,
-        generator=generator,
+        rng=rng,
     )

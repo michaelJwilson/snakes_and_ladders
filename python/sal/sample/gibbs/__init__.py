@@ -116,7 +116,7 @@ class GibbsChain:
 
 
 @dataclass(frozen=True)
-class Annealed:
+class AnnealedLabelling:
     """What annealing returns: the best state visited, and the path there.
 
     Parameters
@@ -360,7 +360,7 @@ class Indexed:
         key per factor, which #561 promoted to 47.8% of a run once the sweep
         was compiled. The
         :data:`~sal.backend.Backend.NUMBA` path
-        (:func:`sal.sample.kernels.factor_graph_log_density`) reads
+        (:func:`sal.sample.gibbs.numba.factor_graph_log_density`) reads
         the same tables through the edge layout and sums the same terms in the
         same order, so it reproduces it **bitwise** (#563).
 
@@ -370,7 +370,7 @@ class Indexed:
             If ``backend`` is one this density has no implementation for.
         """
         if backend is Backend.NUMBA:
-            from sal.sample.kernels import factor_graph_log_density
+            from sal.sample.gibbs.numba import factor_graph_log_density
 
             layout = self.layout()
             return float(
@@ -440,7 +440,7 @@ def gibbs_sweep(
 
     ``backend`` chooses the implementation and nothing else. The
     :data:`~sal.backend.Backend.NUMBA` kernel
-    (:func:`sal.sample.kernels.gibbs_sweep_sites`) walks the edge
+    (:func:`sal.sample.gibbs.numba.gibbs_sweep_sites`) walks the edge
     layout and returns the state the NumPy path returns **bitwise**, deciding
     a site itself only where the last place of ``exp`` cannot reach the draw
     and leaving the rest to NumPy, which is what lets it be the default: the
@@ -458,7 +458,7 @@ def gibbs_sweep(
     draws = np.asarray(rng.random(len(indexed.names)))
 
     if backend is Backend.NUMBA:
-        from sal.sample.kernels import gibbs_sweep_sites
+        from sal.sample.gibbs.numba import gibbs_sweep_sites
 
         layout = indexed.layout()
         local = np.empty(int(indexed.cardinality.max()), dtype=np.float64)
@@ -742,7 +742,7 @@ def anneal_factor_graph(
     *,
     start: np.ndarray | None = None,
     backend: Backend = Backend.NUMBA,
-) -> Annealed:
+) -> AnnealedLabelling:
     """Simulated annealing by heat-bath sweeps: one sweep per schedule step at that step's temperature.
 
     The generic form of :func:`sal.sample.potts_mcmc.anneal_potts`,
@@ -761,7 +761,7 @@ def anneal_factor_graph(
         trajectory.append(value)
         if value > best:
             best, best_state = value, state.copy()
-    return Annealed(best_state, best, np.array(trajectory))
+    return AnnealedLabelling(best_state, best, np.array(trajectory))
 
 
 def chain_block_sweep(

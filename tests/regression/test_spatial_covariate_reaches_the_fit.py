@@ -18,7 +18,7 @@ from sal.likelihood.spatio_sequential import (
     marginal_log_likelihood_torch,
 )
 from sal.sim.count_pairs import IndependentCountPair
-from sal.sim.count_pairs_rust import fine_instance
+from sal.sim.count_pairs.rust import fine_instance
 from sal.sim.fixtures import fixture
 from sal.sim.spatio_sequential import (
     SpatioSequentialParams,

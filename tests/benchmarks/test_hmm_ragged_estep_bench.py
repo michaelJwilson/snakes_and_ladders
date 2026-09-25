@@ -16,6 +16,7 @@ import pytest
 import torch
 from sal.backend import Backend
 from sal.emissions import NegativeBinomialEmission
+from sal.opt.em import EmConfig
 from sal.opt.hmm import baum_welch_family
 from sal.ragged import Ragged
 
@@ -58,9 +59,8 @@ def test_baum_welch_on_a_ragged_batch(
             initial,
             kernel,
             start,
-            max_iterations=5,
-            tolerance=0.0,
             backend=backend,
+            config=EmConfig(max_iterations=5, tolerance=0.0),
         )
     )
     assert math.isfinite(fit.log_likelihood)

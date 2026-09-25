@@ -29,8 +29,8 @@ from sal.learn.tree import (
 )
 from sal.likelihood.parsimony import fitch_score
 from sal.likelihood.pruning import log_likelihood
-from sal.likelihood.pruning_torch import branch_order
-from sal.likelihood.pruning_torch import (
+from sal.likelihood.pruning.torch import branch_order
+from sal.likelihood.pruning.torch import (
     log_likelihood as log_likelihood_torch,
 )
 from sal.search.infer import score_topology
@@ -214,7 +214,7 @@ def test_a_reward_is_the_improvement_it_reports() -> None:
 def test_an_episode_return_telescopes_to_its_total_improvement() -> None:
     environment, _, alignment = _environment()
     start = next(iter(enumerate_topologies(sorted(alignment))))
-    episode = greedy_rollout(environment, start, max_steps=10)
+    episode = greedy_rollout(environment, start=start, max_steps=10)
     assert_allclose(
         episode.total_reward,
         environment.score(episode.states[-1]) - environment.score(start),
@@ -255,14 +255,19 @@ def test_a_policy_rollout_telescopes_like_the_greedy_one() -> None:
     policy = LinearPolicy(1)
     policy.set_weights(torch.tensor([200.0], dtype=torch.float64))
 
-    episode = rollout(environment, policy, np.random.default_rng(0), 20, start=start)
+    episode = rollout(
+        environment, policy, np.random.default_rng(0), max_steps=20, start=start
+    )
 
     assert_allclose(
         episode.total_reward,
         environment.score(episode.states[-1]) - environment.score(start),
         atol=1e-9,
     )
-    assert episode.actions == greedy_rollout(environment, start, 20).actions
+    assert (
+        episode.actions
+        == greedy_rollout(environment, start=start, max_steps=20).actions
+    )
 
 
 # --- caching --------------------------------------------------------------
@@ -321,7 +326,7 @@ def test_greedy_search_reaches_the_enumerated_optimum() -> None:
     topologies = list(enumerate_topologies(sorted(alignment)))
     best = max(environment.score(topology) for topology in topologies)
     for start in topologies:
-        episode = greedy_rollout(environment, start, max_steps=20)
+        episode = greedy_rollout(environment, start=start, max_steps=20)
         assert environment.score(episode.states[-1]) == pytest.approx(best)
         assert episode.terminated
 

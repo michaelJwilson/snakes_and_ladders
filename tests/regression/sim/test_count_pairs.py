@@ -29,7 +29,7 @@ from sal.sim.count_pairs import (
     coarsen,
     planted_labels,
 )
-from sal.sim.count_pairs_rust import binned_instance, fine_instance
+from sal.sim.count_pairs.rust import binned_instance, fine_instance
 from sal.sim.fixtures import fixture
 from sal.sim.spatio_sequential import circulant_transition
 

@@ -52,7 +52,7 @@ import dataclasses
 import functools
 import inspect
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import KW_ONLY, dataclass
+from dataclasses import KW_ONLY, dataclass, replace
 from typing import Any, NoReturn
 
 import numpy as np
@@ -60,6 +60,7 @@ import torch
 
 from sal.cost import Cost
 from sal.opt.budget import Budget, Comparison, Outcome, compare
+from sal.opt.em import EM, EMISSION_MIXTURE_EM
 from sal.opt.emission_mixture import expectation_maximization
 from sal.opt.fit import fit
 from sal.opt.hmm import baum_welch_family
@@ -228,7 +229,10 @@ def polish_by_emission_em(
     """
     observations, weights, family = _mixture_at(objective, theta)
     fitted = expectation_maximization(
-        observations, weights, family, max_iterations=budget.size
+        observations,
+        weights,
+        family,
+        config=replace(EMISSION_MIXTURE_EM, max_iterations=budget.size),
     )
     polished = objective.theta_from(
         {
@@ -274,7 +278,7 @@ def polish_by_baum_welch(
         named["log_initial"],
         named["log_transition"],
         family,
-        max_iterations=budget.size,
+        config=replace(EM, max_iterations=budget.size),
     )
     polished = objective.theta_from(
         {

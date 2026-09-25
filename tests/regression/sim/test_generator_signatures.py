@@ -68,7 +68,7 @@ def _icm_draw(rng: np.random.Generator) -> tuple[int, ...]:
 
     A random field against a comparable coupling: 6 draws reach 3 optima.
     """
-    labelling, _ = iterated_conditional_modes(_graph(), ICM_FIELD, 3, rng)
+    labelling, *_ = iterated_conditional_modes(_graph(), ICM_FIELD, 3, rng)
     return tuple(int(v) for v in labelling)
 
 
@@ -78,7 +78,7 @@ def _icm_draw(rng: np.random.Generator) -> tuple[int, ...]:
 
 def _hmc_draw(generator: torch.Generator) -> tuple[float, ...]:
     chain = sample(GAUSSIAN, generator, 4, step_size=0.2, n_steps=5)
-    return tuple(float(v) for v in chain.theta.reshape(-1))
+    return tuple(float(v) for v in chain.draws.reshape(-1))
 
 
 def _anneal_draw(generator: torch.Generator) -> tuple[float, ...]:

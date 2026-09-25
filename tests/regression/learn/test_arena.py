@@ -104,7 +104,12 @@ def _direct(
     if name == "reinforce":
         policy = LinearPolicy(environment.n_features())
         reinforce(
-            environment, policy, rng, budget.iterations, budget.batch, budget.max_steps
+            environment,
+            policy,
+            rng,
+            iterations=budget.iterations,
+            batch=budget.batch,
+            max_steps=budget.max_steps,
         )
         return policy
     if name == "actor-critic":
@@ -160,7 +165,7 @@ def test_a_registered_learner_is_bitwise_the_direct_call(name: str) -> None:
     policy = _direct(name, environment, SHORT, 0)
     rng = np.random.default_rng(1)
     direct = [
-        rollout(environment, policy, rng, SHORT.max_steps, start=start)
+        rollout(environment, policy, rng, max_steps=SHORT.max_steps, start=start)
         for start in starts
     ]
 
@@ -190,7 +195,8 @@ def test_the_greedy_row_is_the_greedy_rollout_and_not_a_policy() -> None:
         )
     ]
     direct = [
-        greedy_rollout(environment, start, PUBLISHED.max_steps) for start in starts
+        greedy_rollout(environment, start=start, max_steps=PUBLISHED.max_steps)
+        for start in starts
     ]
 
     assert not LEARNERS["greedy"].trains
@@ -200,7 +206,7 @@ def test_the_greedy_row_is_the_greedy_rollout_and_not_a_policy() -> None:
     trained = _direct("ppo", environment, SHORT, 0)
     rng = np.random.default_rng(1)
     walked = [
-        rollout(environment, trained, rng, PUBLISHED.max_steps, start=start)
+        rollout(environment, trained, rng, max_steps=PUBLISHED.max_steps, start=start)
         for start in starts
     ]
     assert sum(episode.terminated for episode in direct) > sum(
@@ -222,7 +228,8 @@ def test_the_cost_is_the_scored_actions_and_greedy_spends_fewer_than_its_budget(
     environment = potts_environment()
     starts = _starts(environment)
     episodes = [
-        greedy_rollout(environment, start, PUBLISHED.max_steps) for start in starts
+        greedy_rollout(environment, start=start, max_steps=PUBLISHED.max_steps)
+        for start in starts
     ]
     per_state = len(environment.actions(starts[0]))
     counted = [evaluations(environment, episode) for episode in episodes]

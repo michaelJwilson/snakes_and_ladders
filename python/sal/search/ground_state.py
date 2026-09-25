@@ -92,6 +92,7 @@ from sal.sim.factor_graph import from_potts
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from sal.sim.potts import (
     SpatioOnlyParams,
+    check_labelling,
     critical_coupling,
     energy,
     spatio_only_field,
@@ -636,7 +637,7 @@ def run_annealed(
         rng,
         move=move,
         cluster_backend=Backend.RUST if move in _COMPILED_CLUSTERS else Backend.PYTHON,
-        initial=start,
+        start=start,
     )
     return MethodRun(
         labelling=run.labelling,
@@ -656,19 +657,21 @@ def descend(
     backend: Backend | None = None,
     min_sites: int = 0,
 ) -> tuple[np.ndarray, int]:
-    """Index-order ICM from a uniform draw, or from ``start``, one sweep at a time, and the sweeps it ran.
+    """Index-order ICM from a uniform draw, or from ``start``, and the sweeps it ran.
 
     The descent :func:`run_icm` runs, on the same draws, with its sweep count
-    read out: the count is what a warm chain is charged, where
-    :func:`run_icm` charges its whole budget. The sweep that changes nothing
-    is counted, as :func:`~sal.search.potts_starts.polish_by_icm`
-    counts it.
+    read out of :attr:`~sal.search.alpha_expansion.Labelling.sweeps`: the
+    count is what a warm chain is charged, where :func:`run_icm` charges its
+    whole budget. The sweep that changes nothing is counted, as
+    :func:`~sal.search.potts_starts.polish_by_icm` counts it. One call since
+    #1059, which reran ICM one sweep at a time to count.
 
     ``backend`` and ``min_sites`` are
     :func:`~sal.search.icm.iterated_conditional_modes`'s;
-    ``None`` is its default backend. A floored sweep draws its ``n_nodes``
-    uniforms from ``rng`` per sweep, so the floor's draws are those of
-    one-sweep descents, not of :func:`run_icm`'s one call.
+    ``None`` is its default backend. A floored descent draws its
+    ``max_sweeps * n_nodes`` uniforms up front, as :func:`run_icm`'s one call
+    does, so the labelling is the one sweep-at-a-time descents reached and
+    the generator is left where one call leaves it.
 
     Returns
     -------
@@ -682,23 +685,17 @@ def descend(
         if start is None
         else np.array(start, dtype=np.int64)
     )
-    sweeps = 0
-    while sweeps < max_sweeps:
-        settled = iterated_conditional_modes(
-            problem.graph,
-            problem.field,
-            problem.n_states,
-            rng,
-            start=labelling,
-            max_sweeps=1,
-            min_sites=min_sites,
-            backend=Backend.NUMBA if backend is None else backend,
-        )
-        sweeps += 1
-        if np.array_equal(settled.labelling, labelling):
-            break
-        labelling = settled.labelling
-    return labelling, sweeps
+    settled = iterated_conditional_modes(
+        problem.graph,
+        problem.field,
+        problem.n_states,
+        rng,
+        start=labelling,
+        max_sweeps=max_sweeps,
+        min_sites=min_sites,
+        backend=Backend.NUMBA if backend is None else backend,
+    )
+    return settled.labelling, settled.sweeps
 
 
 def warm_anneal(
@@ -1358,7 +1355,7 @@ def ground_state(
         raise ValueError(msg)
     problem = Problem(graph, values, int(values.shape[1]))
     if start is not None:
-        start = _checked_start(problem, start)
+        start = check_labelling(start, problem.n_nodes, problem.n_states)
     keywords: dict[str, Any] = {}
     if schedule is not None:
         keywords["schedule"] = schedule
@@ -1368,30 +1365,6 @@ def ground_state(
         keywords["backend"] = backend
         keywords["min_sites"] = min_sites
     return solvers[method](problem, budget, rng, start=start, **keywords)
-
-
-def _checked_start(problem: Problem, start: np.ndarray) -> np.ndarray:
-    """``start`` as an ``int64`` copy, checked to be one state in range per node.
-
-    Raises
-    ------
-    ValueError
-        If it is not integer, not shape ``(n_nodes,)``, or holds a state
-        outside ``[0, n_states)``.
-    """
-    labelling = np.asarray(start)
-    if (
-        labelling.shape != (problem.n_nodes,)
-        or not np.issubdtype(labelling.dtype, np.integer)
-        or not ((labelling >= 0).all() and (labelling < problem.n_states).all())
-    ):
-        msg = (
-            f"start must hold one integer state in [0, {problem.n_states}) per "
-            f"node of {problem.n_nodes}; got shape {labelling.shape}, dtype "
-            f"{labelling.dtype}"
-        )
-        raise ValueError(msg)
-    return np.array(labelling, dtype=np.int64)
 
 
 def outcome(run: MethodRun) -> Outcome:

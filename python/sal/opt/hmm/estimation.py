@@ -1,4 +1,4 @@
-"""The EM drivers: Baum-Welch, categorical and per family, Viterbi decoding and the scored evidence, and the route each takes between the torch recursion and the compiled ``oxisal`` steps.
+"""The EM drivers: Baum-Welch, categorical and per family, and the route each takes between the torch recursion and the compiled ``oxisal`` steps.
 
 A driver here owns the iteration and the record a fit returns; the recursion
 it runs is :mod:`~sal.opt.hmm.forward`'s, or a compiled kernel
@@ -27,8 +27,7 @@ from sal.emissions import (
     PoissonEmission,
     refuse_collapsed,
 )
-from sal.opt.em import em_loop
-from sal.opt.hmm.forward import forward_log_likelihood_from_density
+from sal.opt.em import EM, EmConfig, em_loop
 from sal.opt.termination import Termination
 from sal.ragged import Ragged
 
@@ -73,10 +72,10 @@ class CategoricalFit:
     """What :func:`baum_welch` fitted, as log-probabilities.
 
     :class:`EmFit` is the general form, carrying a family rather than a
-    matrix and two fields a categorical M step cannot fill: no categorical
-    re-estimate sits at a boundary, and the outer loop's termination is
-    :class:`EmFit`'s to report. This is the narrowing, and it carries what
-    the four-tuple carried and nothing else (issue #865).
+    matrix and a field a categorical M step cannot fill: no categorical
+    re-estimate sits at a boundary. The outer loop's termination is carried
+    as every EM fit carries it (issue #1059); the four-tuple an unpacking
+    reads is what it was (issue #865).
 
     Parameters
     ----------
@@ -88,15 +87,19 @@ class CategoricalFit:
         Shape ``(m, n_symbols)``, the fitted emission matrix.
     log_likelihood : float
         The final log-likelihood.
+    termination : Termination | None
+        Why the EM loop stopped and after how many iterations, as
+        :class:`EmFit` reports it.
     """
 
     log_initial: torch.Tensor
     log_transition: torch.Tensor
     log_emission: torch.Tensor
     log_likelihood: float
+    termination: Termination | None = None
 
     def __iter__(self) -> Iterator[Any]:
-        """The order callers unpack: the three parameters, then the value.
+        """The declared order (#865): the three parameters, the value, the termination.
 
         ``Any`` and not a union: an unpacking gives every name the element
         type, so a union would mistype each of them.
@@ -106,6 +109,7 @@ class CategoricalFit:
             self.log_transition,
             self.log_emission,
             self.log_likelihood,
+            self.termination,
         )
 
 
@@ -114,8 +118,7 @@ def baum_welch(
     log_initial: torch.Tensor,
     log_transition: torch.Tensor,
     log_emission: torch.Tensor,
-    max_iterations: int = 500,
-    tolerance: float = 1e-12,
+    config: EmConfig = EM,
     backend: Backend = Backend.RUST,
 ) -> CategoricalFit:
     """Fit an HMM by expectation-maximization, with no autodiff involved.
@@ -131,12 +134,10 @@ def baum_welch(
         Integer symbols, shape ``(n_sequences, sequence_length)``.
     log_initial, log_transition, log_emission : torch.Tensor
         Starting parameters, as log-probabilities.
-    max_iterations : int
-        Maximum EM iterations.
-    tolerance : float
-        Stop when the log-likelihood improves by less than this *relative*
-        to its magnitude -- absolute would not transfer across data sizes
-        (``DEV.md``, issue #111).
+    config : EmConfig
+        The EM budget and its relative tolerance; :data:`~sal.opt.em.EM`,
+        500 iterations at 1e-12, by default. Relative, since an absolute
+        tolerance does not transfer across data sizes (``DEV.md``, issue #111).
     backend : Backend
         :data:`~sal.backend.Backend.RUST`, the default since
         issue #986, runs each E and M step in
@@ -161,16 +162,14 @@ def baum_welch(
             log_initial,
             log_transition,
             log_emission,
-            max_iterations=max_iterations,
-            tolerance=tolerance,
+            config=config,
         )
     result = baum_welch_family(
         observations,
         log_initial,
         log_transition,
         CategoricalEmission.from_log(log_emission),
-        max_iterations=max_iterations,
-        tolerance=tolerance,
+        config=config,
     )
     family = result.emissions
     if not isinstance(family, CategoricalEmission):  # pragma: no cover
@@ -181,6 +180,7 @@ def baum_welch(
         result.log_transition,
         family.log_matrix,
         result.log_likelihood,
+        termination=result.termination,
     )
 
 
@@ -307,8 +307,7 @@ def _streamed_baum_welch(
     log_transition: torch.Tensor,
     log_emission: torch.Tensor,
     *,
-    max_iterations: int,
-    tolerance: float,
+    config: EmConfig,
 ) -> CategoricalFit:
     """:func:`baum_welch` on the compiled step, driven by the same :func:`em_loop`."""
     # Borrowed where NumPy already holds int64 rows; a copy only otherwise.
@@ -328,11 +327,10 @@ def _streamed_baum_welch(
             -1
         )
 
-    (initial, transition, emission), log_likelihood, _ = em_loop(
+    (initial, transition, emission), log_likelihood, termination = em_loop(
         step,
         (flat(log_initial), flat(log_transition), flat(log_emission)),
-        tolerance=tolerance,
-        max_iterations=max_iterations,
+        config=config,
     )
     # Shaped in NumPy and wrapped without a copy: a first torch `reshape` in a
     # process costs 2.1 MB of resident memory, 60 times the fit's own.
@@ -341,6 +339,7 @@ def _streamed_baum_welch(
         torch.from_numpy(transition.reshape(m, m)),
         torch.from_numpy(emission.reshape(m, n_symbols)),
         log_likelihood,
+        termination=termination,
     )
 
 
@@ -418,8 +417,7 @@ def _streamed_family(
     log_transition: torch.Tensor,
     emissions: EmissionFamily,
     *,
-    max_iterations: int,
-    tolerance: float,
+    config: EmConfig,
     covariate: np.ndarray | None = None,
     with_table: bool = True,
     table_size: int | None = None,
@@ -528,8 +526,7 @@ def _streamed_family(
     (initial, transition, fitted), log_likelihood, termination = em_loop(
         step,
         (flat(log_initial), flat(log_transition), emissions),
-        tolerance=tolerance,
-        max_iterations=max_iterations,
+        config=config,
     )
     return EmFit(
         log_initial=torch.from_numpy(initial),
@@ -541,142 +538,13 @@ def _streamed_family(
     )
 
 
-def viterbi(
-    observations: np.ndarray,
-    log_initial: torch.Tensor,
-    log_transition: torch.Tensor,
-    emissions: EmissionFamily,
-    backend: Backend = Backend.RUST,
-) -> tuple[np.ndarray, float]:
-    """The most probable hidden path of every sequence, and their total log-probability.
+def compiled_family(emissions: EmissionFamily) -> tuple[str, np.ndarray] | None:
+    """The compiled HMM kernels' family name and parameters for ``emissions``, or ``None``.
 
-    Parameters
-    ----------
-    observations : np.ndarray
-        Shape ``(n_sequences, length)``: symbols, real values or counts, as
-        ``emissions`` scores them.
-    log_initial, log_transition : torch.Tensor
-        Log-probabilities, ``(m,)`` and ``(m, m)``.
-    emissions : EmissionFamily
-        The emission family.
-    backend : Backend
-        :data:`~sal.backend.Backend.RUST`, the default,
-        decodes the sequences in parallel in ``oxisal.
-        hmm_viterbi`` where ``emissions`` is exactly a categorical, a
-        one-channel Gaussian or a count family; any other family, and
-        :data:`~sal.backend.Backend.PYTHON`, take the NumPy
-        recursion here, which is the oracle (issue #997).
-
-    Returns
-    -------
-    tuple[np.ndarray, float]
-        The paths, ``(n_sequences, length)`` ``int64``, and the sum over
-        sequences of each path's joint log-probability. A tie goes to the
-        lower state.
+    Exactly a categorical, a one-channel Gaussian or a count family is
+    compiled; ``None`` for any other, whose caller takes its oracle.
+    :mod:`sal.likelihood.hmm`'s Viterbi and evidence read it (issue #1059).
     """
-    refuse_backend("viterbi", backend, (Backend.PYTHON, Backend.RUST))
-    values = np.asarray(observations)
-    compiled = _viterbi_family(emissions)
-    if backend is Backend.RUST and compiled is not None and values.ndim == 2:
-        name, parameters = compiled
-        # Symbols and counts are read as the int64 NumPy holds them.
-        dtype = np.int64 if np.issubdtype(values.dtype, np.integer) else np.float64
-        states, log_probability = oxisal.hmm_viterbi(
-            np.ascontiguousarray(values, dtype=dtype),
-            np.ascontiguousarray(log_initial.detach().numpy(), dtype=np.float64),
-            np.ascontiguousarray(
-                log_transition.detach().numpy(), dtype=np.float64
-            ).reshape(-1),
-            name,
-            parameters,
-        )
-        return states.reshape(values.shape), float(log_probability)
-    emit = emissions.log_density(
-        torch.as_tensor(values, dtype=emissions.observation_dtype)
-    ).numpy()
-    kernel = log_transition.detach().numpy()
-    n_sequences, length = values.shape
-    delta = log_initial.detach().numpy() + emit[:, 0]
-    back = np.empty((n_sequences, length, delta.shape[1]), dtype=np.int64)
-    for t in range(1, length):
-        scores = delta[:, :, None] + kernel[None]
-        back[:, t] = np.argmax(scores, axis=1)
-        delta = np.take_along_axis(scores, back[:, t][:, None, :], axis=1)[:, 0]
-        delta = delta + emit[:, t]
-    states = np.empty((n_sequences, length), dtype=np.int64)
-    states[:, -1] = np.argmax(delta, axis=1)
-    for t in range(length - 1, 0, -1):
-        states[:, t - 1] = np.take_along_axis(back[:, t], states[:, t, None], axis=1)[
-            :, 0
-        ]
-    return states, float(delta.max(axis=1).sum())
-
-
-def hmm_log_likelihood(
-    observations: np.ndarray,
-    log_initial: torch.Tensor,
-    log_transition: torch.Tensor,
-    emissions: EmissionFamily,
-    backend: Backend = Backend.RUST,
-) -> float:
-    """The summed log-likelihood of every sequence at given parameters, with no gradient.
-
-    The number hmmlearn's ``score`` and :func:`forward_log_likelihood_from_density`
-    report. Returned as a ``float``, since no gradient is taken: a caller that
-    needs one differentiates :func:`forward_log_likelihood_from_density`.
-
-    Parameters
-    ----------
-    observations : np.ndarray
-        Shape ``(n_sequences, length)``, as ``emissions`` scores them.
-    log_initial, log_transition : torch.Tensor
-        Log-probabilities, ``(m,)`` and ``(m, m)``.
-    emissions : EmissionFamily
-        The emission family.
-    backend : Backend
-        :data:`~sal.backend.Backend.RUST`, the default, runs
-        the scaled forward pass over the sequences in parallel in
-        ``oxisal.hmm_score`` for the families :func:`viterbi`
-        compiles, and forms no ``(n_sequences, length, m)`` array;
-        :data:`~sal.backend.Backend.PYTHON`, and any other
-        family, take :func:`forward_log_likelihood_from_density`, the oracle
-        (issue #997).
-
-    Returns
-    -------
-    float
-    """
-    refuse_backend("hmm_log_likelihood", backend, (Backend.PYTHON, Backend.RUST))
-    values = np.asarray(observations)
-    compiled = _viterbi_family(emissions)
-    if backend is Backend.RUST and compiled is not None and values.ndim == 2:
-        name, parameters = compiled
-        dtype = np.int64 if np.issubdtype(values.dtype, np.integer) else np.float64
-        return float(
-            oxisal.hmm_score(
-                np.ascontiguousarray(values, dtype=dtype),
-                np.ascontiguousarray(log_initial.detach().numpy(), dtype=np.float64),
-                np.ascontiguousarray(
-                    log_transition.detach().numpy(), dtype=np.float64
-                ).reshape(-1),
-                name,
-                parameters,
-            )
-        )
-    with torch.no_grad():
-        return float(
-            forward_log_likelihood_from_density(
-                emissions.log_density(
-                    torch.as_tensor(values, dtype=emissions.observation_dtype)
-                ),
-                log_initial,
-                log_transition,
-            )
-        )
-
-
-def _viterbi_family(emissions: EmissionFamily) -> tuple[str, np.ndarray] | None:
-    """The compiled Viterbi's name and parameters for ``emissions``, or ``None``."""
     if type(emissions) is CategoricalEmission:
         return "categorical", np.ascontiguousarray(
             emissions.log_matrix.detach().numpy(), dtype=np.float64
@@ -695,8 +563,7 @@ def baum_welch_family(
     log_initial: torch.Tensor,
     log_transition: torch.Tensor,
     emissions: EmissionFamily,
-    max_iterations: int = 500,
-    tolerance: float = 1e-12,
+    config: EmConfig = EM,
     covariate: np.ndarray | Ragged | None = None,
     *,
     update: CovariateUpdate | None = None,
@@ -731,12 +598,10 @@ def baum_welch_family(
         Symbol indices or real values, as the family says.
     emissions : EmissionFamily
         Starting emission family.
-    max_iterations : int
-        Maximum EM iterations.
-    tolerance : float
-        Stop when the log-likelihood improves by less than this *relative*
-        to its magnitude -- absolute would not transfer across data sizes
-        (``DEV.md``, issue #111).
+    config : EmConfig
+        The EM budget and its relative tolerance; :data:`~sal.opt.em.EM`,
+        500 iterations at 1e-12, by default. Relative, since an absolute
+        tolerance does not transfer across data sizes (``DEV.md``, issue #111).
     log_initial, log_transition : torch.Tensor
         Starting parameters, as log-probabilities. ``log_transition`` is
         ``(m, m)``, one kernel for the whole chain; ``(length - 1, m, m)``, one
@@ -843,8 +708,7 @@ def baum_welch_family(
             log_initial,
             log_transition,
             emissions,
-            max_iterations=max_iterations,
-            tolerance=tolerance,
+            config=config,
             covariate=covariate,
             with_table=with_table,
             table_size=table_size,
@@ -1047,8 +911,7 @@ def baum_welch_family(
     (log_initial, log_transition, _, emissions), log_likelihood, termination = em_loop(
         iterate,
         (log_initial, log_transition, kernels, emissions),
-        tolerance=tolerance,
-        max_iterations=max_iterations,
+        config=config,
     )
     return EmFit(
         log_initial=log_initial,

@@ -1,40 +1,35 @@
-"""Compiled kernels whose oracles reproduce them bitwise, beside those oracles.
+"""The ``numba`` twins of :mod:`sal.sample.gibbs`: the heat-bath sweep and the log-density, each reproduced bitwise (issues #561, #563, #1059).
 
-Issue #264's audit ranked the Python-level loops of this package by self time
-and found one that a compiled kernel removes outright: the single-site descent
-sweep, which lives in :mod:`sal.search.numba.icm`
-since issue #1055. The kernels here share its test: each is reproduced
-**bitwise** by its oracle.
+:mod:`sal.sample.gibbs` is the gateway and holds the NumPy oracles; this
+module holds the two kernels it reaches, moved out of ``sample/kernels.py``
+and then beside their gateway by #1059. Both touch no Python object and so
+are ``nogil=True``: a thread backend runs them concurrently, the rule root
+``CLAUDE.md`` states (#604). Both take arrays, never the graph: the caller
+flattens once and the kernel walks strides (the layout rule), and
+``cache=True`` writes the compiled object beside the source so the first call
+in a process pays once.
 
-That exactness is why these are ``numba`` rather than Rust. Root
+**The sweep.** :func:`sal.sample.gibbs.gibbs_sweep` is its oracle. Its
+exactness is why this is ``numba`` rather than Rust. Root
 ``CLAUDE.md``'s backend rule admits one compiled path per measurement; the
 Rust extension already carries the Potts *sampling* sweep
 (:func:`sal.sample.potts_mcmc.sample_potts` on the extension), and a second copy of it
 is what the rule exists to refuse. A kernel whose pin is exact carries no
-such cost and lives here.
+such cost.
 
-Issue #561's sweep over the factor graph is here on that same test rather
-than on being deterministic. A heat-bath draw exponentiates, and ``libm``'s
-``exp`` and NumPy's disagree in the last place on 4.6% of ``float64`` inputs,
-so the arithmetic alone would make it a distributional port. What keeps the
-pin exact is that :func:`gibbs_sweep_sites` decides a site only where the
-draw clears every cumulative boundary by more than the two exponentials can
-move it, and hands the rest back; a bound, not an assumption about rounding.
+A heat-bath draw exponentiates, and ``libm``'s ``exp`` and NumPy's disagree
+in the last place on 4.6% of ``float64`` inputs, so the arithmetic alone
+would make it a distributional port. What keeps the pin exact is that
+:func:`gibbs_sweep_sites` decides a site only where the draw clears every
+cumulative boundary by more than the two exponentials can move it, and hands
+the rest back; a bound, not an assumption about rounding.
 
-Issue #563's density is here for the reason the descent sweep is: it takes no
-exponential, so summing the same terms in the same order is bitwise
-reproduction outright, and the pin needs no bound. What it does need is that
-order -- floating-point addition is not associative, so the kernel sums
-factors left to right in graph order as the oracle does, and a vectorized sum
-would be a different number.
-
-Every kernel here touches no Python object and so is ``nogil=True``: a
-thread backend runs them concurrently, the rule root ``CLAUDE.md`` states
-(#604).
-
-The kernels take arrays, never the graph: the caller flattens once and the
-kernel walks strides (the layout rule), and ``cache=True`` writes the compiled
-object beside the source so the first call in a process pays once.
+**The log-density.** :meth:`sal.sim.factor_graph.FactorGraph.log_density` is
+its oracle. :func:`factor_graph_log_density` takes no exponential, so summing
+the same terms in the same order is bitwise reproduction outright, and the pin
+needs no bound. What it does need is that order -- floating-point addition is
+not associative, so the kernel sums factors left to right in graph order as
+the oracle does, and a vectorized sum would be a different number.
 """
 
 from __future__ import annotations

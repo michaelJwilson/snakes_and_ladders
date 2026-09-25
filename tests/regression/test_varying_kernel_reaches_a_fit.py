@@ -9,10 +9,13 @@ the rest, as with a covariate.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 import torch
 from sal.emissions import CategoricalEmission
+from sal.opt.em import EM
 from sal.opt.hmm import baum_welch_family
 from sal.sim.spatio_sequential import canonical_spatio_sequential
 
@@ -43,7 +46,7 @@ def _fit(
         torch.log(torch.as_tensor(_INITIAL)),
         log_transition,
         CategoricalEmission(np.array([[0.6, 0.2, 0.2], [0.2, 0.2, 0.6]])),
-        max_iterations=100,
+        config=replace(EM, max_iterations=100),
     )
     return result.log_transition, result.log_likelihood
 

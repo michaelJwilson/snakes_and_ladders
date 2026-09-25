@@ -237,7 +237,7 @@ def test_the_gradient_fit_agrees_with_baum_welch() -> None:
     estimate = objective.constrain(gradient_result.theta)
 
     start = objective.constrain(objective.initial())
-    _, _, em_emission, em_log_likelihood = baum_welch(
+    _, _, em_emission, em_log_likelihood, _ = baum_welch(
         observations,
         start["log_initial"],
         start["log_transition"],

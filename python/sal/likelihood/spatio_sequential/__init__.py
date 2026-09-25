@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import cast
+from typing import Literal, cast, get_args
 
 import numpy as np
 import torch
@@ -35,6 +35,104 @@ from sal.sim.spatio_sequential import (
     SpatioSequentialParams,
     gated_log_density,
 )
+
+#: How the beta-binomial's trial count reaches the kernel (issue #1064).
+#: ``factored`` tabulates its density's terms each by its own integer and the
+#: kernel sums them per observation; ``range`` tabulates every
+#: ``(successes, trial count)`` pair over the trial counts from the least to the
+#: greatest; ``distinct`` over the trial counts that occur. All three are exact
+#: and bitwise to one another. The negative binomial's exposure is factored
+#: whichever is chosen: it is continuous, and a table by its values has a row
+#: per observation.
+CovariateRows = Literal["factored", "range", "distinct"]
+
+#: The layouts :data:`CovariateRows` names, for a refusal to list.
+COVARIATE_ROWS: tuple[CovariateRows, ...] = get_args(CovariateRows)
+
+#: Bytes one channel's covariate table may take (issue #1064): the refusal a
+#: wide trial-count range meets before it allocates, under ``range`` and
+#: ``distinct`` and in ``factored``'s trial-count tables. 1 GiB is
+#: 6.2x the covariate of the stress instance of
+#: ``spatio_sequential_counts_covariate``, the largest array the E step already
+#: holds there.
+COVARIATE_TABLE_CEILING = 2**30
+
+
+@dataclass(frozen=True)
+class ChannelRows:
+    """One channel's rows and what its table is built over; no parameter enters.
+
+    Parameters
+    ----------
+    rows : np.ndarray
+        ``(S, n_nodes)`` contiguous ``uint32``, each observation's table row.
+    extent : int
+        One past the largest count, the counts the table spans.
+    levels : np.ndarray | None
+        The covariate value of each code where the table is over
+        ``(count, code)`` pairs, row ``count * len(levels) + code``; ``None``
+        where it is by count alone.
+    covariate : np.ndarray | None
+        The covariate a factored channel's kernel term reads per observation:
+        the exposure as ``float64`` or the trial count as ``uint32``, both
+        ``(S, n_nodes)`` contiguous; ``None`` where nothing is factored.
+    """
+
+    rows: np.ndarray
+    extent: int
+    levels: np.ndarray | None = None
+    covariate: np.ndarray | None = None
+
+
+@dataclass(frozen=True)
+class ObservationRows:
+    """Both channels' rows, built once per fit and reused by every E step (issue #1064).
+
+    A row depends on the observations and the covariate and on no parameter,
+    so an E step handed these builds only the tables. They are interpretable
+    only against the observations and the covariate they were built from, and
+    an E step refuses them for any other.
+
+    Parameters
+    ----------
+    layout : CovariateRows
+        The trial count's layout they were built in.
+    observations : np.ndarray
+        The observations they were built from, held to be compared by identity.
+    covariate : np.ndarray | None
+        The covariate, likewise.
+    total : ChannelRows
+        The first channel's.
+    successes : ChannelRows
+        The second channel's.
+    """
+
+    layout: CovariateRows
+    observations: np.ndarray
+    covariate: np.ndarray | None
+    total: ChannelRows
+    successes: ChannelRows
+
+
+def observation_rows(
+    observations: np.ndarray,
+    covariate: np.ndarray | None,
+    *,
+    covariate_rows: CovariateRows = "range",
+) -> ObservationRows:
+    """Every observation's table row in both channels, built once per fit (issue #1064).
+
+    The Rust twin's :func:`~sal.likelihood.spatio_sequential.rust.observation_rows`,
+    reached through this gateway: the rows are an input only the
+    :data:`~sal.backend.Backend.RUST` E step reads.
+    """
+    kernel = twin("observation_rows", Backend.RUST, __name__)
+    assert kernel is not None
+    return cast(
+        ObservationRows,
+        kernel.observation_rows(observations, covariate, covariate_rows=covariate_rows),
+    )
+
 
 #: What a refusal names: the coupled E step runs on NumPy, the oracle, or on
 #: the tabulated Rust kernel. One enum names the kernel, as it does for
@@ -280,6 +378,36 @@ def log_evidence_by_forward(
 VERTEX_BLOCK = 256
 
 
+def _refuse_rows_on_the_oracle(
+    backend: Backend, covariate_rows: CovariateRows | ObservationRows
+) -> None:
+    """Refuse a covariate layout where no table is built.
+
+    ``covariate_rows`` sets how the Rust backend lays out the trial count's
+    table, or hands it rows already built (issue #1064). The NumPy oracle
+    scores every observation at its own covariate and builds no table, so a
+    layout other than the default handed to it would be ignored rather than
+    followed.
+
+    Raises
+    ------
+    ValueError
+        If ``covariate_rows`` is not ``"range"`` and ``backend`` is not
+        :data:`~sal.backend.Backend.RUST`.
+    """
+    if covariate_rows != "range" and backend is not Backend.RUST:
+        what = (
+            covariate_rows
+            if isinstance(covariate_rows, str)
+            else type(covariate_rows).__name__
+        )
+        msg = (
+            f"covariate_rows={what!r} lays out the Rust backend's tables; the "
+            f"{backend} backend builds none and scores every covariate exactly"
+        )
+        raise ValueError(msg)
+
+
 def _blocks(members: np.ndarray) -> Iterator[np.ndarray]:
     """``members`` in contiguous blocks of at most :data:`VERTEX_BLOCK`."""
     for start in range(0, members.size, VERTEX_BLOCK):
@@ -392,11 +520,24 @@ def class_posteriors(
     labels: np.ndarray,
     *,
     backend: Backend = Backend.PYTHON,
+    covariate_rows: CovariateRows | ObservationRows = "range",
 ) -> ClassPosteriors:
-    """Forward--backward on every class's chain over its members' summed scores."""
+    """Forward--backward on every class's chain over its members' summed scores.
+
+    ``covariate_rows`` is the Rust backend's
+    (:func:`sal.likelihood.spatio_sequential.rust.emission_rows`), and refused
+    on this one unless it is the default.
+    """
+    _refuse_rows_on_the_oracle(backend, covariate_rows)
     if (rust := twin(_COUPLED, backend, __name__)) is not None:
         return cast(
-            "ClassPosteriors", rust.class_posteriors(params, observations, labels)
+            "ClassPosteriors",
+            rust.class_posteriors(
+                params,
+                observations,
+                labels,
+                covariate_rows=covariate_rows,
+            ),
         )
     density = class_log_density(params, observations, labels)
     log_transition = np.log(params.transition)
@@ -425,6 +566,7 @@ def external_field(
     posterior: np.ndarray | None = None,
     *,
     backend: Backend = Backend.PYTHON,
+    covariate_rows: CovariateRows | ObservationRows = "range",
 ) -> np.ndarray:
     """`    `H_nm`` of the external-field equation of the textbook: minus the posterior-expected emission score, shape ``(n_nodes, M)``.
 
@@ -439,10 +581,20 @@ def external_field(
     field was computed *without* --- so the step proposed labels under one
     model and accepted them under another. The ascent stays monotone either
     way, which is why nothing failed.
+
+    ``covariate_rows`` is as :func:`class_posteriors` takes it.
     """
+    _refuse_rows_on_the_oracle(backend, covariate_rows)
     if (rust := twin(_COUPLED, backend, __name__)) is not None:
         return cast(
-            "np.ndarray", rust.external_field(params, observations, labels, posterior)
+            "np.ndarray",
+            rust.external_field(
+                params,
+                observations,
+                labels,
+                posterior,
+                covariate_rows=covariate_rows,
+            ),
         )
     if posterior is None:
         posterior = class_posteriors(params, observations, labels).posterior
@@ -470,6 +622,7 @@ def labelled_log_likelihood(
     labels: np.ndarray,
     *,
     backend: Backend = Backend.PYTHON,
+    covariate_rows: CovariateRows | ObservationRows = "range",
 ) -> float:
     """``log p(x, l | theta)`` with the chains marginalized, up to ``log Z_Potts``.
 
@@ -478,9 +631,19 @@ def labelled_log_likelihood(
     intractable past enumeration, so it is left out; add
     :attr:`ExactSpatioSequential.log_prior_normalizer` where enumeration
     reaches, which is how the test pins this against the oracle.
+    ``covariate_rows`` is as :func:`class_posteriors` takes it.
     """
+    _refuse_rows_on_the_oracle(backend, covariate_rows)
     if (rust := twin(_COUPLED, backend, __name__)) is not None:
-        return cast("float", rust.labelled_log_likelihood(params, observations, labels))
+        return cast(
+            "float",
+            rust.labelled_log_likelihood(
+                params,
+                observations,
+                labels,
+                covariate_rows=covariate_rows,
+            ),
+        )
     own = float(log_prior(params, np.asarray(labels, dtype=np.int64)[None, :])[0])
     evidence = class_posteriors(params, observations, labels).log_evidence
     return own + float(evidence.sum())

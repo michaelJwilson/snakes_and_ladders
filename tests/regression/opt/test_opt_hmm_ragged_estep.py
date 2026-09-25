@@ -13,12 +13,14 @@ under the torch recursion and at the tolerance under the compiled one.
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 
 import numpy as np
 import pytest
 import torch
 from sal.backend import Backend
 from sal.emissions import NegativeBinomialEmission
+from sal.opt.em import EM, EmConfig
 from sal.opt.hmm import baum_welch_family
 from sal.ragged import Ragged
 
@@ -74,9 +76,8 @@ def test_the_compiled_e_step_is_the_torch_recursion() -> None:
                 initial,
                 kernel,
                 start,
-                max_iterations=10,
-                tolerance=0.0,
                 backend=backend,
+                config=EmConfig(max_iterations=10, tolerance=0.0),
             )
             for backend in (Backend.PYTHON, Backend.RUST)
         }
@@ -111,7 +112,7 @@ def test_a_held_transition_is_that_transition_expanded_per_step() -> None:
         initial,
         kernel.expand(max(batch.lengths) - 1, 4, 4).clone(),
         start,
-        max_iterations=5,
+        config=replace(EM, max_iterations=5),
     )
     # The torch recursion on both sides is bitwise; the default compiled E
     # step measured 1.3e-15 relative on the likelihood and 5.2e-13 on the
@@ -122,9 +123,9 @@ def test_a_held_transition_is_that_transition_expanded_per_step() -> None:
             initial,
             kernel,
             start,
-            max_iterations=5,
             fit_transition=False,
             backend=backend,
+            config=replace(EM, max_iterations=5),
         )
         assert torch.equal(held.log_transition, kernel)
         fitted = held.emissions.named_parameters()
@@ -152,11 +153,23 @@ def test_a_per_step_kernel_keeps_the_torch_recursion_under_either_backend() -> N
     initial = torch.full((4,), -math.log(4.0), dtype=torch.float64)
     per_step = kernel.expand(max(batch.lengths) - 1, 4, 4).clone()
     first, second = (
-        baum_welch_family(batch, initial, per_step, start, max_iterations=3, backend=b)
+        baum_welch_family(
+            batch,
+            initial,
+            per_step,
+            start,
+            backend=b,
+            config=replace(EM, max_iterations=3),
+        )
         for b in (Backend.PYTHON, Backend.RUST)
     )
     assert first.log_likelihood == second.log_likelihood
     with pytest.raises(ValueError, match="E step"):
         baum_welch_family(
-            batch, initial, kernel, start, max_iterations=1, backend=Backend.NUMBA
+            batch,
+            initial,
+            kernel,
+            start,
+            backend=Backend.NUMBA,
+            config=replace(EM, max_iterations=1),
         )

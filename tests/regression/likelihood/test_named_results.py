@@ -16,10 +16,10 @@ from sal.likelihood.features import Adjacency
 from sal.likelihood.forward_backward import StepKernels
 from sal.likelihood.hadamard import Spectrum
 from sal.likelihood.message_passing import _Run
-from sal.likelihood.message_passing_rust import TreeMessages
-from sal.likelihood.ragged_rust import Posteriors
+from sal.likelihood.message_passing.rust import TreeMessages
+from sal.likelihood.ragged import Posteriors
 from sal.likelihood.schedule import UpwardMessageSchedule
-from sal.likelihood.spatio_sequential_rust import (
+from sal.likelihood.spatio_sequential.rust import (
     EmissionRows,
     EmissionTables,
 )

@@ -43,7 +43,9 @@ from enum import Enum
 
 import torch
 
+from sal.backend import Backend, refuse_backend
 from sal.opt.objective import Objective
+from sal.sample.chain import Adaptation
 from sal.track import TrackedOptimization, current
 
 #: Shrinkages one update may spend before it is refused. The interval halves
@@ -104,7 +106,7 @@ class SliceChain:
 
     Parameters
     ----------
-    theta : torch.Tensor
+    draws : torch.Tensor
         Draws in unconstrained coordinates, shape ``(n_samples, dimension)``.
         One draw is one sweep, not one univariate update.
     objective_evaluations : int
@@ -119,7 +121,7 @@ class SliceChain:
         Shrinkages a sweep spent, over the whole run.
     """
 
-    theta: torch.Tensor
+    draws: torch.Tensor
     objective_evaluations: int
     evaluations_per_draw: float
     expansions_per_draw: float
@@ -137,8 +139,12 @@ def slice_sample(
     theta0: torch.Tensor | None = None,
     burn_in: int = 0,
     shrink: bool = True,
+    temperature: float = 1.0,
+    adaptation: Adaptation | None = None,
+    store_chain: bool = True,
+    backend: Backend = Backend.PYTHON,
 ) -> SliceChain:
-    """Draw ``n_samples`` sweeps from the density ``exp(-objective)``.
+    """Draw ``n_samples`` sweeps from the density ``exp(-objective / temperature)``.
 
     A sweep is ``dimension`` univariate updates: along each axis in turn under
     ``COORDINATE``, along that many independently drawn directions under
@@ -174,6 +180,20 @@ def slice_sample(
         same stationary distribution at an unbounded cost, which is the
         ablation that says what the shrinkage buys. It is refused past
         :data:`MAX_SHRINKAGES` candidates like any other update.
+    temperature : float
+        The chain targets ``exp(-objective / temperature)``; the level and
+        each comparison divide the energy by it, so at 1 the chain is the
+        untempered one bitwise.
+    adaptation : Adaptation | None
+        Refused unless ``None``: the width is adapted within each update by
+        stepping out and shrinking, so a warm-up has no step or metric to
+        set. Taken so the samplers share one entry shape (issue #1059).
+    store_chain : bool
+        Keep the draws. ``False`` keeps none --- ``draws`` has zero rows ---
+        and the counters alone are reported.
+    backend : Backend
+        :data:`~sal.backend.Backend.PYTHON` alone: the torch loop has no
+        compiled twin.
 
     Returns
     -------
@@ -182,9 +202,20 @@ def slice_sample(
     Raises
     ------
     ValueError
-        If ``width`` is not positive, ``max_steps_out`` is below 1, or an
-        update exhausts :data:`MAX_SHRINKAGES`.
+        If ``width`` or ``temperature`` is not positive, ``max_steps_out`` is
+        below 1, an ``adaptation`` or a backend other than ``PYTHON`` is
+        given, or an update exhausts :data:`MAX_SHRINKAGES`.
     """
+    refuse_backend("slice_sample", backend, (Backend.PYTHON,))
+    if adaptation is not None:
+        msg = (
+            "slice_sample takes no adaptation: stepping out and shrinking set "
+            "the interval within each update, so a warm-up has nothing to set"
+        )
+        raise ValueError(msg)
+    if not temperature > 0.0:
+        msg = f"temperature must be positive, got {temperature}"
+        raise ValueError(msg)
     if width <= 0.0:
         msg = f"width must be positive, got {width}"
         raise ValueError(msg)
@@ -203,7 +234,9 @@ def slice_sample(
     ).to(torch.float64)
     dimension = int(position.shape[0])
 
-    draws = torch.empty((n_samples, dimension), dtype=torch.float64)
+    draws = torch.empty(
+        (n_samples if store_chain else 0, dimension), dtype=torch.float64
+    )
     evaluations = 0
     expansions = 0
     shrinkages = 0
@@ -222,13 +255,15 @@ def slice_sample(
                 width=width,
                 max_steps_out=max_steps_out,
                 shrink=shrink,
+                temperature=temperature,
             )
             position = update.theta
             evaluations += update.evaluations
             expansions += update.expansions
             shrinkages += update.shrinkages
         if index >= burn_in:
-            draws[index - burn_in] = position
+            if store_chain:
+                draws[index - burn_in] = position
             tracked.record(
                 index - burn_in,
                 state=position,
@@ -239,7 +274,7 @@ def slice_sample(
 
     sweeps = max(n_samples + burn_in, 1)
     return SliceChain(
-        theta=draws,
+        draws=draws,
         objective_evaluations=evaluations,
         evaluations_per_draw=evaluations / sweeps,
         expansions_per_draw=expansions / sweeps,
@@ -256,6 +291,7 @@ def slice_update(
     width: float,
     max_steps_out: int,
     shrink: bool = True,
+    temperature: float = 1.0,
 ) -> SliceUpdate:
     """Neal's (2003, §3.1) stepping-out and shrinkage along one line.
 
@@ -276,7 +312,7 @@ def slice_update(
     generator : torch.Generator
         The stream the level, the interval offset and the candidates come
         from.
-    width, max_steps_out, shrink
+    width, max_steps_out, shrink, temperature
         As :func:`slice_sample`.
 
     Returns
@@ -300,7 +336,9 @@ def slice_update(
         raise ValueError(msg)
     # log y = log(f(x) * u) with u uniform on (0, 1), written as a log so a
     # density below `float64`'s smallest normal still cuts a level.
-    log_slice = -current + math.log(float(torch.rand(1, generator=generator)))
+    log_slice = -current / temperature + math.log(
+        float(torch.rand(1, generator=generator))
+    )
 
     # Neal's Figure 3: the interval is placed uniformly around the current
     # point and its expansions are split at random between the ends, which is
@@ -313,14 +351,14 @@ def slice_update(
     expansions = 0
     while left_steps > 0:
         evaluations += 1
-        if -float(objective(position + lower * direction)) <= log_slice:
+        if -float(objective(position + lower * direction)) / temperature <= log_slice:
             break
         lower -= width
         left_steps -= 1
         expansions += 1
     while right_steps > 0:
         evaluations += 1
-        if -float(objective(position + upper * direction)) <= log_slice:
+        if -float(objective(position + upper * direction)) / temperature <= log_slice:
             break
         upper += width
         right_steps -= 1
@@ -331,7 +369,7 @@ def slice_update(
         offset = lower + (upper - lower) * float(torch.rand(1, generator=generator))
         candidate = position + offset * direction
         evaluations += 1
-        if -float(objective(candidate)) >= log_slice:
+        if -float(objective(candidate)) / temperature >= log_slice:
             return SliceUpdate(
                 theta=candidate,
                 log_slice=log_slice,

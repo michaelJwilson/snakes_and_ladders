@@ -30,7 +30,10 @@ decoding (issue #593), refereed by enumeration at the declared length and
 taken no further. ``maxflow_declined`` is here as ``pruning_burn`` is, its
 Rust half behind the ``sandbox`` feature: the three max-flow kernels issue
 #715 measured against Boykov--Kolmogorov and did not keep, each still a
-referee of the kept one arc for arc.
+referee of the kept one arc for arc. ``covariate_grid`` is here as
+``tropical`` is, declined: a continuous covariate coded on a power-of-two grid
+(issue #1064), which no family reaches, since the exposure factors and the
+trial count is exact.
 """
 
 from sal import _submodules

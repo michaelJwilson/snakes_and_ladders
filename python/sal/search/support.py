@@ -82,7 +82,7 @@ from sal.sim.topology import (
 # default in workers and serial alike, so the two runs reduce in the same order
 # on one machine. No pool reached 2x at 4 workers at the mid-size tier;
 # STATUS.md carries the measurement (issue #344).
-_BOOTSTRAP_BACKEND: Pool = "processes"
+_BOOTSTRAP_POOL: Pool = "processes"
 _BOOTSTRAP_INTRA_OP_THREADS: int | None = None
 
 
@@ -421,7 +421,7 @@ def _replicate(
     found = infer(
         resampled,
         k,
-        topology=None,
+        start=None,
         model=model,
         moves=moves,
         max_evaluations=max_evaluations,
@@ -470,7 +470,7 @@ def bootstrap_support(
         _replicate,
         [(alignment, k, model, moves, max_evaluations)] * n_replicates,
         workers=workers,
-        backend=_BOOTSTRAP_BACKEND,
+        pool=_BOOTSTRAP_POOL,
         intra_op_threads=_BOOTSTRAP_INTRA_OP_THREADS,
         generator=rng,
     )

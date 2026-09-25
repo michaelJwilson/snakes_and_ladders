@@ -172,7 +172,11 @@ def test_a_rollout_started_at_a_local_maximum_takes_no_action() -> None:
     optimum_state = (0, 0, 0, 0)
     assert environment.is_terminal(optimum_state)
     episode = rollout(
-        environment, LinearPolicy(2), np.random.default_rng(3), 10, start=optimum_state
+        environment,
+        LinearPolicy(2),
+        np.random.default_rng(3),
+        max_steps=10,
+        start=optimum_state,
     )
     assert episode.actions == ()
     assert episode.terminated
@@ -192,7 +196,7 @@ def test_a_rollout_is_reproducible_from_its_seed() -> None:
 @pytest.mark.oracle
 def test_greedy_takes_the_best_rewarded_action_at_every_step() -> None:
     environment = potts_environment()
-    episode = greedy_rollout(environment, (2, 1, 1, 0), max_steps=20)
+    episode = greedy_rollout(environment, start=(2, 1, 1, 0), max_steps=20)
     for state, taken, reward in zip(
         episode.states, episode.actions, episode.rewards, strict=False
     ):
@@ -207,13 +211,15 @@ def test_greedy_takes_the_best_rewarded_action_at_every_step() -> None:
 @pytest.mark.smoke
 def test_a_negative_budget_is_rejected_by_a_policy_rollout() -> None:
     with pytest.raises(ValueError, match="max_steps must be >= 0"):
-        rollout(potts_environment(), LinearPolicy(2), np.random.default_rng(0), -1)
+        rollout(
+            potts_environment(), LinearPolicy(2), np.random.default_rng(0), max_steps=-1
+        )
 
 
 @pytest.mark.smoke
 def test_a_negative_budget_is_rejected_by_the_greedy_rollout() -> None:
     with pytest.raises(ValueError, match="max_steps must be >= 0"):
-        greedy_rollout(potts_environment(), (0, 1, 0, 1), -1)
+        greedy_rollout(potts_environment(), start=(0, 1, 0, 1), max_steps=-1)
 
 
 # --- the gauge -----------------------------------------------------------
@@ -289,12 +295,13 @@ def test_every_rollout_loop_reads_terminated_from_the_state_it_ended_in() -> Non
     rng = np.random.default_rng(0)
     policy = LinearPolicy(2)
     episodes = [
-        rollout(environment, policy, rng, budget, stop_at_local_optimum=stop)
+        rollout(environment, policy, rng, max_steps=budget, stop_at_local_optimum=stop)
         for budget in (0, 1, 8)
         for stop in (True, False)
     ]
     episodes += [
-        greedy_rollout(environment, environment.reset(rng), budget) for budget in (0, 8)
+        greedy_rollout(environment, start=environment.reset(rng), max_steps=budget)
+        for budget in (0, 8)
     ]
 
     for episode in episodes:

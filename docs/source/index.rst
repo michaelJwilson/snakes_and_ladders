@@ -43,6 +43,12 @@ whether or not it has members yet.
 .. automodule:: sal.emissions.counts
    :members: lgamma_shifted
 
+.. automodule:: sal.emissions.nb
+   :members:
+
+.. automodule:: sal.emissions.bb
+   :members:
+
 .. automodule:: sal.fixtures
    :members:
 
@@ -59,9 +65,6 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: sal.track
-   :members:
-
-.. automodule:: sal.likelihood.ragged_rust
    :members:
 
 .. automodule:: sal.sim
@@ -100,7 +103,7 @@ whether or not it has members yet.
 .. automodule:: sal.sim.count_pairs
    :members:
 
-.. automodule:: sal.sim.count_pairs_rust
+.. automodule:: sal.sim.count_pairs.rust
    :members:
 
 .. automodule:: sal.sim.potts
@@ -169,13 +172,13 @@ whether or not it has members yet.
 .. automodule:: sal.likelihood.pruning_common
    :members:
 
-.. automodule:: sal.likelihood.pruning_torch
+.. automodule:: sal.likelihood.pruning.torch
    :members:
 
-.. automodule:: sal.likelihood.pruning_jax
+.. automodule:: sal.likelihood.pruning.jax
    :members:
 
-.. automodule:: sal.likelihood.pruning_rust
+.. automodule:: sal.likelihood.pruning.rust
    :members:
 
 .. automodule:: sal.likelihood.pruning_analytic
@@ -205,16 +208,25 @@ whether or not it has members yet.
 .. automodule:: sal.likelihood.message_passing_reference
    :members:
 
-.. automodule:: sal.likelihood.message_passing_rust
+.. automodule:: sal.likelihood.message_passing.rust
    :members:
 
 .. automodule:: sal.likelihood.spatio_sequential
    :members:
 
-.. automodule:: sal.likelihood.spatio_sequential_rust
+.. automodule:: sal.likelihood.spatio_sequential.rust
    :members:
 
 .. automodule:: sal.likelihood.forward_backward
+   :members:
+
+.. automodule:: sal.likelihood.ragged
+   :members:
+
+.. automodule:: sal.likelihood.ragged.rust
+   :members:
+
+.. automodule:: sal.likelihood.hmm
    :members:
 
 .. automodule:: sal.likelihood.hmm_paths
@@ -247,7 +259,7 @@ whether or not it has members yet.
 .. automodule:: sal.likelihood.convolutional
    :members:
 
-.. automodule:: sal.likelihood.convolutional_rust
+.. automodule:: sal.likelihood.convolutional.rust
    :members:
 
 .. automodule:: sal.likelihood.turbo
@@ -301,7 +313,7 @@ whether or not it has members yet.
 
 .. automodule:: sal.opt.hmm.estimation
 
-.. automodule:: sal.opt.hmm_jax
+.. automodule:: sal.opt.hmm.jax
    :members:
 
 .. automodule:: sal.opt.mixture
@@ -335,13 +347,16 @@ whether or not it has members yet.
 .. automodule:: sal.sample.metropolis
    :members:
 
-.. automodule:: sal.sample.hmc_jax
+.. automodule:: sal.sample.hmc.jax
    :members:
 
 .. automodule:: sal.sample.declared
    :members:
 
 .. automodule:: sal.sample.mixture_gibbs
+   :members:
+
+.. automodule:: sal.sample.mixture_anneal
    :members:
 
 .. automodule:: sal.sample.relabel
@@ -480,7 +495,7 @@ whether or not it has members yet.
 .. automodule:: sal.backend
    :members:
 
-.. automodule:: sal.sample.kernels
+.. automodule:: sal.sample.gibbs.numba
    :members:
 
 .. automodule:: sal.search.decoding
@@ -498,9 +513,7 @@ whether or not it has members yet.
 .. automodule:: sal.search.icm
    :members:
 
-.. automodule:: sal.search.numba
-
-.. automodule:: sal.search.numba.icm
+.. automodule:: sal.search.icm.numba
    :members:
 
 .. automodule:: sal.search.trws
@@ -515,7 +528,7 @@ whether or not it has members yet.
 .. automodule:: sal.search.maxflow
    :members:
 
-.. automodule:: sal.search.maxflow_rust
+.. automodule:: sal.search.maxflow.rust
    :members:
 
 .. automodule:: sal.learn.ranking
@@ -545,6 +558,9 @@ whether or not it has members yet.
    :no-index:
 
 .. automodule:: sal.sandbox.circulant_schedule
+   :members:
+
+.. automodule:: sal.sandbox.covariate_grid
    :members:
 
 .. automodule:: sal.sandbox.maxflow_declined

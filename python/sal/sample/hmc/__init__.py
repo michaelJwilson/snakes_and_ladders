@@ -97,7 +97,7 @@ from sal.sample.declared import (
     declared_jax_energy,
 )
 from sal.sample.expectation import Expectation
-from sal.sample.hmc_jax import JaxWalk
+from sal.sample.hmc.jax import JaxWalk
 from sal.sample.schedule import (
     Monotone,
     TempSchedule,
@@ -123,7 +123,7 @@ __all__ = [
     "YOSHIDA_WEIGHTS",
     "Adaptation",
     "Adapted",
-    "Annealed",
+    "AnnealedTheta",
     "Chain",
     "HmcChain",
     "Integrator",
@@ -199,7 +199,7 @@ class HmcChain:
 
     Parameters
     ----------
-    theta : torch.Tensor
+    draws : torch.Tensor
         Draws in unconstrained coordinates, shape ``(n_samples, dimension)``.
     acceptance_rate : float
         Fraction of proposals accepted. Hamiltonian dynamics conserves energy
@@ -223,7 +223,7 @@ class HmcChain:
         ``operators`` given to :func:`sample`; empty when none were.
     """
 
-    theta: torch.Tensor
+    draws: torch.Tensor
     acceptance_rate: float
     energy_error: torch.Tensor
     force_evaluations: int
@@ -475,7 +475,7 @@ def sample(
         ``None`` runs the fixed-parameter chain at unit mass, bitwise what it
         was before adaptation existed.
     store_chain : bool
-        Keep the draws (issue #988). ``False`` keeps none --- ``theta`` has
+        Keep the draws (issue #988). ``False`` keeps none --- ``draws`` has
         zero rows --- and the chain holds memory of the order of one draw
         rather than ``n_samples`` of them; what it was for is then
         ``operators``' expectations.
@@ -556,7 +556,7 @@ def sample(
             operators=operators,
         )
     return HmcChain(
-        theta=chain.draws,
+        draws=chain.draws,
         acceptance_rate=chain.acceptance_rate,
         energy_error=chain.energy_error,
         force_evaluations=chain.force_evaluations,
@@ -566,7 +566,7 @@ def sample(
 
 
 @dataclass(frozen=True)
-class Annealed:
+class AnnealedTheta:
     """What one annealing run found, and what it cost.
 
     Parameters
@@ -603,7 +603,7 @@ def anneal(
     n_steps: int = DEFAULT_STEPS,
     theta0: torch.Tensor | None = None,
     integrator: Integrator = leapfrog,
-) -> Annealed:
+) -> AnnealedTheta:
     """Simulated annealing with Hamiltonian proposals: :func:`sample` on a schedule.
 
     One proposal per schedule step at that step's temperature, tracking the
@@ -630,14 +630,14 @@ def anneal(
 
     Returns
     -------
-    Annealed
+    AnnealedTheta
     """
     _check_trajectory(step_size, n_steps)
     position = start_point(objective, theta0)
 
     best, best_value = position.clone(), float(objective(position))
     accepted = 0
-    # `energy` is the best value so far, which is what `Annealed.value`
+    # `energy` is the best value so far, which is what `AnnealedTheta.value`
     # returns: the series ends at the field rather than at the last visited
     # point, which the result does not report. `best` is the state passed,
     # for the same reason.
@@ -660,7 +660,7 @@ def anneal(
             best, best_value = position.clone(), value
         tracked.record(step, state=best, temperature=temperature, energy=best_value)
     tracked.record_cost(max(schedule.n_steps - 1, 0), best.nbytes)
-    return Annealed(
+    return AnnealedTheta(
         theta=best,
         value=best_value,
         final=position,

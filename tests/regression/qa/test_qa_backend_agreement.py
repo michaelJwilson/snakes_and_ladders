@@ -10,6 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
+from sal.backend import Backend
 from sal.fixtures import load_params
 from sal.qa.backend_agreement import (
     BACKENDS,
@@ -30,13 +31,13 @@ _AGREEMENT = 1e-12
 
 
 @pytest.fixture(scope="module")
-def measured() -> dict[str, list[tuple[int, float]]]:
+def measured() -> dict[Backend, list[tuple[int, float]]]:
     return agreement(load_params(FIXTURE, SimulationParams))
 
 
 @pytest.mark.oracle
 def test_every_backend_agrees_with_brute_force(
-    measured: dict[str, list[tuple[int, float]]],
+    measured: dict[Backend, list[tuple[int, float]]],
 ) -> None:
     # The span is part of the claim. The deviation is reported relative, so
     # one bound holding across a tenfold range of site counts is what says it
@@ -51,7 +52,7 @@ def test_every_backend_agrees_with_brute_force(
 
 @pytest.mark.smoke
 def test_the_caption_reports_the_worst_deviation_it_measured(
-    measured: dict[str, list[tuple[int, float]]],
+    measured: dict[Backend, list[tuple[int, float]]],
 ) -> None:
     params = load_params(FIXTURE, SimulationParams)
     figure, caption = build_figure(measured, params)
@@ -66,7 +67,7 @@ def test_the_caption_reports_the_worst_deviation_it_measured(
 
 @pytest.mark.smoke
 def test_float64_epsilon_is_below_the_measured_deviation(
-    measured: dict[str, list[tuple[int, float]]],
+    measured: dict[Backend, list[tuple[int, float]]],
 ) -> None:
     # The figure draws epsilon as a reference line. If the deviation were at
     # epsilon the line would say nothing; it is above it, which is what a sum

@@ -236,7 +236,7 @@ def test_an_em_fit_and_a_gradient_fit_agree_on_the_interval_at_their_optimum() -
     gradient_errors = standard_errors_at(objective, objective.constrain(gradient.theta))
 
     start = objective.constrain(objective.initial())
-    log_initial, log_transition, log_emission, log_likelihood = baum_welch(
+    log_initial, log_transition, log_emission, log_likelihood, _ = baum_welch(
         observations,
         start["log_initial"],
         start["log_transition"],
@@ -376,7 +376,7 @@ def test_where_the_laplace_approximation_is_exact_the_chain_agrees_with_it() -> 
         n_steps=10,
         burn_in=200,
     )
-    assert_allclose(chain.theta.std(0).numpy(), exact.numpy(), rtol=0.05)
+    assert_allclose(chain.draws.std(0).numpy(), exact.numpy(), rtol=0.05)
 
 
 @pytest.mark.smoke
@@ -403,7 +403,7 @@ def test_the_delta_method_interval_and_the_sampled_posterior_agree() -> None:
         burn_in=400,
     )
 
-    constrained = [objective.constrain(draw) for draw in chain.theta]
+    constrained = [objective.constrain(draw) for draw in chain.draws]
     coupling = torch.tensor([float(one["coupling"]) for one in constrained])
     sampled = torch.cat(
         [
@@ -435,7 +435,7 @@ def test_the_intervals_from_an_em_fit_cover_truth_at_the_nominal_rate() -> None:
         observations = simulate_sequences(params).observations
         objective = HmmObjective(observations, params.n_states, params.n_symbols)
         start = objective.constrain(objective.initial())
-        log_initial, log_transition, log_emission, _ = baum_welch(
+        log_initial, log_transition, log_emission, *_ = baum_welch(
             observations,
             start["log_initial"],
             start["log_transition"],

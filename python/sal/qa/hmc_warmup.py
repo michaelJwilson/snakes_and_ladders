@@ -192,7 +192,7 @@ def running_mean(chain: HmcChain, coordinate: int) -> np.ndarray:
         ``mean(theta[:t, coordinate])`` for every ``t``, 1-D of length
         ``n_samples``.
     """
-    draws: np.ndarray = chain.theta[:, coordinate].detach().numpy()
+    draws: np.ndarray = chain.draws[:, coordinate].detach().numpy()
     counts = np.arange(1, draws.size + 1)
     trace: np.ndarray = np.cumsum(draws) / counts
     return trace
@@ -239,7 +239,7 @@ def _ess_per_gradient(chain: HmcChain) -> float:
     The warm-up's gradients are inside ``force_evaluations``, so this charges
     the adapted chain for them rather than comparing at equal recorded draws.
     """
-    sizes: np.ndarray = effective_sample_size(chain.theta).detach().numpy()
+    sizes: np.ndarray = effective_sample_size(chain.draws).detach().numpy()
     return float(sizes.min()) / chain.force_evaluations
 
 

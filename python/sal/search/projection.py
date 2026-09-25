@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 import torch
@@ -51,6 +51,7 @@ from sal.opt.constrain import (
     log_simplex,
     positive,
 )
+from sal.opt.em import EM, EmConfig
 from sal.opt.emission_mixture import (
     ComponentsAt,
     expectation_maximization,
@@ -77,6 +78,7 @@ from sal.opt.mixture import (
 from sal.opt.objective import Objective
 from sal.opt.starts import PolishedPoint, Trial
 from sal.opt.termination import Termination
+from sal.sample.chain import torch_stream
 from sal.sample.initialize import FromAnnealing, FromChain, FromTempering
 from sal.sample.schedule import ExponentialTempSchedule
 from sal.sim.count_pairs import (
@@ -306,23 +308,32 @@ class CountPairAt:
 
 
 @dataclass(frozen=True)
-class Seeding:
-    """What one candidate produced, and what it charged for it.
+class Seeding[F: EmissionFamily]:
+    """What one start produced, what it charged, and the path it took there.
+
+    The one result every seeding rule returns, here and in
+    :data:`sal.search.mixture_starts.STARTS`, whose ``Seeded`` carried the
+    same fields and ``path`` (issue #1059).
 
     Parameters
     ----------
-    components : IndependentCountPair
-        The seeded components.
+    components : F
+        The seeded components, of the family the rule seeds.
     passes : float
         The seeding's own cost, in passes over the data.
     diagnostics : str
-        Empty for a heuristic; for a chain, the acceptance rate and whatever
-        else says the draw is a draw and not a random restart.
+        Empty for a heuristic; for a chain or a fit, what says how it ended:
+        the acceptance rate, and whatever else says the draw is a draw and
+        not a random restart.
+    path : tuple[tuple[int, F], ...]
+        For a start that iterates, the step of its run at which it held each
+        of these components; empty for one that does not.
     """
 
-    components: IndependentCountPair
+    components: F
     passes: float
     diagnostics: str = ""
+    path: tuple[tuple[int, F], ...] = ()
 
 
 def _euclidean_score(rows: np.ndarray) -> Callable[..., np.ndarray]:
@@ -353,7 +364,7 @@ def _at_indices(
 
 def euclidean_seeding(
     instance: ProjectedCounts, at: ComponentsAt, rng: np.random.Generator
-) -> Seeding:
+) -> Seeding[IndependentCountPair]:
     """k-means++ as it stands: D-squared sampling under squared Euclidean distance.
 
     Returns
@@ -372,7 +383,7 @@ def euclidean_seeding(
 
 def emission_seeding(
     instance: ProjectedCounts, at: ComponentsAt, rng: np.random.Generator
-) -> Seeding:
+) -> Seeding[IndependentCountPair]:
     """``Emission_Mixture++``: the same scheme under the family's own Bregman divergence.
 
     Returns
@@ -389,7 +400,7 @@ def emission_seeding(
 
 def data_seeding(
     instance: ProjectedCounts, at: ComponentsAt, rng: np.random.Generator
-) -> Seeding:
+) -> Seeding[IndependentCountPair]:
     """Components placed on observations drawn uniformly, without replacement.
 
     Returns
@@ -406,7 +417,7 @@ def data_seeding(
 
 def prior_seeding(
     instance: ProjectedCounts, at: ComponentsAt, rng: np.random.Generator
-) -> Seeding:
+) -> Seeding[IndependentCountPair]:
     """Components drawn from a prior over the observed range, reading no observation.
 
     The control that says whether structure in a seeding earns its cost: a
@@ -438,7 +449,7 @@ BURN_IN_ITERATIONS = 3
 
 def burn_in_seeding(
     instance: ProjectedCounts, at: ComponentsAt, rng: np.random.Generator
-) -> Seeding:
+) -> Seeding[IndependentCountPair]:
     """The coupled model's own start in projection: a short fit on a subsample.
 
     Returns
@@ -455,8 +466,7 @@ def burn_in_seeding(
         instance.observations[subsample],
         weights,
         seeded,
-        max_iterations=BURN_IN_ITERATIONS,
-        tolerance=0.0,
+        config=EmConfig(max_iterations=BURN_IN_ITERATIONS, tolerance=0.0),
     )
     return Seeding(
         _count_pair(fit.components),
@@ -588,14 +598,9 @@ ANNEAL_STEPS = 8
 TEMPERING_ROUNDS = 2
 
 
-def _generator(rng: np.random.Generator) -> torch.Generator:
-    """A torch stream derived from the caller's generator, so one seed runs the cell."""
-    return torch.Generator().manual_seed(int(rng.integers(0, 2**31 - 1)))
-
-
 def chain_seeding(
     instance: ProjectedCounts, at: ComponentsAt, rng: np.random.Generator
-) -> Seeding:
+) -> Seeding[IndependentCountPair]:
     """A short Hamiltonian chain on the surrogate; the last draw is the seeding.
 
     Returns
@@ -611,14 +616,14 @@ def chain_seeding(
     initializer = FromChain(
         CHAIN_DRAWS,
         CHAIN_STEP,
-        _generator(rng),
+        torch_stream(rng),
         n_steps=CHAIN_TRAJECTORY,
         burn_in=CHAIN_BURN_IN,
         adaptation=None,
     )
     chain = initializer.chain(surrogate(instance))
     return Seeding(
-        _from_theta(instance, chain.theta[-1], at),
+        _from_theta(instance, chain.draws[-1], at),
         PASSES_PER_GRADIENT * chain.force_evaluations,
         f"acceptance {chain.acceptance_rate:.2f}, mean energy error "
         f"{float(chain.energy_error.mean()):.2e}",
@@ -627,7 +632,7 @@ def chain_seeding(
 
 def annealed_seeding(
     instance: ProjectedCounts, at: ComponentsAt, rng: np.random.Generator
-) -> Seeding:
+) -> Seeding[IndependentCountPair]:
     """The single-chain control for tempering: the best point of a falling temperature.
 
     Returns
@@ -637,7 +642,7 @@ def annealed_seeding(
     run = FromAnnealing(
         ExponentialTempSchedule(float(TEMPERATURES[-1]), 1.0, ANNEAL_STEPS),
         CHAIN_STEP,
-        _generator(rng),
+        torch_stream(rng),
         n_steps=CHAIN_TRAJECTORY,
     ).run(surrogate(instance))
     return Seeding(
@@ -649,7 +654,7 @@ def annealed_seeding(
 
 def tempered_seeding(
     instance: ProjectedCounts, at: ComponentsAt, rng: np.random.Generator
-) -> Seeding:
+) -> Seeding[IndependentCountPair]:
     """Parallel tempering on the surrogate; the best point at any temperature.
 
     Returns
@@ -663,7 +668,7 @@ def tempered_seeding(
         TEMPERATURES,
         TEMPERING_ROUNDS,
         CHAIN_STEP,
-        _generator(rng),
+        torch_stream(rng),
         n_steps=CHAIN_TRAJECTORY,
     ).run(surrogate(instance))
     return Seeding(
@@ -677,7 +682,7 @@ def tempered_seeding(
 #: Every candidate, in the order the ticket states them. ``prior`` and ``data``
 #: are the two cheap controls; the rest read structure out of the data or out
 #: of the surface.
-SEEDINGS: dict[str, Callable[..., Seeding]] = {
+SEEDINGS: dict[str, Callable[..., Seeding[IndependentCountPair]]] = {
     "prior": prior_seeding,
     "data": data_seeding,
     "kmeans++": euclidean_seeding,
@@ -702,7 +707,7 @@ RESTART_SCALE = 0.5
 
 def gaussian_em_seeding(
     instance: ProjectedCounts, at: ComponentsAt, rng: np.random.Generator
-) -> Seeding:
+) -> Seeding[IndependentCountPair]:
     """The Gaussian mixture fitted to the first channel, its means the locations.
 
     Experiment 010's control: expectation--maximization of
@@ -723,7 +728,7 @@ def gaussian_em_seeding(
         channel,
         torch.exp(objective.constrain(start)["log_weight"]).detach(),
         objective.components(start),
-        max_iterations=GAUSSIAN_EM_ITERATIONS,
+        config=replace(EM, max_iterations=GAUSSIAN_EM_ITERATIONS),
     )
     ended = fitted.termination
     return Seeding(
@@ -735,7 +740,7 @@ def gaussian_em_seeding(
 
 def objective_seeding(
     instance: ProjectedCounts, at: ComponentsAt, _rng: np.random.Generator
-) -> Seeding:
+) -> Seeding[IndependentCountPair]:
     """The surrogate's own nominated point, through :class:`FromObjective`.
 
     Returns
@@ -749,7 +754,7 @@ def objective_seeding(
 
 def perturbed_seeding(
     instance: ProjectedCounts, at: ComponentsAt, _rng: np.random.Generator
-) -> Seeding:
+) -> Seeding[IndependentCountPair]:
     """That point, tilted off a symmetry it may be stationary at, through :class:`Perturbed`.
 
     Returns
@@ -763,7 +768,7 @@ def perturbed_seeding(
 
 def restart_seeding(
     instance: ProjectedCounts, at: ComponentsAt, rng: np.random.Generator
-) -> Seeding:
+) -> Seeding[IndependentCountPair]:
     """The best by surrogate value of :data:`RESTARTS` points drawn by :class:`RandomRestart`.
 
     Returns
@@ -781,7 +786,7 @@ def restart_seeding(
 
 def quantile_seeding(
     instance: ProjectedCounts, at: ComponentsAt, _rng: np.random.Generator
-) -> Seeding:
+) -> Seeding[IndependentCountPair]:
     """Evenly spaced quantiles of the first channel, through :func:`quantile_locations`.
 
     Returns
@@ -803,7 +808,7 @@ def quantile_seeding(
 #: :data:`SEEDINGS`, which is experiment 009's candidate set and what the
 #: suite parametrizes over; module-level, so a process pool can run them
 #: (issue #891).
-LOCATION_SEEDINGS: dict[str, Callable[..., Seeding]] = {
+LOCATION_SEEDINGS: dict[str, Callable[..., Seeding[IndependentCountPair]]] = {
     "gaussian-em": gaussian_em_seeding,
     "objective": objective_seeding,
     "perturbed": perturbed_seeding,
@@ -823,7 +828,7 @@ class Fitted:
     ----------
     name : str
         The candidate.
-    seeding : Seeding
+    seeding : Seeding[IndependentCountPair]
         What it produced and charged.
     log_likelihoods : np.ndarray
         The projected log-likelihood at the seeding and after every
@@ -846,7 +851,7 @@ class Fitted:
     """
 
     name: str
-    seeding: Seeding
+    seeding: Seeding[IndependentCountPair]
     log_likelihoods: np.ndarray
     iterations: int
     recovery: float
@@ -884,7 +889,7 @@ def fit_projection(
     budget: Budget,
     rng: np.random.Generator,
     *,
-    seeding: Seeding | None = None,
+    seeding: Seeding[IndependentCountPair] | None = None,
 ) -> Fitted:
     """Seed by one candidate, then fit the projected mixture within the budget.
 
@@ -907,7 +912,7 @@ def fit_projection(
         run, one pass each.
     rng : np.random.Generator
         Passed in.
-    seeding : Seeding | None
+    seeding : Seeding[IndependentCountPair] | None
         A seeding produced elsewhere, so a start that is not one of
         :data:`SEEDINGS` is fitted through this same loop at this same budget
         rather than through a second one beside it (issue #887). ``None`` runs
@@ -971,7 +976,10 @@ def _projected_em(
     tracked = current()
     for _ in range(budget.size):
         step = expectation_maximization(
-            instance.observations, weights, components, max_iterations=1, tolerance=0.0
+            instance.observations,
+            weights,
+            components,
+            config=EmConfig(max_iterations=1, tolerance=0.0),
         )
         trace.append(step.log_likelihood)
         tracked.record(
@@ -1052,7 +1060,7 @@ class SeededFit:
 
     name: str
     at: ComponentsAt
-    seeding: Callable[..., Seeding] | None = None
+    seeding: Callable[..., Seeding[IndependentCountPair]] | None = None
 
     def __call__(
         self, instance: ProjectedCounts, budget: Budget, rng: np.random.Generator
@@ -1125,7 +1133,7 @@ class TimedFit:
 
     name: str
     at: ComponentsAt
-    seeding: Callable[..., Seeding]
+    seeding: Callable[..., Seeding[IndependentCountPair]]
     passes: Budget
 
     def __call__(

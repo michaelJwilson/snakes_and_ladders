@@ -8,7 +8,7 @@ rules that come before any speedup:
 * **A parallel run is bitwise equal to the serial run.** Randomness enters as
   one generator per task, spawned from the caller's generator with
   :meth:`numpy.random.Generator.spawn`, so task ``i`` draws the same stream
-  under every backend and worker count and the result cannot depend on
+  under every pool and worker count and the result cannot depend on
   scheduling. Results are returned in input order.
 * **Workers are an explicit argument.** ``workers=1`` is serial; there is no
   default and no environment override, so a run does not change on a bigger
@@ -17,7 +17,7 @@ rules that come before any speedup:
 ``torch`` and BLAS already multithread inside a kernel, so a pool of workers
 each running a multithreaded kernel oversubscribes the machine.
 ``intra_op_threads`` sets the count per worker explicitly, and the serial
-backend applies the same count, so the two runs execute the same kernels with
+pool applies the same count, so the two runs execute the same kernels with
 the same reduction order. ``DEV.md`` carries the measured rule and the hardware.
 
 The count is ``torch``'s, and this module never imports ``torch`` (issue
@@ -26,7 +26,7 @@ every worker. Where ``torch`` is already loaded the count is set at once;
 where it is not, an import hook sets it the moment ``torch`` finishes
 importing, so a body that imports ``torch`` itself -- as a spawned worker does
 when it unpickles a function from a module that imports it -- runs its first
-kernel at the count. The serial and thread backends restore what they
+kernel at the count. The serial and thread pools restore what they
 replaced, including the default of a ``torch`` first imported inside the call.
 BLAS behind NumPy is not set here: it reads its thread count when NumPy
 loads, which in a spawned worker is before any initializer runs, and changing
@@ -34,7 +34,7 @@ it afterwards needs ``threadpoolctl``, which is not a dependency. It follows
 ``OMP_NUM_THREADS``, ``OPENBLAS_NUM_THREADS`` and ``MKL_NUM_THREADS``, which
 a spawned worker inherits from the caller's environment.
 
-The process backend uses the ``spawn`` start method, which works with ``torch``
+The process pool uses the ``spawn`` start method, which works with ``torch``
 and on Apple Silicon. Spawned workers import the package afresh, a fixed cost
 per pool that ``STATUS.md`` reports beside each speedup; a function sent to it
 must be importable by name, and its items picklable.
@@ -58,12 +58,11 @@ Pool = Literal["serial", "threads", "processes"]
 """Which pool runs the tasks. `Pool` and not `Backend` (issue #860): the word
 `Backend` names which *implementation* runs a kernel
 (:class:`sal.backend.Backend`, an enum in 47 files), and one
-word for two choices had ``search.infer`` annotating a pool with it."""
+word for two choices had ``search.infer`` annotating a pool with it. The
+keyword that takes one is ``pool=`` since #1059, so ``backend=`` means a
+:class:`~sal.backend.Backend` wherever it is written."""
 
-Backend = Pool
-"""The name this carried until #860, kept so an existing annotation resolves."""
-
-BACKENDS: tuple[Pool, ...] = ("serial", "threads", "processes")
+POOLS: tuple[Pool, ...] = ("serial", "threads", "processes")
 
 T = TypeVar("T")
 R = TypeVar("R")
@@ -193,8 +192,8 @@ def _call(
     return function(item, generator)
 
 
-def _executor(backend: Pool, workers: int, intra_op_threads: int | None) -> Executor:
-    if backend == "threads":
+def _executor(pool: Pool, workers: int, intra_op_threads: int | None) -> Executor:
+    if pool == "threads":
         return ThreadPoolExecutor(max_workers=workers)
     return ProcessPoolExecutor(
         max_workers=workers,
@@ -210,7 +209,7 @@ def map_tasks(
     items: Iterable[T],
     *,
     workers: int,
-    backend: Pool,
+    pool: Pool,
     intra_op_threads: int | None,
     generator: None = None,
 ) -> list[R]: ...
@@ -222,7 +221,7 @@ def map_tasks(
     items: Iterable[T],
     *,
     workers: int,
-    backend: Pool,
+    pool: Pool,
     intra_op_threads: int | None,
     generator: np.random.Generator,
 ) -> list[R]: ...
@@ -233,7 +232,7 @@ def map_tasks(
     items: Iterable[T],
     *,
     workers: int,
-    backend: Pool,
+    pool: Pool,
     intra_op_threads: int | None,
     generator: np.random.Generator | None = None,
 ) -> list[R]:
@@ -243,15 +242,15 @@ def map_tasks(
     ----------
     function : Callable
         ``function(item)``, or ``function(item, generator)`` when
-        ``generator`` is given. Under the process backend it must be
+        ``generator`` is given. Under the process pool it must be
         importable by name, so a closure or a lambda is refused by pickling.
     items : Iterable
         The independent tasks. Materialized once, so a generator expression
         is consumed here and the count is known before any task runs.
     workers : int
         At least one. ``1`` runs serially in the calling thread whatever
-        ``backend`` says, so a caller passing ``1`` gets the loop it had.
-    backend : {"serial", "threads", "processes"}
+        ``pool`` says, so a caller passing ``1`` gets the loop it had.
+    pool : {"serial", "threads", "processes"}
         ``"serial"`` refuses ``workers > 1`` rather than ignoring it.
         ``"threads"`` suits a body that releases the GIL -- a ``torch`` op on
         a tensor large enough to parallelize, a Rust kernel under
@@ -259,7 +258,7 @@ def map_tasks(
         of pickling the item and the result and of spawning the workers.
     intra_op_threads : int | None
         ``torch.set_num_threads`` inside every worker, and in this process
-        for the serial and thread backends, restored afterwards; set at
+        for the serial and thread pools, restored afterwards; set at
         ``torch``'s import where ``torch`` is not yet loaded, so it is never
         imported here. ``None`` leaves the setting alone. Stated by the caller rather than defaulted
         because it decides whether the pool oversubscribes the machine;
@@ -279,8 +278,8 @@ def map_tasks(
     Raises
     ------
     ValueError
-        If ``workers < 1``, ``backend`` is not one of the three, or
-        ``backend="serial"`` is asked for more than one worker.
+        If ``workers < 1``, ``pool`` is not one of the three, or
+        ``pool="serial"`` is asked for more than one worker.
     Exception
         Whatever a task raised, re-raised in the caller with a note naming
         the task's index and item (:meth:`BaseException.add_note`). Tasks
@@ -289,11 +288,11 @@ def map_tasks(
     if workers < 1:
         msg = f"workers is at least one, got {workers}"
         raise ValueError(msg)
-    if backend not in BACKENDS:
-        msg = f"backend is one of {BACKENDS}, got {backend!r}"
+    if pool not in POOLS:
+        msg = f"pool is one of {POOLS}, got {pool!r}"
         raise ValueError(msg)
-    if backend == "serial" and workers > 1:
-        msg = f"the serial backend runs one worker, asked for {workers}"
+    if pool == "serial" and workers > 1:
+        msg = f"the serial pool runs one worker, asked for {workers}"
         raise ValueError(msg)
     tasks = list(items)
     generators: list[np.random.Generator | None] = (
@@ -311,9 +310,9 @@ def map_tasks(
                 )
             ]
 
-    pool_threads = intra_op_threads if backend == "threads" else None
+    pool_threads = intra_op_threads if pool == "threads" else None
     with _intra_op_threads(pool_threads):
-        executor = _executor(backend, min(workers, len(tasks)), intra_op_threads)
+        executor = _executor(pool, min(workers, len(tasks)), intra_op_threads)
         try:
             futures: list[Future[R]] = [
                 executor.submit(_call, function, item, child)

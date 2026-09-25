@@ -38,7 +38,7 @@ InstanceT = TypeVar("InstanceT")
 # holds the GIL. Each cell already seeds its own generator, so the cells are
 # independent by construction. No pool reached 2x at 4 workers at the
 # mid-size tier; STATUS.md carries the measurement (issue #344).
-_COMPARE_BACKEND: Pool = "processes"
+_COMPARE_POOL: Pool = "processes"
 
 # The intra-op thread count of a pooled worker: one, so a pool of one worker
 # per core uses the cores and no more (DEV.md, the thread rule). A spawned
@@ -331,7 +331,7 @@ def compare(
             for row, index, seed in cells
         ],
         workers=workers,
-        backend=_COMPARE_BACKEND,
+        pool=_COMPARE_POOL,
         intra_op_threads=None if workers == 1 else _COMPARE_POOLED_INTRA_OP_THREADS,
     )
     for (row, index, _seed), outcome in zip(cells, outcomes, strict=True):

@@ -146,7 +146,10 @@ def measure(
         )
 
     greedy = reached(
-        [greedy_rollout(environment, start, HORIZON).states[-1] for start in starts]
+        [
+            greedy_rollout(environment, start=start, max_steps=HORIZON).states[-1]
+            for start in starts
+        ]
     )
 
     untrained = LinearPolicy(environment.n_features())
@@ -156,9 +159,9 @@ def measure(
     control_rng = np.random.default_rng(99)
     control = reached(
         [
-            rollout(environment, untrained, control_rng, HORIZON, start=start).states[
-                -1
-            ]
+            rollout(
+                environment, untrained, control_rng, max_steps=HORIZON, start=start
+            ).states[-1]
             for start in starts
             for _ in range(ROLLOUTS_PER_START)
         ]
@@ -181,7 +184,9 @@ def measure(
         learned.append(
             reached(
                 [
-                    rollout(environment, policy, probe, HORIZON, start=start).states[-1]
+                    rollout(
+                        environment, policy, probe, max_steps=HORIZON, start=start
+                    ).states[-1]
                     for start in starts
                     for _ in range(ROLLOUTS_PER_START)
                 ]

@@ -34,6 +34,7 @@ def rollout[S, A](
     environment: Environment[S, A],
     policy: Policy,
     rng: np.random.Generator,
+    *,
     max_steps: int,
     start: S | None = None,
     stop_at_local_optimum: bool = True,
@@ -112,8 +113,9 @@ def rollout[S, A](
 
 def greedy_rollout[S, A](
     environment: Environment[S, A],
-    start: S,
+    *,
     max_steps: int,
+    start: S,
 ) -> Episode[S, A]:
     """Run one episode taking the best-rewarded action at every step.
 
@@ -130,11 +132,11 @@ def greedy_rollout[S, A](
     ----------
     environment : Environment[S, A]
         The problem to search.
+    max_steps : int
+        Decision budget, counted as for :func:`rollout`.
     start : S
         Starting state. Required rather than drawn, because a comparison
         against a policy is only fair from the same start.
-    max_steps : int
-        Decision budget, counted as for :func:`rollout`.
 
     Returns
     -------
@@ -171,9 +173,10 @@ def greedy_rollout[S, A](
 
 def greedy_restarts[S, A](
     environment: Environment[S, A],
-    start: S,
-    max_steps: int,
     rng: np.random.Generator,
+    *,
+    max_steps: int,
+    start: S,
 ) -> tuple[Episode[S, A], ...]:
     """Hill climbing restarted until ``max_steps`` decisions are spent.
 
@@ -191,13 +194,13 @@ def greedy_restarts[S, A](
     ----------
     environment : Environment[S, A]
         The problem to search.
-    start : S
-        Starting state of the first run.
+    rng : np.random.Generator
+        Draws every restart's state, and nothing else.
     max_steps : int
         Decision budget over every run together, counted as for
         :func:`rollout`.
-    rng : np.random.Generator
-        Draws every restart's state, and nothing else.
+    start : S
+        Starting state of the first run.
 
     Returns
     -------
@@ -218,7 +221,7 @@ def greedy_restarts[S, A](
     runs: list[Episode[S, A]] = []
     state, spent = start, 0
     while spent < max_steps:
-        episode = greedy_rollout(environment, state, max_steps - spent)
+        episode = greedy_rollout(environment, start=state, max_steps=max_steps - spent)
         runs.append(episode)
         spent += max(len(episode.actions), 1)
         state = environment.reset(rng)

@@ -173,6 +173,18 @@ def test_the_compiled_route_is_reproducible_from_the_generator() -> None:
     np.testing.assert_array_equal(first.draws.numpy(), second.draws.numpy())
 
 
+@pytest.mark.oracle
+@pytest.mark.parametrize("backend", [Backend.RUST, Backend.PYTHON], ids=str)
+def test_an_array_start_is_the_objectives_initial_point_bitwise(
+    backend: Backend,
+) -> None:
+    # Issue #1059: `theta0` is an array, as the chain takes no derivative;
+    # the zero start `GaussianTarget.initial` gives is the same chain.
+    implicit = _chain(backend, n=200)
+    explicit = _chain(backend, n=200, theta0=np.zeros(DIMENSION))
+    np.testing.assert_array_equal(implicit.draws.numpy(), explicit.draws.numpy())
+
+
 @pytest.mark.smoke
 def test_a_bad_step_and_an_unknown_backend_are_refused() -> None:
     with pytest.raises(ValueError, match="step_size"):

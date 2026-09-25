@@ -96,7 +96,7 @@ from sal.search.ground_state import (
     run_swendsen_wang_then_expansion,
 )
 from sal.search.potts_starts import (
-    PottsObjective,
+    LabellingEnergy,
     RunStart,
     polish_by_icm,
 )
@@ -398,7 +398,7 @@ def matched_niedermayer(budget: Budget, start: int) -> tuple[int, list[dict[str,
             _niedermayer_spend,
             [(steps, seed) for seed in TUNING_SEEDS],
             workers=WORKERS,
-            backend="processes",
+            pool="processes",
             intra_op_threads=1,
         )
         spent = [visits for _, visits in runs]
@@ -492,7 +492,7 @@ def run_arms(names: Sequence[str] | None = None) -> dict[str, Any]:
     table = arms()
     chosen = {name: table[name] for name in (names or list(table))}
     result = StartsBenchmark(
-        PottsObjective(rung),
+        LabellingEnergy(rung),
         chosen,
         polish_by_icm,
         seeding_budget=SEEDING,
@@ -566,7 +566,7 @@ def main(parts: Sequence[str] = PARTS) -> None:
                 diagnose,
                 tasks,
                 workers=WORKERS,
-                backend="processes",
+                pool="processes",
                 intra_op_threads=1,
             )
             result["diagnosis"] = {

@@ -98,9 +98,9 @@ def test_hill_climbing_reaches_the_enumerated_optimum() -> None:
     rng = np.random.default_rng(2)
     reached = [
         environment.energy(
-            greedy_rollout(environment, environment.reset(rng), EPISODE_HORIZON).states[
-                -1
-            ]
+            greedy_rollout(
+                environment, start=environment.reset(rng), max_steps=EPISODE_HORIZON
+            ).states[-1]
         )
         for _ in range(40)
     ]

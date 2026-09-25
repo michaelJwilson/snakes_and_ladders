@@ -50,6 +50,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from sal.emissions import EmissionFamily
+from sal.opt.em import EMISSION_MIXTURE_EM, EmConfig
 from sal.opt.emission_mixture import (
     ComponentsAt,
     EmissionMixtureFit,
@@ -248,14 +249,13 @@ def split_and_merge(
     *,
     candidates: int,
     partial_iterations: int = 3,
-    max_iterations: int = 200,
-    tolerance: float = 1e-10,
+    config: EmConfig = EMISSION_MIXTURE_EM,
 ) -> SplitMerge:
     """Split-and-merge moves from a converged EM fit until none of the top ``candidates`` raises the likelihood.
 
     From the current fit, :func:`candidate_moves` ranks the moves; each is
     realized, polished by ``partial_iterations`` steps of partial EM on its
-    three components and by full EM to ``tolerance``, and kept if its
+    three components and by full EM to ``config.tolerance``, and kept if its
     log-likelihood is above the current fit's. After a kept move the
     ranking starts again from the new fit; a round in which none of the
     ``candidates`` is kept ends the search. Every step is recorded into the
@@ -276,8 +276,8 @@ def split_and_merge(
     partial_iterations : int
         Partial EM steps on the three affected components, after the M step
         that realizes the move.
-    max_iterations, tolerance
-        Full EM's, as
+    config : EmConfig
+        Full EM's budget and tolerance, as
         :func:`~sal.opt.emission_mixture.expectation_maximization`
         takes them.
 
@@ -311,8 +311,7 @@ def split_and_merge(
                 values,
                 weights,
                 family,
-                max_iterations=max_iterations,
-                tolerance=tolerance,
+                config=config,
             )
             accepted = full.log_likelihood > fit.log_likelihood
             steps.append(

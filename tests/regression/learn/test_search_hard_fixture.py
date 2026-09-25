@@ -80,7 +80,9 @@ def _endpoints(environment: TreeEnvironment, seed: int) -> list[Topology]:
     """Where greedy stops, from each of `STARTS` seeded starting topologies."""
     rng = np.random.default_rng(seed + START_SEED_OFFSET)
     return [
-        greedy_rollout(environment, environment.reset(rng), HORIZON).states[-1]
+        greedy_rollout(
+            environment, start=environment.reset(rng), max_steps=HORIZON
+        ).states[-1]
         for _ in range(STARTS)
     ]
 

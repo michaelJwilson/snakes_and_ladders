@@ -48,7 +48,7 @@ _RCOND = 1e-6
 # slowed the serial fit 2.9x, because torch's intra-op parallelism over the
 # sites is the parallelism that pays here, and no pool reached 2x at 4
 # workers. STATUS.md carries the measurement (issue #344).
-_MULTI_START_BACKEND: Pool = "processes"
+_MULTI_START_POOL: Pool = "processes"
 _MULTI_START_INTRA_OP_THREADS: int | None = None
 
 
@@ -505,7 +505,7 @@ def fit_from(
         _fit_start,
         [(objective, theta0, max_iterations, gradient_tolerance) for theta0 in starts],
         workers=workers,
-        backend=_MULTI_START_BACKEND,
+        pool=_MULTI_START_POOL,
         intra_op_threads=_MULTI_START_INTRA_OP_THREADS,
     )
     ordered = tuple(sorted(results, key=lambda result: result.value))

@@ -20,10 +20,10 @@ from sal.emissions import CategoricalEmission
 from sal.likelihood import (
     pruning,
     pruning_analytic,
-    pruning_rust,
-    pruning_torch,
 )
 from sal.likelihood.brute_force import brute_force_log_likelihood
+from sal.likelihood.pruning import rust as pruning_rust
+from sal.likelihood.pruning import torch as pruning_torch
 from sal.sim.graph import PottsGraph
 from sal.sim.hmm import HmmParams
 from sal.sim.tree import Node

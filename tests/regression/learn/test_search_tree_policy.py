@@ -103,10 +103,11 @@ def test_every_episode_ends_where_no_move_improves(
     probe = np.random.default_rng(1000)
 
     greedy_ends = [
-        greedy_rollout(environment, start, HORIZON).states[-1] for start in starts
+        greedy_rollout(environment, start=start, max_steps=HORIZON).states[-1]
+        for start in starts
     ]
     learned_ends = [
-        rollout(environment, policy, probe, HORIZON, start=start).states[-1]
+        rollout(environment, policy, probe, max_steps=HORIZON, start=start).states[-1]
         for start in starts
     ]
 
@@ -127,7 +128,9 @@ def test_an_untrained_policy_is_far_worse_than_greedy(
     rate = _rate(
         environment,
         [
-            rollout(environment, untrained, rng, HORIZON, start=start).states[-1]
+            rollout(environment, untrained, rng, max_steps=HORIZON, start=start).states[
+                -1
+            ]
             for start in starts
             for _ in range(ROLLOUTS_PER_START)
         ],
@@ -147,7 +150,10 @@ def test_a_trained_policy_is_no_worse_than_hill_climbing(
     best = maximum
     greedy = _rate(
         environment,
-        [greedy_rollout(environment, start, HORIZON).states[-1] for start in starts],
+        [
+            greedy_rollout(environment, start=start, max_steps=HORIZON).states[-1]
+            for start in starts
+        ],
         best,
     )
     assert greedy == pytest.approx(_GREEDY)
@@ -165,7 +171,9 @@ def test_a_trained_policy_is_no_worse_than_hill_climbing(
     learned = _rate(
         environment,
         [
-            rollout(environment, policy, probe, HORIZON, start=start).states[-1]
+            rollout(environment, policy, probe, max_steps=HORIZON, start=start).states[
+                -1
+            ]
             for start in starts
             for _ in range(ROLLOUTS_PER_START)
         ],

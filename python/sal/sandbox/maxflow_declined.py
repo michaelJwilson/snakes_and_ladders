@@ -1,7 +1,7 @@
 """The three max-flow kernels issue #715 declined, behind the ``sandbox`` feature.
 
 Conserved on this package's declined rule. Issue #715 built four kernels
-behind :mod:`sal.search.maxflow_rust`'s seam --- Dinic (the
+behind :mod:`sal.search.maxflow.rust`'s seam --- Dinic (the
 port issue #220 made), highest-label push-relabel, Boykov--Kolmogorov and a
 synchronous parallel push-relabel on rayon --- pinned each to the Python
 Dinic arc for arc, and timed them on square lattices with a random per-node
@@ -115,7 +115,7 @@ def ising_ground_state(
     """The exact two-state ground state by a declined kernel.
 
     The same contract as
-    :func:`sal.search.maxflow_rust.ising_ground_state`: the
+    :func:`sal.search.maxflow.rust.ising_ground_state`: the
     configuration, and its energy evaluated in Python on the configuration
     rather than read back from the cut.
     """

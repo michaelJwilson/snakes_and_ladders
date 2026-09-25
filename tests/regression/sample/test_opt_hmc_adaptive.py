@@ -58,7 +58,7 @@ def _four_taxon_posterior() -> WithGaussianPrior:
 
 
 def _ess_per_gradient(chain: HmcChain) -> np.ndarray:
-    return (effective_sample_size(chain.theta) / chain.force_evaluations).numpy()
+    return (effective_sample_size(chain.draws) / chain.force_evaluations).numpy()
 
 
 # --- exact ------------------------------------------------------------------
@@ -342,11 +342,11 @@ def _agreement(
     )
     for chain in (adapted, fixed):
         assert chain.acceptance_rate > 0.5
-    ess_adapted = effective_sample_size(adapted.theta)
-    ess_fixed = effective_sample_size(fixed.theta)
-    sd_adapted, sd_fixed = adapted.theta.std(0), fixed.theta.std(0)
+    ess_adapted = effective_sample_size(adapted.draws)
+    ess_fixed = effective_sample_size(fixed.draws)
+    sd_adapted, sd_fixed = adapted.draws.std(0), fixed.draws.std(0)
 
-    mean_gap = (adapted.theta.mean(0) - fixed.theta.mean(0)).abs()
+    mean_gap = (adapted.draws.mean(0) - fixed.draws.mean(0)).abs()
     mean_error = (sd_adapted**2 / ess_adapted + sd_fixed**2 / ess_fixed).sqrt()
     assert bool((mean_gap < 3.0 * mean_error).all()), mean_gap / mean_error
 
@@ -375,9 +375,9 @@ def test_the_adapted_chain_agrees_with_the_fixed_chain_and_the_exact_gaussian() 
     np.testing.assert_allclose(laplace["x"].numpy(), exact.numpy(), rtol=1e-8)
     for chain in (adapted, fixed):
         np.testing.assert_allclose(
-            chain.theta.mean(0).numpy(), GAUSSIAN.mean.numpy(), atol=0.12
+            chain.draws.mean(0).numpy(), GAUSSIAN.mean.numpy(), atol=0.12
         )
-        np.testing.assert_allclose(chain.theta.std(0).numpy(), exact.numpy(), rtol=0.06)
+        np.testing.assert_allclose(chain.draws.std(0).numpy(), exact.numpy(), rtol=0.06)
 
     per_gradient_adapted = _ess_per_gradient(adapted)
     per_gradient_fixed = _ess_per_gradient(fixed)
@@ -411,7 +411,7 @@ def test_the_adapted_chain_agrees_with_the_fixed_chain_on_the_four_taxon_posteri
                         for tensor in posterior.constrain(draw).values()
                     ]
                 )
-                for draw in chain.theta
+                for draw in chain.draws
             ]
         )
         interval = torch.cat([tensor.reshape(-1) for tensor in laplace.values()])
@@ -458,11 +458,11 @@ def test_the_adapted_chains_marginals_are_the_exact_gaussians_within_three_error
     adapted = below_the_cliff.adapted
     assert adapted is not None
 
-    squares = (below_the_cliff.theta - GAUSSIAN.mean) ** 2
+    squares = (below_the_cliff.draws - GAUSSIAN.mean) ** 2
     exact_variance = GAUSSIAN.covariance.diagonal()
     mean_errors = (
-        (below_the_cliff.theta.mean(0) - GAUSSIAN.mean).abs()
-        * effective_sample_size(below_the_cliff.theta).sqrt()
+        (below_the_cliff.draws.mean(0) - GAUSSIAN.mean).abs()
+        * effective_sample_size(below_the_cliff.draws).sqrt()
         / exact_variance.sqrt()
     )
     variance_errors = (

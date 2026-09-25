@@ -70,7 +70,7 @@ def test_a_budgeted_search_reaches_its_own_maximum_at_this_size(
     result = infer(
         alignment,
         4,
-        topology=truth,
+        start=truth,
         max_evaluations=_BUDGET,
         lazy_top=_LAZY_TOP,
     )

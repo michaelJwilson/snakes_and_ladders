@@ -13,11 +13,13 @@ exchanged family and its M step maximizes the unfolded likelihood, found by
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 
 import numpy as np
 import pytest
 import torch
 from sal.emissions import BetaBinomialEmission, NegativeBinomialEmission
+from sal.opt.em import EM
 from sal.opt.hmm import baum_welch_family
 from sal.sim.count_pairs import IndependentCountPair, ReflectedEmission
 from scipy.optimize import minimize
@@ -52,9 +54,15 @@ def test_identical_per_sequence_kernels_are_the_per_step_kernel() -> None:
     draws, _ = _chains(family, 6, 30, 0)
     per_step = _kernel(0.9, 2).expand(29, 2, 2).clone()
     initial = torch.log(torch.tensor([0.5, 0.5], dtype=torch.float64))
-    shared = baum_welch_family(draws, initial, per_step, family, max_iterations=5)
+    shared = baum_welch_family(
+        draws, initial, per_step, family, config=replace(EM, max_iterations=5)
+    )
     each = baum_welch_family(
-        draws, initial, per_step.expand(6, 29, 2, 2).clone(), family, max_iterations=5
+        draws,
+        initial,
+        per_step.expand(6, 29, 2, 2).clone(),
+        family,
+        config=replace(EM, max_iterations=5),
     )
     assert shared.log_likelihood == each.log_likelihood
     assert torch.equal(shared.log_initial, each.log_initial)
@@ -72,16 +80,24 @@ def test_distinct_kernels_score_each_sequence_as_its_own_chain() -> None:
     stays = [0.6, 0.8, 0.95, 0.99]
     kernels = torch.stack([_kernel(stay, 2).expand(24, 2, 2) for stay in stays])
     initial = torch.log(torch.tensor([0.3, 0.7], dtype=torch.float64))
-    together = baum_welch_family(draws, initial, kernels, family, max_iterations=1)
+    together = baum_welch_family(
+        draws, initial, kernels, family, config=replace(EM, max_iterations=1)
+    )
     alone = sum(
         baum_welch_family(
-            draws[i : i + 1], initial, kernels[i], family, max_iterations=1
+            draws[i : i + 1],
+            initial,
+            kernels[i],
+            family,
+            config=replace(EM, max_iterations=1),
         ).log_likelihood
         for i in range(4)
     )
     assert abs(together.log_likelihood - alone) <= 1e-10 * abs(alone)
     with pytest.raises(ValueError, match="is neither"):
-        baum_welch_family(draws, initial, kernels[:3], family, max_iterations=1)
+        baum_welch_family(
+            draws, initial, kernels[:3], family, config=replace(EM, max_iterations=1)
+        )
 
 
 @pytest.mark.critical
@@ -157,7 +173,9 @@ def test_a_planted_reflected_count_pair_chain_is_recovered() -> None:
     )
     kernels = _kernel(0.9, 4).expand(40, 149, 4, 4).clone()
     initial = torch.full((4,), math.log(0.25), dtype=torch.float64)
-    fit = baum_welch_family(draws, initial, kernels, start, max_iterations=200)
+    fit = baum_welch_family(
+        draws, initial, kernels, start, config=replace(EM, max_iterations=200)
+    )
     base = fit.emissions.base  # type: ignore[attr-defined]
     order = np.argsort(base.total.mean.numpy())
     np.testing.assert_allclose(base.total.mean.numpy()[order], [30.0, 90.0], rtol=0.05)

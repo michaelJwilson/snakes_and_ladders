@@ -22,13 +22,13 @@ from typing import Any
 
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from sal.likelihood import spatio_sequential_rust as rust
 from sal.likelihood.spatio_sequential import (
     class_posteriors,
     external_field,
+    rust,
 )
 from sal.sim.count_pairs import CountPairInstance
-from sal.sim.count_pairs_rust import binned_instance
+from sal.sim.count_pairs.rust import binned_instance
 from sal.sim.fixtures import fixture
 
 PROBLEM = "spatio_sequential_counts"

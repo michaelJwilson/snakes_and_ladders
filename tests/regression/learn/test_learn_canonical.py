@@ -58,7 +58,7 @@ def _policy_reaches_every_start(
             if (row, column) == grid.goal:
                 continue
             episode = rollout(
-                grid, policy, rng, 4 * (rows + columns), start=(row, column)
+                grid, policy, rng, max_steps=4 * (rows + columns), start=(row, column)
             )
             reached.append(episode.total_reward >= optimal[row, column] - 1e-9)
     return reached

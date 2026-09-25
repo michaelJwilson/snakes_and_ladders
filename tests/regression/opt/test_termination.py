@@ -9,12 +9,15 @@ the science is refereed in `test_opt_fit.py`, `test_opt_mixture.py`,
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 import torch
 from sal.cost import Cost
 from sal.emissions import GaussianEmission
 from sal.opt.budget import Budget
+from sal.opt.em import EM
 from sal.opt.fit import fit
 from sal.opt.mixture import expectation_maximization
 from sal.opt.termination import Stop, Termination
@@ -111,9 +114,11 @@ def test_the_iteration_count_a_caller_compared_is_the_reason_already() -> None:
     # settled fit from a capped one, which reads a converged run that took
     # every iteration as a failure. The reason says which happened.
     draws = _mixture_draws()
-    capped = expectation_maximization(draws, _WEIGHTS, _components(), max_iterations=1)
+    capped = expectation_maximization(
+        draws, _WEIGHTS, _components(), config=replace(EM, max_iterations=1)
+    )
     settled = expectation_maximization(
-        draws, _WEIGHTS, _components(), max_iterations=200
+        draws, _WEIGHTS, _components(), config=replace(EM, max_iterations=200)
     )
 
     assert capped.iterations == 1

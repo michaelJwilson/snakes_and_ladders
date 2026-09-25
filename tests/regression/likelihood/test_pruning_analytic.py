@@ -18,9 +18,10 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from sal.likelihood import pruning_analytic, pruning_torch
+from sal.likelihood import pruning_analytic
 from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
 from sal.likelihood.patterns import compress
+from sal.likelihood.pruning import torch as pruning_torch
 from sal.sandbox import pruning_burn
 from sal.sim.tree import Node
 

@@ -437,7 +437,9 @@ def test_the_deterministic_relaxation_beats_single_flip_hill_climbing() -> None:
         [
             environment.energy(
                 greedy_rollout(
-                    environment, environment.reset(np.random.default_rng(seed)), 200
+                    environment,
+                    start=environment.reset(np.random.default_rng(seed)),
+                    max_steps=200,
                 ).states[-1]
             )
             > best - 1e-9
@@ -476,7 +478,9 @@ def test_the_sampled_estimators_only_tie_with_the_baseline() -> None:
         [
             environment.energy(
                 greedy_rollout(
-                    environment, environment.reset(np.random.default_rng(seed)), 200
+                    environment,
+                    start=environment.reset(np.random.default_rng(seed)),
+                    max_steps=200,
                 ).states[-1]
             )
             > best - 1e-9
