@@ -36,7 +36,7 @@ import tex
 from _paths import REPO_ROOT
 
 #: The package the map is of.
-PACKAGE = REPO_ROOT / "python" / "snakes_and_ladders"
+PACKAGE = REPO_ROOT / "python" / "sal"
 
 #: The packages whose modules are *applications*; everything else is
 #: infrastructure. Root `CLAUDE.md` states the split and this is the whole of
@@ -212,7 +212,7 @@ def status_claims(
         later = [head for head in heads if head > start]
         end = later[0] if later else len(text)
         for span in CODE_SPAN.findall(text[start:end]):
-            candidate = span.removeprefix("snakes_and_ladders.")
+            candidate = span.removeprefix("sal.")
             # A symbol inside a module names the module: `device.available_device`.
             name = known.get(candidate) or known.get(candidate.rsplit(".", 1)[0])
             for one in (
@@ -375,7 +375,7 @@ def placed(
         for concern, packages in drawn.items()
     }
     nodes: list[tuple[float, float, str, str, float, int]] = []
-    nodes.append((0.0, 0.0, "centre", r"snakes\_and\_ladders", 0.0, -1))
+    nodes.append((0.0, 0.0, "centre", r"sal", 0.0, -1))
 
     for concern, (low, high) in _wedges(weights).items():
         packages = drawn[concern]

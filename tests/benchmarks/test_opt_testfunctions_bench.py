@@ -13,8 +13,8 @@ from __future__ import annotations
 
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.opt.fit import fit
-from snakes_and_ladders.opt.testfunctions import Himmelblau, Rastrigin, Rosenbrock
+from sal.opt.fit import fit
+from sal.opt.testfunctions import Himmelblau, Rastrigin, Rosenbrock
 
 
 @pytest.mark.parametrize("dimension", [2, 10, 50])

@@ -1,4 +1,4 @@
-"""Regression tests for snakes_and_ladders.qa.forney.
+"""Regression tests for sal.qa.forney.
 
 The renderer draws a window of the declared instance, so what is pinned is
 the window: it stays inside the declared caps at every tier, the edges it
@@ -11,14 +11,14 @@ from __future__ import annotations
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
-from snakes_and_ladders.qa.figure import check_latex_safe
-from snakes_and_ladders.qa.forney import (
+from sal.qa.figure import check_latex_safe
+from sal.qa.forney import (
     LATTICE_CAP,
     POSITION_CAP,
     build_figure,
     forney_window,
 )
-from snakes_and_ladders.sim.fixtures import fixture
+from sal.sim.fixtures import fixture
 
 PROBLEM = "spatio_sequential_counts"
 

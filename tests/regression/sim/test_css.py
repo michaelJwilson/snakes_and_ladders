@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.sim.css import CssCode, sample_x_error
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.ldpc import (
+from sal.sim.css import CssCode, sample_x_error
+from sal.sim.fixtures import fixture
+from sal.sim.ldpc import (
     BinarySymmetricChannel,
     bicycle_code,
     gallager_code,

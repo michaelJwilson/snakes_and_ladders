@@ -1,4 +1,4 @@
-"""Regression tests for snakes_and_ladders.qa.frustrated_lattices.
+"""Regression tests for sal.qa.frustrated_lattices.
 
 The lattice drawing is pinned to the geometry it claims -- every bond at
 unit length, every wrapped bond ending at a translate of its target -- and
@@ -12,7 +12,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from snakes_and_ladders.qa.frustrated_lattices import (
+from sal.qa.frustrated_lattices import (
     GlassScan,
     build_figure,
     edge_segments,
@@ -21,9 +21,9 @@ from snakes_and_ladders.qa.frustrated_lattices import (
     lattice_layout,
     main,
 )
-from snakes_and_ladders.sim.canonical import minimum_frustrated_edges
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+from sal.sim.canonical import minimum_frustrated_edges
+from sal.sim.fixtures import fixture
+from sal.sim.graph import BoundaryCondition, lattice_graph
 
 FIXTURE = fixture("frustrated_lattice", "ci")
 PARAMS = FIXTURE.params

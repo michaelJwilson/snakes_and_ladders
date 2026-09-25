@@ -1,6 +1,6 @@
 //! Boykov--Kolmogorov maximum flow, and the Ising ground-state reduction.
 //!
-//! The Python implementation in `snakes_and_ladders.search.maxflow` --- Dinic,
+//! The Python implementation in `sal.search.maxflow` --- Dinic,
 //! kept readable --- stays as the oracle this is pinned against, per root
 //! `CLAUDE.md`. What Rust buys is what root `CLAUDE.md` reserves it for:
 //! control flow and irregular memory access over an adjacency structure, with
@@ -487,7 +487,7 @@ fn boykov_kolmogorov(network: &mut FlowNetwork, source: usize, sink: usize) -> f
 ///
 /// `field` is `n_nodes * 2` in row-major order, `edges` is `2 * n_edges` as
 /// flattened `(i, j)` pairs, and `coupling` is one entry per edge. The
-/// construction is the one `snakes_and_ladders.search.maxflow.ising_ground_state`
+/// construction is the one `sal.search.maxflow.ising_ground_state`
 /// documents; it is duplicated here rather than shared because the two
 /// implementations must be independent for one to be the other's oracle.
 #[cfg_attr(not(feature = "sandbox"), allow(dead_code))]

@@ -14,8 +14,8 @@ from collections.abc import Generator
 
 import numpy as np
 import pytest
-from snakes_and_ladders.likelihood.message_passing import sum_product
-from snakes_and_ladders.likelihood.schedule import (
+from sal.likelihood.message_passing import sum_product
+from sal.likelihood.schedule import (
     SCHEDULES,
     DownwardMessageSchedule,
     FloodingMessageSchedule,
@@ -28,13 +28,13 @@ from snakes_and_ladders.likelihood.schedule import (
     UpwardMessageSchedule,
     resolve,
 )
-from snakes_and_ladders.sim.factor_graph import (
+from sal.sim.factor_graph import (
     Factor,
     FactorGraph,
     Variable,
     from_potts,
 )
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+from sal.sim.graph import BoundaryCondition, lattice_graph
 
 TREE_SCHEDULES = ("tree", "upward", "downward")
 LOOPY_SCHEDULES = ("flooding", "sequential", "residual")

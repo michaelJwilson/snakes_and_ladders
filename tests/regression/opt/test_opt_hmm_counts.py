@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from snakes_and_ladders.emissions import (
+from sal.emissions import (
     BetaBinomialEmission,
     BinomialEmission,
     EmissionFamily,
@@ -24,9 +24,9 @@ from snakes_and_ladders.emissions import (
     PoissonEmission,
     Reestimate,
 )
-from snakes_and_ladders.likelihood.hmm_paths import enumerate_hidden_paths
-from snakes_and_ladders.opt.fit import constrained_standard_errors, covers, fit
-from snakes_and_ladders.opt.hmm import (
+from sal.likelihood.hmm_paths import enumerate_hidden_paths
+from sal.opt.fit import constrained_standard_errors, covers, fit
+from sal.opt.hmm import (
     BetaBinomialHmmObjective,
     BinomialHmmObjective,
     NegativeBinomialHmmObjective,
@@ -35,7 +35,7 @@ from snakes_and_ladders.opt.hmm import (
     baum_welch_family,
     forward_log_likelihood_from_density,
 )
-from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
+from sal.sim.hmm import HmmParams, simulate_sequences
 
 from tests._objective_checks import assert_gradient_matches_finite_differences
 

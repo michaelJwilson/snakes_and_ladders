@@ -14,14 +14,14 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders import emissions
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.emissions import BetaBinomialEmission, CountPairEmission, mstep
-from snakes_and_ladders.opt.mixture import responsibilities
-from snakes_and_ladders.search.projection import flatten, project
-from snakes_and_ladders.sim.count_pairs import binned_model
-from snakes_and_ladders.sim.emission_mixture import simulate_emission_mixture
-from snakes_and_ladders.sim.fixtures import fixture
+from sal import emissions
+from sal.backend import Backend
+from sal.emissions import BetaBinomialEmission, CountPairEmission, mstep
+from sal.opt.mixture import responsibilities
+from sal.search.projection import flatten, project
+from sal.sim.count_pairs import binned_model
+from sal.sim.emission_mixture import simulate_emission_mixture
+from sal.sim.fixtures import fixture
 
 #: The declared floor for a reordered sum through a bisection (#648).
 FLOOR = 2e-06

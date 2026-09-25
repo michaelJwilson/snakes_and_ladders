@@ -20,13 +20,13 @@ from collections.abc import Callable
 import pytest
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.opt.potts import (
+from sal.fixtures import load_params
+from sal.opt.potts import (
     PottsObjective,
     log_partition_by_recursion,
     log_partition_by_squaring,
 )
-from snakes_and_ladders.sim.potts_chain import PottsParams, simulate_chains
+from sal.sim.potts_chain import PottsParams, simulate_chains
 
 from tests._fixtures import FIXTURES_DIR
 

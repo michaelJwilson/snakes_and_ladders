@@ -14,13 +14,13 @@ import math
 
 import numpy as np
 import pytest
-from snakes_and_ladders.likelihood.algebraic import hamming_correct, syndrome
-from snakes_and_ladders.likelihood.ldpc import (
+from sal.likelihood.algebraic import hamming_correct, syndrome
+from sal.likelihood.ldpc import (
     decode,
     enumerate_codewords,
     exact_decoding,
 )
-from snakes_and_ladders.sim.elementary_codes import (
+from sal.sim.elementary_codes import (
     crc_remainder,
     golay_code,
     hamming_code,
@@ -29,7 +29,7 @@ from snakes_and_ladders.sim.elementary_codes import (
     repetition_error_rate,
     single_parity_check,
 )
-from snakes_and_ladders.sim.ldpc import (
+from sal.sim.ldpc import (
     BinaryErasureChannel,
     BinarySymmetricChannel,
     encode,

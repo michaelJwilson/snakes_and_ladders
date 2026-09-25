@@ -3,7 +3,7 @@
 The E step against the enumerated posterior over labellings (CI size); the fit
 against the planted parameters up to permutation (both sizes); the seeded
 start against the uniform one over shared seeds, reported either way, on
-``snakes_and_ladders.qa.mixture_seeding``'s terms. Instances are the
+``sal.qa.mixture_seeding``'s terms. Instances are the
 registry's (``sim/CLAUDE.md``).
 """
 
@@ -13,8 +13,8 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from snakes_and_ladders.emissions import CountPairEmission
-from snakes_and_ladders.opt.emission_mixture import (
+from sal.emissions import CountPairEmission
+from sal.opt.emission_mixture import (
     CountPairSeeding,
     EmissionMixtureFit,
     enumerated_posterior,
@@ -22,15 +22,15 @@ from snakes_and_ladders.opt.emission_mixture import (
     plus_plus_start,
     uniform_start,
 )
-from snakes_and_ladders.opt.mixture import (
+from sal.opt.mixture import (
     mixture_log_likelihood,
     responsibilities,
 )
-from snakes_and_ladders.sim.emission_mixture import (
+from sal.sim.emission_mixture import (
     EmissionMixtureParams,
     simulate_emission_mixture,
 )
-from snakes_and_ladders.sim.fixtures import fixture
+from sal.sim.fixtures import fixture
 
 #: Declared shape starts, away from the CI truth (6, 10, 15, 12), so a fit
 #: that recovers them found them.
@@ -43,7 +43,7 @@ START_CONCENTRATION = 10.0
 #: parameters to four figures.
 EM_TOLERANCE = 1e-8
 
-#: 3**10 = 59,049 labellings, inside `snakes_and_ladders.enumeration`'s cap;
+#: 3**10 = 59,049 labellings, inside `sal.enumeration`'s cap;
 #: observations are independent, so each marginal is the full data's.
 ENUMERATED = 10
 

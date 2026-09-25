@@ -13,8 +13,8 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.likelihood.ldpc import enumerate_codewords
-from snakes_and_ladders.sim.convolutional import (
+from sal.likelihood.ldpc import enumerate_codewords
+from sal.sim.convolutional import (
     MAX_PARITY_CHECK_BITS,
     encode_stream,
     inverse_permutation,
@@ -27,7 +27,7 @@ from snakes_and_ladders.sim.convolutional import (
     turbo_encode,
     turbo_generator_matrix,
 )
-from snakes_and_ladders.sim.fixtures import fixture
+from sal.sim.fixtures import fixture
 
 from tests._rows import every_row, every_value
 

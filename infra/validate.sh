@@ -41,7 +41,7 @@ export SAL_KEY_DURATION_CAP="${SAL_KEY_DURATION_CAP:-120}"
 # reported as such rather than waited for.
 selected_cap=180
 
-scratch="${SAL_SCRATCH:-${TMPDIR:-/tmp}/snakes_and_ladders-validate}"
+scratch="${SAL_SCRATCH:-${TMPDIR:-/tmp}/sal-validate}"
 mkdir -p "$scratch"
 
 failures=()
@@ -108,7 +108,7 @@ if echo "$changed" | grep -q '^docs/source/' \
     docs/source "$scratch/html" -W -q
 fi
 
-if echo "$changed" | grep -qE '^(docs/nb/|python/snakes_and_ladders/|tests/regression/fixtures/)'; then
+if echo "$changed" | grep -qE '^(docs/nb/|python/sal/|tests/regression/fixtures/)'; then
   # Every notebook under docs/nb/, not the ones a digest calls stale: which
   # claims a run verifies is not a hash's decision (issue #480). The six cost
   # the number DEV.md's budget table carries, inside the 300 s.

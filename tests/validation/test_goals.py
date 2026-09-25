@@ -19,29 +19,29 @@ from typing import Any, NamedTuple
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders import oxisal
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.emissions import GaussianEmission
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.learn.policy import LinearPolicy
-from snakes_and_ladders.learn.ppo import generalized_advantages
-from snakes_and_ladders.learn.reinforce import surrogate_loss
-from snakes_and_ladders.learn.surrogate import (
+from sal import oxisal
+from sal.backend import Backend
+from sal.emissions import GaussianEmission
+from sal.fixtures import load_params
+from sal.learn.policy import LinearPolicy
+from sal.learn.ppo import generalized_advantages
+from sal.learn.reinforce import surrogate_loss
+from sal.learn.surrogate import (
     Examples,
     GraphSurrogate,
     SetSurrogate,
     _Batch,
 )
-from snakes_and_ladders.opt.hmm import GaussianHmmObjective, baum_welch
-from snakes_and_ladders.opt.mixture import expectation_maximization
-from snakes_and_ladders.sample import hmc, metropolis
-from snakes_and_ladders.sample.potts_mcmc.sweeps import bond_probability
-from snakes_and_ladders.search.alpha_expansion import alpha_expansion
-from snakes_and_ladders.search.ground_state import lattice_rung
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
-from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
-from snakes_and_ladders.sim.potts import critical_coupling, site_field
-from snakes_and_ladders.validation.gaussian import GaussianTarget, diagonal_precision
+from sal.opt.hmm import GaussianHmmObjective, baum_welch
+from sal.opt.mixture import expectation_maximization
+from sal.sample import hmc, metropolis
+from sal.sample.potts_mcmc.sweeps import bond_probability
+from sal.search.alpha_expansion import alpha_expansion
+from sal.search.ground_state import lattice_rung
+from sal.sim.graph import BoundaryCondition, lattice_graph
+from sal.sim.hmm import HmmParams, simulate_sequences
+from sal.sim.potts import critical_coupling, site_field
+from sal.validation.gaussian import GaussianTarget, diagonal_precision
 
 from tests._fixtures import FIXTURES_DIR
 from tests.regression.learn.conftest import potts_environment

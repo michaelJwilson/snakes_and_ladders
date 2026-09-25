@@ -2,8 +2,8 @@ model: frustrated-lattice
 oracle: closed-form
 
 # The two frustrated instances whose answer comes from outside this suite
-# (`snakes_and_ladders.qa.frustrated_lattices`). Every field is required --
-# see python/snakes_and_ladders/sim/canonical.py and sim/CLAUDE.md.
+# (`sal.qa.frustrated_lattices`). Every field is required --
+# see python/sal/sim/canonical.py and sim/CLAUDE.md.
 #
 # 3x3 is the smallest periodic triangular lattice the counting argument
 # covers: at extent 2 the +1 and -1 neighbours coincide and the wrap doubles

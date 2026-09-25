@@ -16,12 +16,12 @@ import itertools
 
 import numpy as np
 import pytest
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.likelihood.potts import enumerate_potts
-from snakes_and_ladders.opt.budget import Budget
-from snakes_and_ladders.search.alpha_expansion import alpha_beta_swap, alpha_expansion
-from snakes_and_ladders.search.ground_state import (
+from sal.backend import Backend
+from sal.cost import Cost
+from sal.likelihood.potts import enumerate_potts
+from sal.opt.budget import Budget
+from sal.search.alpha_expansion import alpha_beta_swap, alpha_expansion
+from sal.search.ground_state import (
     ANNEAL_SCHEDULE,
     MethodRun,
     expansion_bracket,
@@ -30,15 +30,15 @@ from snakes_and_ladders.search.ground_state import (
     run_expansion_then_swendsen_wang,
     run_swendsen_wang_then_expansion,
 )
-from snakes_and_ladders.search.potts_starts import (
+from sal.search.potts_starts import (
     TilingRung,
     recovery,
     recovery_bound,
     tiling_rung,
 )
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.graph import PottsGraph
-from snakes_and_ladders.sim.potts import energies
+from sal.sim.fixtures import fixture
+from sal.sim.graph import PottsGraph
+from sal.sim.potts import energies
 
 #: Heat-bath sweeps' worth of site visits per run, the notebook's budget.
 SWEEPS = 1000

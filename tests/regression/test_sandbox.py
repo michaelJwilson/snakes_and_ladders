@@ -1,4 +1,4 @@
-"""`snakes_and_ladders.sandbox` is the oracle home, and only tests and QA may read it.
+"""`sal.sandbox` is the oracle home, and only tests and QA may read it.
 
 Issue #322. A hot-path module importing its own oracle has not been replaced,
 and a package root re-exporting it puts it on the surface; both are read from
@@ -14,11 +14,11 @@ import importlib
 from pathlib import Path
 
 import pytest
-import snakes_and_ladders
-import snakes_and_ladders.sandbox
+import sal
+import sal.sandbox
 
-PACKAGE = Path(snakes_and_ladders.__file__).parent
-SANDBOX = "snakes_and_ladders.sandbox"
+PACKAGE = Path(sal.__file__).parent
+SANDBOX = "sal.sandbox"
 
 # The packages the oracle home may not be imported from: everything that could
 # carry a hot path. `qa` renders and may read an oracle; `tests/` pins against
@@ -82,20 +82,20 @@ def test_the_sandbox_states_its_rules_where_the_root_says_they_live() -> None:
     # asserted here; the package-root rule is root `CLAUDE.md`'s.
     rules = (PACKAGE / "sandbox" / "CLAUDE.md").read_text()
     assert "deleted" in rules
-    assert "Only `tests/` and `snakes_and_ladders.qa` import from here" in rules
-    assert snakes_and_ladders.sandbox.__doc__ is not None
-    assert "test_sandbox.py" in snakes_and_ladders.sandbox.__doc__
+    assert "Only `tests/` and `sal.qa` import from here" in rules
+    assert sal.sandbox.__doc__ is not None
+    assert "test_sandbox.py" in sal.sandbox.__doc__
 
 
 @pytest.mark.infra
 def test_the_guard_catches_every_spelling_of_the_import() -> None:
     # The guard's own trigger: a lazy import inside a function is the spelling
     # a reviewer misses, and the AST walk sees it.
-    assert _imports_sandbox("import snakes_and_ladders.sandbox")
-    assert _imports_sandbox("from snakes_and_ladders.sandbox import maxflow")
-    assert _imports_sandbox("from snakes_and_ladders.sandbox.maxflow import max_flow")
+    assert _imports_sandbox("import sal.sandbox")
+    assert _imports_sandbox("from sal.sandbox import maxflow")
+    assert _imports_sandbox("from sal.sandbox.maxflow import max_flow")
     assert _imports_sandbox(
-        "def f():\n    import snakes_and_ladders.sandbox.maxflow as m\n    return m"
+        "def f():\n    import sal.sandbox.maxflow as m\n    return m"
     )
-    assert not _imports_sandbox("from snakes_and_ladders.search import maxflow")
-    assert not _imports_sandbox("import snakes_and_ladders.sandboxed")
+    assert not _imports_sandbox("from sal.search import maxflow")
+    assert not _imports_sandbox("import sal.sandboxed")

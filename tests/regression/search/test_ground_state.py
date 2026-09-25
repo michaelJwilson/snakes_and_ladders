@@ -15,34 +15,34 @@ import itertools
 
 import numpy as np
 import pytest
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.likelihood.message_passing import (
+from sal.backend import Backend
+from sal.cost import Cost
+from sal.likelihood.message_passing import (
     MessageScheduleName,
     max_product,
 )
-from snakes_and_ladders.opt.budget import Budget
-from snakes_and_ladders.sample.potts_mcmc import (
+from sal.opt.budget import Budget
+from sal.sample.potts_mcmc import (
     PottsMove,
     anneal_potts,
     parallel_tempering,
     sample_potts,
 )
-from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
-from snakes_and_ladders.search import ground_state
-from snakes_and_ladders.search.alpha_expansion import (
+from sal.sample.schedule import ExponentialTempSchedule
+from sal.search import ground_state
+from sal.search.alpha_expansion import (
     alpha_beta_swap,
     alpha_expansion,
     swap,
 )
-from snakes_and_ladders.search.maxflow import ising_ground_state
-from snakes_and_ladders.search.maxflow_rust import (
+from sal.search.maxflow import ising_ground_state
+from sal.search.maxflow_rust import (
     ising_ground_state as rust_ground_state,
 )
-from snakes_and_ladders.sim.factor_graph import from_potts
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
-from snakes_and_ladders.sim.potts import SpatioOnlyParams, energy
+from sal.sim.factor_graph import from_potts
+from sal.sim.fixtures import fixture
+from sal.sim.graph import BoundaryCondition, lattice_graph
+from sal.sim.potts import SpatioOnlyParams, energy
 
 from tests._rows import every_value
 
@@ -270,7 +270,7 @@ def test_gibbs_at_zero_temperature_is_the_descent_update() -> None:
     offsets, neighbours, couplings = rung.graph.compressed_adjacency()
 
     cold = state.copy()
-    from snakes_and_ladders.sample.potts_mcmc.sweeps import single_site_sweep
+    from sal.sample.potts_mcmc.sweeps import single_site_sweep
 
     single_site_sweep(
         cold, rung.field, offsets, neighbours, couplings, np.random.default_rng(3), 1e6
@@ -427,7 +427,7 @@ def test_the_runners_record_the_energy_their_kernels_return() -> None:
 def test_the_comparison_records_the_labelling_each_entry_returned() -> None:
     # Each entry carries its run's labelling; the records must cover every
     # cell, or a structural column is read from the wrong run.
-    from snakes_and_ladders.opt.budget import compare
+    from sal.opt.budget import compare
 
     rung = _rung(CI, 3)
     budget = Budget(Cost.SITE_VISITS, 20 * rung.visits_per_sweep)
@@ -450,7 +450,7 @@ def test_every_cell_is_recorded_on_a_worker_pool() -> None:
     # other processes and the parent read an empty record (issue #856). The
     # record returns on the outcome, and the pooled run is the serial run:
     # each cell seeds itself, so the energies and the labellings match.
-    from snakes_and_ladders.opt.budget import compare
+    from sal.opt.budget import compare
 
     rung = _rung(CI, 3)
     budget = Budget(Cost.SITE_VISITS, 20 * rung.visits_per_sweep)

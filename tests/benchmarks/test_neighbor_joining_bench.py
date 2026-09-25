@@ -1,4 +1,4 @@
-"""Benchmarks for ``snakes_and_ladders.search.neighbor_joining`` at 50 taxa.
+"""Benchmarks for ``sal.search.neighbor_joining`` at 50 taxa.
 
 See ``tests/regression/search/test_neighbor_joining.py`` for correctness.
 The algorithm is ``O(n^3)``; 50 taxa is the largest size the exactness test
@@ -10,12 +10,12 @@ from __future__ import annotations
 
 import numpy as np
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.likelihood.distance import tree_distances
-from snakes_and_ladders.search.neighbor_joining import (
+from sal.likelihood.distance import tree_distances
+from sal.search.neighbor_joining import (
     four_point_violation,
     neighbor_joining,
 )
-from snakes_and_ladders.sim.topology import leaf_bipartitions
+from sal.sim.topology import leaf_bipartitions
 
 from tests.regression.search.test_neighbor_joining import random_tree
 

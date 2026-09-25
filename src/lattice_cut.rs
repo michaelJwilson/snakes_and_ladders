@@ -41,7 +41,7 @@ const NONE: u32 = u32::MAX;
 /// the reverse arc. `terminal[n]`
 /// is node `n`'s residual from the source when positive and to the sink,
 /// negated, when negative.
-#[pyclass(module = "snakes_and_ladders.oxisal")]
+#[pyclass(module = "sal.oxisal")]
 pub struct LatticeCut {
     n_nodes: usize,
     start: Vec<u32>,

@@ -12,9 +12,9 @@ import tracemalloc
 
 import numpy as np
 import pytest
-from snakes_and_ladders.learn.tree import with_uniform_branch_lengths
-from snakes_and_ladders.likelihood import pruning
-from snakes_and_ladders.qa.likelihood_footprint import (
+from sal.learn.tree import with_uniform_branch_lengths
+from sal.likelihood import pruning
+from sal.qa.likelihood_footprint import (
     DECLARED_MAXIMUM,
     MEASURED_SIZES,
     MEMORY_BUDGET_BYTES,
@@ -24,9 +24,9 @@ from snakes_and_ladders.qa.likelihood_footprint import (
     simulation_bytes,
     warm_up,
 )
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.simulate import simulate_alignment
-from snakes_and_ladders.sim.tree import Node
+from sal.sim.fixtures import fixture
+from sal.sim.simulate import simulate_alignment
+from sal.sim.tree import Node
 
 from tests._rows import every_value
 

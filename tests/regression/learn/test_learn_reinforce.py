@@ -13,18 +13,18 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from snakes_and_ladders.learn.exact import (
+from sal.learn.exact import (
     exact_expected_return,
     exact_policy_gradient,
     finite_difference_gradient,
 )
-from snakes_and_ladders.learn.policy import LinearPolicy
-from snakes_and_ladders.learn.potts import (
+from sal.learn.policy import LinearPolicy
+from sal.learn.potts import (
     enumerate_configurations,
     optimum,
 )
-from snakes_and_ladders.learn.reinforce import reinforce, surrogate_loss
-from snakes_and_ladders.learn.rollout import (
+from sal.learn.reinforce import reinforce, surrogate_loss
+from sal.learn.rollout import (
     greedy_rollout,
     log_probabilities_of,
     rollout,

@@ -13,14 +13,14 @@ from collections import deque
 
 import numpy as np
 import pytest
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.graph import (
+from sal.sim.fixtures import fixture
+from sal.sim.graph import (
     BoundaryCondition,
     PottsGraph,
     lattice_graph,
     triangular_lattice_graph,
 )
-from snakes_and_ladders.sim.potts import (
+from sal.sim.potts import (
     SpatioTilingParams,
     tile_partition,
     tiling_field,

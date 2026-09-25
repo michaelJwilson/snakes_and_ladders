@@ -4,7 +4,7 @@ oracle: closed-form
 # The three continuous test functions, as declared instances: where each
 # starts, how many restarts a multi-start fit draws, the region a surface of
 # it is drawn over, and the published minimizers that referee it. Every field
-# is required -- see python/snakes_and_ladders/opt/testfunctions.py.
+# is required -- see python/sal/opt/testfunctions.py.
 #
 # The minimizers are the oracle and are quoted, never computed here:
 # Rosenbrock's (a, a) and Rastrigin's origin are exact, and Himmelblau's

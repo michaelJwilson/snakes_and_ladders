@@ -6,7 +6,7 @@ package alone: :func:`median_seconds` times the package and
 :func:`assert_meets` fails above the goal times :data:`GOAL_RATIO`, 0.55. The
 benchmark pair in `tests/benchmarks/` re-measures it. A :class:`MemoryGoal`
 bounds the peak added resident memory (issue #987), read in a fresh
-interpreter by :func:`snakes_and_ladders.validation.runner.package`
+interpreter by :func:`sal.validation.runner.package`
 (:func:`assert_fits`). Goal tests carry `goal` and run in CI's `validation`
 job without blocking; the ratio moves with the hardware.
 """
@@ -18,7 +18,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 import numpy as np
-from snakes_and_ladders.validation.runner import package
+from sal.validation.runner import package
 
 #: Runs whose median the package's figure is.
 REPEATS = 5
@@ -33,7 +33,7 @@ GOAL_RATIO = 0.55
 class Goal:
     """One external framework's runtime on one declared fixture."""
 
-    #: The framework, as `snakes_and_ladders.validation.FRAMEWORKS` names it.
+    #: The framework, as `sal.validation.FRAMEWORKS` names it.
     framework: str
     #: The fixture and the call timed, in words a reader can rebuild.
     what: str
@@ -86,7 +86,7 @@ def assert_meets(ours: float, goal: Goal) -> None:
 class MemoryGoal:
     """One external framework's peak added resident memory on one declared fixture."""
 
-    #: The framework, as `snakes_and_ladders.validation.FRAMEWORKS` names it.
+    #: The framework, as `sal.validation.FRAMEWORKS` names it.
     framework: str
     #: The fixture and the call measured, in words a reader can rebuild.
     what: str

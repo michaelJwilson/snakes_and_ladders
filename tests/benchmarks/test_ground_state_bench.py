@@ -22,16 +22,16 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.sample.potts_mcmc import PottsMove, anneal_potts
-from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
-from snakes_and_ladders.sandbox import maxflow_declined
-from snakes_and_ladders.sandbox.maxflow_declined import DeclinedKernel
-from snakes_and_ladders.search import alpha_expansion as expansion_module
-from snakes_and_ladders.search.alpha_expansion import alpha_beta_swap, alpha_expansion
-from snakes_and_ladders.search.maxflow import FlowNetwork, MinCut
-from snakes_and_ladders.sim.graph import BoundaryCondition, triangular_lattice_graph
-from snakes_and_ladders.sim.potts import spatio_only_field
+from sal.backend import Backend
+from sal.sample.potts_mcmc import PottsMove, anneal_potts
+from sal.sample.schedule import ExponentialTempSchedule
+from sal.sandbox import maxflow_declined
+from sal.sandbox.maxflow_declined import DeclinedKernel
+from sal.search import alpha_expansion as expansion_module
+from sal.search.alpha_expansion import alpha_beta_swap, alpha_expansion
+from sal.search.maxflow import FlowNetwork, MinCut
+from sal.sim.graph import BoundaryCondition, triangular_lattice_graph
+from sal.sim.potts import spatio_only_field
 
 #: The schedule the comparison anneals on, at a length a benchmark affords.
 STEPS = 20

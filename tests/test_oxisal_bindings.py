@@ -5,7 +5,7 @@ pure-Python tests under tests/regression and tests/benchmarks.
 """
 
 import pytest
-from snakes_and_ladders.oxisal import double
+from sal.oxisal import double
 
 
 @pytest.mark.critical

@@ -14,19 +14,19 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.learn.critic import Critic, n_state_features
-from snakes_and_ladders.learn.policy import EpsilonGreedyPolicy, LinearPolicy
-from snakes_and_ladders.learn.ppo import ppo
-from snakes_and_ladders.learn.reinforce import reinforce
-from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
-from snakes_and_ladders.learn.tree import RewardModel, TreeEnvironment
-from snakes_and_ladders.qa.rl_tree_policy import BATCH, HORIZON, ITERATIONS, STARTS
-from snakes_and_ladders.sample.schedule import LinearTempSchedule
-from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.topology import MoveSet, Topology, enumerate_topologies
-from snakes_and_ladders.sim.tree import edges
+from sal.fixtures import load_params
+from sal.learn.critic import Critic, n_state_features
+from sal.learn.policy import EpsilonGreedyPolicy, LinearPolicy
+from sal.learn.ppo import ppo
+from sal.learn.reinforce import reinforce
+from sal.learn.rollout import greedy_rollout, rollout
+from sal.learn.tree import RewardModel, TreeEnvironment
+from sal.qa.rl_tree_policy import BATCH, HORIZON, ITERATIONS, STARTS
+from sal.sample.schedule import LinearTempSchedule
+from sal.sim.params import SimulationParams
+from sal.sim.simulator import simulate_tree
+from sal.sim.topology import MoveSet, Topology, enumerate_topologies
+from sal.sim.tree import edges
 
 FIXTURE = Path("tests/regression/fixtures/tree_search/release.yaml")
 ROLLOUTS_PER_START = 4

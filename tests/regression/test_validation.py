@@ -1,4 +1,4 @@
-"""`snakes_and_ladders.validation` drives external frameworks, each in a subprocess (issue #972).
+"""`sal.validation` drives external frameworks, each in a subprocess (issue #972).
 
 Read from the source tree, as `test_sandbox.py` does: no hot-path package
 imports `validation` and the root does not re-export it; only the scripts under
@@ -18,10 +18,10 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-import snakes_and_ladders
-from snakes_and_ladders.validation import FRAMEWORKS
-from snakes_and_ladders.validation.protocol import SECONDS
-from snakes_and_ladders.validation.runner import ScriptError, available, package, run
+import sal
+from sal.validation import FRAMEWORKS
+from sal.validation.protocol import SECONDS
+from sal.validation.runner import ScriptError, available, package, run
 from validation_extras import PREFIX, validation_extras
 
 from tests._paths import REPO_ROOT
@@ -34,8 +34,8 @@ from tests.validation._goals import (
     median_seconds,
 )
 
-PACKAGE = Path(snakes_and_ladders.__file__).parent
-VALIDATION = "snakes_and_ladders.validation"
+PACKAGE = Path(sal.__file__).parent
+VALIDATION = "sal.validation"
 SCRIPTS = PACKAGE / "validation" / "scripts"
 TESTS = REPO_ROOT / "tests"
 
@@ -147,7 +147,7 @@ def test_the_guards_catch_every_spelling_of_the_import() -> None:
     )
     assert not _imports("import maxflowing", "maxflow")
     assert not _imports("from . import maxflow", "maxflow")
-    assert _imports("from snakes_and_ladders.validation import runner", VALIDATION)
+    assert _imports("from sal.validation import runner", VALIDATION)
 
 
 @pytest.mark.critical
@@ -183,8 +183,8 @@ def test_the_home_states_its_rules_where_its_docstring_says() -> None:
     rules = (PACKAGE / "validation" / "CLAUDE.md").read_text()
     assert "Every framework runs in a subprocess" in rules
     assert "Only `tests/` imports from here" in rules
-    assert snakes_and_ladders.validation.__doc__ is not None
-    assert "test_validation.py" in snakes_and_ladders.validation.__doc__
+    assert sal.validation.__doc__ is not None
+    assert "test_validation.py" in sal.validation.__doc__
 
 
 @pytest.mark.infra

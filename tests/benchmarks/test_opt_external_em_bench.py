@@ -21,12 +21,12 @@ import numpy as np
 import pytest
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.emissions import GaussianEmission
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.opt.hmm import baum_welch
-from snakes_and_ladders.opt.mixture import expectation_maximization
-from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
-from snakes_and_ladders.validation import hmmlearn, scikit_learn
+from sal.emissions import GaussianEmission
+from sal.fixtures import load_params
+from sal.opt.hmm import baum_welch
+from sal.opt.mixture import expectation_maximization
+from sal.sim.hmm import HmmParams, simulate_sequences
+from sal.validation import hmmlearn, scikit_learn
 
 from tests._fixtures import FIXTURES_DIR
 from tests._frameworks import requires

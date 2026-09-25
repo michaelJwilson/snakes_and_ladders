@@ -66,8 +66,8 @@ selection() {
     | uv run --no-sync python -c 'import json,sys; print(" ".join(json.load(sys.stdin)["paths"]))'
 }
 for class in "docs-only:docs/tex/paper.tex" \
-             "one module (learn/):python/snakes_and_ladders/learn/reinforce.py" \
-             "search/-wide:python/snakes_and_ladders/search/infer.py"; do
+             "one module (learn/):python/sal/learn/reinforce.py" \
+             "search/-wide:python/sal/search/infer.py"; do
   name="${class%%:*}"; files="${class#*:}"
   paths="$(selection $files)"
   # shellcheck disable=SC2086

@@ -2,7 +2,7 @@
 
 Each was unrefereed at #729's measurement and is pinned to an answer computed
 without it: :func:`strip_log_partition_target` against
-:func:`~snakes_and_ladders.likelihood.potts.enumerate_potts` on the 3x3
+:func:`~sal.likelihood.potts.enumerate_potts` on the 3x3
 lattice; :func:`ground_state_target` against the enumerated minimum;
 :func:`ground_state_offset` as a bound on it, per instance; and
 :func:`shuffle_children` against the maximized log-likelihood it may not move.
@@ -15,22 +15,22 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.learn.ranking import (
+from sal.backend import Backend
+from sal.learn.ranking import (
     ground_state_offset,
     ground_state_target,
     lattice_instances,
     shuffle_children,
     strip_log_partition_target,
 )
-from snakes_and_ladders.likelihood.potts import enumerate_potts, log_weights
-from snakes_and_ladders.search.infer import score_topology
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
-from snakes_and_ladders.sim.newick import to_newick, validate_unrooted_newick
-from snakes_and_ladders.sim.potts import SpatioOnlyParams
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.topology import leaf_bipartitions, random_topology
+from sal.likelihood.potts import enumerate_potts, log_weights
+from sal.search.infer import score_topology
+from sal.sim.fixtures import fixture
+from sal.sim.graph import BoundaryCondition, lattice_graph
+from sal.sim.newick import to_newick, validate_unrooted_newick
+from sal.sim.potts import SpatioOnlyParams
+from sal.sim.simulator import simulate_tree
+from sal.sim.topology import leaf_bipartitions, random_topology
 
 from tests._fixtures import SMALL_SITES, load_fixture
 

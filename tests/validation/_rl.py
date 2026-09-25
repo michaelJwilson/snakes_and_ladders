@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 import torch
-from snakes_and_ladders.learn.environment import Episode
-from snakes_and_ladders.learn.potts import PottsEnvironment
+from sal.learn.environment import Episode
+from sal.learn.potts import PottsEnvironment
 
 from tests.regression.learn.conftest import potts_environment
 
@@ -82,7 +82,7 @@ def ppo_loss_and_gradient(
     clip: float,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """``learn.ppo.ppo_loss`` under ``WEIGHTS`` and its gradient, episodes of ``episode_length``."""
-    from snakes_and_ladders.learn import ppo
+    from sal.learn import ppo
 
     weights = torch.tensor(WEIGHTS, dtype=torch.float64, requires_grad=True)
     n_episodes = taken.shape[0] // episode_length

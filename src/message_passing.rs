@@ -1,6 +1,6 @@
 //! The tree schedule's two passes over the factor-graph layout.
 //!
-//! `snakes_and_ladders.likelihood.message_passing._run` --- the vectorized
+//! `sal.likelihood.message_passing._run` --- the vectorized
 //! NumPy implementation --- stays as the oracle this is pinned against, and
 //! `likelihood.message_passing_reference` stays as its oracle, per root
 //! `CLAUDE.md`.
@@ -469,7 +469,7 @@ pub fn tree_messages(
 type Messages<'py> = (Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>);
 
 /// The tree schedule's two passes, for
-/// `snakes_and_ladders.likelihood.message_passing_rust`.
+/// `sal.likelihood.message_passing_rust`.
 ///
 /// Every array is `int64` but `tables`, which is `float64`, and all are
 /// borrowed: `as_slice` succeeds only for a C-contiguous array and the

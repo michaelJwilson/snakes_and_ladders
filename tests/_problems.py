@@ -19,13 +19,13 @@ from pathlib import Path
 from typing import Any
 
 import catalogue
-from snakes_and_ladders.sim.fixtures import FIXTURES_DIR, problems
+from sal.sim.fixtures import FIXTURES_DIR, problems
 
 #: The repository root, from this file: `tests.` imports are resolved under it.
 from tests._paths import REPO_ROOT
 
 #: Calls whose *first* positional argument names the problem.
-#: `snakes_and_ladders.sim.fixtures.fixture` and `path_of`, and the
+#: `sal.sim.fixtures.fixture` and `path_of`, and the
 #: `tests/_fixtures.py` loaders.
 NAMES_FIRST = (
     "fixture",
@@ -183,11 +183,11 @@ def _defining_code() -> tuple[tuple[str, frozenset[str]], ...]:
 
 
 def _imported_code(tree: ast.Module) -> set[str]:
-    """Every `snakes_and_ladders` name the module imports, full depth, unprefixed.
+    """Every `sal` name the module imports, full depth, unprefixed.
 
     Matched by prefix: ``sim import jc`` and ``sim.jc import x`` both reach ``sim.jc``.
     """
-    package = "snakes_and_ladders"
+    package = "sal"
     imported: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):

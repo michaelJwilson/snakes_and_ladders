@@ -17,9 +17,9 @@ import math
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.likelihood.potts import log_weights, strip_log_partition
-from snakes_and_ladders.opt.potts import graph_statistics, log_partition_graph
-from snakes_and_ladders.sample.annealed import (
+from sal.likelihood.potts import log_weights, strip_log_partition
+from sal.opt.potts import graph_statistics, log_partition_graph
+from sal.sample.annealed import (
     LogPartition,
     Resampling,
     annealed_importance_sampling,
@@ -28,11 +28,11 @@ from snakes_and_ladders.sample.annealed import (
     rung_weights,
     simulated_tempering,
 )
-from snakes_and_ladders.sample.potts_mcmc import PottsMove
-from snakes_and_ladders.sample.statistics import chi_square_p_value
-from snakes_and_ladders.sample.tempered import round_trips
-from snakes_and_ladders.sim.canonical import frustrated_triangular_lattice
-from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from sal.sample.potts_mcmc import PottsMove
+from sal.sample.statistics import chi_square_p_value
+from sal.sample.tempered import round_trips
+from sal.sim.canonical import frustrated_triangular_lattice
+from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
 #: The ladder both estimators run on, and the population. 200 rungs at 128
 #: replicas holds the weight distribution narrow enough to read the answer:

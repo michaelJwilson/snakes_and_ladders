@@ -1,6 +1,6 @@
 """The table's harness: a seam that re-spells nothing, and a metric with a cost.
 
-Issue #705. Each learner through :data:`~snakes_and_ladders.learn.arena.LEARNERS`
+Issue #705. Each learner through :data:`~sal.learn.arena.LEARNERS`
 returns bitwise what its direct call returns under the same seed. The metric
 reproduces the Potts chain's five rows, 80.2 / 88.9 / 88.9 / 96.3 / 97.5% of 81
 starts (#313). Greedy is a row, not a policy: `greedy_rollout` stops at a local
@@ -13,8 +13,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.learn.actor_critic import actor_critic
-from snakes_and_ladders.learn.arena import (
+from sal.learn.actor_critic import actor_critic
+from sal.learn.arena import (
     CRITIC_HIDDEN,
     LEARNERS,
     MLP_HIDDEN,
@@ -30,22 +30,22 @@ from snakes_and_ladders.learn.arena import (
     row,
     table,
 )
-from snakes_and_ladders.learn.critic import Critic, n_state_features
-from snakes_and_ladders.learn.environment import Episode
-from snakes_and_ladders.learn.policy import (
+from sal.learn.critic import Critic, n_state_features
+from sal.learn.environment import Episode
+from sal.learn.policy import (
     LinearPolicy,
     MLPPolicy,
     Policy,
     TrainablePolicy,
 )
-from snakes_and_ladders.learn.potts import (
+from sal.learn.potts import (
     PottsEnvironment,
     enumerate_configurations,
     optimum,
 )
-from snakes_and_ladders.learn.ppo import ppo
-from snakes_and_ladders.learn.reinforce import reinforce
-from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
+from sal.learn.ppo import ppo
+from sal.learn.reinforce import reinforce
+from sal.learn.rollout import greedy_rollout, rollout
 
 from tests.regression.learn.conftest import potts_environment
 

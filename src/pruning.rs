@@ -1,6 +1,6 @@
-//! Felsenstein pruning, ported from `python/snakes_and_ladders/likelihood/pruning.py`
+//! Felsenstein pruning, ported from `python/sal/likelihood/pruning.py`
 //! (the NumPy oracle) to Rust, exposed to Python via PyO3 as
-//! `snakes_and_ladders.oxisal.pruning_log_likelihood`.
+//! `sal.oxisal.pruning_log_likelihood`.
 //!
 //! Implements `eq:pruning` and `eq:root` of `docs/tex/textbook.tex` exactly: message passing `partial[i, s] = sum_j P_ij(t) *
 //! child_partial[j, s]`, post-order over the topology, with the same
@@ -21,8 +21,8 @@
 //! in `STATUS.md`; the rule that they be confirmed by benchmark and never by
 //! asserting a vector width is why no width appears anywhere in this file.
 //!
-//! The Python wrapper (`snakes_and_ladders.likelihood.pruning_rust`) flattens a
-//! `snakes_and_ladders.sim.tree.Node` topology into the arrays this module expects,
+//! The Python wrapper (`sal.likelihood.pruning_rust`) flattens a
+//! `sal.sim.tree.Node` topology into the arrays this module expects,
 //! mirroring `pruning_torch.py`'s convention of keeping branch lengths as a
 //! flat array in a defined order rather than read off `Node.branch_length`
 //! inside the accelerated call, even though Rust has no autograd graph to
@@ -53,7 +53,7 @@ use rayon::prelude::*;
 const TILE: usize = 128;
 
 /// Closed-form k-state Jukes-Cantor transition probabilities P(t), `eq:jc`
-/// of `docs/tex/textbook.tex`, ported from `snakes_and_ladders.sim.jc.jc_transition_probabilities`.
+/// of `docs/tex/textbook.tex`, ported from `sal.sim.jc.jc_transition_probabilities`.
 ///
 /// Returns a row-major `k * k` matrix flattened into a `Vec<f64>`; entry
 /// `i * k + j` is Pr(state j at the branch's end | state i at its start).
@@ -97,7 +97,7 @@ pub struct LeafObservations<'a> {
 
 /// Total log-likelihood of an alignment under the k-state Jukes-Cantor model,
 /// computed by Felsenstein pruning -- the Rust port of
-/// `snakes_and_ladders.likelihood.pruning.log_likelihood`. Plain Rust (no PyO3 types) so
+/// `sal.likelihood.pruning.log_likelihood`. Plain Rust (no PyO3 types) so
 /// `cargo test` can call it directly; see the module docs for why.
 ///
 /// # Parameters

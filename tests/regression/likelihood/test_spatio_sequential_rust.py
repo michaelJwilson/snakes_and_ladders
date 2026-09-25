@@ -14,21 +14,21 @@ from dataclasses import replace
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders import oxisal
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.emissions import CategoricalEmission
-from snakes_and_ladders.likelihood import spatio_sequential
-from snakes_and_ladders.likelihood import spatio_sequential_rust as rust
-from snakes_and_ladders.likelihood.spatio_sequential import (
+from sal import oxisal
+from sal.backend import Backend
+from sal.emissions import CategoricalEmission
+from sal.likelihood import spatio_sequential
+from sal.likelihood import spatio_sequential_rust as rust
+from sal.likelihood.spatio_sequential import (
     class_posteriors,
     external_field,
 )
-from snakes_and_ladders.sim.count_pairs import (
+from sal.sim.count_pairs import (
     CountPairInstance,
     IndependentCountPair,
 )
-from snakes_and_ladders.sim.count_pairs_rust import binned_instance, fine_instance
-from snakes_and_ladders.sim.fixtures import fixture
+from sal.sim.count_pairs_rust import binned_instance, fine_instance
+from sal.sim.fixtures import fixture
 
 from tests._scale import stress_only
 

@@ -11,7 +11,7 @@ is ``potts_environment(6)``, not a second constant.
 from __future__ import annotations
 
 import numpy as np
-from snakes_and_ladders.learn.potts import PottsEnvironment
+from sal.learn.potts import PottsEnvironment
 
 #: The per-state field of the reference instance.
 FIELD = np.array([0.4, -0.1, -0.3])

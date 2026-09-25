@@ -15,10 +15,10 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.qa import search_topologies, search_trajectory
-from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.tree import Node, preorder
+from sal.fixtures import load_params
+from sal.qa import search_topologies, search_trajectory
+from sal.sim.params import SimulationParams
+from sal.sim.tree import Node, preorder
 
 from tests._fixtures import FIXTURES_DIR
 

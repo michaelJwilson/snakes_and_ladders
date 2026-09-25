@@ -20,12 +20,12 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders import oxisal
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.search.ground_state import lattice_rung
-from snakes_and_ladders.search.maxflow import ising_ground_state
-from snakes_and_ladders.sim.potts import site_field
-from snakes_and_ladders.validation import pymaxflow
+from sal import oxisal
+from sal.backend import Backend
+from sal.search.ground_state import lattice_rung
+from sal.search.maxflow import ising_ground_state
+from sal.sim.potts import site_field
+from sal.validation import pymaxflow
 
 from tests._frameworks import requires
 from tests.validation._goals import median_package

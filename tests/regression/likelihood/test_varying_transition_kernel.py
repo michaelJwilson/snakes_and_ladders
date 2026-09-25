@@ -16,12 +16,12 @@ import itertools
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.likelihood.forward_backward import (
+from sal.likelihood.forward_backward import (
     forward_backward,
     sample_path,
     step_kernels,
 )
-from snakes_and_ladders.opt.hmm import forward_log_likelihood_from_density
+from sal.opt.hmm import forward_log_likelihood_from_density
 
 from tests._rows import every_row
 

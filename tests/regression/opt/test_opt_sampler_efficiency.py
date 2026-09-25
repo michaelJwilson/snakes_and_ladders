@@ -12,9 +12,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.sample.hmc import Adaptation, effective_sample_size, sample
-from snakes_and_ladders.sample.langevin import MALA_TARGET_ACCEPTANCE, mala
-from snakes_and_ladders.sample.slice import slice_sample
+from sal.sample.hmc import Adaptation, effective_sample_size, sample
+from sal.sample.langevin import MALA_TARGET_ACCEPTANCE, mala
+from sal.sample.slice import slice_sample
 
 from tests._posteriors import GAUSSIAN, weight_posterior
 from tests._scale import at_scale

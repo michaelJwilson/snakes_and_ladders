@@ -14,24 +14,24 @@ from collections.abc import Sequence
 
 import numpy as np
 import pytest
-from snakes_and_ladders.likelihood.distance import distance_matrix, tree_distances
-from snakes_and_ladders.likelihood.surrogate import (
+from sal.likelihood.distance import distance_matrix, tree_distances
+from sal.likelihood.surrogate import (
     least_squares_lengths,
     least_squares_residual,
 )
-from snakes_and_ladders.search.neighbor_joining import (
+from sal.search.neighbor_joining import (
     atteson_radius,
     four_point_violation,
     neighbor_joining,
     split_lengths,
 )
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.topology import (
+from sal.sim.simulator import simulate_tree
+from sal.sim.topology import (
     enumerate_topologies,
     leaf_bipartitions,
     random_topology,
 )
-from snakes_and_ladders.sim.tree import Node
+from sal.sim.tree import Node
 
 from tests._fixtures import EIGHT_TAXA, FOUR_TAXA, load_fixture
 from tests._rows import every_value

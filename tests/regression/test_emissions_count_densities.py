@@ -13,13 +13,13 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from scipy import stats
-from snakes_and_ladders.emissions import (
+from sal.emissions import (
     BetaBinomialEmission,
     BinomialEmission,
     NegativeBinomialEmission,
     PoissonEmission,
 )
+from scipy import stats
 
 #: Counts scored in every test, shape ``(2, 3)``: a batch of two positions
 #: over three states, which is the shape the fit passes and which broadcasts

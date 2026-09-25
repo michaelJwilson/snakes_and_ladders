@@ -11,13 +11,13 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.likelihood.distance import DistanceKind, distance_matrix
-from snakes_and_ladders.search.infer import infer, score_topology
-from snakes_and_ladders.search.neighbor_joining import neighbor_joining
-from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.topology import normalized_robinson_foulds
-from snakes_and_ladders.sim.tree import Node, balanced_tree, preorder
+from sal.likelihood.distance import DistanceKind, distance_matrix
+from sal.search.infer import infer, score_topology
+from sal.search.neighbor_joining import neighbor_joining
+from sal.sim.params import SimulationParams
+from sal.sim.simulator import simulate_tree
+from sal.sim.topology import normalized_robinson_foulds
+from sal.sim.tree import Node, balanced_tree, preorder
 
 from tests._scale import Fixture, at_fixture
 

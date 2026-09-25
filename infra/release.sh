@@ -59,7 +59,7 @@ run_check "cargo test --features sandbox" cargo test --locked --features sandbox
 # this is the one place that has to say otherwise. The expression is a
 # tautology written out rather than an empty `-m ""`, so that what it selects
 # is legible and a later reader does not delete it as a stray flag.
-run_check "pytest (full suite)" uv run pytest -m "release or not release" --cov=snakes_and_ladders --cov-report=term-missing --cov-fail-under=90 --cov-context=test
+run_check "pytest (full suite)" uv run pytest -m "release or not release" --cov=sal --cov-report=term-missing --cov-fail-under=90 --cov-context=test
 # The judged floor (issue #729), recut from the run above; the floors live in
 # infra/gates.py beside the markers that count.
 run_check "judged coverage floor" uv run python infra/coverage_recut.py --fail-under
@@ -94,9 +94,9 @@ run_check "generated ledgers" infra/ledgers.sh --check
 # overwritten. A mismatch is a failure, never a silent refresh -- `--check`
 # renders into a temporary directory and compares, naming each figure that
 # does not reproduce. The clock the figures are rendered against is pinned in
-# snakes_and_ladders.qa.build, so this needs no environment of its own.
+# sal.qa.build, so this needs no environment of its own.
 run_check "QA figures (every figure)" \
-  uv run python -m snakes_and_ladders.qa.build --all --check
+  uv run python -m sal.qa.build --all --check
 # `--no-figures`, because the step above just rendered the whole manifest and
 # compared every byte of it against `docs/tex/figures/`. A second render can
 # only write those same bytes back, and until issue #530 the gate paid for it:

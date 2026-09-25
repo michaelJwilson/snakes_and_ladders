@@ -17,25 +17,25 @@ from itertools import product
 
 import numpy as np
 import pytest
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.enumeration import configurations
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.likelihood.hmm_paths import (
+from sal.backend import Backend
+from sal.enumeration import configurations
+from sal.fixtures import load_params
+from sal.likelihood.hmm_paths import (
     PathEnumeration,
     emission_log_density,
     enumerate_hidden_paths,
     path_log_probability,
 )
-from snakes_and_ladders.likelihood.message_passing import sum_product
-from snakes_and_ladders.likelihood.potts import log_weights
-from snakes_and_ladders.likelihood.spatio_sequential import (
+from sal.likelihood.message_passing import sum_product
+from sal.likelihood.potts import log_weights
+from sal.likelihood.spatio_sequential import (
     enumerate_spatio_sequential,
     log_chain,
     log_prior,
 )
-from snakes_and_ladders.numerics import logsumexp
-from snakes_and_ladders.sample import gibbs
-from snakes_and_ladders.sample.gibbs import (
+from sal.numerics import logsumexp
+from sal.sample import gibbs
+from sal.sample.gibbs import (
     GibbsMove,
     Indexed,
     anneal_factor_graph,
@@ -47,18 +47,18 @@ from snakes_and_ladders.sample.gibbs import (
     gibbs_sweep,
     sample_factor_graph,
 )
-from snakes_and_ladders.sample.potts_mcmc import anneal_potts, energies
-from snakes_and_ladders.sample.potts_mcmc.sweeps import single_site_sweep
-from snakes_and_ladders.sample.schedule import (
+from sal.sample.potts_mcmc import anneal_potts, energies
+from sal.sample.potts_mcmc.sweeps import single_site_sweep
+from sal.sample.schedule import (
     ConstantTempSchedule,
     ExponentialTempSchedule,
 )
-from snakes_and_ladders.sample.statistics import chi_square_p_value
-from snakes_and_ladders.search.infer import score_topology
-from snakes_and_ladders.sim.canonical import (
+from sal.sample.statistics import chi_square_p_value
+from sal.search.infer import score_topology
+from sal.sim.canonical import (
     minimum_frustrated_edges,
 )
-from snakes_and_ladders.sim.factor_graph import (
+from sal.sim.factor_graph import (
     Factor,
     FactorGraph,
     Variable,
@@ -66,25 +66,25 @@ from snakes_and_ladders.sim.factor_graph import (
     from_potts,
     from_tree,
 )
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
-from snakes_and_ladders.sim.hmm import simulate_sequences
-from snakes_and_ladders.sim.jc import jc_transition_probabilities
-from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.spatio_sequential import (
+from sal.sim.fixtures import fixture
+from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from sal.sim.hmm import simulate_sequences
+from sal.sim.jc import jc_transition_probabilities
+from sal.sim.params import SimulationParams
+from sal.sim.simulator import simulate_tree
+from sal.sim.spatio_sequential import (
     SpatioSequentialParams,
     coupled_factor_graph,
     gated_log_density,
     simulate_spatio_sequential,
 )
-from snakes_and_ladders.sim.topology import (
+from sal.sim.topology import (
     enumerate_topologies,
     leaf_bipartitions,
     nni_neighbours,
     random_topology,
 )
-from snakes_and_ladders.sim.tree import preorder
+from sal.sim.tree import preorder
 
 from tests._fixtures import FOUR_TAXA, fixture_path, load_fixture
 from tests._rows import every_row

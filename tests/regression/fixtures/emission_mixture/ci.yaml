@@ -2,8 +2,8 @@ model: emission-mixture
 oracle: enumeration
 
 # The three-component mixture of two-channel count emissions
-# (`snakes_and_ladders.sim.emission_mixture`, issue #399). Every field is
-# required -- see python/snakes_and_ladders/sim/emission_mixture.py and
+# (`sal.sim.emission_mixture`, issue #399). Every field is
+# required -- see python/sal/sim/emission_mixture.py and
 # sim/CLAUDE.md.
 #
 # The components are `count-pair-joint`: each draws a depth from a negative
@@ -21,7 +21,7 @@ oracle: enumeration
 #
 # The oracle at this size is the enumerated posterior over component
 # labellings: with K = 3 the 10-observation prefix of the draw has 59,049
-# labellings, inside the enumeration cap `snakes_and_ladders.enumeration`
+# labellings, inside the enumeration cap `sal.enumeration`
 # sets, and the observations are independent, so the marginal at each of those
 # ten is the same quantity the responsibilities of the whole dataset carry.
 seed: 20260908

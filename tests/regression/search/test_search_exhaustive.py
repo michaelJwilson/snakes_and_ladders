@@ -14,21 +14,21 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.search.infer import (
+from sal.fixtures import load_params
+from sal.search.infer import (
     Inference,
     infer,
     parsimony_search,
     score_topology,
 )
-from snakes_and_ladders.sim.newick import (
+from sal.sim.newick import (
     count_topologies,
     to_newick,
     validate_unrooted_newick,
 )
-from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.topology import (
+from sal.sim.params import SimulationParams
+from sal.sim.simulator import simulate_tree
+from sal.sim.topology import (
     MoveSet,
     Topology,
     enumerate_topologies,

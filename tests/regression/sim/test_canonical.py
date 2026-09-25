@@ -13,14 +13,14 @@ import math
 
 import numpy as np
 import pytest
-from snakes_and_ladders.likelihood.hmm_paths import (
+from sal.likelihood.hmm_paths import (
     enumerate_hidden_paths,
     path_log_probability,
 )
-from snakes_and_ladders.sample.potts_mcmc import PottsMove, sample_potts
-from snakes_and_ladders.search.icm import iterated_conditional_modes
-from snakes_and_ladders.search.max_cut import enumerate_max_cut
-from snakes_and_ladders.sim.canonical import (
+from sal.sample.potts_mcmc import PottsMove, sample_potts
+from sal.search.icm import iterated_conditional_modes
+from sal.search.max_cut import enumerate_max_cut
+from sal.sim.canonical import (
     AMBIGUOUS_OBSERVATIONS,
     WANNIER_RESIDUAL_ENTROPY,
     ambiguous_hmm,
@@ -28,8 +28,8 @@ from snakes_and_ladders.sim.canonical import (
     minimum_frustrated_edges,
     planted_spin_glass,
 )
-from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
-from snakes_and_ladders.sim.potts import energy
+from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from sal.sim.potts import energy
 
 from tests._rows import every_row, every_value
 
@@ -75,7 +75,7 @@ def test_the_periodic_ground_state_agrees_on_exactly_one_edge_in_three() -> None
 @pytest.mark.oracle
 def test_the_ground_state_energy_is_known_without_enumerating() -> None:
     # What the closed form buys: the ground-state *energy* at any size, in the
-    # convention `snakes_and_ladders.sim.potts.energy` uses.
+    # convention `sal.sim.potts.energy` uses.
     # Every other discrete claim here stops where enumeration does.
     def check(shape: tuple[int, int]) -> None:
         graph = frustrated_triangular_lattice(shape, coupling=-1.5)
@@ -273,7 +273,7 @@ def test_the_planted_state_stops_being_the_ground_state_as_frustration_rises() -
 def test_the_planted_energy_matches_the_energy_of_the_planted_state() -> None:
     # The construction records its own answer, so a drift between the recorded
     # energy and the model's would make every comparison against it wrong.
-    # Checked against `snakes_and_ladders.sim.potts.energy`,
+    # Checked against `sal.sim.potts.energy`,
     # which shares no code with it.
     instance = planted_spin_glass(12, 4.0, 0.25, np.random.default_rng(3))
 

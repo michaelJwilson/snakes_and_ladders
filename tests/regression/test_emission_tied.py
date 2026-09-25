@@ -15,13 +15,13 @@ import math
 import numpy as np
 import pytest
 import torch
-from scipy.optimize import minimize, minimize_scalar
-from snakes_and_ladders.emissions import (
+from sal.emissions import (
     BetaBinomialEmission,
     NegativeBinomialEmission,
     mstep,
 )
-from snakes_and_ladders.sim.count_pairs import IndependentCountPair
+from sal.sim.count_pairs import IndependentCountPair
+from scipy.optimize import minimize, minimize_scalar
 
 from tests._rows import every_value
 

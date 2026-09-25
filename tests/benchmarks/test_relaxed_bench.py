@@ -16,8 +16,8 @@ import numpy as np
 import pytest
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.learn.potts import PottsEnvironment
-from snakes_and_ladders.learn.relaxed import (
+from sal.learn.potts import PottsEnvironment
+from sal.learn.relaxed import (
     RelaxationMode,
     RelaxedPotts,
     estimate_gradient,

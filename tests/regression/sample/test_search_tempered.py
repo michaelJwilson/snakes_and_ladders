@@ -18,18 +18,18 @@ from typing import cast
 
 import numpy as np
 import pytest
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.likelihood.hmm_paths import emission_log_density
-from snakes_and_ladders.likelihood.potts import log_weights
-from snakes_and_ladders.sample.potts_mcmc import (
+from sal.backend import Backend
+from sal.likelihood.hmm_paths import emission_log_density
+from sal.likelihood.potts import log_weights
+from sal.sample.potts_mcmc import (
     PottsMove,
     adapt_ladder_potts,
     houdayer_move,
     parallel_tempering,
     sweep_for,
 )
-from snakes_and_ladders.sample.statistics import chi_square_p_value, sign_test_p_value
-from snakes_and_ladders.sample.tempered import (
+from sal.sample.statistics import chi_square_p_value, sign_test_p_value
+from sal.sample.tempered import (
     TemperedEnsemble,
     adapt_ladder_round_trips,
     round_trip_time,
@@ -39,7 +39,7 @@ from snakes_and_ladders.sample.tempered import (
     tempered_topologies,
     up_fraction,
 )
-from snakes_and_ladders.search.support import (
+from sal.search.support import (
     SupportKind,
     TemperedSupport,
     enumerated_labelling_support,
@@ -47,16 +47,16 @@ from snakes_and_ladders.search.support import (
     tempered_labelling_support,
     tempered_topology_support,
 )
-from snakes_and_ladders.sim.canonical import (
+from sal.sim.canonical import (
     AMBIGUOUS_OBSERVATIONS,
     ambiguous_hmm,
     frustrated_triangular_lattice,
 )
-from snakes_and_ladders.sim.factor_graph import FactorGraph, from_hmm, from_potts
-from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
-from snakes_and_ladders.sim.potts import critical_coupling, site_field
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.topology import enumerate_topologies, leaf_bipartitions
+from sal.sim.factor_graph import FactorGraph, from_hmm, from_potts
+from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from sal.sim.potts import critical_coupling, site_field
+from sal.sim.simulator import simulate_tree
+from sal.sim.topology import enumerate_topologies, leaf_bipartitions
 
 from tests._fixtures import FOUR_TAXA, load_fixture
 

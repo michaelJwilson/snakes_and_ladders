@@ -71,11 +71,9 @@ def _selected(problem: str) -> set[Path]:
     return {path for path in _modules() if problem in fixtures_named_in(path)}
 
 
-#: A ``from snakes_and_ladders... import ...`` statement, single or parenthesized.
+#: A ``from sal... import ...`` statement, single or parenthesized.
 #: A regex where the scan uses `ast`, so the two readings share no code.
-PACKAGE_IMPORT = re.compile(
-    r"from\s+snakes_and_ladders(?:\.([\w.]+))?\s+import\s+(\([^)]*\)|[^\n]*)"
-)
+PACKAGE_IMPORT = re.compile(r"from\s+sal(?:\.([\w.]+))?\s+import\s+(\([^)]*\)|[^\n]*)")
 
 
 def _imports_defining(path: Path, names: tuple[str, ...]) -> bool:
@@ -378,7 +376,7 @@ def mini_suite(tmp_path_factory: pytest.TempPathFactory) -> Path:
     )
     # Names no problem and imports no defining code: the `infra` case.
     (directory / "test_shared.py").write_text(
-        "from snakes_and_ladders.numerics import sample_rows\n\n\n"
+        "from sal.numerics import sample_rows\n\n\n"
         "def test_shared() -> None:\n    sample_rows\n"
     )
     (directory / "test_typo.py").write_text(

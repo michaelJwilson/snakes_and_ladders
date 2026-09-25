@@ -1,4 +1,4 @@
-"""Regression test for snakes_and_ladders.qa.opt_branch_recovery.
+"""Regression test for sal.qa.opt_branch_recovery.
 
 Pins the numbers the script computes before matplotlib sees them
 (qa/CLAUDE.md): the recovery in panel (a), the confounding in panel (b), and
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.qa.opt_branch_recovery import (
+from sal.qa.opt_branch_recovery import (
     SPLITS,
     build_figure,
     recovery,

@@ -1,14 +1,14 @@
 """An M step and a draw take arrays, and reproduce the tensor call bitwise (issue #1011).
 
-:meth:`~snakes_and_ladders.emissions.EmissionFamily.reestimate` and
-:meth:`~snakes_and_ladders.emissions.EmissionFamily.sample` take no
+:meth:`~sal.emissions.EmissionFamily.reestimate` and
+:meth:`~sal.emissions.EmissionFamily.sample` take no
 derivative, so a caller holding NumPy arrays hands them over without building
 a tensor. Each family converts at entry and computes as it did on a tensor,
 so the referee is the tensor call itself: every parameter the re-estimate
 returns, every field of its record, and every draw, equal byte for byte.
 
-The two implementers in :mod:`snakes_and_ladders.sim.count_pairs` are listed
-with the seven in :mod:`snakes_and_ladders.emissions`: they were the consumers
+The two implementers in :mod:`sal.sim.count_pairs` are listed
+with the seven in :mod:`sal.emissions`: they were the consumers
 the tensor-only signature blocked.
 """
 
@@ -20,7 +20,7 @@ import numpy as np
 import pytest
 import torch
 from numpy.typing import ArrayLike
-from snakes_and_ladders.emissions import (
+from sal.emissions import (
     BetaBinomialEmission,
     BinomialEmission,
     CategoricalEmission,
@@ -31,7 +31,7 @@ from snakes_and_ladders.emissions import (
     PoissonEmission,
     Reestimate,
 )
-from snakes_and_ladders.sim.count_pairs import IndependentCountPair, ReflectedEmission
+from sal.sim.count_pairs import IndependentCountPair, ReflectedEmission
 
 N_SEQUENCES, LENGTH = 3, 200
 

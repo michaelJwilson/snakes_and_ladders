@@ -16,7 +16,7 @@ import itertools
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from snakes_and_ladders.likelihood.hadamard import (
+from sal.likelihood.hadamard import (
     MAX_TAXA,
     binary_recoding,
     closest_tree,
@@ -28,12 +28,12 @@ from snakes_and_ladders.likelihood.hadamard import (
     split_weights,
     walsh_hadamard,
 )
-from snakes_and_ladders.likelihood.pruning import log_likelihood
-from snakes_and_ladders.search.neighbor_joining import split_lengths
-from snakes_and_ladders.sim.simulate import simulate_alignment
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.topology import leaf_bipartitions
-from snakes_and_ladders.sim.tree import Node
+from sal.likelihood.pruning import log_likelihood
+from sal.search.neighbor_joining import split_lengths
+from sal.sim.simulate import simulate_alignment
+from sal.sim.simulator import simulate_tree
+from sal.sim.topology import leaf_bipartitions
+from sal.sim.tree import Node
 
 from tests._fixtures import EIGHT_TAXA, FOUR_TAXA, load_fixture
 

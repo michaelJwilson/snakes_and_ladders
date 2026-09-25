@@ -17,11 +17,11 @@ from pathlib import Path
 
 import numpy as np
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.learn.tree import RewardModel, TreeEnvironment
-from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.topology import random_topology
+from sal.fixtures import load_params
+from sal.learn.tree import RewardModel, TreeEnvironment
+from sal.sim.params import SimulationParams
+from sal.sim.simulator import simulate_tree
+from sal.sim.topology import random_topology
 
 from tests._fixtures import FIXTURES_DIR
 

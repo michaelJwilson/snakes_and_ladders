@@ -17,13 +17,13 @@ from itertools import product
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.emissions import GaussianEmission
-from snakes_and_ladders.likelihood.forward_backward import forward_backward, sample_path
-from snakes_and_ladders.likelihood.hmm_paths import (
+from sal.emissions import GaussianEmission
+from sal.likelihood.forward_backward import forward_backward, sample_path
+from sal.likelihood.hmm_paths import (
     emission_log_density,
     enumerate_hidden_paths,
 )
-from snakes_and_ladders.likelihood.spatio_sequential import (
+from sal.likelihood.spatio_sequential import (
     class_posteriors,
     conditional_state_posterior,
     enumerate_spatio_sequential,
@@ -33,10 +33,10 @@ from snakes_and_ladders.likelihood.spatio_sequential import (
     map_labelling,
     marginal_log_likelihood_torch,
 )
-from snakes_and_ladders.numerics import logsumexp
-from snakes_and_ladders.sample.statistics import chi_square_p_value
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.spatio_sequential import (
+from sal.numerics import logsumexp
+from sal.sample.statistics import chi_square_p_value
+from sal.sim.fixtures import fixture
+from sal.sim.spatio_sequential import (
     gated_log_density,
     simulate_spatio_sequential,
 )

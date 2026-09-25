@@ -10,11 +10,11 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.sim.jc import jc_rate_matrix, jc_transition_probabilities
-from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
-from snakes_and_ladders.sim.tree import Node
+from sal.fixtures import load_params
+from sal.sim.jc import jc_rate_matrix, jc_transition_probabilities
+from sal.sim.params import SimulationParams
+from sal.sim.simulate import simulate_alignment
+from sal.sim.tree import Node
 
 
 @pytest.mark.smoke

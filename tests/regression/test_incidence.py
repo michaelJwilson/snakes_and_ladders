@@ -15,11 +15,11 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from sal.incidence import SparseIncidence
+from sal.sim.factor_graph import Factor, FactorGraph, Variable
+from sal.sim.graph import BoundaryCondition, lattice_graph
+from sal.sim.ldpc import gallager_code
 from scipy.sparse import csr_matrix
-from snakes_and_ladders.incidence import SparseIncidence
-from snakes_and_ladders.sim.factor_graph import Factor, FactorGraph, Variable
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
-from snakes_and_ladders.sim.ldpc import gallager_code
 
 from tests._rows import every_row
 

@@ -15,10 +15,10 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from snakes_and_ladders.likelihood.spatio_sequential import labelled_log_likelihood
-from snakes_and_ladders.search.spatio_sequential import merge_step
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.spatio_sequential import simulate_spatio_sequential
+from sal.likelihood.spatio_sequential import labelled_log_likelihood
+from sal.search.spatio_sequential import merge_step
+from sal.sim.fixtures import fixture
+from sal.sim.spatio_sequential import simulate_spatio_sequential
 
 from tests._rows import every_value
 

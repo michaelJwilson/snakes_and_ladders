@@ -18,40 +18,40 @@ import math
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from scipy import stats
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.learn.keyed import KeyedMove, keyed_generator
-from snakes_and_ladders.learn.potts_nd import (
+from sal.backend import Backend
+from sal.cost import Cost
+from sal.learn.keyed import KeyedMove, keyed_generator
+from sal.learn.potts_nd import (
     CLUSTER_KINDS,
     PARAMETRIC_KINDS,
     FeatureColumn,
     PottsAction,
     PottsNDEnvironment,
 )
-from snakes_and_ladders.opt.budget import Budget
-from snakes_and_ladders.sample.potts_keyed import (
+from sal.opt.budget import Budget
+from sal.sample.potts_keyed import (
     NiedermayerMove,
     SwendsenWangMove,
     WolffMove,
     cluster_moves,
 )
-from snakes_and_ladders.sample.potts_mcmc import (
+from sal.sample.potts_mcmc import (
     MoveKind,
     niedermayer_sweep,
     swendsen_wang_sweep,
     wolff_sweep,
 )
-from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
-from snakes_and_ladders.search.ground_state import (
+from sal.sample.schedule import ExponentialTempSchedule
+from sal.search.ground_state import (
     ANNEAL_END,
     ANNEAL_START,
     Rung,
     run_swendsen_wang,
     run_wolff,
 )
-from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
-from snakes_and_ladders.sim.potts import critical_coupling, energies, spatio_only_field
+from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from sal.sim.potts import critical_coupling, energies, spatio_only_field
+from scipy import stats
 
 from tests._rows import every_value
 

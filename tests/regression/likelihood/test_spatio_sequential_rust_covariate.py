@@ -12,15 +12,15 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from snakes_and_ladders.likelihood import spatio_sequential_rust as rust
-from snakes_and_ladders.likelihood.spatio_sequential import (
+from sal.likelihood import spatio_sequential_rust as rust
+from sal.likelihood.spatio_sequential import (
     class_posteriors,
     external_field,
 )
-from snakes_and_ladders.sim.count_pairs import CountPairInstance
-from snakes_and_ladders.sim.count_pairs_rust import fine_instance
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.spatio_sequential import SpatioSequentialParams
+from sal.sim.count_pairs import CountPairInstance
+from sal.sim.count_pairs_rust import fine_instance
+from sal.sim.fixtures import fixture
+from sal.sim.spatio_sequential import SpatioSequentialParams
 
 PROBLEM = "spatio_sequential_counts"
 

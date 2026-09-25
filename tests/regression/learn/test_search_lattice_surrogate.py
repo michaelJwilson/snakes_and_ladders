@@ -18,8 +18,8 @@ from collections.abc import Sequence
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.learn.ranking import (
+from sal.backend import Backend
+from sal.learn.ranking import (
     enumerated_log_partition_target,
     ground_state_offset,
     ground_state_target,
@@ -27,7 +27,7 @@ from snakes_and_ladders.learn.ranking import (
     lattice_instances,
     strip_log_partition_target,
 )
-from snakes_and_ladders.learn.surrogate import (
+from sal.learn.surrogate import (
     AttentionSurrogate,
     Examples,
     GraphSurrogate,
@@ -40,17 +40,17 @@ from snakes_and_ladders.learn.surrogate import (
     r_squared,
     split_by_group,
 )
-from snakes_and_ladders.likelihood.potts import enumerate_potts, log_weights
-from snakes_and_ladders.likelihood.surrogate import (
+from sal.likelihood.potts import enumerate_potts, log_weights
+from sal.likelihood.surrogate import (
     decoupled_ground_energy,
     decoupled_log_partition,
     mean_field_log_partition,
     saturated_log_partition,
     spanning_tree_log_partition,
 )
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.graph import PottsGraph
-from snakes_and_ladders.sim.potts import SpatioOnlyParams, energy
+from sal.sim.fixtures import fixture
+from sal.sim.graph import PottsGraph
+from sal.sim.potts import SpatioOnlyParams, energy
 
 #: Loaded once each: a lattice and a field per rung, from which every instance
 #: below is redrawn.

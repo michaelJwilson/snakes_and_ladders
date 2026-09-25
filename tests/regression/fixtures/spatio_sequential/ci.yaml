@@ -3,7 +3,7 @@ oracle: enumeration
 
 # The coupled spatio-sequential instance small enough to enumerate: a 2x2
 # open lattice, M = K = 2, S = 6. Every field is required -- see
-# python/snakes_and_ladders/sim/spatio_sequential.py and sim/CLAUDE.md.
+# python/sal/sim/spatio_sequential.py and sim/CLAUDE.md.
 #
 # 2**4 labellings times 2**12 joint chain paths is 65,536 states, inside the
 # enumeration limit, so `likelihood.spatio_sequential.enumerate_spatio_sequential`

@@ -1,7 +1,7 @@
 //! Single-site heat-bath sweeps for the Potts model, ported from
-//! `python/snakes_and_ladders/sample/potts_mcmc/sweeps.py::single_site_sweep`
+//! `python/sal/sample/potts_mcmc/sweeps.py::single_site_sweep`
 //! (the oracle) and exposed to Python as
-//! `snakes_and_ladders.oxisal.single_site_sweeps`.
+//! `sal.oxisal.single_site_sweeps`.
 //!
 //! **Why this one is a Rust port.** Issue #232 profiled the sweep as the one
 //! place a Python-level loop dominates: 100 sweeps on a 32x32 periodic lattice
@@ -27,7 +27,7 @@
 //! this one.
 //!
 //! **The uniforms are drawn in Python and passed in.** This module holds no
-//! generator, for the reason `sampling.rs` states: `snakes_and_ladders.sim`'s
+//! generator, for the reason `sampling.rs` states: `sal.sim`'s
 //! reproducibility contract is that a seeded generator determines the result,
 //! and a second stream inside Rust would break it silently.
 //!

@@ -14,23 +14,23 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.learn.critic import Critic, n_state_features
-from snakes_and_ladders.learn.environment import Episode
-from snakes_and_ladders.learn.exact import exact_action_values, exact_optimal_value
-from snakes_and_ladders.learn.planning import (
+from sal.learn.critic import Critic, n_state_features
+from sal.learn.environment import Episode
+from sal.learn.exact import exact_action_values, exact_optimal_value
+from sal.learn.planning import (
     SearchResult,
     critic_leaf_value,
     expert_iteration,
     plan_episode,
     puct_search,
 )
-from snakes_and_ladders.learn.policy import LinearPolicy
-from snakes_and_ladders.learn.potts import (
+from sal.learn.policy import LinearPolicy
+from sal.learn.potts import (
     PottsEnvironment,
     enumerate_configurations,
     optimum,
 )
-from snakes_and_ladders.learn.rollout import greedy_rollout
+from sal.learn.rollout import greedy_rollout
 
 from tests.regression.learn.conftest import potts_environment
 

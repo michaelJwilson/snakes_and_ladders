@@ -3,7 +3,7 @@ oracle: transfer-matrix
 
 # Ground truth for the 1-D Potts chain reference instance
 # (tests/regression/test_opt_potts.py). Every field is required -- see
-# python/snakes_and_ladders/opt/potts.py and python/snakes_and_ladders/opt/CLAUDE.md.
+# python/sal/opt/potts.py and python/sal/opt/CLAUDE.md.
 #
 # chain_length=12 with n_chains=400 gives 4400 adjacent pairs and 4800 site
 # observations, enough that the maximum-likelihood estimate sits well inside

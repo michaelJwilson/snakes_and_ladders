@@ -15,7 +15,7 @@ commands fail at the shipout of whichever page the line lands on; and a cell
 an author wrote as LaTeX, where the markup is the content and only the
 tabular's own syntax is neutralised.
 
-``python/snakes_and_ladders/qa/`` carries its own copy rather than importing
+``python/sal/qa/`` carries its own copy rather than importing
 this: `infra/CLAUDE.md` keeps application references out of ``infra/``, and
 the package does not depend on ``infra/``. The copy is held to this table by
 `tests/regression/docs/test_latex_escaping.py`, which is the guard that makes

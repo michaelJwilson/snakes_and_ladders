@@ -13,10 +13,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.sample import hmc
-from snakes_and_ladders.sample.expectation import KalmanMean
-from snakes_and_ladders.validation.gaussian import GaussianTarget, diagonal_precision
+from sal.backend import Backend
+from sal.sample import hmc
+from sal.sample.expectation import KalmanMean
+from sal.validation.gaussian import GaussianTarget, diagonal_precision
 
 from tests._posteriors import assert_gaussian_moments
 

@@ -14,10 +14,10 @@ mpl.use("Agg")
 
 import matplotlib.pyplot as plt
 import pytest
-from snakes_and_ladders.qa.layout import (
+from sal.qa.layout import (
     discrete_legend,
 )
-from snakes_and_ladders.qa.style import (
+from sal.qa.style import (
     INK,
     PALETTE,
     STATE_PALETTE,

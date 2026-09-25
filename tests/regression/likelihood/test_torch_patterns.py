@@ -11,17 +11,17 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from snakes_and_ladders.likelihood.objective import (
+from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
+from sal.likelihood.objective import (
     BranchLengthObjective,
     SubstitutionModelObjective,
 )
-from snakes_and_ladders.likelihood.pruning_torch import (
+from sal.likelihood.pruning_torch import (
     branch_lengths_from_tree,
     log_likelihood,
     transition_probabilities,
 )
-from snakes_and_ladders.sim.tree import Node
+from sal.sim.tree import Node
 
 from tests._fixtures import EIGHT_TAXA, simulated_alignment
 

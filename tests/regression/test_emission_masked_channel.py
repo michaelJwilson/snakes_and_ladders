@@ -12,8 +12,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.emissions import BetaBinomialEmission, NegativeBinomialEmission
-from snakes_and_ladders.sim.count_pairs import IndependentCountPair
+from sal.emissions import BetaBinomialEmission, NegativeBinomialEmission
+from sal.sim.count_pairs import IndependentCountPair
 
 from tests._rows import every_value
 

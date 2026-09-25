@@ -12,9 +12,9 @@ seconds are the host's.
 from __future__ import annotations
 
 import pytest
-from snakes_and_ladders.qa import likelihood_footprint, sim_problem_sizes
-from snakes_and_ladders.qa.figure import booktabs_tabular, mathjax_array
-from snakes_and_ladders.qa.starts_table import build_array, build_table
+from sal.qa import likelihood_footprint, sim_problem_sizes
+from sal.qa.figure import booktabs_tabular, mathjax_array
+from sal.qa.starts_table import build_array, build_table
 
 from tests.regression.qa.test_qa_sim_problem_sizes import FIXTURE_PATHS
 from tests.regression.qa.test_qa_starts_table import ROWS

@@ -20,7 +20,7 @@ import time
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.emissions import mstep
+from sal.emissions import mstep
 
 #: Past every declared fixture, which is the point: both terms below are
 #: invisible at a `ci.yaml` size.

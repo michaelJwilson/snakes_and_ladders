@@ -16,17 +16,17 @@ from collections.abc import Callable
 from typing import Any
 
 import numpy as np
-from snakes_and_ladders.emissions import CategoricalEmission
-from snakes_and_ladders.likelihood import (
+from sal.emissions import CategoricalEmission
+from sal.likelihood import (
     pruning,
     pruning_analytic,
     pruning_rust,
     pruning_torch,
 )
-from snakes_and_ladders.likelihood.brute_force import brute_force_log_likelihood
-from snakes_and_ladders.sim.graph import PottsGraph
-from snakes_and_ladders.sim.hmm import HmmParams
-from snakes_and_ladders.sim.tree import Node
+from sal.likelihood.brute_force import brute_force_log_likelihood
+from sal.sim.graph import PottsGraph
+from sal.sim.hmm import HmmParams
+from sal.sim.tree import Node
 
 #: The per-state field over `TREE`; three states, none of them favoured
 #: enough to make a marginal degenerate.

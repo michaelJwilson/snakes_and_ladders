@@ -3,7 +3,7 @@
 Issue #449 compared three: PyTorch's taped backward (the oracle), a `burn`
 tape in Rust, and the analytic two-pass backward behind one
 ``torch.autograd.Function``. The `burn` route lost and is conserved in
-``snakes_and_ladders.sandbox``, so it is timed here where the extension
+``sal.sandbox``, so it is timed here where the extension
 carries the ``sandbox`` Cargo feature and absent where it does not ---
 ``docs/experiments/007-pruning-gradient-routes.md`` carries the numbers it
 lost on. One evaluation is a forward pass and a ``backward()``, which is what
@@ -33,12 +33,12 @@ import numpy as np
 import pytest
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.likelihood import pruning_analytic, pruning_torch
-from snakes_and_ladders.sandbox import pruning_burn
-from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.tree import Node
+from sal.fixtures import load_params
+from sal.likelihood import pruning_analytic, pruning_torch
+from sal.sandbox import pruning_burn
+from sal.sim.params import SimulationParams
+from sal.sim.simulator import simulate_tree
+from sal.sim.tree import Node
 
 from tests._fixtures import FIXTURES_DIR
 

@@ -1,4 +1,4 @@
-"""Regression tests for ``snakes_and_ladders.sim.topology``'s NNI and SPR generators.
+"""Regression tests for ``sal.sim.topology``'s NNI and SPR generators.
 
 Exhaustive at sizes enumeration reaches (``n <= 10``, ``DEV.md``): the closed
 counts ``2 * (n - 3)`` (NNI) and ``2 * (n - 3) * (2 * n - 7)`` (SPR; issue #79)
@@ -16,13 +16,13 @@ from itertools import combinations, pairwise
 
 import numpy as np
 import pytest
-from snakes_and_ladders.sim import topology as topology_module
-from snakes_and_ladders.sim.newick import (
+from sal.sim import topology as topology_module
+from sal.sim.newick import (
     count_topologies,
     to_newick,
     validate_unrooted_newick,
 )
-from snakes_and_ladders.sim.topology import (
+from sal.sim.topology import (
     Topology,
     enumerate_topologies,
     leaf_bipartitions,
@@ -30,7 +30,7 @@ from snakes_and_ladders.sim.topology import (
     random_topology,
     spr_neighbours,
 )
-from snakes_and_ladders.sim.tree import Node
+from sal.sim.tree import Node
 
 # Sizes at which exhaustive enumeration is the oracle. The per-pull-request
 # budget holds 5 and 6; 7 costs about 8 s across the two neighbourhood tests

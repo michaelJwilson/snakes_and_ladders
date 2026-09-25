@@ -20,25 +20,25 @@ from collections.abc import Mapping
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.opt.budget import Budget
-from snakes_and_ladders.opt.constrain import log_simplex
-from snakes_and_ladders.opt.emission_mixture import CountPairSeeding
-from snakes_and_ladders.opt.mixture import (
+from sal.cost import Cost
+from sal.opt.budget import Budget
+from sal.opt.constrain import log_simplex
+from sal.opt.emission_mixture import CountPairSeeding
+from sal.opt.mixture import (
     GaussianMixtureObjective,
     mixture_log_likelihood,
 )
-from snakes_and_ladders.opt.objective import Objective
-from snakes_and_ladders.sample import hmc
-from snakes_and_ladders.sample.initialize import (
+from sal.opt.objective import Objective
+from sal.sample import hmc
+from sal.sample.initialize import (
     FromTempering,
     LadderCalibration,
     LadderRule,
 )
-from snakes_and_ladders.sample.schedule import AdaptedLadder, FeedbackLadder
-from snakes_and_ladders.search import mixture_starts
-from snakes_and_ladders.sim.emission_mixture import simulate_emission_mixture
-from snakes_and_ladders.sim.fixtures import fixture
+from sal.sample.schedule import AdaptedLadder, FeedbackLadder
+from sal.search import mixture_starts
+from sal.sim.emission_mixture import simulate_emission_mixture
+from sal.sim.fixtures import fixture
 
 from tests._posteriors import enumerated_quadrature, weight_posterior
 

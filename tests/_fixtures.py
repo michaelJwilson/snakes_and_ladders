@@ -1,7 +1,7 @@
 """Shared access to the tree fixtures of the problem registry.
 
 One spelling of the fixture location, per `DEV.md`'s Test Layout; the
-directory is the registry's (:mod:`snakes_and_ladders.sim.fixtures`), so the
+directory is the registry's (:mod:`sal.sim.fixtures`), so the
 suite and the figures agree. The Felsenstein- and Farris-zone trees (issue
 #209) live here because small- and large-parsimony tests score the same two.
 """
@@ -12,19 +12,19 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.sim import fixtures as registry
-from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.topology import leaf_bipartitions
-from snakes_and_ladders.sim.tree import Node
+from sal.fixtures import load_params
+from sal.sim import fixtures as registry
+from sal.sim.params import SimulationParams
+from sal.sim.simulator import simulate_tree
+from sal.sim.topology import leaf_bipartitions
+from sal.sim.tree import Node
 
 #: Where the fixtures live, re-exported from the registry so the suite and the
 #: figures cannot disagree about it.
 FIXTURES_DIR = registry.FIXTURES_DIR
 
 if TYPE_CHECKING:
-    from snakes_and_ladders.sim.params import SimulationParams
+    from sal.sim.params import SimulationParams
 
 # The fixtures every backend is exercised against, smallest first.
 SMALL_SITES = "tree_jc/ci.yaml"

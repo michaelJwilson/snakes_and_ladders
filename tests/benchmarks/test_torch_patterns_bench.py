@@ -24,17 +24,17 @@ import numpy as np
 import pytest
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.likelihood.objective import (
+from sal.likelihood.objective import (
     BranchLengthObjective,
     SubstitutionModelObjective,
 )
-from snakes_and_ladders.likelihood.pruning_torch import (
+from sal.likelihood.pruning_torch import (
     branch_lengths_from_tree,
     log_likelihood,
     transition_probabilities,
 )
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.tree import Node
+from sal.sim.simulator import simulate_tree
+from sal.sim.tree import Node
 
 from tests._fixtures import EIGHT_TAXA, load_fixture
 

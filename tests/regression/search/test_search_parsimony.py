@@ -17,20 +17,20 @@ from collections.abc import Mapping
 
 import numpy as np
 import pytest
-from snakes_and_ladders.likelihood.parsimony import (
+from sal.likelihood.parsimony import (
     fitch_score,
     sankoff_score,
     unit_step_matrix,
 )
-from snakes_and_ladders.search.infer import (
+from sal.search.infer import (
     ParsimonyInference,
     parsimony_search,
     score_topology,
 )
-from snakes_and_ladders.sim.newick import count_topologies
-from snakes_and_ladders.sim.simulate import simulate_alignment
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.topology import (
+from sal.sim.newick import count_topologies
+from sal.sim.simulate import simulate_alignment
+from sal.sim.simulator import simulate_tree
+from sal.sim.topology import (
     MoveSet,
     Topology,
     enumerate_topologies,

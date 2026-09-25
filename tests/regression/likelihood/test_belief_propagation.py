@@ -12,14 +12,14 @@ import math
 
 import numpy as np
 import pytest
-from snakes_and_ladders.likelihood.belief_propagation import (
+from sal.likelihood.belief_propagation import (
     ConvergenceError,
     belief_propagation,
 )
-from snakes_and_ladders.likelihood.potts import enumerate_potts, strip_log_partition
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
-from snakes_and_ladders.sim.potts import critical_coupling
+from sal.likelihood.potts import enumerate_potts, strip_log_partition
+from sal.sim.fixtures import fixture
+from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from sal.sim.potts import critical_coupling
 
 from tests._rows import every_row
 from tests.regression.likelihood.conftest import FIELD, TREE

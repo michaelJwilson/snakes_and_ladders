@@ -20,14 +20,14 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.likelihood.parsimony import (
+from sal.likelihood.parsimony import (
     fitch_score,
     sankoff_score,
     unit_step_matrix,
 )
-from snakes_and_ladders.sim.simulate import simulate_alignment
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.tree import Node
+from sal.sim.simulate import simulate_alignment
+from sal.sim.simulator import simulate_tree
+from sal.sim.tree import Node
 
 from tests._fixtures import EIGHT_TAXA, load_fixture
 

@@ -2,8 +2,8 @@ model: gaussian-mixture
 oracle: enumeration
 
 # The five-component Gaussian mixture of the seeding and tempering studies
-# (`snakes_and_ladders.qa.mixture_seeding`, experiment 004). Every field is
-# required -- see python/snakes_and_ladders/sim/mixture.py and sim/CLAUDE.md.
+# (`sal.qa.mixture_seeding`, experiment 004). Every field is
+# required -- see python/sal/sim/mixture.py and sim/CLAUDE.md.
 #
 # Adjacent means are 1.5 standard deviations apart: far enough that the
 # components are identifiable from 500 observations, close enough that the

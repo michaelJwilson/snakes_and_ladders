@@ -17,11 +17,11 @@ import numpy as np
 import pytest
 import torch
 import yaml
-from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.opt.budget import Budget
-from snakes_and_ladders.opt.objective import Objective
-from snakes_and_ladders.opt.starts import StartsBenchmark
-from snakes_and_ladders.search.ground_state import (
+from sal.cost import Cost
+from sal.opt.budget import Budget
+from sal.opt.objective import Objective
+from sal.opt.starts import StartsBenchmark
+from sal.search.ground_state import (
     METHODS,
     Rung,
     expansion_bracket,
@@ -29,8 +29,8 @@ from snakes_and_ladders.search.ground_state import (
     run_alpha_expansion,
     rung_field,
 )
-from snakes_and_ladders.search.icm import iterated_conditional_modes
-from snakes_and_ladders.search.potts_starts import (
+from sal.search.icm import iterated_conditional_modes
+from sal.search.potts_starts import (
     PottsObjective,
     SolverStart,
     binary_sibling,
@@ -39,8 +39,8 @@ from snakes_and_ladders.search.potts_starts import (
     rung_of,
     spatio_rung,
 )
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.potts import PottsLatticeParams, SpatioOnlyParams, energy
+from sal.sim.fixtures import fixture
+from sal.sim.potts import PottsLatticeParams, SpatioOnlyParams, energy
 
 #: A small rung of the same family: 8x8 at three states in the size tilt.
 SIDE = 8
@@ -175,7 +175,7 @@ def test_an_annealed_entry_is_described_by_its_function_and_move() -> None:
 
 @pytest.mark.smoke
 def test_the_adapter_refuses_what_it_cannot_read(tmp_path: Path) -> None:
-    from snakes_and_ladders.opt.mixture import GaussianMixtureObjective
+    from sal.opt.mixture import GaussianMixtureObjective
 
     rung = _small()
     objective = PottsObjective(rung)

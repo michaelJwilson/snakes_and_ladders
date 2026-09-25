@@ -16,11 +16,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.sample.potts_mcmc.sweeps import bond_probability
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
-from snakes_and_ladders.sim.potts import critical_coupling
-from snakes_and_ladders.validation import rustworkx
-from snakes_and_ladders.validation.runner import package
+from sal.sample.potts_mcmc.sweeps import bond_probability
+from sal.sim.graph import BoundaryCondition, lattice_graph
+from sal.sim.potts import critical_coupling
+from sal.validation import rustworkx
+from sal.validation.runner import package
 
 from tests._frameworks import requires
 

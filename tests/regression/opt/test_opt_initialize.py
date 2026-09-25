@@ -16,25 +16,25 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.opt.budget import Budget, Outcome, compare, restarts
-from snakes_and_ladders.opt.fit import fit, fit_from
-from snakes_and_ladders.opt.hmm import HmmObjective
-from snakes_and_ladders.opt.initialize import FromObjective, Perturbed, RandomRestart
-from snakes_and_ladders.opt.testfunctions import (
+from sal.cost import Cost
+from sal.opt.budget import Budget, Outcome, compare, restarts
+from sal.opt.fit import fit, fit_from
+from sal.opt.hmm import HmmObjective
+from sal.opt.initialize import FromObjective, Perturbed, RandomRestart
+from sal.opt.testfunctions import (
     HIMMELBLAU_MINIMA,
     Himmelblau,
     Rastrigin,
     Rosenbrock,
 )
-from snakes_and_ladders.sample import hmc
-from snakes_and_ladders.sample.initialize import (
+from sal.sample import hmc
+from sal.sample.initialize import (
     CHAIN_ADAPTATION,
     FromAnnealing,
     FromChain,
     FromTempering,
 )
-from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
+from sal.sample.schedule import ExponentialTempSchedule
 
 from tests._objective_checks import AnalyticGaussian
 
@@ -272,7 +272,7 @@ def test_a_multi_start_fit_refuses_no_workers() -> None:
 
 
 #: Distance counting as reaching a published minimizer: the six decimals of
-#: :data:`snakes_and_ladders.opt.testfunctions.HIMMELBLAU_MINIMA`.
+#: :data:`sal.opt.testfunctions.HIMMELBLAU_MINIMA`.
 PUBLISHED_TOLERANCE = 1e-5
 
 

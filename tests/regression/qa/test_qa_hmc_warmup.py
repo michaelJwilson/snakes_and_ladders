@@ -1,4 +1,4 @@
-"""Regression tests for snakes_and_ladders.qa.hmc_warmup.
+"""Regression tests for sal.qa.hmc_warmup.
 
 Refereed by closed forms. The target is ``tests._objective_checks``'s
 ``AnalyticGaussian``, the sampler tests' own; both chains are correct
@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.qa.hmc_warmup import (
+from sal.qa.hmc_warmup import (
     COVARIANCE,
     MEAN,
     N_SAMPLES,
@@ -29,7 +29,7 @@ from snakes_and_ladders.qa.hmc_warmup import (
     settling_draw,
     target,
 )
-from snakes_and_ladders.sample.hmc import effective_sample_size
+from sal.sample.hmc import effective_sample_size
 
 from tests._objective_checks import AnalyticGaussian
 

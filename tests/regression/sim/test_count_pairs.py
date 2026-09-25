@@ -17,9 +17,9 @@ import numpy as np
 import pytest
 import torch
 import yaml
-from snakes_and_ladders.emissions import BetaBinomialEmission, NegativeBinomialEmission
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.sim.count_pairs import (
+from sal.emissions import BetaBinomialEmission, NegativeBinomialEmission
+from sal.fixtures import load_params
+from sal.sim.count_pairs import (
     SUCCESSES,
     TOTAL,
     CountPairInstance,
@@ -29,9 +29,9 @@ from snakes_and_ladders.sim.count_pairs import (
     coarsen,
     planted_labels,
 )
-from snakes_and_ladders.sim.count_pairs_rust import binned_instance, fine_instance
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.spatio_sequential import circulant_transition
+from sal.sim.count_pairs_rust import binned_instance, fine_instance
+from sal.sim.fixtures import fixture
+from sal.sim.spatio_sequential import circulant_transition
 
 CI = "spatio_sequential_counts"
 

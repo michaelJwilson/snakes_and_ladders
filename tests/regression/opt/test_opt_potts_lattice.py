@@ -12,15 +12,15 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from snakes_and_ladders.opt.fit import constrained_standard_errors, covers, fit
-from snakes_and_ladders.opt.potts import (
+from sal.opt.fit import constrained_standard_errors, covers, fit
+from sal.opt.potts import (
     PottsLatticeObjective,
     graph_statistics,
     log_partition,
     log_partition_graph,
 )
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
-from snakes_and_ladders.sim.potts import simulate_potts
+from sal.sim.graph import BoundaryCondition, lattice_graph
+from sal.sim.potts import simulate_potts
 
 from tests._rows import every_value
 

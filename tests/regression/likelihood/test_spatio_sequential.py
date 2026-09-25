@@ -13,15 +13,15 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from snakes_and_ladders.likelihood.spatio_sequential import (
+from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
+from sal.likelihood.spatio_sequential import (
     conditional_state_posterior,
     enumerate_spatio_sequential,
     log_evidence_by_forward,
     log_joint_at,
 )
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.spatio_sequential import (
+from sal.sim.fixtures import fixture
+from sal.sim.spatio_sequential import (
     SimulatedSpatioSequential,
     SpatioSequentialParams,
     coupled_factor_graph,

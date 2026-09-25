@@ -14,16 +14,16 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from scipy.optimize import minimize
-from snakes_and_ladders.likelihood.potts import enumerate_potts, strip_log_partition
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
-from snakes_and_ladders.sim.potts import (
+from sal.likelihood.potts import enumerate_potts, strip_log_partition
+from sal.sim.fixtures import fixture
+from sal.sim.graph import BoundaryCondition, lattice_graph
+from sal.sim.potts import (
     SpatioOnlyParams,
     simulate_potts,
     site_field,
     spatio_only_field,
 )
+from scipy.optimize import minimize
 
 #: Deviation two exact routes may differ by: both sum the same weights in a
 #: different order, so the gap is the last bits of a float64 reduction.

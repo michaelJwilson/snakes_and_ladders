@@ -12,9 +12,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.emissions import CategoricalEmission
-from snakes_and_ladders.opt.hmm import baum_welch_family
-from snakes_and_ladders.sim.spatio_sequential import canonical_spatio_sequential
+from sal.emissions import CategoricalEmission
+from sal.opt.hmm import baum_welch_family
+from sal.sim.spatio_sequential import canonical_spatio_sequential
 
 _EMISSION = np.array([[0.85, 0.10, 0.05], [0.05, 0.10, 0.85]])
 _INITIAL = np.array([0.5, 0.5])

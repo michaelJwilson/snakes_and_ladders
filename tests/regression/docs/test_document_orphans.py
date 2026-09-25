@@ -57,7 +57,7 @@ def test_the_key_travels_one_way_and_the_textbook_names_no_code() -> None:
         source = (document_orphans.TEX_DIR / name).read_text()
         offenders = [
             needle
-            for needle in (r"(?<!\w)snakes_and_ladders(?!\w)", r"\.py", r"\\texttt\{")
+            for needle in (r"(?<!\w)sal(?!\w)", r"\.py", r"\\texttt\{")
             if re.search(needle, source)
         ]
         assert offenders == [], f"{name} names code: {offenders}"

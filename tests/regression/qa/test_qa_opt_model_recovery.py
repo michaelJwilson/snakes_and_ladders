@@ -1,4 +1,4 @@
-"""Regression test for snakes_and_ladders.qa.opt_model_recovery.
+"""Regression test for sal.qa.opt_model_recovery.
 
 Pins the numbers the script computes before matplotlib sees them
 (qa/CLAUDE.md), and in particular that the caption's coverage counts are the
@@ -10,7 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from snakes_and_ladders.qa.opt_model_recovery import (
+from sal.qa.opt_model_recovery import (
     SITES,
     TRUE_EXCHANGEABILITIES,
     TRUE_PI,
@@ -18,7 +18,7 @@ from snakes_and_ladders.qa.opt_model_recovery import (
     fit_model,
     truth_vector,
 )
-from snakes_and_ladders.sim.gtr import gtr_rate_matrix
+from sal.sim.gtr import gtr_rate_matrix
 
 from tests._fixtures import EIGHT_TAXA, load_fixture
 

@@ -3,7 +3,7 @@ oracle: enumeration
 
 # A bicycle code at the block length codeword enumeration reaches, matched to
 # the Gallager fixture beside it in length and in degrees. Every field is
-# required -- see python/snakes_and_ladders/sim/ldpc.py and sim/CLAUDE.md.
+# required -- see python/sal/sim/ldpc.py and sim/CLAUDE.md.
 #
 # The circulant has order 6 and first-row weight 3, so H0 = [A | A^T] has
 # column weight 3 and row weight 6: the degrees of the (3,6) fixture at the

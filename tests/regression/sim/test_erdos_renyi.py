@@ -11,12 +11,12 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.likelihood.belief_propagation import (
+from sal.likelihood.belief_propagation import (
     ConvergenceError,
     belief_propagation,
 )
-from snakes_and_ladders.likelihood.potts import enumerate_potts
-from snakes_and_ladders.sim.graph import PottsGraph, erdos_renyi_graph
+from sal.likelihood.potts import enumerate_potts
+from sal.sim.graph import PottsGraph, erdos_renyi_graph
 
 from tests._rows import every_value
 

@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.sim import fixtures
-from snakes_and_ladders.sim.hmm import simulate_sequences
-from snakes_and_ladders.sim.spatio_sequential import simulate_spatio_sequential
+from sal.sim import fixtures
+from sal.sim.hmm import simulate_sequences
+from sal.sim.spatio_sequential import simulate_spatio_sequential
 
 
 @pytest.mark.critical

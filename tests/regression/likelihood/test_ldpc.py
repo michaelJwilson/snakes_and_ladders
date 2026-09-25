@@ -15,7 +15,7 @@ from collections.abc import Callable, Mapping
 
 import numpy as np
 import pytest
-from snakes_and_ladders.likelihood.ldpc import (
+from sal.likelihood.ldpc import (
     Decoding,
     DecodingAlgorithm,
     MapEstimate,
@@ -25,14 +25,14 @@ from snakes_and_ladders.likelihood.ldpc import (
     erasure_threshold,
     exact_decoding,
 )
-from snakes_and_ladders.likelihood.message_passing import (
+from sal.likelihood.message_passing import (
     MessageScheduleName,
     max_product,
     sum_product,
 )
-from snakes_and_ladders.sim.factor_graph import from_parity_check
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.ldpc import (
+from sal.sim.factor_graph import from_parity_check
+from sal.sim.fixtures import fixture
+from sal.sim.ldpc import (
     LLR_CAP,
     BinaryErasureChannel,
     BinaryInputGaussianChannel,

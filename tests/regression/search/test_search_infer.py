@@ -1,8 +1,8 @@
 """Regression tests for topology search.
 
-Issue #63's claim: the same model-agnostic ``snakes_and_ladders.opt.fit``
+Issue #63's claim: the same model-agnostic ``sal.opt.fit``
 scores every candidate topology, with the discrete move outside it as an
-operation that builds a new objective. Nothing in ``snakes_and_ladders.opt``
+operation that builds a new objective. Nothing in ``sal.opt``
 changed to make that work, and the import-graph test in
 ``test_opt_objective.py`` still holds.
 
@@ -19,24 +19,24 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from snakes_and_ladders.likelihood import pruning_torch
-from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from snakes_and_ladders.likelihood.objective import BranchLengthObjective
-from snakes_and_ladders.likelihood.pruning_torch import (
+from sal.likelihood import pruning_torch
+from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
+from sal.likelihood.objective import BranchLengthObjective
+from sal.likelihood.pruning_torch import (
     PartialCache,
     branch_order,
     log_likelihood_cached,
 )
-from snakes_and_ladders.opt.fit import fit
-from snakes_and_ladders.search import infer as infer_module
-from snakes_and_ladders.search.infer import Inference, infer, score_topology
-from snakes_and_ladders.sim.newick import (
+from sal.opt.fit import fit
+from sal.search import infer as infer_module
+from sal.search.infer import Inference, infer, score_topology
+from sal.sim.newick import (
     count_topologies,
     to_newick,
     validate_unrooted_newick,
 )
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.topology import (
+from sal.sim.simulator import simulate_tree
+from sal.sim.topology import (
     Model,
     MoveSet,
     branch_splits,
@@ -44,7 +44,7 @@ from snakes_and_ladders.sim.topology import (
     nni_neighbours,
     random_topology,
 )
-from snakes_and_ladders.sim.tree import preorder
+from sal.sim.tree import preorder
 
 from tests._fixtures import EIGHT_TAXA, SMALL_SITES, load_fixture
 from tests._rows import every_value

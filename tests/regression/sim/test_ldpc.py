@@ -14,9 +14,9 @@ import math
 
 import numpy as np
 import pytest
-from snakes_and_ladders.likelihood.ldpc import enumerate_codewords
-from snakes_and_ladders.sim.factor_graph import from_parity_check
-from snakes_and_ladders.sim.ldpc import (
+from sal.likelihood.ldpc import enumerate_codewords
+from sal.sim.factor_graph import from_parity_check
+from sal.sim.ldpc import (
     LLR_CAP,
     MAX_ENCODABLE_BITS,
     BinaryErasureChannel,

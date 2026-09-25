@@ -17,10 +17,10 @@ import math
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.emissions import NegativeBinomialEmission
-from snakes_and_ladders.opt.hmm import baum_welch_family
-from snakes_and_ladders.ragged import Ragged
+from sal.backend import Backend
+from sal.emissions import NegativeBinomialEmission
+from sal.opt.hmm import baum_welch_family
+from sal.ragged import Ragged
 
 from tests._rows import every_value
 

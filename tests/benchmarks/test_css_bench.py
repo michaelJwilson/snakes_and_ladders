@@ -15,9 +15,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.likelihood.css import decode_succeeds, error_cosets
-from snakes_and_ladders.sim.css import CssCode
-from snakes_and_ladders.sim.ldpc import bicycle_code
+from sal.likelihood.css import decode_succeeds, error_cosets
+from sal.sim.css import CssCode
+from sal.sim.ldpc import bicycle_code
 
 FLIP = 0.05
 

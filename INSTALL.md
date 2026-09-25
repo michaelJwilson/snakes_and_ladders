@@ -63,7 +63,7 @@ install needs an external framework, and no package module imports one.
 The `validation-<framework>` extras (issue #972) each install one external
 framework the package is checked or timed against, and nothing imports one
 into the package process: its script under
-`python/snakes_and_ladders/validation/scripts/` runs in a subprocess. Sync one
+`python/sal/validation/scripts/` runs in a subprocess. Sync one
 with `uv sync --locked --extra test --extra validation-<name>`, or every one
 with `uv sync --locked --extra test $(python3 infra/validation_extras.py)`,
 then run `uv run pytest -m validation tests/validation`. Without its extra a
@@ -71,7 +71,7 @@ test there skips.
 
 `track` is the one extra with an advisory against it, and the one to sync
 deliberately. It installs `aim`, the optional store behind
-`snakes_and_ladders.track.Run` (issue #778). Nothing in the package imports
+`sal.track.Run` (issue #778). Nothing in the package imports
 it: `Run` is a Protocol written with `aim.Run`'s own signatures, so an Aim
 run is passed in and nothing is adapted, and the default run records nothing
 and needs nothing. PYSEC-2026-1087 and PYSEC-2026-1088 stand unfixed against
@@ -95,18 +95,18 @@ extension:
 pip install .
 ```
 
-This makes `snakes_and_ladders.oxisal` importable from Python: `double`, an example
+This makes `sal.oxisal` importable from Python: `double`, an example
 binding; `pruning_log_likelihood`, the Rust CPU Felsenstein pruning backend
-behind `snakes_and_ladders.likelihood.pruning_rust`; `sample_rows`, the categorical
-sampler behind `snakes_and_ladders.numerics_rust`, which `snakes_and_ladders.sim` and `snakes_and_ladders.opt` draw
+behind `sal.likelihood.pruning_rust`; `sample_rows`, the categorical
+sampler behind `sal.numerics_rust`, which `sal.sim` and `sal.opt` draw
 their fixtures through; and `max_flow` with `ising_ground_state`, the
-minimum-cut kernels behind `snakes_and_ladders.search.maxflow_rust`. Reinstall after
+minimum-cut kernels behind `sal.search.maxflow_rust`. Reinstall after
 editing anything under `src/`; the compiled module does not rebuild itself.
 
 One binding is not in that build. `pruning_gradient`, the `burn` taped
 gradient issue #449 measured and declined, sits behind the `sandbox` Cargo
 feature so the default install compiles no `burn` (34 crates in 37 s against
-102 in 86 s; `DEV.md`, Build System). `snakes_and_ladders.sandbox.pruning_burn`
+102 in 86 s; `DEV.md`, Build System). `sal.sandbox.pruning_burn`
 imports either way and refuses to run without it, and its tests skip. To run
 them, build with the feature:
 
@@ -134,7 +134,7 @@ does.
 gate, including coverage:
 
 ```
-pytest --cov=snakes_and_ladders --cov-report=term-missing --cov-fail-under=90
+pytest --cov=sal --cov-report=term-missing --cov-fail-under=90
 ```
 
 ## Checks CI will run
@@ -179,8 +179,8 @@ Open `docs/_build/html/index.html`. The `-W` flag turns warnings into errors,
 matching CI, so a broken docstring or cross-reference fails locally.
 
 The documents — the paper and the textbook — are LaTeX under `docs/tex/`. The
-`snakes_and_ladders.qa` scripts render the figures and tables they include
-(`snakes_and_ladders.qa.manifest` lists them), so building them regenerates the
+`sal.qa` scripts render the figures and tables they include
+(`sal.qa.manifest` lists them), so building them regenerates the
 cited ones before running `latexmk`; the applicability tables the textbook
 inputs are not committed and are written by `infra/problems_tables.py --write`,
 which `infra/build_documents.sh` runs for you:

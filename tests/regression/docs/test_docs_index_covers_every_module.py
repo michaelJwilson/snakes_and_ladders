@@ -2,7 +2,7 @@
 
 `sphinx-build -W` fails on a broken entry and never on an absent one
 (`docs/CLAUDE.md`). Repairs: #135 (fourteen entries), #154 (eighteen, all of
-`snakes_and_ladders.qa`), and five more when this test was written.
+`sal.qa`), and five more when this test was written.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ def _listed() -> set[str]:
 
 def _present() -> set[str]:
     modules = set()
-    for path in sorted((PACKAGE / "snakes_and_ladders").rglob("*.py")):
+    for path in sorted((PACKAGE / "sal").rglob("*.py")):
         if "__pycache__" in path.parts:
             continue
         relative = path.relative_to(PACKAGE)

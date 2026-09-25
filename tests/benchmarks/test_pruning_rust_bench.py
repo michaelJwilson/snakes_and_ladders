@@ -21,15 +21,15 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.learn.tree import with_uniform_branch_lengths
-from snakes_and_ladders.likelihood import pruning, pruning_rust
-from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.topology import random_topology
-from snakes_and_ladders.sim.tree import Node
+from sal.fixtures import load_params
+from sal.learn.tree import with_uniform_branch_lengths
+from sal.likelihood import pruning, pruning_rust
+from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
+from sal.sim.params import SimulationParams
+from sal.sim.simulate import simulate_alignment
+from sal.sim.simulator import simulate_tree
+from sal.sim.topology import random_topology
+from sal.sim.tree import Node
 
 from tests._fixtures import FIXTURES_DIR
 

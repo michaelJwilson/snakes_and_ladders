@@ -1,7 +1,7 @@
 //! The count families' M-step solves, ported from
-//! `python/snakes_and_ladders/emissions/mstep.py` (the batched `torch` solves, the
+//! `python/sal/emissions/mstep.py` (the batched `torch` solves, the
 //! oracle) to Rust, exposed to Python via PyO3 as
-//! `snakes_and_ladders.oxisal.negative_binomial_dispersions`
+//! `sal.oxisal.negative_binomial_dispersions`
 //! and `...beta_binomial_parameters` (issue #922).
 //!
 //! **The digamma differences are sums of reciprocals.** Every score term the

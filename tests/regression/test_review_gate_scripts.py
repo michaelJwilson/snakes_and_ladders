@@ -111,7 +111,7 @@ def test_the_seam_gate_sees_only_the_protocols_the_branch_adds(
 ) -> None:
     # A `Protocol` already on the base is not a new seam, and a plain class is
     # not a seam at all.
-    package = "python/snakes_and_ladders"
+    package = "python/sal"
     existing = "from typing import Protocol\n\n\nclass Old(Protocol):\n    pass\n"
     _repository(tmp_path, {f"{package}/opt/objective.py": existing})
     _commit(
@@ -144,7 +144,7 @@ def test_the_seam_gate_counts_the_modules_that_name_the_protocol(
     # the module declaring it never counts as one of them.
     sources = {
         "opt.objective": _declared("An objective."),
-        "a": "from snakes_and_ladders.opt.objective import New\n",
+        "a": "from sal.opt.objective import New\n",
         "b": "New\n",
         "c": "Newer\n",
     }

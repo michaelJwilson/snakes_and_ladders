@@ -18,9 +18,9 @@ from dataclasses import dataclass
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.emissions import GaussianEmission
-from snakes_and_ladders.opt.budget import (
+from sal.cost import Cost
+from sal.emissions import GaussianEmission
+from sal.opt.budget import (
     Budget,
     Comparison,
     Method,
@@ -28,17 +28,17 @@ from snakes_and_ladders.opt.budget import (
     compare,
     restarts,
 )
-from snakes_and_ladders.opt.fit import fit
-from snakes_and_ladders.opt.mixture import (
+from sal.opt.fit import fit
+from sal.opt.mixture import (
     GaussianMixtureObjective,
     MixtureFit,
     expectation_maximization,
     uniform_seeds,
 )
-from snakes_and_ladders.sample.hmc import anneal, leapfrog, parallel_tempering
-from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
-from snakes_and_ladders.sim import fixtures
-from snakes_and_ladders.sim.mixture import simulate_mixture
+from sal.sample.hmc import anneal, leapfrog, parallel_tempering
+from sal.sample.schedule import ExponentialTempSchedule
+from sal.sim import fixtures
+from sal.sim.mixture import simulate_mixture
 
 from tests._objective_checks import Counted
 

@@ -17,7 +17,7 @@ import numpy as np
 import pytest
 import torch
 from numpy.typing import NDArray
-from snakes_and_ladders.learn.canonical import (
+from sal.learn.canonical import (
     ChainMdp,
     CliffWalk,
     GridWorld,
@@ -27,13 +27,13 @@ from snakes_and_ladders.learn.canonical import (
     shortest_path_length,
     value_iteration,
 )
-from snakes_and_ladders.learn.critic import Critic, n_state_features
-from snakes_and_ladders.learn.environment import Environment
-from snakes_and_ladders.learn.exact import exact_optimal_value
-from snakes_and_ladders.learn.policy import LinearPolicy
-from snakes_and_ladders.learn.ppo import ppo
-from snakes_and_ladders.learn.reinforce import reinforce
-from snakes_and_ladders.learn.rollout import rollout
+from sal.learn.critic import Critic, n_state_features
+from sal.learn.environment import Environment
+from sal.learn.exact import exact_optimal_value
+from sal.learn.policy import LinearPolicy
+from sal.learn.ppo import ppo
+from sal.learn.reinforce import reinforce
+from sal.learn.rollout import rollout
 
 from tests._rows import every_value
 

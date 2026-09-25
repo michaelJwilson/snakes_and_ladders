@@ -1,4 +1,4 @@
-"""Regression tests for ``snakes_and_ladders.sim.newick``.
+"""Regression tests for ``sal.sim.newick``.
 
 Per root ``CLAUDE.md`` ("Pin to Independent Sources"), ``count_topologies``
 is checked against an independent brute-force enumeration rather than
@@ -15,8 +15,8 @@ from itertools import combinations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.sim.newick import (
+from sal.fixtures import load_params
+from sal.sim.newick import (
     _parse_newick,
     _parse_unrooted_newick,
     count_topologies,
@@ -24,9 +24,9 @@ from snakes_and_ladders.sim.newick import (
     validate_newick,
     validate_unrooted_newick,
 )
-from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.tree import Node, preorder
+from sal.sim.params import SimulationParams
+from sal.sim.simulator import simulate_tree
+from sal.sim.tree import Node, preorder
 
 from tests._fixtures import FIXTURES_DIR
 from tests._rows import every_row, every_value

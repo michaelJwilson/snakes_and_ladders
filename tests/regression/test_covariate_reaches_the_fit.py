@@ -13,11 +13,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.emissions import NegativeBinomialEmission
-from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from snakes_and_ladders.likelihood.spatio_sequential import class_log_density
-from snakes_and_ladders.opt.hmm import baum_welch_family
-from snakes_and_ladders.sim.spatio_sequential import (
+from sal.emissions import NegativeBinomialEmission
+from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
+from sal.likelihood.spatio_sequential import class_log_density
+from sal.opt.hmm import baum_welch_family
+from sal.sim.spatio_sequential import (
     canonical_spatio_sequential,
     gated_log_density,
 )
@@ -154,7 +154,7 @@ def test_the_spatial_seams_run_and_the_covariate_field_is_validated() -> None:
     """
     from dataclasses import replace
 
-    from snakes_and_ladders.sim.spatio_sequential import simulate_spatio_sequential
+    from sal.sim.spatio_sequential import simulate_spatio_sequential
 
     params = canonical_spatio_sequential()
     data = simulate_spatio_sequential(params, np.random.default_rng(3))

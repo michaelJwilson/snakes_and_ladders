@@ -3,7 +3,7 @@ oracle: none
 
 # A bicycle code at the block length the waterfall is visible at, matched to
 # the Gallager fixture beside it in length, degree and rate. Every field is
-# required -- see python/snakes_and_ladders/sim/ldpc.py.
+# required -- see python/sal/sim/ldpc.py.
 #
 # The density-evolution threshold refereeing the Gallager code at this length
 # is a property of that ensemble and does not transfer to this construction,

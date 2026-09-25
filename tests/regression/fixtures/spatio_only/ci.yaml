@@ -4,7 +4,7 @@ oracle: enumeration
 # The spatial half of the coupled model (issue #413): a Potts prior over M
 # class labels whose external field varies *per site*, driven by a declared
 # per-site covariate. Every field is required -- see
-# python/snakes_and_ladders/sim/potts.py and sim/CLAUDE.md.
+# python/sal/sim/potts.py and sim/CLAUDE.md.
 #
 # 3x3 at 3 classes is 3**9 = 19,683 configurations, so `log Z`, every
 # marginal and the covariate's effect on them are exact. The geometry,

@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import pytest
 import torch
-from snakes_and_ladders.likelihood import pruning_torch
-from snakes_and_ladders.sandbox import pruning_burn
+from sal.likelihood import pruning_torch
+from sal.sandbox import pruning_burn
 
 from tests._fixtures import SMALL_SITES, simulated_alignment
 

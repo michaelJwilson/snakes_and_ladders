@@ -15,16 +15,16 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.likelihood.brute_force import brute_force_log_likelihood
-from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from snakes_and_ladders.likelihood.objective import (
+from sal.backend import Backend
+from sal.likelihood.brute_force import brute_force_log_likelihood
+from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
+from sal.likelihood.objective import (
     BranchLengthObjective,
     SubstitutionModelObjective,
 )
-from snakes_and_ladders.opt.fit import fit
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.tree import Node
+from sal.opt.fit import fit
+from sal.sim.simulator import simulate_tree
+from sal.sim.tree import Node
 
 from tests._fixtures import EIGHT_TAXA, FOUR_TAXA, SMALL_SITES, load_fixture
 
@@ -93,7 +93,7 @@ def test_the_jax_value_is_the_brute_force_likelihood() -> None:
 def test_the_jax_gradient_passes_finite_differences() -> None:
     """``jax.test_util.check_grads`` on the compiled program, reverse mode."""
     from jax.test_util import check_grads
-    from snakes_and_ladders.likelihood import pruning_jax
+    from sal.likelihood import pruning_jax
 
     tau, k, pi, alignment = _alignment(SMALL_SITES, n_sites=200)
     objective = BranchLengthObjective(tau, k, pi, alignment)

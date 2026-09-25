@@ -10,9 +10,9 @@ from __future__ import annotations
 from dataclasses import fields
 
 import pytest
-from snakes_and_ladders.opt.hmm import CategoricalFit
-from snakes_and_ladders.opt.potts import GraphStatistics
-from snakes_and_ladders.opt.testfunctions import NearestMinimum
+from sal.opt.hmm import CategoricalFit
+from sal.opt.potts import GraphStatistics
+from sal.opt.testfunctions import NearestMinimum
 
 #: Every result type this package's share of the ticket names, one per
 #: entry point: no two of the three report the same fields.

@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import pytest
 import torch
-from snakes_and_ladders.emissions import BetaBinomialEmission
-from snakes_and_ladders.sandbox.count_emissions import (
+from sal.emissions import BetaBinomialEmission
+from sal.sandbox.count_emissions import (
     BetaBinomialEmission as Conserved,
 )
 

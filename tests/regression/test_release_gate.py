@@ -15,7 +15,7 @@ import shlex
 import subprocess
 
 import pytest
-from snakes_and_ladders.qa.manifest import FIGURES
+from sal.qa.manifest import FIGURES
 
 from tests._paths import REPO_ROOT
 
@@ -64,7 +64,7 @@ def test_the_gate_renders_every_figure_without_consulting_a_stamp() -> None:
     """
     _, command = _step_named("QA figures")
     assert command[:3] == ["uv", "run", "python"], command
-    assert "snakes_and_ladders.qa.build" in command
+    assert "sal.qa.build" in command
     assert "--all" in command, (
         "the release gate's figure step does not pass --all, so the stamps "
         "decide what it renders (issue #484)"
@@ -196,6 +196,6 @@ def test_release_md_bounds_the_figure_pass_above_the_manifest_s_total() -> None:
     assert bound >= total, (
         f"RELEASE.md bounds the figure pass at ~{match.group(1)} min, under "
         f"the {total:.1f} s the {len(FIGURES)} entries of "
-        "snakes_and_ladders.qa.manifest declare between them: the manifest has "
+        "sal.qa.manifest declare between them: the manifest has "
         "outgrown the stated bound (issue #525)"
     )

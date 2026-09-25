@@ -10,10 +10,10 @@ from __future__ import annotations
 from dataclasses import fields
 
 import pytest
-from snakes_and_ladders.sample.balanced import Change
-from snakes_and_ladders.sample.gibbs import TopologyStep
-from snakes_and_ladders.sample.hmc import Chain, PhaseSpace, Transition
-from snakes_and_ladders.sample.potts_mcmc import Clusters, PottsPair, TemperedModel
+from sal.sample.balanced import Change
+from sal.sample.gibbs import TopologyStep
+from sal.sample.hmc import Chain, PhaseSpace, Transition
+from sal.sample.potts_mcmc import Clusters, PottsPair, TemperedModel
 
 #: Every result type this package names. :class:`Transition` covers both
 #: kernels: `langevin._LangevinKernel` returns the one `hmc.Kernel` declares

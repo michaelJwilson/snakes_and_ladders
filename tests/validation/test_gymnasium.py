@@ -15,10 +15,10 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from snakes_and_ladders.learn.environment import Environment
-from snakes_and_ladders.learn.policy import LinearPolicy
-from snakes_and_ladders.learn.rollout import rollout
-from snakes_and_ladders.validation import gymnasium
+from sal.learn.environment import Environment
+from sal.learn.policy import LinearPolicy
+from sal.learn.rollout import rollout
+from sal.validation import gymnasium
 
 from tests._fixtures import FIXTURES_DIR
 from tests._frameworks import requires

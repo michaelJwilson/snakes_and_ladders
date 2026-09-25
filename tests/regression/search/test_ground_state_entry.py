@@ -11,15 +11,15 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.opt.budget import Budget
-from snakes_and_ladders.search.ground_state import (
+from sal.cost import Cost
+from sal.opt.budget import Budget
+from sal.search.ground_state import (
     METHODS,
     ground_state,
     lattice_rung,
 )
-from snakes_and_ladders.search.maxflow import ising_ground_state
-from snakes_and_ladders.sim.potts import energy
+from sal.search.maxflow import ising_ground_state
+from sal.sim.potts import energy
 
 
 @pytest.mark.critical

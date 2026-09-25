@@ -15,20 +15,20 @@ import numpy as np
 import pytest
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.emissions import (
+from sal.emissions import (
     BetaBinomialEmission,
     BinomialEmission,
     NegativeBinomialEmission,
     PoissonEmission,
 )
-from snakes_and_ladders.opt.hmm import (
+from sal.opt.hmm import (
     BetaBinomialHmmObjective,
     BinomialHmmObjective,
     NegativeBinomialHmmObjective,
     PoissonHmmObjective,
 )
-from snakes_and_ladders.sim import fixtures
-from snakes_and_ladders.sim.hmm import simulate_sequences
+from sal.sim import fixtures
+from sal.sim.hmm import simulate_sequences
 
 CountEmission = (
     PoissonEmission | BinomialEmission | NegativeBinomialEmission | BetaBinomialEmission

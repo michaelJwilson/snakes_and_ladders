@@ -18,18 +18,18 @@ from dataclasses import replace
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.bound import Bound, BoundViolation, Certificate, certify
-from snakes_and_ladders.learn.ranking import shuffle_children
-from snakes_and_ladders.likelihood.brute_force import brute_force_log_likelihood
-from snakes_and_ladders.likelihood.features import (
+from sal.bound import Bound, BoundViolation, Certificate, certify
+from sal.learn.ranking import shuffle_children
+from sal.likelihood.brute_force import brute_force_log_likelihood
+from sal.likelihood.features import (
     TREE_FEATURE_NAMES,
     tree_features,
     tree_tokens,
 )
-from snakes_and_ladders.likelihood.parsimony import fitch_score
-from snakes_and_ladders.likelihood.potts import enumerate_potts, log_weights
-from snakes_and_ladders.likelihood.pruning_torch import branch_order, log_likelihood
-from snakes_and_ladders.likelihood.surrogate import (
+from sal.likelihood.parsimony import fitch_score
+from sal.likelihood.potts import enumerate_potts, log_weights
+from sal.likelihood.pruning_torch import branch_order, log_likelihood
+from sal.likelihood.surrogate import (
     ParsimonyUpperBound,
     PlugInLikelihood,
     ground_state_energy_bounds,
@@ -41,13 +41,13 @@ from snakes_and_ladders.likelihood.surrogate import (
     site_fitch_scores,
     spanning_tree_log_partition,
 )
-from snakes_and_ladders.search.alpha_expansion import alpha_expansion
-from snakes_and_ladders.search.infer import score_topology
-from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
-from snakes_and_ladders.sim.jc import jc_transition_probabilities
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.topology import enumerate_topologies
-from snakes_and_ladders.sim.tree import Node, preorder
+from sal.search.alpha_expansion import alpha_expansion
+from sal.search.infer import score_topology
+from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from sal.sim.jc import jc_transition_probabilities
+from sal.sim.simulator import simulate_tree
+from sal.sim.topology import enumerate_topologies
+from sal.sim.tree import Node, preorder
 
 from tests._fixtures import FIXTURES_DIR, load_fixture
 from tests._rows import every_value

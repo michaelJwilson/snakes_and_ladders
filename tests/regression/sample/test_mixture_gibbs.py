@@ -12,13 +12,13 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from snakes_and_ladders.sample.mixture_gibbs import (
+from sal.sample.mixture_gibbs import (
     GaussianMixturePrior,
     exact_allocation_posterior,
     gibbs_gaussian_mixture,
 )
-from snakes_and_ladders.sample.relabel import permute_parameters, stephens
-from snakes_and_ladders.sample.statistics import chi_square_p_value
+from sal.sample.relabel import permute_parameters, stephens
+from sal.sample.statistics import chi_square_p_value
 
 #: The level a chi-square goodness-of-fit test rejects at, as the Potts
 #: samplers' tests use it.

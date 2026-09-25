@@ -12,9 +12,9 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.opt.budget import Budget, compare
-from snakes_and_ladders.search.projection import (
+from sal.cost import Cost
+from sal.opt.budget import Budget, compare
+from sal.search.projection import (
     DETERMINISTIC,
     LOCATION_SEEDINGS,
     SEEDINGS,
@@ -27,8 +27,8 @@ from snakes_and_ladders.search.projection import (
     flatten,
     project,
 )
-from snakes_and_ladders.sim.count_pairs import binned_model
-from snakes_and_ladders.sim.fixtures import fixture
+from sal.sim.count_pairs import binned_model
+from sal.sim.fixtures import fixture
 
 PROBLEM = "spatio_sequential_counts"
 

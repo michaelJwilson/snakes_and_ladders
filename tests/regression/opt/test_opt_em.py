@@ -14,8 +14,8 @@ from __future__ import annotations
 from collections.abc import Callable
 
 import pytest
-from snakes_and_ladders.opt.em import em_loop
-from snakes_and_ladders.opt.termination import Stop
+from sal.opt.em import em_loop
+from sal.opt.termination import Stop
 
 
 def _scripted(values: list[float]) -> Callable[[int], tuple[int, float]]:

@@ -20,11 +20,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.search.alpha_expansion import alpha_expansion
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
-from snakes_and_ladders.sim.potts import critical_coupling
-from snakes_and_ladders.validation import gco
+from sal.backend import Backend
+from sal.search.alpha_expansion import alpha_expansion
+from sal.sim.graph import BoundaryCondition, lattice_graph
+from sal.sim.potts import critical_coupling
+from sal.validation import gco
 
 from tests._frameworks import requires
 from tests.validation._goals import median_package

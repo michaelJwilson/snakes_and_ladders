@@ -20,14 +20,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.opt.budget import Budget
-from snakes_and_ladders.opt.emission_mixture import expectation_maximization
-from snakes_and_ladders.opt.fit import fit
-from snakes_and_ladders.opt.hmm import HmmObjective, baum_welch_family
-from snakes_and_ladders.opt.initialize import FromObjective, Perturbed, RandomRestart
-from snakes_and_ladders.opt.mixture import GaussianMixtureObjective
-from snakes_and_ladders.opt.starts import (
+from sal.cost import Cost
+from sal.opt.budget import Budget
+from sal.opt.emission_mixture import expectation_maximization
+from sal.opt.fit import fit
+from sal.opt.hmm import HmmObjective, baum_welch_family
+from sal.opt.initialize import FromObjective, Perturbed, RandomRestart
+from sal.opt.mixture import GaussianMixtureObjective
+from sal.opt.starts import (
     SolverComparison,
     StartsBenchmark,
     polish_by_baum_welch,
@@ -35,10 +35,10 @@ from snakes_and_ladders.opt.starts import (
     polish_by_fit,
     refuse_start,
 )
-from snakes_and_ladders.opt.testfunctions import Himmelblau
-from snakes_and_ladders.qa.figure import check_latex_safe
-from snakes_and_ladders.qa.starts import GAP_FLOOR, starts_figure, starts_latex
-from snakes_and_ladders.search.projection import (
+from sal.opt.testfunctions import Himmelblau
+from sal.qa.figure import check_latex_safe
+from sal.qa.starts import GAP_FLOOR, starts_figure, starts_latex
+from sal.search.projection import (
     CountPairAt,
     ProjectedObjective,
     SeedingStart,
@@ -48,8 +48,8 @@ from snakes_and_ladders.search.projection import (
     project,
     projected_recovery,
 )
-from snakes_and_ladders.sim.count_pairs import binned_model
-from snakes_and_ladders.sim.fixtures import fixture
+from sal.sim.count_pairs import binned_model
+from sal.sim.fixtures import fixture
 
 from tests._paths import REPO_ROOT
 from tests._rows import every_value

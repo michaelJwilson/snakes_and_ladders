@@ -27,11 +27,7 @@ def test_the_generated_file_names_no_code(generated: str) -> None:
     # The textbook inputs this file, and `docs/CLAUDE.md` forbids a module
     # path, a filename or a function call in the textbook.
     text = generated
-    assert [
-        needle
-        for needle in ("snakes_and_ladders.", ".py", "\\texttt{")
-        if needle in text
-    ] == []
+    assert [needle for needle in ("sal.", ".py", "\\texttt{") if needle in text] == []
 
 
 #: The one row whose tests name no oracle the tables can place. Its claimed
@@ -249,7 +245,7 @@ def test_the_declared_shapes_name_no_code() -> None:
     # text; this asserts nothing else got in. The package name is matched as
     # a word, being short enough to sit inside one (issue #1048).
     for title, tier, shape in problems_tables.fixture_rows():
-        assert not re.search(r"(?<!\w)snakes_and_ladders(?!\w)", shape), shape
+        assert not re.search(r"(?<!\w)sal(?!\w)", shape), shape
         for forbidden in (".py", ".yaml", "tests/"):
             assert forbidden not in shape, f"{title} / {tier} names code: {shape}"
 

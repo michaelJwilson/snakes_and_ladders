@@ -15,22 +15,22 @@ from itertools import product
 
 import numpy as np
 import pytest
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.likelihood import convolutional_rust
-from snakes_and_ladders.likelihood.convolutional import (
+from sal.backend import Backend
+from sal.likelihood import convolutional_rust
+from sal.likelihood.convolutional import (
     bcjr,
 )
-from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from snakes_and_ladders.likelihood.turbo import (
+from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
+from sal.likelihood.turbo import (
     split_streams,
 )
-from snakes_and_ladders.sim.convolutional import (
+from sal.sim.convolutional import (
     Trellis,
     recursive_systematic_trellis,
     turbo_encode,
 )
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.ldpc import BinaryInputGaussianChannel
+from sal.sim.fixtures import fixture
+from sal.sim.ldpc import BinaryInputGaussianChannel
 
 from tests._rows import every_row
 

@@ -17,10 +17,10 @@ from collections.abc import Callable
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.likelihood import pruning, pruning_rust, pruning_torch
-from snakes_and_ladders.likelihood.patterns import compress
-from snakes_and_ladders.likelihood.pruning_torch import branch_lengths_from_tree
-from snakes_and_ladders.sim.simulator import simulate_tree
+from sal.likelihood import pruning, pruning_rust, pruning_torch
+from sal.likelihood.patterns import compress
+from sal.likelihood.pruning_torch import branch_lengths_from_tree
+from sal.sim.simulator import simulate_tree
 
 from tests._fixtures import load_fixture
 

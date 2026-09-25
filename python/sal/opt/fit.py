@@ -1,0 +1,516 @@
+"""Gradient-based fitting, and the intervals that make a fit falsifiable.
+
+Model-agnostic: ``fit`` takes an
+:class:`~sal.opt.objective.Objective` and knows nothing about
+what it optimizes. ``opt/CLAUDE.md`` makes recovery the acceptance test, and
+recovery needs an interval, so the observed-information machinery lives here
+rather than in a test.
+
+**Convergence is judged relatively.** The objective is a summed
+log-likelihood, so both it and its gradient scale with the data; an absolute
+gradient threshold fixed at one fixture size does not transfer to another
+(``DEV.md``, issue #111). The criterion is the gradient's infinity norm
+against the objective's own magnitude.
+"""
+
+from __future__ import annotations
+
+import logging
+import time
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, replace
+
+import torch
+
+from sal.opt.initialize import Initializer
+from sal.opt.objective import Objective, value_and_gradient
+from sal.opt.termination import Termination
+from sal.parallel import Pool, map_tasks
+from sal.track import TrackedOptimization, current
+
+_log = logging.getLogger(__name__)
+
+# Two-sided normal quantile for a 95% interval. Written out rather than
+# imported from scipy: one constant does not justify a dependency.
+_Z_95 = 1.959963984540054
+
+# L-BFGS steps per outer iteration. More than one so the curvature history
+# accumulates; few enough that the convergence test below is checked often.
+_INNER_ITERATIONS = 20
+
+# Conditioning floor for the observed information; see parameter_covariance.
+_RCOND = 1e-6
+
+# How the starts of a multi-start fit run beside each other. Processes, not
+# threads: a fit is L-BFGS in Python that holds the GIL. The intra-op thread
+# count is left at the process default in workers and serial alike, so the two
+# runs reduce in the same order on one machine: pinning one thread per fit
+# slowed the serial fit 2.9x, because torch's intra-op parallelism over the
+# sites is the parallelism that pays here, and no pool reached 2x at 4
+# workers. STATUS.md carries the measurement (issue #344).
+_MULTI_START_BACKEND: Pool = "processes"
+_MULTI_START_INTRA_OP_THREADS: int | None = None
+
+
+@dataclass(frozen=True)
+class FitResult:
+    """Outcome of a fit.
+
+    Parameters
+    ----------
+    theta : torch.Tensor
+        Fitted unconstrained parameters.
+    value : float
+        Objective at ``theta``.
+    gradient_norm : float
+        Infinity norm of the gradient at ``theta``, relative to ``value`` --
+        the quantity the convergence test is stated against.
+    iterations : int
+        Optimizer steps taken.
+    converged : bool
+        Whether the relative gradient norm fell below the tolerance. A fit
+        that ran out of iterations is returned rather than raised, so a
+        caller can inspect it; every test here asserts this is ``True``.
+    standard_errors : Mapping[str, torch.Tensor] | None
+        Delta-method standard errors at ``theta`` under :meth:`constrain`'s
+        keys, when ``include_intervals`` asked for them. ``None`` means *not
+        requested*, never *refused*: a singular information raises instead.
+    termination : Termination | None
+        The same answer as ``converged`` and ``iterations``, in the form every
+        result states it in (issue #860). The two fields stay: they are what
+        this result has always been read by.
+    """
+
+    theta: torch.Tensor
+    value: float
+    gradient_norm: float
+    iterations: int
+    converged: bool
+    standard_errors: Mapping[str, torch.Tensor] | None = None
+    termination: Termination | None = None
+
+
+def fit(
+    objective: Objective,
+    theta0: torch.Tensor | None = None,
+    max_iterations: int = 500,
+    gradient_tolerance: float = 1e-8,
+    *,
+    include_intervals: bool = False,
+) -> FitResult:
+    """Minimize ``objective`` by L-BFGS with a strong-Wolfe line search.
+
+    L-BFGS rather than a first-order method because the acceptance test is
+    parameter recovery: an interval from the observed information is only
+    meaningful where the gradient is actually zero, and reaching that to nine
+    digits with Adam takes orders of magnitude more steps.
+
+    Parameters
+    ----------
+    objective : Objective
+        The objective to minimize.
+    theta0 : torch.Tensor | None
+        Starting point; ``objective.initial()`` when omitted.
+    max_iterations : int
+        Maximum optimizer steps.
+    gradient_tolerance : float
+        Convergence threshold on ``max|grad| / max(1, |value|)``.
+    include_intervals : bool
+        Also compute :func:`constrained_standard_errors` at the fit. Off by
+        default because a Hessian costs more than the fit inside a multi-start
+        or a search loop, where the interval is never read (issue #268).
+
+    Returns
+    -------
+    FitResult
+        The fitted parameters and the state of the convergence test.
+
+    Raises
+    ------
+    ValueError
+        If an interval was asked for and the fit did not converge: the
+        observed information is a statement about a maximum, and a point the
+        optimizer left early is not one. Without the flag the unconverged fit
+        is returned for inspection.
+    """
+    theta = (
+        (objective.initial() if theta0 is None else theta0)
+        .detach()
+        .clone()
+        .requires_grad_(True)
+    )
+    # tolerance_grad and tolerance_change are switched off deliberately.
+    # Their defaults (1e-7, 1e-9) are absolute, so L-BFGS would stop its
+    # inner loop on a summed log-likelihood long before the gradient is
+    # small relative to the objective -- the exact failure #111 describes,
+    # inside the optimizer rather than in a test. Convergence is decided
+    # below, once, by the relative criterion.
+    optimizer = torch.optim.LBFGS(
+        [theta],
+        max_iter=_INNER_ITERATIONS,
+        history_size=50,
+        line_search_fn="strong_wolfe",
+        tolerance_grad=0.0,
+        tolerance_change=0.0,
+    )
+
+    def closure() -> torch.Tensor:
+        # The objective's declared gradient where it has one (issue #1000),
+        # autograd otherwise; L-BFGS reads `theta.grad` either way.
+        value, gradient = value_and_gradient(objective, theta)
+        theta.grad = gradient
+        return value
+
+    # One lookup for the whole fit (`sal.track`), and one
+    # `record` per iteration: the numbers below are ones the loop already
+    # computes -- the objective L-BFGS returns from its own first evaluation,
+    # the relative norm the convergence test reads -- so a tracked fit costs
+    # the same arithmetic as an untracked one. `theta` is passed so a bound
+    # `Metrics` reports what the point means beside the value.
+    tracked: TrackedOptimization = current()
+    started = time.perf_counter()
+    iterations = 0
+    converged = False
+    while iterations < max_iterations:
+        iterations += 1
+        value = optimizer.step(closure)  # type: ignore[no-untyped-call]
+        gradient_norm = _relative_gradient_norm(objective, theta)
+        # `detach` because L-BFGS hands back the closure's loss, which
+        # carries a graph; reading it as a number must not look like a use.
+        tracked.record(
+            iterations - 1,
+            state=theta,
+            objective=float(value.detach()),
+            relative_gradient_norm=gradient_norm,
+            wall_s=time.perf_counter() - started,
+        )
+        if gradient_norm <= gradient_tolerance:
+            converged = True
+            break
+
+    result = FitResult(
+        theta=theta.detach(),
+        value=float(objective(theta.detach())),
+        gradient_norm=_relative_gradient_norm(objective, theta),
+        iterations=iterations,
+        converged=converged,
+        termination=Termination.after(iterations, converged=converged),
+    )
+    # The closing record is the result's own numbers, so the series ends
+    # where the fit does: the entries above are the objective and the norm
+    # *entering* each iteration, and the last iteration's outcome is here.
+    tracked.record(
+        iterations,
+        state=result.theta,
+        objective=result.value,
+        relative_gradient_norm=result.gradient_norm,
+        wall_s=time.perf_counter() - started,
+    )
+    tracked.record_cost(iterations, result.theta.nbytes)
+    _log.debug(
+        "fit %s after %d iterations at value %.6f, relative gradient norm %.2e",
+        "converged" if converged else "stopped",
+        iterations,
+        result.value,
+        result.gradient_norm,
+    )
+    return _with_intervals(objective, result) if include_intervals else result
+
+
+def _with_intervals(objective: Objective, result: FitResult) -> FitResult:
+    """``result`` carrying its interval, or a refusal where it has none."""
+    if not result.converged:
+        msg = (
+            "an interval was asked for at a point that is not an optimum: the "
+            f"fit did not converge in {result.iterations} iterations (relative "
+            f"gradient norm {result.gradient_norm:.2e})"
+        )
+        raise ValueError(msg)
+    return replace(
+        result, standard_errors=constrained_standard_errors(objective, result.theta)
+    )
+
+
+def _relative_gradient_norm(objective: Objective, theta: torch.Tensor) -> float:
+    value, gradient = value_and_gradient(objective, theta)
+    return float(gradient.abs().max()) / max(1.0, abs(float(value.detach())))
+
+
+def observed_information(objective: Objective, theta: torch.Tensor) -> torch.Tensor:
+    """Hessian of the objective at ``theta``.
+
+    The objective is a *negative* log-likelihood by this package's
+    convention, so its Hessian is the observed Fisher information directly,
+    with no sign flip.
+
+    Parameters
+    ----------
+    objective : Objective
+        The fitted objective.
+    theta : torch.Tensor
+        Point to evaluate at, normally a fitted ``FitResult.theta``.
+
+    Returns
+    -------
+    torch.Tensor
+        Square matrix of shape ``(len(theta), len(theta))``.
+    """
+    callable_objective: Callable[[torch.Tensor], torch.Tensor] = objective
+    information: torch.Tensor = torch.autograd.functional.hessian(  # type: ignore[no-untyped-call]
+        callable_objective, theta.detach()
+    )
+    return information
+
+
+def parameter_covariance(
+    objective: Objective, theta: torch.Tensor, rcond: float = _RCOND
+) -> torch.Tensor:
+    """Inverse observed information: the asymptotic covariance of ``theta``.
+
+    Conditioning is checked rather than left to ``torch.linalg.inv``. A model
+    with an exactly flat direction produces an information matrix that is only
+    *numerically* singular -- rounding leaves its smallest eigenvalue at 1e-4
+    rather than 0 -- so the inversion succeeds and returns an astronomically
+    large covariance instead of failing.
+
+    Parameters
+    ----------
+    objective : Objective
+        The fitted objective.
+    theta : torch.Tensor
+        Fitted parameters. Must be an optimum: away from one the Hessian
+        need not be positive definite, so a non-optimal point is rejected by
+        the same check that catches an unidentifiable model.
+    rcond : float
+        Smallest acceptable ratio of the smallest to the largest eigenvalue
+        of the observed information. The default separates the two cases by
+        four orders of magnitude on both sides: a phylogenetic tree whose two
+        root branches are confounded realizes 6.7e-08, while the same tree
+        with that pair merged realizes 6.1e-02 and an unrooted fixture
+        5.6e-02.
+
+    Returns
+    -------
+    torch.Tensor
+        Covariance matrix in the unconstrained coordinates.
+
+    Raises
+    ------
+    ValueError
+        If the information is singular, indefinite, or worse conditioned than
+        ``rcond``. All three mean the model as parameterized is not
+        identifiable from this data -- an unfixed gauge, a confounded pair of
+        parameters, or too small a sample -- and are reported as such rather
+        than as a linear-algebra error.
+    """
+    information = observed_information(objective, theta)
+    # Symmetric by construction, so eigvalsh is exact where a general
+    # eigensolver would introduce a spurious imaginary part.
+    eigenvalues = torch.linalg.eigvalsh(information)
+    smallest = float(eigenvalues.min())
+    largest = float(eigenvalues.max())
+    if largest <= 0.0 or smallest <= rcond * largest:
+        msg = (
+            f"observed information is not positive definite to within "
+            f"rcond={rcond:.0e} (eigenvalue ratio {smallest / largest:.2e}): "
+            f"the model is not identifiable from this data"
+        )
+        raise ValueError(msg)
+    covariance: torch.Tensor = torch.linalg.inv(information)
+    return covariance
+
+
+def constrained_standard_errors(
+    objective: Objective, theta: torch.Tensor
+) -> Mapping[str, torch.Tensor]:
+    """Delta-method standard errors of the *constrained* parameters.
+
+    Recovery is stated against the parameters a person named, so the
+    covariance is pushed through the constraint map:
+    ``Var(g(theta)) ~ J Sigma J'`` with ``J`` the Jacobian of ``g``.
+
+    Parameters
+    ----------
+    objective : Objective
+        The fitted objective.
+    theta : torch.Tensor
+        Fitted parameters.
+
+    Returns
+    -------
+    Mapping[str, torch.Tensor]
+        One tensor per constrained parameter, shaped like that parameter.
+    """
+    covariance = parameter_covariance(objective, theta)
+    point = theta.detach()
+    errors: dict[str, torch.Tensor] = {}
+    for name in objective.constrain(point):
+        jacobian = torch.autograd.functional.jacobian(  # type: ignore[no-untyped-call]
+            lambda t, key=name: objective.constrain(t)[key],
+            point,
+        )
+        flat = jacobian.reshape(-1, point.numel())
+        variance = ((flat @ covariance) * flat).sum(dim=1)
+        errors[name] = variance.clamp_min(0.0).sqrt().reshape(jacobian.shape[:-1])
+    return errors
+
+
+def standard_errors_at(
+    objective: Objective, named: Mapping[str, torch.Tensor]
+) -> Mapping[str, torch.Tensor]:
+    """Delta-method standard errors at a fit stated in the model's parameters.
+
+    The door every optimizer can use. :func:`constrained_standard_errors`
+    takes a ``theta``, which only a gradient fit has; this takes the
+    parameters themselves and carries them back through
+    :meth:`Objective.theta_from` (issue #268).
+
+    **The refusals are unchanged.** Three points are not maxima: a variance at
+    its floor, where the likelihood is unbounded; a dispersion at its
+    identifiable bound, where the likelihood is flat; and any point that is
+    not an optimum. :func:`parameter_covariance` refuses all three.
+
+    Parameters
+    ----------
+    objective : Objective
+        The objective the fit belongs to.
+    named : Mapping[str, torch.Tensor]
+        The fitted parameters, under :meth:`Objective.constrain`'s keys.
+
+    Returns
+    -------
+    Mapping[str, torch.Tensor]
+        One tensor per constrained parameter, shaped like that parameter.
+
+    Raises
+    ------
+    ValueError
+        If the observed information at that point is singular, indefinite or
+        worse conditioned than :func:`parameter_covariance` admits.
+    """
+    return constrained_standard_errors(objective, objective.theta_from(named))
+
+
+def covers(
+    estimate: torch.Tensor, standard_error: torch.Tensor, truth: torch.Tensor
+) -> torch.Tensor:
+    """Whether a 95% Wald interval around ``estimate`` contains ``truth``.
+
+    Parameters
+    ----------
+    estimate : torch.Tensor
+        Fitted constrained parameter.
+    standard_error : torch.Tensor
+        Its standard error, same shape.
+    truth : torch.Tensor
+        The generating value, same shape.
+
+    Returns
+    -------
+    torch.Tensor
+        Boolean tensor, elementwise.
+    """
+    half_width = _Z_95 * standard_error
+    return (truth >= estimate - half_width) & (truth <= estimate + half_width)
+
+
+@dataclass(frozen=True)
+class MultiStartResult:
+    """Every fit an initializer's starts produced, best first.
+
+    Parameters
+    ----------
+    best : FitResult
+        The lowest-valued fit. What a single-start caller would want.
+    all_fits : tuple[FitResult, ...]
+        Every fit, ordered by value ascending. Reported rather than discarded
+        because discarding them hides that the surface was multimodal ---
+        `test_a_converged_fit_on_rastrigin_is_not_a_global_minimum`'s case.
+    spread : float
+        ``max(value) - min(value)`` over the fits. Zero means every start
+        agreed, which is the evidence that one start would have sufficed;
+        anything else is the amount a single fit could have been wrong by.
+    termination : Termination | None
+        ``best``'s, since the best fit is what a single-start caller reads
+        (issue #860). Every start's own is on its own :class:`FitResult`,
+        which is where a multimodal surface is read from.
+    """
+
+    best: FitResult
+    all_fits: tuple[FitResult, ...]
+    spread: float
+    termination: Termination | None = None
+
+
+def _fit_start(task: tuple[Objective, torch.Tensor, int, float]) -> FitResult:
+    """One start of a multi-start fit, importable so a process pool can run it."""
+    objective, theta0, max_iterations, gradient_tolerance = task
+    return fit(objective, theta0, max_iterations, gradient_tolerance)
+
+
+def fit_from(
+    objective: Objective,
+    initializer: Initializer,
+    max_iterations: int = 500,
+    gradient_tolerance: float = 1e-8,
+    *,
+    workers: int,
+    include_intervals: bool = False,
+) -> MultiStartResult:
+    """Fit from every start an initializer offers, and report all of them.
+
+    A single-start initializer makes this exactly :func:`fit`:
+    `FromObjective` reproduces today's behaviour and `spread` is then 0.
+
+    Parameters
+    ----------
+    objective : Objective
+        What to minimize.
+    initializer : Initializer
+        Where to start. See `sal.opt.initialize`.
+    max_iterations : int
+        Passed to each fit.
+    gradient_tolerance : float
+        Passed to each fit.
+    workers : int
+        Starts fitted at once, through :func:`sal.parallel.map_tasks`
+        on a process pool; ``1`` is the serial loop. Explicit rather than
+        defaulted, so a run does not change with the machine, and bitwise
+        equal at every count because a start draws nothing and the workers
+        run at the intra-op thread count the serial run does. Measured under
+        2x at 4 workers at the mid-size tier (``STATUS.md`` §0), so callers
+        pass ``1`` until a measurement on their hardware says otherwise.
+    include_intervals : bool
+        Attach standard errors to ``best`` only --- one Hessian rather than
+        one per start. The interval is conditional on the mode ``best`` sits
+        in, and ``spread`` beside it says how much that matters.
+
+    Returns
+    -------
+    MultiStartResult
+        The best fit, every fit, and the spread across them.
+
+    Raises
+    ------
+    ValueError
+        If the initializer offers no starts, or ``workers`` is below one; the
+        first would otherwise surface as an empty ``min``.
+    """
+    starts = initializer.starts(objective)
+    if not starts:
+        msg = f"{type(initializer).__name__} offered no starting points"
+        raise ValueError(msg)
+
+    results = map_tasks(
+        _fit_start,
+        [(objective, theta0, max_iterations, gradient_tolerance) for theta0 in starts],
+        workers=workers,
+        backend=_MULTI_START_BACKEND,
+        intra_op_threads=_MULTI_START_INTRA_OP_THREADS,
+    )
+    ordered = tuple(sorted(results, key=lambda result: result.value))
+    spread = float(ordered[-1].value - ordered[0].value)
+    best = _with_intervals(objective, ordered[0]) if include_intervals else ordered[0]
+    return MultiStartResult(
+        best=best, all_fits=ordered, spread=spread, termination=best.termination
+    )

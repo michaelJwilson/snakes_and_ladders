@@ -42,56 +42,56 @@ import torch
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "infra"))
 
 from profile_harness import format_table, self_time_table
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.learn.policy import LinearPolicy
-from snakes_and_ladders.learn.potts import PottsEnvironment
-from snakes_and_ladders.learn.ranking import fixed_length_target, tree_examples
-from snakes_and_ladders.learn.reinforce import reinforce
-from snakes_and_ladders.learn.surrogate import MLPSurrogate, fit_surrogate
-from snakes_and_ladders.likelihood import pruning, pruning_rust, pruning_torch
-from snakes_and_ladders.likelihood.belief_propagation import belief_propagation
-from snakes_and_ladders.likelihood.convolutional import bcjr
-from snakes_and_ladders.likelihood.ldpc import DecodingAlgorithm, decode
-from snakes_and_ladders.likelihood.message_passing import (
+from sal.backend import Backend
+from sal.cost import Cost
+from sal.learn.policy import LinearPolicy
+from sal.learn.potts import PottsEnvironment
+from sal.learn.ranking import fixed_length_target, tree_examples
+from sal.learn.reinforce import reinforce
+from sal.learn.surrogate import MLPSurrogate, fit_surrogate
+from sal.likelihood import pruning, pruning_rust, pruning_torch
+from sal.likelihood.belief_propagation import belief_propagation
+from sal.likelihood.convolutional import bcjr
+from sal.likelihood.ldpc import DecodingAlgorithm, decode
+from sal.likelihood.message_passing import (
     MessageScheduleName,
     sum_product,
 )
-from snakes_and_ladders.likelihood.objective import BranchLengthObjective
-from snakes_and_ladders.likelihood.parsimony import fitch_score
-from snakes_and_ladders.likelihood.turbo import decode_turbo, noise_scale, split_streams
-from snakes_and_ladders.numerics import sample_rows
-from snakes_and_ladders.opt.budget import Budget, Outcome, compare
-from snakes_and_ladders.opt.fit import fit
-from snakes_and_ladders.opt.hmm import forward_log_likelihood_from_density
-from snakes_and_ladders.opt.potts import PottsObjective
-from snakes_and_ladders.sample import hmc
-from snakes_and_ladders.sample.gibbs import sample_factor_graph
-from snakes_and_ladders.sample.potts_keyed import SwendsenWangMove
-from snakes_and_ladders.sample.potts_mcmc import PottsMove, sample_potts
-from snakes_and_ladders.search.alpha_expansion import alpha_expansion
-from snakes_and_ladders.search.infer import infer
-from snakes_and_ladders.search.maxflow import ising_ground_state
-from snakes_and_ladders.sim import fixtures
-from snakes_and_ladders.sim.convolutional import turbo_code
-from snakes_and_ladders.sim.factor_graph import from_hmm, from_potts
-from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
-from snakes_and_ladders.sim.ldpc import (
+from sal.likelihood.objective import BranchLengthObjective
+from sal.likelihood.parsimony import fitch_score
+from sal.likelihood.turbo import decode_turbo, noise_scale, split_streams
+from sal.numerics import sample_rows
+from sal.opt.budget import Budget, Outcome, compare
+from sal.opt.fit import fit
+from sal.opt.hmm import forward_log_likelihood_from_density
+from sal.opt.potts import PottsObjective
+from sal.sample import hmc
+from sal.sample.gibbs import sample_factor_graph
+from sal.sample.potts_keyed import SwendsenWangMove
+from sal.sample.potts_mcmc import PottsMove, sample_potts
+from sal.search.alpha_expansion import alpha_expansion
+from sal.search.infer import infer
+from sal.search.maxflow import ising_ground_state
+from sal.sim import fixtures
+from sal.sim.convolutional import turbo_code
+from sal.sim.factor_graph import from_hmm, from_potts
+from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from sal.sim.ldpc import (
     BinarySymmetricChannel,
     all_zero_transmission,
     gallager_code,
 )
-from snakes_and_ladders.sim.potts import critical_coupling, energies
-from snakes_and_ladders.sim.potts_chain import PottsParams, simulate_chains
-from snakes_and_ladders.sim.simulate import simulate_alignment
-from snakes_and_ladders.sim.topology import (
+from sal.sim.potts import critical_coupling, energies
+from sal.sim.potts_chain import PottsParams, simulate_chains
+from sal.sim.simulate import simulate_alignment
+from sal.sim.topology import (
     MoveSet,
     Topology,
     enumerate_topologies,
     nni_neighbours,
     spr_neighbours,
 )
-from snakes_and_ladders.sim.tree import Node
+from sal.sim.tree import Node
 
 FIELD = np.array([0.3, -0.7, 0.15])
 Section = tuple[str, Callable[[], object], int]

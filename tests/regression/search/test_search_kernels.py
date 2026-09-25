@@ -3,7 +3,7 @@
 62 of `search/kernels.py`'s 71 statements sat behind `njit`, unseen by
 coverage; each kernel is entered through ``py_func`` and judged outside the
 package: :func:`factor_graph_log_density` against
-:func:`snakes_and_ladders.likelihood.potts.log_weights` and `enumerate_potts`
+:func:`sal.likelihood.potts.log_weights` and `enumerate_potts`
 on a 2x2 lattice; :func:`icm_sweeps` against enumeration where descent is
 exact, a hand-stepped two-node sweep, and a brute-forced local-minimum
 certificate; :func:`gibbs_sweep_sites` against the heat-bath conditional and
@@ -17,18 +17,18 @@ from itertools import product
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from snakes_and_ladders.likelihood.potts import enumerate_potts, log_weights
-from snakes_and_ladders.numerics import logsumexp
-from snakes_and_ladders.sample.gibbs import _GUARD, Indexed
-from snakes_and_ladders.sample.kernels import (
+from sal.likelihood.potts import enumerate_potts, log_weights
+from sal.numerics import logsumexp
+from sal.sample.gibbs import _GUARD, Indexed
+from sal.sample.kernels import (
     factor_graph_log_density,
     gibbs_sweep_sites,
 )
-from snakes_and_ladders.sample.statistics import chi_square_p_value
-from snakes_and_ladders.search.numba.icm import icm_sweeps
-from snakes_and_ladders.sim.factor_graph import from_potts
-from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
-from snakes_and_ladders.sim.potts import energies, site_field
+from sal.sample.statistics import chi_square_p_value
+from sal.search.numba.icm import icm_sweeps
+from sal.sim.factor_graph import from_potts
+from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from sal.sim.potts import energies, site_field
 
 #: The 2x2 open square in two states: 16 configurations, so an enumeration is
 #: the referee and a chi-square cell holds hundreds of counts at the chain

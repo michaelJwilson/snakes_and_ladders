@@ -11,9 +11,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.emissions import BetaBinomialEmission, NegativeBinomialEmission
-from snakes_and_ladders.opt.hmm import baum_welch_family
-from snakes_and_ladders.sim.count_pairs import IndependentCountPair
+from sal.emissions import BetaBinomialEmission, NegativeBinomialEmission
+from sal.opt.hmm import baum_welch_family
+from sal.sim.count_pairs import IndependentCountPair
 
 _TRIALS = 40.0
 _RATE = np.array([3.0, 12.0])

@@ -177,11 +177,11 @@ already failed.
 
 **The figure pass is minutes, and its cost is concentrated.** Two of the
 twenty-three figures are half of it and most of the rest are a few seconds each;
-`snakes_and_ladders.qa.manifest` carries the per-figure numbers and is the
+`sal.qa.manifest` carries the per-figure numbers and is the
 source, since a guard already reads them (`CITED_RENDER_CAP`). One thing to
 expect rather than compute: four `opt_*` figures degrade by up to ~80x on a busy
 host (issue #477), where everything else stays near its declared cost.
-`snakes_and_ladders.qa.build` strips `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`
+`sal.qa.build` strips `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`
 and `MKL_NUM_THREADS` from a render's environment, so a figure running a
 multi-threaded reduction degrades superlinearly on an oversubscribed host.
 

@@ -1,4 +1,4 @@
-"""Regression tests for snakes_and_ladders.qa.parsimony_zones.
+"""Regression tests for sal.qa.parsimony_zones.
 
 The figure's numbers are pinned against what produced them, not against the
 drawing: the zone gap against Fitch scores recomputed on the same alignment,
@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.likelihood.parsimony import brute_force_parsimony_score
-from snakes_and_ladders.qa.parsimony_zones import (
+from sal.fixtures import load_params
+from sal.likelihood.parsimony import brute_force_parsimony_score
+from sal.qa.parsimony_zones import (
     FARRIS_ZONE,
     FELSENSTEIN_ZONE,
     LONG_BRANCH_GROUPING,
@@ -23,9 +23,9 @@ from snakes_and_ladders.qa.parsimony_zones import (
     ranking,
     zone_gaps,
 )
-from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
-from snakes_and_ladders.sim.topology import leaf_bipartitions
+from sal.sim.params import SimulationParams
+from sal.sim.simulate import simulate_alignment
+from sal.sim.topology import leaf_bipartitions
 
 from tests._fixtures import FIXTURES_DIR
 

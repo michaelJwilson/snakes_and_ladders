@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import numpy as np
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.parallel import map_tasks
+from sal.parallel import map_tasks
 
 N_TASKS = 256
 

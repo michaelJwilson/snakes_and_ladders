@@ -14,8 +14,8 @@ from collections.abc import Mapping
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.sample.hmc import effective_sample_size
-from snakes_and_ladders.sample.slice import (
+from sal.sample.hmc import effective_sample_size
+from sal.sample.slice import (
     MAX_SHRINKAGES,
     SliceDirection,
     slice_sample,

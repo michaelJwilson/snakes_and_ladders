@@ -10,20 +10,20 @@ from __future__ import annotations
 from dataclasses import fields
 
 import pytest
-from snakes_and_ladders.likelihood.blocks import Extremes
-from snakes_and_ladders.likelihood.distance import DistanceMatrix, TreeDistances
-from snakes_and_ladders.likelihood.features import Adjacency
-from snakes_and_ladders.likelihood.forward_backward import StepKernels
-from snakes_and_ladders.likelihood.hadamard import Spectrum
-from snakes_and_ladders.likelihood.message_passing import _Run
-from snakes_and_ladders.likelihood.message_passing_rust import TreeMessages
-from snakes_and_ladders.likelihood.ragged_rust import Posteriors
-from snakes_and_ladders.likelihood.schedule import UpwardMessageSchedule
-from snakes_and_ladders.likelihood.spatio_sequential_rust import (
+from sal.likelihood.blocks import Extremes
+from sal.likelihood.distance import DistanceMatrix, TreeDistances
+from sal.likelihood.features import Adjacency
+from sal.likelihood.forward_backward import StepKernels
+from sal.likelihood.hadamard import Spectrum
+from sal.likelihood.message_passing import _Run
+from sal.likelihood.message_passing_rust import TreeMessages
+from sal.likelihood.ragged_rust import Posteriors
+from sal.likelihood.schedule import UpwardMessageSchedule
+from sal.likelihood.spatio_sequential_rust import (
     EmissionRows,
     EmissionTables,
 )
-from snakes_and_ladders.likelihood.surrogate import EnergyBounds
+from sal.likelihood.surrogate import EnergyBounds
 
 #: Every result type the ticket names, including the private one `_run`
 #: returns: it is unpacked by its two callers and by a test, so its order is

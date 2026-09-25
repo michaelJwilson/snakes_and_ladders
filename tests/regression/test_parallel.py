@@ -19,8 +19,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders import parallel
-from snakes_and_ladders.parallel import BACKENDS, Pool, map_tasks
+from sal import parallel
+from sal.parallel import BACKENDS, Pool, map_tasks
 
 WORKERS = (1, 4)
 
@@ -254,7 +254,7 @@ _PROBE = """
 import sys
 
 import _bodies
-from snakes_and_ladders.parallel import map_tasks
+from sal.parallel import map_tasks
 
 backend = sys.argv[1]
 workers = 1 if backend == "serial" else 2

@@ -21,7 +21,7 @@ import pytest
 from tests._paths import REPO_ROOT
 
 FIXTURES = REPO_ROOT / "tests" / "regression" / "fixtures"
-PACKAGE = "snakes_and_ladders."
+PACKAGE = "sal."
 
 
 def _resolves(symbol: str) -> bool:

@@ -18,15 +18,15 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.likelihood.convolutional import bcjr
-from snakes_and_ladders.likelihood.turbo import (
+from sal.backend import Backend
+from sal.likelihood.convolutional import bcjr
+from sal.likelihood.turbo import (
     decode_turbo,
     noise_scale,
     split_streams,
 )
-from snakes_and_ladders.sim import fixtures
-from snakes_and_ladders.sim.convolutional import TurboCode, turbo_code
+from sal.sim import fixtures
+from sal.sim.convolutional import TurboCode, turbo_code
 
 #: The declared turbo instance (`turbo/stress.yaml`), read rather than restated
 #: (issue #622): the (7, 5) generators, memory 2 and seed 233 below are its

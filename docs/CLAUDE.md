@@ -16,7 +16,7 @@ module. It is referenced here, never restated. What follows is local.
 
 `tex/` is two documents, their shared bibliography, notation and preamble, the
 hand-drawn sketches the problem statements input, and the figures, tables and
-captions `snakes_and_ladders.qa` generates; a table ships as a fragment a
+captions `sal.qa` generates; a table ships as a fragment a
 document includes rather than as an image, so it matches the surrounding type.
 `source/` is Sphinx, built from the docstrings. `nb/` is one notebook per
 problem class, each running the application from a seeded fixture to a learned

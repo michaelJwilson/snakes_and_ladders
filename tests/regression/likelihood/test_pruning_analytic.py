@@ -18,11 +18,11 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from snakes_and_ladders.likelihood import pruning_analytic, pruning_torch
-from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from snakes_and_ladders.likelihood.patterns import compress
-from snakes_and_ladders.sandbox import pruning_burn
-from snakes_and_ladders.sim.tree import Node
+from sal.likelihood import pruning_analytic, pruning_torch
+from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
+from sal.likelihood.patterns import compress
+from sal.sandbox import pruning_burn
+from sal.sim.tree import Node
 
 from tests._fixtures import EIGHT_TAXA, SMALL_SITES, simulated_alignment
 

@@ -10,14 +10,14 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.qa.backend_agreement import (
+from sal.fixtures import load_params
+from sal.qa.backend_agreement import (
     BACKENDS,
     SITE_COUNTS,
     agreement,
     build_figure,
 )
-from snakes_and_ladders.sim.params import SimulationParams
+from sal.sim.params import SimulationParams
 
 from tests._fixtures import FIXTURES_DIR
 

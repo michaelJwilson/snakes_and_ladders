@@ -13,12 +13,12 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.fixtures import Scale
-from snakes_and_ladders.search.alpha_expansion import Labelling
-from snakes_and_ladders.search.icm import iterated_conditional_modes
-from snakes_and_ladders.sim.canonical import FrustratedLatticeParams, PlantedSpinGlass
-from snakes_and_ladders.sim.fixtures import Baseline, baseline, fixture
-from snakes_and_ladders.sim.potts import energy
+from sal.fixtures import Scale
+from sal.search.alpha_expansion import Labelling
+from sal.search.icm import iterated_conditional_modes
+from sal.sim.canonical import FrustratedLatticeParams, PlantedSpinGlass
+from sal.sim.fixtures import Baseline, baseline, fixture
+from sal.sim.potts import energy
 
 PROBLEM, TIER = "planted_glass", Scale.CI
 #: Zero field: the difficulty is in the couplings, not in a site preference.

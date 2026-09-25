@@ -16,19 +16,19 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from snakes_and_ladders.likelihood.potts import strip_log_partition
-from snakes_and_ladders.opt.constrain import log_simplex
-from snakes_and_ladders.opt.potts import (
+from sal.fixtures import load_params
+from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
+from sal.likelihood.potts import strip_log_partition
+from sal.opt.constrain import log_simplex
+from sal.opt.potts import (
     PottsObjective,
     log_partition,
     log_partition_by_recursion,
     log_partition_by_squaring,
     squaring_is_cheaper,
 )
-from snakes_and_ladders.sim.graph import BoundaryCondition
-from snakes_and_ladders.sim.potts_chain import PottsParams, simulate_chains
+from sal.sim.graph import BoundaryCondition
+from sal.sim.potts_chain import PottsParams, simulate_chains
 
 from tests._fixtures import FIXTURES_DIR
 from tests._objective_checks import assert_gradient_matches_finite_differences

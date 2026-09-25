@@ -54,7 +54,7 @@ from pathlib import Path
 from _paths import REPO_ROOT
 
 CRATE_ROOT = REPO_ROOT / "src"
-PACKAGE_ROOT = REPO_ROOT / "python" / "snakes_and_ladders"
+PACKAGE_ROOT = REPO_ROOT / "python" / "sal"
 TESTS_ROOT = REPO_ROOT / "tests"
 
 #: The crate the bindings are imported from, as every adapter spells it.
@@ -143,23 +143,21 @@ def _test_modules(root: Path = TESTS_ROOT) -> dict[str, str]:
 
 
 def _package_imports(source: str) -> set[str]:
-    """Every ``snakes_and_ladders`` module a source file imports, dotted."""
+    """Every ``sal`` module a source file imports, dotted."""
     found: set[str] = set()
     try:
         tree = ast.parse(source)
     except SyntaxError:  # pragma: no cover - a parse failure is a lint failure
         return found
     for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and (node.module or "").startswith(
-            "snakes_and_ladders"
-        ):
-            module = (node.module or "").removeprefix("snakes_and_ladders").lstrip(".")
+        if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("sal"):
+            module = (node.module or "").removeprefix("sal").lstrip(".")
             found.add(module)
             found.update(f"{module}.{alias.name}".lstrip(".") for alias in node.names)
         elif isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name.startswith("snakes_and_ladders"):
-                    found.add(alias.name.removeprefix("snakes_and_ladders").lstrip("."))
+                if alias.name.startswith("sal"):
+                    found.add(alias.name.removeprefix("sal").lstrip("."))
     return found
 
 

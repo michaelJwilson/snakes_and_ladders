@@ -17,11 +17,11 @@ from __future__ import annotations
 
 import numpy as np
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.learn.exact import exact_policy_gradient
-from snakes_and_ladders.learn.policy import LinearPolicy
-from snakes_and_ladders.learn.potts import PottsEnvironment
-from snakes_and_ladders.learn.reinforce import reinforce
-from snakes_and_ladders.learn.rollout import rollout
+from sal.learn.exact import exact_policy_gradient
+from sal.learn.policy import LinearPolicy
+from sal.learn.potts import PottsEnvironment
+from sal.learn.reinforce import reinforce
+from sal.learn.rollout import rollout
 
 _COUPLING = 0.75
 _FIELD = np.array([0.4, -0.1, -0.3])

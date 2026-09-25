@@ -15,12 +15,12 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.emissions import (
+from sal.emissions import (
     BetaBinomialEmission,
     CovariateNotSupportedError,
     NegativeBinomialEmission,
 )
-from snakes_and_ladders.sim.count_pairs import IndependentCountPair
+from sal.sim.count_pairs import IndependentCountPair
 
 #: The declared trial count. It is also the *neutral* covariate for the
 #: successes channel, which is the asymmetry this module exists to pin.

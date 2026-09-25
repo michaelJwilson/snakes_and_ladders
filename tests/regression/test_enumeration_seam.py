@@ -14,7 +14,7 @@ from collections.abc import Callable
 
 import numpy as np
 import pytest
-from snakes_and_ladders.enumeration import (
+from sal.enumeration import (
     MAX_ENUMERABLE_CONFIGURATIONS,
     argmax,
     configurations,
@@ -22,9 +22,9 @@ from snakes_and_ladders.enumeration import (
     posterior,
     site_marginals,
 )
-from snakes_and_ladders.learn.hmm import enumerate_paths
-from snakes_and_ladders.learn.potts import enumerate_configurations
-from snakes_and_ladders.numerics import logsumexp
+from sal.learn.hmm import enumerate_paths
+from sal.learn.potts import enumerate_configurations
+from sal.numerics import logsumexp
 
 from tests._rows import every_row
 

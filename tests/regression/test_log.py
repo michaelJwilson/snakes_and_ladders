@@ -13,7 +13,7 @@ import io
 import logging
 
 import pytest
-from snakes_and_ladders.log import RunLogger, get_logger, phase
+from sal.log import RunLogger, get_logger, phase
 
 
 def _logger(name: str, stream: io.StringIO, ticks: list[float]) -> RunLogger:

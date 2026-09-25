@@ -9,7 +9,7 @@ than discarded: the Python and Rust paths run the same problem at the same
 sizes, so the ratio is visible in one table rather than asserted in prose.
 
 The Rust path is timed twice, as `DEV.md` asks of every port: once through
-`snakes_and_ladders.search.maxflow_rust`, which is what a caller pays, and once
+`sal.search.maxflow_rust`, which is what a caller pays, and once
 on the extension with its arrays already built, which is the kernel plus the
 borrow at the boundary. Their difference is the wrapper's own work; issue
 #336 measured it and found the energy evaluation, not the boundary.
@@ -23,14 +23,14 @@ from collections.abc import Callable
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders import oxisal
-from snakes_and_ladders.sandbox import maxflow_declined
-from snakes_and_ladders.sandbox.maxflow_declined import DeclinedKernel
-from snakes_and_ladders.search import maxflow_rust
-from snakes_and_ladders.search.maxflow import GroundState, ising_ground_state
-from snakes_and_ladders.sim import fixtures
-from snakes_and_ladders.sim.graph import PottsGraph, lattice_graph
-from snakes_and_ladders.sim.potts import site_field
+from sal import oxisal
+from sal.sandbox import maxflow_declined
+from sal.sandbox.maxflow_declined import DeclinedKernel
+from sal.search import maxflow_rust
+from sal.search.maxflow import GroundState, ising_ground_state
+from sal.sim import fixtures
+from sal.sim.graph import PottsGraph, lattice_graph
+from sal.sim.potts import site_field
 
 # The Python blocking flow recurses to the depth of the level graph; the Rust
 # one uses an explicit stack. This raise is itself part of what the port buys.

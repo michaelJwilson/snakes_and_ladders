@@ -60,7 +60,7 @@ exercises, so none of them defines one.
 | Mixture of two-channel count emissions | `emission_mixture` | `sec:emissionmixture` | `sim.emission_mixture`, `opt.emission_mixture` |
 | Continuous test functions | `test_functions` | `sec:testfunctions` | `opt.testfunctions` |
 
-Every symbol above is rooted at `snakes_and_ladders`;
+Every symbol above is rooted at `sal`;
 `tests/regression/test_problems_catalogue.py` resolves each one, so a row
 cannot outlive what it names. Every key is a directory under
 `tests/regression/fixtures/`, and `tests/regression/test_fixture_registry.py`

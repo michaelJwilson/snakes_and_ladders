@@ -14,9 +14,9 @@ import shutil
 from pathlib import Path
 
 import pytest
-from snakes_and_ladders.qa import build, manifest
-from snakes_and_ladders.qa.build import UncitedFigureError, compare, selected
-from snakes_and_ladders.qa.manifest import FIGURES, cited_stems
+from sal.qa import build, manifest
+from sal.qa.build import UncitedFigureError, compare, selected
+from sal.qa.manifest import FIGURES, cited_stems
 
 from tests._scale import stress_only
 

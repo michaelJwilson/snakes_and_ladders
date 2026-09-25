@@ -13,10 +13,10 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.likelihood.convolutional import bcjr
-from snakes_and_ladders.likelihood.ldpc import MapEstimate
-from snakes_and_ladders.likelihood.turbo import (
+from sal.backend import Backend
+from sal.likelihood.convolutional import bcjr
+from sal.likelihood.ldpc import MapEstimate
+from sal.likelihood.turbo import (
     ErrorRates,
     decode_turbo,
     decode_turbo_per_iteration,
@@ -26,9 +26,9 @@ from snakes_and_ladders.likelihood.turbo import (
     split_streams,
     uncoded_bit_error_rate,
 )
-from snakes_and_ladders.sim.convolutional import TurboCode, TurboParams, turbo_encode
-from snakes_and_ladders.sim.fixtures import Fixture, fixture
-from snakes_and_ladders.sim.ldpc import BinaryInputGaussianChannel
+from sal.sim.convolutional import TurboCode, TurboParams, turbo_encode
+from sal.sim.fixtures import Fixture, fixture
+from sal.sim.ldpc import BinaryInputGaussianChannel
 
 #: Bounds the iteration's bit error rate by this times the exact MAP's; measured
 #: 1.26, 1.66, 1.74, 3.20 over the four CI points (K = 12): a bound on the gap.

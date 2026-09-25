@@ -18,10 +18,10 @@ import numpy as np
 import pytest
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.opt.testfunctions import Rosenbrock
-from snakes_and_ladders.sample import metropolis
-from snakes_and_ladders.validation import blackjax
-from snakes_and_ladders.validation.gaussian import GaussianTarget, diagonal_precision
+from sal.opt.testfunctions import Rosenbrock
+from sal.sample import metropolis
+from sal.validation import blackjax
+from sal.validation.gaussian import GaussianTarget, diagonal_precision
 
 from tests._frameworks import requires
 from tests.validation._goals import median_package

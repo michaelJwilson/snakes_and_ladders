@@ -1,7 +1,7 @@
 //! The E step of the coupled spatio-sequential model, ported from
-//! `python/snakes_and_ladders/likelihood/spatio_sequential.py` (the NumPy
+//! `python/sal/likelihood/spatio_sequential.py` (the NumPy
 //! oracle) to Rust, exposed to Python via PyO3 as
-//! `snakes_and_ladders.oxisal.class_posteriors` and
+//! `sal.oxisal.class_posteriors` and
 //! `...external_field`.
 //!
 //! **What the port is for.** At the declared 5,041-vertex instance
@@ -27,7 +27,7 @@
 //! across `M x K` lines one stride apart.
 //!
 //! **The observations are walked position-major.** They cross the boundary in
-//! the `(S, n_nodes)` layout `snakes_and_ladders.sim` already holds them in,
+//! the `(S, n_nodes)` layout `sal.sim` already holds them in,
 //! and the loops run position outer, vertex inner, so both count arrays are
 //! read in stride order. The live accumulator is then one `(M, K)` block per
 //! position, which stays in L1 at every declared size; a vertex-major walk

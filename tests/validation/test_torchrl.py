@@ -14,12 +14,12 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.learn import ppo
-from snakes_and_ladders.learn.policy import LinearPolicy
-from snakes_and_ladders.learn.potts import PottsEnvironment
-from snakes_and_ladders.learn.reinforce import surrogate_loss
-from snakes_and_ladders.learn.rollout import rollout
-from snakes_and_ladders.validation import torchrl
+from sal.learn import ppo
+from sal.learn.policy import LinearPolicy
+from sal.learn.potts import PottsEnvironment
+from sal.learn.reinforce import surrogate_loss
+from sal.learn.rollout import rollout
+from sal.validation import torchrl
 
 from tests._frameworks import requires
 from tests.regression.learn.conftest import potts_environment

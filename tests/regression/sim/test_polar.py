@@ -15,10 +15,10 @@ from itertools import pairwise
 import numpy as np
 import pytest
 import yaml
-from snakes_and_ladders.likelihood.ldpc import enumerate_codewords
-from snakes_and_ladders.likelihood.polar import decode_sc
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.polar import (
+from sal.likelihood.ldpc import enumerate_codewords
+from sal.likelihood.polar import decode_sc
+from sal.sim.fixtures import fixture
+from sal.sim.polar import (
     KERNEL,
     MAX_DENSE_LENGTH,
     PolarCode,

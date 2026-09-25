@@ -17,7 +17,7 @@ import pytest
 
 from tests._paths import REPO_ROOT
 
-PACKAGE = REPO_ROOT / "python" / "snakes_and_ladders"
+PACKAGE = REPO_ROOT / "python" / "sal"
 GENERATED = REPO_ROOT / "docs" / "tex" / "generated" / "api_map.tex"
 
 

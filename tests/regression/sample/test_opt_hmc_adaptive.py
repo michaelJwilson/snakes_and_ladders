@@ -6,7 +6,7 @@ Arithmetic first: dual averaging is Hoffman & Gelman's line for line
 autocorrelation time. Then: acceptance lands at target, adapted and fixed
 chains agree within Monte Carlo error, and cost per draw in gradients is
 reported (issue #333). On a locally quadratic target acceptance is a cliff in
-the step (:class:`~snakes_and_ladders.sample.hmc.Adaptation`); the jitter and
+the step (:class:`~sal.sample.hmc.Adaptation`); the jitter and
 gain come from that measurement, and what they achieve is pinned.
 """
 
@@ -18,11 +18,11 @@ from collections.abc import Mapping
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.likelihood.objective import BranchLengthObjective
-from snakes_and_ladders.opt.fit import fit, standard_errors_at
-from snakes_and_ladders.opt.objective import Objective
-from snakes_and_ladders.sample.chain import _DualAveraging, _Scaled
-from snakes_and_ladders.sample.hmc import (
+from sal.likelihood.objective import BranchLengthObjective
+from sal.opt.fit import fit, standard_errors_at
+from sal.opt.objective import Objective
+from sal.sample.chain import _DualAveraging, _Scaled
+from sal.sample.hmc import (
     DUAL_AVERAGING_GAMMA,
     DUAL_AVERAGING_KAPPA,
     DUAL_AVERAGING_T0,
@@ -34,7 +34,7 @@ from snakes_and_ladders.sample.hmc import (
     leapfrog,
     sample,
 )
-from snakes_and_ladders.sim.simulator import simulate_tree
+from sal.sim.simulator import simulate_tree
 
 from tests._fixtures import FOUR_TAXA, load_fixture
 from tests._posteriors import GAUSSIAN

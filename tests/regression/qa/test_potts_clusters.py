@@ -12,18 +12,18 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.opt.budget import Budget
-from snakes_and_ladders.opt.starts import StartsBenchmark
-from snakes_and_ladders.qa.potts_clusters import (
+from sal.cost import Cost
+from sal.opt.budget import Budget
+from sal.opt.starts import StartsBenchmark
+from sal.qa.potts_clusters import (
     DIAGNOSIS_ROWS,
     POLISH,
     arms,
     load,
 )
-from snakes_and_ladders.qa.potts_schedule import TUNING_SEEDS, release_rung
-from snakes_and_ladders.qa.potts_schedule import load as load_tuned
-from snakes_and_ladders.search.potts_starts import PottsObjective, polish_by_icm
+from sal.qa.potts_schedule import TUNING_SEEDS, release_rung
+from sal.qa.potts_schedule import load as load_tuned
+from sal.search.potts_starts import PottsObjective, polish_by_icm
 
 
 @pytest.mark.smoke

@@ -17,15 +17,15 @@ from collections.abc import Mapping
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.emissions import ParameterDomainError
-from snakes_and_ladders.likelihood.mixture_assignments import (
+from sal.emissions import ParameterDomainError
+from sal.likelihood.mixture_assignments import (
     enumerate_mixture_assignments,
 )
-from snakes_and_ladders.opt.constrain import log_simplex
-from snakes_and_ladders.opt.objective import Objective
-from snakes_and_ladders.opt.potts import PottsObjective
-from snakes_and_ladders.sample import hmc
-from snakes_and_ladders.sample.hmc import (
+from sal.opt.constrain import log_simplex
+from sal.opt.objective import Objective
+from sal.opt.potts import PottsObjective
+from sal.sample import hmc
+from sal.sample.hmc import (
     YOSHIDA_WEIGHTS,
     Integrator,
     WithGaussianPrior,
@@ -37,16 +37,16 @@ from snakes_and_ladders.sample.hmc import (
     sample,
     yoshida,
 )
-from snakes_and_ladders.sample.schedule import (
+from sal.sample.schedule import (
     ConstantTempSchedule,
     ExponentialTempSchedule,
 )
-from snakes_and_ladders.sample.tempered import (
+from sal.sample.tempered import (
     round_trip_time,
     round_trips,
     up_fraction,
 )
-from snakes_and_ladders.sim.potts_chain import PottsParams, simulate_chains
+from sal.sim.potts_chain import PottsParams, simulate_chains
 
 from tests._objective_checks import Counted
 from tests._posteriors import (

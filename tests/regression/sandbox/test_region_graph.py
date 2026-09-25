@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.likelihood.belief_propagation import ConvergenceError
-from snakes_and_ladders.likelihood.message_passing import Marginals, sum_product
-from snakes_and_ladders.likelihood.potts import enumerate_potts
-from snakes_and_ladders.sandbox.region_graph import (
+from sal.likelihood.belief_propagation import ConvergenceError
+from sal.likelihood.message_passing import Marginals, sum_product
+from sal.likelihood.potts import enumerate_potts
+from sal.sandbox.region_graph import (
     RegionGraph,
     bethe_region_graph,
     generalized_belief_propagation,
@@ -21,8 +21,8 @@ from snakes_and_ladders.sandbox.region_graph import (
     lattice_plaquettes,
     region_graph,
 )
-from snakes_and_ladders.sim.factor_graph import FactorGraph, from_potts
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+from sal.sim.factor_graph import FactorGraph, from_potts
+from sal.sim.graph import BoundaryCondition, lattice_graph
 
 FIELD = np.log(np.array([0.5, 0.3, 0.2]))
 
@@ -157,7 +157,7 @@ def test_a_region_graph_that_counts_a_variable_twice_is_refused() -> None:
     # clusters whose intersection is not among the regions count the shared
     # variables twice. The closure is what prevents it, so the test builds the
     # unclosed collection by hand.
-    from snakes_and_ladders.sandbox.region_graph import Region
+    from sal.sandbox.region_graph import Region
 
     graph = _graph((2, 2), 0.6)
     both = tuple(sorted(v.name for v in graph.variables))

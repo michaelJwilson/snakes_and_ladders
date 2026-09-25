@@ -16,17 +16,17 @@ import pytest
 import torch
 from numpy.testing import assert_allclose
 from numpy.typing import ArrayLike
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.emissions import GaussianEmission, Reestimate
-from snakes_and_ladders.likelihood.mixture_assignments import (
+from sal.backend import Backend
+from sal.cost import Cost
+from sal.emissions import GaussianEmission, Reestimate
+from sal.likelihood.mixture_assignments import (
     enumerate_mixture_assignments,
 )
-from snakes_and_ladders.opt.budget import Budget, Outcome, compare
-from snakes_and_ladders.opt.fit import fit
-from snakes_and_ladders.opt.hmm import align_by_key
-from snakes_and_ladders.opt.initialize import Initializer
-from snakes_and_ladders.opt.mixture import (
+from sal.opt.budget import Budget, Outcome, compare
+from sal.opt.fit import fit
+from sal.opt.hmm import align_by_key
+from sal.opt.initialize import Initializer
+from sal.opt.mixture import (
     GaussianMixtureObjective,
     KMeansPlusPlus,
     clustering_cost,
@@ -38,9 +38,9 @@ from snakes_and_ladders.opt.mixture import (
     seeding_guarantee,
     uniform_seeds,
 )
-from snakes_and_ladders.opt.potts import PottsObjective
-from snakes_and_ladders.sim.mixture import MixtureParams, simulate_mixture
-from snakes_and_ladders.sim.potts_chain import PottsParams, simulate_chains
+from sal.opt.potts import PottsObjective
+from sal.sim.mixture import MixtureParams, simulate_mixture
+from sal.sim.potts_chain import PottsParams, simulate_chains
 
 from tests._objective_checks import assert_gradient_matches_finite_differences
 from tests._rows import every_value

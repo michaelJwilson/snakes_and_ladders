@@ -11,12 +11,12 @@ three claims left the per-pull-request tier (issue #401).
 
 So the numbers are computed once and committed, and a test reads them:
 ``<problem>/<tier>.baseline.json`` beside the fixture, written here and read by
-``snakes_and_ladders.sim.fixtures.baseline``, which refuses a record whose
+``sal.sim.fixtures.baseline``, which refuses a record whose
 digest is not the current tree's.
 
 **Where the recomputation went.** Per pull request nothing here runs; the
 release gate runs ``infra/baselines.py`` with no flag, recomputing every record
-and failing on any drift --- the trade ``snakes_and_ladders.qa.build`` states
+and failing on any drift --- the trade ``sal.qa.build`` states
 for figures, for the same reason: a cached number no test recomputes is a claim
 with no referee, and one recomputed on every pull request costs the seconds the
 tier move removed. The digest closes the gap: a change to the fixture, to the
@@ -56,22 +56,22 @@ from typing import Any
 
 import numpy as np
 from _paths import REPO_ROOT
-from snakes_and_ladders.fixtures import Scale
-from snakes_and_ladders.inputs import library_versions, module_closure
-from snakes_and_ladders.learn.exact import exact_expected_return
-from snakes_and_ladders.learn.policy import LinearPolicy
-from snakes_and_ladders.learn.potts import (
+from sal.fixtures import Scale
+from sal.inputs import library_versions, module_closure
+from sal.learn.exact import exact_expected_return
+from sal.learn.policy import LinearPolicy
+from sal.learn.potts import (
     PottsEnvironment,
     enumerate_configurations,
     optimum,
 )
-from snakes_and_ladders.learn.ranking import maximized_target
-from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
-from snakes_and_ladders.learn.tree import FeatureSet, RewardModel, TreeEnvironment
-from snakes_and_ladders.likelihood.potts import log_weights
-from snakes_and_ladders.log import get_logger, phase
-from snakes_and_ladders.search.icm import iterated_conditional_modes
-from snakes_and_ladders.sim.fixtures import (
+from sal.learn.ranking import maximized_target
+from sal.learn.rollout import greedy_rollout, rollout
+from sal.learn.tree import FeatureSet, RewardModel, TreeEnvironment
+from sal.likelihood.potts import log_weights
+from sal.log import get_logger, phase
+from sal.search.icm import iterated_conditional_modes
+from sal.sim.fixtures import (
     BASELINE_LIBRARIES,
     Baseline,
     Fixture,
@@ -83,11 +83,11 @@ from snakes_and_ladders.sim.fixtures import (
     read_baseline,
     write_baseline,
 )
-from snakes_and_ladders.sim.graph import PottsGraph
-from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
-from snakes_and_ladders.sim.topology import MoveSet, Topology, enumerate_topologies
-from snakes_and_ladders.sim.tree import edges
+from sal.sim.graph import PottsGraph
+from sal.sim.params import SimulationParams
+from sal.sim.simulate import simulate_alignment
+from sal.sim.topology import MoveSet, Topology, enumerate_topologies
+from sal.sim.tree import edges
 
 # The relative tolerance a recorded value from an iterative optimiser is
 # recomputed to (issue #527). `maximized_log_likelihood` is 45 L-BFGS fits, and
@@ -508,11 +508,11 @@ class BaselineSpec:
 #: What the tree policy measurements reach: the environment, the rollouts and
 #: the enumeration that referees them, and the simulator that makes the data.
 _TREE_POLICY_MODULES = (
-    "snakes_and_ladders.learn.policy",
-    "snakes_and_ladders.learn.rollout",
-    "snakes_and_ladders.learn.tree",
-    "snakes_and_ladders.sim.topology",
-    "snakes_and_ladders.sim.simulate",
+    "sal.learn.policy",
+    "sal.learn.rollout",
+    "sal.learn.tree",
+    "sal.sim.topology",
+    "sal.sim.simulate",
 )
 
 SPECS: tuple[BaselineSpec, ...] = (
@@ -532,8 +532,8 @@ SPECS: tuple[BaselineSpec, ...] = (
         problem="tree_search",
         tier=Scale.CI,
         modules=(
-            "snakes_and_ladders.learn.ranking",
-            "snakes_and_ladders.sim.simulate",
+            "sal.learn.ranking",
+            "sal.sim.simulate",
         ),
         compute=tree_surrogate_baseline,
     ),
@@ -541,9 +541,9 @@ SPECS: tuple[BaselineSpec, ...] = (
         problem="planted_glass",
         tier=Scale.CI,
         modules=(
-            "snakes_and_ladders.likelihood.potts",
-            "snakes_and_ladders.search.icm",
-            "snakes_and_ladders.sim.canonical",
+            "sal.likelihood.potts",
+            "sal.search.icm",
+            "sal.sim.canonical",
         ),
         compute=planted_glass_baseline,
     ),
@@ -551,10 +551,10 @@ SPECS: tuple[BaselineSpec, ...] = (
         problem="potts_chain",
         tier=Scale.CI,
         modules=(
-            "snakes_and_ladders.learn.exact",
-            "snakes_and_ladders.learn.policy",
-            "snakes_and_ladders.learn.potts",
-            "snakes_and_ladders.learn.rollout",
+            "sal.learn.exact",
+            "sal.learn.policy",
+            "sal.learn.potts",
+            "sal.learn.rollout",
         ),
         compute=potts_environment_baseline,
     ),

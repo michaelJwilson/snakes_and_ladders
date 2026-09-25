@@ -13,7 +13,7 @@ import itertools
 import math
 
 import pytest
-from snakes_and_ladders.sample.schedule import (
+from sal.sample.schedule import (
     CosineTempSchedule,
     ExponentialTempSchedule,
     HeldTempSchedule,

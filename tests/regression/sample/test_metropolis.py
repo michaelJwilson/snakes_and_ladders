@@ -16,12 +16,12 @@ from collections.abc import Callable
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.opt.testfunctions import Rosenbrock
-from snakes_and_ladders.sample import hmc, metropolis
-from snakes_and_ladders.sample.declared import Power
-from snakes_and_ladders.sample.expectation import KalmanMean
-from snakes_and_ladders.validation.gaussian import GaussianTarget, diagonal_precision
+from sal.backend import Backend
+from sal.opt.testfunctions import Rosenbrock
+from sal.sample import hmc, metropolis
+from sal.sample.declared import Power
+from sal.sample.expectation import KalmanMean
+from sal.validation.gaussian import GaussianTarget, diagonal_precision
 
 from tests._posteriors import assert_gaussian_moments
 

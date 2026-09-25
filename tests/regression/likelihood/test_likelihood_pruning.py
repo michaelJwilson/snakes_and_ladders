@@ -1,8 +1,8 @@
-"""Regression tests for ``snakes_and_ladders.likelihood.pruning``.
+"""Regression tests for ``sal.likelihood.pruning``.
 
 Four independent checks per issue #62: brute force at ``n <= 6`` taxa to
 machine precision, per route in ``ROUTES``
-(``snakes_and_ladders.likelihood.brute_force``); rescaled against unrescaled
+(``sal.likelihood.brute_force``); rescaled against unrescaled
 (after ``eq:pruning``); the pulley principle, JC being reversible
 (``test_jc_simulate.py``); and the generating topology outscoring ``N`` random
 wrong ones at sufficient sites.
@@ -16,11 +16,11 @@ from dataclasses import replace
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from snakes_and_ladders.likelihood.brute_force import brute_force_log_likelihood
-from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from snakes_and_ladders.likelihood.pruning import log_likelihood
-from snakes_and_ladders.sim.simulate import simulate_alignment
-from snakes_and_ladders.sim.tree import Node, preorder
+from sal.likelihood.brute_force import brute_force_log_likelihood
+from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
+from sal.likelihood.pruning import log_likelihood
+from sal.sim.simulate import simulate_alignment
+from sal.sim.tree import Node, preorder
 
 from tests._fixtures import SMALL_SITES, load_fixture, simulated_alignment
 from tests.regression.likelihood.conftest import ROUTES, Route

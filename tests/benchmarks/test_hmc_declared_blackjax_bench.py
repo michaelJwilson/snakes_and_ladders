@@ -18,9 +18,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.validation import blackjax
-from snakes_and_ladders.validation.gaussian import diagonal_precision
-from snakes_and_ladders.validation.runner import package
+from sal.validation import blackjax
+from sal.validation.gaussian import diagonal_precision
+from sal.validation.runner import package
 
 from tests._frameworks import requires
 

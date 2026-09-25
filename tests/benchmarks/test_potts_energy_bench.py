@@ -24,12 +24,12 @@ import math
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.likelihood.potts import log_weights
-from snakes_and_ladders.search.ground_state import N_REPLICAS
-from snakes_and_ladders.search.potts_starts import spatio_rung
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
-from snakes_and_ladders.sim.potts import energies
+from sal.likelihood.potts import log_weights
+from sal.search.ground_state import N_REPLICAS
+from sal.search.potts_starts import spatio_rung
+from sal.sim.fixtures import fixture
+from sal.sim.graph import BoundaryCondition, lattice_graph
+from sal.sim.potts import energies
 
 EXTENT = 32
 CONFIGURATIONS = 64
@@ -86,7 +86,7 @@ def test_log_weights_on_one_configuration_benchmark(
 ) -> None:
     """One configuration, the shape the annealing loop scores per sweep (#598).
 
-    :func:`~snakes_and_ladders.sample.potts_mcmc.anneal_potts` calls this once
+    :func:`~sal.sample.potts_mcmc.anneal_potts` calls this once
     a step, so a per-edge Python loop here is paid once per edge per sweep.
     """
     graph = lattice_graph((extent, extent), BoundaryCondition.PERIODIC, 1.0)

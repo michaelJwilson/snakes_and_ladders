@@ -1,4 +1,4 @@
-"""Regression test for snakes_and_ladders.qa.opt_coverage.
+"""Regression test for sal.qa.opt_coverage.
 
 The figure's claim is that the intervals converge on their nominal rate as
 the sample grows. Refitting at every size is what the document
@@ -11,8 +11,8 @@ somebody typed.
 from __future__ import annotations
 
 import pytest
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.qa.opt_coverage import (
+from sal.fixtures import load_params
+from sal.qa.opt_coverage import (
     HMM_SIZES,
     NOMINAL,
     POTTS_SIZES,
@@ -20,8 +20,8 @@ from snakes_and_ladders.qa.opt_coverage import (
     hmm_coverage,
     potts_coverage,
 )
-from snakes_and_ladders.sim.hmm import HmmParams
-from snakes_and_ladders.sim.potts_chain import PottsParams
+from sal.sim.hmm import HmmParams
+from sal.sim.potts_chain import PottsParams
 
 from tests._fixtures import FIXTURES_DIR
 

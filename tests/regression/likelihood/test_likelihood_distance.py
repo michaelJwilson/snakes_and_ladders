@@ -14,7 +14,7 @@ from itertools import product
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from snakes_and_ladders.likelihood.distance import (
+from sal.likelihood.distance import (
     DistanceKind,
     distance_matrix,
     jukes_cantor_distance,
@@ -23,13 +23,13 @@ from snakes_and_ladders.likelihood.distance import (
     pair_counts,
     tree_distances,
 )
-from snakes_and_ladders.sim.gtr import (
+from sal.sim.gtr import (
     gtr_rate_matrix,
     reversible_transition_probabilities,
 )
-from snakes_and_ladders.sim.jc import jc_transition_probabilities
-from snakes_and_ladders.sim.simulate import simulate_alignment
-from snakes_and_ladders.sim.tree import Node
+from sal.sim.jc import jc_transition_probabilities
+from sal.sim.simulate import simulate_alignment
+from sal.sim.tree import Node
 
 from tests._fixtures import EIGHT_TAXA, FOUR_TAXA, load_fixture
 from tests._rows import every_row, every_value

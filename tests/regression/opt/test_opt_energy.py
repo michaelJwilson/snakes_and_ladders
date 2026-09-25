@@ -14,10 +14,10 @@ from collections.abc import Callable
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.opt.objective import DeclaredEnergy, Objective, energy_of
-from snakes_and_ladders.opt.testfunctions import Rastrigin, Rosenbrock
-from snakes_and_ladders.sample.chain import _Scaled
-from snakes_and_ladders.validation.gaussian import (
+from sal.opt.objective import DeclaredEnergy, Objective, energy_of
+from sal.opt.testfunctions import Rastrigin, Rosenbrock
+from sal.sample.chain import _Scaled
+from sal.validation.gaussian import (
     GaussianTarget,
     dense_precision,
     diagonal_precision,

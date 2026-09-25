@@ -2,7 +2,7 @@ model: ldpc
 oracle: closed-form
 
 # The (3,6) Gallager code at the block length the thresholds are visible at.
-# Every field is required -- see python/snakes_and_ladders/sim/ldpc.py.
+# Every field is required -- see python/sal/sim/ldpc.py.
 #
 # 996 bits is long enough that the measured erasure and error curves turn at
 # the density-evolution thresholds -- 0.4294 on the erasure channel

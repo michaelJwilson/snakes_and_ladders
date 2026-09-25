@@ -18,10 +18,10 @@ import itertools
 
 import numpy as np
 import pytest
-from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.opt.budget import Budget
-from snakes_and_ladders.sample.schedule import ScheduleParams, ScheduleShape
-from snakes_and_ladders.search.ground_state import (
+from sal.cost import Cost
+from sal.opt.budget import Budget
+from sal.sample.schedule import ScheduleParams, ScheduleShape
+from sal.search.ground_state import (
     ANNEALED,
     ARMS,
     METHODS,
@@ -30,9 +30,9 @@ from snakes_and_ladders.search.ground_state import (
     ground_state,
     rung_field,
 )
-from snakes_and_ladders.search.potts_starts import spatio_rung
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.potts import SpatioOnlyParams, energy
+from sal.search.potts_starts import spatio_rung
+from sal.sim.fixtures import fixture
+from sal.sim.potts import SpatioOnlyParams, energy
 
 #: The notebook's reported seeds.
 SEEDS = (0, 1, 2, 3, 4)

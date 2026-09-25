@@ -1,4 +1,4 @@
-"""Validation-error paths for ``snakes_and_ladders.likelihood``, route by route.
+"""Validation-error paths for ``sal.likelihood``, route by route.
 
 The guardrails around malformed inputs, one body per claim parametrised over
 `ROUTES` (issue #863); refusals come from `branch_lengths_from_tree` with the
@@ -11,8 +11,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.likelihood import pruning_torch
-from snakes_and_ladders.sim.tree import Node
+from sal.likelihood import pruning_torch
+from sal.sim.tree import Node
 
 from tests.regression.likelihood.conftest import ROUTES, Route
 

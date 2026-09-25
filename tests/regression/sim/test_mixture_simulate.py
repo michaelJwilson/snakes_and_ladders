@@ -16,9 +16,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from snakes_and_ladders.emissions import GaussianEmission
-from snakes_and_ladders.fixtures import BinInstance
-from snakes_and_ladders.sim.mixture import BIN_UNIT, MixtureParams, simulate_mixture
+from sal.emissions import GaussianEmission
+from sal.fixtures import BinInstance
+from sal.sim.mixture import BIN_UNIT, MixtureParams, simulate_mixture
 
 WEIGHTS = np.array([0.3, 0.7])
 MEAN = np.array([-3.0, 3.0])

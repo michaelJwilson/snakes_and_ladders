@@ -12,18 +12,18 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.emissions import GaussianEmission
-from snakes_and_ladders.opt.budget import Budget
-from snakes_and_ladders.opt.fit import fit
-from snakes_and_ladders.opt.mixture import expectation_maximization
-from snakes_and_ladders.opt.termination import Stop, Termination
-from snakes_and_ladders.opt.testfunctions import Rosenbrock
-from snakes_and_ladders.search import ground_state
-from snakes_and_ladders.search.tightening import dual_bound
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
-from snakes_and_ladders.sim.potts import SpatioOnlyParams
+from sal.cost import Cost
+from sal.emissions import GaussianEmission
+from sal.opt.budget import Budget
+from sal.opt.fit import fit
+from sal.opt.mixture import expectation_maximization
+from sal.opt.termination import Stop, Termination
+from sal.opt.testfunctions import Rosenbrock
+from sal.search import ground_state
+from sal.search.tightening import dual_bound
+from sal.sim.fixtures import fixture
+from sal.sim.graph import BoundaryCondition, lattice_graph
+from sal.sim.potts import SpatioOnlyParams
 
 #: Components of the one-dimensional mixture the fourth encoding is read on,
 #: well separated so a handful of iterations settles it.

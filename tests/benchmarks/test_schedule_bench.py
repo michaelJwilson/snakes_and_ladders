@@ -16,13 +16,13 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.likelihood.message_passing import (
+from sal.backend import Backend
+from sal.likelihood.message_passing import (
     MessageScheduleName,
     sum_product,
 )
-from snakes_and_ladders.likelihood.schedule import Layout
-from snakes_and_ladders.sim.factor_graph import Factor, FactorGraph, Variable
+from sal.likelihood.schedule import Layout
+from sal.sim.factor_graph import Factor, FactorGraph, Variable
 
 
 def _chain(n: int, cardinality: int = 4) -> FactorGraph:

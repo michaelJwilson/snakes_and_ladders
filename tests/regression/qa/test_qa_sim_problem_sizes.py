@@ -1,4 +1,4 @@
-"""Regression test for snakes_and_ladders.qa.sim_problem_sizes.
+"""Regression test for sal.qa.sim_problem_sizes.
 
 Pins the tabulated values against each fixture's yaml, read independently,
 not just that the figure renders without raising (CLAUDE.md's
@@ -10,13 +10,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.qa.manifest import FIGURES
-from snakes_and_ladders.qa.sim_problem_sizes import (
+from sal.fixtures import load_params
+from sal.qa.manifest import FIGURES
+from sal.qa.sim_problem_sizes import (
     main,
 )
-from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.tree import preorder
+from sal.sim.params import SimulationParams
+from sal.sim.tree import preorder
 
 from tests._fixtures import FIXTURES_DIR
 

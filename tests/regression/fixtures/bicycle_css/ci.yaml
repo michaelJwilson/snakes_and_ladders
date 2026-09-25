@@ -3,7 +3,7 @@ oracle: enumeration
 
 # The CSS code Hx = Hz = H over a bicycle matrix, at the length every error
 # enumerates. Every field is required -- see
-# python/snakes_and_ladders/sim/css.py and sim/CLAUDE.md.
+# python/sal/sim/css.py and sim/CLAUDE.md.
 #
 # The oracle here enumerates 2**n errors, not 2**k codewords: at n = 16 that
 # is 65,536, inside the 200,000 the enumeration policy allows, and n = 17 is

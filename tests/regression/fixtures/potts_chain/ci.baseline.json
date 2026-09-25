@@ -40,10 +40,10 @@
     }
   },
   "modules": [
-    "snakes_and_ladders.learn.exact",
-    "snakes_and_ladders.learn.policy",
-    "snakes_and_ladders.learn.potts",
-    "snakes_and_ladders.learn.rollout"
+    "sal.learn.exact",
+    "sal.learn.policy",
+    "sal.learn.potts",
+    "sal.learn.rollout"
   ],
   "problem": "potts_chain",
   "tier": "ci"

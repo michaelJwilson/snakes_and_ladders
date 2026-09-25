@@ -17,12 +17,12 @@ from pathlib import Path
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.likelihood.potts import log_weights
-from snakes_and_ladders.sim.fixtures import FIXTURES_DIR, fixture
-from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
-from snakes_and_ladders.sim.potts import energies
-from snakes_and_ladders.sim.potts_chain import PottsParams
+from sal.fixtures import load_params
+from sal.likelihood.potts import log_weights
+from sal.sim.fixtures import FIXTURES_DIR, fixture
+from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from sal.sim.potts import energies
+from sal.sim.potts_chain import PottsParams
 
 #: What two exact routes over the same weights may differ by: the last bits
 #: of a `float64` reduction, which belong to the host and not to the tree.
@@ -123,7 +123,7 @@ import sys
 sys.path.insert(0, {here!r})
 from test_potts_energy import _release_sized
 import numpy as np
-from snakes_and_ladders.sim.potts import energies
+from sal.sim.potts import energies
 graph, field, n_states = _release_sized()
 states = np.random.default_rng(3).integers(0, n_states, size=(64, graph.n_nodes))
 values = [energies(graph, field, state[None])[0] for state in states[:8]]

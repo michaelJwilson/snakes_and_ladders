@@ -13,15 +13,15 @@ import math
 
 import numpy as np
 import pytest
-from snakes_and_ladders.likelihood.algebraic import DecodingFailure, decode, syndromes
-from snakes_and_ladders.sim.galois import (
+from sal.likelihood.algebraic import DecodingFailure, decode, syndromes
+from sal.sim.galois import (
     PRIMITIVE,
     bits_from_symbols,
     field,
     symbols_from_bits,
 )
-from snakes_and_ladders.sim.ldpc import BinarySymmetricChannel
-from snakes_and_ladders.sim.reed_solomon import ReedSolomon, encode, reed_solomon
+from sal.sim.ldpc import BinarySymmetricChannel
+from sal.sim.reed_solomon import ReedSolomon, encode, reed_solomon
 
 from tests._rows import every_row, every_value
 

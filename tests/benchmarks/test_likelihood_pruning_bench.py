@@ -13,10 +13,10 @@ import math
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.likelihood.pruning import log_likelihood
-from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulator import simulate_tree
+from sal.fixtures import load_params
+from sal.likelihood.pruning import log_likelihood
+from sal.sim.params import SimulationParams
+from sal.sim.simulator import simulate_tree
 
 from tests._fixtures import FIXTURES_DIR
 

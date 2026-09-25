@@ -14,18 +14,18 @@ import itertools
 
 import numpy as np
 import pytest
-from snakes_and_ladders.likelihood.parsimony import (
+from sal.likelihood.parsimony import (
     brute_force_parsimony_score,
     fitch_score,
     sankoff_score,
     unit_step_matrix,
 )
-from snakes_and_ladders.likelihood.pruning import log_likelihood
-from snakes_and_ladders.search.infer import score_topology
-from snakes_and_ladders.sim.simulate import simulate_alignment
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.topology import enumerate_topologies, leaf_bipartitions
-from snakes_and_ladders.sim.tree import Node, edges, preorder
+from sal.likelihood.pruning import log_likelihood
+from sal.search.infer import score_topology
+from sal.sim.simulate import simulate_alignment
+from sal.sim.simulator import simulate_tree
+from sal.sim.topology import enumerate_topologies, leaf_bipartitions
+from sal.sim.tree import Node, edges, preorder
 
 from tests._fixtures import (
     FARRIS_ZONE,

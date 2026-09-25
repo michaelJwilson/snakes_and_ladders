@@ -17,7 +17,7 @@ import math
 
 import numpy as np
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.likelihood.forward_backward import forward_backward
+from sal.likelihood.forward_backward import forward_backward
 
 _STATES = 8
 _LENGTH = 2000

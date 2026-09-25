@@ -16,19 +16,19 @@ import math
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.likelihood.potts import log_weights
-from snakes_and_ladders.opt.budget import Budget, Outcome, compare, restarts
-from snakes_and_ladders.sample import potts_mcmc
-from snakes_and_ladders.sample.balanced import (
+from sal.backend import Backend
+from sal.cost import Cost
+from sal.likelihood.potts import log_weights
+from sal.opt.budget import Budget, Outcome, compare, restarts
+from sal.sample import potts_mcmc
+from sal.sample.balanced import (
     BalancingFunction,
     log_balanced_weights,
     log_metropolis_ratio,
     log_normalizer,
     log_ratios,
 )
-from snakes_and_ladders.sample.potts_mcmc import (
+from sal.sample.potts_mcmc import (
     ClusterCounter,
     PottsChain,
     PottsMove,
@@ -47,25 +47,25 @@ from snakes_and_ladders.sample.potts_mcmc import (
     taylor_log_ratios,
     tempered,
 )
-from snakes_and_ladders.sample.potts_mcmc.sweeps import GUARD
-from snakes_and_ladders.sample.schedule import (
+from sal.sample.potts_mcmc.sweeps import GUARD
+from sal.sample.schedule import (
     ConstantTempSchedule,
     ExponentialTempSchedule,
 )
-from snakes_and_ladders.sample.statistics import (
+from sal.sample.statistics import (
     chi_square_p_value,
     integrated_autocorrelation_time,
 )
-from snakes_and_ladders.search.icm import iterated_conditional_modes
-from snakes_and_ladders.sim.canonical import (
+from sal.search.icm import iterated_conditional_modes
+from sal.sim.canonical import (
     PlantedSpinGlass,
     frustrated_triangular_lattice,
     minimum_frustrated_edges,
     planted_spin_glass,
 )
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
-from snakes_and_ladders.sim.potts import (
+from sal.sim.fixtures import fixture
+from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from sal.sim.potts import (
     critical_coupling,
     energy,
     heat_bath_log_weights,
@@ -1523,7 +1523,7 @@ def test_the_backends_agree_bitwise_at_every_temperature(field: str) -> None:
 def test_the_kernel_names_the_shape_it_wanted_and_the_shape_it_got() -> None:
     # PyO3 reports a dimensionality mismatch as "'ndarray' object is not an
     # instance of 'ndarray'", which names neither shape (issue #571).
-    from snakes_and_ladders import oxisal
+    from sal import oxisal
 
     graph = lattice_graph((2, 2), BoundaryCondition.OPEN, 0.5)
     offsets, index, couplings = graph.compressed_adjacency()
@@ -1563,7 +1563,7 @@ def test_a_field_of_the_wrong_dimensionality_names_its_shape() -> None:
     # PyO3 would reject a 1-D field before the kernel body, as "'ndarray'
     # object is not an instance of 'ndarray'" (issue #571). The field is taken
     # as a dynamic array so the refusal names the shape instead.
-    from snakes_and_ladders import oxisal
+    from sal import oxisal
 
     graph = lattice_graph((2, 2), BoundaryCondition.OPEN, 0.5)
     offsets, index, couplings = graph.compressed_adjacency()

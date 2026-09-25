@@ -13,15 +13,15 @@ from typing import Any
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.sample.gibbs import Indexed, gibbs_sweep
-from snakes_and_ladders.sample.potts_mcmc import anneal_potts
-from snakes_and_ladders.sample.schedule import ConstantTempSchedule
-from snakes_and_ladders.sim.factor_graph import from_potts
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+from sal.sample.gibbs import Indexed, gibbs_sweep
+from sal.sample.potts_mcmc import anneal_potts
+from sal.sample.schedule import ConstantTempSchedule
+from sal.sim.factor_graph import from_potts
+from sal.sim.graph import BoundaryCondition, lattice_graph
 
 # The Rust backend arrives with the #287 audit; without it this benchmark has
 # nothing to compare and skips rather than fails.
-Backend = pytest.importorskip("snakes_and_ladders.backend").Backend
+Backend = pytest.importorskip("sal.backend").Backend
 
 SHAPE = (8, 8)
 DENSITY_SHAPE = (32, 32)

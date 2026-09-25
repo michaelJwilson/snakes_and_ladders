@@ -11,8 +11,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.likelihood.ldpc import DecodingAlgorithm, decode
-from snakes_and_ladders.sim.ldpc import (
+from sal.likelihood.ldpc import DecodingAlgorithm, decode
+from sal.sim.ldpc import (
     BinarySymmetricChannel,
     all_zero_transmission,
     bicycle_code,

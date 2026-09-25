@@ -12,9 +12,9 @@ import math
 
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.opt.hmm import HmmObjective
-from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
+from sal.fixtures import load_params
+from sal.opt.hmm import HmmObjective
+from sal.sim.hmm import HmmParams, simulate_sequences
 
 from tests._fixtures import FIXTURES_DIR
 

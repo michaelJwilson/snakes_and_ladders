@@ -4,7 +4,7 @@ What is asserted here is what no instance can assert for itself -- that the
 return telescopes to the improvement it claims to be, that a rollout obeys
 its budget and reports truncation, and that a score shared by every action is
 unidentifiable. The last is the same failure ``log_simplex`` exists to
-prevent in ``snakes_and_ladders.opt``, one module over, and it is the reason no
+prevent in ``sal.opt``, one module over, and it is the reason no
 environment here supplies a bias feature.
 """
 
@@ -17,24 +17,24 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-import snakes_and_ladders.learn
+import sal.learn
 import torch
 from numpy.testing import assert_allclose
-from snakes_and_ladders.learn.environment import Environment, Episode, features_tensor
-from snakes_and_ladders.learn.policy import LinearPolicy
-from snakes_and_ladders.learn.potts import PottsEnvironment
-from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
+from sal.learn.environment import Environment, Episode, features_tensor
+from sal.learn.policy import LinearPolicy
+from sal.learn.potts import PottsEnvironment
+from sal.learn.rollout import greedy_rollout, rollout
 
 from tests.regression.learn.conftest import potts_environment
 
 # Same rule, same wording, same reason as `tests/regression/test_opt_objective.py`.
 FORBIDDEN_PREFIXES = (
-    "snakes_and_ladders.sim",
-    "snakes_and_ladders.likelihood",
-    "snakes_and_ladders.search",
+    "sal.sim",
+    "sal.likelihood",
+    "sal.search",
     # `sample/`'s application half: `sample.schedule` shapes no agent, while
     # `potts_mcmc` and `potts_keyed` are the lattice's move sets (#777).
-    "snakes_and_ladders.sample.potts",
+    "sal.sample.potts",
 )
 
 #: The modules issue #779 exempted, listed so a fourth is a reader's decision.
@@ -61,7 +61,7 @@ def test_learn_imports_nothing_from_the_application_modules() -> None:
     # The structural claim this package exists to make. An agent that has
     # seen a tree is an agent shaped by trees, and neither ruff nor mypy
     # would notice a single convenience import.
-    package = Path(snakes_and_ladders.learn.__file__).parent
+    package = Path(sal.learn.__file__).parent
     offenders: dict[str, set[str]] = {}
     for source in sorted(package.glob("*.py")):
         if source.name in APPLICATION_INSTANCES:
@@ -82,7 +82,7 @@ def test_every_named_application_instance_exists_and_imports_one() -> None:
     # The exemption is two-sided: a name that no longer names a module would
     # exempt nothing and read as though it did, and a module listed here that
     # imports no application module does not need the exemption.
-    package = Path(snakes_and_ladders.learn.__file__).parent
+    package = Path(sal.learn.__file__).parent
     for name in APPLICATION_INSTANCES:
         source = package / name
         assert source.exists(), name
@@ -364,9 +364,7 @@ def test_an_environment_module_imports_no_torch(module: str) -> None:
     # Root `CLAUDE.md`: no autodiff package where no derivative is taken. An
     # environment's features are constants to every loss, so importing one
     # loads no torch; a fresh interpreter, since this one has it loaded.
-    code = (
-        f"import sys, snakes_and_ladders.learn.{module}; print('torch' in sys.modules)"
-    )
+    code = f"import sys, sal.learn.{module}; print('torch' in sys.modules)"
     loaded = subprocess.run(
         [sys.executable, "-c", code], capture_output=True, text=True, check=True
     ).stdout.strip()

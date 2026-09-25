@@ -15,15 +15,15 @@ from collections.abc import Mapping
 
 import numpy as np
 import torch
-from snakes_and_ladders.emissions import GaussianEmission
-from snakes_and_ladders.likelihood.mixture_assignments import (
+from sal.emissions import GaussianEmission
+from sal.likelihood.mixture_assignments import (
     enumerate_mixture_assignments,
 )
-from snakes_and_ladders.opt.constrain import free_from_log_simplex, log_simplex
-from snakes_and_ladders.opt.mixture import mixture_log_likelihood, responsibilities
-from snakes_and_ladders.sample.expectation import Expectation, KalmanMean
-from snakes_and_ladders.sample.hmc import WithGaussianPrior, effective_sample_size
-from snakes_and_ladders.sim.mixture import MixtureParams, simulate_mixture
+from sal.opt.constrain import free_from_log_simplex, log_simplex
+from sal.opt.mixture import mixture_log_likelihood, responsibilities
+from sal.sample.expectation import Expectation, KalmanMean
+from sal.sample.hmc import WithGaussianPrior, effective_sample_size
+from sal.sim.mixture import MixtureParams, simulate_mixture
 
 from tests._objective_checks import AnalyticGaussian
 

@@ -14,16 +14,16 @@ import functools
 
 import numpy as np
 import pytest
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.opt.budget import Budget
-from snakes_and_ladders.sample.potts_mcmc import PottsMove, anneal_potts
-from snakes_and_ladders.sample.schedule import (
+from sal.backend import Backend
+from sal.cost import Cost
+from sal.opt.budget import Budget
+from sal.sample.potts_mcmc import PottsMove, anneal_potts
+from sal.sample.schedule import (
     ExponentialTempSchedule,
     ScheduleParams,
     ScheduleShape,
 )
-from snakes_and_ladders.search.ground_state import (
+from sal.search.ground_state import (
     ANNEAL_END,
     ANNEAL_SCHEDULE,
     ANNEAL_START,
@@ -34,13 +34,13 @@ from snakes_and_ladders.search.ground_state import (
     run_icm,
     warm_anneal,
 )
-from snakes_and_ladders.search.potts_starts import (
+from sal.search.potts_starts import (
     PottsObjective,
     ScheduleStart,
     SolverStart,
     spatio_rung,
 )
-from snakes_and_ladders.sim.fixtures import fixture
+from sal.sim.fixtures import fixture
 
 #: The notebook's reported seeds.
 SEEDS = (0, 1, 2, 3, 4)

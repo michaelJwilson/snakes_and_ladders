@@ -17,24 +17,24 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from snakes_and_ladders.emissions import CountPairEmission
-from snakes_and_ladders.opt.emission_mixture import (
+from sal.emissions import CountPairEmission
+from sal.opt.emission_mixture import (
     CountPairSeeding,
     EmissionMixtureFit,
     expectation_maximization,
     uniform_start,
 )
-from snakes_and_ladders.opt.mixture import mixture_log_likelihood
-from snakes_and_ladders.sample.schedule import ExponentialTempSchedule, ladder
-from snakes_and_ladders.sandbox.annealed_em import (
+from sal.opt.mixture import mixture_log_likelihood
+from sal.sample.schedule import ExponentialTempSchedule, ladder
+from sal.sandbox.annealed_em import (
     annealed_expectation_maximization,
     free_energy,
 )
-from snakes_and_ladders.sim.emission_mixture import (
+from sal.sim.emission_mixture import (
     EmissionMixtureParams,
     simulate_emission_mixture,
 )
-from snakes_and_ladders.sim.fixtures import fixture
+from sal.sim.fixtures import fixture
 
 #: The relative stopping rule `test_opt_emission_mixture.py` fits under.
 EM_TOLERANCE = 1e-8

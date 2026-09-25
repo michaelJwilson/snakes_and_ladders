@@ -1,6 +1,6 @@
 """The shared QA entry point's own contract, and every script's `main` through it.
 
-The figure and table scripts exercise :mod:`snakes_and_ladders.qa.runner`
+The figure and table scripts exercise :mod:`sal.qa.runner`
 end-to-end, so what is pinned here is what routing them through one function
 is supposed to guarantee and what no individual figure's test would catch.
 Each script's own `main` is one row of `SCRIPTS` (issue #982 moved thirteen
@@ -18,8 +18,8 @@ from types import ModuleType
 import matplotlib.pyplot as plt
 import pytest
 from matplotlib.figure import Figure
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.qa import (
+from sal.fixtures import load_params
+from sal.qa import (
     backend_agreement,
     opt_branch_recovery,
     opt_coverage,
@@ -34,14 +34,14 @@ from snakes_and_ladders.qa import (
     sim_tree,
     topology_accuracy,
 )
-from snakes_and_ladders.qa.figure import QAFigure, QATable, latex_integer
-from snakes_and_ladders.qa.runner import (
+from sal.qa.figure import QAFigure, QATable, latex_integer
+from sal.qa.runner import (
     Option,
     ParamsArgument,
     figure_main,
     table_main,
 )
-from snakes_and_ladders.sim.params import SimulationParams
+from sal.sim.params import SimulationParams
 
 from tests._fixtures import FIXTURES_DIR
 

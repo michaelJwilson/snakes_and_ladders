@@ -15,13 +15,13 @@ from typing import Any
 
 import numpy as np
 import pytest
-from snakes_and_ladders.learn.canonical import (
+from sal.learn.canonical import (
     ChainMdp,
     CliffWalk,
     GridWorld,
     value_iteration,
 )
-from snakes_and_ladders.learn.tabular import ActionValues, q_learning, sarsa
+from sal.learn.tabular import ActionValues, q_learning, sarsa
 
 #: What both learners are, seen from a test that runs each on the same fixture.
 TabularLearner = Callable[..., ActionValues[Any, Any]]

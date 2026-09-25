@@ -22,7 +22,7 @@ from pathlib import Path
 import _paths
 import pytest
 import rename_package
-from snakes_and_ladders.likelihood.schedule import (
+from sal.likelihood.schedule import (
     SCHEDULES,
     MessageSchedule,
     MessageScheduleName,
@@ -30,7 +30,7 @@ from snakes_and_ladders.likelihood.schedule import (
 
 from tests._paths import REPO_ROOT
 
-PACKAGE = REPO_ROOT / "python" / "snakes_and_ladders"
+PACKAGE = REPO_ROOT / "python" / "sal"
 
 #: `enumeration.argmax` outside its own module (#755 folded three `learn`
 #: oracles onto `enumerated_optimum`). `likelihood.hmm_paths` reuses the score
@@ -151,8 +151,8 @@ FIXTURE_ALIGNMENT_OWNER = "sim/simulator.py"
 #: modules wrote before `backend.twin` carried them (issue #1010). Indented
 #: only: a module-level import of a twin is the cycle and fails at import.
 TWIN_IMPORT = re.compile(
-    r"^[ \t]+(?:from snakes_and_ladders\.[\w.]+ import \w+_rust\b"
-    r"|import snakes_and_ladders\.[\w.]+_rust\b)",
+    r"^[ \t]+(?:from sal\.[\w.]+ import \w+_rust\b"
+    r"|import sal\.[\w.]+_rust\b)",
     re.MULTILINE,
 )
 TWIN_OWNER = "backend.py"
@@ -169,7 +169,7 @@ SEARCHED = (
 
 def _admitted(path: str, declared: set[str]) -> bool:
     """Whether a match is one of the sites declared, by path below the package."""
-    return any(path.endswith(f"snakes_and_ladders/{site}") for site in declared)
+    return any(path.endswith(f"sal/{site}") for site in declared)
 
 
 def _offenders(pattern: re.Pattern[str], owner: str) -> list[str]:
@@ -330,9 +330,7 @@ def test_logsumexp_has_one_implementation() -> None:
     assert [path for path in found if not _admitted(path, LOGSUMEXP_INLINES)] == []
     # The declaration is an edge and not a wish: the admitted inline is
     # there, so a fold that removes it takes this entry with it.
-    assert sorted(found) == sorted(
-        f"python/snakes_and_ladders/{p}" for p in LOGSUMEXP_INLINES
-    )
+    assert sorted(found) == sorted(f"python/sal/{p}" for p in LOGSUMEXP_INLINES)
 
 
 #: The suffixes and roots the rows below search.
@@ -462,9 +460,7 @@ def test_no_consumer_branches_on_a_schedules_name() -> None:
     assert [
         path for path in found if not _admitted(path, SCHEDULE_NAME_CONSUMERS)
     ] == []
-    assert sorted(found) == sorted(
-        f"python/snakes_and_ladders/{p}" for p in SCHEDULE_NAME_CONSUMERS
-    )
+    assert sorted(found) == sorted(f"python/sal/{p}" for p in SCHEDULE_NAME_CONSUMERS)
     assert _offenders(SCHEDULE_NAME_MATCH, SCHEDULE_OWNER) == []
 
 
@@ -535,14 +531,14 @@ def test_each_guard_fails_on_violating_source() -> None:
         HAND_SKIP: "mark = pytest.mark.skipif(" + 'not available("gco"), reason="")\n',
         HAND_MEASURE: "r, p = peaked(" + "lambda: timed(call))\n",
         FIXTURE_ALIGNMENT: "d = simulate_" + "alignment(p.tau, p.k, p.pi, rng, 9)\n",
-        TWIN_IMPORT: "        from snakes_and_ladders.likelihood import pruning_rust\n",
+        TWIN_IMPORT: "        from sal.likelihood import pruning_rust\n",
         # Unsplit: anchored at a line start, and this literal is indented.
         ICM_DEFINITION: "def iterated_conditional_modes(\n    graph,\n",
     }
     clean = {
-        PRIVATE_LOGSUMEXP: "from snakes_and_ladders.numerics import logsumexp\n",
+        PRIVATE_LOGSUMEXP: "from sal.numerics import logsumexp\n",
         OPEN_CODED_EDGES: "for edge, coupling in graph.weighted_edges():\n",
-        CAP_LITERAL: "from snakes_and_ladders.enumeration import refuse_oversized\n",
+        CAP_LITERAL: "from sal.enumeration import refuse_oversized\n",
         NEIGHBOUR_LISTS: (
             "offsets, neighbours, couplings = graph.compressed_adjacency()\n"
         ),
@@ -553,7 +549,7 @@ def test_each_guard_fails_on_violating_source() -> None:
             '        msg = f"the {plan.name} schedule is exact only on a tree"\n'
         ),
         SCHEDULE_NAME_MATCH: "    for step in plan.steps(layout):\n",
-        FOREIGN_SPARSE: "from snakes_and_ladders.incidence import SparseIncidence\n",
+        FOREIGN_SPARSE: "from sal.incidence import SparseIncidence\n",
         DERIVED_REPO_ROOT: "from tests._paths import REPO_ROOT\n",
         CATALOGUE_FILE: "rows = catalogue.rows()\n",
         PIPE_SPLIT: "cells = catalogue.cells(line)\n",
@@ -564,7 +560,7 @@ def test_each_guard_fails_on_violating_source() -> None:
         HAND_MEASURE: "result, seconds, peak = measured(call)\n",
         FIXTURE_ALIGNMENT: "data = simulate_tree(params, rng, n_sites=9)\n",
         TWIN_IMPORT: "    if (rust := twin(name, backend, __name__)) is not None:\n",
-        ICM_DEFINITION: "from snakes_and_ladders.search.icm import iterated_conditional_modes\n",
+        ICM_DEFINITION: "from sal.search.icm import iterated_conditional_modes\n",
     }
 
     assert [p for p, text in violating.items() if not p.search(text)] == []
@@ -585,10 +581,8 @@ def test_each_guard_fails_on_violating_source() -> None:
     assert not SCHEDULE_NAME_BRANCH.search("    if plan.requires_tree:\n")
     # The twin's other spelling, and the module-level import a caller of a
     # twin that is not its oracle (`qa.backend_agreement`) is free to write.
-    assert TWIN_IMPORT.search("    import snakes_and_ladders.search.maxflow_rust\n")
-    assert not TWIN_IMPORT.search(
-        "from snakes_and_ladders.likelihood import pruning_rust\n"
-    )
+    assert TWIN_IMPORT.search("    import sal.search.maxflow_rust\n")
+    assert not TWIN_IMPORT.search("from sal.likelihood import pruning_rust\n")
 
     # The structural guard on the same discipline, since it cannot be written
     # as a pattern: a sixth schedule beside the base and the same class under
@@ -643,7 +637,7 @@ def _imports_argmax(path: Path) -> bool:
     for node in ast.walk(ast.parse(path.read_text())):
         if (
             isinstance(node, ast.ImportFrom)
-            and node.module == "snakes_and_ladders.enumeration"
+            and node.module == "sal.enumeration"
             and any(alias.name == "argmax" for alias in node.names)
         ):
             return True
@@ -672,16 +666,14 @@ def test_the_argmax_query_reads_a_parenthesised_import(tmp_path: Path) -> None:
     # query that only reads a single-line `from ... import argmax`.
     over_five_lines = tmp_path / "wrapped.py"
     over_five_lines.write_text(
-        "from snakes_and_ladders.enumeration import (\n"
+        "from sal.enumeration import (\n"
         "    MAX_ENUMERABLE_CONFIGURATIONS,\n"
         "    argmax,\n"
         "    configurations,\n"
         ")\n"
     )
     through_the_seam = tmp_path / "folded.py"
-    through_the_seam.write_text(
-        "from snakes_and_ladders.enumeration import enumerated_optimum\n"
-    )
+    through_the_seam.write_text("from sal.enumeration import enumerated_optimum\n")
 
     assert _imports_argmax(over_five_lines)
     assert not _imports_argmax(through_the_seam)
@@ -786,20 +778,20 @@ def test_the_problem_catalogue_has_one_reader() -> None:
 #: `_submodules` is the lazy-import plumbing; `_HmmObjective` is what
 #: `hmm_jax` narrows on until C5 (#1004), re-exported from `opt.hmm`.
 PRIVATE_IMPORTS_ADMITTED = {
-    ("snakes_and_ladders", "_submodules"),
-    ("snakes_and_ladders.opt.hmm", "_HmmObjective"),
-    ("snakes_and_ladders.opt.hmm.objectives", "_HmmObjective"),
+    ("sal", "_submodules"),
+    ("sal.opt.hmm", "_HmmObjective"),
+    ("sal.opt.hmm.objectives", "_HmmObjective"),
 }
 
 
 def _private_imports(source: str) -> set[tuple[str, str]]:
-    """``(module, name)`` for every ``from snakes_and_ladders... import _name`` in ``source``."""
+    """``(module, name)`` for every ``from sal... import _name`` in ``source``."""
     found: set[tuple[str, str]] = set()
     for node in ast.walk(ast.parse(source)):
         if (
             isinstance(node, ast.ImportFrom)
             and node.module
-            and node.module.startswith("snakes_and_ladders")
+            and node.module.startswith("sal")
         ):
             found.update(
                 (node.module, alias.name)
@@ -821,10 +813,8 @@ def test_no_module_imports_another_modules_private_name() -> None:
         if (module, name) not in PRIVATE_IMPORTS_ADMITTED
     }
     assert crossing == set()
-    assert _private_imports("from snakes_and_ladders.sample.hmc import _warm_up\n")
-    assert not _private_imports(
-        "from snakes_and_ladders.sample.chain import run_chain\n"
-    )
+    assert _private_imports("from sal.sample.hmc import _warm_up\n")
+    assert not _private_imports("from sal.sample.chain import run_chain\n")
 
 
 #: The package's import name before issue #1048, which nothing imports now.

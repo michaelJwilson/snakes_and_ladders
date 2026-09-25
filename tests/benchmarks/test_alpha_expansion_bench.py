@@ -16,15 +16,15 @@ import sys
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.search.alpha_expansion import (
+from sal.backend import Backend
+from sal.search.alpha_expansion import (
     _expansion_network,
     alpha_beta_swap,
     alpha_expansion,
 )
-from snakes_and_ladders.search.icm import iterated_conditional_modes
-from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
-from snakes_and_ladders.sim.potts import site_field
+from sal.search.icm import iterated_conditional_modes
+from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from sal.sim.potts import site_field
 
 sys.setrecursionlimit(50_000)
 
@@ -85,7 +85,7 @@ def test_the_expansion_network_build_benchmark(
 ) -> None:
     """Building the network, apart from solving it (issue #598).
 
-    The half of :func:`~snakes_and_ladders.search.alpha_expansion.expand` the
+    The half of :func:`~sal.search.alpha_expansion.expand` the
     Rust cut kernel does not touch, timed on its own so the split between
     building and solving is a number rather than a profile reading.
     """

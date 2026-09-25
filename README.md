@@ -9,7 +9,7 @@ phylogenetic trees, Potts models in an external field, hidden Markov models,
 and low-density parity-check decoding. Autodiff fits the continuous half;
 learned proposals, a critic, a planner and surrogates propose the discrete half
 beside the classical baselines they are measured against; a Rust backend
-(`snakes_and_ladders.oxisal`, via
+(`sal.oxisal`, via
 [PyO3](https://pyo3.rs)/[maturin](https://www.maturin.rs)) carries the
 CPU-bound recursions.
 
@@ -35,9 +35,9 @@ The root exports the seams the package is built on and nothing else ---
 `Objective`, `Environment`, `FactorGraph`, `PottsGraph`, `fixture`, `Backend`
 and `parallel` --- each resolved on first use, and every package resolves its
 submodules the same way, so `sal.sim.tree` reads as written after
-`import snakes_and_ladders as sal` and a bare import loads nothing.
+`import sal` and a bare import loads nothing.
 
-A run reports as it goes through one seam: `snakes_and_ladders.track` records,
+A run reports as it goes through one seam: `sal.track` records,
 per sweep, the numbers a sampler's result already carries, beside a metrics set
 that says what the state means --- into nothing by default, and into an
 `aim.Run`, which its `Run` Protocol is written from, where Aim is installed.
@@ -77,14 +77,14 @@ overriding the root.
 | Contract | Governs |
 | --- | --- |
 | [`CLAUDE.md`](CLAUDE.md) | The repository-wide rules: environment, conventions, performance, testing, the Definition of Done, the model routing |
-| [`python/snakes_and_ladders/sim/CLAUDE.md`](python/snakes_and_ladders/sim/CLAUDE.md) | Data generation and ground-truth retention |
-| [`python/snakes_and_ladders/likelihood/CLAUDE.md`](python/snakes_and_ladders/likelihood/CLAUDE.md) | Pruning, the backends, and the cross-device tolerance they are held to |
-| [`python/snakes_and_ladders/opt/CLAUDE.md`](python/snakes_and_ladders/opt/CLAUDE.md) | Continuous fitting, and why no application may be imported here |
-| [`python/snakes_and_ladders/learn/CLAUDE.md`](python/snakes_and_ladders/learn/CLAUDE.md) | The RL interface, its oracles, and the rules a reward and a baseline obey |
-| [`python/snakes_and_ladders/search/CLAUDE.md`](python/snakes_and_ladders/search/CLAUDE.md) | Move sets, search budgets, and what a solver or sampler must state |
-| [`python/snakes_and_ladders/sample/CLAUDE.md`](python/snakes_and_ladders/sample/CLAUDE.md) | Samplers, annealers and tempering: what a chain reports and the unit it spends |
-| [`python/snakes_and_ladders/qa/CLAUDE.md`](python/snakes_and_ladders/qa/CLAUDE.md) | QA figures: rendering, never recomputing |
-| [`python/snakes_and_ladders/sandbox/CLAUDE.md`](python/snakes_and_ladders/sandbox/CLAUDE.md) | The oracle home: what a framework replaced, and what a measurement declined |
+| [`python/sal/sim/CLAUDE.md`](python/sal/sim/CLAUDE.md) | Data generation and ground-truth retention |
+| [`python/sal/likelihood/CLAUDE.md`](python/sal/likelihood/CLAUDE.md) | Pruning, the backends, and the cross-device tolerance they are held to |
+| [`python/sal/opt/CLAUDE.md`](python/sal/opt/CLAUDE.md) | Continuous fitting, and why no application may be imported here |
+| [`python/sal/learn/CLAUDE.md`](python/sal/learn/CLAUDE.md) | The RL interface, its oracles, and the rules a reward and a baseline obey |
+| [`python/sal/search/CLAUDE.md`](python/sal/search/CLAUDE.md) | Move sets, search budgets, and what a solver or sampler must state |
+| [`python/sal/sample/CLAUDE.md`](python/sal/sample/CLAUDE.md) | Samplers, annealers and tempering: what a chain reports and the unit it spends |
+| [`python/sal/qa/CLAUDE.md`](python/sal/qa/CLAUDE.md) | QA figures: rendering, never recomputing |
+| [`python/sal/sandbox/CLAUDE.md`](python/sal/sandbox/CLAUDE.md) | The oracle home: what a framework replaced, and what a measurement declined |
 | [`infra/CLAUDE.md`](infra/CLAUDE.md) | CI/CD, the agentic workflow, experiment tracking |
 | [`docs/CLAUDE.md`](docs/CLAUDE.md) | How the documents are built and kept true |
 
@@ -137,8 +137,8 @@ recursion on different graphs — a tree, a chain, a lattice, a Tanner graph —
 one discrete/continuous interface serves all four, and the coupled
 spatio-sequential model and the Gaussian mixture derived from them;
 `PROBLEMS.md` lists the 18 problem rows those four graphs carry. That is
-enforced structurally: `snakes_and_ladders.opt` imports no application module
-and `snakes_and_ladders.learn` only the exceptions its `CLAUDE.md` names,
+enforced structurally: `sal.opt` imports no application module
+and `sal.learn` only the exceptions its `CLAUDE.md` names,
 asserted by test.
 
 [ROADMAP.md](ROADMAP.md) states the goal, the accuracy and hardware
@@ -152,7 +152,7 @@ parameters. Eight likelihoods and three closed-form test functions run against
 it unchanged — the Potts chain and lattice, the HMM under six emission
 families, branch lengths on a fixed topology, the GTR substitution model, the
 Gaussian mixture, Rosenbrock, Rastrigin and Himmelblau — none requiring a
-change to `snakes_and_ladders.opt`.
+change to `sal.opt`.
 
 **Fitting with intervals, not just convergence.** L-BFGS under a strong-Wolfe
 line search, with confidence intervals from the observed Fisher information
@@ -183,7 +183,7 @@ action values and the optimal value. Claims rest on that oracle, not on a
 training curve.
 
 **A QA pipeline that is the evidence.** Every figure and table in the paper and
-the textbook is rendered by `snakes_and_ladders.qa` from the code it reports on,
+the textbook is rendered by `sal.qa` from the code it reports on,
 and CI rebuilds and compares them; the textbook's tables of which algorithm and
 which referee applies to each problem are generated from `PROBLEMS.md` and the
 test suite by `infra/problems_tables.py` at build time.

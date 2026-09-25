@@ -24,7 +24,7 @@ def tree(root: Path, *, extension: str | None, source: str = "src/lib.rs") -> No
     (root / "Cargo.toml").write_text("[package]\nname = 'x'\n")
     (root / "Cargo.lock").write_text("# lock\n")
     if extension is not None:
-        built = root / "python" / "snakes_and_ladders"
+        built = root / "python" / "sal"
         built.mkdir(parents=True, exist_ok=True)
         (built / extension).write_bytes(b"\x7fELF")
 
@@ -49,7 +49,7 @@ def test_an_extension_older_than_its_rust_is_refused(tmp_path: Path) -> None:
     age(tmp_path / "Cargo.toml", 300.0)
     age(tmp_path / "Cargo.lock", 300.0)
     age(
-        tmp_path / "python/snakes_and_ladders/oxisal.cpython-312-x86_64-linux-gnu.so",
+        tmp_path / "python/sal/oxisal.cpython-312-x86_64-linux-gnu.so",
         60.0,
     )
 
@@ -85,7 +85,7 @@ def test_a_lockfile_bump_alone_outdates_the_extension(tmp_path: Path) -> None:
     age(tmp_path / "src/lib.rs", 120.0)
     age(tmp_path / "Cargo.toml", 120.0)
     age(
-        tmp_path / "python/snakes_and_ladders/oxisal.cpython-312-x86_64-linux-gnu.so",
+        tmp_path / "python/sal/oxisal.cpython-312-x86_64-linux-gnu.so",
         60.0,
     )
 
@@ -109,7 +109,7 @@ def test_a_tree_with_no_extension_is_not_stale(tmp_path: Path) -> None:
 @pytest.mark.infra
 def test_a_tree_with_no_rust_is_not_stale(tmp_path: Path) -> None:
     """Nothing to be behind: the check is about `src/`, not about age."""
-    built = tmp_path / "python" / "snakes_and_ladders"
+    built = tmp_path / "python" / "sal"
     built.mkdir(parents=True)
     (built / "oxisal.cpython-312-x86_64-linux-gnu.so").write_bytes(b"\x7fELF")
 
