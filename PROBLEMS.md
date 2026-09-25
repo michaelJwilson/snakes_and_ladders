@@ -55,7 +55,7 @@ exercises, so none of them defines one.
 | Polar code, successive cancellation and list decoding | `polar` | `sec:polar` | `sim.polar`, `likelihood.polar` |
 | Hidden Markov model, six emission families | `hmm`, `ragged_hmm` | `sec:hmm` | `sim.hmm`, `opt.hmm`, `likelihood.hmm_paths`, `learn.hmm` |
 | Coupled spatio-sequential model | `spatio_sequential`, `spatio_sequential_ragged` | `sec:coupled` | `sim.spatio_sequential` |
-| Count-pair coupled spatio-sequential model | `spatio_sequential_counts` | `sec:coupled` | `sim.count_pairs`, `sim.count_pairs_rust`, `likelihood.spatio_sequential_rust` |
+| Count-pair coupled spatio-sequential model | `spatio_sequential_counts`, `spatio_sequential_counts_covariate` | `sec:coupled` | `sim.count_pairs`, `sim.count_pairs_rust`, `likelihood.spatio_sequential_rust` |
 | Gaussian mixture | `mixture` | `sec:mixture` | `sim.mixture`, `likelihood.mixture_assignments` |
 | Mixture of two-channel count emissions | `emission_mixture` | `sec:emissionmixture` | `sim.emission_mixture`, `opt.emission_mixture` |
 | Continuous test functions | `test_functions` | `sec:testfunctions` | `opt.testfunctions` |
