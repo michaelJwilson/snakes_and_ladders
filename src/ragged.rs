@@ -169,10 +169,14 @@ pub fn ragged_posteriors_into(
 }
 
 /// PyO3 wrapper over [`ragged_posteriors_into`]; converts `Err` to `ValueError`.
+///
+/// The recursion touches no Python object, so it runs with the GIL released
+/// and a thread pool runs segments' batches at once (#604, #1059).
 #[pyfunction]
 #[pyo3(name = "ragged_posteriors")]
 #[allow(clippy::too_many_arguments)]
 pub fn ragged_posteriors(
+    py: Python<'_>,
     log_density: PyReadonlyArray2<f64>,
     lengths: PyReadonlyArray1<i64>,
     log_initial: PyReadonlyArray1<f64>,
@@ -188,16 +192,17 @@ pub fn ragged_posteriors(
         .iter()
         .map(|&one| usize::try_from(one).unwrap_or(0))
         .collect();
-    ragged_posteriors_into(
-        density,
-        n_states,
-        &widths,
-        log_initial.as_slice()?,
-        log_transition.as_slice()?,
+    let (initial, transition) = (log_initial.as_slice()?, log_transition.as_slice()?);
+    let (gamma, counts, evidence) = (
         gamma.as_slice_mut()?,
         counts.as_slice_mut()?,
         evidence.as_slice_mut()?,
-    )
+    );
+    py.detach(|| {
+        ragged_posteriors_into(
+            density, n_states, &widths, initial, transition, gamma, counts, evidence,
+        )
+    })
     .map_err(PyValueError::new_err)
 }
 
