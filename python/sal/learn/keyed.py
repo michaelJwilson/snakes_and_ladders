@@ -8,7 +8,7 @@ this protocol (#597), and it is the obstacle a Potts environment whose moves
 are Monte Carlo has to clear first.
 
 **A move's randomness is keyed on the state and the action rather than drawn
-from a stream.** ``sim/count_pairs.py`` settles the same question for a
+from a stream.** ``sim/count_pairs/__init__.py`` settles the same question for a
 simulator: vertex ``v``'s counts come from ``default_rng([seed, v])``, so the
 draw depends on the key and not on the order or the thread that reaches it.
 Applied here, a heat-bath sweep or a cluster growth from state ``s`` under

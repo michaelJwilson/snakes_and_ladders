@@ -28,7 +28,7 @@ here so it is read once rather than off 46 signatures.
 ``RUST``
     `numerics.sample_rows`, `likelihood.convolutional`,
     `likelihood.message_passing`, `likelihood.turbo`,
-    `likelihood.ragged_rust`, and the sweeps of `sample.potts_mcmc`,
+    `likelihood.ragged`, and the sweeps of `sample.potts_mcmc`,
     `sample.annealed` and `sample.tempered`.
 ``NUMBA``
     `sample.gibbs`,
@@ -50,6 +50,14 @@ left at ``PYTHON`` otherwise --- which is every entry point whose return is a
 number a document quotes, an oracle's own answer or a fixture's draw. There
 the compiled route is asked for by name and the pin says the answer is the
 same.
+
+**Where a twin lives, and who reaches it** (issue #1059). An algorithm with
+a twin is a package: its reference is ``<sub>.<algorithm>``, the package's
+``__init__``, and each twin is ``<sub>.<algorithm>.<backend>`` beside it,
+``<backend>`` a member's value: ``numba``, ``rust``, ``torch`` or ``jax``. The
+reference is the gateway: it takes ``backend=`` and dispatches, and outside
+the algorithm's own package only ``tests/`` imports a twin, which
+``tests/regression/test_duplication_guards.py`` reads from the imports.
 
 :func:`refuse_backend` is how a module declines a member it has no
 implementation for. The sentence was written inline at five sites and is one
@@ -121,15 +129,16 @@ def refuse_backend(name: str, backend: Backend, allowed: tuple[Backend, ...]) ->
 def twin(name: str, backend: Backend, oracle: str) -> ModuleType | None:
     """The Rust twin of module ``oracle`` where ``backend`` asks for it, else ``None``.
 
-    A module whose compiled route lives in ``<oracle>_rust`` refuses every
+    An algorithm's reference lives at ``<sub>.<algorithm>`` and its Rust twin
+    at ``<sub>.<algorithm>.rust`` (issue #1059). The gateway refuses every
     member but ``PYTHON`` and ``RUST`` with :func:`refuse_backend`, and imports
     the twin inside the call rather than at module level: each twin imports a
     type or a helper from its oracle, so the module-level import is a cycle,
     and it would also put the extension behind every import of the oracle.
     Six modules wrote those three steps and the comment out by hand, at eight
     sites; the
-    caller passes its ``__name__``, so the twin is found by the naming
-    convention rather than by a second spelling of the path.
+    caller passes its ``__name__``, so the twin is found by the layout rather
+    than by a second spelling of the path.
 
     What the call site gives up is the type of the kernel: an attribute of a
     module imported by name is ``Any`` to ``mypy``, so a site returning the
@@ -147,7 +156,7 @@ def twin(name: str, backend: Backend, oracle: str) -> ModuleType | None:
     Returns
     -------
     ModuleType | None
-        ``<oracle>_rust`` for :data:`Backend.RUST`; ``None`` for
+        ``<sub>.<algorithm>.rust`` for :data:`Backend.RUST`; ``None`` for
         :data:`Backend.PYTHON`, where the caller runs its own oracle.
 
     Raises
@@ -158,4 +167,4 @@ def twin(name: str, backend: Backend, oracle: str) -> ModuleType | None:
     refuse_backend(name, backend, (Backend.PYTHON, Backend.RUST))
     if backend is not Backend.RUST:
         return None
-    return importlib.import_module(f"{oracle}_rust")
+    return importlib.import_module(f"{oracle}.rust")

@@ -12,7 +12,7 @@ from __future__ import annotations
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from sal.likelihood import pruning, pruning_torch
+from sal.likelihood import pruning
 from sal.likelihood.device import (
     CROSS_DEVICE_RTOL_FLOAT32,
     CROSS_DEVICE_RTOL_FLOAT64,
@@ -21,6 +21,7 @@ from sal.likelihood.device import (
     default_dtype,
     select_device,
 )
+from sal.likelihood.pruning import torch as pruning_torch
 
 from tests._fixtures import FOUR_TAXA, SMALL_SITES, simulated_alignment
 

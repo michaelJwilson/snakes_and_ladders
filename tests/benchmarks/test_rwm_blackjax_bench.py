@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-import torch
 from pytest_benchmark.fixture import BenchmarkFixture
 from sal.opt.testfunctions import Rosenbrock
 from sal.sample import metropolis
@@ -80,7 +79,7 @@ def test_random_walk_beside_blackjax_benchmark(
             np.random.default_rng(1006),
             N_DRAWS,
             step_size=step,
-            theta0=torch.as_tensor(start),
+            theta0=start,
         ),
         rounds=REPEATS,
         iterations=1,

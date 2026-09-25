@@ -19,7 +19,7 @@ k-means cost, read off its curves (issue #894). The textbook cites it as
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -29,6 +29,7 @@ from matplotlib.figure import Figure
 from sal.cost import Cost
 from sal.emissions import GaussianEmission
 from sal.opt.budget import Budget
+from sal.opt.em import EM
 from sal.opt.mixture import (
     ClusteringObjective,
     GaussianMixtureObjective,
@@ -149,7 +150,7 @@ def fitted(
         observations,
         torch.exp(named["log_weight"]).detach(),
         objective.components(start),
-        max_iterations=EM_ITERATIONS,
+        config=replace(EM, max_iterations=EM_ITERATIONS),
     )
 
 

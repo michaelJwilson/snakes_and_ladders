@@ -23,7 +23,7 @@ from sal.sim.count_pairs import (
     IndependentCountPair,
     SpatioSequentialCountsParams,
 )
-from sal.sim.count_pairs_rust import fine_instance
+from sal.sim.count_pairs.rust import fine_instance
 from sal.sim.fixtures import fixture
 
 PROBLEM = "spatio_sequential_counts_covariate"

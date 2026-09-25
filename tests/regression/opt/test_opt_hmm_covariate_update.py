@@ -13,11 +13,13 @@ from __future__ import annotations
 
 import itertools
 import math
+from dataclasses import replace
 
 import numpy as np
 import pytest
 import torch
 from sal.emissions import NegativeBinomialEmission
+from sal.opt.em import EM, EmConfig
 from sal.opt.hmm import ExpectedRateNormalizer, baum_welch_family
 
 
@@ -71,16 +73,21 @@ def test_an_update_returning_its_covariate_is_the_fit_without_one() -> None:
     family = NegativeBinomialEmission([4.0, 4.0], [2.0, 8.0])
     initial = torch.log(torch.tensor([0.5, 0.5], dtype=torch.float64))
     plain = baum_welch_family(
-        counts, initial, _kernel(0.8, 2), family, max_iterations=5, covariate=exposure
+        counts,
+        initial,
+        _kernel(0.8, 2),
+        family,
+        covariate=exposure,
+        config=replace(EM, max_iterations=5),
     )
     held = baum_welch_family(
         counts,
         initial,
         _kernel(0.8, 2),
         family,
-        max_iterations=5,
         covariate=exposure,
         update=lambda _emissions, _posterior, covariate: covariate,
+        config=replace(EM, max_iterations=5),
     )
     assert plain.log_likelihood == held.log_likelihood
     for name, value in plain.emissions.named_parameters().items():
@@ -110,9 +117,9 @@ def test_two_iterations_are_the_enumerated_plug_in_fit() -> None:
         initial,
         kernel,
         family,
-        max_iterations=1,
         covariate=exposure,
         update=normalizer,
+        config=replace(EM, max_iterations=1),
     )
     expected_one, marginals = _enumerated(
         counts, exposure / first_z, family, initial, kernel
@@ -127,10 +134,9 @@ def test_two_iterations_are_the_enumerated_plug_in_fit() -> None:
         initial,
         kernel,
         family,
-        max_iterations=2,
-        tolerance=0.0,
         covariate=exposure,
         update=normalizer,
+        config=EmConfig(max_iterations=2, tolerance=0.0),
     )
     expected_two, _ = _enumerated(
         counts,
@@ -167,9 +173,9 @@ def test_the_rate_ratios_of_a_normalized_chain_are_recovered() -> None:
         torch.full((m,), -math.log(m), dtype=torch.float64),
         _kernel(0.9, m),
         start,
-        max_iterations=200,
         covariate=exposure,
         update=ExpectedRateNormalizer(torch.as_tensor(lam)),
+        config=replace(EM, max_iterations=200),
     )
     means = np.sort(fit.emissions.alignment_key()[:, 0].numpy())
     np.testing.assert_allclose(means / means[0], [1.0, 2.0, 4.0], rtol=0.05)

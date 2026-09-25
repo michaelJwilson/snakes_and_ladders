@@ -309,7 +309,7 @@ def _search(
     return infer(
         alignment,
         k,
-        topology=start,
+        start=start,
         rng=rng,
         moves=MoveSet.SPR,
         max_evaluations=500,

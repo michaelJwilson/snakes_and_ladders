@@ -126,7 +126,7 @@ def test_a_code_change_beside_prose_runs_both() -> None:
 def test_a_change_selects_the_modules_that_import_it() -> None:
     # `sal.search` imports `sal.likelihood`, so a likelihood change that
     # ran only likelihood's tests would let a break in search through.
-    assert _modules_of(select(["python/sal/likelihood/pruning.py"])) >= {
+    assert _modules_of(select(["python/sal/likelihood/pruning/__init__.py"])) >= {
         "likelihood",
         "search",
         "qa",
@@ -167,7 +167,7 @@ def test_a_likelihood_change_still_runs_the_conserved_gradient_tape() -> None:
     # `test_pruning_burn.py` moved to the sandbox directory (#516) but referees
     # the likelihood tape, so a likelihood change must still select it.
     for changed in (
-        "python/sal/likelihood/pruning_torch.py",
+        "python/sal/likelihood/pruning/torch.py",
         "python/sal/search/topology.py",
         "python/sal/sim/tree.py",
     ):
@@ -344,7 +344,7 @@ def test_the_key_tier_runs_only_for_what_could_move_it() -> None:
     for trigger in (
         "src/coupled.rs",
         "python/sal/emissions/counts.py",
-        "python/sal/sim/count_pairs.py",
+        "python/sal/sim/count_pairs/__init__.py",
         "tests/regression/fixtures/spatio_sequential_counts/stress.yaml",
     ):
         assert "key" not in select([trigger])["deselect"], trigger

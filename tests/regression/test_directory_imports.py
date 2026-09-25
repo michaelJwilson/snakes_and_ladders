@@ -118,14 +118,20 @@ def edges(package: Path = PACKAGE) -> dict[tuple[str, str], set[str]]:
     """
     realized: dict[tuple[str, str], set[str]] = {}
     for path in sorted(package.rglob("*.py")):
-        if path.name == "__init__.py" or any(part in EXCLUDED for part in path.parts):
+        relative = path.relative_to(package)
+        # A directory's own `__init__` is not read; an algorithm package's is
+        # its gateway and reference (#1059), and is named for the package.
+        if (path.name == "__init__.py" and len(relative.parts) <= 2) or any(
+            part in EXCLUDED for part in path.parts
+        ):
             continue
         source = _directory(path, package)
         if source == "(root)":
             continue
+        module = ".".join(relative.with_suffix("").parts[1:]).removesuffix(".__init__")
         for target in _imported_directories(path):
             if target in DIRECTORIES and target != source:
-                realized.setdefault((source, target), set()).add(path.stem)
+                realized.setdefault((source, target), set()).add(module)
     return realized
 
 
@@ -224,7 +230,7 @@ def test_the_cycle_reader_finds_a_cycle_on_a_tree_that_has_one(tmp_path: Path) -
     )
     _write(
         package,
-        "sample/gibbs.py",
+        "sample/gibbs/__init__.py",
         "from sal.sim.graph import PottsGraph\n",
     )
     _write(package, "sim/graph.py", "import numpy as np\n")

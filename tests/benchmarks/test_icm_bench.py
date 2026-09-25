@@ -17,7 +17,7 @@ from pytest_benchmark.fixture import BenchmarkFixture
 from sal.backend import Backend
 from sal.search.ground_state import Rung
 from sal.search.icm import iterated_conditional_modes
-from sal.search.numba.icm import icm_sweeps_checked
+from sal.search.icm.numba import icm_sweeps_checked
 from sal.search.potts_starts import spatio_rung
 from sal.sim.fixtures import fixture
 from sal.sim.potts import site_field

@@ -1,6 +1,6 @@
 """The ordered sum is the fast one, so its bitwise pin costs nothing (#651).
 
-`kernels.factor_graph_log_density` accumulates factors left to right in graph
+`sample.gibbs.numba.factor_graph_log_density` accumulates factors left to right in graph
 order, which reproduces the oracle bitwise (#563). #651 listed that as a site
 where `CLAUDE.md`'s bitwise-to-tolerance rule might admit a vectorized sum,
 since vectorization is the repository's own optimization rule and the pin reads
@@ -31,7 +31,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from numba import njit
-from sal.sample.kernels import factor_graph_log_density
+from sal.sample.gibbs.numba import factor_graph_log_density
 
 SEED = 20260916
 #: Past the lattice fixtures, where a per-factor cost is visible.

@@ -121,7 +121,10 @@ def _reached(built: TreeEnvironment, endpoints: list[Topology], best: float) -> 
 def greedy_rate(built: TreeEnvironment, starts: list[Topology], best: float) -> float:
     return _reached(
         built,
-        [greedy_rollout(built, start, HORIZON).states[-1] for start in starts],
+        [
+            greedy_rollout(built, start=start, max_steps=HORIZON).states[-1]
+            for start in starts
+        ],
         best,
     )
 
@@ -137,7 +140,7 @@ def policy_rate(
     return _reached(
         built,
         [
-            rollout(built, policy, rng, HORIZON, start=start).states[-1]
+            rollout(built, policy, rng, max_steps=HORIZON, start=start).states[-1]
             for start in starts
             for _ in range(rollouts_per_start)
         ],
@@ -337,7 +340,7 @@ def test_the_greedy_weights_reproduce_the_greedy_searcher(
     policy.set_weights(weights)
     decisions = 0
     for start in starts:
-        episode = greedy_rollout(built, start, HORIZON)
+        episode = greedy_rollout(built, start=start, max_steps=HORIZON)
         for state, action in zip(episode.states, episode.actions, strict=False):
             actions = built.actions(state)
             chosen = actions[policy.greedy(built.features(state, actions))]

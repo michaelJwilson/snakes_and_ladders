@@ -228,7 +228,7 @@ def ppo[S, A](
                 environment,
                 collector,
                 rng,
-                max_steps,
+                max_steps=max_steps,
                 stop_at_local_optimum=stop_at_local_optimum,
             )
             for _ in range(batch)

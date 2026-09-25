@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import inspect
 import sys
+from dataclasses import replace
 from functools import partial
 
 import matplotlib.pyplot as plt
@@ -22,6 +23,7 @@ import pytest
 import torch
 from sal.cost import Cost
 from sal.opt.budget import Budget
+from sal.opt.em import EM, EMISSION_MIXTURE_EM
 from sal.opt.emission_mixture import expectation_maximization
 from sal.opt.fit import fit
 from sal.opt.hmm import HmmObjective, baum_welch_family
@@ -273,7 +275,7 @@ def test_the_expectation_maximization_adapter_is_the_entry_point() -> None:
         objective.observations,
         torch.exp(objective.constrain(theta)["log_weight"]),
         objective.components(theta),
-        max_iterations=25,
+        config=replace(EMISSION_MIXTURE_EM, max_iterations=25),
     )
     assert polished.value == -direct.log_likelihood
     assert polished.termination == direct.termination
@@ -301,7 +303,7 @@ def test_the_baum_welch_adapter_is_the_entry_point() -> None:
         named["log_initial"],
         named["log_transition"],
         objective.emissions(theta),
-        max_iterations=30,
+        config=replace(EM, max_iterations=30),
     )
     assert polished.value == -direct.log_likelihood
     assert polished.termination == direct.termination

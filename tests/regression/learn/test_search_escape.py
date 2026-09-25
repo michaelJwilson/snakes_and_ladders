@@ -133,9 +133,9 @@ def test_epsilon_zero_reproduces_hill_climbing_exactly(
     agent = EpsilonGreedyPolicy(_hill_climbing_policy(environment), 0.0)
     for start in traps[:3]:
         under_policy = rollout(
-            environment, agent, np.random.default_rng(0), BUDGET, start=start
+            environment, agent, np.random.default_rng(0), max_steps=BUDGET, start=start
         )
-        under_greedy = greedy_rollout(environment, start, BUDGET)
+        under_greedy = greedy_rollout(environment, start=start, max_steps=BUDGET)
         assert under_policy.states == under_greedy.states
 
 
@@ -159,7 +159,7 @@ def test_an_episode_can_leave_a_local_optimum(
                         environment,
                         agent,
                         rng,
-                        BUDGET,
+                        max_steps=BUDGET,
                         start=trap,
                         stop_at_local_optimum=False,
                     ).states,
@@ -186,7 +186,7 @@ def test_stopping_at_a_local_optimum_never_escapes(
     agent = EpsilonGreedyPolicy(_hill_climbing_policy(environment), _HIGH_EPSILON)
     rng = np.random.default_rng(7)
     for trap in traps:
-        episode = rollout(environment, agent, rng, BUDGET, start=trap)
+        episode = rollout(environment, agent, rng, max_steps=BUDGET, start=trap)
         assert episode.states == (trap,)
         assert abs(environment.score(trap) - maximum) >= 1e-9
 
@@ -204,7 +204,7 @@ def test_random_restart_hill_climbing_solves_this_fixture(
     for _ in range(PROBE_STARTS):
         state, spent, seen = environment.reset(start_rng), 0, -np.inf
         while spent < BUDGET:
-            episode = greedy_rollout(environment, state, BUDGET - spent)
+            episode = greedy_rollout(environment, start=state, max_steps=BUDGET - spent)
             spent += max(len(episode.actions), 1)
             seen = max(seen, _best_seen(environment, episode.states))
             state = environment.reset(restart_rng)

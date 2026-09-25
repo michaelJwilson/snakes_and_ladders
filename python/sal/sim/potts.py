@@ -142,6 +142,51 @@ class SiteField:
         return cls(site_field(np.asarray(field, dtype=np.float64), n_nodes))
 
 
+def check_labelling(
+    labelling: np.ndarray, n_nodes: int, n_states: int, *, name: str = "start"
+) -> np.ndarray:
+    """``labelling`` as an ``int64`` copy, checked to be one integer state in range per node.
+
+    The one check every Potts sampler and solver runs on a labelling it is
+    handed, so they refuse the same starts with the same sentence (issue
+    #1059): ``search.ground_state`` and ``sample.potts_mcmc.chains`` each
+    wrote it, the second without the dtype test, and expansion, swap and ICM
+    wrote none.
+
+    Parameters
+    ----------
+    labelling : np.ndarray
+        The labelling to check, shape ``(n_nodes,)``.
+    n_nodes, n_states : int
+        The instance's sites and states.
+    name : str
+        What the caller calls it, as the message names it.
+
+    Returns
+    -------
+    np.ndarray
+        An ``int64`` copy the caller may write to.
+
+    Raises
+    ------
+    ValueError
+        If it is not of an integer dtype, not shape ``(n_nodes,)``, or holds
+        a state outside ``[0, n_states)``.
+    """
+    array = np.asarray(labelling)
+    if (
+        array.shape != (n_nodes,)
+        or not np.issubdtype(array.dtype, np.integer)
+        or not ((array >= 0).all() and (array < n_states).all())
+    ):
+        msg = (
+            f"{name} must hold one integer state in [0, {n_states}) per node of "
+            f"{n_nodes}; got shape {array.shape}, dtype {array.dtype}"
+        )
+        raise ValueError(msg)
+    return np.array(array, dtype=np.int64)
+
+
 def log_weight_of(field: SiteField | np.ndarray) -> np.ndarray:
     """The log-weight a consumer reads: a :class:`SiteField`'s, or a bare array as given."""
     return field.log_weight if isinstance(field, SiteField) else np.asarray(field)

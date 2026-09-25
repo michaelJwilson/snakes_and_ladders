@@ -28,7 +28,7 @@ from sal.likelihood.features import (
 )
 from sal.likelihood.parsimony import fitch_score
 from sal.likelihood.potts import enumerate_potts, log_weights
-from sal.likelihood.pruning_torch import branch_order, log_likelihood
+from sal.likelihood.pruning.torch import branch_order, log_likelihood
 from sal.likelihood.surrogate import (
     ParsimonyUpperBound,
     PlugInLikelihood,

@@ -77,10 +77,18 @@ def test_q_learning_matches_the_optimal_values_and_sarsa_does_not() -> None:
     grid = GridWorld()
     optimal = value_iteration(grid, (0, 0))
     off_policy = q_learning(
-        grid, np.random.default_rng(3), episodes=EPISODES, epsilon=0.2, max_steps=100
+        grid,
+        np.random.default_rng(3),
+        episodes=EPISODES,
+        epsilon=0.2,
+        max_steps=100,
     )
     on_policy = sarsa(
-        grid, np.random.default_rng(3), episodes=EPISODES, epsilon=0.2, max_steps=100
+        grid,
+        np.random.default_rng(3),
+        episodes=EPISODES,
+        epsilon=0.2,
+        max_steps=100,
     )
 
     # Measured: 2.14e-05 and 1.8889. Four orders separate the methods; a
@@ -213,10 +221,18 @@ def test_the_two_learners_share_their_loop() -> None:
     """
     grid = GridWorld(shape=(3, 3), goal=(2, 2))
     off_policy = q_learning(
-        grid, np.random.default_rng(1), start=(0, 0), episodes=200, epsilon=0.0
+        grid,
+        np.random.default_rng(1),
+        start=(0, 0),
+        episodes=200,
+        epsilon=0.0,
     )
     on_policy = sarsa(
-        grid, np.random.default_rng(1), start=(0, 0), episodes=200, epsilon=0.0
+        grid,
+        np.random.default_rng(1),
+        start=(0, 0),
+        episodes=200,
+        epsilon=0.0,
     )
     assert off_policy.values == on_policy.values
     assert off_policy.updates == on_policy.updates

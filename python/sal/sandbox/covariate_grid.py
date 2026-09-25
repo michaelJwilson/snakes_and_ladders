@@ -1,6 +1,6 @@
 """A continuous covariate coded on a power-of-two grid: declined, conserved (issue #1064).
 
-The coupled Rust E step (:mod:`sal.likelihood.spatio_sequential_rust`)
+The coupled Rust E step (:mod:`sal.likelihood.spatio_sequential.rust`)
 indexes a table by row. A continuous covariate gives a table by count and
 distinct covariate a row per observation, so this rounds the covariate to the
 nearest multiple of ``1 / scale``, tabulates every ``(count, grid value)``
@@ -39,7 +39,7 @@ bitwise.
 does not factor into a table by count and a per-observation term.
 
 The byte ceiling is the live module's
-:data:`~sal.likelihood.spatio_sequential_rust.COVARIATE_TABLE_CEILING`, one
+:data:`~sal.likelihood.spatio_sequential.COVARIATE_TABLE_CEILING`, one
 ceiling for every covariate table. The tabulation and the ``uint32`` refusal
 are carried rather than imported: the live module's are private (issue #1010).
 """
@@ -52,7 +52,7 @@ from collections.abc import Callable
 import numpy as np
 
 from sal.emissions import EmissionFamily
-from sal.likelihood.spatio_sequential_rust import COVARIATE_TABLE_CEILING
+from sal.likelihood.spatio_sequential import COVARIATE_TABLE_CEILING
 from sal.sim.spatio_sequential import SpatioSequentialParams
 
 #: The largest row a ``uint32`` index carries. A table with more rows would
@@ -257,7 +257,7 @@ def _grid_rows(
     ValueError
         If ``scale`` is not positive and finite, or the table's rows overflow
         a ``uint32`` index or its bytes pass
-        :data:`~sal.likelihood.spatio_sequential_rust.COVARIATE_TABLE_CEILING`.
+        :data:`~sal.likelihood.spatio_sequential.COVARIATE_TABLE_CEILING`.
         The message names ``scale``.
     """
     return _tabulated(_grid, "covariate grid", sides, params, values, covariate, scale)

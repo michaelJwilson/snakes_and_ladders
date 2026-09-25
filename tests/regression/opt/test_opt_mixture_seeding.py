@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import partial
 
 import numpy as np
@@ -24,6 +24,7 @@ import torch
 from sal.cost import Cost
 from sal.emissions import GaussianEmission, pooled_variance_floor
 from sal.opt.budget import Budget, Comparison
+from sal.opt.em import EMISSION_MIXTURE_EM
 from sal.opt.emission_mixture import (
     expectation_maximization,
     plus_plus_start,
@@ -332,10 +333,10 @@ def seed_hmc(instance: Instance, rng: np.random.Generator) -> Seeding:
         temperature=chain_temperature(instance),
     )
     # One mode's lowest-valued draw, components ordered by `_from_theta`.
-    values = torch.stack([objective(draw) for draw in chain.theta])
+    values = torch.stack([objective(draw) for draw in chain.draws])
     return Seeding(
-        _from_theta(instance, objective, chain.theta[int(values.argmin())]),
-        2.0 * (chain.force_evaluations + chain.theta.shape[0]) * instance.n_components,
+        _from_theta(instance, objective, chain.draws[int(values.argmin())]),
+        2.0 * (chain.force_evaluations + chain.draws.shape[0]) * instance.n_components,
         acceptance=chain.acceptance_rate,
     )
 
@@ -422,7 +423,7 @@ def fit_from(instance: Instance, seeding: Seeding, iterations: int) -> Fitted:
             instance.observations,
             weights,
             seeding.components,
-            max_iterations=iterations,
+            config=replace(EMISSION_MIXTURE_EM, max_iterations=iterations),
         )
     except ValueError:
         # A component collapsed onto a point: the Gaussian likelihood is

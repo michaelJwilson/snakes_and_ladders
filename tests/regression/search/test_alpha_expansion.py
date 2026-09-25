@@ -85,7 +85,7 @@ def test_the_energy_never_rises_across_an_expansion() -> None:
     previous = energy(graph, field_values, labelling)
     for _ in range(4):
         for alpha in range(3):
-            labelling, current = expand(graph, field_values, labelling, alpha)
+            labelling, current, *_ = expand(graph, field_values, labelling, alpha)
 
             assert current <= previous + 1e-12
             previous = current

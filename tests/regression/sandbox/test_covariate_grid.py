@@ -20,8 +20,7 @@ import pytest
 import torch
 from sal import oxisal
 from sal.emissions import EmissionFamily
-from sal.likelihood import spatio_sequential_rust as rust
-from sal.likelihood.spatio_sequential import class_posteriors
+from sal.likelihood.spatio_sequential import class_posteriors, rust
 from sal.sandbox import covariate_grid as grid
 from sal.sim.count_pairs import (
     SUCCESSES,
@@ -29,7 +28,7 @@ from sal.sim.count_pairs import (
     CountPairInstance,
     IndependentCountPair,
 )
-from sal.sim.count_pairs_rust import fine_instance
+from sal.sim.count_pairs.rust import fine_instance
 from sal.sim.fixtures import fixture
 from sal.sim.spatio_sequential import SpatioSequentialParams
 

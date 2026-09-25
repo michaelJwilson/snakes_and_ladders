@@ -83,7 +83,7 @@ def test_one_langevin_step_is_the_hamiltonian_transition() -> None:
             step_size=step,
         )
 
-        difference = float((hamiltonian_route.theta - langevin_route.theta).abs().max())
+        difference = float((hamiltonian_route.draws - langevin_route.draws).abs().max())
         energy = float(
             (hamiltonian_route.energy_error - langevin_route.energy_error).abs().max()
         )
@@ -114,7 +114,7 @@ def test_the_langevin_chain_recovers_an_analytic_gaussian() -> None:
         )
 
         assert_within_sigmas(
-            chain.theta,
+            chain.draws,
             GAUSSIAN.mean.numpy(),
             np.diag(GAUSSIAN.covariance.numpy()),
             GAUSSIAN_SIGMAS,
@@ -146,12 +146,12 @@ def test_the_langevin_chain_recovers_the_enumerated_assignment_posterior() -> No
         assert chain.acceptance_rate > 0.6, (seed, chain.acceptance_rate)
 
         assert_recovers_assignment_posterior(
-            chain.theta,
+            chain.draws,
             observations,
             components,
             reference,
             sigmas=MIXTURE_SIGMAS,
-            size=float(effective_sample_size(chain.theta)[0]),
+            size=float(effective_sample_size(chain.draws)[0]),
             context=seed,
         )
 
@@ -174,7 +174,7 @@ def test_unadjusted_langevin_realizes_the_closed_form_discretization_bias() -> N
         closed_form = ula_stationary_variance(step, ULA_VARIANCE_TRUTH)
 
         _, variance_sigmas = monte_carlo_sigmas(
-            chain.theta, np.zeros(1), np.array([closed_form])
+            chain.draws, np.zeros(1), np.array([closed_form])
         )
 
         assert not chain.corrected
@@ -206,8 +206,8 @@ def test_dropping_the_correction_misses_the_variance_that_mala_recovers() -> Non
         burn_in=500,
     )
 
-    _, missed = monte_carlo_sigmas(uncorrected.theta, np.zeros(1), truth)
-    _, recovered = monte_carlo_sigmas(corrected.theta, np.zeros(1), truth)
+    _, missed = monte_carlo_sigmas(uncorrected.draws, np.zeros(1), truth)
+    _, recovered = monte_carlo_sigmas(corrected.draws, np.zeros(1), truth)
 
     assert float(missed.max()) > GAUSSIAN_SIGMAS, missed
     assert float(recovered.max()) < GAUSSIAN_SIGMAS, recovered

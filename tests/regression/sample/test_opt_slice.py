@@ -14,9 +14,12 @@ from collections.abc import Mapping
 import numpy as np
 import pytest
 import torch
+from sal.backend import Backend
+from sal.sample.chain import Adaptation
 from sal.sample.hmc import effective_sample_size
 from sal.sample.slice import (
     MAX_SHRINKAGES,
+    SliceChain,
     SliceDirection,
     slice_sample,
     slice_update,
@@ -93,7 +96,7 @@ def test_the_slice_chain_recovers_an_analytic_gaussian(
         )
 
         assert_within_sigmas(
-            chain.theta,
+            chain.draws,
             GAUSSIAN.mean.numpy(),
             np.diag(GAUSSIAN.covariance.numpy()),
             GAUSSIAN_SIGMAS,
@@ -126,12 +129,12 @@ def test_the_slice_chain_recovers_the_enumerated_assignment_posterior() -> None:
         )
 
         assert_recovers_assignment_posterior(
-            chain.theta,
+            chain.draws,
             observations,
             components,
             reference,
             sigmas=MIXTURE_SIGMAS,
-            size=float(effective_sample_size(chain.theta)[0]),
+            size=float(effective_sample_size(chain.draws)[0]),
             context=seed,
         )
 
@@ -203,6 +206,70 @@ def test_a_slice_chain_refuses_a_width_a_step_count_and_a_density_it_cannot_use(
             width=WIDTH,
             max_steps_out=MAX_STEPS_OUT,
         )
+
+
+@pytest.mark.analytic
+def test_the_tempered_slice_chain_samples_the_tempered_gaussian() -> None:
+    # `exp(-U / T)` on a Gaussian is the Gaussian with covariance `T`-fold,
+    # a closed form; issue #1059 gave `slice_sample` the `temperature` the
+    # other continuous samplers take.
+    temperature = 2.0
+    chain = slice_sample(
+        GAUSSIAN,
+        generator=torch.Generator().manual_seed(1059),
+        n_samples=4000,
+        width=WIDTH,
+        max_steps_out=MAX_STEPS_OUT,
+        burn_in=400,
+        temperature=temperature,
+    )
+    assert_within_sigmas(
+        chain.draws,
+        GAUSSIAN.mean.numpy(),
+        temperature * np.diag(GAUSSIAN.covariance.numpy()),
+        GAUSSIAN_SIGMAS,
+    )
+
+
+@pytest.mark.analytic
+def test_an_unstored_slice_chain_spends_what_the_stored_one_spends() -> None:
+    # `store_chain=False` drops the draws and nothing else: one generator
+    # state gives the same counters bitwise (issue #1059).
+    def run(store_chain: bool) -> SliceChain:
+        return slice_sample(
+            GAUSSIAN,
+            generator=torch.Generator().manual_seed(7),
+            n_samples=50,
+            width=WIDTH,
+            max_steps_out=MAX_STEPS_OUT,
+            store_chain=store_chain,
+        )
+
+    stored, free = run(True), run(False)
+    assert free.draws.shape == (0, 2)
+    assert stored.draws.shape == (50, 2)
+    assert free.objective_evaluations == stored.objective_evaluations
+    assert free.shrinkages_per_draw == stored.shrinkages_per_draw
+
+
+@pytest.mark.smoke
+def test_a_slice_chain_refuses_an_adaptation_a_backend_and_a_temperature() -> None:
+    options = {
+        "generator": torch.Generator().manual_seed(1),
+        "n_samples": 4,
+        "width": WIDTH,
+        "max_steps_out": MAX_STEPS_OUT,
+    }
+    with pytest.raises(ValueError, match="no adaptation"):
+        slice_sample(
+            GAUSSIAN,
+            adaptation=Adaptation(8, 0.5, 0.0),
+            **options,  # type: ignore[arg-type]
+        )
+    with pytest.raises(ValueError, match="slice_sample runs on python"):
+        slice_sample(GAUSSIAN, backend=Backend.RUST, **options)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="temperature must be positive"):
+        slice_sample(GAUSSIAN, temperature=0.0, **options)  # type: ignore[arg-type]
 
 
 class _Infinite:

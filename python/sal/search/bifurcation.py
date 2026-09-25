@@ -187,7 +187,7 @@ def _integrate_torch(
 
 def simulated_bifurcation(
     graph: PottsGraph,
-    field_values: np.ndarray,
+    field: np.ndarray,
     n_states: int,
     rng: np.random.Generator,
     *,
@@ -207,7 +207,7 @@ def simulated_bifurcation(
         The instance. Couplings of either sign: a repulsive coupling is where
         the cut does not apply and this still runs, refereed there by the dual
         bound rather than by an optimum.
-    field_values : np.ndarray
+    field : np.ndarray
         ``(n_states,)`` or ``(n_nodes, n_states)``, broadcast by
         :func:`sal.sim.potts.site_field`.
     n_states : int
@@ -263,7 +263,7 @@ def simulated_bifurcation(
         "simulated_bifurcation", backend, (Backend.PYTHON, Backend.TORCH, Backend.RUST)
     )
     rows = site_field(
-        np.asarray(field_values, dtype=np.float64), graph.n_nodes, n_states=n_states
+        np.asarray(field, dtype=np.float64), graph.n_nodes, n_states=n_states
     )
     c0 = _coupling_scale(graph, rows) if coupling_scale is None else coupling_scale
     index = graph.edge_index.reshape(-1, 2)

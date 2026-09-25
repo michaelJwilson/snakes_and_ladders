@@ -72,7 +72,10 @@ def test_ppo_on_the_hard_fixture_is_no_worse_than_reinforce_at_the_same_budget(
     starts = [environment.reset(rng) for _ in range(STARTS)]
     greedy = _rate(
         environment,
-        [greedy_rollout(environment, s, HORIZON).states[-1] for s in starts],
+        [
+            greedy_rollout(environment, start=s, max_steps=HORIZON).states[-1]
+            for s in starts
+        ],
         maximum,
     )
     outcomes = {}
@@ -116,7 +119,9 @@ def test_ppo_on_the_hard_fixture_is_no_worse_than_reinforce_at_the_same_budget(
         outcomes[label] = _rate(
             environment,
             [
-                rollout(environment, policy, probe, HORIZON, start=s).states[-1]
+                rollout(environment, policy, probe, max_steps=HORIZON, start=s).states[
+                    -1
+                ]
                 for s in starts
                 for _ in range(ROLLOUTS_PER_START)
             ],

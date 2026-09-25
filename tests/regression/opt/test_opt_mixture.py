@@ -23,6 +23,7 @@ from sal.likelihood.mixture_assignments import (
     enumerate_mixture_assignments,
 )
 from sal.opt.budget import Budget, Outcome, compare
+from sal.opt.em import EM, EmConfig
 from sal.opt.fit import fit
 from sal.opt.hmm import align_by_key
 from sal.opt.initialize import Initializer
@@ -144,8 +145,8 @@ def test_the_component_m_step_is_the_emission_family_s_own() -> None:
         observations,
         torch.exp(log_weight),
         components,
-        max_iterations=1,
         backend=Backend.PYTHON,
+        config=replace(EM, max_iterations=1),
     )
 
     assert_allclose(one_step.components.mean.numpy(), direct.mean.numpy(), rtol=1e-15)
@@ -682,7 +683,7 @@ def test_a_component_m_step_at_a_boundary_is_reported_on_the_fit() -> None:
         observations,
         weights,
         _ReportingGaussian(MEAN, SCALE, 1e-9, at_boundary=True),
-        max_iterations=3,
+        config=replace(EM, max_iterations=3),
     )
     # The tensor route, which the flagging subclass also takes, so the flag
     # is the only difference the comparison can see (issue #986).
@@ -690,8 +691,8 @@ def test_a_component_m_step_at_a_boundary_is_reported_on_the_fit() -> None:
         observations,
         weights,
         GaussianEmission(MEAN, SCALE, 1e-9),
-        max_iterations=3,
         backend=Backend.PYTHON,
+        config=replace(EM, max_iterations=3),
     )
 
     assert flagged.at_boundary
@@ -715,7 +716,11 @@ def test_the_streamed_mixture_em_is_the_tensor_one() -> None:
     weights = torch.full((3,), 1.0 / 3.0, dtype=torch.float64)
     oracle, streamed = (
         expectation_maximization(
-            draws, weights, start, max_iterations=10, tolerance=-np.inf, backend=backend
+            draws,
+            weights,
+            start,
+            backend=backend,
+            config=EmConfig(max_iterations=10, tolerance=-np.inf),
         )
         for backend in (Backend.PYTHON, Backend.RUST)
     )

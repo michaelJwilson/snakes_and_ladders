@@ -17,7 +17,8 @@ adapters that name it. A kernel nothing calls is reachable only from a test,
 which is a different claim from being in use.
 
 **The oracle** --- read from the *tests*, not from a naming convention. The
-convention is real (``pruning_rust.py`` beside ``pruning.py``) and it does not
+convention is real (``pruning/rust.py`` beside ``pruning/__init__.py``, issue
+#1059) and it does not
 hold everywhere: the ragged kernel is pinned against a conserved route under
 ``sandbox``, which no sibling rule would find. So a kernel's referees are the
 implementations its own test modules import beside it, narrowed to the
@@ -27,9 +28,11 @@ under ``sandbox``, and an oracle **inside the adapter itself** --- because a
 test imports thirty modules and three of them are the referee. That last
 placement is in this list because the first draft of this tool reported the
 ragged kernel as unpinned and the tree said otherwise:
-``test_ragged_rust.py`` imports ``posteriors`` and ``posteriors_oracle`` from
-one module, so the referee is a symbol rather than a module and a tool that
-only looks at modules calls a pinned kernel bare (issue #678). A kernel whose
+``test_ragged_rust.py`` imported ``posteriors`` and ``posteriors_oracle`` from
+one module, so the referee was a symbol rather than a module and a tool that
+only looks at modules calls a pinned kernel bare (issue #678). Since #1059 the
+ragged oracle sits in the gateway beside its twin and is found as the
+sibling; the placement stays for an adapter that keeps its oracle. A kernel whose
 tests import none of the four reads as ``NONE``, which is the gap
 ``likelihood/CLAUDE.md`` names.
 
@@ -215,7 +218,7 @@ def kernels() -> list[Kernel]:
         # to modules that exist and to the oracle vocabulary above. A kernel
         # pinned only against itself reads as an empty tuple rather than as
         # silence, which is the gap `likelihood/CLAUDE.md` names.
-        siblings = {adapter.removesuffix("_rust") for adapter in adapters}
+        siblings = {adapter.removesuffix(".rust") for adapter in adapters}
         referees: set[str] = set()
         for path in exercising:
             for name in imported(tests[path]):
@@ -228,7 +231,7 @@ def kernels() -> list[Kernel]:
                 ):
                     referees.add(name)
                     continue
-                if name not in python or name.endswith("_rust"):
+                if name not in python or name.endswith(".rust"):
                     continue
                 if (
                     name in siblings

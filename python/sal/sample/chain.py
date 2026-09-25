@@ -6,7 +6,7 @@ size --- and :func:`run_chain` is the loop around it: the warm-up
 the metric the first estimates), the burn-in, the recorded draws, and the
 operators' Kalman-filtered expectations. :func:`run_compiled` is the same
 loop compiled (``src/chain.rs``), over a walk ``oxisal`` or
-:mod:`sal.sample.hmc_jax` builds on a declared energy.
+:mod:`sal.sample.hmc.jax` builds on a declared energy.
 
 HMC (:mod:`sal.sample.hmc`), MALA
 (:mod:`sal.sample.langevin`) and random-walk Metropolis
@@ -72,6 +72,17 @@ DUAL_AVERAGING_KAPPA = 0.75
 #: package where no derivative is taken"; issue #1011). The loop draws from
 #: it through :func:`_uniform` and :func:`_seed` and is otherwise blind to it.
 Stream = TypeVar("Stream", torch.Generator, np.random.Generator)
+
+
+def torch_stream(rng: np.random.Generator) -> torch.Generator:
+    """A torch :data:`Stream` seeded by one draw from ``rng``, so one seed runs a torch chain.
+
+    The one derivation a caller holding a NumPy generator makes before a
+    torch-kernel sampler; ``search.projection`` and ``search.mixture_starts``
+    each wrote it until #1059.
+    """
+    return torch.Generator().manual_seed(int(rng.integers(0, 2**31 - 1)))
+
 
 _KernelStream_contra = TypeVar(
     "_KernelStream_contra", torch.Generator, np.random.Generator, contravariant=True
@@ -316,7 +327,7 @@ def run_chain(
     n_samples: int,
     *,
     step_size: float,
-    theta0: torch.Tensor | None,
+    theta0: torch.Tensor | np.ndarray | None,
     burn_in: int,
     temperature: float,
     adaptation: Adaptation | None,
@@ -564,13 +575,31 @@ def run_compiled(
     )
 
 
-def start_point(objective: Objective, theta0: torch.Tensor | None) -> torch.Tensor:
-    """Where a chain starts: ``theta0``, or ``objective.initial()``, detached, in ``float64``."""
+def start_point(
+    objective: Objective, theta0: torch.Tensor | np.ndarray | None
+) -> torch.Tensor:
+    """Where a chain starts: ``theta0``, or ``objective.initial()``, detached, in ``float64``.
+
+    An array ``theta0`` is copied into the loop's tensor, so a sampler that
+    takes no derivative takes its start as an array (issue #1059).
+    """
+    if isinstance(theta0, np.ndarray):
+        return torch.tensor(theta0, dtype=torch.float64)
     return (
         objective.initial().detach().clone()
         if theta0 is None
         else theta0.detach().clone()
     ).to(torch.float64)
+
+
+def on_buffer(array: np.ndarray) -> torch.Tensor:
+    """``array`` as the loop's position, on its own buffer and uncopied.
+
+    The one conversion a kernel that steps on arrays needs to hand a
+    :class:`Transition` back, kept here so its module imports no torch
+    (root ``CLAUDE.md``, "No autodiff package where no derivative is taken").
+    """
+    return torch.from_numpy(array)
 
 
 def gradient_at(objective: Objective, theta: torch.Tensor) -> torch.Tensor:

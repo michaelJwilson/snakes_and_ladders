@@ -26,10 +26,11 @@ from sal.emissions import (
     EmissionFamily,
     NegativeBinomialEmission,
 )
-from sal.likelihood import spatio_sequential_rust as rust
+from sal.likelihood import spatio_sequential as gateway
 from sal.likelihood.spatio_sequential import (
     class_posteriors,
     external_field,
+    rust,
 )
 from sal.search.spatio_sequential import fit_spatio_sequential
 from sal.sim.count_pairs import (
@@ -38,7 +39,7 @@ from sal.sim.count_pairs import (
     CountPairInstance,
     IndependentCountPair,
 )
-from sal.sim.count_pairs_rust import fine_instance
+from sal.sim.count_pairs.rust import fine_instance
 from sal.sim.fixtures import fixture
 from sal.sim.spatio_sequential import SpatioSequentialParams
 
@@ -145,9 +146,9 @@ def test_each_factored_score_is_the_familys_within_the_declared_ulp() -> None:
 
 @pytest.mark.oracle
 @pytest.mark.backend
-@pytest.mark.parametrize("layout", rust.COVARIATE_ROWS)
+@pytest.mark.parametrize("layout", gateway.COVARIATE_ROWS)
 def test_the_e_step_and_field_match_the_numpy_oracle(
-    layout: rust.CovariateRows,
+    layout: gateway.CovariateRows,
 ) -> None:
     instance = _instance()
     params, observations, labels = (
@@ -180,7 +181,7 @@ def test_the_e_step_and_field_match_the_numpy_oracle(
 def _success_scores(
     params: SpatioSequentialParams,
     observations: np.ndarray,
-    layout: rust.CovariateRows,
+    layout: gateway.CovariateRows,
 ) -> np.ndarray:
     """The successes' score alone as the kernel forms it, ``(S, V, M, K)``.
 
@@ -218,9 +219,9 @@ def _success_scores(
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("layout", rust.COVARIATE_ROWS)
+@pytest.mark.parametrize("layout", gateway.COVARIATE_ROWS)
 def test_each_trial_count_score_is_the_familys_bitwise(
-    layout: rust.CovariateRows,
+    layout: gateway.CovariateRows,
 ) -> None:
     # The factored layout sums the nine `lgamma` terms in the family's order,
     # each tabulated at the family's own argument; the two tabulated layouts
@@ -254,7 +255,7 @@ def test_each_trial_count_score_is_the_familys_bitwise(
 @pytest.mark.backend
 @pytest.mark.parametrize("layout", ["range", "distinct"])
 def test_every_tabulated_layout_is_the_factored_e_step_and_field_bitwise(
-    layout: rust.CovariateRows,
+    layout: gateway.CovariateRows,
 ) -> None:
     # The scores are the same bits in every layout (above), and the kernel sums
     # them in one order: the E step and the field follow.
@@ -306,7 +307,7 @@ def test_first_appearance_codes_are_the_sorted_codes_bitwise() -> None:
     rows = successes.astype(np.int64) * distinct.size + codes.reshape(trials.shape)
     sorted_rows = replace(
         hashed,
-        successes=rust.ChannelRows(
+        successes=gateway.ChannelRows(
             np.ascontiguousarray(rows, dtype=np.uint32),
             hashed.successes.extent,
             distinct,
@@ -329,9 +330,9 @@ def test_first_appearance_codes_are_the_sorted_codes_bitwise() -> None:
 
 @pytest.mark.smoke
 @pytest.mark.backend
-@pytest.mark.parametrize("layout", rust.COVARIATE_ROWS)
+@pytest.mark.parametrize("layout", gateway.COVARIATE_ROWS)
 def test_rows_built_once_are_the_rows_built_per_call_bitwise(
-    layout: rust.CovariateRows,
+    layout: gateway.CovariateRows,
 ) -> None:
     # A fit builds the rows once and every E step builds only the tables; the
     # rows name no parameter, so the answer is the same bits at other

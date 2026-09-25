@@ -20,12 +20,12 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from sal.likelihood import pruning_torch
 from sal.likelihood.objective import (
     BranchLengthObjective,
     GradientRoute,
     SubstitutionModelObjective,
 )
+from sal.likelihood.pruning import torch as pruning_torch
 from sal.opt.fit import (
     FitResult,
     constrained_standard_errors,

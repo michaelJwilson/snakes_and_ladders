@@ -12,13 +12,13 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from sal.likelihood import spatio_sequential_rust as rust
 from sal.likelihood.spatio_sequential import (
     class_posteriors,
     external_field,
+    rust,
 )
 from sal.sim.count_pairs import CountPairInstance
-from sal.sim.count_pairs_rust import fine_instance
+from sal.sim.count_pairs.rust import fine_instance
 from sal.sim.fixtures import fixture
 from sal.sim.spatio_sequential import SpatioSequentialParams
 

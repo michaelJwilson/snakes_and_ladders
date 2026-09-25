@@ -88,7 +88,7 @@ name (issue #779).
 - **`step` is deterministic by contract, so randomness inside a move is keyed
   on the state and the action, never streamed.** `exact.py`'s enumeration
   depends on one successor per pair, so a Monte Carlo move draws from a digest
-  of where it is and what it is doing — `sim/count_pairs.py`'s contract,
+  of where it is and what it is doing — `sim/count_pairs/__init__.py`'s contract,
   applied to a move (issue #706); a stream threaded through the caller would
   make the successor depend on visit order. What keying cannot express — a
   stochastic *reward*, a slippery transition — goes to the issue tracker rather

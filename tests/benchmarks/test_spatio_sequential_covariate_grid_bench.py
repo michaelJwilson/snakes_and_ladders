@@ -20,10 +20,14 @@ from typing import Any
 
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from sal.likelihood import spatio_sequential_rust as rust
-from sal.likelihood.spatio_sequential import class_posteriors
+from sal.likelihood.spatio_sequential import (
+    COVARIATE_ROWS,
+    CovariateRows,
+    class_posteriors,
+    rust,
+)
 from sal.sim.count_pairs import CountPairInstance
-from sal.sim.count_pairs_rust import fine_instance
+from sal.sim.count_pairs.rust import fine_instance
 from sal.sim.fixtures import fixture
 
 PROBLEM = "spatio_sequential_counts_covariate"
@@ -44,9 +48,9 @@ def _once(
 
 
 @pytest.mark.stress
-@pytest.mark.parametrize("layout", rust.COVARIATE_ROWS)
+@pytest.mark.parametrize("layout", COVARIATE_ROWS)
 def test_rust_class_posteriors_under_a_continuous_covariate(
-    benchmark: BenchmarkFixture, layout: rust.CovariateRows
+    benchmark: BenchmarkFixture, layout: CovariateRows
 ) -> None:
     # The tables are built per call, so the build is inside the measurement.
     instance = _instance()
@@ -65,9 +69,9 @@ def test_rust_class_posteriors_under_a_continuous_covariate(
 
 
 @pytest.mark.stress
-@pytest.mark.parametrize("layout", rust.COVARIATE_ROWS)
+@pytest.mark.parametrize("layout", COVARIATE_ROWS)
 def test_rust_external_field_under_a_continuous_covariate(
-    benchmark: BenchmarkFixture, layout: rust.CovariateRows
+    benchmark: BenchmarkFixture, layout: CovariateRows
 ) -> None:
     instance = _instance()
     rows = rust.observation_rows(

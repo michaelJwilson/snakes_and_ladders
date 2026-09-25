@@ -199,6 +199,7 @@ def _population(
     n_replicas: int,
     move: PottsMove,
     backend: Backend,
+    cluster_backend: Backend,
 ) -> tuple[
     np.ndarray,
     list[np.random.Generator],
@@ -232,7 +233,9 @@ def _population(
         dtype=np.int64,
     )
     offsets, neighbours, couplings = graph.compressed_adjacency()
-    advance = sweep_for(move, graph, rows, offsets, neighbours, couplings, backend)
+    advance = sweep_for(
+        move, graph, rows, offsets, neighbours, couplings, backend, cluster_backend
+    )
     return states, children, advance, rows
 
 
@@ -257,6 +260,7 @@ def annealed_importance_sampling(
     *,
     move: PottsMove = PottsMove.SINGLE_SITE,
     backend: Backend = Backend.RUST,
+    cluster_backend: Backend = Backend.PYTHON,
 ) -> LogPartition:
     """``log Z`` from independent annealing runs, weighted by what each one cost (Neal 2001).
 
@@ -295,6 +299,11 @@ def annealed_importance_sampling(
         The move set each rung's sweep uses.
     backend : Backend
         As :func:`~sal.sample.potts_mcmc.sample_potts`.
+    cluster_backend : Backend
+        Which implementation runs a cluster move's pass, as
+        :func:`~sal.sample.potts_mcmc.sample_potts` takes it;
+        :data:`~sal.backend.Backend.PYTHON`, the default, is the chain before
+        #1059 threaded it here, bitwise.
 
     Returns
     -------
@@ -312,7 +321,7 @@ def annealed_importance_sampling(
     """
     ladder = _check_rungs(betas, from_zero=True)
     states, children, advance, rows = _population(
-        graph, field, rng, n_replicas, move, backend
+        graph, field, rng, n_replicas, move, backend, cluster_backend
     )
     log_zero = _log_z_zero(graph, rows)
     log_n = np.log(n_replicas)
@@ -386,6 +395,7 @@ def population_annealing(
     *,
     move: PottsMove = PottsMove.SINGLE_SITE,
     backend: Backend = Backend.RUST,
+    cluster_backend: Backend = Backend.PYTHON,
     resample: Resampling = Resampling.SYSTEMATIC,
 ) -> LogPartition:
     """``log Z`` from a population resampled at every rung (Hukushima & Iba 2003; Machta 2010).
@@ -406,7 +416,7 @@ def population_annealing(
 
     Parameters
     ----------
-    graph, field, betas, rng, n_replicas, move, backend
+    graph, field, betas, rng, n_replicas, move, backend, cluster_backend
         As :func:`annealed_importance_sampling`, with the parent generator
         drawing the resampling uniforms beside spawning the children.
     resample : Resampling
@@ -428,7 +438,7 @@ def population_annealing(
     """
     ladder = _check_rungs(betas, from_zero=True)
     states, children, advance, rows = _population(
-        graph, field, rng, n_replicas, move, backend
+        graph, field, rng, n_replicas, move, backend, cluster_backend
     )
     log_zero = _log_z_zero(graph, rows)
     log_n = np.log(n_replicas)
@@ -554,6 +564,7 @@ def simulated_tempering(
     *,
     move: PottsMove = PottsMove.SINGLE_SITE,
     backend: Backend = Backend.RUST,
+    cluster_backend: Backend = Backend.PYTHON,
 ) -> SimulatedTempered:
     """One walker over the ladder, with the rung as a sampled variable (Marinari & Parisi 1992).
 
@@ -573,7 +584,7 @@ def simulated_tempering(
 
     Parameters
     ----------
-    graph, field, move, backend
+    graph, field, move, backend, cluster_backend
         As :func:`annealed_importance_sampling`.
     betas : TempSchedule | Sequence[float]
         Read by
@@ -624,7 +635,9 @@ def simulated_tempering(
     )
     offsets, neighbours, couplings = graph.compressed_adjacency()
     refuse_negative_coupling(move, graph)
-    advance = sweep_for(move, graph, rows, offsets, neighbours, couplings, backend)
+    advance = sweep_for(
+        move, graph, rows, offsets, neighbours, couplings, backend, cluster_backend
+    )
 
     rung = 0
     accepted = 0

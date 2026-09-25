@@ -19,9 +19,9 @@ from dataclasses import replace
 
 import numpy as np
 from pytest_benchmark.fixture import BenchmarkFixture
-from sal.likelihood import spatio_sequential_rust as rust
+from sal.likelihood.spatio_sequential import rust
 from sal.sim.count_pairs import CountPairInstance
-from sal.sim.count_pairs_rust import fine_instance
+from sal.sim.count_pairs.rust import fine_instance
 from sal.sim.fixtures import fixture
 
 PROBLEM = "spatio_sequential_counts"

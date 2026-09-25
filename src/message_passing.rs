@@ -469,7 +469,7 @@ pub fn tree_messages(
 type Messages<'py> = (Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>);
 
 /// The tree schedule's two passes, for
-/// `sal.likelihood.message_passing_rust`.
+/// `sal.likelihood.message_passing.rust`.
 ///
 /// Every array is `int64` but `tables`, which is `float64`, and all are
 /// borrowed: `as_slice` succeeds only for a C-contiguous array and the

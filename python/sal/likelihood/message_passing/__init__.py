@@ -48,7 +48,7 @@ the grouping machinery is paid per level to group one thing. That is issue
 **A backend, for the one order a kernel implements.** The per-level dispatch
 that grouping leaves is the cost on a chain --- one message per level, so the
 NumPy calls are over single rows --- and issue #754's stress profile ranked
-it. :mod:`sal.likelihood.message_passing_rust` runs the two
+it. :mod:`sal.likelihood.message_passing.rust` runs the two
 tree passes over the same layout in Rust and is the default of
 :func:`sum_product` and :func:`max_product`: **9.05x / 9.28x** at the chain
 of 200, saving **21.6 ms** of that call's 24.3, with the NumPy route below
@@ -89,7 +89,36 @@ DEFAULT_MAX_ITERATIONS = 500
 
 
 class ConvergenceError(RuntimeError):
-    """Flooding did not settle within the iteration cap."""
+    """Messages did not settle within the iteration cap: the one refusal every message-passing route raises.
+
+    Carries the cap, the residual it stopped at and the tolerance it missed,
+    so a caller tuning damping or the cap sees how far off it was. Belief
+    propagation on a Potts graph and the general flooding schedule raised two
+    classes of this name until #1059.
+
+    Parameters
+    ----------
+    method : str
+        What did not converge, as the message names it.
+    iterations : int
+        The sweeps run, which is the cap.
+    residual : float
+        The largest message change on the last sweep.
+    tolerance : float
+        The change the messages had to fall below.
+    """
+
+    def __init__(
+        self, method: str, iterations: int, residual: float, tolerance: float
+    ) -> None:
+        super().__init__(
+            f"{method} did not converge in {iterations} iterations: "
+            f"largest message change {residual:.3e} against a tolerance of "
+            f"{tolerance:.3e}"
+        )
+        self.iterations = iterations
+        self.residual = residual
+        self.tolerance = tolerance
 
 
 @dataclass(frozen=True)
@@ -372,11 +401,7 @@ def _run(
             return _Run(layout, to_variable, to_factor, sweep, plan, math.nan)
         if sweep >= max_iterations:
             break
-    msg = (
-        f"{plan.name} did not converge in {max_iterations} sweeps; "
-        f"residual {residual:.2e} above {tolerance:.0e}"
-    )
-    raise ConvergenceError(msg)
+    raise ConvergenceError(plan.name, max_iterations, residual, tolerance)
 
 
 def _beliefs(
@@ -463,7 +488,7 @@ def sum_product(
         :data:`~sal.backend.Backend.PYTHON` is the NumPy
         route below, which stays as the oracle;
         :data:`~sal.backend.Backend.RUST` is
-        :func:`sal.likelihood.message_passing_rust.tree_messages`
+        :func:`sal.likelihood.message_passing.rust.tree_messages`
         and the default, because it is **9.05x / 9.28x** a tree-schedule
         ``sum_product`` at the chain of 200 the stress profile ranks, which
         saves **21.6 ms** of that call's 24.3 (``docs/experiments/027``). It

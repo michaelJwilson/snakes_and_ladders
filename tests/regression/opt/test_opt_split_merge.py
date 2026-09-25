@@ -12,11 +12,13 @@ from __future__ import annotations
 
 import itertools
 import math
+from dataclasses import replace
 
 import numpy as np
 import pytest
 import torch
 from sal.emissions import CountPairEmission
+from sal.opt.em import EMISSION_MIXTURE_EM
 from sal.opt.emission_mixture import (
     CountPairSeeding,
     EmissionMixtureFit,
@@ -100,7 +102,12 @@ def planted() -> tuple[
     third = pairs[labels == 2]
     median = third[np.argsort(third[:, 0])[len(third) // 2]]
     rows = np.stack([shared, median, median])
-    fit = expectation_maximization(pairs, _uniform(3), at(rows), tolerance=EM_TOLERANCE)
+    fit = expectation_maximization(
+        pairs,
+        _uniform(3),
+        at(rows),
+        config=replace(EMISSION_MIXTURE_EM, tolerance=EM_TOLERANCE),
+    )
     return draw, at, fit
 
 
@@ -113,7 +120,11 @@ def repaired(
     """Split-and-merge from the planted fixed point, once: about 16 s, read by two tests."""
     draw, at, plain = planted
     return split_and_merge(
-        plain, draw.observations, at, candidates=CANDIDATES, tolerance=EM_TOLERANCE
+        plain,
+        draw.observations,
+        at,
+        candidates=CANDIDATES,
+        config=replace(EMISSION_MIXTURE_EM, tolerance=EM_TOLERANCE),
     )
 
 
@@ -140,7 +151,7 @@ def test_split_and_merge_repairs_the_planted_fixed_point(
         draw.observations,
         torch.as_tensor(draw.weights, dtype=torch.float64),
         draw.components,
-        tolerance=EM_TOLERANCE,
+        config=replace(EMISSION_MIXTURE_EM, tolerance=EM_TOLERANCE),
     )
     assert truth.log_likelihood > reference
     assert repaired.fit.log_likelihood == pytest.approx(
@@ -182,9 +193,18 @@ def test_from_the_data_start_split_and_merge_is_read_against_plain_em() -> None:
     draw, at = _draw()
     pairs = draw.observations.astype(float)
     start = uniform_start(pairs, 3, at, np.random.default_rng(0))
-    plain = expectation_maximization(pairs, _uniform(3), start, tolerance=EM_TOLERANCE)
+    plain = expectation_maximization(
+        pairs,
+        _uniform(3),
+        start,
+        config=replace(EMISSION_MIXTURE_EM, tolerance=EM_TOLERANCE),
+    )
     repaired = split_and_merge(
-        plain, pairs, at, candidates=CANDIDATES, tolerance=EM_TOLERANCE
+        plain,
+        pairs,
+        at,
+        candidates=CANDIDATES,
+        config=replace(EMISSION_MIXTURE_EM, tolerance=EM_TOLERANCE),
     )
     assert repaired.fit.log_likelihood >= plain.log_likelihood
     reference, reference_recovery = _reference(draw)

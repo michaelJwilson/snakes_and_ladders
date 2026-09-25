@@ -20,12 +20,9 @@ from numpy.testing import assert_allclose
 from sal.likelihood.potts import enumerate_potts, log_weights
 from sal.numerics import logsumexp
 from sal.sample.gibbs import _GUARD, Indexed
-from sal.sample.kernels import (
-    factor_graph_log_density,
-    gibbs_sweep_sites,
-)
+from sal.sample.gibbs.numba import factor_graph_log_density, gibbs_sweep_sites
 from sal.sample.statistics import chi_square_p_value
-from sal.search.numba.icm import icm_sweeps
+from sal.search.icm.numba import icm_sweeps
 from sal.sim.factor_graph import from_potts
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from sal.sim.potts import energies, site_field

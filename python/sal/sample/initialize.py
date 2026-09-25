@@ -151,7 +151,7 @@ class FromChain(Initializer):
         list[torch.Tensor]
             ``n_samples`` points.
         """
-        return list(self.chain(objective).theta)
+        return list(self.chain(objective).draws)
 
 
 class FromAnnealing(Initializer):
@@ -185,12 +185,12 @@ class FromAnnealing(Initializer):
         self.generator = generator
         self.n_steps = n_steps
 
-    def run(self, objective: Objective) -> hmc.Annealed:
+    def run(self, objective: Objective) -> hmc.AnnealedTheta:
         """The annealing run: its best point, the acceptance rate and its cost.
 
         Returns
         -------
-        sal.sample.hmc.Annealed
+        sal.sample.hmc.AnnealedTheta
         """
         return hmc.anneal(
             objective,

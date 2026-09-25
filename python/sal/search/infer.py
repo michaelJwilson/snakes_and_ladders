@@ -23,7 +23,7 @@ branch but the few a move touched, and a branch is the split it induces
 (:func:`sal.sim.topology.branch_splits`), so the parent's fitted
 lengths start the neighbour's fit on every branch that persists. The same
 identity lets an unfitted evaluation of the neighbour reuse the parent's
-subtree partials (:class:`~sal.likelihood.pruning_torch.PartialCache`),
+subtree partials (:class:`~sal.likelihood.pruning.torch.PartialCache`),
 which is what lazy scoring -- rank every neighbour cheaply, fit only the top
 few, always fit the accepted move in full -- rests on. Warm starts are on by
 default because they change where a fit *starts* and not where it ends;
@@ -53,7 +53,7 @@ from sal.likelihood.objective import (
     SubstitutionModelObjective,
 )
 from sal.likelihood.parsimony import fitch_score, sankoff_score
-from sal.likelihood.pruning_torch import (
+from sal.likelihood.pruning.torch import (
     PartialCache,
     log_likelihood_cached,
 )
@@ -223,15 +223,15 @@ def _objective(
 
 def _start(
     alignment: Mapping[str, np.ndarray],
-    topology: Topology | None,
+    start: Topology | None,
     rng: np.random.Generator | None,
 ) -> Topology:
     """The topology a search begins from, drawn from ``rng`` when none is given."""
     if len(alignment) < 4:
         msg = f"need at least 4 taxa to search, got {len(alignment)}"
         raise ValueError(msg)
-    if topology is not None:
-        return topology
+    if start is not None:
+        return start
     if rng is None:
         msg = "searching for a topology needs an rng to draw the start from"
         raise ValueError(msg)
@@ -369,7 +369,7 @@ def infer(
     alignment: Mapping[str, np.ndarray],
     k: int,
     *,
-    topology: Topology | None = None,
+    start: Topology | None = None,
     model: Model = Model.JC,
     moves: MoveSet = MoveSet.NNI,
     max_evaluations: int = 200,
@@ -380,7 +380,7 @@ def infer(
     radius: int | None = None,
     partial_reoptimization: bool = False,
     workers: int = 1,
-    backend: Pool = "serial",
+    pool: Pool = "serial",
     intra_op_threads: int | None = None,
 ) -> Inference:
     """Hill-climb over topologies, fitting continuous parameters per candidate.
@@ -391,8 +391,9 @@ def infer(
         Observed states per taxon, each of shape ``(n_sites,)``.
     k : int
         Number of states.
-    topology : Topology | None
-        Where to start. ``None`` draws a random topology from ``rng``. A
+    start : Topology | None
+        Where to start, the name every search and sampler gives it (issue
+        #1059). ``None`` draws a random topology from ``rng``. A
         parsimony start is this argument rather than a mode of its own:
         ``parsimony_search(alignment, k, rng=rng).topology`` is the tree the
         Fitch climb reaches, at one post-order pass per candidate against this
@@ -406,7 +407,7 @@ def infer(
         Maximum candidates scored. The initial topology's own fit is not
         counted against it.
     rng : np.random.Generator | None
-        Source of the starting topology, required when ``topology`` is ``None``
+        Source of the starting topology, required when ``start`` is ``None``
         and unused otherwise. Passed in rather than seeded here, so a caller
         running an ensemble gets independent starts (`sim/CLAUDE.md`, issue
         #240). There is no default: a generator made here would be unseeded, and
@@ -452,7 +453,7 @@ def infer(
         their results are combined in input order, so a parallel search is
         bitwise equal to the serial one, candidate for candidate. ``1``, the
         default, is the loop this had.
-    backend : Pool
+    pool : Pool
         Which pool ``workers`` come from, per
         :func:`sal.parallel.map_tasks`. ``"serial"``, the
         default, refuses ``workers > 1`` rather than ignoring it, so asking
@@ -480,7 +481,7 @@ def infer(
         a surrogate is given without ``lazy_top`` to apply it to, ``radius``
         is given with ``MoveSet.NNI`` or is below 1,
         ``partial_reoptimization`` is set without ``warm_start``, or
-        ``workers`` and ``backend`` disagree (:func:`parallel.map_tasks`).
+        ``workers`` and ``pool`` disagree (:func:`parallel.map_tasks`).
     """
     if lazy_top is not None and lazy_top < 1:
         msg = f"lazy_top must be at least 1 when given, got {lazy_top}"
@@ -496,7 +497,7 @@ def infer(
         raise ValueError(msg)
 
     neighbourhood = _neighbourhood(moves, radius)
-    current = _start(alignment, topology, rng)
+    current = _start(alignment, start, rng)
     best = _score(model, current, k, alignment)
     trace = [best.value]
     seen = {leaf_bipartitions(current)}
@@ -550,7 +551,7 @@ def infer(
                 for neighbour in to_fit
             ],
             workers=workers,
-            backend=backend,
+            pool=pool,
             intra_op_threads=intra_op_threads,
         )
         for neighbour, fitted in zip(to_fit, scored, strict=True):
@@ -692,7 +693,7 @@ def parsimony_search(
     k: int,
     *,
     step_matrix: np.ndarray | None = None,
-    topology: Topology | None = None,
+    start: Topology | None = None,
     moves: MoveSet = MoveSet.NNI,
     max_evaluations: int = 200,
     rng: np.random.Generator | None = None,
@@ -719,7 +720,7 @@ def parsimony_search(
         be a metric --- symmetric, zero on the diagonal, satisfying the triangle
         inequality --- since an unrooted topology has one score only when every
         rooting scores the same.
-    topology : Topology | None
+    start : Topology | None
         Where to start. ``None`` draws a random topology from ``rng``.
     moves : MoveSet
         Neighbourhood the search proposes from.
@@ -727,7 +728,7 @@ def parsimony_search(
         Maximum candidates scored. The initial topology's own score is not
         counted against it.
     rng : np.random.Generator | None
-        Source of the starting topology, required when ``topology`` is
+        Source of the starting topology, required when ``start`` is
         ``None`` and unused otherwise, on the terms :func:`infer` states.
 
     Returns
@@ -738,7 +739,7 @@ def parsimony_search(
     Raises
     ------
     ValueError
-        If the alignment has fewer than 4 taxa, if ``topology`` is ``None``
+        If the alignment has fewer than 4 taxa, if ``start`` is ``None``
         and no ``rng`` is given, or if ``step_matrix`` is not a metric of
         shape ``(k, k)``.
     """
@@ -753,7 +754,7 @@ def parsimony_search(
         def score(candidate: Topology) -> float:
             return sankoff_score(candidate, alignment, step)
 
-    current = _start(alignment, topology, rng)
+    current = _start(alignment, start, rng)
     best = score(current)
     trace = [best]
     seen = {leaf_bipartitions(current)}

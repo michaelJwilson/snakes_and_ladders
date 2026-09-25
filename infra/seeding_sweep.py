@@ -236,7 +236,7 @@ def main() -> None:
                 for index, instance in enumerate(drawn)
             ],
             workers=workers,
-            backend="processes",
+            pool="processes",
             intra_op_threads=None,
         )
         arguments.out.write_text(

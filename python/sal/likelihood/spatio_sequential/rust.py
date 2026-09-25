@@ -69,7 +69,6 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
-from typing import Literal, get_args
 
 import numpy as np
 
@@ -78,7 +77,12 @@ from sal.emissions import BetaBinomialEmission, EmissionFamily, validated_trials
 from sal.emissions.bb import log_factorial, trial_tables
 from sal.emissions.nb import exposure_table
 from sal.likelihood.spatio_sequential import (
+    COVARIATE_ROWS,
+    COVARIATE_TABLE_CEILING,
+    ChannelRows,
     ClassPosteriors,
+    CovariateRows,
+    ObservationRows,
     log_prior,
 )
 from sal.sim.count_pairs import (
@@ -87,19 +91,6 @@ from sal.sim.count_pairs import (
     IndependentCountPair,
 )
 from sal.sim.spatio_sequential import SpatioSequentialParams
-
-#: How the beta-binomial's trial count reaches the kernel (issue #1064).
-#: ``factored`` tabulates its density's terms each by its own integer and the
-#: kernel sums them per observation; ``range`` tabulates every
-#: ``(successes, trial count)`` pair over the trial counts from the least to the
-#: greatest; ``distinct`` over the trial counts that occur. All three are exact
-#: and bitwise to one another. The negative binomial's exposure is factored
-#: whichever is chosen: it is continuous, and a table by its values has a row
-#: per observation.
-CovariateRows = Literal["factored", "range", "distinct"]
-
-#: The layouts :data:`CovariateRows` names, for a refusal to list.
-COVARIATE_ROWS: tuple[CovariateRows, ...] = get_args(CovariateRows)
 
 
 def _families(params: SpatioSequentialParams) -> list[IndependentCountPair]:
@@ -123,14 +114,6 @@ def _families(params: SpatioSequentialParams) -> list[IndependentCountPair]:
         families.append(family)
     return families
 
-
-#: Bytes one channel's covariate table may take (issue #1064): the refusal a
-#: wide trial-count range meets before it allocates, under ``range`` and
-#: ``distinct`` and in ``factored``'s trial-count tables. 1 GiB is
-#: 6.2x the covariate of the stress instance of
-#: ``spatio_sequential_counts_covariate``, the largest array the E step already
-#: holds there.
-COVARIATE_TABLE_CEILING = 2**30
 
 #: The largest row a ``uint32`` index carries. A table with more rows would
 #: wrap on the cast and read the wrong row, so it is refused.
@@ -284,62 +267,6 @@ def _range_codes(values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     low = int(codes.min())
     levels = low + np.arange(int(codes.max()) - low + 1, dtype=np.float64)
     return codes - low, levels
-
-
-@dataclass(frozen=True)
-class ChannelRows:
-    """One channel's rows and what its table is built over; no parameter enters.
-
-    Parameters
-    ----------
-    rows : np.ndarray
-        ``(S, n_nodes)`` contiguous ``uint32``, each observation's table row.
-    extent : int
-        One past the largest count, the counts the table spans.
-    levels : np.ndarray | None
-        The covariate value of each code where the table is over
-        ``(count, code)`` pairs, row ``count * len(levels) + code``; ``None``
-        where it is by count alone.
-    covariate : np.ndarray | None
-        The covariate a factored channel's kernel term reads per observation:
-        the exposure as ``float64`` or the trial count as ``uint32``, both
-        ``(S, n_nodes)`` contiguous; ``None`` where nothing is factored.
-    """
-
-    rows: np.ndarray
-    extent: int
-    levels: np.ndarray | None = None
-    covariate: np.ndarray | None = None
-
-
-@dataclass(frozen=True)
-class ObservationRows:
-    """Both channels' rows, built once per fit and reused by every E step (issue #1064).
-
-    A row depends on the observations and the covariate and on no parameter,
-    so an E step handed these builds only the tables. They are interpretable
-    only against the observations and the covariate they were built from, and
-    an E step refuses them for any other.
-
-    Parameters
-    ----------
-    layout : CovariateRows
-        The trial count's layout they were built in.
-    observations : np.ndarray
-        The observations they were built from, held to be compared by identity.
-    covariate : np.ndarray | None
-        The covariate, likewise.
-    total : ChannelRows
-        The first channel's.
-    successes : ChannelRows
-        The second channel's.
-    """
-
-    layout: CovariateRows
-    observations: np.ndarray
-    covariate: np.ndarray | None
-    total: ChannelRows
-    successes: ChannelRows
 
 
 def _uint32(values: np.ndarray, what: str) -> np.ndarray:

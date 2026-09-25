@@ -105,7 +105,9 @@ def test_hill_climbing_reaches_the_enumerated_optimum_on_a_lattice() -> None:
     rng = np.random.default_rng(3)
     reached = [
         environment.energy(
-            greedy_rollout(environment, environment.reset(rng), 30).states[-1]
+            greedy_rollout(
+                environment, start=environment.reset(rng), max_steps=30
+            ).states[-1]
         )
         for _ in range(30)
     ]

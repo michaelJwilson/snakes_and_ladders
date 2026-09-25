@@ -53,20 +53,22 @@ def test_every_kernel_is_pinned_against_a_referee_its_tests_import(
 
 
 @pytest.mark.infra
-def test_an_oracle_inside_the_adapter_is_a_referee(
+def test_the_gateway_beside_the_twin_is_a_referee(
     found: list[appraise_kernels.Kernel],
 ) -> None:
-    # The referee can be a symbol: `test_ragged_rust.py` imports `posteriors`
-    # and `posteriors_oracle` from one module; a module-only survey reported a
-    # false gap.
+    # The referee was a symbol until #1059: `test_ragged_rust.py` imported
+    # `posteriors` and `posteriors_oracle` from the adapter itself, and a
+    # module-only survey reported a false gap. With the twin at
+    # `likelihood.ragged.rust`, the oracle sits in the gateway beside it, the
+    # sibling the survey reads for every other twin.
     ragged = next(kernel for kernel in found if kernel.module == "ragged")
 
     # `opt.hmm` calls the kernel too (#933, R5), and its torch recursion is its
     # oracle, so the adapter `opt.hmm.estimation` (#1010) is itself a referee.
-    assert "likelihood.ragged_rust.posteriors_oracle" in ragged.referees
+    assert "likelihood.ragged" in ragged.referees
     assert ragged.referees == (
         "likelihood.message_passing_reference",
-        "likelihood.ragged_rust.posteriors_oracle",
+        "likelihood.ragged",
         "opt.hmm.estimation",
         "sandbox.rectangular_hmm",
     )
@@ -95,11 +97,11 @@ def test_the_boundary_names_the_adapter_each_kernel_is_called_through(
     # that loses its caller -- reachable from a test alone -- shows here.
     adapters = {kernel.module: kernel.adapters for kernel in found}
 
-    assert adapters["count_pairs"] == ("sim.count_pairs_rust",)
+    assert adapters["count_pairs"] == ("sim.count_pairs.rust",)
     # Two callers since #933 (R5): `opt.hmm` may not import `likelihood`, so
     # Baum-Welch's compiled E step reaches the kernel through the extension.
-    assert adapters["ragged"] == ("likelihood.ragged_rust", "opt.hmm.estimation")
-    assert adapters["coupled"] == ("likelihood.spatio_sequential_rust",)
+    assert adapters["ragged"] == ("likelihood.ragged.rust", "opt.hmm.estimation")
+    assert adapters["coupled"] == ("likelihood.spatio_sequential.rust",)
 
 
 @pytest.mark.infra

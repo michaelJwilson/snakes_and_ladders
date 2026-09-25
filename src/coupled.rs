@@ -1,5 +1,5 @@
 //! The E step of the coupled spatio-sequential model, ported from
-//! `python/sal/likelihood/spatio_sequential.py` (the NumPy
+//! `python/sal/likelihood/spatio_sequential/__init__.py` (the NumPy
 //! oracle) to Rust, exposed to Python via PyO3 as
 //! `sal.oxisal.class_posteriors` and
 //! `...external_field`.

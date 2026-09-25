@@ -113,7 +113,9 @@ def test_expert_iteration_makes_the_planner_reach_the_optimum_at_a_fraction_of_g
         np.mean(
             [
                 abs(
-                    environment.energy(greedy_rollout(environment, s, 6).states[-1])
+                    environment.energy(
+                        greedy_rollout(environment, start=s, max_steps=6).states[-1]
+                    )
                     - best
                 )
                 < 1e-9

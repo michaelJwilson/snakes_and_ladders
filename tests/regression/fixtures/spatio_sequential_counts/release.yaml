@@ -4,7 +4,7 @@ oracle: none
 # The coupled model between the ci instance and the key one: the stress
 # file's M = 10 classes, K = 10 hidden states and emission ladders, on a 10x10
 # open triangular lattice of 100 vertices over S = 1,000 sequential positions.
-# Every field is required -- see python/sal/sim/count_pairs.py.
+# Every field is required -- see python/sal/sim/count_pairs/__init__.py.
 #
 # 100,000 count pairs, and M x K = 100 (class, state) components: the
 # component count experiment 009 fitted in projection, on a lattice whose
@@ -20,7 +20,7 @@ seed: 20260908
 
 # What the counts hash to, so a changed simulator fails here rather than in a
 # recovery number three tests later. Written by `sim.count_pairs.counts_digest`
-# over the draw `sim.count_pairs_rust.simulate_count_pairs` makes of this file:
+# over the draw `sim.count_pairs.rust.simulate_count_pairs` makes of this file:
 # 0.06 s on the 4-core reference host, the largest count 695 in the first channel and 40 in the second.
 counts_digest: 8891ea830217f7c0
 shape: [10, 10]

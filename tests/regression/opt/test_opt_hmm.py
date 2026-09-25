@@ -27,7 +27,9 @@ from sal.emissions import (
     PoissonEmission,
 )
 from sal.fixtures import load_params
+from sal.likelihood.hmm import hmm_log_likelihood, viterbi
 from sal.likelihood.hmm_paths import enumerate_hidden_paths
+from sal.opt.em import EM, EmConfig
 from sal.opt.hmm import (
     EmFit,
     GaussianHmmObjective,
@@ -36,9 +38,8 @@ from sal.opt.hmm import (
     baum_welch,
     baum_welch_family,
     forward_log_likelihood,
-    hmm_log_likelihood,
-    viterbi,
 )
+from sal.opt.termination import Stop, Termination
 from sal.sim.fixtures import fixture
 from sal.sim.hmm import HmmParams, simulate_sequences
 
@@ -250,12 +251,12 @@ def test_baum_welch_increases_the_likelihood_monotonically() -> None:
     log_transition = start["log_transition"]
     log_emission = start["log_emission"]
     for _ in range(8):
-        log_initial, log_transition, log_emission, value = baum_welch(
+        log_initial, log_transition, log_emission, value, _ = baum_welch(
             observations,
             log_initial,
             log_transition,
             log_emission,
-            max_iterations=1,
+            config=replace(EM, max_iterations=1),
         )
         assert value >= previous - 1e-9 * abs(value)
         previous = value
@@ -290,8 +291,8 @@ def test_baum_welch_stops_once_the_likelihood_stops_moving() -> None:
         start["log_emission"],
     )
 
-    *_, loose = baum_welch(*arguments, tolerance=1e-1)
-    *_, tight = baum_welch(*arguments, tolerance=1e-14)
+    loose = baum_welch(*arguments, config=replace(EM, tolerance=1e-1)).log_likelihood
+    tight = baum_welch(*arguments, config=replace(EM, tolerance=1e-14)).log_likelihood
     assert loose < tight
 
 
@@ -344,7 +345,9 @@ def test_baum_welch_reaches_the_enumerated_path_evidence_and_its_fixed_point() -
         params.emissions,
     )
 
-    first = baum_welch_family(observations, *start, max_iterations=1)
+    first = baum_welch_family(
+        observations, *start, config=replace(EM, max_iterations=1)
+    )
     assert_allclose(
         first.log_likelihood,
         _enumerated_evidence(params, observations),
@@ -354,7 +357,9 @@ def test_baum_welch_reaches_the_enumerated_path_evidence_and_its_fixed_point() -
     walked = start
     evidence = []
     for _ in range(_EM_ITERATES):
-        iterate = baum_welch_family(observations, *walked, max_iterations=1)
+        iterate = baum_welch_family(
+            observations, *walked, config=replace(EM, max_iterations=1)
+        )
         walked = (iterate.log_initial, iterate.log_transition, iterate.emissions)
         evidence.append(_enumerated_evidence(_stepped(params, iterate), observations))
     assert evidence == sorted(evidence), evidence
@@ -466,15 +471,15 @@ def test_baum_welch_ascends_and_settles_on_the_re_estimation_equations() -> None
     walked = start
     reported = []
     for _ in range(_EM_ASCENT):
-        initial_step, transition_step, emission_step, likelihood = baum_welch(
-            observations, *walked, max_iterations=1
+        initial_step, transition_step, emission_step, likelihood, _ = baum_welch(
+            observations, *walked, config=replace(EM, max_iterations=1)
         )
         walked = (initial_step, transition_step, emission_step)
         reported.append(likelihood)
     increments = np.diff(np.array(reported))
     assert (increments > 0.0).all(), reported
 
-    log_initial, log_transition, log_emission, log_likelihood = baum_welch(
+    log_initial, log_transition, log_emission, log_likelihood, _ = baum_welch(
         observations, *start
     )
     initial, transition, emission, evidence = _re_estimated(
@@ -510,9 +515,8 @@ def test_the_streamed_baum_welch_is_the_batched_one() -> None:
                 initial,
                 transition,
                 emission,
-                max_iterations=10,
-                tolerance=-np.inf,
                 backend=backend,
+                config=EmConfig(max_iterations=10, tolerance=-np.inf),
             )
             for backend in (Backend.PYTHON, Backend.RUST)
         ]
@@ -524,6 +528,10 @@ def test_the_streamed_baum_welch_is_the_batched_one() -> None:
                 atol=1e-10,
             )
         assert_allclose(fits[1].log_likelihood, fits[0].log_likelihood, rtol=1e-12)
+        # Issue #1059: both routes report the loop's termination, as every EM
+        # fit does; ten steps at a tolerance nothing meets is the budget.
+        for fit in fits:
+            assert fit.termination == Termination(False, 10, Stop.BUDGET)
 
     every_value([1, 40], check)
 
@@ -603,10 +611,9 @@ def test_the_streamed_family_step_is_the_batched_one(
             initial,
             transition,
             family,
-            max_iterations=10,
-            tolerance=-np.inf,
             covariate=depth,
             backend=backend,
+            config=EmConfig(max_iterations=10, tolerance=-np.inf),
         )
         for backend in (Backend.PYTHON, Backend.RUST)
     ]
@@ -620,12 +627,11 @@ def test_the_streamed_family_step_is_the_batched_one(
                 initial,
                 transition,
                 family,
-                max_iterations=10,
-                tolerance=-np.inf,
                 covariate=depth,
                 with_table=with_table,
                 table_size=size,
                 approx=approx,
+                config=EmConfig(max_iterations=10, tolerance=-np.inf),
             )
             for with_table, size, approx in (
                 (False, None, False),
@@ -667,9 +673,8 @@ def test_real_valued_counts_take_the_batched_route() -> None:
             initial,
             transition,
             family,
-            max_iterations=3,
-            tolerance=-np.inf,
             backend=backend,
+            config=EmConfig(max_iterations=3, tolerance=-np.inf),
         )
         for backend in (Backend.PYTHON, Backend.RUST)
     ]

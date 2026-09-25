@@ -11,10 +11,8 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from sal.likelihood.belief_propagation import (
-    ConvergenceError,
-    belief_propagation,
-)
+from sal.likelihood.belief_propagation import belief_propagation
+from sal.likelihood.message_passing import ConvergenceError
 from sal.likelihood.potts import enumerate_potts
 from sal.sim.graph import PottsGraph, erdos_renyi_graph
 

@@ -43,7 +43,7 @@ the right tool is :mod:`sal.likelihood.patterns`.
 
 **Arrays in, floats out.** No derivative is taken through the interval, so
 it takes array-likes and returns ``float`` (issue #1011). Two quantities come
-from :mod:`~sal.likelihood.pruning_torch`, whose tensors the
+from :mod:`~sal.likelihood.pruning.torch`, whose tensors the
 fits differentiate: the exact half's evaluation and the transition matrices
 ``P(t)`` the extremes are read from. Each crosses there once per call, and
 ``torch`` is imported at that call rather than with the module.
@@ -214,7 +214,7 @@ def site_log_likelihood_extremes(
         Root state distribution, shape ``(k,)``.
     branch_lengths : npt.ArrayLike
         Shape ``(len(branch_order(tau)),)``, in the order
-        :func:`~sal.likelihood.pruning_torch.log_likelihood`
+        :func:`~sal.likelihood.pruning.torch.log_likelihood`
         takes it; read as ``float64``.
     rate_matrix : npt.ArrayLike | None
         A general rate matrix, or ``None`` for the closed-form Jukes-Cantor
@@ -234,7 +234,7 @@ def site_log_likelihood_extremes(
     """
     import torch
 
-    from sal.likelihood.pruning_torch import (
+    from sal.likelihood.pruning.torch import (
         branch_order,
         transition_probabilities,
     )
@@ -286,7 +286,7 @@ def site_log_likelihood_extremes(
 
 
 def _rate_tensor(rate_matrix: npt.ArrayLike | None) -> torch.Tensor | None:
-    """``rate_matrix`` as the ``float64`` tensor ``pruning_torch`` takes, or ``None``."""
+    """``rate_matrix`` as the ``float64`` tensor ``likelihood.pruning.torch`` takes, or ``None``."""
     if rate_matrix is None:
         return None
     import torch
@@ -418,7 +418,7 @@ def block_frequency_interval(
         # differentiate; the lengths cross into it here, once.
         import torch
 
-        from sal.likelihood.pruning_torch import log_likelihood
+        from sal.likelihood.pruning.torch import log_likelihood
 
         exact = float(
             log_likelihood(

@@ -26,8 +26,8 @@ import numpy as np
 import torch
 from matplotlib.figure import Figure
 
-from sal.likelihood import pruning_torch
 from sal.likelihood.objective import BranchLengthObjective
+from sal.likelihood.pruning import torch as pruning_torch
 from sal.opt.fit import constrained_standard_errors, covers, fit
 from sal.qa.figure import QAFigure
 from sal.qa.runner import figure_main, fixture_params

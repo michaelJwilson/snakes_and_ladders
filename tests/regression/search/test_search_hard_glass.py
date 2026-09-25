@@ -60,7 +60,10 @@ def test_single_site_descent_does_not_solve_the_declared_glass(
     best = record.value("enumerated_ground_energy")
     rate = float(
         np.mean(
-            [abs(found - best) < 1e-9 for _, found in _descents(glass, 20260908, 50)]
+            [
+                abs(found - best) < 1e-9
+                for _, found, *_ in _descents(glass, 20260908, 50)
+            ]
         )
     )
 
@@ -94,7 +97,7 @@ def test_every_descent_failure_stops_at_a_genuine_local_minimum(
     best = record.value("enumerated_ground_energy")
     failures = [
         labelling
-        for labelling, found in _descents(glass, 20260908, 20)
+        for labelling, found, *_ in _descents(glass, 20260908, 20)
         if abs(found - best) >= 1e-9
     ]
 
@@ -114,7 +117,9 @@ def test_random_restart_descent_still_reaches_the_ground_state(
     # The baseline to beat is restart descent: 1.000 over 50 restarts on every
     # seed measured; here 8 of 50 within 1e-9 of `enumerated_ground_energy`.
     best = record.value("enumerated_ground_energy")
-    reached = [abs(found - best) < 1e-9 for _, found in _descents(glass, 20260908, 50)]
+    reached = [
+        abs(found - best) < 1e-9 for _, found, *_ in _descents(glass, 20260908, 50)
+    ]
 
     assert any(reached)
     assert record.value("restart_success") == 1.0

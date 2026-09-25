@@ -72,7 +72,7 @@ from sal.sim.spatio_sequential import SpatioSequentialParams
 from sal.track import current as current_tracked
 
 if TYPE_CHECKING:
-    from sal.likelihood.spatio_sequential_rust import CovariateRows, ObservationRows
+    from sal.likelihood.spatio_sequential import CovariateRows, ObservationRows
 
 
 class LabelSolver(StrEnum):
@@ -389,7 +389,7 @@ def fit_spatio_sequential(
         Which kernel runs the E step, the field and the labelled log-likelihood:
         :data:`~sal.backend.Backend.PYTHON` is the NumPy oracle
         and :data:`~sal.backend.Backend.RUST` the tabulated
-        kernel of :mod:`sal.likelihood.spatio_sequential_rust`,
+        kernel of :mod:`sal.likelihood.spatio_sequential.rust`,
         chosen inside :mod:`sal.likelihood.spatio_sequential`
         so the three cannot be mixed (#828).
     min_label_sites : int
@@ -400,7 +400,7 @@ def fit_spatio_sequential(
         nothing from ``rng``.
     covariate_rows : CovariateRows
         The Rust backend's layout for the trial count's table
-        (:func:`sal.likelihood.spatio_sequential_rust.observation_rows`, issue
+        (:func:`sal.likelihood.spatio_sequential.rust.observation_rows`, issue
         #1064). The rows depend on the observations and the covariate alone,
         so on the Rust backend they are built once here and every E step, field
         and labelled log-likelihood of the fit reuses them. ``"range"``, the
@@ -425,7 +425,7 @@ def fit_spatio_sequential(
     if backend is Backend.RUST:
         # Imported here, as `sal.backend.twin` imports it, so the NumPy
         # backend never loads the extension.
-        from sal.likelihood.spatio_sequential_rust import observation_rows
+        from sal.likelihood.spatio_sequential import observation_rows
 
         rows = observation_rows(
             observations, params.covariate, covariate_rows=covariate_rows

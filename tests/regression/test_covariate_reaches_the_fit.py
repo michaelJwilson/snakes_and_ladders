@@ -10,12 +10,15 @@ refuses a covariate by design, so it is not a site here.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 import torch
 from sal.emissions import NegativeBinomialEmission
 from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
 from sal.likelihood.spatio_sequential import class_log_density
+from sal.opt.em import EM
 from sal.opt.hmm import baum_welch_family
 from sal.sim.spatio_sequential import (
     canonical_spatio_sequential,
@@ -59,8 +62,8 @@ def _fit(
             torch.as_tensor(_DISPERSION, dtype=torch.float64),
             torch.as_tensor(start, dtype=torch.float64),
         ),
-        max_iterations=200,
         covariate=exposure,
+        config=replace(EM, max_iterations=200),
     )
     family = result.emissions
     assert isinstance(family, NegativeBinomialEmission)

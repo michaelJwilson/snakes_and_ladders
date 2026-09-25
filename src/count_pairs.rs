@@ -1,5 +1,5 @@
 //! Per-vertex simulation of the coupled model's two-channel counts, ported
-//! from `python/sal/sim/count_pairs.py` (the NumPy oracle) to
+//! from `python/sal/sim/count_pairs/__init__.py` (the NumPy oracle) to
 //! Rust, exposed to Python via PyO3 as
 //! `sal.oxisal.simulate_count_pairs`.
 //!

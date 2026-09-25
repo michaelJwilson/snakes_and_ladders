@@ -85,7 +85,7 @@ def test_a_chain_without_its_draws_returns_the_expectations() -> None:
         store_chain=False,
         operators={"x": lambda x: x, "x2": lambda x: x * x},
     )
-    assert chain.theta.shape == (0, dimension)
+    assert chain.draws.shape == (0, dimension)
     first, second = chain.expectations["x"], chain.expectations["x2"]
     assert first.n == second.n == 1_000
     assert_gaussian_moments(first, second, precision)
@@ -110,11 +110,11 @@ def test_an_operator_leaves_the_chain_bitwise_as_it_was() -> None:
 
     plain = run()
     observed = run(operators={"x": lambda x: x})
-    assert torch.equal(plain.theta, observed.theta)
+    assert torch.equal(plain.draws, observed.draws)
     assert plain.expectations == {}
     np.testing.assert_allclose(
         observed.expectations["x"].mean,
-        _filtered(plain.theta.numpy()).estimate().mean,
+        _filtered(plain.draws.numpy()).estimate().mean,
         rtol=0.0,
         atol=0.0,
     )

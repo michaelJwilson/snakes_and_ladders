@@ -18,6 +18,7 @@ from collections.abc import Callable, Mapping
 
 import numpy as np
 
+from sal.opt.em import EmConfig
 from sal.validation.protocol import dump, measured, received
 
 #: One output mapping from one measured call.
@@ -101,8 +102,7 @@ def _baum_welch(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
             initial,
             transition,
             emission,
-            max_iterations=n_iter,
-            tolerance=-np.inf,
+            config=EmConfig(max_iterations=n_iter, tolerance=-np.inf),
         )
         return {"emission": np.exp(fit.log_emission.numpy())}
 
@@ -160,12 +160,11 @@ def _family_baum_welch(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs
         initial,
         transition,
         family,
-        max_iterations=1,
-        tolerance=-np.inf,
         backend=backend,
         with_table=with_table,
         table_size=table_size,
         approx=approx,
+        config=EmConfig(max_iterations=1, tolerance=-np.inf),
     )
 
     def call() -> Outputs:
@@ -174,12 +173,11 @@ def _family_baum_welch(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs
             initial,
             transition,
             family,
-            max_iterations=n_iter,
-            tolerance=-np.inf,
             backend=backend,
             with_table=with_table,
             table_size=table_size,
             approx=approx,
+            config=EmConfig(max_iterations=n_iter, tolerance=-np.inf),
         )
         return {"log_likelihood": np.asarray(fit.log_likelihood)}
 
@@ -200,7 +198,7 @@ def _viterbi(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
         GaussianEmission,
         PoissonEmission,
     )
-    from sal.opt.hmm import hmm_log_likelihood, viterbi
+    from sal.likelihood.hmm import hmm_log_likelihood, viterbi
 
     observations = inputs["observations"]
     initial, transition = (
@@ -324,7 +322,10 @@ def _mixture_em(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
 
     def call() -> Outputs:
         fit = expectation_maximization(
-            observations, weights, start, max_iterations=n_iter, tolerance=-np.inf
+            observations,
+            weights,
+            start,
+            config=EmConfig(max_iterations=n_iter, tolerance=-np.inf),
         )
         return {"weights": fit.weights.numpy()}
 
@@ -384,8 +385,6 @@ def _random_walk_sample(inputs: Mapping[str, np.ndarray]) -> Callable[[], Output
     with ``constants``; ``warmup`` proposals above zero run the warm-up at
     the optimal random-walk acceptance first.
     """
-    import torch
-
     from sal.opt.testfunctions import Rosenbrock
     from sal.sample import hmc, metropolis
     from sal.validation.gaussian import GaussianTarget
@@ -404,7 +403,7 @@ def _random_walk_sample(inputs: Mapping[str, np.ndarray]) -> Callable[[], Output
         if warmup
         else None
     )
-    theta0 = torch.as_tensor(position)
+    theta0 = np.asarray(position, dtype=np.float64)
     # Outside the measured call, as `_hmc_sample`'s set-up.
     metropolis.random_walk(
         GaussianTarget(np.ones(2)),

@@ -505,7 +505,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "tree",
         "pruning, Rust",
-        "likelihood.pruning_rust.log_likelihood",
+        "likelihood.pruning.rust.log_likelihood",
         "pruning, NumPy",
         T + "likelihood/test_pruning_common.py"
         "::test_the_rust_route_meets_the_oracle_within_the_float64_bound",
@@ -514,7 +514,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "tree",
         "pruning, Torch",
-        "likelihood.pruning_torch.log_likelihood",
+        "likelihood.pruning.torch.log_likelihood",
         "pruning, NumPy",
         T + "likelihood/test_pruning_common.py"
         "::test_the_torch_route_reproduces_the_oracle_bitwise",
@@ -685,7 +685,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "hmm",
         "tree schedule, Rust",
-        "likelihood.message_passing_rust.tree_messages",
+        "likelihood.message_passing.rust.tree_messages",
         "forward via sum-product",
         T + "likelihood/test_message_passing_rust.py"
         "::test_the_kernel_writes_the_oracle_s_messages_edge_for_edge",
@@ -739,7 +739,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "hmm",
         "ragged HMM",
-        "likelihood.ragged_rust.posteriors",
+        "likelihood.ragged.posteriors",
         "forward / forward-backward",
         T + "opt/test_ragged_hmm.py"
         "::test_equal_lengths_reproduce_the_conserved_route_bitwise",
@@ -775,7 +775,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "hmm",
         "coupled, Rust",
-        "likelihood.spatio_sequential_rust.class_posteriors",
+        "likelihood.spatio_sequential.rust.class_posteriors",
         "coupled E and M steps",
         T + "likelihood/test_spatio_sequential_rust.py"
         "::test_the_rust_e_step_and_field_match_the_numpy_oracle",
@@ -821,7 +821,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "codes",
         "BCJR, Rust",
-        "likelihood.convolutional_rust.bcjr",
+        "likelihood.convolutional.rust.bcjr",
         "BCJR",
         T + "likelihood/test_convolutional_rust.py"
         "::test_the_rust_pass_is_the_numpy_oracle_bitwise_on_the_declared_registers",

@@ -19,10 +19,10 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from sal.likelihood import pruning_torch
 from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
 from sal.likelihood.objective import BranchLengthObjective
-from sal.likelihood.pruning_torch import (
+from sal.likelihood.pruning import torch as pruning_torch
+from sal.likelihood.pruning.torch import (
     PartialCache,
     branch_order,
     log_likelihood_cached,
@@ -138,7 +138,7 @@ def test_a_fixed_topology_with_no_budget_is_exactly_the_continuous_fit() -> None
     alignment, k = _alignment()
     params = load_fixture(SMALL_SITES)
 
-    result = infer(alignment, k, topology=params.tau, max_evaluations=0)
+    result = infer(alignment, k, start=params.tau, max_evaluations=0)
 
     objective = BranchLengthObjective(params.tau, k, np.full(k, 1.0 / k), alignment)
     expected = fit(objective)
@@ -159,7 +159,7 @@ def test_score_topology_agrees_with_a_zero_budget_search() -> None:
 
     assert_allclose(
         score_topology(params.tau, alignment, k),
-        infer(alignment, k, topology=params.tau, max_evaluations=0).log_likelihood,
+        infer(alignment, k, start=params.tau, max_evaluations=0).log_likelihood,
         rtol=1e-12,
     )
 
@@ -526,7 +526,7 @@ def test_parallel_candidate_fits_reproduce_the_serial_search_exactly() -> None:
         rng=np.random.default_rng(0),
         max_evaluations=12,
         workers=2,
-        backend="processes",
+        pool="processes",
         intra_op_threads=1,
     )
 
@@ -544,7 +544,7 @@ def test_workers_without_a_pool_is_refused_rather_than_run_serially() -> None:
     # while leaving the default serial backend is a mistake worth an error,
     # since the alternative is a run that silently ignores the request.
     alignment, k = _alignment()
-    with pytest.raises(ValueError, match="serial backend runs one worker"):
+    with pytest.raises(ValueError, match="serial pool runs one worker"):
         infer(
             alignment,
             k,

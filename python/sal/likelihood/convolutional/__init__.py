@@ -131,7 +131,7 @@ def bcjr(
         :data:`~sal.backend.Backend.PYTHON` is the NumPy
         oracle below, which stays;
         :data:`~sal.backend.Backend.RUST` is
-        :func:`sal.likelihood.convolutional_rust.bcjr` and
+        :func:`sal.likelihood.convolutional.rust.bcjr` and
         the default, because it is **34.8x / 35.0x** one pass at the
         declared ``K = 256`` and **26.2x / 26.3x** an eight-iteration turbo
         decode, which saves **35.6 ms** of that decode's 37.0

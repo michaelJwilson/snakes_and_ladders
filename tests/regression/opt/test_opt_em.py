@@ -12,9 +12,10 @@ is made elsewhere.
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import FrozenInstanceError, replace
 
 import pytest
-from sal.opt.em import em_loop
+from sal.opt.em import EM, EMISSION_MIXTURE_EM, EmConfig, em_loop
 from sal.opt.termination import Stop
 
 
@@ -33,8 +34,7 @@ def test_the_loop_stops_where_the_relative_change_falls_to_the_tolerance() -> No
     calls, log_likelihood, termination = em_loop(
         _scripted([-100.0, -10.0, -1.0, -1.0, -999.0]),
         0,
-        tolerance=1e-12,
-        max_iterations=10,
+        config=EmConfig(max_iterations=10, tolerance=1e-12),
     )
 
     assert (calls, termination.iterations) == (4, 4)
@@ -50,8 +50,7 @@ def test_an_exhausted_budget_returns_the_last_state_rather_than_raising() -> Non
     calls, log_likelihood, termination = em_loop(
         _scripted([-8.0, -4.0, -2.0, -1.0]),
         0,
-        tolerance=1e-12,
-        max_iterations=3,
+        config=EmConfig(max_iterations=3, tolerance=1e-12),
     )
 
     assert (calls, termination.iterations) == (3, 3)
@@ -64,10 +63,21 @@ def test_an_empty_budget_runs_no_step_and_reports_no_likelihood() -> None:
     calls, log_likelihood, termination = em_loop(
         _scripted([-1.0]),
         0,
-        tolerance=1e-12,
-        max_iterations=0,
+        config=EmConfig(max_iterations=0, tolerance=1e-12),
     )
 
     assert (calls, termination.iterations) == (0, 0)
     assert termination.reason is Stop.BUDGET
     assert log_likelihood == -float("inf")
+
+
+@pytest.mark.smoke
+def test_replacing_a_field_leaves_the_shared_config_unchanged() -> None:
+    # Issue #1059: `EM` is one frozen default every entry point shares, so a
+    # caller's `replace` makes a new config and no other caller sees it.
+    changed = replace(EM, tolerance=1e-10)
+    assert changed.tolerance == 1e-10
+    assert EmConfig(max_iterations=500, tolerance=1e-12) == EM
+    assert EmConfig(max_iterations=200, tolerance=1e-10) == EMISSION_MIXTURE_EM
+    with pytest.raises(FrozenInstanceError):
+        EM.tolerance = 0.0  # type: ignore[misc]
