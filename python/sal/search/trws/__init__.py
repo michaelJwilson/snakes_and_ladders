@@ -66,7 +66,7 @@ import numpy as np
 from sal.backend import Backend, refuse_backend
 from sal.incidence import SparseIncidence
 from sal.opt.termination import Termination
-from sal.search.numba.trws import trws_iterations_checked
+from sal.search.trws.numba import trws_iterations_checked
 from sal.sim.graph import PottsGraph
 from sal.sim.potts import SiteField, energy, log_weight_of, site_field
 
@@ -232,7 +232,7 @@ def trws(
 
     ``backend`` chooses the implementation and nothing else. The
     :data:`~sal.backend.Backend.NUMBA` kernel,
-    :func:`~sal.search.numba.trws.trws_iterations`, runs the reference's
+    :func:`~sal.search.trws.numba.trws_iterations`, runs the reference's
     arithmetic in the reference's order and returns its trace and labelling
     **bitwise**; :data:`~sal.backend.Backend.PYTHON` is the reference, and
     the oracle that pins it.

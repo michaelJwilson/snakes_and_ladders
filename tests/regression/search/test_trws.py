@@ -17,10 +17,10 @@ import pytest
 from sal.backend import Backend
 from sal.enumeration import configurations
 from sal.likelihood.potts import log_weights
-from sal.search.numba.trws import trws_iterations_checked
 from sal.search.potts_starts import spatio_rung, tiling_rung
 from sal.search.tightening import dual_bound
 from sal.search.trws import chain_layout, trws
+from sal.search.trws.numba import trws_iterations_checked
 from sal.sim.fixtures import fixture
 from sal.sim.graph import (
     BoundaryCondition,
