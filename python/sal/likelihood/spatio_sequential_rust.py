@@ -52,6 +52,10 @@ density is then a function of the count *and* the exposure or trial count.
   call, and its tables the smallest. The numbers are in
   ``changelog.d/1064.added.md``.
 
+A covariate grid, for a continuous covariate on a family that does not
+factor, serves neither family and is conserved in
+:mod:`sal.sandbox.covariate_grid`.
+
 **The rows depend on the observations and the covariate alone.** No parameter
 enters them, so a fit builds them once with :func:`observation_rows` and hands
 the result to every E step, which then builds only the tables.
@@ -63,7 +67,6 @@ written into arrays allocated here.
 
 from __future__ import annotations
 
-import math
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import Literal, get_args
@@ -122,11 +125,12 @@ def _families(params: SpatioSequentialParams) -> list[IndependentCountPair]:
 
 
 #: Bytes one channel's covariate table may take (issue #1064): the refusal a
-#: fine grid or a wide trial-count range meets before it allocates. 1 GiB is
+#: wide trial-count range meets before it allocates, under ``range`` and
+#: ``distinct`` and in ``factored``'s trial-count tables. 1 GiB is
 #: 6.2x the covariate of the stress instance of
 #: ``spatio_sequential_counts_covariate``, the largest array the E step already
 #: holds there.
-GRID_TABLE_CEILING = 2**30
+COVARIATE_TABLE_CEILING = 2**30
 
 #: The largest row a ``uint32`` index carries. A table with more rows would
 #: wrap on the cast and read the wrong row, so it is refused.
@@ -231,12 +235,12 @@ def _refuse_rows(n_rows: int, what: str) -> None:
 
 
 def _refuse_bytes(n_rows: int, params: SpatioSequentialParams, what: str) -> None:
-    """Refuse a covariate table past :data:`GRID_TABLE_CEILING` before it is built."""
+    """Refuse a covariate table past :data:`COVARIATE_TABLE_CEILING` before it is built."""
     size = n_rows * params.n_classes * params.n_states * 8
-    if size > GRID_TABLE_CEILING:
+    if size > COVARIATE_TABLE_CEILING:
         msg = (
-            f"{what}: its table is {size} bytes, past the {GRID_TABLE_CEILING} "
-            f"of GRID_TABLE_CEILING"
+            f"{what}: its table is {size} bytes, past the {COVARIATE_TABLE_CEILING} "
+            f"of COVARIATE_TABLE_CEILING"
         )
         raise ValueError(msg)
 
@@ -268,192 +272,18 @@ def _outer_table(
     return table
 
 
-def _tabulate(
-    sides: list[EmissionFamily],
-    params: SpatioSequentialParams,
-    values: np.ndarray,
-    levels: np.ndarray,
-    codes: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Every ``(count, level)`` pair's log-density, and each observation's row.
-
-    The row is ``count * len(levels) + code``.
-    """
-    table = _outer_table(sides, params, int(values.max()) + 1, levels)
-    rows = values.astype(np.int64) * levels.size + codes.reshape(values.shape)
-    return table, rows
-
-
-def _slope(
-    sides: list[EmissionFamily], values: np.ndarray, covariate: np.ndarray
-) -> np.ndarray:
-    """``max |d log p / dc|`` per observation, over every class and state.
-
-    Through each family's own ``log_density`` and autograd: the observations
-    are independent, so the gradient of one state's column summed over the
-    observations is that state's derivative at each observation.
-    """
-    import torch
-
-    counts = torch.from_numpy(np.asarray(values, dtype=np.float64).reshape(-1))
-    peak = np.zeros(counts.shape[0])
-    for side in sides:
-        at = torch.tensor(
-            np.asarray(covariate, dtype=np.float64).reshape(-1, 1), requires_grad=True
-        )
-        scores = side.log_density(counts, covariate=at)
-        for k in range(scores.shape[-1]):
-            (gradient,) = torch.autograd.grad(scores[:, k].sum(), at, retain_graph=True)
-            peak = np.maximum(peak, np.abs(gradient.detach().numpy().reshape(-1)))
-    return peak
-
-
-def grid_scale(
-    sides: list[EmissionFamily],
-    values: np.ndarray,
-    covariate: np.ndarray,
-    covariate_tolerance: float,
-) -> float:
-    """The grid a covariate is coded on: the coarsest power of two within ``covariate_tolerance``.
-
-    Rounding ``c`` to the nearest multiple of ``1 / scale`` moves it by at most
-    ``1 / (2 scale)``, so ``|Delta log p| <= G / (2 scale)`` per observation,
-    ``G = max |d log p / dc|`` over every class, state and observation, the
-    slope taken through each family's autograd at every covariate and at its
-    grid value. The scale returned is the smallest power of two meeting
-    ``covariate_tolerance`` with that bound; since the grid values move with
-    the scale, it is doubled from the observations' own slope until they
-    agree. The bound is exact where ``|d log p / dc|`` is largest at a sampled
-    point, and a slope peaking between the samples is the case it does not
-    cover: a per-observation bound from the two ends of one interval was
-    exceeded by 1.3e-6 of itself at the ci instance, at a count whose slope
-    turns inside the interval. A power of two makes ``code / scale`` exact in
-    ``float64``, so a covariate already on the grid is reproduced bit for bit.
-
-    **No family reaches this today** (issue #1064). The grid is for a
-    continuous covariate on a family whose density does not factor, and the
-    negative binomial's exposure factors (:mod:`sal.emissions.nb`). **An
-    integer covariate is refused**: a table over its values is exact, and no
-    coarser grid is admissible, because a trial count rounded below its own
-    successes leaves the beta-binomial's support, where the density is
-    ``-inf`` and no slope bounds the change. Its layouts are
-    :data:`CovariateRows`.
-
-    Parameters
-    ----------
-    sides : list[EmissionFamily]
-        One channel's family per class.
-    values : np.ndarray
-        That channel's counts.
-    covariate : np.ndarray
-        That channel's covariate, the counts' shape.
-    covariate_tolerance : float
-        The largest ``|Delta log p|`` admitted per observation.
-
-    Returns
-    -------
-    float
-
-    Raises
-    ------
-    ValueError
-        If ``covariate_tolerance`` is not positive and finite, or the
-        covariate is an integer.
-    """
-    if not (math.isfinite(covariate_tolerance) and covariate_tolerance > 0.0):
-        msg = f"covariate_tolerance must be positive and finite, got {covariate_tolerance}"
-        raise ValueError(msg)
-    if bool((covariate == np.rint(covariate)).all()):
-        msg = (
-            f"covariate_tolerance={covariate_tolerance}: the covariate is an "
-            f"integer, and a table over its values is exact at scale 1; a "
-            f"tolerance is for a continuous covariate"
-        )
-        raise ValueError(msg)
-    peak = float(_slope(sides, values, covariate).max())
-    if peak == 0.0:
-        return 1.0
-    scale = float(2.0 ** math.ceil(math.log2(peak / (2.0 * covariate_tolerance))))
-    while True:
-        codes, levels = _grid(covariate, scale)
-        at_grid = levels[codes.reshape(-1)]
-        peak = max(peak, float(_slope(sides, values, at_grid).max()))
-        if peak / (2.0 * scale) <= covariate_tolerance:
-            return scale
-        scale *= 2.0
-
-
-def _grid(covariate: np.ndarray, scale: float) -> tuple[np.ndarray, np.ndarray]:
-    """The covariate's codes from zero, and the grid value of each code.
+def _range_codes(values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Each integer's offset from the least, and the value of each offset.
 
     The codes span the least to the greatest, contiguously, rather than the
-    distinct codes alone: the range needs no sort, and the distinct codes need
-    one per call, which is what issue #658 measured as the cost of a table.
+    distinct values alone: the range needs no sort, and the distinct values
+    need one per call, which is what issue #658 measured as the cost of a
+    table.
     """
-    codes = np.rint(np.asarray(covariate, dtype=np.float64) * scale).astype(np.int64)
+    codes = np.rint(np.asarray(values, dtype=np.float64)).astype(np.int64)
     low = int(codes.min())
-    levels = (low + np.arange(int(codes.max()) - low + 1, dtype=np.float64)) / scale
+    levels = low + np.arange(int(codes.max()) - low + 1, dtype=np.float64)
     return codes - low, levels
-
-
-def _grid_rows(
-    sides: list[EmissionFamily],
-    params: SpatioSequentialParams,
-    values: np.ndarray,
-    covariate: np.ndarray,
-    scale: float,
-) -> tuple[np.ndarray, np.ndarray]:
-    """One channel's table on the grid at ``scale``, and each observation's row.
-
-    Raises
-    ------
-    ValueError
-        If ``scale`` is not positive and finite, or the table's rows overflow
-        a ``uint32`` index or its bytes pass :data:`GRID_TABLE_CEILING`. The
-        message names ``scale``.
-    """
-    if not (math.isfinite(scale) and scale > 0.0):
-        msg = f"a covariate grid's scale must be positive and finite, got scale={scale}"
-        raise ValueError(msg)
-    codes, levels = _grid(covariate, scale)
-    n_rows = (int(values.max()) + 1) * levels.size
-    what = f"the covariate grid at scale={scale}"
-    _refuse_rows(n_rows, what)
-    size = n_rows * params.n_classes * params.n_states * 8
-    if size > GRID_TABLE_CEILING:
-        msg = (
-            f"{what} spans {levels.size} codes: its table is {size} bytes, past "
-            f"the {GRID_TABLE_CEILING} of GRID_TABLE_CEILING; a larger "
-            f"covariate_tolerance gives a coarser grid"
-        )
-        raise ValueError(msg)
-    return _tabulate(sides, params, values, levels, codes)
-
-
-def _grid_bound(
-    sides: list[EmissionFamily],
-    values: np.ndarray,
-    covariate: np.ndarray,
-    scale: float,
-) -> np.ndarray:
-    """Per observation, the bound on ``|Delta log p|`` the grid at ``scale`` admits.
-
-    ``G * |c - c_hat|``, with ``G`` the largest ``|d log p / dc|`` over every
-    class, state and observation, at the covariate and at its grid value
-    (:func:`grid_scale`). It is at most ``G / (2 scale)``, and zero where the
-    covariate is on the grid.
-    """
-    codes, levels = _grid(covariate, scale)
-    flat = np.asarray(covariate, dtype=np.float64).reshape(-1)
-    at_grid = levels[codes.reshape(-1)]
-    moved = np.abs(flat - at_grid)
-    if not bool(moved.any()):
-        return np.zeros(np.shape(values))
-    peak = max(
-        float(_slope(sides, values, flat).max()),
-        float(_slope(sides, values, at_grid).max()),
-    )
-    return np.asarray(peak * moved).reshape(np.shape(values))
 
 
 @dataclass(frozen=True)
@@ -598,7 +428,7 @@ def _trial_rows(
             covariate=_uint32(trials, "the trial counts"),
         )
     if layout == "range":
-        codes, levels = _grid(trials, 1.0)
+        codes, levels = _range_codes(trials)
     else:
         flat, levels = oxisal.factorize(
             np.ascontiguousarray(trials, dtype=np.float64).reshape(-1)
@@ -850,7 +680,7 @@ def emission_rows(
     ------
     ValueError
         As :func:`observation_rows` refuses, if handed rows built for other
-        inputs, or if a covariate table passes :data:`GRID_TABLE_CEILING`.
+        inputs, or if a covariate table passes :data:`COVARIATE_TABLE_CEILING`.
     """
     families = _families(params)
     rows = _rows_for(params, observations, covariate_rows)

@@ -6,9 +6,10 @@ the negative binomial's exposure and the beta-binomial's trial count --- and
 pinned per score against the families' own ``log_density`` and per E step
 against the NumPy oracle. The trial count's two tabulated layouts, ``range``
 and ``distinct``, are pinned bitwise to the factored one, and the rows each
-builds are pinned bitwise to themselves rebuilt. The covariate grid, which no
-family reaches today, is held to its stated bound on the continuous exposure
-through its private helpers. Fixture: ``spatio_sequential_counts_covariate``.
+builds are pinned bitwise to themselves rebuilt. The covariate grid is
+conserved in ``sal.sandbox.covariate_grid`` and tested in
+``tests/regression/sandbox/test_covariate_grid.py``. Fixture:
+``spatio_sequential_counts_covariate``.
 """
 
 from __future__ import annotations
@@ -61,15 +62,12 @@ _RELATIVE = 1e-11
 #: declared tolerance as there. Measured 1.0e-09.
 _ABSOLUTE = 1e-7
 
-#: A tolerance a grid is asked for, refused on the integer trial count.
-_TOLERANCE = 1e-3
-
 #: Relative tolerance on a recovered negative-binomial mean or beta-binomial
 #: rate: the 5% the exact path's coupled recovery test uses
 #: (`tests/regression/search/test_spatio_sequential_pair_fit.py`).
 _RECOVERY = 0.05
 
-#: Positions of the ci instance the per-score and grid checks read, every
+#: Positions of the ci instance the per-score checks read, every
 #: tenth: 100 positions and 6,400 observations.
 _EVERY = 10
 
@@ -391,124 +389,6 @@ def test_an_unknown_layout_is_refused() -> None:
         )
 
 
-@pytest.mark.smoke
-def test_a_tolerance_on_the_integer_trial_count_is_refused() -> None:
-    # A table over an integer's values is exact, so no grid is asked for.
-    instance = _instance()
-    params, observations = instance.params, instance.observations
-    covariate = params.covariate
-    assert covariate is not None
-
-    with pytest.raises(ValueError, match="integer"):
-        rust.grid_scale(
-            _sides(params, SUCCESSES),
-            observations[..., SUCCESSES],
-            covariate[..., SUCCESSES],
-            _TOLERANCE,
-        )
-
-
-@pytest.mark.oracle
-def test_a_covariate_on_a_power_of_two_grid_is_tabulated_bitwise() -> None:
-    # An exposure already a multiple of 1/4 is coded at scale 4, and
-    # code / scale is exact in float64: every tabulated score is the family's
-    # log_density at the observation's own exposure, bit for bit.
-    instance = _instance()
-    params = instance.params
-    assert params.covariate is not None
-    exposure = np.maximum(np.rint(params.covariate[..., TOTAL] * 4.0), 1.0) / 4.0
-    values = instance.observations[::_EVERY, :, TOTAL]
-    exposure = exposure[::_EVERY]
-    sides = _sides(params, TOTAL)
-
-    table, rows = rust._grid_rows(sides, params, values, exposure, 4.0)
-
-    for m, side in enumerate(sides):
-        direct = side.log_density(
-            torch.as_tensor(values.reshape(-1), dtype=torch.float64),
-            covariate=torch.as_tensor(exposure.reshape(-1, 1)),
-        ).numpy()
-        assert np.array_equal(table[rows.reshape(-1), m, :], direct)
-
-
-@pytest.mark.oracle
-@pytest.mark.parametrize("tolerance", [1.0, 0.25])
-def test_a_continuous_covariate_on_the_grid_is_within_its_stated_bound(
-    tolerance: float,
-) -> None:
-    # The grid applied to the continuous exposure, where the factorization is
-    # what runs: the one continuous covariate the model carries. Measured at
-    # tolerance 1.0: scale 64, largest bound 0.81 and largest change 0.48, a
-    # class's evidence moved by 0.94 against 1,283 allowed; at 0.25: scale 256,
-    # 0.20 and 0.11, and 0.21 against 317. Per score,
-    # the change against the family's log_density is under the bound; per
-    # class, the change in log evidence against the NumPy oracle is under the
-    # sum of the bounds over its members.
-    instance = _instance()
-    params = replace(
-        instance.params,
-        n_positions=instance.params.n_positions // _EVERY,
-        covariate=None
-        if instance.params.covariate is None
-        else instance.params.covariate[::_EVERY],
-    )
-    observations = instance.observations[::_EVERY]
-    labels = instance.labels
-    covariate = params.covariate
-    assert covariate is not None
-    sides = _sides(params, TOTAL)
-    values, exposure = observations[..., TOTAL], covariate[..., TOTAL]
-
-    scale = rust.grid_scale(sides, values, exposure, tolerance)
-    table, rows = rust._grid_rows(sides, params, values, exposure, scale)
-    bound = rust._grid_bound(sides, values, exposure, scale)
-    assert bound.max() <= tolerance
-    for m, side in enumerate(sides):
-        direct = side.log_density(
-            torch.as_tensor(values.reshape(-1), dtype=torch.float64),
-            covariate=torch.as_tensor(exposure.reshape(-1, 1)),
-        ).numpy()
-        # The bound is first order and exact arithmetic's; where it is tight
-        # the two scores' own rounding is added, as the per-score tolerance.
-        moved = np.abs(table[rows.reshape(-1), m, :] - direct)
-        rounding = _PER_SCORE * np.abs(direct)
-        assert (moved <= bound.reshape(-1, 1) + rounding).all()
-
-    exact = rust.emission_rows(params, observations)
-    evidence = np.empty(params.n_classes)
-    oxisal.class_posteriors(
-        np.ascontiguousarray(rows, dtype=np.uint32).reshape(-1),
-        exact.success_rows.reshape(-1),
-        np.ascontiguousarray(labels, dtype=np.int64),
-        table.reshape(-1),
-        exact.success_table.reshape(-1),
-        np.ascontiguousarray(np.log(params.initial)).reshape(-1),
-        np.ascontiguousarray(
-            np.broadcast_to(
-                np.log(params.transition),
-                (params.n_classes, params.n_states, params.n_states),
-            )
-        ).reshape(-1),
-        params.n_positions,
-        params.graph.n_nodes,
-        params.n_classes,
-        params.n_states,
-        np.empty(params.n_classes * params.n_positions * params.n_states),
-        np.empty(
-            params.n_classes
-            * (params.n_positions - 1)
-            * params.n_states
-            * params.n_states
-        ),
-        evidence,
-        **({} if exact.trials is None else exact.trials.arguments()),
-    )
-    oracle = class_posteriors(params, observations, labels).log_evidence
-    for m in range(params.n_classes):
-        allowed = float(bound[:, labels == m].sum())
-        assert abs(evidence[m] - oracle[m]) <= allowed
-
-
 @pytest.mark.end2end
 def test_em_on_both_factored_channels_recovers_the_generating_parameters() -> None:
     # Block ascent on the Rust backend, both channels factored and the rows
@@ -559,24 +439,6 @@ def _rate(family: BetaBinomialEmission) -> torch.Tensor:
 
 
 @pytest.mark.smoke
-@pytest.mark.parametrize("tolerance", [0.0, -1.0, float("nan"), float("inf")])
-def test_a_tolerance_that_is_not_positive_and_finite_is_refused(
-    tolerance: float,
-) -> None:
-    instance = _instance()
-    params = instance.params
-    assert params.covariate is not None
-
-    with pytest.raises(ValueError, match="covariate_tolerance"):
-        rust.grid_scale(
-            _sides(params, TOTAL),
-            instance.observations[..., TOTAL],
-            params.covariate[..., TOTAL],
-            tolerance,
-        )
-
-
-@pytest.mark.smoke
 def test_a_layout_on_the_numpy_oracle_is_refused() -> None:
     # The oracle builds no table, so a layout handed to it would be ignored.
     instance = _instance()
@@ -588,37 +450,6 @@ def test_a_layout_on_the_numpy_oracle_is_refused() -> None:
             instance.labels,
             covariate_rows="factored",
         )
-
-
-@pytest.mark.smoke
-@pytest.mark.parametrize(
-    ("scale", "match"),
-    [
-        (2.0**13, "GRID_TABLE_CEILING"),
-        (2.0**20, "uint32"),
-        (0.0, "scale=0.0"),
-        (float("inf"), "scale=inf"),
-    ],
-)
-def test_a_grid_too_fine_to_tabulate_is_refused_before_it_is_built(
-    scale: float, match: str
-) -> None:
-    # At 2**13 the exposure's range spans 9.7e4 codes, 1.1e8 rows and 3.5 GB;
-    # at 2**20 the rows pass what a uint32 index carries. Both are refused
-    # before anything is allocated, and every message names the scale.
-    instance = _instance()
-    params = instance.params
-    assert params.covariate is not None
-
-    with pytest.raises(ValueError, match=match) as refused:
-        rust._grid_rows(
-            _sides(params, TOTAL),
-            params,
-            instance.observations[..., TOTAL],
-            params.covariate[..., TOTAL],
-            scale,
-        )
-    assert "scale" in str(refused.value)
 
 
 @pytest.mark.smoke

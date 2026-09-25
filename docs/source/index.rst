@@ -547,6 +547,9 @@ whether or not it has members yet.
 .. automodule:: sal.sandbox.circulant_schedule
    :members:
 
+.. automodule:: sal.sandbox.covariate_grid
+   :members:
+
 .. automodule:: sal.sandbox.maxflow_declined
    :members:
 
