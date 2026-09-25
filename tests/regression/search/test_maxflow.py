@@ -17,12 +17,12 @@ from itertools import product
 
 import numpy as np
 import pytest
-from sal.search import maxflow_rust
 from sal.search.maxflow import (
     FlowNetwork,
     ising_ground_state,
     max_flow,
 )
+from sal.search.rust import maxflow as maxflow_rust
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from sal.sim.potts import energies, site_field
 

@@ -48,7 +48,7 @@ the grouping machinery is paid per level to group one thing. That is issue
 **A backend, for the one order a kernel implements.** The per-level dispatch
 that grouping leaves is the cost on a chain --- one message per level, so the
 NumPy calls are over single rows --- and issue #754's stress profile ranked
-it. :mod:`sal.likelihood.message_passing_rust` runs the two
+it. :mod:`sal.likelihood.rust.message_passing` runs the two
 tree passes over the same layout in Rust and is the default of
 :func:`sum_product` and :func:`max_product`: **9.05x / 9.28x** at the chain
 of 200, saving **21.6 ms** of that call's 24.3, with the NumPy route below
@@ -463,7 +463,7 @@ def sum_product(
         :data:`~sal.backend.Backend.PYTHON` is the NumPy
         route below, which stays as the oracle;
         :data:`~sal.backend.Backend.RUST` is
-        :func:`sal.likelihood.message_passing_rust.tree_messages`
+        :func:`sal.likelihood.rust.message_passing.tree_messages`
         and the default, because it is **9.05x / 9.28x** a tree-schedule
         ``sum_product`` at the chain of 200 the stress profile ranks, which
         saves **21.6 ms** of that call's 24.3 (``docs/experiments/027``). It

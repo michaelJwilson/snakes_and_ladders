@@ -97,7 +97,7 @@ from sal.sample.declared import (
     declared_jax_energy,
 )
 from sal.sample.expectation import Expectation
-from sal.sample.hmc_jax import JaxWalk
+from sal.sample.jax.hmc import JaxWalk
 from sal.sample.schedule import (
     Monotone,
     TempSchedule,

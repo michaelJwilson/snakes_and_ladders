@@ -1,40 +1,21 @@
-"""Compiled kernels whose oracles reproduce them bitwise, beside those oracles.
+"""The factor-graph heat-bath sweep, compiled, and reproduced bitwise by its oracle (issues #561, #1059).
 
-Issue #264's audit ranked the Python-level loops of this package by self time
-and found one that a compiled kernel removes outright: the single-site descent
-sweep, which lives in :mod:`sal.search.numba.icm`
-since issue #1055. The kernels here share its test: each is reproduced
-**bitwise** by its oracle.
+:func:`sal.sample.gibbs.gibbs_sweep` is the gateway and the NumPy oracle;
+this is its ``numba`` twin, moved out of ``sample/kernels.py`` by #1059.
 
-That exactness is why these are ``numba`` rather than Rust. Root
+That exactness is why this is ``numba`` rather than Rust. Root
 ``CLAUDE.md``'s backend rule admits one compiled path per measurement; the
 Rust extension already carries the Potts *sampling* sweep
 (:func:`sal.sample.potts_mcmc.sample_potts` on the extension), and a second copy of it
 is what the rule exists to refuse. A kernel whose pin is exact carries no
-such cost and lives here.
+such cost.
 
-Issue #561's sweep over the factor graph is here on that same test rather
-than on being deterministic. A heat-bath draw exponentiates, and ``libm``'s
-``exp`` and NumPy's disagree in the last place on 4.6% of ``float64`` inputs,
-so the arithmetic alone would make it a distributional port. What keeps the
-pin exact is that :func:`gibbs_sweep_sites` decides a site only where the
-draw clears every cumulative boundary by more than the two exponentials can
-move it, and hands the rest back; a bound, not an assumption about rounding.
-
-Issue #563's density is here for the reason the descent sweep is: it takes no
-exponential, so summing the same terms in the same order is bitwise
-reproduction outright, and the pin needs no bound. What it does need is that
-order -- floating-point addition is not associative, so the kernel sums
-factors left to right in graph order as the oracle does, and a vectorized sum
-would be a different number.
-
-Every kernel here touches no Python object and so is ``nogil=True``: a
-thread backend runs them concurrently, the rule root ``CLAUDE.md`` states
-(#604).
-
-The kernels take arrays, never the graph: the caller flattens once and the
-kernel walks strides (the layout rule), and ``cache=True`` writes the compiled
-object beside the source so the first call in a process pays once.
+A heat-bath draw exponentiates, and ``libm``'s ``exp`` and NumPy's disagree
+in the last place on 4.6% of ``float64`` inputs, so the arithmetic alone
+would make it a distributional port. What keeps the pin exact is that
+:func:`gibbs_sweep_sites` decides a site only where the draw clears every
+cumulative boundary by more than the two exponentials can move it, and hands
+the rest back; a bound, not an assumption about rounding.
 """
 
 from __future__ import annotations
@@ -130,43 +111,3 @@ def gibbs_sweep_sites(
             return position
         state[position] = chosen
     return n_variables
-
-
-@njit(cache=True, nogil=True)
-def factor_graph_log_density(
-    state: np.ndarray,
-    tables: np.ndarray,
-    factor_start: np.ndarray,
-    factor_offsets: np.ndarray,
-    factor_column: np.ndarray,
-    factor_stride: np.ndarray,
-) -> float:
-    """``sum_f log psi_f`` at one full assignment, over the edge layout.
-
-    The density :meth:`sal.sim.factor_graph.FactorGraph.log_density`
-    defines, read from the ``tables`` of
-    :class:`sal.sample.gibbs._EdgeLayout` rather than from a table
-    and a tuple key per factor: each factor's element is the offset its axes
-    fix, and the sum runs left to right over factors in graph order.
-
-    That order is the whole of the pin. Floating-point addition is not
-    associative, so a pairwise or vectorized sum may move the last place of a
-    recorded log-density; this accumulates the same terms in the same sequence
-    as the oracle and reproduces it **bitwise**. No exponential is taken, so
-    nothing here depends on which ``exp`` :func:`gibbs_sweep_sites` had to
-    bound.
-
-    **The pin is not a cost, which #651 established by measuring it.** Gathering
-    the offsets and calling ``np.sum`` is *slower* at every size from a thousand
-    factors to a million --- 0.60x to 0.77x, the extra array and its second pass
-    costing more than fusing the accumulate saves --- so the ordered form is
-    also the fast one and nothing is traded for the reproduction.
-    ``tests/benchmarks/test_factor_density_sum_bench.py`` holds both.
-    """
-    total = 0.0
-    for factor in range(factor_start.shape[0]):
-        offset = factor_start[factor]
-        for axis in range(factor_offsets[factor], factor_offsets[factor + 1]):
-            offset += state[factor_column[axis]] * factor_stride[axis]
-        total += tables[offset]
-    return total

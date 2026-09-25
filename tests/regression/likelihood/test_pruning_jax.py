@@ -93,7 +93,7 @@ def test_the_jax_value_is_the_brute_force_likelihood() -> None:
 def test_the_jax_gradient_passes_finite_differences() -> None:
     """``jax.test_util.check_grads`` on the compiled program, reverse mode."""
     from jax.test_util import check_grads
-    from sal.likelihood import pruning_jax
+    from sal.likelihood.jax import pruning as pruning_jax
 
     tau, k, pi, alignment = _alignment(SMALL_SITES, n_sites=200)
     objective = BranchLengthObjective(tau, k, pi, alignment)

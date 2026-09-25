@@ -167,7 +167,7 @@ def test_a_likelihood_change_still_runs_the_conserved_gradient_tape() -> None:
     # `test_pruning_burn.py` moved to the sandbox directory (#516) but referees
     # the likelihood tape, so a likelihood change must still select it.
     for changed in (
-        "python/sal/likelihood/pruning_torch.py",
+        "python/sal/likelihood/torch/pruning.py",
         "python/sal/search/topology.py",
         "python/sal/sim/tree.py",
     ):

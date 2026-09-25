@@ -39,7 +39,7 @@ exercises, so none of them defines one.
 
 | Problem | Key | Statement | Defines |
 | --- | --- | --- | --- |
-| Phylogenetic tree, Jukes–Cantor | `tree_search`, `tree_scale` | `sec:phylo` | `sim.jc`, `sim.simulate`, `likelihood.pruning`, `likelihood.pruning_rust`, `likelihood.hadamard`, `search.neighbor_joining`, `learn.tree`, `sandbox.tropical` |
+| Phylogenetic tree, Jukes–Cantor | `tree_search`, `tree_scale` | `sec:phylo` | `sim.jc`, `sim.simulate`, `likelihood.pruning`, `likelihood.rust.pruning`, `likelihood.hadamard`, `search.neighbor_joining`, `learn.tree`, `sandbox.tropical` |
 | Phylogenetic tree, general time-reversible | `tree_jc` | `sec:phylo` | `sim.gtr` |
 | Phylogenetic tree, parsimony | `tree_jc` | `sec:parsimony` | `likelihood.parsimony` |
 | Potts chain in a field | `potts_chain` | `sec:potts` | `sim.potts_chain`, `learn.potts`, `opt.potts` |
@@ -55,7 +55,7 @@ exercises, so none of them defines one.
 | Polar code, successive cancellation and list decoding | `polar` | `sec:polar` | `sim.polar`, `likelihood.polar` |
 | Hidden Markov model, six emission families | `hmm`, `ragged_hmm` | `sec:hmm` | `sim.hmm`, `opt.hmm`, `likelihood.hmm_paths`, `learn.hmm` |
 | Coupled spatio-sequential model | `spatio_sequential`, `spatio_sequential_ragged` | `sec:coupled` | `sim.spatio_sequential` |
-| Count-pair coupled spatio-sequential model | `spatio_sequential_counts` | `sec:coupled` | `sim.count_pairs`, `sim.count_pairs_rust`, `likelihood.spatio_sequential_rust` |
+| Count-pair coupled spatio-sequential model | `spatio_sequential_counts` | `sec:coupled` | `sim.count_pairs`, `sim.rust.count_pairs`, `likelihood.rust.spatio_sequential` |
 | Gaussian mixture | `mixture` | `sec:mixture` | `sim.mixture`, `likelihood.mixture_assignments` |
 | Mixture of two-channel count emissions | `emission_mixture` | `sec:emissionmixture` | `sim.emission_mixture`, `opt.emission_mixture` |
 | Continuous test functions | `test_functions` | `sec:testfunctions` | `opt.testfunctions` |

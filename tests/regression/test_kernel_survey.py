@@ -63,10 +63,10 @@ def test_an_oracle_inside_the_adapter_is_a_referee(
 
     # `opt.hmm` calls the kernel too (#933, R5), and its torch recursion is its
     # oracle, so the adapter `opt.hmm.estimation` (#1010) is itself a referee.
-    assert "likelihood.ragged_rust.posteriors_oracle" in ragged.referees
+    assert "likelihood.rust.ragged.posteriors_oracle" in ragged.referees
     assert ragged.referees == (
         "likelihood.message_passing_reference",
-        "likelihood.ragged_rust.posteriors_oracle",
+        "likelihood.rust.ragged.posteriors_oracle",
         "opt.hmm.estimation",
         "sandbox.rectangular_hmm",
     )
@@ -95,11 +95,11 @@ def test_the_boundary_names_the_adapter_each_kernel_is_called_through(
     # that loses its caller -- reachable from a test alone -- shows here.
     adapters = {kernel.module: kernel.adapters for kernel in found}
 
-    assert adapters["count_pairs"] == ("sim.count_pairs_rust",)
+    assert adapters["count_pairs"] == ("sim.rust.count_pairs",)
     # Two callers since #933 (R5): `opt.hmm` may not import `likelihood`, so
     # Baum-Welch's compiled E step reaches the kernel through the extension.
-    assert adapters["ragged"] == ("likelihood.ragged_rust", "opt.hmm.estimation")
-    assert adapters["coupled"] == ("likelihood.spatio_sequential_rust",)
+    assert adapters["ragged"] == ("likelihood.rust.ragged", "opt.hmm.estimation")
+    assert adapters["coupled"] == ("likelihood.rust.spatio_sequential",)
 
 
 @pytest.mark.infra

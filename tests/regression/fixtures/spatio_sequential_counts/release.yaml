@@ -20,7 +20,7 @@ seed: 20260908
 
 # What the counts hash to, so a changed simulator fails here rather than in a
 # recovery number three tests later. Written by `sim.count_pairs.counts_digest`
-# over the draw `sim.count_pairs_rust.simulate_count_pairs` makes of this file:
+# over the draw `sim.rust.count_pairs.simulate_count_pairs` makes of this file:
 # 0.06 s on the 4-core reference host, the largest count 695 in the first channel and 40 in the second.
 counts_digest: 8891ea830217f7c0
 shape: [10, 10]

@@ -6,7 +6,7 @@ size --- and :func:`run_chain` is the loop around it: the warm-up
 the metric the first estimates), the burn-in, the recorded draws, and the
 operators' Kalman-filtered expectations. :func:`run_compiled` is the same
 loop compiled (``src/chain.rs``), over a walk ``oxisal`` or
-:mod:`sal.sample.hmc_jax` builds on a declared energy.
+:mod:`sal.sample.jax.hmc` builds on a declared energy.
 
 HMC (:mod:`sal.sample.hmc`), MALA
 (:mod:`sal.sample.langevin`) and random-walk Metropolis

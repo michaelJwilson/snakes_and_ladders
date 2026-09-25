@@ -17,14 +17,14 @@ whatever ``L`` is.
 **The compression lives here and each backend takes weights**: the pattern
 table is a property of the alignment, and a backend that built its own would
 have to be checked against the others for agreeing on what a pattern is.
-``pruning``, ``pruning_torch`` and ``pruning_rust`` all take a ``weights``
+``pruning``, ``likelihood.torch.pruning`` and ``likelihood.rust.pruning`` all take a ``weights``
 argument of the shape :func:`compress` returns;
 :attr:`SitePatterns.alignment` is the compressed alignment they read
 alongside it.
 
 Weights are exact counts, not a normalisation, so ``weights.sum()`` is the
 site count and a fractional weight is never introduced. The Rust binding
-cannot take them (``pruning_rust`` says how it works around that), which is
+cannot take them (``likelihood.rust.pruning`` says how it works around that), which is
 the one place the compression is not carried by the kernel itself.
 """
 

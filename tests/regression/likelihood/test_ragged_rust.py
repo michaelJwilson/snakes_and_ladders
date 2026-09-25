@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 from sal.backend import Backend
 from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from sal.likelihood.ragged_rust import posteriors, posteriors_oracle
+from sal.likelihood.rust.ragged import posteriors, posteriors_oracle
 from sal.ragged import Ragged
 
 from tests._rows import every_value

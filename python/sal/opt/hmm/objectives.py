@@ -209,7 +209,7 @@ class _HmmObjective(Objective):
         """
         if self._backend is not Backend.JAX:
             return None
-        from sal.opt.hmm_jax import jax_energy
+        from sal.opt.jax.hmm import jax_energy
 
         return jax_energy(self)
 
@@ -219,7 +219,7 @@ class _HmmObjective(Objective):
         """The negative log-likelihood at ``theta`` and its gradient, detached (issue #1000).
 
         Under :data:`~sal.backend.Backend.JAX`, the default,
-        the compiled twin of :mod:`sal.opt.hmm_jax` takes both
+        the compiled twin of :mod:`sal.opt.jax.hmm` takes both
         at 0.07x--0.18x autograd's runtime at 10^4--10^5 positions; under
         :data:`~sal.backend.Backend.TORCH` autograd through
         :meth:`__call__` does, and is the oracle the twin is pinned to at
@@ -228,7 +228,7 @@ class _HmmObjective(Objective):
         if self._backend is Backend.TORCH:
             return autograd_value_and_gradient(self, theta)
         if self._jax is None:
-            from sal.opt.hmm_jax import value_and_grad
+            from sal.opt.jax.hmm import value_and_grad
 
             self._jax = value_and_grad(self)
         value_, gradient_ = self._jax(theta.detach().cpu().numpy())

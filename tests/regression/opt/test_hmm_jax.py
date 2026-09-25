@@ -11,7 +11,6 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from sal.opt import hmm_jax
 from sal.opt.hmm import (
     BetaBinomialHmmObjective,
     BinomialHmmObjective,
@@ -20,6 +19,7 @@ from sal.opt.hmm import (
     NegativeBinomialHmmObjective,
     PoissonHmmObjective,
 )
+from sal.opt.jax import hmm as hmm_jax
 
 from tests._rows import every_value
 

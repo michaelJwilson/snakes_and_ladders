@@ -17,9 +17,11 @@ from collections.abc import Callable
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from sal.likelihood import pruning, pruning_rust, pruning_torch
+from sal.likelihood import pruning
 from sal.likelihood.patterns import compress
-from sal.likelihood.pruning_torch import branch_lengths_from_tree
+from sal.likelihood.rust import pruning as pruning_rust
+from sal.likelihood.torch import pruning as pruning_torch
+from sal.likelihood.torch.pruning import branch_lengths_from_tree
 from sal.sim.simulator import simulate_tree
 
 from tests._fixtures import load_fixture

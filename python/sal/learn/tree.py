@@ -56,8 +56,8 @@ from numpy.typing import NDArray
 from sal.learn.environment import Environment
 from sal.likelihood.parsimony import fitch_score
 from sal.likelihood.pruning import log_likelihood
-from sal.likelihood.pruning_torch import branch_order
-from sal.likelihood.pruning_torch import (
+from sal.likelihood.torch.pruning import branch_order
+from sal.likelihood.torch.pruning import (
     log_likelihood as log_likelihood_torch,
 )
 from sal.search.infer import score_topology

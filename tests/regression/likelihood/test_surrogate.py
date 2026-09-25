@@ -28,7 +28,6 @@ from sal.likelihood.features import (
 )
 from sal.likelihood.parsimony import fitch_score
 from sal.likelihood.potts import enumerate_potts, log_weights
-from sal.likelihood.pruning_torch import branch_order, log_likelihood
 from sal.likelihood.surrogate import (
     ParsimonyUpperBound,
     PlugInLikelihood,
@@ -41,6 +40,7 @@ from sal.likelihood.surrogate import (
     site_fitch_scores,
     spanning_tree_log_partition,
 )
+from sal.likelihood.torch.pruning import branch_order, log_likelihood
 from sal.search.alpha_expansion import alpha_expansion
 from sal.search.infer import score_topology
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph

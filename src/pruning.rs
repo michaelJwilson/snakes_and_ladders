@@ -21,9 +21,9 @@
 //! in `STATUS.md`; the rule that they be confirmed by benchmark and never by
 //! asserting a vector width is why no width appears anywhere in this file.
 //!
-//! The Python wrapper (`sal.likelihood.pruning_rust`) flattens a
+//! The Python wrapper (`sal.likelihood.rust.pruning`) flattens a
 //! `sal.sim.tree.Node` topology into the arrays this module expects,
-//! mirroring `pruning_torch.py`'s convention of keeping branch lengths as a
+//! mirroring `torch/pruning.py`'s convention of keeping branch lengths as a
 //! flat array in a defined order rather than read off `Node.branch_length`
 //! inside the accelerated call, even though Rust has no autograd graph to
 //! protect.

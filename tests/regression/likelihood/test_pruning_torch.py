@@ -1,4 +1,4 @@
-"""Regression tests for ``sal.likelihood.pruning_torch``.
+"""Regression tests for ``sal.likelihood.torch.pruning``.
 
 Issue #70's shared checks run over ``ROUTES`` (#982): the oracle in
 ``test_pruning_common.py``, brute force and rescaling in
@@ -16,8 +16,9 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from sal.likelihood import pruning, pruning_torch
+from sal.likelihood import pruning
 from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
+from sal.likelihood.torch import pruning as pruning_torch
 from sal.sim.jc import jc_rate_matrix
 from sal.sim.simulate import simulate_alignment
 from sal.sim.tree import Node

@@ -16,7 +16,7 @@ from sal.likelihood.objective import (
     BranchLengthObjective,
     SubstitutionModelObjective,
 )
-from sal.likelihood.pruning_torch import (
+from sal.likelihood.torch.pruning import (
     branch_lengths_from_tree,
     log_likelihood,
     transition_probabilities,

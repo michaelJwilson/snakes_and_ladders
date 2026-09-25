@@ -293,7 +293,7 @@ pub fn bcjr_impl(
 type Decoded<'py> = (Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>, f64);
 
 /// One log-MAP forward--backward pass, for
-/// `sal.likelihood.convolutional_rust`.
+/// `sal.likelihood.rust.convolutional`.
 ///
 /// `next_state` is `2 * n_states` `int64` and `parity` `2 * n_states`
 /// `uint8`, both `(n_states, 2)` row-major and flattened; the three ratio

@@ -208,7 +208,7 @@ def _negative_log_likelihood(
     """``(theta, data) -> U(theta)``, traceable, once per structure (issue #1008).
 
     What :func:`_compiled` differentiates and a compiled chain
-    (:mod:`sal.sample.hmc_jax`) traces inside its own loop.
+    (:mod:`sal.sample.jax.hmc`) traces inside its own loop.
     """
     import jax
 

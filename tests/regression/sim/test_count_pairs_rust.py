@@ -27,11 +27,11 @@ from sal.sim.count_pairs import (
 from sal.sim.count_pairs import (
     simulate_count_pairs as simulate_numpy,
 )
-from sal.sim.count_pairs_rust import fine_instance
-from sal.sim.count_pairs_rust import (
+from sal.sim.fixtures import fixture
+from sal.sim.rust.count_pairs import fine_instance
+from sal.sim.rust.count_pairs import (
     simulate_count_pairs as simulate_rust,
 )
-from sal.sim.fixtures import fixture
 
 PROBLEM = "spatio_sequential_counts"
 

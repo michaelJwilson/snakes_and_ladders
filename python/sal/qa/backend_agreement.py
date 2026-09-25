@@ -21,8 +21,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
 
-from sal.likelihood import pruning, pruning_rust, pruning_torch
+from sal.likelihood import pruning
 from sal.likelihood.brute_force import brute_force_log_likelihood
+from sal.likelihood.rust import pruning as pruning_rust
+from sal.likelihood.torch import pruning as pruning_torch
 from sal.qa.figure import QAFigure
 from sal.qa.runner import FIXTURE_PARAMS, figure_main
 from sal.qa.style import (

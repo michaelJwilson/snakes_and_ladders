@@ -1,6 +1,6 @@
 """Analytic gradient of Felsenstein pruning, behind one ``torch.autograd.Function``.
 
-The forward value is ``pruning_torch.log_likelihood``'s, computed with the
+The forward value is ``likelihood.torch.pruning.log_likelihood``'s, computed with the
 same operations in the same order; the gradient in ``branch_lengths`` comes
 from the closed form rather than from a tape. ``alg:pruning-backward`` of
 ``docs/tex/textbook.tex`` states the recursion; this module implements it.
@@ -32,7 +32,7 @@ prefix/suffix scan over the children gives the same product with no division.
 The gradient in the root distribution, in a general rate matrix, or in the
 alignment is not computed: those are constants of the fit this attacks
 (``likelihood.objective.BranchLengthObjective``), and a caller that needs them
-uses ``pruning_torch`` instead. Passing a ``pi`` or ``rate_matrix`` that
+uses ``likelihood.torch.pruning`` instead. Passing a ``pi`` or ``rate_matrix`` that
 requires a gradient is refused rather than silently returning zero for it.
 """
 
@@ -53,7 +53,7 @@ from sal.likelihood.pruning_common import (
     postorder,
     rescale_partial,
 )
-from sal.likelihood.pruning_torch import (
+from sal.likelihood.torch.pruning import (
     branch_order,
     transition_probabilities,
 )
@@ -286,13 +286,13 @@ def log_likelihood(
     """Total log-likelihood, differentiable w.r.t. ``branch_lengths``.
 
     Signature and value match
-    :func:`sal.likelihood.pruning_torch.log_likelihood`, which
+    :func:`sal.likelihood.torch.pruning.log_likelihood`, which
     stays the oracle; only how the gradient is obtained differs.
 
     Parameters
     ----------
     tau, k, pi, alignment, branch_lengths, weights, rate_matrix, rescale
-        As :func:`sal.likelihood.pruning_torch.log_likelihood`.
+        As :func:`sal.likelihood.torch.pruning.log_likelihood`.
         ``pi`` and ``rate_matrix`` are constants here: this backward computes
         no gradient for them.
 
@@ -316,7 +316,7 @@ def log_likelihood(
     if pi_t.requires_grad or (rate_matrix is not None and rate_matrix.requires_grad):
         msg = (
             "pruning_analytic computes a gradient in branch_lengths only; "
-            "pi and rate_matrix must be constants -- use pruning_torch"
+            "pi and rate_matrix must be constants -- use likelihood.torch.pruning"
         )
         raise ValueError(msg)
 

@@ -33,7 +33,7 @@ before the split (issue #1010) is re-exported here, so
 
 **A private name stays in the module that defines it**, and no submodule needs
 another's. The one exception is ``_HmmObjective``, the base the objectives
-share, which :mod:`sal.opt.hmm_jax` reads from here until issue
+share, which :mod:`sal.opt.jax.hmm` reads from here until issue
 #1004 gives it a public seam; it is re-exported so that import is unchanged,
 and ``tests/regression/test_duplication_guards.py`` admits both crossings.
 """
@@ -66,7 +66,7 @@ from sal.opt.hmm.objectives import (
     PoissonHmmObjective,
 )
 
-# Re-exported for `opt.hmm_jax`, whose import of it from here predates the
+# Re-exported for `opt.jax.hmm`, whose import of it from here predates the
 # split and is admitted until issue #1004; the alias is what declares the
 # re-export to `mypy --strict`.
 from sal.opt.hmm.objectives import (

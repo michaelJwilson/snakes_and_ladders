@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 import torch
-from sal.likelihood import pruning_torch
+from sal.likelihood.torch import pruning as pruning_torch
 from sal.sandbox import pruning_burn
 
 from tests._fixtures import SMALL_SITES, simulated_alignment

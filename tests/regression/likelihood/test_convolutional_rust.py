@@ -16,11 +16,11 @@ from itertools import product
 import numpy as np
 import pytest
 from sal.backend import Backend
-from sal.likelihood import convolutional_rust
 from sal.likelihood.convolutional import (
     bcjr,
 )
 from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
+from sal.likelihood.rust import convolutional as convolutional_rust
 from sal.likelihood.turbo import (
     split_streams,
 )

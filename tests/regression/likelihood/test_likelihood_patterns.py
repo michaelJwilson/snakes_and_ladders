@@ -13,10 +13,12 @@ from collections import Counter
 import numpy as np
 import pytest
 import torch
-from sal.likelihood import pruning, pruning_rust, pruning_torch
+from sal.likelihood import pruning
 from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
 from sal.likelihood.patterns import SitePatterns, check_weights, compress
-from sal.likelihood.pruning_torch import branch_lengths_from_tree
+from sal.likelihood.rust import pruning as pruning_rust
+from sal.likelihood.torch import pruning as pruning_torch
+from sal.likelihood.torch.pruning import branch_lengths_from_tree
 from sal.sim.params import SimulationParams
 from sal.sim.simulator import simulate_tree
 from sal.sim.tree import preorder

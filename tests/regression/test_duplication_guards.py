@@ -14,6 +14,7 @@ surveys live in dated reviews (#813).
 from __future__ import annotations
 
 import ast
+import json
 import re
 import subprocess
 import sys
@@ -150,9 +151,10 @@ FIXTURE_ALIGNMENT_OWNER = "sim/simulator.py"
 #: import and the comment on the cycle it avoids, which eight sites in six
 #: modules wrote before `backend.twin` carried them (issue #1010). Indented
 #: only: a module-level import of a twin is the cycle and fails at import.
+#: A Rust twin is `<sub>.rust.<algorithm>` since #1059.
 TWIN_IMPORT = re.compile(
-    r"^[ \t]+(?:from sal\.[\w.]+ import \w+_rust\b"
-    r"|import sal\.[\w.]+_rust\b)",
+    r"^[ \t]+(?:from sal\.\w+\.rust(?:\.\w+)? import \w+\b"
+    r"|import sal\.\w+\.rust\.\w+\b)",
     re.MULTILINE,
 )
 TWIN_OWNER = "backend.py"
@@ -531,7 +533,7 @@ def test_each_guard_fails_on_violating_source() -> None:
         HAND_SKIP: "mark = pytest.mark.skipif(" + 'not available("gco"), reason="")\n',
         HAND_MEASURE: "r, p = peaked(" + "lambda: timed(call))\n",
         FIXTURE_ALIGNMENT: "d = simulate_" + "alignment(p.tau, p.k, p.pi, rng, 9)\n",
-        TWIN_IMPORT: "        from sal.likelihood import pruning_rust\n",
+        TWIN_IMPORT: "        from sal.likelihood.rust import pruning\n",
         # Unsplit: anchored at a line start, and this literal is indented.
         ICM_DEFINITION: "def iterated_conditional_modes(\n    graph,\n",
     }
@@ -579,10 +581,10 @@ def test_each_guard_fails_on_violating_source() -> None:
         "    if plan is not MessageScheduleName.FLOODING:\n"
     )
     assert not SCHEDULE_NAME_BRANCH.search("    if plan.requires_tree:\n")
-    # The twin's other spelling, and the module-level import a caller of a
-    # twin that is not its oracle (`qa.backend_agreement`) is free to write.
-    assert TWIN_IMPORT.search("    import sal.search.maxflow_rust\n")
-    assert not TWIN_IMPORT.search("from sal.likelihood import pruning_rust\n")
+    # The twin's other spelling, and the module-level import a twin's own
+    # test is free to write (`test_backend_twins_are_reached_by_their_gateway`).
+    assert TWIN_IMPORT.search("    import sal.search.rust.maxflow\n")
+    assert not TWIN_IMPORT.search("from sal.likelihood.rust import pruning\n")
 
     # The structural guard on the same discipline, since it cannot be written
     # as a pattern: a sixth schedule beside the base and the same class under
@@ -776,7 +778,7 @@ def test_the_problem_catalogue_has_one_reader() -> None:
 
 #: Private cross-module imports, each with its reason (#1010, CLEAN's E):
 #: `_submodules` is the lazy-import plumbing; `_HmmObjective` is what
-#: `hmm_jax` narrows on until C5 (#1004), re-exported from `opt.hmm`.
+#: `opt.jax.hmm` narrows on until C5 (#1004), re-exported from `opt.hmm`.
 PRIVATE_IMPORTS_ADMITTED = {
     ("sal", "_submodules"),
     ("sal.opt.hmm", "_HmmObjective"),
@@ -859,3 +861,95 @@ def test_the_retired_name_does_not_import() -> None:
     )
 
     assert result.stdout.strip() == "refused"
+
+
+#: The backends a twin's subpackage is named for: `<sub>.<backend>.<algorithm>`
+#: (issue #1059). `python` is the oracle's own member and names no subpackage.
+TWIN_BACKENDS = frozenset({"numba", "rust", "torch", "jax"})
+
+#: Twin imports outside the twin's subpackage, each with its reason. The torch
+#: pruning module is the differentiable evaluator a tree fit, a search's
+#: cached partials and a learner's ranking tape through; it is no door of
+#: `likelihood.pruning`'s float signature, so it has no gateway yet, and which
+#: one it gets is an open question on #1059. `sandbox` referees the route it
+#: conserved against it, as `tests/` does.
+TWIN_IMPORTS_ADMITTED = {
+    ("learn/ranking.py", "sal.likelihood.torch.pruning"),
+    ("learn/tree.py", "sal.likelihood.torch.pruning"),
+    ("qa/backend_agreement.py", "sal.likelihood.rust.pruning"),
+    ("qa/backend_agreement.py", "sal.likelihood.torch.pruning"),
+    ("qa/opt_branch_recovery.py", "sal.likelihood.torch.pruning"),
+    ("sandbox/pruning_burn.py", "sal.likelihood.torch.pruning"),
+    ("search/infer.py", "sal.likelihood.torch.pruning"),
+}
+
+
+def _twin_imports(source: str) -> set[str]:
+    """Every ``sal.<sub>.<backend>.<algorithm>`` ``source`` imports, at any depth."""
+    found: set[str] = set()
+    for node in ast.walk(ast.parse(source)):
+        names: list[str] = []
+        if isinstance(node, ast.ImportFrom) and node.module:
+            names = (
+                [f"{node.module}.{alias.name}" for alias in node.names]
+                if len(node.module.split(".")) == 3
+                else [node.module]
+            )
+        elif isinstance(node, ast.Import):
+            names = [alias.name for alias in node.names]
+        for name in names:
+            parts = name.split(".")
+            if parts[0] == "sal" and len(parts) >= 4 and parts[2] in TWIN_BACKENDS:
+                found.add(".".join(parts[:4]))
+    return found
+
+
+def _notebook_code(path: Path) -> str:
+    """A notebook's code cells as one module, its magics dropped."""
+    cells = json.loads(path.read_text())["cells"]
+    return "\n".join(
+        line
+        for cell in cells
+        if cell["cell_type"] == "code"
+        for line in "".join(cell["source"]).splitlines()
+        if not line.lstrip().startswith(("%", "!"))
+    )
+
+
+@pytest.mark.critical
+@pytest.mark.infra
+def test_backend_twins_are_reached_by_their_gateway() -> None:
+    # Issue #1059: a caller reaches `<sub>.<backend>.<algorithm>` through the
+    # gateway `<sub>.<algorithm>` and its `backend=`, so only the twin's own
+    # subpackage and `tests/` import it. The package, `infra/` and the
+    # notebooks are read.
+    crossing = {
+        (path.relative_to(PACKAGE).as_posix(), module)
+        for path in sorted(PACKAGE.rglob("*.py"))
+        for module in _twin_imports(path.read_text())
+        if module.split(".")[1] != path.relative_to(PACKAGE).parts[0]
+    }
+    crossing |= {
+        (path.relative_to(REPO_ROOT).as_posix(), module)
+        for path in sorted((REPO_ROOT / "infra").rglob("*.py"))
+        for module in _twin_imports(path.read_text())
+    }
+    crossing |= {
+        (path.relative_to(REPO_ROOT).as_posix(), module)
+        for path in sorted((REPO_ROOT / "docs" / "nb").glob("*.ipynb"))
+        for module in _twin_imports(_notebook_code(path))
+    }
+    assert crossing - TWIN_IMPORTS_ADMITTED == set()
+    assert TWIN_IMPORTS_ADMITTED - crossing == set(), "an admitted crossing is gone"
+    # Paired inputs: each spelling of a twin import, and two that are not.
+    assert _twin_imports("from sal.likelihood.rust import pruning\n") == {
+        "sal.likelihood.rust.pruning"
+    }
+    assert _twin_imports("def f():\n    import sal.search.rust.maxflow\n") == {
+        "sal.search.rust.maxflow"
+    }
+    assert _twin_imports("from sal.opt.jax.hmm import value_and_grad\n") == {
+        "sal.opt.jax.hmm"
+    }
+    assert _twin_imports("from sal.likelihood import pruning\n") == set()
+    assert _twin_imports("from sal.backend import Backend\n") == set()

@@ -21,10 +21,10 @@ every accelerated backend (Rust, PyTorch, CUDA, Metal) is validated against,
 per ``likelihood/CLAUDE.md``.
 
 ``log_likelihood`` takes a ``backend``, which is a **door and not a rung**
-(issue #860): ``Backend.RUST`` calls ``pruning_rust``'s own entry point with
+(issue #860): ``Backend.RUST`` calls ``likelihood.rust.pruning``'s own entry point with
 the arguments it was given and returns what it returns, and the recursion
 below is reached on ``Backend.PYTHON``, the default. No arithmetic moved and
-no rung merged --- ``pruning_rust`` keeps its entry point and its bitwise
+no rung merged --- ``likelihood.rust.pruning`` keeps its entry point and its bitwise
 pin, and this oracle gained no code from the route it referees.
 """
 
@@ -80,7 +80,7 @@ def log_likelihood(
         Which implementation runs it. ``PYTHON`` is this module's own
         recursion, the oracle, and is the default: a caller who does not ask
         gets the reference (issue #860). ``RUST`` is
-        ``sal.likelihood.pruning_rust``'s call, the one the
+        ``sal.likelihood.rust.pruning``'s call, the one the
         caller made by importing that module, reached through the enum every
         other twin is reached through. Nothing else: the twin is the only
         other implementation of *this* signature.

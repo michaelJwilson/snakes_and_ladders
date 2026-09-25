@@ -85,7 +85,7 @@ class FlowNetwork:
     one list index and a NumPy slice is an object allocation. The compiled
     consumer has the contiguous form already ---
     :meth:`as_arrays` builds it for
-    :mod:`sal.search.maxflow_rust`, and that is the boundary
+    :mod:`sal.search.rust.maxflow`, and that is the boundary
     the layout rule is about.
 
     ``add_edge`` also appends, which offsets cannot do without knowing the
@@ -247,7 +247,7 @@ class FlowNetwork:
 
         ``arcs`` is ``2 * n_edges`` flattened ``(from, to)`` pairs, and the
         two capacity arrays are the forward and back arc of each. This is the
-        layout :mod:`sal.search.maxflow_rust` crosses the
+        layout :mod:`sal.search.rust.maxflow` crosses the
         boundary with, and it is written here rather than there so the
         paired-arc convention above has one reading: a second one, kept in
         the module that consumes it, is a convention that can fall out of
@@ -296,7 +296,7 @@ class GroundState:
     """The exact minimum-energy configuration of a two-state ferromagnet.
 
     One type for both implementations: :func:`ising_ground_state` and
-    :func:`sal.search.maxflow_rust.ising_ground_state` are an
+    :func:`sal.search.rust.maxflow.ising_ground_state` are an
     oracle pair on the ladder, so a test that swaps one for the other reads
     the same fields (issue #865).
 
@@ -491,7 +491,7 @@ def ising_ground_state(
     backend : Backend
         :data:`~sal.backend.Backend.PYTHON` is the push-relabel
         cut here, the oracle; :data:`~sal.backend.Backend.RUST`
-        is :mod:`sal.search.maxflow_rust`, pinned to it bitwise.
+        is :mod:`sal.search.rust.maxflow`, pinned to it bitwise.
         Chosen here so a caller names the kernel rather than the module, as
         ``bcjr`` and ``sum_product`` already ask (#813).
 

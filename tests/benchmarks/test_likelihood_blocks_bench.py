@@ -43,7 +43,7 @@ import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
 from sal.likelihood.blocks import block_frequency_interval
-from sal.likelihood.pruning_torch import (
+from sal.likelihood.torch.pruning import (
     branch_lengths_from_tree,
     log_likelihood,
 )

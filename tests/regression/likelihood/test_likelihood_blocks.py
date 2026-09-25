@@ -21,7 +21,7 @@ from sal.likelihood.blocks import (
     block_frequency_interval,
     site_log_likelihood_extremes,
 )
-from sal.likelihood.pruning_torch import (
+from sal.likelihood.torch.pruning import (
     branch_lengths_from_tree,
     log_likelihood,
 )
