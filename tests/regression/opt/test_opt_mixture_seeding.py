@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import partial
 
 import numpy as np
@@ -24,6 +24,7 @@ import torch
 from sal.cost import Cost
 from sal.emissions import GaussianEmission, pooled_variance_floor
 from sal.opt.budget import Budget, Comparison
+from sal.opt.em import EMISSION_MIXTURE_EM
 from sal.opt.emission_mixture import (
     expectation_maximization,
     plus_plus_start,
@@ -422,7 +423,7 @@ def fit_from(instance: Instance, seeding: Seeding, iterations: int) -> Fitted:
             instance.observations,
             weights,
             seeding.components,
-            max_iterations=iterations,
+            config=replace(EMISSION_MIXTURE_EM, max_iterations=iterations),
         )
     except ValueError:
         # A component collapsed onto a point: the Gaussian likelihood is

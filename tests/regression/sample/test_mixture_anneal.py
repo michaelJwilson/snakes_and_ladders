@@ -11,10 +11,13 @@ likelihood, and one seed reproduces it bitwise.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 import torch
 from sal.emissions import CountPairEmission
+from sal.opt.em import EMISSION_MIXTURE_EM
 from sal.opt.emission_mixture import (
     CountPairSeeding,
     expectation_maximization,
@@ -107,7 +110,10 @@ def test_the_anneal_keeps_its_best_state_and_em_from_it_never_falls() -> None:
         rel=1e-12,
     )
     polished = expectation_maximization(
-        observations, run.weights, run.components, tolerance=1e-8
+        observations,
+        run.weights,
+        run.components,
+        config=replace(EMISSION_MIXTURE_EM, tolerance=1e-8),
     )
     assert polished.log_likelihood >= run.log_likelihood
     # And each E step's posterior sums to one, as EM's does.

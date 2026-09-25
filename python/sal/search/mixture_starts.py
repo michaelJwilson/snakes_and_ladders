@@ -55,6 +55,7 @@ import torch
 from sal.cost import Cost
 from sal.emissions import EmissionFamily
 from sal.opt.budget import Budget, Outcome
+from sal.opt.em import EmConfig
 from sal.opt.emission_mixture import (
     ComponentsAt,
     expectation_maximization,
@@ -329,7 +330,10 @@ def gaussian_em_seeding(instance: MixtureInstance, rng: np.random.Generator) -> 
     path: list[tuple[int, EmissionFamily]] = []
     for iteration in range(GAUSSIAN_EM_ITERATIONS):
         fitted = gaussian_expectation_maximization(
-            channel, weights, components, max_iterations=1, tolerance=0.0
+            channel,
+            weights,
+            components,
+            config=EmConfig(max_iterations=1, tolerance=0.0),
         )
         weights, components = fitted.weights, fitted.components
         tracked.record(iteration, surrogate_log_likelihood=fitted.log_likelihood)
@@ -375,9 +379,8 @@ def burn_in_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seed
             subsample,
             weights,
             components,
-            max_iterations=1,
-            tolerance=0.0,
             covariate=covariate,
+            config=EmConfig(max_iterations=1, tolerance=0.0),
         )
         weights, components = fitted.weights, fitted.components
         tracked.record(iteration, subsample_log_likelihood=fitted.log_likelihood)
@@ -1079,9 +1082,8 @@ def polish(
                 instance.observations,
                 weights,
                 components,
-                max_iterations=1,
-                tolerance=0.0,
                 covariate=instance.covariate,
+                config=EmConfig(max_iterations=1, tolerance=0.0),
             )
         except ValueError:
             # The one refusal this stop reads: a component the E step leaves

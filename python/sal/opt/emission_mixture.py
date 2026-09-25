@@ -45,7 +45,7 @@ from sal.opt.constrain import (
     log_simplex,
     positive,
 )
-from sal.opt.em import em_loop
+from sal.opt.em import EMISSION_MIXTURE_EM, EmConfig, em_loop
 from sal.opt.mixture import (
     e_step,
     emission_mixture_plus_plus,
@@ -108,8 +108,7 @@ def expectation_maximization(
     observations: np.ndarray | torch.Tensor,
     weights: np.ndarray | torch.Tensor,
     components: EmissionFamily,
-    max_iterations: int = 200,
-    tolerance: float = 1e-10,
+    config: EmConfig = EMISSION_MIXTURE_EM,
     *,
     covariate: np.ndarray | torch.Tensor | None = None,
 ) -> EmissionMixtureFit:
@@ -134,12 +133,11 @@ def expectation_maximization(
         as a tensor of its own dtype, and a tensor is used as given.
     components : EmissionFamily
         Starting components.
-    max_iterations : int
-        Maximum EM iterations.
-    tolerance : float
-        Stop when the log-likelihood improves by less than this *relative* to
-        its magnitude --- absolute would not transfer across data sizes
-        (``DEV.md``, issue #111).
+    config : EmConfig
+        The EM budget and its relative tolerance;
+        :data:`~sal.opt.em.EMISSION_MIXTURE_EM`, 200 iterations at 1e-10, by
+        default. Relative, since an absolute tolerance does not transfer
+        across data sizes (``DEV.md``, issue #111).
     covariate : np.ndarray | torch.Tensor | None
         Per-observation covariate, scored in the E step and conditioned on in
         the M step alike (issue #933): an exposure, a trial count, or one of
@@ -178,8 +176,7 @@ def expectation_maximization(
             *distinct,
             weights,
             components,
-            max_iterations=max_iterations,
-            tolerance=tolerance,
+            config=config,
         )
     values = torch.as_tensor(observations, dtype=torch.float64)
     conditioned = (
@@ -223,7 +220,9 @@ def expectation_maximization(
         torch.empty((values.shape[0], components.n_states), dtype=torch.float64),
     )
     (weights, components, posterior), log_likelihood, termination = em_loop(
-        step, start, tolerance=tolerance, max_iterations=max_iterations
+        step,
+        start,
+        config=config,
     )
     return EmissionMixtureFit(
         weights=weights,
@@ -371,8 +370,7 @@ def _cell_expectation_maximization(
     weights: torch.Tensor,
     components: EmissionFamily,
     *,
-    max_iterations: int,
-    tolerance: float,
+    config: EmConfig,
 ) -> EmissionMixtureFit:
     """:func:`expectation_maximization` on the distinct counts (issue #997)."""
     support = torch.from_numpy(cells.astype(np.float64))
@@ -411,7 +409,9 @@ def _cell_expectation_maximization(
         torch.empty((0, components.n_states), dtype=torch.float64),
     )
     (weights, components, posterior), log_likelihood, termination = em_loop(
-        step, start, tolerance=tolerance, max_iterations=max_iterations
+        step,
+        start,
+        config=config,
     )
     responsibilities = (
         posterior[torch.from_numpy(inverse)]

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 import pytest
@@ -28,6 +28,7 @@ from sal.opt.budget import (
     compare,
     restarts,
 )
+from sal.opt.em import EM
 from sal.opt.fit import fit
 from sal.opt.mixture import (
     GaussianMixtureObjective,
@@ -156,7 +157,7 @@ def _em_then_polish(
             GaussianEmission(
                 named["mean"], named["scale"], fixture.objective.variance_floor
             ),
-            max_iterations=budget.size - POLISH_RESERVE,
+            config=replace(EM, max_iterations=budget.size - POLISH_RESERVE),
         )
     except ValueError:
         # A component collapsed: refused, and charged the iterations it had.

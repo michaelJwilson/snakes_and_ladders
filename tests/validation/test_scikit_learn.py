@@ -20,6 +20,7 @@ import pytest
 import torch
 from sal.emissions import GaussianEmission
 from sal.fixtures import load_params
+from sal.opt.em import EmConfig
 from sal.opt.mixture import (
     expectation_maximization,
     mixture_log_likelihood,
@@ -67,8 +68,7 @@ def _ours(
         observations,
         torch.as_tensor(weights),
         GaussianEmission(mean, scale, 1e-12),
-        max_iterations=n_iter,
-        tolerance=-np.inf,
+        config=EmConfig(max_iterations=n_iter, tolerance=-np.inf),
     )
     return (
         fit.weights.numpy(),

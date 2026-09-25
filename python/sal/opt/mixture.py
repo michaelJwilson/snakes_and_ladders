@@ -48,7 +48,7 @@ from sal.opt.constrain import (
     log_simplex,
     positive,
 )
-from sal.opt.em import em_loop
+from sal.opt.em import EM, EmConfig, em_loop
 from sal.opt.initialize import Initializer, quantile_locations
 from sal.opt.objective import Objective, autograd_value_and_gradient
 from sal.opt.termination import Termination
@@ -553,8 +553,7 @@ def expectation_maximization(
     observations: np.ndarray,
     weights: torch.Tensor,
     components: GaussianEmission,
-    max_iterations: int = 500,
-    tolerance: float = 1e-12,
+    config: EmConfig = EM,
     backend: Backend = Backend.RUST,
 ) -> MixtureFit:
     """Fit a mixture by EM, with no autodiff involved.
@@ -574,12 +573,10 @@ def expectation_maximization(
         Starting mixing weights.
     components : GaussianEmission
         Starting components.
-    max_iterations : int
-        Maximum EM iterations.
-    tolerance : float
-        Stop when the log-likelihood improves by less than this *relative* to
-        its magnitude — absolute would not transfer across data sizes
-        (``DEV.md``, issue #111).
+    config : EmConfig
+        The EM budget and its relative tolerance; :data:`~sal.opt.em.EM`,
+        500 iterations at 1e-12, by default. Relative, since an absolute
+        tolerance does not transfer across data sizes (``DEV.md``, issue #111).
     backend : Backend
         :data:`~sal.backend.Backend.RUST`, the default since
         issue #986 for one-channel components, runs each step in
@@ -620,8 +617,7 @@ def expectation_maximization(
             observations,
             weights,
             components,
-            max_iterations=max_iterations,
-            tolerance=tolerance,
+            config=config,
         )
     values = torch.as_tensor(observations, dtype=torch.float64).reshape(-1)
     boundary = False
@@ -653,8 +649,7 @@ def expectation_maximization(
     (weights, components), log_likelihood, termination = em_loop(
         step,
         (weights, components),
-        tolerance=tolerance,
-        max_iterations=max_iterations,
+        config=config,
     )
     return MixtureFit(
         weights,
@@ -671,8 +666,7 @@ def _streamed_expectation_maximization(
     weights: torch.Tensor,
     components: GaussianEmission,
     *,
-    max_iterations: int,
-    tolerance: float,
+    config: EmConfig,
 ) -> MixtureFit:
     """:func:`expectation_maximization` on the compiled step, under the same :func:`em_loop`.
 
@@ -712,8 +706,7 @@ def _streamed_expectation_maximization(
     (weight, mean, scale), log_likelihood, termination = em_loop(
         step,
         (flat(weights), flat(components.mean), flat(components.scale)),
-        tolerance=tolerance,
-        max_iterations=max_iterations,
+        config=config,
     )
     return MixtureFit(
         torch.from_numpy(weight),

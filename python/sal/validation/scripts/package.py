@@ -18,6 +18,7 @@ from collections.abc import Callable, Mapping
 
 import numpy as np
 
+from sal.opt.em import EmConfig
 from sal.validation.protocol import dump, measured, received
 
 #: One output mapping from one measured call.
@@ -101,8 +102,7 @@ def _baum_welch(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
             initial,
             transition,
             emission,
-            max_iterations=n_iter,
-            tolerance=-np.inf,
+            config=EmConfig(max_iterations=n_iter, tolerance=-np.inf),
         )
         return {"emission": np.exp(fit.log_emission.numpy())}
 
@@ -160,12 +160,11 @@ def _family_baum_welch(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs
         initial,
         transition,
         family,
-        max_iterations=1,
-        tolerance=-np.inf,
         backend=backend,
         with_table=with_table,
         table_size=table_size,
         approx=approx,
+        config=EmConfig(max_iterations=1, tolerance=-np.inf),
     )
 
     def call() -> Outputs:
@@ -174,12 +173,11 @@ def _family_baum_welch(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs
             initial,
             transition,
             family,
-            max_iterations=n_iter,
-            tolerance=-np.inf,
             backend=backend,
             with_table=with_table,
             table_size=table_size,
             approx=approx,
+            config=EmConfig(max_iterations=n_iter, tolerance=-np.inf),
         )
         return {"log_likelihood": np.asarray(fit.log_likelihood)}
 
@@ -324,7 +322,10 @@ def _mixture_em(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
 
     def call() -> Outputs:
         fit = expectation_maximization(
-            observations, weights, start, max_iterations=n_iter, tolerance=-np.inf
+            observations,
+            weights,
+            start,
+            config=EmConfig(max_iterations=n_iter, tolerance=-np.inf),
         )
         return {"weights": fit.weights.numpy()}
 

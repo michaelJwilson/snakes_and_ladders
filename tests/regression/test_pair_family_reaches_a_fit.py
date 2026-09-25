@@ -8,10 +8,13 @@ a fit not told it does not.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 import torch
 from sal.emissions import BetaBinomialEmission, NegativeBinomialEmission
+from sal.opt.em import EM
 from sal.opt.hmm import baum_welch_family
 from sal.sim.count_pairs import IndependentCountPair
 
@@ -60,8 +63,8 @@ def _fit(observations: np.ndarray, covariate: np.ndarray | None) -> np.ndarray:
         _INITIAL,
         _TRANSITION,
         _family(np.array([2.0, 8.0])),
-        max_iterations=60,
         covariate=covariate,
+        config=replace(EM, max_iterations=60),
     )
     family = result.emissions
     assert isinstance(family, IndependentCountPair)

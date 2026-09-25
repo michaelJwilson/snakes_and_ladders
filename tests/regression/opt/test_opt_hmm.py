@@ -29,6 +29,7 @@ from sal.emissions import (
 from sal.fixtures import load_params
 from sal.likelihood.hmm import hmm_log_likelihood, viterbi
 from sal.likelihood.hmm_paths import enumerate_hidden_paths
+from sal.opt.em import EM, EmConfig
 from sal.opt.hmm import (
     EmFit,
     GaussianHmmObjective,
@@ -255,7 +256,7 @@ def test_baum_welch_increases_the_likelihood_monotonically() -> None:
             log_initial,
             log_transition,
             log_emission,
-            max_iterations=1,
+            config=replace(EM, max_iterations=1),
         )
         assert value >= previous - 1e-9 * abs(value)
         previous = value
@@ -290,8 +291,8 @@ def test_baum_welch_stops_once_the_likelihood_stops_moving() -> None:
         start["log_emission"],
     )
 
-    *_, loose = baum_welch(*arguments, tolerance=1e-1)
-    *_, tight = baum_welch(*arguments, tolerance=1e-14)
+    *_, loose = baum_welch(*arguments, config=replace(EM, tolerance=1e-1))
+    *_, tight = baum_welch(*arguments, config=replace(EM, tolerance=1e-14))
     assert loose < tight
 
 
@@ -344,7 +345,9 @@ def test_baum_welch_reaches_the_enumerated_path_evidence_and_its_fixed_point() -
         params.emissions,
     )
 
-    first = baum_welch_family(observations, *start, max_iterations=1)
+    first = baum_welch_family(
+        observations, *start, config=replace(EM, max_iterations=1)
+    )
     assert_allclose(
         first.log_likelihood,
         _enumerated_evidence(params, observations),
@@ -354,7 +357,9 @@ def test_baum_welch_reaches_the_enumerated_path_evidence_and_its_fixed_point() -
     walked = start
     evidence = []
     for _ in range(_EM_ITERATES):
-        iterate = baum_welch_family(observations, *walked, max_iterations=1)
+        iterate = baum_welch_family(
+            observations, *walked, config=replace(EM, max_iterations=1)
+        )
         walked = (iterate.log_initial, iterate.log_transition, iterate.emissions)
         evidence.append(_enumerated_evidence(_stepped(params, iterate), observations))
     assert evidence == sorted(evidence), evidence
@@ -467,7 +472,7 @@ def test_baum_welch_ascends_and_settles_on_the_re_estimation_equations() -> None
     reported = []
     for _ in range(_EM_ASCENT):
         initial_step, transition_step, emission_step, likelihood = baum_welch(
-            observations, *walked, max_iterations=1
+            observations, *walked, config=replace(EM, max_iterations=1)
         )
         walked = (initial_step, transition_step, emission_step)
         reported.append(likelihood)
@@ -510,9 +515,8 @@ def test_the_streamed_baum_welch_is_the_batched_one() -> None:
                 initial,
                 transition,
                 emission,
-                max_iterations=10,
-                tolerance=-np.inf,
                 backend=backend,
+                config=EmConfig(max_iterations=10, tolerance=-np.inf),
             )
             for backend in (Backend.PYTHON, Backend.RUST)
         ]
@@ -607,10 +611,9 @@ def test_the_streamed_family_step_is_the_batched_one(
             initial,
             transition,
             family,
-            max_iterations=10,
-            tolerance=-np.inf,
             covariate=depth,
             backend=backend,
+            config=EmConfig(max_iterations=10, tolerance=-np.inf),
         )
         for backend in (Backend.PYTHON, Backend.RUST)
     ]
@@ -624,12 +627,11 @@ def test_the_streamed_family_step_is_the_batched_one(
                 initial,
                 transition,
                 family,
-                max_iterations=10,
-                tolerance=-np.inf,
                 covariate=depth,
                 with_table=with_table,
                 table_size=size,
                 approx=approx,
+                config=EmConfig(max_iterations=10, tolerance=-np.inf),
             )
             for with_table, size, approx in (
                 (False, None, False),
@@ -671,9 +673,8 @@ def test_real_valued_counts_take_the_batched_route() -> None:
             initial,
             transition,
             family,
-            max_iterations=3,
-            tolerance=-np.inf,
             backend=backend,
+            config=EmConfig(max_iterations=3, tolerance=-np.inf),
         )
         for backend in (Backend.PYTHON, Backend.RUST)
     ]

@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 import torch
@@ -51,6 +51,7 @@ from sal.opt.constrain import (
     log_simplex,
     positive,
 )
+from sal.opt.em import EM, EmConfig
 from sal.opt.emission_mixture import (
     ComponentsAt,
     expectation_maximization,
@@ -456,8 +457,7 @@ def burn_in_seeding(
         instance.observations[subsample],
         weights,
         seeded,
-        max_iterations=BURN_IN_ITERATIONS,
-        tolerance=0.0,
+        config=EmConfig(max_iterations=BURN_IN_ITERATIONS, tolerance=0.0),
     )
     return Seeding(
         _count_pair(fit.components),
@@ -719,7 +719,7 @@ def gaussian_em_seeding(
         channel,
         torch.exp(objective.constrain(start)["log_weight"]).detach(),
         objective.components(start),
-        max_iterations=GAUSSIAN_EM_ITERATIONS,
+        config=replace(EM, max_iterations=GAUSSIAN_EM_ITERATIONS),
     )
     ended = fitted.termination
     return Seeding(
@@ -967,7 +967,10 @@ def _projected_em(
     tracked = current()
     for _ in range(budget.size):
         step = expectation_maximization(
-            instance.observations, weights, components, max_iterations=1, tolerance=0.0
+            instance.observations,
+            weights,
+            components,
+            config=EmConfig(max_iterations=1, tolerance=0.0),
         )
         trace.append(step.log_likelihood)
         tracked.record(

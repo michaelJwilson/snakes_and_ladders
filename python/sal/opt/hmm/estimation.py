@@ -27,7 +27,7 @@ from sal.emissions import (
     PoissonEmission,
     refuse_collapsed,
 )
-from sal.opt.em import em_loop
+from sal.opt.em import EM, EmConfig, em_loop
 from sal.opt.termination import Termination
 from sal.ragged import Ragged
 
@@ -117,8 +117,7 @@ def baum_welch(
     log_initial: torch.Tensor,
     log_transition: torch.Tensor,
     log_emission: torch.Tensor,
-    max_iterations: int = 500,
-    tolerance: float = 1e-12,
+    config: EmConfig = EM,
     backend: Backend = Backend.RUST,
 ) -> CategoricalFit:
     """Fit an HMM by expectation-maximization, with no autodiff involved.
@@ -134,12 +133,10 @@ def baum_welch(
         Integer symbols, shape ``(n_sequences, sequence_length)``.
     log_initial, log_transition, log_emission : torch.Tensor
         Starting parameters, as log-probabilities.
-    max_iterations : int
-        Maximum EM iterations.
-    tolerance : float
-        Stop when the log-likelihood improves by less than this *relative*
-        to its magnitude -- absolute would not transfer across data sizes
-        (``DEV.md``, issue #111).
+    config : EmConfig
+        The EM budget and its relative tolerance; :data:`~sal.opt.em.EM`,
+        500 iterations at 1e-12, by default. Relative, since an absolute
+        tolerance does not transfer across data sizes (``DEV.md``, issue #111).
     backend : Backend
         :data:`~sal.backend.Backend.RUST`, the default since
         issue #986, runs each E and M step in
@@ -164,16 +161,14 @@ def baum_welch(
             log_initial,
             log_transition,
             log_emission,
-            max_iterations=max_iterations,
-            tolerance=tolerance,
+            config=config,
         )
     result = baum_welch_family(
         observations,
         log_initial,
         log_transition,
         CategoricalEmission.from_log(log_emission),
-        max_iterations=max_iterations,
-        tolerance=tolerance,
+        config=config,
     )
     family = result.emissions
     if not isinstance(family, CategoricalEmission):  # pragma: no cover
@@ -311,8 +306,7 @@ def _streamed_baum_welch(
     log_transition: torch.Tensor,
     log_emission: torch.Tensor,
     *,
-    max_iterations: int,
-    tolerance: float,
+    config: EmConfig,
 ) -> CategoricalFit:
     """:func:`baum_welch` on the compiled step, driven by the same :func:`em_loop`."""
     # Borrowed where NumPy already holds int64 rows; a copy only otherwise.
@@ -335,8 +329,7 @@ def _streamed_baum_welch(
     (initial, transition, emission), log_likelihood, termination = em_loop(
         step,
         (flat(log_initial), flat(log_transition), flat(log_emission)),
-        tolerance=tolerance,
-        max_iterations=max_iterations,
+        config=config,
     )
     # Shaped in NumPy and wrapped without a copy: a first torch `reshape` in a
     # process costs 2.1 MB of resident memory, 60 times the fit's own.
@@ -423,8 +416,7 @@ def _streamed_family(
     log_transition: torch.Tensor,
     emissions: EmissionFamily,
     *,
-    max_iterations: int,
-    tolerance: float,
+    config: EmConfig,
     covariate: np.ndarray | None = None,
     with_table: bool = True,
     table_size: int | None = None,
@@ -533,8 +525,7 @@ def _streamed_family(
     (initial, transition, fitted), log_likelihood, termination = em_loop(
         step,
         (flat(log_initial), flat(log_transition), emissions),
-        tolerance=tolerance,
-        max_iterations=max_iterations,
+        config=config,
     )
     return EmFit(
         log_initial=torch.from_numpy(initial),
@@ -571,8 +562,7 @@ def baum_welch_family(
     log_initial: torch.Tensor,
     log_transition: torch.Tensor,
     emissions: EmissionFamily,
-    max_iterations: int = 500,
-    tolerance: float = 1e-12,
+    config: EmConfig = EM,
     covariate: np.ndarray | Ragged | None = None,
     *,
     update: CovariateUpdate | None = None,
@@ -607,12 +597,10 @@ def baum_welch_family(
         Symbol indices or real values, as the family says.
     emissions : EmissionFamily
         Starting emission family.
-    max_iterations : int
-        Maximum EM iterations.
-    tolerance : float
-        Stop when the log-likelihood improves by less than this *relative*
-        to its magnitude -- absolute would not transfer across data sizes
-        (``DEV.md``, issue #111).
+    config : EmConfig
+        The EM budget and its relative tolerance; :data:`~sal.opt.em.EM`,
+        500 iterations at 1e-12, by default. Relative, since an absolute
+        tolerance does not transfer across data sizes (``DEV.md``, issue #111).
     log_initial, log_transition : torch.Tensor
         Starting parameters, as log-probabilities. ``log_transition`` is
         ``(m, m)``, one kernel for the whole chain; ``(length - 1, m, m)``, one
@@ -719,8 +707,7 @@ def baum_welch_family(
             log_initial,
             log_transition,
             emissions,
-            max_iterations=max_iterations,
-            tolerance=tolerance,
+            config=config,
             covariate=covariate,
             with_table=with_table,
             table_size=table_size,
@@ -923,8 +910,7 @@ def baum_welch_family(
     (log_initial, log_transition, _, emissions), log_likelihood, termination = em_loop(
         iterate,
         (log_initial, log_transition, kernels, emissions),
-        tolerance=tolerance,
-        max_iterations=max_iterations,
+        config=config,
     )
     return EmFit(
         log_initial=log_initial,
