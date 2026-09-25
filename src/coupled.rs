@@ -41,6 +41,20 @@
 //! which is why the two are pinned at a relative tolerance rather than
 //! bitwise (`likelihood/CLAUDE.md`).
 //!
+//! **A negative-binomial exposure is factored, not tabulated** (issue #1064).
+//! Under a per-observation exposure `c` the total's density is a function of
+//! the count and a real number, and a table by count and distinct exposure has
+//! as many rows as there are observations. It splits instead:
+//! `log p(y | m, k, c) = A[y, m, k] + r ln(r / t) + y ln(mu c / t)` with
+//! `t = r + mu c`, `A` the `lgamma` terms the caller tabulates by count through
+//! the family, and the two exposure terms computed here in the pass that
+//! already sums the member scores. The kernel gains `ln` and no special
+//! function, and nothing of size `S x V x M x K` is built. The terms are the
+//! family's own, in its order: written as `y ln c - (y + r) ln t` with
+//! `r ln r + y ln mu` moved into `A`, one `ln` per score fewer, the per-score
+//! difference from the family was 263 ulp at the ci instance, the cancellation
+//! of terms near `y ln mu`; in the family's order it is 2.3 ulp.
+//!
 //! The implementations are plain Rust with no PyO3 types so `cargo test` and
 //! `benches/` can link them, per `src/pruning.rs`'s module docs.
 
@@ -103,6 +117,77 @@ pub struct EmissionTables<'a> {
     pub total: &'a [f64],
     /// The second channel's table, `n_successes * M * K`.
     pub success: &'a [f64],
+    /// The first channel's exposure term, where it carries one. The first
+    /// channel's row is then the count itself and `total` is the table `A`
+    /// of [`ExposureTerm`].
+    pub exposure: Option<ExposureTerm<'a>>,
+}
+
+/// The negative binomial's exposure, factored out of the first channel's table.
+///
+/// `log p(y | m, k, c) = A[y, m, k] + r ln(r / t) + y ln(mu c / t)`, with
+/// `t = r_mk + mu_mk c` and `A[y, m, k] = lgamma(y + r) - lgamma(r) -
+/// lgamma(y + 1)` the first channel's table. A zero exposure marks the count
+/// unobserved and it scores zero under every class and state, as the family
+/// scores it.
+#[derive(Clone, Copy)]
+pub struct ExposureTerm<'a> {
+    /// `S * V` exposures, position-major, each non-negative.
+    pub exposure: &'a [f64],
+    /// `M * K` dispersions `r`, row-major.
+    pub dispersion: &'a [f64],
+    /// `M * K` means `mu` at unit exposure, row-major.
+    pub mean: &'a [f64],
+}
+
+impl ExposureTerm<'_> {
+    /// The first channel's score at one observation, for every state of class `m`.
+    ///
+    /// Two logarithms and two divisions per class and state, in the order
+    /// `NegativeBinomialEmission.log_density` takes them, which is the whole
+    /// cost the factorization adds.
+    #[inline]
+    fn score_into(&self, table: &[f64], count: u32, c: f64, from: usize, out: &mut [f64]) {
+        if c == 0.0 {
+            out.fill(0.0);
+            return;
+        }
+        let y = f64::from(count);
+        for (k, cell) in out.iter_mut().enumerate() {
+            let index = from + k;
+            let r = self.dispersion[index];
+            let rate = c * self.mean[index];
+            let total = r + rate;
+            *cell = table[k] + r * (r / total).ln() + y * (rate / total).ln();
+        }
+    }
+
+    /// Check the lengths against the shape, and every exposure against its support.
+    fn validate(&self, shape: &CoupledShape) -> Result<(), String> {
+        let observations = shape.n_positions * shape.n_nodes;
+        if self.exposure.len() != observations {
+            return Err(format!(
+                "exposure has {} entries, expected S * V = {observations}",
+                self.exposure.len()
+            ));
+        }
+        for (name, values) in [("dispersion", self.dispersion), ("mean", self.mean)] {
+            if values.len() != shape.block() {
+                return Err(format!(
+                    "{name} has {} entries, expected M * K = {}",
+                    values.len(),
+                    shape.block()
+                ));
+            }
+        }
+        if self.exposure.iter().any(|&c| !(c >= 0.0 && c.is_finite())) {
+            return Err(
+                "every exposure must be finite and non-negative; zero marks the count unobserved"
+                    .to_string(),
+            );
+        }
+        Ok(())
+    }
 }
 
 impl EmissionTables<'_> {
@@ -137,7 +222,10 @@ impl EmissionTables<'_> {
                 _ => {}
             }
         }
-        Ok(())
+        match &self.exposure {
+            Some(term) => term.validate(shape),
+            None => Ok(()),
+        }
     }
 }
 
@@ -156,6 +244,26 @@ fn class_log_density(
     let (n_positions, n_nodes, n_states) = (shape.n_positions, shape.n_nodes, shape.n_states);
     let block = shape.block();
     density.fill(0.0);
+    if let Some(term) = &tables.exposure {
+        // One observation's first-channel scores, reused across observations.
+        let mut scores = vec![0.0f64; n_states];
+        for s in 0..n_positions {
+            let row = s * n_nodes;
+            for v in 0..n_nodes {
+                let m = labels[v] as usize;
+                let from = m * n_states;
+                let count = totals[row + v];
+                let total = &tables.total[row_index(count) * block + from..][..n_states];
+                term.score_into(total, count, term.exposure[row + v], from, &mut scores);
+                let success = &tables.success[row_index(successes[row + v]) * block + from..];
+                let into = &mut density[(m * n_positions + s) * n_states..][..n_states];
+                for k in 0..n_states {
+                    into[k] += scores[k] + success[k];
+                }
+            }
+        }
+        return;
+    }
     for s in 0..n_positions {
         let row = s * n_nodes;
         for v in 0..n_nodes {
@@ -388,6 +496,35 @@ pub fn external_field_into(
     // over `s` sequential inside it, in the same order and so to the same
     // bits. 200 items against 4 cores is ample; the reassociated version
     // would have been faster and wrong (issue #627).
+    if let Some(term) = &tables.exposure {
+        // The same walk and the same order of summation as below, with the
+        // first channel's `M x K` scores formed per observation from the
+        // factored table rather than read from a table row.
+        field
+            .par_chunks_mut(shape.n_classes)
+            .enumerate()
+            .for_each(|(v, into)| {
+                let mut scores = vec![0.0f64; block];
+                into.fill(0.0);
+                for s in 0..n_positions {
+                    let row = s * n_nodes;
+                    let weight = &weights[s * block..][..block];
+                    let count = totals[row + v];
+                    let total = &tables.total[row_index(count) * block..][..block];
+                    term.score_into(total, count, term.exposure[row + v], 0, &mut scores);
+                    let success = &tables.success[row_index(successes[row + v]) * block..][..block];
+                    for (m, cell) in into.iter_mut().enumerate() {
+                        let mut accumulated = 0.0;
+                        for k in 0..n_states {
+                            let index = m * n_states + k;
+                            accumulated += (scores[index] + success[index]) * weight[index];
+                        }
+                        *cell -= accumulated;
+                    }
+                }
+            });
+        return Ok(());
+    }
     field
         .par_chunks_mut(shape.n_classes)
         .enumerate()
@@ -456,6 +593,25 @@ fn borrowed<'a, T: numpy::Element>(
     })
 }
 
+/// The exposure term from its three optional arrays: all three, or none.
+fn exposure_term<'a>(
+    exposure: &'a Option<PyReadonlyArray1<'_, f64>>,
+    dispersion: &'a Option<PyReadonlyArray1<'_, f64>>,
+    mean: &'a Option<PyReadonlyArray1<'_, f64>>,
+) -> PyResult<Option<ExposureTerm<'a>>> {
+    match (exposure, dispersion, mean) {
+        (None, None, None) => Ok(None),
+        (Some(exposure), Some(dispersion), Some(mean)) => Ok(Some(ExposureTerm {
+            exposure: borrowed(exposure, "exposure")?,
+            dispersion: borrowed(dispersion, "dispersion")?,
+            mean: borrowed(mean, "mean")?,
+        })),
+        _ => Err(PyValueError::new_err(
+            "an exposure term takes exposure, dispersion and mean together",
+        )),
+    }
+}
+
 /// `class_posteriors_into` as a Python binding.
 ///
 /// Every array crosses the boundary once, contiguous and borrowed rather than
@@ -467,10 +623,18 @@ fn borrowed<'a, T: numpy::Element>(
 /// `None`; the results are written into `posterior`, `pairwise` and
 /// `log_evidence`.
 ///
+/// `exposure`, `dispersion` and `mean`, given together, are the first
+/// channel's [`ExposureTerm`]; `total_table` is then its table `A`.
+///
 /// # Errors
 /// `ValueError` naming the first violated precondition, including a count
 /// past the extent of the table that is indexed by it.
 #[pyfunction]
+#[pyo3(signature = (
+    totals, successes, labels, total_table, success_table, log_initial,
+    log_transition, n_positions, n_nodes, n_classes, n_states, posterior,
+    pairwise, log_evidence, exposure=None, dispersion=None, mean=None
+))]
 #[allow(clippy::too_many_arguments)]
 pub fn class_posteriors(
     py: Python<'_>,
@@ -488,10 +652,14 @@ pub fn class_posteriors(
     mut posterior: PyReadwriteArray1<'_, f64>,
     mut pairwise: PyReadwriteArray1<'_, f64>,
     mut log_evidence: PyReadwriteArray1<'_, f64>,
+    exposure: Option<PyReadonlyArray1<'_, f64>>,
+    dispersion: Option<PyReadonlyArray1<'_, f64>>,
+    mean: Option<PyReadonlyArray1<'_, f64>>,
 ) -> PyResult<()> {
     let tables = EmissionTables {
         total: borrowed(&total_table, "total_table")?,
         success: borrowed(&success_table, "success_table")?,
+        exposure: exposure_term(&exposure, &dispersion, &mean)?,
     };
     let shape = CoupledShape {
         n_positions,
@@ -532,12 +700,19 @@ pub fn class_posteriors(
 
 /// `external_field_into` as a Python binding.
 ///
+/// `exposure`, `dispersion` and `mean` are as [`class_posteriors`] takes them.
+///
 /// # Returns
 /// `None`; the result is written into `field`.
 ///
 /// # Errors
 /// `ValueError` naming the first violated precondition.
 #[pyfunction]
+#[pyo3(signature = (
+    totals, successes, total_table, success_table, weights, n_positions,
+    n_nodes, n_classes, n_states, field, exposure=None, dispersion=None,
+    mean=None
+))]
 #[allow(clippy::too_many_arguments)]
 pub fn external_field(
     py: Python<'_>,
@@ -551,10 +726,14 @@ pub fn external_field(
     n_classes: usize,
     n_states: usize,
     mut field: PyReadwriteArray1<'_, f64>,
+    exposure: Option<PyReadonlyArray1<'_, f64>>,
+    dispersion: Option<PyReadonlyArray1<'_, f64>>,
+    mean: Option<PyReadonlyArray1<'_, f64>>,
 ) -> PyResult<()> {
     let tables = EmissionTables {
         total: borrowed(&total_table, "total_table")?,
         success: borrowed(&success_table, "success_table")?,
+        exposure: exposure_term(&exposure, &dispersion, &mean)?,
     };
     let shape = CoupledShape {
         n_positions,
@@ -597,6 +776,7 @@ mod tests {
         let tables = EmissionTables {
             total: &total,
             success: &success,
+            exposure: None,
         };
         let totals = [0u32, 1, 1, 0];
         let successes = [0u32, 0, 0, 0];
@@ -633,6 +813,7 @@ mod tests {
         let tables = EmissionTables {
             total: &total,
             success: &success,
+            exposure: None,
         };
         let totals = [0u32, 2, 1, 0];
         let successes = [0u32, 0, 0, 0];
@@ -657,12 +838,76 @@ mod tests {
         assert!(refused.unwrap_err().contains("past the table's extent"));
     }
 
+    /// `A[y] + r ln(r / t) + y ln(mu c / t)` written out for one class and
+    /// two states, against the kernel's accumulation of it.
+    #[test]
+    fn an_exposure_term_is_added_to_the_count_table_and_zero_exposure_scores_zero() {
+        let (shape, total, success) = tiny();
+        let dispersion = [2.0, 5.0];
+        let mean = [3.0, 7.0];
+        let exposure = [0.5, 2.0, 0.0, 1.5];
+        let tables = EmissionTables {
+            total: &total,
+            success: &success,
+            exposure: Some(ExposureTerm {
+                exposure: &exposure,
+                dispersion: &dispersion,
+                mean: &mean,
+            }),
+        };
+        let totals = [0u32, 1, 1, 0];
+        let successes = [0u32, 0, 0, 0];
+        let weights = [1.0, 0.0, 1.0, 0.0];
+        let mut field = vec![0.0; 2];
+
+        external_field_into(shape, &tables, &totals, &successes, &weights, &mut field).unwrap();
+
+        let score = |a: f64, y: f64, c: f64| {
+            let (r, rate) = (dispersion[0], mean[0] * c);
+            a + r * (r / (r + rate)).ln() + y * (rate / (r + rate)).ln()
+        };
+        // Vertex 0: count 0 at exposure 0.5, then count 1 at exposure 0,
+        // which is unobserved and scores zero.
+        assert!((field[0] + score(total[0], 0.0, 0.5)).abs() < 1e-12);
+        // Vertex 1: count 1 at exposure 2.0, then count 0 at exposure 1.5.
+        let expected = score(total[2], 1.0, 2.0) + score(total[0], 0.0, 1.5);
+        assert!((field[1] + expected).abs() < 1e-12);
+    }
+
+    #[test]
+    fn a_negative_exposure_is_refused() {
+        let (shape, total, success) = tiny();
+        let exposure = [0.5, -1.0, 1.0, 1.0];
+        let tables = EmissionTables {
+            total: &total,
+            success: &success,
+            exposure: Some(ExposureTerm {
+                exposure: &exposure,
+                dispersion: &[1.0, 1.0],
+                mean: &[1.0, 1.0],
+            }),
+        };
+        let mut field = vec![0.0; 2];
+
+        let refused = external_field_into(
+            shape,
+            &tables,
+            &[0u32, 1, 1, 0],
+            &[0u32, 0, 0, 0],
+            &[1.0, 0.0, 1.0, 0.0],
+            &mut field,
+        );
+
+        assert!(refused.unwrap_err().contains("non-negative"));
+    }
+
     #[test]
     fn the_field_is_minus_the_expected_score() {
         let (shape, total, success) = tiny();
         let tables = EmissionTables {
             total: &total,
             success: &success,
+            exposure: None,
         };
         let totals = [0u32, 1, 1, 0];
         let successes = [0u32, 0, 0, 0];

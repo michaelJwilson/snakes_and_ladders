@@ -280,6 +280,30 @@ def log_evidence_by_forward(
 VERTEX_BLOCK = 256
 
 
+def _refuse_tolerance_on_the_oracle(
+    backend: Backend, covariate_tolerance: float | None
+) -> None:
+    """Refuse a covariate tolerance where no table is built.
+
+    ``covariate_tolerance`` sets the grid the Rust backend tabulates a
+    covariate on (issue #1064). The NumPy oracle scores every observation at
+    its own covariate, so it has no grid, and a tolerance handed to it would
+    be ignored rather than met.
+
+    Raises
+    ------
+    ValueError
+        If ``covariate_tolerance`` is set and ``backend`` is not
+        :data:`~sal.backend.Backend.RUST`.
+    """
+    if covariate_tolerance is not None and backend is not Backend.RUST:
+        msg = (
+            f"covariate_tolerance={covariate_tolerance} sets the Rust backend's "
+            f"covariate grid; the {backend} backend scores every covariate exactly"
+        )
+        raise ValueError(msg)
+
+
 def _blocks(members: np.ndarray) -> Iterator[np.ndarray]:
     """``members`` in contiguous blocks of at most :data:`VERTEX_BLOCK`."""
     for start in range(0, members.size, VERTEX_BLOCK):
@@ -392,11 +416,24 @@ def class_posteriors(
     labels: np.ndarray,
     *,
     backend: Backend = Backend.PYTHON,
+    covariate_tolerance: float | None = None,
 ) -> ClassPosteriors:
-    """Forward--backward on every class's chain over its members' summed scores."""
+    """Forward--backward on every class's chain over its members' summed scores.
+
+    ``covariate_tolerance`` is the Rust backend's
+    (:func:`sal.likelihood.spatio_sequential_rust.emission_rows`), and refused
+    on this one.
+    """
+    _refuse_tolerance_on_the_oracle(backend, covariate_tolerance)
     if (rust := twin(_COUPLED, backend, __name__)) is not None:
         return cast(
-            "ClassPosteriors", rust.class_posteriors(params, observations, labels)
+            "ClassPosteriors",
+            rust.class_posteriors(
+                params,
+                observations,
+                labels,
+                covariate_tolerance=covariate_tolerance,
+            ),
         )
     density = class_log_density(params, observations, labels)
     log_transition = np.log(params.transition)
@@ -425,6 +462,7 @@ def external_field(
     posterior: np.ndarray | None = None,
     *,
     backend: Backend = Backend.PYTHON,
+    covariate_tolerance: float | None = None,
 ) -> np.ndarray:
     """`    `H_nm`` of the external-field equation of the textbook: minus the posterior-expected emission score, shape ``(n_nodes, M)``.
 
@@ -439,10 +477,20 @@ def external_field(
     field was computed *without* --- so the step proposed labels under one
     model and accepted them under another. The ascent stays monotone either
     way, which is why nothing failed.
+
+    ``covariate_tolerance`` is as :func:`class_posteriors` takes it.
     """
+    _refuse_tolerance_on_the_oracle(backend, covariate_tolerance)
     if (rust := twin(_COUPLED, backend, __name__)) is not None:
         return cast(
-            "np.ndarray", rust.external_field(params, observations, labels, posterior)
+            "np.ndarray",
+            rust.external_field(
+                params,
+                observations,
+                labels,
+                posterior,
+                covariate_tolerance=covariate_tolerance,
+            ),
         )
     if posterior is None:
         posterior = class_posteriors(params, observations, labels).posterior
@@ -470,6 +518,7 @@ def labelled_log_likelihood(
     labels: np.ndarray,
     *,
     backend: Backend = Backend.PYTHON,
+    covariate_tolerance: float | None = None,
 ) -> float:
     """``log p(x, l | theta)`` with the chains marginalized, up to ``log Z_Potts``.
 
@@ -478,9 +527,19 @@ def labelled_log_likelihood(
     intractable past enumeration, so it is left out; add
     :attr:`ExactSpatioSequential.log_prior_normalizer` where enumeration
     reaches, which is how the test pins this against the oracle.
+    ``covariate_tolerance`` is as :func:`class_posteriors` takes it.
     """
+    _refuse_tolerance_on_the_oracle(backend, covariate_tolerance)
     if (rust := twin(_COUPLED, backend, __name__)) is not None:
-        return cast("float", rust.labelled_log_likelihood(params, observations, labels))
+        return cast(
+            "float",
+            rust.labelled_log_likelihood(
+                params,
+                observations,
+                labels,
+                covariate_tolerance=covariate_tolerance,
+            ),
+        )
     own = float(log_prior(params, np.asarray(labels, dtype=np.int64)[None, :])[0])
     evidence = class_posteriors(params, observations, labels).log_evidence
     return own + float(evidence.sum())

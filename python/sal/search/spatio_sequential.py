@@ -351,6 +351,7 @@ def fit_spatio_sequential(
     wolff_schedule: TempSchedule | None = None,
     backend: Backend = Backend.PYTHON,
     min_label_sites: int = 0,
+    covariate_tolerance: float | None = None,
 ) -> SpatioSequentialFit:
     """Block-coordinate ascent on ``log p(x, l | theta)``.
 
@@ -393,11 +394,19 @@ def fit_spatio_sequential(
         (:func:`redraw_small_labels`), so the block's M step fits no class to
         a handful of sites. ``0``, the default, redraws nothing and draws
         nothing from ``rng``.
+    covariate_tolerance : float | None
+        The Rust backend's covariate grid
+        (:func:`sal.likelihood.spatio_sequential_rust.emission_rows`, issue
+        #1064), for the E step, the field and the labelled log-likelihood; the
+        M step scores every covariate exactly. ``None``, the default,
+        tabulates the distinct covariate values; it is refused on the NumPy
+        backend, which has no grid.
 
     Raises
     ------
     ValueError
-        If ``n_blocks < 1``, or a re-estimated family did not converge.
+        If ``n_blocks < 1``, a re-estimated family did not converge, or
+        ``covariate_tolerance`` is set on the NumPy backend.
     """
     if n_blocks < 1:
         msg = f"at least one block, got {n_blocks}"
@@ -408,9 +417,17 @@ def fit_spatio_sequential(
         if labels is None
         else np.asarray(labels, dtype=np.int64).copy()
     )
-    posteriors_of = partial(class_posteriors, backend=backend)
-    field_of = partial(external_field, backend=backend)
-    log_likelihood_of = partial(labelled_log_likelihood, backend=backend)
+    posteriors_of = partial(
+        class_posteriors, backend=backend, covariate_tolerance=covariate_tolerance
+    )
+    field_of = partial(
+        external_field, backend=backend, covariate_tolerance=covariate_tolerance
+    )
+    log_likelihood_of = partial(
+        labelled_log_likelihood,
+        backend=backend,
+        covariate_tolerance=covariate_tolerance,
+    )
     values = [log_likelihood_of(params, observations, current)]
     tracked = current_tracked()
     tracked.record(0, objective=-values[0], log_likelihood=values[0])
