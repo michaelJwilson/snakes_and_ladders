@@ -12,7 +12,7 @@ data, the rescaling step and the four validations --- and each rung keeps its
 own entry point above it.
 
 **Nothing here unifies arithmetic that differed.** The two rescaling copies
-replaced a vanished scale with different objects: ``likelihood.torch.pruning`` builds one
+replaced a vanished scale with different objects: ``likelihood.pruning.torch`` builds one
 scalar per call, ``pruning_analytic`` and ``log_likelihood_cached`` a tensor
 of ones per node. Which object is passed stays the caller's, as ``fallback``,
 because a fold that picks one for both is a fold that has to prove the bits
@@ -25,7 +25,7 @@ The fifth copy of the checks, in ``brute_force``, stays where it is for the
 first reason above: it is the referee that pins the NumPy oracle.
 
 **The module imports no torch** (issue #1011). The checks, the post-order and
-the NumPy indicator serve routes that take no derivative --- ``likelihood.rust.pruning``,
+the NumPy indicator serve routes that take no derivative --- ``likelihood.pruning.rust``,
 ``likelihood.blocks``, ``likelihood.surrogate`` --- and loading torch for them
 cost 1.3 s and 590 MB. :func:`leaf_indicator` imports it where it builds a
 tensor, and :func:`rescale_partial` reaches it through its argument's methods.
@@ -209,7 +209,7 @@ def leaf_indicator(
     index_device : torch.device | None
         Where the scatter's row index is built. ``None`` builds it on the
         default device, which is what
-        :func:`sal.likelihood.torch.pruning.log_likelihood_cached`
+        :func:`sal.likelihood.pruning.torch.log_likelihood_cached`
         does and keeps doing; the other callers pass ``device``. A parameter
         rather than a choice made here, so no call site's device behaviour
         moves.
@@ -256,7 +256,7 @@ def rescale_partial(
         What replaces a vanished scale. ``None`` builds ``ones_like(scale)``,
         which is what :mod:`sal.likelihood.pruning_analytic`
         and ``log_likelihood_cached`` build per node;
-        :func:`sal.likelihood.torch.pruning.log_likelihood`
+        :func:`sal.likelihood.pruning.torch.log_likelihood`
         passes the one scalar it builds per call instead. The selected value
         is the same either way; which object is allocated stays the caller's.
 

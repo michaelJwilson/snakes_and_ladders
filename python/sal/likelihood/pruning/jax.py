@@ -1,6 +1,6 @@
 """Felsenstein pruning under JAX: the value and its gradient in one compiled program (issue #1005).
 
-The recursion is :func:`sal.likelihood.torch.pruning.log_likelihood`'s
+The recursion is :func:`sal.likelihood.pruning.torch.log_likelihood`'s
 operation for operation --- the same post-order schedule, the same transition
 matrices (``eq:jc`` in closed form, or ``expm(Q t)``), the same rescaling by
 each node's per-site maximum --- so the two agree to rounding. What differs
@@ -27,14 +27,14 @@ from typing import Any
 import numpy as np
 
 from sal.likelihood.patterns import check_weights
+from sal.likelihood.pruning.torch import traversal
 from sal.likelihood.pruning_common import (
     check_alignment_covers,
     leaf_indicator_array,
 )
-from sal.likelihood.torch.pruning import traversal
 from sal.sim.tree import Node
 
-#: A post-order schedule as :func:`likelihood.torch.pruning.traversal` builds it: per
+#: A post-order schedule as :func:`likelihood.pruning.torch.traversal` builds it: per
 #: node, its slot, its leaf name or ``None``, and ``(child slot, branch)``
 #: pairs.
 type Steps = tuple[tuple[int, str | None, tuple[tuple[int, int], ...]], ...]

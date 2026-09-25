@@ -22,7 +22,7 @@ from sal.search.maxflow import (
     ising_ground_state,
     max_flow,
 )
-from sal.search.rust import maxflow as maxflow_rust
+from sal.search.maxflow import rust as maxflow_rust
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from sal.sim.potts import energies, site_field
 

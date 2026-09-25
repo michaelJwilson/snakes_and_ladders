@@ -25,7 +25,7 @@ from sal.likelihood.objective import (
     GradientRoute,
     SubstitutionModelObjective,
 )
-from sal.likelihood.torch import pruning as pruning_torch
+from sal.likelihood.pruning import torch as pruning_torch
 from sal.opt.fit import (
     FitResult,
     constrained_standard_errors,

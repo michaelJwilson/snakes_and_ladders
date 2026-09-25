@@ -5,7 +5,7 @@ Rust out of ``burn_tensor`` operations and differentiated by ``burn-autodiff``
 over ``Autodiff<NdArray<f64>>`` (``src/pruning_burn.rs``), so the gradient in
 the branch lengths is produced on the Rust side of the boundary and only
 ``2n - 3`` doubles come back. The value and the gradient are pinned against
-``likelihood.torch.pruning``, which stays the oracle.
+``likelihood.pruning.torch``, which stays the oracle.
 
 **It lost, and lives here rather than in ``likelihood/``.** 46.80 ms per
 gradient against the analytic two-pass backward's 16.36 and PyTorch's taped
@@ -20,7 +20,7 @@ import from here, and no hot path does.
 sandbox`` does. Without it the extension carries no ``pruning_gradient``,
 :data:`AVAILABLE` is ``False``, and :func:`log_likelihood` raises
 ``ImportError`` before doing any work --- it never falls back to
-``likelihood.torch.pruning``, because a referee that quietly becomes the thing it
+``likelihood.pruning.torch``, because a referee that quietly becomes the thing it
 referees asserts nothing. The check is here rather than at import because
 ``docs/source/index.rst`` lists every module and ``sphinx-build -W`` imports
 each one, so a module that refuses to import fails the default documentation
@@ -35,14 +35,14 @@ to `f32`.
 **No general rate matrix.** `burn` exposes no matrix exponential, so this
 route implements the closed-form Jukes-Cantor transition only. A
 ``rate_matrix`` is refused rather than ignored, and a caller that fits a
-general ``Q`` uses ``likelihood.torch.pruning``.
+general ``Q`` uses ``likelihood.pruning.torch``.
 
-The flattening mirrors ``likelihood.rust.pruning``: the topology crosses as a post-order
+The flattening mirrors ``likelihood.pruning.rust``: the topology crosses as a post-order
 child list with one branch length per node, and the alignment as one
 C-contiguous ``(n_leaves, n_sites)`` block, borrowed rather than copied. The
 gradient comes back in that post-order and is permuted here into
 ``branch_order`` before it reaches autograd, so the tensor a caller
-differentiates is ordered as ``likelihood.torch.pruning``'s is.
+differentiates is ordered as ``likelihood.pruning.torch``'s is.
 """
 
 from __future__ import annotations
@@ -55,8 +55,8 @@ import torch
 
 from sal import oxisal
 from sal.likelihood.patterns import check_weights
+from sal.likelihood.pruning.torch import branch_order
 from sal.likelihood.pruning_common import postorder
-from sal.likelihood.torch.pruning import branch_order
 from sal.sim.tree import Node, preorder
 
 #: Whether the extension was built with the ``sandbox`` Cargo feature. A
@@ -194,13 +194,13 @@ def log_likelihood(
     """Total log-likelihood, differentiable w.r.t. ``branch_lengths``.
 
     Signature and value match
-    :func:`sal.likelihood.torch.pruning.log_likelihood`, which
+    :func:`sal.likelihood.pruning.torch.log_likelihood`, which
     stays the oracle; only how the gradient is obtained differs.
 
     Parameters
     ----------
     tau, k, pi, alignment, branch_lengths, weights, rescale
-        As :func:`sal.likelihood.torch.pruning.log_likelihood`.
+        As :func:`sal.likelihood.pruning.torch.log_likelihood`.
         ``pi`` is a constant here: this backward computes no gradient for it.
     rate_matrix : torch.Tensor | None
         Must be ``None``: `burn` has no matrix exponential and this route
@@ -230,7 +230,7 @@ def log_likelihood(
     if rate_matrix is not None:
         msg = (
             "pruning_burn implements the closed-form Jukes-Cantor transition "
-            "only; a general rate matrix needs likelihood.torch.pruning"
+            "only; a general rate matrix needs likelihood.pruning.torch"
         )
         raise ValueError(msg)
     dtype, device = branch_lengths.dtype, branch_lengths.device
@@ -241,7 +241,7 @@ def log_likelihood(
     if pi_t.requires_grad:
         msg = (
             "pruning_burn computes a gradient in branch_lengths only; "
-            "pi must be a constant -- use likelihood.torch.pruning"
+            "pi must be a constant -- use likelihood.pruning.torch"
         )
         raise ValueError(msg)
 

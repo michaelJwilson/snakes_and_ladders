@@ -22,8 +22,8 @@ from sal.likelihood import (
     pruning_analytic,
 )
 from sal.likelihood.brute_force import brute_force_log_likelihood
-from sal.likelihood.rust import pruning as pruning_rust
-from sal.likelihood.torch import pruning as pruning_torch
+from sal.likelihood.pruning import rust as pruning_rust
+from sal.likelihood.pruning import torch as pruning_torch
 from sal.sim.graph import PottsGraph
 from sal.sim.hmm import HmmParams
 from sal.sim.tree import Node

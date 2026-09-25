@@ -10,7 +10,8 @@ import numpy as np
 import pytest
 from sal.backend import Backend
 from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from sal.likelihood.rust.ragged import posteriors, posteriors_oracle
+from sal.likelihood.ragged import posteriors, posteriors_oracle
+from sal.likelihood.ragged import rust as ragged_rust
 from sal.ragged import Ragged
 
 from tests._rows import every_value
@@ -34,11 +35,11 @@ def _instance(
 @pytest.mark.critical
 @pytest.mark.oracle
 def test_the_compiled_kernel_matches_the_oracle() -> None:
-    """Marginals, transition counts and evidence, all three."""
+    """Marginals, transition counts and evidence, all three, from the twin itself."""
 
     def check(lengths: tuple[int, ...]) -> None:
         density, initial, transition = _instance(lengths, seed=4)
-        gamma, counts, evidence = posteriors(density, initial, transition)
+        gamma, counts, evidence = ragged_rust.posteriors(density, initial, transition)
         want_gamma, want_counts, want_evidence = posteriors_oracle(
             density, initial, transition
         )

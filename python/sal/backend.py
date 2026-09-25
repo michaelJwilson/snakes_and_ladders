@@ -28,7 +28,7 @@ here so it is read once rather than off 46 signatures.
 ``RUST``
     `numerics.sample_rows`, `likelihood.convolutional`,
     `likelihood.message_passing`, `likelihood.turbo`,
-    `likelihood.rust.ragged`, and the sweeps of `sample.potts_mcmc`,
+    `likelihood.ragged`, and the sweeps of `sample.potts_mcmc`,
     `sample.annealed` and `sample.tempered`.
 ``NUMBA``
     `sample.gibbs` and
@@ -51,12 +51,12 @@ number a document quotes, an oracle's own answer or a fixture's draw. There
 the compiled route is asked for by name and the pin says the answer is the
 same.
 
-**Where a twin lives, and who reaches it** (issue #1059). An algorithm's
-reference is ``<sub>.<algorithm>`` and each twin is
-``<sub>.<backend>.<algorithm>``, ``<backend>`` a member's value: ``numba``,
-``rust``, ``torch`` or ``jax``. The reference module is the gateway: it takes
-``backend=`` and dispatches, and outside the twin's own subpackage only the
-gateway and ``tests/`` import a twin, which
+**Where a twin lives, and who reaches it** (issue #1059). An algorithm with
+a twin is a package: its reference is ``<sub>.<algorithm>``, the package's
+``__init__``, and each twin is ``<sub>.<algorithm>.<backend>`` beside it,
+``<backend>`` a member's value: ``numba``, ``rust``, ``torch`` or ``jax``. The
+reference is the gateway: it takes ``backend=`` and dispatches, and outside
+the algorithm's own package only ``tests/`` imports a twin, which
 ``tests/regression/test_duplication_guards.py`` reads from the imports.
 
 :func:`refuse_backend` is how a module declines a member it has no
@@ -130,7 +130,7 @@ def twin(name: str, backend: Backend, oracle: str) -> ModuleType | None:
     """The Rust twin of module ``oracle`` where ``backend`` asks for it, else ``None``.
 
     An algorithm's reference lives at ``<sub>.<algorithm>`` and its Rust twin
-    at ``<sub>.rust.<algorithm>`` (issue #1059). The gateway refuses every
+    at ``<sub>.<algorithm>.rust`` (issue #1059). The gateway refuses every
     member but ``PYTHON`` and ``RUST`` with :func:`refuse_backend`, and imports
     the twin inside the call rather than at module level: each twin imports a
     type or a helper from its oracle, so the module-level import is a cycle,
@@ -156,7 +156,7 @@ def twin(name: str, backend: Backend, oracle: str) -> ModuleType | None:
     Returns
     -------
     ModuleType | None
-        ``<sub>.rust.<algorithm>`` for :data:`Backend.RUST`; ``None`` for
+        ``<sub>.<algorithm>.rust`` for :data:`Backend.RUST`; ``None`` for
         :data:`Backend.PYTHON`, where the caller runs its own oracle.
 
     Raises
@@ -167,5 +167,4 @@ def twin(name: str, backend: Backend, oracle: str) -> ModuleType | None:
     refuse_backend(name, backend, (Backend.PYTHON, Backend.RUST))
     if backend is not Backend.RUST:
         return None
-    package, _, algorithm = oracle.rpartition(".")
-    return importlib.import_module(f"{package}.rust.{algorithm}")
+    return importlib.import_module(f"{oracle}.rust")

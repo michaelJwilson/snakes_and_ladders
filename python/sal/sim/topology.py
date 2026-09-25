@@ -226,7 +226,7 @@ def leaf_bipartitions(topology: Topology) -> frozenset[frozenset[str]]:
 
 
 def branch_splits(topology: Topology) -> list[frozenset[str]]:
-    """The split each branch induces, in ``likelihood.torch.pruning.branch_order`` order.
+    """The split each branch induces, in ``likelihood.pruning.torch.branch_order`` order.
 
     A branch *is* the bipartition of the leaf set it separates, canonicalized as
     :func:`leaf_bipartitions` canonicalizes it, so a branch matches between a

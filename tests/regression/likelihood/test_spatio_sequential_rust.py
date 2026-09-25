@@ -18,17 +18,17 @@ from sal import oxisal
 from sal.backend import Backend
 from sal.emissions import CategoricalEmission
 from sal.likelihood import spatio_sequential
-from sal.likelihood.rust import spatio_sequential as rust
 from sal.likelihood.spatio_sequential import (
     class_posteriors,
     external_field,
+    rust,
 )
 from sal.sim.count_pairs import (
     CountPairInstance,
     IndependentCountPair,
 )
+from sal.sim.count_pairs.rust import binned_instance, fine_instance
 from sal.sim.fixtures import fixture
-from sal.sim.rust.count_pairs import binned_instance, fine_instance
 
 from tests._scale import stress_only
 

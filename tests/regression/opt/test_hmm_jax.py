@@ -19,7 +19,7 @@ from sal.opt.hmm import (
     NegativeBinomialHmmObjective,
     PoissonHmmObjective,
 )
-from sal.opt.jax import hmm as hmm_jax
+from sal.opt.hmm import jax as hmm_jax
 
 from tests._rows import every_value
 

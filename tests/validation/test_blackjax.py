@@ -1,6 +1,6 @@
 """`sample.hmc` against BlackJAX, run in a subprocess (issue #963).
 
-BlackJAX shares no code with `sample/hmc.py`. Leapfrog and Yoshida, 25 steps
+BlackJAX shares no code with `sample/hmc/__init__.py`. Leapfrog and Yoshida, 25 steps
 on a dense 10-D Gaussian: endpoint within 1e-12 of
 `generate_euclidean_integrator`. Chains of 5,000 at step 0.15, seven steps:
 means within 4 standard errors at each chain's ESS, acceptance within 0.01

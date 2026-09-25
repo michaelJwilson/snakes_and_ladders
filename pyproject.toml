@@ -15,7 +15,7 @@ requires-python = ">=3.12.2"
 readme = "README.md"
 # sal.sim imports numpy (simulation) and pyyaml (the fixture files
 # loading) directly; sal.qa imports matplotlib to render the figures
-# docs/tex/ includes; sal.likelihood.torch.pruning imports torch, the
+# docs/tex/ includes; sal.likelihood.pruning.torch imports torch, the
 # autodiff backend CLAUDE.md's Performance section already decided on --
 # added here, by the first PR whose code imports it, per that section's
 # note. All four are core dependencies rather than front-loaded ahead of
@@ -25,7 +25,7 @@ readme = "README.md"
 dependencies = [
     "matplotlib>=3.9.0",
     # 10k+ GitHub stars; carries the deterministic Potts kernels
-    # (`search/numba/`, `sample/numba/`), whose pin against the Python oracle is bitwise.
+    # (`search/icm/numba.py`, `sample/gibbs/numba.py`), whose pin against the Python oracle is bitwise.
     "numba>=0.61.0",
     "numpy>=1.26.0",
     "pyyaml>=6.0.3",

@@ -5,11 +5,11 @@ stays").
 
 Implements the same recursion as the oracle -- ``eq:pruning`` and ``eq:root`` of
 ``docs/tex/textbook.tex`` -- in Rust (``src/pruning.rs``), exposed via PyO3.
-There is no autodiff graph to protect here (unlike ``torch/pruning.py``),
+There is no autodiff graph to protect here (unlike ``pruning/torch.py``),
 but this wrapper still flattens ``tau`` into plain arrays crossing the FFI
 boundary in a fixed, defined order, rather than letting Rust read
 ``Node.branch_length`` mid-recursion -- the same shape of interface
-``torch/pruning.py``'s ``branch_order`` convention establishes, kept for
+``pruning/torch.py``'s ``branch_order`` convention establishes, kept for
 consistency across backends even though Rust has no gradient to keep out of
 the topology.
 

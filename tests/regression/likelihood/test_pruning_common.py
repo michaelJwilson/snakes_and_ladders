@@ -21,8 +21,8 @@ from sal.likelihood import (
     pruning_common,
 )
 from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from sal.likelihood.rust import pruning as pruning_rust
-from sal.likelihood.torch import pruning as pruning_torch
+from sal.likelihood.pruning import rust as pruning_rust
+from sal.likelihood.pruning import torch as pruning_torch
 from sal.sim.fixtures import fixture
 from sal.sim.simulate import simulate_alignment
 from sal.sim.tree import Node

@@ -8,7 +8,7 @@ same draws and reproduces it bitwise. :func:`icm_sweeps_checked` checks its
 shapes with the Rust entries' messages (#571), because a compiled kernel
 indexes without bounds checks. It touches no Python object and so is
 ``nogil=True`` (#604). A backend's twin lives at
-``<subpackage>.<backend>.<solver>`` (issue #1059).
+``<subpackage>.<solver>.<backend>`` (issue #1059).
 """
 
 from __future__ import annotations

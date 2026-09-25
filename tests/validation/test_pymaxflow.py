@@ -15,7 +15,7 @@ import pytest
 from sal.backend import Backend
 from sal.search import maxflow
 from sal.search.ground_state import lattice_rung
-from sal.search.rust import maxflow as maxflow_rust
+from sal.search.maxflow import rust as maxflow_rust
 from sal.validation import pymaxflow
 
 from tests._frameworks import requires

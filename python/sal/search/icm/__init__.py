@@ -38,7 +38,7 @@ import numpy as np
 from sal.backend import Backend, refuse_backend
 from sal.opt.termination import Termination
 from sal.search.alpha_expansion import Labelling
-from sal.search.numba.icm import icm_sweeps_checked, no_survivor
+from sal.search.icm.numba import icm_sweeps_checked, no_survivor
 from sal.sim.graph import PottsGraph
 from sal.sim.potts import (
     SiteField,
@@ -114,7 +114,7 @@ def iterated_conditional_modes(
 
     ``backend`` chooses the sweep's implementation and nothing else. The
     :data:`~sal.backend.Backend.NUMBA` kernel,
-    :func:`~sal.search.numba.icm.icm_sweeps`, returns the
+    :func:`~sal.search.icm.numba.icm_sweeps`, returns the
     labelling the Python loop returns **bitwise** --- same update, same
     order, same first-minimum tie rule, same floor from the same draws ---
     which is what lets it be the default (#264).

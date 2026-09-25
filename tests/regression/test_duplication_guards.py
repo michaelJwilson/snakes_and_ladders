@@ -53,7 +53,7 @@ PRIVATE_LOGSUMEXP = re.compile(r"^def _logsumexp\w*\(", re.MULTILINE)
 #: `message_passing`'s private `logsumexp` is the owner's five operations in
 #: order over the last axis, bitwise equal to `numerics.logsumexp`, without the
 #: general axis handling; folding it is row R10 of the 2026-09-20 design review.
-LOGSUMEXP_INLINES = {"likelihood/message_passing.py"}
+LOGSUMEXP_INLINES = {"likelihood/message_passing/__init__.py"}
 OPEN_CODED_EDGES = re.compile(r"zip\(\s*\w+\.edges,\s*\w+\.coupling")
 CAP_LITERAL = re.compile(r"^\s*MAX_ENUMERABLE\w* = \d", re.MULTILINE)
 SQUARE_TRANSITION = re.compile(r"log\(\s*1(\.0)?\s*\+\s*(np\.|numpy\.|math\.)?sqrt")
@@ -114,7 +114,7 @@ EXCLUDED: dict[str, str] = {
         "335.11 ms for one Baum-Welch iteration over the same batch, 0.012% "
         "(#677)"
     ),
-    "search/maxflow.py": (
+    "search/maxflow/__init__.py": (
         "list of lists kept: a row is 1.95 ms as lists against 3.93 ms flat "
         "with offsets over 16,384 rows of degree six, and the compiled "
         "consumer takes `as_arrays` (#586); `from_arcs` builds through the "
@@ -151,10 +151,10 @@ FIXTURE_ALIGNMENT_OWNER = "sim/simulator.py"
 #: import and the comment on the cycle it avoids, which eight sites in six
 #: modules wrote before `backend.twin` carried them (issue #1010). Indented
 #: only: a module-level import of a twin is the cycle and fails at import.
-#: A Rust twin is `<sub>.rust.<algorithm>` since #1059.
+#: A Rust twin is `<sub>.<algorithm>.rust` since #1059.
 TWIN_IMPORT = re.compile(
-    r"^[ \t]+(?:from sal\.\w+\.rust(?:\.\w+)? import \w+\b"
-    r"|import sal\.\w+\.rust\.\w+\b)",
+    r"^[ \t]+(?:from sal\.\w+\.\w+(?:\.rust import \w+| import rust)\b"
+    r"|import sal\.\w+\.\w+\.rust\b)",
     re.MULTILINE,
 )
 TWIN_OWNER = "backend.py"
@@ -533,7 +533,7 @@ def test_each_guard_fails_on_violating_source() -> None:
         HAND_SKIP: "mark = pytest.mark.skipif(" + 'not available("gco"), reason="")\n',
         HAND_MEASURE: "r, p = peaked(" + "lambda: timed(call))\n",
         FIXTURE_ALIGNMENT: "d = simulate_" + "alignment(p.tau, p.k, p.pi, rng, 9)\n",
-        TWIN_IMPORT: "        from sal.likelihood.rust import pruning\n",
+        TWIN_IMPORT: "        from sal.likelihood.pruning import rust\n",
         # Unsplit: anchored at a line start, and this literal is indented.
         ICM_DEFINITION: "def iterated_conditional_modes(\n    graph,\n",
     }
@@ -583,8 +583,10 @@ def test_each_guard_fails_on_violating_source() -> None:
     assert not SCHEDULE_NAME_BRANCH.search("    if plan.requires_tree:\n")
     # The twin's other spelling, and the module-level import a twin's own
     # test is free to write (`test_backend_twins_are_reached_by_their_gateway`).
-    assert TWIN_IMPORT.search("    import sal.search.rust.maxflow\n")
-    assert not TWIN_IMPORT.search("from sal.likelihood.rust import pruning\n")
+    assert TWIN_IMPORT.search("    import sal.search.maxflow.rust\n")
+    assert TWIN_IMPORT.search("    from sal.search.maxflow.rust import ising\n")
+    assert not TWIN_IMPORT.search("from sal.likelihood.pruning import rust\n")
+    assert not TWIN_IMPORT.search("    from sal.likelihood.pruning import rescale\n")
 
     # The structural guard on the same discipline, since it cannot be written
     # as a pattern: a sixth schedule beside the base and the same class under
@@ -707,7 +709,7 @@ HELD_BAND = re.compile(
 #: Single-site descent, defined in `search.icm` alone: it sat in
 #: `search.alpha_expansion` as the expansion's baseline until issue #1055
 #: moved it, with no alias left behind.
-ICM_OWNER = "search/icm.py"
+ICM_OWNER = "search/icm/__init__.py"
 ICM_DEFINITION = re.compile(r"^def iterated_conditional_modes\(", re.MULTILINE)
 
 CATALOGUE_FILE = re.compile(r"PROBLEMS\.md")
@@ -778,7 +780,7 @@ def test_the_problem_catalogue_has_one_reader() -> None:
 
 #: Private cross-module imports, each with its reason (#1010, CLEAN's E):
 #: `_submodules` is the lazy-import plumbing; `_HmmObjective` is what
-#: `opt.jax.hmm` narrows on until C5 (#1004), re-exported from `opt.hmm`.
+#: `opt.hmm.jax` narrows on until C5 (#1004), re-exported from `opt.hmm`.
 PRIVATE_IMPORTS_ADMITTED = {
     ("sal", "_submodules"),
     ("sal.opt.hmm", "_HmmObjective"),
@@ -863,27 +865,36 @@ def test_the_retired_name_does_not_import() -> None:
     assert result.stdout.strip() == "refused"
 
 
-#: The backends a twin's subpackage is named for: `<sub>.<backend>.<algorithm>`
-#: (issue #1059). `python` is the oracle's own member and names no subpackage.
+#: The backends a twin's module is named for: `<sub>.<algorithm>.<backend>`
+#: (issue #1059). `python` is the oracle's own member and names no module.
 TWIN_BACKENDS = frozenset({"numba", "rust", "torch", "jax"})
 
-#: Twin imports outside the twin's subpackage, each with its reason. The torch
+#: Twin imports outside the algorithm's own package, each with its reason. The torch
 #: pruning module is the differentiable evaluator a tree fit, a search's
 #: cached partials and a learner's ranking tape through; it is no door of
 #: `likelihood.pruning`'s float signature, so it has no gateway yet, and which
 #: one it gets is an open question on #1059. `sandbox` referees the route it
-#: conserved against it, as `tests/` does.
+#: conserved against it, as `tests/` does. The five `likelihood` entries sat
+#: inside the rule while it admitted the twin's whole subpackage and cross it
+#: since the backend went last (#1059): `blocks`, `pruning_analytic` and
+#: `surrogate` take the same taped evaluator, and `objective`'s `backend=` is
+#: the tree objective's gradient door, its `JAX` member the compiled program.
 TWIN_IMPORTS_ADMITTED = {
-    ("learn/ranking.py", "sal.likelihood.torch.pruning"),
-    ("learn/tree.py", "sal.likelihood.torch.pruning"),
-    ("qa/opt_branch_recovery.py", "sal.likelihood.torch.pruning"),
-    ("sandbox/pruning_burn.py", "sal.likelihood.torch.pruning"),
-    ("search/infer.py", "sal.likelihood.torch.pruning"),
+    ("learn/ranking.py", "sal.likelihood.pruning.torch"),
+    ("learn/tree.py", "sal.likelihood.pruning.torch"),
+    ("likelihood/blocks.py", "sal.likelihood.pruning.torch"),
+    ("likelihood/objective.py", "sal.likelihood.pruning.jax"),
+    ("likelihood/objective.py", "sal.likelihood.pruning.torch"),
+    ("likelihood/pruning_analytic.py", "sal.likelihood.pruning.torch"),
+    ("likelihood/surrogate.py", "sal.likelihood.pruning.torch"),
+    ("qa/opt_branch_recovery.py", "sal.likelihood.pruning.torch"),
+    ("sandbox/pruning_burn.py", "sal.likelihood.pruning.torch"),
+    ("search/infer.py", "sal.likelihood.pruning.torch"),
 }
 
 
 def _twin_imports(source: str) -> set[str]:
-    """Every ``sal.<sub>.<backend>.<algorithm>`` ``source`` imports, at any depth."""
+    """Every ``sal.<sub>.<algorithm>.<backend>`` ``source`` imports, at any depth."""
     found: set[str] = set()
     for node in ast.walk(ast.parse(source)):
         names: list[str] = []
@@ -897,7 +908,7 @@ def _twin_imports(source: str) -> set[str]:
             names = [alias.name for alias in node.names]
         for name in names:
             parts = name.split(".")
-            if parts[0] == "sal" and len(parts) >= 4 and parts[2] in TWIN_BACKENDS:
+            if parts[0] == "sal" and len(parts) >= 4 and parts[3] in TWIN_BACKENDS:
                 found.add(".".join(parts[:4]))
     return found
 
@@ -917,15 +928,15 @@ def _notebook_code(path: Path) -> str:
 @pytest.mark.critical
 @pytest.mark.infra
 def test_backend_twins_are_reached_by_their_gateway() -> None:
-    # Issue #1059: a caller reaches `<sub>.<backend>.<algorithm>` through the
-    # gateway `<sub>.<algorithm>` and its `backend=`, so only the twin's own
-    # subpackage and `tests/` import it. The package, `infra/` and the
-    # notebooks are read.
+    # Issue #1059: a caller reaches `<sub>.<algorithm>.<backend>` through the
+    # gateway `<sub>.<algorithm>` and its `backend=`, so only the algorithm's
+    # own package --- its `__init__` and the sibling twins --- and `tests/`
+    # import it. The package, `infra/` and the notebooks are read.
     crossing = {
         (path.relative_to(PACKAGE).as_posix(), module)
         for path in sorted(PACKAGE.rglob("*.py"))
         for module in _twin_imports(path.read_text())
-        if module.split(".")[1] != path.relative_to(PACKAGE).parts[0]
+        if tuple(module.split(".")[1:3]) != path.relative_to(PACKAGE).parts[:2]
     }
     crossing |= {
         (path.relative_to(REPO_ROOT).as_posix(), module)
@@ -940,14 +951,15 @@ def test_backend_twins_are_reached_by_their_gateway() -> None:
     assert crossing - TWIN_IMPORTS_ADMITTED == set()
     assert TWIN_IMPORTS_ADMITTED - crossing == set(), "an admitted crossing is gone"
     # Paired inputs: each spelling of a twin import, and two that are not.
-    assert _twin_imports("from sal.likelihood.rust import pruning\n") == {
-        "sal.likelihood.rust.pruning"
+    assert _twin_imports("from sal.likelihood.pruning import rust\n") == {
+        "sal.likelihood.pruning.rust"
     }
-    assert _twin_imports("def f():\n    import sal.search.rust.maxflow\n") == {
-        "sal.search.rust.maxflow"
+    assert _twin_imports("def f():\n    import sal.search.maxflow.rust\n") == {
+        "sal.search.maxflow.rust"
     }
-    assert _twin_imports("from sal.opt.jax.hmm import value_and_grad\n") == {
-        "sal.opt.jax.hmm"
+    assert _twin_imports("from sal.opt.hmm.jax import value_and_grad\n") == {
+        "sal.opt.hmm.jax"
     }
     assert _twin_imports("from sal.likelihood import pruning\n") == set()
+    assert _twin_imports("from sal.likelihood.pruning import rescale\n") == set()
     assert _twin_imports("from sal.backend import Backend\n") == set()

@@ -26,7 +26,7 @@ from sal.likelihood.message_passing import (
     max_product,
     sum_product,
 )
-from sal.likelihood.rust import message_passing as message_passing_rust
+from sal.likelihood.message_passing import rust as message_passing_rust
 from sal.likelihood.schedule import Layout
 from sal.sim.factor_graph import (
     Factor,

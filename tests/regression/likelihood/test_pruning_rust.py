@@ -1,4 +1,4 @@
-"""Regression tests for ``sal.likelihood.rust.pruning`` (the Rust CPU backend).
+"""Regression tests for ``sal.likelihood.pruning.rust`` (the Rust CPU backend).
 
 What is the compiled route's alone. The checks every route shares are one
 body each, parametrised over ``ROUTES`` (issue #982): agreement with the NumPy
@@ -18,7 +18,7 @@ from sal.backend import Backend
 from sal.likelihood import pruning
 from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
 from sal.likelihood.patterns import compress
-from sal.likelihood.rust import pruning as pruning_rust
+from sal.likelihood.pruning import rust as pruning_rust
 
 from tests._fixtures import FOUR_TAXA, SMALL_SITES, load_fixture, simulated_alignment
 

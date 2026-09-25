@@ -384,7 +384,7 @@ def fit_spatio_sequential(
         Which kernel runs the E step, the field and the labelled log-likelihood:
         :data:`~sal.backend.Backend.PYTHON` is the NumPy oracle
         and :data:`~sal.backend.Backend.RUST` the tabulated
-        kernel of :mod:`sal.likelihood.rust.spatio_sequential`,
+        kernel of :mod:`sal.likelihood.spatio_sequential.rust`,
         chosen inside :mod:`sal.likelihood.spatio_sequential`
         so the three cannot be mixed (#828).
     min_label_sites : int

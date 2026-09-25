@@ -35,7 +35,7 @@ import torch
 from pytest_benchmark.fixture import BenchmarkFixture
 from sal.fixtures import load_params
 from sal.likelihood import pruning_analytic
-from sal.likelihood.torch import pruning as pruning_torch
+from sal.likelihood.pruning import torch as pruning_torch
 from sal.sandbox import pruning_burn
 from sal.sim.params import SimulationParams
 from sal.sim.simulator import simulate_tree

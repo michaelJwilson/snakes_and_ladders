@@ -18,7 +18,7 @@
 //!
 //! **No general rate matrix.** `burn` exposes no matrix exponential, so this
 //! route computes the closed-form Jukes-Cantor transition only; the general
-//! `Q` path of `sal.likelihood.torch.pruning` has no
+//! `Q` path of `sal.likelihood.pruning.torch` has no
 //! counterpart here. `python/sal/sandbox/pruning_burn.py`
 //! refuses a rate matrix rather than ignoring one.
 //!
@@ -128,7 +128,7 @@ pub fn pruning_gradient_impl(
     let base =
         Tensor::<Backend, 3>::from_data(TensorData::new(vec![1.0 / kf; k * k], [1, k, k]), &device);
     let shift = Tensor::<Backend, 3>::from_data(TensorData::new(shift_data, [1, k, k]), &device);
-    // Every branch's transition at once, as `likelihood.torch.pruning` does it: one
+    // Every branch's transition at once, as `likelihood.pruning.torch` does it: one
     // `exp` over the branch vector rather than one per child, so the tape
     // carries the transition build once instead of once per edge.
     let decay = (branch.clone() * (-kf / (kf - 1.0)))

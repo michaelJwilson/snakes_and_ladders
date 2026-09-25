@@ -25,7 +25,7 @@ from sal.fixtures import load_params
 from sal.learn.tree import with_uniform_branch_lengths
 from sal.likelihood import pruning
 from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from sal.likelihood.rust import pruning as pruning_rust
+from sal.likelihood.pruning import rust as pruning_rust
 from sal.sim.params import SimulationParams
 from sal.sim.simulate import simulate_alignment
 from sal.sim.simulator import simulate_tree

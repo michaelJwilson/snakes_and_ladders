@@ -37,7 +37,7 @@ from sal.search.alpha_expansion import (
     swap,
 )
 from sal.search.maxflow import ising_ground_state
-from sal.search.rust.maxflow import (
+from sal.search.maxflow.rust import (
     ising_ground_state as rust_ground_state,
 )
 from sal.sim.factor_graph import from_potts

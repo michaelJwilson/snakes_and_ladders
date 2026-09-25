@@ -19,8 +19,8 @@ from sal.backend import Backend
 from sal.likelihood.convolutional import (
     bcjr,
 )
+from sal.likelihood.convolutional import rust as convolutional_rust
 from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from sal.likelihood.rust import convolutional as convolutional_rust
 from sal.likelihood.turbo import (
     split_streams,
 )

@@ -1,8 +1,8 @@
-"""The ragged forward-backward in Rust, pinned to the NumPy oracle.
+"""The ragged forward-backward: the gateway, and the oracle the Rust twin is pinned to.
 
 Issue #666. The Python path pads every segment to the longest and masks, which
-is what lets it take one batched step per position of the longest. This one
-walks the segments in place and pads nothing, so it does the work the problem
+is what lets it take one batched step per position of the longest. The Rust
+twin, :mod:`sal.likelihood.ragged.rust`, walks the segments in place and pads nothing, so it does the work the problem
 has rather than the work the longest segment implies.
 
 **Which is faster is a question about the lengths, not about the language**, and
@@ -10,8 +10,8 @@ the benchmark answers it rather than this docstring: even lengths waste no
 padding and the batched path has nothing to beat, while one long segment among
 short ones is where the padding is nearly all of the block.
 
-Per root `CLAUDE.md`, the pure-Python route stays as the oracle and the
-regression test pins this against it.
+Per root `CLAUDE.md`, the pure-Python route, :func:`posteriors_oracle`, stays
+as the oracle and the regression test pins the twin against it.
 
 **The selector is here rather than on `forward_backward` (issue #860).** The
 ragged kernel returns *log* gamma, the log transition counts **summed over
@@ -28,12 +28,12 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
+from typing import cast
 
 import numpy as np
 
-from sal.backend import Backend, refuse_backend
+from sal.backend import Backend, twin
 from sal.likelihood.forward_backward import forward_backward
-from sal.oxisal import ragged_posteriors
 from sal.ragged import Ragged
 
 
@@ -68,7 +68,7 @@ def posteriors(
     *,
     backend: Backend = Backend.RUST,
 ) -> Posteriors:
-    """Marginals, transition counts and per-segment evidence, in Rust.
+    """Marginals, transition counts and per-segment evidence, by default in Rust.
 
     Parameters
     ----------
@@ -79,8 +79,8 @@ def posteriors(
     log_transition : np.ndarray
         ``(n_states, n_states)`` in log space.
     backend : Backend
-        Which implementation runs it. ``RUST`` is the compiled kernel and is
-        the default, this being the compiled module's entry point;
+        Which implementation runs it. ``RUST`` is the compiled kernel,
+        :func:`sal.likelihood.ragged.rust.posteriors`, and is the default;
         ``PYTHON`` is :func:`posteriors_oracle`, the sibling it is pinned
         against, reached through the enum rather than by naming the function
         (issue #860). Nothing else.
@@ -92,7 +92,7 @@ def posteriors(
         n_states)``, the log transition counts summed over segments as
         ``(n_states, n_states)``, and one log evidence per segment; the pair
         spanning a boundary is in none of the counts. On ``RUST`` they are the
-        extension's own buffers, wrapped here and not copied, so a pin reads
+        extension's own buffers, wrapped by the twin and not copied, so a pin reads
         what the kernel wrote.
 
     Raises
@@ -100,24 +100,11 @@ def posteriors(
     ValueError
         If ``backend`` is neither ``RUST`` nor ``PYTHON``.
     """
-    refuse_backend("ragged posteriors", backend, (Backend.PYTHON, Backend.RUST))
-    if backend is Backend.PYTHON:
-        return posteriors_oracle(log_density, log_initial, log_transition)
-    values = np.ascontiguousarray(log_density.values, dtype=np.float64)
-    n_states = values.shape[1]
-    gamma = np.empty_like(values)
-    counts = np.empty((n_states, n_states), dtype=np.float64)
-    evidence = np.empty(log_density.n_segments, dtype=np.float64)
-    ragged_posteriors(
-        values,
-        np.asarray(log_density.lengths, dtype=np.int64),
-        np.ascontiguousarray(log_initial, dtype=np.float64),
-        np.ascontiguousarray(log_transition, dtype=np.float64),
-        gamma,
-        counts,
-        evidence,
-    )
-    return Posteriors(gamma, counts, evidence)
+    if (rust := twin("ragged posteriors", backend, __name__)) is not None:
+        return cast(
+            "Posteriors", rust.posteriors(log_density, log_initial, log_transition)
+        )
+    return posteriors_oracle(log_density, log_initial, log_transition)
 
 
 def posteriors_oracle(

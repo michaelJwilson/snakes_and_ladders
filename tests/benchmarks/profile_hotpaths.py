@@ -59,8 +59,8 @@ from sal.likelihood.message_passing import (
 )
 from sal.likelihood.objective import BranchLengthObjective
 from sal.likelihood.parsimony import fitch_score
-from sal.likelihood.rust import pruning as pruning_rust
-from sal.likelihood.torch import pruning as pruning_torch
+from sal.likelihood.pruning import rust as pruning_rust
+from sal.likelihood.pruning import torch as pruning_torch
 from sal.likelihood.turbo import decode_turbo, noise_scale, split_streams
 from sal.numerics import sample_rows
 from sal.opt.budget import Budget, Outcome, compare
@@ -230,11 +230,11 @@ def likelihood_sections(mid: bool) -> list[Section]:
     return [
         (f"likelihood.pruning NumPy @ {n_taxa} taxa x {n_sites}", _numpy, 5),
         (
-            f"likelihood.torch.pruning + backward @ {n_taxa} x {n_sites}",
+            f"likelihood.pruning.torch + backward @ {n_taxa} x {n_sites}",
             _torch_with_gradient,
             5,
         ),
-        (f"likelihood.rust.pruning @ {n_taxa} x {n_sites}", _rust, 5),
+        (f"likelihood.pruning.rust @ {n_taxa} x {n_sites}", _rust, 5),
         (f"likelihood.message_passing flooding @ {extent}x{extent}", _flooding, 1),
         (f"likelihood.belief_propagation @ {extent}x{extent}", _bp, 1),
         (

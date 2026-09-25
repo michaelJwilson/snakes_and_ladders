@@ -1157,7 +1157,7 @@ def simulate_count_pairs(
     so the draw is a function of the seed and the vertex alone --- not of the
     order vertices are visited in, nor of how many threads visit them. That is
     what lets the Rust simulator
-    (:mod:`sal.sim.rust.count_pairs`) be checked against this
+    (:mod:`sal.sim.count_pairs.rust`) be checked against this
     one vertex by vertex, and it is the exception `sim/CLAUDE.md`'s "a
     generator, never a seed" rule is stated against: the seed is the
     fixture's, declared in its file, and every stream derived from it here is
@@ -1171,7 +1171,7 @@ def simulate_count_pairs(
         :data:`~sal.backend.Backend.PYTHON` draws here, vertex
         by vertex, and is the oracle;
         :data:`~sal.backend.Backend.RUST` is
-        :mod:`sal.sim.rust.count_pairs`, pinned to it draw for
+        :mod:`sal.sim.count_pairs.rust`, pinned to it draw for
         draw. Chosen here so a caller names the kernel rather than the module
         (#813).
 

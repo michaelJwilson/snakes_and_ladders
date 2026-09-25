@@ -27,14 +27,14 @@ from sal.sim.count_pairs import (
     simulate_count_pairs,
     split_covariate,
 )
-from sal.sim.fixtures import fixture
-from sal.sim.graph import BoundaryCondition, lattice_graph
-from sal.sim.rust.count_pairs import (
+from sal.sim.count_pairs.rust import (
     _channels,
 )
-from sal.sim.rust.count_pairs import (
+from sal.sim.count_pairs.rust import (
     simulate_count_pairs as simulate_rust,
 )
+from sal.sim.fixtures import fixture
+from sal.sim.graph import BoundaryCondition, lattice_graph
 from sal.sim.spatio_sequential import (
     SimulatedSpatioSequential,
     SpatioSequentialParams,

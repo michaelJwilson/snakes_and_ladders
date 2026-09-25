@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from sal.likelihood.torch import pruning as pruning_torch
+from sal.likelihood.pruning import torch as pruning_torch
 from sal.sim.tree import Node
 
 from tests.regression.likelihood.conftest import ROUTES, Route

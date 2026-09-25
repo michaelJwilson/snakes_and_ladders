@@ -21,8 +21,8 @@ import torch
 from numpy.testing import assert_allclose
 from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
 from sal.likelihood.objective import BranchLengthObjective
-from sal.likelihood.torch import pruning as pruning_torch
-from sal.likelihood.torch.pruning import (
+from sal.likelihood.pruning import torch as pruning_torch
+from sal.likelihood.pruning.torch import (
     PartialCache,
     branch_order,
     log_likelihood_cached,

@@ -133,7 +133,7 @@ class Power:
 class DeclaredJaxEnergy(Protocol):
     """An objective whose energy is a traceable JAX ``(theta, data)`` function (issue #1008).
 
-    What :mod:`sal.sample.jax.hmc` runs a chain on under
+    What :mod:`sal.sample.hmc.jax` runs a chain on under
     ``jit``; ``None`` where the objective has none at its current backend.
     """
 

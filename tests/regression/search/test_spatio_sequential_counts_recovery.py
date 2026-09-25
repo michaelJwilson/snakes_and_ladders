@@ -29,8 +29,8 @@ from sal.sim.count_pairs import (
     IndependentCountPair,
     aggregate,
 )
+from sal.sim.count_pairs.rust import binned_instance
 from sal.sim.fixtures import KEY, fixture
-from sal.sim.rust.count_pairs import binned_instance
 
 from tests._scale import at_bin, stress_only
 

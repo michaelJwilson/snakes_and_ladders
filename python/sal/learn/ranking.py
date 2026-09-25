@@ -36,8 +36,8 @@ from sal.likelihood.features import (
     tree_tokens,
 )
 from sal.likelihood.potts import enumerate_potts, strip_log_partition
+from sal.likelihood.pruning.torch import branch_order, log_likelihood
 from sal.likelihood.surrogate import decoupled_ground_energy
-from sal.likelihood.torch.pruning import branch_order, log_likelihood
 from sal.search.alpha_expansion import alpha_expansion
 from sal.search.infer import score_topology
 from sal.sim.graph import PottsGraph

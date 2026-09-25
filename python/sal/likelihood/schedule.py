@@ -39,7 +39,7 @@ is being ordered, which is the question a reader of either actually has.
 **Why a base class and not a `Protocol`.** One module calls through the
 base --- ``message_passing``, which reads ``requires_tree``, ``bounded``,
 ``guarantee`` and ``steps`` off whatever schedule it holds. Three more read
-this module without it: ``likelihood.rust.message_passing`` takes :class:`Layout`, and
+this module without it: ``likelihood.message_passing.rust`` takes :class:`Layout`, and
 ``message_passing_reference`` and ``search.ground_state`` take
 :class:`MessageScheduleName` through ``message_passing``'s re-export. What
 earns the base class is the six schedules under it, which share the group
@@ -503,7 +503,7 @@ class MessageSchedule(ABC):
 
     @property
     def compiled(self) -> bool:
-        """Whether :mod:`sal.likelihood.rust.message_passing` runs this order.
+        """Whether :mod:`sal.likelihood.message_passing.rust` runs this order.
 
         False here, and true only on the two-pass tree schedule, which is the
         order issue #754 measured and ported. It is a property of the schedule

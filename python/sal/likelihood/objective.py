@@ -38,8 +38,8 @@ from sal.likelihood import (
     pruning,
     pruning_analytic,
 )
-from sal.likelihood.jax import pruning as pruning_jax
-from sal.likelihood.torch import pruning as pruning_torch
+from sal.likelihood.pruning import jax as pruning_jax
+from sal.likelihood.pruning import torch as pruning_torch
 from sal.opt.constrain import (
     free_from_log_simplex,
     free_from_positive,
@@ -62,7 +62,7 @@ GradientRoute = Literal["analytic", "taped"]
 
 ``"analytic"`` is :mod:`sal.likelihood.pruning_analytic`, the
 closed form of ``alg:pruning-backward``; ``"taped"`` is
-:mod:`sal.likelihood.torch.pruning`, which stays the oracle the
+:mod:`sal.likelihood.pruning.torch`, which stays the oracle the
 closed form is pinned against and the default here. The two values agree
 exactly -- they are the same forward pass -- and the two gradients to the
 tolerance ``tests/regression/likelihood/test_pruning_analytic.py`` states,
@@ -81,7 +81,7 @@ class BranchLengthObjective(Objective):
     ----------
     tau : Node
         The topology, held fixed. Branch lengths on the ``Node`` tree are
-        ignored -- ``likelihood.torch.pruning`` takes them as a tensor, per
+        ignored -- ``likelihood.pruning.torch`` takes them as a tensor, per
         ``likelihood/CLAUDE.md``.
     k : int
         Number of states.
@@ -96,7 +96,7 @@ class BranchLengthObjective(Objective):
         Where to run. ``None`` leaves the tensor on the default device.
     gradient : GradientRoute
         Where the derivative in the branch lengths comes from. ``"taped"``,
-        the default, is ``likelihood.torch.pruning``; ``"analytic"`` is the closed form
+        the default, is ``likelihood.pruning.torch``; ``"analytic"`` is the closed form
         of ``alg:pruning-backward``. Both return the same forward value,
         computed by the same operations in the same order, and their
         gradients agree to 5.4e-16 relative.
@@ -108,7 +108,7 @@ class BranchLengthObjective(Objective):
         the two through a fit, rather than only at ``log_likelihood``.
     backend : Backend
         Where :meth:`value_and_gradient` takes the value and gradient.
-        ``Backend.JAX`` is :mod:`sal.likelihood.jax.pruning`,
+        ``Backend.JAX`` is :mod:`sal.likelihood.pruning.jax`,
         one program per topology under ``jit`` (issue #1005);
         ``Backend.TORCH`` is ``gradient``'s PyTorch route, the oracle it is
         pinned to. ``__call__`` is the PyTorch route under either.
@@ -249,7 +249,7 @@ class BranchLengthObjective(Objective):
         Returns
         -------
         torch.Tensor
-            One positive length per branch, ordered for ``likelihood.torch.pruning``.
+            One positive length per branch, ordered for ``likelihood.pruning.torch``.
         """
         lengths = positive(theta)
         if self._merged is None:
@@ -335,7 +335,7 @@ class BranchLengthObjective(Objective):
         """The topology with ``theta``'s branch lengths attached.
 
         The inverse of :meth:`theta_from_truth`, and the form anything that
-        draws or serializes a fitted tree needs --- ``likelihood.torch.pruning`` keeps
+        draws or serializes a fitted tree needs --- ``likelihood.pruning.torch`` keeps
         lengths out of the ``Node`` structure.
 
         On a rooted binary tree the estimable sum is split evenly between the

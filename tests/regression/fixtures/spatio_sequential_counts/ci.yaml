@@ -3,7 +3,7 @@ oracle: transfer-matrix
 
 # The coupled model with two-channel count emissions, at the size every
 # reference for the 5K instance is established at. Every field is required --
-# see python/sal/sim/count_pairs.py.
+# see python/sal/sim/count_pairs/__init__.py.
 #
 # 8x8 triangular = 64 vertices, M = K = 2, S = 1,000: 64,000 count pairs, and
 # about 16,000 per (class, state), which is what the Rust simulator's per-state
@@ -22,7 +22,7 @@ seed: 20260908
 # What the counts hash to, so a changed simulator fails here rather than in a
 # recovery number three tests later. Written by
 # `sim.count_pairs.counts_digest` over the draw
-# `sim.rust.count_pairs.simulate_count_pairs` makes of this file.
+# `sim.count_pairs.rust.simulate_count_pairs` makes of this file.
 counts_digest: 24feb2c7dddff658
 shape: [8, 8]
 boundary: open

@@ -97,10 +97,10 @@ pip install .
 
 This makes `sal.oxisal` importable from Python: `double`, an example
 binding; `pruning_log_likelihood`, the Rust CPU Felsenstein pruning backend
-behind `sal.likelihood.rust.pruning`; `sample_rows`, the categorical
+behind `sal.likelihood.pruning.rust`; `sample_rows`, the categorical
 sampler behind `sal.numerics_rust`, which `sal.sim` and `sal.opt` draw
 their fixtures through; and `max_flow` with `ising_ground_state`, the
-minimum-cut kernels behind `sal.search.rust.maxflow`. Reinstall after
+minimum-cut kernels behind `sal.search.maxflow.rust`. Reinstall after
 editing anything under `src/`; the compiled module does not rebuild itself.
 
 One binding is not in that build. `pruning_gradient`, the `burn` taped

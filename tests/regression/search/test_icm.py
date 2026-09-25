@@ -29,7 +29,7 @@ from sal.search.ground_state import (
     ground_state,
 )
 from sal.search.icm import SweepOrder, iterated_conditional_modes
-from sal.search.numba.icm import icm_sweeps, icm_sweeps_checked
+from sal.search.icm.numba import icm_sweeps, icm_sweeps_checked
 from sal.search.potts_starts import spatio_rung
 from sal.search.spatio_sequential import (
     LabelSolver,

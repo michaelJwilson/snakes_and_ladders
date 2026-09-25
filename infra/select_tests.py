@@ -105,10 +105,9 @@ KEY_TRIGGERS = (
     "Cargo.lock",
     "tests/regression/fixtures/",
     "python/sal/emissions/",
-    "python/sal/sim/count_pairs.py",
+    "python/sal/sim/count_pairs/",
     "python/sal/sim/spatio_sequential.py",
-    "python/sal/likelihood/spatio_sequential.py",
-    "python/sal/likelihood/rust/spatio_sequential.py",
+    "python/sal/likelihood/spatio_sequential/",
     "python/sal/search/spatio_sequential.py",
 )
 

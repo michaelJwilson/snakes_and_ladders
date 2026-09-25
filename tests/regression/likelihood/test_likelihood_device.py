@@ -21,7 +21,7 @@ from sal.likelihood.device import (
     default_dtype,
     select_device,
 )
-from sal.likelihood.torch import pruning as pruning_torch
+from sal.likelihood.pruning import torch as pruning_torch
 
 from tests._fixtures import FOUR_TAXA, SMALL_SITES, simulated_alignment
 

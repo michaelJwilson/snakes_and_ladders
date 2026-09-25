@@ -23,7 +23,7 @@ branch but the few a move touched, and a branch is the split it induces
 (:func:`sal.sim.topology.branch_splits`), so the parent's fitted
 lengths start the neighbour's fit on every branch that persists. The same
 identity lets an unfitted evaluation of the neighbour reuse the parent's
-subtree partials (:class:`~sal.likelihood.torch.pruning.PartialCache`),
+subtree partials (:class:`~sal.likelihood.pruning.torch.PartialCache`),
 which is what lazy scoring -- rank every neighbour cheaply, fit only the top
 few, always fit the accepted move in full -- rests on. Warm starts are on by
 default because they change where a fit *starts* and not where it ends;
@@ -53,7 +53,7 @@ from sal.likelihood.objective import (
     SubstitutionModelObjective,
 )
 from sal.likelihood.parsimony import fitch_score, sankoff_score
-from sal.likelihood.torch.pruning import (
+from sal.likelihood.pruning.torch import (
     PartialCache,
     log_likelihood_cached,
 )

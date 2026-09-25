@@ -162,11 +162,11 @@ class PlugInLikelihood(Surrogate):
 
     def __call__(self, structure: object, data: object) -> float:
         topology, alignment = _tree_arguments(structure, data)
-        # `likelihood.torch.pruning.log_likelihood` takes tensors, since the fits
+        # `likelihood.pruning.torch.log_likelihood` takes tensors, since the fits
         # differentiate through it: the lengths cross into it here, once.
         import torch
 
-        from sal.likelihood.torch.pruning import log_likelihood
+        from sal.likelihood.pruning.torch import log_likelihood
 
         return float(
             log_likelihood(

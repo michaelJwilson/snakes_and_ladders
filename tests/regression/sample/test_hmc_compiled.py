@@ -411,7 +411,7 @@ def test_the_compiled_hmm_trajectory_is_the_torch_leapfrog() -> None:
 @pytest.mark.parametrize("family", ["gaussian-rust", "poisson-jax"])
 def test_both_routes_sample_the_hmm_posterior_alike(family: str) -> None:
     # The Gaussian HMM runs the Rust walk, the Poisson HMM the JAX one
-    # (`sample.jax.hmc`), each against the torch route in distribution.
+    # (`sample.hmc.jax`), each against the torch route in distribution.
     if family == "gaussian-rust":
         objective: Any = GaussianHmmObjective(_sequences(10, 50), 2)
         theta0 = torch.as_tensor(_HMM_START)

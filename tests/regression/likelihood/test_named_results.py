@@ -16,13 +16,13 @@ from sal.likelihood.features import Adjacency
 from sal.likelihood.forward_backward import StepKernels
 from sal.likelihood.hadamard import Spectrum
 from sal.likelihood.message_passing import _Run
-from sal.likelihood.rust.message_passing import TreeMessages
-from sal.likelihood.rust.ragged import Posteriors
-from sal.likelihood.rust.spatio_sequential import (
+from sal.likelihood.message_passing.rust import TreeMessages
+from sal.likelihood.ragged import Posteriors
+from sal.likelihood.schedule import UpwardMessageSchedule
+from sal.likelihood.spatio_sequential.rust import (
     EmissionRows,
     EmissionTables,
 )
-from sal.likelihood.schedule import UpwardMessageSchedule
 from sal.likelihood.surrogate import EnergyBounds
 
 #: Every result type the ticket names, including the private one `_run`
