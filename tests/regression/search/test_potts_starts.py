@@ -224,7 +224,7 @@ def test_at_ten_states_the_polish_never_rises_and_nothing_ends_below_the_bracket
     expansion = run_alpha_expansion(rung, budget, np.random.default_rng(0)).energy
     bracket = expansion_bracket(rung, expansion)
     objective = LabellingEnergy(rung)
-    for name in ("greedy", "anneal", "alpha-expansion"):
+    for name in ("field_argmax", "anneal", "alpha-expansion"):
         (seeded,) = SolverStart(name, budget, np.random.default_rng(1)).starts(
             objective
         )

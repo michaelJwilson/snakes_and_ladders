@@ -432,7 +432,7 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "potts",
-        "run_tempering, run_greedy, run_max_product",
+        "run_tempering, run_field_argmax, run_max_product",
         "search.ground_state.run_tempering",
         None,
         T + "search/test_ground_state.py"

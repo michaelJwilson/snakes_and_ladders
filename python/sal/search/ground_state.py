@@ -741,7 +741,7 @@ def warm_anneal(
     )
 
 
-def run_greedy(
+def run_field_argmax(
     problem: Problem | Rung,
     budget: Budget,
     rng: np.random.Generator,
@@ -755,7 +755,7 @@ def run_greedy(
     ties on both is a method the instance cannot distinguish.
     """
     _refuse_start(
-        "greedy",
+        "field_argmax",
         start,
         "it is built from the field alone, with no labelling to start from",
     )
@@ -930,7 +930,7 @@ def run_alpha_expansion(
 ) -> MethodRun:
     """Alpha expansion: the only entry carrying a bound, and the bracket's lower end.
 
-    It starts from the field's argmax, the greedy labelling, or from
+    It starts from the field's argmax, the field_argmax labelling, or from
     ``start``, and draws nothing from ``rng``.
     """
     problem = _problem(problem)
@@ -1009,7 +1009,7 @@ def run_max_product(
     that refusal is carried through rather than papered over: a run that does
     not converge within its budget returns an infinite energy and
     ``converged=False``. Substituting the field-only labelling there would
-    enter the greedy baseline's numbers in max-product's row, which is the
+    enter the field_argmax baseline's numbers in max-product's row, which is the
     quiet failure this branch exists to prevent.
     """
     _refuse_start("max-product", start, "it iterates messages, not a labelling")
@@ -1081,7 +1081,7 @@ def run_bifurcation(
 #: Every entry, in report order. ICM and Gibbs at T = 0 are two rows of one
 #: axis, named so the report cannot present them as independent methods.
 METHODS: dict[str, Method] = {
-    "greedy": run_greedy,
+    "field_argmax": run_field_argmax,
     "icm": run_icm,
     "icm-random": run_icm_random,
     "anneal": run_anneal,
@@ -1277,7 +1277,7 @@ def ground_state(
     entry's own, bitwise. ``start`` replaces the labelling the solver would
     draw or build: ICM and ICM in random order descend from it, the annealers
     and the warm chain's descent start from it, the expansion and the swap
-    cut from it, and each hybrid hands it to its first part. ``greedy``,
+    cut from it, and each hybrid hands it to its first part. ``field_argmax``,
     ``tempering``, ``max-product`` and ``bifurcation`` have no single
     starting labelling and refuse one.
 
