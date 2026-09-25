@@ -1,6 +1,6 @@
 """Simulated annealing over the count-pair mixture's assignments (issue #901).
 
-`opt.emission_mixture.anneal_assignments` draws every observation's component
+`sample.mixture_anneal.anneal_assignments` draws every observation's component
 from its tempered responsibilities and re-estimates the components at the
 draw. The referees are the heat bath's two limits, read on the draw itself:
 at `T -> 0` a sweep is the argmax of the responsibilities, and at `T = 1` its
@@ -17,12 +17,11 @@ import torch
 from sal.emissions import CountPairEmission
 from sal.opt.emission_mixture import (
     CountPairSeeding,
-    anneal_assignments,
-    draw_assignments,
     expectation_maximization,
     uniform_start,
 )
 from sal.opt.mixture import mixture_log_likelihood, responsibilities
+from sal.sample.mixture_anneal import anneal_assignments, draw_assignments
 from sal.search.mixture_starts import (
     STARTS,
     gibbs_schedule,

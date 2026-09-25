@@ -57,7 +57,6 @@ from sal.emissions import EmissionFamily
 from sal.opt.budget import Budget, Outcome
 from sal.opt.emission_mixture import (
     ComponentsAt,
-    anneal_assignments,
     expectation_maximization,
     plus_plus_start,
     uniform_start,
@@ -82,6 +81,7 @@ from sal.opt.starts import Curve, Polished, Trial
 from sal.opt.termination import Stop, Termination
 from sal.parallel import Pool, map_tasks
 from sal.sample.initialize import FromAnnealing, FromChain, FromTempering
+from sal.sample.mixture_anneal import anneal_assignments
 from sal.sample.schedule import ExponentialTempSchedule, ladder
 from sal.search.projection import (
     ANNEAL_STEPS,

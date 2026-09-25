@@ -17,12 +17,8 @@ import pytest
 import torch
 from sal.emissions import GaussianEmission, PoissonEmission
 from sal.fixtures import load_params
-from sal.opt.hmm import (
-    baum_welch,
-    baum_welch_family,
-    hmm_log_likelihood,
-    viterbi,
-)
+from sal.likelihood.hmm import hmm_log_likelihood, viterbi
+from sal.opt.hmm import baum_welch, baum_welch_family
 from sal.sim.hmm import HmmParams, simulate_sequences
 from sal.validation import hmmlearn
 

@@ -15,11 +15,11 @@ import pytest
 import torch
 from sal.emissions import BetaBinomialEmission, NegativeBinomialEmission
 from sal.opt.emission_mixture import (
-    anneal_assignments,
     expectation_maximization,
     plus_plus_start,
 )
 from sal.opt.mixture import e_step, mixture_log_likelihood
+from sal.sample.mixture_anneal import anneal_assignments
 from sal.search.mixture_starts import (
     MixtureInstance,
     emission_seeding,

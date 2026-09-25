@@ -217,6 +217,9 @@ whether or not it has members yet.
 .. automodule:: sal.likelihood.forward_backward
    :members:
 
+.. automodule:: sal.likelihood.hmm
+   :members:
+
 .. automodule:: sal.likelihood.hmm_paths
    :members:
 
@@ -342,6 +345,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: sal.sample.mixture_gibbs
+   :members:
+
+.. automodule:: sal.sample.mixture_anneal
    :members:
 
 .. automodule:: sal.sample.relabel

@@ -27,6 +27,7 @@ from sal.emissions import (
     PoissonEmission,
 )
 from sal.fixtures import load_params
+from sal.likelihood.hmm import hmm_log_likelihood, viterbi
 from sal.likelihood.hmm_paths import enumerate_hidden_paths
 from sal.opt.hmm import (
     EmFit,
@@ -36,8 +37,6 @@ from sal.opt.hmm import (
     baum_welch,
     baum_welch_family,
     forward_log_likelihood,
-    hmm_log_likelihood,
-    viterbi,
 )
 from sal.sim.fixtures import fixture
 from sal.sim.hmm import HmmParams, simulate_sequences

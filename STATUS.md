@@ -1225,7 +1225,11 @@ posteriors and the pairwise posteriors of one chain in the log domain, and a
 forward-filter backward-sample draw of the path; it is pinned against the path
 enumeration on four chains to 1e-12 and the coupled model's E step against the
 enumerated conditional posterior to 1e-11. Baum–Welch keeps its own recursion
-for the gradient it needs.
+for the gradient it needs. `likelihood.hmm` holds the scored evidence and the
+Viterbi path at given parameters, compiled for the categorical, one-channel
+Gaussian and count families (#997) and pinned to hmmlearn's `score` and
+`decode` in `tests/validation/test_hmmlearn.py`; #1059 moved both out of
+`opt.hmm`.
 
 **The tree was audited against the runtime-optimization opportunities, and
 five of the ten lines had a measurement behind them**

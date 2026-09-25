@@ -200,7 +200,7 @@ def _viterbi(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
         GaussianEmission,
         PoissonEmission,
     )
-    from sal.opt.hmm import hmm_log_likelihood, viterbi
+    from sal.likelihood.hmm import hmm_log_likelihood, viterbi
 
     observations = inputs["observations"]
     initial, transition = (
