@@ -193,9 +193,9 @@ def test_on_two_frustrated_instances_both_ascents_stop_short_of_each_other() -> 
     # Coordinate ascent on the LP dual stops where no block move raises it,
     # which need not be the maximum (Kolmogorov 2006, weak tree agreement).
     # On `triangular-0` and `triangular-2` TRW-S converges 0.0160 and 0.0067
-    # below `dual_bound`; the explicit LP, solved by HiGHS in a scratch run
-    # (the comparison is ticketed as #1063), is -1.14911 and -1.40024, above
-    # both, so neither is the LP value there. Both stay bounds.
+    # below `dual_bound`; the explicit LP, solved by HiGHS
+    # (`tests/validation/test_highs.py`, #1063), is -1.14911 and -1.40024,
+    # above both, so neither is the LP value there. Both stay bounds.
     def check(name: str, graph: PottsGraph, field: np.ndarray, n_states: int) -> None:
         result = trws(graph, field)
         reference = dual_bound(graph, field, iterations=5000)

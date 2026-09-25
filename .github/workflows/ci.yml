@@ -511,7 +511,8 @@ jobs:
             cargo-${{ runner.os }}-
       - run: pip install "uv==${UV_VERSION}"
       - run: uv sync --locked --extra test $(python3 infra/validation_extras.py)
-      - run: uv run pytest -m "(validation or infra) and not goal" tests/validation tests/regression/test_validation.py -rs
+      # `release` stays for the release: HiGHS's full-size LP is minutes (#1063).
+      - run: uv run pytest -m "(validation or infra) and not goal and not release" tests/validation tests/regression/test_validation.py -rs
       # The runtimes the package has to meet, each an external framework's on
       # a declared fixture, measured on the reference host and hardcoded in
       # `tests/validation/test_goals.py`, so no framework is needed to run

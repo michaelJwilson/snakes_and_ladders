@@ -119,9 +119,14 @@ def test_only_the_scripts_import_a_framework() -> None:
 
 @pytest.mark.infra
 def test_every_validation_extra_is_one_registered_framework_with_a_test() -> None:
+    # A framework a core dependency carries needs no extra: HiGHS is SciPy's
+    # `linprog(method="highs")` (#1063). Every other one has its extra.
     extras = _declared_extras()
     registered = {framework.extra: framework for framework in FRAMEWORKS.values()}
-    assert set(extras) == set(registered)
+    core = _core_distributions()
+    assert set(extras) <= set(registered)
+    for extra, framework in registered.items():
+        assert extra in extras or framework.distribution.lower() in core, extra
     for extra, requirements in extras.items():
         framework = registered[extra]
         assert extra == PREFIX + framework.name.replace("_", "-")
@@ -130,6 +135,7 @@ def test_every_validation_extra_is_one_registered_framework_with_a_test() -> Non
         assert _distribution(requirements[0]).lower() == (
             framework.distribution.lower()
         )
+    for framework in FRAMEWORKS.values():
         assert (PACKAGE / "validation" / f"{framework.name}.py").exists()
         assert (SCRIPTS / f"{framework.name}.py").exists()
         assert (TESTS / "validation" / f"test_{framework.name}.py").exists()

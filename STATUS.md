@@ -4113,8 +4113,29 @@ row and in 176.3 s to -17,025.92 on the second, both unconverged. The compiled
 kernel runs 10 iterations in 68.6 ms against the Python reference's 10,338 ms,
 151x (`test_trws_bench.py`, 1-minute load 4). On two frustrated 3x3
 triangular lattices TRW-S converges below `dual_bound`'s value of the same
-relaxation, and both below the explicit LP (`test_trws.py`); the LP
-comparison at size is #1063.
+relaxation, and both below the explicit LP (`test_trws.py`).
+
+**The explicit LP, #1063.** `validation.highs` solves the local-polytope LP
+with every node and edge marginal written out, by HiGHS through SciPy's
+`linprog`, in a subprocess. Where TRW-S converges to it, it is the LP value to
+1e-8 relative, and so is `dual_bound`'s: seven of the nine 3x3 and 2x4
+lattices, `potts_lattice/{ci,stress,release}`, `spatio_only/{ci,stress}` and
+`spatio_tiling/ci`, the largest 1.8 s for HiGHS against 0.07 s for TRW-S. On
+the two stalled triangular lattices the LP is -1.14911 and -1.40024, TRW-S
+0.0160 and 0.0271 below it, `dual_bound` 7.4e-5 and 0.0204. The primal's node
+marginals are integral on every instance but the three frustrated ones, and
+there the LP value is the minimum (`tests/validation/test_highs.py`). At
+5,041 sites and ten states, 1,534,410 columns, one run each at a 1-minute load
+of 5.3, 2.1 GB peak:
+
+| instance | LP value | HiGHS seconds | node marginals | TRW-S bound | TRW-S below LP |
+| --- | --- | --- | --- | --- | --- |
+| `spatio_only/release` | -10,454.16 | 343.9 | integral | -10,454.16 | 8e-14 relative |
+| `spatio_tiling/release` | **-17,022.93** | 267.6 | fractional at 95 sites | -17,022.98 | 0.0496 |
+
+So of the tiling bracket's 0.81, TRW-S stopping short is 0.05 and the other
+0.75 lies between the LP and the best labelling, -17,022.18. TRW-S takes 0.82 s
+and 8.7 s on the two, the `highs` goals in `test_goals.py`.
 
 Two implementation notes worth keeping. The block update is the exact
 minimizer of its own block, checked against a numerical minimum over the

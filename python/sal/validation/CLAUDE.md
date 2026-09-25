@@ -30,7 +30,9 @@ module. It is referenced here, never restated. What follows is local.
   as a `validation-<name>` extra in `pyproject.toml`, a `Framework` entry in
   `FRAMEWORKS`, an adapter `<name>.py` here, a script `scripts/<name>.py` and
   `tests/validation/test_<name>.py`. The extra is added by the framework's
-  own ticket, with the permission root `CLAUDE.md` requires.
+  own ticket, with the permission root `CLAUDE.md` requires. A framework a
+  core dependency already carries takes no extra: HiGHS is SciPy's
+  `linprog(method="highs")` (#1063).
 - **A framework's runtime sets a goal.** Where a benchmark pair times the
   framework on a declared fixture, its runtime there is hardcoded as a `Goal` in
   `tests/validation/test_goals.py`, with when and where it was measured. The
