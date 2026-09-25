@@ -51,8 +51,10 @@ every value on it is a bound; its limit is measured against
 ``dual_bound``'s, not assumed equal to it. On two frustrated 3x3 triangular
 lattices it converges 0.016 and 0.0067 below ``dual_bound``'s value, and
 agrees with it to 1e-9 relative on the six other small lattices and the two
-CI fixtures tested (``tests/regression/search/test_trws.py``). The
-comparison against the explicit LP is issue #1063.
+CI fixtures tested (``tests/regression/search/test_trws.py``). Against
+HiGHS's solution of the explicit LP (``tests/validation/test_highs.py``,
+issue #1063) it agrees to 1e-8 relative wherever it converges to it, and on
+``spatio_tiling/release`` it stops 0.0496 below it.
 """
 
 from __future__ import annotations
