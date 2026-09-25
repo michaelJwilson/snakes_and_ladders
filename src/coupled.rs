@@ -129,8 +129,7 @@ pub struct EmissionTables<'a> {
 /// `t = r_mk + mu_mk c` and `B[y, m, k] = lgamma(y + r) - lgamma(r) -
 /// lgamma(y + 1) + r ln r + y ln mu` the first channel's table. A zero exposure marks the count
 /// unobserved and it scores zero under every class and state, as the family
-/// scores it. `ln t` is [`crate::simd_ln::ln`], not `f64::ln`, for the reason
-/// `score_into` gives.
+/// scores it.
 #[derive(Clone, Copy)]
 pub struct ExposureTerm<'a> {
     /// `S * V` exposures, position-major, each non-negative.
@@ -148,17 +147,6 @@ impl ExposureTerm<'_> {
     /// the form chosen for speed over the family's order of operations, which
     /// costs two logarithms and two divisions per score and agrees to fewer
     /// ulp (issue #1064).
-    ///
-    /// **Three passes over `out`, so the logarithms vectorize.** `out` holds
-    /// every `t` first, then every `ln t`, then the score. `ln t` is
-    /// [`crate::simd_ln::ln`], plain arithmetic that runs two lanes to an SSE2
-    /// register, where `f64::ln` is a libm call per element: at the stress
-    /// instance the kernel's E step falls from 1.07 s to 0.84 s and its field
-    /// from 2.41 s to 2.06 s. `t >= r > 0` is finite, inside that `ln`'s
-    /// domain. It is within one ulp of `f64::ln`, which moves 561 of 25,600
-    /// ci scores by up to 256 ulp of the score through the cancellation below
-    /// and leaves their worst distance from the family at 262.9 ulp. `ln c`
-    /// stays `f64::ln`: once per call, it is not in the loop.
     #[inline]
     fn score_into(&self, table: &[f64], count: u32, c: f64, from: usize, out: &mut [f64]) {
         if c == 0.0 {
@@ -167,20 +155,11 @@ impl ExposureTerm<'_> {
         }
         let y = f64::from(count);
         let y_log_c = y * c.ln();
-        let n = out.len();
-        let (dispersion, mean, table) = (
-            &self.dispersion[from..][..n],
-            &self.mean[from..][..n],
-            &table[..n],
-        );
-        for ((cell, &r), &mu) in out.iter_mut().zip(dispersion).zip(mean) {
-            *cell = r + c * mu;
-        }
-        for cell in out.iter_mut() {
-            *cell = crate::simd_ln::ln(*cell);
-        }
-        for ((cell, &r), &b) in out.iter_mut().zip(dispersion).zip(table) {
-            *cell = b + y_log_c - (y + r) * *cell;
+        for (k, cell) in out.iter_mut().enumerate() {
+            let index = from + k;
+            let r = self.dispersion[index];
+            let total = r + c * self.mean[index];
+            *cell = table[k] + y_log_c - (y + r) * total.ln();
         }
     }
 

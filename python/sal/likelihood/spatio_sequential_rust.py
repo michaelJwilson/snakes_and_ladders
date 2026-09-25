@@ -42,10 +42,7 @@ total's table is ``B`` by count and the kernel forms ``y log c - (y + r) log t``
 per observation: one logarithm per score, chosen for speed over the family's
 order of operations. The sum cancels where ``y log mu`` and ``y log(mu c / t)``
 are large and opposite, so each score is the family's to 263 ulp relative at
-that instance rather than the 2.3 ulp the family's order gives. The
-logarithm is ``src/simd_ln.rs``, fdlibm's ``log`` in branch-free arithmetic
-and within one ulp of ``f64::ln``, so the kernel takes it two lanes at a time
-where a libm call takes one; the bound is unchanged at 262.9 ulp.
+that instance rather than the 2.3 ulp the family's order gives.
 
 **A trial count may be tabulated on a grid** (issue #1064). With
 ``covariate_tolerance`` set, a covariate is coded ``round(c * scale)`` for the

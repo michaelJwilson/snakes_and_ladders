@@ -39,7 +39,6 @@ pub mod pruning;
 pub mod pruning_burn;
 pub mod ragged;
 pub mod sampling;
-pub mod simd_ln;
 pub mod special;
 
 pub use bcjr::bcjr_forward_backward;
