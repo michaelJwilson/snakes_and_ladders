@@ -316,7 +316,7 @@ def run_chain(
     n_samples: int,
     *,
     step_size: float,
-    theta0: torch.Tensor | None,
+    theta0: torch.Tensor | np.ndarray | None,
     burn_in: int,
     temperature: float,
     adaptation: Adaptation | None,
@@ -564,13 +564,31 @@ def run_compiled(
     )
 
 
-def start_point(objective: Objective, theta0: torch.Tensor | None) -> torch.Tensor:
-    """Where a chain starts: ``theta0``, or ``objective.initial()``, detached, in ``float64``."""
+def start_point(
+    objective: Objective, theta0: torch.Tensor | np.ndarray | None
+) -> torch.Tensor:
+    """Where a chain starts: ``theta0``, or ``objective.initial()``, detached, in ``float64``.
+
+    An array ``theta0`` is copied into the loop's tensor, so a sampler that
+    takes no derivative takes its start as an array (issue #1059).
+    """
+    if isinstance(theta0, np.ndarray):
+        return torch.tensor(theta0, dtype=torch.float64)
     return (
         objective.initial().detach().clone()
         if theta0 is None
         else theta0.detach().clone()
     ).to(torch.float64)
+
+
+def on_buffer(array: np.ndarray) -> torch.Tensor:
+    """``array`` as the loop's position, on its own buffer and uncopied.
+
+    The one conversion a kernel that steps on arrays needs to hand a
+    :class:`Transition` back, kept here so its module imports no torch
+    (root ``CLAUDE.md``, "No autodiff package where no derivative is taken").
+    """
+    return torch.from_numpy(array)
 
 
 def gradient_at(objective: Objective, theta: torch.Tensor) -> torch.Tensor:

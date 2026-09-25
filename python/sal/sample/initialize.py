@@ -151,7 +151,7 @@ class FromChain(Initializer):
         list[torch.Tensor]
             ``n_samples`` points.
         """
-        return list(self.chain(objective).theta)
+        return list(self.chain(objective).draws)
 
 
 class FromAnnealing(Initializer):

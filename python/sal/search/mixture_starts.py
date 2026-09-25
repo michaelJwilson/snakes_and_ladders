@@ -509,7 +509,7 @@ def chain_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded
     chain = chain_initializer(rng).chain(objective)
     path = tuple(
         (draw, at_locations(instance, objective.components(theta).mean))
-        for draw, theta in enumerate(chain.theta)
+        for draw, theta in enumerate(chain.draws)
     )
     return Seeded(
         path[-1][1],

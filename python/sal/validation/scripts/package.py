@@ -384,8 +384,6 @@ def _random_walk_sample(inputs: Mapping[str, np.ndarray]) -> Callable[[], Output
     with ``constants``; ``warmup`` proposals above zero run the warm-up at
     the optimal random-walk acceptance first.
     """
-    import torch
-
     from sal.opt.testfunctions import Rosenbrock
     from sal.sample import hmc, metropolis
     from sal.validation.gaussian import GaussianTarget
@@ -404,7 +402,7 @@ def _random_walk_sample(inputs: Mapping[str, np.ndarray]) -> Callable[[], Output
         if warmup
         else None
     )
-    theta0 = torch.as_tensor(position)
+    theta0 = np.asarray(position, dtype=np.float64)
     # Outside the measured call, as `_hmc_sample`'s set-up.
     metropolis.random_walk(
         GaussianTarget(np.ones(2)),

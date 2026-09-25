@@ -78,7 +78,7 @@ def _icm_draw(rng: np.random.Generator) -> tuple[int, ...]:
 
 def _hmc_draw(generator: torch.Generator) -> tuple[float, ...]:
     chain = sample(GAUSSIAN, generator, 4, step_size=0.2, n_steps=5)
-    return tuple(float(v) for v in chain.theta.reshape(-1))
+    return tuple(float(v) for v in chain.draws.reshape(-1))
 
 
 def _anneal_draw(generator: torch.Generator) -> tuple[float, ...]:

@@ -76,7 +76,7 @@ def test_both_chains_are_correct_samplers_and_not_one_stuck_one() -> None:
     # effective sample size is its length, which flatters it.
     for chain in (ADAPTED, FIXED):
         assert 0.2 < chain.acceptance_rate < 1.0
-        moves = torch.count_nonzero(chain.theta[1:] - chain.theta[:-1])
+        moves = torch.count_nonzero(chain.draws[1:] - chain.draws[:-1])
         assert moves > N_SAMPLES // 2
 
 
@@ -89,8 +89,8 @@ def test_both_chains_recover_the_exact_mean_within_monte_carlo_error() -> None:
     gaussian = target()
     exact_sd = torch.sqrt(torch.diagonal(gaussian.covariance))
     for chain in (ADAPTED, FIXED):
-        standard_error = exact_sd / torch.sqrt(effective_sample_size(chain.theta))
-        deviation = torch.abs(chain.theta.mean(dim=0) - gaussian.mean)
+        standard_error = exact_sd / torch.sqrt(effective_sample_size(chain.draws))
+        deviation = torch.abs(chain.draws.mean(dim=0) - gaussian.mean)
 
         assert bool(torch.all(deviation < 4.0 * standard_error)), (
             f"{deviation} against {4.0 * standard_error}"
@@ -137,7 +137,7 @@ def test_settling_takes_the_last_excursion_and_not_the_first_entry() -> None:
 @pytest.mark.infra
 def test_the_running_mean_is_a_running_mean() -> None:
     trace = running_mean(ADAPTED, TRACKED)
-    draws = ADAPTED.theta[:, TRACKED].detach().numpy()
+    draws = ADAPTED.draws[:, TRACKED].detach().numpy()
 
     assert trace.shape == (N_SAMPLES,)
     assert trace[0] == pytest.approx(draws[0])

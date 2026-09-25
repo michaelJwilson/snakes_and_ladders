@@ -376,7 +376,7 @@ def test_where_the_laplace_approximation_is_exact_the_chain_agrees_with_it() -> 
         n_steps=10,
         burn_in=200,
     )
-    assert_allclose(chain.theta.std(0).numpy(), exact.numpy(), rtol=0.05)
+    assert_allclose(chain.draws.std(0).numpy(), exact.numpy(), rtol=0.05)
 
 
 @pytest.mark.smoke
@@ -403,7 +403,7 @@ def test_the_delta_method_interval_and_the_sampled_posterior_agree() -> None:
         burn_in=400,
     )
 
-    constrained = [objective.constrain(draw) for draw in chain.theta]
+    constrained = [objective.constrain(draw) for draw in chain.draws]
     coupling = torch.tensor([float(one["coupling"]) for one in constrained])
     sampled = torch.cat(
         [

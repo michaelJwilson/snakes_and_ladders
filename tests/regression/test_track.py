@@ -168,7 +168,7 @@ def test_the_null_run_leaves_a_chain_bitwise_what_it_was() -> None:
     with track(NULL_RUN):
         inside = _chain()
 
-    assert torch.equal(inside.theta, outside.theta)
+    assert torch.equal(inside.draws, outside.draws)
     assert torch.equal(inside.energy_error, outside.energy_error)
     assert inside.acceptance_rate == outside.acceptance_rate
     assert inside.force_evaluations == outside.force_evaluations
@@ -209,7 +209,7 @@ def test_the_chain_records_the_counters_the_chain_returns() -> None:
     assert [value for _, value in run.series("energy_error")] == [
         float(error) for error in chain.energy_error
     ]
-    assert run.last("state_bytes") == float(chain.theta.nbytes)
+    assert run.last("state_bytes") == float(chain.draws.nbytes)
     assert run.last("peak_rss_bytes") > 0.0
 
 
@@ -702,9 +702,9 @@ def test_the_null_run_leaves_the_five_loops_bitwise_what_they_were() -> None:
             _simulated_tempering(),
             _ensemble(),
         )
-    assert torch.equal(inside[0].theta, outside[0].theta)
+    assert torch.equal(inside[0].draws, outside[0].draws)
     assert inside[0].objective_evaluations == outside[0].objective_evaluations
-    assert torch.equal(inside[1].theta, outside[1].theta)
+    assert torch.equal(inside[1].draws, outside[1].draws)
     for one, other in ((inside[2], outside[2]), (inside[3], outside[3])):
         assert one.log_z == other.log_z
         assert one.stderr == other.stderr
@@ -722,7 +722,7 @@ def test_the_slice_and_langevin_chains_record_the_unit_each_is_counted_in() -> N
     run = _memory(tracked.run)
     assert len(run.series("objective_evaluations")) == N_SAMPLES
     assert run.last("objective_evaluations") == float(sliced.objective_evaluations)
-    assert run.last("state_bytes") == float(sliced.theta.nbytes)
+    assert run.last("state_bytes") == float(sliced.draws.nbytes)
     with track() as tracked:
         chain = _mala()
     run = _memory(tracked.run)

@@ -618,7 +618,7 @@ def chain_seeding(
     )
     chain = initializer.chain(surrogate(instance))
     return Seeding(
-        _from_theta(instance, chain.theta[-1], at),
+        _from_theta(instance, chain.draws[-1], at),
         PASSES_PER_GRADIENT * chain.force_evaluations,
         f"acceptance {chain.acceptance_rate:.2f}, mean energy error "
         f"{float(chain.energy_error.mean()):.2e}",

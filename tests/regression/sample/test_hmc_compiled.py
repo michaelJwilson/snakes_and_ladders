@@ -68,9 +68,9 @@ def test_the_compiled_chain_recovers_the_gaussian_moments() -> None:
         n_steps=10,
         burn_in=200,
     )
-    assert chain.theta.shape == (4_000, dimension)
+    assert chain.draws.shape == (4_000, dimension)
     assert chain.acceptance_rate > 0.8
-    assert_gaussian_moments(*draw_moments(chain.theta), precision)
+    assert_gaussian_moments(*draw_moments(chain.draws), precision)
 
 
 @pytest.mark.smoke
@@ -87,14 +87,14 @@ def test_the_compiled_chain_is_reproducible_and_routes_what_it_cannot_run() -> N
             **options,  # type: ignore[arg-type]
         )
 
-    assert torch.equal(run().theta, run().theta)
+    assert torch.equal(run().draws, run().draws)
     # A temperature is the torch route's alone: the compiled and torch
     # streams differ, so the tempered chain matches the explicit torch one.
     tempered = run(temperature=2.0)
     assert torch.equal(
-        tempered.theta, run(temperature=2.0, backend=Backend.PYTHON).theta
+        tempered.draws, run(temperature=2.0, backend=Backend.PYTHON).draws
     )
-    assert not torch.equal(run().theta, run(backend=Backend.PYTHON).theta)
+    assert not torch.equal(run().draws, run(backend=Backend.PYTHON).draws)
 
 
 @pytest.mark.oracle
@@ -128,10 +128,10 @@ def test_the_compiled_mala_chain_recovers_the_gaussian_moments() -> None:
         step_size=0.9 / (2.0 * dimension**0.25),
         burn_in=500,
     )
-    assert chain.theta.shape == (20_000, dimension)
+    assert chain.draws.shape == (20_000, dimension)
     assert chain.corrected
     assert chain.acceptance_rate > 0.8
-    assert_gaussian_moments(*draw_moments(chain.theta), precision)
+    assert_gaussian_moments(*draw_moments(chain.draws), precision)
 
 
 @pytest.mark.smoke
@@ -147,13 +147,13 @@ def test_the_compiled_mala_chain_routes_what_it_cannot_run() -> None:
             **options,  # type: ignore[arg-type]
         )
 
-    assert torch.equal(run().theta, run().theta)
+    assert torch.equal(run().draws, run().draws)
     # ULA and a temperature are the torch route's alone.
     for options in ({"corrected": False}, {"temperature": 2.0}):
         assert torch.equal(
-            run(**options).theta, run(**options, backend=Backend.PYTHON).theta
+            run(**options).draws, run(**options, backend=Backend.PYTHON).draws
         )
-    assert not torch.equal(run().theta, run(backend=Backend.PYTHON).theta)
+    assert not torch.equal(run().draws, run(backend=Backend.PYTHON).draws)
 
 
 @pytest.mark.oracle
@@ -218,11 +218,46 @@ def test_compiled_operators_are_kalman_mean_over_the_stored_draws() -> None:
     )
     for name, operator in operators.items():
         kalman = KalmanMean()
-        for row in chain.theta:
+        for row in chain.draws:
             kalman.update(operator(row))
         np.testing.assert_array_equal(
             chain.expectations[name].mean, kalman.estimate().mean
         )
+
+
+@pytest.mark.oracle
+@pytest.mark.backend
+@pytest.mark.parametrize("backend", [Backend.RUST, Backend.PYTHON], ids=str)
+def test_mala_operators_are_kalman_mean_over_the_stored_draws(
+    backend: Backend,
+) -> None:
+    # Issue #1059: `mala` takes the `operators` `sample` and `random_walk`
+    # take, filtered bitwise as `KalmanMean` filters the stored draws on
+    # either route; unstored, the expectations are the same numbers.
+    target = GaussianTarget(diagonal_precision(12))
+    operators = {"x": Power(1), "x2": Power(2)}
+
+    def run(store_chain: bool) -> langevin.LangevinChain:
+        return langevin.mala(
+            target,
+            torch.Generator().manual_seed(1059),
+            1_000,
+            step_size=0.3,
+            operators=operators,
+            store_chain=store_chain,
+            backend=backend,
+        )
+
+    stored, free = run(True), run(False)
+    assert free.draws.shape == (0, 12)
+    for name, operator in operators.items():
+        kalman = KalmanMean()
+        for row in stored.draws:
+            kalman.update(operator(row))
+        expected = kalman.estimate()
+        for chain in (stored, free):
+            np.testing.assert_array_equal(chain.expectations[name].mean, expected.mean)
+            np.testing.assert_array_equal(chain.expectations[name].phi, expected.phi)
 
 
 @pytest.mark.oracle
@@ -426,7 +461,7 @@ def test_the_jax_walk_filters_and_warms_up_as_the_rust_one_does() -> None:
     assert chain.adapted.mass_diagonal.shape == (5,)
     assert abs(chain.acceptance_rate - 0.65) < 0.2
     kalman = KalmanMean()
-    for row in chain.theta:
+    for row in chain.draws:
         kalman.update(row**2)
     np.testing.assert_allclose(
         chain.expectations["x2"].mean,

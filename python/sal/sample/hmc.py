@@ -199,7 +199,7 @@ class HmcChain:
 
     Parameters
     ----------
-    theta : torch.Tensor
+    draws : torch.Tensor
         Draws in unconstrained coordinates, shape ``(n_samples, dimension)``.
     acceptance_rate : float
         Fraction of proposals accepted. Hamiltonian dynamics conserves energy
@@ -223,7 +223,7 @@ class HmcChain:
         ``operators`` given to :func:`sample`; empty when none were.
     """
 
-    theta: torch.Tensor
+    draws: torch.Tensor
     acceptance_rate: float
     energy_error: torch.Tensor
     force_evaluations: int
@@ -475,7 +475,7 @@ def sample(
         ``None`` runs the fixed-parameter chain at unit mass, bitwise what it
         was before adaptation existed.
     store_chain : bool
-        Keep the draws (issue #988). ``False`` keeps none --- ``theta`` has
+        Keep the draws (issue #988). ``False`` keeps none --- ``draws`` has
         zero rows --- and the chain holds memory of the order of one draw
         rather than ``n_samples`` of them; what it was for is then
         ``operators``' expectations.
@@ -556,7 +556,7 @@ def sample(
             operators=operators,
         )
     return HmcChain(
-        theta=chain.draws,
+        draws=chain.draws,
         acceptance_rate=chain.acceptance_rate,
         energy_error=chain.energy_error,
         force_evaluations=chain.force_evaluations,

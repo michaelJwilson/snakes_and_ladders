@@ -32,9 +32,9 @@ from __future__ import annotations
 import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import numpy as np
-import torch
 
 from sal import oxisal
 from sal.backend import Backend, refuse_backend
@@ -46,11 +46,15 @@ from sal.sample.chain import (
     Adaptation,
     Transition,
     compiled_route,
+    on_buffer,
     run_chain,
     run_compiled,
     start_point,
 )
 from sal.sample.declared import declared_energy
+
+if TYPE_CHECKING:
+    import torch
 
 #: The asymptotically optimal acceptance for a random walk on a product
 #: target as the dimension grows (Roberts, Gelman & Gilks, 1997).
@@ -114,7 +118,7 @@ class _RandomWalkKernel:
         uniform = float(generator.random())
         take, probability, error = _decide(current, proposed, temperature, uniform)
         if take:
-            moved = torch.from_numpy(proposal)
+            moved = on_buffer(proposal)
             self._at = (objective, moved, proposed)
             return Transition(moved, error, 1, probability)
         self._at = (objective, position, current)
@@ -123,11 +127,11 @@ class _RandomWalkKernel:
 
 def random_walk(
     objective: Objective,
-    generator: np.random.Generator,
+    rng: np.random.Generator,
     n_samples: int,
     *,
     step_size: float,
-    theta0: torch.Tensor | None = None,
+    theta0: np.ndarray | None = None,
     burn_in: int = 0,
     temperature: float = 1.0,
     adaptation: Adaptation | None = None,
@@ -142,7 +146,7 @@ def random_walk(
     objective : Objective
         Read as an unnormalized negative log density; only its value is
         used, through :func:`~sal.opt.objective.energy_of`.
-    generator : numpy.random.Generator
+    rng : numpy.random.Generator
         The stream every increment and uniform is drawn from (issue #1011).
     n_samples : int
         Draws recorded after burn-in.
@@ -150,7 +154,10 @@ def random_walk(
         The proposal's standard deviation per coordinate, in the metric's
         coordinates. Required: its right value is the target's scale. With an
         ``adaptation`` it is the warm-up's starting point.
-    theta0, burn_in, temperature, store_chain, operators
+    theta0 : numpy.ndarray | None
+        Starting point, copied; ``objective.initial()`` when omitted. An
+        array, as the chain takes no derivative (issue #1059).
+    burn_in, temperature, store_chain, operators
         As :func:`sal.sample.hmc.sample`.
     adaptation : Adaptation | None
         The two-window warm-up :func:`~sal.sample.hmc.sample`
@@ -164,7 +171,7 @@ def random_walk(
         ``operators`` observe the draws as :func:`~sal.sample.hmc.run_compiled`
         states, so a
         chain with ``store_chain=False`` holds that many draws at most. Its stream is ChaCha8 seeded by one draw from
-        ``generator``, so it is pinned to the Python route in distribution.
+        ``rng``, so it is pinned to the Python route in distribution.
         Any other chain, and :data:`~sal.backend.Backend.PYTHON`,
         run the NumPy kernel.
 
@@ -190,7 +197,7 @@ def random_walk(
             declared,
             (),
             EVALUATIONS_PER_PROPOSAL,
-            generator,
+            rng,
             n_samples,
             step_size=step_size,
             theta0=start_point(objective, theta0),
@@ -203,7 +210,7 @@ def random_walk(
         _RandomWalkKernel(),
         EVALUATIONS_PER_PROPOSAL,
         objective,
-        generator,
+        rng,
         n_samples,
         step_size=step_size,
         theta0=theta0,
