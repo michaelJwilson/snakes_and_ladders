@@ -653,6 +653,12 @@ whether or not it has members yet.
 .. automodule:: sal.validation.scripts.torch_geometric
    :members:
 
+.. automodule:: sal.validation.highs
+   :members:
+
+.. automodule:: sal.validation.scripts.highs
+   :members:
+
 .. automodule:: sal.qa
    :members:
 
