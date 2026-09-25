@@ -630,11 +630,7 @@ fn exposure_term<'a>(
 /// `ValueError` naming the first violated precondition, including a count
 /// past the extent of the table that is indexed by it.
 #[pyfunction]
-#[pyo3(signature = (
-    totals, successes, labels, total_table, success_table, log_initial,
-    log_transition, n_positions, n_nodes, n_classes, n_states, posterior,
-    pairwise, log_evidence, exposure=None, dispersion=None, mean=None
-))]
+#[pyo3(signature = (totals, successes, labels, total_table, success_table, log_initial, log_transition, n_positions, n_nodes, n_classes, n_states, posterior, pairwise, log_evidence, exposure=None, dispersion=None, mean=None))]
 #[allow(clippy::too_many_arguments)]
 pub fn class_posteriors(
     py: Python<'_>,
@@ -708,11 +704,7 @@ pub fn class_posteriors(
 /// # Errors
 /// `ValueError` naming the first violated precondition.
 #[pyfunction]
-#[pyo3(signature = (
-    totals, successes, total_table, success_table, weights, n_positions,
-    n_nodes, n_classes, n_states, field, exposure=None, dispersion=None,
-    mean=None
-))]
+#[pyo3(signature = (totals, successes, total_table, success_table, weights, n_positions, n_nodes, n_classes, n_states, field, exposure=None, dispersion=None, mean=None))]
 #[allow(clippy::too_many_arguments)]
 pub fn external_field(
     py: Python<'_>,

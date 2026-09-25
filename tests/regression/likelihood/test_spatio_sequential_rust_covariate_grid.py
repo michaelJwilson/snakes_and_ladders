@@ -171,6 +171,7 @@ def test_the_factored_e_step_and_field_match_the_numpy_oracle() -> None:
     )
 
 
+@pytest.mark.smoke
 @pytest.mark.backend
 def test_an_integer_covariate_on_the_grid_is_the_exact_path_bitwise() -> None:
     # The trial count is an integer, coded at scale one, where the code is the

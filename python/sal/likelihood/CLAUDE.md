@@ -110,7 +110,9 @@ module. It is referenced here, never restated. What follows is local.
   observation; where it also conditions on something else, the row is a code
   the caller computes and the kernel is unchanged (issue #658). Widening what
   a kernel scores is a question about the caller's index; changing the kernel
-  is the answer of last resort.
+  is the answer of last resort, taken where the covariate is continuous and no
+  index is small: the kernel then completes a density the caller factored,
+  from a table and the family's own parameters (issue #1064).
 
 - **A tabulation is judged by its build, not by its size.** The distinct
   combinations are the smallest exact table and were the wrong choice: finding

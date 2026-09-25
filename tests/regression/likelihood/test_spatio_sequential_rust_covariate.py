@@ -97,15 +97,13 @@ def test_without_a_covariate_the_rows_are_the_counts() -> None:
     instance = _instance()
     observations = instance.observations
 
-    totals, successes, total_table, success_table, exposure = rust.emission_rows(
-        instance.params, observations
-    )
+    rows = rust.emission_rows(instance.params, observations)
 
-    assert exposure is None
-    assert np.array_equal(totals, observations[..., 0])
-    assert np.array_equal(successes, observations[..., 1])
-    assert total_table.shape[0] == int(observations[..., 0].max()) + 1
-    assert success_table.shape[0] == int(observations[..., 1].max()) + 1
+    assert rows.exposure is None
+    assert np.array_equal(rows.total_rows, observations[..., 0])
+    assert np.array_equal(rows.success_rows, observations[..., 1])
+    assert rows.total_table.shape[0] == int(observations[..., 0].max()) + 1
+    assert rows.success_table.shape[0] == int(observations[..., 1].max()) + 1
 
 
 @pytest.mark.smoke
@@ -123,10 +121,10 @@ def test_the_covaried_tabulation_stays_a_table() -> None:
     observations = instance.observations
     n_observations = observations.shape[0] * observations.shape[1]
 
-    _, _, total_table, success_table, _ = rust.emission_rows(params, observations)
+    rows = rust.emission_rows(params, observations)
 
-    assert total_table.shape[0] < n_observations
-    assert success_table.shape[0] < n_observations
+    assert rows.total_table.shape[0] < n_observations
+    assert rows.success_table.shape[0] < n_observations
 
 
 @pytest.mark.analytic

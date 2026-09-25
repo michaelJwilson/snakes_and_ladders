@@ -489,7 +489,7 @@ class EmissionRows:
         """The exposure term as the kernels' keyword arguments; empty without one."""
         return {} if self.exposure is None else self.exposure.arguments()
 
-    def __iter__(self) -> Iterator[np.ndarray]:
+    def __iter__(self) -> Iterator[np.ndarray | ExposureTerm | None]:
         """The rows, the tables, then the exposure term: the order callers unpack."""
         yield from (
             self.total_rows,
