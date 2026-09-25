@@ -34,8 +34,8 @@ diagonal, per ``x_t``: ``O(q)`` a message rather than ``O(q^2)``.
 
 **The decode.** After each iteration the sites are labelled in index order,
 each taking the first state minimizing its field, the couplings to the
-already labelled lower neighbours, and the messages from the higher ones
-(Kolmogorov 2006, Section 5). The lowest-energy labelling over the
+already labelled lower neighbours, and the messages from the higher ones,
+as Kolmogorov (2006) decodes. The lowest-energy labelling over the
 iterations is kept.
 
 **Sign.** ``sim.potts.energy`` is ``-sum h - sum J [x_s = x_t]``, which a
@@ -48,7 +48,11 @@ negative, and turns the sign once at its return.
 passes reach that LP's maximum, which coordinate ascent does not guarantee in
 general (Kolmogorov 2006, weak tree agreement). The trace is monotone and
 every value on it is a bound; its limit is measured against
-``dual_bound``'s, not assumed equal to it.
+``dual_bound``'s, not assumed equal to it. On two frustrated 3x3 triangular
+lattices it converges 0.016 and 0.0067 below ``dual_bound``'s value, and
+agrees with it to 1e-9 relative on the six other small lattices and the two
+CI fixtures tested (``tests/regression/search/test_trws.py``). The
+comparison against the explicit LP is issue #1063.
 """
 
 from __future__ import annotations
@@ -65,7 +69,7 @@ from sal.sim.graph import PottsGraph
 from sal.sim.potts import SiteField, energy, log_weight_of, site_field
 
 #: Iterations :func:`trws` runs at most.
-MAX_ITERATIONS = 1000
+MAX_ITERATIONS = 5000
 #: The relative rise of the bound per iteration below which the run has converged.
 TOLERANCE = 1e-12
 
