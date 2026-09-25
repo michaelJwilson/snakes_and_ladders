@@ -44,7 +44,7 @@ EXACT = 1e-9
 
 #: The solvers that refuse a start, and the ones whose own start is the
 #: field's argmax rather than a uniform draw.
-REFUSED = ("greedy", "tempering", "max-product", "bifurcation")
+REFUSED = ("field_argmax", "tempering", "max-product", "bifurcation")
 ARGMAX_START = ("alpha-expansion", "alpha-beta-swap", "expansion>swendsen-wang")
 #: The solvers that end on a descent from the start they are handed.
 DESCENTS = ("icm", "alpha-expansion", "alpha-beta-swap", "expansion>swendsen-wang")
@@ -56,7 +56,7 @@ DESCENTS = ("icm", "alpha-expansion", "alpha-beta-swap", "expansion>swendsen-wan
 #: on Wolff's matched steps, `warm_anneal` from 1.0, and the two hybrids of
 #: `search.cluster_moves`.
 BEFORE = {
-    "ci/greedy": "dd8ab86c204a8c39",
+    "ci/field_argmax": "dd8ab86c204a8c39",
     "ci/icm": "eba7c65d69aeb916",
     "ci/icm-random": "f61e867f262cd619",
     "ci/anneal": "b599a8a6d3e3ebbc",
@@ -67,7 +67,7 @@ BEFORE = {
     "ci/alpha-beta-swap": "212124e7656e961a",
     "ci/max-product": "2fd81f289869933b",
     "ci/bifurcation": "3c108e6281f26ea7",
-    "release/greedy": "d32a79fb13f61671",
+    "release/field_argmax": "d32a79fb13f61671",
     "release/icm": "0b81269cf9db1847",
     "release/icm-random": "354122e191105cb6",
     "release/anneal": "6582386d83d0024b",
