@@ -267,31 +267,6 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
             return scores
         return torch.where(unobserved, torch.zeros_like(scores), scores)
 
-    def count_log_factor(self, observations: torch.Tensor) -> torch.Tensor:
-        """``A_k(y)``, the part of :meth:`log_density` that no exposure reaches (issue #1064).
-
-        Under an exposure ``c`` the density is
-        ``A_k(y) + r_k log(r_k / t) + y log(mu_k c / t)`` with
-        ``t = r_k + mu_k c`` and ``A_k(y) = lgamma(y + r_k) - lgamma(r_k) -
-        lgamma(y + 1)``. ``A`` is a function of the count alone, so a caller
-        scoring many exposures tabulates it once by count and forms the two
-        exposure terms per observation, which need logarithms and no
-        ``lgamma``. These are :meth:`log_density`'s first three terms, in its
-        order, so a caller completing them in that order reproduces it to the
-        rounding of its logarithm.
-
-        Returns
-        -------
-        torch.Tensor
-            Shape ``(..., n_states)``.
-        """
-        counts = observations.unsqueeze(-1).to(self._mean.dtype)
-        return (
-            lgamma_shifted(counts, self._dispersion)
-            - torch.lgamma(self._dispersion)
-            - torch.lgamma(counts + 1.0)
-        )
-
     def bregman_divergence(self, observations: torch.Tensor) -> torch.Tensor:
         """``r log((r + mu) / (r + y)) + y log(y (r + mu) / (mu (r + y)))``.
 

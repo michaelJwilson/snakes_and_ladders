@@ -2,11 +2,12 @@
 
 At the stress instance of ``spatio_sequential_counts_covariate`` --- 5,041
 vertices, ``M = K = 10``, 2,000 positions, a log-normal exposure and trial
-count per observation --- the Rust E step factors the exposure and tabulates
-the trial count, and the NumPy oracle scores every observation. A table by
-count and distinct exposure is not measured: at 3,634 counts and 1.0e7
-exposures it is 3.7e10 rows, past a ``uint32`` index and 2.9e13 bytes. The
-numbers are in ``changelog.d/1064.added.md``.
+count per observation --- the Rust E step factors the exposure and lays the
+trial count out in each of the three ``CovariateRows``, and the NumPy oracle
+scores every observation. The rows are built once, outside the measurement,
+as a fit builds them. A table by count and distinct exposure is not measured:
+at 3,634 counts and 1.0e7 exposures it is 3.7e10 rows, past a ``uint32`` index
+and 2.9e13 bytes. The numbers are in ``changelog.d/1064.added.md``.
 
 Each case runs once, as ``test_spatio_sequential_rust_bench.py`` states why.
 Correctness is pinned in
@@ -43,12 +44,15 @@ def _once(
 
 
 @pytest.mark.stress
-@pytest.mark.parametrize("covariate_tolerance", [None, 1e-3])
+@pytest.mark.parametrize("layout", rust.COVARIATE_ROWS)
 def test_rust_class_posteriors_under_a_continuous_covariate(
-    benchmark: BenchmarkFixture, covariate_tolerance: float | None
+    benchmark: BenchmarkFixture, layout: rust.CovariateRows
 ) -> None:
     # The tables are built per call, so the build is inside the measurement.
     instance = _instance()
+    rows = rust.observation_rows(
+        instance.observations, instance.params.covariate, covariate_rows=layout
+    )
 
     _once(
         benchmark,
@@ -56,17 +60,21 @@ def test_rust_class_posteriors_under_a_continuous_covariate(
         instance.params,
         instance.observations,
         instance.labels,
-        covariate_tolerance=covariate_tolerance,
+        covariate_rows=rows,
     )
 
 
 @pytest.mark.stress
+@pytest.mark.parametrize("layout", rust.COVARIATE_ROWS)
 def test_rust_external_field_under_a_continuous_covariate(
-    benchmark: BenchmarkFixture,
+    benchmark: BenchmarkFixture, layout: rust.CovariateRows
 ) -> None:
     instance = _instance()
+    rows = rust.observation_rows(
+        instance.observations, instance.params.covariate, covariate_rows=layout
+    )
     posterior = rust.class_posteriors(
-        instance.params, instance.observations, instance.labels
+        instance.params, instance.observations, instance.labels, covariate_rows=rows
     ).posterior
 
     _once(
@@ -76,7 +84,7 @@ def test_rust_external_field_under_a_continuous_covariate(
         instance.observations,
         instance.labels,
         posterior,
-        covariate_tolerance=1e-3,
+        covariate_rows=rows,
     )
 
 

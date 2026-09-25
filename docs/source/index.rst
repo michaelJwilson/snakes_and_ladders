@@ -43,6 +43,12 @@ whether or not it has members yet.
 .. automodule:: sal.emissions.counts
    :members: lgamma_shifted
 
+.. automodule:: sal.emissions.nb
+   :members:
+
+.. automodule:: sal.emissions.bb
+   :members:
+
 .. automodule:: sal.fixtures
    :members:
 

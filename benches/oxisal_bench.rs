@@ -259,6 +259,7 @@ fn bench_class_posteriors(c: &mut Criterion) {
         total: &total,
         success: &success,
         exposure: None,
+        trials: None,
     };
     let totals: Vec<u32> = (0..n_positions * n_nodes)
         .map(|index| (index % extent) as u32)

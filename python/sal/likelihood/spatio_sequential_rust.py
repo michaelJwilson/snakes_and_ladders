@@ -24,50 +24,56 @@ an add where the oracle does three ``lgamma`` calls, and the tables are the
 oracle's own arithmetic rather than a second implementation of it. The tables
 are row-major, ``[row, M, K]``, for the reason ``src/coupled.rs`` states.
 
-**Under a covariate the row is not the count** (issue #658). The density is
-then a function of the count *and* the exposure or trial count it is scored
-against, so there is no table indexed by the count alone. The trial count's
-channel tabulates every ``(count, covariate code)`` pair and each observation
-carries the row it falls in; the kernel never knew what the index meant, only
-that the table was built from it.
+**Under a covariate the row is not the count** (issues #658, #1064). The
+density is then a function of the count *and* the exposure or trial count.
 
-**The exposure is factored instead** (issue #1064). A continuous exposure takes
-one value per observation, and a table by count and distinct exposure then has
-``extent * S * V`` rows: 2.3 GB per channel at the ci instance of
-``spatio_sequential_counts_covariate``. The negative binomial splits as
-``B_k(y) + y log c - (y + r_k) log t`` with ``t = r_k + mu_k c`` and
-``B_k(y) = A_k(y) + r_k log r_k + y log mu_k``, ``A`` being
-:meth:`~sal.emissions.NegativeBinomialEmission.count_log_factor`. So the
-total's table is ``B`` by count and the kernel forms ``y log c - (y + r) log t``
-per observation: one logarithm per score, chosen for speed over the family's
-order of operations. The sum cancels where ``y log mu`` and ``y log(mu c / t)``
-are large and opposite, so each score is the family's to 263 ulp relative at
-that instance rather than the 2.3 ulp the family's order gives.
+- The negative binomial's exposure is continuous, and a table by count and
+  distinct exposure has a row per observation: 2.3 GB per channel at the ci
+  instance of ``spatio_sequential_counts_covariate``. It is factored: the
+  table is :func:`~sal.emissions.nb.exposure_table`, ``B_k(y)``, and the
+  kernel adds ``y log c - (y + r) log t``, ``t = r_k + mu_k c``: one
+  logarithm per score, chosen for speed over the family's order of
+  operations, 262.9 ulp relative at that instance rather than 2.3.
+- The beta-binomial's trial count is an integer, and its rows take one of
+  three exact layouts, :data:`CovariateRows`, bitwise to one another.
+  ``range`` and ``distinct`` tabulate every ``(successes, trial count)`` pair
+  --- over every trial count from the least to the greatest, or over those
+  that occur, found by ``oxisal.factorize`` in one pass in first-appearance
+  order --- and hand each observation its row. ``factored`` keeps the table
+  by successes, ``U_k(z) = lgamma(z + a_k)``, and the kernel adds
+  ``V_k(n - z) - W_k(n)``, the Beta function's three terms and the
+  state-free ``lgamma(j + 1)`` at ``n``, ``z`` and ``n - z``, all tabulated
+  by :mod:`sal.emissions.bb` and summed in the family's order, so each score
+  is its ``log_density`` bit for bit. ``range`` is the default: in a fit at
+  the stress instance, with the rows built once, it and ``distinct`` are
+  tied fastest and ``factored`` is 4% slower over the E steps and fields,
+  its field 14% slower per call for the six additions per score the
+  family's order costs; ``factored`` is the fastest where rows are built per
+  call, and its tables the smallest. The numbers are in
+  ``changelog.d/1064.added.md``.
 
-**A trial count may be tabulated on a grid** (issue #1064). With
-``covariate_tolerance`` set, a covariate is coded ``round(c * scale)`` for the
-coarsest power-of-two ``scale`` whose bound
-``max |d log p / dc| / (2 scale)`` is within the tolerance, and the table spans
-the codes from the least to the greatest. An integer covariate is coded at
-``scale = 1`` whatever the tolerance, which reproduces it exactly; see
-:func:`grid_scale`.
+**The rows depend on the observations and the covariate alone.** No parameter
+enters them, so a fit builds them once with :func:`observation_rows` and hands
+the result to every E step, which then builds only the tables.
 
 **One crossing per call, contiguous.** The counts cross as the ``(S, V)``
-arrays they are already held in, cast to ``uint16`` --- which is the same
-statement the table makes, that the counts are small --- and the results are
+arrays they are already held in, cast to ``uint32``, and the results are
 written into arrays allocated here.
 """
 
 from __future__ import annotations
 
 import math
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
+from typing import Literal, get_args
 
 import numpy as np
 
 from sal import oxisal
-from sal.emissions import EmissionFamily, NegativeBinomialEmission
+from sal.emissions import BetaBinomialEmission, EmissionFamily, validated_trials
+from sal.emissions.bb import log_factorial, trial_tables
+from sal.emissions.nb import exposure_table
 from sal.likelihood.spatio_sequential import (
     ClassPosteriors,
     log_prior,
@@ -78,6 +84,19 @@ from sal.sim.count_pairs import (
     IndependentCountPair,
 )
 from sal.sim.spatio_sequential import SpatioSequentialParams
+
+#: How the beta-binomial's trial count reaches the kernel (issue #1064).
+#: ``factored`` tabulates its density's terms each by its own integer and the
+#: kernel sums them per observation; ``range`` tabulates every
+#: ``(successes, trial count)`` pair over the trial counts from the least to the
+#: greatest; ``distinct`` over the trial counts that occur. All three are exact
+#: and bitwise to one another. The negative binomial's exposure is factored
+#: whichever is chosen: it is continuous, and a table by its values has a row
+#: per observation.
+CovariateRows = Literal["factored", "range", "distinct"]
+
+#: The layouts :data:`CovariateRows` names, for a refusal to list.
+COVARIATE_ROWS: tuple[CovariateRows, ...] = get_args(CovariateRows)
 
 
 def _families(params: SpatioSequentialParams) -> list[IndependentCountPair]:
@@ -102,10 +121,11 @@ def _families(params: SpatioSequentialParams) -> list[IndependentCountPair]:
     return families
 
 
-#: Bytes one channel's grid table may take (issue #1064): the refusal a
-#: fine ``scale`` meets before it allocates. 1 GiB is 6.2x the covariate of the
-#: stress instance of ``spatio_sequential_counts_covariate``, the largest array
-#: the E step already holds there.
+#: Bytes one channel's covariate table may take (issue #1064): the refusal a
+#: fine grid or a wide trial-count range meets before it allocates. 1 GiB is
+#: 6.2x the covariate of the stress instance of
+#: ``spatio_sequential_counts_covariate``, the largest array the E step already
+#: holds there.
 GRID_TABLE_CEILING = 2**30
 
 #: The largest row a ``uint32`` index carries. A table with more rows would
@@ -117,9 +137,9 @@ _ROW_LIMIT = 2**32 - 1
 class ExposureTerm:
     """The negative binomial's exposure, factored out of the total's table (issue #1064).
 
-    With it, the total's table is ``A_k(y)`` by count and its row is the
-    count; the kernel adds ``r log(r / t) + y log(mu c / t)``, ``t = r + mu c``,
-    per observation.
+    With it, the total's table is :func:`~sal.emissions.nb.exposure_table` by
+    count and its row is the count; the kernel adds ``y log c - (y + r) log t``,
+    ``t = r + mu c``, per observation.
 
     Parameters
     ----------
@@ -144,6 +164,57 @@ class ExposureTerm:
         }
 
 
+@dataclass(frozen=True)
+class TrialTerm:
+    """The beta-binomial's trial count, factored out of the successes' table (issue #1064).
+
+    With it, the successes' table is ``U[z, m, k] = lgamma(z + a_mk)`` and its
+    row is the successes; the kernel adds the other eight terms of the density
+    per observation, in the family's order (:mod:`sal.emissions.bb`).
+
+    Parameters
+    ----------
+    trials : np.ndarray
+        ``(S, n_nodes)`` contiguous ``uint32``; zero marks the successes
+        unobserved.
+    failure : np.ndarray
+        ``V[j, m, k] = lgamma(j + b_mk)``, ``(extent, M, K)`` contiguous.
+    trial : np.ndarray
+        ``W[n, m, k] = lgamma(n + a_mk + b_mk)``, ``(extent, M, K)`` contiguous.
+    log_factorial : np.ndarray
+        ``lgamma(j + 1)``, ``(extent,)``.
+    log_beta : np.ndarray
+        ``lgamma(a + b)``, ``lgamma(a)`` and ``lgamma(b)``, ``(3, M, K)``
+        contiguous.
+    """
+
+    trials: np.ndarray
+    failure: np.ndarray
+    trial: np.ndarray
+    log_factorial: np.ndarray
+    log_beta: np.ndarray
+
+    def arguments(self) -> dict[str, np.ndarray]:
+        """The kernel's five keyword arguments, flat."""
+        return {
+            "trials": self.trials.reshape(-1),
+            "failure_table": self.failure.reshape(-1),
+            "trial_table": self.trial.reshape(-1),
+            "log_factorial": self.log_factorial,
+            "log_beta": self.log_beta.reshape(-1),
+        }
+
+    @property
+    def nbytes(self) -> int:
+        """The bytes of the four tables, the trial counts excluded."""
+        return (
+            self.failure.nbytes
+            + self.trial.nbytes
+            + self.log_factorial.nbytes
+            + self.log_beta.nbytes
+        )
+
+
 def _side(family: IndependentCountPair, channel: int) -> EmissionFamily:
     """One channel's family of a pair."""
     return family.total if channel == TOTAL else family.successes
@@ -159,6 +230,44 @@ def _refuse_rows(n_rows: int, what: str) -> None:
         raise ValueError(msg)
 
 
+def _refuse_bytes(n_rows: int, params: SpatioSequentialParams, what: str) -> None:
+    """Refuse a covariate table past :data:`GRID_TABLE_CEILING` before it is built."""
+    size = n_rows * params.n_classes * params.n_states * 8
+    if size > GRID_TABLE_CEILING:
+        msg = (
+            f"{what}: its table is {size} bytes, past the {GRID_TABLE_CEILING} "
+            f"of GRID_TABLE_CEILING"
+        )
+        raise ValueError(msg)
+
+
+def _outer_table(
+    sides: Sequence[EmissionFamily],
+    params: SpatioSequentialParams,
+    extent: int,
+    levels: np.ndarray,
+) -> np.ndarray:
+    """Every ``(count, level)`` pair's log-density, row ``count * len(levels) + code``.
+
+    The outer product of the counts ``0 .. extent - 1`` and ``levels``, built
+    vectorized and never sorted.
+    """
+    # `log_density` is the families' tensor API, which the objectives
+    # differentiate through; torch is imported at this call rather than with
+    # the module (issue #1011).
+    import torch
+
+    n_levels = levels.size
+    counts = torch.from_numpy(np.repeat(np.arange(extent, dtype=np.float64), n_levels))
+    covariate = torch.from_numpy(
+        np.tile(np.asarray(levels, dtype=np.float64), extent)[:, None]
+    )
+    table = np.empty((extent * n_levels, params.n_classes, params.n_states))
+    for m, side in enumerate(sides):
+        table[:, m, :] = side.log_density(counts, covariate=covariate).numpy()
+    return table
+
+
 def _tabulate(
     sides: list[EmissionFamily],
     params: SpatioSequentialParams,
@@ -168,25 +277,11 @@ def _tabulate(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Every ``(count, level)`` pair's log-density, and each observation's row.
 
-    The outer product of the counts ``0 .. max`` and ``levels``, built
-    vectorized and never sorted; the row is ``count * len(levels) + code``.
+    The row is ``count * len(levels) + code``.
     """
-    # `log_density` is the families' tensor API, which the objectives
-    # differentiate through; torch is imported at this call rather than with
-    # the module (issue #1011).
-    import torch
-
-    extent = int(values.max()) + 1
-    n_levels = levels.size
-    counts = torch.from_numpy(np.repeat(np.arange(extent, dtype=np.float64), n_levels))
-    covariate = torch.from_numpy(
-        np.tile(np.asarray(levels, dtype=np.float64), extent)[:, None]
-    )
-    table = np.empty((extent * n_levels, params.n_classes, params.n_states))
-    for m, side in enumerate(sides):
-        table[:, m, :] = side.log_density(counts, covariate=covariate).numpy()
-    rows = values.astype(np.int64) * n_levels + codes.reshape(values.shape)
-    return np.ascontiguousarray(table), rows
+    table = _outer_table(sides, params, int(values.max()) + 1, levels)
+    rows = values.astype(np.int64) * levels.size + codes.reshape(values.shape)
+    return table, rows
 
 
 def _slope(
@@ -235,11 +330,14 @@ def grid_scale(
     turns inside the interval. A power of two makes ``code / scale`` exact in
     ``float64``, so a covariate already on the grid is reproduced bit for bit.
 
-    **An integer covariate is coded at ``scale = 1``**, whatever the tolerance.
-    At that scale the code is the value and the grid is exact, so no finer one
-    is needed; and no coarser one is admissible, because a trial count rounded
-    below its own successes leaves the beta-binomial's support, where the
-    density is ``-inf`` and no slope bounds the change.
+    **No family reaches this today** (issue #1064). The grid is for a
+    continuous covariate on a family whose density does not factor, and the
+    negative binomial's exposure factors (:mod:`sal.emissions.nb`). **An
+    integer covariate is refused**: a table over its values is exact, and no
+    coarser grid is admissible, because a trial count rounded below its own
+    successes leaves the beta-binomial's support, where the density is
+    ``-inf`` and no slope bounds the change. Its layouts are
+    :data:`CovariateRows`.
 
     Parameters
     ----------
@@ -259,13 +357,19 @@ def grid_scale(
     Raises
     ------
     ValueError
-        If ``covariate_tolerance`` is not positive and finite.
+        If ``covariate_tolerance`` is not positive and finite, or the
+        covariate is an integer.
     """
     if not (math.isfinite(covariate_tolerance) and covariate_tolerance > 0.0):
         msg = f"covariate_tolerance must be positive and finite, got {covariate_tolerance}"
         raise ValueError(msg)
     if bool((covariate == np.rint(covariate)).all()):
-        return 1.0
+        msg = (
+            f"covariate_tolerance={covariate_tolerance}: the covariate is an "
+            f"integer, and a table over its values is exact at scale 1; a "
+            f"tolerance is for a continuous covariate"
+        )
+        raise ValueError(msg)
     peak = float(_slope(sides, values, covariate).max())
     if peak == 0.0:
         return 1.0
@@ -352,97 +456,227 @@ def _grid_bound(
     return np.asarray(peak * moved).reshape(np.shape(values))
 
 
-def _channel_rows(
-    families: list[IndependentCountPair],
-    params: SpatioSequentialParams,
-    values: np.ndarray,
-    covariate: np.ndarray | None,
-    channel: int,
-    covariate_tolerance: float | None = None,
-) -> tuple[np.ndarray, np.ndarray, ExposureTerm | None]:
-    """One channel's table, the row each observation falls in, and its exposure term.
+@dataclass(frozen=True)
+class ChannelRows:
+    """One channel's rows and what its table is built over; no parameter enters.
 
-    Without a covariate the row **is** the count, the table is count-major and
-    the extent is the largest count plus one --- exactly what this module
-    tabulated before issue #658, and the same numbers.
-
-    With one on a negative binomial, the table is
-    :meth:`~sal.emissions.NegativeBinomialEmission.count_log_factor`
-    plus ``r log r + y log mu`` by count, the row is the count, and the exposure travels as an
-    :class:`ExposureTerm` the kernel completes the density with (issue #1064).
-
-    With one on any other family, the density is a function of the count
-    *and* the covariate. Every ``(count, covariate)`` combination is tabulated,
-    and the row is ``count * n_levels + code``. Where ``covariate_tolerance``
-    is ``None`` the codes are the distinct covariate values, factorized once
-    per call (issue #658), bit for bit what this module computed before
-    issue #1064. Where it is set, the codes are the covariate's on the grid
-    :func:`grid_scale` chooses, spanning the least to the greatest.
-
-    The rows are the families' own arithmetic either way, which is the property
-    that keeps this a table rather than a second implementation of the oracle.
+    Parameters
+    ----------
+    rows : np.ndarray
+        ``(S, n_nodes)`` contiguous ``uint32``, each observation's table row.
+    extent : int
+        One past the largest count, the counts the table spans.
+    levels : np.ndarray | None
+        The covariate value of each code where the table is over
+        ``(count, code)`` pairs, row ``count * len(levels) + code``; ``None``
+        where it is by count alone.
+    covariate : np.ndarray | None
+        The covariate a factored channel's kernel term reads per observation:
+        the exposure as ``float64`` or the trial count as ``uint32``, both
+        ``(S, n_nodes)`` contiguous; ``None`` where nothing is factored.
     """
-    # `log_density` is the families' tensor API, which the objectives
-    # differentiate through: the table's arguments are built as arrays and
-    # cross into it once per family, and torch is imported at this call rather
-    # than with the module (issue #1011).
+
+    rows: np.ndarray
+    extent: int
+    levels: np.ndarray | None = None
+    covariate: np.ndarray | None = None
+
+
+@dataclass(frozen=True)
+class ObservationRows:
+    """Both channels' rows, built once per fit and reused by every E step (issue #1064).
+
+    A row depends on the observations and the covariate and on no parameter,
+    so an E step handed these builds only the tables. They are interpretable
+    only against the observations and the covariate they were built from, and
+    an E step refuses them for any other.
+
+    Parameters
+    ----------
+    layout : CovariateRows
+        The trial count's layout they were built in.
+    observations : np.ndarray
+        The observations they were built from, held to be compared by identity.
+    covariate : np.ndarray | None
+        The covariate, likewise.
+    total : ChannelRows
+        The first channel's.
+    successes : ChannelRows
+        The second channel's.
+    """
+
+    layout: CovariateRows
+    observations: np.ndarray
+    covariate: np.ndarray | None
+    total: ChannelRows
+    successes: ChannelRows
+
+
+def _uint32(values: np.ndarray, what: str) -> np.ndarray:
+    """``values`` as contiguous ``uint32`` rows, refused past what the type carries."""
+    if values.size:
+        _refuse_rows(int(values.max()) + 1, what)
+    return np.ascontiguousarray(values, dtype=np.uint32)
+
+
+def observation_rows(
+    observations: np.ndarray,
+    covariate: np.ndarray | None,
+    *,
+    covariate_rows: CovariateRows = "range",
+) -> ObservationRows:
+    """Every observation's table row in both channels, for ``covariate_rows``.
+
+    Without a covariate the row **is** the count, in both channels, and the
+    layout does not enter. With one, the total's row is the count and its
+    exposure is carried for the kernel; the successes' row is the count and
+    the trial count carried under ``factored``, and ``count * n_codes + code``
+    under ``range`` and ``distinct``, the code being the trial count's offset
+    from the least under ``range`` and its first-appearance index
+    (``oxisal.factorize``) under ``distinct``.
+
+    Parameters
+    ----------
+    observations : np.ndarray
+        Shape ``(S, n_nodes, 2)``, integer counts.
+    covariate : np.ndarray | None
+        Shape ``(S, n_nodes, 2)``: the exposure, then the trial count.
+    covariate_rows : CovariateRows
+        The trial count's layout; ``range``, the default, is tied fastest
+        with ``distinct`` in a fit at stress (``changelog.d/1064.added.md``).
+
+    Returns
+    -------
+    ObservationRows
+
+    Raises
+    ------
+    ValueError
+        If ``covariate_rows`` is not a :data:`CovariateRows`, an exposure is
+        negative or not finite, a trial count is not a non-negative integer,
+        or a row overflows a ``uint32`` index.
+    """
+    if covariate_rows not in COVARIATE_ROWS:
+        msg = f"covariate_rows must be one of {COVARIATE_ROWS}, got {covariate_rows!r}"
+        raise ValueError(msg)
+    totals, successes = observations[..., TOTAL], observations[..., SUCCESSES]
+    total = ChannelRows(_uint32(totals, "the totals"), int(totals.max()) + 1)
+    plain = ChannelRows(_uint32(successes, "the successes"), int(successes.max()) + 1)
+    if covariate is None:
+        return ObservationRows(covariate_rows, observations, None, total, plain)
+    exposure = np.ascontiguousarray(covariate[..., TOTAL], dtype=np.float64)
+    if bool(((exposure < 0.0) | ~np.isfinite(exposure)).any()):
+        msg = "every exposure must be finite and non-negative; zero marks the count unobserved"
+        raise ValueError(msg)
+    total = ChannelRows(total.rows, total.extent, covariate=exposure)
+    return ObservationRows(
+        covariate_rows,
+        observations,
+        covariate,
+        total,
+        _trial_rows(successes, covariate[..., SUCCESSES], covariate_rows),
+    )
+
+
+def _trial_rows(
+    successes: np.ndarray, trials: np.ndarray, layout: CovariateRows
+) -> ChannelRows:
+    """The successes' rows under a trial count, in ``layout``."""
     import torch
 
-    sides = [_side(family, channel) for family in families]
-    if covariate is None:
-        extent = int(values.max()) + 1
-        counts = torch.from_numpy(np.arange(extent, dtype=np.float64))
-        table = np.empty((extent, params.n_classes, params.n_states))
-        for m, side in enumerate(sides):
-            table[:, m, :] = side.log_density(counts).numpy()
-        return np.ascontiguousarray(table), values, None
-    if all(isinstance(side, NegativeBinomialEmission) for side in sides):
-        negative_binomials = [
-            side for side in sides if isinstance(side, NegativeBinomialEmission)
-        ]
-        exposure = np.ascontiguousarray(covariate, dtype=np.float64)
-        if bool(((exposure < 0.0) | ~np.isfinite(exposure)).any()):
-            msg = "every exposure must be finite and non-negative; zero marks the count unobserved"
-            raise ValueError(msg)
-        extent = int(values.max()) + 1
-        counts = torch.from_numpy(np.arange(extent, dtype=np.float64))
-        table = np.empty((extent, params.n_classes, params.n_states))
-        for m, side in enumerate(negative_binomials):
-            # `B = A + r log r + y log mu`: the exposure-free terms of the
-            # kernel's `B + y log c - (y + r) log t`.
-            table[:, m, :] = (
-                side.count_log_factor(counts)
-                + side.dispersion * torch.log(side.dispersion)
-                + counts.unsqueeze(-1) * torch.log(side.mean)
-            ).numpy()
-        term = ExposureTerm(
-            exposure,
-            np.ascontiguousarray(
-                np.stack([side.dispersion.numpy() for side in negative_binomials])
-            ),
-            np.ascontiguousarray(
-                np.stack([side.mean.numpy() for side in negative_binomials])
-            ),
-        )
-        return np.ascontiguousarray(table), values, term
-    if covariate_tolerance is not None:
-        scale = grid_scale(sides, values, covariate, covariate_tolerance)
-        table, rows = _grid_rows(sides, params, values, covariate, scale)
-        return table, rows, None
-    # The covariate alone is factorized, and the row is arithmetic on the two
-    # codes: `count * n_distinct + code`. Factorizing the *pairs* instead --- one
-    # `np.unique` over an `(S * V, 2)` array --- is a lexsort per call, and it
-    # cost 135.6 ms of a 141.4 ms E step at the ci instance, taking the backend
-    # to 0.6x the oracle it exists to beat. This is one sort of a single column
-    # and two integer operations, and the table it addresses is the outer
-    # product rather than the distinct pairs: larger, built vectorized, and
-    # never sorted.
-    distinct, codes = np.unique(covariate.reshape(-1), return_inverse=True)
-    _refuse_rows(
-        (int(values.max()) + 1) * distinct.size, "the distinct covariate values"
+    # The family's own check, so the refusal is the one its `log_density`
+    # would make.
+    validated_trials(
+        torch.from_numpy(np.asarray(trials, dtype=np.float64)),
+        torch.ones(1, dtype=torch.float64),
     )
-    table, rows = _tabulate(sides, params, values, distinct, codes)
-    return table, rows, None
+    extent = int(successes.max()) + 1
+    if layout == "factored":
+        return ChannelRows(
+            _uint32(successes, "the successes"),
+            extent,
+            covariate=_uint32(trials, "the trial counts"),
+        )
+    if layout == "range":
+        codes, levels = _grid(trials, 1.0)
+    else:
+        flat, levels = oxisal.factorize(
+            np.ascontiguousarray(trials, dtype=np.float64).reshape(-1)
+        )
+        codes = flat.astype(np.int64).reshape(trials.shape)
+    what = f"the trial counts' {layout} table"
+    _refuse_rows(extent * levels.size, what)
+    rows = successes.astype(np.int64) * levels.size + codes
+    return ChannelRows(np.ascontiguousarray(rows, dtype=np.uint32), extent, levels)
+
+
+def _count_table(
+    sides: Sequence[EmissionFamily], params: SpatioSequentialParams, extent: int
+) -> np.ndarray:
+    """Each class's log-density at every count ``0 .. extent - 1``, ``(extent, M, K)``."""
+    import torch
+
+    counts = torch.from_numpy(np.arange(extent, dtype=np.float64))
+    table = np.empty((extent, params.n_classes, params.n_states))
+    for m, side in enumerate(sides):
+        table[:, m, :] = side.log_density(counts).numpy()
+    return table
+
+
+def _total_table(
+    families: list[IndependentCountPair],
+    params: SpatioSequentialParams,
+    rows: ChannelRows,
+) -> tuple[np.ndarray, ExposureTerm | None]:
+    """The first channel's table, and its exposure term where it carries one."""
+    sides = [family.total for family in families]
+    if rows.covariate is None:
+        return _count_table(sides, params, rows.extent), None
+    table = np.empty((rows.extent, params.n_classes, params.n_states))
+    for m, side in enumerate(sides):
+        table[:, m, :] = exposure_table(side, rows.extent).numpy()
+    term = ExposureTerm(
+        rows.covariate,
+        np.ascontiguousarray(np.stack([side.dispersion.numpy() for side in sides])),
+        np.ascontiguousarray(np.stack([side.mean.numpy() for side in sides])),
+    )
+    return table, term
+
+
+def _success_table(
+    families: list[IndependentCountPair],
+    params: SpatioSequentialParams,
+    rows: ChannelRows,
+) -> tuple[np.ndarray, TrialTerm | None]:
+    """The second channel's table, and its trial term where it carries one."""
+    sides: list[BetaBinomialEmission] = [family.successes for family in families]
+    if rows.levels is not None:
+        n_rows = rows.extent * rows.levels.size
+        _refuse_bytes(n_rows, params, f"the trial counts' {rows.levels.size} codes")
+        return _outer_table(sides, params, rows.extent, rows.levels), None
+    if rows.covariate is None:
+        return _count_table(sides, params, rows.extent), None
+    trials_extent = int(rows.covariate.max()) + 1
+    _refuse_bytes(trials_extent, params, f"a trial count of {trials_extent - 1}")
+    shape = (params.n_classes, params.n_states)
+    success = np.empty((rows.extent, *shape))
+    failure = np.empty((trials_extent, *shape))
+    trial = np.empty((trials_extent, *shape))
+    log_beta = np.empty((3, *shape))
+    for m, side in enumerate(sides):
+        tables = trial_tables(side, rows.extent, trials_extent)
+        success[:, m, :] = tables.success.numpy()
+        failure[:, m, :] = tables.failure.numpy()
+        trial[:, m, :] = tables.trial.numpy()
+        log_beta[:, m, :] = tables.log_beta.numpy()
+    term = TrialTerm(
+        rows.covariate,
+        failure,
+        trial,
+        np.ascontiguousarray(log_factorial(trials_extent).numpy()),
+        log_beta,
+    )
+    return success, term
 
 
 @dataclass(frozen=True)
@@ -484,7 +718,10 @@ class EmissionRows:
         The second channel's.
     exposure : ExposureTerm | None
         The first channel's factored exposure, where it carries one; its
-        table is then ``A`` by count (issue #1064).
+        table is then ``B`` by count (issue #1064).
+    trials : TrialTerm | None
+        The second channel's factored trial count, where it carries one; its
+        table is then ``U`` by successes (issue #1064).
     """
 
     total_rows: np.ndarray
@@ -492,27 +729,70 @@ class EmissionRows:
     total_table: np.ndarray
     success_table: np.ndarray
     exposure: ExposureTerm | None = None
+    trials: TrialTerm | None = None
 
     def kernel_arguments(self) -> dict[str, np.ndarray]:
-        """The exposure term as the kernels' keyword arguments; empty without one."""
-        return {} if self.exposure is None else self.exposure.arguments()
+        """The factored terms as the kernels' keyword arguments; empty without one."""
+        arguments = {} if self.exposure is None else self.exposure.arguments()
+        if self.trials is not None:
+            arguments.update(self.trials.arguments())
+        return arguments
 
-    def __iter__(self) -> Iterator[np.ndarray | ExposureTerm | None]:
-        """The rows, the tables, then the exposure term: the order callers unpack."""
+    @property
+    def table_bytes(self) -> int:
+        """The bytes of every table built from the parameters, rows excluded."""
+        return (
+            self.total_table.nbytes
+            + self.success_table.nbytes
+            + (0 if self.trials is None else self.trials.nbytes)
+        )
+
+    def __iter__(self) -> Iterator[np.ndarray | ExposureTerm | TrialTerm | None]:
+        """The rows, the tables, then the two terms: the order callers unpack."""
         yield from (
             self.total_rows,
             self.success_rows,
             self.total_table,
             self.success_table,
             self.exposure,
+            self.trials,
         )
+
+
+def _rows_for(
+    params: SpatioSequentialParams,
+    observations: np.ndarray,
+    covariate_rows: CovariateRows | ObservationRows,
+) -> ObservationRows:
+    """``covariate_rows`` if it is already rows for these inputs, else rows built in that layout.
+
+    Raises
+    ------
+    ValueError
+        If ``covariate_rows`` is rows built from other observations or another
+        covariate. They are compared by identity, which is what a fit holds.
+    """
+    if not isinstance(covariate_rows, ObservationRows):
+        return observation_rows(
+            observations, params.covariate, covariate_rows=covariate_rows
+        )
+    if (
+        covariate_rows.observations is not observations
+        or covariate_rows.covariate is not params.covariate
+    ):
+        msg = (
+            "these rows were built from other observations or another covariate; "
+            "build them with observation_rows for these"
+        )
+        raise ValueError(msg)
+    return covariate_rows
 
 
 def emission_tables(
     params: SpatioSequentialParams,
     observations: np.ndarray,
     *,
-    covariate_tolerance: float | None = None,
+    covariate_rows: CovariateRows | ObservationRows = "range",
 ) -> EmissionTables:
     """Both channels' log-density for every class, state and table row.
 
@@ -523,17 +803,17 @@ def emission_tables(
         tabulated against where it carries one.
     observations : np.ndarray
         Shape ``(S, n_nodes, 2)``.
-    covariate_tolerance : float | None
+    covariate_rows : CovariateRows | ObservationRows
         As :func:`emission_rows` takes it.
 
     Returns
     -------
     EmissionTables
         The first channel's table and the second's. :func:`emission_rows`
-        returns these with the row indices and the exposure term, which is
+        returns these with the row indices and the factored terms, which is
         how the two entry points take them.
     """
-    rows = emission_rows(params, observations, covariate_tolerance=covariate_tolerance)
+    rows = emission_rows(params, observations, covariate_rows=covariate_rows)
     return EmissionTables(rows.total_table, rows.success_table)
 
 
@@ -541,13 +821,15 @@ def emission_rows(
     params: SpatioSequentialParams,
     observations: np.ndarray,
     *,
-    covariate_tolerance: float | None = None,
+    covariate_rows: CovariateRows | ObservationRows = "range",
 ) -> EmissionRows:
     """The rows and the tables together, since neither is meaningful alone.
 
     A row index is only interpretable against the table it was built with, so
     the two are returned from one call rather than derived twice from the same
-    inputs and trusted to agree (issue #658).
+    inputs and trusted to agree (issue #658). The tables are the families' own
+    arithmetic whatever the layout, which is the property that keeps this a
+    table rather than a second implementation of the oracle.
 
     Parameters
     ----------
@@ -555,40 +837,33 @@ def emission_rows(
         The two-channel families, and the covariate where it carries one.
     observations : np.ndarray
         Shape ``(S, n_nodes, 2)``.
-    covariate_tolerance : float | None
-        The largest ``|Delta log p|`` per observation a covariate grid may
-        admit, for a channel whose covariate is tabulated rather than factored
-        (the trial count's). ``None``, the default, tabulates the distinct
-        covariate values exactly, as before issue #1064. An integer covariate
-        is coded exactly at any tolerance (:func:`grid_scale`), so for the
-        trial count the grid changes the table's layout and not its values.
+    covariate_rows : CovariateRows | ObservationRows
+        The trial count's layout, or rows :func:`observation_rows` already
+        built for these observations and this covariate, in which case only
+        the tables are built.
 
     Returns
     -------
     EmissionRows
-        The total's rows, the successes' rows, the total's table, the
-        successes' table, and the total's exposure term where it has one.
 
     Raises
     ------
     ValueError
-        If ``covariate_tolerance`` is not positive and finite, or a table's
-        rows overflow a ``uint32`` index.
+        As :func:`observation_rows` refuses, if handed rows built for other
+        inputs, or if a covariate table passes :data:`GRID_TABLE_CEILING`.
     """
     families = _families(params)
-    covariate = params.covariate
-    out = []
-    for channel in (TOTAL, SUCCESSES):
-        table, rows, term = _channel_rows(
-            families,
-            params,
-            observations[..., channel],
-            None if covariate is None else covariate[..., channel],
-            channel,
-            covariate_tolerance,
-        )
-        out.append((np.ascontiguousarray(rows, dtype=np.uint32), table, term))
-    return EmissionRows(out[0][0], out[1][0], out[0][1], out[1][1], out[0][2])
+    rows = _rows_for(params, observations, covariate_rows)
+    total_table, exposure = _total_table(families, params, rows.total)
+    success_table, trials = _success_table(families, params, rows.successes)
+    return EmissionRows(
+        rows.total.rows,
+        rows.successes.rows,
+        np.ascontiguousarray(total_table),
+        np.ascontiguousarray(success_table),
+        exposure,
+        trials,
+    )
 
 
 def class_posteriors(
@@ -596,7 +871,7 @@ def class_posteriors(
     observations: np.ndarray,
     labels: np.ndarray,
     *,
-    covariate_tolerance: float | None = None,
+    covariate_rows: CovariateRows | ObservationRows = "range",
 ) -> ClassPosteriors:
     """Forward--backward on every class's chain over its members' summed scores.
 
@@ -612,7 +887,7 @@ def class_posteriors(
         Shape ``(S, n_nodes, 2)``, integer counts.
     labels : np.ndarray
         One class per vertex, shape ``(n_nodes,)``.
-    covariate_tolerance : float | None
+    covariate_rows : CovariateRows | ObservationRows
         As :func:`emission_rows` takes it.
 
     Returns
@@ -621,7 +896,7 @@ def class_posteriors(
         The posterior ``(M, S, K)``, the pairwise ``(M, S - 1, K, K)`` and the
         per-class log evidence ``(M,)``.
     """
-    rows = emission_rows(params, observations, covariate_tolerance=covariate_tolerance)
+    rows = emission_rows(params, observations, covariate_rows=covariate_rows)
     n_positions, n_nodes = observations.shape[:2]
     posterior = np.empty((params.n_classes, n_positions, params.n_states))
     pairwise = np.empty(
@@ -665,25 +940,26 @@ def external_field(
     labels: np.ndarray,
     posterior: np.ndarray | None = None,
     *,
-    covariate_tolerance: float | None = None,
+    covariate_rows: CovariateRows | ObservationRows = "range",
 ) -> np.ndarray:
     """``H[n, m]``, minus the posterior-expected emission score, shape ``(n_nodes, M)``.
 
     The signature and the return of
     :func:`sal.likelihood.spatio_sequential.external_field`.
-    ``posterior`` defaults to this module's own E step at ``labels``;
-    ``covariate_tolerance`` is as :func:`emission_rows` takes it.
+    ``posterior`` defaults to this module's own E step at ``labels``, over
+    the same rows; ``covariate_rows`` is as :func:`emission_rows` takes it.
 
     Returns
     -------
     np.ndarray
         Shape ``(n_nodes, M)``.
     """
+    built = _rows_for(params, observations, covariate_rows)
     if posterior is None:
         posterior = class_posteriors(
-            params, observations, labels, covariate_tolerance=covariate_tolerance
+            params, observations, labels, covariate_rows=built
         ).posterior
-    rows = emission_rows(params, observations, covariate_tolerance=covariate_tolerance)
+    rows = emission_rows(params, observations, covariate_rows=built)
     n_positions, n_nodes = observations.shape[:2]
     field = np.empty((n_nodes, params.n_classes))
     # (M, S, K) to (S, M, K): the kernel wants one position's weights
@@ -710,7 +986,7 @@ def labelled_log_likelihood(
     observations: np.ndarray,
     labels: np.ndarray,
     *,
-    covariate_tolerance: float | None = None,
+    covariate_rows: CovariateRows | ObservationRows = "range",
 ) -> float:
     """``log p(x, l | theta)`` with the chains marginalized, up to ``log Z_Potts``.
 
@@ -718,7 +994,7 @@ def labelled_log_likelihood(
     :func:`sal.likelihood.spatio_sequential.labelled_log_likelihood`,
     over this module's E step. The Potts term is the oracle's own: it is a sum
     over edges and costs nothing beside the emission densities.
-    ``covariate_tolerance`` is as :func:`emission_rows` takes it.
+    ``covariate_rows`` is as :func:`emission_rows` takes it.
 
     Returns
     -------
@@ -727,53 +1003,6 @@ def labelled_log_likelihood(
     own = float(log_prior(params, np.asarray(labels, dtype=np.int64)[None, :])[0])
     return own + float(
         class_posteriors(
-            params, observations, labels, covariate_tolerance=covariate_tolerance
+            params, observations, labels, covariate_rows=covariate_rows
         ).log_evidence.sum()
     )
-
-
-def covariate_grid_error(
-    params: SpatioSequentialParams,
-    observations: np.ndarray,
-    covariate_tolerance: float,
-) -> np.ndarray:
-    """Per observation, the bound on ``|Delta log p|`` the covariate grid admits, shape ``(S, n_nodes)``.
-
-    Summed over the channels that are tabulated on a grid, each
-    ``G * |c - c_hat|`` with ``G`` the largest ``|d log p / dc|`` through the
-    family's autograd, over every class, state and observation and at both
-    ``c`` and ``c_hat``, and ``c_hat`` the grid value at :func:`grid_scale`'s
-    scale. It is at most ``G / (2 scale)``, which :func:`grid_scale` holds
-    within ``covariate_tolerance``. A class's log evidence is a
-    log-sum over paths of a sum over its members' scores, so it moves by at
-    most the sum of this array over the class's members. The factored
-    exposure contributes zero, and so does an integer covariate, which the
-    grid reproduces exactly.
-
-    Parameters
-    ----------
-    params : SpatioSequentialParams
-        The two-channel families and their covariate.
-    observations : np.ndarray
-        Shape ``(S, n_nodes, 2)``.
-    covariate_tolerance : float
-        As :func:`emission_rows` takes it.
-
-    Returns
-    -------
-    np.ndarray
-        Zero everywhere where the params carry no covariate.
-    """
-    families = _families(params)
-    bound = np.zeros(observations.shape[:2])
-    if params.covariate is None:
-        return bound
-    for channel in (TOTAL, SUCCESSES):
-        sides = [_side(family, channel) for family in families]
-        if all(isinstance(side, NegativeBinomialEmission) for side in sides):
-            continue
-        values = observations[..., channel]
-        covariate = params.covariate[..., channel]
-        scale = grid_scale(sides, values, covariate, covariate_tolerance)
-        bound += _grid_bound(sides, values, covariate, scale)
-    return bound

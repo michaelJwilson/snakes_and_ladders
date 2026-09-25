@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import torch
@@ -35,6 +35,9 @@ from sal.sim.spatio_sequential import (
     SpatioSequentialParams,
     gated_log_density,
 )
+
+if TYPE_CHECKING:
+    from sal.likelihood.spatio_sequential_rust import CovariateRows, ObservationRows
 
 #: What a refusal names: the coupled E step runs on NumPy, the oracle, or on
 #: the tabulated Rust kernel. One enum names the kernel, as it does for
@@ -280,26 +283,32 @@ def log_evidence_by_forward(
 VERTEX_BLOCK = 256
 
 
-def _refuse_tolerance_on_the_oracle(
-    backend: Backend, covariate_tolerance: float | None
+def _refuse_rows_on_the_oracle(
+    backend: Backend, covariate_rows: CovariateRows | ObservationRows
 ) -> None:
-    """Refuse a covariate tolerance where no table is built.
+    """Refuse a covariate layout where no table is built.
 
-    ``covariate_tolerance`` sets the grid the Rust backend tabulates a
-    covariate on (issue #1064). The NumPy oracle scores every observation at
-    its own covariate, so it has no grid, and a tolerance handed to it would
-    be ignored rather than met.
+    ``covariate_rows`` sets how the Rust backend lays out the trial count's
+    table, or hands it rows already built (issue #1064). The NumPy oracle
+    scores every observation at its own covariate and builds no table, so a
+    layout other than the default handed to it would be ignored rather than
+    followed.
 
     Raises
     ------
     ValueError
-        If ``covariate_tolerance`` is set and ``backend`` is not
+        If ``covariate_rows`` is not ``"range"`` and ``backend`` is not
         :data:`~sal.backend.Backend.RUST`.
     """
-    if covariate_tolerance is not None and backend is not Backend.RUST:
+    if covariate_rows != "range" and backend is not Backend.RUST:
+        what = (
+            covariate_rows
+            if isinstance(covariate_rows, str)
+            else type(covariate_rows).__name__
+        )
         msg = (
-            f"covariate_tolerance={covariate_tolerance} sets the Rust backend's "
-            f"covariate grid; the {backend} backend scores every covariate exactly"
+            f"covariate_rows={what!r} lays out the Rust backend's tables; the "
+            f"{backend} backend builds none and scores every covariate exactly"
         )
         raise ValueError(msg)
 
@@ -416,15 +425,15 @@ def class_posteriors(
     labels: np.ndarray,
     *,
     backend: Backend = Backend.PYTHON,
-    covariate_tolerance: float | None = None,
+    covariate_rows: CovariateRows | ObservationRows = "range",
 ) -> ClassPosteriors:
     """Forward--backward on every class's chain over its members' summed scores.
 
-    ``covariate_tolerance`` is the Rust backend's
+    ``covariate_rows`` is the Rust backend's
     (:func:`sal.likelihood.spatio_sequential_rust.emission_rows`), and refused
-    on this one.
+    on this one unless it is the default.
     """
-    _refuse_tolerance_on_the_oracle(backend, covariate_tolerance)
+    _refuse_rows_on_the_oracle(backend, covariate_rows)
     if (rust := twin(_COUPLED, backend, __name__)) is not None:
         return cast(
             "ClassPosteriors",
@@ -432,7 +441,7 @@ def class_posteriors(
                 params,
                 observations,
                 labels,
-                covariate_tolerance=covariate_tolerance,
+                covariate_rows=covariate_rows,
             ),
         )
     density = class_log_density(params, observations, labels)
@@ -462,7 +471,7 @@ def external_field(
     posterior: np.ndarray | None = None,
     *,
     backend: Backend = Backend.PYTHON,
-    covariate_tolerance: float | None = None,
+    covariate_rows: CovariateRows | ObservationRows = "range",
 ) -> np.ndarray:
     """`    `H_nm`` of the external-field equation of the textbook: minus the posterior-expected emission score, shape ``(n_nodes, M)``.
 
@@ -478,9 +487,9 @@ def external_field(
     model and accepted them under another. The ascent stays monotone either
     way, which is why nothing failed.
 
-    ``covariate_tolerance`` is as :func:`class_posteriors` takes it.
+    ``covariate_rows`` is as :func:`class_posteriors` takes it.
     """
-    _refuse_tolerance_on_the_oracle(backend, covariate_tolerance)
+    _refuse_rows_on_the_oracle(backend, covariate_rows)
     if (rust := twin(_COUPLED, backend, __name__)) is not None:
         return cast(
             "np.ndarray",
@@ -489,7 +498,7 @@ def external_field(
                 observations,
                 labels,
                 posterior,
-                covariate_tolerance=covariate_tolerance,
+                covariate_rows=covariate_rows,
             ),
         )
     if posterior is None:
@@ -518,7 +527,7 @@ def labelled_log_likelihood(
     labels: np.ndarray,
     *,
     backend: Backend = Backend.PYTHON,
-    covariate_tolerance: float | None = None,
+    covariate_rows: CovariateRows | ObservationRows = "range",
 ) -> float:
     """``log p(x, l | theta)`` with the chains marginalized, up to ``log Z_Potts``.
 
@@ -527,9 +536,9 @@ def labelled_log_likelihood(
     intractable past enumeration, so it is left out; add
     :attr:`ExactSpatioSequential.log_prior_normalizer` where enumeration
     reaches, which is how the test pins this against the oracle.
-    ``covariate_tolerance`` is as :func:`class_posteriors` takes it.
+    ``covariate_rows`` is as :func:`class_posteriors` takes it.
     """
-    _refuse_tolerance_on_the_oracle(backend, covariate_tolerance)
+    _refuse_rows_on_the_oracle(backend, covariate_rows)
     if (rust := twin(_COUPLED, backend, __name__)) is not None:
         return cast(
             "float",
@@ -537,7 +546,7 @@ def labelled_log_likelihood(
                 params,
                 observations,
                 labels,
-                covariate_tolerance=covariate_tolerance,
+                covariate_rows=covariate_rows,
             ),
         )
     own = float(log_prior(params, np.asarray(labels, dtype=np.int64)[None, :])[0])

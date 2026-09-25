@@ -1,12 +1,14 @@
 """The Rust coupled E step under a continuous covariate (issue #1064).
 
 A log-normal exposure per observation makes a table by count and distinct
-exposure as large as the observations. The negative binomial's exposure is
-factored instead, and pinned per score against the family's own
-``log_density`` and per E step against the NumPy oracle. The trial count is
-tabulated, on a grid where ``covariate_tolerance`` is set: an integer covariate
-is exact on it, and a continuous one is held to the bound
-``covariate_grid_error`` states. Fixture: ``spatio_sequential_counts_covariate``.
+exposure as large as the observations. Both channels are factored instead ---
+the negative binomial's exposure and the beta-binomial's trial count --- and
+pinned per score against the families' own ``log_density`` and per E step
+against the NumPy oracle. The trial count's two tabulated layouts, ``range``
+and ``distinct``, are pinned bitwise to the factored one, and the rows each
+builds are pinned bitwise to themselves rebuilt. The covariate grid, which no
+family reaches today, is held to its stated bound on the continuous exposure
+through its private helpers. Fixture: ``spatio_sequential_counts_covariate``.
 """
 
 from __future__ import annotations
@@ -59,8 +61,7 @@ _RELATIVE = 1e-11
 #: declared tolerance as there. Measured 1.0e-09.
 _ABSOLUTE = 1e-7
 
-#: A tolerance the trial count's grid is asked for. Any positive value codes
-#: an integer covariate at scale one; this one is the value the benchmark uses.
+#: A tolerance a grid is asked for, refused on the integer trial count.
 _TOLERANCE = 1e-3
 
 #: Relative tolerance on a recovered negative-binomial mean or beta-binomial
@@ -146,7 +147,10 @@ def test_each_factored_score_is_the_familys_within_the_declared_ulp() -> None:
 
 @pytest.mark.oracle
 @pytest.mark.backend
-def test_the_factored_e_step_and_field_match_the_numpy_oracle() -> None:
+@pytest.mark.parametrize("layout", rust.COVARIATE_ROWS)
+def test_the_e_step_and_field_match_the_numpy_oracle(
+    layout: rust.CovariateRows,
+) -> None:
     instance = _instance()
     params, observations, labels = (
         instance.params,
@@ -155,7 +159,7 @@ def test_the_factored_e_step_and_field_match_the_numpy_oracle() -> None:
     )
 
     expected = class_posteriors(params, observations, labels)
-    actual = rust.class_posteriors(params, observations, labels)
+    actual = rust.class_posteriors(params, observations, labels, covariate_rows=layout)
 
     np.testing.assert_allclose(
         actual.log_evidence, expected.log_evidence, rtol=_RELATIVE
@@ -167,48 +171,241 @@ def test_the_factored_e_step_and_field_match_the_numpy_oracle() -> None:
         actual.pairwise, expected.pairwise, rtol=_RELATIVE, atol=_ABSOLUTE
     )
     np.testing.assert_allclose(
-        rust.external_field(params, observations, labels, expected.posterior),
+        rust.external_field(
+            params, observations, labels, expected.posterior, covariate_rows=layout
+        ),
         external_field(params, observations, labels, expected.posterior),
         rtol=_RELATIVE,
     )
 
 
+def _success_scores(
+    params: SpatioSequentialParams,
+    observations: np.ndarray,
+    layout: rust.CovariateRows,
+) -> np.ndarray:
+    """The successes' score alone as the kernel forms it, ``(S, V, M, K)``.
+
+    The field at one position with all of a state's weight, over a first
+    channel of zeros: every class and state of every observation, in ``K``
+    calls per position.
+    """
+    rows = rust.emission_rows(params, observations, covariate_rows=layout)
+    arguments = {} if rows.trials is None else rows.trials.arguments()
+    n_positions, n_nodes = observations.shape[:2]
+    n_classes, n_states = params.n_classes, params.n_states
+    scores = np.empty((n_positions, n_nodes, n_classes, n_states))
+    for s in range(n_positions):
+        if rows.trials is not None:
+            arguments["trials"] = rows.trials.trials[s]
+        for k in range(n_states):
+            weights = np.zeros((1, n_classes, n_states))
+            weights[0, :, k] = 1.0
+            field = np.empty(n_nodes * n_classes)
+            oxisal.external_field(
+                np.zeros(n_nodes, dtype=np.uint32),
+                np.ascontiguousarray(rows.success_rows[s]),
+                np.zeros(n_classes * n_states),
+                rows.success_table.reshape(-1),
+                weights.reshape(-1),
+                1,
+                n_nodes,
+                n_classes,
+                n_states,
+                field,
+                **arguments,
+            )
+            scores[s, :, :, k] = -field.reshape(n_nodes, n_classes)
+    return scores
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("layout", rust.COVARIATE_ROWS)
+def test_each_trial_count_score_is_the_familys_bitwise(
+    layout: rust.CovariateRows,
+) -> None:
+    # The factored layout sums the nine `lgamma` terms in the family's order,
+    # each tabulated at the family's own argument; the two tabulated layouts
+    # read the family's `log_density` at the pair. Measured 0 ulp at every one
+    # of the 6.4e6 scores of the ci instance, in every layout.
+    instance = _instance()
+    params, observations = instance.params, instance.observations
+    covariate = params.covariate
+    assert covariate is not None
+    n_positions, n_nodes = observations.shape[:2]
+
+    got = _success_scores(params, observations, layout)
+
+    successes = torch.as_tensor(
+        observations[..., SUCCESSES].reshape(-1), dtype=torch.float64
+    )
+    trials = torch.as_tensor(covariate[..., SUCCESSES].reshape(-1, 1))
+    want = np.stack(
+        [
+            side.log_density(successes, covariate=trials)
+            .numpy()
+            .reshape(n_positions, n_nodes, -1)
+            for side in _sides(params, SUCCESSES)
+        ],
+        axis=2,
+    )
+    assert np.array_equal(got, want)
+
+
 @pytest.mark.smoke
 @pytest.mark.backend
-def test_an_integer_covariate_on_the_grid_is_the_exact_path_bitwise() -> None:
-    # The trial count is an integer, coded at scale one, where the code is the
-    # value: the grid changes the table's layout and none of its values.
+@pytest.mark.parametrize("layout", ["range", "distinct"])
+def test_every_tabulated_layout_is_the_factored_e_step_and_field_bitwise(
+    layout: rust.CovariateRows,
+) -> None:
+    # The scores are the same bits in every layout (above), and the kernel sums
+    # them in one order: the E step and the field follow.
     instance = _instance()
     params, observations, labels = (
         instance.params,
         instance.observations,
         instance.labels,
     )
-    trials = params.covariate
-    assert trials is not None
 
-    exact = rust.class_posteriors(params, observations, labels)
-    grid = rust.class_posteriors(
-        params, observations, labels, covariate_tolerance=_TOLERANCE
+    factored = rust.class_posteriors(
+        params, observations, labels, covariate_rows="factored"
     )
-    sides = _sides(params, SUCCESSES)
+    tabulated = rust.class_posteriors(
+        params, observations, labels, covariate_rows=layout
+    )
 
-    assert (
-        rust.grid_scale(
-            sides, observations[..., SUCCESSES], trials[..., SUCCESSES], _TOLERANCE
-        )
-        == 1.0
-    )
-    assert np.array_equal(grid.log_evidence, exact.log_evidence)
-    assert np.array_equal(grid.posterior, exact.posterior)
-    assert np.array_equal(grid.pairwise, exact.pairwise)
+    assert np.array_equal(tabulated.log_evidence, factored.log_evidence)
+    assert np.array_equal(tabulated.posterior, factored.posterior)
+    assert np.array_equal(tabulated.pairwise, factored.pairwise)
     assert np.array_equal(
         rust.external_field(
-            params, observations, labels, exact.posterior, covariate_tolerance=1.0
+            params, observations, labels, factored.posterior, covariate_rows=layout
         ),
-        rust.external_field(params, observations, labels, exact.posterior),
+        rust.external_field(
+            params, observations, labels, factored.posterior, covariate_rows="factored"
+        ),
     )
-    assert not rust.covariate_grid_error(params, observations, _TOLERANCE).any()
+
+
+@pytest.mark.smoke
+@pytest.mark.backend
+def test_first_appearance_codes_are_the_sorted_codes_bitwise() -> None:
+    # `oxisal.factorize` codes the trial counts in the order they appear and
+    # `np.unique` in sorted order: the table's rows are permuted and every row
+    # an observation reads holds the same number.
+    instance = _instance()
+    params, observations, labels = (
+        instance.params,
+        instance.observations,
+        instance.labels,
+    )
+    covariate = params.covariate
+    assert covariate is not None
+    hashed = rust.observation_rows(observations, covariate, covariate_rows="distinct")
+    trials = covariate[..., SUCCESSES]
+    distinct, codes = np.unique(trials.reshape(-1), return_inverse=True)
+    successes = observations[..., SUCCESSES]
+    rows = successes.astype(np.int64) * distinct.size + codes.reshape(trials.shape)
+    sorted_rows = replace(
+        hashed,
+        successes=rust.ChannelRows(
+            np.ascontiguousarray(rows, dtype=np.uint32),
+            hashed.successes.extent,
+            distinct,
+        ),
+    )
+    levels = hashed.successes.levels
+    assert levels is not None
+
+    first = rust.class_posteriors(params, observations, labels, covariate_rows=hashed)
+    second = rust.class_posteriors(
+        params, observations, labels, covariate_rows=sorted_rows
+    )
+
+    assert not np.array_equal(levels, distinct)
+    assert np.array_equal(np.sort(levels), distinct)
+    assert np.array_equal(first.log_evidence, second.log_evidence)
+    assert np.array_equal(first.posterior, second.posterior)
+    assert np.array_equal(first.pairwise, second.pairwise)
+
+
+@pytest.mark.smoke
+@pytest.mark.backend
+@pytest.mark.parametrize("layout", rust.COVARIATE_ROWS)
+def test_rows_built_once_are_the_rows_built_per_call_bitwise(
+    layout: rust.CovariateRows,
+) -> None:
+    # A fit builds the rows once and every E step builds only the tables; the
+    # rows name no parameter, so the answer is the same bits at other
+    # parameters than the ones current when they were built.
+    instance = _instance()
+    observations, labels = instance.observations, instance.labels
+    params = replace(
+        instance.params,
+        emissions=tuple(
+            IndependentCountPair(
+                NegativeBinomialEmission(
+                    family.total.dispersion, family.total.mean * 1.1
+                ),
+                family.successes,
+            )
+            for family in instance.params.emissions
+            if isinstance(family, IndependentCountPair)
+        ),
+    )
+    rows = rust.observation_rows(
+        observations, instance.params.covariate, covariate_rows=layout
+    )
+
+    cached = rust.class_posteriors(params, observations, labels, covariate_rows=rows)
+    built = rust.class_posteriors(params, observations, labels, covariate_rows=layout)
+
+    assert np.array_equal(cached.log_evidence, built.log_evidence)
+    assert np.array_equal(cached.posterior, built.posterior)
+    assert np.array_equal(cached.pairwise, built.pairwise)
+    assert np.array_equal(
+        rust.external_field(params, observations, labels, covariate_rows=rows),
+        rust.external_field(params, observations, labels, covariate_rows=layout),
+    )
+
+
+@pytest.mark.smoke
+def test_rows_built_for_other_observations_are_refused() -> None:
+    instance = _instance()
+    params, observations = instance.params, instance.observations
+    rows = rust.observation_rows(observations, params.covariate)
+
+    with pytest.raises(ValueError, match="other observations"):
+        rust.emission_rows(params, observations.copy(), covariate_rows=rows)
+
+
+@pytest.mark.smoke
+def test_an_unknown_layout_is_refused() -> None:
+    instance = _instance()
+
+    with pytest.raises(ValueError, match="covariate_rows"):
+        rust.emission_rows(
+            instance.params,
+            instance.observations,
+            covariate_rows="sorted",  # type: ignore[arg-type]
+        )
+
+
+@pytest.mark.smoke
+def test_a_tolerance_on_the_integer_trial_count_is_refused() -> None:
+    # A table over an integer's values is exact, so no grid is asked for.
+    instance = _instance()
+    params, observations = instance.params, instance.observations
+    covariate = params.covariate
+    assert covariate is not None
+
+    with pytest.raises(ValueError, match="integer"):
+        rust.grid_scale(
+            _sides(params, SUCCESSES),
+            observations[..., SUCCESSES],
+            covariate[..., SUCCESSES],
+            _TOLERANCE,
+        )
 
 
 @pytest.mark.oracle
@@ -304,6 +501,7 @@ def test_a_continuous_covariate_on_the_grid_is_within_its_stated_bound(
             * params.n_states
         ),
         evidence,
+        **({} if exact.trials is None else exact.trials.arguments()),
     )
     oracle = class_posteriors(params, observations, labels).log_evidence
     for m in range(params.n_classes):
@@ -312,11 +510,11 @@ def test_a_continuous_covariate_on_the_grid_is_within_its_stated_bound(
 
 
 @pytest.mark.end2end
-def test_em_with_the_grid_recovers_the_generating_parameters() -> None:
-    # Block ascent on the Rust backend, the trial count on the grid, started
-    # from means 30% high and dispersions 30% low; recovery is held to the
-    # exact path's 5%. Two blocks: the measured fit reaches its value at the
-    # first and holds it through eight.
+def test_em_on_both_factored_channels_recovers_the_generating_parameters() -> None:
+    # Block ascent on the Rust backend, both channels factored and the rows
+    # built once for the fit, started from means 30% high and dispersions 30%
+    # low; recovery is held to the exact path's 5%. Two blocks: the measured
+    # fit reaches its value at the first and holds it through eight.
     instance = _instance()
     planted = instance.params
     start = replace(
@@ -340,7 +538,7 @@ def test_em_with_the_grid_recovers_the_generating_parameters() -> None:
         labels=instance.labels,
         n_blocks=2,
         backend=Backend.RUST,
-        covariate_tolerance=_TOLERANCE,
+        covariate_rows="factored",
     )
 
     assert np.array_equal(fit.labels, instance.labels)
@@ -366,24 +564,29 @@ def test_a_tolerance_that_is_not_positive_and_finite_is_refused(
     tolerance: float,
 ) -> None:
     instance = _instance()
+    params = instance.params
+    assert params.covariate is not None
 
     with pytest.raises(ValueError, match="covariate_tolerance"):
-        rust.emission_rows(
-            instance.params, instance.observations, covariate_tolerance=tolerance
+        rust.grid_scale(
+            _sides(params, TOTAL),
+            instance.observations[..., TOTAL],
+            params.covariate[..., TOTAL],
+            tolerance,
         )
 
 
 @pytest.mark.smoke
-def test_a_tolerance_on_the_numpy_oracle_is_refused() -> None:
-    # The oracle has no grid, so a tolerance handed to it would be ignored.
+def test_a_layout_on_the_numpy_oracle_is_refused() -> None:
+    # The oracle builds no table, so a layout handed to it would be ignored.
     instance = _instance()
 
-    with pytest.raises(ValueError, match="covariate_tolerance"):
+    with pytest.raises(ValueError, match="covariate_rows"):
         class_posteriors(
             instance.params,
             instance.observations,
             instance.labels,
-            covariate_tolerance=_TOLERANCE,
+            covariate_rows="factored",
         )
 
 
@@ -434,9 +637,32 @@ def test_a_negative_exposure_is_refused() -> None:
 
 @pytest.mark.smoke
 @pytest.mark.critical
-def test_without_a_tolerance_the_trial_count_is_tabulated_as_before() -> None:
-    # The `None` path is #658's: the distinct trial counts, factorized, and the
-    # row `count * n_distinct + code`, restated here against the arrays.
+def test_the_factored_layout_rows_both_channels_by_count() -> None:
+    # The rows are the counts in both channels, the covariate travels to the
+    # kernel, and each table spans its own integer: 0.35 MB against the
+    # 13.1 MB of the `range` table at stress.
+    instance = _instance()
+    params, observations = instance.params, instance.observations
+    covariate = params.covariate
+    assert covariate is not None
+
+    rows = rust.emission_rows(params, observations, covariate_rows="factored")
+
+    assert rows.exposure is not None
+    assert rows.trials is not None
+    assert np.array_equal(rows.total_rows, observations[..., TOTAL])
+    assert np.array_equal(rows.success_rows, observations[..., SUCCESSES])
+    assert np.array_equal(rows.trials.trials, covariate[..., SUCCESSES])
+    successes = observations[..., SUCCESSES]
+    assert rows.success_table.shape[0] == int(successes.max()) + 1
+    assert rows.trials.trial.shape[0] == int(covariate[..., SUCCESSES].max()) + 1
+
+
+@pytest.mark.smoke
+@pytest.mark.critical
+def test_by_default_the_trial_count_spans_its_range() -> None:
+    # The row is `successes * n_codes + n - n_min`, every trial count from the
+    # least to the greatest a code; the exposure is factored.
     instance = _instance()
     params, observations = instance.params, instance.observations
     covariate = params.covariate
@@ -444,14 +670,33 @@ def test_without_a_tolerance_the_trial_count_is_tabulated_as_before() -> None:
 
     rows = rust.emission_rows(params, observations)
 
-    distinct, codes = np.unique(
-        covariate[..., SUCCESSES].reshape(-1), return_inverse=True
-    )
-    successes = observations[..., SUCCESSES]
-    expected_rows = successes.astype(np.int64) * distinct.size + codes.reshape(
-        successes.shape
-    )
-    assert np.array_equal(rows.success_rows, expected_rows)
-    assert rows.success_table.shape[0] == (int(successes.max()) + 1) * distinct.size
+    trials = covariate[..., SUCCESSES].astype(np.int64)
+    low, n_codes = int(trials.min()), int(trials.max() - trials.min()) + 1
+    successes = observations[..., SUCCESSES].astype(np.int64)
     assert rows.exposure is not None
-    assert np.array_equal(rows.total_rows, observations[..., TOTAL])
+    assert rows.trials is None
+    assert np.array_equal(rows.success_rows, successes * n_codes + trials - low)
+    assert rows.success_table.shape[0] == (int(successes.max()) + 1) * n_codes
+
+
+@pytest.mark.smoke
+def test_the_distinct_layout_codes_in_first_appearance_order() -> None:
+    # The row is `successes * n_distinct + code`, the code each trial count's
+    # index among the distinct values in the order they first occur.
+    instance = _instance()
+    params, observations = instance.params, instance.observations
+    covariate = params.covariate
+    assert covariate is not None
+
+    rows = rust.emission_rows(params, observations, covariate_rows="distinct")
+
+    trials = covariate[..., SUCCESSES].reshape(-1)
+    _, first = np.unique(trials, return_index=True)
+    levels = trials[np.sort(first)]
+    codes = {value: code for code, value in enumerate(levels)}
+    successes = observations[..., SUCCESSES]
+    expected = successes.astype(np.int64) * levels.size + np.array(
+        [codes[value] for value in trials]
+    ).reshape(successes.shape)
+    assert np.array_equal(rows.success_rows, expected)
+    assert rows.success_table.shape[0] == (int(successes.max()) + 1) * levels.size

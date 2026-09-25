@@ -116,5 +116,5 @@ module. It is referenced here, never restated. What follows is local.
   combinations are the smallest exact table and were the wrong choice: finding
   them sorts an array per call, which cost more than the densities the table
   exists to avoid recomputing and put the backend below its own oracle. The
-  outer product is larger, built vectorized, never sorted. Where a table is
-  built per call, the build is the measurement.
+  outer product is larger, built vectorized, never sorted. Rows once per fit
+  (issue #1064), tables per call, and a build is part of what is measured.
