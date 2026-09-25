@@ -398,7 +398,7 @@ def matched_niedermayer(budget: Budget, start: int) -> tuple[int, list[dict[str,
             _niedermayer_spend,
             [(steps, seed) for seed in TUNING_SEEDS],
             workers=WORKERS,
-            backend="processes",
+            pool="processes",
             intra_op_threads=1,
         )
         spent = [visits for _, visits in runs]
@@ -566,7 +566,7 @@ def main(parts: Sequence[str] = PARTS) -> None:
                 diagnose,
                 tasks,
                 workers=WORKERS,
-                backend="processes",
+                pool="processes",
                 intra_op_threads=1,
             )
             result["diagnosis"] = {

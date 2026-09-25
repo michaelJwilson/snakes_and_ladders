@@ -29,7 +29,7 @@ def test_serial_map_tasks_benchmark(benchmark: BenchmarkFixture) -> None:
         _draw,
         items,
         workers=1,
-        backend="serial",
+        pool="serial",
         intra_op_threads=None,
         generator=np.random.default_rng(0),
     )

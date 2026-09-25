@@ -876,8 +876,6 @@ TWIN_BACKENDS = frozenset({"numba", "rust", "torch", "jax"})
 TWIN_IMPORTS_ADMITTED = {
     ("learn/ranking.py", "sal.likelihood.torch.pruning"),
     ("learn/tree.py", "sal.likelihood.torch.pruning"),
-    ("qa/backend_agreement.py", "sal.likelihood.rust.pruning"),
-    ("qa/backend_agreement.py", "sal.likelihood.torch.pruning"),
     ("qa/opt_branch_recovery.py", "sal.likelihood.torch.pruning"),
     ("sandbox/pruning_burn.py", "sal.likelihood.torch.pruning"),
     ("search/infer.py", "sal.likelihood.torch.pruning"),

@@ -786,7 +786,7 @@ class BestOf:
             _run_seeding,
             [task] * self.n,
             workers=self.workers,
-            backend=self.pool if self.workers > 1 else "serial",
+            pool=self.pool if self.workers > 1 else "serial",
             intra_op_threads=1,
             generator=rng,
         )

@@ -380,7 +380,7 @@ def infer(
     radius: int | None = None,
     partial_reoptimization: bool = False,
     workers: int = 1,
-    backend: Pool = "serial",
+    pool: Pool = "serial",
     intra_op_threads: int | None = None,
 ) -> Inference:
     """Hill-climb over topologies, fitting continuous parameters per candidate.
@@ -452,7 +452,7 @@ def infer(
         their results are combined in input order, so a parallel search is
         bitwise equal to the serial one, candidate for candidate. ``1``, the
         default, is the loop this had.
-    backend : Pool
+    pool : Pool
         Which pool ``workers`` come from, per
         :func:`sal.parallel.map_tasks`. ``"serial"``, the
         default, refuses ``workers > 1`` rather than ignoring it, so asking
@@ -480,7 +480,7 @@ def infer(
         a surrogate is given without ``lazy_top`` to apply it to, ``radius``
         is given with ``MoveSet.NNI`` or is below 1,
         ``partial_reoptimization`` is set without ``warm_start``, or
-        ``workers`` and ``backend`` disagree (:func:`parallel.map_tasks`).
+        ``workers`` and ``pool`` disagree (:func:`parallel.map_tasks`).
     """
     if lazy_top is not None and lazy_top < 1:
         msg = f"lazy_top must be at least 1 when given, got {lazy_top}"
@@ -550,7 +550,7 @@ def infer(
                 for neighbour in to_fit
             ],
             workers=workers,
-            backend=backend,
+            pool=pool,
             intra_op_threads=intra_op_threads,
         )
         for neighbour, fitted in zip(to_fit, scored, strict=True):

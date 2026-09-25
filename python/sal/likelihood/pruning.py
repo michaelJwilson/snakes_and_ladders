@@ -82,8 +82,11 @@ def log_likelihood(
         gets the reference (issue #860). ``RUST`` is
         ``sal.likelihood.rust.pruning``'s call, the one the
         caller made by importing that module, reached through the enum every
-        other twin is reached through. Nothing else: the twin is the only
-        other implementation of *this* signature.
+        other twin is reached through. ``TORCH`` is
+        ``sal.likelihood.torch.pruning`` at the branch lengths ``tau``
+        carries, its tape detached: the value alone, for a caller comparing
+        backends (issue #1059); a caller that differentiates takes the tensor
+        from that module.
 
     Returns
     -------
@@ -96,10 +99,25 @@ def log_likelihood(
     ValueError
         If ``pi`` does not have shape ``(k,)``, ``alignment`` is missing a
         leaf of ``tau``, or ``weights`` does not have one entry per column.
-        Or if ``backend`` is neither ``PYTHON`` nor ``RUST``.
+        Or if ``backend`` is not ``PYTHON``, ``TORCH`` or ``RUST``.
     """
     # A door, before any arithmetic: the recursion below is the oracle and
     # gains nothing from the route it referees.
+    if backend is Backend.TORCH:
+        # Imported here so the oracle's import loads no torch.
+        from sal.likelihood.torch import pruning as taped
+
+        return float(
+            taped.log_likelihood(
+                tau,
+                k,
+                pi,
+                alignment,
+                taped.branch_lengths_from_tree(tau),
+                weights=weights,
+                rescale=rescale,
+            ).detach()
+        )
     if (rust := twin("pruning log_likelihood", backend, __name__)) is not None:
         return cast(
             "float",

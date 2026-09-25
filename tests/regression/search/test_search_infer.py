@@ -526,7 +526,7 @@ def test_parallel_candidate_fits_reproduce_the_serial_search_exactly() -> None:
         rng=np.random.default_rng(0),
         max_evaluations=12,
         workers=2,
-        backend="processes",
+        pool="processes",
         intra_op_threads=1,
     )
 
@@ -544,7 +544,7 @@ def test_workers_without_a_pool_is_refused_rather_than_run_serially() -> None:
     # while leaving the default serial backend is a mistake worth an error,
     # since the alternative is a run that silently ignores the request.
     alignment, k = _alignment()
-    with pytest.raises(ValueError, match="serial backend runs one worker"):
+    with pytest.raises(ValueError, match="serial pool runs one worker"):
         infer(
             alignment,
             k,

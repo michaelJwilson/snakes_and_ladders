@@ -391,7 +391,7 @@ go through it, each taking `workers=` explicitly — `opt.fit.fit_from` (starts)
   under 4 (issue #891). Its serial and pooled runs agree bitwise where the
   process runs at one thread, as the suite's does (`tests/conftest.py`). A
   site whose task body is a `torch` op above the parallel grain, or a Rust
-  kernel with the GIL released, is the case for `backend="threads"` — and
+  kernel with the GIL released, is the case for `pool="threads"` — and
   every kernel of `oxisal` releases it (`Python::detach`,
   PyO3 0.29's name for `allow_threads`) since issue #604, so that case has
   eligible sites. A Python

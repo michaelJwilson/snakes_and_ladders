@@ -306,16 +306,16 @@ def test_the_fit_records_the_value_and_the_norm_the_result_reports() -> None:
 
 @pytest.mark.smoke
 def test_two_contexts_record_only_their_own_and_outside_records_nothing() -> None:
-    # `map_tasks` on the serial backend runs the task in the calling context,
+    # `map_tasks` on the serial pool runs the task in the calling context,
     # which is the context the run lives in.
     def task(item: int) -> int:
         current().record(item, item=float(item))
         return item
 
     with track(name="first") as first:
-        map_tasks(task, [0, 1], workers=1, backend="serial", intra_op_threads=None)
+        map_tasks(task, [0, 1], workers=1, pool="serial", intra_op_threads=None)
     with track(name="second") as second:
-        map_tasks(task, [2], workers=1, backend="serial", intra_op_threads=None)
+        map_tasks(task, [2], workers=1, pool="serial", intra_op_threads=None)
 
     assert _memory(first.run).series("item") == [(0, 0.0), (1, 1.0)]
     assert _memory(second.run).series("item") == [(2, 2.0)]
@@ -348,7 +348,7 @@ def test_a_pool_worker_starts_outside_the_context_and_records_nothing() -> None:
     # left to be discovered from an empty series.
     with track() as tracked:
         map_tasks(
-            _record_in_worker, [0, 1], workers=2, backend="threads", intra_op_threads=1
+            _record_in_worker, [0, 1], workers=2, pool="threads", intra_op_threads=1
         )
 
     with pytest.raises(KeyError):
