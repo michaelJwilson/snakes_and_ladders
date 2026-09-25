@@ -556,6 +556,27 @@ whether or not it has members yet.
 .. automodule:: sal.sandbox.polar_reference
    :members:
 
+.. automodule:: sal.sandbox.surrogate
+   :members:
+
+.. automodule:: sal.sandbox.surrogate.potts
+   :members:
+
+.. automodule:: sal.sandbox.surrogate.potts.model
+   :members:
+
+.. automodule:: sal.sandbox.surrogate.potts.fields
+   :members:
+
+.. automodule:: sal.sandbox.surrogate.potts.labels
+   :members:
+
+.. automodule:: sal.sandbox.surrogate.potts.train
+   :members:
+
+.. automodule:: sal.sandbox.surrogate.potts.evaluate
+   :members:
+
 .. automodule:: sal.validation
    :members:
 
