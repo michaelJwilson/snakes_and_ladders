@@ -51,8 +51,9 @@ _PER_SCORE = _ULPS * np.finfo(np.float64).eps
 
 #: Relative agreement of an evidence and a field with the NumPy oracle: the
 #: tolerance the uncovaried and the #658 covariate comparisons declare
-#: (`test_spatio_sequential_rust_covariate.py`). Measured 4.4e-15 on the
-#: evidence and 2.4e-15 on the field, one thread.
+#: (`test_spatio_sequential_rust_covariate.py`). Measured 4.5e-15 on the
+#: evidence and 2.4e-15 on the field, one thread (4.4e-15 on the evidence
+#: before ``ln t`` moved to ``src/simd_ln.rs``).
 _RELATIVE = 1e-11
 
 #: The posteriors are probabilities, compared absolutely, at the same
