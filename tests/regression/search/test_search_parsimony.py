@@ -119,7 +119,7 @@ def test_every_start_reaches_the_enumerated_minimum_at_five_taxa(
 
     for start in enumerate_topologies(sorted(alignment)):
         result = parsimony_search(
-            alignment, k, step_matrix=step_matrix, topology=start, moves=moves
+            alignment, k, step_matrix=step_matrix, start=start, moves=moves
         )
         assert result.converged
         assert _reaches_the_minimum(result, best, scores), (
@@ -146,7 +146,7 @@ def test_every_start_reaches_the_enumerated_minimum_at_six_taxa(
             alignment,
             k,
             step_matrix=step_matrix,
-            topology=start,
+            start=start,
             moves=moves,
             max_evaluations=500,
         )
@@ -256,7 +256,7 @@ def test_a_zero_budget_scores_the_start_and_nothing_else() -> None:
     alignment, k = _alignment(SIX_TAXA)
     params = load_fixture(SIX_TAXA)
 
-    result = parsimony_search(alignment, k, topology=params.tau, max_evaluations=0)
+    result = parsimony_search(alignment, k, start=params.tau, max_evaluations=0)
 
     assert result.converged
     assert result.evaluations == 0
@@ -348,7 +348,7 @@ def test_large_parsimony_returns_the_wrong_tree_in_the_felsenstein_zone(
     assert scores[ZONE_TRUE_SPLIT] - best > 0
 
     for start in topologies:
-        result = parsimony_search(alignment, 4, topology=start, moves=moves)
+        result = parsimony_search(alignment, 4, start=start, moves=moves)
         assert result.converged
         assert _reaches_the_minimum(result, best, scores)
     weighted_best, weighted = _enumerated(alignment, 4, TRANSITION_TRANSVERSION)

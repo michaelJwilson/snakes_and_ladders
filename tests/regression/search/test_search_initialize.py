@@ -163,7 +163,7 @@ class SearchFrom:
         inference = infer(
             instance.alignment,
             instance.k,
-            topology=topology,
+            start=topology,
             moves=MoveSet.NNI,
             max_evaluations=budget.size,
             rng=rng,

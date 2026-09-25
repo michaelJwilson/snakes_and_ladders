@@ -421,7 +421,7 @@ def _replicate(
     found = infer(
         resampled,
         k,
-        topology=None,
+        start=None,
         model=model,
         moves=moves,
         max_evaluations=max_evaluations,
