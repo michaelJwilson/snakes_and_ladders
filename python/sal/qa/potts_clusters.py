@@ -96,7 +96,7 @@ from sal.search.ground_state import (
     run_swendsen_wang_then_expansion,
 )
 from sal.search.potts_starts import (
-    PottsObjective,
+    LabellingEnergy,
     RunStart,
     polish_by_icm,
 )
@@ -492,7 +492,7 @@ def run_arms(names: Sequence[str] | None = None) -> dict[str, Any]:
     table = arms()
     chosen = {name: table[name] for name in (names or list(table))}
     result = StartsBenchmark(
-        PottsObjective(rung),
+        LabellingEnergy(rung),
         chosen,
         polish_by_icm,
         seeding_budget=SEEDING,

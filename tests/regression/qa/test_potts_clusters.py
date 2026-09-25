@@ -23,7 +23,7 @@ from sal.qa.potts_clusters import (
 )
 from sal.qa.potts_schedule import TUNING_SEEDS, release_rung
 from sal.qa.potts_schedule import load as load_tuned
-from sal.search.potts_starts import PottsObjective, polish_by_icm
+from sal.search.potts_starts import LabellingEnergy, polish_by_icm
 
 
 @pytest.mark.smoke
@@ -32,7 +32,7 @@ def test_a_recorded_arm_reruns_bitwise() -> None:
     recorded = load()["arms"]
     name = "label-directed"
     result = StartsBenchmark(
-        PottsObjective(release_rung()),
+        LabellingEnergy(release_rung()),
         {name: arms()[name]},
         polish_by_icm,
         seeding_budget=Budget(Cost.EVALUATIONS, 1),

@@ -35,7 +35,7 @@ from sal.search.ground_state import (
     warm_anneal,
 )
 from sal.search.potts_starts import (
-    PottsObjective,
+    LabellingEnergy,
     ScheduleStart,
     SolverStart,
     spatio_rung,
@@ -193,7 +193,7 @@ def test_a_schedule_start_on_the_default_is_the_solver_start_bitwise(
     name: str,
 ) -> None:
     rung = _rung()
-    objective = PottsObjective(rung)
+    objective = LabellingEnergy(rung)
     budget = _budget(rung)
 
     solver = SolverStart(name, budget, np.random.default_rng([3, 0]))
