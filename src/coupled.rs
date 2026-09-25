@@ -155,11 +155,24 @@ impl ExposureTerm<'_> {
         }
         let y = f64::from(count);
         let y_log_c = y * c.ln();
-        for (k, cell) in out.iter_mut().enumerate() {
-            let index = from + k;
-            let r = self.dispersion[index];
-            let total = r + c * self.mean[index];
-            *cell = table[k] + y_log_c - (y + r) * total.ln();
+        // Pre-sliced rows, walked in three passes: `t`, `ln t`, the score. It
+        // is the same arithmetic in the same order, so bitwise to indexing
+        // `from + k`; the stress kernel's E step measured 0.88 s against
+        // 1.07 s indexed (issue #1064).
+        let n = out.len();
+        let (dispersion, mean, table) = (
+            &self.dispersion[from..][..n],
+            &self.mean[from..][..n],
+            &table[..n],
+        );
+        for ((cell, &r), &mu) in out.iter_mut().zip(dispersion).zip(mean) {
+            *cell = r + c * mu;
+        }
+        for cell in out.iter_mut() {
+            *cell = cell.ln();
+        }
+        for ((cell, &r), &b) in out.iter_mut().zip(dispersion).zip(table) {
+            *cell = b + y_log_c - (y + r) * *cell;
         }
     }
 
