@@ -360,10 +360,12 @@ ABSENT: dict[str, tuple[re.Pattern[str], str, tuple[Path, ...], tuple[str, ...]]
     "retired environment": (RETIRED_ENVIRONMENTS, _HERE, SEARCHED, _PY_NB),
     # A `csr_matrix` beside `SparseIncidence` is a second layout. The package
     # and notebooks only: `tests/regression/test_incidence.py` holds
-    # `scipy.sparse` as the referee of the one layout (#776).
+    # `scipy.sparse` as the referee of the one layout (#776). HiGHS's script
+    # owns the one package-side use: `linprog` takes its LP in that layout,
+    # in the subprocess (#1063).
     "scipy sparse": (
         FOREIGN_SPARSE,
-        _HERE,
+        "validation/scripts/highs.py",
         (PACKAGE, REPO_ROOT / "docs" / "nb"),
         _PY_NB,
     ),
