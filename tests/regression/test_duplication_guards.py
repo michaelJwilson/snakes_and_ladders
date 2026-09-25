@@ -100,9 +100,9 @@ INCIDENCE_OWNER = "incidence.py"
 
 #: Package modules building a store through the seam, as of 048a342 plus
 #: `sample/tempered.py` and `sample/annealed.py` (#766); `search/ground_state.py`
-#: left with #858; `qa/potts_clusters.py` joined with #1041. A PR adding or
-#: removing a consumer moves the pin.
-SEAM_CONSUMERS = 12
+#: left with #858; `qa/potts_clusters.py` joined with #1041, `search/trws.py`
+#: with #1060. A PR adding or removing a consumer moves the pin.
+SEAM_CONSUMERS = 13
 
 #: Files this guard does not read, each against the reason, rather than an
 #: allow-list nobody can audit. The first two are measurements the

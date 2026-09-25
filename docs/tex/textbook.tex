@@ -4530,6 +4530,55 @@ is measured, since the bound is a theorem and the ratio is a number. On a
 tiling field enumeration referees the recovery bound at twelve sites, and the
 planted states referee it at 5,041, where no optimum is known.
 
+\subsection{The local-polytope bound}
+\label{sec:potts-lp-bound}
+A labelling's energy bounds the optimum from above; a bound from below needs a
+relaxation. Replace the labelling by site marginals $\mu_i(a)$ and edge
+marginals $\mu_{ij}(a, b)$, each non-negative, each site's summing to one and
+each edge's summing to its sites' along either index. That set is the
+\emph{local polytope}, and it contains every labelling as a vertex, so
+\begin{equation}
+  \min_{\mu} \; \sum_i \sum_a \theta_i(a)\,\mu_i(a)
+    + \sum_{(ij)} \sum_{a,b} \theta_{ij}(a,b)\,\mu_{ij}(a,b)
+  \;\le\; \min_{\sigma} \energy(\sigma),
+  \qquad
+  \theta_i(a) = -h_i(a),\;\; \theta_{ij}(a,b) = -J_{ij}\,\delta(a,b),
+  \label{eq:local-polytope}
+\end{equation}
+with equality on a tree, where the local polytope is the marginal polytope
+\citep{wainwright2005map}. The dual of Equation~\ref{eq:local-polytope}
+maximizes over \emph{reparametrizations}: messages $M_{ji}(a)$ added to site
+$i$'s term and subtracted from edge $(ij)$'s leave $\energy$ unchanged at
+every labelling. Cut the edges into chains monotone in a fixed site order,
+each edge in one chain and site $i$ in $n_i$ of them, and give each chain the
+reparametrized site terms divided by $n_i$ and the reparametrized edge terms
+whole. The chains sum to $\energy$, so the sum of their minima --- each a
+Viterbi recursion --- is at most $\min_\sigma \energy(\sigma)$ \emph{for any
+messages}. Sequential tree-reweighted message passing \citep{kolmogorov2006}
+visits the sites in the order and back, and at site $i$ sends each later
+neighbour $j$
+\begin{equation}
+  M_{ij}(b) = \min_a \Big[ \tfrac{1}{n_i}\big(\theta_i(a)
+    + \textstyle\sum_{k \sim i} M_{ki}(a)\big) - M_{ji}(a) + \theta_{ij}(a,b) \Big],
+  \label{eq:trws-message}
+\end{equation}
+under which the chain bound does not decrease. For a Potts edge the minimum
+over $a$ is the smaller of the diagonal term and the least off-diagonal one,
+$O(q)$ per message rather than $O(q^2)$. The iteration stops at a fixed point
+of the updates, which need not be the maximum of the dual: coordinate ascent
+on a non-smooth objective can stall, and on a frustrated lattice it does.
+
+\paragraph{What pins it.}
+Enumeration bounds every iterate from above, and on a tree and a chain the
+bound meets the enumerated optimum. At convergence it is compared with a
+second coordinate ascent on the same dual that moves an edge's share against
+its two sites; where both reach the maximum they agree to $10^{-9}$, and on
+two frustrated $3 \times 3$ lattices the chains stop below the second, which
+is recorded rather than tolerated. The explicit linear program referees the
+maximum itself. What a bound meeting a labelling's energy establishes is that
+labelling's optimality, with no oracle consulted; what a gap establishes is an
+interval, not which end of it is loose.
+
 \subsection{Simulated bifurcation}
 \label{sec:potts-bifurcation}
 Every route above is sequential over sites or over labels. Simulated
