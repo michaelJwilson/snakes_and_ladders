@@ -39,7 +39,13 @@ from sal.backend import Backend, refuse_backend
 from sal.search.alpha_expansion import Labelling
 from sal.search.numba.icm import icm_sweeps_checked, no_survivor
 from sal.sim.graph import PottsGraph
-from sal.sim.potts import SiteField, energy, log_weight_of, site_field
+from sal.sim.potts import (
+    SiteField,
+    check_labelling,
+    energy,
+    log_weight_of,
+    site_field,
+)
 
 
 class SweepOrder(StrEnum):
@@ -158,7 +164,9 @@ def iterated_conditional_modes(
         If ``min_sites`` is negative or exceeds ``n_nodes``; if a sweep
         leaves no state at the floor to dissolve into (never where
         ``min_sites <= ceil(n_nodes / n_states)``); if ``backend`` names no
-        sweep, or names the compiled one for a descent it does not implement.
+        sweep, or names the compiled one for a descent it does not implement;
+        if ``start`` is not one integer state in range per node
+        (:func:`~sal.sim.potts.check_labelling`).
     """
     n_nodes = graph.n_nodes
     check_min_sites(min_sites, n_nodes)
@@ -166,7 +174,7 @@ def iterated_conditional_modes(
     labelling = (
         rng.integers(0, n_states, size=n_nodes)
         if start is None
-        else np.asarray(start, dtype=np.int64).copy()
+        else check_labelling(start, n_nodes, n_states)
     )
     lazy = sweep_order is SweepOrder.RANDOM and stop_when_clean
     if backend is Backend.NUMBA and lazy:

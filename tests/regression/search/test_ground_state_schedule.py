@@ -105,7 +105,7 @@ def test_a_start_given_is_the_start_drawn_bitwise(move: PottsMove) -> None:
     # The draw `anneal_potts` makes, made here and handed in.
     initial = rng.integers(0, rung.n_states, size=rung.n_nodes)
     given = anneal_potts(
-        rung.graph, rung.field, schedule, rng, move=move, initial=initial
+        rung.graph, rung.field, schedule, rng, move=move, start=initial
     )
 
     assert np.array_equal(drawn.labelling, given.labelling)
@@ -121,13 +121,13 @@ def test_a_start_of_the_wrong_shape_or_range_is_refused() -> None:
         np.zeros(rung.n_nodes - 1, dtype=np.int64),
         np.full(rung.n_nodes, rung.n_states, dtype=np.int64),
     ):
-        with pytest.raises(ValueError, match="one state"):
+        with pytest.raises(ValueError, match="one integer state"):
             anneal_potts(
                 rung.graph,
                 rung.field,
                 schedule,
                 np.random.default_rng(0),
-                initial=initial,
+                start=initial,
             )
 
 

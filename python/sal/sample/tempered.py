@@ -489,6 +489,7 @@ def tempered_potts_pair(
     move: PottsMove = PottsMove.SINGLE_SITE,
     houdayer: bool = True,
     backend: Backend = Backend.RUST,
+    cluster_backend: Backend = Backend.PYTHON,
 ) -> TemperedEnsemble:
     """A replica pair per rung, exchanging along the ladder, joined by Houdayer's move.
 
@@ -527,6 +528,11 @@ def tempered_potts_pair(
         is read against.
     backend : Backend
         As :func:`~sal.sample.potts_mcmc.sample_potts`.
+    cluster_backend : Backend
+        Which implementation runs a cluster move's pass, as
+        :func:`~sal.sample.potts_mcmc.sample_potts` takes it;
+        :data:`~sal.backend.Backend.PYTHON`, the default, is the chain before
+        #1059 threaded it here, bitwise.
 
     Returns
     -------
@@ -558,7 +564,9 @@ def tempered_potts_pair(
         raise ValueError(msg)
 
     offsets, neighbours, couplings = graph.compressed_adjacency()
-    advance = sweep_for(move, graph, rows, offsets, neighbours, couplings, backend)
+    advance = sweep_for(
+        move, graph, rows, offsets, neighbours, couplings, backend, cluster_backend
+    )
     children = rng.spawn(len(temperatures))
 
     def start(child: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:

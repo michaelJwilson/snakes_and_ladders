@@ -48,7 +48,13 @@ from sal.search.maxflow import (
     max_flow,
 )
 from sal.sim.graph import PottsGraph
-from sal.sim.potts import SiteField, energy, log_weight_of, site_field
+from sal.sim.potts import (
+    SiteField,
+    check_labelling,
+    energy,
+    log_weight_of,
+    site_field,
+)
 
 # The bound is `2 * c_max / c_min` for a metric pairwise term; with a uniform
 # coupling the ratio is 1 and the factor is exactly 2.
@@ -215,7 +221,7 @@ class _Carried(NamedTuple):
 
 def _lowest_by_cut(
     graph: PottsGraph,
-    field_values: np.ndarray,
+    field: np.ndarray,
     labelling: np.ndarray,
     build: Callable[[np.ndarray], _CutMove | None],
     held: float | None,
@@ -229,7 +235,7 @@ def _lowest_by_cut(
     is a move with no site to make it on, which is the labelling unchanged.
     ``held`` is the input labelling's energy where the caller has it.
     """
-    values = site_field(np.asarray(field_values, dtype=float), graph.n_nodes)
+    values = site_field(np.asarray(field, dtype=float), graph.n_nodes)
     built = build(values)
     current = energy(graph, values, labelling) if held is None else held
     if built is None:
@@ -302,7 +308,7 @@ class _Move:
 
 def _cycle_to_a_local_minimum(
     graph: PottsGraph,
-    field_values: np.ndarray,
+    field: np.ndarray,
     n_states: int,
     move: _Move,
     *,
@@ -322,10 +328,12 @@ def _cycle_to_a_local_minimum(
     check_non_negative_couplings(graph, move.reason)
 
     values = site_field(
-        np.asarray(field_values, dtype=float), graph.n_nodes, n_states=n_states
+        np.asarray(field, dtype=float), graph.n_nodes, n_states=n_states
     )
     labelling = (
-        values.argmax(axis=1).astype(np.int64) if start is None else start.copy()
+        values.argmax(axis=1).astype(np.int64)
+        if start is None
+        else check_labelling(start, graph.n_nodes, n_states)
     )
     current = held = energy(graph, values, labelling)
     # One network for every move of the run: the lattice's arcs are laid out
@@ -463,7 +471,7 @@ def _expansion_arcs(
 
 def expand(
     graph: PottsGraph,
-    field_values: np.ndarray,
+    field: np.ndarray,
     labelling: np.ndarray,
     alpha: int,
     *,
@@ -524,14 +532,19 @@ def expand(
     Raises
     ------
     ValueError
-        If ``backend`` names an implementation this function does not have.
+        If ``backend`` names an implementation this function does not have,
+        or ``labelling`` is not one integer state in range per node
+        (:func:`~sal.sim.potts.check_labelling`).
     """
-    return _expand(graph, field_values, labelling, alpha, backend, None)
+    checked = check_labelling(
+        labelling, graph.n_nodes, int(np.shape(field)[-1]), name="labelling"
+    )
+    return _expand(graph, field, checked, alpha, backend, None)
 
 
 def _expand(
     graph: PottsGraph,
-    field_values: np.ndarray,
+    field: np.ndarray,
     labelling: np.ndarray,
     alpha: int,
     backend: Backend,
@@ -573,7 +586,7 @@ def _expand(
 
     return _lowest_by_cut(
         graph,
-        field_values,
+        field,
         labelling,
         build,
         None if carried is None else carried.energy,
@@ -611,7 +624,7 @@ EXPANSION = _Move(
 
 def alpha_expansion(
     graph: PottsGraph,
-    field_values: SiteField | np.ndarray,
+    field: SiteField | np.ndarray,
     n_states: int,
     *,
     start: np.ndarray | None = None,
@@ -631,7 +644,7 @@ def alpha_expansion(
     graph : PottsGraph
         Every coupling must be non-negative --- the metric condition the
         bound rests on.
-    field_values : SiteField | np.ndarray
+    field : SiteField | np.ndarray
         ``(n_states,)`` or ``(n_nodes, n_states)``.
     n_states : int
         Label count.
@@ -649,12 +662,14 @@ def alpha_expansion(
     Raises
     ------
     ValueError
-        If a coupling is negative, or the cap is reached.
+        If a coupling is negative, ``start`` is not one integer state in range
+        per node (:func:`~sal.sim.potts.check_labelling`), or the cap is
+        reached.
     """
-    field_values = log_weight_of(field_values)
+    field = log_weight_of(field)
     return _cycle_to_a_local_minimum(
         graph,
-        field_values,
+        field,
         n_states,
         EXPANSION,
         start=start,
@@ -742,7 +757,7 @@ def _swap_arcs(
 
 def swap(
     graph: PottsGraph,
-    field_values: np.ndarray,
+    field: np.ndarray,
     labelling: np.ndarray,
     alpha: int,
     beta: int,
@@ -776,14 +791,19 @@ def swap(
     ValueError
         If ``backend`` names an implementation this function does not have,
         or ``alpha`` and ``beta`` are the same label, where the move is the
-        identity and a caller asking for it has a bug rather than a no-op.
+        identity and a caller asking for it has a bug rather than a no-op, or
+        ``labelling`` is not one integer state in range per node
+        (:func:`~sal.sim.potts.check_labelling`).
     """
-    return _swap(graph, field_values, labelling, alpha, beta, backend, None)
+    checked = check_labelling(
+        labelling, graph.n_nodes, int(np.shape(field)[-1]), name="labelling"
+    )
+    return _swap(graph, field, checked, alpha, beta, backend, None)
 
 
 def _swap(
     graph: PottsGraph,
-    field_values: np.ndarray,
+    field: np.ndarray,
     labelling: np.ndarray,
     alpha: int,
     beta: int,
@@ -833,7 +853,7 @@ def _swap(
 
     return _lowest_by_cut(
         graph,
-        field_values,
+        field,
         labelling,
         build,
         None if carried is None else carried.energy,
@@ -872,7 +892,7 @@ SWAP = _Move(
 
 def alpha_beta_swap(
     graph: PottsGraph,
-    field_values: np.ndarray,
+    field: np.ndarray,
     n_states: int,
     *,
     start: np.ndarray | None = None,
@@ -893,13 +913,14 @@ def alpha_beta_swap(
     Raises
     ------
     ValueError
-        If a coupling is negative, or the cap is reached. Monotonicity over a
+        If a coupling is negative, ``start`` is not one integer state in range
+        per node, or the cap is reached. Monotonicity over a
         finite state space makes the second impossible on a correct
         implementation, as it is for :func:`alpha_expansion`.
     """
     return _cycle_to_a_local_minimum(
         graph,
-        field_values,
+        field,
         n_states,
         SWAP,
         start=start,

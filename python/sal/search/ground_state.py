@@ -92,6 +92,7 @@ from sal.sim.factor_graph import from_potts
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from sal.sim.potts import (
     SpatioOnlyParams,
+    check_labelling,
     critical_coupling,
     energy,
     spatio_only_field,
@@ -636,7 +637,7 @@ def run_annealed(
         rng,
         move=move,
         cluster_backend=Backend.RUST if move in _COMPILED_CLUSTERS else Backend.PYTHON,
-        initial=start,
+        start=start,
     )
     return MethodRun(
         labelling=run.labelling,
@@ -1358,7 +1359,7 @@ def ground_state(
         raise ValueError(msg)
     problem = Problem(graph, values, int(values.shape[1]))
     if start is not None:
-        start = _checked_start(problem, start)
+        start = check_labelling(start, problem.n_nodes, problem.n_states)
     keywords: dict[str, Any] = {}
     if schedule is not None:
         keywords["schedule"] = schedule
@@ -1368,30 +1369,6 @@ def ground_state(
         keywords["backend"] = backend
         keywords["min_sites"] = min_sites
     return solvers[method](problem, budget, rng, start=start, **keywords)
-
-
-def _checked_start(problem: Problem, start: np.ndarray) -> np.ndarray:
-    """``start`` as an ``int64`` copy, checked to be one state in range per node.
-
-    Raises
-    ------
-    ValueError
-        If it is not integer, not shape ``(n_nodes,)``, or holds a state
-        outside ``[0, n_states)``.
-    """
-    labelling = np.asarray(start)
-    if (
-        labelling.shape != (problem.n_nodes,)
-        or not np.issubdtype(labelling.dtype, np.integer)
-        or not ((labelling >= 0).all() and (labelling < problem.n_states).all())
-    ):
-        msg = (
-            f"start must hold one integer state in [0, {problem.n_states}) per "
-            f"node of {problem.n_nodes}; got shape {labelling.shape}, dtype "
-            f"{labelling.dtype}"
-        )
-        raise ValueError(msg)
-    return np.array(labelling, dtype=np.int64)
 
 
 def outcome(run: MethodRun) -> Outcome:

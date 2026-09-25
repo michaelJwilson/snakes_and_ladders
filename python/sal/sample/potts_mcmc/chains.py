@@ -45,6 +45,7 @@ from sal.sample.schedule import (
 from sal.sim.graph import PottsGraph
 from sal.sim.potts import (
     SiteField,
+    check_labelling,
     energies,
     log_weight_of,
     site_field,
@@ -285,7 +286,7 @@ def anneal_potts(
     move: PottsMove = PottsMove.SINGLE_SITE,
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.PYTHON,
-    initial: np.ndarray | None = None,
+    start: np.ndarray | None = None,
 ) -> AnnealedPotts:
     """Simulated annealing by heat-bath sweeps on a temperature schedule.
 
@@ -338,8 +339,9 @@ def anneal_potts(
         For the ghost-spin and label-directed passes it merges the bonds
         (:func:`bond_roots`), on the same roots either way, and neither
         keeps a counter (issue #1041).
-    initial : np.ndarray | None
-        The labelling the chain starts from, copied, shape ``(n_nodes,)``;
+    start : np.ndarray | None
+        The labelling the chain starts from, copied, shape ``(n_nodes,)``,
+        checked by :func:`~sal.sim.potts.check_labelling`;
         ``None`` draws it uniformly from ``rng``, as before the parameter
         existed. A given start draws nothing, so the chain's first draw is
         the generator's next (issue #1038).
@@ -351,24 +353,17 @@ def anneal_potts(
     Raises
     ------
     ValueError
-        If ``initial`` is not one state in range per node.
+        If ``start`` is not one integer state in range per node.
     """
     field = log_weight_of(field)
     refuse_negative_coupling(move, graph)
 
     rows = site_field(np.asarray(field, dtype=float), graph.n_nodes)
-    if initial is None:
-        drawn = rng.integers(0, int(rows.shape[1]), size=graph.n_nodes)
-    else:
-        drawn = np.array(initial, dtype=np.int64)
-        if drawn.shape != (graph.n_nodes,) or not (
-            (drawn >= 0).all() and (drawn < rows.shape[1]).all()
-        ):
-            msg = (
-                f"initial must hold one state in [0, {rows.shape[1]}) per node "
-                f"of {graph.n_nodes}, got shape {drawn.shape}"
-            )
-            raise ValueError(msg)
+    drawn = (
+        rng.integers(0, int(rows.shape[1]), size=graph.n_nodes)
+        if start is None
+        else check_labelling(start, graph.n_nodes, int(rows.shape[1]))
+    )
     state = np.ascontiguousarray(drawn, dtype=np.int64)
     offsets, neighbours, couplings = graph.compressed_adjacency()
     lists = adjacency_lists(offsets, neighbours, couplings)
@@ -1083,6 +1078,7 @@ def sample_potts_pair(
     temperature: float = 1.0,
     houdayer: bool = True,
     backend: Backend = Backend.RUST,
+    cluster_backend: Backend = Backend.PYTHON,
 ) -> PottsPair:
     """Two replicas at one temperature, joined by Houdayer's isoenergetic move.
 
@@ -1107,7 +1103,7 @@ def sample_potts_pair(
 
     Parameters
     ----------
-    graph, field, move, rng, n_sweeps, burn_in, thin, temperature, backend
+    graph, field, move, rng, n_sweeps, burn_in, thin, temperature, backend, cluster_backend
         As :func:`sample_potts`, applied to each replica. ``rng`` spawns one
         child per replica and keeps the pair's own draws, so the two replicas
         do not share a stream --- :func:`parallel_tempering`'s rule, for its
@@ -1155,7 +1151,9 @@ def sample_potts_pair(
         for child in children
     ]
     offsets, neighbours, couplings = graph.compressed_adjacency()
-    advance = sweep_for(move, graph, rows, offsets, neighbours, couplings, backend)
+    advance = sweep_for(
+        move, graph, rows, offsets, neighbours, couplings, backend, cluster_backend
+    )
 
     recorded = [np.empty((n_sweeps, graph.n_nodes), dtype=np.int64) for _ in range(2)]
     totals, counts = [0, 0], [0, 0]
