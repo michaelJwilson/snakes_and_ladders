@@ -105,16 +105,16 @@ module. It is referenced here, never restated. What follows is local.
   ask for one hides what the exact one buys (issue #592).
 
 - **A compiled backend's table is indexed by a row, not by a value.** The
-  coupled kernel reads `table[row]` and never knew what the index meant. Where
-  the density is a function of the observation alone the row *is* the
-  observation; where it also conditions on something else, the row is a code
-  the caller computes and the kernel is unchanged (issue #658). Widening what
-  a kernel scores is a question about the caller's index; changing the kernel
-  is the answer of last resort.
+  kernel reads `table[row]` and never knew what the index meant. Where the
+  density is a function of the observation alone the row *is* the observation;
+  otherwise the row is a code the caller computes and the kernel is unchanged
+  (issue #658). Widening what a kernel scores is a question about the caller's
+  index; changing the kernel is the last resort, taken to factor a continuous
+  covariate exactly, not grid it; the grid is in `sandbox` (issue #1064).
 
 - **A tabulation is judged by its build, not by its size.** The distinct
   combinations are the smallest exact table and were the wrong choice: finding
   them sorts an array per call, which cost more than the densities the table
   exists to avoid recomputing and put the backend below its own oracle. The
-  outer product is larger, built vectorized, never sorted. Where a table is
-  built per call, the build is the measurement.
+  outer product is larger, built vectorized, never sorted. Rows once per fit
+  (issue #1064), tables per call, and a build is part of what is measured.

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import torch
@@ -35,6 +35,9 @@ from sal.sim.spatio_sequential import (
     SpatioSequentialParams,
     gated_log_density,
 )
+
+if TYPE_CHECKING:
+    from sal.likelihood.spatio_sequential_rust import CovariateRows, ObservationRows
 
 #: What a refusal names: the coupled E step runs on NumPy, the oracle, or on
 #: the tabulated Rust kernel. One enum names the kernel, as it does for
@@ -280,6 +283,36 @@ def log_evidence_by_forward(
 VERTEX_BLOCK = 256
 
 
+def _refuse_rows_on_the_oracle(
+    backend: Backend, covariate_rows: CovariateRows | ObservationRows
+) -> None:
+    """Refuse a covariate layout where no table is built.
+
+    ``covariate_rows`` sets how the Rust backend lays out the trial count's
+    table, or hands it rows already built (issue #1064). The NumPy oracle
+    scores every observation at its own covariate and builds no table, so a
+    layout other than the default handed to it would be ignored rather than
+    followed.
+
+    Raises
+    ------
+    ValueError
+        If ``covariate_rows`` is not ``"range"`` and ``backend`` is not
+        :data:`~sal.backend.Backend.RUST`.
+    """
+    if covariate_rows != "range" and backend is not Backend.RUST:
+        what = (
+            covariate_rows
+            if isinstance(covariate_rows, str)
+            else type(covariate_rows).__name__
+        )
+        msg = (
+            f"covariate_rows={what!r} lays out the Rust backend's tables; the "
+            f"{backend} backend builds none and scores every covariate exactly"
+        )
+        raise ValueError(msg)
+
+
 def _blocks(members: np.ndarray) -> Iterator[np.ndarray]:
     """``members`` in contiguous blocks of at most :data:`VERTEX_BLOCK`."""
     for start in range(0, members.size, VERTEX_BLOCK):
@@ -392,11 +425,24 @@ def class_posteriors(
     labels: np.ndarray,
     *,
     backend: Backend = Backend.PYTHON,
+    covariate_rows: CovariateRows | ObservationRows = "range",
 ) -> ClassPosteriors:
-    """Forward--backward on every class's chain over its members' summed scores."""
+    """Forward--backward on every class's chain over its members' summed scores.
+
+    ``covariate_rows`` is the Rust backend's
+    (:func:`sal.likelihood.spatio_sequential_rust.emission_rows`), and refused
+    on this one unless it is the default.
+    """
+    _refuse_rows_on_the_oracle(backend, covariate_rows)
     if (rust := twin(_COUPLED, backend, __name__)) is not None:
         return cast(
-            "ClassPosteriors", rust.class_posteriors(params, observations, labels)
+            "ClassPosteriors",
+            rust.class_posteriors(
+                params,
+                observations,
+                labels,
+                covariate_rows=covariate_rows,
+            ),
         )
     density = class_log_density(params, observations, labels)
     log_transition = np.log(params.transition)
@@ -425,6 +471,7 @@ def external_field(
     posterior: np.ndarray | None = None,
     *,
     backend: Backend = Backend.PYTHON,
+    covariate_rows: CovariateRows | ObservationRows = "range",
 ) -> np.ndarray:
     """`    `H_nm`` of the external-field equation of the textbook: minus the posterior-expected emission score, shape ``(n_nodes, M)``.
 
@@ -439,10 +486,20 @@ def external_field(
     field was computed *without* --- so the step proposed labels under one
     model and accepted them under another. The ascent stays monotone either
     way, which is why nothing failed.
+
+    ``covariate_rows`` is as :func:`class_posteriors` takes it.
     """
+    _refuse_rows_on_the_oracle(backend, covariate_rows)
     if (rust := twin(_COUPLED, backend, __name__)) is not None:
         return cast(
-            "np.ndarray", rust.external_field(params, observations, labels, posterior)
+            "np.ndarray",
+            rust.external_field(
+                params,
+                observations,
+                labels,
+                posterior,
+                covariate_rows=covariate_rows,
+            ),
         )
     if posterior is None:
         posterior = class_posteriors(params, observations, labels).posterior
@@ -470,6 +527,7 @@ def labelled_log_likelihood(
     labels: np.ndarray,
     *,
     backend: Backend = Backend.PYTHON,
+    covariate_rows: CovariateRows | ObservationRows = "range",
 ) -> float:
     """``log p(x, l | theta)`` with the chains marginalized, up to ``log Z_Potts``.
 
@@ -478,9 +536,19 @@ def labelled_log_likelihood(
     intractable past enumeration, so it is left out; add
     :attr:`ExactSpatioSequential.log_prior_normalizer` where enumeration
     reaches, which is how the test pins this against the oracle.
+    ``covariate_rows`` is as :func:`class_posteriors` takes it.
     """
+    _refuse_rows_on_the_oracle(backend, covariate_rows)
     if (rust := twin(_COUPLED, backend, __name__)) is not None:
-        return cast("float", rust.labelled_log_likelihood(params, observations, labels))
+        return cast(
+            "float",
+            rust.labelled_log_likelihood(
+                params,
+                observations,
+                labels,
+                covariate_rows=covariate_rows,
+            ),
+        )
     own = float(log_prior(params, np.asarray(labels, dtype=np.int64)[None, :])[0])
     evidence = class_posteriors(params, observations, labels).log_evidence
     return own + float(evidence.sum())

@@ -25,6 +25,7 @@ TEXTBOOK = TEX / "textbook.tex"
 #: key absent here is stated under the five parts already.
 SHARED_KEYS: dict[str, str] = {
     "spatio_sequential_counts": "par:coupled:pairs",
+    "spatio_sequential_counts_covariate": "par:coupled:covariate",
     "spatio_sequential_ragged": "par:coupled:ragged",
     "ragged_hmm": "par:hmm:ragged",
 }
