@@ -90,7 +90,7 @@ def test_the_sampled_estimator_is_unbiased_for_the_enumerated_gradient() -> None
 
     rng = np.random.default_rng(7)
     episodes = [
-        rollout(environment, policy, rng, EXACT_HORIZON, start=start)
+        rollout(environment, policy, rng, max_steps=EXACT_HORIZON, start=start)
         for _ in range(6000)
     ]
     policy.weights.grad = None
@@ -129,7 +129,9 @@ def test_the_baseline_reduces_the_estimator_variance() -> None:
         rng = np.random.default_rng(5)
         gradients: list[np.ndarray] = []
         for _ in range(400):
-            episode = rollout(environment, policy, rng, EXACT_HORIZON, start=start)
+            episode = rollout(
+                environment, policy, rng, max_steps=EXACT_HORIZON, start=start
+            )
             policy.weights.grad = None
             (-surrogate_loss(environment, policy, [episode], baseline)).backward()  # type: ignore[no-untyped-call]
             assert policy.weights.grad is not None
@@ -141,7 +143,7 @@ def test_the_baseline_reduces_the_estimator_variance() -> None:
         np.mean(
             [
                 rollout(
-                    environment, policy, rng, EXACT_HORIZON, start=start
+                    environment, policy, rng, max_steps=EXACT_HORIZON, start=start
                 ).total_reward
                 for _ in range(2000)
             ]
@@ -214,7 +216,11 @@ def test_the_learned_policy_is_at_least_as_good_as_hill_climbing() -> None:
     greedy = float(
         np.mean(
             [
-                final_energy(greedy_rollout(environment, start, EPISODE_HORIZON).states)
+                final_energy(
+                    greedy_rollout(
+                        environment, start=start, max_steps=EPISODE_HORIZON
+                    ).states
+                )
                 for start in starts
             ]
         )
@@ -225,7 +231,7 @@ def test_the_learned_policy_is_at_least_as_good_as_hill_climbing() -> None:
             [
                 final_energy(
                     rollout(
-                        environment, policy, rng, EPISODE_HORIZON, start=start
+                        environment, policy, rng, max_steps=EPISODE_HORIZON, start=start
                     ).states
                 )
                 for start in starts
@@ -267,7 +273,7 @@ def test_the_gradient_check_would_catch_a_biased_estimator() -> None:
 
     rng = np.random.default_rng(7)
     episodes = [
-        rollout(environment, policy, rng, EXACT_HORIZON, start=start)
+        rollout(environment, policy, rng, max_steps=EXACT_HORIZON, start=start)
         for _ in range(4000)
     ]
     myopic = torch.zeros((), dtype=torch.float64)
@@ -295,7 +301,9 @@ def test_the_shared_decision_loop_reproduces_the_loop_it_replaced() -> None:
     # loop written out; bitwise, taken entry and whole vector.
     environment, policy = potts_environment(), _policy([0.3, -0.6])
     rng = np.random.default_rng(4)
-    episodes = [rollout(environment, policy, rng, EPISODE_HORIZON) for _ in range(8)]
+    episodes = [
+        rollout(environment, policy, rng, max_steps=EPISODE_HORIZON) for _ in range(8)
+    ]
 
     replayed = log_probabilities_of(policy, environment, episodes)
     assert [len(decisions) for decisions in replayed] == [

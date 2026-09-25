@@ -149,7 +149,8 @@ def test_the_estimator_with_the_exact_critic_is_unbiased_for_the_exact_gradient(
     exact = exact_policy_gradient(environment, policy, start, HORIZON)
     rng = np.random.default_rng(0)
     episodes = [
-        rollout(environment, policy, rng, HORIZON, start=start) for _ in range(4000)
+        rollout(environment, policy, rng, max_steps=HORIZON, start=start)
+        for _ in range(4000)
     ]
     advantages = [
         [
@@ -169,7 +170,7 @@ def test_the_estimator_with_the_exact_critic_is_unbiased_for_the_exact_gradient(
 def test_targets_and_advantages_line_up_with_the_decisions() -> None:
     environment, policy = potts_environment(), _policy([0.3, -0.6])
     rng = np.random.default_rng(1)
-    episodes = [rollout(environment, policy, rng, HORIZON) for _ in range(5)]
+    episodes = [rollout(environment, policy, rng, max_steps=HORIZON) for _ in range(5)]
     n_decisions = sum(len(e.actions) for e in episodes)
     features, targets = state_targets(environment, episodes)
     assert features.shape == (n_decisions, n_state_features(environment))
@@ -223,7 +224,7 @@ def test_actor_critic_reaches_the_optimum_at_least_as_often_as_greedy() -> None:
         [
             abs(
                 environment.energy(
-                    rollout(environment, policy, rng, 6, start=s).states[-1]
+                    rollout(environment, policy, rng, max_steps=6, start=s).states[-1]
                 )
                 - best
             )
@@ -324,7 +325,7 @@ def test_the_bootstrapped_targets_telescope_to_the_closed_form_return() -> None:
     )
 
     for start in _states(environment)[::10]:
-        episode = greedy_rollout(environment, start, 12)
+        episode = greedy_rollout(environment, start=start, max_steps=12)
         if not episode.actions:
             continue
         assert episode.terminated, "the closed form below needs a finished episode"

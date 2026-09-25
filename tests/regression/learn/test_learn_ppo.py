@@ -52,7 +52,9 @@ def _reached(environment: PottsEnvironment, policy: LinearPolicy | MLPPolicy) ->
             [
                 abs(
                     environment.energy(
-                        rollout(environment, policy, rng, 6, start=s).states[-1]
+                        rollout(environment, policy, rng, max_steps=6, start=s).states[
+                            -1
+                        ]
                     )
                     - best
                 )
@@ -111,7 +113,7 @@ def test_unclipped_ppo_at_the_collecting_policy_has_the_actor_critic_gradient() 
         generator=torch.Generator().manual_seed(0),
     )
     rng = np.random.default_rng(0)
-    episodes = [rollout(environment, policy, rng, 3) for _ in range(40)]
+    episodes = [rollout(environment, policy, rng, max_steps=3) for _ in range(40)]
     advantages = episode_advantages(environment, episodes, critic, lam=1.0)
     old = [t.detach() for t in _log_probabilities(environment, policy, episodes)]
     loss, fraction = ppo_loss(

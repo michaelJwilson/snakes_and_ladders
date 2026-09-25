@@ -141,7 +141,10 @@ def test_the_environment_is_hard_enough_to_be_worth_searching() -> None:
     best = optimum(environment)[1]
     stalled = sum(
         abs(
-            environment.energy(greedy_rollout(environment, start, 50).states[-1]) - best
+            environment.energy(
+                greedy_rollout(environment, start=start, max_steps=50).states[-1]
+            )
+            - best
         )
         > 1e-9
         for start in enumerate_configurations(3, 4)
@@ -160,7 +163,7 @@ def test_the_greedy_weights_reproduce_the_greedy_searcher() -> None:
     policy = LinearPolicy(2)
     policy.set_weights(environment.greedy_weights() * 50.0)
     for start in itertools.islice(enumerate_configurations(3, 4), 15):
-        expected = greedy_rollout(environment, start, max_steps=20)
+        expected = greedy_rollout(environment, start=start, max_steps=20)
         state = start
         taken: list[tuple[int, int]] = []
         while not environment.is_terminal(state) and len(taken) < 20:

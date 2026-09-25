@@ -266,7 +266,7 @@ def _descent(
     The harness minimizes (`opt/budget.py`), so the sign flips here.
     """
     state = instance.reset(rng)
-    episode = greedy_rollout(instance, state, budget.size)
+    episode = greedy_rollout(instance, start=state, max_steps=budget.size)
     best = max(instance.score(visited) for visited in episode.states)
     return Outcome(-best, max(len(episode.actions), 1))
 

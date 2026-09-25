@@ -123,6 +123,7 @@ def reinforce[S, A](
     environment: Environment[S, A],
     policy: LinearPolicy,
     rng: np.random.Generator,
+    *,
     iterations: int,
     batch: int,
     max_steps: int,
@@ -188,7 +189,7 @@ def reinforce[S, A](
                 environment,
                 policy,
                 rng,
-                max_steps,
+                max_steps=max_steps,
                 stop_at_local_optimum=stop_at_local_optimum,
             )
             for _ in range(batch)

@@ -72,7 +72,7 @@ def _sampled_decisions(
 ) -> tuple[torch.Tensor, torch.Tensor, list[int]]:
     """Every decision's neighbourhood features, the index taken, and its episode."""
     rng = np.random.default_rng(seed)
-    rolled = [rollout(environment, policy, rng, 3) for _ in range(episodes)]
+    rolled = [rollout(environment, policy, rng, max_steps=3) for _ in range(episodes)]
     features, taken, owner = [], [], []
     for index, episode in enumerate(rolled):
         for state, action in zip(episode.states, episode.actions, strict=False):

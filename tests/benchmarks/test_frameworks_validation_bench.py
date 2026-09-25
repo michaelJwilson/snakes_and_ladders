@@ -214,7 +214,7 @@ def test_gymnasium_adapter_beside_rollout_benchmark(
         rng = np.random.default_rng(0)
         taken = 0
         while taken < steps:
-            taken += len(rollout(environment, policy, rng, 8).actions) or 1
+            taken += len(rollout(environment, policy, rng, max_steps=8).actions) or 1
         return taken
 
     start = time.perf_counter()
