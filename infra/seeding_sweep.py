@@ -3,7 +3,7 @@
 Not collected by ``pytest``: it is the experiment's own run. Writes one JSON
 that ``docs/experiments/009-projection-emission-seedings.md``, ``STATUS.md``
 and the pull-request body quote. The comparison runs through
-`snakes_and_ladders.opt.starts.StartsBenchmark` (issue #894), and
+`sal.opt.starts.StartsBenchmark` (issue #894), and
 `tests/regression/opt/test_opt_starts.py` re-derives the experiment's rows
 from :func:`benchmark` at release.
 
@@ -19,12 +19,12 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.opt.budget import Budget
-from snakes_and_ladders.opt.mixture import mixture_log_likelihood, responsibilities
-from snakes_and_ladders.opt.starts import SolverComparison, Start, StartsBenchmark
-from snakes_and_ladders.parallel import map_tasks
-from snakes_and_ladders.search.projection import (
+from sal.cost import Cost
+from sal.opt.budget import Budget
+from sal.opt.mixture import mixture_log_likelihood, responsibilities
+from sal.opt.starts import SolverComparison, Start, StartsBenchmark
+from sal.parallel import map_tasks
+from sal.search.projection import (
     SEEDINGS,
     CountPairAt,
     ProjectedCounts,
@@ -37,9 +37,9 @@ from snakes_and_ladders.search.projection import (
     projected_mean_error,
     projected_recovery,
 )
-from snakes_and_ladders.sim.count_pairs import binned_model
-from snakes_and_ladders.sim.fixtures import KEY, fixture
-from snakes_and_ladders.sim.spatio_sequential import SpatioSequentialParams
+from sal.sim.count_pairs import binned_model
+from sal.sim.fixtures import KEY, fixture
+from sal.sim.spatio_sequential import SpatioSequentialParams
 
 PROBLEM = "spatio_sequential_counts"
 

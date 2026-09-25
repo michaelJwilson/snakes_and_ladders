@@ -17,15 +17,15 @@ import itertools
 
 import numpy as np
 import pytest
-from snakes_and_ladders.likelihood.potts import enumerate_potts
-from snakes_and_ladders.search.decoding import expected_site_errors, marginal_decode
-from snakes_and_ladders.sim.graph import (
+from sal.likelihood.potts import enumerate_potts
+from sal.search.decoding import expected_site_errors, marginal_decode
+from sal.sim.graph import (
     BoundaryCondition,
     PottsGraph,
     lattice_graph,
     triangular_lattice_graph,
 )
-from snakes_and_ladders.sim.potts import energy
+from sal.sim.potts import energy
 
 FIELD = np.log(np.array([0.45, 0.35, 0.20]))
 

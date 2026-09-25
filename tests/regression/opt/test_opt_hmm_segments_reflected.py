@@ -17,10 +17,10 @@ import math
 import numpy as np
 import pytest
 import torch
+from sal.emissions import BetaBinomialEmission, NegativeBinomialEmission
+from sal.opt.hmm import baum_welch_family
+from sal.sim.count_pairs import IndependentCountPair, ReflectedEmission
 from scipy.optimize import minimize
-from snakes_and_ladders.emissions import BetaBinomialEmission, NegativeBinomialEmission
-from snakes_and_ladders.opt.hmm import baum_welch_family
-from snakes_and_ladders.sim.count_pairs import IndependentCountPair, ReflectedEmission
 
 TRIALS = 40.0
 

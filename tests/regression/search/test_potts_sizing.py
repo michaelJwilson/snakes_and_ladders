@@ -14,16 +14,16 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.learn.failure import probe_failure
-from snakes_and_ladders.opt.budget import Budget, restarts
-from snakes_and_ladders.search.ground_state import (
+from sal.cost import Cost
+from sal.learn.failure import probe_failure
+from sal.opt.budget import Budget, restarts
+from sal.search.ground_state import (
     Entry,
     lattice_rung,
     uniform_ground_energy,
 )
-from snakes_and_ladders.search.maxflow import ising_ground_state
-from snakes_and_ladders.sim.potts import energy
+from sal.search.maxflow import ising_ground_state
+from sal.sim.potts import energy
 
 from tests._rows import every_value
 

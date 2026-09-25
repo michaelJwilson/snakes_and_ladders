@@ -2,15 +2,15 @@
 
 Ten test modules wrote `skipif(not available("<module>"), reason="... is the
 validation-<name> extra")` by hand, restating what
-:data:`snakes_and_ladders.validation.FRAMEWORKS` declares: the module its
+:data:`sal.validation.FRAMEWORKS` declares: the module its
 script imports and the extra that installs it.
 """
 
 from __future__ import annotations
 
 import pytest
-from snakes_and_ladders.validation import FRAMEWORKS
-from snakes_and_ladders.validation.runner import available
+from sal.validation import FRAMEWORKS
+from sal.validation.runner import available
 
 
 def requires(name: str) -> pytest.MarkDecorator:

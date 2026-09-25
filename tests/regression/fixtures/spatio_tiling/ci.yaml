@@ -6,7 +6,7 @@ oracle: enumeration
 # by s_t and no other state. Unlike `spatio_only`'s alpha[m] * c_i the field is
 # not linear in the state, so no reduction to the ladder's two ends holds and
 # the optimum at q = 3 can use all three states. See
-# python/snakes_and_ladders/sim/potts.py.
+# python/sal/sim/potts.py.
 #
 # 4x3 at 3 states is 3**12 = 531,441 labellings, so the ground state is
 # enumerated. The geometry and coupling are `release`'s, a triangular lattice

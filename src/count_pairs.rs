@@ -1,7 +1,7 @@
 //! Per-vertex simulation of the coupled model's two-channel counts, ported
-//! from `python/snakes_and_ladders/sim/count_pairs.py` (the NumPy oracle) to
+//! from `python/sal/sim/count_pairs.py` (the NumPy oracle) to
 //! Rust, exposed to Python via PyO3 as
-//! `snakes_and_ladders.oxisal.simulate_count_pairs`.
+//! `sal.oxisal.simulate_count_pairs`.
 //!
 //! The declared 5,041-vertex instance is 1.008e8 count pairs
 //! (`tests/regression/fixtures/spatio_sequential_counts/stress.yaml`), each a
@@ -52,7 +52,7 @@ const VERTEX_BLOCK: usize = 64;
 ///
 /// The total's is an exposure multiplying the negative-binomial mean and the
 /// successes' replaces the beta-binomial's declared trial count, which is what
-/// `snakes_and_ladders.sim.count_pairs.split_covariate` means by one covariate
+/// `sal.sim.count_pairs.split_covariate` means by one covariate
 /// per channel (issue #671). A `None` covariate is a draw at unit exposure and
 /// the declared trials, the values this kernel drew before one existed.
 pub struct CountPairCovariate<'a> {

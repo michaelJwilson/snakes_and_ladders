@@ -20,18 +20,18 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.opt.fit import (
+from sal.fixtures import load_params
+from sal.opt.fit import (
     constrained_standard_errors,
     covers,
     fit,
     observed_information,
     parameter_covariance,
 )
-from snakes_and_ladders.opt.hmm import HmmObjective, align_states, baum_welch
-from snakes_and_ladders.opt.potts import PottsObjective
-from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
-from snakes_and_ladders.sim.potts_chain import PottsParams, simulate_chains
+from sal.opt.hmm import HmmObjective, align_states, baum_welch
+from sal.opt.potts import PottsObjective
+from sal.sim.hmm import HmmParams, simulate_sequences
+from sal.sim.potts_chain import PottsParams, simulate_chains
 
 from tests._fixtures import FIXTURES_DIR
 

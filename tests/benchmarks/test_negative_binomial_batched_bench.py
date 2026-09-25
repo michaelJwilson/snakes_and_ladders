@@ -12,11 +12,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.emissions import NegativeBinomialEmission, mstep
-from snakes_and_ladders.opt.mixture import responsibilities
-from snakes_and_ladders.search.projection import flatten, project
-from snakes_and_ladders.sim.count_pairs import binned_model
-from snakes_and_ladders.sim.fixtures import fixture
+from sal.emissions import NegativeBinomialEmission, mstep
+from sal.opt.mixture import responsibilities
+from sal.search.projection import flatten, project
+from sal.sim.count_pairs import binned_model
+from sal.sim.fixtures import fixture
 
 #: Observations the projection draws, as #892 and #918 measured.
 N_OBSERVATIONS = 4_000

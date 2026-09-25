@@ -324,7 +324,7 @@ class JudgedCoverage:
     name: str
     #: The markers whose tests count. A test carrying any of them counts.
     counting: tuple[str, ...]
-    #: Packages under `snakes_and_ladders` outside the guard: a renderer has
+    #: Packages under `sal` outside the guard: a renderer has
     #: no oracle, and `qa` is held by `snapshot` pins and stated beside the
     #: figure, never inside it. `validation` (issue #972) drives external
     #: frameworks, and its oracles run in CI's `validation` job where the

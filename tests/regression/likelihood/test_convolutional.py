@@ -1,7 +1,7 @@
 """BCJR and Viterbi on one trellis, against enumeration and against sum-product.
 
 Enumerating all ``2 ** K`` messages says the posterior is right; message
-passing on :func:`snakes_and_ladders.sim.factor_graph.from_trellis` says it is
+passing on :func:`sal.sim.factor_graph.from_trellis` says it is
 the same computation as every other problem class (the pairing of #340).
 Tolerances, absolute on a per-bit log-odds ratio: ``1e-9`` against
 enumeration (measured ``2.8e-14``) and against the tree schedule (``2.7e-15``).
@@ -13,27 +13,27 @@ import math
 
 import numpy as np
 import pytest
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.likelihood.convolutional import (
+from sal.backend import Backend
+from sal.likelihood.convolutional import (
     bcjr,
     enumerate_messages,
     exact_bitwise_posterior,
     viterbi,
 )
-from snakes_and_ladders.likelihood.message_passing import (
+from sal.likelihood.message_passing import (
     MessageScheduleName,
     max_product,
     sum_product,
 )
-from snakes_and_ladders.sim.convolutional import (
+from sal.sim.convolutional import (
     IMPOSSIBLE_EDGE,
     Trellis,
     encode_stream,
     recursive_systematic_trellis,
     terminate,
 )
-from snakes_and_ladders.sim.factor_graph import Factor, FactorGraph, from_trellis
-from snakes_and_ladders.sim.ldpc import BinaryInputGaussianChannel
+from sal.sim.factor_graph import Factor, FactorGraph, from_trellis
+from sal.sim.ldpc import BinaryInputGaussianChannel
 
 from tests._rows import every_value
 

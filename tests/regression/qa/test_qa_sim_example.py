@@ -1,4 +1,4 @@
-"""Regression test for snakes_and_ladders.qa.sim_example.
+"""Regression test for sal.qa.sim_example.
 
 Pins the caption's content against the generating parameters and the
 displayed tree against the fixture's, not just that the figure renders without
@@ -9,14 +9,14 @@ of `test_qa_runner.py::test_main_writes_its_output_and_caption`.
 from __future__ import annotations
 
 import pytest
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.qa.figure import state_label
-from snakes_and_ladders.qa.sim_example import (
+from sal.fixtures import load_params
+from sal.qa.figure import state_label
+from sal.qa.sim_example import (
     build_caption,
     display_newick,
 )
-from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.tree import Node, preorder
+from sal.sim.params import SimulationParams
+from sal.sim.tree import Node, preorder
 
 from tests._fixtures import FIXTURES_DIR
 

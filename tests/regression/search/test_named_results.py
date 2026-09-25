@@ -10,10 +10,10 @@ from __future__ import annotations
 from dataclasses import fields
 
 import pytest
-from snakes_and_ladders.search.alpha_expansion import Labelling
-from snakes_and_ladders.search.ground_state import Bracket, RungField
-from snakes_and_ladders.search.max_cut import MaxCut
-from snakes_and_ladders.search.maxflow import GroundState, PairedArcs
+from sal.search.alpha_expansion import Labelling
+from sal.search.ground_state import Bracket, RungField
+from sal.search.max_cut import MaxCut
+from sal.search.maxflow import GroundState, PairedArcs
 
 #: Every result type this package's share of the ticket names. `Labelling`
 #: carries three entry points and `GroundState` two, so the count here is

@@ -31,7 +31,7 @@ from pathlib import Path
 
 from _paths import REPO_ROOT
 
-PACKAGE_ROOT = REPO_ROOT / "python" / "snakes_and_ladders"
+PACKAGE_ROOT = REPO_ROOT / "python" / "sal"
 #: Consuming modules at or above which a seam earns its place, per root
 #: `CLAUDE.md`. Below it the seam needs a reason.
 CONSUMER_RULE = 3
@@ -67,9 +67,7 @@ def added_protocols(base: str) -> list[tuple[str, str]]:
         path = Path(name)
         if path.suffix != ".py":
             continue
-        module = ".".join(
-            path.relative_to("python/snakes_and_ladders").with_suffix("").parts
-        )
+        module = ".".join(path.relative_to("python/sal").with_suffix("").parts)
         module = module.removesuffix(".__init__").removesuffix("__init__")
         head = (REPO_ROOT / path).read_text() if (REPO_ROOT / path).is_file() else ""
         before = subprocess.run(

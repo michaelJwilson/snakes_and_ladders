@@ -15,7 +15,7 @@ from typing import NamedTuple
 
 import numpy as np
 import pytest
-from snakes_and_ladders.qa.rl_tree_policy import (
+from sal.qa.rl_tree_policy import (
     BATCH,
     ITERATIONS,
     ROLLOUTS_PER_START,
@@ -23,7 +23,7 @@ from snakes_and_ladders.qa.rl_tree_policy import (
     TRAINING_SEEDS,
     measure,
 )
-from snakes_and_ladders.sim.fixtures import fixture
+from sal.sim.fixtures import fixture
 
 pytestmark = pytest.mark.release
 

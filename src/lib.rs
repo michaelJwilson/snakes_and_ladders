@@ -8,7 +8,7 @@
 //! Python object in that closure a compile error. Before this, four Python
 //! threads calling `single_site_sweeps` took 4.03x the wall of one --
 //! serialization exactly (issue #604). It changes no arithmetic and no
-//! single-call timing; what it buys is `snakes_and_ladders.parallel`'s
+//! single-call timing; what it buys is `sal.parallel`'s
 //! `backend="threads"`, which `DEV.md` documents and which had no eligible
 //! site in the package. [`double`] is the exception: a placeholder integer
 //! multiply, where the release would cost more than the body.
@@ -71,15 +71,15 @@ pub use sampling::sample_rows;
 /// Placeholder binding: it demonstrates the Rust-to-Python pattern real
 /// numerical kernels follow (`pruning::pruning_log_likelihood` is now the
 /// substantive one) and implements no phylogenetics itself. Left in place
-/// because `snakes_and_ladders.__init__` re-exports it and `tests/test_oxisal_bindings.py`
+/// because `sal.__init__` re-exports it and `tests/test_oxisal_bindings.py`
 /// asserts it exists.
 #[pyfunction]
 pub fn double(x: i64) -> i64 {
     x * 2
 }
 
-/// The compiled extension module. `python/snakes_and_ladders/__init__.py` re-exports it as
-/// `snakes_and_ladders.oxisal` (see `module-name` in `pyproject.toml`).
+/// The compiled extension module. `python/sal/__init__.py` re-exports it as
+/// `sal.oxisal` (see `module-name` in `pyproject.toml`).
 #[pymodule]
 fn oxisal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(double, m)?)?;

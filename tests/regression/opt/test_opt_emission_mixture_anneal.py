@@ -14,23 +14,23 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from scipy.stats import norm
-from snakes_and_ladders.emissions import CountPairEmission
-from snakes_and_ladders.opt.emission_mixture import (
+from sal.emissions import CountPairEmission
+from sal.opt.emission_mixture import (
     CountPairSeeding,
     anneal_assignments,
     draw_assignments,
     expectation_maximization,
     uniform_start,
 )
-from snakes_and_ladders.opt.mixture import mixture_log_likelihood, responsibilities
-from snakes_and_ladders.search.mixture_starts import (
+from sal.opt.mixture import mixture_log_likelihood, responsibilities
+from sal.search.mixture_starts import (
     STARTS,
     gibbs_schedule,
     instance_from,
 )
-from snakes_and_ladders.sim.emission_mixture import simulate_emission_mixture
-from snakes_and_ladders.sim.fixtures import fixture
+from sal.sim.emission_mixture import simulate_emission_mixture
+from sal.sim.fixtures import fixture
+from scipy.stats import norm
 
 #: Draws the frequency test counts.
 DRAWS = 2_000

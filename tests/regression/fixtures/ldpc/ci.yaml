@@ -3,7 +3,7 @@ oracle: enumeration
 
 # The (3,6) Gallager code at the block length exact decoding reaches
 # (docs/nb/classical_codes.ipynb). Every field is required -- see
-# python/snakes_and_ladders/sim/ldpc.py and sim/CLAUDE.md.
+# python/sal/sim/ldpc.py and sim/CLAUDE.md.
 #
 # n = 12 gives m = 6 checks, at least two of them dependent, so the code has
 # 2**k codewords with k >= 7 and `likelihood.ldpc.exact_decoding` enumerates

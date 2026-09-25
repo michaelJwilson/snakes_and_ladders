@@ -1,7 +1,7 @@
 """The phylogenetic environment: its rewards, its caching, and its boundaries.
 
-Two things neither `snakes_and_ladders.learn` nor
-`snakes_and_ladders.search.infer` can assert for itself: that the environment's
+Two things neither `sal.learn` nor
+`sal.search.infer` can assert for itself: that the environment's
 reward is a difference of the log-likelihood it names, both reward models each
 against the scorer it claims to call; and that the cheap model is cheap for the
 stated reason, memoizing on a key that recognizes the same topology however it
@@ -14,11 +14,11 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.learn.environment import Environment
-from snakes_and_ladders.learn.policy import LinearPolicy
-from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
-from snakes_and_ladders.learn.tree import (
+from sal.fixtures import load_params
+from sal.learn.environment import Environment
+from sal.learn.policy import LinearPolicy
+from sal.learn.rollout import greedy_rollout, rollout
+from sal.learn.tree import (
     FEATURE_NAMES,
     FeatureSet,
     RewardModel,
@@ -27,20 +27,20 @@ from snakes_and_ladders.learn.tree import (
     standardize,
     with_uniform_branch_lengths,
 )
-from snakes_and_ladders.likelihood.parsimony import fitch_score
-from snakes_and_ladders.likelihood.pruning import log_likelihood
-from snakes_and_ladders.likelihood.pruning_torch import branch_order
-from snakes_and_ladders.likelihood.pruning_torch import (
+from sal.likelihood.parsimony import fitch_score
+from sal.likelihood.pruning import log_likelihood
+from sal.likelihood.pruning_torch import branch_order
+from sal.likelihood.pruning_torch import (
     log_likelihood as log_likelihood_torch,
 )
-from snakes_and_ladders.search.infer import score_topology
-from snakes_and_ladders.search.support import internal_splits, split_pattern_support
-from snakes_and_ladders.sim.gtr import gtr_rate_matrix
-from snakes_and_ladders.sim.jc import jc_rate_matrix
-from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.topology import (
+from sal.search.infer import score_topology
+from sal.search.support import internal_splits, split_pattern_support
+from sal.sim.gtr import gtr_rate_matrix
+from sal.sim.jc import jc_rate_matrix
+from sal.sim.params import SimulationParams
+from sal.sim.simulate import simulate_alignment
+from sal.sim.simulator import simulate_tree
+from sal.sim.topology import (
     Model,
     MoveSet,
     Topology,
@@ -49,7 +49,7 @@ from snakes_and_ladders.sim.topology import (
     leaf_bipartitions,
     nni_neighbours,
 )
-from snakes_and_ladders.sim.tree import Node, preorder
+from sal.sim.tree import Node, preorder
 
 from tests._fixtures import FIXTURES_DIR
 from tests._rows import every_value
@@ -246,7 +246,7 @@ def test_the_only_feature_is_the_reward_the_move_would_buy() -> None:
 
 @pytest.mark.analytic
 def test_a_policy_rollout_telescopes_like_the_greedy_one() -> None:
-    # The path `snakes_and_ladders.learn.rollout.rollout` takes through the
+    # The path `sal.learn.rollout.rollout` takes through the
     # environment. At a large positive weight the policy is effectively greedy,
     # so the two agree -- the zero-temperature limit checked on the Potts
     # environment, now on trees.

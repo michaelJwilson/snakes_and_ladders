@@ -346,7 +346,7 @@ macro_rules! walk_class {
         /// `family` and `parameters` are `sample.declared.declared_energy`'s;
         /// `warmup` proposals of zero run no warm-up, and any other number
         /// runs it on construction. `advance` releases the GIL.
-        #[pyclass(module = "snakes_and_ladders.oxisal")]
+        #[pyclass(module = "sal.oxisal")]
         pub struct $name {
             walk: $crate::chain::Walk<$kernel>,
         }

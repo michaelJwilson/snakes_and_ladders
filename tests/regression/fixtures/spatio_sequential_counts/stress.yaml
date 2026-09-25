@@ -4,7 +4,7 @@ oracle: none
 # The coupled model at the size ROADMAP.md's Stage 1 asks for on a triangular
 # lattice: 71 x 71 = 5,041 vertices, M = 10 classes, K = 10 hidden states per
 # class, S = 20,000 sequential positions, two-channel count emissions. Every
-# field is required -- see python/snakes_and_ladders/sim/count_pairs.py.
+# field is required -- see python/sal/sim/count_pairs.py.
 #
 # 1.008e8 count pairs. The fine instance is simulated once from the seed below
 # when a caller first asks for it and held in memory as one

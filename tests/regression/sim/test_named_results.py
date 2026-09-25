@@ -11,12 +11,12 @@ from __future__ import annotations
 from dataclasses import fields
 
 import pytest
-from snakes_and_ladders.sim.convolutional import Encoded
-from snakes_and_ladders.sim.count_pairs import ChannelCovariates
-from snakes_and_ladders.sim.css import XError
-from snakes_and_ladders.sim.graph import CompressedAdjacency, Endpoints
-from snakes_and_ladders.sim.ldpc import _RowEchelon
-from snakes_and_ladders.sim.topology import _Pruned
+from sal.sim.convolutional import Encoded
+from sal.sim.count_pairs import ChannelCovariates
+from sal.sim.css import XError
+from sal.sim.graph import CompressedAdjacency, Endpoints
+from sal.sim.ldpc import _RowEchelon
+from sal.sim.topology import _Pruned
 
 #: Every result type this package's part of the ticket names.
 NAMED = [

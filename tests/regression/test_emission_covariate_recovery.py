@@ -14,7 +14,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.emissions import (
+from sal.emissions import (
     BetaBinomialEmission,
     NegativeBinomialEmission,
 )

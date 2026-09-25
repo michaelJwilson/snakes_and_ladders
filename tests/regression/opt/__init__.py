@@ -1,1 +1,1 @@
-"""Regression tests for `snakes_and_ladders.opt`."""
+"""Regression tests for `sal.opt`."""

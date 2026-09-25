@@ -18,10 +18,10 @@ from dataclasses import replace
 
 import numpy as np
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.likelihood import spatio_sequential_rust as rust
-from snakes_and_ladders.sim.count_pairs import CountPairInstance
-from snakes_and_ladders.sim.count_pairs_rust import fine_instance
-from snakes_and_ladders.sim.fixtures import fixture
+from sal.likelihood import spatio_sequential_rust as rust
+from sal.sim.count_pairs import CountPairInstance
+from sal.sim.count_pairs_rust import fine_instance
+from sal.sim.fixtures import fixture
 
 PROBLEM = "spatio_sequential_counts"
 

@@ -190,8 +190,8 @@ jobs:
       # Deliberately plain pip, not the lockfile: this job checks the path a
       # fresh consumer takes when installing the package from source.
       - run: pip install .
-      - name: Smoke-test snakes_and_ladders.oxisal is importable
-        run: python -c "from snakes_and_ladders.oxisal import double; assert double(21) == 42"
+      - name: Smoke-test sal.oxisal is importable
+        run: python -c "from sal.oxisal import double; assert double(21) == 42"
 
   python-tests:
     name: Python tests (pytest)
@@ -253,7 +253,7 @@ jobs:
       - name: Critical tier coverage floor
         run: |
           uv run pytest -m critical -q \
-            --cov=snakes_and_ladders \
+            --cov=sal \
             --cov-report=json:coverage-critical.json >/dev/null
           uv run pytest tests/regression/test_critical_coverage.py -q
       # CHECKS.md and the textbook's applicability tables are written from
@@ -309,7 +309,7 @@ jobs:
           if [ "${{ github.event_name }}" != "pull_request" ]; then
             echo "::notice::not a pull request -- running the whole suite"
             echo "paths=tests" >> "$GITHUB_OUTPUT"
-            echo "cov=--cov=snakes_and_ladders" >> "$GITHUB_OUTPUT"
+            echo "cov=--cov=sal" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           base="origin/${{ github.base_ref }}"
@@ -571,7 +571,7 @@ jobs:
             PROBLEMS.md \
             infra/problems_tables.py \
             infra/build_documents.sh \
-            python/snakes_and_ladders/qa/ \
+            python/sal/qa/ \
             .github/workflows/ci.yml)"
           if [ -n "$changed" ]; then
             echo "build=true" >>"$GITHUB_OUTPUT"

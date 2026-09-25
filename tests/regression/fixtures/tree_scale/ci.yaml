@@ -23,7 +23,7 @@ oracle: none
 # oracle is affordable at a size, and keeps the oracle ticketed.
 #
 # tau is declared rather than written out -- see
-# python/snakes_and_ladders/sim/params.py. The height of 0.25 bounds the
+# python/sal/sim/params.py. The height of 0.25 bounds the
 # root-to-tip path at every rung, so the diameter does not grow with the leaf
 # count and distant pairs stay inside the Jukes-Cantor saturation of 0.75.
 seed: 20260914

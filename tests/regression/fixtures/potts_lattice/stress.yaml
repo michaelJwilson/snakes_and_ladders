@@ -5,7 +5,7 @@ oracle: none
 # in zero field, at the exact q-state Potts transition on a square lattice,
 # `J_c = ln(1 + sqrt(q)) = 1.005`.
 #
-# `coupling: critical` is resolved by `snakes_and_ladders.sim.potts`'s closed
+# `coupling: critical` is resolved by `sal.sim.potts`'s closed
 # form from this file's own `n_states`, not stored as a rounded float: an
 # instance declared *at* the transition cannot drift off it, and a fixture at
 # a different state count is at its own transition rather than at this one.

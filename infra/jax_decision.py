@@ -37,7 +37,7 @@ from pathlib import Path
 import numpy as np, torch
 
 family, n_sequences, backend, repeats = sys.argv[1], int(sys.argv[2]), sys.argv[3], int(sys.argv[4])
-from snakes_and_ladders.opt.hmm import (BetaBinomialHmmObjective, BinomialHmmObjective, GaussianHmmObjective,
+from sal.opt.hmm import (BetaBinomialHmmObjective, BinomialHmmObjective, GaussianHmmObjective,
     HmmObjective, NegativeBinomialHmmObjective, PoissonHmmObjective)
 rng = np.random.default_rng(1000)
 shape = (n_sequences, 100)
@@ -51,7 +51,7 @@ objective = {
 }[family]()
 theta = objective.initial()
 if backend == "jax":
-    from snakes_and_ladders.opt.hmm_jax import value_and_grad
+    from sal.opt.hmm_jax import value_and_grad
     twin = value_and_grad(objective)
     point = theta.numpy()
     one = lambda: twin(point)
@@ -81,10 +81,10 @@ import numpy as np
 
 family, n_taxa, n_sites, backend, repeats = (sys.argv[1], int(sys.argv[2]), int(sys.argv[3]),
     sys.argv[4], int(sys.argv[5]))
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.likelihood.objective import BranchLengthObjective, SubstitutionModelObjective
-from snakes_and_ladders.sim.simulate import simulate_alignment
-from snakes_and_ladders.sim.tree import balanced_tree
+from sal.backend import Backend
+from sal.likelihood.objective import BranchLengthObjective, SubstitutionModelObjective
+from sal.sim.simulate import simulate_alignment
+from sal.sim.tree import balanced_tree
 tau, k = balanced_tree(n_taxa, 0.5), 4
 pi = np.full(k, 1.0 / k)
 alignment = dict(simulate_alignment(tau, k, pi, np.random.default_rng(1005), n_sites).alignment)

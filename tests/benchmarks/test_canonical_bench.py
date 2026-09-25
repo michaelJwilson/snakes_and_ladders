@@ -18,13 +18,13 @@ import numpy as np
 import pytest
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.learn.canonical import GridWorld, value_iteration
-from snakes_and_ladders.learn.critic import Critic, n_state_features
-from snakes_and_ladders.learn.policy import LinearPolicy
-from snakes_and_ladders.learn.ppo import ppo
-from snakes_and_ladders.learn.reinforce import reinforce
-from snakes_and_ladders.learn.rollout import rollout
-from snakes_and_ladders.learn.tabular import ActionValues, q_learning, sarsa
+from sal.learn.canonical import GridWorld, value_iteration
+from sal.learn.critic import Critic, n_state_features
+from sal.learn.policy import LinearPolicy
+from sal.learn.ppo import ppo
+from sal.learn.reinforce import reinforce
+from sal.learn.rollout import rollout
+from sal.learn.tabular import ActionValues, q_learning, sarsa
 
 #: What both tabular learners are, seen from here: same signature, same return.
 TabularLearner = Callable[..., ActionValues[tuple[int, int], tuple[int, int]]]

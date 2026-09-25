@@ -18,7 +18,7 @@ import numpy as np
 import pytest
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.sandbox.tropical import (
+from sal.sandbox.tropical import (
     QuartetTable,
     pairing_positions,
     quartet_indices,

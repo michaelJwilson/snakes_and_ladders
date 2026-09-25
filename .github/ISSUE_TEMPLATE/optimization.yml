@@ -39,7 +39,7 @@ body:
         - "NumPy vectorization"
         - "numba njit"
         - "A Rust kernel"
-        - "rayon over independent tasks, or snakes_and_ladders.parallel"
+        - "rayon over independent tasks, or sal.parallel"
         - "The GIL released around a kernel"
         - "GPU through torch"
     validations:

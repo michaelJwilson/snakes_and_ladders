@@ -17,27 +17,27 @@ from itertools import product
 
 import numpy as np
 import pytest
-from snakes_and_ladders.sample.potts_mcmc import find_root, union_roots
-from snakes_and_ladders.sample.potts_mcmc.sweeps import bond_probability
-from snakes_and_ladders.sim.canonical import planted_spin_glass
-from snakes_and_ladders.sim.graph import (
+from sal.sample.potts_mcmc import find_root, union_roots
+from sal.sample.potts_mcmc.sweeps import bond_probability
+from sal.sim.canonical import planted_spin_glass
+from sal.sim.graph import (
     BoundaryCondition,
     PottsGraph,
     erdos_renyi_graph,
     lattice_graph,
     triangular_lattice_graph,
 )
-from snakes_and_ladders.sim.potts import critical_coupling
-from snakes_and_ladders.sim.topology import (
+from sal.sim.potts import critical_coupling
+from sal.sim.topology import (
     Topology,
     enumerate_topologies,
     nni_neighbours,
     random_topology,
     robinson_foulds,
 )
-from snakes_and_ladders.sim.tree import edges as tree_edges
-from snakes_and_ladders.sim.tree import preorder
-from snakes_and_ladders.validation import rustworkx
+from sal.sim.tree import edges as tree_edges
+from sal.sim.tree import preorder
+from sal.validation import rustworkx
 
 from tests._frameworks import requires
 from tests._rows import every_row, every_value

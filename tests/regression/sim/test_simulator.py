@@ -14,20 +14,20 @@ import inspect
 
 import numpy as np
 import pytest
-from snakes_and_ladders.sim.emission_mixture import simulate_emission_mixture
-from snakes_and_ladders.sim.fixtures import PARAMS, fixture
-from snakes_and_ladders.sim.graph import lattice_graph
-from snakes_and_ladders.sim.hmm import simulate_sequences
-from snakes_and_ladders.sim.mixture import simulate_mixture
-from snakes_and_ladders.sim.potts import simulate_potts
-from snakes_and_ladders.sim.potts_chain import simulate_chains
-from snakes_and_ladders.sim.simulator import (
+from sal.sim.emission_mixture import simulate_emission_mixture
+from sal.sim.fixtures import PARAMS, fixture
+from sal.sim.graph import lattice_graph
+from sal.sim.hmm import simulate_sequences
+from sal.sim.mixture import simulate_mixture
+from sal.sim.potts import simulate_potts
+from sal.sim.potts_chain import simulate_chains
+from sal.sim.simulator import (
     NOT_SIMULATED,
     SIMULATORS,
     Simulator,
     simulate_tree,
 )
-from snakes_and_ladders.sim.spatio_sequential import simulate_spatio_sequential
+from sal.sim.spatio_sequential import simulate_spatio_sequential
 
 #: One declared problem per simulated model, at the tier every test can afford.
 PROBLEM_OF: dict[str, str] = {

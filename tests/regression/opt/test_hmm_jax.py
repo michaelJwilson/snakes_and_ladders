@@ -11,8 +11,8 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from snakes_and_ladders.opt import hmm_jax
-from snakes_and_ladders.opt.hmm import (
+from sal.opt import hmm_jax
+from sal.opt.hmm import (
     BetaBinomialHmmObjective,
     BinomialHmmObjective,
     GaussianHmmObjective,
@@ -114,8 +114,8 @@ def test_one_structure_compiles_once() -> None:
 def test_the_default_gradient_is_the_torch_backend() -> None:
     # Referee: the same objective built with Backend.TORCH, autograd.
     def check(index: int) -> None:
-        from snakes_and_ladders.backend import Backend
-        from snakes_and_ladders.opt.objective import value_and_gradient
+        from sal.backend import Backend
+        from sal.opt.objective import value_and_gradient
 
         objective = _objectives()[index]
         theta = objective.initial() + 0.1
@@ -136,8 +136,8 @@ def test_the_default_gradient_is_the_torch_backend() -> None:
 @pytest.mark.oracle
 def test_a_fit_under_either_backend_reaches_one_optimum() -> None:
     # Referee: the L-BFGS fit under Backend.TORCH from the same start.
-    from snakes_and_ladders.backend import Backend
-    from snakes_and_ladders.opt.fit import fit
+    from sal.backend import Backend
+    from sal.opt.fit import fit
 
     rng = np.random.default_rng(3)
     counts = rng.poisson(np.repeat([2.0, 9.0], 50), size=(4, 100))

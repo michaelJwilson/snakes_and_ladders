@@ -14,17 +14,17 @@ import math
 import numpy as np
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.likelihood import message_passing_reference as reference
-from snakes_and_ladders.likelihood.belief_propagation import belief_propagation
-from snakes_and_ladders.likelihood.message_passing import (
+from sal.backend import Backend
+from sal.likelihood import message_passing_reference as reference
+from sal.likelihood.belief_propagation import belief_propagation
+from sal.likelihood.message_passing import (
     MessageScheduleName,
     max_product,
     sum_product,
 )
-from snakes_and_ladders.opt.hmm import forward_log_likelihood_from_density
-from snakes_and_ladders.sim.factor_graph import from_hmm, from_potts
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+from sal.opt.hmm import forward_log_likelihood_from_density
+from sal.sim.factor_graph import from_hmm, from_potts
+from sal.sim.graph import BoundaryCondition, lattice_graph
 
 _LENGTH = 200
 _STATES = 4

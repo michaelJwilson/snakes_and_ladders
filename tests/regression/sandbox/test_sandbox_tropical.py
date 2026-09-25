@@ -4,7 +4,7 @@ Issue #408; ``ROADMAP.md`` Stage 3's missing oracle. Enumeration at 5 to 8
 taxa: at a corner the relaxation is the discrete objective and a tree metric,
 leakage is bounded, and ascent is held to the enumerated maximum. The
 Hadamard conjugation (``eq:hadamard``) gives a metric sharing no algebra with
-:func:`~snakes_and_ladders.likelihood.distance.tree_distances`, on which the
+:func:`~sal.likelihood.distance.tree_distances`, on which the
 four-point condition holds to ``1e-12``. The corner tolerance is relative:
 at ``temperature_for``'s ``tau`` the leakage is under ``1e-11`` and the rest
 is rounding, ``3.8e-16`` of the value; at 340,000 an absolute ``1e-11`` is 3 ulp.
@@ -18,8 +18,8 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from snakes_and_ladders.likelihood.distance import distance_matrix, tree_distances
-from snakes_and_ladders.likelihood.hadamard import (
+from sal.likelihood.distance import distance_matrix, tree_distances
+from sal.likelihood.hadamard import (
     binary_recoding,
     edge_spectrum,
     expected_spectrum,
@@ -27,7 +27,7 @@ from snakes_and_ladders.likelihood.hadamard import (
     sequence_spectrum,
     split_weights,
 )
-from snakes_and_ladders.sandbox.tropical import (
+from sal.sandbox.tropical import (
     MINIMUM_TEMPERATURE,
     PAIRINGS,
     QuartetTable,
@@ -45,13 +45,13 @@ from snakes_and_ladders.sandbox.tropical import (
     resolutions,
     temperature_for,
 )
-from snakes_and_ladders.search.infer import score_topology
-from snakes_and_ladders.search.neighbor_joining import (
+from sal.search.infer import score_topology
+from sal.search.neighbor_joining import (
     four_point_violation,
     neighbor_joining,
 )
-from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.topology import (
+from sal.sim.params import SimulationParams
+from sal.sim.topology import (
     Topology,
     enumerate_topologies,
     leaf_bipartitions,

@@ -5,7 +5,7 @@ oracle: none
 # Gaussian elimination is cubic and refuses past 512 bits, so 96 is where
 # encoding a message and decoding the received word is still a round trip
 # that can be checked. Every field is required -- see
-# python/snakes_and_ladders/sim/ldpc.py.
+# python/sal/sim/ldpc.py.
 #
 # No oracle at this size: 2**48 codewords cannot be enumerated, and what is
 # checked here is a symmetry (the posterior of the encoded word is the

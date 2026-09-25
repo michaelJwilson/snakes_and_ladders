@@ -1,4 +1,4 @@
-"""Regression tests for snakes_and_ladders.qa.starts_table (issues #891, #898).
+"""Regression tests for sal.qa.starts_table (issues #891, #898).
 
 The layout is pinned, not the rendering: one row per start in the order
 given, five columns --- the initializer, the gap and the seconds at the
@@ -11,9 +11,9 @@ same cells.
 from __future__ import annotations
 
 import pytest
-from snakes_and_ladders.qa.figure import check_latex_safe
-from snakes_and_ladders.qa.starts_table import build_array, build_table
-from snakes_and_ladders.search.mixture_starts import StartRow
+from sal.qa.figure import check_latex_safe
+from sal.qa.starts_table import build_array, build_table
+from sal.search.mixture_starts import StartRow
 
 
 def _row(start: str, gaps: tuple[float, ...], *, deterministic: bool) -> StartRow:

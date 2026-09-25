@@ -13,7 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 
 #: Where a built extension sits in a worktree, by any platform's suffix.
-EXTENSION_GLOB = "python/snakes_and_ladders/oxisal*"
+EXTENSION_GLOB = "python/sal/oxisal*"
 
 #: What the extension is built from. `Cargo.lock` is here because a dependency
 #: bump changes the binary without touching a line of `src/`.

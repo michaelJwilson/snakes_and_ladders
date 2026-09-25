@@ -19,7 +19,7 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from snakes_and_ladders.emissions import (
+from sal.emissions import (
     BetaBinomialEmission,
     BinomialEmission,
     CategoricalEmission,
@@ -27,15 +27,15 @@ from snakes_and_ladders.emissions import (
     NegativeBinomialEmission,
     PoissonEmission,
 )
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.opt.fit import (
+from sal.fixtures import load_params
+from sal.opt.fit import (
     constrained_standard_errors,
     covers,
     fit,
     fit_from,
     standard_errors_at,
 )
-from snakes_and_ladders.opt.hmm import (
+from sal.opt.hmm import (
     BetaBinomialHmmObjective,
     BinomialHmmObjective,
     GaussianHmmObjective,
@@ -45,13 +45,13 @@ from snakes_and_ladders.opt.hmm import (
     align_states,
     baum_welch,
 )
-from snakes_and_ladders.opt.initialize import RandomRestart
-from snakes_and_ladders.opt.mixture import GaussianMixtureObjective
-from snakes_and_ladders.opt.objective import Objective
-from snakes_and_ladders.opt.potts import PottsObjective
-from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
-from snakes_and_ladders.sim.mixture import MixtureParams, simulate_mixture
-from snakes_and_ladders.sim.potts_chain import PottsParams, simulate_chains
+from sal.opt.initialize import RandomRestart
+from sal.opt.mixture import GaussianMixtureObjective
+from sal.opt.objective import Objective
+from sal.opt.potts import PottsObjective
+from sal.sim.hmm import HmmParams, simulate_sequences
+from sal.sim.mixture import MixtureParams, simulate_mixture
+from sal.sim.potts_chain import PottsParams, simulate_chains
 
 from tests._fixtures import FIXTURES_DIR
 from tests._objective_checks import AnalyticGaussian
@@ -359,7 +359,7 @@ def test_where_the_laplace_approximation_is_exact_the_chain_agrees_with_it() -> 
     # A Gaussian's Hessian is its precision: Laplace equals sqrt(diag) to
     # round-off. Chain ratios 1.0004 and 0.9953 at 4000 draws; the 5% bound is
     # 2.7x the largest over three seeds.
-    from snakes_and_ladders.sample.hmc import sample
+    from sal.sample.hmc import sample
 
     target = AnalyticGaussian([1.0, -2.0], [[2.0, 0.6], [0.6, 0.5]])
     exact = target.covariance.diagonal().sqrt()
@@ -384,7 +384,7 @@ def test_the_delta_method_interval_and_the_sampled_posterior_agree() -> None:
     # `hmc.py`'s promise, where the approximation may be one: the delta-method
     # interval on named parameters against a chain. Sampled spread 1.057,
     # 1.031, 1.036 times Laplace: slightly optimistic, as expected, reported.
-    from snakes_and_ladders.sample.hmc import WithGaussianPrior, sample
+    from sal.sample.hmc import WithGaussianPrior, sample
 
     field = np.array([0.3, -0.3])
     field = field - np.log(np.exp(field).sum())

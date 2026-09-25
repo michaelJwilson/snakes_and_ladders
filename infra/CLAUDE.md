@@ -67,7 +67,7 @@ lowering a floor to pass a change.
 
 A framework is adopted the way a backend is: it fronts a hot path once a
 measurement says it beats the implementation there, and that implementation
-moves to `python/snakes_and_ladders/sandbox/` and referees it from there
+moves to `python/sal/sandbox/` and referees it from there
 (`sandbox/CLAUDE.md`). Until that measurement exists a framework is a
 referee, not a replacement — a second implementation our numbers are pinned
 against, reached through an adapter that leaves the interface it wraps

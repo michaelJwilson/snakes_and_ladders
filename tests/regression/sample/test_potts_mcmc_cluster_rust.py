@@ -18,19 +18,19 @@ from typing import Any, cast
 
 import numpy as np
 import pytest
-from snakes_and_ladders import oxisal
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.likelihood.potts import log_weights
-from snakes_and_ladders.sample import potts_mcmc
-from snakes_and_ladders.sample.potts_mcmc import (
+from sal import oxisal
+from sal.backend import Backend
+from sal.likelihood.potts import log_weights
+from sal.sample import potts_mcmc
+from sal.sample.potts_mcmc import (
     ClusterCounter,
     PottsMove,
     sample_potts,
     swendsen_wang_sweep,
 )
-from snakes_and_ladders.sample.potts_mcmc.sweeps import GUARD, bond_probability
-from snakes_and_ladders.sample.statistics import chi_square_p_value
-from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from sal.sample.potts_mcmc.sweeps import GUARD, bond_probability
+from sal.sample.statistics import chi_square_p_value
+from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
 from tests._chains import enumerated_law, fit_p_value
 from tests._rows import every_row, every_value

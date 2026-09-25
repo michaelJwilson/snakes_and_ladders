@@ -14,11 +14,11 @@ import itertools
 
 import numpy as np
 import pytest
-from snakes_and_ladders.likelihood.spatio_sequential import external_field
-from snakes_and_ladders.sample.potts_mcmc import wolff_sweep
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.potts import SiteField, energy
-from snakes_and_ladders.sim.spatio_sequential import simulate_spatio_sequential
+from sal.likelihood.spatio_sequential import external_field
+from sal.sample.potts_mcmc import wolff_sweep
+from sal.sim.fixtures import fixture
+from sal.sim.potts import SiteField, energy
+from sal.sim.spatio_sequential import simulate_spatio_sequential
 
 #: Steps per run on the stress fixture (100 sites, 2 classes, 4 positions): the
 #: CI fixture has 4 sites, where a random start is already a cold fixed point.

@@ -13,12 +13,12 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.sample.hmc import (
+from sal.sample.hmc import (
     Adaptation,
     effective_sample_size,
     sample,
 )
-from snakes_and_ladders.sample.langevin import (
+from sal.sample.langevin import (
     GRADIENTS_PER_PROPOSAL,
     LANGEVIN_STEPS,
     MALA_TARGET_ACCEPTANCE,

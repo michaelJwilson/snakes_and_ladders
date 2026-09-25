@@ -14,12 +14,12 @@ import itertools
 
 import numpy as np
 import pytest
-from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.opt.budget import Budget
-from snakes_and_ladders.sample.potts_mcmc import PottsMove
-from snakes_and_ladders.sample.schedule import ScheduleParams, ScheduleShape
-from snakes_and_ladders.search.cluster_moves import run_cluster_tempering
-from snakes_and_ladders.search.ground_state import (
+from sal.cost import Cost
+from sal.opt.budget import Budget
+from sal.sample.potts_mcmc import PottsMove
+from sal.sample.schedule import ScheduleParams, ScheduleShape
+from sal.search.cluster_moves import run_cluster_tempering
+from sal.search.ground_state import (
     EXPANSION_RESERVE_CYCLES,
     Rung,
     ends_labelling,
@@ -28,9 +28,9 @@ from snakes_and_ladders.search.ground_state import (
     run_expansion_then_swendsen_wang,
     run_swendsen_wang_then_expansion,
 )
-from snakes_and_ladders.search.potts_starts import spatio_rung
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.potts import energies, energy
+from sal.search.potts_starts import spatio_rung
+from sal.sim.fixtures import fixture
+from sal.sim.potts import energies, energy
 
 #: Sweeps' worth of site visits for the release-size arms: the notebook's
 #: 1,000 cut to keep each run near a second.

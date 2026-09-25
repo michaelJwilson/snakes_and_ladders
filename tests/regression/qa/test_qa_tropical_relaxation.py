@@ -12,14 +12,14 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.qa.tropical_relaxation import (
+from sal.qa.tropical_relaxation import (
     TEMPERATURES,
     TOLERANCE,
     Surfaces,
     Sweep,
     measure,
 )
-from snakes_and_ladders.sim.fixtures import fixture
+from sal.sim.fixtures import fixture
 
 from tests.regression.sandbox.test_sandbox_tropical import CORNER_RELATIVE_TOLERANCE
 

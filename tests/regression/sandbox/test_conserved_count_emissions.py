@@ -14,14 +14,12 @@ import hashlib
 
 import pytest
 import torch
-from snakes_and_ladders import emissions as live
-from snakes_and_ladders.sandbox import count_emissions as conserved
+from sal import emissions as live
+from sal.sandbox import count_emissions as conserved
 
 from tests._paths import REPO_ROOT
 
-CONSERVED = (
-    REPO_ROOT / "python" / "snakes_and_ladders" / "sandbox" / "count_emissions.py"
-)
+CONSERVED = REPO_ROOT / "python" / "sal" / "sandbox" / "count_emissions.py"
 
 #: Everything the two families reach, closed transitively over the live
 #: module's own top-level names, in the order that module declares them.
@@ -112,7 +110,8 @@ def test_every_definition_the_families_reach_is_carried() -> None:
     imported = {
         alias.name
         for node in ast.parse(CONSERVED.read_text()).body
-        if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("snakes")
+        if isinstance(node, ast.ImportFrom)
+        and (node.module or "").split(".")[0] == "sal"
         for alias in node.names
     }
 

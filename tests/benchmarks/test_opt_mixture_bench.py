@@ -13,12 +13,12 @@ import math
 import numpy as np
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.emissions import GaussianEmission
-from snakes_and_ladders.opt.mixture import (
+from sal.emissions import GaussianEmission
+from sal.opt.mixture import (
     GaussianMixtureObjective,
     kmeans_plus_plus,
 )
-from snakes_and_ladders.sim.mixture import MixtureParams, simulate_mixture
+from sal.sim.mixture import MixtureParams, simulate_mixture
 
 WEIGHTS = np.array([0.2, 0.3, 0.5])
 MEAN = np.array([-6.0, 0.0, 6.0])

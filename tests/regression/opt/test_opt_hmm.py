@@ -2,7 +2,7 @@
 
 The forward recursion is checked against brute-force enumeration over every
 hidden path -- the independent-oracle pattern
-``snakes_and_ladders.likelihood.brute_force`` establishes for pruning: a
+``sal.likelihood.brute_force`` establishes for pruning: a
 recursion checked only against itself is checked against nothing.
 ``opt/CLAUDE.md``'s finite-difference derivative check is here too.
 """
@@ -16,8 +16,8 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.emissions import (
+from sal.backend import Backend
+from sal.emissions import (
     BetaBinomialEmission,
     BinomialEmission,
     CategoricalEmission,
@@ -26,9 +26,9 @@ from snakes_and_ladders.emissions import (
     NegativeBinomialEmission,
     PoissonEmission,
 )
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.likelihood.hmm_paths import enumerate_hidden_paths
-from snakes_and_ladders.opt.hmm import (
+from sal.fixtures import load_params
+from sal.likelihood.hmm_paths import enumerate_hidden_paths
+from sal.opt.hmm import (
     EmFit,
     GaussianHmmObjective,
     HmmObjective,
@@ -39,8 +39,8 @@ from snakes_and_ladders.opt.hmm import (
     hmm_log_likelihood,
     viterbi,
 )
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
+from sal.sim.fixtures import fixture
+from sal.sim.hmm import HmmParams, simulate_sequences
 
 from tests._fixtures import FIXTURES_DIR
 from tests._objective_checks import assert_gradient_matches_finite_differences

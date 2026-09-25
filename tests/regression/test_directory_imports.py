@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-PACKAGE = Path(__file__).resolve().parents[2] / "python" / "snakes_and_ladders"
+PACKAGE = Path(__file__).resolve().parents[2] / "python" / "sal"
 DIRECTORIES = ("sim", "likelihood", "opt", "search", "sample", "learn", "qa")
 
 #: The directories the division does not run through. `sandbox/` reads the
@@ -96,15 +96,11 @@ def _imported_directories(path: Path) -> set[str]:
         if (
             isinstance(node, ast.ImportFrom)
             and node.module
-            and node.module.startswith("snakes_and_ladders")
+            and node.module.startswith("sal")
         ):
             names = [node.module]
         elif isinstance(node, ast.Import):
-            names = [
-                alias.name
-                for alias in node.names
-                if alias.name.startswith("snakes_and_ladders")
-            ]
+            names = [alias.name for alias in node.names if alias.name.startswith("sal")]
         for name in names:
             parts = name.split(".")
             found.add(
@@ -163,7 +159,7 @@ def test_python_holds_only_the_declared_package() -> None:
     # One package is built from `python/`. `python/phylo/`, a dangling symlink
     # the rename (#252) left, survived unnamed until #873.
     entries = sorted(entry.name for entry in PACKAGE.parent.iterdir())
-    assert entries == ["snakes_and_ladders"], entries
+    assert entries == ["sal"], entries
 
 
 @pytest.mark.smoke
@@ -189,22 +185,18 @@ def test_the_edge_reader_finds_an_edge_no_sentence_admits(tmp_path: Path) -> Non
     # A reader that finds nothing passes the assertions above, so it runs over
     # known edges: `opt -> sim` in the four import forms, `opt -> search` from
     # a function-local import, beside a module that crosses nothing.
-    package = tmp_path / "snakes_and_ladders"
+    package = tmp_path / "sal"
     _write(
         package,
         "opt/objective.py",
-        "from snakes_and_ladders.sim.graph import PottsGraph\n"
-        "from snakes_and_ladders.sim.potts import (\n    site_field,\n)\n"
-        "import snakes_and_ladders.numerics\n"
+        "from sal.sim.graph import PottsGraph\n"
+        "from sal.sim.potts import (\n    site_field,\n)\n"
+        "import sal.numerics\n"
         "def fit() -> None:\n"
-        "    from snakes_and_ladders.search.infer import score_topology\n",
+        "    from sal.search.infer import score_topology\n",
     )
-    _write(
-        package, "sim/graph.py", "from snakes_and_ladders.numerics import logsumexp\n"
-    )
-    _write(
-        package, "sandbox/declined.py", "from snakes_and_ladders.opt.fit import fit\n"
-    )
+    _write(package, "sim/graph.py", "from sal.numerics import logsumexp\n")
+    _write(package, "sandbox/declined.py", "from sal.opt.fit import fit\n")
 
     realized = edges(package)
 
@@ -224,16 +216,16 @@ def test_the_edge_reader_finds_an_edge_no_sentence_admits(tmp_path: Path) -> Non
 def test_the_cycle_reader_finds_a_cycle_on_a_tree_that_has_one(tmp_path: Path) -> None:
     # The same control for the second claim: two directories importing each
     # other are a cycle, and one importing the other is not.
-    package = tmp_path / "snakes_and_ladders"
+    package = tmp_path / "sal"
     _write(
         package,
         "search/infer.py",
-        "from snakes_and_ladders.sample.gibbs import sweep\n",
+        "from sal.sample.gibbs import sweep\n",
     )
     _write(
         package,
         "sample/gibbs.py",
-        "from snakes_and_ladders.sim.graph import PottsGraph\n",
+        "from sal.sim.graph import PottsGraph\n",
     )
     _write(package, "sim/graph.py", "import numpy as np\n")
 
@@ -244,7 +236,7 @@ def test_the_cycle_reader_finds_a_cycle_on_a_tree_that_has_one(tmp_path: Path) -
     _write(
         package,
         "sample/tempered.py",
-        "from snakes_and_ladders.search.infer import score\n",
+        "from sal.search.infer import score\n",
     )
     realized = set(edges(package))
 

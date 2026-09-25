@@ -59,7 +59,7 @@ FIXTURES = REPO_ROOT / "tests" / "regression" / "fixtures"
 
 #: The prefix every code symbol in the catalogue carries. A backticked cell
 #: without it is a path (a fixture, a notebook) and names no algorithm.
-PACKAGE = "snakes_and_ladders."
+PACKAGE = "sal."
 
 ALGORITHM_COLUMNS = (
     "simulation",
@@ -315,9 +315,9 @@ class UnnamedSymbolError(ValueError):
 def _bindings(tree: ast.Module) -> tuple[dict[str, str], dict[str, str]]:
     """Names a test file binds to package symbols, and to package modules.
 
-    ``from snakes_and_ladders.a.b import c as d`` binds ``d`` to the symbol
-    ``a.b.c``; ``from snakes_and_ladders.a import b`` and
-    ``import snakes_and_ladders.a.b`` bind a name to the module ``a.b``, whose
+    ``from sal.a.b import c as d`` binds ``d`` to the symbol
+    ``a.b.c``; ``from sal.a import b`` and
+    ``import sal.a.b`` bind a name to the module ``a.b``, whose
     attributes are then symbols.
     """
     symbols: dict[str, str] = {}
@@ -331,7 +331,7 @@ def _bindings(tree: ast.Module) -> tuple[dict[str, str], dict[str, str]]:
                 bound = alias.asname or alias.name
                 target = f"{base}.{alias.name}" if base else alias.name
                 if base and base.count(".") == 0 and "." not in alias.name:
-                    # `from snakes_and_ladders.likelihood import pruning`: a
+                    # `from sal.likelihood import pruning`: a
                     # module of the package, or a symbol of a top-level module.
                     modules[bound] = target
                 symbols[bound] = target

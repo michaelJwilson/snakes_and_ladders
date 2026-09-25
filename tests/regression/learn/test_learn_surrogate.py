@@ -14,8 +14,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.bound import Bound
-from snakes_and_ladders.learn.surrogate import (
+from sal.bound import Bound
+from sal.learn.surrogate import (
     AttentionSurrogate,
     Examples,
     GraphSurrogate,

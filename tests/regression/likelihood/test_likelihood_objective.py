@@ -1,7 +1,7 @@
 """Regression tests for the phylogenetic instance of ``Objective``.
 
 Two things nothing else in the suite can pin. The optimizer is the same
-model-agnostic ``snakes_and_ladders.opt.fit`` the Potts chain and the HMM use,
+model-agnostic ``sal.opt.fit`` the Potts chain and the HMM use,
 so this file confirms or refutes issue #63's claim that the interface was not
 secretly shaped by one model.
 
@@ -20,13 +20,13 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from snakes_and_ladders.likelihood import pruning_torch
-from snakes_and_ladders.likelihood.objective import (
+from sal.likelihood import pruning_torch
+from sal.likelihood.objective import (
     BranchLengthObjective,
     GradientRoute,
     SubstitutionModelObjective,
 )
-from snakes_and_ladders.opt.fit import (
+from sal.opt.fit import (
     FitResult,
     constrained_standard_errors,
     covers,
@@ -34,11 +34,11 @@ from snakes_and_ladders.opt.fit import (
     observed_information,
     parameter_covariance,
 )
-from snakes_and_ladders.sim.gtr import gtr_rate_matrix
-from snakes_and_ladders.sim.jc import jc_rate_matrix
-from snakes_and_ladders.sim.simulate import simulate_alignment
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.tree import Node, preorder
+from sal.sim.gtr import gtr_rate_matrix
+from sal.sim.jc import jc_rate_matrix
+from sal.sim.simulate import simulate_alignment
+from sal.sim.simulator import simulate_tree
+from sal.sim.tree import Node, preorder
 
 from tests._fixtures import (
     EIGHT_TAXA,
@@ -168,7 +168,7 @@ class _Unmerged:
 @pytest.mark.smoke
 def test_fitting_the_root_branches_separately_has_no_intervals() -> None:
     # The consequence of the confounding: a flat direction makes the
-    # observed information singular, and `snakes_and_ladders.opt.fit` refuses to invert
+    # observed information singular, and `sal.opt.fit` refuses to invert
     # it. This is what the merged parameterization exists to avoid, and the
     # reason it is not merely a tidier way to count parameters.
     params, alignment = simulated_alignment(EIGHT_TAXA, _SITES)

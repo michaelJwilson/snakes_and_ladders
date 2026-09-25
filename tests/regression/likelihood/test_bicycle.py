@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.likelihood.ldpc import decode, exact_decoding
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.ldpc import (
+from sal.likelihood.ldpc import decode, exact_decoding
+from sal.sim.fixtures import fixture
+from sal.sim.ldpc import (
     BinaryErasureChannel,
     BinaryInputGaussianChannel,
     BinarySymmetricChannel,

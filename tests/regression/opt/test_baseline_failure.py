@@ -15,20 +15,20 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.learn.failure import (
+from sal.cost import Cost
+from sal.fixtures import load_params
+from sal.learn.failure import (
     FailureCurve,
     failure_curve,
     probe_failure,
 )
-from snakes_and_ladders.learn.rollout import greedy_rollout
-from snakes_and_ladders.learn.tree import RewardModel, TreeEnvironment
-from snakes_and_ladders.opt.budget import Budget, Outcome, OverspendError, restarts
-from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.topology import MoveSet, enumerate_topologies
-from snakes_and_ladders.sim.tree import edges
+from sal.learn.rollout import greedy_rollout
+from sal.learn.tree import RewardModel, TreeEnvironment
+from sal.opt.budget import Budget, Outcome, OverspendError, restarts
+from sal.sim.params import SimulationParams
+from sal.sim.simulator import simulate_tree
+from sal.sim.topology import MoveSet, enumerate_topologies
+from sal.sim.tree import edges
 
 #: The instance #194 measured, and the budget it measured at: a greedy descent
 #: stops after about four decisions, so 60 buys roughly fifteen restarts.

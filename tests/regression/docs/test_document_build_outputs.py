@@ -2,7 +2,7 @@
 
 Issue #429. `DEV.md` tables which outputs a build rewrites and which of those a
 pull request commits. The referee is the build's own sources, not a second
-list: the stems from `snakes_and_ladders.qa.manifest` and the documents'
+list: the stems from `sal.qa.manifest` and the documents'
 citations, the documents from `infra/build_documents.sh`, tracked paths from
 `git`, and ignored ones from `.gitignore`.
 
@@ -19,7 +19,7 @@ from pathlib import Path
 
 import catalogue
 import pytest
-from snakes_and_ladders.qa.manifest import FIGURES, cited_stems
+from sal.qa.manifest import FIGURES, cited_stems
 
 from tests._paths import REPO_ROOT
 
@@ -36,7 +36,7 @@ _QUOTED = re.compile(r"`([^`]+)`")
 _DOCUMENT_LOOP = re.compile(r"^for document in (.+); do$", re.MULTILINE)
 
 #: The sources the script hands the figure selection, and where it puts the
-#: renders, read from the script: `snakes_and_ladders.qa.build`'s defaults
+#: renders, read from the script: `sal.qa.build`'s defaults
 #: resolve against the installed checkout, which may be another worktree.
 _SELECTION_DOCUMENT = re.compile(r"^\s*--document (\S+)", re.MULTILINE)
 _OUTPUT_DIR = re.compile(r"^\s*--output-dir (\S+)", re.MULTILINE)

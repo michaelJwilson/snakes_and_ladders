@@ -28,8 +28,8 @@ did (issue #278).
 
 ## Running them
 
-The notebooks import `snakes_and_ladders` and take their instance from the
-fixture registry --- `snakes_and_ladders.sim.fixtures.fixture(problem, tier)`,
+The notebooks import `sal` and take their instance from the
+fixture registry --- `sal.sim.fixtures.fixture(problem, tier)`,
 one file per problem and tier under `tests/regression/fixtures/` --- which
 resolves the repository root from wherever they are opened. A notebook builds
 no instance of its own, and a guard refuses one that does (`PROBLEMS.md`,
@@ -105,8 +105,8 @@ does not need it.
 
 ## Keeping them true
 
-A change to `snakes_and_ladders.sim`, `snakes_and_ladders.opt`, `snakes_and_ladders.likelihood`, `snakes_and_ladders.search` or
-`snakes_and_ladders.learn` that alters a number these notebooks print must re-run them in
+A change to `sal.sim`, `sal.opt`, `sal.likelihood`, `sal.search` or
+`sal.learn` that alters a number these notebooks print must re-run them in
 the same pull request, exactly as it must regenerate a `docs/tex/` figure.
 Regenerate with the same tool that checks them:
 

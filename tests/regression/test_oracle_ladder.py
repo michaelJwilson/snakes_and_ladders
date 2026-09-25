@@ -16,7 +16,7 @@ import coverage_recut
 import ladder
 import pytest
 from ladder import LADDER, LADDER_UNITS, PROBLEMS, Rung
-from snakes_and_ladders.cost import Cost
+from sal.cost import Cost
 
 from tests._paths import REPO_ROOT
 
@@ -27,7 +27,7 @@ from tests._paths import REPO_ROOT
 UNPINNED_TODAY = 0
 
 #: The package every rung's callable is relative to.
-PACKAGE = "snakes_and_ladders"
+PACKAGE = "sal"
 
 
 @pytest.fixture(scope="module")

@@ -15,23 +15,23 @@ from pathlib import Path
 import numpy as np
 import pytest
 import yaml
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.emissions import PoissonEmission
-from snakes_and_ladders.sim.count_pairs import (
+from sal.backend import Backend
+from sal.emissions import PoissonEmission
+from sal.sim.count_pairs import (
     SUCCESSES,
     TOTAL,
     CountPairInstance,
     IndependentCountPair,
     counts_digest,
 )
-from snakes_and_ladders.sim.count_pairs import (
+from sal.sim.count_pairs import (
     simulate_count_pairs as simulate_numpy,
 )
-from snakes_and_ladders.sim.count_pairs_rust import fine_instance
-from snakes_and_ladders.sim.count_pairs_rust import (
+from sal.sim.count_pairs_rust import fine_instance
+from sal.sim.count_pairs_rust import (
     simulate_count_pairs as simulate_rust,
 )
-from snakes_and_ladders.sim.fixtures import fixture
+from sal.sim.fixtures import fixture
 
 PROBLEM = "spatio_sequential_counts"
 

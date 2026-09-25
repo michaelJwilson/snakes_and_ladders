@@ -3,10 +3,10 @@
 **A tracked run is the untracked run**, bitwise: same seed, same draws,
 labelling and counters under :data:`NULL_RUN`. **A recorded series ends at the
 field the result reports**, by ``==``. **A metric is a function the package
-already has**: each :class:`~snakes_and_ladders.track.Metrics` is pinned to
+already has**: each :class:`~sal.track.Metrics` is pinned to
 the function its docstring cites and to the truth where the problem has one
 (zero split distance, zero bit errors, zero distance at a known minimizer).
-The referee is :class:`~snakes_and_ladders.track.MemoryRun`, which also
+The referee is :class:`~sal.track.MemoryRun`, which also
 referees the Aim round trip.
 """
 
@@ -20,28 +20,28 @@ import numpy as np
 import pytest
 import torch
 from matplotlib.figure import Figure
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.emissions import CategoricalEmission
-from snakes_and_ladders.likelihood import parsimony, pruning
-from snakes_and_ladders.likelihood.hmm_paths import enumerate_hidden_paths
-from snakes_and_ladders.likelihood.ldpc import CodeMetrics
-from snakes_and_ladders.likelihood.mixture_assignments import (
+from sal.backend import Backend
+from sal.emissions import CategoricalEmission
+from sal.likelihood import parsimony, pruning
+from sal.likelihood.hmm_paths import enumerate_hidden_paths
+from sal.likelihood.ldpc import CodeMetrics
+from sal.likelihood.mixture_assignments import (
     enumerate_mixture_assignments,
 )
-from snakes_and_ladders.likelihood.objective import TreeMetrics
-from snakes_and_ladders.opt import testfunctions
-from snakes_and_ladders.opt.fit import fit
-from snakes_and_ladders.opt.hmm import HmmMetrics, HmmObjective, forward_log_likelihood
-from snakes_and_ladders.opt.mixture import (
+from sal.likelihood.objective import TreeMetrics
+from sal.opt import testfunctions
+from sal.opt.fit import fit
+from sal.opt.hmm import HmmMetrics, HmmObjective, forward_log_likelihood
+from sal.opt.mixture import (
     GaussianMixtureObjective,
     MixtureMetrics,
     clustering_cost,
     mixture_log_likelihood,
 )
-from snakes_and_ladders.opt.testfunctions import Himmelblau, Rastrigin, Rosenbrock
-from snakes_and_ladders.parallel import map_tasks
-from snakes_and_ladders.qa.figure import write_qa_figure
-from snakes_and_ladders.sample import (
+from sal.opt.testfunctions import Himmelblau, Rastrigin, Rosenbrock
+from sal.parallel import map_tasks
+from sal.qa.figure import write_qa_figure
+from sal.sample import (
     annealed,
     hmc,
     langevin,
@@ -49,14 +49,14 @@ from snakes_and_ladders.sample import (
     slice,
     tempered,
 )
-from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
-from snakes_and_ladders.sim.elementary_codes import hamming_code
-from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
-from snakes_and_ladders.sim.hmm import HmmParams
-from snakes_and_ladders.sim.potts import PottsMetrics, energy
-from snakes_and_ladders.sim.topology import robinson_foulds
-from snakes_and_ladders.sim.tree import Node
-from snakes_and_ladders.track import (
+from sal.sample.schedule import ExponentialTempSchedule
+from sal.sim.elementary_codes import hamming_code
+from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from sal.sim.hmm import HmmParams
+from sal.sim.potts import PottsMetrics, energy
+from sal.sim.topology import robinson_foulds
+from sal.sim.tree import Node
+from sal.track import (
     NULL,
     NULL_RUN,
     MemoryRun,

@@ -12,15 +12,15 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from snakes_and_ladders.likelihood.spatio_sequential import (
+from sal.likelihood.spatio_sequential import (
     class_log_density,
     external_field,
     marginal_log_likelihood_torch,
 )
-from snakes_and_ladders.sim.count_pairs import IndependentCountPair
-from snakes_and_ladders.sim.count_pairs_rust import fine_instance
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.spatio_sequential import (
+from sal.sim.count_pairs import IndependentCountPair
+from sal.sim.count_pairs_rust import fine_instance
+from sal.sim.fixtures import fixture
+from sal.sim.spatio_sequential import (
     SpatioSequentialParams,
     gated_log_density,
 )
@@ -83,7 +83,7 @@ def test_the_field_and_the_posterior_agree_about_the_model() -> None:
     """
     params, observations, labels = _instance()
     covaried = replace(params, covariate=_covariate(observations, spread=4.0))
-    from snakes_and_ladders.likelihood.spatio_sequential import class_posteriors
+    from sal.likelihood.spatio_sequential import class_posteriors
 
     posterior = class_posteriors(covaried, observations, labels).posterior
 

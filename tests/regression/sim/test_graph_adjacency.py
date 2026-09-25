@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.sim.canonical import planted_spin_glass
-from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from sal.sim.canonical import planted_spin_glass
+from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
 
 def _neighbour_lists(graph: PottsGraph) -> list[list[tuple[int, float]]]:

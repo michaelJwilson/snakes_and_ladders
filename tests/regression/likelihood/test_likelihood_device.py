@@ -12,8 +12,8 @@ from __future__ import annotations
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from snakes_and_ladders.likelihood import pruning, pruning_torch
-from snakes_and_ladders.likelihood.device import (
+from sal.likelihood import pruning, pruning_torch
+from sal.likelihood.device import (
     CROSS_DEVICE_RTOL_FLOAT32,
     CROSS_DEVICE_RTOL_FLOAT64,
     available_device,

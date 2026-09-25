@@ -2,7 +2,7 @@
 
 Each route's gradient is pinned in its own module; here, a search fitting with
 any of them returns the same topology from
-:func:`snakes_and_ladders.search.infer.infer`. The swap is a ``monkeypatch``
+:func:`sal.search.infer.infer`. The swap is a ``monkeypatch``
 of ``pruning_torch.log_likelihood``, not a permanent seam (issue #425).
 """
 
@@ -14,9 +14,9 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from snakes_and_ladders.likelihood import pruning_analytic, pruning_torch
-from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from snakes_and_ladders.search.infer import infer
+from sal.likelihood import pruning_analytic, pruning_torch
+from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
+from sal.search.infer import infer
 
 from tests._fixtures import SMALL_SITES, simulated_alignment
 

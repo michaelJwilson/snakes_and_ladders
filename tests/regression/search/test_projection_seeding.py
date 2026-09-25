@@ -18,23 +18,22 @@ from collections.abc import Callable, Iterable
 import numpy as np
 import pytest
 import torch
-from scipy.optimize import minimize_scalar
-from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.opt.budget import Budget, compare
-from snakes_and_ladders.opt.initialize import (
+from sal.cost import Cost
+from sal.opt.budget import Budget, compare
+from sal.opt.initialize import (
     FromObjective,
     Initializer,
     quantile_locations,
 )
-from snakes_and_ladders.opt.mixture import (
+from sal.opt.mixture import (
     GaussianMixtureObjective,
     kmeans_plus_plus,
     uniform_seeds,
 )
-from snakes_and_ladders.sample.initialize import FromAnnealing, FromChain, FromTempering
-from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
-from snakes_and_ladders.sample.statistics import chi_square_p_value
-from snakes_and_ladders.search.projection import (
+from sal.sample.initialize import FromAnnealing, FromChain, FromTempering
+from sal.sample.schedule import ExponentialTempSchedule
+from sal.sample.statistics import chi_square_p_value
+from sal.search.projection import (
     PASSES_PER_GRADIENT,
     SEEDINGS,
     CountPairAt,
@@ -50,15 +49,16 @@ from snakes_and_ladders.search.projection import (
     seed_at_means,
     state_bytes,
 )
-from snakes_and_ladders.sim.count_pairs import (
+from sal.sim.count_pairs import (
     SUCCESSES,
     TOTAL,
     IndependentCountPair,
     binned_model,
     planted_labels,
 )
-from snakes_and_ladders.sim.fixtures import KEY, fixture
-from snakes_and_ladders.track import MemoryRun, track
+from sal.sim.fixtures import KEY, fixture
+from sal.track import MemoryRun, track
+from scipy.optimize import minimize_scalar
 
 PROBLEM = "spatio_sequential_counts"
 

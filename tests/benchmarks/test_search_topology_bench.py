@@ -1,4 +1,4 @@
-"""Benchmarks for ``snakes_and_ladders.sim.topology``'s NNI and SPR generators.
+"""Benchmarks for ``sal.sim.topology``'s NNI and SPR generators.
 
 See ``tests/regression/test_search_topology.py`` for correctness. Runs at
 ``n = 10``, the module ``CLAUDE.md``'s topological-test size cap, on a
@@ -9,8 +9,8 @@ for a given ``n``, so neither generator gets a shortcut from balance).
 from __future__ import annotations
 
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.sim.topology import Topology, nni_neighbours, spr_neighbours
-from snakes_and_ladders.sim.tree import Node
+from sal.sim.topology import Topology, nni_neighbours, spr_neighbours
+from sal.sim.tree import Node
 
 N_TAXA = 10
 

@@ -16,9 +16,9 @@ import sys
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.emissions import GaussianEmission
-from snakes_and_ladders.opt.mixture import responsibilities
-from snakes_and_ladders.sample.relabel import (
+from sal.emissions import GaussianEmission
+from sal.opt.mixture import responsibilities
+from sal.sample.relabel import (
     MAX_SJW_COMPONENTS,
     RelabelMethod,
     aic,
@@ -281,7 +281,7 @@ def test_the_module_imports_no_torch() -> None:
     # arrays, leave torch unloaded; checked in a fresh process.
     code = (
         "import sys, numpy as np\n"
-        "from snakes_and_ladders.sample.relabel import stephens\n"
+        "from sal.sample.relabel import stephens\n"
         "stephens(np.random.default_rng(0).dirichlet(np.ones(3), (4, 5)))\n"
         "print('torch' in sys.modules)"
     )

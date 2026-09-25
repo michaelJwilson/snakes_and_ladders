@@ -1,6 +1,6 @@
 //! Vectorized inverse-CDF categorical sampling, ported from
-//! `python/snakes_and_ladders/numerics.py` (the NumPy oracle) to Rust, exposed to Python
-//! via PyO3 as `snakes_and_ladders.oxisal.sample_rows`.
+//! `python/sal/numerics.py` (the NumPy oracle) to Rust, exposed to Python
+//! via PyO3 as `sal.oxisal.sample_rows`.
 //!
 //! Issue #181's audit found this is 94-96% of `simulate_alignment`'s self
 //! time at both a CI-sized and a larger fixture, and the only candidate in
@@ -11,10 +11,10 @@
 //! amortize a GPU launch (`CLAUDE.md`, Performance).
 //!
 //! **The uniforms are drawn in Python and passed in.** This module does no
-//! sampling of its own and holds no generator. `snakes_and_ladders.sim`'s reproducibility
+//! sampling of its own and holds no generator. `sal.sim`'s reproducibility
 //! contract is that a seeded `numpy.random.Generator` determines the result,
 //! and a second stream inside Rust would break it silently -- the same
-//! reasoning `snakes_and_ladders.learn.policy.LinearPolicy.sample` gives for taking an
+//! reasoning `sal.learn.policy.LinearPolicy.sample` gives for taking an
 //! `rng` rather than reaching for torch's global generator. It also makes
 //! bit-exactness against the oracle a property of the arithmetic alone,
 //! which is what lets the regression test assert equality rather than a
@@ -215,7 +215,7 @@ pub fn sample_rows(
 ) -> PyResult<()> {
     // `as_slice` succeeds only for a C-contiguous array, so a borrow with
     // the wrong stride is impossible rather than merely unlikely. Contiguity
-    // is the wrapper's job: `snakes_and_ladders.numerics_rust` calls `ascontiguousarray`,
+    // is the wrapper's job: `sal.numerics_rust` calls `ascontiguousarray`,
     // which is free when the array already is one, so a sliced view is
     // normalized before it arrives and this check never fires in practice.
     // It stays because "never fires in practice" is a property of the

@@ -21,16 +21,15 @@ from functools import partial
 import numpy as np
 import pytest
 import torch
-from scipy.optimize import linear_sum_assignment
-from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.emissions import GaussianEmission, pooled_variance_floor
-from snakes_and_ladders.opt.budget import Budget, Comparison
-from snakes_and_ladders.opt.emission_mixture import (
+from sal.cost import Cost
+from sal.emissions import GaussianEmission, pooled_variance_floor
+from sal.opt.budget import Budget, Comparison
+from sal.opt.emission_mixture import (
     expectation_maximization,
     plus_plus_start,
 )
-from snakes_and_ladders.opt.initialize import Initializer
-from snakes_and_ladders.opt.mixture import (
+from sal.opt.initialize import Initializer
+from sal.opt.mixture import (
     GaussianMixtureObjective,
     canonical_order,
     clustering_cost,
@@ -40,19 +39,20 @@ from snakes_and_ladders.opt.mixture import (
     responsibilities,
     uniform_seeds,
 )
-from snakes_and_ladders.opt.objective import Objective
-from snakes_and_ladders.opt.starts import (
+from sal.opt.objective import Objective
+from sal.opt.starts import (
     PolishedPoint,
     SolverComparison,
     StartsBenchmark,
     polish_by_emission_em,
 )
-from snakes_and_ladders.opt.termination import Stop, Termination
-from snakes_and_ladders.sample.hmc import anneal, leapfrog, parallel_tempering, sample
-from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.mixture import MixtureParams, simulate_mixture
-from snakes_and_ladders.track import current
+from sal.opt.termination import Stop, Termination
+from sal.sample.hmc import anneal, leapfrog, parallel_tempering, sample
+from sal.sample.schedule import ExponentialTempSchedule
+from sal.sim.fixtures import fixture
+from sal.sim.mixture import MixtureParams, simulate_mixture
+from sal.track import current
+from scipy.optimize import linear_sum_assignment
 
 #: Evaluations the fit is held to, per start. One evaluation is one pass over
 #: the observations' per-component log densities, which is what an

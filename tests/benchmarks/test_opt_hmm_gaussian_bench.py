@@ -13,10 +13,10 @@ import math
 import numpy as np
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.emissions import GaussianEmission
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.opt.hmm import GaussianHmmObjective
-from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
+from sal.emissions import GaussianEmission
+from sal.fixtures import load_params
+from sal.opt.hmm import GaussianHmmObjective
+from sal.sim.hmm import HmmParams, simulate_sequences
 
 from tests._fixtures import FIXTURES_DIR
 

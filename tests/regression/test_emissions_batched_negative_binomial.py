@@ -15,14 +15,14 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.emissions import (
+from sal.emissions import (
     CountPairEmission,
     NegativeBinomialEmission,
     mstep,
 )
-from snakes_and_ladders.opt.mixture import responsibilities
-from snakes_and_ladders.sim.emission_mixture import simulate_emission_mixture
-from snakes_and_ladders.sim.fixtures import fixture
+from sal.opt.mixture import responsibilities
+from sal.sim.emission_mixture import simulate_emission_mixture
+from sal.sim.fixtures import fixture
 
 #: The declared floor for a reordered sum through a bisection (#648).
 FLOOR = 2e-06

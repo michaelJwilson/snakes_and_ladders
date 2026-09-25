@@ -14,7 +14,7 @@ import math
 
 import numpy as np
 import pytest
-from snakes_and_ladders.qa.potts_schedule import (
+from sal.qa.potts_schedule import (
     EVALUATIONS,
     MOVES,
     REPORTED_SEEDS,
@@ -24,9 +24,9 @@ from snakes_and_ladders.qa.potts_schedule import (
     load,
     params_of,
 )
-from snakes_and_ladders.sample.potts_mcmc import PottsMove
-from snakes_and_ladders.sample.schedule import ScheduleParams, ScheduleShape
-from snakes_and_ladders.search.ground_state import ANNEAL_SCHEDULE
+from sal.sample.potts_mcmc import PottsMove
+from sal.sample.schedule import ScheduleParams, ScheduleShape
+from sal.search.ground_state import ANNEAL_SCHEDULE
 
 
 @pytest.mark.smoke

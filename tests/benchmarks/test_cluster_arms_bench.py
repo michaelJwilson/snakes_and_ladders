@@ -23,14 +23,14 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.learn.potts_nd import (
+from sal.learn.potts_nd import (
     PottsAction,
     PottsNDEnvironment,
 )
-from snakes_and_ladders.sample.potts_keyed import cluster_moves
-from snakes_and_ladders.sample.potts_mcmc import MoveKind
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
-from snakes_and_ladders.sim.potts import critical_coupling, spatio_only_field
+from sal.sample.potts_keyed import cluster_moves
+from sal.sample.potts_mcmc import MoveKind
+from sal.sim.graph import BoundaryCondition, lattice_graph
+from sal.sim.potts import critical_coupling, spatio_only_field
 
 #: The lattice the ticket's costs were measured at, halved per side so a
 #: benchmark run stays inside the suite's budget: 144 sites rather than 576.

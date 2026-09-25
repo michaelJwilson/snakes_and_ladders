@@ -14,10 +14,9 @@ from itertools import pairwise, product
 
 import numpy as np
 import pytest
-from scipy.optimize import brentq
-from snakes_and_ladders.likelihood.ldpc import erasure_threshold
-from snakes_and_ladders.likelihood.turbo import noise_scale
-from snakes_and_ladders.sim.capacity import (
+from sal.likelihood.ldpc import erasure_threshold
+from sal.likelihood.turbo import noise_scale
+from sal.sim.capacity import (
     DEFAULT_NODES,
     binary_entropy,
     capacity,
@@ -28,12 +27,13 @@ from snakes_and_ladders.sim.capacity import (
     noise_at_capacity,
     symmetric_capacity,
 )
-from snakes_and_ladders.sim.ldpc import (
+from sal.sim.ldpc import (
     BinaryErasureChannel,
     BinaryInputGaussianChannel,
     BinarySymmetricChannel,
     Channel,
 )
+from scipy.optimize import brentq
 
 from tests._rows import every_row, every_value
 

@@ -73,7 +73,7 @@ environment_imports_this_checkout() {
   # code unless PYTHONPATH says otherwise; every gate below would then judge
   # the wrong tree.
   local where
-  where="$(uv run python -c 'import snakes_and_ladders as s; print(s.__file__)')" || return 1
+  where="$(uv run python -c 'import sal as s; print(s.__file__)')" || return 1
   case "$where" in
     "$repo_root"/*) return 0 ;;
     *) echo "  imports $where; sync this worktree or set PYTHONPATH" >&2; return 1 ;;

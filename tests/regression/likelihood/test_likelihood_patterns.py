@@ -13,13 +13,13 @@ from collections import Counter
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.likelihood import pruning, pruning_rust, pruning_torch
-from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from snakes_and_ladders.likelihood.patterns import SitePatterns, check_weights, compress
-from snakes_and_ladders.likelihood.pruning_torch import branch_lengths_from_tree
-from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.tree import preorder
+from sal.likelihood import pruning, pruning_rust, pruning_torch
+from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
+from sal.likelihood.patterns import SitePatterns, check_weights, compress
+from sal.likelihood.pruning_torch import branch_lengths_from_tree
+from sal.sim.params import SimulationParams
+from sal.sim.simulator import simulate_tree
+from sal.sim.tree import preorder
 
 from tests._fixtures import FIXTURES_DIR, load_fixture
 

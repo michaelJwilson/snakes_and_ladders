@@ -2,9 +2,9 @@
 # Builds the project's documents: regenerates the QA figures and captions they
 # cite, then builds docs/paper.pdf, docs/textbook.pdf and docs/api_map.pdf.
 # Build tooling, not
-# science -- it orchestrates snakes_and_ladders.qa and latexmk, and knows nothing about
+# science -- it orchestrates sal.qa and latexmk, and knows nothing about
 # topologies, models, or which fixture renders which figure (see this
-# directory's CLAUDE.md, and snakes_and_ladders.qa.manifest for the figures themselves).
+# directory's CLAUDE.md, and sal.qa.manifest for the figures themselves).
 #
 # --no-figures: build the documents against the figures already in
 # docs/tex/figures/. For a caller that has just rendered every one of them and
@@ -38,7 +38,7 @@ done
 # the current wall-clock time; a fixed constant keeps every rebuild
 # byte-identical regardless of when it runs, so a rebuild that changed
 # nothing is an empty diff.
-# One home for the constant: snakes_and_ladders.qa.build pins it for the figures, and this
+# One home for the constant: sal.qa.build pins it for the figures, and this
 # reads it back so latexmk stamps the PDF with the same clock.
 #
 # `UV_NO_SYNC`: the environment is synced once (`uv sync --locked`), and a
@@ -48,7 +48,7 @@ done
 # it (issue #372).
 export UV_NO_SYNC=1
 SOURCE_DATE_EPOCH="$(uv run --no-sync python -c \
-  'from snakes_and_ladders.qa.build import SOURCE_DATE_EPOCH; print(SOURCE_DATE_EPOCH)')"
+  'from sal.qa.build import SOURCE_DATE_EPOCH; print(SOURCE_DATE_EPOCH)')"
 export SOURCE_DATE_EPOCH
 # SOURCE_DATE_EPOCH alone fixes the PDF's /CreationDate but not \today, which
 # reads pdftex's \year/\month/\day primitives -- those follow the wall clock
@@ -58,7 +58,7 @@ export SOURCE_DATE_EPOCH
 export FORCE_SOURCE_DATE=1
 
 # Which figures exist and what renders each one is
-# `snakes_and_ladders.qa.manifest`, not a list here: this script had thirteen
+# `sal.qa.manifest`, not a list here: this script had thirteen
 # invocations that nothing connected to the document, so when the document
 # stopped citing eleven of them the build kept regenerating all thirteen
 # (issue #154). Regenerating only what the documents cite makes the cost track
@@ -72,7 +72,7 @@ export FORCE_SOURCE_DATE=1
 # have moved was predicted by a stamp until issue #490, wrongly on all 476
 # decisions it made; the cost is bounded by the render cap per figure instead.
 if [ "$figures" -eq 1 ]; then
-  uv run --no-sync python -m snakes_and_ladders.qa.build \
+  uv run --no-sync python -m sal.qa.build \
     --document docs/tex/paper.tex \
     --document docs/tex/textbook.tex \
     --output-dir docs/tex/figures

@@ -15,10 +15,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.opt.testfunctions import Rosenbrock
-from snakes_and_ladders.sample import hmc, langevin, metropolis
-from snakes_and_ladders.validation import blackjax
-from snakes_and_ladders.validation.gaussian import (
+from sal.opt.testfunctions import Rosenbrock
+from sal.sample import hmc, langevin, metropolis
+from sal.validation import blackjax
+from sal.validation.gaussian import (
     GaussianTarget,
     dense_precision,
     diagonal_precision,

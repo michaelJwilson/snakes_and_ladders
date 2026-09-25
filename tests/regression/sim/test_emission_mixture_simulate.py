@@ -13,13 +13,13 @@ from pathlib import Path
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from snakes_and_ladders.emissions import CountPairEmission
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.sim.emission_mixture import (
+from sal.emissions import CountPairEmission
+from sal.fixtures import load_params
+from sal.sim.emission_mixture import (
     EmissionMixtureParams,
     simulate_emission_mixture,
 )
-from snakes_and_ladders.sim.fixtures import fixture
+from sal.sim.fixtures import fixture
 
 WEIGHTS = np.array([0.3, 0.7])
 DISPERSION = np.array([5.0, 9.0])

@@ -3,7 +3,7 @@ oracle: none
 
 # The Gaussian control for the seeding comparison of issue #541, sized to the
 # instance that comparison projects (issue #548). Every field is required --
-# see python/snakes_and_ladders/sim/mixture.py and sim/CLAUDE.md.
+# see python/sal/sim/mixture.py and sim/CLAUDE.md.
 #
 # `spatio_sequential_counts/stress.yaml` at bin factor 5 is 5,041 vertices x
 # 4,000 positions = 20,164,000 two-channel observations over K = 10 states.

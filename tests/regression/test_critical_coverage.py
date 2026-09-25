@@ -45,7 +45,7 @@ def test_the_critical_tier_covers_at_least_the_floor() -> None:
     if not COVERAGE_JSON.exists():
         pytest.skip(
             f"no {COVERAGE_JSON.name}; run "
-            "`pytest -m critical --cov=snakes_and_ladders "
+            "`pytest -m critical --cov=sal "
             "--cov-report=json:coverage-critical.json` to produce one"
         )
     report = json.loads(COVERAGE_JSON.read_text())

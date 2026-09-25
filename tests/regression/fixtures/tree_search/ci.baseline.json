@@ -65,8 +65,8 @@
     }
   },
   "modules": [
-    "snakes_and_ladders.search.surrogate",
-    "snakes_and_ladders.sim.simulate"
+    "sal.search.surrogate",
+    "sal.sim.simulate"
   ],
   "problem": "tree_search",
   "tier": "ci"

@@ -15,8 +15,8 @@ from dataclasses import replace
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.emissions import CovariateNotSupportedError
-from snakes_and_ladders.sim.count_pairs import (
+from sal.emissions import CovariateNotSupportedError
+from sal.sim.count_pairs import (
     SUCCESSES,
     TOTAL,
     CountPairInstance,
@@ -27,15 +27,15 @@ from snakes_and_ladders.sim.count_pairs import (
     simulate_count_pairs,
     split_covariate,
 )
-from snakes_and_ladders.sim.count_pairs_rust import (
+from sal.sim.count_pairs_rust import (
     _channels,
 )
-from snakes_and_ladders.sim.count_pairs_rust import (
+from sal.sim.count_pairs_rust import (
     simulate_count_pairs as simulate_rust,
 )
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
-from snakes_and_ladders.sim.spatio_sequential import (
+from sal.sim.fixtures import fixture
+from sal.sim.graph import BoundaryCondition, lattice_graph
+from sal.sim.spatio_sequential import (
     SimulatedSpatioSequential,
     SpatioSequentialParams,
     simulate_spatio_sequential,

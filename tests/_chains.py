@@ -14,9 +14,9 @@ import itertools
 from collections.abc import Iterable
 
 import numpy as np
-from snakes_and_ladders.likelihood.potts import log_weights
-from snakes_and_ladders.sample.statistics import chi_square_p_value
-from snakes_and_ladders.sim.graph import PottsGraph
+from sal.likelihood.potts import log_weights
+from sal.sample.statistics import chi_square_p_value
+from sal.sim.graph import PottsGraph
 
 #: A configuration, as a chain records it.
 Configuration = tuple[int, ...]

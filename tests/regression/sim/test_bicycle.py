@@ -13,9 +13,9 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.likelihood.ldpc import enumerate_codewords
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.ldpc import (
+from sal.likelihood.ldpc import enumerate_codewords
+from sal.sim.fixtures import fixture
+from sal.sim.ldpc import (
     ParityCheck,
     bicycle_code,
     generator_matrix,

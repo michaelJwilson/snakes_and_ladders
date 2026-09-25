@@ -13,17 +13,17 @@ import itertools
 
 import numpy as np
 import pytest
-from snakes_and_ladders.emissions import CategoricalEmission
-from snakes_and_ladders.likelihood.forward_backward import forward_backward, sample_path
-from snakes_and_ladders.likelihood.hmm_paths import (
+from sal.emissions import CategoricalEmission
+from sal.likelihood.forward_backward import forward_backward, sample_path
+from sal.likelihood.hmm_paths import (
     MAX_ENUMERABLE_PATHS,
     emission_log_density,
     enumerate_hidden_paths,
     path_log_probability,
 )
-from snakes_and_ladders.sample.statistics import chi_square_p_value
-from snakes_and_ladders.sim.canonical import AMBIGUOUS_OBSERVATIONS, ambiguous_hmm
-from snakes_and_ladders.sim.hmm import HmmParams
+from sal.sample.statistics import chi_square_p_value
+from sal.sim.canonical import AMBIGUOUS_OBSERVATIONS, ambiguous_hmm
+from sal.sim.hmm import HmmParams
 
 from tests._rows import every_row
 from tests.regression.likelihood.conftest import CHAIN_CASES, random_hmm
@@ -248,7 +248,7 @@ def test_the_ambiguous_fixture_is_within_the_cap() -> None:
 def test_a_sequence_too_long_to_enumerate_is_refused() -> None:
     params = random_hmm(4, 2, 12, 16)
 
-    # The wording is `snakes_and_ladders.enumeration`'s, shared with every other
+    # The wording is `sal.enumeration`'s, shared with every other
     # enumerator since issue #230; what is asserted here is that this caller
     # reaches it, and that the message names the size that was too large.
     with pytest.raises(

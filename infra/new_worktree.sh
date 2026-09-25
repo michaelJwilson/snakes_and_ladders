@@ -38,7 +38,7 @@ ln -s "$main/.venv" "$path/.venv"
 newest_source=$(ls -t "$main"/src/*.rs | head -1)
 extension=""
 for tree in "$main" $(git -C "$main" worktree list --porcelain | sed -n 's/^worktree //p'); do
-  for candidate in "$tree"/python/snakes_and_ladders/*.so; do
+  for candidate in "$tree"/python/sal/*.so; do
     if [ -f "$candidate" ] && [ "$candidate" -nt "$newest_source" ]; then
       extension=$candidate; break 2
     fi
@@ -49,14 +49,14 @@ if [ -z "$extension" ]; then
   (cd "$path" && cargo build --release) || exit 1
   built=$(ls "$path"/target/release/liboxisal.* 2>/dev/null | head -1)
   [ -n "$built" ] || { echo "cargo build produced no library" >&2; exit 1; }
-  cp "$built" "$path/python/snakes_and_ladders/oxisal.cpython-312-x86_64-linux-gnu.so"
+  cp "$built" "$path/python/sal/oxisal.cpython-312-x86_64-linux-gnu.so"
 else
-  cp "$extension" "$path/python/snakes_and_ladders/"
+  cp "$extension" "$path/python/sal/"
 fi
 
 # The import must resolve here and not in a sibling, which is issue #401.
 resolved=$(cd "$path" && PYTHONPATH="$path/python" UV_NO_SYNC=1 \
-  uv run python -c 'import snakes_and_ladders as s; print(s.__file__)')
+  uv run python -c 'import sal as s; print(s.__file__)')
 case "$resolved" in
   "$path"/*) ;;
   *) echo "import resolved to $resolved, outside $path" >&2; exit 1 ;;

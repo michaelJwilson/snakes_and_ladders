@@ -1,6 +1,6 @@
 """Regression tests for the k-state Jukes-Cantor simulator.
 
-Per ``python/snakes_and_ladders/sim/CLAUDE.md``, simulated substitution frequencies are
+Per ``python/sal/sim/CLAUDE.md``, simulated substitution frequencies are
 validated against the closed-form Jukes-Cantor transition probabilities
 (``eq:jc`` of ``docs/tex/textbook.tex``) -- never against the likelihood/pruning code,
 which does not exist yet -- within a stated Monte Carlo tolerance. Math
@@ -13,11 +13,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.sim.jc import jc_rate_matrix, jc_transition_probabilities
-from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.tree import edges
+from sal.fixtures import load_params
+from sal.sim.jc import jc_rate_matrix, jc_transition_probabilities
+from sal.sim.params import SimulationParams
+from sal.sim.simulator import simulate_tree
+from sal.sim.tree import edges
 
 from tests._fixtures import FIXTURES_DIR
 

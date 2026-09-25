@@ -3,7 +3,7 @@ oracle: transfer-matrix
 
 # The coupled model with two-channel count emissions, at the size every
 # reference for the 5K instance is established at. Every field is required --
-# see python/snakes_and_ladders/sim/count_pairs.py.
+# see python/sal/sim/count_pairs.py.
 #
 # 8x8 triangular = 64 vertices, M = K = 2, S = 1,000: 64,000 count pairs, and
 # about 16,000 per (class, state), which is what the Rust simulator's per-state

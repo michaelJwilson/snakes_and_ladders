@@ -14,9 +14,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders import emissions
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.emissions import NegativeBinomialEmission, mstep
+from sal import emissions
+from sal.backend import Backend
+from sal.emissions import NegativeBinomialEmission, mstep
 
 from tests._rows import every_row
 

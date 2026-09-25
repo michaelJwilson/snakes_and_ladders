@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.search.maxflow import FlowNetwork, max_flow
+from sal.search.maxflow import FlowNetwork, max_flow
 
 
 def _network(n_edges: int = 400, n_nodes: int = 64, seed: int = 3) -> FlowNetwork:

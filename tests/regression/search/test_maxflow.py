@@ -17,14 +17,14 @@ from itertools import product
 
 import numpy as np
 import pytest
-from snakes_and_ladders.search import maxflow_rust
-from snakes_and_ladders.search.maxflow import (
+from sal.search import maxflow_rust
+from sal.search.maxflow import (
     FlowNetwork,
     ising_ground_state,
     max_flow,
 )
-from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
-from snakes_and_ladders.sim.potts import energies, site_field
+from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from sal.sim.potts import energies, site_field
 
 from tests._rows import every_row, every_value
 
@@ -85,7 +85,7 @@ def test_the_cut_finds_the_enumerated_minimum_with_a_per_node_field() -> None:
 def test_the_uniform_field_energy_is_the_negated_model_log_weight() -> None:
     # The per-node generalization must reduce to the model the rest of the
     # repository fits, or this is solving a different problem accurately.
-    from snakes_and_ladders.likelihood.potts import log_weights
+    from sal.likelihood.potts import log_weights
 
     graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.5)
     configurations = np.array(

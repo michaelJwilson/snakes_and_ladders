@@ -13,12 +13,12 @@ from itertools import pairwise
 
 import numpy as np
 import pytest
-from snakes_and_ladders.likelihood.ldpc import (
+from sal.likelihood.ldpc import (
     DecodingAlgorithm,
     decode,
     exact_decoding,
 )
-from snakes_and_ladders.likelihood.polar import (
+from sal.likelihood.polar import (
     crc_checks,
     crc_encode,
     decode_sc,
@@ -26,9 +26,9 @@ from snakes_and_ladders.likelihood.polar import (
     is_codeword,
     transmitted,
 )
-from snakes_and_ladders.sandbox.polar_reference import decode_sc_reference
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.ldpc import (
+from sal.sandbox.polar_reference import decode_sc_reference
+from sal.sim.fixtures import fixture
+from sal.sim.ldpc import (
     BinaryErasureChannel,
     BinaryInputGaussianChannel,
     BinarySymmetricChannel,
@@ -36,7 +36,7 @@ from snakes_and_ladders.sim.ldpc import (
     ParityCheck,
     all_zero_transmission,
 )
-from snakes_and_ladders.sim.polar import (
+from sal.sim.polar import (
     PolarCode,
     PolarParams,
     gaussian_polar_code,

@@ -15,17 +15,17 @@ import itertools
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.search.alpha_expansion import alpha_expansion
-from snakes_and_ladders.search.max_cut import (
+from sal.search.alpha_expansion import alpha_expansion
+from sal.search.max_cut import (
     GOEMANS_WILLIAMSON_RATIO,
     complete_bipartite,
     cut_value,
     enumerate_max_cut,
     goemans_williamson,
 )
-from snakes_and_ladders.sim.canonical import frustrated_triangular_lattice
-from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
-from snakes_and_ladders.sim.potts import energy
+from sal.sim.canonical import frustrated_triangular_lattice
+from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from sal.sim.potts import energy
 
 from tests._rows import every_row, every_value
 

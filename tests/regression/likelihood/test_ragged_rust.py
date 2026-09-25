@@ -8,10 +8,10 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from snakes_and_ladders.likelihood.ragged_rust import posteriors, posteriors_oracle
-from snakes_and_ladders.ragged import Ragged
+from sal.backend import Backend
+from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
+from sal.likelihood.ragged_rust import posteriors, posteriors_oracle
+from sal.ragged import Ragged
 
 from tests._rows import every_value
 

@@ -17,22 +17,22 @@ from dataclasses import replace
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.emissions import CategoricalEmission
-from snakes_and_ladders.likelihood.spatio_sequential import (
+from sal.emissions import CategoricalEmission
+from sal.likelihood.spatio_sequential import (
     class_posteriors,
     labelled_log_likelihood,
 )
-from snakes_and_ladders.search.spatio_sequential import (
+from sal.search.spatio_sequential import (
     fit_spatio_sequential,
     m_step,
     seed_emissions,
 )
-from snakes_and_ladders.sim.count_pairs import (
+from sal.sim.count_pairs import (
     IndependentCountPair,
     simulate_count_pairs,
 )
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.spatio_sequential import simulate_spatio_sequential
+from sal.sim.fixtures import fixture
+from sal.sim.spatio_sequential import simulate_spatio_sequential
 
 
 def _shared_categorical() -> tuple:  # type: ignore[type-arg]

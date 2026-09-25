@@ -15,12 +15,12 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.qa import topology_accuracy
-from snakes_and_ladders.qa.manifest import FIGURES
-from snakes_and_ladders.qa.topology_accuracy import REPLICATES, REQUIREMENT, SITE_COUNTS
-from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.topology import (
+from sal.fixtures import load_params
+from sal.qa import topology_accuracy
+from sal.qa.manifest import FIGURES
+from sal.qa.topology_accuracy import REPLICATES, REQUIREMENT, SITE_COUNTS
+from sal.sim.params import SimulationParams
+from sal.sim.topology import (
     enumerate_topologies,
     normalized_robinson_foulds,
     robinson_foulds,
@@ -46,7 +46,7 @@ def test_a_topology_is_at_distance_zero_from_itself() -> None:
 def test_the_distance_is_the_symmetric_difference_of_the_splits() -> None:
     # Against the definition, computed here independently of the
     # implementation: splits in one tree and not the other, both ways.
-    from snakes_and_ladders.sim.topology import leaf_bipartitions
+    from sal.sim.topology import leaf_bipartitions
 
     topologies = list(enumerate_topologies(list("ABCDE")))
     for first in topologies[:4]:

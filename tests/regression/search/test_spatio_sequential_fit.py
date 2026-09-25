@@ -14,15 +14,15 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.emissions import CategoricalEmission
-from snakes_and_ladders.likelihood.spatio_sequential import (
+from sal.emissions import CategoricalEmission
+from sal.likelihood.spatio_sequential import (
     enumerate_spatio_sequential,
     labelled_log_likelihood,
     map_labelling,
 )
-from snakes_and_ladders.opt.mixture import emission_mixture_plus_plus, kmeans_plus_plus
-from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
-from snakes_and_ladders.search.spatio_sequential import (
+from sal.opt.mixture import emission_mixture_plus_plus, kmeans_plus_plus
+from sal.sample.schedule import ExponentialTempSchedule
+from sal.search.spatio_sequential import (
     LabelSolver,
     fit_spatio_sequential,
     graph_burn_in,
@@ -30,12 +30,12 @@ from snakes_and_ladders.search.spatio_sequential import (
     redraw_small_labels,
     seed_emissions,
 )
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.spatio_sequential import (
+from sal.sim.fixtures import fixture
+from sal.sim.spatio_sequential import (
     SpatioSequentialParams,
     simulate_spatio_sequential,
 )
-from snakes_and_ladders.track import MemoryRun, track
+from sal.track import MemoryRun, track
 
 WOLFF = ExponentialTempSchedule(2.0, 0.2, 12)
 

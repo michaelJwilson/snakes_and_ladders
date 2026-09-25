@@ -5,8 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.likelihood.ragged_rust import posteriors
-from snakes_and_ladders.ragged import Ragged
+from sal.likelihood.ragged_rust import posteriors
+from sal.ragged import Ragged
 
 STATES = 4
 

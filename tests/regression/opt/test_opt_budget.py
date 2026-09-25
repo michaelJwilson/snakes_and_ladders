@@ -13,9 +13,8 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from scipy.stats import binomtest
-from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.opt.budget import (
+from sal.cost import Cost
+from sal.opt.budget import (
     Budget,
     Comparison,
     Method,
@@ -25,6 +24,7 @@ from snakes_and_ladders.opt.budget import (
     mcnemar,
     restarts,
 )
+from scipy.stats import binomtest
 
 
 def _draw(instance: float, budget: Budget, rng: np.random.Generator) -> Outcome:

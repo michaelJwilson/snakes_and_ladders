@@ -16,15 +16,15 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.opt.mixture import GaussianMixtureObjective
-from snakes_and_ladders.sample.hmc import gradient_at
-from snakes_and_ladders.validation import jax
-from snakes_and_ladders.validation.gaussian import (
+from sal.opt.mixture import GaussianMixtureObjective
+from sal.sample.hmc import gradient_at
+from sal.validation import jax
+from sal.validation.gaussian import (
     GaussianTarget,
     dense_precision,
     diagonal_precision,
 )
-from snakes_and_ladders.validation.runner import package
+from sal.validation.runner import package
 
 from tests._frameworks import requires
 

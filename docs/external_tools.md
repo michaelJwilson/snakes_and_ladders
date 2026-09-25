@@ -41,7 +41,7 @@ libraries are imports.
 ## Recommendation
 
 **None is worth adopting today.** Fixture definition is filled:
-`snakes_and_ladders.sim.fixtures` generates every fixture together with the
+`sal.sim.fixtures` generates every fixture together with the
 parameters that generated it, which no external reader can supply. Validation
 is partly filled: an oracle referees every accelerated path, and what it cannot
 referee is the NumPy implementation itself, compared only against its own

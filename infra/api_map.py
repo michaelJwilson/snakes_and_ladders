@@ -45,7 +45,7 @@ from pathlib import Path
 from _paths import REPO_ROOT
 from tex import escape, escape_code
 
-PACKAGE_ROOT = REPO_ROOT / "python" / "snakes_and_ladders"
+PACKAGE_ROOT = REPO_ROOT / "python" / "sal"
 GENERATED = REPO_ROOT / "docs" / "tex" / "generated" / "api_map.tex"
 
 #: Characters a summary line may occupy before it is reported. Chosen against
@@ -95,7 +95,7 @@ class Module:
     Parameters
     ----------
     path : str
-        Relative to ``python/snakes_and_ladders/`` and without the suffix, so
+        Relative to ``python/sal/`` and without the suffix, so
         ``sim/hmm`` and ``sim/__init__``.
     summary : str
         The module docstring's first paragraph, on one line.
@@ -335,7 +335,7 @@ def _reading_section(found: tuple[Module, ...]) -> list[str]:
         f"{tally['method']} public methods: {sum(tally.values())} entries. Each is "
         "listed under the module that declares it, with the first paragraph of "
         "its own docstring. A path is relative to "
-        r"\texttt{python/snakes\_and\_ladders/}, so the entry "
+        r"\texttt{python/sal/}, so the entry "
         r"\texttt{load\_hmm\_params} under \texttt{sim/hmm} is "
         r"\texttt{sim/hmm/load\_hmm\_params}; a method is written under its "
         "class, qualified by it.",

@@ -13,8 +13,8 @@ import math
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
+from sal.numerics import logsumexp, sample_rows
 from scipy.special import logsumexp as scipy_logsumexp
-from snakes_and_ladders.numerics import logsumexp, sample_rows
 
 
 @pytest.mark.critical

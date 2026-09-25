@@ -1,743 +1,743 @@
-snakes_and_ladders
+sal
 ==================
 
-.. automodule:: snakes_and_ladders
+.. automodule:: sal
    :members:
 
 Submodules
 ----------
 
-`python/snakes_and_ladders/__init__.py` re-exports nothing beyond `snakes_and_ladders`'s own top-level
+`python/sal/__init__.py` re-exports nothing beyond `sal`'s own top-level
 utilities; each submodule is autodocumented on its own rather than through the
 flat top-level namespace. Entries below cover every submodule that exists,
 whether or not it has members yet.
 
-.. automodule:: snakes_and_ladders.numerics
+.. automodule:: sal.numerics
    :members:
 
-.. automodule:: snakes_and_ladders.enumeration
+.. automodule:: sal.enumeration
    :members:
 
-.. automodule:: snakes_and_ladders.log
+.. automodule:: sal.log
    :members:
 
-.. automodule:: snakes_and_ladders.bound
+.. automodule:: sal.bound
    :members:
 
-.. automodule:: snakes_and_ladders.cost
+.. automodule:: sal.cost
    :members:
 
-.. automodule:: snakes_and_ladders.emissions
+.. automodule:: sal.emissions
    :members:
 
-.. automodule:: snakes_and_ladders.emissions.base
+.. automodule:: sal.emissions.base
    :members: Values, FamilyT_co
 
-.. automodule:: snakes_and_ladders.emissions.families
+.. automodule:: sal.emissions.families
    :members: COLLAPSE_EXPONENT
 
-.. automodule:: snakes_and_ladders.emissions.mstep
+.. automodule:: sal.emissions.mstep
    :members:
    :exclude-members: identifiable_concentration_bound, identifiable_dispersion_bound
 
-.. automodule:: snakes_and_ladders.emissions.counts
+.. automodule:: sal.emissions.counts
    :members: lgamma_shifted
 
-.. automodule:: snakes_and_ladders.fixtures
+.. automodule:: sal.fixtures
    :members:
 
-.. automodule:: snakes_and_ladders.inputs
+.. automodule:: sal.inputs
    :members:
 
-.. automodule:: snakes_and_ladders.incidence
+.. automodule:: sal.incidence
    :members:
 
-.. automodule:: snakes_and_ladders.parallel
+.. automodule:: sal.parallel
    :members:
 
-.. automodule:: snakes_and_ladders.ragged
+.. automodule:: sal.ragged
    :members:
 
-.. automodule:: snakes_and_ladders.track
+.. automodule:: sal.track
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.ragged_rust
+.. automodule:: sal.likelihood.ragged_rust
    :members:
 
-.. automodule:: snakes_and_ladders.sim
+.. automodule:: sal.sim
    :members:
 
-.. automodule:: snakes_and_ladders.sim.tree
+.. automodule:: sal.sim.tree
    :members:
 
-.. automodule:: snakes_and_ladders.sim.jc
+.. automodule:: sal.sim.jc
    :members:
 
-.. automodule:: snakes_and_ladders.sim.gtr
+.. automodule:: sal.sim.gtr
    :members:
 
-.. automodule:: snakes_and_ladders.sim.params
+.. automodule:: sal.sim.params
    :members:
 
-.. automodule:: snakes_and_ladders.sim.fixtures
+.. automodule:: sal.sim.fixtures
    :members:
 
-.. automodule:: snakes_and_ladders.sim.simulate
+.. automodule:: sal.sim.simulate
    :members:
 
-.. automodule:: snakes_and_ladders.sim.simulator
+.. automodule:: sal.sim.simulator
    :members:
 
-.. automodule:: snakes_and_ladders.sim.graph
+.. automodule:: sal.sim.graph
    :members:
 
-.. automodule:: snakes_and_ladders.sim.factor_graph
+.. automodule:: sal.sim.factor_graph
    :members:
 
-.. automodule:: snakes_and_ladders.sim.spatio_sequential
+.. automodule:: sal.sim.spatio_sequential
    :members:
 
-.. automodule:: snakes_and_ladders.sim.count_pairs
+.. automodule:: sal.sim.count_pairs
    :members:
 
-.. automodule:: snakes_and_ladders.sim.count_pairs_rust
+.. automodule:: sal.sim.count_pairs_rust
    :members:
 
-.. automodule:: snakes_and_ladders.sim.potts
+.. automodule:: sal.sim.potts
    :members:
 
-.. automodule:: snakes_and_ladders.sim.potts_chain
+.. automodule:: sal.sim.potts_chain
    :members:
 
-.. automodule:: snakes_and_ladders.sim.hmm
+.. automodule:: sal.sim.hmm
    :members:
 
-.. automodule:: snakes_and_ladders.sim.mixture
+.. automodule:: sal.sim.mixture
    :members:
 
-.. automodule:: snakes_and_ladders.sim.emission_mixture
+.. automodule:: sal.sim.emission_mixture
    :members:
 
-.. automodule:: snakes_and_ladders.sim.canonical
+.. automodule:: sal.sim.canonical
    :members:
 
-.. automodule:: snakes_and_ladders.sim.newick
+.. automodule:: sal.sim.newick
    :members:
 
-.. automodule:: snakes_and_ladders.sim.elementary_codes
+.. automodule:: sal.sim.elementary_codes
    :members:
 
-.. automodule:: snakes_and_ladders.sim.galois
+.. automodule:: sal.sim.galois
    :members:
 
-.. automodule:: snakes_and_ladders.sim.capacity
+.. automodule:: sal.sim.capacity
    :members:
 
-.. automodule:: snakes_and_ladders.sim.reed_solomon
+.. automodule:: sal.sim.reed_solomon
    :members:
 
-.. automodule:: snakes_and_ladders.sim.ldpc
+.. automodule:: sal.sim.ldpc
    :members:
 
-.. automodule:: snakes_and_ladders.sim.polar
+.. automodule:: sal.sim.polar
    :members:
 
-.. automodule:: snakes_and_ladders.sim.css
+.. automodule:: sal.sim.css
    :members:
 
-.. automodule:: snakes_and_ladders.sim.convolutional
+.. automodule:: sal.sim.convolutional
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood
+.. automodule:: sal.likelihood
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.objective
+.. automodule:: sal.likelihood.objective
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.distance
+.. automodule:: sal.likelihood.distance
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.hadamard
+.. automodule:: sal.likelihood.hadamard
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.patterns
+.. automodule:: sal.likelihood.patterns
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.pruning
+.. automodule:: sal.likelihood.pruning
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.pruning_common
+.. automodule:: sal.likelihood.pruning_common
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.pruning_torch
+.. automodule:: sal.likelihood.pruning_torch
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.pruning_jax
+.. automodule:: sal.likelihood.pruning_jax
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.pruning_rust
+.. automodule:: sal.likelihood.pruning_rust
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.pruning_analytic
+.. automodule:: sal.likelihood.pruning_analytic
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.brute_force
+.. automodule:: sal.likelihood.brute_force
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.parsimony
+.. automodule:: sal.likelihood.parsimony
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.device
+.. automodule:: sal.likelihood.device
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.potts
+.. automodule:: sal.likelihood.potts
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.belief_propagation
+.. automodule:: sal.likelihood.belief_propagation
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.schedule
+.. automodule:: sal.likelihood.schedule
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.message_passing
+.. automodule:: sal.likelihood.message_passing
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.message_passing_reference
+.. automodule:: sal.likelihood.message_passing_reference
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.message_passing_rust
+.. automodule:: sal.likelihood.message_passing_rust
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.spatio_sequential
+.. automodule:: sal.likelihood.spatio_sequential
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.spatio_sequential_rust
+.. automodule:: sal.likelihood.spatio_sequential_rust
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.forward_backward
+.. automodule:: sal.likelihood.forward_backward
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.hmm_paths
+.. automodule:: sal.likelihood.hmm_paths
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.mixture_assignments
+.. automodule:: sal.likelihood.mixture_assignments
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.surrogate
+.. automodule:: sal.likelihood.surrogate
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.blocks
+.. automodule:: sal.likelihood.blocks
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.features
+.. automodule:: sal.likelihood.features
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.ldpc
+.. automodule:: sal.likelihood.ldpc
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.polar
+.. automodule:: sal.likelihood.polar
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.algebraic
+.. automodule:: sal.likelihood.algebraic
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.css
+.. automodule:: sal.likelihood.css
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.convolutional
+.. automodule:: sal.likelihood.convolutional
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.convolutional_rust
+.. automodule:: sal.likelihood.convolutional_rust
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.turbo
+.. automodule:: sal.likelihood.turbo
    :members:
 
-.. automodule:: snakes_and_ladders.opt
+.. automodule:: sal.opt
    :members:
 
-.. automodule:: snakes_and_ladders.opt.objective
+.. automodule:: sal.opt.objective
    :members:
 
-.. automodule:: snakes_and_ladders.opt.constrain
+.. automodule:: sal.opt.constrain
    :members:
 
-.. automodule:: snakes_and_ladders.opt.fit
+.. automodule:: sal.opt.fit
    :members:
 
-.. automodule:: snakes_and_ladders.opt.em
+.. automodule:: sal.opt.em
    :members:
 
-.. automodule:: snakes_and_ladders.opt.initialize
+.. automodule:: sal.opt.initialize
    :members:
 
-.. automodule:: snakes_and_ladders.sample.initialize
+.. automodule:: sal.sample.initialize
    :members:
 
-.. automodule:: snakes_and_ladders.opt.budget
+.. automodule:: sal.opt.budget
    :members:
 
-.. automodule:: snakes_and_ladders.opt.starts
+.. automodule:: sal.opt.starts
    :members:
 
-.. automodule:: snakes_and_ladders.learn.failure
+.. automodule:: sal.learn.failure
    :members:
 
-.. automodule:: snakes_and_ladders.opt.testfunctions
+.. automodule:: sal.opt.testfunctions
    :members:
 
-.. automodule:: snakes_and_ladders.opt.termination
+.. automodule:: sal.opt.termination
    :members:
 
-.. automodule:: snakes_and_ladders.opt.potts
+.. automodule:: sal.opt.potts
    :members:
 
-.. automodule:: snakes_and_ladders.opt.hmm
+.. automodule:: sal.opt.hmm
    :members:
 
-.. automodule:: snakes_and_ladders.opt.hmm.forward
+.. automodule:: sal.opt.hmm.forward
 
-.. automodule:: snakes_and_ladders.opt.hmm.objectives
+.. automodule:: sal.opt.hmm.objectives
 
-.. automodule:: snakes_and_ladders.opt.hmm.estimation
+.. automodule:: sal.opt.hmm.estimation
 
-.. automodule:: snakes_and_ladders.opt.hmm_jax
+.. automodule:: sal.opt.hmm_jax
    :members:
 
-.. automodule:: snakes_and_ladders.opt.mixture
+.. automodule:: sal.opt.mixture
    :members:
 
-.. automodule:: snakes_and_ladders.opt.emission_mixture
+.. automodule:: sal.opt.emission_mixture
    :members:
 
-.. automodule:: snakes_and_ladders.opt.split_merge
+.. automodule:: sal.opt.split_merge
    :members:
 
-.. automodule:: snakes_and_ladders.sample
+.. automodule:: sal.sample
    :members:
 
-.. automodule:: snakes_and_ladders.sample.accept
+.. automodule:: sal.sample.accept
    :members:
 
-.. automodule:: snakes_and_ladders.sample.hmc
+.. automodule:: sal.sample.hmc
    :members:
    :exclude-members: Adaptation, Adapted, BLOCK, Chain, DUAL_AVERAGING_GAMMA, DUAL_AVERAGING_KAPPA, DUAL_AVERAGING_T0, Kernel, Transition, gradient_at, run_chain, run_compiled, start_point
 
-.. automodule:: snakes_and_ladders.sample.chain
+.. automodule:: sal.sample.chain
    :members:
 
-.. automodule:: snakes_and_ladders.sample.expectation
+.. automodule:: sal.sample.expectation
    :members:
 
-.. automodule:: snakes_and_ladders.sample.langevin
+.. automodule:: sal.sample.langevin
    :members:
 
-.. automodule:: snakes_and_ladders.sample.metropolis
+.. automodule:: sal.sample.metropolis
    :members:
 
-.. automodule:: snakes_and_ladders.sample.hmc_jax
+.. automodule:: sal.sample.hmc_jax
    :members:
 
-.. automodule:: snakes_and_ladders.sample.declared
+.. automodule:: sal.sample.declared
    :members:
 
-.. automodule:: snakes_and_ladders.sample.mixture_gibbs
+.. automodule:: sal.sample.mixture_gibbs
    :members:
 
-.. automodule:: snakes_and_ladders.sample.relabel
+.. automodule:: sal.sample.relabel
    :members:
 
-.. automodule:: snakes_and_ladders.sample.slice
+.. automodule:: sal.sample.slice
    :members:
 
-.. automodule:: snakes_and_ladders.sample.schedule
+.. automodule:: sal.sample.schedule
    :members:
 
-.. automodule:: snakes_and_ladders.sample.potts_mcmc
+.. automodule:: sal.sample.potts_mcmc
    :members:
 
-.. automodule:: snakes_and_ladders.sample.potts_mcmc.moves
+.. automodule:: sal.sample.potts_mcmc.moves
 
-.. automodule:: snakes_and_ladders.sample.potts_mcmc.sweeps
+.. automodule:: sal.sample.potts_mcmc.sweeps
    :members: GUARD, sweep_at, single_site_sweep, site_update, balanced_sweep_at, bond_probability
 
-.. automodule:: snakes_and_ladders.sample.potts_mcmc.chains
+.. automodule:: sal.sample.potts_mcmc.chains
 
-.. automodule:: snakes_and_ladders.sample.gibbs
+.. automodule:: sal.sample.gibbs
    :members:
 
-.. automodule:: snakes_and_ladders.sample.balanced
+.. automodule:: sal.sample.balanced
    :members:
 
-.. automodule:: snakes_and_ladders.sample.potts_keyed
+.. automodule:: sal.sample.potts_keyed
    :members:
 
-.. automodule:: snakes_and_ladders.sample.tempered
+.. automodule:: sal.sample.tempered
    :members:
 
-.. automodule:: snakes_and_ladders.sample.annealed
+.. automodule:: sal.sample.annealed
    :members:
 
-.. automodule:: snakes_and_ladders.sample.statistics
+.. automodule:: sal.sample.statistics
    :members:
 
-.. automodule:: snakes_and_ladders.learn
+.. automodule:: sal.learn
    :members:
 
-.. automodule:: snakes_and_ladders.learn.environment
+.. automodule:: sal.learn.environment
    :members:
 
-.. automodule:: snakes_and_ladders.learn.policy
+.. automodule:: sal.learn.policy
    :members:
 
-.. automodule:: snakes_and_ladders.learn.relaxed
+.. automodule:: sal.learn.relaxed
    :members:
 
-.. automodule:: snakes_and_ladders.learn.potts
+.. automodule:: sal.learn.potts
    :members:
 
-.. automodule:: snakes_and_ladders.learn.potts_nd
+.. automodule:: sal.learn.potts_nd
    :members:
 
-.. automodule:: snakes_and_ladders.learn.keyed
+.. automodule:: sal.learn.keyed
    :members:
 
-.. automodule:: snakes_and_ladders.learn.hmm
+.. automodule:: sal.learn.hmm
    :members:
 
-.. automodule:: snakes_and_ladders.learn.rollout
+.. automodule:: sal.learn.rollout
    :members:
 
-.. automodule:: snakes_and_ladders.learn.reinforce
+.. automodule:: sal.learn.reinforce
    :members:
 
-.. automodule:: snakes_and_ladders.learn.exact
+.. automodule:: sal.learn.exact
    :members:
 
-.. automodule:: snakes_and_ladders.learn.arena
+.. automodule:: sal.learn.arena
    :members:
 
-.. automodule:: snakes_and_ladders.learn.canonical
+.. automodule:: sal.learn.canonical
    :members:
 
-.. automodule:: snakes_and_ladders.learn.tabular
+.. automodule:: sal.learn.tabular
    :members:
 
-.. automodule:: snakes_and_ladders.learn.critic
+.. automodule:: sal.learn.critic
    :members:
 
-.. automodule:: snakes_and_ladders.learn.actor_critic
+.. automodule:: sal.learn.actor_critic
    :members:
 
-.. automodule:: snakes_and_ladders.learn.ppo
+.. automodule:: sal.learn.ppo
    :members:
 
-.. automodule:: snakes_and_ladders.learn.planning
+.. automodule:: sal.learn.planning
    :members:
 
-.. automodule:: snakes_and_ladders.learn.surrogate
+.. automodule:: sal.learn.surrogate
    :members:
 
-.. automodule:: snakes_and_ladders.search
+.. automodule:: sal.search
    :members:
 
-.. automodule:: snakes_and_ladders.sim.topology
+.. automodule:: sal.sim.topology
    :members:
 
-.. automodule:: snakes_and_ladders.search.infer
+.. automodule:: sal.search.infer
    :members:
 
-.. automodule:: snakes_and_ladders.search.neighbor_joining
+.. automodule:: sal.search.neighbor_joining
    :members:
 
-.. automodule:: snakes_and_ladders.search.initialize
+.. automodule:: sal.search.initialize
    :members:
 
-.. automodule:: snakes_and_ladders.search.support
+.. automodule:: sal.search.support
    :members:
 
-.. automodule:: snakes_and_ladders.search.spatio_sequential
+.. automodule:: sal.search.spatio_sequential
    :members:
 
-.. automodule:: snakes_and_ladders.search.projection
+.. automodule:: sal.search.projection
    :members:
 
-.. automodule:: snakes_and_ladders.search.mixture_starts
+.. automodule:: sal.search.mixture_starts
    :members:
 
-.. automodule:: snakes_and_ladders.search.potts_starts
+.. automodule:: sal.search.potts_starts
    :members:
 
-.. automodule:: snakes_and_ladders.search.ground_state
+.. automodule:: sal.search.ground_state
    :members:
 
-.. automodule:: snakes_and_ladders.search.cluster_moves
+.. automodule:: sal.search.cluster_moves
    :members:
 
-.. automodule:: snakes_and_ladders.learn.tree
+.. automodule:: sal.learn.tree
    :members:
 
-.. automodule:: snakes_and_ladders.backend
+.. automodule:: sal.backend
    :members:
 
-.. automodule:: snakes_and_ladders.sample.kernels
+.. automodule:: sal.sample.kernels
    :members:
 
-.. automodule:: snakes_and_ladders.search.decoding
+.. automodule:: sal.search.decoding
    :members:
 
-.. automodule:: snakes_and_ladders.search.tightening
+.. automodule:: sal.search.tightening
    :members:
 
-.. automodule:: snakes_and_ladders.search.bifurcation
+.. automodule:: sal.search.bifurcation
    :members:
 
-.. automodule:: snakes_and_ladders.search.alpha_expansion
+.. automodule:: sal.search.alpha_expansion
    :members:
 
-.. automodule:: snakes_and_ladders.search.icm
+.. automodule:: sal.search.icm
    :members:
 
-.. automodule:: snakes_and_ladders.search.numba
+.. automodule:: sal.search.numba
 
-.. automodule:: snakes_and_ladders.search.numba.icm
+.. automodule:: sal.search.numba.icm
    :members:
 
-.. automodule:: snakes_and_ladders.search.max_cut
+.. automodule:: sal.search.max_cut
    :members:
 
-.. automodule:: snakes_and_ladders.search.maxflow
+.. automodule:: sal.search.maxflow
    :members:
 
-.. automodule:: snakes_and_ladders.search.maxflow_rust
+.. automodule:: sal.search.maxflow_rust
    :members:
 
-.. automodule:: snakes_and_ladders.learn.ranking
+.. automodule:: sal.learn.ranking
    :members:
 
-.. automodule:: snakes_and_ladders.sandbox
+.. automodule:: sal.sandbox
    :members:
 
-.. automodule:: snakes_and_ladders.sandbox.annealed_em
+.. automodule:: sal.sandbox.annealed_em
    :members:
 
-.. automodule:: snakes_and_ladders.sandbox.tropical
+.. automodule:: sal.sandbox.tropical
    :members:
 
-.. automodule:: snakes_and_ladders.sandbox.pruning_burn
+.. automodule:: sal.sandbox.pruning_burn
    :members:
 
 .. Its two classes carry the live module's names by design -- it is the same
    code, frozen before the covariate -- so registering them as cross-reference
    targets makes every bare `:class:` reference to either ambiguous. It is a
    referee, not API: documented, and not something to link to.
-.. automodule:: snakes_and_ladders.sandbox.rectangular_hmm
+.. automodule:: sal.sandbox.rectangular_hmm
    :members:
 
-.. automodule:: snakes_and_ladders.sandbox.count_emissions
+.. automodule:: sal.sandbox.count_emissions
    :members:
    :no-index:
 
-.. automodule:: snakes_and_ladders.sandbox.circulant_schedule
+.. automodule:: sal.sandbox.circulant_schedule
    :members:
 
-.. automodule:: snakes_and_ladders.sandbox.maxflow_declined
+.. automodule:: sal.sandbox.maxflow_declined
    :members:
 
-.. automodule:: snakes_and_ladders.sandbox.region_graph
+.. automodule:: sal.sandbox.region_graph
    :members:
 
-.. automodule:: snakes_and_ladders.sandbox.polar_reference
+.. automodule:: sal.sandbox.polar_reference
    :members:
 
-.. automodule:: snakes_and_ladders.validation
+.. automodule:: sal.validation
    :members:
 
-.. automodule:: snakes_and_ladders.validation.runner
+.. automodule:: sal.validation.runner
    :members:
 
-.. automodule:: snakes_and_ladders.validation.protocol
+.. automodule:: sal.validation.protocol
    :members:
 
-.. automodule:: snakes_and_ladders.validation.scripts
+.. automodule:: sal.validation.scripts
    :members:
 
-.. automodule:: snakes_and_ladders.validation.scripts.selftest
+.. automodule:: sal.validation.scripts.selftest
    :members:
 
-.. automodule:: snakes_and_ladders.validation.scripts.package
+.. automodule:: sal.validation.scripts.package
    :members:
 
-.. automodule:: snakes_and_ladders.validation.pymaxflow
+.. automodule:: sal.validation.pymaxflow
    :members:
 
-.. automodule:: snakes_and_ladders.validation.scripts.pymaxflow
+.. automodule:: sal.validation.scripts.pymaxflow
    :members:
 
-.. automodule:: snakes_and_ladders.validation.gco
+.. automodule:: sal.validation.gco
    :members:
 
-.. automodule:: snakes_and_ladders.validation.scripts.gco
+.. automodule:: sal.validation.scripts.gco
    :members:
 
-.. automodule:: snakes_and_ladders.validation.hmmlearn
+.. automodule:: sal.validation.hmmlearn
    :members:
 
-.. automodule:: snakes_and_ladders.validation.scripts.hmmlearn
+.. automodule:: sal.validation.scripts.hmmlearn
    :members:
 
-.. automodule:: snakes_and_ladders.validation.scikit_learn
+.. automodule:: sal.validation.scikit_learn
    :members:
 
-.. automodule:: snakes_and_ladders.validation.scripts.scikit_learn
+.. automodule:: sal.validation.scripts.scikit_learn
    :members:
 
-.. automodule:: snakes_and_ladders.validation.blackjax
+.. automodule:: sal.validation.blackjax
    :members:
 
-.. automodule:: snakes_and_ladders.validation.gaussian
+.. automodule:: sal.validation.gaussian
    :members:
 
-.. automodule:: snakes_and_ladders.validation.rustworkx
+.. automodule:: sal.validation.rustworkx
    :members:
 
-.. automodule:: snakes_and_ladders.validation.scripts.rustworkx
+.. automodule:: sal.validation.scripts.rustworkx
    :members:
 
-.. automodule:: snakes_and_ladders.validation.jax
+.. automodule:: sal.validation.jax
    :members:
 
-.. automodule:: snakes_and_ladders.validation.scripts.jax
+.. automodule:: sal.validation.scripts.jax
    :members:
 
-.. automodule:: snakes_and_ladders.validation.scripts.blackjax
+.. automodule:: sal.validation.scripts.blackjax
    :members:
 
-.. automodule:: snakes_and_ladders.validation.gymnasium
+.. automodule:: sal.validation.gymnasium
    :members:
 
-.. automodule:: snakes_and_ladders.validation.scripts.gymnasium
+.. automodule:: sal.validation.scripts.gymnasium
    :members:
 
-.. automodule:: snakes_and_ladders.validation.torchrl
+.. automodule:: sal.validation.torchrl
    :members:
 
-.. automodule:: snakes_and_ladders.validation.scripts.torchrl
+.. automodule:: sal.validation.scripts.torchrl
    :members:
 
-.. automodule:: snakes_and_ladders.validation.torch_geometric
+.. automodule:: sal.validation.torch_geometric
    :members:
 
-.. automodule:: snakes_and_ladders.validation.scripts.torch_geometric
+.. automodule:: sal.validation.scripts.torch_geometric
    :members:
 
-.. automodule:: snakes_and_ladders.qa
+.. automodule:: sal.qa
    :members:
 
-.. automodule:: snakes_and_ladders.qa.figure
+.. automodule:: sal.qa.figure
    :members:
 
-.. automodule:: snakes_and_ladders.qa.layout
+.. automodule:: sal.qa.layout
    :members:
 
-.. automodule:: snakes_and_ladders.qa.style
+.. automodule:: sal.qa.style
    :members:
 
-.. automodule:: snakes_and_ladders.qa.runner
+.. automodule:: sal.qa.runner
    :members:
 
-.. automodule:: snakes_and_ladders.qa.manifest
+.. automodule:: sal.qa.manifest
    :members:
 
-.. automodule:: snakes_and_ladders.qa.build
+.. automodule:: sal.qa.build
    :members:
 
-.. automodule:: snakes_and_ladders.qa.sim_tree
+.. automodule:: sal.qa.sim_tree
    :members:
 
-.. automodule:: snakes_and_ladders.qa.sim_example
+.. automodule:: sal.qa.sim_example
    :members:
 
-.. automodule:: snakes_and_ladders.qa.sim_problem_sizes
+.. automodule:: sal.qa.sim_problem_sizes
    :members:
 
-.. automodule:: snakes_and_ladders.qa.likelihood_footprint
+.. automodule:: sal.qa.likelihood_footprint
    :members:
 
-.. automodule:: snakes_and_ladders.qa.backend_agreement
+.. automodule:: sal.qa.backend_agreement
    :members:
 
-.. automodule:: snakes_and_ladders.qa.opt_recovery
+.. automodule:: sal.qa.opt_recovery
    :members:
 
-.. automodule:: snakes_and_ladders.qa.opt_coverage
+.. automodule:: sal.qa.opt_coverage
    :members:
 
-.. automodule:: snakes_and_ladders.qa.opt_branch_recovery
+.. automodule:: sal.qa.opt_branch_recovery
    :members:
 
-.. automodule:: snakes_and_ladders.qa.rl_tree_policy
+.. automodule:: sal.qa.rl_tree_policy
    :members:
 
-.. automodule:: snakes_and_ladders.qa.topology_accuracy
+.. automodule:: sal.qa.topology_accuracy
    :members:
 
-.. automodule:: snakes_and_ladders.qa.opt_model_recovery
+.. automodule:: sal.qa.opt_model_recovery
    :members:
 
-.. automodule:: snakes_and_ladders.qa.search_trajectory
+.. automodule:: sal.qa.search_trajectory
    :members:
 
-.. automodule:: snakes_and_ladders.qa.search_topologies
+.. automodule:: sal.qa.search_topologies
    :members:
 
-.. automodule:: snakes_and_ladders.qa.rl_reward_surface
+.. automodule:: sal.qa.rl_reward_surface
    :members:
 
-.. automodule:: snakes_and_ladders.qa.parsimony_zones
+.. automodule:: sal.qa.parsimony_zones
    :members:
 
-.. automodule:: snakes_and_ladders.qa.tropical_relaxation
+.. automodule:: sal.qa.tropical_relaxation
    :members:
 
-.. automodule:: snakes_and_ladders.qa.frustrated_lattices
+.. automodule:: sal.qa.frustrated_lattices
    :members:
 
-.. automodule:: snakes_and_ladders.qa.mixture_seeding
+.. automodule:: sal.qa.mixture_seeding
    :members:
 
-.. automodule:: snakes_and_ladders.qa.starts
+.. automodule:: sal.qa.starts
    :members:
 
-.. automodule:: snakes_and_ladders.qa.optimizer_landscapes
+.. automodule:: sal.qa.optimizer_landscapes
    :members:
 
-.. automodule:: snakes_and_ladders.qa.tanner_graph
+.. automodule:: sal.qa.tanner_graph
    :members:
 
-.. automodule:: snakes_and_ladders.qa.turbo_waterfall
+.. automodule:: sal.qa.turbo_waterfall
    :members:
 
-.. automodule:: snakes_and_ladders.qa.coupled_labelling
+.. automodule:: sal.qa.coupled_labelling
    :members:
 
-.. automodule:: snakes_and_ladders.qa.forney
+.. automodule:: sal.qa.forney
    :members:
 
-.. automodule:: snakes_and_ladders.qa.starts_table
+.. automodule:: sal.qa.starts_table
    :members:
 
-.. automodule:: snakes_and_ladders.qa.hmc_warmup
+.. automodule:: sal.qa.hmc_warmup
    :members:
 
-.. automodule:: snakes_and_ladders.qa.potts_schedule
+.. automodule:: sal.qa.potts_schedule
    :members:
 
-.. automodule:: snakes_and_ladders.qa.potts_clusters
+.. automodule:: sal.qa.potts_clusters
    :members:
 
-.. automodule:: snakes_and_ladders.scripts
+.. automodule:: sal.scripts
    :members:
 
-.. automodule:: snakes_and_ladders.scripts.run_snakes_and_ladders
+.. automodule:: sal.scripts.run_snakes_and_ladders
    :members:

@@ -14,20 +14,20 @@ from itertools import product
 
 import numpy as np
 import pytest
-from snakes_and_ladders.likelihood.message_passing import (
+from sal.likelihood.message_passing import (
     MessageScheduleName,
     max_product,
     sum_product,
 )
-from snakes_and_ladders.search.tightening import dual_bound
-from snakes_and_ladders.sim.factor_graph import from_potts
-from snakes_and_ladders.sim.graph import (
+from sal.search.tightening import dual_bound
+from sal.sim.factor_graph import from_potts
+from sal.sim.graph import (
     BoundaryCondition,
     PottsGraph,
     lattice_graph,
     triangular_lattice_graph,
 )
-from snakes_and_ladders.sim.potts import energy
+from sal.sim.potts import energy
 
 from tests._rows import every_row, every_value
 

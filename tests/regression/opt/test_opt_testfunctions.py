@@ -12,17 +12,17 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.opt.fit import fit
-from snakes_and_ladders.opt.objective import Objective
-from snakes_and_ladders.opt.testfunctions import (
+from sal.fixtures import load_params
+from sal.opt.fit import fit
+from sal.opt.objective import Objective
+from sal.opt.testfunctions import (
     HIMMELBLAU_MINIMA,
     Himmelblau,
     Rastrigin,
     Rosenbrock,
     TestFunctionSuite,
 )
-from snakes_and_ladders.sim.fixtures import path_of
+from sal.sim.fixtures import path_of
 
 from tests._rows import every_row, every_value
 

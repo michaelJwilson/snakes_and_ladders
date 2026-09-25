@@ -20,32 +20,32 @@ from collections.abc import Callable
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.enumeration import configurations
-from snakes_and_ladders.likelihood import message_passing_reference as reference
-from snakes_and_ladders.likelihood.belief_propagation import belief_propagation
-from snakes_and_ladders.likelihood.forward_backward import forward_backward
-from snakes_and_ladders.likelihood.hmm_paths import (
+from sal.backend import Backend
+from sal.enumeration import configurations
+from sal.likelihood import message_passing_reference as reference
+from sal.likelihood.belief_propagation import belief_propagation
+from sal.likelihood.forward_backward import forward_backward
+from sal.likelihood.hmm_paths import (
     emission_log_density,
     enumerate_hidden_paths,
 )
-from snakes_and_ladders.likelihood.message_passing import (
+from sal.likelihood.message_passing import (
     ConvergenceError,
     Marginals,
     MessageScheduleName,
     max_product,
     sum_product,
 )
-from snakes_and_ladders.likelihood.potts import enumerate_potts, log_weights
-from snakes_and_ladders.likelihood.pruning import log_likelihood
-from snakes_and_ladders.likelihood.schedule import Guarantee
-from snakes_and_ladders.likelihood.spatio_sequential import (
+from sal.likelihood.potts import enumerate_potts, log_weights
+from sal.likelihood.pruning import log_likelihood
+from sal.likelihood.schedule import Guarantee
+from sal.likelihood.spatio_sequential import (
     class_log_density,
     class_posteriors,
 )
-from snakes_and_ladders.numerics import logsumexp
-from snakes_and_ladders.opt.hmm import forward_log_likelihood
-from snakes_and_ladders.sim.factor_graph import (
+from sal.numerics import logsumexp
+from sal.opt.hmm import forward_log_likelihood
+from sal.sim.factor_graph import (
     Factor,
     FactorGraph,
     Variable,
@@ -54,12 +54,12 @@ from snakes_and_ladders.sim.factor_graph import (
     from_potts,
     from_tree,
 )
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
-from snakes_and_ladders.sim.jc import jc_transition_probabilities
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.spatio_sequential import simulate_spatio_sequential
-from snakes_and_ladders.sim.tree import Node, preorder
+from sal.sim.fixtures import fixture
+from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from sal.sim.jc import jc_transition_probabilities
+from sal.sim.simulator import simulate_tree
+from sal.sim.spatio_sequential import simulate_spatio_sequential
+from sal.sim.tree import Node, preorder
 
 from tests._fixtures import SMALL_SITES, load_fixture
 from tests._rows import every_row, every_value
@@ -633,7 +633,7 @@ def test_the_tree_schedule_on_a_deep_chain_is_the_forward_recursion() -> None:
     # reference's depth-first order, and the levelled schedule is
     # breadth-first. The forward recursion is the oracle, so this is a claim
     # about the evidence and not only about not raising.
-    from snakes_and_ladders.opt.hmm import forward_log_likelihood_from_density
+    from sal.opt.hmm import forward_log_likelihood_from_density
 
     rng = np.random.default_rng(5)
     log_initial = np.log(rng.dirichlet(np.ones(3)))

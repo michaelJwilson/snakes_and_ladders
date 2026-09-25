@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import pytest
 import torch
-from snakes_and_ladders.emissions import BinomialEmission, PoissonEmission
-from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
+from sal.emissions import BinomialEmission, PoissonEmission
+from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
 
 SEED = 20260916
 N_OBSERVATIONS, N_STATES = 20_000, 6

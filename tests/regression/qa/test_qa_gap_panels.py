@@ -12,13 +12,13 @@ from __future__ import annotations
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
-from snakes_and_ladders.qa.starts import (
+from sal.qa.starts import (
     RUNTIME_FLOOR,
     START_PALETTE,
     gap_panels,
     start_styles,
 )
-from snakes_and_ladders.search.mixture_starts import GapBand, curve_band, gap_band
+from sal.search.mixture_starts import GapBand, curve_band, gap_band
 
 from tests._rows import every_value
 

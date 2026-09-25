@@ -9,6 +9,8 @@ name no code (root ``CLAUDE.md``; issue #640).
 
 from __future__ import annotations
 
+import re
+
 import document_orphans
 import pytest
 
@@ -49,11 +51,13 @@ def test_the_key_travels_one_way_and_the_textbook_names_no_code() -> None:
     # The textbook may name no code (root `CLAUDE.md`, issue #249); this holds
     # the hand-written sources to it, `test_problems_tables.py` the generated
     # table. Needles: a module path, a filename, a typeset identifier (#982).
+    # The package name is matched as a word, being short enough to sit inside
+    # one (issue #1048).
     for name in TEXTBOOK_SOURCES:
         source = (document_orphans.TEX_DIR / name).read_text()
         offenders = [
             needle
-            for needle in ("snakes_and_ladders", ".py", "\\texttt{")
-            if needle in source
+            for needle in (r"(?<!\w)sal(?!\w)", r"\.py", r"\\texttt\{")
+            if re.search(needle, source)
         ]
         assert offenders == [], f"{name} names code: {offenders}"

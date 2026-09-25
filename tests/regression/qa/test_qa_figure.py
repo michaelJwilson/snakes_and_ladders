@@ -1,4 +1,4 @@
-"""Regression test for snakes_and_ladders.qa.figure.write_qa_figure.
+"""Regression test for sal.qa.figure.write_qa_figure.
 
 Pins that the PDF it writes does not embed Type 3 fonts: GitHub's blob
 viewer fails to render them ("Error rendering embedded code"), which is
@@ -15,7 +15,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import pytest
 from matplotlib.figure import Figure
-from snakes_and_ladders.qa.figure import (
+from sal.qa.figure import (
     check_latex_safe,
     latex_integer,
     write_qa_figure,

@@ -19,18 +19,18 @@ import threading
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders import oxisal
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.sample.potts_keyed import SwendsenWangMove
-from snakes_and_ladders.sample.potts_mcmc import (
+from sal import oxisal
+from sal.backend import Backend
+from sal.sample.potts_keyed import SwendsenWangMove
+from sal.sample.potts_mcmc import (
     PottsChain,
     PottsMove,
     parallel_tempering,
     sample_potts,
 )
-from snakes_and_ladders.sample.potts_mcmc.sweeps import GUARD
-from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
-from snakes_and_ladders.sim.potts import critical_coupling, site_field
+from sal.sample.potts_mcmc.sweeps import GUARD
+from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from sal.sim.potts import critical_coupling, site_field
 
 
 def _rust_sample_potts(

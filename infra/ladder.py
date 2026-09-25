@@ -31,7 +31,7 @@ Infrastructure, not science: the callables are strings this module never
 imports, read the way `infra/problems_tables.py` reads the fixture registry
 (`infra/CLAUDE.md`). The guard resolves them; nothing here does.
 
-The unit a rung spends is `snakes_and_ladders.cost.Cost`, declared here until
+The unit a rung spends is `sal.cost.Cost`, declared here until
 issue #860 and imported since: `opt.budget.Budget` holds the same axis equal,
 and one axis is one vocabulary.
 
@@ -43,7 +43,7 @@ from __future__ import annotations
 
 from dataclasses import KW_ONLY, dataclass
 
-from snakes_and_ladders.cost import Cost
+from sal.cost import Cost
 
 #: The five ladders, in the order the survey tables run.
 PROBLEMS = ("potts", "tree", "hmm", "codes", "mixture")

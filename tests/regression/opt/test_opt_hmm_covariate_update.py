@@ -17,8 +17,8 @@ import math
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.emissions import NegativeBinomialEmission
-from snakes_and_ladders.opt.hmm import ExpectedRateNormalizer, baum_welch_family
+from sal.emissions import NegativeBinomialEmission
+from sal.opt.hmm import ExpectedRateNormalizer, baum_welch_family
 
 
 def _kernel(stay: float, m: int) -> torch.Tensor:

@@ -58,7 +58,7 @@ class Row:
     statements : tuple[str, ...]
         The **Statement** labels.
     defines : tuple[str, ...]
-        The **Defines** names, rooted at ``snakes_and_ladders`` and written
+        The **Defines** names, rooted at ``sal`` and written
         without it.
     """
 

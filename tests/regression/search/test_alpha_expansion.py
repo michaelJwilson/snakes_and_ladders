@@ -1,7 +1,7 @@
 """Alpha expansion, checked against an exact solver before a bound is claimed.
 
 At two labels one expansion offers every site the other label, so it must
-reproduce `snakes_and_ladders.search.maxflow`'s exact cut, energy for energy.
+reproduce `sal.search.maxflow`'s exact cut, energy for energy.
 That reduction caught swapped terminal capacities and auxiliary capacities
 ignoring an endpoint already at alpha, while enumeration passed (off by up to
 2.55). Then the bound, measured; and two oracle-free invariants: energy never
@@ -16,8 +16,8 @@ from itertools import product
 
 import numpy as np
 import pytest
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.search.alpha_expansion import (
+from sal.backend import Backend
+from sal.search.alpha_expansion import (
     UNIFORM_POTTS_BOUND,
     _expansion_network,
     _infinite_capacity,
@@ -28,15 +28,15 @@ from snakes_and_ladders.search.alpha_expansion import (
     expand,
     swap,
 )
-from snakes_and_ladders.search.icm import iterated_conditional_modes
-from snakes_and_ladders.search.maxflow import FlowNetwork, ising_ground_state
-from snakes_and_ladders.sim.graph import (
+from sal.search.icm import iterated_conditional_modes
+from sal.search.maxflow import FlowNetwork, ising_ground_state
+from sal.sim.graph import (
     BoundaryCondition,
     PottsGraph,
     erdos_renyi_graph,
     lattice_graph,
 )
-from snakes_and_ladders.sim.potts import energy, site_field
+from sal.sim.potts import energy, site_field
 
 from tests._rows import every_row, every_value
 

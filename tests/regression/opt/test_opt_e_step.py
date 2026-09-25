@@ -11,15 +11,15 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.emissions import CountPairEmission, GaussianEmission
-from snakes_and_ladders.opt.mixture import (
+from sal.backend import Backend
+from sal.emissions import CountPairEmission, GaussianEmission
+from sal.opt.mixture import (
     e_step,
     mixture_log_likelihood,
     responsibilities,
 )
-from snakes_and_ladders.sim.emission_mixture import simulate_emission_mixture
-from snakes_and_ladders.sim.fixtures import fixture
+from sal.sim.emission_mixture import simulate_emission_mixture
+from sal.sim.fixtures import fixture
 
 
 @pytest.mark.analytic
@@ -64,7 +64,7 @@ def test_lgamma_on_the_distinct_counts_is_the_direct_form_bitwise() -> None:
     # The count families' log-densities take lgamma(counts + shift) on the
     # distinct counts and gather; elementwise, so the direct form bitwise,
     # and the direct form wherever the shapes or autodiff rule the gather out.
-    from snakes_and_ladders.emissions.counts import lgamma_shifted
+    from sal.emissions.counts import lgamma_shifted
 
     rng = np.random.default_rng(924)
     counts = torch.as_tensor(rng.integers(0, 300, (3_000, 1)), dtype=torch.float64)

@@ -1,6 +1,6 @@
 """Two spellings of a ladder are one schedule, and a run cannot tell them apart (issue #827).
 
-Four annealers took a :class:`~snakes_and_ladders.sample.schedule.TempSchedule`
+Four annealers took a :class:`~sal.sample.schedule.TempSchedule`
 and six temperings took a bare sequence of temperatures, so a caller who had
 built a schedule could not hand it to a tempering. `LadderTempSchedule` is the
 sequence as a schedule and `ladder` reads either spelling into the tuple the
@@ -17,15 +17,15 @@ import itertools
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.opt.testfunctions import Rosenbrock
-from snakes_and_ladders.sample import hmc
-from snakes_and_ladders.sample.annealed import (
+from sal.opt.testfunctions import Rosenbrock
+from sal.sample import hmc
+from sal.sample.annealed import (
     annealed_importance_sampling,
     population_annealing,
     simulated_tempering,
 )
-from snakes_and_ladders.sample.potts_mcmc import adapt_ladder_potts, parallel_tempering
-from snakes_and_ladders.sample.schedule import (
+from sal.sample.potts_mcmc import adapt_ladder_potts, parallel_tempering
+from sal.sample.schedule import (
     ExponentialTempSchedule,
     LadderTempSchedule,
     adapt_ladder,
@@ -33,16 +33,16 @@ from snakes_and_ladders.sample.schedule import (
     ladder,
     temperatures,
 )
-from snakes_and_ladders.sample.tempered import (
+from sal.sample.tempered import (
     adapt_ladder_round_trips,
     tempered_factor_graph,
     tempered_potts_pair,
     tempered_topologies,
 )
-from snakes_and_ladders.sim.factor_graph import from_potts
-from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.topology import enumerate_topologies
+from sal.sim.factor_graph import from_potts
+from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from sal.sim.simulator import simulate_tree
+from sal.sim.topology import enumerate_topologies
 
 from tests._fixtures import FOUR_TAXA, load_fixture
 

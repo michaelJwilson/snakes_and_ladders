@@ -1,6 +1,6 @@
 //! The BCJR (log-MAP) forward--backward pass over a terminated trellis.
 //!
-//! `snakes_and_ladders.likelihood.convolutional.bcjr` --- the vectorized
+//! `sal.likelihood.convolutional.bcjr` --- the vectorized
 //! NumPy implementation --- stays as the oracle this is pinned against, per
 //! root `CLAUDE.md`. What Rust buys here is what root `CLAUDE.md` reserves it
 //! for: the recursion is sequential in the trellis step and the only axis
@@ -13,7 +13,7 @@
 //! **The arithmetic is the oracle's, operation for operation.** `logaddexp`
 //! below is NumPy's `npy_logaddexp` --- the `x == y` branch included, which
 //! is what makes two equal infinities finite --- and [`logsumexp`] is
-//! `snakes_and_ladders.numerics.logsumexp`'s shift by the row maximum with
+//! `sal.numerics.logsumexp`'s shift by the row maximum with
 //! the sum left to right, which is NumPy's pairwise reduction at the state
 //! counts a trellis has. The one departure is storage: the forward metrics
 //! are two rows rather than a `(T + 1, n_states)` array, since the posterior
@@ -33,7 +33,7 @@ use pyo3::prelude::*;
 
 /// The log weight of an edge the trellis does not have.
 ///
-/// `snakes_and_ladders.sim.convolutional.IMPOSSIBLE_EDGE`, restated here
+/// `sal.sim.convolutional.IMPOSSIBLE_EDGE`, restated here
 /// because the constant crosses no boundary: finite rather than `-inf` so
 /// that a shift by a row maximum over unreachable states underflows to zero
 /// instead of giving `-inf - (-inf)`.
@@ -45,7 +45,7 @@ const LOGE2: f64 = std::f64::consts::LN_2;
 /// A shift register's state machine, as the two tables the recursion reads.
 ///
 /// Both are `(n_states, 2)` row-major and flattened, so edge `(s, u)` is
-/// index `2 * s + u` --- the layout `snakes_and_ladders.sim.convolutional.Trellis`
+/// index `2 * s + u` --- the layout `sal.sim.convolutional.Trellis`
 /// already holds, which is why nothing is copied to build this.
 pub struct Trellis<'a> {
     /// The state entered from `s` on input `u`.
@@ -293,7 +293,7 @@ pub fn bcjr_impl(
 type Decoded<'py> = (Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>, f64);
 
 /// One log-MAP forward--backward pass, for
-/// `snakes_and_ladders.likelihood.convolutional_rust`.
+/// `sal.likelihood.convolutional_rust`.
 ///
 /// `next_state` is `2 * n_states` `int64` and `parity` `2 * n_states`
 /// `uint8`, both `(n_states, 2)` row-major and flattened; the three ratio

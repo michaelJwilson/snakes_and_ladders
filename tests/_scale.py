@@ -10,8 +10,8 @@ from __future__ import annotations
 from typing import Any, TypeVar
 
 import pytest
-from snakes_and_ladders.fixtures import Scale
-from snakes_and_ladders.sim.fixtures import KEY, Fixture, fixture, tiers
+from sal.fixtures import Scale
+from sal.sim.fixtures import KEY, Fixture, fixture, tiers
 
 #: The interface, re-exports included: a bare re-export such as `Fixture` is
 #: private under ``mypy --strict``.

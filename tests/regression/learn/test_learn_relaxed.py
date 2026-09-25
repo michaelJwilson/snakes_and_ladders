@@ -16,9 +16,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.learn.potts import Configuration, PottsEnvironment, optimum
-from snakes_and_ladders.learn.relaxed import (
+from sal.fixtures import load_params
+from sal.learn.potts import Configuration, PottsEnvironment, optimum
+from sal.learn.relaxed import (
     MINIMUM_TEMPERATURE,
     RelaxationMode,
     RelaxedHmmPath,
@@ -32,12 +32,12 @@ from snakes_and_ladders.learn.relaxed import (
     one_hot,
     optimize,
 )
-from snakes_and_ladders.learn.rollout import greedy_rollout
-from snakes_and_ladders.likelihood.hmm_paths import (
+from sal.learn.rollout import greedy_rollout
+from sal.likelihood.hmm_paths import (
     enumerate_hidden_paths,
     path_log_probability,
 )
-from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
+from sal.sim.hmm import HmmParams, simulate_sequences
 
 from tests._rows import every_value
 
@@ -97,7 +97,7 @@ def test_the_potts_relaxation_is_exact_at_every_corner() -> None:
 @pytest.mark.oracle
 def test_the_hmm_relaxation_is_exact_at_every_corner() -> None:
     # The same check across a module boundary, which makes it stronger than
-    # the one above: `snakes_and_ladders.learn` may not import `snakes_and_ladders.likelihood`, so
+    # the one above: `sal.learn` may not import `sal.likelihood`, so
     # `RelaxedHmmPath.discrete` and `path_log_probability` are genuinely
     # independent implementations of `log P(path, observations)`.
     objective, params, observations = _hmm(length=5)

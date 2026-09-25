@@ -15,13 +15,13 @@ from itertools import product
 
 import numpy as np
 import pytest
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.sample.potts_mcmc import PottsChain, PottsMove, sweeps
-from snakes_and_ladders.sample.potts_mcmc import sample_potts as oracle_sample_potts
-from snakes_and_ladders.sample.potts_mcmc.sweeps import GUARD
-from snakes_and_ladders.sample.statistics import chi_square_p_value
-from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
-from snakes_and_ladders.sim.potts import site_field
+from sal.backend import Backend
+from sal.sample.potts_mcmc import PottsChain, PottsMove, sweeps
+from sal.sample.potts_mcmc import sample_potts as oracle_sample_potts
+from sal.sample.potts_mcmc.sweeps import GUARD
+from sal.sample.statistics import chi_square_p_value
+from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from sal.sim.potts import site_field
 
 from tests._chains import enumerated_law, fit_p_value
 from tests._rows import every_row
@@ -156,7 +156,7 @@ def test_a_chain_is_reproducible_from_its_generator() -> None:
 @pytest.mark.smoke
 def test_a_state_outside_the_alphabet_is_refused() -> None:
     """The kernel's own precondition, surfaced as a Python error (via the extension)."""
-    from snakes_and_ladders import oxisal
+    from sal import oxisal
 
     with pytest.raises(ValueError, match=r"expected \[0, 2\)"):
         oxisal.single_site_sweeps(
@@ -223,7 +223,7 @@ def test_a_guard_wide_enough_hands_every_site_back() -> None:
 
     A guard over the whole sum hands every site to NumPy: still the oracle's chain (#599).
     """
-    from snakes_and_ladders import oxisal
+    from sal import oxisal
 
     graph = lattice_graph((4, 4), BoundaryCondition.OPEN, 0.7)
     rows = site_field(WITH_FIELD, graph.n_nodes)
@@ -269,7 +269,7 @@ def test_a_guard_wide_enough_hands_every_site_back() -> None:
 @pytest.mark.smoke
 def test_the_kernel_refuses_a_negative_guard() -> None:
     """A guard is a width, and a negative one would decide every site."""
-    from snakes_and_ladders import oxisal
+    from sal import oxisal
 
     with pytest.raises(ValueError, match="guard must be >= 0"):
         oxisal.single_site_sweeps(
@@ -292,7 +292,7 @@ def test_the_default_guard_hands_nothing_back_on_a_realistic_chain() -> None:
 
     The kernel decided every site; a hand-back would be a correctness change.
     """
-    from snakes_and_ladders import oxisal
+    from sal import oxisal
 
     graph = lattice_graph((8, 8), BoundaryCondition.PERIODIC, 0.4)
     rows = site_field(WITH_FIELD, graph.n_nodes)

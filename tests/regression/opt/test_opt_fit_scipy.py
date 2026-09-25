@@ -13,9 +13,9 @@ from collections.abc import Callable
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.opt.fit import fit
-from snakes_and_ladders.opt.objective import Objective
-from snakes_and_ladders.opt.testfunctions import Himmelblau, Rastrigin, Rosenbrock
+from sal.opt.fit import fit
+from sal.opt.objective import Objective
+from sal.opt.testfunctions import Himmelblau, Rastrigin, Rosenbrock
 
 from tests._rows import every_value
 

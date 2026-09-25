@@ -19,28 +19,28 @@ from collections.abc import Callable
 import numpy as np
 import pytest
 from numba import njit
-from scipy.stats import chisquare
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.opt.budget import Budget
-from snakes_and_ladders.search.ground_state import (
+from sal.backend import Backend
+from sal.cost import Cost
+from sal.opt.budget import Budget
+from sal.search.ground_state import (
     FLOORED,
     METHODS,
     descend,
     ground_state,
 )
-from snakes_and_ladders.search.icm import SweepOrder, iterated_conditional_modes
-from snakes_and_ladders.search.numba.icm import icm_sweeps, icm_sweeps_checked
-from snakes_and_ladders.search.potts_starts import spatio_rung
-from snakes_and_ladders.search.spatio_sequential import (
+from sal.search.icm import SweepOrder, iterated_conditional_modes
+from sal.search.numba.icm import icm_sweeps, icm_sweeps_checked
+from sal.search.potts_starts import spatio_rung
+from sal.search.spatio_sequential import (
     LabelSolver,
     fit_spatio_sequential,
     label_step,
 )
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
-from snakes_and_ladders.sim.potts import energy, site_field
-from snakes_and_ladders.sim.spatio_sequential import simulate_spatio_sequential
+from sal.sim.fixtures import fixture
+from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from sal.sim.potts import energy, site_field
+from sal.sim.spatio_sequential import simulate_spatio_sequential
+from scipy.stats import chisquare
 
 from tests._rows import every_value
 

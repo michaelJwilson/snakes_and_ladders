@@ -13,9 +13,9 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.likelihood.turbo import ErrorRates, uncoded_bit_error_rate
-from snakes_and_ladders.qa.turbo_waterfall import DRAWN_ITERATIONS, measure
-from snakes_and_ladders.sim.fixtures import fixture
+from sal.likelihood.turbo import ErrorRates, uncoded_bit_error_rate
+from sal.qa.turbo_waterfall import DRAWN_ITERATIONS, measure
+from sal.sim.fixtures import fixture
 
 FIXTURE = fixture("turbo", "ci")
 PARAMS = FIXTURE.params

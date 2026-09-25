@@ -77,9 +77,9 @@ def test_the_package_under_test_is_this_worktrees_own() -> None:
 
     Rechecked after `infra/new_worktree.sh`: a sibling can repoint the install later.
     """
-    import snakes_and_ladders
+    import sal
 
-    resolved = Path(snakes_and_ladders.__file__).resolve()
+    resolved = Path(sal.__file__).resolve()
 
     assert resolved.is_relative_to(REPO_ROOT), (
         f"the tests import {resolved}, which is outside {REPO_ROOT}: this "

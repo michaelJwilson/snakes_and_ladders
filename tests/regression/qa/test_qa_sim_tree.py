@@ -1,4 +1,4 @@
-"""Regression test for snakes_and_ladders.qa.sim_tree.
+"""Regression test for sal.qa.sim_tree.
 
 Pins the layout's numeric coordinates against branch lengths recomputed
 independently, and the caption's content against the generating parameters
@@ -11,16 +11,16 @@ from __future__ import annotations
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.qa.figure import state_label
-from snakes_and_ladders.qa.sim_tree import (
+from sal.fixtures import load_params
+from sal.qa.figure import state_label
+from sal.qa.sim_tree import (
     SITES_SHOWN,
     render_sim_tree,
     tree_layout,
 )
-from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.tree import Node, preorder
+from sal.sim.params import SimulationParams
+from sal.sim.simulator import simulate_tree
+from sal.sim.tree import Node, preorder
 
 from tests._fixtures import FIXTURES_DIR
 

@@ -16,14 +16,14 @@ import math
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.emissions import EmissionFamily
-from snakes_and_ladders.opt.budget import Budget, compare
-from snakes_and_ladders.opt.emission_mixture import CountPairSeeding
-from snakes_and_ladders.opt.mixture import mixture_log_likelihood
-from snakes_and_ladders.opt.starts import Polished, Trial
-from snakes_and_ladders.opt.termination import Stop
-from snakes_and_ladders.search.mixture_starts import (
+from sal.cost import Cost
+from sal.emissions import EmissionFamily
+from sal.opt.budget import Budget, compare
+from sal.opt.emission_mixture import CountPairSeeding
+from sal.opt.mixture import mixture_log_likelihood
+from sal.opt.starts import Polished, Trial
+from sal.opt.termination import Stop
+from sal.search.mixture_starts import (
     BEST_OF,
     BEST_OF_EM_STARTS,
     BEST_OF_STARTS,
@@ -40,8 +40,8 @@ from snakes_and_ladders.search.mixture_starts import (
     instance_from,
     polish,
 )
-from snakes_and_ladders.sim.emission_mixture import simulate_emission_mixture
-from snakes_and_ladders.sim.fixtures import fixture
+from sal.sim.emission_mixture import simulate_emission_mixture
+from sal.sim.fixtures import fixture
 
 #: The polish's budget: experiment 009's six passes.
 PASSES = Budget(Cost.PASSES, 6)

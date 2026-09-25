@@ -1,1 +1,1 @@
-Made `main` green: `python/snakes_and_ladders/learn/CLAUDE.md` is back within its 120-line budget, and `tests/regression/learn/test_learn_environment.py`, which imports `learn.hmm`, carries the `hmm` family marker, so `-m hmm` selects it. Both came in with #1033.
+Made `main` green: `python/sal/learn/CLAUDE.md` is back within its 120-line budget, and `tests/regression/learn/test_learn_environment.py`, which imports `learn.hmm`, carries the `hmm` family marker, so `-m hmm` selects it. Both came in with #1033.

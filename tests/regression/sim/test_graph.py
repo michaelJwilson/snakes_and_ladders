@@ -1,4 +1,4 @@
-"""Regression tests for :mod:`snakes_and_ladders.sim.graph`.
+"""Regression tests for :mod:`sal.sim.graph`.
 
 Node and edge counts are checked against closed-form combinatorics -- not
 against a second traversal of the same graph -- across 1-D, 2-D and 3-D
@@ -14,18 +14,18 @@ from typing import Any
 import numpy as np
 import pytest
 import yaml
-from snakes_and_ladders.fixtures import Params, load_params
-from snakes_and_ladders.sim.canonical import FrustratedLatticeParams
-from snakes_and_ladders.sim.count_pairs import SpatioSequentialCountsParams
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.graph import (
+from sal.fixtures import Params, load_params
+from sal.sim.canonical import FrustratedLatticeParams
+from sal.sim.count_pairs import SpatioSequentialCountsParams
+from sal.sim.fixtures import fixture
+from sal.sim.graph import (
     BoundaryCondition,
     PottsGraph,
     lattice_graph,
     triangular_lattice_graph,
 )
-from snakes_and_ladders.sim.potts import PottsLatticeParams, SpatioOnlyParams
-from snakes_and_ladders.sim.spatio_sequential import SpatioSequentialParams
+from sal.sim.potts import PottsLatticeParams, SpatioOnlyParams
+from sal.sim.spatio_sequential import SpatioSequentialParams
 
 from tests._rows import every_value
 

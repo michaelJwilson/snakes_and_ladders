@@ -14,13 +14,13 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.search.ground_state import Rung
-from snakes_and_ladders.search.icm import iterated_conditional_modes
-from snakes_and_ladders.search.numba.icm import icm_sweeps_checked
-from snakes_and_ladders.search.potts_starts import spatio_rung
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.potts import site_field
+from sal.backend import Backend
+from sal.search.ground_state import Rung
+from sal.search.icm import iterated_conditional_modes
+from sal.search.numba.icm import icm_sweeps_checked
+from sal.search.potts_starts import spatio_rung
+from sal.sim.fixtures import fixture
+from sal.sim.potts import site_field
 
 #: 1% of 5,041 sites.
 MIN_SITES = 50

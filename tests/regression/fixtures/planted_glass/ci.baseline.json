@@ -64,9 +64,9 @@
     }
   },
   "modules": [
-    "snakes_and_ladders.likelihood.potts",
-    "snakes_and_ladders.search.icm",
-    "snakes_and_ladders.sim.canonical"
+    "sal.likelihood.potts",
+    "sal.search.icm",
+    "sal.sim.canonical"
   ],
   "problem": "planted_glass",
   "tier": "ci"

@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.sample.potts_mcmc import bond_roots
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+from sal.backend import Backend
+from sal.sample.potts_mcmc import bond_roots
+from sal.sim.graph import BoundaryCondition, lattice_graph
 
 from tests._rows import every_value
 

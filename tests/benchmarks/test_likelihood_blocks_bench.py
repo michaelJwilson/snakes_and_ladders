@@ -42,12 +42,12 @@ from collections.abc import Callable
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.likelihood.blocks import block_frequency_interval
-from snakes_and_ladders.likelihood.pruning_torch import (
+from sal.likelihood.blocks import block_frequency_interval
+from sal.likelihood.pruning_torch import (
     branch_lengths_from_tree,
     log_likelihood,
 )
-from snakes_and_ladders.sim.simulator import simulate_tree
+from sal.sim.simulator import simulate_tree
 
 from tests._fixtures import load_fixture
 

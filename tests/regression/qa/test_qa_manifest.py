@@ -11,8 +11,8 @@ until issue #490 removed it; neither is about staleness, so both moved here.
 from __future__ import annotations
 
 import pytest
-from snakes_and_ladders.qa import build
-from snakes_and_ladders.qa.manifest import (
+from sal.qa import build
+from sal.qa.manifest import (
     CAP_WAIVERS,
     CITED_RENDER_CAP,
     FIGURES,

@@ -1,1 +1,1 @@
-"""Regression tests for `snakes_and_ladders.search`."""
+"""Regression tests for `sal.search`."""

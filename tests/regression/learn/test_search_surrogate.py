@@ -14,16 +14,16 @@ from collections.abc import Mapping
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.bound import Bound
-from snakes_and_ladders.fixtures import Scale
-from snakes_and_ladders.learn.ranking import (
+from sal.bound import Bound
+from sal.fixtures import Scale
+from sal.learn.ranking import (
     LearnedTreeSurrogate,
     TreeTarget,
     maximized_target,
     shuffle_children,
     tree_examples,
 )
-from snakes_and_ladders.learn.surrogate import (
+from sal.learn.surrogate import (
     LinearSurrogate,
     SetSurrogate,
     argmax_agreement,
@@ -32,14 +32,14 @@ from snakes_and_ladders.learn.surrogate import (
     r_squared,
     split_by_group,
 )
-from snakes_and_ladders.likelihood.surrogate import (
+from sal.likelihood.surrogate import (
     ParsimonyUpperBound,
     PlugInLikelihood,
 )
-from snakes_and_ladders.search.infer import infer
-from snakes_and_ladders.sim.fixtures import baseline
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.topology import (
+from sal.search.infer import infer
+from sal.sim.fixtures import baseline
+from sal.sim.simulator import simulate_tree
+from sal.sim.topology import (
     MoveSet,
     Topology,
     enumerate_topologies,

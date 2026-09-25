@@ -15,16 +15,16 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.emissions import GaussianEmission, PoissonEmission
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.opt.hmm import (
+from sal.emissions import GaussianEmission, PoissonEmission
+from sal.fixtures import load_params
+from sal.opt.hmm import (
     baum_welch,
     baum_welch_family,
     hmm_log_likelihood,
     viterbi,
 )
-from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
-from snakes_and_ladders.validation import hmmlearn
+from sal.sim.hmm import HmmParams, simulate_sequences
+from sal.validation import hmmlearn
 
 from tests._fixtures import FIXTURES_DIR
 from tests._frameworks import requires

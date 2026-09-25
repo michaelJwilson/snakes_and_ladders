@@ -18,8 +18,8 @@
 //!
 //! **No general rate matrix.** `burn` exposes no matrix exponential, so this
 //! route computes the closed-form Jukes-Cantor transition only; the general
-//! `Q` path of `snakes_and_ladders.likelihood.pruning_torch` has no
-//! counterpart here. `python/snakes_and_ladders/sandbox/pruning_burn.py`
+//! `Q` path of `sal.likelihood.pruning_torch` has no
+//! counterpart here. `python/sal/sandbox/pruning_burn.py`
 //! refuses a rate matrix rather than ignoring one.
 //!
 //! Like `src/pruning.rs`, the implementation takes no PyO3 types so

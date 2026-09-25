@@ -15,15 +15,15 @@ import itertools
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.learn.policy import LinearPolicy
-from snakes_and_ladders.learn.potts import (
+from sal.fixtures import load_params
+from sal.learn.policy import LinearPolicy
+from sal.learn.potts import (
     PottsEnvironment,
     enumerate_configurations,
     optimum,
 )
-from snakes_and_ladders.learn.rollout import greedy_rollout
-from snakes_and_ladders.sim.potts_chain import PottsParams
+from sal.learn.rollout import greedy_rollout
+from sal.sim.potts_chain import PottsParams
 
 from tests._fixtures import FIXTURES_DIR
 from tests.regression.learn.conftest import FIELD, potts_environment
@@ -176,7 +176,7 @@ def test_the_greedy_weights_reproduce_the_greedy_searcher() -> None:
 
 @pytest.mark.smoke
 def test_the_fixture_yaml_builds_the_same_environment() -> None:
-    # One model, two roles: the yaml that supplies `snakes_and_ladders.opt`'s reference
+    # One model, two roles: the yaml that supplies `sal.opt`'s reference
     # objective read as a search problem instead of a fitting problem.
     params = load_params(FIXTURE, PottsParams)
     environment = PottsEnvironment.from_params(params)

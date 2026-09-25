@@ -99,7 +99,7 @@ before it is published.
   contain the formulation of all supported problems in a common notation, the problem size/fixture
   definitions, all supported algorithms, their applicability and efficiency for each problem,
   the analytic results used for validation.  The tone is concise and follows the writing style
-  in Claude.md at root.  Every plot and table is rendered from declared fixtures by `snakes_and_ladders.qa`
+  in Claude.md at root.  Every plot and table is rendered from declared fixtures by `sal.qa`
   using the same code it reports on.  The paper is in the academic style, advertising the work in a
   measured, authoritative tone.  Plots show key evidence for conclusions drawn, e.g. the optimization performance
   for key problems and the relative efficiency gains.  Each problem statement carries the model as a
@@ -340,7 +340,7 @@ and reduce the number of exact evaluations.
     does not beat the bounded-radius search: on every fixture where both are
     affordable neighbor joining reaches the same optimum at no gradient steps,
     so no budget-matched claim is made. The module is conserved as
-    `snakes_and_ladders.sandbox.tropical` on that measurement, with the tests
+    `sal.sandbox.tropical` on that measurement, with the tests
     and the figure that referee it.
 
 - **Learned Compound Moves:** replace single atomic actions with extended macro-actions,

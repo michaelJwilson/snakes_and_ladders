@@ -15,12 +15,12 @@ from itertools import product
 
 import numpy as np
 import pytest
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.enumeration import configurations
-from snakes_and_ladders.search.alpha_expansion import alpha_expansion
-from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
-from snakes_and_ladders.sim.potts import critical_coupling, energies, energy
-from snakes_and_ladders.validation import gco
+from sal.backend import Backend
+from sal.enumeration import configurations
+from sal.search.alpha_expansion import alpha_expansion
+from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from sal.sim.potts import critical_coupling, energies, energy
+from sal.validation import gco
 
 from tests._frameworks import requires
 from tests._rows import every_row, every_value

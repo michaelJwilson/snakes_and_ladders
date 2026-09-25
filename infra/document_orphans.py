@@ -37,7 +37,7 @@ TEX_DIR = REPO_ROOT / "docs" / "tex"
 TEXTBOOK = TEX_DIR / "textbook.tex"
 DOCUMENTS = (TEX_DIR / "paper.tex", TEXTBOOK)
 RELEASE_TEMPLATE = REPO_ROOT / ".github" / "ISSUE_TEMPLATE" / "release.yml"
-MANIFEST = REPO_ROOT / "python" / "snakes_and_ladders" / "qa" / "manifest.py"
+MANIFEST = REPO_ROOT / "python" / "sal" / "qa" / "manifest.py"
 
 
 #: The shape a problem statement has. Read rather than a hand-kept list, so a
@@ -55,7 +55,7 @@ _STATEMENT = re.compile(
     re.DOTALL,
 )
 #: A figure the manifest declares, and how a document refers to one --- the
-#: two spellings ``snakes_and_ladders.qa.manifest`` itself reads.
+#: two spellings ``sal.qa.manifest`` itself reads.
 _MANIFEST_STEM = re.compile(r'FigureSpec\(\s*"([A-Za-z0-9_]+)"')
 _FIGURE_REFERENCE = re.compile(r"figures/([A-Za-z0-9_]+)")
 _CAPTION_SUFFIX = "_caption"
@@ -99,7 +99,7 @@ def rendered_figures(manifest: Path = MANIFEST) -> set[str]:
 def cited_figures(documents: tuple[Path, ...] = DOCUMENTS) -> set[str]:
     """Every figure stem the documents refer to, by a figure or a caption.
 
-    The same two routes ``snakes_and_ladders.qa.manifest`` reads, spelled
+    The same two routes ``sal.qa.manifest`` reads, spelled
     here as a regular expression for the reason above.
 
     Returns

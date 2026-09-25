@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.numerics import sample_rows
+from sal.backend import Backend
+from sal.numerics import sample_rows
 
 from tests._rows import every_row
 

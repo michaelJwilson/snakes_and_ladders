@@ -1,4 +1,4 @@
-"""Regression tests for snakes_and_ladders.qa.coupled_labelling.
+"""Regression tests for sal.qa.coupled_labelling.
 
 The three panels share one set of coordinates, and those coordinates are the
 lattice's own: a randomized graph layout would place the nodes differently on
@@ -16,7 +16,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from snakes_and_ladders.qa.coupled_labelling import (
+from sal.qa.coupled_labelling import (
     DRAW_SEED,
     FIT_SEED,
     best_permutation,
@@ -26,9 +26,9 @@ from snakes_and_ladders.qa.coupled_labelling import (
     planted_labelling,
     recover,
 )
-from snakes_and_ladders.search.spatio_sequential import label_accuracy
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+from sal.search.spatio_sequential import label_accuracy
+from sal.sim.fixtures import fixture
+from sal.sim.graph import BoundaryCondition, lattice_graph
 
 from tests._rows import every_value
 

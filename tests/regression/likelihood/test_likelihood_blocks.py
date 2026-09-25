@@ -14,26 +14,26 @@ from collections.abc import Sequence
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.bound import Bound, certify
-from snakes_and_ladders.likelihood.blocks import (
+from sal.bound import Bound, certify
+from sal.likelihood.blocks import (
     BlockFrequencyBound,
     Interval,
     block_frequency_interval,
     site_log_likelihood_extremes,
 )
-from snakes_and_ladders.likelihood.pruning_torch import (
+from sal.likelihood.pruning_torch import (
     branch_lengths_from_tree,
     log_likelihood,
 )
-from snakes_and_ladders.search.infer import infer, score_topology
-from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.topology import (
+from sal.search.infer import infer, score_topology
+from sal.sim.params import SimulationParams
+from sal.sim.simulator import simulate_tree
+from sal.sim.topology import (
     MoveSet,
     enumerate_topologies,
     leaf_bipartitions,
 )
-from snakes_and_ladders.sim.tree import preorder
+from sal.sim.tree import preorder
 
 from tests._fixtures import load_fixture
 

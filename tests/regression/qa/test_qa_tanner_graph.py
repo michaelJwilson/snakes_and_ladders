@@ -1,4 +1,4 @@
-"""Regression tests for snakes_and_ladders.qa.tanner_graph.
+"""Regression tests for sal.qa.tanner_graph.
 
 The drawing is pinned where an input stamp cannot reach: node coordinates
 come from the code and from nothing else, so two renders of one tree place
@@ -14,13 +14,13 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from snakes_and_ladders.qa.tanner_graph import (
+from sal.qa.tanner_graph import (
     CHECK_ROW_HEIGHT,
     build_figure,
     main,
     tanner_layout,
 )
-from snakes_and_ladders.sim.fixtures import fixture
+from sal.sim.fixtures import fixture
 
 FIXTURE = fixture("ldpc", "ci")
 PARAMS = FIXTURE.params

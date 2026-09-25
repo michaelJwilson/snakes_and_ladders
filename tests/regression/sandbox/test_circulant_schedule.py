@@ -15,8 +15,8 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from snakes_and_ladders.sandbox.circulant_schedule import circulant_schedule
-from snakes_and_ladders.sim.spatio_sequential import (
+from sal.sandbox.circulant_schedule import circulant_schedule
+from sal.sim.spatio_sequential import (
     canonical_spatio_sequential,
     circulant_transition,
 )

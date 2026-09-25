@@ -15,11 +15,11 @@ from typing import Any
 
 import numpy as np
 import pytest
-from snakes_and_ladders.emissions import CategoricalEmission
-from snakes_and_ladders.sample.statistics import chi_square_p_value
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
-from snakes_and_ladders.sim.spatio_sequential import (
+from sal.emissions import CategoricalEmission
+from sal.sample.statistics import chi_square_p_value
+from sal.sim.fixtures import fixture
+from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from sal.sim.spatio_sequential import (
     SimulatedSpatioSequential,
     SpatioSequentialParams,
     circulant_transition,

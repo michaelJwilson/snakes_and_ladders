@@ -19,7 +19,7 @@ the same basis is what makes the drop a measurement.
 
 Run, from the repository root, after the tier::
 
-    pytest tests/regression -n 3 -m "not release" --cov=snakes_and_ladders \\
+    pytest tests/regression -n 3 -m "not release" --cov=sal \\
         --cov-context=test
     uv run python infra/coverage_recut.py               # the two tables
     uv run python infra/coverage_recut.py --fail-under  # the guard, exit 1 below a floor
@@ -49,7 +49,7 @@ from _paths import REPO_ROOT
 from coverage.numbits import numbits_to_nums
 from coverage.parser import PythonParser
 
-PACKAGE = REPO_ROOT / "python" / "snakes_and_ladders"
+PACKAGE = REPO_ROOT / "python" / "sal"
 
 # `infra/` is on `mypy_path` and is how the guards reach their shared names.
 sys.path.insert(0, str(REPO_ROOT / "infra"))

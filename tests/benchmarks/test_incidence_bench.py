@@ -23,10 +23,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.sample.potts_mcmc import wolff_sweep
-from snakes_and_ladders.sim.factor_graph import Factor, FactorGraph, Variable
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
-from snakes_and_ladders.sim.ldpc import gallager_code
+from sal.sample.potts_mcmc import wolff_sweep
+from sal.sim.factor_graph import Factor, FactorGraph, Variable
+from sal.sim.graph import BoundaryCondition, lattice_graph
+from sal.sim.ldpc import gallager_code
 
 
 @pytest.mark.parametrize("extent", [16, 32, 64])

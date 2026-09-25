@@ -12,20 +12,20 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.likelihood.css import (
+from sal.likelihood.css import (
     decode_succeeds,
     decode_syndrome,
     error_cosets,
     measure_logical_error_rate,
 )
-from snakes_and_ladders.likelihood.ldpc import (
+from sal.likelihood.ldpc import (
     DecodingAlgorithm,
     decode,
     enumerate_codewords,
 )
-from snakes_and_ladders.sim.css import CssCode, sample_x_error
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.ldpc import BinarySymmetricChannel
+from sal.sim.css import CssCode, sample_x_error
+from sal.sim.fixtures import fixture
+from sal.sim.ldpc import BinarySymmetricChannel
 
 #: The declared rate at each tier, and what the enumeration and the decoder
 #: give there. ``ci`` carries the oracle; ``stress`` is past ``2 ** n`` and

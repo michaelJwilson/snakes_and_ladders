@@ -13,18 +13,18 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from snakes_and_ladders.learn.exact import (
+from sal.learn.exact import (
     exact_policy_gradient,
     finite_difference_gradient,
 )
-from snakes_and_ladders.learn.policy import LinearPolicy
-from snakes_and_ladders.learn.potts import (
+from sal.learn.policy import LinearPolicy
+from sal.learn.potts import (
     PottsEnvironment,
     enumerate_configurations,
     optimum,
 )
-from snakes_and_ladders.learn.rollout import greedy_rollout
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+from sal.learn.rollout import greedy_rollout
+from sal.sim.graph import BoundaryCondition, lattice_graph
 
 from tests.regression.learn.conftest import COUPLING, FIELD
 
@@ -117,7 +117,7 @@ def test_hill_climbing_reaches_the_enumerated_optimum_on_a_lattice() -> None:
 @pytest.mark.oracle
 def test_the_enumerated_gradient_matches_central_differences_on_a_lattice() -> None:
     # The oracle that makes this an instance rather than a lookalike:
-    # `snakes_and_ladders.learn.exact` carries it unchanged from the chain. A 2x2 lattice
+    # `sal.learn.exact` carries it unchanged from the chain. A 2x2 lattice
     # keeps |A| ** horizon affordable at 8 actions and horizon 2.
     environment = _lattice((2, 2), BoundaryCondition.OPEN)
     policy = LinearPolicy(2)

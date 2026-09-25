@@ -12,12 +12,12 @@ import numpy as np
 import pytest
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.emissions import GaussianEmission
-from snakes_and_ladders.sample.mixture_gibbs import (
+from sal.emissions import GaussianEmission
+from sal.sample.mixture_gibbs import (
     GaussianMixturePrior,
     gibbs_gaussian_mixture,
 )
-from snakes_and_ladders.sample.relabel import ecr, pra, sjw, stephens
+from sal.sample.relabel import ecr, pra, sjw, stephens
 
 M, N, K = 2_000, 500, 5
 

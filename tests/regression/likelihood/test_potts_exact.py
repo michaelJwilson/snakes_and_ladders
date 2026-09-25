@@ -4,7 +4,7 @@
 measured against, so it cannot itself rest on belief propagation. It is pinned
 twice, in opposite directions: against exhaustive enumeration at sizes where
 that is affordable, and by reduction --- a strip of width 1 is a chain, and
-must reproduce `snakes_and_ladders.opt.potts.log_partition`, a transfer matrix written
+must reproduce `sal.opt.potts.log_partition`, a transfer matrix written
 before this module existed and sharing no code with it.
 """
 
@@ -15,17 +15,17 @@ from itertools import product
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.likelihood.message_passing import sum_product
-from snakes_and_ladders.likelihood.potts import (
+from sal.likelihood.message_passing import sum_product
+from sal.likelihood.potts import (
     GATHER_BELOW,
     ExactPotts,
     enumerate_potts,
     log_weights,
     strip_log_partition,
 )
-from snakes_and_ladders.opt.potts import log_partition
-from snakes_and_ladders.sim.factor_graph import from_potts
-from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from sal.opt.potts import log_partition
+from sal.sim.factor_graph import from_potts
+from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
 from tests._rows import every_row, every_value
 
@@ -58,7 +58,7 @@ def test_the_transfer_matrix_reproduces_exhaustive_enumeration() -> None:
 
 @pytest.mark.oracle
 def test_a_strip_of_width_one_reduces_to_the_chain_transfer_matrix() -> None:
-    # A second exact reference, not a second sampler: `snakes_and_ladders.opt.potts`
+    # A second exact reference, not a second sampler: `sal.opt.potts`
     # transfers a single site at a time in torch, this transfers a column of
     # `M` sites in numpy, and at `M = 1` they must agree to machine precision.
     def check(length: int) -> None:

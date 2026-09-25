@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 import tex
-from snakes_and_ladders.qa.figure import (
+from sal.qa.figure import (
     _LATEX_SPECIALS,
     _THOUSANDS,
     LATEX_ESCAPES,

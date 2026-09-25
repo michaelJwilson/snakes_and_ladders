@@ -17,25 +17,25 @@ import itertools
 
 import numpy as np
 import pytest
-from snakes_and_ladders import oxisal
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.fixtures import Scale
-from snakes_and_ladders.search import ground_state
-from snakes_and_ladders.search.bifurcation import (
+from sal import oxisal
+from sal.backend import Backend
+from sal.fixtures import Scale
+from sal.search import ground_state
+from sal.search.bifurcation import (
     A_END,
     BifurcationResult,
     _integrate_numpy,
     simulated_bifurcation,
 )
-from snakes_and_ladders.search.maxflow import ising_ground_state
-from snakes_and_ladders.sim.canonical import (
+from sal.search.maxflow import ising_ground_state
+from sal.sim.canonical import (
     FrustratedLatticeParams,
     PlantedSpinGlass,
     frustrated_triangular_lattice,
 )
-from snakes_and_ladders.sim.fixtures import Baseline, baseline, fixture
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
-from snakes_and_ladders.sim.potts import SpatioOnlyParams, energy
+from sal.sim.fixtures import Baseline, baseline, fixture
+from sal.sim.graph import BoundaryCondition, lattice_graph
+from sal.sim.potts import SpatioOnlyParams, energy
 
 #: The enumerated ground energy of the frustrated 3x3 triangular antiferromagnet
 #: at two states: nine sites, every triangle carries one unsatisfied bond.

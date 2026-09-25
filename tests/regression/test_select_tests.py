@@ -79,7 +79,7 @@ def test_a_changelog_fragment_alone_selects_nothing() -> None:
         ("STATUS.md", "tests/regression/test_planning_documents_agree.py"),
         ("CLAUDE.md", "tests/regression/test_claude_md_pointers.py"),
         (
-            "python/snakes_and_ladders/opt/CLAUDE.md",
+            "python/sal/opt/CLAUDE.md",
             "tests/regression/test_claude_md_pointers.py",
         ),
         ("docs/nb/hmm.ipynb", "tests/regression/test_check_notebooks.py"),
@@ -115,9 +115,7 @@ def test_every_guard_the_selection_names_exists() -> None:
 @pytest.mark.smoke
 def test_a_code_change_beside_prose_runs_both() -> None:
     # The guards join the module's tests rather than replacing them.
-    chosen = select(
-        ["python/snakes_and_ladders/learn/reinforce.py", "docs/tex/textbook.tex"]
-    )
+    chosen = select(["python/sal/learn/reinforce.py", "docs/tex/textbook.tex"])
 
     assert "learn" in _modules_of(chosen)
     assert set(guards_for(["docs/tex/textbook.tex"])) <= set(chosen["paths"])
@@ -126,9 +124,9 @@ def test_a_code_change_beside_prose_runs_both() -> None:
 @pytest.mark.critical
 @pytest.mark.smoke
 def test_a_change_selects_the_modules_that_import_it() -> None:
-    # `snakes_and_ladders.search` imports `snakes_and_ladders.likelihood`, so a likelihood change that
+    # `sal.search` imports `sal.likelihood`, so a likelihood change that
     # ran only likelihood's tests would let a break in search through.
-    assert _modules_of(select(["python/snakes_and_ladders/likelihood/pruning.py"])) >= {
+    assert _modules_of(select(["python/sal/likelihood/pruning.py"])) >= {
         "likelihood",
         "search",
         "qa",
@@ -139,15 +137,13 @@ def test_a_change_selects_the_modules_that_import_it() -> None:
 @pytest.mark.smoke
 def test_a_leaf_module_selects_only_itself() -> None:
     # A module nothing imports needs nothing else run. The leaf is derived
-    # rather than named: `snakes_and_ladders.learn` was one until
-    # `snakes_and_ladders.qa.rl_tree_policy` imported it (issue #178), and a
+    # rather than named: `sal.learn` was one until
+    # `sal.qa.rl_tree_policy` imported it (issue #178), and a
     # test naming a module goes stale the moment an import is added.
     leaves = [module for module in MODULES if dependents({module}) == {module}]
     assert leaves, "no submodule is a leaf; the selection can save nothing"
     for leaf in leaves:
-        assert _modules_of(
-            select([f"python/snakes_and_ladders/{leaf}/__init__.py"])
-        ) == {leaf}
+        assert _modules_of(select([f"python/sal/{leaf}/__init__.py"])) == {leaf}
 
 
 @pytest.mark.critical
@@ -171,9 +167,9 @@ def test_a_likelihood_change_still_runs_the_conserved_gradient_tape() -> None:
     # `test_pruning_burn.py` moved to the sandbox directory (#516) but referees
     # the likelihood tape, so a likelihood change must still select it.
     for changed in (
-        "python/snakes_and_ladders/likelihood/pruning_torch.py",
-        "python/snakes_and_ladders/search/topology.py",
-        "python/snakes_and_ladders/sim/tree.py",
+        "python/sal/likelihood/pruning_torch.py",
+        "python/sal/search/topology.py",
+        "python/sal/sim/tree.py",
     ):
         assert "sandbox" in _modules_of(select([changed])), changed
 
@@ -187,7 +183,7 @@ def test_the_sandbox_import_guard_runs_on_every_package_it_guards() -> None:
     # enough that today's import graph happens to reach it.
     assert "tests/regression/test_sandbox.py" in ALWAYS
     for package in ("sim", "likelihood", "opt", "search", "learn"):
-        chosen = select([f"python/snakes_and_ladders/{package}/__init__.py"])
+        chosen = select([f"python/sal/{package}/__init__.py"])
         assert "tests/regression/test_sandbox.py" in chosen["paths"], package
 
 
@@ -203,7 +199,7 @@ def test_the_sandbox_import_guard_runs_on_every_package_it_guards() -> None:
         "tests/_fixtures.py",
         "tests/regression/fixtures/tree_jc/stress.yaml",
         ".github/workflows/ci.yml",
-        "python/snakes_and_ladders/numerics.py",
+        "python/sal/numerics.py",
     ],
 )
 def test_a_change_it_cannot_attribute_selects_everything(path: str) -> None:
@@ -212,7 +208,7 @@ def test_a_change_it_cannot_attribute_selects_everything(path: str) -> None:
     chosen = select([path])
 
     assert chosen["paths"] == ["tests"]
-    assert chosen["cov"] == ["snakes_and_ladders"]
+    assert chosen["cov"] == ["sal"]
 
 
 @pytest.mark.critical
@@ -220,7 +216,7 @@ def test_a_change_it_cannot_attribute_selects_everything(path: str) -> None:
 def test_an_unrecognised_code_path_selects_everything() -> None:
     # Not documentation, not attributable to a module: the unsafe answer is
     # the one that looks like a saving.
-    chosen = select(["python/snakes_and_ladders/some_new_module.py"])
+    chosen = select(["python/sal/some_new_module.py"])
 
     assert chosen["paths"] == ["tests"]
 
@@ -232,11 +228,9 @@ def test_coverage_targets_match_the_selected_modules() -> None:
     # what is measured must be exactly what was selected -- no more, since a
     # module whose tests did not run would drag the figure down, and no less,
     # since an unmeasured module is an unmade claim.
-    chosen = select(["python/snakes_and_ladders/search/infer.py"])
+    chosen = select(["python/sal/search/infer.py"])
 
-    assert set(chosen["cov"]) == {
-        f"snakes_and_ladders.{m}" for m in _modules_of(chosen)
-    }
+    assert set(chosen["cov"]) == {f"sal.{m}" for m in _modules_of(chosen)}
 
 
 def _benchmarks_of(chosen: dict[str, list[str]]) -> set[str]:
@@ -253,7 +247,7 @@ def _benchmarks_of(chosen: dict[str, list[str]]) -> set[str]:
 def test_benchmarks_run_only_for_the_modules_they_measure() -> None:
     # `qa` renders figures from what the others compute and is not timed, so
     # a qa change should time nothing.
-    assert _benchmarks_of(select(["python/snakes_and_ladders/qa/build.py"])) == set()
+    assert _benchmarks_of(select(["python/sal/qa/build.py"])) == set()
 
 
 @pytest.mark.critical
@@ -261,13 +255,13 @@ def test_benchmarks_run_only_for_the_modules_they_measure() -> None:
 def test_a_benchmark_is_selected_with_the_module_it_pairs_with() -> None:
     # A change runs the benchmarks of its importers only: `learn` reaches
     # `search` and `likelihood`, never `sim` or `opt`; all of them cost 40 s.
-    chosen = _benchmarks_of(select(["python/snakes_and_ladders/learn/reinforce.py"]))
+    chosen = _benchmarks_of(select(["python/sal/learn/reinforce.py"]))
     expected = {
         Path(path).name for path in _benchmarks_for(sorted(dependents(["learn"])))
     }
     assert chosen == expected
     assert "test_learn_reinforce_bench.py" in chosen
-    assert _benchmarks_of(select(["python/snakes_and_ladders/qa/build.py"])) == set()
+    assert _benchmarks_of(select(["python/sal/qa/build.py"])) == set()
 
 
 @pytest.mark.critical
@@ -275,7 +269,7 @@ def test_a_benchmark_is_selected_with_the_module_it_pairs_with() -> None:
 def test_a_widely_imported_module_selects_its_dependents_benchmarks() -> None:
     # `opt` reaches likelihood, search and learn by import, so their
     # benchmarks are selected too -- the cost of being depended on.
-    chosen = _benchmarks_of(select(["python/snakes_and_ladders/opt/fit.py"]))
+    chosen = _benchmarks_of(select(["python/sal/opt/fit.py"]))
 
     assert "test_opt_fit_bench.py" in chosen
     assert "test_search_infer_bench.py" in chosen
@@ -287,8 +281,8 @@ def test_a_widely_imported_module_selects_its_dependents_benchmarks() -> None:
 def test_the_always_run_modules_are_always_run() -> None:
     # They cover what belongs to no module.
     for changed in (
-        ["python/snakes_and_ladders/learn/policy.py"],
-        ["python/snakes_and_ladders/qa/figure.py"],
+        ["python/sal/learn/policy.py"],
+        ["python/sal/qa/figure.py"],
     ):
         chosen = select(changed)
         assert "tests/regression/test_numerics.py" in chosen["paths"]
@@ -346,11 +340,11 @@ def test_every_whole_suite_trigger_names_something_in_the_tree() -> None:
 def test_the_key_tier_runs_only_for_what_could_move_it() -> None:
     # A key test is two minutes: deselected by default, selected by a change to
     # the coupled model, emissions, fixtures or Rust (issue #399).
-    assert "key" in select(["python/snakes_and_ladders/learn/policy.py"])["deselect"]
+    assert "key" in select(["python/sal/learn/policy.py"])["deselect"]
     for trigger in (
         "src/coupled.rs",
-        "python/snakes_and_ladders/emissions/counts.py",
-        "python/snakes_and_ladders/sim/count_pairs.py",
+        "python/sal/emissions/counts.py",
+        "python/sal/sim/count_pairs.py",
         "tests/regression/fixtures/spatio_sequential_counts/stress.yaml",
     ):
         assert "key" not in select([trigger])["deselect"], trigger

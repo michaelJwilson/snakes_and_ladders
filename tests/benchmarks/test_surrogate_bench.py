@@ -17,15 +17,15 @@ import numpy as np
 import pytest
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.learn.ranking import (
+from sal.learn.ranking import (
     LearnedTreeSurrogate,
     fixed_length_target,
     tree_examples,
 )
-from snakes_and_ladders.learn.surrogate import MLPSurrogate, fit_surrogate
-from snakes_and_ladders.likelihood.features import lattice_features, lattice_tokens
-from snakes_and_ladders.likelihood.potts import enumerate_potts
-from snakes_and_ladders.likelihood.surrogate import (
+from sal.learn.surrogate import MLPSurrogate, fit_surrogate
+from sal.likelihood.features import lattice_features, lattice_tokens
+from sal.likelihood.potts import enumerate_potts
+from sal.likelihood.surrogate import (
     ParsimonyUpperBound,
     PlugInLikelihood,
     decoupled_ground_energy,
@@ -34,10 +34,10 @@ from snakes_and_ladders.likelihood.surrogate import (
     saturated_log_partition,
     spanning_tree_log_partition,
 )
-from snakes_and_ladders.search.infer import score_topology
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.topology import enumerate_topologies
+from sal.search.infer import score_topology
+from sal.sim.graph import BoundaryCondition, lattice_graph
+from sal.sim.simulator import simulate_tree
+from sal.sim.topology import enumerate_topologies
 
 from tests._fixtures import load_fixture
 

@@ -1,4 +1,4 @@
-"""Regression tests for snakes_and_ladders.qa.optimizer_landscapes.
+"""Regression tests for sal.qa.optimizer_landscapes.
 
 The endpoints are pinned to the closed-form minimizers, the drawn surface to
 the objective it is a grid of, and the caption to the counts it was handed.
@@ -11,9 +11,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.opt.fit import MultiStartResult
-from snakes_and_ladders.opt.testfunctions import HIMMELBLAU_MINIMA, Himmelblau
-from snakes_and_ladders.qa.optimizer_landscapes import (
+from sal.opt.fit import MultiStartResult
+from sal.opt.testfunctions import HIMMELBLAU_MINIMA, Himmelblau
+from sal.qa.optimizer_landscapes import (
     build_figure,
     endpoints,
     known_minimizers,
@@ -22,7 +22,7 @@ from snakes_and_ladders.qa.optimizer_landscapes import (
     reached,
     surface,
 )
-from snakes_and_ladders.sim.fixtures import fixture
+from sal.sim.fixtures import fixture
 
 FIXTURE = fixture("test_functions", "ci")
 SUITE = FIXTURE.params

@@ -31,7 +31,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from numba import njit
-from snakes_and_ladders.sample.kernels import factor_graph_log_density
+from sal.sample.kernels import factor_graph_log_density
 
 SEED = 20260916
 #: Past the lattice fixtures, where a per-factor cost is visible.

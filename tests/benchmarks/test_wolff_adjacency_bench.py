@@ -12,9 +12,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.sample import potts_mcmc
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
-from snakes_and_ladders.sim.potts import critical_coupling, site_field
+from sal.sample import potts_mcmc
+from sal.sim.graph import BoundaryCondition, lattice_graph
+from sal.sim.potts import critical_coupling, site_field
 
 STEPS = 200
 

@@ -4,7 +4,7 @@
 validations each route had a copy of; ``likelihood.pruning`` imports none of
 it. On ``tree_jc/ci``, ``pruning_torch`` and ``pruning_analytic`` meet the
 oracle bitwise; the Rust route reassociates and is held to
-:data:`~snakes_and_ladders.likelihood.device.CROSS_DEVICE_RTOL_FLOAT64`
+:data:`~sal.likelihood.device.CROSS_DEVICE_RTOL_FLOAT64`
 (``sec:tolerance``). These are the Rust and Torch oracle tests since #982;
 the torch test also holds the default dtype to ``float64``.
 """
@@ -15,17 +15,17 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from snakes_and_ladders.likelihood import (
+from sal.likelihood import (
     pruning,
     pruning_analytic,
     pruning_common,
     pruning_rust,
     pruning_torch,
 )
-from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.simulate import simulate_alignment
-from snakes_and_ladders.sim.tree import Node
+from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
+from sal.sim.fixtures import fixture
+from sal.sim.simulate import simulate_alignment
+from sal.sim.tree import Node
 
 
 def _instance() -> tuple[Node, int, np.ndarray, dict[str, np.ndarray]]:

@@ -15,25 +15,25 @@ import math
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.learn.actor_critic import advantage_surrogate_loss
-from snakes_and_ladders.learn.critic import Critic, n_state_features
-from snakes_and_ladders.learn.exact import exact_expected_return
-from snakes_and_ladders.learn.policy import LinearPolicy, MLPPolicy
-from snakes_and_ladders.learn.potts import (
+from sal.learn.actor_critic import advantage_surrogate_loss
+from sal.learn.critic import Critic, n_state_features
+from sal.learn.exact import exact_expected_return
+from sal.learn.policy import LinearPolicy, MLPPolicy
+from sal.learn.potts import (
     PottsEnvironment,
     enumerate_configurations,
     optimum,
 )
-from snakes_and_ladders.learn.ppo import (
+from sal.learn.ppo import (
     _log_probabilities,
     episode_advantages,
     generalized_advantages,
     ppo,
     ppo_loss,
 )
-from snakes_and_ladders.learn.reinforce import reinforce
-from snakes_and_ladders.learn.rollout import rollout
-from snakes_and_ladders.sim.fixtures import baseline, fixture
+from sal.learn.reinforce import reinforce
+from sal.learn.rollout import rollout
+from sal.sim.fixtures import baseline, fixture
 
 from tests.regression.learn.conftest import potts_environment
 

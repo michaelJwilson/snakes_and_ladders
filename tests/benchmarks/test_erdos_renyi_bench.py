@@ -14,8 +14,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.likelihood.belief_propagation import belief_propagation
-from snakes_and_ladders.sim.graph import erdos_renyi_graph
+from sal.likelihood.belief_propagation import belief_propagation
+from sal.sim.graph import erdos_renyi_graph
 
 
 @pytest.mark.parametrize("n_nodes", [50, 200, 800])

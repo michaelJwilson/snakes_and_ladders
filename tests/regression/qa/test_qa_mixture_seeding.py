@@ -1,4 +1,4 @@
-"""Regression tests for snakes_and_ladders.qa.mixture_seeding.
+"""Regression tests for sal.qa.mixture_seeding.
 
 The seeding ratios are pinned to the exact dynamic programme they divide by
 and to the published bound; the densities to the family's own normalization;
@@ -12,8 +12,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.opt.mixture import MixtureFit, seeding_guarantee
-from snakes_and_ladders.qa.mixture_seeding import (
+from sal.opt.mixture import MixtureFit, seeding_guarantee
+from sal.qa.mixture_seeding import (
     EM_ITERATIONS,
     SEEDINGS,
     SeedingRatios,
@@ -23,8 +23,8 @@ from snakes_and_ladders.qa.mixture_seeding import (
     main,
     seeding_ratios,
 )
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.mixture import simulate_mixture
+from sal.sim.fixtures import fixture
+from sal.sim.mixture import simulate_mixture
 
 FIXTURE = fixture("mixture", "ci")
 TRUTH = FIXTURE.params

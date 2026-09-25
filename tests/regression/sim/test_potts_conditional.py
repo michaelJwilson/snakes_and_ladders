@@ -11,10 +11,10 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.sample.potts_mcmc import PottsMove, sample_potts
-from snakes_and_ladders.sim import fixtures
-from snakes_and_ladders.sim.graph import lattice_graph
-from snakes_and_ladders.sim.potts import (
+from sal.sample.potts_mcmc import PottsMove, sample_potts
+from sal.sim import fixtures
+from sal.sim.graph import lattice_graph
+from sal.sim.potts import (
     heat_bath_log_weights,
     simulate_potts,
     site_field,

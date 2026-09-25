@@ -10,13 +10,13 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.emissions import CategoricalEmission, PoissonEmission
-from snakes_and_ladders.likelihood.forward_backward import forward_backward
-from snakes_and_ladders.opt.hmm import baum_welch_family
-from snakes_and_ladders.ragged import Ragged
-from snakes_and_ladders.sandbox.rectangular_hmm import baum_welch_rectangular
-from snakes_and_ladders.sim import fixtures
+from sal.backend import Backend
+from sal.emissions import CategoricalEmission, PoissonEmission
+from sal.likelihood.forward_backward import forward_backward
+from sal.opt.hmm import baum_welch_family
+from sal.ragged import Ragged
+from sal.sandbox.rectangular_hmm import baum_welch_rectangular
+from sal.sim import fixtures
 
 #: One chain, two states, a sticky kernel and well-separated rates.
 STATES = 2

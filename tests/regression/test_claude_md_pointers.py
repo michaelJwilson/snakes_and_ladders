@@ -6,7 +6,7 @@ are local" line naming no section, so an agent reading one alone had no way to
 know (issue #155).
 
 Stating an invariant is not enforcing it. `docs/source/index.rst` claimed to
-cover every submodule while missing all eighteen of `snakes_and_ladders.qa`,
+cover every submodule while missing all eighteen of `sal.qa`,
 since `sphinx-build -W` fails on a broken entry and never on an absent one
 (issue #154).
 """
@@ -24,14 +24,14 @@ ROOT_CLAUDE_MD = REPO_ROOT / "CLAUDE.md"
 
 # The directories root `CLAUDE.md` names as carrying their own file.
 MODULE_DIRECTORIES = (
-    "python/snakes_and_ladders/sim",
-    "python/snakes_and_ladders/likelihood",
-    "python/snakes_and_ladders/opt",
-    "python/snakes_and_ladders/learn",
-    "python/snakes_and_ladders/search",
-    "python/snakes_and_ladders/sample",
-    "python/snakes_and_ladders/qa",
-    "python/snakes_and_ladders/sandbox",
+    "python/sal/sim",
+    "python/sal/likelihood",
+    "python/sal/opt",
+    "python/sal/learn",
+    "python/sal/search",
+    "python/sal/sample",
+    "python/sal/qa",
+    "python/sal/sandbox",
     "infra",
     "docs",
 )
@@ -85,7 +85,7 @@ def _in_root(name: str, root: str) -> bool:
 
 def _module_claude_files() -> list[Path]:
     """Every module `CLAUDE.md` on disk, sorted; discovered, not listed."""
-    found = sorted(REPO_ROOT.glob("python/snakes_and_ladders/*/CLAUDE.md"))
+    found = sorted(REPO_ROOT.glob("python/sal/*/CLAUDE.md"))
     for directory in ("infra", "docs"):
         candidate = REPO_ROOT / directory / "CLAUDE.md"
         if candidate.is_file():

@@ -24,10 +24,10 @@ import catalogue
 import numpy as np
 import problems_tables
 import pytest
-from snakes_and_ladders.emissions import CategoricalEmission
-from snakes_and_ladders.fixtures import Scale
-from snakes_and_ladders.sim.canonical import frustrated_triangular_lattice
-from snakes_and_ladders.sim.fixtures import (
+from sal.emissions import CategoricalEmission
+from sal.fixtures import Scale
+from sal.sim.canonical import frustrated_triangular_lattice
+from sal.sim.fixtures import (
     FIXTURES_DIR,
     ORACLES,
     PARAMS,
@@ -42,7 +42,7 @@ from snakes_and_ladders.sim.fixtures import (
     read_baseline,
     tiers,
 )
-from snakes_and_ladders.sim.spatio_sequential import canonical_spatio_sequential
+from sal.sim.spatio_sequential import canonical_spatio_sequential
 
 from tests._paths import REPO_ROOT
 
@@ -267,7 +267,7 @@ def test_a_change_is_recomputed_against_the_records_it_reaches() -> None:
         }
 
     assert reached("README.md", "docs/tex/paper.tex") == set()
-    assert reached("python/snakes_and_ladders/learn/ranking.py") == {"tree_search/ci"}
+    assert reached("python/sal/learn/ranking.py") == {"tree_search/ci"}
     assert reached("tests/regression/fixtures/potts_chain/ci.yaml") == {
         "potts_chain/ci"
     }
@@ -452,7 +452,7 @@ FORBIDDEN = frozenset(
     }
 )
 
-QA = REPO_ROOT / "python" / "snakes_and_ladders" / "qa"
+QA = REPO_ROOT / "python" / "sal" / "qa"
 NOTEBOOKS = REPO_ROOT / "docs" / "nb"
 
 
@@ -493,7 +493,7 @@ def test_no_qa_script_builds_its_own_instance() -> None:
 
     assert offenders == {}, (
         "a QA script builds a problem instance; take it from "
-        "snakes_and_ladders.sim.fixtures and name the file in the manifest"
+        "sal.sim.fixtures and name the file in the manifest"
     )
 
 
@@ -515,10 +515,7 @@ def test_no_notebook_builds_its_own_instance() -> None:
 def test_the_guard_catches_a_constructed_instance() -> None:
     # Guards the guard, per the repository's pattern: an import or an
     # annotation is not a construction, and a call is.
-    assert (
-        _constructions("from snakes_and_ladders.sim.mixture import MixtureParams")
-        == set()
-    )
+    assert _constructions("from sal.sim.mixture import MixtureParams") == set()
     assert _constructions("def f(x: MixtureParams) -> None: ...") == set()
     assert _constructions("p = MixtureParams(w, c, 10, 1, 1e-12)") == {"MixtureParams"}
     assert _constructions("code = ldpc.gallager_code(12, 3, 6, rng)") == {

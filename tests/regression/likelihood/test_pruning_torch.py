@@ -1,4 +1,4 @@
-"""Regression tests for ``snakes_and_ladders.likelihood.pruning_torch``.
+"""Regression tests for ``sal.likelihood.pruning_torch``.
 
 Issue #70's shared checks run over ``ROUTES`` (#982): the oracle in
 ``test_pruning_common.py``, brute force and rescaling in
@@ -16,11 +16,11 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from snakes_and_ladders.likelihood import pruning, pruning_torch
-from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from snakes_and_ladders.sim.jc import jc_rate_matrix
-from snakes_and_ladders.sim.simulate import simulate_alignment
-from snakes_and_ladders.sim.tree import Node
+from sal.likelihood import pruning, pruning_torch
+from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
+from sal.sim.jc import jc_rate_matrix
+from sal.sim.simulate import simulate_alignment
+from sal.sim.tree import Node
 
 from tests._fixtures import SMALL_SITES, load_fixture
 

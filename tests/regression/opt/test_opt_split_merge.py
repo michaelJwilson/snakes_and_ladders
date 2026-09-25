@@ -16,26 +16,26 @@ import math
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.emissions import CountPairEmission
-from snakes_and_ladders.opt.emission_mixture import (
+from sal.emissions import CountPairEmission
+from sal.opt.emission_mixture import (
     CountPairSeeding,
     EmissionMixtureFit,
     expectation_maximization,
     uniform_start,
 )
-from snakes_and_ladders.opt.mixture import mixture_log_likelihood, responsibilities
-from snakes_and_ladders.opt.split_merge import (
+from sal.opt.mixture import mixture_log_likelihood, responsibilities
+from sal.opt.split_merge import (
     SplitMerge,
     candidate_moves,
     merge_criterion,
     split_and_merge,
     split_criterion,
 )
-from snakes_and_ladders.sim.emission_mixture import (
+from sal.sim.emission_mixture import (
     SimulatedEmissionMixtureDataset,
     simulate_emission_mixture,
 )
-from snakes_and_ladders.sim.fixtures import fixture
+from sal.sim.fixtures import fixture
 
 #: The relative stopping rule `test_opt_emission_mixture.py` fits under.
 EM_TOLERANCE = 1e-8

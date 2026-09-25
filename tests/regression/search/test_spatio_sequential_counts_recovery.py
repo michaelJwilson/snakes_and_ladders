@@ -13,24 +13,24 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.likelihood.spatio_sequential import (
+from sal.backend import Backend
+from sal.likelihood.spatio_sequential import (
     class_posteriors,
     external_field,
 )
-from snakes_and_ladders.search.spatio_sequential import (
+from sal.search.spatio_sequential import (
     LabelSolver,
     fit_spatio_sequential,
     label_accuracy,
 )
-from snakes_and_ladders.sim.count_pairs import (
+from sal.sim.count_pairs import (
     TOTAL,
     CountPairInstance,
     IndependentCountPair,
     aggregate,
 )
-from snakes_and_ladders.sim.count_pairs_rust import binned_instance
-from snakes_and_ladders.sim.fixtures import KEY, fixture
+from sal.sim.count_pairs_rust import binned_instance
+from sal.sim.fixtures import KEY, fixture
 
 from tests._scale import at_bin, stress_only
 

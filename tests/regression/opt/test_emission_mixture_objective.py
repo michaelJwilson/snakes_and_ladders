@@ -14,10 +14,10 @@ from collections.abc import Mapping
 import numpy as np
 import pytest
 import torch
+from sal.emissions import CountPairEmission, EmissionFamily
+from sal.opt.emission_mixture import EmissionMixtureObjective
 from scipy.special import logsumexp
 from scipy.stats import betabinom, nbinom
-from snakes_and_ladders.emissions import CountPairEmission, EmissionFamily
-from snakes_and_ladders.opt.emission_mixture import EmissionMixtureObjective
 
 TRUTH = CountPairEmission([6.0, 12.0], [20.0, 60.0], [2.0, 9.0], [8.0, 3.0], joint=True)
 

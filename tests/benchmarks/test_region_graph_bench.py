@@ -16,15 +16,15 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.sandbox.region_graph import (
+from sal.sandbox.region_graph import (
     RegionGraph,
     bethe_region_graph,
     generalized_belief_propagation,
     lattice_plaquettes,
     region_graph,
 )
-from snakes_and_ladders.sim.factor_graph import from_potts
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+from sal.sim.factor_graph import from_potts
+from sal.sim.graph import BoundaryCondition, lattice_graph
 
 FIELD = np.array([0.3, -0.7, 0.15])
 

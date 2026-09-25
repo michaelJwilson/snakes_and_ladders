@@ -18,14 +18,14 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.emissions import GaussianEmission
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.opt.mixture import (
+from sal.emissions import GaussianEmission
+from sal.fixtures import load_params
+from sal.opt.mixture import (
     expectation_maximization,
     mixture_log_likelihood,
 )
-from snakes_and_ladders.sim.mixture import MixtureParams, simulate_mixture
-from snakes_and_ladders.validation import scikit_learn
+from sal.sim.mixture import MixtureParams, simulate_mixture
+from sal.validation import scikit_learn
 
 from tests._fixtures import FIXTURES_DIR
 from tests._frameworks import requires

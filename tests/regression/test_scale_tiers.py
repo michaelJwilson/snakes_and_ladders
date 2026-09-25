@@ -13,8 +13,8 @@ import subprocess
 import sys
 
 import pytest
-from snakes_and_ladders.sim.fixtures import Fixture
-from snakes_and_ladders.sim.params import SimulationParams
+from sal.sim.fixtures import Fixture
+from sal.sim.params import SimulationParams
 
 from tests._durations import key_over_cap, over_cap
 from tests._paths import REPO_ROOT

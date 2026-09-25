@@ -14,17 +14,17 @@ from dataclasses import replace
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.emissions import CovariateNotSupportedError
-from snakes_and_ladders.likelihood.spatio_sequential import (
+from sal.emissions import CovariateNotSupportedError
+from sal.likelihood.spatio_sequential import (
     ClassPosteriors,
     class_posteriors,
     covariate_block,
 )
-from snakes_and_ladders.search.spatio_sequential import fit_spatio_sequential, m_step
-from snakes_and_ladders.sim.count_pairs import IndependentCountPair
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
-from snakes_and_ladders.sim.spatio_sequential import (
+from sal.search.spatio_sequential import fit_spatio_sequential, m_step
+from sal.sim.count_pairs import IndependentCountPair
+from sal.sim.fixtures import fixture
+from sal.sim.graph import BoundaryCondition, lattice_graph
+from sal.sim.spatio_sequential import (
     SpatioSequentialParams,
     simulate_spatio_sequential,
 )

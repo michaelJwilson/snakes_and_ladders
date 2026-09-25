@@ -7,8 +7,8 @@ files: which test paths to run, and which modules to measure coverage over.
 
 Two properties matter more than the saving.
 
-A module's tests are not enough alone: `snakes_and_ladders.search` imports
-`snakes_and_ladders.likelihood`, so a change to the latter must run the
+A module's tests are not enough alone: `sal.search` imports
+`sal.likelihood`, so a change to the latter must run the
 former's tests too. The dependents are derived from the source rather than
 listed, since a list goes stale silently and an import does not.
 
@@ -47,8 +47,8 @@ from collections.abc import Iterable
 
 from _paths import REPO_ROOT
 
-# The submodules with their own test directory. `snakes_and_ladders.numerics`,
-# `snakes_and_ladders.emissions` and the scaffolding hot path are covered by
+# The submodules with their own test directory. `sal.numerics`,
+# `sal.emissions` and the scaffolding hot path are covered by
 # the top-level regression modules, which are cheap and always run.
 #
 # `sandbox` earned a row here with issue #516, and it is the row that shows
@@ -89,12 +89,12 @@ EVERYTHING = (
     "tests/_",
     "tests/regression/fixtures/",
     ".github/workflows/",
-    "python/snakes_and_ladders/__init__.py",
-    "python/snakes_and_ladders/backend.py",
-    "python/snakes_and_ladders/emissions/",
-    "python/snakes_and_ladders/numerics.py",
-    "python/snakes_and_ladders/oxisal.pyi",
-    "python/snakes_and_ladders/scripts/",
+    "python/sal/__init__.py",
+    "python/sal/backend.py",
+    "python/sal/emissions/",
+    "python/sal/numerics.py",
+    "python/sal/oxisal.pyi",
+    "python/sal/scripts/",
 )
 
 # What could move a key fixture's own result, and so selects the `key` tier.
@@ -104,12 +104,12 @@ KEY_TRIGGERS = (
     "Cargo.toml",
     "Cargo.lock",
     "tests/regression/fixtures/",
-    "python/snakes_and_ladders/emissions/",
-    "python/snakes_and_ladders/sim/count_pairs.py",
-    "python/snakes_and_ladders/sim/spatio_sequential.py",
-    "python/snakes_and_ladders/likelihood/spatio_sequential.py",
-    "python/snakes_and_ladders/likelihood/spatio_sequential_rust.py",
-    "python/snakes_and_ladders/search/spatio_sequential.py",
+    "python/sal/emissions/",
+    "python/sal/sim/count_pairs.py",
+    "python/sal/sim/spatio_sequential.py",
+    "python/sal/likelihood/spatio_sequential.py",
+    "python/sal/likelihood/spatio_sequential_rust.py",
+    "python/sal/search/spatio_sequential.py",
 )
 
 #: The tiers a per-pull-request selection never runs. `key` joins them unless
@@ -170,9 +170,7 @@ def _module_imports() -> dict[str, set[str]]:
     """
     imports: dict[str, set[str]] = {module: set() for module in MODULES}
     for module in MODULES:
-        for path in (REPO_ROOT / "python" / "snakes_and_ladders" / module).rglob(
-            "*.py"
-        ):
+        for path in (REPO_ROOT / "python" / "sal" / module).rglob("*.py"):
             for node in ast.walk(ast.parse(path.read_text())):
                 names: list[str] = []
                 if isinstance(node, ast.ImportFrom) and node.module:
@@ -183,7 +181,7 @@ def _module_imports() -> dict[str, set[str]]:
                     parts = name.split(".")
                     if (
                         len(parts) >= 2
-                        and parts[0] == "snakes_and_ladders"
+                        and parts[0] == "sal"
                         and parts[1] in MODULES
                         and parts[1] != module
                     ):
@@ -312,7 +310,7 @@ def select(changed: Iterable[str]) -> dict[str, list[str]]:
     if not changed:
         return {
             "paths": ["tests"],
-            "cov": ["snakes_and_ladders"],
+            "cov": ["sal"],
             "deselect": deselect,
         }
 
@@ -332,7 +330,7 @@ def select(changed: Iterable[str]) -> dict[str, list[str]]:
     for path in relevant:
         for module in MODULES:
             if path.startswith(
-                (f"python/snakes_and_ladders/{module}/", f"tests/regression/{module}/")
+                (f"python/sal/{module}/", f"tests/regression/{module}/")
             ):
                 touched.add(module)
 
@@ -340,7 +338,7 @@ def select(changed: Iterable[str]) -> dict[str, list[str]]:
     if everything or not touched:
         return {
             "paths": ["tests"],
-            "cov": ["snakes_and_ladders"],
+            "cov": ["sal"],
             "deselect": deselect,
         }
 
@@ -348,11 +346,11 @@ def select(changed: Iterable[str]) -> dict[str, list[str]]:
     paths = [f"tests/regression/{module}" for module in sorted(selected)]
     paths += list(ALWAYS)
     paths += [guard for guard in guards if guard not in paths]
-    if any(path.startswith("python/snakes_and_ladders/") for path in relevant):
+    if any(path.startswith("python/sal/") for path in relevant):
         paths += _benchmarks_for(selected & set(BENCHMARKED))
     return {
         "paths": paths,
-        "cov": [f"snakes_and_ladders.{module}" for module in sorted(selected)],
+        "cov": [f"sal.{module}" for module in sorted(selected)],
         "deselect": deselect,
     }
 

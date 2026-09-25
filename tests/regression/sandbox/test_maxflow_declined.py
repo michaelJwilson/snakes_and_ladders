@@ -16,24 +16,24 @@ from collections.abc import Callable
 
 import numpy as np
 import pytest
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.sandbox import maxflow_declined
-from snakes_and_ladders.sandbox.maxflow_declined import DeclinedKernel
-from snakes_and_ladders.search import alpha_expansion as expansion_module
-from snakes_and_ladders.search import maxflow_rust
-from snakes_and_ladders.search.alpha_expansion import alpha_beta_swap, alpha_expansion
-from snakes_and_ladders.search.maxflow import (
+from sal.backend import Backend
+from sal.sandbox import maxflow_declined
+from sal.sandbox.maxflow_declined import DeclinedKernel
+from sal.search import alpha_expansion as expansion_module
+from sal.search import maxflow_rust
+from sal.search.alpha_expansion import alpha_beta_swap, alpha_expansion
+from sal.search.maxflow import (
     FlowNetwork,
     ising_ground_state,
     max_flow,
 )
-from snakes_and_ladders.sim.graph import (
+from sal.sim.graph import (
     BoundaryCondition,
     PottsGraph,
     lattice_graph,
     triangular_lattice_graph,
 )
-from snakes_and_ladders.sim.potts import energies, spatio_only_field
+from sal.sim.potts import energies, spatio_only_field
 
 pytestmark = pytest.mark.skipif(
     not maxflow_declined.AVAILABLE,
@@ -226,7 +226,7 @@ def test_every_declined_kernel_gives_the_package_expansion(
 
 @pytest.mark.smoke
 def test_an_unknown_kernel_is_refused_by_name() -> None:
-    from snakes_and_ladders import oxisal
+    from sal import oxisal
 
     network = FlowNetwork(n_nodes=2)
     network.add_edge(0, 1, 1.0)

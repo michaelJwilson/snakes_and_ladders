@@ -15,12 +15,12 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from snakes_and_ladders.learn.actor_critic import (
+from sal.learn.actor_critic import (
     actor_critic,
     advantage_surrogate_loss,
     critic_advantages,
 )
-from snakes_and_ladders.learn.critic import (
+from sal.learn.critic import (
     Critic,
     fit_critic,
     n_state_features,
@@ -28,19 +28,19 @@ from snakes_and_ladders.learn.critic import (
     state_targets,
     temporal_difference_targets,
 )
-from snakes_and_ladders.learn.exact import (
+from sal.learn.exact import (
     exact_action_values,
     exact_expected_return,
     exact_optimal_value,
     exact_policy_gradient,
 )
-from snakes_and_ladders.learn.policy import LinearPolicy, MLPPolicy
-from snakes_and_ladders.learn.potts import (
+from sal.learn.policy import LinearPolicy, MLPPolicy
+from sal.learn.potts import (
     PottsEnvironment,
     enumerate_configurations,
     optimum,
 )
-from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
+from sal.learn.rollout import greedy_rollout, rollout
 
 from tests.regression.learn.conftest import potts_environment
 

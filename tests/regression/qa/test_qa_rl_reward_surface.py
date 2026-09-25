@@ -13,15 +13,15 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.qa.figure import pearson_correlation
-from snakes_and_ladders.qa.rl_reward_surface import (
+from sal.fixtures import load_params
+from sal.qa.figure import pearson_correlation
+from sal.qa.rl_reward_surface import (
     BRANCH_LENGTHS,
     build_figure,
     mean_branch_length,
     reward_surfaces,
 )
-from snakes_and_ladders.sim.params import SimulationParams
+from sal.sim.params import SimulationParams
 
 from tests._fixtures import FIXTURES_DIR
 

@@ -13,9 +13,9 @@ authors = [{ name = "M. J. Wilson" }]
 license = "MIT"
 requires-python = ">=3.12.2"
 readme = "README.md"
-# snakes_and_ladders.sim imports numpy (simulation) and pyyaml (the fixture files
-# loading) directly; snakes_and_ladders.qa imports matplotlib to render the figures
-# docs/tex/ includes; snakes_and_ladders.likelihood.pruning_torch imports torch, the
+# sal.sim imports numpy (simulation) and pyyaml (the fixture files
+# loading) directly; sal.qa imports matplotlib to render the figures
+# docs/tex/ includes; sal.likelihood.pruning_torch imports torch, the
 # autodiff backend CLAUDE.md's Performance section already decided on --
 # added here, by the first PR whose code imports it, per that section's
 # note. All four are core dependencies rather than front-loaded ahead of
@@ -69,7 +69,7 @@ notebooks = [
     "notebook>=7.2",
 ]
 # External frameworks the package is validated or benchmarked against, one
-# extra each and each run in a subprocess by `snakes_and_ladders.validation`
+# extra each and each run in a subprocess by `sal.validation`
 # (issue #972); `infra/validation_extras.py` reads the list for CI's
 # `validation` job. Each entry records its licence, its stars and the ticket
 # that approved it.
@@ -116,7 +116,7 @@ validation-torch-geometric = ["torch_geometric>=2.5"]
 # validation and benchmarking in a subprocess only; autodiff in the package
 # stays PyTorch. Already resolved beneath BlackJAX, now its own extra.
 validation-jax = ["jax>=0.11.2"]
-# The run store behind `snakes_and_ladders.track` (issue #778). An extra
+# The run store behind `sal.track` (issue #778). An extra
 # rather than a core dependency: `track.Run` is a Protocol written with
 # `aim.Run`'s own signatures, so the package imports, records and tests
 # without it, and only a reader who wants the UI installs it. Apache-2.0 and
@@ -145,11 +145,11 @@ test = [
 ]
 
 [project.scripts]
-run_snakes_and_ladders = "snakes_and_ladders.scripts.run_snakes_and_ladders:main"
+run_snakes_and_ladders = "sal.scripts.run_snakes_and_ladders:main"
 
 [tool.maturin]
 python-source = "python"
-module-name = "snakes_and_ladders.oxisal"
+module-name = "sal.oxisal"
 
 [tool.ruff]
 target-version = "py312"
@@ -269,7 +269,7 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 # The validation frameworks (issue #972) are imported only by their scripts
-# under `snakes_and_ladders/validation/scripts/`, installed only by their
+# under `sal/validation/scripts/`, installed only by their
 # `validation-*` extras and absent where the `lint` job runs; PyMaxflow,
 # gco-wrapper and hmmlearn ship no type information where they are present,
 # and scikit-learn only in part.
@@ -292,15 +292,15 @@ ignore_missing_imports = true
 # is absent its decorators are `Any`. Narrowed to the scripts that import
 # it (issues #963, #991).
 module = [
-    "snakes_and_ladders.validation.scripts.blackjax",
-    "snakes_and_ladders.validation.scripts.jax",
+    "sal.validation.scripts.blackjax",
+    "sal.validation.scripts.jax",
 ]
 disallow_untyped_calls = false
 # Where JAX is absent, as in the `lint` job, `jax.jit` is `Any`.
 disallow_untyped_decorators = false
 
 [[tool.mypy.overrides]]
-# `aim` is the optional store behind `snakes_and_ladders.track.Run` (issue
+# `aim` is the optional store behind `sal.track.Run` (issue
 # #778), declared in the `track` extra and installed by no CI job: nothing in
 # the package imports it at module scope, since `Run` is a Protocol written
 # with `aim.Run`'s own signatures and `track.as_aim`, the one function that
@@ -313,7 +313,7 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 # Where gymnasium is absent its `Env` is `Any`, and --strict refuses to
 # subclass `Any`; where it is present the class is checked in full (#977).
-module = "snakes_and_ladders.validation.scripts.gymnasium"
+module = "sal.validation.scripts.gymnasium"
 disallow_subclassing_any = false
 
 [tool.towncrier]
@@ -399,11 +399,11 @@ markers = [
 # END GENERATED markers
 
 [tool.coverage.run]
-source = ["snakes_and_ladders"]
+source = ["sal"]
 # The validation scripts (issue #972) run in their own interpreter, which
 # coverage does not follow, and import frameworks the tier does not install;
 # what they return is judged in the parent, in `tests/validation/`.
-omit = ["*/snakes_and_ladders/validation/scripts/*"]
+omit = ["*/sal/validation/scripts/*"]
 
 [tool.coverage.report]
 exclude_lines = [

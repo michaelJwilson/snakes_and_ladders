@@ -3,7 +3,7 @@ oracle: transfer-matrix
 
 # The same construction as `ci` on a strip past enumeration: 12 columns of 6
 # sites is 72 sites and 3**72 configurations, and the column transfer matrix
-# of `snakes_and_ladders.likelihood.potts.strip_log_partition` is still exact
+# of `sal.likelihood.potts.strip_log_partition` is still exact
 # there -- 3**6 = 729 column states, 3**12 = 531,441 operations per column
 # step. That is the whole reason the width is 6: it is the largest strip
 # whose exact normalizer is affordable, and an instance with no exact

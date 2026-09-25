@@ -111,7 +111,7 @@ body:
 
         **Replacement** — its own pull request, carrying both numbers and the
         tolerance realized against the sandboxed oracle. The hand-rolled
-        implementation moves to `python/snakes_and_ladders/sandbox/` with its
+        implementation moves to `python/sal/sandbox/` with its
         regression tests and stays the oracle the adapter is pinned against.
         Nothing is deleted, and no replacement is folded into this ticket.
   - type: textarea

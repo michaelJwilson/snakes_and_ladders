@@ -15,10 +15,10 @@ import math
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.search import infer as infer_module
-from snakes_and_ladders.search.infer import infer, parsimony_search, score_topology
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.topology import (
+from sal.search import infer as infer_module
+from sal.search.infer import infer, parsimony_search, score_topology
+from sal.sim.simulator import simulate_tree
+from sal.sim.topology import (
     Model,
     MoveSet,
     nni_neighbours,

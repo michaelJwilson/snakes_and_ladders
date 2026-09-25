@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.sample.accept import (
+from sal.sample.accept import (
     accept,
     accept_at,
     accept_at_temperature,

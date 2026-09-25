@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import pytest
 import torch
-from snakes_and_ladders.emissions import NegativeBinomialEmission
-from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from snakes_and_ladders.sandbox.count_emissions import (
+from sal.emissions import NegativeBinomialEmission
+from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
+from sal.sandbox.count_emissions import (
     NegativeBinomialEmission as Conserved,
 )
 

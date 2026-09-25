@@ -19,28 +19,28 @@ import numpy as np
 import pytest
 import torch
 from numpy.typing import NDArray
-from snakes_and_ladders.fixtures import Scale, load_params
-from snakes_and_ladders.learn.policy import LinearPolicy
-from snakes_and_ladders.learn.reinforce import reinforce
-from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
-from snakes_and_ladders.learn.tree import (
+from sal.fixtures import Scale, load_params
+from sal.learn.policy import LinearPolicy
+from sal.learn.reinforce import reinforce
+from sal.learn.rollout import greedy_rollout, rollout
+from sal.learn.tree import (
     FEATURE_NAMES,
     FeatureSet,
     RewardModel,
     TreeEnvironment,
 )
-from snakes_and_ladders.sample.statistics import sign_test_p_value
-from snakes_and_ladders.sim.fixtures import baseline, fixture
-from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.topology import (
+from sal.sample.statistics import sign_test_p_value
+from sal.sim.fixtures import baseline, fixture
+from sal.sim.params import SimulationParams
+from sal.sim.simulator import simulate_tree
+from sal.sim.topology import (
     MoveSet,
     Topology,
     enumerate_topologies,
     leaf_bipartitions,
     normalized_robinson_foulds,
 )
-from snakes_and_ladders.sim.tree import edges
+from sal.sim.tree import edges
 
 from tests._fixtures import FIXTURES_DIR
 

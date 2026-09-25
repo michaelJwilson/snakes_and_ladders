@@ -4,7 +4,7 @@ Decisions are exactly equal: the max-product assignment, the guarantee, the
 pass count and which marginals are defined. Floats are inside
 `CROSS_DEVICE_RTOL_FLOAT64`: the same sums in the same order, with NumPy's
 vectorized `exp` and `log` differing from `libm`'s in the last place
-(`snakes_and_ladders.backend`). Realized: 3.3e-15 absolute and 7.2e-15
+(`sal.backend`). Realized: 3.3e-15 absolute and 7.2e-15
 relative on the marginals, 1.4e-14 and 2.0e-16 on `log Z`. The default is
 held to enumeration in
 `test_message_passing.py::test_every_chain_evaluator_is_the_path_enumeration` (#982).
@@ -16,26 +16,26 @@ import math
 
 import numpy as np
 import pytest
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.likelihood import message_passing_reference as reference
-from snakes_and_ladders.likelihood import message_passing_rust
-from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from snakes_and_ladders.likelihood.message_passing import (
+from sal.backend import Backend
+from sal.likelihood import message_passing_reference as reference
+from sal.likelihood import message_passing_rust
+from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
+from sal.likelihood.message_passing import (
     Marginals,
     MessageScheduleName,
     _run,
     max_product,
     sum_product,
 )
-from snakes_and_ladders.likelihood.schedule import Layout
-from snakes_and_ladders.sim.factor_graph import (
+from sal.likelihood.schedule import Layout
+from sal.sim.factor_graph import (
     Factor,
     FactorGraph,
     Variable,
     from_hmm,
     from_potts,
 )
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+from sal.sim.graph import BoundaryCondition, lattice_graph
 
 from tests.regression.likelihood.conftest import FIELD, TREE
 

@@ -23,7 +23,7 @@ if [ ! -x "$interpreter" ]; then
   interpreter="$(command -v python3)"
 fi
 suffix="$("$interpreter" -c 'import sysconfig; print(sysconfig.get_config_var("EXT_SUFFIX"))')"
-target="python/snakes_and_ladders/oxisal${suffix}"
+target="python/sal/oxisal${suffix}"
 
 cargo build --release --locked "$@"
 cp "target/release/liboxisal.so" "$target"

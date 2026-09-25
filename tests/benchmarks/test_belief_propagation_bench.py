@@ -16,9 +16,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.likelihood.belief_propagation import belief_propagation
-from snakes_and_ladders.likelihood.potts import enumerate_potts, strip_log_partition
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+from sal.likelihood.belief_propagation import belief_propagation
+from sal.likelihood.potts import enumerate_potts, strip_log_partition
+from sal.sim.graph import BoundaryCondition, lattice_graph
 
 FIELD = np.array([0.3, -0.7, 0.15])
 

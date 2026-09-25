@@ -3,7 +3,7 @@ oracle: enumeration
 
 # The memory-2 (7, 5) turbo code at the message length exact decoding
 # reaches (docs/nb/turbo.ipynb). Every field is required -- see
-# python/snakes_and_ladders/sim/convolutional.py and sim/CLAUDE.md.
+# python/sal/sim/convolutional.py and sim/CLAUDE.md.
 #
 # K = 12 gives 4,096 messages, so `likelihood.turbo.exact_turbo_posterior`
 # enumerates the code and the iterative decoder's bit posteriors are checked

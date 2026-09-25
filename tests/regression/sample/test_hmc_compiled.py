@@ -14,15 +14,15 @@ from typing import Any
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.opt.hmm import GaussianHmmObjective, PoissonHmmObjective
-from snakes_and_ladders.opt.mixture import GaussianMixtureObjective
-from snakes_and_ladders.opt.objective import DeclaredGradient
-from snakes_and_ladders.opt.testfunctions import Rosenbrock
-from snakes_and_ladders.sample import hmc, langevin
-from snakes_and_ladders.sample.declared import Power
-from snakes_and_ladders.sample.expectation import KalmanMean
-from snakes_and_ladders.validation.gaussian import (
+from sal.backend import Backend
+from sal.opt.hmm import GaussianHmmObjective, PoissonHmmObjective
+from sal.opt.mixture import GaussianMixtureObjective
+from sal.opt.objective import DeclaredGradient
+from sal.opt.testfunctions import Rosenbrock
+from sal.sample import hmc, langevin
+from sal.sample.declared import Power
+from sal.sample.expectation import KalmanMean
+from sal.validation.gaussian import (
     GaussianTarget,
     dense_precision,
     diagonal_precision,

@@ -15,16 +15,16 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.fixtures import load_params
-from snakes_and_ladders.likelihood.hmm_paths import (
+from sal.fixtures import load_params
+from sal.likelihood.hmm_paths import (
     emission_log_density,
     enumerate_hidden_paths,
     path_log_probability,
 )
-from snakes_and_ladders.likelihood.parsimony import fitch_score
-from snakes_and_ladders.likelihood.potts import enumerate_potts, log_weights
-from snakes_and_ladders.search.infer import infer
-from snakes_and_ladders.search.support import (
+from sal.likelihood.parsimony import fitch_score
+from sal.likelihood.potts import enumerate_potts, log_weights
+from sal.search.infer import infer
+from sal.search.support import (
     Support,
     SupportKind,
     bootstrap_support,
@@ -36,17 +36,17 @@ from snakes_and_ladders.search.support import (
     pattern_support,
     split_pattern_support,
 )
-from snakes_and_ladders.sim.canonical import AMBIGUOUS_OBSERVATIONS, ambiguous_hmm
-from snakes_and_ladders.sim.factor_graph import (
+from sal.sim.canonical import AMBIGUOUS_OBSERVATIONS, ambiguous_hmm
+from sal.sim.factor_graph import (
     Factor,
     FactorGraph,
     from_hmm,
     from_potts,
 )
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
-from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.topology import (
+from sal.sim.graph import BoundaryCondition, lattice_graph
+from sal.sim.params import SimulationParams
+from sal.sim.simulator import simulate_tree
+from sal.sim.topology import (
     MoveSet,
     enumerate_topologies,
     leaf_bipartitions,

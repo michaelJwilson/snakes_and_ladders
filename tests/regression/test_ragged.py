@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.ragged import MINIMUM_LENGTH, Ragged
+from sal.ragged import MINIMUM_LENGTH, Ragged
 
 
 @pytest.mark.critical

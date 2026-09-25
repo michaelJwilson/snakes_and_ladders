@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.sample.potts_mcmc.sweeps import GUARD
+from sal.sample.potts_mcmc.sweeps import GUARD
 
 SEED = 20260916
 #: Sites drawn per trial, over neighbourhoods and alphabets the lattice fixtures

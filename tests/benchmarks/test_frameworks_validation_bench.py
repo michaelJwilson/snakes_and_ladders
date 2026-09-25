@@ -34,13 +34,13 @@ import numpy as np
 import pytest
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.learn import ppo
-from snakes_and_ladders.learn.policy import LinearPolicy
-from snakes_and_ladders.learn.reinforce import surrogate_loss
-from snakes_and_ladders.learn.rollout import rollout
-from snakes_and_ladders.learn.surrogate import Examples, GraphSurrogate, _Batch
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
-from snakes_and_ladders.validation import gymnasium, torch_geometric, torchrl
+from sal.learn import ppo
+from sal.learn.policy import LinearPolicy
+from sal.learn.reinforce import surrogate_loss
+from sal.learn.rollout import rollout
+from sal.learn.surrogate import Examples, GraphSurrogate, _Batch
+from sal.sim.graph import BoundaryCondition, lattice_graph
+from sal.validation import gymnasium, torch_geometric, torchrl
 
 from tests._frameworks import requires
 from tests.regression.learn.conftest import COUPLING, FIELD, potts_environment

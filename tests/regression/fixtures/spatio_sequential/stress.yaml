@@ -3,7 +3,7 @@ oracle: none
 
 # The coupled model at the size the label solvers are compared on
 # (docs/nb/spatio_sequential.ipynb). Every field is required -- see
-# python/snakes_and_ladders/sim/spatio_sequential.py.
+# python/sal/sim/spatio_sequential.py.
 #
 # A 10x10 open lattice is 100 nodes: past enumeration by a wide margin, which
 # is the point of the tier. What referees a result here is the planted

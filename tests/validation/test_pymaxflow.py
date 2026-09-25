@@ -12,10 +12,10 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.search import maxflow, maxflow_rust
-from snakes_and_ladders.search.ground_state import lattice_rung
-from snakes_and_ladders.validation import pymaxflow
+from sal.backend import Backend
+from sal.search import maxflow, maxflow_rust
+from sal.search.ground_state import lattice_rung
+from sal.validation import pymaxflow
 
 from tests._frameworks import requires
 from tests._rows import every_value

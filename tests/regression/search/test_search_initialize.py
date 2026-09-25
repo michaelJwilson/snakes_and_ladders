@@ -17,33 +17,33 @@ from enum import StrEnum
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.cost import Cost
-from snakes_and_ladders.likelihood.distance import DistanceKind
-from snakes_and_ladders.likelihood.objective import (
+from sal.cost import Cost
+from sal.likelihood.distance import DistanceKind
+from sal.likelihood.objective import (
     BranchLengthObjective,
     SubstitutionModelObjective,
 )
-from snakes_and_ladders.opt.budget import Budget, Comparison, Outcome, compare
-from snakes_and_ladders.opt.fit import fit
-from snakes_and_ladders.opt.initialize import (
+from sal.opt.budget import Budget, Comparison, Outcome, compare
+from sal.opt.fit import fit
+from sal.opt.initialize import (
     FromObjective,
     Initializer,
     Perturbed,
     RandomRestart,
 )
-from snakes_and_ladders.opt.testfunctions import Rosenbrock
-from snakes_and_ladders.search.infer import infer, score_topology
-from snakes_and_ladders.search.initialize import FromDistances, FromHadamard
-from snakes_and_ladders.search.neighbor_joining import split_lengths
-from snakes_and_ladders.sim.simulate import simulate_alignment
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.topology import (
+from sal.opt.testfunctions import Rosenbrock
+from sal.search.infer import infer, score_topology
+from sal.search.initialize import FromDistances, FromHadamard
+from sal.search.neighbor_joining import split_lengths
+from sal.sim.simulate import simulate_alignment
+from sal.sim.simulator import simulate_tree
+from sal.sim.topology import (
     MoveSet,
     Topology,
     enumerate_topologies,
     leaf_bipartitions,
 )
-from snakes_and_ladders.sim.tree import Node
+from sal.sim.tree import Node
 
 from tests._fixtures import EIGHT_TAXA, load_fixture
 from tests._objective_checks import Counted

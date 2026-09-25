@@ -13,19 +13,19 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.emissions import BetaBinomialEmission, NegativeBinomialEmission
-from snakes_and_ladders.opt.emission_mixture import (
+from sal.emissions import BetaBinomialEmission, NegativeBinomialEmission
+from sal.opt.emission_mixture import (
     anneal_assignments,
     expectation_maximization,
     plus_plus_start,
 )
-from snakes_and_ladders.opt.mixture import e_step, mixture_log_likelihood
-from snakes_and_ladders.search.mixture_starts import (
+from sal.opt.mixture import e_step, mixture_log_likelihood
+from sal.search.mixture_starts import (
     MixtureInstance,
     emission_seeding,
     polish,
 )
-from snakes_and_ladders.sim.count_pairs import (
+from sal.sim.count_pairs import (
     IndependentCountPair,
     IndependentCountPairSeeding,
     rate_space,

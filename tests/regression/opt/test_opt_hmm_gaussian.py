@@ -17,20 +17,20 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from snakes_and_ladders.emissions import GaussianEmission
-from snakes_and_ladders.likelihood.hmm_paths import enumerate_hidden_paths
-from snakes_and_ladders.opt.fit import (
+from sal.emissions import GaussianEmission
+from sal.likelihood.hmm_paths import enumerate_hidden_paths
+from sal.opt.fit import (
     constrained_standard_errors,
     covers,
     fit,
 )
-from snakes_and_ladders.opt.hmm import (
+from sal.opt.hmm import (
     GaussianHmmObjective,
     align_families,
     baum_welch_family,
     forward_log_likelihood_from_density,
 )
-from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
+from sal.sim.hmm import HmmParams, simulate_sequences
 
 from tests._objective_checks import assert_gradient_matches_finite_differences
 from tests._rows import every_row

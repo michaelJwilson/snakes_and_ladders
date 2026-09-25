@@ -12,16 +12,16 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.learn.ranking import fixed_length_target, tree_examples
-from snakes_and_ladders.learn.surrogate import (
+from sal.learn.ranking import fixed_length_target, tree_examples
+from sal.learn.surrogate import (
     Examples,
     GraphSurrogate,
     SetSurrogate,
     _Batch,
 )
-from snakes_and_ladders.sim.simulator import simulate_tree
-from snakes_and_ladders.sim.topology import enumerate_topologies
-from snakes_and_ladders.validation import torch_geometric
+from sal.sim.simulator import simulate_tree
+from sal.sim.topology import enumerate_topologies
+from sal.validation import torch_geometric
 
 from tests._fixtures import load_fixture
 from tests._frameworks import requires
