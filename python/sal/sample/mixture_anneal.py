@@ -103,7 +103,7 @@ def anneal_assignments(
     own ``reestimate`` at the one-hot posterior of the draw and the weights
     at its counts, then the log-likelihood at temperature one. The best
     state visited is kept, as
-    :class:`~sal.sample.gibbs.Annealed` keeps its best. The
+    :class:`~sal.sample.gibbs.AnnealedLabelling` keeps its best. The
     count-pair likelihood is scored itself; nothing here reads a surrogate.
     ``temperatures`` is a schedule's values, as
     :func:`~sal.sample.schedule.ladder` returns them. Each sweep is recorded

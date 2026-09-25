@@ -10,8 +10,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from sal.likelihood.belief_propagation import ConvergenceError
-from sal.likelihood.message_passing import Marginals, sum_product
+from sal.likelihood.message_passing import ConvergenceError, Marginals, sum_product
 from sal.likelihood.potts import enumerate_potts
 from sal.sandbox.region_graph import (
     RegionGraph,

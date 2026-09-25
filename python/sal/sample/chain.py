@@ -73,6 +73,17 @@ DUAL_AVERAGING_KAPPA = 0.75
 #: it through :func:`_uniform` and :func:`_seed` and is otherwise blind to it.
 Stream = TypeVar("Stream", torch.Generator, np.random.Generator)
 
+
+def torch_stream(rng: np.random.Generator) -> torch.Generator:
+    """A torch :data:`Stream` seeded by one draw from ``rng``, so one seed runs a torch chain.
+
+    The one derivation a caller holding a NumPy generator makes before a
+    torch-kernel sampler; ``search.projection`` and ``search.mixture_starts``
+    each wrote it until #1059.
+    """
+    return torch.Generator().manual_seed(int(rng.integers(0, 2**31 - 1)))
+
+
 _KernelStream_contra = TypeVar(
     "_KernelStream_contra", torch.Generator, np.random.Generator, contravariant=True
 )

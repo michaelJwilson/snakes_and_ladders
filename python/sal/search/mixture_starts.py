@@ -80,6 +80,7 @@ from sal.opt.mixture import (
 from sal.opt.starts import Curve, Polished, Trial
 from sal.opt.termination import Stop, Termination
 from sal.parallel import Pool, map_tasks
+from sal.sample.chain import torch_stream
 from sal.sample.initialize import FromAnnealing, FromChain, FromTempering
 from sal.sample.mixture_anneal import anneal_assignments
 from sal.sample.schedule import ExponentialTempSchedule, ladder
@@ -250,11 +251,6 @@ def at_locations(instance: MixtureInstance, locations: torch.Tensor) -> Emission
     return instance.at(rows[distance.argmin(axis=1)])
 
 
-def _generator(rng: np.random.Generator) -> torch.Generator:
-    """A torch stream derived from the caller's generator, so one seed runs the start."""
-    return torch.Generator().manual_seed(int(rng.integers(0, 2**31 - 1)))
-
-
 def prior_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded:
     """Components drawn from a prior over the observed range, reading no pair.
 
@@ -409,7 +405,7 @@ def chain_initializer(rng: np.random.Generator) -> FromChain:
     return FromChain(
         CHAIN_DRAWS,
         CHAIN_STEP,
-        _generator(rng),
+        torch_stream(rng),
         n_steps=CHAIN_TRAJECTORY,
         burn_in=CHAIN_BURN_IN,
     )
@@ -420,7 +416,7 @@ def annealing_initializer(rng: np.random.Generator) -> FromAnnealing:
     return FromAnnealing(
         ExponentialTempSchedule(float(TEMPERATURES[-1]), 1.0, ANNEAL_STEPS),
         CHAIN_STEP,
-        _generator(rng),
+        torch_stream(rng),
         n_steps=CHAIN_TRAJECTORY,
     )
 
@@ -431,7 +427,7 @@ def tempering_initializer(rng: np.random.Generator) -> FromTempering:
         TEMPERATURES,
         TEMPERING_ROUNDS,
         CHAIN_STEP,
-        _generator(rng),
+        torch_stream(rng),
         n_steps=CHAIN_TRAJECTORY,
     )
 

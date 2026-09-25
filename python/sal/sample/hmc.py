@@ -123,7 +123,7 @@ __all__ = [
     "YOSHIDA_WEIGHTS",
     "Adaptation",
     "Adapted",
-    "Annealed",
+    "AnnealedTheta",
     "Chain",
     "HmcChain",
     "Integrator",
@@ -566,7 +566,7 @@ def sample(
 
 
 @dataclass(frozen=True)
-class Annealed:
+class AnnealedTheta:
     """What one annealing run found, and what it cost.
 
     Parameters
@@ -603,7 +603,7 @@ def anneal(
     n_steps: int = DEFAULT_STEPS,
     theta0: torch.Tensor | None = None,
     integrator: Integrator = leapfrog,
-) -> Annealed:
+) -> AnnealedTheta:
     """Simulated annealing with Hamiltonian proposals: :func:`sample` on a schedule.
 
     One proposal per schedule step at that step's temperature, tracking the
@@ -630,14 +630,14 @@ def anneal(
 
     Returns
     -------
-    Annealed
+    AnnealedTheta
     """
     _check_trajectory(step_size, n_steps)
     position = start_point(objective, theta0)
 
     best, best_value = position.clone(), float(objective(position))
     accepted = 0
-    # `energy` is the best value so far, which is what `Annealed.value`
+    # `energy` is the best value so far, which is what `AnnealedTheta.value`
     # returns: the series ends at the field rather than at the last visited
     # point, which the result does not report. `best` is the state passed,
     # for the same reason.
@@ -660,7 +660,7 @@ def anneal(
             best, best_value = position.clone(), value
         tracked.record(step, state=best, temperature=temperature, energy=best_value)
     tracked.record_cost(max(schedule.n_steps - 1, 0), best.nbytes)
-    return Annealed(
+    return AnnealedTheta(
         theta=best,
         value=best_value,
         final=position,

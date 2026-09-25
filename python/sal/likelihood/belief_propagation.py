@@ -28,8 +28,12 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from sal.likelihood.message_passing import ConvergenceError
 from sal.numerics import logsumexp
 from sal.sim.graph import PottsGraph
+
+#: What a :class:`~sal.likelihood.message_passing.ConvergenceError` here names.
+_METHOD = "belief propagation"
 
 # Parallel (flooding) updates with damping. Sequential schedules converge on
 # more graphs, but the order then decides the answer, and a fixture that
@@ -41,24 +45,6 @@ DEFAULT_DAMPING = 0.5
 # and 1e-12 brings them to 2.8e-13 for eight more sweeps out of forty-five.
 DEFAULT_TOLERANCE = 1e-12
 DEFAULT_MAX_ITERATIONS = 2_000
-
-
-class ConvergenceError(RuntimeError):
-    """Raised when the messages did not settle within the iteration cap.
-
-    Carries the residual, so a caller tuning damping or the cap sees how far
-    off it was.
-    """
-
-    def __init__(self, iterations: int, residual: float, tolerance: float) -> None:
-        super().__init__(
-            f"belief propagation did not converge in {iterations} iterations: "
-            f"largest message change {residual:.3e} against a tolerance of "
-            f"{tolerance:.3e}"
-        )
-        self.iterations = iterations
-        self.residual = residual
-        self.tolerance = tolerance
 
 
 @dataclass(frozen=True)
@@ -129,7 +115,7 @@ def belief_propagation(
         move and every graph would "converge" at iteration one with the
         residual identically zero -- a silent wrong answer rather than a
         loud one.
-    ConvergenceError
+    ~sal.likelihood.message_passing.ConvergenceError
         If the residual is still above ``tolerance`` at ``max_iterations``.
     """
     if not 0.0 <= damping < 1.0:
@@ -179,7 +165,7 @@ def belief_propagation(
             taken = iteration
             break
     else:
-        raise ConvergenceError(max_iterations, residual, tolerance)
+        raise ConvergenceError(_METHOD, max_iterations, residual, tolerance)
 
     inbox = np.zeros((graph.n_nodes, n_states))
     np.add.at(inbox, target, messages)

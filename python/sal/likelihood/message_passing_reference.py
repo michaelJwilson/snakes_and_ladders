@@ -31,6 +31,9 @@ from sal.likelihood.message_passing import (
 from sal.numerics import logsumexp
 from sal.sim.factor_graph import Factor, FactorGraph
 
+#: What a :class:`~sal.likelihood.message_passing.ConvergenceError` here names.
+_METHOD = "flooding"
+
 
 def _reduce(table: np.ndarray, keep: int, maximum: bool) -> np.ndarray:
     """Sum (or max) out every axis of ``table`` except ``keep``."""
@@ -163,8 +166,7 @@ def _run(
                 to_variable[(factor.name, name)] = updated
         if residual <= tolerance:
             return to_variable, to_factor, iteration
-    msg = f"flooding did not converge in {max_iterations} sweeps; residual {residual:.2e} above {tolerance:.0e}"
-    raise ConvergenceError(msg)
+    raise ConvergenceError(_METHOD, max_iterations, residual, tolerance)
 
 
 def _beliefs(

@@ -77,6 +77,7 @@ from sal.opt.mixture import (
 from sal.opt.objective import Objective
 from sal.opt.starts import PolishedPoint, Trial
 from sal.opt.termination import Termination
+from sal.sample.chain import torch_stream
 from sal.sample.initialize import FromAnnealing, FromChain, FromTempering
 from sal.sample.schedule import ExponentialTempSchedule
 from sal.sim.count_pairs import (
@@ -588,11 +589,6 @@ ANNEAL_STEPS = 8
 TEMPERING_ROUNDS = 2
 
 
-def _generator(rng: np.random.Generator) -> torch.Generator:
-    """A torch stream derived from the caller's generator, so one seed runs the cell."""
-    return torch.Generator().manual_seed(int(rng.integers(0, 2**31 - 1)))
-
-
 def chain_seeding(
     instance: ProjectedCounts, at: ComponentsAt, rng: np.random.Generator
 ) -> Seeding:
@@ -611,7 +607,7 @@ def chain_seeding(
     initializer = FromChain(
         CHAIN_DRAWS,
         CHAIN_STEP,
-        _generator(rng),
+        torch_stream(rng),
         n_steps=CHAIN_TRAJECTORY,
         burn_in=CHAIN_BURN_IN,
         adaptation=None,
@@ -637,7 +633,7 @@ def annealed_seeding(
     run = FromAnnealing(
         ExponentialTempSchedule(float(TEMPERATURES[-1]), 1.0, ANNEAL_STEPS),
         CHAIN_STEP,
-        _generator(rng),
+        torch_stream(rng),
         n_steps=CHAIN_TRAJECTORY,
     ).run(surrogate(instance))
     return Seeding(
@@ -663,7 +659,7 @@ def tempered_seeding(
         TEMPERATURES,
         TEMPERING_ROUNDS,
         CHAIN_STEP,
-        _generator(rng),
+        torch_stream(rng),
         n_steps=CHAIN_TRAJECTORY,
     ).run(surrogate(instance))
     return Seeding(

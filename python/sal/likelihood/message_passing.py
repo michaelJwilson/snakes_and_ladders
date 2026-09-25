@@ -89,7 +89,36 @@ DEFAULT_MAX_ITERATIONS = 500
 
 
 class ConvergenceError(RuntimeError):
-    """Flooding did not settle within the iteration cap."""
+    """Messages did not settle within the iteration cap: the one refusal every message-passing route raises.
+
+    Carries the cap, the residual it stopped at and the tolerance it missed,
+    so a caller tuning damping or the cap sees how far off it was. Belief
+    propagation on a Potts graph and the general flooding schedule raised two
+    classes of this name until #1059.
+
+    Parameters
+    ----------
+    method : str
+        What did not converge, as the message names it.
+    iterations : int
+        The sweeps run, which is the cap.
+    residual : float
+        The largest message change on the last sweep.
+    tolerance : float
+        The change the messages had to fall below.
+    """
+
+    def __init__(
+        self, method: str, iterations: int, residual: float, tolerance: float
+    ) -> None:
+        super().__init__(
+            f"{method} did not converge in {iterations} iterations: "
+            f"largest message change {residual:.3e} against a tolerance of "
+            f"{tolerance:.3e}"
+        )
+        self.iterations = iterations
+        self.residual = residual
+        self.tolerance = tolerance
 
 
 @dataclass(frozen=True)
@@ -372,11 +401,7 @@ def _run(
             return _Run(layout, to_variable, to_factor, sweep, plan, math.nan)
         if sweep >= max_iterations:
             break
-    msg = (
-        f"{plan.name} did not converge in {max_iterations} sweeps; "
-        f"residual {residual:.2e} above {tolerance:.0e}"
-    )
-    raise ConvergenceError(msg)
+    raise ConvergenceError(plan.name, max_iterations, residual, tolerance)
 
 
 def _beliefs(

@@ -116,7 +116,7 @@ class GibbsChain:
 
 
 @dataclass(frozen=True)
-class Annealed:
+class AnnealedLabelling:
     """What annealing returns: the best state visited, and the path there.
 
     Parameters
@@ -742,7 +742,7 @@ def anneal_factor_graph(
     *,
     start: np.ndarray | None = None,
     backend: Backend = Backend.NUMBA,
-) -> Annealed:
+) -> AnnealedLabelling:
     """Simulated annealing by heat-bath sweeps: one sweep per schedule step at that step's temperature.
 
     The generic form of :func:`sal.sample.potts_mcmc.anneal_potts`,
@@ -761,7 +761,7 @@ def anneal_factor_graph(
         trajectory.append(value)
         if value > best:
             best, best_state = value, state.copy()
-    return Annealed(best_state, best, np.array(trajectory))
+    return AnnealedLabelling(best_state, best, np.array(trajectory))
 
 
 def chain_block_sweep(

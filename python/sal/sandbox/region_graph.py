@@ -57,9 +57,12 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from sal.likelihood.belief_propagation import ConvergenceError
+from sal.likelihood.message_passing import ConvergenceError
 from sal.numerics import logsumexp
 from sal.sim.factor_graph import FactorGraph
+
+#: What a :class:`~sal.likelihood.message_passing.ConvergenceError` here names.
+_METHOD = "the Kikuchi iteration"
 
 
 @dataclass(frozen=True)
@@ -509,10 +512,8 @@ def generalized_belief_propagation(
     ValueError
         If ``damping`` is outside ``[0, 1)``, where at 1 no message moves and
         every graph would "converge" on the first sweep.
-    ~sal.likelihood.belief_propagation.ConvergenceError
+    ~sal.likelihood.message_passing.ConvergenceError
         If the residual is still above ``tolerance`` at ``max_iterations``.
-        Qualified because two modules here declare that name and Sphinx
-        resolves a bare one to both, which `-W` makes an error.
     """
     if not 0.0 <= damping < 1.0:
         msg = (
@@ -587,7 +588,7 @@ def generalized_belief_propagation(
             taken = iteration
             break
     else:
-        raise ConvergenceError(max_iterations, float(residual), tolerance)
+        raise ConvergenceError(_METHOD, max_iterations, float(residual), tolerance)
 
     settled = {
         keys[index]: np.exp(belief(index)) for index in range(len(regions.regions))
