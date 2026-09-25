@@ -31,9 +31,9 @@ here so it is read once rather than off 46 signatures.
     `likelihood.ragged_rust`, and the sweeps of `sample.potts_mcmc`,
     `sample.annealed` and `sample.tempered`.
 ``NUMBA``
-    `sample.gibbs` and
-    `search.icm.iterated_conditional_modes`: arithmetic that is
-    NumPy's operation for operation.
+    `sample.gibbs`,
+    `search.icm.iterated_conditional_modes` and `search.trws.trws`:
+    arithmetic that is NumPy's operation for operation.
 ``JAX``
     the gradient of `opt.hmm`'s objectives (issue #1000), pinned to the
     ``TORCH`` autograd route at 1e-10.

@@ -503,6 +503,12 @@ whether or not it has members yet.
 .. automodule:: sal.search.numba.icm
    :members:
 
+.. automodule:: sal.search.trws
+   :members:
+
+.. automodule:: sal.search.numba.trws
+   :members:
+
 .. automodule:: sal.search.max_cut
    :members:
 
