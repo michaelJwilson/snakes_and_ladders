@@ -33,6 +33,7 @@ energies a cut can represent.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Any, NamedTuple
@@ -78,10 +79,21 @@ class Labelling:
         One state per node.
     energy : float
         Its energy under :func:`~sal.sim.potts.energy`.
+    sweeps : int
+        Sweeps the descent ran, the clean one that stopped it included, so a
+        caller charges what was spent without rerunning one sweep at a time
+        (issue #1059). Zero for a single :func:`expand` or :func:`swap`, which
+        runs no sweep.
+    termination : Termination | None
+        For a descent: converged where the labelling returned is one a sweep
+        leaves unchanged --- a local minimum at the floor --- and the budget
+        otherwise, after ``sweeps``. ``None`` for a single move.
     """
 
     labelling: np.ndarray
     energy: float
+    sweeps: int = 0
+    termination: Termination | None = None
 
     def __iter__(self) -> Iterator[Any]:
         """``(labelling, energy)``: the order callers unpack.
@@ -110,10 +122,12 @@ class ExpansionResult:
         labelling was already expansion-optimal, which is information rather
         than a failure.
     termination : Termination | None
-        Always converged, after ``cycles`` of them: the loop returns on the
-        cycle that lowers nothing and raises on the cap, monotonicity over a
-        finite state space making the cap a defect rather than a budget
-        (issue #860).
+        Converged after ``cycles`` where a cycle lowered nothing. Where
+        ``max_cycles`` ran out first it is the budget after ``max_cycles``,
+        and a warning says so (issue #1059): the default cap is a defect
+        guard, since monotonicity over a finite state space bounds the
+        cycles, but a caller's cap is a budget (`search.ground_state`
+        derives one from site visits), and a budget returns what it holds.
     """
 
     labelling: np.ndarray
@@ -319,11 +333,12 @@ def _cycle_to_a_local_minimum(
     """Cycle over ``move``'s label sets until a full sweep lowers nothing.
 
     The body :func:`alpha_expansion` and :func:`alpha_beta_swap` share
-    (issue #858). The loop, the accept and the two refusals are identical
+    (issue #858). The loop, the accept and the refusal are identical
     between them; what differs is the label set a cycle iterates and the move
     it applies to each, which is what ``move`` carries. Monotonicity over a
-    finite state space is what makes the cap unreachable, so reaching it is a
-    defect and not a budget --- for either move.
+    finite state space makes the default cap unreachable; a cap the caller
+    derived from a budget can be reached, and then the labelling held is
+    returned with a warning and a termination recording the cap (issue #1059).
     """
     check_non_negative_couplings(graph, move.reason)
 
@@ -362,12 +377,19 @@ def _cycle_to_a_local_minimum(
                 termination=Termination.after(cycle, converged=True),
             )
 
-    msg = (
-        f"{move.name} did not settle in {max_cycles} cycles. The energy is "
-        "non-increasing over a finite state space, so this cannot happen on a "
-        "correct implementation and is a defect rather than a budget"
+    warnings.warn(
+        f"{move.name} did not settle in max_cycles={max_cycles} cycles; ran "
+        f"{max_cycles} and returns the labelling it holds, with a Termination "
+        "recording the cap",
+        stacklevel=3,
     )
-    raise ValueError(msg)
+    return ExpansionResult(
+        labelling=labelling,
+        energy=energy(graph, values, labelling),
+        cycles=max_cycles,
+        moves=moves,
+        termination=Termination.after(max_cycles, converged=False),
+    )
 
 
 def _expansion_network(
@@ -652,9 +674,9 @@ def alpha_expansion(
         Initial labelling; the per-node data optimum when omitted, which is
         the labelling ignoring every coupling.
     max_cycles : int
-        Refuse past this many sweeps rather than looping. Monotonicity makes
-        exceeding it impossible on a correct implementation, so reaching it
-        is a bug report rather than a tuning knob.
+        Cycles to run at most. The default, :data:`DEFAULT_MAX_CYCLES`, is a
+        defect guard: monotonicity makes a correct run settle inside it. A
+        caller's cap is a budget, and reaching it returns the labelling held.
     backend : Backend
         Which network and minimum-cut solver each :func:`expand` runs; see
         :func:`expand` for the two and why the Rust one is the default.
@@ -662,9 +684,15 @@ def alpha_expansion(
     Raises
     ------
     ValueError
-        If a coupling is negative, ``start`` is not one integer state in range
-        per node (:func:`~sal.sim.potts.check_labelling`), or the cap is
-        reached.
+        If a coupling is negative, or ``start`` is not one integer state in
+        range per node (:func:`~sal.sim.potts.check_labelling`).
+
+    Warns
+    -----
+    UserWarning
+        Where ``max_cycles`` runs out before a cycle lowers nothing; the
+        result then carries ``cycles = max_cycles`` and a termination
+        recording the budget (issue #1059).
     """
     field = log_weight_of(field)
     return _cycle_to_a_local_minimum(
@@ -913,10 +941,13 @@ def alpha_beta_swap(
     Raises
     ------
     ValueError
-        If a coupling is negative, ``start`` is not one integer state in range
-        per node, or the cap is reached. Monotonicity over a
-        finite state space makes the second impossible on a correct
-        implementation, as it is for :func:`alpha_expansion`.
+        If a coupling is negative, or ``start`` is not one integer state in
+        range per node.
+
+    Warns
+    -----
+    UserWarning
+        Where ``max_cycles`` runs out first, as :func:`alpha_expansion` does.
     """
     return _cycle_to_a_local_minimum(
         graph,

@@ -723,3 +723,90 @@ def test_the_floor_reaches_every_descent_and_the_other_label_steps_refuse_it() -
             LabelSolver.ALPHA_EXPANSION,
             min_sites=2,
         )
+
+
+# --- the sweep count and the termination (issue #1059) -----------------------
+
+
+@pytest.mark.oracle
+@pytest.mark.backend
+@pytest.mark.parametrize("min_sites", [0, 3])
+def test_one_descent_counts_the_sweeps_one_sweep_calls_count(min_sites: int) -> None:
+    # `descend` ran ICM one sweep at a time to count; one call now reports
+    # `Labelling.sweeps`. Referee: that loop, written here, on 20 starts of
+    # the spatio_only ci rung, on both backends; the labelling is bitwise.
+    # Without a floor the count is equal and a descent its clean sweep stopped
+    # reads converged. With one, a sweep whose move the floor undoes leaves
+    # the array as it was and is not clean, so the loop stopped where one
+    # call runs on to its cap and reads the budget.
+    rung = spatio_rung(fixture("spatio_only", "ci").params, "ci")
+    draws = np.random.default_rng(1059)
+    for _ in range(20):
+        start = draws.integers(0, rung.n_states, size=rung.n_nodes)
+        for backend in (Backend.NUMBA, Backend.PYTHON):
+            labelling, stepped, rng = start.copy(), 0, np.random.default_rng(0)
+            while stepped < 40:
+                moved = iterated_conditional_modes(
+                    rung.graph,
+                    rung.field,
+                    rung.n_states,
+                    rng,
+                    start=labelling,
+                    max_sweeps=1,
+                    min_sites=min_sites,
+                    backend=backend,
+                ).labelling
+                stepped += 1
+                if np.array_equal(moved, labelling):
+                    break
+                labelling = moved
+            one = iterated_conditional_modes(
+                rung.graph,
+                rung.field,
+                rung.n_states,
+                np.random.default_rng(0),
+                start=start,
+                max_sweeps=40,
+                min_sites=min_sites,
+                backend=backend,
+            )
+            assert np.array_equal(one.labelling, labelling)
+            assert one.termination is not None
+            assert one.termination.iterations == one.sweeps
+            if min_sites == 0:
+                assert one.sweeps == stepped
+                assert one.termination.converged == (stepped < 40)
+            else:
+                assert one.sweeps >= stepped
+                assert one.termination.converged == (one.sweeps < 40)
+
+
+@pytest.mark.analytic
+@pytest.mark.parametrize("backend", [Backend.NUMBA, Backend.PYTHON], ids=str)
+def test_a_descent_cut_short_reads_the_budget(backend: Backend) -> None:
+    # A cap of one sweep on a three-site chain: the termination reads
+    # converged exactly where a second sweep would leave the labelling as the
+    # first left it, on either backend.
+    graph = lattice_graph((3,), BoundaryCondition.OPEN, 1.0)
+    values = np.array([[0.0, 0.1], [0.3, 0.0], [0.0, 0.3]])
+    run = iterated_conditional_modes(
+        graph,
+        values,
+        2,
+        np.random.default_rng(0),
+        start=np.array([0, 1, 1], dtype=np.int64),
+        max_sweeps=1,
+        backend=backend,
+    )
+    settled = iterated_conditional_modes(
+        graph,
+        values,
+        2,
+        np.random.default_rng(0),
+        start=run.labelling,
+        max_sweeps=1,
+        backend=backend,
+    )
+    assert run.sweeps == 1
+    assert run.termination is not None
+    assert run.termination.converged == np.array_equal(settled.labelling, run.labelling)

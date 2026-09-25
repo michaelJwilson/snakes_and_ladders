@@ -22,6 +22,7 @@ from sal.likelihood.message_passing import (
     max_product,
 )
 from sal.opt.budget import Budget
+from sal.opt.termination import Stop, Termination
 from sal.sample.potts_mcmc import (
     PottsMove,
     anneal_potts,
@@ -517,15 +518,20 @@ def test_the_swap_refuses_a_negative_coupling() -> None:
 
 
 @pytest.mark.smoke
-def test_the_swap_refuses_rather_than_looping_past_its_cycle_cap() -> None:
-    # Monotonicity over a finite state space makes reaching the cap
-    # impossible on a correct implementation, so it is a defect report and
-    # not a budget -- the same contract `alpha_expansion` states.
+def test_the_swap_warns_and_returns_what_it_holds_at_its_cycle_cap() -> None:
+    # Issue #1059: a caller's cap is a budget (`ground_state` derives one from
+    # site visits), so reaching it warns and returns the labelling held, its
+    # energy in full, and a termination recording the cap rather than raising.
     rung = _rung(CI, 3)
     start = np.array([0, 1, 2, 0, 1, 2, 0, 1, 2], dtype=np.int64)
 
-    with pytest.raises(ValueError, match="did not settle in 1 cycles"):
-        alpha_beta_swap(rung.graph, rung.field, 3, start=start, max_cycles=1)
+    with pytest.warns(UserWarning, match="did not settle in max_cycles=1"):
+        capped = alpha_beta_swap(rung.graph, rung.field, 3, start=start, max_cycles=1)
+    assert capped.cycles == 1
+    assert capped.termination == Termination(False, 1, Stop.BUDGET)
+    assert capped.energy == energy(rung.graph, rung.field, capped.labelling)
+    settled = alpha_beta_swap(rung.graph, rung.field, 3, start=start)
+    assert settled.energy <= capped.energy
 
 
 @pytest.mark.smoke

@@ -657,19 +657,21 @@ def descend(
     backend: Backend | None = None,
     min_sites: int = 0,
 ) -> tuple[np.ndarray, int]:
-    """Index-order ICM from a uniform draw, or from ``start``, one sweep at a time, and the sweeps it ran.
+    """Index-order ICM from a uniform draw, or from ``start``, and the sweeps it ran.
 
     The descent :func:`run_icm` runs, on the same draws, with its sweep count
-    read out: the count is what a warm chain is charged, where
-    :func:`run_icm` charges its whole budget. The sweep that changes nothing
-    is counted, as :func:`~sal.search.potts_starts.polish_by_icm`
-    counts it.
+    read out of :attr:`~sal.search.alpha_expansion.Labelling.sweeps`: the
+    count is what a warm chain is charged, where :func:`run_icm` charges its
+    whole budget. The sweep that changes nothing is counted, as
+    :func:`~sal.search.potts_starts.polish_by_icm` counts it. One call since
+    #1059, which reran ICM one sweep at a time to count.
 
     ``backend`` and ``min_sites`` are
     :func:`~sal.search.icm.iterated_conditional_modes`'s;
-    ``None`` is its default backend. A floored sweep draws its ``n_nodes``
-    uniforms from ``rng`` per sweep, so the floor's draws are those of
-    one-sweep descents, not of :func:`run_icm`'s one call.
+    ``None`` is its default backend. A floored descent draws its
+    ``max_sweeps * n_nodes`` uniforms up front, as :func:`run_icm`'s one call
+    does, so the labelling is the one sweep-at-a-time descents reached and
+    the generator is left where one call leaves it.
 
     Returns
     -------
@@ -683,23 +685,17 @@ def descend(
         if start is None
         else np.array(start, dtype=np.int64)
     )
-    sweeps = 0
-    while sweeps < max_sweeps:
-        settled = iterated_conditional_modes(
-            problem.graph,
-            problem.field,
-            problem.n_states,
-            rng,
-            start=labelling,
-            max_sweeps=1,
-            min_sites=min_sites,
-            backend=Backend.NUMBA if backend is None else backend,
-        )
-        sweeps += 1
-        if np.array_equal(settled.labelling, labelling):
-            break
-        labelling = settled.labelling
-    return labelling, sweeps
+    settled = iterated_conditional_modes(
+        problem.graph,
+        problem.field,
+        problem.n_states,
+        rng,
+        start=labelling,
+        max_sweeps=max_sweeps,
+        min_sites=min_sites,
+        backend=Backend.NUMBA if backend is None else backend,
+    )
+    return settled.labelling, settled.sweeps
 
 
 def warm_anneal(

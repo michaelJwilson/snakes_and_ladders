@@ -36,6 +36,7 @@ from enum import StrEnum
 import numpy as np
 
 from sal.backend import Backend, refuse_backend
+from sal.opt.termination import Termination
 from sal.search.alpha_expansion import Labelling
 from sal.search.numba.icm import icm_sweeps_checked, no_survivor
 from sal.sim.graph import PottsGraph
@@ -44,6 +45,7 @@ from sal.sim.potts import (
     check_labelling,
     energy,
     log_weight_of,
+    owner_rows,
     site_field,
 )
 
@@ -156,7 +158,9 @@ def iterated_conditional_modes(
     Returns
     -------
     Labelling
-        The labelling it settles on, and its energy.
+        The labelling it settles on, its energy, the sweeps run (the clean
+        one included) and a termination: converged where a sweep would leave
+        the labelling unchanged, the budget otherwise (issue #1059).
 
     Raises
     ------
@@ -203,7 +207,7 @@ def iterated_conditional_modes(
 
     if backend is Backend.NUMBA:
         labelling = np.ascontiguousarray(labelling, dtype=np.int64)
-        icm_sweeps_checked(
+        sweeps = icm_sweeps_checked(
             labelling,
             values,
             offsets,
@@ -215,7 +219,9 @@ def iterated_conditional_modes(
             stop_when_clean,
             min_sites,
         )
-        return Labelling(labelling, energy(graph, values, labelling))
+        return _descended(
+            graph, values, labelling, sweeps, n_states, min_sites, offsets
+        )
 
     # The compressed rows as Python sequences, converted once rather than
     # sliced per site: a NumPy slice and gather per site measured a third of
@@ -229,7 +235,9 @@ def iterated_conditional_modes(
     # neighbour's label once per incident edge, and a list read is 0.18 us
     # cheaper than a NumPy scalar one. Same reads, same order, same writes.
     labels = labelling.tolist()
+    sweeps = 0
     for sweep in range(max_sweeps):
+        sweeps += 1
         order = (
             rng.permutation(n_nodes)
             if lazy
@@ -250,7 +258,41 @@ def iterated_conditional_modes(
             break
     labelling[:] = labels
 
-    return Labelling(labelling, energy(graph, values, labelling))
+    return _descended(graph, values, labelling, sweeps, n_states, min_sites, offsets)
+
+
+def _descended(
+    graph: PottsGraph,
+    values: np.ndarray,
+    labelling: np.ndarray,
+    sweeps: int,
+    n_states: int,
+    min_sites: int,
+    offsets: np.ndarray,
+) -> Labelling:
+    """The descent's result: its energy, its sweeps, and whether a sweep would leave it unchanged.
+
+    Settled is read off the labelling, the same test on both backends: every
+    site already at the first label of least local energy, summed in the
+    sweep's edge order so a tie resolves as the sweep resolves it, and no
+    state held by fewer than ``min_sites`` sites. That is the state a clean
+    sweep leaves, so a run stopped by one reads converged, and one that ran
+    out of sweeps reads the budget unless its last sweep happened to settle.
+    """
+    _, neighbours, couplings = graph.compressed_adjacency()
+    local = -values.copy()
+    # `subtract.at` applies in edge order, as the sweep's loop does.
+    np.subtract.at(local, (owner_rows(offsets), labelling[neighbours]), couplings)
+    settled = bool((local.argmin(axis=1) == labelling).all())
+    if settled and min_sites > 0:
+        counts = np.bincount(labelling, minlength=n_states)
+        settled = not bool(((counts > 0) & (counts < min_sites)).any())
+    return Labelling(
+        labelling,
+        energy(graph, values, labelling),
+        sweeps=sweeps,
+        termination=Termination.after(sweeps, converged=settled),
+    )
 
 
 def _dissolve(
