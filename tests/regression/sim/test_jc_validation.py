@@ -20,19 +20,19 @@ from sal.sim.tree import Node
 @pytest.mark.smoke
 def test_jc_transition_probabilities_rejects_k_below_two() -> None:
     with pytest.raises(ValueError, match="k must be >= 2"):
-        jc_transition_probabilities(0.1, k=1)
+        jc_transition_probabilities(0.1, n_states=1)
 
 
 @pytest.mark.smoke
 def test_jc_transition_probabilities_rejects_negative_branch_length() -> None:
     with pytest.raises(ValueError, match="t must be non-negative"):
-        jc_transition_probabilities(-0.1, k=4)
+        jc_transition_probabilities(-0.1, n_states=4)
 
 
 @pytest.mark.smoke
 def test_jc_rate_matrix_rejects_k_below_two() -> None:
     with pytest.raises(ValueError, match="k must be >= 2"):
-        jc_rate_matrix(k=1)
+        jc_rate_matrix(n_states=1)
 
 
 @pytest.mark.smoke
@@ -43,7 +43,7 @@ def test_simulate_alignment_rejects_mismatched_pi_shape() -> None:
     with pytest.raises(ValueError, match="pi has shape"):
         simulate_alignment(
             tau=tau,
-            k=4,
+            n_states=4,
             pi=np.full(3, 1.0 / 3),
             rng=np.random.default_rng(0),
             n_sites=10,
@@ -57,14 +57,18 @@ def test_simulate_alignment_rejects_non_root_node_without_branch_length() -> Non
     )
     with pytest.raises(ValueError, match="has no branch_length"):
         simulate_alignment(
-            tau=tau, k=4, pi=np.full(4, 0.25), rng=np.random.default_rng(0), n_sites=10
+            tau=tau,
+            n_states=4,
+            pi=np.full(4, 0.25),
+            rng=np.random.default_rng(0),
+            n_sites=10,
         )
 
 
 @pytest.mark.smoke
 def test_load_simulation_params_rejects_missing_field(tmp_path: Path) -> None:
     incomplete = tmp_path / "incomplete.yaml"
-    incomplete.write_text("seed: 0\nn_sites: 10\nk: 4\n")
+    incomplete.write_text("seed: 0\nn_sites: 10\nn_states: 4\n")
     with pytest.raises(ValueError, match="missing required field"):
         load_params(incomplete, SimulationParams)
 
@@ -76,7 +80,7 @@ def test_load_simulation_params_rejects_mismatched_pi_shape(tmp_path: Path) -> N
         "seed: 0\n"
         "n_sites: 10\n"
         "tolerance: 0.01\n"
-        "k: 4\n"
+        "n_states: 4\n"
         "pi: [0.5, 0.5]\n"
         "tau:\n"
         "  name: root\n"
@@ -95,7 +99,7 @@ def test_load_simulation_params_rejects_pi_not_summing_to_one(tmp_path: Path) ->
         "seed: 0\n"
         "n_sites: 10\n"
         "tolerance: 0.01\n"
-        "k: 4\n"
+        "n_states: 4\n"
         "pi: [0.5, 0.5, 0.5, 0.5]\n"
         "tau:\n"
         "  name: root\n"

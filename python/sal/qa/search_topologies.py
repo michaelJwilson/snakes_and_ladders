@@ -35,9 +35,9 @@ from sal.sim.tree import Node, preorder
 
 
 def _fitted(
-    topology: Topology, alignment: dict[str, np.ndarray], k: int, pi: np.ndarray
+    topology: Topology, alignment: dict[str, np.ndarray], n_states: int, pi: np.ndarray
 ) -> tuple[Node, float]:
-    objective = BranchLengthObjective(topology, k, pi, alignment)
+    objective = BranchLengthObjective(topology, n_states, pi, alignment)
     result = fit(objective)
     return objective.fitted_tree(result.theta), -result.value
 
@@ -62,13 +62,15 @@ def found_and_runner_up(
     dataset = simulate_tree(params, np.random.default_rng(params.seed))
     alignment = dict(dataset.alignment)
 
-    result = infer(alignment, params.k, rng=np.random.default_rng(0), moves=MoveSet.NNI)
+    result = infer(
+        alignment, params.n_states, rng=np.random.default_rng(0), moves=MoveSet.NNI
+    )
     found_key = leaf_bipartitions(result.topology)
 
     ranked = sorted(
         (
             (
-                _fitted(topology, alignment, params.k, params.pi)[1],
+                _fitted(topology, alignment, params.n_states, params.pi)[1],
                 leaf_bipartitions(topology),
                 topology,
             )
@@ -80,9 +82,11 @@ def found_and_runner_up(
     )
     runner_up_topology = ranked[0][2]
 
-    found_tree, found_score = _fitted(result.topology, alignment, params.k, params.pi)
+    found_tree, found_score = _fitted(
+        result.topology, alignment, params.n_states, params.pi
+    )
     other_tree, other_score = _fitted(
-        runner_up_topology, alignment, params.k, params.pi
+        runner_up_topology, alignment, params.n_states, params.pi
     )
     # A split present in one and absent from the other: what the likelihood
     # difference is actually about.

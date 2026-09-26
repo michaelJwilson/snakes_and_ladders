@@ -61,7 +61,7 @@ def _dataset(
     dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=n_sites)
     return (
         params.tau,
-        params.k,
+        params.n_states,
         params.pi,
         dataset.alignment,
         pruning_torch.branch_lengths_from_tree(params.tau),

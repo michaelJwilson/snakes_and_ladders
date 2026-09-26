@@ -24,7 +24,7 @@ coupling: 0.7
 # can border another favouring the same state.
 tiles:
   seed: 1050
-  k: 16
+  n_tiles: 16
 
 # The ten states in order, then the first six again: every state planted at
 # least once, so the optimum can use all ten.

@@ -65,7 +65,7 @@ def _objective(
     params, alignment = simulated_alignment(fixture, sites)
     return BranchLengthObjective(
         params.tau,
-        params.k,
+        params.n_states,
         params.pi,
         alignment,
         gradient=gradient,
@@ -103,7 +103,7 @@ def test_the_two_branches_below_a_rooted_root_are_confounded() -> None:
         candidate[second] = total * (1.0 - fraction)
         return float(
             pruning_torch.log_likelihood(
-                params.tau, params.k, params.pi, alignment, candidate
+                params.tau, params.n_states, params.pi, alignment, candidate
             )
         )
 
@@ -130,7 +130,7 @@ def test_two_non_root_siblings_are_not_confounded() -> None:
         candidate[second] = total * (1.0 - fraction)
         return float(
             pruning_torch.log_likelihood(
-                params.tau, params.k, params.pi, alignment, candidate
+                params.tau, params.n_states, params.pi, alignment, candidate
             )
         )
 
@@ -172,7 +172,7 @@ def test_fitting_the_root_branches_separately_has_no_intervals() -> None:
     # it. This is what the merged parameterization exists to avoid, and the
     # reason it is not merely a tidier way to count parameters.
     params, alignment = simulated_alignment(EIGHT_TAXA, _SITES)
-    naive = _Unmerged(params.tau, params.k, params.pi, alignment)
+    naive = _Unmerged(params.tau, params.n_states, params.pi, alignment)
     result = fit(naive)
 
     with pytest.raises(ValueError, match="not identifiable"):
@@ -300,7 +300,7 @@ def test_branch_length_intervals_cover_at_the_nominal_rate() -> None:
             n_sites=_SITES,
         )
         objective = BranchLengthObjective(
-            params.tau, params.k, params.pi, dict(dataset.alignment)
+            params.tau, params.n_states, params.pi, dict(dataset.alignment)
         )
         if truth is None:
             truth = torch.exp(objective.theta_from_truth(params.tau))
@@ -338,14 +338,14 @@ def _gtr_objective(
     rate = gtr_rate_matrix(_TRUE_EXCHANGEABILITIES, _TRUE_PI)
     dataset = simulate_alignment(
         tau=params.tau,
-        k=params.k,
+        n_states=params.n_states,
         pi=_TRUE_PI,
         rng=np.random.default_rng(params.seed + 7919 * seed_offset),
         n_sites=sites,
         rate_matrix=rate,
     )
     objective = SubstitutionModelObjective(
-        params.tau, params.k, dict(dataset.alignment)
+        params.tau, params.n_states, dict(dataset.alignment)
     )
     truth = objective.theta_from_truth(params.tau, _TRUE_EXCHANGEABILITIES, _TRUE_PI)
     return objective, truth
@@ -383,7 +383,7 @@ def test_the_starting_point_is_exactly_jukes_cantor() -> None:
     objective, _ = _gtr_objective(sites=200)
     assert_allclose(
         objective.rate_matrix(objective.initial()).detach().numpy(),
-        jc_rate_matrix(params.k),
+        jc_rate_matrix(params.n_states),
         atol=1e-15,
     )
 
@@ -466,7 +466,7 @@ def test_fitting_jc_simulated_data_recovers_a_jc_like_model() -> None:
     # Jukes-Cantor, the general model must not invent structure. Stated in
     # standard errors so it transfers if the fixture size changes.
     params, alignment = simulated_alignment(SMALL_SITES, _GTR_SITES)
-    objective = SubstitutionModelObjective(params.tau, params.k, alignment)
+    objective = SubstitutionModelObjective(params.tau, params.n_states, alignment)
     result = fit(objective)
     estimate = objective.constrain(result.theta)
     error = constrained_standard_errors(objective, result.theta)
@@ -475,7 +475,7 @@ def test_fitting_jc_simulated_data_recovers_a_jc_like_model() -> None:
     deviation = (free - torch.ones_like(free)).abs() / error["exchangeabilities"][:-1]
     assert float(deviation.max()) < 4.0
 
-    uniform = torch.full((params.k,), 1.0 / params.k, dtype=torch.float64)
+    uniform = torch.full((params.n_states,), 1.0 / params.n_states, dtype=torch.float64)
     pi_deviation = (estimate["pi"] - uniform).abs() / error["pi"]
     assert float(pi_deviation.max()) < 4.0
 
@@ -622,7 +622,7 @@ def test_an_unknown_gradient_route_is_refused() -> None:
     with pytest.raises(ValueError, match="gradient is one of"):
         BranchLengthObjective(
             params.tau,
-            params.k,
+            params.n_states,
             params.pi,
             {leaf: np.zeros(4, dtype=np.int64) for leaf in ("A", "B", "C", "D")},
             gradient="adjoint",  # type: ignore[arg-type]

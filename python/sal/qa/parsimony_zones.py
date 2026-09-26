@@ -118,7 +118,11 @@ def zone_gaps(rng: np.random.Generator) -> dict[str, np.ndarray]:
         for row, n_sites in enumerate(SITE_COUNTS):
             for replicate in range(REPLICATES):
                 dataset = simulate_alignment(
-                    tau=tau, k=_ZONE_STATES, pi=uniform, rng=zone_rng, n_sites=n_sites
+                    tau=tau,
+                    n_states=_ZONE_STATES,
+                    pi=uniform,
+                    rng=zone_rng,
+                    n_sites=n_sites,
                 )
                 wrong = fitch_score(
                     LONG_BRANCH_GROUPING, dataset.alignment, _ZONE_STATES
@@ -167,20 +171,20 @@ def ranking(params: SimulationParams) -> Ranking:
     alignment = dict(dataset.alignment)
     scores = np.array(
         sorted(
-            fitch_score(topology, alignment, params.k)
+            fitch_score(topology, alignment, params.n_states)
             for topology in enumerate_topologies(sorted(alignment))
         )
     )
     result = parsimony_search(
         alignment,
-        params.k,
+        params.n_states,
         moves=MoveSet.NNI,
         rng=np.random.default_rng(params.seed),
         max_evaluations=SEARCH_BUDGET,
     )
     return Ranking(
         scores=scores,
-        truth=fitch_score(params.tau, alignment, params.k),
+        truth=fitch_score(params.tau, alignment, params.n_states),
         found=int(result.score),
         evaluations=result.evaluations,
         found_truth=leaf_bipartitions(result.topology) == leaf_bipartitions(params.tau),

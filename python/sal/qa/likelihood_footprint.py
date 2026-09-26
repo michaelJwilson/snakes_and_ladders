@@ -130,7 +130,7 @@ def measure(n_taxa: int, n_sites: int, n_states: int) -> tuple[float, float]:
 
     tracemalloc.start()
     dataset = simulate_alignment(
-        tau=tau, k=n_states, pi=pi, rng=np.random.default_rng(1), n_sites=n_sites
+        tau=tau, n_states=n_states, pi=pi, rng=np.random.default_rng(1), n_sites=n_sites
     )
     _, simulate_peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
@@ -239,7 +239,7 @@ def build_table(params: SimulationParams) -> tuple[str, str]:
     tuple[str, str]
         The ``tabular`` body and the caption.
     """
-    return render_footprint(params.k), build_caption(params.k)
+    return render_footprint(params.n_states), build_caption(params.n_states)
 
 
 def main(argv: list[str] | None = None) -> QATable:
