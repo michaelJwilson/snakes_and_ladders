@@ -169,6 +169,27 @@ def test_a_decoded_labelling_is_never_better_than_the_bound() -> None:
         assert certificate.gap >= -1e-9
 
 
+@pytest.mark.analytic
+@pytest.mark.potts_lattice
+def test_the_tolerance_is_the_one_it_hard_coded_and_a_looser_one_settles_sooner() -> (
+    None
+):
+    # Issue #1091 lifted the 1e-12 out of the loop: at that value the run is
+    # the default's, bitwise; a looser one settles in no more sweeps, and
+    # the bound it certifies stays a lower bound.
+    graph = triangular_lattice_graph((3, 3), BoundaryCondition.OPEN, -0.8)
+    ground = _ground_state(graph)
+
+    default = dual_bound(graph, FIELD, max_iterations=300)
+    spelled = dual_bound(graph, FIELD, max_iterations=300, tolerance=1e-12)
+    loose = dual_bound(graph, FIELD, max_iterations=300, tolerance=1e-3)
+
+    assert spelled.bound == default.bound
+    assert spelled.iterations == default.iterations
+    assert loose.iterations <= default.iterations
+    assert loose.bound <= ground + 1e-9
+
+
 @pytest.mark.oracle
 @pytest.mark.frustrated_lattice
 def test_triangles_tighten_what_the_pairwise_relaxation_cannot_see() -> None:
