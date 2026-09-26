@@ -154,7 +154,7 @@ def value_iteration[S, A](
     start: S,
     *,
     residual: float = DEFAULT_RESIDUAL,
-    max_sweeps: int = DEFAULT_SWEEPS,
+    max_iterations: int = DEFAULT_SWEEPS,
 ) -> ValueFunction[S]:
     """``V*`` by sweeping the Bellman optimality operator, undiscounted.
 
@@ -173,7 +173,7 @@ def value_iteration[S, A](
         The state the reachable set is taken from.
     residual : float
         Stopping tolerance on the largest single-sweep change.
-    max_sweeps : int
+    max_iterations : int
         Sweeps before refusing.
 
     Returns
@@ -183,14 +183,14 @@ def value_iteration[S, A](
     Raises
     ------
     SweepError
-        If the residual is still above ``residual`` at ``max_sweeps``. A
+        If the residual is still above ``residual`` at ``max_iterations``. A
         cycle of positive reward makes the undiscounted optimum unbounded and
         this is where that shows, loudly.
     """
     states = reachable_states(environment, start)
     values: dict[S, float] = dict.fromkeys(states, 0.0)
     last = 0.0
-    for sweep in range(1, max_sweeps + 1):
+    for sweep in range(1, max_iterations + 1):
         largest = 0.0
         for state in states:
             if environment.is_terminal(state):
@@ -204,7 +204,7 @@ def value_iteration[S, A](
         last = largest
         if largest <= residual:
             return ValueFunction(values=values, sweeps=sweep, residual=largest)
-    raise SweepError(max_sweeps, last, residual)
+    raise SweepError(max_iterations, last, residual)
 
 
 def shortest_path_length[S, A](

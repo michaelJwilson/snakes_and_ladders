@@ -35,7 +35,7 @@ import numpy as np
 from sal.backend import Backend, twin
 from sal.incidence import SparseIncidence
 from sal.sim.graph import PottsGraph
-from sal.sim.potts import energy, site_field
+from sal.sim.potts import SiteField, energy, log_weight_of, site_field
 
 
 @dataclass(frozen=True)
@@ -472,7 +472,10 @@ def check_non_negative_couplings(graph: PottsGraph, reason: str) -> None:
 
 
 def ising_ground_state(
-    graph: PottsGraph, field_values: np.ndarray, *, backend: Backend = Backend.PYTHON
+    graph: PottsGraph,
+    field: SiteField | np.ndarray,
+    *,
+    backend: Backend = Backend.PYTHON,
 ) -> GroundState:
     """The exact minimum-energy configuration of a two-state ferromagnet.
 
@@ -493,7 +496,7 @@ def ising_ground_state(
     ----------
     graph : PottsGraph
         Every coupling must be non-negative.
-    field_values : np.ndarray
+    field : SiteField | np.ndarray
         ``(2,)`` or ``(n_nodes, 2)``. A **uniform** field makes the
         ferromagnetic ground state trivial: every coupling favours agreement
         and every site prefers the same state, so the answer is
@@ -520,11 +523,10 @@ def ising_ground_state(
         is the submodularity boundary: the problem is NP-hard there and this
         returns nothing rather than a lattice-shaped wrong answer.
     """
+    field = log_weight_of(field)
     if (rust := twin("ising_ground_state", backend, __name__)) is not None:
-        return cast("GroundState", rust.ising_ground_state(graph, field_values))
-    values = site_field(
-        np.asarray(field_values, dtype=float), graph.n_nodes, n_states=2
-    )
+        return cast("GroundState", rust.ising_ground_state(graph, field))
+    values = site_field(np.asarray(field, dtype=float), graph.n_nodes, n_states=2)
     check_non_negative_couplings(
         graph,
         "a negative coupling makes the energy non-submodular, the ground "
@@ -548,7 +550,9 @@ def ising_ground_state(
     return GroundState(configuration, energy(graph, values, configuration))
 
 
-def cut_energy(graph: PottsGraph, field_values: np.ndarray, cut_value: float) -> float:
+def cut_energy(
+    graph: PottsGraph, field: SiteField | np.ndarray, cut_value: float
+) -> float:
     """The energy a cut of capacity ``cut_value`` corresponds to.
 
     Separated so a test can check the reduction's arithmetic against the
@@ -556,8 +560,7 @@ def cut_energy(graph: PottsGraph, field_values: np.ndarray, cut_value: float) ->
     agree; if they do not, the construction is wrong in a way that reading the
     configuration back and scoring it would hide.
     """
-    values = site_field(
-        np.asarray(field_values, dtype=float), graph.n_nodes, n_states=2
-    )
+    field = log_weight_of(field)
+    values = site_field(np.asarray(field, dtype=float), graph.n_nodes, n_states=2)
     offsets = (-values).min(axis=1)
     return cut_value + float(offsets.sum()) - float(graph.edge_coupling.sum())

@@ -85,7 +85,7 @@ AUTOCORRELATION = 1.0
 def _four_taxa() -> tuple[dict[str, np.ndarray], int]:
     params = load_fixture(FOUR_TAXA)
     dataset = simulate_tree(params, np.random.default_rng(1), n_sites=30)
-    return dict(dataset.alignment), params.k
+    return dict(dataset.alignment), params.n_states
 
 
 def _potts_lattice() -> FactorGraph:

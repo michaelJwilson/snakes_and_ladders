@@ -108,11 +108,12 @@ if echo "$changed" | grep -q '^docs/source/' \
     docs/source "$scratch/html" -W -q
 fi
 
-if echo "$changed" | grep -qE '^(docs/nb/|python/sal/|tests/regression/fixtures/)'; then
-  # Every notebook under docs/nb/, not the ones a digest calls stale: which
-  # claims a run verifies is not a hash's decision (issue #480). The six cost
-  # the number DEV.md's budget table carries, inside the 300 s.
-  step "notebooks" uv run python infra/check_notebooks.py
+notebooks="$(echo "$changed" | python3 infra/check_notebooks.py --changed --list)"
+if [ -n "$notebooks" ]; then
+  # The notebooks the change touches, as the `notebooks` CI job selects them;
+  # every one runs at release (issue #1087).
+  # shellcheck disable=SC2086  # one path per word, by construction
+  step "notebooks" uv run python infra/check_notebooks.py $notebooks
 fi
 
 if echo "$changed" | grep -q '^docs/tex/'; then

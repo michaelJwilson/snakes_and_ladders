@@ -77,7 +77,7 @@ def _alpha_expansion(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     )
 
     def call() -> Outputs:
-        result = solver(graph, field, n_states, backend=Backend.RUST)
+        result = solver(graph, field, n_states=n_states, backend=Backend.RUST)
         return {"labelling": result.labelling, "energy": np.asarray(result.energy)}
 
     return call
