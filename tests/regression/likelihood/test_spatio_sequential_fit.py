@@ -159,7 +159,7 @@ def test_the_backward_sampler_draws_paths_from_the_posterior() -> None:
                     + density[t, path[t]]
                     for t in range(1, 3)
                 )
-                - enumerated.log_likelihood
+                - enumerated.log_evidence
             )
             for path in paths
         ]

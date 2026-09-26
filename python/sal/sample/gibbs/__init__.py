@@ -53,7 +53,9 @@ from typing import Any
 import numpy as np
 
 from sal.backend import Backend, refuse_backend
+from sal.cost import Cost
 from sal.numerics import logsumexp
+from sal.opt.termination import Termination
 from sal.sample.accept import accept
 from sal.sample.balanced import (
     draw_change,
@@ -62,7 +64,7 @@ from sal.sample.balanced import (
     log_normalizer,
     log_ratios,
 )
-from sal.sample.schedule import TempSchedule
+from sal.sample.schedule import Annealed, TempSchedule
 from sal.search.infer import score_topology
 from sal.sim.factor_graph import Factor, FactorGraph
 from sal.sim.topology import (
@@ -115,24 +117,25 @@ class GibbsChain:
     log_densities: np.ndarray
 
 
-@dataclass(frozen=True)
-class AnnealedLabelling:
-    """What annealing returns: the best state visited, and the path there.
+@dataclass(frozen=True, kw_only=True)
+class AnnealedLabelling(Annealed[np.ndarray]):
+    """What annealing returns: the best state visited, and the path there (issue #1090).
+
+    An :class:`~sal.sample.schedule.Annealed` over states: ``best`` is the state
+    of highest log-density seen, shape ``(n_variables,)``, ``final`` where
+    the chain ended, and ``spent`` the heat-bath sweeps.
 
     Parameters
     ----------
-    state : np.ndarray
-        The state of highest log-density seen, shape ``(n_variables,)``.
     log_density : float
-        Its unnormalized log-density at temperature one.
-    trajectory : np.ndarray
+        ``best``'s unnormalized log-density at temperature one.
+    trace : np.ndarray
         The log-density after every step, shape ``(n_steps + 1,)``; the first
         entry is the start.
     """
 
-    state: np.ndarray
     log_density: float
-    trajectory: np.ndarray
+    trace: np.ndarray
 
 
 # How far from a cumulative boundary a draw must land for the compiled sweep
@@ -761,7 +764,15 @@ def anneal_factor_graph(
         trajectory.append(value)
         if value > best:
             best, best_state = value, state.copy()
-    return AnnealedLabelling(best_state, best, np.array(trajectory))
+    return AnnealedLabelling(
+        best=best_state,
+        log_density=best,
+        final=state,
+        trace=np.array(trajectory),
+        spent=schedule.n_steps,
+        unit=Cost.SWEEPS,
+        termination=Termination.after(schedule.n_steps, converged=False),
+    )
 
 
 def chain_block_sweep(
@@ -843,17 +854,20 @@ def chain_block_sweep(
         state[positions[t]] = rng.choice(weights.shape[0], p=weights / weights.sum())
 
 
-@dataclass(frozen=True)
-class AnnealedTopology:
-    """What the topology move returns.
+@dataclass(frozen=True, kw_only=True)
+class AnnealedTopology(Annealed[Topology]):
+    """What the topology move returns (issue #1090).
+
+    An :class:`~sal.sample.schedule.Annealed` over topologies: ``best`` is the
+    topology of highest fitted log-likelihood visited, ``final`` where the
+    walk ended, and ``spent`` the topologies this run fitted, the cache
+    hits being free.
 
     Parameters
     ----------
-    topology : Topology
-        The topology of highest fitted log-likelihood visited.
     log_likelihood : float
-        Its fitted log-likelihood.
-    trajectory : np.ndarray
+        ``best``'s fitted log-likelihood.
+    trace : np.ndarray
         The current topology's fitted log-likelihood after every step.
     acceptance : float
         The fraction of proposals accepted.
@@ -862,9 +876,8 @@ class AnnealedTopology:
         once per topology however often the chain returns to it.
     """
 
-    topology: Topology
     log_likelihood: float
-    trajectory: np.ndarray
+    trace: np.ndarray
     acceptance: float
     scores: Mapping[frozenset[frozenset[str]], float]
 
@@ -895,6 +908,7 @@ def anneal_topology(
     calls, since the fit is the whole cost.
     """
     cache = {} if scores is None else scores
+    fitted_before = len(cache)
     score = cached_topology_score(alignment, n_states, cache, model=model)
     current, value = start, score(start)
     best, best_value = current, value
@@ -909,7 +923,15 @@ def anneal_topology(
                 best, best_value = current, value
         trajectory.append(value)
     return AnnealedTopology(
-        best, best_value, np.array(trajectory), accepted / schedule.n_steps, cache
+        best=best,
+        log_likelihood=best_value,
+        final=current,
+        trace=np.array(trajectory),
+        acceptance=accepted / schedule.n_steps,
+        scores=cache,
+        spent=len(cache) - fitted_before,
+        unit=Cost.FITS,
+        termination=Termination.after(schedule.n_steps, converged=False),
     )
 
 

@@ -95,14 +95,17 @@ from sal.search.icm import (
     SweepOrder,
     check_min_sites,
     iterated_conditional_modes,
+    merge_small_labels,
 )
 from sal.sim.factor_graph import from_potts
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from sal.sim.potts import (
+    SiteField,
     SpatioOnlyParams,
     check_labelling,
     critical_coupling,
     energy,
+    log_weight_of,
     spatio_only_field,
 )
 
@@ -646,9 +649,9 @@ def run_annealed(
         start=start,
     )
     return MethodRun(
-        labelling=run.labelling,
+        labelling=run.best,
         energy=run.energy,
-        spent=run.site_visits,
+        spent=run.spent,
         seconds=time.perf_counter() - started,
         trace=run.trace,
         # A step count fixed before the run: it ends on its budget (#1085).
@@ -659,7 +662,7 @@ def run_annealed(
 def _descend(
     problem: Problem | Rung,
     rng: np.random.Generator,
-    max_sweeps: int,
+    max_iterations: int,
     *,
     start: np.ndarray | None = None,
     backend: Backend | None = None,
@@ -678,7 +681,7 @@ def _descend(
         problem.field,
         rng,
         start=labelling,
-        max_sweeps=max_sweeps,
+        max_iterations=max_iterations,
         min_sites=min_sites,
         backend=Backend.NUMBA if backend is None else backend,
         n_states=problem.n_states,
@@ -688,7 +691,7 @@ def _descend(
 def descend(
     problem: Problem | Rung,
     rng: np.random.Generator,
-    max_sweeps: int,
+    max_iterations: int,
     *,
     start: np.ndarray | None = None,
     backend: Backend | None = None,
@@ -706,17 +709,17 @@ def descend(
     ``backend`` and ``min_sites`` are
     :func:`~sal.search.icm.iterated_conditional_modes`'s;
     ``None`` is its default backend. A floored descent draws its
-    ``max_sweeps * n_nodes`` uniforms up front, as :func:`run_icm`'s one call
+    ``max_iterations * n_nodes`` uniforms up front, as :func:`run_icm`'s one call
     does, so the labelling is the one sweep-at-a-time descents reached and
     the generator is left where one call leaves it.
 
     Returns
     -------
     tuple[np.ndarray, int]
-        The labelling, and the sweeps run, at most ``max_sweeps``.
+        The labelling, and the sweeps run, at most ``max_iterations``.
     """
     settled = _descend(
-        problem, rng, max_sweeps, start=start, backend=backend, min_sites=min_sites
+        problem, rng, max_iterations, start=start, backend=backend, min_sites=min_sites
     )
     return settled.labelling, settled.sweeps
 
@@ -746,6 +749,57 @@ def run_descent(
         spent=settled.sweeps * problem.visits_per_sweep,
         seconds=time.perf_counter() - started,
         termination=settled.termination,
+    )
+
+
+def run_merge(
+    problem: Problem | Rung,
+    budget: Budget,
+    rng: np.random.Generator,
+    *,
+    start: np.ndarray | None = None,
+    min_sites: int | None = None,
+    backend: Backend | None = None,
+) -> MethodRun:
+    """The stage after a solver that floors its labelling: ``merge(min_sites=k)`` (issue #1081).
+
+    :func:`~sal.search.icm.merge_small_labels` on the labelling the stage
+    before handed over, charged ``visits_per_sweep`` per ICM sweep it ran, as
+    :func:`run_descent` is. So ``alpha-expansion>merge(min_sites=20)`` is the
+    expansion's labelling with no class under 20 sites, at a local minimum.
+
+    Raises
+    ------
+    ValueError
+        If there is no labelling to floor --- a merge is never a first stage
+        --- or ``min_sites`` is not given.
+    """
+    if start is None:
+        msg = (
+            "'merge' floors the labelling a stage before it found; it is no first stage"
+        )
+        raise ValueError(msg)
+    if min_sites is None:
+        msg = "'merge' needs min_sites, e.g. merge(min_sites=20)"
+        raise ValueError(msg)
+    problem = _problem(problem)
+    check_min_sites(min_sites, problem.n_nodes)
+    started = time.perf_counter()
+    floored = merge_small_labels(
+        problem.graph,
+        problem.field,
+        np.array(start, dtype=np.int64),
+        rng,
+        min_sites=min_sites,
+        max_iterations=budget.size // problem.visits_per_sweep,
+        backend=Backend.NUMBA if backend is None else backend,
+    )
+    return MethodRun(
+        labelling=floored.labelling,
+        energy=floored.energy,
+        spent=floored.sweeps * problem.visits_per_sweep,
+        seconds=time.perf_counter() - started,
+        termination=floored.termination,
     )
 
 
@@ -814,7 +868,7 @@ def run_icm(
         problem.field,
         rng,
         start=start,
-        max_sweeps=steps,
+        max_iterations=steps,
         min_sites=min_sites,
         backend=Backend.NUMBA if backend is None else backend,
         n_states=problem.n_states,
@@ -861,7 +915,7 @@ def run_icm_random(
         problem.field,
         rng,
         start=start,
-        max_sweeps=steps,
+        max_iterations=steps,
         sweep_order=SweepOrder.RANDOM,
         stop_when_clean=False,
         min_sites=min_sites,
@@ -936,7 +990,7 @@ def run_tempering(
     )
     return MethodRun(
         labelling=run.best,
-        energy=run.best_energy,
+        energy=run.energy,
         spent=N_REPLICAS * per_replica * problem.visits_per_sweep,
         seconds=time.perf_counter() - started,
         termination=Termination.after(per_replica, converged=False),
@@ -963,7 +1017,7 @@ def run_alpha_expansion(
         problem.graph,
         problem.field,
         start=start,
-        max_cycles=cycles,
+        max_iterations=cycles,
         backend=Backend.RUST,
         n_states=problem.n_states,
     )
@@ -1002,7 +1056,7 @@ def run_alpha_beta_swap(
         problem.graph,
         problem.field,
         start=start,
-        max_cycles=cycles,
+        max_iterations=cycles,
         backend=Backend.RUST,
         n_states=problem.n_states,
     )
@@ -1159,8 +1213,9 @@ FLOORED = frozenset({"icm", "icm-random"})
 _ANNEALED_METHODS = frozenset({"anneal", "swendsen-wang", "wolff"})
 
 #: Parts a chain can name beside :data:`METHODS` and :data:`ARMS`: the warm
-#: chain's descent, which charges only the sweeps it ran (issue #1077).
-STAGES: dict[str, Method] = {"descent": run_descent}
+#: chain's descent, which charges only the sweeps it ran (issue #1077), and
+#: the merge that floors a labelling after any solver (issue #1081).
+STAGES: dict[str, Method] = {"descent": run_descent, "merge": run_merge}
 
 #: Separates the parts of a chain in a method name.
 CHAIN = ">"
@@ -1168,7 +1223,7 @@ CHAIN = ">"
 
 def _options(name: str) -> frozenset[str]:
     """The keyword options the part ``name`` takes: an arm's are an anneal's."""
-    if name in FLOORED:
+    if name in FLOORED or name == "merge":
         return DESCENT_OPTIONS
     if name in _ANNEALED_METHODS:
         return ANNEAL_OPTIONS
@@ -1702,7 +1757,7 @@ ANNEALED = _ANNEALED_METHODS | frozenset(ARMS)
 
 def ground_state(
     graph: PottsGraph,
-    field: np.ndarray,
+    field: SiteField | np.ndarray,
     method: str | SolverChain | SolverRealizations | Then | BestOf,
     budget: Budget,
     rng: np.random.Generator,
@@ -1734,7 +1789,7 @@ def ground_state(
     ----------
     graph : PottsGraph
         The lattice; every coupling non-negative.
-    field : np.ndarray
+    field : SiteField | np.ndarray
         ``h``, shape ``(n_nodes, n_states)``.
     method : str | SolverChain | Then
         A key of :data:`METHODS` or :data:`ARMS`; the text of a
@@ -1777,6 +1832,7 @@ def ground_state(
         is given to a method that runs no anneal, or ``backend`` or
         ``min_sites > 0`` to one outside :data:`FLOORED`.
     """
+    field = log_weight_of(field)
     solvers = METHODS | ARMS
     solver: Callable[..., MethodRun]
     if isinstance(method, Then | BestOf | SolverChain | SolverRealizations):
@@ -1823,8 +1879,12 @@ def ground_state(
         keywords["schedule"] = schedule
     if steps is not None:
         keywords["steps"] = steps
-    if takes & DESCENT_OPTIONS:
+    # Only what the caller gave: a default forwarded would override the
+    # argument a stage was built with, `icm(min_sites=5)`'s floor or
+    # `merge(min_sites=20)`'s (issue #1081).
+    if backend is not None:
         keywords["backend"] = backend
+    if min_sites != 0:
         keywords["min_sites"] = min_sites
     return solver(problem, budget, rng, start=start, **keywords)
 

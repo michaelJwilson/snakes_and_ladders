@@ -37,7 +37,7 @@ from sal.opt.mixture import (
     emission_mixture_plus_plus,
     kmeans_plus_plus,
     optimal_clustering_cost,
-    responsibilities,
+    responsibilities_torch,
     uniform_seeds,
 )
 from sal.opt.objective import Objective
@@ -329,14 +329,14 @@ def seed_hmc(instance: Instance, rng: np.random.Generator) -> Seeding:
         max(1, BUDGET.size // PER_PROPOSAL),
         step_size=STEP_SIZE,
         n_steps=N_STEPS,
-        theta0=_theta_at(instance, objective, start.components),
+        start=_theta_at(instance, objective, start.components),
         temperature=chain_temperature(instance),
     )
     # One mode's lowest-valued draw, components ordered by `_from_theta`.
     values = torch.stack([objective(draw) for draw in chain.draws])
     return Seeding(
         _from_theta(instance, objective, chain.draws[int(values.argmin())]),
-        2.0 * (chain.force_evaluations + chain.draws.shape[0]) * instance.n_components,
+        2.0 * (chain.spent + chain.draws.shape[0]) * instance.n_components,
         acceptance=chain.acceptance_rate,
     )
 
@@ -353,11 +353,11 @@ def seed_tempering(instance: Instance, rng: np.random.Generator) -> Seeding:
         max(1, BUDGET.size // (PER_PROPOSAL * len(LADDER))),
         step_size=STEP_SIZE,
         n_steps=N_STEPS,
-        theta0=_theta_at(instance, objective, start.components),
+        start=_theta_at(instance, objective, start.components),
     )
     return Seeding(
-        _from_theta(instance, objective, run.theta),
-        2.0 * run.force_evaluations * instance.n_components,
+        _from_theta(instance, objective, run.best),
+        2.0 * run.spent * instance.n_components,
         acceptance=float(run.acceptance_rate[0]),
         swap_acceptance=float(run.swap_acceptance.min()),
     )
@@ -376,11 +376,11 @@ def seed_anneal(instance: Instance, rng: np.random.Generator) -> Seeding:
         torch.Generator().manual_seed(int(rng.integers(2**31 - 1))),
         step_size=STEP_SIZE,
         n_steps=N_STEPS,
-        theta0=_theta_at(instance, objective, start.components),
+        start=_theta_at(instance, objective, start.components),
     )
     return Seeding(
-        _from_theta(instance, objective, run.theta),
-        2.0 * run.force_evaluations * instance.n_components,
+        _from_theta(instance, objective, run.best),
+        2.0 * run.spent * instance.n_components,
         acceptance=run.acceptance_rate,
     )
 
@@ -438,7 +438,7 @@ def fit_from(instance: Instance, seeding: Seeding, iterations: int) -> Fitted:
         )
     return Fitted(
         -run.log_likelihood,
-        run.iterations,
+        run.termination.iterations,
         seeding.evaluations(),
         label_recovery(instance, run.responsibilities),
         seeding.acceptance,
@@ -453,7 +453,7 @@ def bayes_recovery(instance: Instance) -> float:
     """
     return label_recovery(
         instance,
-        responsibilities(
+        responsibilities_torch(
             torch.as_tensor(instance.observations, dtype=torch.float64),
             torch.log(torch.as_tensor(instance.truth.weights, dtype=torch.float64)),
             instance.truth.components,
@@ -518,7 +518,7 @@ def recovered(instance: Instance, objective: Objective, theta: torch.Tensor) -> 
     named = objective.constrain(theta)
     return label_recovery(
         instance,
-        responsibilities(
+        responsibilities_torch(
             objective.observations, named["log_weight"], objective.components(theta)
         ),
     )

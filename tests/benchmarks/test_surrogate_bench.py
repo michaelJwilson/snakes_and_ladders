@@ -30,9 +30,9 @@ from sal.likelihood.surrogate import (
     PlugInLikelihood,
     decoupled_ground_energy,
     decoupled_log_partition,
-    mean_field_log_partition,
+    mean_field_log_partition_torch,
     saturated_log_partition,
-    spanning_tree_log_partition,
+    spanning_tree_log_partition_torch,
 )
 from sal.search.infer import score_topology
 from sal.sim.graph import BoundaryCondition, lattice_graph
@@ -80,7 +80,7 @@ def test_learned_tree_prediction_benchmark(benchmark: BenchmarkFixture) -> None:
         MLPSurrogate(examples.features.shape[1]),
         examples,
         examples,
-        generator=torch.Generator().manual_seed(0),
+        rng=torch.Generator().manual_seed(0),
         max_epochs=20,
     )
     surrogate = LearnedTreeSurrogate(fitted, k, pi)
@@ -96,9 +96,9 @@ def test_lattice_log_partition_benchmark(
         assert np.isfinite(benchmark(enumerate_potts, graph, FIELD).log_partition)
         return
     bound = (
-        mean_field_log_partition
+        mean_field_log_partition_torch
         if kind == "mean_field"
-        else spanning_tree_log_partition
+        else spanning_tree_log_partition_torch
     )
     assert torch.isfinite(benchmark(bound, graph, torch.as_tensor(FIELD)))
 
@@ -109,8 +109,8 @@ def test_lattice_log_partition_benchmark(
 def test_per_site_field_bound_benchmark(benchmark: BenchmarkFixture, kind: str) -> None:
     graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.7)
     bound = {
-        "mean_field": mean_field_log_partition,
-        "spanning_tree": spanning_tree_log_partition,
+        "mean_field": mean_field_log_partition_torch,
+        "spanning_tree": spanning_tree_log_partition_torch,
         "decoupled": decoupled_log_partition,
         "saturated": saturated_log_partition,
         "ground_energy": decoupled_ground_energy,

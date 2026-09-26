@@ -54,7 +54,7 @@ from sal.opt.mixture import (
     emission_mixture_plus_plus,
     kmeans_plus_plus,
     mixture_log_likelihood,
-    responsibilities,
+    responsibilities_torch,
     uniform_seeds,
 )
 from sal.opt.objective import Objective
@@ -86,8 +86,6 @@ class EmissionMixtureFit:
     log_likelihood : float
         The log-likelihood at the returned parameters. A probability, since
         every count family is discrete, so it is at most zero.
-    iterations : int
-        EM iterations run.
     at_boundary : bool
         Whether a component's M step reached the edge of the range this data
         identifies its parameter over --- a flat likelihood in a dispersion or
@@ -95,15 +93,14 @@ class EmissionMixtureFit:
         #122).
     termination : Termination | None
         Whether the loop met its relative tolerance or ran out of iterations,
-        in the form every result states it in (issue #860). ``iterations``
-        stays: it is what this result has always been read by.
+        in the form every result states it in (issue #860); its
+        ``iterations`` are the EM iterations run (issue #1090).
     """
 
     weights: torch.Tensor
     components: EmissionFamily
     responsibilities: torch.Tensor
     log_likelihood: float
-    iterations: int
     at_boundary: bool
     termination: Termination = dataclass_field(kw_only=True)
 
@@ -118,7 +115,7 @@ def expectation_maximization(
 ) -> EmissionMixtureFit:
     """Fit a mixture of count emissions by EM.
 
-    The E step is :func:`sal.opt.mixture.responsibilities` and
+    The E step is :func:`sal.opt.mixture.responsibilities_torch` and
     the M step is the family's own :meth:`reestimate`: independent
     observations carry no message between them, and the family receives the
     posterior an HMM's forward--backward pass would hand it. The alternation
@@ -233,7 +230,6 @@ def expectation_maximization(
         components=components,
         responsibilities=posterior,
         log_likelihood=log_likelihood,
-        iterations=termination.iterations,
         at_boundary=boundary,
         termination=termination,
     )
@@ -255,12 +251,12 @@ def responsibilities_at(
 ) -> np.ndarray:
     """The E step at ``weights`` and ``components``, shape ``(n_samples, K)``, as an array.
 
-    :func:`sal.opt.mixture.responsibilities` on the observations
+    :func:`sal.opt.mixture.responsibilities_torch` on the observations
     as float64 and ``log(weights)``, read out once (issue #1011).
     """
     values = torch.as_tensor(observations, dtype=torch.float64)
     log_weight = torch.log(torch.as_tensor(weights, dtype=torch.float64))
-    return responsibilities(values, log_weight, components).detach().numpy()
+    return responsibilities_torch(values, log_weight, components).detach().numpy()
 
 
 def partial_expectation_maximization(
@@ -427,7 +423,6 @@ def _cell_expectation_maximization(
         components=components,
         responsibilities=responsibilities,
         log_likelihood=log_likelihood,
-        iterations=termination.iterations,
         at_boundary=boundary,
         termination=termination,
     )
@@ -440,7 +435,7 @@ def enumerated_posterior(
 ) -> torch.Tensor:
     """``P(component | observations)`` summed over every joint labelling.
 
-    The independent answer :func:`sal.opt.mixture.responsibilities`
+    The independent answer :func:`sal.opt.mixture.responsibilities_torch`
     is refereed against, sharing no line with it: the responsibilities
     normalize each observation's row on its own, while this scores each of the
     ``K ** N`` labellings of the whole dataset, normalizes over all of them,

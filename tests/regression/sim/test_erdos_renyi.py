@@ -66,7 +66,7 @@ def test_belief_propagation_is_exact_on_every_acyclic_draw() -> None:
         exact = enumerate_potts(graph, FIELD)
         result = belief_propagation(graph, FIELD)
 
-        deviation = abs(result.bethe_log_partition - exact.log_partition) / abs(
+        deviation = abs(result.log_partition - exact.log_partition) / abs(
             exact.log_partition
         )
         assert deviation < RELATIVE_TOLERANCE
@@ -116,7 +116,7 @@ def test_the_deviation_on_a_cyclic_draw_is_reported_not_asserted() -> None:
         except ConvergenceError:
             continue
 
-        deviation = abs(result.bethe_log_partition - exact.log_partition) / abs(
+        deviation = abs(result.log_partition - exact.log_partition) / abs(
             exact.log_partition
         )
         assert deviation < 5e-2

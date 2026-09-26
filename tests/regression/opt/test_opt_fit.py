@@ -106,7 +106,7 @@ def test_a_supplied_starting_point_is_used() -> None:
     # With no budget the fit must hand back exactly what it was given, which
     # is the only way to show the starting point is honoured rather than
     # coincidentally reached.
-    held = fit(objective, theta0=truth, max_iterations=0)
+    held = fit(objective, start=truth, max_iterations=0)
     assert torch.equal(held.theta, truth)
     assert not held.converged
     assert held.iterations == 0
@@ -117,7 +117,7 @@ def test_a_supplied_starting_point_is_used() -> None:
 def test_the_potts_optimum_does_not_depend_on_the_starting_point() -> None:
     objective, truth = _potts_objective()
     assert_allclose(
-        fit(objective, theta0=truth).theta.numpy(),
+        fit(objective, start=truth).theta.numpy(),
         fit(objective).theta.numpy(),
         rtol=1e-7,
     )

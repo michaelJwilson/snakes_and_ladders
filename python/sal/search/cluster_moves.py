@@ -82,8 +82,8 @@ def run_cluster_tempering(
     )
     return MethodRun(
         labelling=run.best,
-        energy=run.best_energy,
-        spent=run.site_visits,
+        energy=run.energy,
+        spent=run.spent,
         seconds=time.perf_counter() - started,
         trace=(counter,),
         # A step count fixed before the run: it ends on its budget (#1085).

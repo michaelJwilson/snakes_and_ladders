@@ -89,7 +89,9 @@ def test_both_chains_recover_the_exact_mean_within_monte_carlo_error() -> None:
     gaussian = target()
     exact_sd = torch.sqrt(torch.diagonal(gaussian.covariance))
     for chain in (ADAPTED, FIXED):
-        standard_error = exact_sd / torch.sqrt(effective_sample_size(chain.draws))
+        standard_error = exact_sd / torch.sqrt(
+            torch.from_numpy(effective_sample_size(chain.draws))
+        )
         deviation = torch.abs(chain.draws.mean(dim=0) - gaussian.mean)
 
         assert bool(torch.all(deviation < 4.0 * standard_error)), (
@@ -102,7 +104,7 @@ def test_the_warm_up_repays_its_discarded_draws() -> None:
     # The caption's claim, asserted: the adapted chain buys more effective
     # draws per gradient than the fixed one *after* being charged for the
     # gradients its warm-up spent.
-    assert ADAPTED.force_evaluations > FIXED.force_evaluations
+    assert ADAPTED.spent > FIXED.spent
 
     assert _ess_per_gradient(ADAPTED) > _ess_per_gradient(FIXED)
 

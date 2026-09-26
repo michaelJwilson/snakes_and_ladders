@@ -147,7 +147,7 @@ def test_hamiltonian_tempering_reads_both_spellings_to_the_same_positions() -> N
         hmc.parallel_tempering(
             objective,
             spelling,
-            generator=torch.Generator().manual_seed(4),
+            rng=torch.Generator().manual_seed(4),
             n_rounds=5,
             step_size=0.05,
             n_steps=3,
@@ -156,7 +156,7 @@ def test_hamiltonian_tempering_reads_both_spellings_to_the_same_positions() -> N
     ]
 
     assert torch.equal(runs[0].positions, runs[1].positions)
-    assert torch.equal(runs[0].swap_acceptance, runs[1].swap_acceptance)
+    assert np.array_equal(runs[0].swap_acceptance, runs[1].swap_acceptance)
 
 
 @pytest.mark.analytic

@@ -26,6 +26,7 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 
+from sal.cost import Cost
 from sal.learn.critic import (
     Critic,
     fit_critic,
@@ -33,19 +34,21 @@ from sal.learn.critic import (
     state_values,
 )
 from sal.learn.environment import Environment, Episode
-from sal.learn.policy import EpsilonGreedyPolicy, TrainablePolicy
+from sal.learn.policy import EpsilonGreedyPolicy, TrainablePolicy, TrainingRun
 from sal.learn.rollout import log_probabilities_of, rollout
+from sal.opt.termination import Termination
 from sal.sample.schedule import TempSchedule
 
 
-@dataclass(frozen=True)
-class PPOTraining:
-    """The outcome of a PPO run: the same diagnostics as the actor-critic, plus the clipped fraction."""
+@dataclass(frozen=True, kw_only=True)
+class PPOTraining(TrainingRun):
+    """The outcome of a PPO run: the actor-critic's diagnostics, plus the clipped fraction (issue #1090).
 
-    mean_returns: tuple[float, ...]
+    A :class:`~sal.learn.policy.TrainingRun`, ``spent`` in episodes.
+    """
+
     critic_losses: tuple[float, ...]
     clipped_fraction: tuple[float, ...]
-    episodes: int
 
 
 def generalized_advantages(
@@ -258,10 +261,12 @@ def ppo[S, A](
             float(np.mean([episode.total_reward for episode in episodes]))
         )
     return PPOTraining(
-        tuple(mean_returns),
-        tuple(critic_losses),
-        tuple(clipped_fraction),
-        iterations * batch,
+        mean_returns=tuple(mean_returns),
+        critic_losses=tuple(critic_losses),
+        clipped_fraction=tuple(clipped_fraction),
+        spent=iterations * batch,
+        unit=Cost.EPISODES,
+        termination=Termination.after(iterations, converged=False),
     )
 
 

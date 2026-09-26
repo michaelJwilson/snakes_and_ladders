@@ -35,9 +35,11 @@ from itertools import accumulate
 import numpy as np
 import torch
 
+from sal.cost import Cost
 from sal.learn.environment import Environment, Episode
-from sal.learn.policy import LinearPolicy
+from sal.learn.policy import LinearPolicy, TrainingRun
 from sal.learn.rollout import rollout, taken_log_probabilities
+from sal.opt.termination import Termination
 
 # Adam rather than plain SGD, for the reason the baseline exists: the
 # gradient's scale is set by the objective's units, which differ between
@@ -46,26 +48,24 @@ from sal.learn.rollout import rollout, taken_log_probabilities
 _DEFAULT_LEARNING_RATE = 0.05
 
 
-@dataclass(frozen=True)
-class Training:
-    """The outcome of a training run.
+@dataclass(frozen=True, kw_only=True)
+class Training(TrainingRun):
+    """The outcome of a REINFORCE run: a :class:`~sal.learn.policy.TrainingRun` and the weights (issue #1090).
+
+    ``spent`` is the episodes sampled, which is what the budget counts.
 
     Parameters
     ----------
     weights : np.ndarray
         The learned policy parameters, shape ``(n_features,)``.
-    mean_returns : tuple[float, ...]
-        Mean sampled return per iteration. A diagnostic, *not* a result: it
-        is a Monte Carlo estimate under a changing policy, so a rising curve
-        is consistent with a broken estimator. The claim worth making is
-        against the enumerated ``J`` in :mod:`sal.learn.exact`.
-    episodes : int
-        Total episodes sampled, which is what the budget counts.
+
+    ``mean_returns`` is a diagnostic, *not* a result: a Monte Carlo estimate
+    under a changing policy, so a rising curve is consistent with a broken
+    estimator. The claim worth making is against the enumerated ``J`` in
+    :mod:`sal.learn.exact`.
     """
 
     weights: np.ndarray
-    mean_returns: tuple[float, ...]
-    episodes: int
 
 
 def surrogate_loss[S, A](
@@ -208,5 +208,7 @@ def reinforce[S, A](
     return Training(
         weights=policy.weights.detach().numpy().copy(),
         mean_returns=tuple(mean_returns),
-        episodes=iterations * batch,
+        spent=iterations * batch,
+        unit=Cost.EPISODES,
+        termination=Termination.after(iterations, converged=False),
     )

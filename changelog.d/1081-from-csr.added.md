@@ -1,0 +1,1 @@
+`PottsGraph.from_csr(indptr, indices, coupling)` builds a graph from a symmetric CSR adjacency, keeping each undirected edge once and refusing an asymmetric or self-looped input. `PottsGraph` checks its edges' node range with NumPy rather than a Python loop (#1081).

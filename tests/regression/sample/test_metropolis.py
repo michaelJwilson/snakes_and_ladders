@@ -98,7 +98,7 @@ def test_both_warm_ups_settle_on_the_target_acceptance() -> None:
         chain = _chain(backend, n=4_000, adaptation=adaptation, store_chain=False)
         assert chain.adapted is not None
         assert chain.adapted.force_evaluations == 2_000
-        assert chain.force_evaluations == 6_000
+        assert chain.spent == 6_000
         rates.append(chain.acceptance_rate)
     assert abs(rates[0] - metropolis.RWM_TARGET_ACCEPTANCE) < 0.05
     assert abs(rates[0] - rates[1]) < 0.03
@@ -178,10 +178,10 @@ def test_the_compiled_route_is_reproducible_from_the_generator() -> None:
 def test_an_array_start_is_the_objectives_initial_point_bitwise(
     backend: Backend,
 ) -> None:
-    # Issue #1059: `theta0` is an array, as the chain takes no derivative;
+    # Issue #1059: `start` is an array, as the chain takes no derivative;
     # the zero start `GaussianTarget.initial` gives is the same chain.
     implicit = _chain(backend, n=200)
-    explicit = _chain(backend, n=200, theta0=np.zeros(DIMENSION))
+    explicit = _chain(backend, n=200, start=np.zeros(DIMENSION))
     np.testing.assert_array_equal(implicit.draws.numpy(), explicit.draws.numpy())
 
 

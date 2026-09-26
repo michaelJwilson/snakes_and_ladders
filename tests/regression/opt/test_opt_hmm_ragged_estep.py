@@ -85,9 +85,9 @@ def test_the_compiled_e_step_is_the_torch_recursion() -> None:
         assert abs(
             torch_fit.log_likelihood - compiled.log_likelihood
         ) <= TOLERANCE * abs(torch_fit.log_likelihood)
-        for name, value in torch_fit.emissions.named_parameters().items():
+        for name, value in torch_fit.components.named_parameters().items():
             assert (
-                _relative(compiled.emissions.named_parameters()[name], value)
+                _relative(compiled.components.named_parameters()[name], value)
                 < TOLERANCE
             )
         assert (
@@ -128,11 +128,11 @@ def test_a_held_transition_is_that_transition_expanded_per_step() -> None:
             config=replace(EM, max_iterations=5),
         )
         assert torch.equal(held.log_transition, kernel)
-        fitted = held.emissions.named_parameters()
+        fitted = held.components.named_parameters()
         if backend is Backend.PYTHON:
             assert held.log_likelihood == per_step.log_likelihood
             for name, value in fitted.items():
-                assert torch.equal(value, per_step.emissions.named_parameters()[name])
+                assert torch.equal(value, per_step.components.named_parameters()[name])
         else:
             assert abs(
                 held.log_likelihood - per_step.log_likelihood
@@ -140,7 +140,7 @@ def test_a_held_transition_is_that_transition_expanded_per_step() -> None:
             for name, value in fitted.items():
                 torch.testing.assert_close(
                     value,
-                    per_step.emissions.named_parameters()[name],
+                    per_step.components.named_parameters()[name],
                     rtol=TOLERANCE,
                     atol=0.0,
                 )

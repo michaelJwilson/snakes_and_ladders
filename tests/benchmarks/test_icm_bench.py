@@ -16,10 +16,11 @@ import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
 from sal.backend import Backend
 from sal.search.ground_state import Rung
-from sal.search.icm import iterated_conditional_modes
+from sal.search.icm import colouring, iterated_conditional_modes
 from sal.search.icm.numba import icm_sweeps_checked
 from sal.search.potts_starts import spatio_rung
 from sal.sim.fixtures import fixture
+from sal.sim.graph import BoundaryCondition, triangular_lattice_graph
 from sal.sim.potts import site_field
 
 #: 1% of 5,041 sites.
@@ -43,7 +44,7 @@ def test_floored_descent_benchmark(
             rung.graph,
             rung.field,
             np.random.default_rng(0),
-            max_sweeps=MAX_SWEEPS,
+            max_iterations=MAX_SWEEPS,
             min_sites=MIN_SITES,
             backend=backend,
             n_states=rung.n_states,
@@ -82,3 +83,21 @@ def test_floored_kernel_benchmark(benchmark: BenchmarkFixture) -> None:
     sweeps = benchmark.pedantic(sweep, rounds=5, iterations=1, warmup_rounds=1)  # type: ignore[no-untyped-call]
 
     assert 1 <= sweeps <= MAX_SWEEPS
+
+
+@pytest.mark.parametrize("backend", [Backend.NUMBA, Backend.PYTHON], ids=str)
+def test_colouring_benchmark(benchmark: BenchmarkFixture, backend: Backend) -> None:
+    # The checkerboard order's greedy colouring (issue #1073), paid once per
+    # descent: on 5,625 sites the Python loop was 10 ms of a 16 ms descent.
+    graph = triangular_lattice_graph((75, 75), BoundaryCondition.OPEN, 0.7)
+
+    classes = benchmark.pedantic(  # type: ignore[no-untyped-call]
+        colouring,
+        args=(graph,),
+        kwargs={"backend": backend},
+        rounds=5,
+        iterations=1,
+        warmup_rounds=1,
+    )
+
+    assert int(classes.max()) + 1 == 4

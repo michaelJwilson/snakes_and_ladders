@@ -72,7 +72,7 @@ from sal.opt.mixture import (
     GaussianMixtureObjective,
     KMeansPlusPlus,
     mixture_log_likelihood,
-    responsibilities,
+    responsibilities_torch,
 )
 from sal.opt.mixture import (
     expectation_maximization as gaussian_expectation_maximization,
@@ -526,7 +526,7 @@ def chain_seeding(
     )
     return Seeding(
         path[-1][1],
-        PASSES_PER_GRADIENT * chain.force_evaluations,
+        PASSES_PER_GRADIENT * chain.spent,
         f"acceptance {chain.acceptance_rate:.2f}"
         + (
             f", adapted step {chain.adapted.step_size:.3g}"
@@ -549,8 +549,8 @@ def annealed_seeding(
     objective = surrogate(instance)
     run = annealing_initializer(rng).run(objective)
     return Seeding(
-        at_locations(instance, objective.components(run.theta).mean),
-        PASSES_PER_GRADIENT * run.force_evaluations,
+        at_locations(instance, objective.components(run.best).mean),
+        PASSES_PER_GRADIENT * run.spent,
         f"acceptance {run.acceptance_rate:.2f}",
     )
 
@@ -567,8 +567,8 @@ def tempered_seeding(
     objective = surrogate(instance)
     run = tempering_initializer(rng).run(objective)
     return Seeding(
-        at_locations(instance, objective.components(run.theta).mean),
-        PASSES_PER_GRADIENT * run.force_evaluations,
+        at_locations(instance, objective.components(run.best).mean),
+        PASSES_PER_GRADIENT * run.spent,
         f"cold acceptance {float(run.acceptance_rate[0]):.2f}, lowest swap "
         f"{float(run.swap_acceptance.min()):.2f}",
     )
@@ -1112,7 +1112,7 @@ def polish(
         except ValueError:
             # The one refusal this stop reads: a component the E step leaves
             # no responsibility on, whose M step has nothing to solve on.
-            owned = responsibilities(
+            owned = responsibilities_torch(
                 values,
                 torch.log(weights),
                 components,
@@ -1334,7 +1334,7 @@ class TimedStart:
                 if index > 0
             )
 
-        posterior = responsibilities(
+        posterior = responsibilities_torch(
             values,
             torch.log(polished.weights),
             polished.components,
