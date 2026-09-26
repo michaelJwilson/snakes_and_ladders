@@ -49,7 +49,7 @@ from sal.sample import (
     slice,
     tempered,
 )
-from sal.sample.schedule import ExponentialTempSchedule
+from sal.sample.schedule import ExponentialTempSchedule, InverseTemperatures
 from sal.sim.elementary_codes import hamming_code
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from sal.sim.hmm import HmmParams
@@ -623,7 +623,7 @@ def test_an_aim_run_reads_back_what_the_memory_run_recorded(tmp_path: Path) -> N
 # --- The five loops #799 named, and the five metrics nothing recorded -------
 
 #: A three-rung ladder from the uniform law, as the annealed estimators need.
-BETAS = (0.0, 0.5, 1.0)
+BETAS = InverseTemperatures((0.0, 0.5, 1.0))
 
 
 def _slice() -> slice.SliceChain:
@@ -663,7 +663,7 @@ def _simulated_tempering() -> annealed.SimulatedTempered:
     return annealed.simulated_tempering(
         _graph(),
         FIELD,
-        (0.5, 1.0, 2.0),
+        InverseTemperatures((0.5, 1.0, 2.0)),
         np.zeros(3),
         np.random.default_rng(SEED),
         SWEEPS,

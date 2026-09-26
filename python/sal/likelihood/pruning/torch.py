@@ -89,7 +89,7 @@ def branch_lengths_from_tree(
     return torch.tensor(lengths, dtype=dtype, device=device)
 
 
-def _jc_transition_probabilities(t: torch.Tensor, k: int) -> torch.Tensor:
+def _jc_transition_probabilities(t: torch.Tensor, n_states: int) -> torch.Tensor:
     """Closed-form JC P(t), ``eq:jc`` of ``docs/tex/textbook.tex``, differentiable in ``t``.
 
     ``t`` may be a scalar or a vector of branch lengths; the result carries
@@ -97,15 +97,15 @@ def _jc_transition_probabilities(t: torch.Tensor, k: int) -> torch.Tensor:
     arithmetic is elementwise, so a matrix taken from the batched result is
     the matrix the scalar call returns, bitwise -- a test pins it.
     """
-    decay = torch.exp(-k * t / (k - 1))[..., None, None]
-    off_diagonal = (1.0 - decay) / k
-    diagonal = 1.0 / k + (k - 1) / k * decay
-    eye = torch.eye(k, dtype=t.dtype, device=t.device)
+    decay = torch.exp(-n_states * t / (n_states - 1))[..., None, None]
+    off_diagonal = (1.0 - decay) / n_states
+    diagonal = 1.0 / n_states + (n_states - 1) / n_states * decay
+    eye = torch.eye(n_states, dtype=t.dtype, device=t.device)
     return off_diagonal * (1.0 - eye) + diagonal * eye
 
 
 def transition_probabilities(
-    t: torch.Tensor, k: int, rate_matrix: torch.Tensor | None
+    t: torch.Tensor, n_states: int, rate_matrix: torch.Tensor | None
 ) -> torch.Tensor:
     """``P(t)`` for every branch length in ``t``, shape ``(*t.shape, k, k)``.
 
@@ -116,7 +116,7 @@ def transition_probabilities(
     the matrix exponential one batched ``matrix_exp``.
     """
     if rate_matrix is None:
-        return _jc_transition_probabilities(t, k)
+        return _jc_transition_probabilities(t, n_states)
     result: torch.Tensor = torch.linalg.matrix_exp(rate_matrix * t[..., None, None])
     return result
 
@@ -145,7 +145,7 @@ _LEAF_PARTIAL_LIMIT = 512
 def _leaf_partial(
     states: object,
     n_sites: int,
-    k: int,
+    n_states: int,
     dtype: torch.dtype,
     device: torch.device,
 ) -> torch.Tensor:
@@ -157,7 +157,7 @@ def _leaf_partial(
         The leaf's observed states, as the alignment holds them.
     n_sites : int
         Columns in the alignment.
-    k : int
+    n_states : int
         Alphabet size.
     dtype : torch.dtype
         Tensor type, taken from the branch lengths.
@@ -171,12 +171,14 @@ def _leaf_partial(
         the branch lengths, so it carries no gradient and is shared rather
         than copied.
     """
-    key = (id(states), k, dtype, str(device))
+    key = (id(states), n_states, dtype, str(device))
     hit = _LEAF_PARTIALS.get(key)
     if hit is not None and hit[0] is states:
         return hit[1]
 
-    partial = leaf_indicator(states, n_sites, k, dtype, device, index_device=device)
+    partial = leaf_indicator(
+        states, n_sites, n_states, dtype, device, index_device=device
+    )
     if len(_LEAF_PARTIALS) >= _LEAF_PARTIAL_LIMIT:
         _LEAF_PARTIALS.pop(next(iter(_LEAF_PARTIALS)))
     _LEAF_PARTIALS[key] = (states, partial)
@@ -269,7 +271,7 @@ def traversal(tau: Node) -> Traversal:
 
 def log_likelihood(
     tau: Node,
-    k: int,
+    n_states: int,
     pi: np.ndarray | torch.Tensor,
     alignment: Mapping[str, np.ndarray | torch.Tensor],
     branch_lengths: torch.Tensor,
@@ -285,7 +287,7 @@ def log_likelihood(
     tau : Node
         Root of the topology. Its own ``branch_length`` fields are ignored;
         branch lengths come from ``branch_lengths`` instead.
-    k : int
+    n_states : int
         Number of states.
     pi : np.ndarray | torch.Tensor
         Root state distribution, shape ``(k,)``.
@@ -331,7 +333,7 @@ def log_likelihood(
     dtype = branch_lengths.dtype
     device = branch_lengths.device
     pi_t = torch.as_tensor(pi, dtype=dtype, device=device)
-    check_pi_shape(tuple(pi_t.shape), k)
+    check_pi_shape(tuple(pi_t.shape), n_states)
 
     schedule = traversal(tau)
     check_branch_lengths_shape(tuple(branch_lengths.shape), len(schedule.order))
@@ -344,7 +346,7 @@ def log_likelihood(
     # than as a fresh `ones_like` per internal node.
     one = torch.ones((), dtype=dtype, device=device)
     # Every branch's transition matrix at once, indexed by branch_order.
-    transitions = transition_probabilities(branch_lengths, k, rate_matrix)
+    transitions = transition_probabilities(branch_lengths, n_states, rate_matrix)
 
     # The post-order, flat: one pass over the schedule the topology fixes,
     # rather than a Python frame and two dictionary lookups per node per
@@ -356,7 +358,7 @@ def log_likelihood(
     for slot, leaf_name, children in schedule.steps:
         if leaf_name is not None:
             partials[slot] = _leaf_partial(
-                alignment[leaf_name], n_sites, k, dtype, device
+                alignment[leaf_name], n_sites, n_states, dtype, device
             )
             continue
 
@@ -371,7 +373,7 @@ def log_likelihood(
             partial = message if partial is None else partial * message
         if partial is None:
             # A childless non-leaf constrains nothing.
-            partial = torch.ones((n_sites, k), dtype=dtype, device=device)
+            partial = torch.ones((n_sites, n_states), dtype=dtype, device=device)
 
         if rescale:
             # The replacement for a vanished scale is the scalar one rather
@@ -439,7 +441,7 @@ class PartialCache:
 
 def log_likelihood_cached(
     tau: Node,
-    k: int,
+    n_states: int,
     pi: np.ndarray | torch.Tensor,
     alignment: Mapping[str, np.ndarray | torch.Tensor],
     branch_lengths: torch.Tensor,
@@ -475,7 +477,7 @@ def log_likelihood_cached(
     lengths = branch_lengths.detach()
     with torch.no_grad():
         pi_t = torch.as_tensor(pi, dtype=dtype, device=device)
-        transitions = transition_probabilities(lengths, k, rate_matrix)
+        transitions = transition_probabilities(lengths, n_states, rate_matrix)
         leaves = [node for node in preorder(tau) if node.is_leaf]
         n_sites = int(torch.as_tensor(alignment[leaves[0].name]).shape[0])
 
@@ -486,7 +488,12 @@ def log_likelihood_cached(
                 if found is not None:
                     return key, *found
                 partial = leaf_indicator(
-                    alignment[node.name], n_sites, k, dtype, device, index_device=None
+                    alignment[node.name],
+                    n_sites,
+                    n_states,
+                    dtype,
+                    device,
+                    index_device=None,
                 )
                 scale = torch.zeros(n_sites, dtype=dtype, device=device)
                 cache.put(key, (partial, scale))
@@ -502,7 +509,7 @@ def log_likelihood_cached(
             if found is not None:
                 return key, *found
 
-            partial = torch.ones((n_sites, k), dtype=dtype, device=device)
+            partial = torch.ones((n_sites, n_states), dtype=dtype, device=device)
             log_scale = torch.zeros(n_sites, dtype=dtype, device=device)
             for child, (_, _, child_partial, child_scale) in zip(
                 node.children, parts, strict=True

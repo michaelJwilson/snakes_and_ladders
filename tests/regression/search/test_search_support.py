@@ -75,8 +75,8 @@ def test_the_nni_neighbourhood_of_four_taxa_is_the_whole_space_so_the_two_suppor
     alignment = _alignment(params, 1, 200)
     topology = random_topology(sorted(alignment), np.random.default_rng(1))
 
-    neighbourhood = neighbourhood_support(topology, alignment, params.k)
-    enumerated = enumerated_support(topology, alignment, params.k)
+    neighbourhood = neighbourhood_support(topology, alignment, params.n_states)
+    enumerated = enumerated_support(topology, alignment, params.n_states)
 
     assert neighbourhood.n_candidates == enumerated.n_candidates == 3
     assert neighbourhood.kind is SupportKind.NEIGHBOURHOOD
@@ -100,8 +100,10 @@ def test_the_neighbourhood_weight_bounds_the_enumerated_one_and_the_best_tree_ha
     topologies = list(enumerate_topologies(sorted(alignment)))
     assert len(topologies) == 15
 
-    neighbourhood = [neighbourhood_support(t, alignment, params.k) for t in topologies]
-    enumerated = [enumerated_support(t, alignment, params.k) for t in topologies]
+    neighbourhood = [
+        neighbourhood_support(t, alignment, params.n_states) for t in topologies
+    ]
+    enumerated = [enumerated_support(t, alignment, params.n_states) for t in topologies]
 
     for near, exact in zip(neighbourhood, enumerated, strict=True):
         assert near.weight >= exact.weight - 1e-12
@@ -119,12 +121,12 @@ def test_bootstrap_support_is_a_frequency_over_the_returned_topology_s_internal_
 ):
     params = load_params(fixture_path(FIVE_TAXA), SimulationParams)
     alignment = _alignment(params, 3, 300)
-    topology = infer(alignment, params.k, rng=np.random.default_rng(3)).topology
+    topology = infer(alignment, params.n_states, rng=np.random.default_rng(3)).topology
 
     support = bootstrap_support(
         topology,
         alignment,
-        params.k,
+        params.n_states,
         np.random.default_rng(4),
         n_replicates=8,
         workers=1,
@@ -132,7 +134,7 @@ def test_bootstrap_support_is_a_frequency_over_the_returned_topology_s_internal_
     again = bootstrap_support(
         topology,
         alignment,
-        params.k,
+        params.n_states,
         np.random.default_rng(4),
         n_replicates=8,
         workers=1,
@@ -155,7 +157,7 @@ def test_the_generating_splits_have_full_bootstrap_support_at_many_sites() -> No
     support = bootstrap_support(
         truth,
         alignment,
-        params.k,
+        params.n_states,
         np.random.default_rng(6),
         n_replicates=10,
         workers=1,
@@ -180,9 +182,12 @@ def test_the_enumerated_support_is_calibrated_on_simulated_data() -> None:
         for seed in range(6):
             alignment = _alignment(params, 100 * n_sites + seed, n_sites)
             returned = infer(
-                alignment, params.k, moves=MoveSet.NNI, rng=np.random.default_rng(seed)
+                alignment,
+                params.n_states,
+                moves=MoveSet.NNI,
+                rng=np.random.default_rng(seed),
             ).topology
-            support = enumerated_support(returned, alignment, params.k)
+            support = enumerated_support(returned, alignment, params.n_states)
             bin_index = int(np.searchsorted(edges, support.weight, side="right") - 1)
             counts[bin_index] += 1
             hits[bin_index] += leaf_bipartitions(returned) == truth
@@ -228,17 +233,20 @@ def test_the_neighbourhood_and_bootstrap_supports_are_calibrated_at_seven_and_ei
         for seed in range(4):
             alignment = _alignment(params, 100 * n_sites + seed, n_sites)
             returned = infer(
-                alignment, params.k, moves=MoveSet.NNI, rng=np.random.default_rng(seed)
+                alignment,
+                params.n_states,
+                moves=MoveSet.NNI,
+                rng=np.random.default_rng(seed),
             ).topology
             neighbourhood.append(
-                neighbourhood_support(returned, alignment, params.k).weight
+                neighbourhood_support(returned, alignment, params.n_states).weight
             )
             bootstrap.append(
                 min(
                     bootstrap_support(
                         returned,
                         alignment,
-                        params.k,
+                        params.n_states,
                         np.random.default_rng(seed),
                         n_replicates=8,
                         workers=1,
@@ -376,10 +384,10 @@ def test_an_enumeration_past_the_limit_and_an_empty_bootstrap_are_refused() -> N
     topology = random_topology(sorted(alignment), np.random.default_rng(1))
 
     with pytest.raises(ValueError, match="topologies on 4 taxa"):
-        enumerated_support(topology, alignment, params.k, max_topologies=2)
+        enumerated_support(topology, alignment, params.n_states, max_topologies=2)
     with pytest.raises(ValueError, match="at least one replicate"):
         bootstrap_support(
-            topology, alignment, params.k, np.random.default_rng(0), 0, workers=1
+            topology, alignment, params.n_states, np.random.default_rng(0), 0, workers=1
         )
 
 
@@ -391,7 +399,7 @@ def test_a_topology_with_no_competitor_has_all_the_weight() -> None:
     three = {name: alignment[name] for name in sorted(alignment)[:3]}
     topology = random_topology(sorted(three), np.random.default_rng(1))
 
-    support = neighbourhood_support(topology, three, params.k)
+    support = neighbourhood_support(topology, three, params.n_states)
 
     assert isinstance(support, Support)
     assert support.weight == 1.0
@@ -416,7 +424,7 @@ def test_pattern_support_is_the_fraction_of_sites_some_tree_with_the_split_fits_
     topologies = list(enumerate_topologies(taxa))
     checked: set[frozenset[str]] = set()
     for topology in topologies:
-        support = pattern_support(topology, alignment, params.k)
+        support = pattern_support(topology, alignment, params.n_states)
         assert set(support) == set(internal_splits(topology))
         for split, value in support.items():
             if split in checked:
@@ -430,7 +438,9 @@ def test_pattern_support_is_the_fraction_of_sites_some_tree_with_the_split_fits_
                     name: states[site : site + 1] for name, states in alignment.items()
                 }
                 distinct = len({int(states[0]) for states in column.values()})
-                fewest = min(fitch_score(t, column, params.k) for t in containing)
+                fewest = min(
+                    fitch_score(t, column, params.n_states) for t in containing
+                )
                 assert fewest >= distinct - 1
                 compatible += fewest == distinct - 1
             assert value == compatible / n_sites, split
@@ -451,8 +461,14 @@ def test_the_four_taxon_support_is_one_minus_the_frequency_of_the_two_conflictin
     a, b, c, d = (alignment[name] for name in ("A", "B", "C", "D"))
     conflicting = ((a == c) & (b == d) & (a != b)) | ((a == d) & (b == c) & (a != b))
     expected = 1.0 - float(np.mean(conflicting))
-    assert split_pattern_support(frozenset({"C", "D"}), alignment, params.k) == expected
-    assert split_pattern_support(frozenset({"A", "B"}), alignment, params.k) == expected
+    assert (
+        split_pattern_support(frozenset({"C", "D"}), alignment, params.n_states)
+        == expected
+    )
+    assert (
+        split_pattern_support(frozenset({"A", "B"}), alignment, params.n_states)
+        == expected
+    )
     assert 0.0 < expected < 1.0
 
 
@@ -469,14 +485,19 @@ def test_pattern_support_ranks_the_generating_split_first_where_the_bootstrap_re
     truth = params.tau
     (true_split,) = internal_splits(truth)
     bootstrap = bootstrap_support(
-        truth, alignment, params.k, np.random.default_rng(11), n_replicates=5, workers=1
+        truth,
+        alignment,
+        params.n_states,
+        np.random.default_rng(11),
+        n_replicates=5,
+        workers=1,
     )
     assert bootstrap == {true_split: 1.0}
     alternatives = [frozenset({"B", "C"}), frozenset({"B", "D"})]
     assert true_split not in alternatives
-    winner = split_pattern_support(true_split, alignment, params.k)
+    winner = split_pattern_support(true_split, alignment, params.n_states)
     for split in alternatives:
-        assert split_pattern_support(split, alignment, params.k) < winner
+        assert split_pattern_support(split, alignment, params.n_states) < winner
 
 
 @pytest.mark.smoke
@@ -484,11 +505,11 @@ def test_a_split_that_is_not_a_bipartition_of_the_alignment_is_refused() -> None
     params = load_params(fixture_path(FOUR_TAXA), SimulationParams)
     alignment = _alignment(params, 12, 20)
     with pytest.raises(ValueError, match="lacks"):
-        split_pattern_support(frozenset({"A", "Z"}), alignment, params.k)
+        split_pattern_support(frozenset({"A", "Z"}), alignment, params.n_states)
     with pytest.raises(ValueError, match="each side"):
-        split_pattern_support(frozenset(alignment), alignment, params.k)
+        split_pattern_support(frozenset(alignment), alignment, params.n_states)
     # A trivial split cannot be crossed, so every site is compatible.
-    assert split_pattern_support(frozenset({"A"}), alignment, params.k) == 1.0
+    assert split_pattern_support(frozenset({"A"}), alignment, params.n_states) == 1.0
 
 
 @pytest.mark.smoke
@@ -500,13 +521,13 @@ def test_four_workers_report_the_bootstrap_one_worker_reports() -> None:
     """
     params = load_params(fixture_path(FIVE_TAXA), SimulationParams)
     alignment = _alignment(params, 3, 300)
-    topology = infer(alignment, params.k, rng=np.random.default_rng(3)).topology
+    topology = infer(alignment, params.n_states, rng=np.random.default_rng(3)).topology
 
     serial = bootstrap_support(
-        topology, alignment, params.k, np.random.default_rng(4), 8, workers=1
+        topology, alignment, params.n_states, np.random.default_rng(4), 8, workers=1
     )
     pooled = bootstrap_support(
-        topology, alignment, params.k, np.random.default_rng(4), 8, workers=4
+        topology, alignment, params.n_states, np.random.default_rng(4), 8, workers=4
     )
 
     assert pooled == serial
@@ -522,18 +543,18 @@ def test_a_replicate_is_the_search_of_the_resample_its_spawned_generator_draws()
     """
     params = load_params(fixture_path(FIVE_TAXA), SimulationParams)
     alignment = _alignment(params, 3, 300)
-    topology = infer(alignment, params.k, rng=np.random.default_rng(3)).topology
+    topology = infer(alignment, params.n_states, rng=np.random.default_rng(3)).topology
     n_sites = 300
 
     support = bootstrap_support(
-        topology, alignment, params.k, np.random.default_rng(9), 2, workers=1
+        topology, alignment, params.n_states, np.random.default_rng(9), 2, workers=1
     )
 
     counts = dict.fromkeys(internal_splits(topology), 0)
     for child in np.random.default_rng(9).spawn(2):
         columns = child.integers(0, n_sites, size=n_sites)
         resampled = {name: states[columns] for name, states in alignment.items()}
-        found = infer(resampled, params.k, rng=child).topology
+        found = infer(resampled, params.n_states, rng=child).topology
         for split in internal_splits(found):
             if split in counts:
                 counts[split] += 1

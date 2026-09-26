@@ -184,7 +184,7 @@ def test_the_rounded_cut_is_the_gauged_alpha_expansion_optimum_at_two_labels() -
     total = float(graph.edge_coupling.sum())
     start = np.random.default_rng(3).integers(0, 2, size=graph.n_nodes)
 
-    expansion = alpha_expansion(graph, np.zeros(2), 2, start=start)
+    expansion = alpha_expansion(graph, np.zeros(2), start=start, n_states=2)
     rounded = goemans_williamson(graph, generator=torch.Generator().manual_seed(5))
 
     # The gauge: the expansion agrees across every edge, and flipping one side
@@ -200,7 +200,7 @@ def test_the_rounded_cut_is_the_gauged_alpha_expansion_optimum_at_two_labels() -
     # The boundary: the frustrated instance the gauge cannot reach.
     frustrated = frustrated_triangular_lattice((3, 3), BoundaryCondition.PERIODIC, -1.0)
     with pytest.raises(ValueError, match="every coupling must be non-negative"):
-        alpha_expansion(frustrated, np.zeros(2), 2)
+        alpha_expansion(frustrated, np.zeros(2), n_states=2)
 
     positive = PottsGraph(
         n_nodes=frustrated.n_nodes,

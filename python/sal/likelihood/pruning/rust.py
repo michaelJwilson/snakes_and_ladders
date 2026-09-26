@@ -56,7 +56,7 @@ from sal.sim.tree import Node
 
 def log_likelihood(
     tau: Node,
-    k: int,
+    n_states: int,
     pi: np.ndarray,
     alignment: dict[str, np.ndarray],
     *,
@@ -75,7 +75,7 @@ def log_likelihood(
     tau : Node
         Root of the topology, with branch lengths attached to each non-root
         node.
-    k : int
+    n_states : int
         Number of states.
     pi : np.ndarray
         Root state distribution, shape (k,).
@@ -104,7 +104,7 @@ def log_likelihood(
         leaf of ``tau``, the alignment is ragged, ``weights`` does not have
         one entry per column, or a non-root node has no ``branch_length``.
     """
-    check_pi_shape(pi.shape, k)
+    check_pi_shape(pi.shape, n_states)
 
     order = postorder(tau)
     leaves = [node for node in order if node.is_leaf]
@@ -155,7 +155,7 @@ def log_likelihood(
                 children,
                 np.ascontiguousarray(states),
                 row_index,
-                k,
+                n_states,
                 pi_contiguous,
                 rescale,
             )

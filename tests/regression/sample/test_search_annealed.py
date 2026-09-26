@@ -29,6 +29,7 @@ from sal.sample.annealed import (
     simulated_tempering,
 )
 from sal.sample.potts_mcmc import PottsMove
+from sal.sample.schedule import InverseTemperatures
 from sal.sample.statistics import chi_square_p_value
 from sal.sample.tempered import round_trips
 from sal.sim.canonical import frustrated_triangular_lattice
@@ -69,7 +70,7 @@ WIDER_FIELD = np.array([0.6, -0.4])
 #: rungs from beta 0.25 to 2, the coldest the model as declared at beta 1 and
 #: the hottest twice that; the walker crosses it in both directions, realized
 #: 520 to 525 round trips over 6,000 recorded sweeps.
-TEMPERING_BETAS = (0.25, 0.5, 1.0, 2.0)
+TEMPERING_BETAS = InverseTemperatures((0.25, 0.5, 1.0, 2.0))
 TEMPERING_SWEEPS = 6_000
 TEMPERING_THIN = 5
 
@@ -202,7 +203,11 @@ def test_the_zero_rung_is_n_log_q_bitwise() -> None:
 
     for estimator in (annealed_importance_sampling, population_annealing):
         estimate = estimator(
-            graph, WIDER_FIELD, (0.0,), np.random.default_rng(0), POPULATION
+            graph,
+            WIDER_FIELD,
+            InverseTemperatures((0.0,)),
+            np.random.default_rng(0),
+            POPULATION,
         )
 
         assert estimate.log_partition == exact
@@ -409,17 +414,27 @@ def test_a_ladder_or_a_population_the_estimators_cannot_use_is_refused() -> None
     rng = np.random.default_rng(0)
 
     with pytest.raises(ValueError, match="must start at beta = 0"):
-        annealed_importance_sampling(graph, field, (0.5, 1.0), rng, 8)
+        annealed_importance_sampling(
+            graph, field, InverseTemperatures((0.5, 1.0)), rng, 8
+        )
     with pytest.raises(ValueError, match="strictly increasing"):
-        population_annealing(graph, field, (0.0, 1.0, 0.5), rng, 8)
+        population_annealing(graph, field, InverseTemperatures((0.0, 1.0, 0.5)), rng, 8)
     with pytest.raises(ValueError, match="at least two replicas"):
-        annealed_importance_sampling(graph, field, (0.0, 1.0), rng, 1)
+        annealed_importance_sampling(
+            graph, field, InverseTemperatures((0.0, 1.0)), rng, 1
+        )
     with pytest.raises(ValueError, match="at least 2 rungs"):
-        simulated_tempering(graph, field, (1.0,), np.zeros(1), rng, 10)
+        simulated_tempering(
+            graph, field, InverseTemperatures((1.0,)), np.zeros(1), rng, 10
+        )
     with pytest.raises(ValueError, match="one g_k per rung"):
-        simulated_tempering(graph, field, (0.5, 1.0), np.zeros(3), rng, 10)
+        simulated_tempering(
+            graph, field, InverseTemperatures((0.5, 1.0)), np.zeros(3), rng, 10
+        )
     with pytest.raises(ValueError, match="n_sweeps"):
-        simulated_tempering(graph, field, (0.5, 1.0), np.zeros(2), rng, 0)
+        simulated_tempering(
+            graph, field, InverseTemperatures((0.5, 1.0)), np.zeros(2), rng, 0
+        )
     with pytest.raises(ValueError, match="at least two rungs"):
         geometric_betas(1.0, 1, beta_min=0.1)
     with pytest.raises(ValueError, match="beta_min must lie"):
@@ -437,8 +452,21 @@ def test_a_cluster_move_on_a_negative_coupling_is_refused_by_every_estimator() -
 
     for call in (annealed_importance_sampling, population_annealing):
         with pytest.raises(ValueError, match="needs every coupling >= 0"):
-            call(graph, field, (0.0, 1.0), rng, 4, move=PottsMove.WOLFF)
+            call(
+                graph,
+                field,
+                InverseTemperatures((0.0, 1.0)),
+                rng,
+                4,
+                move=PottsMove.WOLFF,
+            )
     with pytest.raises(ValueError, match="needs every coupling >= 0"):
         simulated_tempering(
-            graph, field, (0.5, 1.0), np.zeros(2), rng, 10, move=PottsMove.WOLFF
+            graph,
+            field,
+            InverseTemperatures((0.5, 1.0)),
+            np.zeros(2),
+            rng,
+            10,
+            move=PottsMove.WOLFF,
         )

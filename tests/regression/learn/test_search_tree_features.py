@@ -89,7 +89,7 @@ def environment(
     alignment = dict(dataset.alignment)
     built = TreeEnvironment(
         alignment,
-        params.k,
+        params.n_states,
         np.asarray(params.pi),
         branch_length=float(
             np.mean([child.branch_length for _, child in edges(params.tau)])
@@ -109,12 +109,12 @@ def starting_topologies(
 
 
 def enumerated_maximum(built: TreeEnvironment, taxa: list[str]) -> float:
-    return max(built.score(topology) for topology in enumerate_topologies(taxa))
+    return max(built.log_weight(topology) for topology in enumerate_topologies(taxa))
 
 
 def _reached(built: TreeEnvironment, endpoints: list[Topology], best: float) -> float:
     return float(
-        np.mean([abs(built.score(state) - best) < 1e-9 for state in endpoints])
+        np.mean([abs(built.log_weight(state) - best) < 1e-9 for state in endpoints])
     )
 
 

@@ -33,7 +33,7 @@ def test_simulate_alignment_benchmark(
     dataset = benchmark(
         simulate_alignment,
         params.tau,
-        params.k,
+        params.n_states,
         params.pi,
         np.random.default_rng(params.seed),
         params.n_sites,

@@ -58,14 +58,16 @@ def _gaussian(precision: Any, jnp: Any) -> Callable[[Any], Any]:
     return objective
 
 
-def _mixture(observations: Any, k: int, jax: Any) -> Callable[[Any], Any]:
+def _mixture(observations: Any, n_states: int, jax: Any) -> Callable[[Any], Any]:
     """The mixture's negative log-likelihood over ``(free weights, means, log scales)``."""
     jnp = jax.numpy
 
     def objective(theta: Any) -> Any:
-        log_weight = jax.nn.log_softmax(jnp.concatenate([jnp.zeros(1), theta[: k - 1]]))
-        mean = theta[k - 1 : 2 * k - 1]
-        log_scale = theta[2 * k - 1 : 3 * k - 1]
+        log_weight = jax.nn.log_softmax(
+            jnp.concatenate([jnp.zeros(1), theta[: n_states - 1]])
+        )
+        mean = theta[n_states - 1 : 2 * n_states - 1]
+        log_scale = theta[2 * n_states - 1 : 3 * n_states - 1]
         standard = (observations[:, None] - mean[None, :]) / jnp.exp(log_scale)
         log_density = (
             -0.5 * standard * standard - log_scale - 0.5 * jnp.log(2.0 * jnp.pi)

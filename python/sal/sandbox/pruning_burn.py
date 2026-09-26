@@ -142,7 +142,7 @@ class _PruningLogLikelihood(torch.autograd.Function):
         ctx: Any,
         branch_lengths: torch.Tensor,
         flattened: _Flattened,
-        k: int,
+        n_states: int,
         pi: torch.Tensor,
         weight: torch.Tensor | None,
         rescale: bool,
@@ -155,7 +155,7 @@ class _PruningLogLikelihood(torch.autograd.Function):
             flattened.children,
             flattened.leaf_states,
             flattened.leaf_row,
-            k,
+            n_states,
             np.ascontiguousarray(pi.detach().cpu().numpy(), dtype=np.float64),
             None
             if weight is None
@@ -181,7 +181,7 @@ class _PruningLogLikelihood(torch.autograd.Function):
 
 def log_likelihood(
     tau: Node,
-    k: int,
+    n_states: int,
     pi: np.ndarray | torch.Tensor,
     alignment: Mapping[str, np.ndarray],
     branch_lengths: torch.Tensor,
@@ -235,8 +235,8 @@ def log_likelihood(
         raise ValueError(msg)
     dtype, device = branch_lengths.dtype, branch_lengths.device
     pi_t = torch.as_tensor(pi, dtype=dtype, device=device)
-    if pi_t.shape != (k,):
-        msg = f"pi has shape {tuple(pi_t.shape)}, expected ({k},)"
+    if pi_t.shape != (n_states,):
+        msg = f"pi has shape {tuple(pi_t.shape)}, expected ({n_states},)"
         raise ValueError(msg)
     if pi_t.requires_grad:
         msg = (
@@ -266,6 +266,6 @@ def log_likelihood(
         None if weight is None else torch.as_tensor(weight, dtype=dtype, device=device)
     )
     result: torch.Tensor = _PruningLogLikelihood.apply(  # type: ignore[no-untyped-call]
-        branch_lengths, flattened, k, pi_t, weight_t, rescale
+        branch_lengths, flattened, n_states, pi_t, weight_t, rescale
     )
     return result

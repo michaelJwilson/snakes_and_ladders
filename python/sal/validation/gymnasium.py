@@ -87,7 +87,7 @@ def build(spec: Spec) -> tuple[Any, int]:
     dataset = simulate_tree(params, np.random.default_rng(params.seed))
     tree = TreeEnvironment(
         dict(dataset.alignment),
-        params.k,
+        params.n_states,
         params.pi,
         spec.branch_length,
         reward=RewardModel.KNOWN,
