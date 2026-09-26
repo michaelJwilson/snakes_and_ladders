@@ -41,8 +41,8 @@ def _argmax_icm(params: SpatioTilingParams) -> float:
     run = iterated_conditional_modes(
         params.graph,
         params.field,
-        params.n_states,
-        np.random.default_rng(0),
+        n_states=params.n_states,
+        rng=np.random.default_rng(0),
         start=params.field.argmax(axis=1).astype(np.int64),
         max_sweeps=100_000,
     )
@@ -121,7 +121,9 @@ def test_held_tiles_is_the_recovery_bound_on_a_noise_free_field(tier: str) -> No
 def test_expansion_labels_every_held_tile_its_planted_state() -> None:
     params: SpatioTilingParams = CI.params
     rung = tiling_rung(params, "ci")
-    labelling = alpha_expansion(params.graph, params.field, params.n_states).labelling
+    labelling = alpha_expansion(
+        params.graph, params.field, n_states=params.n_states
+    ).labelling
     held = held_tiles(rung)
 
     assert held.any()
@@ -133,7 +135,9 @@ def test_expansion_labels_every_held_tile_its_planted_state() -> None:
 def test_expansion_is_below_icm_and_above_the_bound_at_ci() -> None:
     params: SpatioTilingParams = CI.params
     bound = trws(params.graph, params.field).bound
-    expansion = alpha_expansion(params.graph, params.field, params.n_states).energy
+    expansion = alpha_expansion(
+        params.graph, params.field, n_states=params.n_states
+    ).energy
 
     assert bound <= expansion + 1e-9
     assert expansion < _argmax_icm(params)
@@ -155,7 +159,7 @@ def test_expansion_beats_icm_on_the_held_out_set_by_more_than_two_se() -> None:
             [
                 trws(held_out.graph, held_out.field).bound,
                 alpha_expansion(
-                    held_out.graph, held_out.field, held_out.n_states
+                    held_out.graph, held_out.field, n_states=held_out.n_states
                 ).energy,
                 _argmax_icm(held_out),
             ]
