@@ -31,10 +31,10 @@ parameter.
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Iterator, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, ClassVar, Generic, Self, TypeVar, cast
+from typing import Any, ClassVar, Self, cast
 
 import numpy as np
 import torch
@@ -44,12 +44,29 @@ from sal import param_tree
 from sal.backend import Backend, twin
 from sal.emissions import (
     BetaBinomialEmission,
-    CovariateNotSupportedError,
     EmissionFamily,
     NegativeBinomialEmission,
     Reestimate,
 )
+
+# The channel split moved to `emissions.base` so `emissions.CountPairEmission`
+# reads the same one (issue #1083); re-exported so every import from here holds.
+from sal.emissions.base import (
+    SUCCESSES as SUCCESSES,  # noqa: PLC0414
+)
+from sal.emissions.base import (
+    TOTAL as TOTAL,  # noqa: PLC0414
+)
+from sal.emissions.base import (
+    ChannelCovariates as ChannelCovariates,  # noqa: PLC0414
+)
+from sal.emissions.base import (
+    CovariateT as CovariateT,  # noqa: PLC0414
+)
 from sal.emissions.base import as_array
+from sal.emissions.base import (
+    split_covariate as split_covariate,  # noqa: PLC0414
+)
 from sal.fixtures import BinInstance
 from sal.sim.graph import (
     boundary_from_declared,
@@ -58,120 +75,6 @@ from sal.sim.graph import (
 from sal.sim.spatio_sequential import (
     SpatioSequentialParams,
 )
-
-#: Channel index of the total count, the negative binomial one.
-TOTAL = 0
-
-#: Channel index of the success count, the beta-binomial one.
-SUCCESSES = 1
-
-#: A covariate in either form its consumers hold it: the model's NumPy array,
-#: which the Rust draw passes on, and the tensor a family scores against. One
-#: check reads both, so the two simulators cannot refuse different shapes
-#: (issue #856).
-CovariateT = TypeVar("CovariateT", np.ndarray, torch.Tensor)
-
-
-@dataclass(frozen=True)
-class ChannelCovariates(Generic[CovariateT]):
-    """One covariate per channel, in the type the caller handed in.
-
-    Generic over the two forms a covariate is held in --- the model's NumPy
-    array and the tensor a family scores against --- so a caller keeps the
-    type it passed rather than reading it back as :class:`object`.
-
-    Parameters
-    ----------
-    exposure : np.ndarray | torch.Tensor | None
-        Channel ``TOTAL``'s: the exposure the count is scored against.
-    trials : np.ndarray | torch.Tensor | None
-        Channel ``SUCCESSES``'s: the trial count the successes are out of.
-        ``None`` for both when the caller passed none.
-    """
-
-    exposure: CovariateT | None
-    trials: CovariateT | None
-
-    def __iter__(self) -> Iterator[CovariateT | None]:
-        """``(exposure, trials)``: the order callers unpack."""
-        yield from (self.exposure, self.trials)
-
-
-def split_covariate(
-    family: object, covariate: CovariateT | None
-) -> ChannelCovariates[CovariateT]:
-    """One covariate per channel, from the axis the observation already has.
-
-    #631 refused a covariate on a pair family because "the two channels would
-    each need their own --- an exposure for the total, a trial count for the
-    successes --- and one tensor cannot be both". It can, with the channel axis
-    (issue #658): a covariate is ``(..., 2)`` exactly as an observation is,
-    channel ``TOTAL`` the exposure the count is scored against and channel
-    ``SUCCESSES`` the trials the successes are out of, and it splits where the
-    observation splits.
-
-    Each slice gains the trailing singleton the single-channel families
-    broadcast over their states with, so what reaches
-    :class:`~sal.emissions.NegativeBinomialEmission` and
-    :class:`~sal.emissions.BetaBinomialEmission` is the shape
-    they already document.
-
-    A covariate *without* the channel axis is still refused, because that is
-    the tensor #631 was right about: nothing says which channel it belongs to,
-    and a family that guesses conditions half the model on the wrong number.
-
-    **The rank rule, stated here because this is the one check.** The trailing
-    axis is the channel pair and the leading axes are the caller's layout ---
-    ``(S, 2)`` for a vertex's column, ``(S, V, 2)`` for the model's block,
-    ``(S * n_m, 2)`` for a flattened draw --- so the rule is a trailing axis of
-    two and at least one axis before it. Both simulators call this, and so
-    accept and refuse the same shapes; the Rust draw refused every rank but
-    three and this accepted a bare ``(2,)`` (issue #856).
-
-    **The neutral covariate is not ones.** It is ones for the total, whose
-    exposure multiplies a rate, and the family's own declared ``trials`` for
-    the successes, whose covariate replaces a trial count. A caller passing
-    ones to both does not get the uncovaried model back --- it gets a
-    beta-binomial asked for more successes than trials, which scores ``-inf``.
-    The two channels condition on different kinds of thing, which is the whole
-    reason one tensor could not be both.
-
-    Parameters
-    ----------
-    family : object
-        The family refusing, or its class where the caller holds no instance:
-        the Rust draw builds none. Named in the refusal.
-    covariate : np.ndarray | torch.Tensor | None
-        One value per observation per channel, or ``None``.
-
-    Returns
-    -------
-    ChannelCovariates
-        The total's and the successes', in ``covariate``'s own type, or both
-        ``None`` for ``None``. It iterates in that order, so a caller
-        unpacking it is unchanged.
-
-    Raises
-    ------
-    CovariateNotSupportedError
-        If ``covariate`` does not carry the two-channel axis under at least
-        one leading axis.
-    """
-    if covariate is None:
-        return ChannelCovariates(None, None)
-    if covariate.ndim < 2 or covariate.shape[-1] != 2:
-        name = family.__name__ if isinstance(family, type) else type(family).__name__
-        msg = (
-            f"{name} takes one covariate per channel, shape (..., 2) as its "
-            f"observations are: channel {TOTAL} the total's exposure and channel "
-            f"{SUCCESSES} the successes' trial count, under at least one axis of "
-            f"the caller's layout. Got {tuple(covariate.shape)}, which names no "
-            "channel -- the tensor that cannot be both (#631, #658, #856)."
-        )
-        raise CovariateNotSupportedError(msg)
-    return ChannelCovariates(
-        covariate[..., TOTAL, None], covariate[..., SUCCESSES, None]
-    )
 
 
 class IndependentCountPair(EmissionFamily):

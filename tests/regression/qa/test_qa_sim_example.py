@@ -25,12 +25,12 @@ PARAMS_PATH = FIXTURES_DIR / "tree_jc/stress.yaml"
 
 @pytest.mark.smoke
 def test_state_label_is_nucleotide_coded_for_k_four() -> None:
-    assert [state_label(i, k=4) for i in range(4)] == ["A", "C", "G", "T"]
+    assert [state_label(i, n_states=4) for i in range(4)] == ["A", "C", "G", "T"]
 
 
 @pytest.mark.smoke
 def test_state_label_falls_back_to_digit_for_other_k() -> None:
-    assert state_label(2, k=3) == "2"
+    assert state_label(2, n_states=3) == "2"
 
 
 @pytest.mark.smoke

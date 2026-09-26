@@ -70,13 +70,17 @@ def test_block_frequency_interval_benchmark(
 
     # cutoff None is the uncompressed evaluation this is measured against.
     call: Callable[[], float] = (
-        (lambda: float(log_likelihood(params.tau, params.k, pi, alignment, lengths)))
+        (
+            lambda: float(
+                log_likelihood(params.tau, params.n_states, pi, alignment, lengths)
+            )
+        )
         if cutoff is None
         else (
             lambda: float(
                 block_frequency_interval(
                     params.tau,
-                    params.k,
+                    params.n_states,
                     pi,
                     alignment,
                     lengths,

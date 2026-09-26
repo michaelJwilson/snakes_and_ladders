@@ -124,18 +124,18 @@ def test_the_iteration_count_a_caller_compared_is_the_reason_already() -> None:
         draws, _WEIGHTS, _components(), config=replace(EM, max_iterations=200)
     )
 
-    assert capped.iterations == 1
+    assert capped.termination.iterations == 1
     assert capped.termination == Termination(
         converged=False, iterations=1, reason=Stop.BUDGET
     )
     assert settled.termination is not None
     assert settled.termination.converged
-    assert settled.termination.iterations == settled.iterations
+    assert 1 < settled.termination.iterations < 200
 
 
 @pytest.mark.smoke
 def test_the_optimal_property_answers_about_the_gap_and_not_about_the_loop() -> None:
-    # Encoding 5: `Certificate.optimal` was read as "did it finish" and is a
+    # Encoding 5: `BoundedLabelling.optimal` was read as "did it finish" and is a
     # statement about the instance --- a run whose sweeps settled can leave a
     # gap open. One sweep cannot settle, so the two answers separate here.
     graph = lattice_graph((4, 4), BoundaryCondition.PERIODIC, coupling=-1.0)
@@ -143,15 +143,15 @@ def test_the_optimal_property_answers_about_the_gap_and_not_about_the_loop() -> 
     # sweep found it and both runs then settle on sweep one.
     field = np.random.default_rng([860, 3]).normal(size=(graph.n_nodes, 3))
 
-    capped = dual_bound(graph, field, iterations=1)
-    settled = dual_bound(graph, field, iterations=400)
+    capped = dual_bound(graph, field, max_iterations=1)
+    settled = dual_bound(graph, field, max_iterations=400)
 
     assert capped.termination == Termination(
         converged=False, iterations=1, reason=Stop.BUDGET
     )
     assert settled.termination is not None
     assert settled.termination.converged
-    assert settled.termination.iterations == settled.iterations
+    assert 1 < settled.termination.iterations <= 400
 
 
 @pytest.mark.smoke

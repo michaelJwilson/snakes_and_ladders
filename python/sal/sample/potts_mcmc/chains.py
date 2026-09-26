@@ -15,6 +15,8 @@ from typing import Any
 import numpy as np
 
 from sal.backend import Backend
+from sal.cost import Cost
+from sal.opt.termination import Termination
 from sal.sample.accept import accept
 from sal.sample.potts_mcmc.moves import (
     PottsMove,
@@ -36,7 +38,9 @@ from sal.sample.potts_mcmc.sweeps import (
 )
 from sal.sample.schedule import (
     AdaptedLadder,
+    Annealed,
     Monotone,
+    Tempered,
     TempSchedule,
     adapt_ladder,
     check_ladder,
@@ -241,39 +245,31 @@ def sample_potts(
     return PottsChain(states=recorded, mean_cluster_size=mean_cluster)
 
 
-@dataclass(frozen=True)
-class AnnealedPotts:
-    """What one annealing run found, and what it cost.
+@dataclass(frozen=True, kw_only=True)
+class AnnealedPotts(Annealed[np.ndarray]):
+    """What one annealing run found, and what it cost (issue #1090).
+
+    An :class:`~sal.sample.schedule.Annealed` over labellings: ``best`` is the
+    lowest-energy configuration visited, shape ``(n_nodes,)``, ``final``
+    where the chain ended, and ``spent`` the site visits, the unit a budget
+    is matched on rather than the sweep count: a Wolff sweep flips one
+    cluster while a heat-bath sweep touches every site, so equal sweeps
+    hand the cluster moves a free lattice per move (issue #551).
 
     Parameters
     ----------
-    labelling : np.ndarray
-        The lowest-energy configuration visited, shape ``(n_nodes,)``. The
-        *best* rather than the last: the final sweeps run cold but not at
-        zero, so the chain can leave the best state it found.
     energy : float
-        Its energy, in :func:`energies`' convention.
-    final : np.ndarray
-        Where the chain ended, kept so a caller can see whether the best was
-        the end or a state passed through.
+        ``best``'s energy, in :func:`energies`' convention.
     n_sweeps : int
         Sweeps run, one per schedule step.
-    site_visits : int
-        Site labels read or written by the move set. **This** is what a
-        budget is matched on, not the sweep count: a Wolff sweep flips one
-        cluster while a heat-bath sweep touches every site, so equal sweeps
-        hand the cluster moves a free lattice per move (issue #551).
     trace : tuple[ClusterCounter, ...]
         One counter per schedule step for a cluster move set, empty for
         single-site. Kept per step because the quantity issue #551 predicts
         is a function of temperature and the schedule is what varies it.
     """
 
-    labelling: np.ndarray
     energy: float
-    final: np.ndarray
     n_sweeps: int
-    site_visits: int = 0
     trace: tuple[ClusterCounter, ...] = ()
 
 
@@ -489,18 +485,24 @@ def anneal_potts(
         )
     tracked.record_cost(max(schedule.n_steps - 1, 0), state.nbytes)
     return AnnealedPotts(
-        labelling=best_state,
+        best=best_state,
         energy=best_energy,
         final=state,
         n_sweeps=schedule.n_steps,
-        site_visits=visits,
+        spent=visits,
+        unit=Cost.SITE_VISITS,
+        termination=Termination.after(schedule.n_steps, converged=False),
         trace=tuple(trace),
     )
 
 
-@dataclass(frozen=True)
-class TemperedChains:
-    """What a parallel-tempering run produced.
+@dataclass(frozen=True, kw_only=True)
+class TemperedChains(Tempered[np.ndarray]):
+    """What a parallel-tempering run produced (issue #1090).
+
+    A :class:`~sal.sample.schedule.Tempered` over labellings: ``best`` is the
+    lowest-energy configuration seen at any temperature, and ``spent`` the
+    replica sweeps, burn-in included.
 
     Parameters
     ----------
@@ -509,17 +511,8 @@ class TemperedChains:
         replica ``r`` sits at ``temperatures[r]`` throughout, because a swap
         exchanges *configurations* between temperatures rather than moving a
         chain along the ladder.
-    temperatures : tuple[float, ...]
-        The ladder, as given.
-    swap_acceptance : np.ndarray
-        Fraction of proposed exchanges accepted per adjacent pair, shape
-        ``(n_replicas - 1,)``. Near zero means the ladder has a gap no
-        configuration crosses and the replicas are independent chains; near
-        one means two temperatures are close enough that one is redundant.
-    best : np.ndarray
-        The lowest-energy configuration seen at any temperature.
-    best_energy : float
-        Its energy, in :func:`energies`' convention.
+    energy : float
+        ``best``'s energy, in :func:`energies`' convention.
     n_sweeps : int
         Sweeps run per replica after burn-in --- the budget per replica, so
         the whole run cost ``n_replicas`` times this.
@@ -536,10 +529,7 @@ class TemperedChains:
     """
 
     states: np.ndarray
-    temperatures: tuple[float, ...]
-    swap_acceptance: np.ndarray
-    best: np.ndarray
-    best_energy: float
+    energy: float
     n_sweeps: int
     walkers: np.ndarray
 
@@ -561,7 +551,7 @@ def swap_log_ratio(
 
 def parallel_tempering(
     graph: PottsGraph,
-    field: np.ndarray,
+    field: SiteField | np.ndarray,
     temperatures: TempSchedule | Sequence[float],
     rng: np.random.Generator,
     n_sweeps: int,
@@ -589,7 +579,7 @@ def parallel_tempering(
     graph : PottsGraph
         The instance. Couplings of either sign; single-site moves only, for
         the reason :func:`anneal_potts` gives.
-    field : np.ndarray
+    field : SiteField | np.ndarray
         External field, shape ``(n_states,)``.
     temperatures : TempSchedule | Sequence[float]
         The ladder, in any order; at least two, all positive. The stationary
@@ -616,6 +606,7 @@ def parallel_tempering(
         nothing to exchange and is :func:`sample_potts` --- or any is not
         positive.
     """
+    field = log_weight_of(field)
     temperatures = check_ladder(ladder(temperatures), needed_by="parallel tempering")
 
     rows = site_field(np.asarray(field, dtype=float), graph.n_nodes)
@@ -678,30 +669,36 @@ def parallel_tempering(
                 step, state=best, swap_acceptance=float(np.mean(accepted / proposed))
             )
     tracked.record_cost(max(n_sweeps * thin - 1, 0), states.nbytes)
+    steps = (burn_in + n_sweeps) * thin
     return TemperedChains(
         states=recorded,
         temperatures=tuple(temperatures),
         swap_acceptance=accepted / proposed,
         best=best,
-        best_energy=best_energy,
+        energy=best_energy,
         n_sweeps=n_sweeps,
         walkers=trace,
+        spent=steps * len(temperatures),
+        unit=Cost.SWEEPS,
+        termination=Termination.after(steps, converged=False),
     )
 
 
-@dataclass(frozen=True)
-class ClusterTempered:
-    """What :func:`cluster_tempering` produced.
+@dataclass(frozen=True, kw_only=True)
+class ClusterTempered(Tempered[np.ndarray]):
+    """What :func:`cluster_tempering` produced (issue #1090).
+
+    A :class:`~sal.sample.schedule.Tempered` over labellings: ``best`` is the
+    lowest-energy configuration seen at any temperature, and ``spent`` the
+    site visits: every replica's passes plus every Houdayer move, each
+    charged one sweep's ``n_nodes + 2 n_edges``, since the move reads every
+    site and the defect sites' edges.
 
     Parameters
     ----------
     states : np.ndarray
         Recorded configurations, ``(n_recorded, n_replicas, n_nodes)``;
         empty along the first axis unless the run was asked to record.
-    temperatures : tuple[float, ...]
-        The ladder, as given.
-    swap_acceptance : np.ndarray
-        Exchanges accepted over proposed, per adjacent pair.
     houdayer_acceptance : np.ndarray
         Houdayer moves accepted over proposed, per pair that runs one.
     houdayer_sizes : tuple[int, ...]
@@ -709,28 +706,18 @@ class ClusterTempered:
         everywhere proposes none.
     houdayer_accepts : int
         Of those, the moves accepted.
-    best : np.ndarray
-        The lowest-energy configuration seen at any temperature.
-    best_energy : float
-        Its energy.
+    energy : float
+        ``best``'s energy.
     n_sweeps : int
         Steps run, each one Swendsen-Wang pass per replica.
-    site_visits : int
-        Every replica's passes plus every Houdayer move, each charged one
-        sweep's ``n_nodes + 2 n_edges``: the move reads every site and the
-        defect sites' edges.
     """
 
     states: np.ndarray
-    temperatures: tuple[float, ...]
-    swap_acceptance: np.ndarray
     houdayer_acceptance: np.ndarray
     houdayer_sizes: tuple[int, ...]
     houdayer_accepts: int
-    best: np.ndarray
-    best_energy: float
+    energy: float
     n_sweeps: int
-    site_visits: int
 
 
 def cluster_tempering(
@@ -874,20 +861,22 @@ def cluster_tempering(
         houdayer_sizes=tuple(sizes),
         houdayer_accepts=int(houdayer[1].sum()),
         best=best,
-        best_energy=best_energy,
+        energy=best_energy,
         n_sweeps=n_sweeps,
-        site_visits=visits,
+        spent=visits,
+        unit=Cost.SITE_VISITS,
+        termination=Termination.after((burn_in + n_sweeps) * thin, converged=False),
     )
 
 
 def adapt_ladder_potts(
     graph: PottsGraph,
-    field: np.ndarray,
-    start: TempSchedule | Sequence[float],
+    field: SiteField | np.ndarray,
+    temperatures: TempSchedule | Sequence[float],
     rng: np.random.Generator,
     n_sweeps: int,
     band: tuple[float, float],
-    max_rounds: int,
+    max_iterations: int,
     max_replicas: int,
     *,
     backend: Backend = Backend.RUST,
@@ -905,20 +894,21 @@ def adapt_ladder_potts(
     ----------
     graph, field, rng, backend
         As :func:`parallel_tempering`.
-    start : TempSchedule | Sequence[float]
+    temperatures : TempSchedule | Sequence[float]
         The starting ladder, in either spelling and read by
         :func:`~sal.sample.schedule.ladder` into the same
         floats; its endpoints are kept.
     n_sweeps : int
         Sweeps per replica per measurement. Each acceptance is a fraction of
         ``n_sweeps`` proposals, so this sets what the band can resolve.
-    band, max_rounds, max_replicas
+    band, max_iterations, max_replicas
         As :func:`sal.sample.schedule.adapt_ladder`.
 
     Returns
     -------
     AdaptedLadder
     """
+    field = log_weight_of(field)
 
     def measure(candidate: tuple[float, ...]) -> list[float]:
         run = parallel_tempering(
@@ -926,7 +916,9 @@ def adapt_ladder_potts(
         )
         return [float(value) for value in run.swap_acceptance]
 
-    return adapt_ladder(measure, ladder(start), band, max_rounds, max_replicas)
+    return adapt_ladder(
+        measure, ladder(temperatures), band, max_iterations, max_replicas
+    )
 
 
 def sweep_for(
@@ -1068,7 +1060,7 @@ class PottsPair:
 
 def sample_potts_pair(
     graph: PottsGraph,
-    field: np.ndarray,
+    field: SiteField | np.ndarray,
     move: PottsMove,
     rng: np.random.Generator,
     n_sweeps: int,
@@ -1129,6 +1121,7 @@ def sample_potts_pair(
         Fortuin-Kasteleyn cluster move on a graph with a negative coupling, as
         :func:`sample_potts` refuses it.
     """
+    field = log_weight_of(field)
     refuse_negative_coupling(move, graph)
 
     model = tempered(graph, field, temperature)

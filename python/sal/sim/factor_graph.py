@@ -37,6 +37,7 @@ from sal.incidence import SparseIncidence
 from sal.sim.convolutional import IMPOSSIBLE_EDGE, Trellis
 from sal.sim.graph import PottsGraph
 from sal.sim.ldpc import ParityCheck
+from sal.sim.potts import SiteField, log_weight_of
 from sal.sim.tree import Node, edges, preorder
 
 
@@ -281,7 +282,7 @@ class FactorGraph:
 # --- adapters: the problem classes, and the coupled model ---------------
 
 
-def from_potts(graph: PottsGraph, field_values: np.ndarray) -> FactorGraph:
+def from_potts(graph: PottsGraph, field: SiteField | np.ndarray) -> FactorGraph:
     """The Potts model of :func:`sal.likelihood.potts.log_weights`.
 
     One variable per node, a unary factor ``h`` per node, and a pairwise factor
@@ -290,10 +291,11 @@ def from_potts(graph: PottsGraph, field_values: np.ndarray) -> FactorGraph:
     Parameters
     ----------
     graph : PottsGraph
-    field_values : np.ndarray
+    field : SiteField | np.ndarray
         Shape ``(q,)``, or ``(n_nodes, q)`` for a per-node field.
     """
-    values = np.asarray(field_values, dtype=float)
+    field = log_weight_of(field)
+    values = np.asarray(field, dtype=float)
     if values.ndim == 1:
         values = np.tile(values, (graph.n_nodes, 1))
     q = int(values.shape[1])
@@ -345,7 +347,7 @@ def from_hmm(
 
 def from_tree(
     tau: Node,
-    k: int,
+    n_states: int,
     pi: np.ndarray,
     site: Mapping[str, int],
     transitions: Mapping[str, np.ndarray],
@@ -362,7 +364,7 @@ def from_tree(
     ----------
     tau : Node
         The rooted topology.
-    k : int
+    n_states : int
         States.
     pi : np.ndarray
         Root distribution, shape ``(k,)``.
@@ -371,7 +373,7 @@ def from_tree(
     transitions : Mapping[str, np.ndarray]
         Child name to its branch's ``P(t)``, shape ``(k, k)``.
     """
-    variables = [Variable(node.name, k) for node in preorder(tau)]
+    variables = [Variable(node.name, n_states) for node in preorder(tau)]
     factors = [Factor("pi", (tau.name,), np.log(np.asarray(pi, dtype=float)))]
     with np.errstate(divide="ignore"):
         for parent, child in edges(tau):
@@ -384,7 +386,7 @@ def from_tree(
             )
         for node in preorder(tau):
             if node.is_leaf:
-                indicator = np.full(k, -np.inf)
+                indicator = np.full(n_states, -np.inf)
                 indicator[site[node.name]] = 0.0
                 factors.append(Factor(f"x:{node.name}", (node.name,), indicator))
     return FactorGraph(variables, factors)

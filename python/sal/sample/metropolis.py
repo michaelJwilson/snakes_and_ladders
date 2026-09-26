@@ -38,6 +38,7 @@ import numpy as np
 
 from sal import oxisal
 from sal.backend import Backend, refuse_backend
+from sal.cost import Cost
 from sal.emissions import ParameterDomainError
 from sal.opt.objective import Objective, energy_of
 from sal.sample import hmc
@@ -131,7 +132,7 @@ def random_walk(
     n_samples: int,
     *,
     step_size: float,
-    theta0: np.ndarray | None = None,
+    start: np.ndarray | None = None,
     burn_in: int = 0,
     temperature: float = 1.0,
     adaptation: Adaptation | None = None,
@@ -154,7 +155,7 @@ def random_walk(
         The proposal's standard deviation per coordinate, in the metric's
         coordinates. Required: its right value is the target's scale. With an
         ``adaptation`` it is the warm-up's starting point.
-    theta0 : numpy.ndarray | None
+    start : numpy.ndarray | None
         Starting point, copied; ``objective.initial()`` when omitted. An
         array, as the chain takes no derivative (issue #1059).
     burn_in, temperature, store_chain, operators
@@ -199,8 +200,9 @@ def random_walk(
             EVALUATIONS_PER_PROPOSAL,
             rng,
             n_samples,
+            unit=Cost.EVALUATIONS,
             step_size=step_size,
-            theta0=start_point(objective, theta0),
+            start=start_point(objective, start),
             burn_in=burn_in,
             adaptation=adaptation,
             store_chain=store_chain,
@@ -212,8 +214,9 @@ def random_walk(
         objective,
         rng,
         n_samples,
+        unit=Cost.EVALUATIONS,
         step_size=step_size,
-        theta0=theta0,
+        start=start,
         burn_in=burn_in,
         temperature=temperature,
         adaptation=adaptation,
@@ -232,7 +235,7 @@ class Replayed:
 
 def replay(
     objective: Objective,
-    theta0: np.ndarray,
+    start: np.ndarray,
     step_size: float | np.ndarray,
     increments: np.ndarray,
     uniforms: np.ndarray,
@@ -244,7 +247,7 @@ def replay(
     randomness is compared draw for draw. ``step_size`` is a scalar or one
     scale per coordinate.
     """
-    position = np.array(theta0, dtype=np.float64)
+    position = np.array(start, dtype=np.float64)
     scale = np.asarray(step_size, dtype=np.float64)
     current = energy_of(objective, position)
     draws = np.empty((len(uniforms), position.shape[0]))

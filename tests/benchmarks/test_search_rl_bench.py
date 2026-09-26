@@ -40,7 +40,7 @@ def _alignment(
 ) -> tuple[dict[str, np.ndarray], int, np.ndarray]:
     params = load_params(fixture, SimulationParams)
     dataset = simulate_tree(params, np.random.default_rng(params.seed))
-    return dict(dataset.alignment), params.k, params.pi
+    return dict(dataset.alignment), params.n_states, params.pi
 
 
 def _score_once(

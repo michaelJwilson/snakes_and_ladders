@@ -43,6 +43,7 @@ import torch
 
 from sal import param_tree
 from sal.bound import Bound
+from sal.sample.chain import torch_stream
 
 
 @dataclass(frozen=True)
@@ -483,7 +484,7 @@ def fit_surrogate(
     train: Examples,
     validation: Examples,
     *,
-    generator: torch.Generator,
+    rng: np.random.Generator | torch.Generator,
     learning_rate: float = 1e-2,
     max_epochs: int = 300,
     patience: int = 30,
@@ -496,6 +497,7 @@ def fit_surrogate(
     that fit's weights and standardization instead, which is what transfer
     along a curriculum means.
     """
+    generator = torch_stream(rng)
     if warm is None:
         for parameter in model.parameters():
             if parameter.dim() > 1:
@@ -657,10 +659,11 @@ def curriculum(
     make_model: Callable[[], torch.nn.Module],
     stages: Sequence[Stage],
     *,
-    generator: torch.Generator,
+    rng: np.random.Generator | torch.Generator,
     **options: float | int,
 ) -> Curriculum:
     """Fit through the stages in order, each continuing from the previous fit's weights."""
+    generator = torch_stream(rng)
     fits: list[Fitted] = []
     for stage in stages:
         fits.append(
@@ -668,7 +671,7 @@ def curriculum(
                 make_model(),
                 stage.train,
                 stage.validation,
-                generator=generator,
+                rng=generator,
                 warm=fits[-1] if fits else None,
                 **options,  # type: ignore[arg-type]
             )

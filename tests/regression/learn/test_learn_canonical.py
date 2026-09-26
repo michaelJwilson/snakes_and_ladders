@@ -243,7 +243,7 @@ def test_a_positive_cycle_is_refused_rather_than_returned() -> None:
     # optimum and a caller cannot tell it from one that is.
     cycle = ChainMdp(n_states=3, prize=0.0, consolation=0.0)
     with pytest.raises(SweepError, match="did not settle"):
-        value_iteration(_Rewarding(cycle), 0, residual=1e-13, max_sweeps=50)
+        value_iteration(_Rewarding(cycle), 0, residual=1e-13, max_iterations=50)
 
 
 @pytest.mark.smoke

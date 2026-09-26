@@ -66,8 +66,8 @@ def test_identical_per_sequence_kernels_are_the_per_step_kernel() -> None:
     )
     assert shared.log_likelihood == each.log_likelihood
     assert torch.equal(shared.log_initial, each.log_initial)
-    for name, value in shared.emissions.named_parameters().items():
-        assert torch.equal(value, each.emissions.named_parameters()[name])
+    for name, value in shared.components.named_parameters().items():
+        assert torch.equal(value, each.components.named_parameters()[name])
 
 
 @pytest.mark.critical
@@ -176,7 +176,7 @@ def test_a_planted_reflected_count_pair_chain_is_recovered() -> None:
     fit = baum_welch_family(
         draws, initial, kernels, start, config=replace(EM, max_iterations=200)
     )
-    base = fit.emissions.base  # type: ignore[attr-defined]
+    base = fit.components.base  # type: ignore[attr-defined]
     order = np.argsort(base.total.mean.numpy())
     np.testing.assert_allclose(base.total.mean.numpy()[order], [30.0, 90.0], rtol=0.05)
     rate = (base.successes.alpha / base.successes.concentration).numpy()[order]

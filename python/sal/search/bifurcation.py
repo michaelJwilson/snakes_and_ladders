@@ -45,7 +45,7 @@ from sal import oxisal
 from sal.backend import Backend, refuse_backend
 from sal.opt.termination import Termination
 from sal.sim.graph import CompressedAdjacency, PottsGraph
-from sal.sim.potts import energy, site_field
+from sal.sim.potts import energy, penalized, site_field, states_of
 
 if TYPE_CHECKING:
     import torch
@@ -189,9 +189,9 @@ def _integrate_torch(
 def simulated_bifurcation(
     graph: PottsGraph,
     field: np.ndarray,
-    n_states: int,
     rng: np.random.Generator,
     *,
+    n_states: int | None = None,
     steps: int = DEFAULT_STEPS,
     dt: float = DEFAULT_DT,
     n_replicas: int = 1,
@@ -211,11 +211,12 @@ def simulated_bifurcation(
     field : np.ndarray
         ``(n_states,)`` or ``(n_nodes, n_states)``, broadcast by
         :func:`sal.sim.potts.site_field`.
-    n_states : int
-        ``q >= 2``.
     rng : np.random.Generator
         Draws every replica's start, and nothing else; the dynamics are
         deterministic from it.
+    n_states : int | None
+        ``q >= 2``, read from the field's state axis; given, it is checked
+        against it (issue #1091).
     steps : int
         Integration steps per replica; the ramp reaches ``A_END`` at the last.
     dt : float
@@ -251,6 +252,7 @@ def simulated_bifurcation(
         If ``n_states < 2``, ``steps < 1``, ``n_replicas < 1``, ``dt <= 0``, or
         the backend is neither PYTHON nor TORCH.
     """
+    n_states = states_of(field, graph.n_nodes, n_states)
     if n_states < 2:
         msg = f"n_states must be >= 2, got {n_states}"
         raise ValueError(msg)
@@ -263,8 +265,13 @@ def simulated_bifurcation(
     refuse_backend(
         "simulated_bifurcation", backend, (Backend.PYTHON, Backend.TORCH, Backend.RUST)
     )
-    rows = site_field(
-        np.asarray(field, dtype=np.float64), graph.n_nodes, n_states=n_states
+    # The relaxation is continuous: a forbidden label's -inf is a finite
+    # penalty no optimum takes (#1081).
+    rows = penalized(
+        graph,
+        site_field(
+            np.asarray(field, dtype=np.float64), graph.n_nodes, n_states=n_states
+        ),
     )
     c0 = _coupling_scale(graph, rows) if coupling_scale is None else coupling_scale
     index = graph.edge_index.reshape(-1, 2)

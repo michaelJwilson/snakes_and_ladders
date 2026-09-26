@@ -94,9 +94,9 @@ def _check_names(names: list[str]) -> None:
 
 
 def binary_recoding(
-    alignment: Mapping[str, np.ndarray], k: int
+    alignment: Mapping[str, np.ndarray], n_states: int
 ) -> dict[str, np.ndarray]:
-    """A ``k``-state Jukes--Cantor alignment as a two-state symmetric one.
+    """A ``n_states``-state Jukes--Cantor alignment as a two-state symmetric one.
 
     States ``0`` to ``k/2 - 1`` become ``0`` and the rest ``1``. Under
     ``eq:jc`` every state is exchangeable, so the grouping is exact: a change
@@ -108,7 +108,7 @@ def binary_recoding(
     ----------
     alignment : Mapping[str, np.ndarray]
         Taxon name to states in ``[0, k)``.
-    k : int
+    n_states : int
         Number of states, even.
 
     Returns
@@ -119,19 +119,20 @@ def binary_recoding(
     Raises
     ------
     ValueError
-        If ``k`` is odd, where no grouping of the states is exchangeable.
+        If ``n_states`` is odd, where no grouping of the states is exchangeable.
     """
-    if k % 2:
-        msg = f"the two-state recoding needs an even state count, got {k}"
+    if n_states % 2:
+        msg = f"the two-state recoding needs an even state count, got {n_states}"
         raise ValueError(msg)
     return {
-        name: (states >= k // 2).astype(np.int64) for name, states in alignment.items()
+        name: (states >= n_states // 2).astype(np.int64)
+        for name, states in alignment.items()
     }
 
 
-def recoding_scale(k: int) -> float:
+def recoding_scale(n_states: int) -> float:
     """The factor by which :func:`binary_recoding` scales a branch length: ``k / (2 (k - 1))``."""
-    return k / (2.0 * (k - 1))
+    return n_states / (2.0 * (n_states - 1))
 
 
 @dataclass(frozen=True)

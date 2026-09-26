@@ -179,11 +179,11 @@ def test_sankoff_with_the_unit_matrix_is_fitch_on_every_five_taxon_topology() ->
     params = load_fixture(FIVE_TAXA)
     dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=1200)
     alignment = dict(dataset.alignment)
-    unit = unit_step_matrix(params.k)
+    unit = unit_step_matrix(params.n_states)
 
     for topology in enumerate_topologies(sorted(alignment)):
         assert sankoff_score(topology, alignment, unit) == fitch_score(
-            topology, alignment, params.k
+            topology, alignment, params.n_states
         )
 
 
@@ -390,16 +390,19 @@ def test_the_short_branch_likelihood_ranks_the_topologies_as_the_fitch_score_doe
         )
         topologies = list(enumerate_topologies(sorted(alignment)))
         fitch = np.array(
-            [fitch_score(topology, alignment, params.k) for topology in topologies]
+            [
+                fitch_score(topology, alignment, params.n_states)
+                for topology in topologies
+            ]
         )
 
-        fine = _likelihoods(topologies, 1e-5, params.k, pi, alignment)
-        coarse = _likelihoods(topologies, 1e-6, params.k, pi, alignment)
+        fine = _likelihoods(topologies, 1e-5, params.n_states, pi, alignment)
+        coarse = _likelihoods(topologies, 1e-6, params.n_states, pi, alignment)
         slope = (fine - coarse) / (np.log(1e-5) - np.log(1e-6))
         slope_error = max(slope_error, float(np.abs(slope - fitch).max()))
 
         for length in (1e-2, 1e-8):
-            values = _likelihoods(topologies, length, params.k, pi, alignment)
+            values = _likelihoods(topologies, length, params.n_states, pi, alignment)
             gaps = [
                 values[better] - values[worse]
                 for better in range(len(topologies))

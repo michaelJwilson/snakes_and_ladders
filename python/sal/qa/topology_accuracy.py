@@ -78,7 +78,7 @@ def accuracy(params: SimulationParams) -> dict[int, list[float]]:
                 params, np.random.default_rng(params.seed + replicate), n_sites=n_sites
             )
             result = infer(
-                dict(dataset.alignment), params.k, rng=np.random.default_rng(0)
+                dict(dataset.alignment), params.n_states, rng=np.random.default_rng(0)
             )
             distances.append(normalized_robinson_foulds(result.topology, params.tau))
         measured[n_sites] = distances

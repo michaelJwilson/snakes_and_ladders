@@ -55,6 +55,7 @@ from sal.sim.potts import (
     energy,
     log_weight_of,
     site_field,
+    states_of,
 )
 
 # The bound is `2 * c_max / c_min` for a metric pairwise term; with a uniform
@@ -104,6 +105,39 @@ class Labelling:
         yield from (self.labelling, self.energy, self.sweeps, self.termination)
 
 
+@dataclass(frozen=True, kw_only=True)
+class BoundedLabelling(Labelling):
+    """A labelling, and a lower bound on the minimum it is measured against (issue #1081).
+
+    What the bounded solvers return: TRW-S and the tightened dual decomposition
+    did the same job with two types, different field orders and an optional
+    termination. ``energy`` is an **upper** bound on the minimum --- some
+    labelling attains it --- and ``bound`` a **lower** one, both in
+    :func:`~sal.sim.potts.energy`'s sign.
+
+    Parameters
+    ----------
+    bound : float
+        A lower bound on ``min_x E(x)``, valid at every iteration.
+    """
+
+    bound: float
+
+    @property
+    def gap(self) -> float:
+        """``energy - bound``: what is not established. Zero certifies the labelling optimal."""
+        return self.energy - self.bound
+
+    @property
+    def optimal(self) -> bool:
+        """Whether the gap has closed to floating-point noise.
+
+        A real certificate: nothing can beat the bound, and this labelling
+        attains it.
+        """
+        return bool(self.gap <= 1e-9 * max(1.0, abs(self.bound)))
+
+
 @dataclass(frozen=True)
 class ExpansionResult:
     """A labelling, and what reaching it cost.
@@ -123,7 +157,7 @@ class ExpansionResult:
         than a failure.
     termination : Termination | None
         Converged after ``cycles`` where a cycle lowered nothing. Where
-        ``max_cycles`` ran out first it is the budget after ``max_cycles``,
+        ``max_iterations`` ran out first it is the budget after ``max_iterations``,
         and a warning says so (issue #1059): the default cap is a defect
         guard, since monotonicity over a finite state space bounds the
         cycles, but a caller's cap is a budget (`search.ground_state`
@@ -331,7 +365,7 @@ def _cycle_to_a_local_minimum(
     move: _Move,
     *,
     start: np.ndarray | None,
-    max_cycles: int,
+    max_iterations: int,
     backend: Backend,
 ) -> ExpansionResult:
     """Cycle over ``move``'s label sets until a full sweep lowers nothing.
@@ -360,7 +394,7 @@ def _cycle_to_a_local_minimum(
     cut = _lattice_cut(graph) if backend is Backend.RUST else None
 
     moves = 0
-    for cycle in range(1, max_cycles + 1):
+    for cycle in range(1, max_iterations + 1):
         improved = False
         for labels in move.label_sets(n_states):
             moved = move.apply(
@@ -382,13 +416,13 @@ def _cycle_to_a_local_minimum(
             )
 
     # The cap is a termination, not a warning (issue #1089): the result says
-    # it ran to `max_cycles`, which is all a caller needs to decide.
+    # it ran to `max_iterations`, which is all a caller needs to decide.
     return ExpansionResult(
         labelling=labelling,
         energy=energy(graph, values, labelling),
-        cycles=max_cycles,
+        cycles=max_iterations,
         moves=moves,
-        termination=Termination.after(max_cycles, converged=False),
+        termination=Termination.after(max_iterations, converged=False),
     )
 
 
@@ -647,10 +681,10 @@ EXPANSION = _Move(
 def alpha_expansion(
     graph: PottsGraph,
     field: SiteField | np.ndarray,
-    n_states: int,
     *,
+    n_states: int | None = None,
     start: np.ndarray | None = None,
-    max_cycles: int = DEFAULT_MAX_CYCLES,
+    max_iterations: int = DEFAULT_MAX_CYCLES,
     backend: Backend = Backend.RUST,
 ) -> ExpansionResult:
     """Cycle over labels until a full sweep lowers nothing.
@@ -668,12 +702,13 @@ def alpha_expansion(
         bound rests on.
     field : SiteField | np.ndarray
         ``(n_states,)`` or ``(n_nodes, n_states)``.
-    n_states : int
-        Label count.
+    n_states : int | None
+        Label count, read from the field's state axis; given, it is checked
+        against it (issue #1091).
     start : np.ndarray | None
         Initial labelling; the per-node data optimum when omitted, which is
         the labelling ignoring every coupling.
-    max_cycles : int
+    max_iterations : int
         Cycles to run at most. The default, :data:`DEFAULT_MAX_CYCLES`, is a
         defect guard: monotonicity makes a correct run settle inside it. A
         caller's cap is a budget, and reaching it returns the labelling held.
@@ -690,18 +725,18 @@ def alpha_expansion(
     Warns
     -----
     UserWarning
-        Where ``max_cycles`` runs out before a cycle lowers nothing; the
-        result then carries ``cycles = max_cycles`` and a termination
+        Where ``max_iterations`` runs out before a cycle lowers nothing; the
+        result then carries ``cycles = max_iterations`` and a termination
         recording the budget (issue #1059).
     """
     field = log_weight_of(field)
     return _cycle_to_a_local_minimum(
         graph,
         field,
-        n_states,
+        states_of(field, graph.n_nodes, n_states),
         EXPANSION,
         start=start,
-        max_cycles=max_cycles,
+        max_iterations=max_iterations,
         backend=backend,
     )
 
@@ -920,11 +955,11 @@ SWAP = _Move(
 
 def alpha_beta_swap(
     graph: PottsGraph,
-    field: np.ndarray,
-    n_states: int,
+    field: SiteField | np.ndarray,
     *,
+    n_states: int | None = None,
     start: np.ndarray | None = None,
-    max_cycles: int = DEFAULT_MAX_CYCLES,
+    max_iterations: int = DEFAULT_MAX_CYCLES,
     backend: Backend = Backend.RUST,
 ) -> ExpansionResult:
     """Cycle over every label pair until a full sweep lowers nothing.
@@ -947,14 +982,185 @@ def alpha_beta_swap(
     Warns
     -----
     UserWarning
-        Where ``max_cycles`` runs out first, as :func:`alpha_expansion` does.
+        Where ``max_iterations`` runs out first, as :func:`alpha_expansion` does.
     """
+    field = log_weight_of(field)
     return _cycle_to_a_local_minimum(
         graph,
         field,
-        n_states,
+        states_of(field, graph.n_nodes, n_states),
         SWAP,
         start=start,
-        max_cycles=max_cycles,
+        max_iterations=max_iterations,
         backend=backend,
+    )
+
+
+# --- fusion moves (issue #1070) -------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Fused(Labelling):
+    """A fusion's labelling, and how many sites the roof dual left open.
+
+    Parameters
+    ----------
+    unlabelled : int
+        Sites where the two proposals differ and the roof dual fixes neither,
+        which took the better proposal's label. Zero where every pairwise
+        term between differing sites is submodular.
+    """
+
+    unlabelled: int = 0
+
+
+def fuse(
+    graph: PottsGraph,
+    field: SiteField | np.ndarray,
+    first: np.ndarray,
+    second: np.ndarray,
+    *,
+    backend: Backend = Backend.RUST,
+) -> Fused:
+    """The fusion move: per site, ``first``'s label or ``second``'s, chosen by one cut (issue #1070).
+
+    Lempitsky, Rother, Roth and Blake (2010). Each site where the proposals
+    differ takes a binary variable, ``0`` for ``first``'s label and ``1`` for
+    ``second``'s, and the energy over those variables is minimized by the roof
+    dual (QPBO; Kolmogorov and Rother 2007): a minimum cut over two nodes per
+    variable, ``p`` and its complement. Each pairwise term is split into a
+    unary part and one of two kinds of pair: a submodular pair, paying where
+    the two sites choose differently, joins ``p -> q`` and its mirror
+    ``q' -> p'``; a non-submodular pair, paying where both keep ``first``,
+    joins ``p -> q'`` and ``q -> p'``. Each arc carries half the term, so a
+    consistent cut pays it once. A site whose two nodes land on opposite
+    sides is labelled; one whose two land together is left open. An
+    alpha-expansion move is the fusion of a labelling with the constant
+    labelling ``alpha``, whose terms are all submodular.
+
+    **Never worse than either proposal.** The roof dual's labelled part is
+    an autarky: written over any labelling of the differing sites, it does
+    not raise that labelling's energy. Written over the better proposal, it
+    gives ``E(fused) <= min(E(first), E(second))``.
+
+    Parameters
+    ----------
+    graph : PottsGraph
+        Any couplings; a negative one makes pairs non-submodular.
+    field : SiteField | np.ndarray
+        Log-weight per site and state.
+    first, second : np.ndarray
+        The two proposals, one state per site.
+    backend : Backend
+        The cut: ``RUST`` or ``PYTHON``, its oracle.
+
+    Returns
+    -------
+    Fused
+
+    Examples
+    --------
+    >>> from sal.sim.graph import BoundaryCondition, lattice_graph
+    >>> chain = lattice_graph((4,), BoundaryCondition.OPEN, 1.0)
+    >>> field = np.array([[1.0, 0.0], [1.0, 0.0], [0.0, 1.0], [0.0, 1.0]])
+    >>> fuse(chain, field, np.zeros(4, np.int64), np.ones(4, np.int64)).labelling
+    array([0, 0, 1, 1])
+    """
+    refuse_backend("fuse's minimum cut", backend, (Backend.PYTHON, Backend.RUST))
+    n_nodes = graph.n_nodes
+    values = site_field(np.asarray(log_weight_of(field), dtype=float), n_nodes)
+    n_states = values.shape[1]
+    first = check_labelling(first, n_nodes, n_states)
+    second = check_labelling(second, n_nodes, n_states)
+    better = (
+        first
+        if energy(graph, values, first) <= energy(graph, values, second)
+        else second
+    )
+    differs = first != second
+    variables = np.flatnonzero(differs)
+    n_variables = variables.size
+    if n_variables == 0:
+        return Fused(
+            better.copy(), energy(graph, values, better), termination=_ONE_MOVE
+        )
+    index = np.full(n_nodes, -1, dtype=np.int64)
+    index[variables] = np.arange(n_variables)
+    rows = np.arange(n_nodes)
+    # Costs, not log-weights: each site's cost of keeping either proposal.
+    keep_first = -values[rows, first]
+    keep_second = -values[rows, second]
+    edges = graph.edge_index
+    coupling = np.asarray(graph.edge_coupling, dtype=float)
+    left, right = edges[:, 0], edges[:, 1]
+    # The four costs of each edge, `A..D` for (0, 0), (0, 1), (1, 0), (1, 1).
+    cost_a = -coupling * (first[left] == first[right])
+    cost_b = -coupling * (first[left] == second[right])
+    cost_c = -coupling * (second[left] == first[right])
+    cost_d = -coupling * (second[left] == second[right])
+    # An edge with one end fixed is a unary term on the other end.
+    only_left = differs[left] & ~differs[right]
+    only_right = differs[right] & ~differs[left]
+    np.add.at(keep_first, left[only_left], cost_a[only_left])
+    np.add.at(keep_second, left[only_left], cost_c[only_left])
+    np.add.at(keep_first, right[only_right], cost_a[only_right])
+    np.add.at(keep_second, right[only_right], cost_b[only_right])
+    # An edge between two variables: a unary part and one pair.
+    both = differs[left] & differs[right]
+    p, q = index[left[both]], index[right[both]]
+    a, b, c, d = cost_a[both], cost_b[both], cost_c[both], cost_d[both]
+    weight = b + c - a - d
+    submodular = weight >= 0.0
+    # Cost when x = 1, over x = 0: `C - A` or `D - B` on p, `D - C` on q.
+    extra = np.zeros(n_variables)
+    np.add.at(extra, p, np.where(submodular, c - a, d - b))
+    np.add.at(extra, q, d - c)
+    extra += keep_second[variables] - keep_first[variables]
+    source, sink = 2 * n_variables, 2 * n_variables + 1
+    unary = np.arange(n_variables)
+    complement = unary + n_variables
+    rising, falling = extra > 0.0, extra < 0.0
+    half = np.abs(extra) / 2.0
+    pair = np.abs(weight) / 2.0
+    tail = np.concatenate(
+        [
+            np.full(rising.sum(), source),
+            complement[rising],
+            unary[falling],
+            np.full(falling.sum(), source),
+            p,
+            np.where(submodular, q + n_variables, q),
+        ]
+    )
+    head = np.concatenate(
+        [
+            unary[rising],
+            np.full(rising.sum(), sink),
+            np.full(falling.sum(), sink),
+            complement[falling],
+            np.where(submodular, q, q + n_variables),
+            p + n_variables,
+        ]
+    )
+    capacity = np.concatenate(
+        [half[rising], half[rising], half[falling], half[falling], pair, pair]
+    )
+    network = FlowNetwork.from_arcs(
+        2 * n_variables + 2,
+        tail.astype(np.int64),
+        head.astype(np.int64),
+        capacity,
+        np.zeros(capacity.size),
+    )
+    cut = max_flow(network, source, sink, backend=backend)
+    side = cut.source_side
+    kept, flipped = side[unary] & ~side[complement], ~side[unary] & side[complement]
+    fused = better.copy()
+    fused[variables[kept]] = first[variables[kept]]
+    fused[variables[flipped]] = second[variables[flipped]]
+    return Fused(
+        fused,
+        energy(graph, values, fused),
+        termination=_ONE_MOVE,
+        unlabelled=int(n_variables - kept.sum() - flipped.sum()),
     )

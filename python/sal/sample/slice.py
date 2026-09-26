@@ -41,11 +41,13 @@ import time
 from dataclasses import dataclass
 from enum import Enum
 
+import numpy as np
 import torch
 
 from sal.backend import Backend, refuse_backend
+from sal.cost import Cost
 from sal.opt.objective import Objective
-from sal.sample.chain import Adaptation
+from sal.sample.chain import Adaptation, torch_stream
 from sal.track import TrackedOptimization, current
 
 #: Shrinkages one update may spend before it is refused. The interval halves
@@ -109,9 +111,12 @@ class SliceChain:
     draws : torch.Tensor
         Draws in unconstrained coordinates, shape ``(n_samples, dimension)``.
         One draw is one sweep, not one univariate update.
-    objective_evaluations : int
-        Evaluations spent, burn-in included, so an effective sample size
-        divided by it is the cost of a draw in the unit this sampler spends.
+    spent : int
+        Objective evaluations spent, burn-in included, so an effective sample
+        size divided by it is the cost of a draw (issue #1090).
+    unit : Cost
+        :attr:`~sal.cost.Cost.EVALUATIONS`, what ``spent`` counts, where
+        the gradient samplers' chains count gradients.
     evaluations_per_draw : float
         The same number over the sweeps that produced it, which is what a
         width is diagnosed by.
@@ -122,7 +127,8 @@ class SliceChain:
     """
 
     draws: torch.Tensor
-    objective_evaluations: int
+    spent: int
+    unit: Cost
     evaluations_per_draw: float
     expansions_per_draw: float
     shrinkages_per_draw: float
@@ -130,13 +136,13 @@ class SliceChain:
 
 def slice_sample(
     objective: Objective,
-    generator: torch.Generator,
+    rng: np.random.Generator | torch.Generator,
     n_samples: int,
     *,
     width: float,
     max_steps_out: int,
     direction: SliceDirection = SliceDirection.COORDINATE,
-    theta0: torch.Tensor | None = None,
+    start: torch.Tensor | None = None,
     burn_in: int = 0,
     shrink: bool = True,
     temperature: float = 1.0,
@@ -156,7 +162,7 @@ def slice_sample(
     objective : Objective
         Read as an unnormalized negative log density, as
         :func:`~sal.sample.hmc.sample` reads it.
-    generator : torch.Generator
+    rng : np.random.Generator | torch.Generator
         The stream every uniform, direction and slice level comes from.
     n_samples : int
         Sweeps recorded after burn-in.
@@ -170,7 +176,7 @@ def slice_sample(
         At least 1.
     direction : SliceDirection
         The lines a sweep runs along.
-    theta0 : torch.Tensor | None
+    start : torch.Tensor | None
         Starting point; ``objective.initial()`` when omitted.
     burn_in : int
         Sweeps discarded before recording.
@@ -206,6 +212,7 @@ def slice_sample(
         below 1, an ``adaptation`` or a backend other than ``PYTHON`` is
         given, or an update exhausts :data:`MAX_SHRINKAGES`.
     """
+    generator = torch_stream(rng)
     refuse_backend("slice_sample", backend, (Backend.PYTHON,))
     if adaptation is not None:
         msg = (
@@ -229,8 +236,8 @@ def slice_sample(
 
     position = (
         objective.initial().detach().clone()
-        if theta0 is None
-        else theta0.detach().clone()
+        if start is None
+        else start.detach().clone()
     ).to(torch.float64)
     dimension = int(position.shape[0])
 
@@ -275,7 +282,8 @@ def slice_sample(
     sweeps = max(n_samples + burn_in, 1)
     return SliceChain(
         draws=draws,
-        objective_evaluations=evaluations,
+        spent=evaluations,
+        unit=Cost.EVALUATIONS,
         evaluations_per_draw=evaluations / sweeps,
         expansions_per_draw=expansions / sweeps,
         shrinkages_per_draw=shrinkages / sweeps,

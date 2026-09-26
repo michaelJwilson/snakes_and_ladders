@@ -20,6 +20,7 @@ def posteriors(
     log_density: Ragged,
     log_initial: np.ndarray,
     log_transition: np.ndarray,
+    switch: np.ndarray | None = None,
 ) -> Posteriors:
     """Marginals, transition counts and per-segment evidence, in Rust.
 
@@ -31,6 +32,9 @@ def posteriors(
         ``(n_states,)``, the distribution each segment restarts at.
     log_transition : np.ndarray
         ``(n_states, n_states)`` in log space.
+    switch : np.ndarray | None
+        One stay-or-switch probability per position, or ``None``; see
+        :func:`sal.likelihood.ragged.posteriors`.
 
     Returns
     -------
@@ -51,5 +55,8 @@ def posteriors(
         gamma,
         counts,
         evidence,
+        None
+        if switch is None
+        else np.ascontiguousarray(switch, dtype=np.float64).reshape(-1),
     )
     return Posteriors(gamma, counts, evidence)

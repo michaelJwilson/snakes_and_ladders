@@ -93,7 +93,7 @@ def _environment(
     alignment = dict(dataset.alignment)
     environment = TreeEnvironment(
         alignment,
-        params.k,
+        params.n_states,
         np.asarray(params.pi),
         branch_length=float(
             np.mean([child.branch_length for _, child in edges(params.tau)])
@@ -184,7 +184,7 @@ def measure(
             batch=BATCH,
             max_steps=HORIZON,
         )
-        episodes = training.episodes
+        episodes = training.spent
         probe = np.random.default_rng(1000 + seed)
         learned.append(
             reached(

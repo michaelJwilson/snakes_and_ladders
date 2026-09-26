@@ -1,0 +1,1 @@
+`potts_starts.ipynb` measures ICM from the field's argmax on 30 held-out tilings: a median of 2 sweeps to a clean one, 25–38 above the TRW-S bound where alpha-expansion is 0.8–2.4 above it, and every site where the two disagree inside a tile at or under `recovery_bound` (#1071).

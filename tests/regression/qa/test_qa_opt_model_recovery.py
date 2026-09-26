@@ -45,7 +45,7 @@ def test_the_fits_recover_the_generating_model_and_the_caption_reports_them() ->
     general = fit_model(
         params, gtr_rate_matrix(TRUE_EXCHANGEABILITIES, TRUE_PI), TRUE_PI
     )
-    uniform = np.full(params.k, 1.0 / params.k)
+    uniform = np.full(params.n_states, 1.0 / params.n_states)
     jukes_cantor = fit_model(params, None, uniform)
 
     fitted, spread = general

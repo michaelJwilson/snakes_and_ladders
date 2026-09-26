@@ -34,12 +34,12 @@ def _instance() -> tuple[Node, int, np.ndarray, dict[str, np.ndarray]]:
     pi = np.asarray(params.pi, dtype=float)
     dataset = simulate_alignment(
         tau=params.tau,
-        k=params.k,
+        n_states=params.n_states,
         pi=pi,
         rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
-    return params.tau, params.k, pi, dataset.alignment
+    return params.tau, params.n_states, pi, dataset.alignment
 
 
 @pytest.mark.oracle

@@ -226,16 +226,49 @@ def recovery_bound(rung: TilingRung) -> np.ndarray:
     np.ndarray
         Shape ``(k,)``, in the coupling's units.
     """
+    bound = np.zeros(rung.states.size)
+    np.maximum.at(bound, rung.tiles, _outside_coupling(rung))
+    return bound
+
+
+def _outside_coupling(rung: TilingRung) -> np.ndarray:
+    """``b_i``: per site, the coupling on its bonds leaving its tile."""
     # Each bond joining two tiles counts its coupling at both of its ends.
     ends = rung.graph.edge_index
     crossing = rung.tiles[ends[:, 0]] != rung.tiles[ends[:, 1]]
     weights = np.asarray(rung.graph.edge_coupling) * crossing
-    per_site = np.bincount(
+    return np.bincount(
         ends.ravel(), weights=np.repeat(weights, 2), minlength=rung.n_nodes
     )
-    bound = np.zeros(rung.states.size)
-    np.maximum.at(bound, rung.tiles, per_site)
-    return bound
+
+
+def held_tiles(rung: TilingRung) -> np.ndarray:
+    """Per tile, whether every graph-cut local minimum labels it its favoured state in full, on any field (issue #1074).
+
+    :func:`recovery_bound`'s argument site by site. Expanding ``a_t`` onto
+    ``U`` changes site ``i``'s field term by at most ``-m_i``, its margin
+    ``h_i(a_t) - max_(b != a_t) h_i(b)``, and its bonds leaving the tile by
+    at most ``b_i``, so the move lowers the energy when ``m_i > b_i`` at
+    every site of the tile. On a noise-free tiling field ``m_i = s_t``,
+    and this is ``s_t > b_t``, :func:`recovery_bound`'s condition; on a
+    noisy one a site whose noise favours another state can fail it, and
+    its tile is then not held.
+
+    Returns
+    -------
+    np.ndarray
+        ``bool``, shape ``(k,)``.
+    """
+    field = np.asarray(rung.field, dtype=float)
+    planted = rung.states[rung.tiles]
+    rows = np.arange(rung.n_nodes)
+    favoured = field[rows, planted]
+    others = field.copy()
+    others[rows, planted] = -np.inf
+    margin = favoured - others.max(axis=1)
+    slack = np.full(rung.states.size, np.inf)
+    np.minimum.at(slack, rung.tiles, margin - _outside_coupling(rung))
+    return slack > 0.0
 
 
 def binary_sibling(rung: Rung, name: str) -> Rung:
@@ -514,11 +547,11 @@ def polish_by_icm(
         settled = iterated_conditional_modes(
             rung.graph,
             rung.field,
-            rung.n_states,
             floor_draws,
             start=labelling,
-            max_sweeps=1,
+            max_iterations=1,
             min_sites=min_sites,
+            n_states=rung.n_states,
         )
         sweeps += 1
         tracked.record(sweeps, objective=settled.energy)

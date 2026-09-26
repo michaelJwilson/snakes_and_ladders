@@ -93,3 +93,61 @@ def test_the_enum_selects_the_kernel_or_its_oracle_bitwise() -> None:
 
     with pytest.raises(ValueError, match="not numba"):
         posteriors(density, initial, transition, backend=Backend.NUMBA)
+
+
+#: Segment layouts the switched kernel is checked on: even, uneven, and the
+#: shortest a segment may be.
+SWITCHED_LAYOUTS = [(6, 6, 6), (2, 11, 3, 7), (2, 2)]
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("lengths", SWITCHED_LAYOUTS, ids=str)
+def test_a_switched_transition_matches_the_materialized_stack(
+    lengths: tuple[int, ...],
+) -> None:
+    # Issue #1082 H1: the kernel builds `(1 - s) I + s A` per step from one
+    # `A`; the oracle hands `forward_backward` the `(T - 1, K, K)` stack.
+    density, initial, transition = _instance(lengths, seed=1082)
+    switch = np.random.default_rng(len(lengths)).uniform(size=sum(lengths))
+
+    compiled = posteriors(density, initial, transition, switch=switch)
+    reference = posteriors_oracle(density, initial, transition, switch)
+
+    for got, want in zip(compiled, reference, strict=True):
+        np.testing.assert_allclose(got, want, rtol=CROSS_DEVICE_RTOL_FLOAT64)
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("value", [0.0, 0.35, 1.0])
+def test_a_constant_switch_is_the_mixed_kernel(value: float) -> None:
+    # A constant `s` is one kernel, `(1 - s) I + s A`, passed as the plain
+    # `(K, K)` transition; at `s = 1` that is `A` itself, and at `s = 0` the
+    # chain never moves. Bitwise at 0 and 0.35; at 1 the kernel's `ln` of
+    # `exp(log A)` and NumPy's differ by up to 5.4e-16 relative, inside the
+    # twin's declared tolerance.
+    density, initial, transition = _instance((5, 8), seed=7)
+    switch = np.full(13, value)
+    with np.errstate(divide="ignore"):
+        mixed = np.log((1.0 - value) * np.eye(STATES) + value * np.exp(transition))
+
+    switched = posteriors(density, initial, transition, switch=switch)
+    plain = posteriors(density, initial, mixed)
+
+    for got, want in zip(switched, plain, strict=True):
+        np.testing.assert_allclose(got, want, rtol=CROSS_DEVICE_RTOL_FLOAT64)
+    if value < 1.0:
+        assert all(
+            np.array_equal(got, want) for got, want in zip(switched, plain, strict=True)
+        )
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize(
+    ("switch", "message"),
+    [(np.full(4, 0.5), "one per position"), (np.full(13, 1.5), "in \\[0, 1\\]")],
+)
+def test_a_malformed_switch_is_refused(switch: np.ndarray, message: str) -> None:
+    density, initial, transition = _instance((5, 8), seed=7)
+
+    with pytest.raises(ValueError, match=message):
+        posteriors(density, initial, transition, switch=switch)

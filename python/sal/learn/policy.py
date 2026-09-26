@@ -23,11 +23,15 @@ exists to prevent, one module over.
 from __future__ import annotations
 
 from abc import abstractmethod
+from dataclasses import dataclass
 from typing import Protocol
 
 import numpy as np
 import torch
 from numpy.typing import NDArray
+
+from sal.cost import Cost
+from sal.opt.termination import Termination
 
 #: What a policy scores: :meth:`Environment.features`' array, or a tensor.
 #: A feature is a constant to every loss here, so it is converted to a tensor
@@ -369,3 +373,31 @@ class EpsilonGreedyPolicy(Policy):
         if self._epsilon > 0.0 and rng.random() < self._epsilon:
             return int(rng.integers(n_actions))
         return self._policy.greedy(features)
+
+
+@dataclass(frozen=True, kw_only=True)
+class TrainingRun:
+    """What a policy-training run returns, whichever trainer ran it (issue #1090).
+
+    Four trainers returned four shapes: the cost was ``episodes`` in three
+    and ``evaluations`` in the fourth, and none said why it stopped. Each
+    trainer's result is a thin subclass adding the losses it tracks.
+
+    Parameters
+    ----------
+    mean_returns : tuple[float, ...]
+        The mean return of each iteration's batch, in order.
+    spent : int
+        What training cost, in ``unit``.
+    unit : Cost
+        :attr:`~sal.cost.Cost.EPISODES` for the policy-gradient trainers,
+        :attr:`~sal.cost.Cost.EVALUATIONS` for expert iteration, whose cost
+        is the search's leaf evaluations.
+    termination : Termination
+        Training runs its iterations to the end: their count, not converged.
+    """
+
+    mean_returns: tuple[float, ...]
+    spent: int
+    unit: Cost
+    termination: Termination

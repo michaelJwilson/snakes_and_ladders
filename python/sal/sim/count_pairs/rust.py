@@ -82,14 +82,14 @@ def _channels(
     (issue #671). Splitting here is one copy per call against ``S * V`` reads.
 
     The split and the refusal are
-    :func:`~sal.sim.count_pairs.split_covariate`'s, which states
+    :func:`~sal.emissions.base.split_covariate`'s, which states
     the rank rule --- one simulator must not accept what the other refuses, and
     this twin carried a second check that refused what the NumPy draw accepted
     (issue #856). What is left here is the flatten the kernel's
     one-dimensional arguments take; a covariate of the wrong length is the
     kernel's own refusal. The pair stays a pair (issue #865): it is one
     caller's two kernel arguments, and the split it wraps is named by
-    :class:`~sal.sim.count_pairs.ChannelCovariates`.
+    :class:`~sal.emissions.base.ChannelCovariates`.
 
     Raises
     ------

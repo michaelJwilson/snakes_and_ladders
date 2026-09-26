@@ -34,3 +34,23 @@ def test_ragged_posteriors_bench(
     initial = np.log(np.full(STATES, 1.0 / STATES))
     transition = np.log(np.full((STATES, STATES), 1.0 / STATES))
     benchmark(posteriors, density, initial, transition)
+
+
+@pytest.mark.benchmark(group="ragged-switched")
+@pytest.mark.parametrize("route", ["switch", "stack"])
+def test_switched_transition_bench(benchmark: BenchmarkFixture, route: str) -> None:
+    """A per-site switch (issue #1082): the kernel's per-step build, against the stack.
+
+    `stack` is what a caller did without the switch: materialize one
+    `(K, K)` kernel per step and run the oracle's per-step form, one segment
+    at a time. 64 segments of 500 at four states.
+    """
+    from sal.backend import Backend
+
+    lengths = (500,) * 64
+    density = _density(lengths)
+    initial = np.log(np.full(STATES, 1.0 / STATES))
+    transition = np.log(np.random.default_rng(3).dirichlet(np.ones(STATES), STATES))
+    switch = np.random.default_rng(4).uniform(size=sum(lengths))
+    backend = Backend.RUST if route == "switch" else Backend.PYTHON
+    benchmark(posteriors, density, initial, transition, switch=switch, backend=backend)

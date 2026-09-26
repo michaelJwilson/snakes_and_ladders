@@ -41,7 +41,7 @@ def environment() -> TreeEnvironment:
     ]
     return TreeEnvironment(
         dict(dataset.alignment),
-        params.k,
+        params.n_states,
         params.pi,
         branch_length=float(np.mean(lengths)),
         reward=RewardModel.KNOWN,

@@ -1120,14 +1120,16 @@ def test_annealing_reaches_the_closed_form_ground_energy_where_descent_does_not(
         for seed in range(20)
     ]
     descended = [
-        iterated_conditional_modes(graph, field, 2, np.random.default_rng(seed)).energy
+        iterated_conditional_modes(
+            graph, field, np.random.default_rng(seed), n_states=2
+        ).energy
         for seed in range(20)
     ]
 
     for result in annealed:
         # The reported energy is the energy of the reported labelling, in the
         # convention the exact solvers use, and never below the closed form.
-        assert result.energy == pytest.approx(energy(graph, field, result.labelling))
+        assert result.energy == pytest.approx(energy(graph, field, result.best))
         assert result.energy >= ground - 1e-12
         assert result.n_sweeps == 200
     annealed_hits = sum(abs(result.energy - ground) < 1e-12 for result in annealed)
@@ -1240,10 +1242,8 @@ def test_the_best_configuration_is_the_lowest_energy_any_replica_visited() -> No
     )
 
     visited = energies(graph, WITH_FIELD, run.states.reshape(-1, graph.n_nodes))
-    assert run.best_energy == pytest.approx(
-        energies(graph, WITH_FIELD, run.best[None])[0]
-    )
-    assert run.best_energy <= visited.min() + 1e-12
+    assert run.energy == pytest.approx(energies(graph, WITH_FIELD, run.best[None])[0])
+    assert run.energy <= visited.min() + 1e-12
 
 
 @pytest.mark.oracle
@@ -1277,7 +1277,7 @@ def test_tempering_reaches_the_ground_energy_annealing_reaches() -> None:
         assert annealing.energy == pytest.approx(ground, abs=1e-12)
         visited = energies(graph, field, run.states[:, coldest])
         assert float(visited.min()) == pytest.approx(annealing.energy, abs=1e-12)
-        assert run.best_energy == pytest.approx(ground, abs=1e-12)
+        assert run.energy == pytest.approx(ground, abs=1e-12)
         assert run.swap_acceptance[coldest - 1] > 0.2, run.swap_acceptance
 
 
@@ -1311,7 +1311,7 @@ def test_tempering_and_annealing_beat_restarts_at_equal_budget_on_the_glass() ->
         instance: PlantedSpinGlass, budget: Budget, rng: np.random.Generator
     ) -> Outcome:
         energy = iterated_conditional_modes(
-            instance.graph, np.zeros(2), 2, rng, max_sweeps=budget.size
+            instance.graph, np.zeros(2), rng, max_iterations=budget.size, n_states=2
         ).energy
         return Outcome(energy, budget.size)
 
@@ -1331,7 +1331,7 @@ def test_tempering_and_annealing_beat_restarts_at_equal_budget_on_the_glass() ->
     ) -> Outcome:
         per_replica = budget.size // len(ladder)
         run = parallel_tempering(instance.graph, np.zeros(2), ladder, rng, per_replica)
-        return Outcome(run.best_energy, per_replica * len(ladder))
+        return Outcome(run.energy, per_replica * len(ladder))
 
     result = compare(
         {"restarts": restarts(descent, 4), "anneal": anneal, "tempering": tempering},
@@ -1460,7 +1460,7 @@ def test_the_adapted_ladder_reaches_the_ground_state_at_equal_sweeps(
             remaining // len(adapted.temperatures),
             backend=Backend.RUST,
         )
-        adapted_hits += abs(run.best_energy - ground) < 1e-12
+        adapted_hits += abs(run.energy - ground) < 1e-12
     hand_hits = sum(
         abs(
             parallel_tempering(
@@ -1470,7 +1470,7 @@ def test_the_adapted_ladder_reaches_the_ground_state_at_equal_sweeps(
                 np.random.default_rng(seed),
                 budget // len(HAND_LADDER),
                 backend=Backend.RUST,
-            ).best_energy
+            ).energy
             - ground
         )
         < 1e-12

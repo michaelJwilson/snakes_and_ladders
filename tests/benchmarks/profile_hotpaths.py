@@ -129,7 +129,11 @@ def _branched(n_taxa: int, seed: int) -> Node:
 def _alignment(n_taxa: int, n_sites: int) -> tuple[Node, dict[str, np.ndarray]]:
     tau = _branched(n_taxa, seed=0)
     dataset = simulate_alignment(
-        tau, k=4, pi=np.full(4, 0.25), rng=np.random.default_rng(1), n_sites=n_sites
+        tau,
+        n_states=4,
+        pi=np.full(4, 0.25),
+        rng=np.random.default_rng(1),
+        n_sites=n_sites,
     )
     return tau, dict(dataset.alignment)
 
@@ -158,7 +162,7 @@ def sim_sections(mid: bool) -> list[Section]:
 
     def _simulate() -> None:
         simulate_alignment(
-            tau, k=4, pi=pi, rng=np.random.default_rng(1), n_sites=n_sites
+            tau, n_states=4, pi=pi, rng=np.random.default_rng(1), n_sites=n_sites
         )
 
     def _lattices() -> None:
@@ -352,7 +356,7 @@ def search_sections(mid: bool) -> list[Section]:
         energies(graph, ising_field, configurations)
 
     def _expansion() -> None:
-        alpha_expansion(graph, potts_field, 3)
+        alpha_expansion(graph, potts_field, n_states=3)
 
     def _single_site() -> None:
         # The oracle sweep explicitly, though it is no longer the default:
@@ -524,7 +528,7 @@ def learn_sections(mid: bool) -> list[Section]:
             MLPSurrogate(examples.features.shape[1]),
             examples,
             examples,
-            generator=torch.Generator().manual_seed(0),
+            rng=torch.Generator().manual_seed(0),
             max_epochs=20,
         )
 
