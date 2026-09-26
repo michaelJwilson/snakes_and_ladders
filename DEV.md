@@ -437,6 +437,24 @@ go through it, each taking `workers=` explicitly — `opt.fit.fit_from` (starts)
 * **Every pull request names its base branch in its title, and targets it.** The title starts with the base branch in brackets — `[main]` for a root, `[claude/phylo-249-document-split]` for a link in a chain — and the base is set to that branch (issue #292). The base branch rather than the parent's PR number, because it is what the pull request's `base` field holds, so the `pr-title` job checks the two agree and it survives the parent being renumbered or closed. A stacked pull request targets its *parent branch* rather than `main`, so the diff under review is the change itself — measured on the #190 chain, #225 was 64 changed files against `main` and 11 against its parent. GitHub retargets a child to `main` when the parent merges, so the title prefix is the only part to update by hand.
 * **A chain merges bottom-up, with a merge commit.** Squash and rebase-merge both rewrite the parent's commits into new SHAs, after which the child no longer contains them: its diff duplicates the parent's content and every pull request below it conflicts. A merge commit preserves the ancestry, so each child's diff narrows to its own change the moment its parent lands. Bring a chain up to date the same way — cascade `main` into the root, then each parent into its child — and never rebase or force-push a branch, which invalidates any checkout of it and leaves the stale heads issue #123 records. Where two subtrees share a root, take the longer one first: whichever goes second is reconciled per branch.
 
+### API Vocabulary
+
+The names root `CLAUDE.md`'s API conventions refer to. An entry point uses these, or its docstring says why not. Where the package still diverges, the ticket that converges it is named.
+
+| Concept | Name | Type and rule | Converging |
+| --- | --- | --- | --- |
+| Minimized objective | `energy` | `float`; a maximized one is `log_weight`, `log_likelihood` or `log_evidence` | #1089 |
+| State count | `n_states` | `int`, inferred from `field` where it has a state axis | #1091 |
+| Per-site field | `field` | `SiteField \| np.ndarray`, read through `log_weight_of` | #1091 |
+| Randomness | `rng` | `np.random.Generator`, keyword-only, required; a torch path derives its own | #1091 |
+| Initial state | `start` | keyword-only | #1091 |
+| Loop cap | `max_iterations` | `int >= 1`; the unit of one iteration stated per solver | #1091 |
+| Tolerance | `tolerance` | relative, stated per solver | #1091 |
+| Temperatures | `schedule` | `TempSchedule`; inverse temperatures have their own type | #1089 |
+| Cost of a run | `spent` | `int` in a declared `Cost` | #1090 |
+| Why a loop ended | `termination` | `Termination`, required | #1085, #1090 |
+| Returned arrays | — | NumPy and `float`; a tensor only from a `torch.py` twin or a `*_torch` name | #1092 |
+
 ### Dependency Management
 
 1. **Request:** Explicitly request permission before adding dependencies/tools.
