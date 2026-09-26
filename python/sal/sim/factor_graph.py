@@ -37,6 +37,7 @@ from sal.incidence import SparseIncidence
 from sal.sim.convolutional import IMPOSSIBLE_EDGE, Trellis
 from sal.sim.graph import PottsGraph
 from sal.sim.ldpc import ParityCheck
+from sal.sim.potts import SiteField, log_weight_of
 from sal.sim.tree import Node, edges, preorder
 
 
@@ -281,7 +282,7 @@ class FactorGraph:
 # --- adapters: the problem classes, and the coupled model ---------------
 
 
-def from_potts(graph: PottsGraph, field_values: np.ndarray) -> FactorGraph:
+def from_potts(graph: PottsGraph, field: SiteField | np.ndarray) -> FactorGraph:
     """The Potts model of :func:`sal.likelihood.potts.log_weights`.
 
     One variable per node, a unary factor ``h`` per node, and a pairwise factor
@@ -290,10 +291,11 @@ def from_potts(graph: PottsGraph, field_values: np.ndarray) -> FactorGraph:
     Parameters
     ----------
     graph : PottsGraph
-    field_values : np.ndarray
+    field : SiteField | np.ndarray
         Shape ``(q,)``, or ``(n_nodes, q)`` for a per-node field.
     """
-    values = np.asarray(field_values, dtype=float)
+    field = log_weight_of(field)
+    values = np.asarray(field, dtype=float)
     if values.ndim == 1:
         values = np.tile(values, (graph.n_nodes, 1))
     q = int(values.shape[1])

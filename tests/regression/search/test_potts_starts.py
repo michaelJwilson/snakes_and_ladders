@@ -122,7 +122,7 @@ def test_the_icm_polish_ends_at_a_local_minimum_never_above_its_start() -> None:
         rung.field,
         np.random.default_rng(0),
         start=start,
-        max_sweeps=POLISH.size,
+        max_iterations=POLISH.size,
         n_states=3,
     )
     assert np.array_equal(whole.labelling, labelling)

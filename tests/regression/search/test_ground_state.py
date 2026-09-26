@@ -530,7 +530,7 @@ def test_the_swap_returns_what_it_holds_at_its_cycle_cap_and_says_so() -> None:
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         capped = alpha_beta_swap(
-            rung.graph, rung.field, start=start, max_cycles=1, n_states=3
+            rung.graph, rung.field, start=start, max_iterations=1, n_states=3
         )
     assert capped.cycles == 1
     assert capped.termination == Termination(False, 1, Stop.BUDGET)

@@ -20,9 +20,9 @@ may be joined. A recolouring is a change, so the descent continues past it.
 **The draws.** Both backends read the same randomness, drawn up front in one
 order: the start where none is given (``rng.integers``), then one
 permutation per sweep for a random order that runs every sweep, then
-``rng.random(max_sweeps * n_nodes)`` for the floor, only where
+``rng.random(max_iterations * n_nodes)`` for the floor, only where
 ``min_sites > 0``. So an unfloored descent spends the generator exactly as it
-did before the floor, and a floored one spends ``max_sweeps * n_nodes``
+did before the floor, and a floored one spends ``max_iterations * n_nodes``
 uniforms however early it stops. A random order that stops on a clean sweep
 draws its permutations per sweep, which only
 :data:`~sal.backend.Backend.PYTHON` runs; its floor's uniforms
@@ -92,7 +92,7 @@ def iterated_conditional_modes(
     *,
     n_states: int | None = None,
     start: np.ndarray | None = None,
-    max_sweeps: int = 200,
+    max_iterations: int = 200,
     sweep_order: SweepOrder = SweepOrder.INDEX,
     stop_when_clean: bool = True,
     min_sites: int = 0,
@@ -137,13 +137,13 @@ def iterated_conditional_modes(
         given, it is checked against that axis (issue #1091).
     start : np.ndarray | None
         The labelling to descend from, or ``None`` to draw one uniformly.
-    max_sweeps : int
+    max_iterations : int
         Sweeps the descent is allowed.
     sweep_order : SweepOrder
         The order sites are visited in; index order by default.
     stop_when_clean : bool
         Whether a sweep that changes nothing, recolouring included, ends the
-        descent. ``False`` runs every sweep of ``max_sweeps``.
+        descent. ``False`` runs every sweep of ``max_iterations``.
     min_sites : int
         The floor: after each sweep a state holding at least one and fewer
         than this many sites is dissolved into the states at or above it.
@@ -200,12 +200,16 @@ def iterated_conditional_modes(
     # per-sweep draw would take them (issue #923): with every sweep run, the
     # same stream. No rows is index order.
     orders = (
-        np.stack([rng.permutation(n_nodes) for _ in range(max_sweeps)]).astype(np.int64)
-        if sweep_order is SweepOrder.RANDOM and not lazy and max_sweeps > 0
+        np.stack([rng.permutation(n_nodes) for _ in range(max_iterations)]).astype(
+            np.int64
+        )
+        if sweep_order is SweepOrder.RANDOM and not lazy and max_iterations > 0
         else np.empty((0, n_nodes), dtype=np.int64)
     )
     draws = (
-        rng.random(max_sweeps * n_nodes) if min_sites > 0 else np.empty(0, np.float64)
+        rng.random(max_iterations * n_nodes)
+        if min_sites > 0
+        else np.empty(0, np.float64)
     )
     offsets, neighbour_index, edge_couplings = graph.compressed_adjacency()
 
@@ -219,7 +223,7 @@ def iterated_conditional_modes(
             edge_couplings,
             orders,
             draws,
-            max_sweeps,
+            max_iterations,
             stop_when_clean,
             min_sites,
         )
@@ -240,7 +244,7 @@ def iterated_conditional_modes(
     # cheaper than a NumPy scalar one. Same reads, same order, same writes.
     labels = labelling.tolist()
     sweeps = 0
-    for sweep in range(max_sweeps):
+    for sweep in range(max_iterations):
         sweeps += 1
         order = (
             rng.permutation(n_nodes)

@@ -38,7 +38,7 @@ import numpy as np
 from sal.opt.termination import Termination, check_cap
 from sal.search.alpha_expansion import BoundedLabelling
 from sal.sim.graph import PottsGraph
-from sal.sim.potts import energy, site_field
+from sal.sim.potts import SiteField, energy, log_weight_of, site_field
 
 
 def _edge_tables(graph: PottsGraph, n_states: int) -> np.ndarray:
@@ -95,9 +95,10 @@ def _clusters(
 
 def dual_bound(
     graph: PottsGraph,
-    field_values: np.ndarray,
+    field: SiteField | np.ndarray,
     *,
-    iterations: int = 200,
+    max_iterations: int = 200,
+    tolerance: float = 1e-12,
     plaquettes: tuple[tuple[int, ...], ...] = (),
 ) -> BoundedLabelling:
     """Bound the Potts ground-state energy from below, and decode under it.
@@ -113,11 +114,15 @@ def dual_bound(
     graph : PottsGraph
         The lattice or graph. Couplings may be of either sign: a repulsive one
         is where this earns its place, since minimum cut cannot take it.
-    field_values : np.ndarray
+    field : SiteField | np.ndarray
         The external field, ``(n_states,)`` or ``(n_nodes, n_states)``.
-    iterations : int
+    max_iterations : int
         Coordinate-descent sweeps. More can only raise the lower bound, never
         lower it, so this trades time for tightness and never for validity.
+    tolerance : float
+        The sweeps have settled where one moves the dual by at most this,
+        absolute: the dual is an energy, and a relative change would stall
+        where it crosses zero.
     plaquettes : tuple[tuple[int, ...], ...]
         Sites of each higher-order cluster, typically a lattice's unit cells or
         its triangles. Empty runs the pairwise relaxation, whose bound on a
@@ -130,7 +135,8 @@ def dual_bound(
     BoundedLabelling
         The labelling, its energy, the lower bound, and the gap between them.
     """
-    values = site_field(field_values, graph.n_nodes)
+    field = log_weight_of(field)
+    values = site_field(field, graph.n_nodes)
     n_nodes, n_states = values.shape
     clusters = _clusters(graph, n_states, plaquettes)
 
@@ -177,8 +183,8 @@ def dual_bound(
     best_shares = node_shares()
     taken = 0
     settled = False
-    check_cap("iterations", iterations)
-    for sweep in range(1, iterations + 1):
+    check_cap("max_iterations", max_iterations)
+    for sweep in range(1, max_iterations + 1):
         taken = sweep
         before = dual_value()
         shares = node_shares()
@@ -207,14 +213,14 @@ def dual_bound(
         current = dual_value()
         if current < best:
             best, best_shares = current, node_shares()
-        if abs(before - current) <= 1e-12:
+        if abs(before - current) <= tolerance:
             settled = True
             break
 
     labelling = np.asarray(best_shares.argmax(axis=1), dtype=np.int64)
     return BoundedLabelling(
         labelling=labelling,
-        energy=float(energy(graph, field_values, labelling)),
+        energy=float(energy(graph, field, labelling)),
         # The dual bounds the log-weight from above; the energy is its
         # negative, so an upper bound there is a lower bound here.
         bound=-float(best),

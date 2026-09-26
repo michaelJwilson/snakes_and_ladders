@@ -1313,7 +1313,7 @@ def test_tempering_and_annealing_beat_restarts_at_equal_budget_on_the_glass() ->
         instance: PlantedSpinGlass, budget: Budget, rng: np.random.Generator
     ) -> Outcome:
         energy = iterated_conditional_modes(
-            instance.graph, np.zeros(2), rng, max_sweeps=budget.size, n_states=2
+            instance.graph, np.zeros(2), rng, max_iterations=budget.size, n_states=2
         ).energy
         return Outcome(energy, budget.size)
 
