@@ -41,7 +41,7 @@ FIXED_SITES = 2_000
 
 #: The alphabet the table is computed at, read from the tree fixture the
 #: figure is rendered from rather than restated here.
-N_STATES = fixture("tree_jc", "ci").params.k
+N_STATES = fixture("tree_jc", "ci").params.n_states
 
 
 @pytest.fixture(autouse=True, scope="module")
@@ -108,7 +108,11 @@ def test_a_balanced_topology_costs_strictly_less_than_the_caterpillar() -> None:
         tau = with_uniform_branch_lengths(topology, 0.1)
         alignment = dict(
             simulate_alignment(
-                tau=tau, k=4, pi=pi, rng=np.random.default_rng(1), n_sites=FIXED_SITES
+                tau=tau,
+                n_states=4,
+                pi=pi,
+                rng=np.random.default_rng(1),
+                n_sites=FIXED_SITES,
             ).alignment
         )
         tracemalloc.start()
