@@ -28,6 +28,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import cast
 
 import numpy as np
@@ -35,6 +36,27 @@ import numpy as np
 from sal.backend import Backend, twin
 from sal.likelihood.forward_backward import forward_backward
 from sal.ragged import Ragged
+
+
+class SwitchKind(StrEnum):
+    """How a per-position switch probability ``s_t`` enters the step into ``t``.
+
+    ``STAY_OR_MOVE`` is ``(1 - s_t) I + s_t A`` (issue #1082). The other two
+    are a slow chain ``A`` over ``K`` states coupled to a fast binary layer,
+    ``2 K`` states with ``(i, a)`` at ``2 i + a`` as ``np.kron`` lays them
+    out (issue #1133):
+
+    - ``KRONECKER``: ``A ⊗ S_t``, ``S_t = [[1 - s_t, s_t], [s_t, 1 - s_t]]``.
+      No ``A'`` makes it ``(1 - s) I + s A'`` unless ``A = I``, since both of
+      ``(1 - s)(A ⊗ I) + s (A ⊗ J)`` carry ``A``.
+    - ``KRONECKER_DIAGONAL``: ``S_t`` on ``A``'s diagonal blocks alone, the
+      layer switching only where the slow chain stays; an off-diagonal move
+      lands on either layer with probability one half.
+    """
+
+    STAY_OR_MOVE = "stay_or_move"
+    KRONECKER = "kronecker"
+    KRONECKER_DIAGONAL = "kronecker_diagonal"
 
 
 @dataclass(frozen=True)
@@ -67,6 +89,7 @@ def posteriors(
     log_transition: np.ndarray,
     *,
     switch: np.ndarray | None = None,
+    switch_kind: SwitchKind = SwitchKind.STAY_OR_MOVE,
     backend: Backend = Backend.RUST,
 ) -> Posteriors:
     """Marginals, transition counts and per-segment evidence, by default in Rust.
@@ -87,6 +110,13 @@ def posteriors(
         otherwise moves by ``A``. The kernel builds each step's transition
         from the one ``A`` rather than a ``(T, K, K)`` stack, and a
         segment's first entry is never read.
+    switch_kind : SwitchKind
+        How ``switch`` enters. Under either Kronecker kind ``log_density``
+        and ``log_initial`` are over the ``2 K`` states, ``log_transition``
+        is the slow chain's ``(K, K)``, and ``switch`` is required; the
+        kernel takes each step in its factors, ``2 K^2 + 4 K`` terms against
+        the ``4 K^2`` of the explicit matrix, and the counts are over the
+        ``2 K`` states.
     backend : Backend
         Which implementation runs it. ``RUST`` is the compiled kernel,
         :func:`sal.likelihood.ragged.rust.posteriors`, and is the default;
@@ -112,9 +142,37 @@ def posteriors(
     if (rust := twin("ragged posteriors", backend, __name__)) is not None:
         return cast(
             "Posteriors",
-            rust.posteriors(log_density, log_initial, log_transition, switch),
+            rust.posteriors(
+                log_density, log_initial, log_transition, switch, switch_kind
+            ),
         )
-    return posteriors_oracle(log_density, log_initial, log_transition, switch)
+    return posteriors_oracle(
+        log_density, log_initial, log_transition, switch, switch_kind
+    )
+
+
+def step_transitions(
+    log_transition: np.ndarray, steps: np.ndarray, switch_kind: SwitchKind
+) -> np.ndarray:
+    """Each step's transition, materialized: ``(len(steps), n, n)`` in log space.
+
+    The storage the kernel avoids, built here for the oracle. ``steps`` are
+    the switch probabilities of the steps taken.
+    """
+    moved = np.exp(np.asarray(log_transition, dtype=float))
+    s = np.asarray(steps, dtype=float)[:, None, None]
+    if switch_kind is SwitchKind.STAY_OR_MOVE:
+        matrices = (1.0 - s) * np.eye(moved.shape[0]) + s * moved
+    else:
+        layer = (1.0 - s) * np.eye(2) + s * (1.0 - np.eye(2))
+        if switch_kind is SwitchKind.KRONECKER:
+            matrices = np.stack([np.kron(moved, one) for one in layer])
+        else:
+            kept = np.diag(np.diag(moved))
+            spread = np.kron(moved - kept, np.full((2, 2), 0.5))
+            matrices = np.stack([spread + np.kron(kept, one) for one in layer])
+    with np.errstate(divide="ignore"):
+        return np.asarray(np.log(matrices))
 
 
 def posteriors_oracle(
@@ -122,16 +180,21 @@ def posteriors_oracle(
     log_initial: np.ndarray,
     log_transition: np.ndarray,
     switch: np.ndarray | None = None,
+    switch_kind: SwitchKind = SwitchKind.STAY_OR_MOVE,
 ) -> Posteriors:
     """The same, one segment at a time through `forward_backward`.
 
     The oracle the compiled path is pinned against: it reuses the per-chain
     recursion this repository already refereed rather than writing a second
     batched one, so what it adds is only the segmentation. With ``switch``
-    it materializes each segment's ``(T - 1, K, K)`` stack of
-    ``log((1 - s) I + s A)``, the storage the kernel avoids, and hands it to
-    `forward_backward`'s per-step form.
+    it materializes each segment's ``(T - 1, n, n)`` stack of the step's
+    transition (:func:`step_transitions`), the storage the kernel avoids, and
+    hands it to `forward_backward`'s per-step form.
     """
+    switch_kind = SwitchKind(switch_kind)
+    if switch_kind is not SwitchKind.STAY_OR_MOVE and switch is None:
+        msg = f"a {switch_kind} switch needs a switch probability per position"
+        raise ValueError(msg)
     gamma = np.empty_like(log_density.values)
     n_states = log_density.values.shape[1]
     counts = np.full((n_states, n_states), -np.inf)
@@ -139,14 +202,12 @@ def posteriors_oracle(
     at = 0
     if switch is not None:
         switch = np.asarray(switch, dtype=float).reshape(-1)
-        stay = np.eye(n_states)
-        moved = np.exp(np.asarray(log_transition, dtype=float))
     for index, segment in enumerate(log_density.segments()):
         kernel = np.asarray(log_transition, dtype=float)
         if switch is not None:
-            steps = switch[at + 1 : at + len(segment), None, None]
-            with np.errstate(divide="ignore"):
-                kernel = np.log((1.0 - steps) * stay + steps * moved)
+            kernel = step_transitions(
+                log_transition, switch[at + 1 : at + len(segment)], switch_kind
+            )
         run = forward_backward(segment, log_initial, kernel)
         # `forward_backward` returns probabilities; this returns logs, which
         # is what the accumulator below needs and what the compiled kernel
