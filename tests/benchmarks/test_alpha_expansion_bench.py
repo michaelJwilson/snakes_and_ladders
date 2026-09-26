@@ -21,8 +21,10 @@ from sal.search.alpha_expansion import (
     _expansion_network,
     alpha_beta_swap,
     alpha_expansion,
+    fuse,
 )
 from sal.search.icm import iterated_conditional_modes
+from sal.sim.fixtures import fixture
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from sal.sim.potts import site_field
 
@@ -114,3 +116,27 @@ def test_the_rust_cut_moves_at_large_site_counts(
     solve = alpha_expansion if name == "expansion" else alpha_beta_swap
     result = benchmark(solve, graph, values, 10, backend=Backend.RUST)
     assert np.isfinite(result.energy)
+
+
+@pytest.mark.parametrize("backend", [Backend.RUST, Backend.PYTHON], ids=str)
+def test_fusion_benchmark(benchmark: BenchmarkFixture, backend: Backend) -> None:
+    # One fusion at the stress size (issue #1070): `spatio_tiling/release`,
+    # 5,041 sites at ten states, expansion's labelling against an ICM
+    # descent's, which differ on 1,189 sites. Against the expansion's own
+    # 20 ms, the Rust cut's fusion is the cheaper of the two.
+    params = fixture("spatio_tiling", "release").params
+    first = alpha_expansion(params.graph, params.field, params.n_states).labelling
+    second = iterated_conditional_modes(
+        params.graph, params.field, params.n_states, np.random.default_rng(0)
+    ).labelling
+
+    fused = benchmark.pedantic(  # type: ignore[no-untyped-call]
+        fuse,
+        args=(params.graph, params.field, first, second),
+        kwargs={"backend": backend},
+        rounds=5,
+        iterations=1,
+        warmup_rounds=1,
+    )
+
+    assert fused.unlabelled == 0
