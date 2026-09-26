@@ -23,7 +23,7 @@ import numpy as np
 from sal.validation.protocol import dump, peaked, received, timed
 
 
-def _polytope(
+def polytope(
     unary: np.ndarray, first: np.ndarray, second: np.ndarray, coupling: np.ndarray
 ) -> tuple[np.ndarray, Any, np.ndarray]:
     """The cost vector, the equality matrix and its right-hand side."""
@@ -81,7 +81,7 @@ def main() -> None:
 
     def build_and_solve() -> tuple[Any, float, float]:
         (cost, matrix, right), build_seconds = timed(
-            lambda: _polytope(
+            lambda: polytope(
                 unary, inputs["first"], inputs["second"], inputs["coupling"]
             )
         )

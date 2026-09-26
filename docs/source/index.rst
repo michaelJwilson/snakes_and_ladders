@@ -575,6 +575,9 @@ whether or not it has members yet.
 .. automodule:: sal.sandbox.polar_reference
    :members:
 
+.. automodule:: sal.sandbox.potts_mip
+   :members:
+
 .. automodule:: sal.validation
    :members:
 

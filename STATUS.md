@@ -4137,6 +4137,31 @@ So of the tiling bracket's 0.81, TRW-S stopping short is 0.05 and the other
 0.75 lies between the LP and the best labelling, -17,022.18. TRW-S takes 0.82 s
 and 8.7 s on the two, the `highs` goals in `test_goals.py`.
 
+**A MIP on the fractional sites, #1069, conserved in `sandbox.potts_mip`.** It solves the
+local polytope with integer node marginals by HiGHS's `milp`. Integral node
+marginals fix every edge table, so the MIP's optimum is the minimum energy. On
+the nine 3x3 and 2x4 lattices and a 4x4 two-state lattice it is the enumerated
+minimum to 1e-12, and proven, the three frustrated triangular lattices
+included, where the LP is more than 1e-3 below it. On `spatio_tiling/release`,
+with the LP's labelling held at its integral sites and the rest folded into
+the free sites' field:
+
+| free region | free sites | energy | seconds | peak |
+| --- | --- | --- | --- | --- |
+| the 95 fractional sites | 95 | **-17,022.1988** | 4.6 | 160 MB |
+| and 1 ring | 220 | -17,022.1988 | 12.8 | 345 MB |
+| and 2 rings | 363 | -17,022.1988 | 16.4 | 512 MB |
+| and 3 rings | 524 | -17,022.1988 | 32.4 | 895 MB |
+| and 4 rings | 703 | -17,022.1988 | 46.7 | 1.1 GB |
+
+The held sites do not bind out to four rings, and the labelling is 0.02 below
+the best before it, -17,022.18. That is a labelling, an upper bound, not a
+proof: the whole problem as a MIP (50,410 integer columns), stopped at its
+1,800 s limit still at the root node, raises the lower bound from the LP's
+-17,022.93 to **-17,022.82** (4.9 GB peak), and its own labelling there is
+-17,013.01. So the optimum lies in **[-17,022.82, -17,022.20]**, 0.62 wide,
+and is not recorded as the fixture's reference energy.
+
 Two implementation notes worth keeping. The block update is the exact
 minimizer of its own block, checked against a numerical minimum over the
 block's messages; an early version left the site's own share inside the
