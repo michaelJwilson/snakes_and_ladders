@@ -336,7 +336,7 @@ def seed_hmc(instance: Instance, rng: np.random.Generator) -> Seeding:
     values = torch.stack([objective(draw) for draw in chain.draws])
     return Seeding(
         _from_theta(instance, objective, chain.draws[int(values.argmin())]),
-        2.0 * (chain.force_evaluations + chain.draws.shape[0]) * instance.n_components,
+        2.0 * (chain.spent + chain.draws.shape[0]) * instance.n_components,
         acceptance=chain.acceptance_rate,
     )
 

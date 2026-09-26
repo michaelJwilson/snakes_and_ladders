@@ -512,7 +512,7 @@ def chain_seeding(
     )
     return Seeding(
         path[-1][1],
-        PASSES_PER_GRADIENT * chain.force_evaluations,
+        PASSES_PER_GRADIENT * chain.spent,
         f"acceptance {chain.acceptance_rate:.2f}"
         + (
             f", adapted step {chain.adapted.step_size:.3g}"

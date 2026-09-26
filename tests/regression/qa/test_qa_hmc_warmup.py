@@ -102,7 +102,7 @@ def test_the_warm_up_repays_its_discarded_draws() -> None:
     # The caption's claim, asserted: the adapted chain buys more effective
     # draws per gradient than the fixed one *after* being charged for the
     # gradients its warm-up spent.
-    assert ADAPTED.force_evaluations > FIXED.force_evaluations
+    assert ADAPTED.spent > FIXED.spent
 
     assert _ess_per_gradient(ADAPTED) > _ess_per_gradient(FIXED)
 

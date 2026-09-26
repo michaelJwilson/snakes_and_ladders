@@ -240,7 +240,7 @@ def _ess_per_gradient(chain: HmcChain) -> float:
     the adapted chain for them rather than comparing at equal recorded draws.
     """
     sizes: np.ndarray = effective_sample_size(chain.draws).detach().numpy()
-    return float(sizes.min()) / chain.force_evaluations
+    return float(sizes.min()) / chain.spent
 
 
 def build_figure(adapted: HmcChain, fixed: HmcChain) -> tuple[Figure, str]:

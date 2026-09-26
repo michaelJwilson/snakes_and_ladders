@@ -84,15 +84,9 @@ def test_one_gradient_buys_more_from_a_langevin_step_than_from_a_trajectory(
             burn_in=burn_in,
         )
 
-        per_gradient = effective_per_thousand(
-            hamiltonian.draws, hamiltonian.force_evaluations
-        )
-        langevin_per_gradient = effective_per_thousand(
-            langevin.draws, langevin.force_evaluations
-        )
-        slice_per_evaluation = effective_per_thousand(
-            sliced.draws, sliced.objective_evaluations
-        )
+        per_gradient = effective_per_thousand(hamiltonian.draws, hamiltonian.spent)
+        langevin_per_gradient = effective_per_thousand(langevin.draws, langevin.spent)
+        slice_per_evaluation = effective_per_thousand(sliced.draws, sliced.spent)
 
         assert langevin_per_gradient > per_gradient, (
             n_samples,

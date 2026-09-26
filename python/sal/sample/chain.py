@@ -28,6 +28,7 @@ import numpy as np
 import torch
 
 from sal.backend import Backend
+from sal.cost import Cost
 from sal.opt.objective import (
     Objective,
     declares_gradient,
@@ -273,10 +274,9 @@ class Adapted:
 class Chain:
     """What a run of :func:`run_chain` drew, whatever kernel drew it.
 
-    The fields :class:`HmcChain` and
-    :class:`~sal.sample.langevin.LangevinChain` are built
-    from, in the unit each sampler spends: the evaluations are gradients for
-    both kernels here.
+    The one chain result (issue #1090): :class:`HmcChain` and
+    :class:`~sal.sample.langevin.LangevinChain` are subclasses of it, and
+    ``spent`` is counted in the ``unit`` each kernel declares.
 
     Parameters
     ----------
@@ -289,8 +289,12 @@ class Chain:
         counted.
     energy_error : torch.Tensor
         ``|H(proposal) - H(current)|`` per recorded proposal.
-    force_evaluations : int
-        Evaluations spent, the warm-up's and the burn-in's included.
+    spent : int
+        Evaluations spent, the warm-up's and the burn-in's included, so an
+        effective sample size divided by it is the cost of a draw.
+    unit : Cost
+        What ``spent`` counts: gradients for the Hamiltonian and Langevin
+        kernels, objective evaluations for the random walk (issue #1090).
     adapted : Adapted | None
         What the warm-up settled on, or ``None`` for a fixed-parameter chain.
     """
@@ -298,13 +302,14 @@ class Chain:
     draws: torch.Tensor
     acceptance_rate: float
     energy_error: torch.Tensor
-    force_evaluations: int
+    spent: int
+    unit: Cost
     adapted: Adapted | None
     #: Each operator's expectation over the recorded draws (issue #988).
     expectations: Mapping[str, Expectation] = field(default_factory=dict)
 
     def __iter__(self) -> Iterator[Any]:
-        """``(draws, acceptance_rate, energy_error, force_evaluations, adapted, expectations)``.
+        """``(draws, acceptance_rate, energy_error, spent, unit, adapted, expectations)``.
 
         The order callers unpack. ``Any`` for :meth:`Transition.__iter__`'s
         reason.
@@ -313,7 +318,8 @@ class Chain:
             self.draws,
             self.acceptance_rate,
             self.energy_error,
-            self.force_evaluations,
+            self.spent,
+            self.unit,
             self.adapted,
             self.expectations,
         )
@@ -326,6 +332,7 @@ def run_chain(
     generator: Stream,
     n_samples: int,
     *,
+    unit: Cost,
     step_size: float,
     theta0: torch.Tensor | np.ndarray | None,
     burn_in: int,
@@ -446,7 +453,8 @@ def run_chain(
         draws=draws,
         acceptance_rate=accepted / n_samples if n_samples else 0.0,
         energy_error=errors[burn_in:],
-        force_evaluations=(n_samples + burn_in) * per_proposal + warmup_evaluations,
+        spent=(n_samples + burn_in) * per_proposal + warmup_evaluations,
+        unit=unit,
         adapted=adapted,
         expectations={name: kalman.estimate() for name, kalman in filters.items()},
     )
@@ -479,6 +487,7 @@ def run_compiled(
     generator: Stream,
     n_samples: int,
     *,
+    unit: Cost,
     step_size: float,
     theta0: torch.Tensor,
     burn_in: int,
@@ -562,7 +571,8 @@ def run_compiled(
         else torch.empty((0, dimension)),
         acceptance_rate=accepted / n_samples if n_samples else 0.0,
         energy_error=torch.from_numpy(np.concatenate(errors)),
-        force_evaluations=(n_samples + burn_in) * per_proposal + warmup_evaluations,
+        spent=(n_samples + burn_in) * per_proposal + warmup_evaluations,
+        unit=unit,
         adapted=None
         if adaptation is None
         else Adapted(

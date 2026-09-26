@@ -171,7 +171,7 @@ def test_the_null_run_leaves_a_chain_bitwise_what_it_was() -> None:
     assert torch.equal(inside.draws, outside.draws)
     assert torch.equal(inside.energy_error, outside.energy_error)
     assert inside.acceptance_rate == outside.acceptance_rate
-    assert inside.force_evaluations == outside.force_evaluations
+    assert inside.spent == outside.spent
 
 
 @pytest.mark.patch
@@ -200,7 +200,7 @@ def test_the_chain_records_the_counters_the_chain_returns() -> None:
     run = _memory(tracked.run)
     assert run.params["name"] == "hmc"
     assert run.last("acceptance_so_far") == chain.acceptance_rate
-    assert run.last("force_evaluations") == chain.force_evaluations
+    assert run.last("force_evaluations") == chain.spent
     assert len(run.series("energy_error")) == N_SAMPLES
     assert [step for step, _ in run.series("energy_error")] == list(range(N_SAMPLES))
     # The error recorded per draw is the error the chain reports for it, and
@@ -703,7 +703,7 @@ def test_the_null_run_leaves_the_five_loops_bitwise_what_they_were() -> None:
             _ensemble(),
         )
     assert torch.equal(inside[0].draws, outside[0].draws)
-    assert inside[0].objective_evaluations == outside[0].objective_evaluations
+    assert inside[0].spent == outside[0].spent
     assert torch.equal(inside[1].draws, outside[1].draws)
     for one, other in ((inside[2], outside[2]), (inside[3], outside[3])):
         assert one.log_z == other.log_z
@@ -721,7 +721,7 @@ def test_the_slice_and_langevin_chains_record_the_unit_each_is_counted_in() -> N
         sliced = _slice()
     run = _memory(tracked.run)
     assert len(run.series("objective_evaluations")) == N_SAMPLES
-    assert run.last("objective_evaluations") == float(sliced.objective_evaluations)
+    assert run.last("objective_evaluations") == float(sliced.spent)
     assert run.last("state_bytes") == float(sliced.draws.nbytes)
     with track() as tracked:
         chain = _mala()
@@ -729,7 +729,7 @@ def test_the_slice_and_langevin_chains_record_the_unit_each_is_counted_in() -> N
     # `mala` runs `hmc.run_chain`, so the hook is the chain's and the unit is
     # gradients, one per proposal.
     assert run.last("acceptance_so_far") == chain.acceptance_rate
-    assert run.last("force_evaluations") == float(chain.force_evaluations)
+    assert run.last("force_evaluations") == float(chain.spent)
     assert len(run.series("energy_error")) == N_SAMPLES
 
 

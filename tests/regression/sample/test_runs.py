@@ -1,4 +1,4 @@
-"""Every annealer's result is one `Annealed`, every tempering's one `Tempered` (issue #1090).
+"""One result type per sampler concept: `Annealed`, `Tempered` and `Chain` (issue #1090).
 
 Referees: the guard reads the package's classes, so a new annealer's result
 that is not an `Annealed` fails here; and each subclass carries the shared
@@ -12,11 +12,14 @@ import dataclasses
 from pathlib import Path
 
 import pytest
+from sal.sample.chain import Chain
 from sal.sample.gibbs import AnnealedLabelling, AnnealedTopology
-from sal.sample.hmc import AnnealedTheta
+from sal.sample.hmc import AnnealedTheta, HmcChain
 from sal.sample.hmc import Tempered as HmcTempered
+from sal.sample.langevin import LangevinChain
 from sal.sample.potts_mcmc import AnnealedPotts, ClusterTempered, TemperedChains
 from sal.sample.schedule import Annealed, Tempered
+from sal.sample.slice import SliceChain
 
 PACKAGE = Path(__file__).resolve().parents[3] / "python" / "sal"
 
@@ -100,3 +103,12 @@ def test_each_tempered_result_carries_the_shared_fields(result: type) -> None:
 
     assert shared <= names
     assert issubclass(result, Tempered)
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize("result", [Chain, HmcChain, LangevinChain, SliceChain])
+def test_each_chain_counts_what_it_spent_in_a_declared_unit(result: type) -> None:
+    names = {field.name for field in dataclasses.fields(result)}
+
+    assert {"draws", "spent", "unit"} <= names
+    assert result is SliceChain or issubclass(result, Chain)
