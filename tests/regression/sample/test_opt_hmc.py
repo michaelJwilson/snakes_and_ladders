@@ -567,7 +567,7 @@ def test_annealing_reports_the_best_point_visited_not_the_last() -> None:
         generator=torch.Generator().manual_seed(2),
         step_size=0.2,
         n_steps=10,
-        theta0=start,
+        start=start,
     )
 
     assert result.value == pytest.approx(float(GAUSSIAN(result.theta)), rel=EXACT)

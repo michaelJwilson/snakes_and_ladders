@@ -140,7 +140,7 @@ class FitFrom:
         )
         counted = Counted(objective)
         theta0 = _initializer(self.start, rng).starts(objective)[0]
-        result = fit(counted, theta0=theta0)
+        result = fit(counted, start=theta0)
         assert result.converged
         assert counted.calls <= budget.size
         return Outcome(result.value, counted.calls)

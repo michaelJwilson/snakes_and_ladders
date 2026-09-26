@@ -575,8 +575,8 @@ def test_nothing_of_the_optimizer_crosses_a_structural_move() -> None:
     objective = BranchLengthObjective(topology, 4, np.full(4, 0.25), alignment)
     theta0 = objective.initial() + 0.1
     first, second = (
-        fit(objective, theta0=theta0.clone()),
-        fit(objective, theta0=theta0.clone()),
+        fit(objective, start=theta0.clone()),
+        fit(objective, start=theta0.clone()),
     )
     assert torch.equal(first.theta, second.theta)
     assert first.iterations == second.iterations

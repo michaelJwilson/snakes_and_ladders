@@ -284,7 +284,7 @@ def _score(
             scored = _Restricted(objective, theta0, free)
             theta0 = scored.initial()
     counting = _Counting(scored)
-    result = fit(counting, theta0=theta0)
+    result = fit(counting, start=theta0)
     named = {
         name: value.detach() for name, value in scored.constrain(result.theta).items()
     }

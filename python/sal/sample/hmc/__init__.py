@@ -428,7 +428,7 @@ def sample(
     *,
     step_size: float,
     n_steps: int = DEFAULT_STEPS,
-    theta0: torch.Tensor | None = None,
+    start: torch.Tensor | None = None,
     burn_in: int = 0,
     integrator: Integrator = leapfrog,
     temperature: float = 1.0,
@@ -456,7 +456,7 @@ def sample(
         ``adaptation`` it is the warm-up's starting point.
     n_steps : int
         Leapfrog steps per proposal.
-    theta0 : torch.Tensor | None
+    start : torch.Tensor | None
         Starting point; ``objective.initial()`` when omitted.
     burn_in : int
         Draws discarded before recording.
@@ -534,7 +534,7 @@ def sample(
             generator,
             n_samples,
             step_size=step_size,
-            theta0=start_point(objective, theta0),
+            start=start_point(objective, start),
             burn_in=burn_in,
             adaptation=adaptation,
             store_chain=store_chain,
@@ -548,7 +548,7 @@ def sample(
             generator,
             n_samples,
             step_size=step_size,
-            theta0=theta0,
+            start=start,
             burn_in=burn_in,
             temperature=temperature,
             adaptation=adaptation,
@@ -601,7 +601,7 @@ def anneal(
     *,
     step_size: float,
     n_steps: int = DEFAULT_STEPS,
-    theta0: torch.Tensor | None = None,
+    start: torch.Tensor | None = None,
     integrator: Integrator = leapfrog,
 ) -> AnnealedTheta:
     """Simulated annealing with Hamiltonian proposals: :func:`sample` on a schedule.
@@ -623,7 +623,7 @@ def anneal(
         ``force_evaluations`` on the result is the budget in gradients.
     generator : torch.Generator
         As :func:`sample`.
-    step_size, n_steps, theta0, integrator
+    step_size, n_steps, start, integrator
         As :func:`sample`. The step needs no rescaling with temperature ---
         see the module note --- but a step that is stable at the hot end can
         still reject at the cold end, which the acceptance rate reports.
@@ -633,7 +633,7 @@ def anneal(
     AnnealedTheta
     """
     _check_trajectory(step_size, n_steps)
-    position = start_point(objective, theta0)
+    position = start_point(objective, start)
 
     best, best_value = position.clone(), float(objective(position))
     accepted = 0
@@ -726,7 +726,7 @@ def parallel_tempering(
     *,
     step_size: float,
     n_steps: int = DEFAULT_STEPS,
-    theta0: torch.Tensor | None = None,
+    start: torch.Tensor | None = None,
     integrator: Integrator = leapfrog,
     deadline: float | None = None,
 ) -> Tempered:
@@ -771,8 +771,8 @@ def parallel_tempering(
         Transitions per replica, at least one. The budget in proposals is
         ``n_rounds * len(temperatures)``; ``force_evaluations`` on the result
         is the budget in gradients.
-    step_size, n_steps, theta0, integrator
-        As :func:`sample`; every replica starts at ``theta0``.
+    step_size, n_steps, start, integrator
+        As :func:`sample`; every replica starts at ``start``.
     deadline : float | None
         A :func:`time.perf_counter` reading. A round after the first starts
         only if the longest round so far would end by it, so ``n_rounds`` is
@@ -810,10 +810,10 @@ def parallel_tempering(
         torch.Generator().manual_seed(int(child))
         for child in torch.randint(0, 2**31 - 1, (n_replicas,), generator=parent)
     ]
-    start = start_point(objective, theta0)
-    positions = [start.clone() for _ in range(n_replicas)]
-    value = float(objective(start))
-    best, best_value = start.clone(), value
+    origin = start_point(objective, start)
+    positions = [origin.clone() for _ in range(n_replicas)]
+    value = float(objective(origin))
+    best, best_value = origin.clone(), value
     accepted = torch.zeros(n_replicas, dtype=torch.float64)
     # A list rather than a tensor sized to `n_rounds`: under a deadline that
     # count is a ceiling, and the stacked rounds are the same values.

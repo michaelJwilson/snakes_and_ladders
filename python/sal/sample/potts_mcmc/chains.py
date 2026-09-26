@@ -883,7 +883,7 @@ def cluster_tempering(
 def adapt_ladder_potts(
     graph: PottsGraph,
     field: np.ndarray,
-    start: TempSchedule | Sequence[float],
+    temperatures: TempSchedule | Sequence[float],
     rng: np.random.Generator,
     n_sweeps: int,
     band: tuple[float, float],
@@ -905,7 +905,7 @@ def adapt_ladder_potts(
     ----------
     graph, field, rng, backend
         As :func:`parallel_tempering`.
-    start : TempSchedule | Sequence[float]
+    temperatures : TempSchedule | Sequence[float]
         The starting ladder, in either spelling and read by
         :func:`~sal.sample.schedule.ladder` into the same
         floats; its endpoints are kept.
@@ -926,7 +926,9 @@ def adapt_ladder_potts(
         )
         return [float(value) for value in run.swap_acceptance]
 
-    return adapt_ladder(measure, ladder(start), band, max_iterations, max_replicas)
+    return adapt_ladder(
+        measure, ladder(temperatures), band, max_iterations, max_replicas
+    )
 
 
 def sweep_for(

@@ -568,7 +568,7 @@ class AdaptedLadder:
 
 def adapt_ladder(
     measure: Callable[[tuple[float, ...]], Sequence[float]],
-    start: TempSchedule | Sequence[float],
+    temperatures: TempSchedule | Sequence[float],
     band: tuple[float, float],
     max_iterations: int,
     max_replicas: int,
@@ -595,7 +595,7 @@ def adapt_ladder(
     ----------
     measure : Callable[[tuple[float, ...]], Sequence[float]]
         Exchange acceptance per neighbouring pair of a ladder.
-    start : TempSchedule | Sequence[float]
+    temperatures : TempSchedule | Sequence[float]
         The starting ladder, in either spelling and read by :func:`ladder`
         into the same floats: at least two temperatures, strictly monotone in
         either direction. Its two endpoints are the result's.
@@ -620,7 +620,9 @@ def adapt_ladder(
         monotone or is not positive, the band is not an interval inside
         ``(0, 1)``, or a budget is below 1.
     """
-    rungs = check_ladder(ladder(start), needed_by="a ladder", monotone=Monotone.EITHER)
+    rungs = check_ladder(
+        ladder(temperatures), needed_by="a ladder", monotone=Monotone.EITHER
+    )
     low, high = band
     if not 0.0 < low < high < 1.0:
         msg = f"band must satisfy 0 < low < high < 1, got {band}"
@@ -757,7 +759,7 @@ class FeedbackLadder:
 
 def adapt_ladder_by_round_trips(
     measure: Callable[[tuple[float, ...]], Sequence[float]],
-    start: TempSchedule | Sequence[float],
+    temperatures: TempSchedule | Sequence[float],
     tolerance: float,
     max_iterations: int,
 ) -> FeedbackLadder:
@@ -789,7 +791,7 @@ def adapt_ladder_by_round_trips(
         finite.
         :func:`sal.sample.tempered.up_fraction` computes it
         from a walker trace.
-    start : TempSchedule | Sequence[float]
+    temperatures : TempSchedule | Sequence[float]
         The starting ladder, in either spelling and read by :func:`ladder`
         into the same floats: at least three temperatures --- two are the
         endpoints and there is nothing to place --- strictly monotone in
@@ -814,7 +816,9 @@ def adapt_ladder_by_round_trips(
         whole ladder, which is a run in which no walker circulated and so
         carries no placement.
     """
-    rungs = check_ladder(ladder(start), needed_by="a ladder", monotone=Monotone.EITHER)
+    rungs = check_ladder(
+        ladder(temperatures), needed_by="a ladder", monotone=Monotone.EITHER
+    )
     if len(rungs) < 3:
         msg = (
             f"a round-trip placement needs at least three temperatures, got "
