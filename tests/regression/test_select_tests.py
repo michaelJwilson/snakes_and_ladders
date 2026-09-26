@@ -242,6 +242,8 @@ def test_coverage_targets_match_the_selected_modules() -> None:
     chosen = select(["python/sal/search/infer.py", "python/sal/sim/tree.py"])
 
     assert chosen["cov"] == ["sal.search", "sal.sim"]
+    assert {"tests/regression/search", "tests/regression/sim"} <= set(chosen["paths"])
+    assert select(["infra/select_tests.py"])["cov"] == []
 
 
 def _benchmarks_of(chosen: dict[str, list[str]]) -> set[str]:

@@ -66,7 +66,19 @@ from _paths import REPO_ROOT
 # so a change to any of those selects it, which is what
 # `tests/regression/sandbox/test_pruning_burn.py` needs now that it no longer
 # sits under `likelihood/`.
-MODULES = ("sim", "likelihood", "opt", "learn", "search", "qa", "sandbox")
+MODULES = (
+    "sim",
+    "likelihood",
+    "opt",
+    "learn",
+    "search",
+    "qa",
+    "sandbox",
+    "sample",
+)
+
+#: Subpackages whose tests live outside `tests/regression/<name>`.
+TEST_DIRS = {"validation": "tests/validation"}
 
 # The modules a benchmark measures. `qa` renders figures from what these
 # compute and is not itself timed, as issue #109's trigger had it. `sandbox`
@@ -516,9 +528,26 @@ def select(changed: Iterable[str]) -> dict[str, list[str]]:
     touched = {module for module in packages if module in MODULES}
     if any(path.startswith("python/sal/") for path in relevant):
         paths += _benchmarks_for(dependents(touched) & set(BENCHMARKED))
+    # Coverage is measured per changed subpackage, over that subpackage's own
+    # tests as well as the importers: a subpackage measured by only the files
+    # importing one of its modules would read low against the push run's
+    # floor, and a single module reads low where its kernels are compiled
+    # (`sal.search.icm` alone is 72%, its numba twin untraced). Nothing is
+    # measured when no `sal` subpackage changed, as for prose.
+    measured = sorted(
+        package for package in packages if package in MODULES or package in TEST_DIRS
+    )
+    touched_tests = [
+        TEST_DIRS.get(package, f"tests/regression/{package}") for package in measured
+    ]
+    paths += [
+        path
+        for path in touched_tests
+        if path not in paths and (REPO_ROOT / path).is_dir()
+    ]
     return {
         "paths": paths,
-        "cov": [f"sal.{package}" for package in sorted(packages)] or ["sal"],
+        "cov": [f"sal.{package}" for package in measured],
         "deselect": deselect,
     }
 
