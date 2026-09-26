@@ -45,6 +45,7 @@ import torch
 
 from sal.enumeration import refuse_oversized
 from sal.opt.termination import Termination
+from sal.sample.chain import torch_stream
 from sal.sim.graph import PottsGraph
 
 # The Goemans-Williamson constant: the expected ratio of the rounded cut to
@@ -156,7 +157,7 @@ def enumerate_max_cut(graph: PottsGraph, *, max_nodes: int = 20) -> MaxCut:
 
 def goemans_williamson(
     graph: PottsGraph,
-    generator: torch.Generator,
+    rng: np.random.Generator | torch.Generator,
     *,
     rank: int | None = None,
     iterations: int = 600,
@@ -177,7 +178,7 @@ def goemans_williamson(
         Edge weights are ``abs(coupling)``, so a graph written with the
         antiferromagnetic sign this problem corresponds to and one written
         with positive weights give the same cut.
-    generator : torch.Generator
+    rng : np.random.Generator | torch.Generator
         Draws both the initial vectors and the rounding hyperplanes; passed in
         rather than seeded here (`sim/CLAUDE.md`), so a run reproduces from
         ``torch.Generator().manual_seed(seed)`` at the call site.
@@ -192,6 +193,7 @@ def goemans_williamson(
         Hyperplanes drawn. The best is kept, which is standard and is why the
         realized ratio typically beats the expected one by a wide margin.
     """
+    generator = torch_stream(rng)
     weights = torch.zeros((graph.n_nodes, graph.n_nodes), dtype=torch.float64)
     for (first, second), coupling in graph.weighted_edges():
         weights[first, second] += abs(coupling)

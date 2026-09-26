@@ -227,7 +227,7 @@ def _objective(
 def _start(
     alignment: Mapping[str, np.ndarray],
     start: Topology | None,
-    rng: np.random.Generator | None,
+    rng: np.random.Generator,
 ) -> Topology:
     """The topology a search begins from, drawn from ``rng`` when none is given."""
     if len(alignment) < 4:
@@ -235,9 +235,6 @@ def _start(
         raise ValueError(msg)
     if start is not None:
         return start
-    if rng is None:
-        msg = "searching for a topology needs an rng to draw the start from"
-        raise ValueError(msg)
     return random_topology(sorted(alignment), rng)
 
 
@@ -287,7 +284,7 @@ def _score(
             scored = _Restricted(objective, theta0, free)
             theta0 = scored.initial()
     counting = _Counting(scored)
-    result = fit(counting, theta0=theta0)
+    result = fit(counting, start=theta0)
     named = {
         name: value.detach() for name, value in scored.constrain(result.theta).items()
     }
@@ -381,7 +378,7 @@ def infer(
     model: Model = Model.JC,
     moves: MoveSet = MoveSet.NNI,
     max_evaluations: int = 200,
-    rng: np.random.Generator | None = None,
+    rng: np.random.Generator,
     warm_start: bool = True,
     lazy_top: int | None = None,
     surrogate: Surrogate | None = None,
@@ -414,9 +411,9 @@ def infer(
     max_evaluations : int
         Maximum candidates scored. The initial topology's own fit is not
         counted against it.
-    rng : np.random.Generator | None
-        Source of the starting topology, required when ``start`` is ``None``
-        and unused otherwise. Passed in rather than seeded here, so a caller
+    rng : np.random.Generator
+        Draws the starting topology where ``start`` is ``None``, and is
+        required either way, as every entry point's is (issue #1091). Passed in rather than seeded here, so a caller
         running an ensemble gets independent starts (`sim/CLAUDE.md`, issue
         #240). There is no default: a generator made here would be unseeded, and
         the run irreproducible, or seeded from a constant nobody declared.
@@ -704,7 +701,7 @@ def parsimony_search(
     start: Topology | None = None,
     moves: MoveSet = MoveSet.NNI,
     max_evaluations: int = 200,
-    rng: np.random.Generator | None = None,
+    rng: np.random.Generator,
 ) -> ParsimonyInference:
     """Hill-climb over topologies on the parsimony score: large parsimony (``eq:large-parsimony``).
 
@@ -735,9 +732,9 @@ def parsimony_search(
     max_evaluations : int
         Maximum candidates scored. The initial topology's own score is not
         counted against it.
-    rng : np.random.Generator | None
-        Source of the starting topology, required when ``start`` is
-        ``None`` and unused otherwise, on the terms :func:`infer` states.
+    rng : np.random.Generator
+        Draws the starting topology where ``start`` is ``None``; required,
+        on the terms :func:`infer` states.
 
     Returns
     -------
