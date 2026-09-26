@@ -46,9 +46,9 @@ def _tree_examples() -> Examples:
     return tree_examples(
         alignments,
         topologies,
-        params.k,
+        params.n_states,
         np.asarray(params.pi),
-        fixed_length_target(params.k, np.asarray(params.pi), 0.1),
+        fixed_length_target(params.n_states, np.asarray(params.pi), 0.1),
     )
 
 

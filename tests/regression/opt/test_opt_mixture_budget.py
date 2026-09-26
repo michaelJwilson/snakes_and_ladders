@@ -298,6 +298,7 @@ def _assert_nothing_beats_the_referee(measurement: Measurement) -> None:
 
 
 @pytest.mark.end2end
+@pytest.mark.release  # 34.3 s in the tier, over the 10 s cap (#1088)
 def test_at_eight_starts_restarts_reach_the_optimum_from_the_most_starts() -> None:
     # The per-pull-request tier of the release measurement below: the same code
     # on its first 8 starts. Realized: restarts 2/8, annealing 1/8, tempering

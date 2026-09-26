@@ -322,6 +322,7 @@ def _dispersion_coverage(dispersion: float, replicates: int) -> tuple[int, int, 
 
 
 @pytest.mark.smoke
+@pytest.mark.release  # 15.9 s in the tier, over the 10 s cap (#1088)
 def test_an_interval_stops_existing_at_both_ends_of_the_dispersion_range() -> None:
     # What degrades at both ends is whether an interval exists. The release
     # sweep: 7 of 16 without one at dispersion 100, 0 of 16 at 2; at eight

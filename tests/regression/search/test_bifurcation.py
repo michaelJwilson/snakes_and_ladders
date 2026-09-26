@@ -77,7 +77,7 @@ def test_the_relaxation_reaches_the_enumerated_ground_state_of_the_declared_glas
     field = np.zeros((glass.graph.n_nodes, 2))
     runs = [
         simulated_bifurcation(
-            glass.graph, field, 2, np.random.default_rng(seed), dt=0.25
+            glass.graph, field, np.random.default_rng(seed), dt=0.25, n_states=2
         )
         for seed in range(_SEEDS)
     ]
@@ -103,7 +103,7 @@ def test_at_two_labels_the_relaxation_is_read_against_the_exact_cut() -> None:
         field = rng.normal(size=(graph.n_nodes, 2))
         _, exact = ising_ground_state(graph, field)
         run = simulated_bifurcation(
-            graph, field, 2, np.random.default_rng(1), dt=0.1, n_replicas=4
+            graph, field, np.random.default_rng(1), dt=0.1, n_replicas=4, n_states=2
         )
         assert run.energy >= exact - _EXACT
         gaps.append(run.energy - exact)
@@ -129,7 +129,9 @@ def test_the_frustrated_antiferromagnet_ground_state_is_reached_where_the_cut_ca
     )
     assert exact == _FRUSTRATED_Q2
     runs = [
-        simulated_bifurcation(graph, field, 2, np.random.default_rng(seed), dt=0.25)
+        simulated_bifurcation(
+            graph, field, np.random.default_rng(seed), dt=0.25, n_states=2
+        )
         for seed in range(_SEEDS)
     ]
 
@@ -147,7 +149,7 @@ def test_three_labels_reach_the_enumerated_minimum_at_nine_sites() -> None:
         for labels in itertools.product(range(3), repeat=params.graph.n_nodes)
     )
     run = simulated_bifurcation(
-        params.graph, field, 3, np.random.default_rng(2), dt=0.1, n_replicas=8
+        params.graph, field, np.random.default_rng(2), dt=0.1, n_replicas=8, n_states=3
     )
 
     assert run.energy == pytest.approx(exact, abs=_EXACT)
@@ -162,10 +164,15 @@ def test_the_torch_path_returns_the_numpy_labelling() -> None:
     graph = lattice_graph((4, 4), BoundaryCondition.OPEN, 0.4)
     field = np.random.default_rng(5).normal(size=(graph.n_nodes, 2))
     numpy_run = simulated_bifurcation(
-        graph, field, 2, np.random.default_rng(1), steps=300
+        graph, field, np.random.default_rng(1), steps=300, n_states=2
     )
     torch_run = simulated_bifurcation(
-        graph, field, 2, np.random.default_rng(1), steps=300, backend=Backend.TORCH
+        graph,
+        field,
+        np.random.default_rng(1),
+        steps=300,
+        backend=Backend.TORCH,
+        n_states=2,
     )
 
     assert np.array_equal(numpy_run.labelling, torch_run.labelling)
@@ -177,7 +184,9 @@ def test_the_energy_reported_is_the_discrete_energy_of_the_labelling() -> None:
     # Never the relaxed score: a run is judged on the labelling it returns.
     graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.6)
     field = np.random.default_rng(3).normal(size=(graph.n_nodes, 3))
-    run = simulated_bifurcation(graph, field, 3, np.random.default_rng(0), steps=200)
+    run = simulated_bifurcation(
+        graph, field, np.random.default_rng(0), steps=200, n_states=3
+    )
 
     assert run.labelling.shape == (graph.n_nodes,)
     assert run.energy == energy(graph, field, run.labelling)
@@ -191,13 +200,13 @@ def test_the_relaxation_refuses_what_it_cannot_answer_for() -> None:
     field = np.zeros((4, 2))
     rng = np.random.default_rng(0)
     with pytest.raises(ValueError, match="n_states"):
-        simulated_bifurcation(graph, np.zeros((4, 1)), 1, rng)
+        simulated_bifurcation(graph, np.zeros((4, 1)), rng, n_states=1)
     with pytest.raises(ValueError, match="steps and n_replicas"):
-        simulated_bifurcation(graph, field, 2, rng, steps=0)
+        simulated_bifurcation(graph, field, rng, steps=0, n_states=2)
     with pytest.raises(ValueError, match="dt"):
-        simulated_bifurcation(graph, field, 2, rng, dt=0.0)
+        simulated_bifurcation(graph, field, rng, dt=0.0, n_states=2)
     with pytest.raises(ValueError, match="runs on"):
-        simulated_bifurcation(graph, field, 2, rng, backend=Backend.NUMBA)
+        simulated_bifurcation(graph, field, rng, backend=Backend.NUMBA, n_states=2)
 
 
 @pytest.mark.oracle
