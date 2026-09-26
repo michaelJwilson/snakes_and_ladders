@@ -154,7 +154,7 @@ def _tree_environment(
     """The reward surface an agent sees on a tree fixture, and its taxa."""
     dataset = simulate_alignment(
         tau=params.tau,
-        k=params.k,
+        n_states=params.n_states,
         pi=params.pi,
         rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
@@ -162,7 +162,7 @@ def _tree_environment(
     alignment = dict(dataset.alignment)
     built = TreeEnvironment(
         alignment,
-        params.k,
+        params.n_states,
         np.asarray(params.pi),
         branch_length=float(
             np.mean([child.branch_length for _, child in edges(params.tau)])
@@ -183,7 +183,7 @@ def _starts(built: TreeEnvironment, seed: int) -> list[Topology]:
 def _rate(built: TreeEnvironment, endpoints: Sequence[Topology], best: float) -> float:
     """The fraction of ``endpoints`` scoring the enumerated maximum."""
     return float(
-        np.mean([abs(built.score(state) - best) < 1e-9 for state in endpoints])
+        np.mean([abs(built.log_weight(state) - best) < 1e-9 for state in endpoints])
     )
 
 
@@ -203,7 +203,7 @@ def tree_policy_baseline(loaded: Fixture[Any]) -> dict[str, Measurement]:
         "start_seed_offset": START_SEED_OFFSET,
     }
 
-    best = max(built.score(topology) for topology in enumerate_topologies(taxa))
+    best = max(built.log_weight(topology) for topology in enumerate_topologies(taxa))
     starts = _starts(built, params.seed)
     greedy = _rate(
         built,
@@ -266,13 +266,13 @@ def tree_surrogate_baseline(loaded: Fixture[Any]) -> dict[str, Measurement]:
     expensive rather than the surrogate.
     """
     params = loaded.params
-    target = maximized_target(params.k)
+    target = maximized_target(params.n_states)
     targets = []
     for index in range(SURROGATE_ALIGNMENTS):
         alignment = dict(
             simulate_alignment(
                 params.tau,
-                params.k,
+                params.n_states,
                 params.pi,
                 np.random.default_rng(SURROGATE_SEED_OFFSET + index),
                 SURROGATE_SITES,
@@ -325,7 +325,7 @@ def potts_environment_baseline(loaded: Fixture[Any]) -> dict[str, Measurement]:
         np.mean(
             [
                 abs(
-                    environment.energy(
+                    environment.log_weight(
                         rollout(
                             environment,
                             untrained,
@@ -429,7 +429,9 @@ def planted_glass_baseline(loaded: Fixture[Any]) -> dict[str, Measurement]:
     for offset in range(GLASS_RESTART_SEEDS):
         generator = np.random.default_rng(params.seed + offset)
         found = [
-            iterated_conditional_modes(glass.graph, GLASS_FIELD, 2, generator).energy
+            iterated_conditional_modes(
+                glass.graph, GLASS_FIELD, generator, n_states=2
+            ).energy
             for _ in range(params.glass_restarts)
         ]
         hits = [abs(energy - best) < 1e-9 for energy in found]

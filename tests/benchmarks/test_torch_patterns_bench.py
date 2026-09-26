@@ -52,7 +52,7 @@ def _dataset() -> tuple[Node, int, np.ndarray, dict[str, np.ndarray], torch.Tens
     dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=_SITES)
     return (
         params.tau,
-        params.k,
+        params.n_states,
         params.pi,
         dataset.alignment,
         branch_lengths_from_tree(params.tau),

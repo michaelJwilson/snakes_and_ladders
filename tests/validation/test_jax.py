@@ -80,6 +80,7 @@ def _mixture(n: int) -> tuple[np.ndarray, np.ndarray]:
 
 
 @pytest.mark.oracle
+@pytest.mark.release  # 10.8 s in the tier, over the 10 s cap (#1088)
 def test_the_mixture_likelihood_differentiates_as_jax_does() -> None:
     observations, points = _mixture(10_000)
     theirs = jax.gradients(points, observations=observations, n_components=3)

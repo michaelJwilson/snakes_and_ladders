@@ -28,10 +28,14 @@ from sal.sample.potts_mcmc import PottsMove
 from sal.sample.schedule import ScheduleParams, ScheduleShape
 from sal.search.ground_state import ANNEAL_SCHEDULE
 
+#: Relative agreement of a rerun energy with its record: a sum of ~5,000
+#: terms reordered (#1045) moves the last few bits, never 1e-12.
+RERUN_TOLERANCE = 1e-12
+
 
 @pytest.mark.smoke
 @pytest.mark.snapshot
-def test_a_recorded_evaluation_reruns_bitwise() -> None:
+def test_a_recorded_evaluation_reruns_within_the_declared_tolerance() -> None:
     tuned = load()
     entry = tuned.raw["moves"]["swendsen-wang"]["chosen"]
     params = ScheduleParams(
@@ -45,7 +49,12 @@ def test_a_recorded_evaluation_reruns_bitwise() -> None:
         np.random.default_rng([TUNING_SEEDS[0], 0]),
     )
 
-    assert energy == entry["energies"][0]
+    # Bitwise until #1045 moved the edge term outside BLAS, which reorders the
+    # energy's sum: the rerun is -10142.328645965481 against the recorded
+    # -10142.328645965412, 6.8e-15 relative. The declared tolerance is the
+    # floor, well inside the 1e-12 a reordered sum of this length needs; the
+    # spend is an integer count and stays exact.
+    assert energy == pytest.approx(entry["energies"][0], rel=RERUN_TOLERANCE)
     assert spent == entry["spent"][0]
 
 

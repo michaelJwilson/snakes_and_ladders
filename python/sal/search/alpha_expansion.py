@@ -33,7 +33,6 @@ energies a cut can represent.
 
 from __future__ import annotations
 
-import warnings
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
@@ -56,6 +55,7 @@ from sal.sim.potts import (
     energy,
     log_weight_of,
     site_field,
+    states_of,
 )
 
 # The bound is `2 * c_max / c_min` for a metric pairwise term; with a uniform
@@ -415,12 +415,8 @@ def _cycle_to_a_local_minimum(
                 termination=Termination.after(cycle, converged=True),
             )
 
-    warnings.warn(
-        f"{move.name} did not settle in max_cycles={max_cycles} cycles; ran "
-        f"{max_cycles} and returns the labelling it holds, with a Termination "
-        "recording the cap",
-        stacklevel=3,
-    )
+    # The cap is a termination, not a warning (issue #1089): the result says
+    # it ran to `max_cycles`, which is all a caller needs to decide.
     return ExpansionResult(
         labelling=labelling,
         energy=energy(graph, values, labelling),
@@ -685,8 +681,8 @@ EXPANSION = _Move(
 def alpha_expansion(
     graph: PottsGraph,
     field: SiteField | np.ndarray,
-    n_states: int,
     *,
+    n_states: int | None = None,
     start: np.ndarray | None = None,
     max_cycles: int = DEFAULT_MAX_CYCLES,
     backend: Backend = Backend.RUST,
@@ -706,8 +702,9 @@ def alpha_expansion(
         bound rests on.
     field : SiteField | np.ndarray
         ``(n_states,)`` or ``(n_nodes, n_states)``.
-    n_states : int
-        Label count.
+    n_states : int | None
+        Label count, read from the field's state axis; given, it is checked
+        against it (issue #1091).
     start : np.ndarray | None
         Initial labelling; the per-node data optimum when omitted, which is
         the labelling ignoring every coupling.
@@ -736,7 +733,7 @@ def alpha_expansion(
     return _cycle_to_a_local_minimum(
         graph,
         field,
-        n_states,
+        states_of(field, graph.n_nodes, n_states),
         EXPANSION,
         start=start,
         max_cycles=max_cycles,
@@ -958,9 +955,9 @@ SWAP = _Move(
 
 def alpha_beta_swap(
     graph: PottsGraph,
-    field: np.ndarray,
-    n_states: int,
+    field: SiteField | np.ndarray,
     *,
+    n_states: int | None = None,
     start: np.ndarray | None = None,
     max_cycles: int = DEFAULT_MAX_CYCLES,
     backend: Backend = Backend.RUST,
@@ -987,10 +984,11 @@ def alpha_beta_swap(
     UserWarning
         Where ``max_cycles`` runs out first, as :func:`alpha_expansion` does.
     """
+    field = log_weight_of(field)
     return _cycle_to_a_local_minimum(
         graph,
         field,
-        n_states,
+        states_of(field, graph.n_nodes, n_states),
         SWAP,
         start=start,
         max_cycles=max_cycles,

@@ -118,6 +118,10 @@ run_check "documents" infra/build_documents.sh --no-figures
 # it is this gate. A cached number no run ever reproduces would be a claim
 # with no referee.
 run_check "fixture baselines" uv run python infra/baselines.py
+# Every notebook under docs/nb/, the one place they all run (issue #1087): a
+# pull request re-executes only the notebooks it changes, so a notebook a
+# change breaks without touching it is found here, one release later at most.
+run_check "notebooks" uv run python infra/check_notebooks.py
 
 echo
 if [ "${#failures[@]}" -eq 0 ]; then
