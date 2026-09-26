@@ -66,6 +66,7 @@ import re
 import time
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, replace
+from dataclasses import field as dataclass_field
 from typing import Any, Protocol
 
 import numpy as np
@@ -1216,118 +1217,216 @@ def chain(*parts: str | Step) -> Then:
     )
 
 
-#: One part of a chain's name: a solver's name and, in parentheses, its
+#: One stage of a chain's text: a solver's name and, in parentheses, its
 #: arguments as ``key=value`` pairs separated by commas.
-_PART = re.compile(r"^\s*([A-Za-z0-9_\-]+)\s*(?:\((.*)\))?\s*$")
+_STAGE = re.compile(r"^\s*([A-Za-z0-9_\-]+)\s*(?:\((.*)\))?\s*$")
 
-#: The arguments that set fields of an annealed part's schedule, whose
-#: other fields are :data:`ANNEAL_SCHEDULE`'s.
-SCHEDULE_FIELDS: dict[str, Callable[[str], Any]] = {
+#: The fields of an annealed stage's schedule an argument sets; the others
+#: are :data:`ANNEAL_SCHEDULE`'s.
+SCHEDULE_FIELDS = ("shape", "t_start", "t_end", "hold")
+
+#: Every argument a stage can take, and how a value, typed or text, is read.
+ARGUMENTS: dict[str, Callable[[Any], Any]] = {
     "shape": ScheduleShape,
     "t_start": float,
     "t_end": float,
     "hold": float,
+    "steps": int,
+    "backend": Backend,
+    "min_sites": int,
+    "reserve_cycles": int,
+    "reserve_sweeps": int,
 }
 
 
-def _split(method: str) -> list[str]:
-    """``method`` split at each :data:`CHAIN` outside parentheses."""
+def _split(text: str) -> list[str]:
+    """``text`` split at each :data:`CHAIN` outside parentheses."""
     parts: list[str] = []
     depth, begun = 0, 0
-    for index, character in enumerate(method):
+    for index, character in enumerate(text):
         depth += {"(": 1, ")": -1}.get(character, 0)
         if character == CHAIN and depth == 0:
-            parts.append(method[begun:index])
+            parts.append(text[begun:index])
             begun = index + 1
-    parts.append(method[begun:])
+    parts.append(text[begun:])
     return parts
 
 
 def _refuse_argument(name: str, keys: Iterable[str], reason: str) -> None:
-    """Raise for arguments a part cannot take."""
+    """Raise for arguments a stage cannot take."""
     msg = f"{name!r} takes no {sorted(keys)!r}: {reason}"
     raise ValueError(msg)
 
 
-def rendered(text: str) -> Step:
-    """One part read from its name and arguments, e.g. ``swendsen-wang(t_start=1.0,steps=40)`` (issue #1077).
+@dataclass
+class SolverStage:
+    """One stage of a :class:`SolverChain`: a solver's name and its arguments (issue #1077).
 
-    The arguments are ``shape``, ``t_start``, ``t_end`` and ``hold``, which
-    replace those fields of :data:`ANNEAL_SCHEDULE`, and ``steps``, on an
-    annealed part; ``backend`` and ``min_sites`` on a single-site descent;
-    and ``reserve_cycles`` (expansion cycles) or ``reserve_sweeps`` on any
-    part, held back for the parts after it. An :data:`ARMS` name is a
-    chain already and takes none. A keyword passed at call time replaces
-    the one an argument bound.
-
-    Raises
-    ------
-    ValueError
-        If the text is not a name with arguments, the name is in no table,
-        or an argument is unknown, malformed or not the part's.
+    ``arguments`` are :data:`ARGUMENTS`' keys: the schedule's fields and
+    ``steps`` on an annealed stage, ``backend`` and ``min_sites`` on a
+    single-site descent, and ``reserve_cycles`` or ``reserve_sweeps`` on any
+    stage, held back for the stages after it. Set them with :meth:`update`,
+    which checks each against the stage. An :data:`ARMS` name is a chain
+    already and takes none.
     """
-    match = _PART.match(text)
-    if match is None:
-        msg = f"a part is a name and optional (key=value, ...), got {text!r}"
-        raise ValueError(msg)
-    name, body = match.groups()
-    _solver(name)
-    if not body or not body.strip():
-        return part(name)
-    arguments: dict[str, str] = {}
-    for item in body.split(","):
-        key, equals, value = item.partition("=")
-        if not equals or not key.strip() or not value.strip():
-            msg = f"an argument is key=value, got {item.strip()!r} in {text!r}"
+
+    name: str
+    arguments: dict[str, Any] = dataclass_field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        _solver(self.name)
+        given, self.arguments = self.arguments, {}
+        self.update(**given)
+
+    @classmethod
+    def parse(cls, text: str) -> SolverStage:
+        """A stage from ``name`` or ``name(key=value,...)``."""
+        match = _STAGE.match(text)
+        if match is None:
+            msg = f"a stage is a name and optional (key=value, ...), got {text!r}"
             raise ValueError(msg)
-        arguments[key.strip()] = value.strip()
-    if name in ARMS:
-        _refuse_argument(name, arguments, "an arm is a chain already")
-    takes = _options(name)
-    bound: dict[str, Any] = {}
-    fields = {key: arguments.pop(key) for key in SCHEDULE_FIELDS if key in arguments}
-    annealing = {key for key in ("steps",) if key in arguments} | set(fields)
-    if annealing and not takes & ANNEAL_OPTIONS:
-        _refuse_argument(name, annealing, "it runs no anneal")
-    if fields:
-        bound["schedule"] = replace(
-            ANNEAL_SCHEDULE,
-            **{key: SCHEDULE_FIELDS[key](value) for key, value in fields.items()},
+        name, body = match.groups()
+        arguments: dict[str, str] = {}
+        for item in (body or "").split(","):
+            if not item.strip():
+                continue
+            key, equals, value = item.partition("=")
+            if not equals or not key.strip() or not value.strip():
+                msg = f"an argument is key=value, got {item.strip()!r} in {text!r}"
+                raise ValueError(msg)
+            arguments[key.strip()] = value.strip()
+        return cls(name, arguments)
+
+    def update(self, **arguments: Any) -> SolverStage:
+        """Set arguments, checked against the stage; ``schedule=`` sets all four fields.
+
+        Returns the stage, so calls chain.
+
+        Raises
+        ------
+        ValueError
+            If an argument is unknown, unreadable or not the stage's, or
+            both reserves would be set.
+        """
+        if "schedule" in arguments:
+            schedule = arguments.pop("schedule")
+            arguments = {
+                **{key: getattr(schedule, key) for key in SCHEDULE_FIELDS},
+                **arguments,
+            }
+        if not arguments:
+            return self
+        unknown = set(arguments) - set(ARGUMENTS)
+        if unknown:
+            _refuse_argument(self.name, unknown, "unknown arguments")
+        if self.name in ARMS:
+            _refuse_argument(self.name, arguments, "an arm is a chain already")
+        takes = _options(self.name)
+        annealing = set(arguments) & {*SCHEDULE_FIELDS, "steps"}
+        if annealing and not takes & ANNEAL_OPTIONS:
+            _refuse_argument(self.name, annealing, "it runs no anneal")
+        descending = set(arguments) & {"backend", "min_sites"}
+        if descending and not takes & DESCENT_OPTIONS:
+            _refuse_argument(self.name, descending, "it is no single-site descent")
+        read = {key: ARGUMENTS[key](value) for key, value in arguments.items()}
+        merged = {**self.arguments, **read}
+        if "reserve_cycles" in merged and "reserve_sweeps" in merged:
+            _refuse_argument(self.name, read, "one reserve, in cycles or in sweeps")
+        self.arguments = merged
+        return self
+
+    def step(self) -> Step:
+        """The stage as a :class:`~sal.opt.compose.Step`."""
+        arguments = dict(self.arguments)
+        bound: dict[str, Any] = {}
+        fields = {
+            key: arguments.pop(key) for key in SCHEDULE_FIELDS if key in arguments
+        }
+        if fields:
+            bound["schedule"] = replace(ANNEAL_SCHEDULE, **fields)
+        for key in ("steps", "backend", "min_sites"):
+            if key in arguments:
+                bound[key] = arguments.pop(key)
+        reserve: Callable[[Any], int] | None = None
+        if "reserve_cycles" in arguments:
+            reserve = ExpansionReserve(arguments.pop("reserve_cycles"))
+        if "reserve_sweeps" in arguments:
+            reserve = SweepReserve(arguments.pop("reserve_sweeps"))
+        return part(self.name, reserve=reserve, **bound)
+
+    def __str__(self) -> str:
+        """The stage's text, which :meth:`parse` reads back."""
+        if not self.arguments:
+            return self.name
+        shown = ",".join(
+            f"{key}={getattr(value, 'value', value)!s}"
+            if not isinstance(value, float)
+            else f"{key}={value!r}"
+            for key, value in self.arguments.items()
         )
-    if "steps" in arguments:
-        bound["steps"] = int(arguments.pop("steps"))
-    descending = {key for key in ("backend", "min_sites") if key in arguments}
-    if descending and not takes & DESCENT_OPTIONS:
-        _refuse_argument(name, descending, "it is no single-site descent")
-    if "backend" in arguments:
-        bound["backend"] = Backend(arguments.pop("backend"))
-    if "min_sites" in arguments:
-        bound["min_sites"] = int(arguments.pop("min_sites"))
-    reserve: Callable[[Any], int] | None = None
-    if "reserve_cycles" in arguments and "reserve_sweeps" in arguments:
-        _refuse_argument(name, arguments, "one reserve, in cycles or in sweeps")
-    if "reserve_cycles" in arguments:
-        reserve = ExpansionReserve(int(arguments.pop("reserve_cycles")))
-    if "reserve_sweeps" in arguments:
-        reserve = SweepReserve(int(arguments.pop("reserve_sweeps")))
-    if arguments:
-        _refuse_argument(name, arguments, "unknown arguments")
-    return part(name, reserve=reserve, **bound)
+        return f"{self.name}({shown})"
 
 
-def compose(method: str) -> Then:
-    """:func:`chain` over a name ``a>b(...)>...``, each part read by :func:`rendered` (issue #1077).
+@dataclass
+class SolverChain:
+    """Stages run in order under one budget, built when called (issue #1077).
 
-    Any chain of :data:`METHODS`, :data:`ARMS` and :data:`STAGES` parts, each
-    with its own arguments, is built from its text when it is called for; the
-    table entries are names for some of them, not the limit of what runs.
-
-    Raises
-    ------
-    ValueError
-        If a part cannot be read, or the name has one part.
+    ``SolverChain.parse("swendsen-wang>alpha-expansion")`` reads one from
+    its text, ``chain.stages[0].update(t_start=1.0, reserve_cycles=10)``
+    sets a stage's arguments, and :func:`ground_state` runs it. Each stage
+    starts from the labelling of the one before and gets the budget the
+    stages before it left less its reserve; the run is the last stage's,
+    ``spent`` summed. ``schedule`` and ``steps`` passed at call time reach
+    every annealed stage and replace its arguments; ``backend`` and
+    ``min_sites`` every single-site descent. A stage that refuses a start,
+    such as ``field_argmax``, can only come first; and since
+    :func:`run_icm` charges its whole budget, a descent before another stage
+    is ``descent``. ``str(chain)`` is text :meth:`parse` reads back.
     """
-    return chain(*(rendered(text) for text in _split(method)))
+
+    stages: list[SolverStage]
+
+    def __post_init__(self) -> None:
+        if not self.stages:
+            msg = "a chain has at least one stage"
+            raise ValueError(msg)
+
+    @classmethod
+    def parse(cls, text: str) -> SolverChain:
+        """A chain from ``a>b(key=value,...)>...``, each stage read by :meth:`SolverStage.parse`."""
+        return cls([SolverStage.parse(stage) for stage in _split(text)])
+
+    def then(self) -> Then:
+        """The chain as it runs, built from the stages' current arguments."""
+        return Then(tuple(stage.step() for stage in self.stages), handover)
+
+    @property
+    def takes(self) -> frozenset[str]:
+        """Every option some stage takes at call time."""
+        return self.then().takes
+
+    def __call__(
+        self,
+        problem: Problem | Rung,
+        budget: Budget,
+        rng: np.random.Generator,
+        /,
+        *,
+        start: np.ndarray | None = None,
+        **options: Any,
+    ) -> MethodRun:
+        """Run the stages on ``problem`` within ``budget``, the first from ``start``."""
+        run: MethodRun = self.then()(problem, budget, rng, start=start, **options)
+        return run
+
+    def __str__(self) -> str:
+        """The chain's text, which :meth:`parse` reads back."""
+        return CHAIN.join(str(stage) for stage in self.stages)
+
+
+def compose(text: str) -> SolverChain:
+    """:meth:`SolverChain.parse`: any chain of :data:`METHODS`, :data:`ARMS` and :data:`STAGES` stages, from its text."""
+    return SolverChain.parse(text)
 
 
 # The arms' constants are issue #1038's results, copied from
@@ -1387,7 +1486,7 @@ ANNEALED = _ANNEALED_METHODS | frozenset(ARMS)
 def ground_state(
     graph: PottsGraph,
     field: np.ndarray,
-    method: str | Then,
+    method: str | SolverChain | Then,
     budget: Budget,
     rng: np.random.Generator,
     *,
@@ -1420,12 +1519,12 @@ def ground_state(
         The lattice; every coupling non-negative.
     field : np.ndarray
         ``h``, shape ``(n_nodes, n_states)``.
-    method : str | Then
-        A key of :data:`METHODS` or :data:`ARMS`; a part with arguments or a
-        chain of parts joined by ``>``, read by :func:`compose`, e.g.
-        ``swendsen-wang(t_start=1.0,reserve_cycles=10)>alpha-expansion``; or a
-        chain built by :func:`chain`. A key is read as itself before it is
-        read as a chain.
+    method : str | SolverChain | Then
+        A key of :data:`METHODS` or :data:`ARMS`; the text of a
+        :class:`SolverChain`, stages joined by ``>`` with their arguments,
+        e.g. ``swendsen-wang(t_start=1.0,reserve_cycles=10)>alpha-expansion``;
+        a :class:`SolverChain`; or a chain built by :func:`chain`. A key is
+        read as itself before it is read as a chain.
     budget : Budget
         In :attr:`~sal.cost.Cost.SITE_VISITS`, the unit every
         entry is charged in.
@@ -1463,16 +1562,13 @@ def ground_state(
     """
     solvers = METHODS | ARMS
     solver: Callable[..., MethodRun]
-    if isinstance(method, Then):
+    if isinstance(method, Then | SolverChain):
         solver, takes = method, method.takes
     elif method in solvers:
         solver, takes = solvers[method], _options(method)
-    elif CHAIN in method:
-        composed = compose(method)
+    elif CHAIN in method or "(" in method:
+        composed = SolverChain.parse(method)
         solver, takes = composed, composed.takes
-    elif "(" in method:
-        one = rendered(method)
-        solver, takes = one.stage, one.takes
     else:
         msg = (
             f"no ground-state method {method!r}; the methods are {sorted(METHODS)} "

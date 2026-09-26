@@ -83,7 +83,8 @@ class Then:
     Parameters
     ----------
     steps : tuple[Step, ...]
-        At least two.
+        At least one; one step is that stage alone, its spend and answer
+        unchanged.
     handover : Callable[[Any], Any]
         Reads the answer out of a run: the next step's ``start``.
 
@@ -96,8 +97,8 @@ class Then:
     handover: Callable[[Any], Any]
 
     def __post_init__(self) -> None:
-        if len(self.steps) < 2:
-            msg = f"a chain has at least two steps, got {len(self.steps)}"
+        if not self.steps:
+            msg = "a chain has at least one step"
             raise ValueError(msg)
 
     @property

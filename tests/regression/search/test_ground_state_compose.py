@@ -11,6 +11,7 @@ arm. The arms themselves are pinned to the functions they replaced by
 from __future__ import annotations
 
 import functools
+import pickle
 
 import numpy as np
 import pytest
@@ -26,6 +27,7 @@ from sal.search.ground_state import (
     WARM_SCHEDULE,
     MethodRun,
     Rung,
+    SolverChain,
     chain,
     ground_state,
     part,
@@ -248,3 +250,42 @@ def test_an_argument_a_part_cannot_take_is_refused(text: str, match: str) -> Non
         ground_state(
             rung.graph, rung.field, text, _budget(rung), np.random.default_rng(0)
         )
+
+
+@pytest.mark.oracle
+def test_a_chain_read_from_text_takes_its_arguments_by_update() -> None:
+    # The object route: parse the stages, update one, hand the instance to
+    # `ground_state`. With the arm's schedule and reserve it is the arm; its
+    # text reads back to an equal chain, and a pickled copy runs the same.
+    rung = _rung()
+    budget = _budget(rung)
+    solver = SolverChain.parse("swendsen-wang>alpha-expansion")
+    solver.stages[0].update(
+        schedule=SWENDSEN_WANG_SCHEDULE, reserve_cycles=EXPANSION_RESERVE_CYCLES
+    )
+    copy = pickle.loads(pickle.dumps(solver))
+
+    assert SolverChain.parse(str(solver)) == solver
+    for seed in SEEDS:
+        run = ground_state(
+            rung.graph, rung.field, solver, budget, np.random.default_rng(seed)
+        )
+        _same(
+            run,
+            ARMS["swendsen-wang>expansion"](rung, budget, np.random.default_rng(seed)),
+        )
+        _same(run, copy(rung, budget, np.random.default_rng(seed)))
+
+    solver.stages[0].update(t_start=1.0)
+    assert str(solver).startswith("swendsen-wang(shape=linear,t_start=1.0,")
+
+
+@pytest.mark.smoke
+def test_an_update_a_stage_cannot_take_is_refused_and_leaves_it_unchanged() -> None:
+    solver = SolverChain.parse("alpha-expansion>swendsen-wang(steps=4)")
+    with pytest.raises(ValueError, match="runs no anneal"):
+        solver.stages[0].update(t_start=1.0)
+    with pytest.raises(ValueError, match="unknown arguments"):
+        solver.stages[1].update(bogus=1)
+
+    assert str(solver) == "alpha-expansion>swendsen-wang(steps=4)"

@@ -94,14 +94,14 @@ def test_an_option_reaches_the_steps_that_take_it_and_no_other() -> None:
 
 
 @pytest.mark.analytic
-def test_a_step_left_no_budget_and_a_chain_of_one_are_refused() -> None:
+def test_a_step_left_no_budget_and_an_empty_chain_are_refused() -> None:
     spend_all = functools.partial(_stage, share=1)
     chain = then([spend_all, _stage], operator.attrgetter("x"))
 
     with pytest.raises(ValueError, match="step 1 is left 0"):
         chain(0, Budget(Cost.SITE_VISITS, 8), np.random.default_rng(0))
-    with pytest.raises(ValueError, match="at least two steps"):
-        then([_stage], operator.attrgetter("x"))
+    with pytest.raises(ValueError, match="at least one step"):
+        then([], operator.attrgetter("x"))
 
 
 @pytest.mark.analytic
