@@ -63,6 +63,181 @@ fn step_kernel<'a>(
     out
 }
 
+/// How a switch probability enters the step into a position (issues #1082, #1133).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SwitchKind {
+    /// `(1 - s) I + s A`: stay, or move by `A` (#1082).
+    StayOrMove,
+    /// `A ⊗ S`, `S = [[1 - s, s], [s, 1 - s]]`: a slow chain `A` over `K`
+    /// states and a fast binary layer switching with `s`, state `(i, a)` at
+    /// index `2 i + a`, as `np.kron(A, S)` lays it out.
+    Kronecker,
+    /// `A ⊗ S` on `A`'s diagonal blocks alone: the layer switches with `s`
+    /// where the slow chain stays, and lands on either layer with probability
+    /// one half where it moves.
+    KroneckerDiagonal,
+}
+
+impl SwitchKind {
+    /// The kind a Python caller names: `stay_or_move`, `kronecker` or
+    /// `kronecker_diagonal`.
+    ///
+    /// # Errors
+    /// Any other name.
+    pub fn parse(name: &str) -> Result<Self, String> {
+        match name {
+            "stay_or_move" => Ok(Self::StayOrMove),
+            "kronecker" => Ok(Self::Kronecker),
+            "kronecker_diagonal" => Ok(Self::KroneckerDiagonal),
+            other => Err(format!(
+                "switch_kind is {other:?}; one of stay_or_move, kronecker, kronecker_diagonal"
+            )),
+        }
+    }
+}
+
+/// `ln(1 / 2)`: the layer a moved slow chain lands on, under the diagonal switch.
+const LN_HALF: f64 = -std::f64::consts::LN_2;
+
+/// One step's Kronecker transition, held as its factors and never as a `2K x 2K` matrix.
+///
+/// The forward and backward products factor through the slow chain: a
+/// `K x K` product per layer, then a `2 x 2` mix per slow state --- `2 K^2 +
+/// 4 K` terms a step against the `4 K^2` of the explicit matrix (#1133).
+struct KroneckerStep<'a> {
+    /// `ln A`, row-major `K x K`.
+    log_slow: &'a [f64],
+    /// `K`.
+    slow: usize,
+    /// Whether the layer switches only where the slow chain stays.
+    diagonal: bool,
+    /// `ln(1 - s)`.
+    stay: f64,
+    /// `ln s`.
+    flip: f64,
+}
+
+impl<'a> KroneckerStep<'a> {
+    fn at(log_slow: &'a [f64], slow: usize, diagonal: bool, s: f64) -> Self {
+        Self {
+            log_slow,
+            slow,
+            diagonal,
+            stay: (1.0 - s).ln(),
+            flip: s.ln(),
+        }
+    }
+
+    /// `ln S[a, b]`.
+    #[inline]
+    fn mix(&self, a: usize, b: usize) -> f64 {
+        if a == b {
+            self.stay
+        } else {
+            self.flip
+        }
+    }
+
+    /// `ln P[(i, a), (j, b)]`, one entry of the matrix this never builds.
+    #[inline]
+    fn entry(&self, from: usize, to: usize) -> f64 {
+        let (i, a, j, b) = (from / 2, from % 2, to / 2, to % 2);
+        let layer = if !self.diagonal || i == j {
+            self.mix(a, b)
+        } else {
+            LN_HALF
+        };
+        self.log_slow[i * self.slow + j] + layer
+    }
+
+    /// `out[(j, b)] = ln sum_(i, a) exp(previous[(i, a)] + ln P[(i, a), (j, b)])`.
+    ///
+    /// `scratch` holds `2 K` entries.
+    fn forward(&self, previous: &[f64], scratch: &mut [f64], out: &mut [f64]) {
+        let k = self.slow;
+        if self.diagonal {
+            // Both layers of a slow state pooled: a moved chain forgets its layer.
+            for i in 0..k {
+                scratch[i] = log_add(previous[2 * i], previous[2 * i + 1]);
+            }
+            for j in 0..k {
+                let mut moved = f64::NEG_INFINITY;
+                for i in (0..k).filter(|&i| i != j) {
+                    moved = log_add(moved, scratch[i] + self.log_slow[i * k + j]);
+                }
+                let kept = self.log_slow[j * k + j];
+                for b in 0..2 {
+                    let stayed = log_add(
+                        previous[2 * j] + kept + self.mix(0, b),
+                        previous[2 * j + 1] + kept + self.mix(1, b),
+                    );
+                    out[2 * j + b] = log_add(stayed, moved + LN_HALF);
+                }
+            }
+            return;
+        }
+        // The slow chain's product per layer, then the layer's `2 x 2` mix.
+        for j in 0..k {
+            for a in 0..2 {
+                let mut carried = f64::NEG_INFINITY;
+                for i in 0..k {
+                    carried = log_add(carried, previous[2 * i + a] + self.log_slow[i * k + j]);
+                }
+                scratch[2 * j + a] = carried;
+            }
+            for b in 0..2 {
+                out[2 * j + b] = log_add(
+                    scratch[2 * j] + self.mix(0, b),
+                    scratch[2 * j + 1] + self.mix(1, b),
+                );
+            }
+        }
+    }
+
+    /// `out[(i, a)] = ln sum_(j, b) exp(ln P[(i, a), (j, b)] + ahead[(j, b)])`.
+    ///
+    /// `scratch` holds `2 K` entries.
+    fn backward(&self, ahead: &[f64], scratch: &mut [f64], out: &mut [f64]) {
+        let k = self.slow;
+        // The layer's mix first, per slow state it lands in.
+        for j in 0..k {
+            for a in 0..2 {
+                scratch[2 * j + a] = log_add(
+                    self.mix(a, 0) + ahead[2 * j],
+                    self.mix(a, 1) + ahead[2 * j + 1],
+                );
+            }
+        }
+        if self.diagonal {
+            for i in 0..k {
+                let mut moved = f64::NEG_INFINITY;
+                for j in (0..k).filter(|&j| j != i) {
+                    moved = log_add(
+                        moved,
+                        self.log_slow[i * k + j] + log_add(ahead[2 * j], ahead[2 * j + 1]),
+                    );
+                }
+                for a in 0..2 {
+                    out[2 * i + a] = log_add(
+                        self.log_slow[i * k + i] + scratch[2 * i + a],
+                        moved + LN_HALF,
+                    );
+                }
+            }
+            return;
+        }
+        for i in 0..k {
+            for a in 0..2 {
+                let mut carried = f64::NEG_INFINITY;
+                for j in 0..k {
+                    carried = log_add(carried, self.log_slow[i * k + j] + scratch[2 * j + a]);
+                }
+                out[2 * i + a] = carried;
+            }
+        }
+    }
+}
+
 /// Posterior marginals, transition counts and evidence, segment by segment.
 ///
 /// # Parameters
@@ -78,6 +253,11 @@ fn step_kernel<'a>(
 ///   step into position `t` then takes `(1 - s[t]) I + s[t] A` with `A` the
 ///   transition, the stay-or-switch form, built per step from the one `A`
 ///   rather than stored `T` times; a segment's first entry is never read.
+/// - `kind`: how `switch` enters. Under [`SwitchKind::Kronecker`] and
+///   [`SwitchKind::KroneckerDiagonal`], `n_states` is `2 K`,
+///   `log_transition` is the slow chain's `K x K`, and `switch` is required;
+///   the step is taken in its factors, and `counts` are over the `2 K`
+///   states, the matrix's own.
 ///
 /// # Returns
 /// `Ok(())`, or `Err` naming the first violated precondition.
@@ -92,10 +272,21 @@ pub fn ragged_posteriors_into(
     counts: &mut [f64],
     evidence: &mut [f64],
     switch: &[f64],
+    kind: SwitchKind,
 ) -> Result<(), String> {
     if n_states == 0 {
         return Err("n_states must be positive".to_string());
     }
+    let kronecker = kind != SwitchKind::StayOrMove;
+    let slow = n_states / 2;
+    if kronecker && (!n_states.is_multiple_of(2) || switch.is_empty()) {
+        return Err(format!(
+            "a {kind:?} switch takes 2 K states and a switch per position, got {n_states} \
+             states and {} switch entries",
+            switch.len()
+        ));
+    }
+    let width = if kronecker { slow } else { n_states };
     if log_initial.len() != n_states {
         return Err(format!(
             "log_initial has {} entries for {} states",
@@ -103,11 +294,11 @@ pub fn ragged_posteriors_into(
             n_states
         ));
     }
-    if log_transition.len() != n_states * n_states {
+    if log_transition.len() != width * width {
         return Err(format!(
             "log_transition has {} entries for {} states",
             log_transition.len(),
-            n_states
+            width
         ));
     }
     if let Some(index) = lengths.iter().position(|&one| one < 2) {
@@ -144,19 +335,28 @@ pub fn ragged_posteriors_into(
     }
     // The transition in probability space, read by every switched step; the
     // unswitched path reads `log_transition` itself and is unchanged.
-    let probability: Vec<f64> = if switch.is_empty() {
+    let probability: Vec<f64> = if switch.is_empty() || kronecker {
         Vec::new()
     } else {
         log_transition.iter().map(|&one| one.exp()).collect()
     };
     let mut switched = vec![
         0.0_f64;
-        if switch.is_empty() {
+        if switch.is_empty() || kronecker {
             0
         } else {
             n_states * n_states
         }
     ];
+    let mut scratch = vec![0.0_f64; if kronecker { n_states } else { 0 }];
+    let step_at = |position: usize| {
+        KroneckerStep::at(
+            log_transition,
+            slow,
+            kind == SwitchKind::KroneckerDiagonal,
+            switch[position],
+        )
+    };
 
     counts.fill(f64::NEG_INFINITY);
     let mut alpha = vec![0.0_f64; n_states];
@@ -178,6 +378,14 @@ pub fn ragged_posteriors_into(
         }
         for step in 1..length {
             previous.copy_from_slice(&alpha);
+            if kronecker {
+                step_at(start + step).forward(&previous, &mut scratch, &mut alpha);
+                for state in 0..n_states {
+                    alpha[state] += log_density[base + step * n_states + state];
+                    forward[step * n_states + state] = alpha[state];
+                }
+                continue;
+            }
             let kernel = step_kernel(
                 log_transition,
                 &probability,
@@ -209,6 +417,22 @@ pub fn ragged_posteriors_into(
             let next = base + (step + 1) * n_states;
             for state in 0..n_states {
                 ahead[state] = log_density[next + state] + beta[state];
+            }
+            if kronecker {
+                let factors = step_at(start + step + 1);
+                factors.backward(&ahead, &mut scratch, &mut beta);
+                for from in 0..n_states {
+                    let row = from * n_states;
+                    for to in 0..n_states {
+                        let pair =
+                            forward[step * n_states + from] + factors.entry(from, to) + ahead[to]
+                                - total_evidence;
+                        counts[row + to] = log_add(counts[row + to], pair);
+                    }
+                    gamma[base + step * n_states + from] =
+                        forward[step * n_states + from] + beta[from] - total_evidence;
+                }
+                continue;
             }
             let kernel = step_kernel(
                 log_transition,
@@ -244,7 +468,7 @@ pub fn ragged_posteriors_into(
 #[allow(clippy::too_many_arguments)]
 #[pyfunction]
 #[pyo3(name = "ragged_posteriors")]
-#[pyo3(signature = (log_density, lengths, log_initial, log_transition, gamma, counts, evidence, switch = None))]
+#[pyo3(signature = (log_density, lengths, log_initial, log_transition, gamma, counts, evidence, switch = None, switch_kind = "stay_or_move"))]
 pub fn ragged_posteriors(
     py: Python<'_>,
     log_density: PyReadonlyArray2<f64>,
@@ -255,7 +479,9 @@ pub fn ragged_posteriors(
     mut counts: PyReadwriteArray2<f64>,
     mut evidence: PyReadwriteArray1<f64>,
     switch: Option<PyReadonlyArray1<f64>>,
+    switch_kind: &str,
 ) -> PyResult<()> {
+    let kind = SwitchKind::parse(switch_kind).map_err(PyValueError::new_err)?;
     let density = log_density.as_slice()?;
     let n_states = log_initial.len()?;
     let widths: Vec<usize> = lengths
@@ -275,7 +501,7 @@ pub fn ragged_posteriors(
     };
     py.detach(|| {
         ragged_posteriors_into(
-            density, n_states, &widths, initial, transition, gamma, counts, evidence, switch,
+            density, n_states, &widths, initial, transition, gamma, counts, evidence, switch, kind,
         )
     })
     .map_err(PyValueError::new_err)
@@ -305,6 +531,7 @@ mod tests {
             &mut counts,
             &mut evidence,
             &[],
+            SwitchKind::StayOrMove,
         )
         .unwrap();
         // Every density is one and every choice even, so each segment's
@@ -332,6 +559,7 @@ mod tests {
             &mut counts,
             &mut evidence,
             &[],
+            SwitchKind::StayOrMove,
         )
         .unwrap_err();
         assert!(error.contains("at least 2 positions"), "{error}");

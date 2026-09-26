@@ -345,6 +345,7 @@ def ragged_posteriors(
     counts: np.ndarray,
     evidence: np.ndarray,
     switch: np.ndarray | None = None,
+    switch_kind: str = "stay_or_move",
 ) -> None: ...
 
 class MetropolisWalk:

@@ -6,11 +6,19 @@ is checked is the segmentation and not a second batched recursion.
 
 from __future__ import annotations
 
+import itertools
+
 import numpy as np
 import pytest
+from sal import oxisal
 from sal.backend import Backend
 from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from sal.likelihood.ragged import posteriors, posteriors_oracle
+from sal.likelihood.ragged import (
+    SwitchKind,
+    posteriors,
+    posteriors_oracle,
+    step_transitions,
+)
 from sal.likelihood.ragged import rust as ragged_rust
 from sal.ragged import Ragged
 
@@ -151,3 +159,125 @@ def test_a_malformed_switch_is_refused(switch: np.ndarray, message: str) -> None
 
     with pytest.raises(ValueError, match=message):
         posteriors(density, initial, transition, switch=switch)
+
+
+#: The two Kronecker kinds (issue #1133).
+KRONECKER_KINDS = [SwitchKind.KRONECKER, SwitchKind.KRONECKER_DIAGONAL]
+
+#: Slow states under the fast binary layer.
+SLOW = 3
+
+
+def _layered(
+    lengths: tuple[int, ...], seed: int
+) -> tuple[Ragged, np.ndarray, np.ndarray, np.ndarray]:
+    """Scores over ``2 K`` states, a ``2 K`` prior, a ``K x K`` slow chain and a switch."""
+    rng = np.random.default_rng(seed)
+    total = sum(lengths)
+    return (
+        Ragged(np.log(rng.random((total, 2 * SLOW))), lengths),
+        np.log(rng.dirichlet(np.ones(2 * SLOW))),
+        np.log(rng.dirichlet(np.ones(SLOW), size=SLOW)),
+        rng.uniform(size=total),
+    )
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("kind", KRONECKER_KINDS, ids=str)
+@pytest.mark.parametrize("lengths", SWITCHED_LAYOUTS, ids=str)
+def test_a_kronecker_switch_matches_the_materialized_stack(
+    lengths: tuple[int, ...], kind: SwitchKind
+) -> None:
+    # The kernel takes each step in its factors; the oracle hands
+    # `forward_backward` the `(T - 1, 2K, 2K)` stack of `np.kron(A, S_t)`.
+    density, initial, slow, switch = _layered(lengths, seed=1133)
+
+    compiled = posteriors(density, initial, slow, switch=switch, switch_kind=kind)
+    reference = posteriors_oracle(density, initial, slow, switch, kind)
+
+    for got, want in zip(compiled, reference, strict=True):
+        np.testing.assert_allclose(got, want, rtol=CROSS_DEVICE_RTOL_FLOAT64)
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("kind", KRONECKER_KINDS, ids=str)
+def test_the_kronecker_evidence_and_marginals_are_the_sum_over_paths(
+    kind: SwitchKind,
+) -> None:
+    # Every one of the 6^5 paths through one segment of five positions,
+    # scored from the explicit per-step matrices and summed.
+    density, initial, slow, switch = _layered((5,), seed=7)
+    steps = step_transitions(slow, switch[1:], kind)
+    n = 2 * SLOW
+    paths = np.array(list(itertools.product(range(n), repeat=5)))
+    score = initial[paths[:, 0]] + density.values[0, paths[:, 0]]
+    for t in range(1, 5):
+        score = score + steps[t - 1, paths[:, t - 1], paths[:, t]]
+        score = score + density.values[t, paths[:, t]]
+    evidence = np.logaddexp.reduce(score)
+    marginals = np.array(
+        [
+            [np.logaddexp.reduce(score[paths[:, t] == state]) for state in range(n)]
+            for t in range(5)
+        ]
+    )
+
+    gamma, _, got = posteriors(density, initial, slow, switch=switch, switch_kind=kind)
+
+    np.testing.assert_allclose(got, [evidence], rtol=1e-12)
+    np.testing.assert_allclose(gamma, marginals - evidence, rtol=1e-11, atol=1e-12)
+
+
+@pytest.mark.oracle
+def test_under_an_identity_slow_chain_the_kronecker_switch_is_stay_or_move() -> None:
+    # `I ⊗ S_t = (1 - s) I + s (I ⊗ J)`: the one case the stay-or-move form
+    # covers, reached by a different arithmetic.
+    density, initial, _, switch = _layered((6, 9, 2), seed=11)
+    with np.errstate(divide="ignore"):
+        identity = np.log(np.eye(SLOW))
+        flipped = np.log(np.kron(np.eye(SLOW), 1.0 - np.eye(2)))
+
+    kronecker = posteriors(
+        density, initial, identity, switch=switch, switch_kind=SwitchKind.KRONECKER
+    )
+    moved = posteriors(density, initial, flipped, switch=switch)
+
+    for got, want in zip(kronecker, moved, strict=True):
+        np.testing.assert_allclose(got, want, rtol=CROSS_DEVICE_RTOL_FLOAT64)
+
+
+@pytest.mark.analytic
+@pytest.mark.parametrize("kind", list(SwitchKind), ids=str)
+def test_every_step_transition_is_stochastic(kind: SwitchKind) -> None:
+    _, _, slow, switch = _layered((4,), seed=3)
+
+    rows = np.exp(step_transitions(slow, switch, kind)).sum(axis=-1)
+
+    np.testing.assert_allclose(rows, 1.0, rtol=1e-14)
+
+
+@pytest.mark.smoke
+def test_a_malformed_kronecker_call_is_refused() -> None:
+    density, initial, slow, switch = _layered((5, 8), seed=7)
+    odd = Ragged(density.values[:, :5], density.lengths)
+
+    with pytest.raises(ValueError, match="switch per position"):
+        posteriors(density, initial, slow, switch_kind=SwitchKind.KRONECKER)
+    with pytest.raises(ValueError, match="2 K states"):
+        posteriors(
+            odd, initial[:5], slow, switch=switch, switch_kind=SwitchKind.KRONECKER
+        )
+    with pytest.raises(ValueError, match="not a valid SwitchKind"):
+        ragged_rust.posteriors(density, initial, slow, switch, "sideways")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="switch_kind"):
+        oxisal.ragged_posteriors(
+            density.values,
+            np.asarray(density.lengths, dtype=np.int64),
+            initial,
+            slow,
+            np.empty_like(density.values),
+            np.empty((2 * SLOW, 2 * SLOW)),
+            np.empty(2),
+            switch,
+            "sideways",
+        )

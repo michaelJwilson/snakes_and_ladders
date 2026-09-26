@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from sal.likelihood.ragged import Posteriors
+from sal.likelihood.ragged import Posteriors, SwitchKind
 from sal.oxisal import ragged_posteriors
 from sal.ragged import Ragged
 
@@ -21,6 +21,7 @@ def posteriors(
     log_initial: np.ndarray,
     log_transition: np.ndarray,
     switch: np.ndarray | None = None,
+    switch_kind: SwitchKind = SwitchKind.STAY_OR_MOVE,
 ) -> Posteriors:
     """Marginals, transition counts and per-segment evidence, in Rust.
 
@@ -33,8 +34,10 @@ def posteriors(
     log_transition : np.ndarray
         ``(n_states, n_states)`` in log space.
     switch : np.ndarray | None
-        One stay-or-switch probability per position, or ``None``; see
+        One switch probability per position, or ``None``; see
         :func:`sal.likelihood.ragged.posteriors`.
+    switch_kind : SwitchKind
+        How ``switch`` enters; see :class:`sal.likelihood.ragged.SwitchKind`.
 
     Returns
     -------
@@ -58,5 +61,6 @@ def posteriors(
         None
         if switch is None
         else np.ascontiguousarray(switch, dtype=np.float64).reshape(-1),
+        str(SwitchKind(switch_kind)),
     )
     return Posteriors(gamma, counts, evidence)

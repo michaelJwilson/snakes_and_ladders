@@ -65,7 +65,7 @@ pub use potts::{bond_roots, single_site_sweeps, swendsen_wang_sweep};
 pub use pruning::pruning_log_likelihood;
 #[cfg(feature = "sandbox")]
 pub use pruning_burn::pruning_gradient;
-pub use ragged::ragged_posteriors_into;
+pub use ragged::{ragged_posteriors_into, SwitchKind};
 pub use sampling::sample_rows;
 
 /// Doubles an integer.
