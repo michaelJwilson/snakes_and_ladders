@@ -1086,14 +1086,16 @@ _SPATIO_TILING_REQUIRED_FIELDS = frozenset(
 )
 
 #: The keys a tiling fixture's ``tiles`` declares: the seed its centres are
-#: drawn from and ``k``, the tile count.
-_TILES_KEYS = frozenset({"seed", "k"})
+#: drawn from and ``n_tiles``, the tile count.
+_TILES_KEYS = frozenset({"seed", "n_tiles"})
 
 
-def tile_partition(graph: PottsGraph, k: int, rng: np.random.Generator) -> np.ndarray:
-    """Every node assigned to the nearest of ``k`` centres drawn from ``rng``: a seeded Voronoi tiling.
+def tile_partition(
+    graph: PottsGraph, n_tiles: int, rng: np.random.Generator
+) -> np.ndarray:
+    """Every node assigned to the nearest of ``n_tiles`` centres drawn from ``rng``: a seeded Voronoi tiling.
 
-    The centres are ``k`` distinct nodes drawn uniformly without replacement,
+    The centres are ``n_tiles`` distinct nodes drawn uniformly without replacement,
     in draw order; a node joins the centre nearest it in graph distance
     (hops), and a tie goes to the centre drawn first. Tile ``t`` holds centre
     ``t``.
@@ -1111,8 +1113,8 @@ def tile_partition(graph: PottsGraph, k: int, rng: np.random.Generator) -> np.nd
     ----------
     graph : PottsGraph
         Connected.
-    k : int
-        The tile count, ``1 <= k <= graph.n_nodes``.
+    n_tiles : int
+        The tile count, ``1 <= n_tiles <= graph.n_nodes``.
     rng : np.random.Generator
         Draws the centres, and nothing else.
 
@@ -1124,7 +1126,7 @@ def tile_partition(graph: PottsGraph, k: int, rng: np.random.Generator) -> np.nd
     Raises
     ------
     ValueError
-        If ``k`` is out of range, or a node is reached from no centre, which a
+        If ``n_tiles`` is out of range, or a node is reached from no centre, which a
         disconnected graph allows.
 
     Examples
@@ -1138,14 +1140,14 @@ def tile_partition(graph: PottsGraph, k: int, rng: np.random.Generator) -> np.nd
     >>> tile_partition(chain, 2, np.random.default_rng(3))
     array([0, 0, 0, 1, 1, 1])
     """
-    if not 1 <= k <= graph.n_nodes:
-        msg = f"k must be in [1, {graph.n_nodes}], got {k}"
+    if not 1 <= n_tiles <= graph.n_nodes:
+        msg = f"n_tiles must be in [1, {graph.n_nodes}], got {n_tiles}"
         raise ValueError(msg)
-    centres = rng.choice(graph.n_nodes, size=k, replace=False)
+    centres = rng.choice(graph.n_nodes, size=n_tiles, replace=False)
     offsets, neighbours, _ = graph.compressed_adjacency()
     # Hop counts from each centre, one row per centre in draw order, by a
     # breadth-first search whose frontier expands one layer per step.
-    distances = np.full((k, graph.n_nodes), np.inf)
+    distances = np.full((n_tiles, graph.n_nodes), np.inf)
     for row, centre in enumerate(centres):
         reached = distances[row]
         reached[centre] = 0.0
@@ -1315,17 +1317,17 @@ class SpatioTilingParams:
         if not isinstance(raw, Mapping) or set(raw) != _TILES_KEYS:
             msg = f"{path}: tiles declares exactly {sorted(_TILES_KEYS)}"
             raise ValueError(msg)
-        k = int(raw["k"])
+        n_tiles = int(raw["n_tiles"])
         states = np.asarray(declared["states"], dtype=np.int64)
         strengths = np.asarray(declared["strengths"], dtype=np.float64)
-        if states.shape != (k,) or strengths.shape != (k,):
+        if states.shape != (n_tiles,) or strengths.shape != (n_tiles,):
             msg = (
                 f"{path}: states {states.shape} and strengths {strengths.shape} "
-                f"must each be one per tile, ({k},)"
+                f"must each be one per tile, ({n_tiles},)"
             )
             raise ValueError(msg)
         seed = int(raw["seed"])
-        tiles = tile_partition(graph, k, np.random.default_rng(seed))
+        tiles = tile_partition(graph, n_tiles, np.random.default_rng(seed))
         try:
             field = tiling_field(tiles, states, strengths, n_states)
         except ValueError as error:

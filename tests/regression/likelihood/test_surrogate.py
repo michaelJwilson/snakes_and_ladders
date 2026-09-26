@@ -60,7 +60,7 @@ FIELD = np.array([0.3, -0.2, 0.1])
 def _alignment(n_sites: int = N_SITES) -> tuple[dict[str, np.ndarray], int, np.ndarray]:
     params = load_fixture(FIVE_TAXA)
     dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=n_sites)
-    return dict(dataset.alignment), params.k, np.asarray(params.pi)
+    return dict(dataset.alignment), params.n_states, np.asarray(params.pi)
 
 
 @pytest.fixture(scope="module")

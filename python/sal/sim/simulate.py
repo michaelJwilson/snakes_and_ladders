@@ -43,7 +43,7 @@ class SimulatedDataset:
         The topology, with branch lengths, in Newick format.
     tau : Node
         The topology that was simulated over.
-    k : int
+    n_states : int
         Number of states.
     pi : np.ndarray
         Root state distribution used.
@@ -55,14 +55,14 @@ class SimulatedDataset:
     node_states: dict[str, np.ndarray]
     newick: str
     tau: Node
-    k: int
+    n_states: int
     pi: np.ndarray
     n_sites: int
 
 
 def simulate_alignment(
     tau: Node,
-    k: int,
+    n_states: int,
     pi: np.ndarray,
     rng: np.random.Generator,
     n_sites: int,
@@ -75,7 +75,7 @@ def simulate_alignment(
     tau : Node
         Root of the topology, with branch lengths attached to each
         non-root node.
-    k : int
+    n_states : int
         Number of states.
     pi : np.ndarray
         Root state distribution, shape (k,).
@@ -98,21 +98,21 @@ def simulate_alignment(
     SimulatedDataset
         The simulated alignment, ancestral states, and generating truth.
     """
-    if pi.shape != (k,):
-        msg = f"pi has shape {pi.shape}, expected ({k},)"
+    if pi.shape != (n_states,):
+        msg = f"pi has shape {pi.shape}, expected ({n_states},)"
         raise ValueError(msg)
 
     node_states: dict[str, np.ndarray] = {}
 
     def _walk(node: Node, parent_states: np.ndarray | None) -> None:
         if parent_states is None:
-            states = rng.choice(k, size=n_sites, p=pi)
+            states = rng.choice(n_states, size=n_sites, p=pi)
         else:
             if node.branch_length is None:
                 msg = f"non-root node {node.name!r} has no branch_length"
                 raise ValueError(msg)
             transition = (
-                jc_transition_probabilities(node.branch_length, k=k)
+                jc_transition_probabilities(node.branch_length, n_states=n_states)
                 if rate_matrix is None
                 else reversible_transition_probabilities(
                     rate_matrix, pi, node.branch_length
@@ -134,7 +134,7 @@ def simulate_alignment(
         node_states=node_states,
         newick=to_newick(tau),
         tau=tau,
-        k=k,
+        n_states=n_states,
         pi=pi,
         n_sites=n_sites,
     )

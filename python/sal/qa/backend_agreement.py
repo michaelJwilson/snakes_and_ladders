@@ -65,10 +65,12 @@ def agreement(params: SimulationParams) -> dict[Backend, list[tuple[int, float]]
             params, np.random.default_rng(params.seed), n_sites=n_sites
         )
         alignment = dict(dataset.alignment)
-        oracle = brute_force_log_likelihood(params.tau, params.k, params.pi, alignment)
+        oracle = brute_force_log_likelihood(
+            params.tau, params.n_states, params.pi, alignment
+        )
         for backend in BACKENDS:
             value = pruning.log_likelihood(
-                params.tau, params.k, params.pi, alignment, backend=backend
+                params.tau, params.n_states, params.pi, alignment, backend=backend
             )
             measured[backend].append((n_sites, abs(value - oracle) / abs(oracle)))
     return measured

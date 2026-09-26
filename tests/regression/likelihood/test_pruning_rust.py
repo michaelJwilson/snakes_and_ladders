@@ -36,8 +36,10 @@ def test_relative_tolerance_transfers_to_fixture_scale() -> None:
     """
     params, alignment = simulated_alignment(FOUR_TAXA)
 
-    numpy_ll = pruning.log_likelihood(params.tau, params.k, params.pi, alignment)
-    rust_ll = pruning_rust.log_likelihood(params.tau, params.k, params.pi, alignment)
+    numpy_ll = pruning.log_likelihood(params.tau, params.n_states, params.pi, alignment)
+    rust_ll = pruning_rust.log_likelihood(
+        params.tau, params.n_states, params.pi, alignment
+    )
 
     # The relative bound holds, unchanged from `test_pruning_common.py`'s
     # 20,000-site check.
@@ -63,11 +65,13 @@ def test_the_enum_reaches_the_rust_kernel_bitwise() -> None:
         patterns = compress(alignment)
 
         assert pruning.log_likelihood(
-            params.tau, params.k, params.pi, alignment, backend=Backend.RUST
-        ) == pruning_rust.log_likelihood(params.tau, params.k, params.pi, alignment)
+            params.tau, params.n_states, params.pi, alignment, backend=Backend.RUST
+        ) == pruning_rust.log_likelihood(
+            params.tau, params.n_states, params.pi, alignment
+        )
         assert pruning.log_likelihood(
             params.tau,
-            params.k,
+            params.n_states,
             params.pi,
             patterns.alignment,
             weights=patterns.weights,
@@ -75,7 +79,7 @@ def test_the_enum_reaches_the_rust_kernel_bitwise() -> None:
             backend=Backend.RUST,
         ) == pruning_rust.log_likelihood(
             params.tau,
-            params.k,
+            params.n_states,
             params.pi,
             patterns.alignment,
             weights=patterns.weights,
@@ -85,5 +89,5 @@ def test_the_enum_reaches_the_rust_kernel_bitwise() -> None:
     params = load_fixture(SMALL_SITES)
     with pytest.raises(ValueError, match="not numba"):
         pruning.log_likelihood(
-            params.tau, params.k, params.pi, {}, backend=Backend.NUMBA
+            params.tau, params.n_states, params.pi, {}, backend=Backend.NUMBA
         )
