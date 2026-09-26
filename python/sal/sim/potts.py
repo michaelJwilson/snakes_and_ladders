@@ -207,6 +207,60 @@ def log_weight_of(field: SiteField | np.ndarray) -> np.ndarray:
     return field.log_weight if isinstance(field, SiteField) else np.asarray(field)
 
 
+def forbid(field: SiteField | np.ndarray, allowed: np.ndarray) -> np.ndarray:
+    """``field`` with ``-inf`` wherever ``allowed`` is False: the forbidden-label convention (issue #1081).
+
+    A forbidden label is a log-weight of ``-inf`` --- the field says "never
+    this label" and no solver takes a second argument for it. This writes a
+    boolean mask ``(n_nodes, n_states)`` into that form, so a mask and a
+    ``-inf`` field are one problem, bitwise.
+
+    Raises
+    ------
+    ValueError
+        If ``allowed``'s shape is not the field's, or a site allows no label.
+    """
+    values = np.asarray(log_weight_of(field), dtype=float)
+    mask = np.asarray(allowed, dtype=bool)
+    if mask.shape != values.shape:
+        msg = f"allowed has shape {mask.shape}, the field {values.shape}"
+        raise ValueError(msg)
+    if not mask.any(axis=1).all():
+        site = int(np.argmin(mask.any(axis=1)))
+        msg = f"site {site} allows no label"
+        raise ValueError(msg)
+    return np.where(mask, values, -np.inf)
+
+
+def penalized(graph: PottsGraph, rows: np.ndarray) -> np.ndarray:
+    """``rows`` with each ``-inf`` replaced by a finite log-weight no optimum takes (issue #1081).
+
+    For a solver whose arithmetic cannot carry ``-inf`` --- a dual that
+    subtracts two, a continuous relaxation. A forbidden entry at site ``i``
+    becomes ``min_a h_i(a) - (1 + sum_e |J_e|)`` over its allowed labels:
+    moving that site to any allowed label then raises the log-weight by more
+    than any change in the couplings can take away, so every optimum of the
+    penalized problem is allowed and scores what the constrained problem's
+    does, and a lower bound on the penalized minimum energy bounds the
+    constrained one.
+
+    Raises
+    ------
+    ValueError
+        If a site allows no label.
+    """
+    finite = np.isfinite(rows)
+    if finite.all():
+        return rows
+    if not finite.any(axis=1).all():
+        site = int(np.argmin(finite.any(axis=1)))
+        msg = f"site {site} allows no label"
+        raise ValueError(msg)
+    margin = 1.0 + float(np.abs(graph.edge_coupling).sum())
+    floor = np.where(finite, rows, np.inf).min(axis=1, keepdims=True) - margin
+    return np.where(finite, rows, floor)
+
+
 def energies(graph: PottsGraph, field: np.ndarray, states: np.ndarray) -> np.ndarray:
     """``E(s) = -sum_i h_i[s_i] - sum_(ij) J_ij [s_i == s_j]``, per configuration.
 
