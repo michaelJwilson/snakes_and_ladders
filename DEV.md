@@ -445,7 +445,7 @@ The names root `CLAUDE.md`'s API conventions refer to. An entry point uses these
 | --- | --- | --- | --- |
 | Minimized objective | `energy` | `float`; a maximized one is `log_weight`, `log_likelihood` or `log_evidence` | #1089 |
 | State count | `n_states` | `int`, inferred from `field` where it has a state axis; a model with a second axis names its Potts labels `n_classes`, and a mixture its `n_components` | #1091 |
-| Per-site field | `field` | `SiteField \| np.ndarray`, read through `log_weight_of` | #1091 |
+| Per-site field | `field` | `SiteField \| np.ndarray`, read through `log_weight_of`; a field shared by every site, `(n_states,)`, is `np.ndarray` alone | #1091 |
 | Randomness | `rng` | `np.random.Generator`, keyword-only, required; a torch path derives its own | #1091 |
 | Initial state | `start` | keyword-only | #1091 |
 | Loop cap | `max_iterations` | `int >= 1`; the unit of one iteration stated per solver: an ICM sweep, an expansion or swap cycle, a ladder measurement, a dual sweep | #1091 |
