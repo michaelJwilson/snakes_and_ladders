@@ -45,18 +45,19 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import numpy as np
 import torch
 
 from sal import oxisal
 from sal.backend import Backend, refuse_backend
+from sal.cost import Cost
 from sal.opt.objective import Objective
 from sal.sample.accept import accept_ratio, acceptance_probability
 from sal.sample.chain import (
     Adaptation,
-    Adapted,
+    Chain,
     Transition,
     compiled_route,
     gradient_at,
@@ -66,7 +67,6 @@ from sal.sample.chain import (
     torch_stream,
 )
 from sal.sample.declared import declared_energy
-from sal.sample.expectation import Expectation
 
 #: The acceptance a MALA step is adapted toward: the optimal scaling of the
 #: Langevin diffusion in the limit of many dimensions (Roberts & Rosenthal,
@@ -87,48 +87,25 @@ LANGEVIN_STEPS = 1
 GRADIENTS_PER_PROPOSAL = 2
 
 
-@dataclass(frozen=True)
-class LangevinChain:
-    """A Langevin chain, what it cost, and whether it was corrected.
+@dataclass(frozen=True, kw_only=True)
+class LangevinChain(Chain):
+    """A Langevin chain, what it cost, and whether it was corrected (issue #1090).
 
-    :class:`~sal.sample.hmc.HmcChain`'s fields, plus the flag,
-    because an uncorrected chain's acceptance rate is 1 by construction and
-    reading the two objects alike would read that 1 as a diagnostic.
+    A :class:`~sal.sample.chain.Chain`, ``spent`` in gradients at
+    :data:`GRADIENTS_PER_PROPOSAL` a proposal, plus the flag, because an
+    uncorrected chain's acceptance rate is 1 by construction and reading
+    the two alike would read that 1 as a diagnostic: read ``energy_error``
+    instead, which for an uncorrected chain is the correction not applied,
+    and so the bias itself.
 
     Parameters
     ----------
-    draws : torch.Tensor
-        Draws in unconstrained coordinates, shape ``(n_samples, dimension)``.
-    acceptance_rate : float
-        Fraction of proposals accepted. **1.0 by construction when
-        ``corrected`` is False**, where it says nothing at all; read
-        ``energy_error`` instead.
-    energy_error : torch.Tensor
-        ``|H(proposal) - H(current)|`` per proposal, ``H`` being the
-        Hamiltonian of the equivalent one-step trajectory. For a corrected
-        chain it separates a step too large from a bug, as it does for
-        :func:`~sal.sample.hmc.sample`; for an uncorrected one it
-        is the correction that was not applied, and so the bias itself.
-    force_evaluations : int
-        Gradients spent, warm-up and burn-in included, at
-        :data:`GRADIENTS_PER_PROPOSAL` a proposal.
-    adapted : Adapted | None
-        What the warm-up settled on, or ``None`` for a fixed-step chain.
     corrected : bool
         Whether the Metropolis correction was applied. False is ULA, whose
         draws are from a distribution that is not the target.
-    expectations : Mapping[str, Expectation]
-        Each operator's expectation over the recorded draws, keyed as the
-        ``operators`` given to :func:`mala`; empty when none were.
     """
 
-    draws: torch.Tensor
-    acceptance_rate: float
-    energy_error: torch.Tensor
-    force_evaluations: int
-    adapted: Adapted | None
     corrected: bool
-    expectations: Mapping[str, Expectation] = field(default_factory=dict)
 
 
 def mala(
@@ -230,6 +207,7 @@ def mala(
             GRADIENTS_PER_PROPOSAL,
             generator,
             n_samples,
+            unit=Cost.GRADIENTS,
             step_size=step_size,
             start=start_point(objective, start),
             burn_in=burn_in,
@@ -241,7 +219,8 @@ def mala(
             draws=chain.draws,
             acceptance_rate=chain.acceptance_rate,
             energy_error=chain.energy_error,
-            force_evaluations=chain.force_evaluations,
+            spent=chain.spent,
+            unit=chain.unit,
             adapted=chain.adapted,
             corrected=True,
             expectations=chain.expectations,
@@ -253,6 +232,7 @@ def mala(
         objective,
         generator,
         n_samples,
+        unit=Cost.GRADIENTS,
         step_size=step_size,
         start=start,
         burn_in=burn_in,
@@ -265,7 +245,8 @@ def mala(
         draws=chain.draws,
         acceptance_rate=chain.acceptance_rate,
         energy_error=chain.energy_error,
-        force_evaluations=chain.force_evaluations,
+        spent=chain.spent,
+        unit=chain.unit,
         adapted=chain.adapted,
         corrected=corrected,
         expectations=chain.expectations,

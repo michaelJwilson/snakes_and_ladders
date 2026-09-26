@@ -418,7 +418,7 @@ def _streams_score(
     )
 
 
-def responsibilities(
+def responsibilities_torch(
     observations: torch.Tensor,
     log_weight: torch.Tensor,
     components: EmissionFamily,
@@ -444,7 +444,7 @@ def e_step(
     *,
     covariate: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """:func:`mixture_log_likelihood` and :func:`responsibilities` from one log-density pass (issue #924).
+    """:func:`mixture_log_likelihood` and :func:`responsibilities_torch` from one log-density pass (issue #924).
 
     An EM step needs both at the same parameters, and each of the two
     functions evaluates the components' log-density on every observation.
@@ -527,8 +527,6 @@ class MixtureFit:
         The fitted component family.
     log_likelihood : float
         The final log-likelihood. A density, so possibly positive.
-    iterations : int
-        EM iterations run.
     at_boundary : bool
         Whether a component's M step reached the edge of the range this data
         identifies its parameter over --- reported rather than treated as an
@@ -538,14 +536,14 @@ class MixtureFit:
         edge; the field carries what a family with one reports (issue #856).
     termination : Termination | None
         Whether the loop met its relative tolerance or ran out of iterations,
-        in the form every result states it in (issue #860). ``iterations``
-        stays: it is what this result has always been read by.
+        in the form every result states it in (issue #860); its
+        ``iterations`` are the EM iterations run, which a field of their own
+        repeated until #1090.
     """
 
     weights: torch.Tensor
     components: GaussianEmission
     log_likelihood: float
-    iterations: int
     at_boundary: bool
     termination: Termination = dataclass_field(kw_only=True)
 
@@ -656,7 +654,6 @@ def expectation_maximization(
         weights,
         components,
         log_likelihood,
-        termination.iterations,
         boundary,
         termination=termination,
     )
@@ -713,7 +710,6 @@ def _streamed_expectation_maximization(
         torch.from_numpy(weight),
         GaussianEmission(mean, scale, floor),
         log_likelihood,
-        termination.iterations,
         False,
         termination=termination,
     )

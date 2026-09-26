@@ -39,7 +39,7 @@ def test_the_bethe_free_energy_is_exact_on_a_tree() -> None:
 
     result = belief_propagation(TREE, FIELD)
 
-    assert _relative(result.bethe_log_partition, exact.log_partition) < 1e-14
+    assert _relative(result.log_partition, exact.log_partition) < 1e-14
 
 
 @pytest.mark.oracle
@@ -87,7 +87,7 @@ def test_a_zero_coupling_lattice_is_exact_despite_its_loops() -> None:
 
     result = belief_propagation(graph, FIELD)
 
-    assert _relative(result.bethe_log_partition, exact) < RELATIVE_TOLERANCE
+    assert _relative(result.log_partition, exact) < RELATIVE_TOLERANCE
 
 
 # Measured on a 6x4 open strip against `strip_log_partition`, 3 states,
@@ -117,7 +117,7 @@ def test_the_bethe_deviation_is_the_measured_size() -> None:
         exact = strip_log_partition(shape, BoundaryCondition.OPEN, coupling, FIELD)
 
         result = belief_propagation(graph, FIELD)
-        realized = _relative(result.bethe_log_partition, exact)
+        realized = _relative(result.log_partition, exact)
 
         assert realized == pytest.approx(expected, rel=0.1) or (
             expected < 1e-12 and realized < 1e-12
@@ -148,9 +148,9 @@ def test_the_bethe_deviation_on_the_registry_lattice_is_the_measured_size() -> N
     # Pinned to the order of magnitude, as the curve above is: what the
     # section reports is how far the approximation sits from exact on a graph
     # with four independent cycles, not a digit of it.
-    absolute = abs(result.bethe_log_partition - exact.log_partition)
+    absolute = abs(result.log_partition - exact.log_partition)
     assert absolute == pytest.approx(1.47e-2, rel=0.1)
-    assert _relative(result.bethe_log_partition, exact.log_partition) == pytest.approx(
+    assert _relative(result.log_partition, exact.log_partition) == pytest.approx(
         4.67e-3, rel=0.1
     )
     assert np.abs(result.single_site - exact.single_site).max() == pytest.approx(
@@ -172,7 +172,7 @@ def test_the_deviation_peaks_in_the_neighbourhood_of_the_transition() -> None:
         key=lambda coupling: _relative(
             belief_propagation(
                 lattice_graph(shape, BoundaryCondition.OPEN, coupling), FIELD
-            ).bethe_log_partition,
+            ).log_partition,
             strip_log_partition(shape, BoundaryCondition.OPEN, coupling, FIELD),
         ),
     )
@@ -215,7 +215,7 @@ def test_undamped_updates_are_permitted_and_converge_on_a_tree() -> None:
 
     result = belief_propagation(TREE, FIELD, damping=0.0)
 
-    assert _relative(result.bethe_log_partition, exact.log_partition) < 1e-14
+    assert _relative(result.log_partition, exact.log_partition) < 1e-14
 
 
 @pytest.mark.smoke
@@ -237,6 +237,6 @@ def test_an_edgeless_graph_is_exactly_its_independent_sites() -> None:
 
     result = belief_propagation(graph, FIELD)
 
-    assert _relative(result.bethe_log_partition, 4 * single) < RELATIVE_TOLERANCE
+    assert _relative(result.log_partition, 4 * single) < RELATIVE_TOLERANCE
     independent = np.tile(np.exp(FIELD) / np.exp(FIELD).sum(), (graph.n_nodes, 1))
     np.testing.assert_allclose(result.single_site, independent, atol=1e-12)

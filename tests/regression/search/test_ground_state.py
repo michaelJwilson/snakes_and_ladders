@@ -328,7 +328,7 @@ def test_the_rust_sweep_runs_the_per_site_field_and_matches_the_oracle() -> None
         for backend in (Backend.PYTHON, Backend.RUST)
     ]
 
-    np.testing.assert_array_equal(runs[0].labelling, runs[1].labelling)
+    np.testing.assert_array_equal(runs[0].best, runs[1].best)
     np.testing.assert_array_equal(runs[0].final, runs[1].final)
     assert runs[0].energy == runs[1].energy
 
@@ -395,7 +395,7 @@ def test_the_runners_record_the_energy_their_kernels_return() -> None:
         rung.graph, rung.field, ladder, np.random.default_rng(seed), per_replica
     )
 
-    assert tempering.energy == kernel.best_energy
+    assert tempering.energy == kernel.energy
     assert np.array_equal(tempering.labelling, kernel.best)
     assert (
         tempering.spent == ground_state.N_REPLICAS * per_replica * rung.visits_per_sweep
@@ -564,4 +564,4 @@ def test_the_compiled_swendsen_wang_anneal_keeps_no_counter() -> None:
     )
     assert compiled.trace == ()
     assert len(oracle.trace) == schedule.n_steps
-    assert compiled.energy == energy(rung.graph, rung.field, compiled.labelling)
+    assert compiled.energy == energy(rung.graph, rung.field, compiled.best)

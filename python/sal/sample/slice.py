@@ -45,6 +45,7 @@ import numpy as np
 import torch
 
 from sal.backend import Backend, refuse_backend
+from sal.cost import Cost
 from sal.opt.objective import Objective
 from sal.sample.chain import Adaptation, torch_stream
 from sal.track import TrackedOptimization, current
@@ -110,9 +111,12 @@ class SliceChain:
     draws : torch.Tensor
         Draws in unconstrained coordinates, shape ``(n_samples, dimension)``.
         One draw is one sweep, not one univariate update.
-    objective_evaluations : int
-        Evaluations spent, burn-in included, so an effective sample size
-        divided by it is the cost of a draw in the unit this sampler spends.
+    spent : int
+        Objective evaluations spent, burn-in included, so an effective sample
+        size divided by it is the cost of a draw (issue #1090).
+    unit : Cost
+        :attr:`~sal.cost.Cost.EVALUATIONS`, what ``spent`` counts, where
+        the gradient samplers' chains count gradients.
     evaluations_per_draw : float
         The same number over the sweeps that produced it, which is what a
         width is diagnosed by.
@@ -123,7 +127,8 @@ class SliceChain:
     """
 
     draws: torch.Tensor
-    objective_evaluations: int
+    spent: int
+    unit: Cost
     evaluations_per_draw: float
     expansions_per_draw: float
     shrinkages_per_draw: float
@@ -277,7 +282,8 @@ def slice_sample(
     sweeps = max(n_samples + burn_in, 1)
     return SliceChain(
         draws=draws,
-        objective_evaluations=evaluations,
+        spent=evaluations,
+        unit=Cost.EVALUATIONS,
         evaluations_per_draw=evaluations / sweeps,
         expansions_per_draw=expansions / sweeps,
         shrinkages_per_draw=shrinkages / sweeps,

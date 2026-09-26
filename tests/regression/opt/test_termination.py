@@ -124,13 +124,13 @@ def test_the_iteration_count_a_caller_compared_is_the_reason_already() -> None:
         draws, _WEIGHTS, _components(), config=replace(EM, max_iterations=200)
     )
 
-    assert capped.iterations == 1
+    assert capped.termination.iterations == 1
     assert capped.termination == Termination(
         converged=False, iterations=1, reason=Stop.BUDGET
     )
     assert settled.termination is not None
     assert settled.termination.converged
-    assert settled.termination.iterations == settled.iterations
+    assert 1 < settled.termination.iterations < 200
 
 
 @pytest.mark.smoke

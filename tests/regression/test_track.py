@@ -171,7 +171,7 @@ def test_the_null_run_leaves_a_chain_bitwise_what_it_was() -> None:
     assert torch.equal(inside.draws, outside.draws)
     assert torch.equal(inside.energy_error, outside.energy_error)
     assert inside.acceptance_rate == outside.acceptance_rate
-    assert inside.force_evaluations == outside.force_evaluations
+    assert inside.spent == outside.spent
 
 
 @pytest.mark.patch
@@ -181,15 +181,15 @@ def test_the_null_run_leaves_an_annealed_and_a_tempered_run_bitwise() -> None:
     with track(NULL_RUN):
         inside_annealed, inside_tempered = _annealed(), _tempered()
 
-    assert np.array_equal(inside_annealed.labelling, outside_annealed.labelling)
+    assert np.array_equal(inside_annealed.best, outside_annealed.best)
     assert np.array_equal(inside_annealed.final, outside_annealed.final)
     assert inside_annealed.energy == outside_annealed.energy
-    assert inside_annealed.site_visits == outside_annealed.site_visits
+    assert inside_annealed.spent == outside_annealed.spent
     assert np.array_equal(inside_tempered.states, outside_tempered.states)
     assert np.array_equal(
         inside_tempered.swap_acceptance, outside_tempered.swap_acceptance
     )
-    assert inside_tempered.best_energy == outside_tempered.best_energy
+    assert inside_tempered.energy == outside_tempered.energy
 
 
 @pytest.mark.smoke
@@ -200,7 +200,7 @@ def test_the_chain_records_the_counters_the_chain_returns() -> None:
     run = _memory(tracked.run)
     assert run.params["name"] == "hmc"
     assert run.last("acceptance_so_far") == chain.acceptance_rate
-    assert run.last("force_evaluations") == chain.force_evaluations
+    assert run.last("force_evaluations") == chain.spent
     assert len(run.series("energy_error")) == N_SAMPLES
     assert [step for step, _ in run.series("energy_error")] == list(range(N_SAMPLES))
     # The error recorded per draw is the error the chain reports for it, and
@@ -428,7 +428,7 @@ def test_hmm_metrics_report_the_forward_log_likelihood() -> None:
     # relative 1e-12 rather than bitwise.
     assert measured["log_likelihood"] == pytest.approx(
         sum(
-            enumerate_hidden_paths(truth, sequence).log_likelihood
+            enumerate_hidden_paths(truth, sequence).log_evidence
             for sequence in observations
         ),
         rel=1e-12,
@@ -570,7 +570,7 @@ def test_bound_potts_metrics_score_the_labelling_the_annealer_returns() -> None:
     # of the labelling the result carries: two names, one number, because the
     # annealer passes the best labelling it holds.
     assert run.last("energy") == annealed.energy
-    assert run.last("state_energy") == energy(graph, FIELD, annealed.labelling)
+    assert run.last("state_energy") == energy(graph, FIELD, annealed.best)
     assert len(run.series("state_energy")) == SWEEPS
 
 
@@ -703,12 +703,12 @@ def test_the_null_run_leaves_the_five_loops_bitwise_what_they_were() -> None:
             _ensemble(),
         )
     assert torch.equal(inside[0].draws, outside[0].draws)
-    assert inside[0].objective_evaluations == outside[0].objective_evaluations
+    assert inside[0].spent == outside[0].spent
     assert torch.equal(inside[1].draws, outside[1].draws)
     for one, other in ((inside[2], outside[2]), (inside[3], outside[3])):
-        assert one.log_z == other.log_z
+        assert one.log_partition == other.log_partition
         assert one.stderr == other.stderr
-        assert np.array_equal(one.rung_log_z, other.rung_log_z)
+        assert np.array_equal(one.rung_log_partition, other.rung_log_partition)
     assert np.array_equal(inside[4].states, outside[4].states)
     assert inside[4].acceptance == outside[4].acceptance
     assert np.array_equal(inside[5].walkers, outside[5].walkers)
@@ -721,7 +721,7 @@ def test_the_slice_and_langevin_chains_record_the_unit_each_is_counted_in() -> N
         sliced = _slice()
     run = _memory(tracked.run)
     assert len(run.series("objective_evaluations")) == N_SAMPLES
-    assert run.last("objective_evaluations") == float(sliced.objective_evaluations)
+    assert run.last("objective_evaluations") == float(sliced.spent)
     assert run.last("state_bytes") == float(sliced.draws.nbytes)
     with track() as tracked:
         chain = _mala()
@@ -729,7 +729,7 @@ def test_the_slice_and_langevin_chains_record_the_unit_each_is_counted_in() -> N
     # `mala` runs `hmc.run_chain`, so the hook is the chain's and the unit is
     # gradients, one per proposal.
     assert run.last("acceptance_so_far") == chain.acceptance_rate
-    assert run.last("force_evaluations") == float(chain.force_evaluations)
+    assert run.last("force_evaluations") == float(chain.spent)
     assert len(run.series("energy_error")) == N_SAMPLES
 
 
@@ -740,11 +740,11 @@ def test_the_annealed_estimators_record_log_z_its_error_and_its_ess_per_rung() -
             estimate = estimator()
         run = _memory(tracked.run)
         assert [step for step, _ in run.series("log_z")] == [1, 2]
-        assert run.last("log_z") == estimate.log_z
+        assert run.last("log_z") == estimate.log_partition
         assert run.last("log_z_stderr") == estimate.stderr
         assert run.last("ess") == estimate.ess
         assert [value for _, value in run.series("log_z")] == list(
-            estimate.rung_log_z[1:]
+            estimate.rung_log_partition[1:]
         )
         assert run.last("state_bytes") > 0.0
 
@@ -801,7 +801,7 @@ def test_every_loop_records_what_it_cost_the_machine() -> None:
             step_size=STEP_SIZE,
             n_steps=3,
         )
-    assert _memory(tracked.run).last("state_bytes") == float(annealed_hmc.theta.nbytes)
+    assert _memory(tracked.run).last("state_bytes") == float(annealed_hmc.best.nbytes)
     with track() as tracked:
         tempered_hmc = hmc.parallel_tempering(
             _objective(),

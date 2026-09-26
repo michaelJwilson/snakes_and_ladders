@@ -93,10 +93,8 @@ def test_one_langevin_step_is_the_hamiltonian_transition() -> None:
         # not, and a difference of 1e-15 in the ratio that decided it would
         # have to land inside a uniform's last bits to move one.
         assert langevin_route.acceptance_rate == hamiltonian_route.acceptance_rate, step
-        assert (
-            langevin_route.force_evaluations == hamiltonian_route.force_evaluations
-        ), step
-        assert langevin_route.force_evaluations == 400 * GRADIENTS_PER_PROPOSAL
+        assert langevin_route.spent == hamiltonian_route.spent, step
+        assert langevin_route.spent == 400 * GRADIENTS_PER_PROPOSAL
 
 
 @pytest.mark.oracle
@@ -237,7 +235,7 @@ def test_the_warm_up_adapts_the_step_to_the_langevin_acceptance() -> None:
         assert bool((chain.adapted.mass_diagonal > 0.0).all())
         # The warm-up's gradients are in the bill, so a cost per effective
         # sample is the whole cost and not the recorded part of it.
-        assert chain.force_evaluations == (2000 + 200 + 300) * GRADIENTS_PER_PROPOSAL
+        assert chain.spent == (2000 + 200 + 300) * GRADIENTS_PER_PROPOSAL
         accepted.append(chain.acceptance_rate)
 
     assert abs(float(np.mean(accepted)) - MALA_TARGET_ACCEPTANCE) < 0.1, accepted

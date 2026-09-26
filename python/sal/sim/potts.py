@@ -20,7 +20,7 @@ the broadcast of a per-site one and not a second model.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, ClassVar, Self
 
@@ -205,6 +205,60 @@ def check_labelling(
 def log_weight_of(field: SiteField | np.ndarray) -> np.ndarray:
     """The log-weight a consumer reads: a :class:`SiteField`'s, or a bare array as given."""
     return field.log_weight if isinstance(field, SiteField) else np.asarray(field)
+
+
+def forbid(field: SiteField | np.ndarray, allowed: np.ndarray) -> np.ndarray:
+    """``field`` with ``-inf`` wherever ``allowed`` is False: the forbidden-label convention (issue #1081).
+
+    A forbidden label is a log-weight of ``-inf`` --- the field says "never
+    this label" and no solver takes a second argument for it. This writes a
+    boolean mask ``(n_nodes, n_states)`` into that form, so a mask and a
+    ``-inf`` field are one problem, bitwise.
+
+    Raises
+    ------
+    ValueError
+        If ``allowed``'s shape is not the field's, or a site allows no label.
+    """
+    values = np.asarray(log_weight_of(field), dtype=float)
+    mask = np.asarray(allowed, dtype=bool)
+    if mask.shape != values.shape:
+        msg = f"allowed has shape {mask.shape}, the field {values.shape}"
+        raise ValueError(msg)
+    if not mask.any(axis=1).all():
+        site = int(np.argmin(mask.any(axis=1)))
+        msg = f"site {site} allows no label"
+        raise ValueError(msg)
+    return np.where(mask, values, -np.inf)
+
+
+def penalized(graph: PottsGraph, rows: np.ndarray) -> np.ndarray:
+    """``rows`` with each ``-inf`` replaced by a finite log-weight no optimum takes (issue #1081).
+
+    For a solver whose arithmetic cannot carry ``-inf`` --- a dual that
+    subtracts two, a continuous relaxation. A forbidden entry at site ``i``
+    becomes ``min_a h_i(a) - (1 + sum_e |J_e|)`` over its allowed labels:
+    moving that site to any allowed label then raises the log-weight by more
+    than any change in the couplings can take away, so every optimum of the
+    penalized problem is allowed and scores what the constrained problem's
+    does, and a lower bound on the penalized minimum energy bounds the
+    constrained one.
+
+    Raises
+    ------
+    ValueError
+        If a site allows no label.
+    """
+    finite = np.isfinite(rows)
+    if finite.all():
+        return rows
+    if not finite.any(axis=1).all():
+        site = int(np.argmin(finite.any(axis=1)))
+        msg = f"site {site} allows no label"
+        raise ValueError(msg)
+    margin = 1.0 + float(np.abs(graph.edge_coupling).sum())
+    floor = np.where(finite, rows, np.inf).min(axis=1, keepdims=True) - margin
+    return np.where(finite, rows, floor)
 
 
 def energies(graph: PottsGraph, field: np.ndarray, states: np.ndarray) -> np.ndarray:
@@ -1090,6 +1144,10 @@ _SPATIO_TILING_REQUIRED_FIELDS = frozenset(
 #: drawn from and ``n_tiles``, the tile count.
 _TILES_KEYS = frozenset({"seed", "n_tiles"})
 
+#: The keys a tiling fixture's optional ``noise`` declares (issue #1074): the
+#: seed of its generator, its standard deviation and its neighbour averages.
+_NOISE_KEYS = frozenset({"seed", "sigma", "rounds"})
+
 
 def tile_partition(
     graph: PottsGraph, n_tiles: int, rng: np.random.Generator
@@ -1237,6 +1295,51 @@ def tiling_field(
     return field
 
 
+def smoothed_noise(
+    graph: PottsGraph, n_states: int, rounds: int, rng: np.random.Generator
+) -> np.ndarray:
+    """Unit-variance Gaussian noise per site and state, averaged over neighbours ``rounds`` times (issue #1074).
+
+    Each round replaces a site's value by the mean over the site and its
+    neighbours, so a draw is correlated over about ``sqrt(rounds)`` hops and
+    a wrong state can win a patch rather than a site. The result is divided
+    by its own standard deviation, so a caller's ``sigma`` is the noise's
+    scale whatever the rounds.
+
+    Parameters
+    ----------
+    graph : PottsGraph
+        Every node of degree at least one.
+    n_states : int
+        ``q``, the columns.
+    rounds : int
+        Neighbour averages, ``>= 0``; zero is white noise.
+    rng : np.random.Generator
+        Draws the ``n_nodes * n_states`` normals, and nothing else.
+
+    Returns
+    -------
+    np.ndarray
+        Shape ``(n_nodes, n_states)``, mean near zero and standard deviation one.
+
+    Raises
+    ------
+    ValueError
+        If ``rounds`` is negative.
+    """
+    if rounds < 0:
+        msg = f"rounds must be >= 0, got {rounds}"
+        raise ValueError(msg)
+    noise = rng.standard_normal((graph.n_nodes, n_states))
+    offsets, neighbours, _ = graph.compressed_adjacency()
+    degree = np.diff(offsets)[:, np.newaxis]
+    for _ in range(rounds):
+        noise = (noise + np.add.reduceat(noise[neighbours], offsets[:-1])) / (
+            1.0 + degree
+        )
+    return np.asarray(noise / noise.std())
+
+
 @dataclass(frozen=True)
 class SpatioTilingParams:
     """A Potts prior whose field favours one planted state per tile.
@@ -1264,9 +1367,17 @@ class SpatioTilingParams:
     strengths : np.ndarray
         ``s_t``, shape ``(k,)``.
     field : np.ndarray
-        ``h``, shape ``(n_nodes, q)``, from the three above.
+        ``h``, shape ``(n_nodes, q)``, from the three above, plus
+        ``noise_sigma`` times :func:`smoothed_noise` where declared.
     tiling_seed : int
         Seed of the generator the tiles' centres are drawn from.
+    noise_seed : int | None
+        Seed of the noise's generator; ``None`` for a noise-free field
+        (issue #1074).
+    noise_sigma : float
+        The noise's standard deviation, zero where there is none.
+    noise_rounds : int
+        :func:`smoothed_noise`'s neighbour averages.
     """
 
     graph: PottsGraph
@@ -1276,6 +1387,9 @@ class SpatioTilingParams:
     strengths: np.ndarray
     field: np.ndarray
     tiling_seed: int
+    noise_seed: int | None = None
+    noise_sigma: float = 0.0
+    noise_rounds: int = 0
 
     #: The fields :func:`sal.fixtures.load_params` checks are present before
     #: calling :meth:`from_declared`.
@@ -1334,12 +1448,69 @@ class SpatioTilingParams:
         except ValueError as error:
             msg = f"{path}: {error}"
             raise ValueError(msg) from error
+        noise = declared.get("noise")
+        if noise is None:
+            return cls(
+                graph=graph,
+                n_states=n_states,
+                tiles=tiles,
+                states=states,
+                strengths=strengths,
+                field=field,
+                tiling_seed=seed,
+            )
+        if not isinstance(noise, Mapping) or set(noise) != _NOISE_KEYS:
+            msg = f"{path}: noise declares exactly {sorted(_NOISE_KEYS)}"
+            raise ValueError(msg)
+        sigma, rounds = float(noise["sigma"]), int(noise["rounds"])
+        if sigma <= 0.0:
+            msg = f"{path}: noise.sigma must be positive, got {sigma}"
+            raise ValueError(msg)
+        noise_seed = int(noise["seed"])
+        drawn = smoothed_noise(
+            graph, n_states, rounds, np.random.default_rng(noise_seed)
+        )
         return cls(
             graph=graph,
             n_states=n_states,
             tiles=tiles,
             states=states,
             strengths=strengths,
-            field=field,
+            field=field + sigma * drawn,
             tiling_seed=seed,
+            noise_seed=noise_seed,
+            noise_sigma=sigma,
+            noise_rounds=rounds,
+        )
+
+    def redrawn(self, tiling_seed: int, noise_seed: int | None) -> Self:
+        """The same declared instance with its tiles, and its noise where declared, drawn from new seeds.
+
+        A held-out instance of the fixture (issue #1074): every declared
+        number is kept, and only the draws change.
+
+        Returns
+        -------
+        Self
+        """
+        tiles = tile_partition(
+            self.graph, self.n_tiles, np.random.default_rng(tiling_seed)
+        )
+        field = tiling_field(tiles, self.states, self.strengths, self.n_states)
+        if self.noise_sigma > 0.0:
+            if noise_seed is None:
+                msg = "a noisy instance is redrawn with a noise seed"
+                raise ValueError(msg)
+            field = field + self.noise_sigma * smoothed_noise(
+                self.graph,
+                self.n_states,
+                self.noise_rounds,
+                np.random.default_rng(noise_seed),
+            )
+        return replace(
+            self,
+            tiles=tiles,
+            field=field,
+            tiling_seed=tiling_seed,
+            noise_seed=noise_seed if self.noise_sigma > 0.0 else None,
         )

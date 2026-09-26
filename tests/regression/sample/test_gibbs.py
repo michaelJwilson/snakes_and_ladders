@@ -568,12 +568,12 @@ def test_annealing_reaches_the_closed_form_ground_state_as_the_potts_annealer_do
         annealed = anneal_factor_graph(
             factor_graph, schedule, np.random.default_rng(seed)
         )
-        energy = float(energies(graph, np.zeros(2), annealed.state[None])[0])
+        energy = float(energies(graph, np.zeros(2), annealed.best[None])[0])
         generic += int(abs(energy - target) < 1e-9)
-        assert annealed.trajectory.shape == (201,)
+        assert annealed.trace.shape == (201,)
         names = [variable.name for variable in factor_graph.variables]
         recomputed = factor_graph.log_density(
-            dict(zip(names, annealed.state.tolist(), strict=True))
+            dict(zip(names, annealed.best.tolist(), strict=True))
         )
         assert abs(annealed.log_density - recomputed) < 1e-12
         specialised += int(
@@ -649,7 +649,7 @@ def test_the_topology_move_at_temperature_one_samples_the_enumerated_flat_prior_
             visits[keys.index(leaf_bipartitions(current))] += 1
 
     assert len(run.scores) == 15
-    assert run.trajectory.shape == (6001,)
+    assert run.trace.shape == (6001,)
     keep = weights * visits.sum() >= 5.0  # pool the rare topologies for the test
     pooled_counts = np.append(visits[keep], visits[~keep].sum())
     pooled_expected = np.append(weights[keep], weights[~keep].sum()) * visits.sum()
@@ -673,8 +673,8 @@ def test_the_annealed_topology_move_reaches_the_enumerated_best() -> None:
             start,
             scores=cache,
         )
-        hits += int(leaf_bipartitions(run.topology) == best)
-        assert run.log_likelihood == cache[leaf_bipartitions(run.topology)]
+        hits += int(leaf_bipartitions(run.best) == best)
+        assert run.log_likelihood == cache[leaf_bipartitions(run.best)]
 
     assert hits >= 5, hits
 

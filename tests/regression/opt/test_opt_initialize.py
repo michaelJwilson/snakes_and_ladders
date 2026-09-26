@@ -373,17 +373,14 @@ def test_a_chain_start_warms_up_by_default_and_none_is_the_chain_it_drew_before(
     ).chain(objective)
     assert torch.equal(warmed.draws, chain(CHAIN_ADAPTATION).draws)
     assert warmed.adapted is not None
-    assert (
-        warmed.force_evaluations
-        == (CHAIN_ADAPTATION.warmup + burn_in + draws) * per_proposal
-    )
+    assert warmed.spent == (CHAIN_ADAPTATION.warmup + burn_in + draws) * per_proposal
 
     fixed = FromChain(
         draws, step, torch.Generator().manual_seed(898), steps, burn_in, None
     ).chain(objective)
     assert torch.equal(fixed.draws, chain(None).draws)
     assert fixed.adapted is None
-    assert fixed.force_evaluations == (burn_in + draws) * per_proposal
+    assert fixed.spent == (burn_in + draws) * per_proposal
 
 
 def _annealed_start(seed: int) -> FromAnnealing:
@@ -426,8 +423,8 @@ def test_the_sampled_starts_are_their_runs_own_records_and_leave_the_cell_descen
         assert torch.equal(start, draw)
 
     annealed = _annealed_start(0).run(objective)
-    assert torch.equal(_annealed_start(0).starts(objective)[0], annealed.theta)
-    assert annealed.value == float(objective(annealed.theta))
+    assert torch.equal(_annealed_start(0).starts(objective)[0], annealed.best)
+    assert annealed.value == float(objective(annealed.best))
     assert annealed.value <= float(objective(annealed.final))
 
     trapped = fit(objective)
@@ -445,12 +442,12 @@ def test_the_sampled_starts_are_their_runs_own_records_and_leave_the_cell_descen
 
         annealed = _annealed_start(seed).run(objective)
         reached["anneal"].append(
-            _lowest(objective, [fit(objective, start=annealed.theta).theta])
+            _lowest(objective, [fit(objective, start=annealed.best).theta])
         )
 
         tempered = _tempered_start(seed).run(objective)
-        assert torch.equal(_tempered_start(seed).starts(objective)[0], tempered.theta)
-        assert tempered.value == float(objective(tempered.theta))
+        assert torch.equal(_tempered_start(seed).starts(objective)[0], tempered.best)
+        assert tempered.value == float(objective(tempered.best))
         visited = np.array(
             [
                 [float(objective(position)) for position in exchange]
@@ -460,7 +457,7 @@ def test_the_sampled_starts_are_their_runs_own_records_and_leave_the_cell_descen
         assert visited.min() - tempered.value == 0.0
         coldest += int(np.unravel_index(int(visited.argmin()), visited.shape)[1] == 0)
         reached["temper"].append(
-            _lowest(objective, [fit(objective, start=tempered.theta).theta])
+            _lowest(objective, [fit(objective, start=tempered.best).theta])
         )
 
     for name, values in reached.items():

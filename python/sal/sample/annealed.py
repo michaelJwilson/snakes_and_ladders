@@ -92,7 +92,7 @@ class LogPartition:
 
     Parameters
     ----------
-    log_z : float
+    log_partition : float
         The estimate at the ladder's last rung.
     stderr : float
         Its standard error, by the delta method on the weight average:
@@ -105,9 +105,9 @@ class LogPartition:
         ``(sum w) ** 2 / sum w ** 2``. It is at most ``n_replicas``, and a run
         whose weight sits on one member has an ESS near 1 however large the
         population.
-    rung_log_z : np.ndarray
+    rung_log_partition : np.ndarray
         ``log Z`` at every rung of the ladder, shape ``(n_rungs,)``, the first
-        entry the exact ``n log q`` and the last :attr:`log_z`. These are the
+        entry the exact ``n log q`` and the last :attr:`log_partition`. These are the
         ``-g_k`` :func:`simulated_tempering` takes.
     log_weights : np.ndarray
         The accumulated log importance weight of each member of the final
@@ -124,10 +124,10 @@ class LogPartition:
         falling as a resampled population collapses onto fewer ancestors.
     """
 
-    log_z: float
+    log_partition: float
     stderr: float
     ess: float
-    rung_log_z: np.ndarray
+    rung_log_partition: np.ndarray
     log_weights: np.ndarray
     family_entropy: float
 
@@ -371,10 +371,10 @@ def annealed_importance_sampling(
     # of `exp(log n)` and reports a positive error on an exact answer.
     relative = math.expm1(float(log_n + square - 2.0 * total))
     return LogPartition(
-        log_z=log_zero + float(total - log_n),
+        log_partition=log_zero + float(total - log_n),
         stderr=math.sqrt(max(relative, 0.0) / n_replicas),
         ess=n_replicas / (relative + 1.0),
-        rung_log_z=np.array(rung_log_z),
+        rung_log_partition=np.array(rung_log_z),
         log_weights=log_w,
         family_entropy=float(log_n),
     )
@@ -491,10 +491,10 @@ def population_annealing(
     tracked.record_cost(max(len(ladder) - 1, 0), states.nbytes)
     stderr = math.sqrt(max(variance, 0.0))
     return LogPartition(
-        log_z=log_z,
+        log_partition=log_z,
         stderr=stderr,
         ess=1.0 / (stderr**2 + 1.0 / n_replicas),
-        rung_log_z=np.array(rung_log_z),
+        rung_log_partition=np.array(rung_log_z),
         log_weights=log_weights,
         family_entropy=_entropy(families, n_replicas),
     )
@@ -556,7 +556,7 @@ def rung_weights(estimate: LogPartition) -> np.ndarray:
     run, and the quality of the weights is the quality of that estimate,
     reported by its own standard error.
     """
-    return -np.asarray(estimate.rung_log_z, dtype=float)
+    return -np.asarray(estimate.rung_log_partition, dtype=float)
 
 
 def simulated_tempering(

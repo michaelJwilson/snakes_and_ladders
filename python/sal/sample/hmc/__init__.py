@@ -58,7 +58,7 @@ import itertools
 import math
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -66,10 +66,12 @@ import torch
 
 from sal import oxisal
 from sal.backend import Backend, refuse_backend
+from sal.cost import Cost
 from sal.emissions import ParameterDomainError
 from sal.opt.objective import (
     Objective,
 )
+from sal.opt.termination import Termination
 from sal.sample.accept import (
     accept_ratio,
     accept_with,
@@ -97,14 +99,15 @@ from sal.sample.declared import (
     declared_energy,
     declared_jax_energy,
 )
-from sal.sample.expectation import Expectation
 from sal.sample.hmc.jax import JaxWalk
 from sal.sample.schedule import (
+    Annealed,
     Monotone,
     TempSchedule,
     check_ladder,
     ladder,
 )
+from sal.sample.schedule import Tempered as TemperedRun
 from sal.sample.tempered import exchange
 
 # `current` is aliased: `_coefficients` already binds that name to a
@@ -195,41 +198,19 @@ class WithGaussianPrior(Objective):
 
 
 @dataclass(frozen=True)
-class HmcChain:
-    """A chain, and what it cost to get it.
+class HmcChain(Chain):
+    """A Hamiltonian chain, and what it cost to get it (issue #1090).
 
-    Parameters
-    ----------
-    draws : torch.Tensor
-        Draws in unconstrained coordinates, shape ``(n_samples, dimension)``.
-    acceptance_rate : float
-        Fraction of proposals accepted. Hamiltonian dynamics conserves energy
-        exactly, so a correct implementation with a small step size accepts
-        nearly everything; a rate near zero means the integrator is diverging
-        rather than that the target is hard.
-    energy_error : torch.Tensor
-        ``|H(proposal) - H(current)|`` per proposal. The diagnostic that
-        distinguishes a step size too large from a bug: the first grows
-        smoothly with the step size, the second does not.
-    force_evaluations : int
-        Gradients spent, warm-up and burn-in included, so an effective
-        sample size divided by it is the cost of a draw and two chains
-        compare at equal evaluations rather than equal samples.
-    adapted : Adapted | None
-        What the warm-up settled on, when :func:`sample` was given an
-        :class:`Adaptation`; ``None`` for a fixed-parameter chain.
-    expectations : Mapping[str, Expectation]
-        Each operator's expectation over the recorded draws, by the Kalman
-        filter of :mod:`sal.sample.expectation`, keyed as the
-        ``operators`` given to :func:`sample`; empty when none were.
+    A :class:`~sal.sample.chain.Chain`, ``spent`` in gradients, warm-up and
+    burn-in included, so an effective sample size divided by it is the cost
+    of a draw and two chains compare at equal evaluations rather than equal
+    samples. The acceptance rate reads as Hamiltonian dynamics has it:
+    energy is conserved exactly, so a correct implementation with a small
+    step accepts nearly everything, and a rate near zero means the
+    integrator is diverging rather than that the target is hard. The
+    energy error is the diagnostic that tells a step too large from a bug:
+    the first grows smoothly with the step, the second does not.
     """
-
-    draws: torch.Tensor
-    acceptance_rate: float
-    energy_error: torch.Tensor
-    force_evaluations: int
-    adapted: Adapted | None
-    expectations: Mapping[str, Expectation] = field(default_factory=dict)
 
 
 #: The cube root that Yoshida's fourth-order composition is built from.
@@ -535,6 +516,7 @@ def sample(
             integrator.force_evaluations(n_steps),
             generator,
             n_samples,
+            unit=Cost.GRADIENTS,
             step_size=step_size,
             start=start_point(objective, start),
             burn_in=burn_in,
@@ -549,6 +531,7 @@ def sample(
             objective,
             generator,
             n_samples,
+            unit=Cost.GRADIENTS,
             step_size=step_size,
             start=start,
             burn_in=burn_in,
@@ -561,39 +544,33 @@ def sample(
         draws=chain.draws,
         acceptance_rate=chain.acceptance_rate,
         energy_error=chain.energy_error,
-        force_evaluations=chain.force_evaluations,
+        spent=chain.spent,
+        unit=chain.unit,
         adapted=chain.adapted,
         expectations=chain.expectations,
     )
 
 
-@dataclass(frozen=True)
-class AnnealedTheta:
-    """What one annealing run found, and what it cost.
+@dataclass(frozen=True, kw_only=True)
+class AnnealedTheta(Annealed[torch.Tensor]):
+    """What one annealing run found, and what it cost (issue #1090).
+
+    An :class:`~sal.sample.schedule.Annealed` over points in unconstrained
+    coordinates: ``best`` is the lowest-valued point visited, ``final``
+    where the chain ended, and ``spent`` the gradients, so the run is
+    comparable to any other optimizer at equal evaluations.
 
     Parameters
     ----------
-    theta : torch.Tensor
-        The lowest-valued point visited, in unconstrained coordinates. The
-        *best* rather than the last: the final proposals run cold but not at
-        zero, so the chain can leave its best point.
     value : float
-        The objective there.
-    final : torch.Tensor
-        Where the chain ended.
+        The objective at ``best``, which the objective minimizes.
     acceptance_rate : float
         Over the whole schedule. Near zero at the cold end is the symptom of
         a step too large for the final temperature.
-    force_evaluations : int
-        Gradients spent, so the run is comparable to any other optimizer at
-        equal evaluations.
     """
 
-    theta: torch.Tensor
     value: float
-    final: torch.Tensor
     acceptance_rate: float
-    force_evaluations: int
 
 
 def anneal(
@@ -622,7 +599,7 @@ def anneal(
         which they meant.
     schedule : TempSchedule
         Temperature per proposal. Its length is the budget in proposals;
-        ``force_evaluations`` on the result is the budget in gradients.
+        ``spent`` on the result is the budget in gradients.
     rng : np.random.Generator | torch.Generator
         As :func:`sample`.
     step_size, n_steps, start, integrator
@@ -664,24 +641,30 @@ def anneal(
         tracked.record(step, state=best, temperature=temperature, energy=best_value)
     tracked.record_cost(max(schedule.n_steps - 1, 0), best.nbytes)
     return AnnealedTheta(
-        theta=best,
+        best=best,
         value=best_value,
         final=position,
         acceptance_rate=accepted / schedule.n_steps,
-        force_evaluations=schedule.n_steps * integrator.force_evaluations(n_steps),
+        spent=schedule.n_steps * integrator.force_evaluations(n_steps),
+        unit=Cost.GRADIENTS,
+        termination=Termination.after(schedule.n_steps, converged=False),
     )
 
 
-@dataclass(frozen=True)
-class Tempered:
-    """What one parallel-tempering run found, and what it cost.
+@dataclass(frozen=True, kw_only=True)
+class Tempered(TemperedRun[torch.Tensor]):
+    """What one parallel-tempering run found, and what it cost (issue #1090).
+
+    A :class:`~sal.sample.schedule.Tempered` over points: ``best`` is the
+    lowest-valued point visited at any temperature, ``spent`` the gradients
+    over every replica, so the run is comparable to any other optimizer at
+    equal evaluations, and ``swap_acceptance`` an array, the NumPy the
+    exchange bookkeeping already kept.
 
     Parameters
     ----------
-    theta : torch.Tensor
-        The lowest-valued point visited at any temperature.
     value : float
-        The objective there.
+        The objective at ``best``, which the objective minimizes.
     positions : torch.Tensor
         Every replica after every round, shape ``(n_rounds, n_replicas,
         dimension)``; replica ``r`` sits at ``temperatures[r]`` throughout,
@@ -691,14 +674,6 @@ class Tempered:
     acceptance_rate : torch.Tensor
         Fraction of Hamiltonian proposals accepted per replica, shape
         ``(n_replicas,)``.
-    swap_acceptance : torch.Tensor
-        Fraction of proposed exchanges accepted per adjacent pair, shape
-        ``(n_replicas - 1,)``. Near zero means the ladder has a gap no
-        position crosses and the replicas are independent chains; near one
-        means two temperatures are close enough that one is redundant.
-    force_evaluations : int
-        Gradients spent over every replica, so the run is comparable to any
-        other optimizer at equal evaluations.
     walkers : np.ndarray
         ``walkers[t, w]`` is the rung walker ``w`` sat at, at round ``t``,
         shape ``(n_rounds, n_replicas)``. The other reading of the same run:
@@ -712,12 +687,9 @@ class Tempered:
         differentiates it (issue #861).
     """
 
-    theta: torch.Tensor
     value: float
     positions: torch.Tensor
     acceptance_rate: torch.Tensor
-    swap_acceptance: torch.Tensor
-    force_evaluations: int
     walkers: np.ndarray
 
 
@@ -772,7 +744,7 @@ def parallel_tempering(
         replicas' seeds and the exchange uniforms.
     n_rounds : int
         Transitions per replica, at least one. The budget in proposals is
-        ``n_rounds * len(temperatures)``; ``force_evaluations`` on the result
+        ``n_rounds * len(temperatures)``; ``spent`` on the result
         is the budget in gradients.
     step_size, n_steps, start, integrator
         As :func:`sample`; every replica starts at ``start``.
@@ -879,14 +851,15 @@ def parallel_tempering(
     tracked.record_cost(max(round_index - 1, 0), rounds.nbytes)
 
     return Tempered(
-        theta=best,
+        best=best,
         value=best_value,
         positions=rounds,
         acceptance_rate=accepted / round_index,
-        swap_acceptance=torch.tensor(ensemble.swap_acceptance, dtype=torch.float64),
-        force_evaluations=round_index
-        * n_replicas
-        * integrator.force_evaluations(n_steps),
+        temperatures=tuple(temperatures),
+        swap_acceptance=np.asarray(ensemble.swap_acceptance, dtype=np.float64),
+        spent=round_index * n_replicas * integrator.force_evaluations(n_steps),
+        unit=Cost.GRADIENTS,
+        termination=Termination.after(round_index, converged=False),
         walkers=ensemble.walkers,
     )
 
@@ -1045,7 +1018,7 @@ def compiled_trajectory(
     return PhaseSpace(torch.from_numpy(end), torch.from_numpy(velocity))
 
 
-def effective_sample_size(draws: torch.Tensor) -> torch.Tensor:
+def effective_sample_size(draws: torch.Tensor | np.ndarray) -> np.ndarray:
     """Effective sample size per coordinate, by Geyer's initial positive sequence.
 
     The integrated autocorrelation time ``tau = 1 + 2 sum_k rho_k`` is
@@ -1058,13 +1031,14 @@ def effective_sample_size(draws: torch.Tensor) -> torch.Tensor:
 
     Parameters
     ----------
-    draws : torch.Tensor
+    draws : torch.Tensor | np.ndarray
         Shape ``(n, dimension)``, one chain.
 
     Returns
     -------
-    torch.Tensor
-        Shape ``(dimension,)``. A coordinate that did not move has no
+    np.ndarray
+        Shape ``(dimension,)``, a diagnostic and so NumPy, whichever the draws
+        came as (issue #1092). A coordinate that did not move has no
         autocorrelation and is reported as ``n``.
 
     Raises
@@ -1073,6 +1047,7 @@ def effective_sample_size(draws: torch.Tensor) -> torch.Tensor:
         If fewer than 4 draws are given, which is fewer than the two pairs
         the truncation rule needs.
     """
+    draws = torch.as_tensor(draws)
     n = int(draws.shape[0])
     if n < 4:
         msg = f"effective sample size needs at least 4 draws, got {n}"
@@ -1094,4 +1069,4 @@ def effective_sample_size(draws: torch.Tensor) -> torch.Tensor:
         cutoff = int(negative[0]) if negative.numel() else int(pairs.shape[0])
         tau = -1.0 + 2.0 * float(pairs[:cutoff].sum())
         sizes[coordinate] = n / tau
-    return sizes
+    return sizes.numpy()

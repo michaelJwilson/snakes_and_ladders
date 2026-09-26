@@ -247,8 +247,8 @@ def build_figure(
 
     stopped = (
         f"at the {EM_ITERATIONS}-iteration cap, still moving"
-        if fit.iterations >= EM_ITERATIONS
-        else f"in {fit.iterations} iterations"
+        if fit.termination.iterations >= EM_ITERATIONS
+        else f"in {fit.termination.iterations} iterations"
     )
     caption = (
         f"A Gaussian mixture of {truth.n_components} components with means "

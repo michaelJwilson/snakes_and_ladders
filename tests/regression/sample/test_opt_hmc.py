@@ -569,7 +569,7 @@ def test_a_constant_schedule_at_one_is_the_sampler_draw_for_draw() -> None:
     )
 
     assert torch.equal(annealed.final, chain.draws[-1])
-    assert annealed.force_evaluations == 200 * leapfrog.force_evaluations(10)
+    assert annealed.spent == 200 * leapfrog.force_evaluations(10)
 
 
 @pytest.mark.smoke
@@ -587,12 +587,12 @@ def test_annealing_reports_the_best_point_visited_not_the_last() -> None:
         start=start,
     )
 
-    assert result.value == pytest.approx(float(GAUSSIAN(result.theta)), rel=EXACT)
+    assert result.value == pytest.approx(float(GAUSSIAN(result.best)), rel=EXACT)
     assert result.value <= float(GAUSSIAN(start))
     assert result.value <= float(GAUSSIAN(result.final))
     # On a quadratic bowl the cold end sits at the mode: within a tenth of a
     # standard deviation of the exact minimizer after 300 proposals.
-    deviation = (result.theta - GAUSSIAN.mean) / GAUSSIAN.covariance.diagonal().sqrt()
+    deviation = (result.best - GAUSSIAN.mean) / GAUSSIAN.covariance.diagonal().sqrt()
     assert float(deviation.abs().max()) < 0.1
 
 
@@ -625,7 +625,7 @@ def test_each_tempering_replica_samples_the_gaussian_at_its_own_temperature() ->
         )
     assert bool((run.swap_acceptance > 0.2).all()), run.swap_acceptance
     assert bool((run.swap_acceptance < 1.0).all()), run.swap_acceptance
-    assert run.value == pytest.approx(float(GAUSSIAN(run.theta)), rel=EXACT)
+    assert run.value == pytest.approx(float(GAUSSIAN(run.best)), rel=EXACT)
 
 
 @pytest.mark.smoke
@@ -646,7 +646,7 @@ def test_tempering_costs_what_its_accounting_says_and_is_reproducible() -> None:
         n_steps=6,
     )
 
-    assert run.force_evaluations == 25 * 4 * leapfrog.force_evaluations(6)
+    assert run.spent == 25 * 4 * leapfrog.force_evaluations(6)
     assert counted.calls == 1 + 25 * 4 * (leapfrog.force_evaluations(6) + 3)
     again = parallel_tempering(
         GAUSSIAN,
@@ -657,7 +657,7 @@ def test_tempering_costs_what_its_accounting_says_and_is_reproducible() -> None:
         n_steps=6,
     )
     assert torch.equal(run.positions, again.positions)
-    assert torch.equal(run.theta, again.theta)
+    assert torch.equal(run.best, again.best)
     assert run.positions.shape == (25, 4, 2)
 
 

@@ -38,6 +38,7 @@ import numpy as np
 
 from sal import oxisal
 from sal.backend import Backend, refuse_backend
+from sal.cost import Cost
 from sal.emissions import ParameterDomainError
 from sal.opt.objective import Objective, energy_of
 from sal.sample import hmc
@@ -199,6 +200,7 @@ def random_walk(
             EVALUATIONS_PER_PROPOSAL,
             rng,
             n_samples,
+            unit=Cost.EVALUATIONS,
             step_size=step_size,
             start=start_point(objective, start),
             burn_in=burn_in,
@@ -212,6 +214,7 @@ def random_walk(
         objective,
         rng,
         n_samples,
+        unit=Cost.EVALUATIONS,
         step_size=step_size,
         start=start,
         burn_in=burn_in,

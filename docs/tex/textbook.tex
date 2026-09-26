@@ -4544,6 +4544,26 @@ is measured, since the bound is a theorem and the ratio is a number. On a
 tiling field enumeration referees the recovery bound at twelve sites, and the
 planted states referee it at 5,041, where no optimum is known.
 
+\paragraph{Fusion.}
+An expansion move chooses, per site, between the current label and
+$\alpha$. The fusion move \citep{lempitsky2010} chooses between two whole
+labellings $a$ and $b$: a site where they differ takes $y_i \in \{0, 1\}$,
+keeping $a_i$ or taking $b_i$, and the energy over $y$ is binary with pairwise
+costs $\theta_{ij}(y_i, y_j) = -J_{ij}\,[\ell_i(y_i) = \ell_j(y_j)]$. A pair is
+submodular when $\theta_{ij}(0,0) + \theta_{ij}(1,1) \le \theta_{ij}(0,1) +
+\theta_{ij}(1,0)$, which every pair of an expansion is, since $b$ is the
+constant $\alpha$; two arbitrary labellings can break it. The roof dual
+\citep{kolmogorov2007} minimizes such an energy by one cut over two nodes per
+variable, and labels a subset of the sites; its labelled part is an autarky,
+so written over the better of $a$ and $b$ it gives
+\begin{equation}
+  E(\mathrm{fuse}(a, b)) \le \min\{E(a), E(b)\}.
+  \label{eq:fusion}
+\end{equation}
+Where every site is labelled, the result is the binary problem's optimum.
+Enumeration of the $2^n$ choices referees both claims on small graphs, and
+the expansion move referees the constant case.
+
 \subsection{The local-polytope bound}
 \label{sec:potts-lp-bound}
 A labelling's energy bounds the optimum from above; a bound from below needs a
