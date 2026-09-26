@@ -12,6 +12,8 @@ reference bitwise. `spatio_only/release`'s optimum, the two-state graph cut
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import numpy as np
 import pytest
 from sal.backend import Backend
@@ -422,9 +424,10 @@ def test_every_bound_refuses_a_cap_below_one_alike() -> None:
     # Issue #1089: `dual_bound(max_iterations=0)` returned a bound of -inf where
     # TRW-S refused; both refuse through `check_cap`.
     field = np.zeros(3)
-    for call in (
+    calls: tuple[Callable[[], object], ...] = (
         lambda: trws(TREE, field, max_iterations=0),
         lambda: dual_bound(TREE, field, max_iterations=0, plaquettes=()),
-    ):
+    )
+    for call in calls:
         with pytest.raises(ValueError, match="a loop's cap and must be at least 1"):
             call()

@@ -177,7 +177,7 @@ def _anneal(fixture: Fixture, budget: Budget, rng: np.random.Generator) -> Outco
         torch.Generator().manual_seed(int(rng.integers(2**31 - 1))),
         step_size=STEP_SIZE,
         n_steps=N_STEPS,
-        theta0=theta,
+        start=theta,
     )
     value, polish = _polish(fixture, run.theta, run.value)
     return Outcome(value, counted.calls + polish)
@@ -195,7 +195,7 @@ def _tempering(fixture: Fixture, budget: Budget, rng: np.random.Generator) -> Ou
         n_rounds,
         step_size=STEP_SIZE,
         n_steps=N_STEPS,
-        theta0=theta,
+        start=theta,
     )
     value, polish = _polish(fixture, run.theta, run.value)
     return Outcome(value, counted.calls + polish)
