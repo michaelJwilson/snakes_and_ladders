@@ -97,3 +97,20 @@ class Termination:
             iterations=iterations,
             reason=Stop.CONVERGED if converged else Stop.BUDGET,
         )
+
+
+def check_cap(name: str, value: int) -> int:
+    """``value``, refused below one: a loop's cap is at least one iteration (issue #1089).
+
+    One refusal for every iterative solver, so a cap of zero cannot return
+    ``-inf`` from one solver and raise from its sibling.
+
+    Raises
+    ------
+    ValueError
+        If ``value`` is below 1.
+    """
+    if value < 1:
+        msg = f"{name} is a loop's cap and must be at least 1, got {value}"
+        raise ValueError(msg)
+    return value

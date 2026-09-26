@@ -345,7 +345,7 @@ def test_past_enumeration_the_planted_state_is_a_reference_not_a_hard_case() -> 
         instance = planted_spin_glass(100, 4.0, frustration, rng)
         best = min(
             iterated_conditional_modes(
-                instance.graph, field, 2, rng=np.random.default_rng(seed)
+                instance.graph, field, rng=np.random.default_rng(seed), n_states=2
             ).energy
             for seed in range(20)
         )

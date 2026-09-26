@@ -676,12 +676,12 @@ def _descend(
     return iterated_conditional_modes(
         problem.graph,
         problem.field,
-        problem.n_states,
         rng,
         start=labelling,
         max_sweeps=max_sweeps,
         min_sites=min_sites,
         backend=Backend.NUMBA if backend is None else backend,
+        n_states=problem.n_states,
     )
 
 
@@ -812,12 +812,12 @@ def run_icm(
     settled = iterated_conditional_modes(
         problem.graph,
         problem.field,
-        problem.n_states,
         rng,
         start=start,
         max_sweeps=steps,
         min_sites=min_sites,
         backend=Backend.NUMBA if backend is None else backend,
+        n_states=problem.n_states,
     )
     return MethodRun(
         labelling=settled.labelling,
@@ -859,7 +859,6 @@ def run_icm_random(
     settled = iterated_conditional_modes(
         problem.graph,
         problem.field,
-        problem.n_states,
         rng,
         start=start,
         max_sweeps=steps,
@@ -867,6 +866,7 @@ def run_icm_random(
         stop_when_clean=False,
         min_sites=min_sites,
         backend=Backend.NUMBA if backend is None else backend,
+        n_states=problem.n_states,
     )
     return MethodRun(
         labelling=settled.labelling,
@@ -962,10 +962,10 @@ def run_alpha_expansion(
     run = alpha_expansion(
         problem.graph,
         problem.field,
-        problem.n_states,
         start=start,
         max_cycles=cycles,
         backend=Backend.RUST,
+        n_states=problem.n_states,
     )
     return MethodRun(
         labelling=run.labelling,
@@ -1001,10 +1001,10 @@ def run_alpha_beta_swap(
     run = alpha_beta_swap(
         problem.graph,
         problem.field,
-        problem.n_states,
         start=start,
         max_cycles=cycles,
         backend=Backend.RUST,
+        n_states=problem.n_states,
     )
     return MethodRun(
         labelling=run.labelling,
@@ -1089,7 +1089,7 @@ def run_bifurcation(
     steps = max(1, budget.size // problem.visits_per_sweep)
     started = time.perf_counter()
     result = simulated_bifurcation(
-        problem.graph, problem.field, problem.n_states, rng, steps=steps
+        problem.graph, problem.field, rng, steps=steps, n_states=problem.n_states
     )
     return MethodRun(
         labelling=result.labelling,

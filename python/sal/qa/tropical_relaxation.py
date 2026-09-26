@@ -104,7 +104,7 @@ def measure(params: SimulationParams) -> tuple[Sweep, Surfaces]:
     """
     dataset = simulate_tree(params, np.random.default_rng(params.seed))
     alignment = dict(dataset.alignment)
-    table = quartet_table(alignment, params.k)
+    table = quartet_table(alignment, params.n_states)
     positions = pairing_positions(table.n_taxa)
 
     topologies = list(enumerate_topologies(sorted(alignment)))
@@ -151,7 +151,10 @@ def measure(params: SimulationParams) -> tuple[Sweep, Surfaces]:
 
     quartet = np.array(discretes)
     likelihood = np.array(
-        [score_topology(topology, alignment, params.k) for topology in topologies]
+        [
+            score_topology(topology, alignment, params.n_states)
+            for topology in topologies
+        ]
     )
     keys = [leaf_bipartitions(topology) for topology in topologies]
     surfaces = Surfaces(

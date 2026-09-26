@@ -65,7 +65,7 @@ import numpy as np
 
 from sal.backend import Backend, refuse_backend
 from sal.incidence import SparseIncidence
-from sal.opt.termination import Termination
+from sal.opt.termination import Termination, check_cap
 from sal.search.alpha_expansion import BoundedLabelling, Sense, oriented, reoriented
 from sal.search.trws.numba import trws_iterations_checked
 from sal.sim.graph import PottsGraph
@@ -265,6 +265,7 @@ def trws(
     )
     unary = np.ascontiguousarray(-values)
     layout = chain_layout(graph)
+    check_cap("max_iterations", max_iterations)
     if backend is Backend.NUMBA:
         _, labelling, trace, _, taken, converged = trws_iterations_checked(
             unary,
@@ -281,9 +282,6 @@ def trws(
             float(tolerance),
         )
     else:
-        if max_iterations < 1:
-            msg = f"max_iterations must be >= 1, got {max_iterations}"
-            raise ValueError(msg)
         if not tolerance >= 0.0:
             msg = f"tolerance must be >= 0, got {tolerance}"
             raise ValueError(msg)

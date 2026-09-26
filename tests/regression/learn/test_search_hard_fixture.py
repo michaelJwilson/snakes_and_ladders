@@ -57,7 +57,7 @@ def _environment(
     """The reward surface an agent sees, at the tree's own mean branch length."""
     return TreeEnvironment(
         alignment,
-        params.k,
+        params.n_states,
         np.asarray(params.pi),
         branch_length=float(
             np.mean([child.branch_length for _, child in edges(params.tau)])
@@ -71,7 +71,7 @@ def _enumerated_maximum(
     environment: TreeEnvironment, alignment: dict[str, np.ndarray]
 ) -> float:
     return max(
-        environment.score(topology)
+        environment.log_weight(topology)
         for topology in enumerate_topologies(sorted(alignment))
     )
 
@@ -112,7 +112,7 @@ def test_the_generating_topology_is_the_enumerated_maximum(
     # Without this the fixture is unusable: a search that fails to find the
     # best topology would be finding the right answer, and a search that
     # succeeded would be finding the wrong one.
-    assert nni.score(params.tau) == nni_maximum
+    assert nni.log_weight(params.tau) == nni_maximum
 
 
 @pytest.mark.oracle
@@ -130,7 +130,7 @@ def test_nni_hill_climbing_fails_from_a_substantial_fraction_of_starts(
     nni: TreeEnvironment, nni_maximum: float, nni_endpoints: list[Topology]
 ) -> None:
     best = nni_maximum
-    reached = [nni.score(state) for state in nni_endpoints]
+    reached = [nni.log_weight(state) for state in nni_endpoints]
     success = float(np.mean([value == best for value in reached]))
 
     # Both bounds matter. A fixture greedy always solves cannot separate a
@@ -154,7 +154,9 @@ def test_every_nni_failure_stops_at_a_genuine_local_optimum(
     # The difference between a hard fixture and too short an episode. If a
     # run stopped with an improving move still available, the failure would
     # measure HORIZON rather than the environment.
-    failures = [state for state in nni_endpoints if nni.score(state) != nni_maximum]
+    failures = [
+        state for state in nni_endpoints if nni.log_weight(state) != nni_maximum
+    ]
 
     assert failures, "expected some NNI runs to fall short on this fixture"
     assert all(nni.is_terminal(state) for state in failures)
@@ -171,7 +173,7 @@ def test_spr_reaches_the_optimum_where_nni_does_not(
     environment = _environment(params, alignment, MoveSet.SPR)
     best = _enumerated_maximum(environment, alignment)
     reached = [
-        environment.score(state) for state in _endpoints(environment, params.seed)
+        environment.log_weight(state) for state in _endpoints(environment, params.seed)
     ]
     success = float(np.mean([value == best for value in reached]))
 

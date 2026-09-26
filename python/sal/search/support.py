@@ -178,7 +178,7 @@ def _support(log_score: float, competitors: list[float], kind: SupportKind) -> S
 def neighbourhood_support(
     topology: Topology,
     alignment: Mapping[str, np.ndarray],
-    k: int,
+    n_states: int,
     *,
     moves: MoveSet = MoveSet.NNI,
     model: Model = Model.JC,
@@ -191,11 +191,11 @@ def neighbourhood_support(
     """
     neighbours = nni_neighbours if moves is MoveSet.NNI else spr_neighbours
     competitors = [
-        score_topology(candidate, alignment, k, model)
+        score_topology(candidate, alignment, n_states, model)
         for candidate in _distinct(topology, neighbours(topology))
     ]
     return _support(
-        score_topology(topology, alignment, k, model),
+        score_topology(topology, alignment, n_states, model),
         competitors,
         SupportKind.NEIGHBOURHOOD,
     )
@@ -211,7 +211,7 @@ def _double_factorial_count(n_leaves: int) -> int:
 def enumerated_support(
     topology: Topology,
     alignment: Mapping[str, np.ndarray],
-    k: int,
+    n_states: int,
     *,
     model: Model = Model.JC,
     max_topologies: int = 945,
@@ -234,11 +234,11 @@ def enumerated_support(
         limit=max_topologies,
     )
     competitors = [
-        score_topology(candidate, alignment, k, model)
+        score_topology(candidate, alignment, n_states, model)
         for candidate in _distinct(topology, enumerate_topologies(leaves))
     ]
     return _support(
-        score_topology(topology, alignment, k, model),
+        score_topology(topology, alignment, n_states, model),
         competitors,
         SupportKind.ENUMERATED,
     )
@@ -369,7 +369,7 @@ def tempered_labelling_support(
 def tempered_topology_support(
     topology: Topology,
     alignment: Mapping[str, np.ndarray],
-    k: int,
+    n_states: int,
     ensemble: TemperedEnsemble,
     *,
     model: Model = Model.JC,
@@ -390,7 +390,7 @@ def tempered_topology_support(
     key = leaf_bipartitions(topology)
     log_score = ensemble.scores.get(key)
     if log_score is None:
-        log_score = score_topology(topology, alignment, k, model)
+        log_score = score_topology(topology, alignment, n_states, model)
     return _tempered(ensemble, key, log_score)
 
 
@@ -433,7 +433,7 @@ def _replicate(
 def bootstrap_support(
     topology: Topology,
     alignment: Mapping[str, np.ndarray],
-    k: int,
+    n_states: int,
     rng: np.random.Generator,
     n_replicates: int,
     *,
@@ -468,7 +468,7 @@ def bootstrap_support(
     counts: dict[frozenset[str], int] = dict.fromkeys(internal_splits(topology), 0)
     found = map_tasks(
         _replicate,
-        [(alignment, k, model, moves, max_evaluations)] * n_replicates,
+        [(alignment, n_states, model, moves, max_evaluations)] * n_replicates,
         workers=workers,
         pool=_BOOTSTRAP_POOL,
         intra_op_threads=_BOOTSTRAP_INTRA_OP_THREADS,
@@ -482,7 +482,7 @@ def bootstrap_support(
 
 
 def split_pattern_support(
-    split: frozenset[str], alignment: Mapping[str, np.ndarray], k: int
+    split: frozenset[str], alignment: Mapping[str, np.ndarray], n_states: int
 ) -> float:
     """Fraction of sites compatible with ``split``: at most one state on both sides.
 
@@ -499,7 +499,7 @@ def split_pattern_support(
         :func:`sal.sim.topology.leaf_bipartitions` canonicalizes it.
     alignment : Mapping[str, np.ndarray]
         Observed states per taxon, each of shape ``(n_sites,)``.
-    k : int
+    n_states : int
         Number of states.
 
     Returns
@@ -524,7 +524,7 @@ def split_pattern_support(
     inside_states = np.stack([alignment[name] for name in sorted(split)])
     outside_states = np.stack([alignment[name] for name in outside])
     straddling = np.zeros(inside_states.shape[1], dtype=np.int64)
-    for state in range(k):
+    for state in range(n_states):
         straddling += (inside_states == state).any(axis=0) & (
             outside_states == state
         ).any(axis=0)
@@ -532,7 +532,7 @@ def split_pattern_support(
 
 
 def pattern_support(
-    topology: Topology, alignment: Mapping[str, np.ndarray], k: int
+    topology: Topology, alignment: Mapping[str, np.ndarray], n_states: int
 ) -> dict[frozenset[str], float]:
     """Per internal split of ``topology``, :func:`split_pattern_support`.
 
@@ -540,6 +540,6 @@ def pattern_support(
     split by split.
     """
     return {
-        split: split_pattern_support(split, alignment, k)
+        split: split_pattern_support(split, alignment, n_states)
         for split in internal_splits(topology)
     }

@@ -127,7 +127,7 @@ def test_a_tiling_of_a_disconnected_graph_is_refused() -> None:
     two = PottsGraph(n_nodes=4, edges=((0, 1), (2, 3)), coupling=(1.0, 1.0))
     with pytest.raises(ValueError, match="not connected"):
         tile_partition(two, 1, np.random.default_rng(0))
-    with pytest.raises(ValueError, match="k must be"):
+    with pytest.raises(ValueError, match="n_tiles must be"):
         tile_partition(two, 5, np.random.default_rng(0))
 
 
