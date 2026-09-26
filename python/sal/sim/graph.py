@@ -145,6 +145,36 @@ class Endpoints:
         yield from (self.first, self.second, self.coupling)
 
 
+def _transposes(
+    forward: np.ndarray,
+    forward_weights: np.ndarray,
+    backward: np.ndarray,
+    backward_weights: np.ndarray,
+    n_nodes: int,
+) -> bool:
+    """Whether the upper entries and the transposed lower ones are one multiset.
+
+    Compared on one ``int64`` key per pair, ``i * n_nodes + j``, which a
+    single sort orders; the weights are compared in that order, and only a
+    repeated key --- a doubled bond --- needs the second sort key.
+    """
+    if forward.shape != backward.shape:
+        return False
+    forward_key = forward[:, 0] * n_nodes + forward[:, 1]
+    backward_key = backward[:, 0] * n_nodes + backward[:, 1]
+    forward_order = np.argsort(forward_key, kind="stable")
+    backward_order = np.argsort(backward_key, kind="stable")
+    if not np.array_equal(forward_key[forward_order], backward_key[backward_order]):
+        return False
+    if np.array_equal(forward_weights[forward_order], backward_weights[backward_order]):
+        return True
+    forward_order = np.lexsort((forward_weights, forward_key))
+    backward_order = np.lexsort((backward_weights, backward_key))
+    return bool(
+        np.array_equal(forward_weights[forward_order], backward_weights[backward_order])
+    )
+
+
 @dataclass(frozen=True)
 class PottsGraph:
     """An undirected graph carrying a per-edge Potts coupling.
@@ -191,11 +221,75 @@ class PottsGraph:
                 f"{len(self.edges)} edges -- one per edge is required"
             )
             raise ValueError(msg)
-        for edge in self.edges:
-            first, second = edge
-            if not (0 <= first < self.n_nodes and 0 <= second < self.n_nodes):
-                msg = f"edge {edge} names a node outside [0, {self.n_nodes})"
-                raise ValueError(msg)
+        index = self.edge_index
+        outside = (index < 0) | (index >= self.n_nodes)
+        if outside.any():
+            edge = tuple(
+                int(node) for node in index[int(np.argmax(outside.any(axis=1)))]
+            )
+            msg = f"edge {edge} names a node outside [0, {self.n_nodes})"
+            raise ValueError(msg)
+
+    @classmethod
+    def from_csr(
+        cls,
+        indptr: np.ndarray,
+        indices: np.ndarray,
+        coupling: np.ndarray | float,
+    ) -> PottsGraph:
+        """The graph a symmetric CSR adjacency describes, each undirected edge once (issue #1081).
+
+        A caller holding a sparse adjacency --- ``scipy.sparse``'s, or a
+        k-nearest-neighbour graph's --- built ``edges`` as Python tuples to
+        get here. This reads the three CSR arrays with NumPy alone and keeps
+        the entry ``(i, j)`` with ``i < j`` of each symmetric pair, in
+        row-major order, so a graph of 10^6 sites is built without a Python
+        loop in the validation. :attr:`edge_coupling` is seeded with the array
+        it built rather than rebuilt from the tuple.
+
+        Parameters
+        ----------
+        indptr : np.ndarray
+            Row pointers, shape ``(n_nodes + 1,)``.
+        indices : np.ndarray
+            Column indices, shape ``(indptr[-1],)``.
+        coupling : np.ndarray | float
+            ``J`` per stored entry, shape ``(indptr[-1],)``, or one ``J`` for
+            every edge. Entry ``(i, j)`` and entry ``(j, i)`` must carry the
+            same value.
+
+        Raises
+        ------
+        ValueError
+            If the adjacency is not symmetric --- an entry without its
+            transpose, or a transpose of another coupling --- or has a self
+            loop, which a Potts coupling does not define.
+        """
+        indptr = np.asarray(indptr, dtype=np.int64)
+        indices = np.asarray(indices, dtype=np.int64)
+        n_nodes = indptr.shape[0] - 1
+        rows = np.repeat(np.arange(n_nodes, dtype=np.int64), np.diff(indptr))
+        weights = np.broadcast_to(np.asarray(coupling, dtype=np.float64), indices.shape)
+        if np.any(rows == indices):
+            node = int(rows[np.argmax(rows == indices)])
+            msg = f"node {node} has a self loop, which a Potts coupling does not define"
+            raise ValueError(msg)
+        upper, lower = rows < indices, rows > indices
+        forward = np.stack([rows[upper], indices[upper]], axis=1)
+        backward = np.stack([indices[lower], rows[lower]], axis=1)
+        if not _transposes(forward, weights[upper], backward, weights[lower], n_nodes):
+            msg = "the CSR adjacency is not symmetric: every (i, j, J) needs its (j, i, J)"
+            raise ValueError(msg)
+        edge_coupling = np.ascontiguousarray(weights[upper])
+        graph = cls(
+            n_nodes,
+            tuple(zip(forward[:, 0].tolist(), forward[:, 1].tolist(), strict=True)),
+            tuple(edge_coupling.tolist()),
+        )
+        # The couplings this built are the array the cached property would
+        # rebuild from the tuple; seeding it skips that conversion.
+        graph.__dict__["edge_coupling"] = _read_only(edge_coupling)
+        return graph
 
     @cached_property
     def edge_index(self) -> np.ndarray:
