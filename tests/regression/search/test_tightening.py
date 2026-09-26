@@ -114,7 +114,7 @@ def _cooled(graph: PottsGraph, beta: float) -> PottsGraph:
 @pytest.mark.potts_lattice
 def test_the_dual_bound_is_the_zero_temperature_belief_propagation_energy() -> None:
     # The rung below (#734). On the tree the bound is max-product's MAP energy:
-    # 8.9e-16 (1e-9, `Certificate.optimal`'s slack). `-log Z / beta` rises to
+    # 8.9e-16 (1e-9, `BoundedLabelling.optimal`'s slack). `-log Z / beta` rises to
     # it within `log(k ** n) / beta`: gaps 3.7e-2 at beta 10, 4.5e-7 at 100
     # (bounds 0.659, 0.066). On the loopy 3x3 the bound is below the Bethe
     # decoding's energy: slack 0.0 at J = 0.4, 9.0 at J = -0.8.

@@ -33,63 +33,12 @@ zero it is an honest interval, reported and never assumed small.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from dataclasses import field as dataclass_field
-
 import numpy as np
 
 from sal.opt.termination import Termination
+from sal.search.alpha_expansion import BoundedLabelling
 from sal.sim.graph import PottsGraph
 from sal.sim.potts import energy, site_field
-
-
-@dataclass(frozen=True)
-class Certificate:
-    """A labelling, an upper bound on the optimum, and the gap between them.
-
-    Parameters
-    ----------
-    labelling : np.ndarray
-        The decoded labelling, one state per site.
-    energy : float
-        Its energy, in the sign `sim.potts.energy` uses: a ground
-        state **minimizes** it, so this is an **upper** bound on the minimum
-        --- some labelling achieves it, so the best does at least this well.
-    bound : float
-        A **lower** bound on the minimum, valid at every iteration by the
-        construction above. The dual bounds the maximum of the log-weight from
-        above and the energy is its negative, so the sign turns once here and
-        nowhere else.
-    iterations : int
-        Coordinate-ascent sweeps taken.
-    termination : Termination | None
-        Whether the sweeps settled --- the dual moved by less than 1e-12 ---
-        or the count ran out (issue #860). Not ``optimal``, which is a
-        statement about the gap and so about the instance, not about the
-        loop.
-
-    Notes
-    -----
-    ``optimal`` is the only certificate here, and it is a real one: a labelling
-    whose energy meets the bound cannot be beaten, because nothing can exceed
-    the bound and this labelling attains it.
-    """
-
-    labelling: np.ndarray
-    energy: float
-    bound: float
-    iterations: int
-    termination: Termination = dataclass_field(kw_only=True)
-
-    @property
-    def gap(self) -> float:
-        """``energy - bound``, what is not established. Zero certifies."""
-        return self.energy - self.bound
-
-    @property
-    def optimal(self) -> bool:
-        """Whether the gap has closed to floating-point noise."""
-        return bool(self.gap <= 1e-9 * max(1.0, abs(self.bound)))
 
 
 def _edge_tables(graph: PottsGraph, n_states: int) -> np.ndarray:
@@ -150,7 +99,7 @@ def dual_bound(
     *,
     iterations: int = 200,
     plaquettes: tuple[tuple[int, ...], ...] = (),
-) -> Certificate:
+) -> BoundedLabelling:
     """Bound the Potts ground-state energy from below, and decode under it.
 
     The decomposition: one subproblem per site holding its field, and one per
@@ -178,7 +127,7 @@ def dual_bound(
 
     Returns
     -------
-    Certificate
+    BoundedLabelling
         The labelling, its energy, the lower bound, and the gap between them.
     """
     values = site_field(field_values, graph.n_nodes)
@@ -262,12 +211,11 @@ def dual_bound(
             break
 
     labelling = np.asarray(best_shares.argmax(axis=1), dtype=np.int64)
-    return Certificate(
+    return BoundedLabelling(
         labelling=labelling,
         energy=float(energy(graph, field_values, labelling)),
         # The dual bounds the log-weight from above; the energy is its
         # negative, so an upper bound there is a lower bound here.
         bound=-float(best),
-        iterations=taken,
         termination=Termination.after(taken, converged=settled),
     )
