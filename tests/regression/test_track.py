@@ -189,7 +189,7 @@ def test_the_null_run_leaves_an_annealed_and_a_tempered_run_bitwise() -> None:
     assert np.array_equal(
         inside_tempered.swap_acceptance, outside_tempered.swap_acceptance
     )
-    assert inside_tempered.best_energy == outside_tempered.best_energy
+    assert inside_tempered.energy == outside_tempered.energy
 
 
 @pytest.mark.smoke

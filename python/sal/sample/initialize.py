@@ -354,7 +354,7 @@ class FromTempering(Initializer):
             calibration=calibrated,
             rounds=run_rounds,
             transitions=run_rounds * len(temperatures),
-            force_evaluations=tempered.force_evaluations,
+            force_evaluations=tempered.spent,
             seconds=time.perf_counter() - began,
             budget=budget,
         )
@@ -368,7 +368,7 @@ class FromTempering(Initializer):
         list[torch.Tensor]
             Exactly one start.
         """
-        return [self.run(objective).theta]
+        return [self.run(objective).best]
 
 
 class LadderRule(StrEnum):
@@ -589,9 +589,9 @@ def calibrate_ladder(
             start=best,
         )
         transitions += calibration.rounds * len(candidate)
-        force_evaluations += tempered.force_evaluations
+        force_evaluations += tempered.spent
         if tempered.value < best_value:
-            best, best_value = tempered.theta, tempered.value
+            best, best_value = tempered.best, tempered.value
         return tempered
 
     def acceptance(candidate: tuple[float, ...]) -> list[float]:

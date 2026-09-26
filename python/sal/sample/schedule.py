@@ -62,6 +62,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol, runtime_checkable
 
+import numpy as np
+
 from sal.cost import Cost
 from sal.opt.termination import Termination
 
@@ -964,6 +966,43 @@ class Annealed[T]:
 
     best: T
     final: T
+    spent: int
+    unit: Cost
+    termination: Termination
+
+
+@dataclass(frozen=True, kw_only=True)
+class Tempered[T]:
+    """What a parallel-tempering run found, and what it cost (issue #1090).
+
+    Three temperings returned three shapes, the cost as ``site_visits``,
+    ``force_evaluations`` or a sweep count to multiply out. This is the
+    shape they share; each tempering's result is a thin subclass adding its
+    value in its own sign and what its move set records, as
+    :class:`Annealed` does.
+
+    Parameters
+    ----------
+    best : T
+        The best point seen at any temperature.
+    temperatures : tuple[float, ...]
+        The ladder, as given.
+    swap_acceptance : np.ndarray
+        Fraction of proposed exchanges accepted per adjacent pair, shape
+        ``(n_replicas - 1,)``. Near zero means the ladder has a gap nothing
+        crosses and the replicas are independent chains; near one means two
+        temperatures are close enough that one is redundant.
+    spent : int
+        What the run cost over every replica, in ``unit``.
+    unit : Cost
+        The unit ``spent`` is counted in.
+    termination : Termination
+        Why the run stopped: its steps ran out, or a deadline cut it short.
+    """
+
+    best: T
+    temperatures: tuple[float, ...]
+    swap_acceptance: np.ndarray
     spent: int
     unit: Cost
     termination: Termination

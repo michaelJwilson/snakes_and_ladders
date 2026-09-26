@@ -567,8 +567,8 @@ def tempered_seeding(
     objective = surrogate(instance)
     run = tempering_initializer(rng).run(objective)
     return Seeding(
-        at_locations(instance, objective.components(run.theta).mean),
-        PASSES_PER_GRADIENT * run.force_evaluations,
+        at_locations(instance, objective.components(run.best).mean),
+        PASSES_PER_GRADIENT * run.spent,
         f"cold acceptance {float(run.acceptance_rate[0]):.2f}, lowest swap "
         f"{float(run.swap_acceptance.min()):.2f}",
     )

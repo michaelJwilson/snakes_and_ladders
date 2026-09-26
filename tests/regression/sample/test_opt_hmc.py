@@ -625,7 +625,7 @@ def test_each_tempering_replica_samples_the_gaussian_at_its_own_temperature() ->
         )
     assert bool((run.swap_acceptance > 0.2).all()), run.swap_acceptance
     assert bool((run.swap_acceptance < 1.0).all()), run.swap_acceptance
-    assert run.value == pytest.approx(float(GAUSSIAN(run.theta)), rel=EXACT)
+    assert run.value == pytest.approx(float(GAUSSIAN(run.best)), rel=EXACT)
 
 
 @pytest.mark.smoke
@@ -646,7 +646,7 @@ def test_tempering_costs_what_its_accounting_says_and_is_reproducible() -> None:
         n_steps=6,
     )
 
-    assert run.force_evaluations == 25 * 4 * leapfrog.force_evaluations(6)
+    assert run.spent == 25 * 4 * leapfrog.force_evaluations(6)
     assert counted.calls == 1 + 25 * 4 * (leapfrog.force_evaluations(6) + 3)
     again = parallel_tempering(
         GAUSSIAN,
@@ -657,7 +657,7 @@ def test_tempering_costs_what_its_accounting_says_and_is_reproducible() -> None:
         n_steps=6,
     )
     assert torch.equal(run.positions, again.positions)
-    assert torch.equal(run.theta, again.theta)
+    assert torch.equal(run.best, again.best)
     assert run.positions.shape == (25, 4, 2)
 
 

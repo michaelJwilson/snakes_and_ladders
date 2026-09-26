@@ -179,8 +179,8 @@ def test_one_seed_reproduces_the_calibrated_ladder_and_the_start_bitwise() -> No
     assert first.spent.calibration.ladder == second.spent.calibration.ladder
     assert first.spent.calibration.placement == second.spent.calibration.placement
     assert torch.equal(one.positions, two.positions)
-    assert torch.equal(one.theta, two.theta)
-    assert torch.equal(one.swap_acceptance, two.swap_acceptance)
+    assert torch.equal(one.best, two.best)
+    assert np.array_equal(one.swap_acceptance, two.swap_acceptance)
 
     plain = _start(3, None, rounds=20)
     direct = hmc.parallel_tempering(
@@ -192,7 +192,7 @@ def test_one_seed_reproduces_the_calibrated_ladder_and_the_start_bitwise() -> No
         n_steps=TRAJECTORY,
     )
     started = plain.starts(target)[0]
-    assert torch.equal(started, direct.theta)
+    assert torch.equal(started, direct.best)
     assert plain.spent is not None
     assert plain.spent.calibration is None
     assert plain.spent.total_transitions == 20 * len(FIXED)
@@ -232,7 +232,7 @@ def test_a_budget_in_seconds_stops_inside_it_and_another_unit_is_refused() -> No
     assert alone.spent.budget == Budget(Cost.SECONDS, 1)
     assert 1 < alone.spent.rounds == run.positions.shape[0]
     assert alone.spent.seconds <= 1.0, alone.spent.seconds
-    assert run.force_evaluations == alone.spent.rounds * 3 * (
+    assert run.spent == alone.spent.rounds * 3 * (
         hmc.leapfrog.force_evaluations(TRAJECTORY)
     )
 
@@ -389,8 +389,8 @@ def test_on_the_mixture_the_calibration_buys_no_handover_at_equal_transitions() 
         assert fixed.spent is not None
         assert fixed.spent.total_transitions >= total
         handed[seed] = (
-            _handover(instance, objective, warm.theta),
-            _handover(instance, objective, cold.theta),
+            _handover(instance, objective, warm.best),
+            _handover(instance, objective, cold.best),
         )
     assert handed[4][0] > handed[4][1], handed
     assert handed[5][0] < handed[5][1], handed
