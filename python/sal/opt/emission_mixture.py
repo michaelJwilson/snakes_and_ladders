@@ -26,6 +26,8 @@ import itertools
 import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from enum import StrEnum
+from typing import NamedTuple
 
 import numpy as np
 import torch
@@ -49,6 +51,7 @@ from sal.opt.em import EMISSION_MIXTURE_EM, EmConfig, em_loop
 from sal.opt.mixture import (
     e_step,
     emission_mixture_plus_plus,
+    kmeans_plus_plus,
     mixture_log_likelihood,
     responsibilities,
     uniform_seeds,
@@ -777,3 +780,83 @@ class EmissionMixtureObjective(Objective):
             log_simplex(theta[: self._k - 1]),
             self.components(theta),
         )
+
+
+class SeedMethod(StrEnum):
+    """How :func:`seed` places the components (issue #1085).
+
+    Each reads the observations alone, so data with no known truth seeds.
+    """
+
+    UNIFORM = "uniform"
+    """:func:`uniform_start`: observations drawn uniformly, without replacement."""
+    PLUS_PLUS = "plus_plus"
+    """:func:`plus_plus_start`: D-squared sampling under the family's Bregman divergence."""
+    KMEANS = "kmeans"
+    """:func:`~sal.opt.mixture.kmeans_plus_plus` on the raw rows, the centres handed to ``at``."""
+
+
+class Start(NamedTuple):
+    """Where an EM fit begins: mixing weights and components (issue #1085).
+
+    One type for every seeding, which a fit takes as it is: a pair, so
+    ``expectation_maximization(observations, *start)`` passes the two
+    arguments the fit already has, and a type checker knows there are two.
+
+    Parameters
+    ----------
+    weights : np.ndarray
+        Mixing weights, shape ``(n_components,)``, summing to one.
+    components : EmissionFamily
+        The seeded components.
+    """
+
+    weights: np.ndarray
+    components: EmissionFamily
+
+
+def seed(
+    observations: np.ndarray,
+    n_components: int,
+    at: ComponentsAt,
+    *,
+    method: SeedMethod | str,
+    rng: np.random.Generator,
+    rows: np.ndarray | None = None,
+) -> Start:
+    """A :class:`Start` from the observations alone: the seeding a caller with no truth can run (issue #1085).
+
+    The seeding rules of `search.mixture_starts` read a simulated instance,
+    whose truth they used only for its component count, so data with no known
+    truth could not be seeded. These are the rules that read the data alone,
+    in one place, with uniform weights; `search.mixture_starts` calls them.
+
+    Parameters
+    ----------
+    observations : np.ndarray
+        Observations, shape ``(n_samples,)`` or ``(n_samples, channels)``.
+    n_components : int
+        Components to seed.
+    at : ComponentsAt
+        Builds the family from the rows chosen.
+    method : SeedMethod | str
+        Which rule places them.
+    rng : np.random.Generator
+        Generator, passed in.
+    rows : np.ndarray | None
+        Where the rule reads from, when that is not ``observations``: under a
+        covariate, the rows in rate space (issue #933).
+
+    Returns
+    -------
+    Start
+    """
+    read = np.asarray(observations if rows is None else rows, dtype=np.float64)
+    chosen = SeedMethod(method)
+    if chosen is SeedMethod.UNIFORM:
+        components = uniform_start(read, n_components, at, rng)
+    elif chosen is SeedMethod.PLUS_PLUS:
+        components = plus_plus_start(read, n_components, at, rng)
+    else:
+        components = at(kmeans_plus_plus(read, n_components, rng))
+    return Start(np.full(n_components, 1.0 / n_components), components)
