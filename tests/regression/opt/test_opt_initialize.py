@@ -438,14 +438,14 @@ def test_the_sampled_starts_are_their_runs_own_records_and_leave_the_cell_descen
     coldest = 0
     for seed in SAMPLED_SEEDS:
         fitted = [
-            fit(objective, theta0=start).theta
+            fit(objective, start=start).theta
             for start in _chain_start(seed).starts(objective)
         ]
         reached["chain"].append(_lowest(objective, fitted))
 
         annealed = _annealed_start(seed).run(objective)
         reached["anneal"].append(
-            _lowest(objective, [fit(objective, theta0=annealed.theta).theta])
+            _lowest(objective, [fit(objective, start=annealed.theta).theta])
         )
 
         tempered = _tempered_start(seed).run(objective)
@@ -460,7 +460,7 @@ def test_the_sampled_starts_are_their_runs_own_records_and_leave_the_cell_descen
         assert visited.min() - tempered.value == 0.0
         coldest += int(np.unravel_index(int(visited.argmin()), visited.shape)[1] == 0)
         reached["temper"].append(
-            _lowest(objective, [fit(objective, theta0=tempered.theta).theta])
+            _lowest(objective, [fit(objective, start=tempered.theta).theta])
         )
 
     for name, values in reached.items():
