@@ -50,6 +50,7 @@ def _collected(selector: str) -> int:
 
 
 @pytest.mark.smoke
+@pytest.mark.release  # 12.8 s in the tier, over the 10 s cap (#1088)
 def test_the_stress_tier_is_reachable_and_not_empty() -> None:
     # A tier nothing selects is a tier that rots. This is the check that would
     # have caught `stress` being registered but never applied, or applied but
@@ -58,6 +59,7 @@ def test_the_stress_tier_is_reachable_and_not_empty() -> None:
 
 
 @pytest.mark.smoke
+@pytest.mark.release  # 11.7 s in the tier, over the 10 s cap (#1088)
 def test_the_key_tier_is_reachable_and_not_empty() -> None:
     # The tier added by issue #399: exempt from `SAL_DURATION_CAP` and held to
     # `SAL_KEY_DURATION_CAP` instead. An exemption nothing selects is an
@@ -66,6 +68,7 @@ def test_the_key_tier_is_reachable_and_not_empty() -> None:
 
 
 @pytest.mark.analytic
+@pytest.mark.release  # 44.5 s in the tier, over the 10 s cap (#1088)
 def test_the_ci_tier_excludes_the_stress_and_key_tiers() -> None:
     # The selections partition within `not release`: a `release` test with an
     # `at_scale` case carries `stress` too (#756), and `key` is not `stress`.

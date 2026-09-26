@@ -241,20 +241,18 @@ jobs:
       # It runs unconditionally, not through `select_tests`: these are exactly
       # the checks that must not depend on which module the diff touched, since
       # a change `select_tests` mis-attributes is one of the things they catch.
+      # One run, under coverage (issue #1088). It ran twice, bare to gate and
+      # instrumented to measure the tier's own floor (issue #635), because
+      # instrumentation costs about 4x. The bare run bought an earlier red on
+      # a failing gate and cost the whole bare run on every green one: 65 s
+      # bare and 103 s instrumented on the local replica at four workers. The report
+      # is what `tests/regression/test_critical_coverage.py` reads; it skips
+      # where there is none, so a local `-m critical` pays nothing.
       - name: Critical gate
-        run: uv run pytest -m critical -q
-      # The tier's own coverage floor (issue #635), measured here rather than
-      # on the gate above: instrumentation costs about 4x -- 15.9 s bare
-      # against 61.56 s under `--cov` on the reference host -- and the gate
-      # exists to be fast. So the tier runs twice, once to gate and once to
-      # measure, and the second run's report is what
-      # `tests/regression/test_critical_coverage.py` reads. It skips where
-      # there is no report, so a local `-m critical` pays nothing.
-      - name: Critical tier coverage floor
         run: |
           uv run pytest -m critical -q \
             --cov=sal \
-            --cov-report=json:coverage-critical.json >/dev/null
+            --cov-report=json:coverage-critical.json
           uv run pytest tests/regression/test_critical_coverage.py -q
       # CHECKS.md and the textbook's applicability tables are written from
       # the tree and are not committed (issue #425). This regenerates both --
