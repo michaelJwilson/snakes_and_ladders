@@ -524,7 +524,7 @@ def learn_sections(mid: bool) -> list[Section]:
             MLPSurrogate(examples.features.shape[1]),
             examples,
             examples,
-            generator=torch.Generator().manual_seed(0),
+            rng=torch.Generator().manual_seed(0),
             max_epochs=20,
         )
 

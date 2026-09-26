@@ -90,6 +90,7 @@ from sal.sample.chain import (
     run_chain,
     run_compiled,
     start_point,
+    torch_stream,
 )
 from sal.sample.declared import (
     Power,
@@ -423,7 +424,7 @@ def hamiltonian(
 
 def sample(
     objective: Objective,
-    generator: torch.Generator,
+    rng: np.random.Generator | torch.Generator,
     n_samples: int,
     *,
     step_size: float,
@@ -443,7 +444,7 @@ def sample(
     ----------
     objective : Objective
         Read as an unnormalized negative log density.
-    generator : torch.Generator
+    rng : np.random.Generator | torch.Generator
         The stream every momentum and acceptance draw comes from, passed in
         rather than seeded here (`sim/CLAUDE.md`): a chain is reproducible
         from ``torch.Generator().manual_seed(seed)`` at the call site, and two
@@ -513,6 +514,7 @@ def sample(
         time: it accepts at rate 1 and samples nothing, looking healthy by
         every diagnostic.
     """
+    generator = torch_stream(rng)
     _check_trajectory(step_size, n_steps)
     refuse_backend("hmc.sample", backend, (Backend.PYTHON, Backend.RUST))
     declared = declared_energy(objective)
@@ -597,7 +599,7 @@ class AnnealedTheta:
 def anneal(
     objective: Objective,
     schedule: TempSchedule,
-    generator: torch.Generator,
+    rng: np.random.Generator | torch.Generator,
     *,
     step_size: float,
     n_steps: int = DEFAULT_STEPS,
@@ -621,7 +623,7 @@ def anneal(
     schedule : TempSchedule
         Temperature per proposal. Its length is the budget in proposals;
         ``force_evaluations`` on the result is the budget in gradients.
-    generator : torch.Generator
+    rng : np.random.Generator | torch.Generator
         As :func:`sample`.
     step_size, n_steps, start, integrator
         As :func:`sample`. The step needs no rescaling with temperature ---
@@ -632,6 +634,7 @@ def anneal(
     -------
     AnnealedTheta
     """
+    generator = torch_stream(rng)
     _check_trajectory(step_size, n_steps)
     position = start_point(objective, start)
 
@@ -721,7 +724,7 @@ class Tempered:
 def parallel_tempering(
     objective: Objective,
     temperatures: TempSchedule | Sequence[float],
-    generator: torch.Generator,
+    rng: np.random.Generator | torch.Generator,
     n_rounds: int,
     *,
     step_size: float,
@@ -764,7 +767,7 @@ def parallel_tempering(
     temperatures : TempSchedule | Sequence[float]
         The ladder, coldest first; at least two, all positive, strictly
         increasing so that adjacent pairs are the ones that exchange.
-    generator : torch.Generator
+    rng : np.random.Generator | torch.Generator
         The parent stream, seeded by the caller (issue #337); it draws the
         replicas' seeds and the exchange uniforms.
     n_rounds : int
@@ -794,6 +797,7 @@ def parallel_tempering(
         nothing to exchange and is :func:`sample` --- if any is not positive
         or the ladder is not increasing, or if ``n_rounds`` is below one.
     """
+    generator = torch_stream(rng)
     _check_trajectory(step_size, n_steps)
     temperatures = check_ladder(
         ladder(temperatures),

@@ -138,7 +138,9 @@ def test_a_fixed_topology_with_no_budget_is_exactly_the_continuous_fit() -> None
     alignment, k = _alignment()
     params = load_fixture(SMALL_SITES)
 
-    result = infer(alignment, k, start=params.tau, max_evaluations=0)
+    result = infer(
+        alignment, k, start=params.tau, max_evaluations=0, rng=np.random.default_rng(0)
+    )
 
     objective = BranchLengthObjective(params.tau, k, np.full(k, 1.0 / k), alignment)
     expected = fit(objective)
@@ -159,7 +161,13 @@ def test_score_topology_agrees_with_a_zero_budget_search() -> None:
 
     assert_allclose(
         score_topology(params.tau, alignment, k),
-        infer(alignment, k, start=params.tau, max_evaluations=0).log_likelihood,
+        infer(
+            alignment,
+            k,
+            start=params.tau,
+            max_evaluations=0,
+            rng=np.random.default_rng(0),
+        ).log_likelihood,
         rtol=1e-12,
     )
 
@@ -254,7 +262,7 @@ def test_too_few_taxa_is_refused() -> None:
     alignment = {name: np.zeros(5, dtype=np.int64) for name in "ABC"}
 
     with pytest.raises(ValueError, match="at least 4 taxa"):
-        infer(alignment, 4)
+        infer(alignment, 4, rng=np.random.default_rng(0))
 
 
 # --- what carries from a topology to its neighbour (issue #289) ------------

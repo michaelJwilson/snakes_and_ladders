@@ -73,6 +73,7 @@ def test_a_budgeted_search_reaches_its_own_maximum_at_this_size(
         start=truth,
         max_evaluations=_BUDGET,
         lazy_top=_LAZY_TOP,
+        rng=np.random.default_rng(0),
     )
 
     assert result.log_likelihood == pytest.approx(

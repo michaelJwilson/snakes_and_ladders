@@ -375,7 +375,7 @@ def test_an_annealed_sampled_run_cannot_pass_the_enumerated_optimum() -> None:
 
     found = optimize(
         objective,
-        generator=torch.Generator().manual_seed(729),
+        rng=torch.Generator().manual_seed(729),
         temperature=1.0,
         final_temperature=0.1,
         steps=120,
@@ -450,7 +450,7 @@ def test_the_deterministic_relaxation_beats_single_flip_hill_climbing() -> None:
         [
             optimize(
                 objective,
-                generator=torch.Generator().manual_seed(seed),
+                rng=torch.Generator().manual_seed(seed),
                 temperature=0.5,
                 steps=100,
                 stochastic=False,
@@ -492,7 +492,7 @@ def test_the_sampled_estimators_only_tie_with_the_baseline() -> None:
             [
                 optimize(
                     objective,
-                    generator=torch.Generator().manual_seed(seed),
+                    rng=torch.Generator().manual_seed(seed),
                     temperature=0.5,
                     steps=100,
                     mode=mode,
@@ -517,7 +517,7 @@ def test_the_hmm_path_is_recovered_from_every_restart() -> None:
     reached = sum(
         optimize(
             objective,
-            generator=torch.Generator().manual_seed(seed),
+            rng=torch.Generator().manual_seed(seed),
             temperature=0.5,
             steps=150,
             stochastic=False,
@@ -624,14 +624,14 @@ def test_annealing_reaches_the_final_temperature_during_optimization() -> None:
 
     fixed = optimize(
         objective,
-        generator=torch.Generator().manual_seed(1),
+        rng=torch.Generator().manual_seed(1),
         temperature=0.5,
         steps=40,
         stochastic=False,
     )
     annealed = optimize(
         objective,
-        generator=torch.Generator().manual_seed(1),
+        rng=torch.Generator().manual_seed(1),
         temperature=0.5,
         final_temperature=0.01,
         steps=40,

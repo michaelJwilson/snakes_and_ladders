@@ -28,6 +28,7 @@ import time
 from dataclasses import dataclass
 from enum import StrEnum
 
+import numpy as np
 import torch
 
 from sal.cost import Cost
@@ -35,6 +36,7 @@ from sal.opt.budget import Budget
 from sal.opt.initialize import Initializer
 from sal.opt.objective import Objective
 from sal.sample import hmc
+from sal.sample.chain import torch_stream
 from sal.sample.schedule import (
     AdaptedLadder,
     FeedbackLadder,
@@ -541,7 +543,7 @@ def calibrate_ladder(
     objective: Objective,
     temperatures: TempSchedule | tuple[float, ...],
     calibration: LadderCalibration,
-    generator: torch.Generator,
+    rng: np.random.Generator | torch.Generator,
     *,
     step_size: float,
     n_steps: int = hmc.DEFAULT_STEPS,
@@ -568,6 +570,7 @@ def calibrate_ladder(
         As the adapter refuses, or if the settled ladder is not positive and
         strictly increasing.
     """
+    generator = torch_stream(rng)
     began = time.perf_counter()
     best: torch.Tensor | None = None
     best_value = float("inf")

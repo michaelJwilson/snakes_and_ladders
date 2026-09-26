@@ -68,6 +68,7 @@ import torch
 
 from sal.enumeration import enumerated_optimum
 from sal.learn.potts import Configuration, PottsEnvironment
+from sal.sample.chain import torch_stream
 from sal.sample.schedule import (
     ConstantTempSchedule,
     ExponentialTempSchedule,
@@ -255,7 +256,7 @@ def one_hot(configuration: Configuration, n_states: int) -> torch.Tensor:
 def gumbel_softmax(
     logits: torch.Tensor,
     temperature: float,
-    generator: torch.Generator,
+    rng: np.random.Generator | torch.Generator,
     *,
     mode: RelaxationMode = RelaxationMode.SOFT,
 ) -> torch.Tensor:
@@ -267,7 +268,7 @@ def gumbel_softmax(
         Shape ``(L, k)``. Unnormalized; only differences within a row matter.
     temperature : float
         The ``tau`` of the relaxation, ``>= MINIMUM_TEMPERATURE``.
-    generator : torch.Generator
+    rng : np.random.Generator | torch.Generator
         Passed in rather than seeded here, so a caller drawing a *batch* gets
         independent samples --- the mistake a ``seed`` parameter invites, and
         which this repository has made before.
@@ -281,6 +282,7 @@ def gumbel_softmax(
     ValueError
         If ``temperature`` is below :data:`MINIMUM_TEMPERATURE`.
     """
+    generator = torch_stream(rng)
     if temperature < MINIMUM_TEMPERATURE:
         msg = (
             f"temperature must be >= {MINIMUM_TEMPERATURE}, got {temperature}: "
@@ -356,7 +358,7 @@ def estimate_gradient(
     objective: RelaxedObjective,
     logits: torch.Tensor,
     temperature: float,
-    generator: torch.Generator,
+    rng: np.random.Generator | torch.Generator,
     *,
     mode: RelaxationMode = RelaxationMode.SOFT,
     n_samples: int = 1,
@@ -368,6 +370,7 @@ def estimate_gradient(
     than assumed small. Averaging more samples reduces variance and leaves the
     bias untouched, which is why the two are reported separately.
     """
+    generator = torch_stream(rng)
     parameters = logits.detach().clone().requires_grad_(True)
     total = torch.zeros((), dtype=torch.float64)
     for _ in range(n_samples):
@@ -414,7 +417,7 @@ def _schedule(
 
 def optimize(
     objective: RelaxedObjective,
-    generator: torch.Generator,
+    rng: np.random.Generator | torch.Generator,
     *,
     temperature: float = 0.5,
     final_temperature: float | None = None,
@@ -430,7 +433,7 @@ def optimize(
     ----------
     objective : RelaxedObjective
         The discrete problem being relaxed.
-    generator : torch.Generator
+    rng : np.random.Generator | torch.Generator
         The only source of randomness, so a run is reproducible from the
         generator its caller seeded (issue #337).
     temperature : float
@@ -465,6 +468,7 @@ def optimize(
         Carrying the discrete score of the ``argmax`` configuration, which is
         the number to compare against an enumerated optimum.
     """
+    generator = torch_stream(rng)
     logits = 0.01 * torch.randn(
         (objective.n_sites, objective.n_states),
         generator=generator,

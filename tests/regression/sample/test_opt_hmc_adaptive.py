@@ -239,7 +239,7 @@ def test_a_warm_up_whose_chain_did_not_move_is_refused() -> None:
     with pytest.raises(ValueError, match=r"zero on coordinate\(s\) \[0, 1\]"):
         sample(
             wall,
-            generator=torch.Generator().manual_seed(1),
+            rng=torch.Generator().manual_seed(1),
             n_samples=10,
             step_size=0.1,
             n_steps=3,
@@ -276,7 +276,7 @@ def _pooled_acceptance(objective: Objective, seeds: range, n_samples: int) -> fl
     chains = [
         sample(
             objective,
-            generator=torch.Generator().manual_seed(seed),
+            rng=torch.Generator().manual_seed(seed),
             n_samples=n_samples,
             step_size=0.05,
             n_steps=5,
@@ -326,7 +326,7 @@ def _agreement(
     """
     adapted = sample(
         objective,
-        generator=torch.Generator().manual_seed(21),
+        rng=torch.Generator().manual_seed(21),
         n_samples=n_samples,
         step_size=0.05,
         n_steps=5,
@@ -334,7 +334,7 @@ def _agreement(
     )
     fixed = sample(
         objective,
-        generator=torch.Generator().manual_seed(22),
+        rng=torch.Generator().manual_seed(22),
         n_samples=n_samples,
         step_size=fixed_step,
         n_steps=fixed_steps,
@@ -449,7 +449,7 @@ def test_the_adapted_chains_marginals_are_the_exact_gaussians_within_three_error
     """
     below_the_cliff = sample(
         GAUSSIAN,
-        generator=torch.Generator().manual_seed(729),
+        rng=torch.Generator().manual_seed(729),
         n_samples=1200,
         step_size=0.05,
         n_steps=5,
@@ -499,7 +499,7 @@ def _largest_energy_errors(target: float) -> tuple[list[float], float]:
     chains = [
         sample(
             GAUSSIAN,
-            generator=torch.Generator().manual_seed(seed),
+            rng=torch.Generator().manual_seed(seed),
             n_samples=1200,
             step_size=0.05,
             n_steps=5,

@@ -74,13 +74,16 @@ DUAL_AVERAGING_KAPPA = 0.75
 Stream = TypeVar("Stream", torch.Generator, np.random.Generator)
 
 
-def torch_stream(rng: np.random.Generator) -> torch.Generator:
+def torch_stream(rng: np.random.Generator | torch.Generator) -> torch.Generator:
     """A torch :data:`Stream` seeded by one draw from ``rng``, so one seed runs a torch chain.
 
     The one derivation a caller holding a NumPy generator makes before a
     torch-kernel sampler; ``search.projection`` and ``search.mixture_starts``
-    each wrote it until #1059.
+    each wrote it until #1059. A torch generator is its own stream and is
+    returned as given, so a torch entry point takes either (issue #1091).
     """
+    if isinstance(rng, torch.Generator):
+        return rng
     return torch.Generator().manual_seed(int(rng.integers(0, 2**31 - 1)))
 
 
