@@ -31,10 +31,10 @@ FIELD = np.random.default_rng(1081).normal(0.0, 1.0, (GRAPH.n_nodes, 3))
 def _solvers() -> dict[str, object]:
     return {
         "icm": lambda g, f, s: iterated_conditional_modes(
-            g, f, 3, np.random.default_rng(0), sense=s
+            g, f, n_states=3, rng=np.random.default_rng(0), sense=s
         ),
-        "alpha-expansion": lambda g, f, s: alpha_expansion(g, f, 3, sense=s),
-        "alpha-beta-swap": lambda g, f, s: alpha_beta_swap(g, f, 3, sense=s),
+        "alpha-expansion": lambda g, f, s: alpha_expansion(g, f, n_states=3, sense=s),
+        "alpha-beta-swap": lambda g, f, s: alpha_beta_swap(g, f, n_states=3, sense=s),
         "trws": lambda g, f, s: trws(g, f, sense=s),
     }
 
