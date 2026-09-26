@@ -214,11 +214,13 @@ def _disturbed(topology: Topology, warm: _Fitted) -> torch.Tensor:
 
 
 def _objective(
-    model: Model, topology: Topology, k: int, alignment: Mapping[str, np.ndarray]
+    model: Model, topology: Topology, n_states: int, alignment: Mapping[str, np.ndarray]
 ) -> BranchLengthObjective | SubstitutionModelObjective:
     if model is Model.JC:
-        return BranchLengthObjective(topology, k, np.full(k, 1.0 / k), alignment)
-    return SubstitutionModelObjective(topology, k, alignment)
+        return BranchLengthObjective(
+            topology, n_states, np.full(n_states, 1.0 / n_states), alignment
+        )
+    return SubstitutionModelObjective(topology, n_states, alignment)
 
 
 def _start(
@@ -262,7 +264,7 @@ def _warm_theta(
 def _score(
     model: Model,
     topology: Topology,
-    k: int,
+    n_states: int,
     alignment: Mapping[str, np.ndarray],
     warm: _Fitted | None = None,
     *,
@@ -275,7 +277,7 @@ def _score(
     fitted value; it needs ``warm`` to have those values and is ignored
     without one.
     """
-    objective = _objective(model, topology, k, alignment)
+    objective = _objective(model, topology, n_states, alignment)
     theta0 = None if warm is None else _warm_theta(objective, topology, warm)
     scored: Objective = objective
     if partial and warm is not None and theta0 is not None:
@@ -317,7 +319,7 @@ def _score_candidate(task: _Candidate) -> _Fitted:
 def _lazy_score(
     model: Model,
     topology: Topology,
-    k: int,
+    n_states: int,
     alignment: Mapping[str, np.ndarray],
     warm: _Fitted,
     cache: PartialCache,
@@ -326,13 +328,18 @@ def _lazy_score(
     lengths = _warm_lengths(topology, warm)
     if model is Model.JC:
         return log_likelihood_cached(
-            topology, k, np.full(k, 1.0 / k), alignment, lengths, cache
+            topology,
+            n_states,
+            np.full(n_states, 1.0 / n_states),
+            alignment,
+            lengths,
+            cache,
         )
-    objective = SubstitutionModelObjective(topology, k, alignment)
+    objective = SubstitutionModelObjective(topology, n_states, alignment)
     theta = _warm_theta(objective, topology, warm)
     return log_likelihood_cached(
         topology,
-        k,
+        n_states,
         warm.named["pi"],
         alignment,
         lengths,
@@ -367,7 +374,7 @@ def _neighbourhood(
 
 def infer(
     alignment: Mapping[str, np.ndarray],
-    k: int,
+    n_states: int,
     *,
     start: Topology | None = None,
     model: Model = Model.JC,
@@ -389,7 +396,7 @@ def infer(
     ----------
     alignment : Mapping[str, np.ndarray]
         Observed states per taxon, each of shape ``(n_sites,)``.
-    k : int
+    n_states : int
         Number of states.
     start : Topology | None
         Where to start, the name every search and sampler gives it (issue
@@ -498,7 +505,7 @@ def infer(
 
     neighbourhood = _neighbourhood(moves, radius)
     current = _start(alignment, start, rng)
-    best = _score(model, current, k, alignment)
+    best = _score(model, current, n_states, alignment)
     trace = [best.value]
     seen = {leaf_bipartitions(current)}
     cache = PartialCache()
@@ -538,7 +545,7 @@ def infer(
             ranked = sorted(
                 fresh,
                 key=lambda neighbour: _lazy_score(
-                    model, neighbour, k, alignment, best, cache
+                    model, neighbour, n_states, alignment, best, cache
                 ),
                 reverse=True,
             )
@@ -547,7 +554,7 @@ def infer(
         scored = map_tasks(
             _score_candidate,
             [
-                (model, neighbour, k, alignment, warm, partial_reoptimization)
+                (model, neighbour, n_states, alignment, warm, partial_reoptimization)
                 for neighbour in to_fit
             ],
             workers=workers,
@@ -566,7 +573,7 @@ def infer(
             # A partial fit is a lower bound on the full one, so the winner is
             # refitted over every branch before it is accepted: the reported
             # log-likelihood, and the trace, stay maximized values.
-            candidate_fit = _score(model, candidate, k, alignment, candidate_fit)
+            candidate_fit = _score(model, candidate, n_states, alignment, candidate_fit)
             fits += 1
             likelihood_evaluations += candidate_fit.evaluations
         current, best = candidate, candidate_fit
@@ -597,7 +604,7 @@ def infer(
 def score_topology(
     topology: Topology,
     alignment: Mapping[str, np.ndarray],
-    k: int,
+    n_states: int,
     model: Model = Model.JC,
 ) -> float:
     """Maximized log-likelihood of one topology, with no search.
@@ -611,7 +618,7 @@ def score_topology(
         The topology to fit.
     alignment : Mapping[str, np.ndarray]
         Observed states per taxon.
-    k : int
+    n_states : int
         Number of states.
     model : Model
         Substitution model for the continuous fit.
@@ -621,7 +628,7 @@ def score_topology(
     float
         The maximized log-likelihood.
     """
-    return _score(model, topology, k, alignment).value
+    return _score(model, topology, n_states, alignment).value
 
 
 @dataclass(frozen=True)
@@ -658,7 +665,7 @@ class ParsimonyInference:
     termination: Termination | None = None
 
 
-def _metric_step_matrix(step_matrix: np.ndarray, k: int) -> np.ndarray:
+def _metric_step_matrix(step_matrix: np.ndarray, n_states: int) -> np.ndarray:
     """``step_matrix`` if the unrooted score is well defined under it, else raise.
 
     A search walks unrooted topologies and keys them on their bipartitions, so
@@ -669,8 +676,8 @@ def _metric_step_matrix(step_matrix: np.ndarray, k: int) -> np.ndarray:
     it splits.
     """
     step = np.asarray(step_matrix, dtype=np.float64)
-    if step.shape != (k, k):
-        msg = f"step_matrix must have shape {(k, k)}, got {step.shape}"
+    if step.shape != (n_states, n_states):
+        msg = f"step_matrix must have shape {(n_states, n_states)}, got {step.shape}"
         raise ValueError(msg)
     if not np.array_equal(step, step.T) or bool(np.any(np.diag(step) != 0.0)):
         msg = (
@@ -690,7 +697,7 @@ def _metric_step_matrix(step_matrix: np.ndarray, k: int) -> np.ndarray:
 
 def parsimony_search(
     alignment: Mapping[str, np.ndarray],
-    k: int,
+    n_states: int,
     *,
     step_matrix: np.ndarray | None = None,
     start: Topology | None = None,
@@ -711,7 +718,7 @@ def parsimony_search(
     ----------
     alignment : Mapping[str, np.ndarray]
         Observed states per taxon, each of shape ``(n_sites,)``.
-    k : int
+    n_states : int
         Number of states.
     step_matrix : np.ndarray | None
         ``None`` scores by :func:`~sal.likelihood.parsimony.fitch_score`.
@@ -746,10 +753,10 @@ def parsimony_search(
     if step_matrix is None:
 
         def score(candidate: Topology) -> float:
-            return float(fitch_score(candidate, alignment, k))
+            return float(fitch_score(candidate, alignment, n_states))
 
     else:
-        step = _metric_step_matrix(step_matrix, k)
+        step = _metric_step_matrix(step_matrix, n_states)
 
         def score(candidate: Topology) -> float:
             return sankoff_score(candidate, alignment, step)

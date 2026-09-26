@@ -177,7 +177,9 @@ def test_the_closest_tree_of_the_fixture_alignment_is_the_generating_topology(
     """The four-state fixtures, recoded, give the generating topology at their declared sites."""
     params = load_fixture(name)
     dataset = simulate_tree(params, np.random.default_rng(params.seed))
-    names, spectrum = sequence_spectrum(binary_recoding(dataset.alignment, params.k))
+    names, spectrum = sequence_spectrum(
+        binary_recoding(dataset.alignment, params.n_states)
+    )
     weights = split_weights(hadamard_conjugation(spectrum), names)
 
     tree = closest_tree(weights, names, minimum_length=1e-4)
@@ -193,7 +195,7 @@ def test_a_spectrum_the_logarithm_cannot_take_is_refused() -> None:
     """
     params = load_fixture(HARD)
     dataset = simulate_tree(params, np.random.default_rng(params.seed))
-    _, spectrum = sequence_spectrum(binary_recoding(dataset.alignment, params.k))
+    _, spectrum = sequence_spectrum(binary_recoding(dataset.alignment, params.n_states))
 
     with pytest.raises(ValueError, match="non-positive"):
         hadamard_conjugation(spectrum)

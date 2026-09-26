@@ -52,7 +52,9 @@ def _four_taxon_posterior() -> WithGaussianPrior:
     params = load_fixture(FOUR_TAXA)
     dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=500)
     return WithGaussianPrior(
-        BranchLengthObjective(params.tau, params.k, params.pi, dict(dataset.alignment)),
+        BranchLengthObjective(
+            params.tau, params.n_states, params.pi, dict(dataset.alignment)
+        ),
         scale=2.0,
     )
 

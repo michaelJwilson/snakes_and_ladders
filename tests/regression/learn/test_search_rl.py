@@ -77,7 +77,7 @@ def _environment(
     alignment = _alignment(params)
     environment = TreeEnvironment(
         alignment,
-        params.k,
+        params.n_states,
         params.pi,
         _BRANCH_LENGTH,
         reward=reward,
@@ -106,7 +106,7 @@ def _gtr_alignment(
     rate_matrix = gtr_rate_matrix(_GTR_EXCHANGEABILITIES, _GTR_PI)
     dataset = simulate_alignment(
         tau=params.tau,
-        k=params.k,
+        n_states=params.n_states,
         pi=_GTR_PI,
         rng=np.random.default_rng(params.seed),
         n_sites=_GTR_SITES,
@@ -166,7 +166,7 @@ def test_the_known_score_is_the_likelihood_at_a_fixed_branch_length() -> None:
     for topology in enumerate_topologies(sorted(alignment)):
         expected = log_likelihood(
             with_uniform_branch_lengths(topology, _BRANCH_LENGTH),
-            params.k,
+            params.n_states,
             params.pi,
             alignment,
         )
@@ -179,7 +179,7 @@ def test_the_fitted_score_is_the_maximized_likelihood() -> None:
     topology = next(iter(enumerate_topologies(sorted(alignment))))
     assert_allclose(
         environment.score(topology),
-        score_topology(topology, alignment, params.k),
+        score_topology(topology, alignment, params.n_states),
         rtol=1e-9,
     )
 
@@ -191,7 +191,9 @@ def test_the_fitted_score_is_never_below_the_known_one() -> None:
     # surface rather than a noisy estimate of the same one.
     _, params, alignment = _environment()
     known, fitted = (
-        TreeEnvironment(alignment, params.k, params.pi, _BRANCH_LENGTH, reward=reward)
+        TreeEnvironment(
+            alignment, params.n_states, params.pi, _BRANCH_LENGTH, reward=reward
+        )
         for reward in (RewardModel.KNOWN, RewardModel.FITTED)
     )
     for topology in enumerate_topologies(sorted(alignment)):
@@ -363,7 +365,7 @@ def test_the_known_reward_under_a_general_model_needs_its_rate_matrix() -> None:
     with pytest.raises(ValueError, match="under gtr needs a rate_matrix"):
         TreeEnvironment(
             alignment,
-            params.k,
+            params.n_states,
             params.pi,
             _BRANCH_LENGTH,
             model=Model.GTR,
@@ -372,7 +374,7 @@ def test_the_known_reward_under_a_general_model_needs_its_rate_matrix() -> None:
     with pytest.raises(ValueError, match="must have shape"):
         TreeEnvironment(
             alignment,
-            params.k,
+            params.n_states,
             params.pi,
             _BRANCH_LENGTH,
             model=Model.GTR,
@@ -382,11 +384,11 @@ def test_the_known_reward_under_a_general_model_needs_its_rate_matrix() -> None:
     with pytest.raises(ValueError, match="fixes its rate matrix"):
         TreeEnvironment(
             alignment,
-            params.k,
+            params.n_states,
             params.pi,
             _BRANCH_LENGTH,
             model=Model.JC,
-            rate_matrix=jc_rate_matrix(params.k),
+            rate_matrix=jc_rate_matrix(params.n_states),
         )
 
 
@@ -402,7 +404,7 @@ def test_the_known_gtr_score_is_the_pruning_recursion_at_the_fixed_length() -> N
     alignment, rate_matrix = _gtr_alignment(params)
     environment = TreeEnvironment(
         alignment,
-        params.k,
+        params.n_states,
         _GTR_PI,
         _BRANCH_LENGTH,
         model=Model.GTR,
@@ -416,7 +418,7 @@ def test_the_known_gtr_score_is_the_pruning_recursion_at_the_fixed_length() -> N
         expected = float(
             log_likelihood_torch(
                 topology,
-                params.k,
+                params.n_states,
                 _GTR_PI,
                 alignment,
                 lengths,
@@ -435,12 +437,12 @@ def test_the_general_q_path_reduces_to_jukes_cantor_at_its_rate_matrix() -> None
     environment, params, alignment = _environment(RewardModel.KNOWN)
     general = TreeEnvironment(
         alignment,
-        params.k,
+        params.n_states,
         params.pi,
         _BRANCH_LENGTH,
         model=Model.GTR,
         reward=RewardModel.KNOWN,
-        rate_matrix=jc_rate_matrix(params.k),
+        rate_matrix=jc_rate_matrix(params.n_states),
     )
     for topology in enumerate_topologies(sorted(alignment)):
         assert_allclose(general.score(topology), environment.score(topology), rtol=1e-9)
@@ -458,7 +460,7 @@ def test_the_fitted_gtr_score_is_never_below_the_known_one() -> None:
     alignment, rate_matrix = _gtr_alignment(params)
     known = TreeEnvironment(
         alignment,
-        params.k,
+        params.n_states,
         _GTR_PI,
         _BRANCH_LENGTH,
         model=Model.GTR,
@@ -467,7 +469,7 @@ def test_the_fitted_gtr_score_is_never_below_the_known_one() -> None:
     )
     fitted = TreeEnvironment(
         alignment,
-        params.k,
+        params.n_states,
         _GTR_PI,
         _BRANCH_LENGTH,
         model=Model.GTR,
@@ -506,8 +508,8 @@ def test_the_parsimony_column_is_the_change_in_fitch_score() -> None:
         actions = environment.actions(state)
         raw = environment.raw_features(state, actions)
         expected = [
-            fitch_score(action, alignment, params.k)
-            - fitch_score(state, alignment, params.k)
+            fitch_score(action, alignment, params.n_states)
+            - fitch_score(state, alignment, params.n_states)
             for action in actions
         ]
         assert_allclose(raw[:, 1].numpy(), expected, atol=0.0)
@@ -532,8 +534,12 @@ def test_the_support_columns_are_the_pattern_support_of_the_split_broken_and_mad
         for row, action in enumerate(actions):
             (broken,) = internal_splits(state) - internal_splits(action)
             (made,) = internal_splits(action) - internal_splits(state)
-            assert raw[row, 2] == split_pattern_support(broken, alignment, params.k)
-            assert raw[row, 3] == split_pattern_support(made, alignment, params.k)
+            assert raw[row, 2] == split_pattern_support(
+                broken, alignment, params.n_states
+            )
+            assert raw[row, 3] == split_pattern_support(
+                made, alignment, params.n_states
+            )
             assert 0.0 < raw[row, 2] <= 1.0
             assert 0.0 < raw[row, 3] <= 1.0
 
@@ -594,7 +600,7 @@ def test_too_few_taxa_is_rejected() -> None:
     alignment = _alignment(params)
     trimmed = {name: alignment[name] for name in sorted(alignment)[:3]}
     with pytest.raises(ValueError, match="need at least 4 taxa"):
-        TreeEnvironment(trimmed, params.k, params.pi, _BRANCH_LENGTH)
+        TreeEnvironment(trimmed, params.n_states, params.pi, _BRANCH_LENGTH)
 
 
 @pytest.mark.oracle

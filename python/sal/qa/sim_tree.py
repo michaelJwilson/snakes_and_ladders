@@ -85,7 +85,7 @@ def render_sim_tree(
     tau: Node,
     ax: Axes,
     alignment: Mapping[str, np.ndarray] | None = None,
-    k: int = 4,
+    n_states: int = 4,
 ) -> dict[str, tuple[float, float]]:
     """Draw ``tau`` as a labelled phylogram on ``ax``.
 
@@ -142,7 +142,7 @@ def render_sim_tree(
             ax.text(
                 _SEQUENCE_X,
                 node_y,
-                "".join(state_label(int(state), k) for state in sites),
+                "".join(state_label(int(state), n_states) for state in sites),
                 transform=transform,
                 fontsize=8,
                 family="monospace",
@@ -211,7 +211,9 @@ def build_figure(params: SimulationParams) -> tuple[Figure, str]:
         params, np.random.default_rng(params.seed), n_sites=max(SITES_SHOWN, 1)
     )
     fig, ax = plt.subplots(figsize=(6.5, 4))
-    render_sim_tree(params.tau, ax, alignment=dataset.alignment, k=params.k)
+    render_sim_tree(
+        params.tau, ax, alignment=dataset.alignment, n_states=params.n_states
+    )
     fig.subplots_adjust(right=_TREE_WIDTH)
     return fig, build_caption(params)
 

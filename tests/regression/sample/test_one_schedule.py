@@ -122,7 +122,12 @@ def test_the_tempered_ensembles_read_both_spellings_to_the_same_draws() -> None:
     start = next(iter(enumerate_topologies(sorted(alignment))))
     topologies = [
         tempered_topologies(
-            alignment, params.k, spelling, np.random.default_rng(3), 4, start=start
+            alignment,
+            params.n_states,
+            spelling,
+            np.random.default_rng(3),
+            4,
+            start=start,
         )
         for spelling in (LADDER, LadderTempSchedule(LADDER))
     ]

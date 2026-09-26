@@ -55,7 +55,7 @@ def environment(params: SimulationParams) -> TreeEnvironment:
     dataset = simulate_tree(params, np.random.default_rng(params.seed))
     return TreeEnvironment(
         dict(dataset.alignment),
-        params.k,
+        params.n_states,
         np.asarray(params.pi),
         branch_length=float(
             np.mean([child.branch_length for _, child in edges(params.tau)])

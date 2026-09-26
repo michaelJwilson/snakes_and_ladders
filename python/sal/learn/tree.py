@@ -223,7 +223,7 @@ class TreeEnvironment(Environment[Topology, Topology]):
     ----------
     alignment : Mapping[str, np.ndarray]
         Observed states per taxon, each of shape ``(n_sites,)``.
-    k : int
+    n_states : int
         Number of states.
     pi : np.ndarray
         Root distribution, shape ``(k,)``. Used only by ``KNOWN``; the fitted
@@ -246,7 +246,7 @@ class TreeEnvironment(Environment[Topology, Topology]):
         The rate matrix ``Q``, shape ``(k, k)``, the known reward scores a
         general model at; ``pi`` is its stationary distribution. Required
         with ``KNOWN`` under ``GTR``, refused under ``JC``, whose ``Q`` is
-        fixed by ``k``.
+        fixed by ``n_states``.
 
     Raises
     ------
@@ -260,7 +260,7 @@ class TreeEnvironment(Environment[Topology, Topology]):
     def __init__(
         self,
         alignment: Mapping[str, np.ndarray],
-        k: int,
+        n_states: int,
         pi: np.ndarray,
         branch_length: float,
         model: Model = Model.JC,
@@ -282,14 +282,12 @@ class TreeEnvironment(Environment[Topology, Topology]):
                     "needs a rate_matrix"
                 )
                 raise ValueError(msg)
-            if np.shape(rate_matrix) != (k, k):
-                msg = (
-                    f"rate_matrix must have shape {(k, k)}, got {np.shape(rate_matrix)}"
-                )
+            if np.shape(rate_matrix) != (n_states, n_states):
+                msg = f"rate_matrix must have shape {(n_states, n_states)}, got {np.shape(rate_matrix)}"
                 raise ValueError(msg)
 
         self._alignment = dict(alignment)
-        self._k = k
+        self._n_states = n_states
         self._pi = np.asarray(pi, dtype=np.float64)
         self._branch_length = branch_length
         self._model = model
@@ -334,11 +332,13 @@ class TreeEnvironment(Environment[Topology, Topology]):
         if cached is not None:
             return cached
         if self._reward is RewardModel.FITTED:
-            value = score_topology(topology, self._alignment, self._k, self._model)
+            value = score_topology(
+                topology, self._alignment, self._n_states, self._model
+            )
         elif self._rate_matrix is None:
             value = log_likelihood(
                 with_uniform_branch_lengths(topology, self._branch_length),
-                self._k,
+                self._n_states,
                 self._pi,
                 self._alignment,
             )
@@ -356,7 +356,7 @@ class TreeEnvironment(Environment[Topology, Topology]):
                 value = float(
                     log_likelihood_torch(
                         topology,
-                        self._k,
+                        self._n_states,
                         self._pi,
                         self._alignment,
                         lengths,
@@ -372,7 +372,7 @@ class TreeEnvironment(Environment[Topology, Topology]):
         key = leaf_bipartitions(topology)
         cached = self._parsimony.get(key)
         if cached is None:
-            cached = fitch_score(topology, self._alignment, self._k)
+            cached = fitch_score(topology, self._alignment, self._n_states)
             self._parsimony[key] = cached
         return cached
 
@@ -385,7 +385,7 @@ class TreeEnvironment(Environment[Topology, Topology]):
         """
         cached = self._support.get(split)
         if cached is None:
-            cached = split_pattern_support(split, self._alignment, self._k)
+            cached = split_pattern_support(split, self._alignment, self._n_states)
             self._support[split] = cached
         return cached
 

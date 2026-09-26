@@ -89,7 +89,7 @@ def environment(
     alignment = dict(dataset.alignment)
     built = TreeEnvironment(
         alignment,
-        params.k,
+        params.n_states,
         np.asarray(params.pi),
         branch_length=float(
             np.mean([child.branch_length for _, child in edges(params.tau)])

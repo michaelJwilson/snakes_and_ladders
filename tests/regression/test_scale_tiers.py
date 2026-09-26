@@ -118,7 +118,7 @@ def test_at_fixture_hands_the_body_a_loaded_instance(
 ) -> None:
     # Exercised end to end: the CI case runs on every pull request, and the
     # other two are deselected there by their markers.
-    assert instance.params.k == 4
+    assert instance.params.n_states == 4
     assert instance.oracle == "enumeration"
 
 
