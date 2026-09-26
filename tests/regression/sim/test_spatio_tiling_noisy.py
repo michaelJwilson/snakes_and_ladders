@@ -44,7 +44,7 @@ def _argmax_icm(params: SpatioTilingParams) -> float:
         n_states=params.n_states,
         rng=np.random.default_rng(0),
         start=params.field.argmax(axis=1).astype(np.int64),
-        max_sweeps=100_000,
+        max_iterations=100_000,
     )
     assert run.termination is not None
     assert run.termination.converged
