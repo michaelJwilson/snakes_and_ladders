@@ -74,10 +74,10 @@ def icm_label(graph: PottsGraph, field: np.ndarray, seed: int) -> Label:
         n_states=n_states,
         rng=rng,
         start=field.argmax(1),
-        max_sweeps=ICM_SWEEPS,
+        max_iterations=ICM_SWEEPS,
     )
     random = iterated_conditional_modes(
-        graph, field, n_states=n_states, rng=rng, max_sweeps=ICM_SWEEPS
+        graph, field, n_states=n_states, rng=rng, max_iterations=ICM_SWEEPS
     )
     if argmax.energy <= random.energy:
         return Label(np.asarray(argmax.labelling, dtype=np.int64), "icm-argmax")

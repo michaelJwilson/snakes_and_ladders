@@ -282,7 +282,7 @@ def _polished(
         n_states=values.shape[1],
         rng=np.random.default_rng(0),
         start=predict(model, grids, values),
-        max_sweeps=100_000,
+        max_iterations=100_000,
     ).energy
 
 

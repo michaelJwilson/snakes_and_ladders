@@ -126,7 +126,7 @@ def _icm(graph: PottsGraph, field: np.ndarray, start: np.ndarray) -> float:
         n_states=field.shape[1],
         rng=np.random.default_rng(0),
         start=np.asarray(start, dtype=np.int64),
-        max_sweeps=ICM_SWEEPS,
+        max_iterations=ICM_SWEEPS,
     ).energy
 
 
