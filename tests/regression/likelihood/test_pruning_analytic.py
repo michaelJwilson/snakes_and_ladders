@@ -58,7 +58,7 @@ def _case(
     params, alignment = simulated_alignment(name, n_sites)
     return (
         params.tau,
-        params.k,
+        params.n_states,
         params.pi,
         alignment,
         pruning_torch.branch_lengths_from_tree(params.tau),

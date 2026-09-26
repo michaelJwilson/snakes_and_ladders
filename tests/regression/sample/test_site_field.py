@@ -113,9 +113,11 @@ def test_the_declared_field_is_one_model_whichever_way_it_arrives() -> None:
     bare = -energy
     forms = (bare, SiteField.from_log_weight(bare), SiteField.from_energy(energy))
     assert all(np.array_equal(log_weight_of(f), bare) for f in forms)
-    expansions = [alpha_expansion(graph, f, 3).labelling for f in forms]
+    expansions = [alpha_expansion(graph, f, n_states=3).labelling for f in forms]
     modes = [
-        iterated_conditional_modes(graph, f, 3, np.random.default_rng(0)).labelling
+        iterated_conditional_modes(
+            graph, f, np.random.default_rng(0), n_states=3
+        ).labelling
         for f in forms
     ]
     schedule = ExponentialTempSchedule(start=2.0, end=0.5, n_steps=20)

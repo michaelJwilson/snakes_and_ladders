@@ -292,7 +292,7 @@ def test_the_table_names_its_rows_and_refuses_one_it_does_not_carry() -> None:
     partial = table(
         environment,
         starts,
-        environment.energy,
+        environment.log_weight,
         best,
         SHORT,
         _streams,
@@ -305,7 +305,7 @@ def test_the_table_names_its_rows_and_refuses_one_it_does_not_carry() -> None:
         table(
             environment,
             starts,
-            environment.energy,
+            environment.log_weight,
             best,
             SHORT,
             _streams,
@@ -323,7 +323,7 @@ def test_an_untrained_row_spends_no_training_decisions() -> None:
         LEARNERS["greedy"],
         environment,
         starts,
-        environment.energy,
+        environment.log_weight,
         best,
         PUBLISHED,
         _streams(),
@@ -352,7 +352,7 @@ def test_the_chains_five_rows_come_back_at_the_published_fractions() -> None:
         rows = table(
             environment,
             starts,
-            environment.energy,
+            environment.log_weight,
             best,
             PUBLISHED,
             _streams,
@@ -361,7 +361,7 @@ def test_the_chains_five_rows_come_back_at_the_published_fractions() -> None:
         assert {entry.name: entry.reached for entry in rows} == CHAIN_ROWS
         assert all(entry.starts == 81 for entry in rows)
 
-    rows = table(environment, starts, environment.energy, best, PUBLISHED, _streams)
+    rows = table(environment, starts, environment.log_weight, best, PUBLISHED, _streams)
     baseline = rows[0]
     assert [entry.against(baseline) for entry in rows[1:]] == [Outcome.BEAT] * 4
 
@@ -416,7 +416,7 @@ def test_the_greedy_row_is_the_table_computed_by_hand() -> None:
     (greedy,) = table(
         environment,
         starts,
-        environment.energy,
+        environment.log_weight,
         best,
         budget,
         _streams,
@@ -471,14 +471,16 @@ def test_the_wandering_greedy_row_is_the_restart_loop_written_by_hand() -> None:
         assert [list(episode.states) for episode in group] == visited
     reached = sum(
         any(
-            best - environment.energy(state) <= 1e-9 for run in visited for state in run
+            best - environment.log_weight(state) <= 1e-9
+            for run in visited
+            for state in run
         )
         for visited, _ in hand
     )
     (greedy,) = table(
         environment,
         starts,
-        environment.energy,
+        environment.log_weight,
         best,
         budget,
         _streams,
