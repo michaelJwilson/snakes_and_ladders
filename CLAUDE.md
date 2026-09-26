@@ -110,6 +110,14 @@ Submodules include `infra/`, `sim/`, `likelihood/`, `opt/`, `search/`, learn/`, 
 *   Must be open source (OSI-approved license).
 *   Flag any proposed dependency with $<1,000$ GitHub stars (or equivalent ecosystem metric).
 
+## API Conventions
+*   **One name, one meaning, one sign.** `energy` is minimized; maximized quantities are `log_*`. No name is reused for another quantity or sign.
+*   **Match the sibling.** A new entry point copies its nearest sibling's arguments, order and result, in the vocabulary `DEV.md` lists; where the sibling is wrong, fix both or ticket it.
+*   **One result type per concept,** carrying `spent` in a declared `Cost` and a required `Termination`. Exhaustion is a termination, never a warning, exception or silence.
+*   **Meaning by type, not by value.** Two readings of an input are two types.
+*   **NumPy at the boundary;** tensors only behind a torch name.
+*   **Every convention has a guard test,** or it drifts.
+
 ## Conventions
 *   **Documentation Sync:** Any change affecting behavior, CI, dev setup, or math models must update, in the same PR, whichever of the documents it makes inaccurate: e.g. `README.md`, `CLAUDE.md` (including modules), `DEV.md`, `INSTALL.md`, `docs/tex/`, `docs/nb/`, etc. If the change is user-visible, add a fragment under `changelog.d/`.
 *   **Code Standards:** Use type hints where possible. Do not introduce silent behavior changes (e.g., default parameters). Keep dependencies minimal and justify additions.
