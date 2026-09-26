@@ -389,7 +389,7 @@ def test_the_release_and_stress_tiers_are_never_selected_locally() -> None:
     [
         # The two packages the subpackage list had missed since they were
         # created (#777, #972): each now selects its own tests.
-        ("python/sal/sample/potts_mcmc/__init__.py", "tests/regression/sample/"),
+        ("python/sal/sample/chain.py", "tests/regression/sample/"),
         ("python/sal/validation/runner.py", "tests/validation/"),
         # A backend twin is loaded by name; its gateway's importers run.
         ("python/sal/search/icm/numba.py", "tests/regression/search/test_icm.py"),
@@ -419,7 +419,7 @@ def test_python_imports_no_sal_module_outside_the_static_closure() -> None:
     sample = [
         "tests/regression/search/test_icm.py",
         "tests/regression/search/test_ground_state_compose.py",
-        "tests/regression/sample/test_potts_mcmc.py",
+        "tests/regression/sample/test_metropolis.py",
         "tests/regression/opt/test_opt_fit.py",
         "tests/regression/likelihood/test_forward_backward.py",
         "tests/regression/learn/test_arena.py",
