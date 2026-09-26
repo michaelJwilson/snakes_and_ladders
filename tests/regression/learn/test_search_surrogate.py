@@ -99,7 +99,7 @@ def test_learned_surrogates_rank_held_out_neighbourhoods() -> None:
         SetSurrogate(n_features, n_token_features),
     ):
         fitted = fit_surrogate(
-            model, train, validation, generator=torch.Generator().manual_seed(0)
+            model, train, validation, rng=torch.Generator().manual_seed(0)
         )
         predicted = fitted.predict(test)
         assert r_squared(predicted, test.targets) > 0.8
@@ -142,7 +142,7 @@ def test_learned_surrogates_rank_a_held_out_alignment_from_the_recorded_fits() -
         SetSurrogate(n_features, n_token_features),
     ):
         fitted = fit_surrogate(
-            model, train, validation, generator=torch.Generator().manual_seed(0)
+            model, train, validation, rng=torch.Generator().manual_seed(0)
         )
         predicted = fitted.predict(test)
         assert r_squared(predicted, test.targets) > 0.8
@@ -188,7 +188,7 @@ def test_the_learned_surrogate_ranks_the_topologies_the_plug_in_bound_ranks() ->
         LinearSurrogate(examples.features.shape[1]),
         train,
         validation,
-        generator=torch.Generator().manual_seed(0),
+        rng=torch.Generator().manual_seed(0),
     )
 
     held_out = int(np.unique(examples.groups[split.test])[0])

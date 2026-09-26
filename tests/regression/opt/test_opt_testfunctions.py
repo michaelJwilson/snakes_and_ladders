@@ -144,7 +144,7 @@ def test_a_converged_fit_on_rastrigin_is_not_a_global_minimum() -> None:
     converged_but_not_global = 0
     for _ in range(40):
         start = torch.tensor(rng.uniform(-5.12, 5.12, size=2), dtype=torch.float64)
-        result = fit(objective, theta0=start)
+        result = fit(objective, start=start)
         distance = float(torch.linalg.vector_norm(result.theta - objective.minimizer()))
         if result.converged and distance > 1e-4:
             converged_but_not_global += 1
