@@ -45,7 +45,7 @@ exercises, so none of them defines one.
 | Potts chain in a field | `potts_chain` | `sec:potts` | `sim.potts_chain`, `learn.potts`, `opt.potts` |
 | Potts lattice and Markov random field | `potts_lattice` | `sec:potts` | `likelihood.belief_propagation`, `search.maxflow`, `search.max_cut`, `sim.graph.lattice_graph`, `sim.graph.erdos_renyi_graph` |
 | Potts lattice in a per-site field | `spatio_only` | `sec:potts` | `sim.potts.spatio_only_field`, `sim.graph.triangular_lattice_graph` |
-| Potts lattice in a tiling field | `spatio_tiling` | `sec:potts` | `sim.potts.tiling_field`, `sim.potts.tile_partition`, `search.potts_starts.tiling_rung` |
+| Potts lattice in a tiling field | `spatio_tiling`, `spatio_tiling_noisy` | `sec:potts` | `sim.potts.tiling_field`, `sim.potts.tile_partition`, `sim.potts.smoothed_noise`, `search.potts_starts.tiling_rung` |
 | Frustrated Potts: triangular antiferromagnet | `frustrated_lattice` | `sec:frustrated` | `sim.canonical.frustrated_triangular_lattice`, `sim.canonical.minimum_frustrated_edges` |
 | Planted spin glass, enumerable ground state | `planted_glass` | `sec:frustrated` | `sim.canonical.planted_spin_glass`, `sim.canonical.PlantedSpinGlass` |
 | Low-density parity-check code, Gallager (3,6) | `ldpc` | `sec:ldpc` | `sim.ldpc.gallager_code`, `likelihood.ldpc` |

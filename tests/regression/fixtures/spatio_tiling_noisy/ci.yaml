@@ -1,0 +1,62 @@
+model: spatio-tiling
+oracle: none
+
+# `spatio_tiling/release`'s tiling at 21 x 21 with the coupling doubled and
+# noise on the field (issue #1074), so a wrong patch can hold against every
+# single-site move: ICM stops in it and alpha-expansion, whose moves relabel a
+# region at once, does not. On the noise-free field ICM fails only in weak
+# tiles; here it fails in strong ones too.
+#
+# 10**441 labellings, so the stated oracle is none. What referees a result
+# is the TRW-S lower bound and alpha-expansion's paired difference against
+# ICM, on the held-out instances `validation` names.
+geometry: triangular
+shape: [21, 21]
+boundary: open
+n_states: 10
+
+# Twice `spatio_tiling`'s 0.7, which a sweep over J in {0.7, 1.4, 2.8},
+# sigma in {0.5, 1, 2} and rounds in {0, 2, 8} at 41 x 41, three seeds a
+# point, chose (issue #1074's table): at 1.4, 0.5 and 2 alpha-expansion's
+# gap to the TRW-S bound was 0.67 against ICM's 635 from the field's
+# argmax, a ratio of 0.001 and 326 SE on the paired difference, the
+# smallest ratio of any point with noise correlated across sites.
+coupling: 1.4
+
+tiles:
+  seed: 1074
+  k: 16
+
+states: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5]
+
+# `spatio_tiling/release`'s ladder, np.geomspace(0.07, 7.0, 16) rounded to
+# four places.
+strengths:
+  - 0.07
+  - 0.0952
+  - 0.1293
+  - 0.1758
+  - 0.239
+  - 0.3249
+  - 0.4417
+  - 0.6004
+  - 0.8161
+  - 1.1094
+  - 1.5081
+  - 2.0501
+  - 2.7868
+  - 3.7882
+  - 5.1495
+  - 7.0
+
+# Unit-variance Gaussian noise per site and state, averaged over each site's
+# neighbours twice (a correlation of 0.79 at one hop and 0.40 at two, read on
+# 41 x 41), scaled by sigma (`sim.potts.smoothed_noise`).
+noise:
+  seed: 1074
+  sigma: 0.5
+  rounds: 2
+
+# The first 16 hex digits of sha256 over the field's float64 bytes: the
+# instance reproduces from its seeds bit for bit.
+digest: 2c930dc85aab6ec4

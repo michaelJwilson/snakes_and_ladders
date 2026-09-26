@@ -20,7 +20,7 @@ the broadcast of a per-site one and not a second model.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, ClassVar, Self
 
@@ -1074,6 +1074,10 @@ _SPATIO_TILING_REQUIRED_FIELDS = frozenset(
 #: drawn from and ``k``, the tile count.
 _TILES_KEYS = frozenset({"seed", "k"})
 
+#: The keys a tiling fixture's optional ``noise`` declares (issue #1074): the
+#: seed of its generator, its standard deviation and its neighbour averages.
+_NOISE_KEYS = frozenset({"seed", "sigma", "rounds"})
+
 
 def tile_partition(graph: PottsGraph, k: int, rng: np.random.Generator) -> np.ndarray:
     """Every node assigned to the nearest of ``k`` centres drawn from ``rng``: a seeded Voronoi tiling.
@@ -1219,6 +1223,51 @@ def tiling_field(
     return field
 
 
+def smoothed_noise(
+    graph: PottsGraph, n_states: int, rounds: int, rng: np.random.Generator
+) -> np.ndarray:
+    """Unit-variance Gaussian noise per site and state, averaged over neighbours ``rounds`` times (issue #1074).
+
+    Each round replaces a site's value by the mean over the site and its
+    neighbours, so a draw is correlated over about ``sqrt(rounds)`` hops and
+    a wrong state can win a patch rather than a site. The result is divided
+    by its own standard deviation, so a caller's ``sigma`` is the noise's
+    scale whatever the rounds.
+
+    Parameters
+    ----------
+    graph : PottsGraph
+        Every node of degree at least one.
+    n_states : int
+        ``q``, the columns.
+    rounds : int
+        Neighbour averages, ``>= 0``; zero is white noise.
+    rng : np.random.Generator
+        Draws the ``n_nodes * n_states`` normals, and nothing else.
+
+    Returns
+    -------
+    np.ndarray
+        Shape ``(n_nodes, n_states)``, mean near zero and standard deviation one.
+
+    Raises
+    ------
+    ValueError
+        If ``rounds`` is negative.
+    """
+    if rounds < 0:
+        msg = f"rounds must be >= 0, got {rounds}"
+        raise ValueError(msg)
+    noise = rng.standard_normal((graph.n_nodes, n_states))
+    offsets, neighbours, _ = graph.compressed_adjacency()
+    degree = np.diff(offsets)[:, np.newaxis]
+    for _ in range(rounds):
+        noise = (noise + np.add.reduceat(noise[neighbours], offsets[:-1])) / (
+            1.0 + degree
+        )
+    return np.asarray(noise / noise.std())
+
+
 @dataclass(frozen=True)
 class SpatioTilingParams:
     """A Potts prior whose field favours one planted state per tile.
@@ -1246,9 +1295,17 @@ class SpatioTilingParams:
     strengths : np.ndarray
         ``s_t``, shape ``(k,)``.
     field : np.ndarray
-        ``h``, shape ``(n_nodes, q)``, from the three above.
+        ``h``, shape ``(n_nodes, q)``, from the three above, plus
+        ``noise_sigma`` times :func:`smoothed_noise` where declared.
     tiling_seed : int
         Seed of the generator the tiles' centres are drawn from.
+    noise_seed : int | None
+        Seed of the noise's generator; ``None`` for a noise-free field
+        (issue #1074).
+    noise_sigma : float
+        The noise's standard deviation, zero where there is none.
+    noise_rounds : int
+        :func:`smoothed_noise`'s neighbour averages.
     """
 
     graph: PottsGraph
@@ -1258,6 +1315,9 @@ class SpatioTilingParams:
     strengths: np.ndarray
     field: np.ndarray
     tiling_seed: int
+    noise_seed: int | None = None
+    noise_sigma: float = 0.0
+    noise_rounds: int = 0
 
     #: The fields :func:`sal.fixtures.load_params` checks are present before
     #: calling :meth:`from_declared`.
@@ -1316,12 +1376,69 @@ class SpatioTilingParams:
         except ValueError as error:
             msg = f"{path}: {error}"
             raise ValueError(msg) from error
+        noise = declared.get("noise")
+        if noise is None:
+            return cls(
+                graph=graph,
+                n_states=n_states,
+                tiles=tiles,
+                states=states,
+                strengths=strengths,
+                field=field,
+                tiling_seed=seed,
+            )
+        if not isinstance(noise, Mapping) or set(noise) != _NOISE_KEYS:
+            msg = f"{path}: noise declares exactly {sorted(_NOISE_KEYS)}"
+            raise ValueError(msg)
+        sigma, rounds = float(noise["sigma"]), int(noise["rounds"])
+        if sigma <= 0.0:
+            msg = f"{path}: noise.sigma must be positive, got {sigma}"
+            raise ValueError(msg)
+        noise_seed = int(noise["seed"])
+        drawn = smoothed_noise(
+            graph, n_states, rounds, np.random.default_rng(noise_seed)
+        )
         return cls(
             graph=graph,
             n_states=n_states,
             tiles=tiles,
             states=states,
             strengths=strengths,
-            field=field,
+            field=field + sigma * drawn,
             tiling_seed=seed,
+            noise_seed=noise_seed,
+            noise_sigma=sigma,
+            noise_rounds=rounds,
+        )
+
+    def redrawn(self, tiling_seed: int, noise_seed: int | None) -> Self:
+        """The same declared instance with its tiles, and its noise where declared, drawn from new seeds.
+
+        A held-out instance of the fixture (issue #1074): every declared
+        number is kept, and only the draws change.
+
+        Returns
+        -------
+        Self
+        """
+        tiles = tile_partition(
+            self.graph, self.n_tiles, np.random.default_rng(tiling_seed)
+        )
+        field = tiling_field(tiles, self.states, self.strengths, self.n_states)
+        if self.noise_sigma > 0.0:
+            if noise_seed is None:
+                msg = "a noisy instance is redrawn with a noise seed"
+                raise ValueError(msg)
+            field = field + self.noise_sigma * smoothed_noise(
+                self.graph,
+                self.n_states,
+                self.noise_rounds,
+                np.random.default_rng(noise_seed),
+            )
+        return replace(
+            self,
+            tiles=tiles,
+            field=field,
+            tiling_seed=tiling_seed,
+            noise_seed=noise_seed if self.noise_sigma > 0.0 else None,
         )

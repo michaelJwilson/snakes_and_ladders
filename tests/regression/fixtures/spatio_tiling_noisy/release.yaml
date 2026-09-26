@@ -1,0 +1,96 @@
+model: spatio-tiling
+oracle: none
+
+# `spatio_tiling/release`'s tiling at 75 x 75 with the coupling doubled and
+# noise on the field (issue #1074), so a wrong patch can hold against every
+# single-site move: ICM stops in it and alpha-expansion, whose moves relabel a
+# region at once, does not. On the noise-free field ICM fails only in weak
+# tiles; here it fails in strong ones too.
+#
+# 10**5625 labellings, so the stated oracle is none. What referees a result
+# is the TRW-S lower bound and alpha-expansion's paired difference against
+# ICM, on the held-out instances `validation` names.
+geometry: triangular
+shape: [75, 75]
+boundary: open
+n_states: 10
+
+# Twice `spatio_tiling`'s 0.7, which a sweep over J in {0.7, 1.4, 2.8},
+# sigma in {0.5, 1, 2} and rounds in {0, 2, 8} at 41 x 41, three seeds a
+# point, chose (issue #1074's table): at 1.4, 0.5 and 2 alpha-expansion's
+# gap to the TRW-S bound was 0.67 against ICM's 635 from the field's
+# argmax, a ratio of 0.001 and 326 SE on the paired difference, the
+# smallest ratio of any point with noise correlated across sites.
+coupling: 1.4
+
+tiles:
+  seed: 1074
+  k: 16
+
+states: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5]
+
+# `spatio_tiling/release`'s ladder, np.geomspace(0.07, 7.0, 16) rounded to
+# four places.
+strengths:
+  - 0.07
+  - 0.0952
+  - 0.1293
+  - 0.1758
+  - 0.239
+  - 0.3249
+  - 0.4417
+  - 0.6004
+  - 0.8161
+  - 1.1094
+  - 1.5081
+  - 2.0501
+  - 2.7868
+  - 3.7882
+  - 5.1495
+  - 7.0
+
+# Unit-variance Gaussian noise per site and state, averaged over each site's
+# neighbours twice (a correlation of 0.79 at one hop and 0.40 at two, read on
+# 41 x 41), scaled by sigma (`sim.potts.smoothed_noise`).
+noise:
+  seed: 1074
+  sigma: 0.5
+  rounds: 2
+
+# The first 16 hex digits of sha256 over the field's float64 bytes: the
+# instance reproduces from its seeds bit for bit.
+digest: 7b3bda15d934544b
+
+# Twenty held-out instances (`SpatioTilingParams.redrawn`): tiles from seed
+# tiling_seed + i and noise from noise_seed + i, every declared number
+# otherwise this file's. The seeds are disjoint from the fixture's own and
+# from issue #1074's sweep, and are the target #1067's surrogate is scored
+# on, never trained on. Each row is recorded as [TRW-S lower bound,
+# alpha-expansion's energy, ICM's energy from the field's argmax to
+# convergence]: expansion's gap averages 10.19 against ICM's 2,087.35, a
+# paired difference of 2,077.17 +- 58.73, 35 SE.
+validation:
+  tiling_seed: 20000
+  noise_seed: 30000
+  count: 20
+  recorded:
+    - [-27724.282283163277, -27722.070452078548, -25110.01900135086]
+    - [-30161.7805053729, -30158.001860030297, -27758.947140073855]
+    - [-29740.974441351867, -29722.299990068295, -27460.444347936154]
+    - [-30397.486518498165, -30385.673061517668, -28203.455659043673]
+    - [-31216.73814007553, -31207.276068310573, -29388.162426135634]
+    - [-29858.010699648756, -29834.804999715183, -27873.925515971183]
+    - [-30595.785802995422, -30589.037377585406, -29011.69434957667]
+    - [-30913.52298983628, -30913.458200010755, -29160.88590766555]
+    - [-31336.035592331795, -31314.671904344385, -29489.11712868272]
+    - [-30733.39448144964, -30728.265315304947, -28506.33913615834]
+    - [-31557.484763856195, -31555.29867419194, -29316.06755891718]
+    - [-30125.62691263021, -30124.466575638908, -27823.108121409285]
+    - [-31364.493176332668, -31325.519662298393, -29344.50387167547]
+    - [-32034.731275922877, -32025.48613752077, -30144.419450323756]
+    - [-35878.25528805144, -35874.69931713754, -34155.52398811269]
+    - [-29633.60537734704, -29631.587919438218, -27480.515581595148]
+    - [-31548.57123117571, -31543.50484965231, -29602.831913924405]
+    - [-30806.20982057343, -30804.00309427322, -28583.741055104154]
+    - [-27862.74461357443, -27828.463022020183, -25559.666993616112]
+    - [-28816.139985420476, -28813.55013352919, -26585.422448276742]
