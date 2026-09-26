@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import math
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -55,6 +55,7 @@ from sal.sample.potts_mcmc import (
 )
 from sal.sample.schedule import (
     ExponentialTempSchedule,
+    InverseTemperatures,
     Monotone,
     Quantity,
     TempSchedule,
@@ -63,7 +64,7 @@ from sal.sample.schedule import (
     temperatures,
 )
 from sal.sim.graph import PottsGraph
-from sal.sim.potts import site_field
+from sal.sim.potts import SiteField, log_weight_of, site_field
 from sal.track import TrackedOptimization, current
 
 
@@ -91,7 +92,7 @@ class LogPartition:
 
     Parameters
     ----------
-    log_z : float
+    log_partition : float
         The estimate at the ladder's last rung.
     stderr : float
         Its standard error, by the delta method on the weight average:
@@ -104,9 +105,9 @@ class LogPartition:
         ``(sum w) ** 2 / sum w ** 2``. It is at most ``n_replicas``, and a run
         whose weight sits on one member has an ESS near 1 however large the
         population.
-    rung_log_z : np.ndarray
+    rung_log_partition : np.ndarray
         ``log Z`` at every rung of the ladder, shape ``(n_rungs,)``, the first
-        entry the exact ``n log q`` and the last :attr:`log_z`. These are the
+        entry the exact ``n log q`` and the last :attr:`log_partition`. These are the
         ``-g_k`` :func:`simulated_tempering` takes.
     log_weights : np.ndarray
         The accumulated log importance weight of each member of the final
@@ -123,15 +124,17 @@ class LogPartition:
         falling as a resampled population collapses onto fewer ancestors.
     """
 
-    log_z: float
+    log_partition: float
     stderr: float
     ess: float
-    rung_log_z: np.ndarray
+    rung_log_partition: np.ndarray
     log_weights: np.ndarray
     family_entropy: float
 
 
-def geometric_betas(beta: float, n_rungs: int, *, beta_min: float) -> tuple[float, ...]:
+def geometric_betas(
+    beta: float, n_rungs: int, *, beta_min: float
+) -> InverseTemperatures:
     """A ladder of inverse temperatures: exactly ``0``, then geometric to ``beta``.
 
     The zero rung is prepended rather than approached, because a geometric
@@ -155,7 +158,7 @@ def geometric_betas(beta: float, n_rungs: int, *, beta_min: float) -> tuple[floa
 
     Returns
     -------
-    tuple[float, ...]
+    InverseTemperatures
 
     Raises
     ------
@@ -170,12 +173,14 @@ def geometric_betas(beta: float, n_rungs: int, *, beta_min: float) -> tuple[floa
         msg = f"beta_min must lie in (0, {beta}], got {beta_min}"
         raise ValueError(msg)
     if n_rungs == 2:
-        return (0.0, beta)
-    return (0.0, *temperatures(ExponentialTempSchedule(beta_min, beta, n_rungs - 1)))
+        return InverseTemperatures((0.0, beta))
+    return InverseTemperatures(
+        (0.0, *temperatures(ExponentialTempSchedule(beta_min, beta, n_rungs - 1)))
+    )
 
 
 def _check_rungs(
-    betas: TempSchedule | Sequence[float], *, from_zero: bool
+    betas: TempSchedule | InverseTemperatures, *, from_zero: bool
 ) -> tuple[float, ...]:
     """The ladder in ``beta``, read from either spelling and validated as one.
 
@@ -253,8 +258,8 @@ def _entropy(labels: np.ndarray, n_replicas: int) -> float:
 
 def annealed_importance_sampling(
     graph: PottsGraph,
-    field: np.ndarray,
-    betas: TempSchedule | Sequence[float],
+    field: SiteField | np.ndarray,
+    betas: TempSchedule | InverseTemperatures,
     rng: np.random.Generator,
     n_replicas: int,
     *,
@@ -282,9 +287,9 @@ def annealed_importance_sampling(
     graph : PottsGraph
         The lattice. Couplings of either sign, subject to ``move``'s own
         refusal.
-    field : np.ndarray
+    field : SiteField | np.ndarray
         External field ``h``, shape ``(n_states,)`` or ``(n_nodes, n_states)``.
-    betas : TempSchedule | Sequence[float]
+    betas : TempSchedule | InverseTemperatures
         The ladder of inverse temperatures, starting at ``0.0`` and strictly
         increasing; :func:`geometric_betas` builds one. A
         :class:`~sal.sample.schedule.TempSchedule` is read as
@@ -319,6 +324,7 @@ def annealed_importance_sampling(
         :func:`~sal.sample.potts_mcmc.sample_potts` for a
         Fortuin-Kasteleyn cluster move on a negative coupling.
     """
+    field = log_weight_of(field)
     ladder = _check_rungs(betas, from_zero=True)
     states, children, advance, rows = _population(
         graph, field, rng, n_replicas, move, backend, cluster_backend
@@ -365,10 +371,10 @@ def annealed_importance_sampling(
     # of `exp(log n)` and reports a positive error on an exact answer.
     relative = math.expm1(float(log_n + square - 2.0 * total))
     return LogPartition(
-        log_z=log_zero + float(total - log_n),
+        log_partition=log_zero + float(total - log_n),
         stderr=math.sqrt(max(relative, 0.0) / n_replicas),
         ess=n_replicas / (relative + 1.0),
-        rung_log_z=np.array(rung_log_z),
+        rung_log_partition=np.array(rung_log_z),
         log_weights=log_w,
         family_entropy=float(log_n),
     )
@@ -388,8 +394,8 @@ def _resampled(
 
 def population_annealing(
     graph: PottsGraph,
-    field: np.ndarray,
-    betas: TempSchedule | Sequence[float],
+    field: SiteField | np.ndarray,
+    betas: TempSchedule | InverseTemperatures,
     rng: np.random.Generator,
     n_replicas: int,
     *,
@@ -436,6 +442,7 @@ def population_annealing(
     ValueError
         As :func:`annealed_importance_sampling`.
     """
+    field = log_weight_of(field)
     ladder = _check_rungs(betas, from_zero=True)
     states, children, advance, rows = _population(
         graph, field, rng, n_replicas, move, backend, cluster_backend
@@ -484,10 +491,10 @@ def population_annealing(
     tracked.record_cost(max(len(ladder) - 1, 0), states.nbytes)
     stderr = math.sqrt(max(variance, 0.0))
     return LogPartition(
-        log_z=log_z,
+        log_partition=log_z,
         stderr=stderr,
         ess=1.0 / (stderr**2 + 1.0 / n_replicas),
-        rung_log_z=np.array(rung_log_z),
+        rung_log_partition=np.array(rung_log_z),
         log_weights=log_weights,
         family_entropy=_entropy(families, n_replicas),
     )
@@ -549,13 +556,13 @@ def rung_weights(estimate: LogPartition) -> np.ndarray:
     run, and the quality of the weights is the quality of that estimate,
     reported by its own standard error.
     """
-    return -np.asarray(estimate.rung_log_z, dtype=float)
+    return -np.asarray(estimate.rung_log_partition, dtype=float)
 
 
 def simulated_tempering(
     graph: PottsGraph,
-    field: np.ndarray,
-    betas: TempSchedule | Sequence[float],
+    field: SiteField | np.ndarray,
+    betas: TempSchedule | InverseTemperatures,
     weights: np.ndarray,
     rng: np.random.Generator,
     n_sweeps: int,
@@ -586,7 +593,7 @@ def simulated_tempering(
     ----------
     graph, field, move, backend, cluster_backend
         As :func:`annealed_importance_sampling`.
-    betas : TempSchedule | Sequence[float]
+    betas : TempSchedule | InverseTemperatures
         Read by
         :func:`~sal.sample.schedule.beta_ladder`: a
         :class:`~sal.sample.schedule.TempSchedule` as
@@ -618,6 +625,7 @@ def simulated_tempering(
         If the ladder is unusable, ``weights`` does not carry one entry per
         rung, or ``n_sweeps`` or ``thin`` is below 1 or ``burn_in`` below 0.
     """
+    field = log_weight_of(field)
     ladder = _check_rungs(betas, from_zero=False)
     g = np.asarray(weights, dtype=float)
     if g.shape != (len(ladder),):

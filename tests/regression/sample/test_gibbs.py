@@ -414,11 +414,11 @@ def test_the_generic_sweep_recovers_the_exact_marginals_on_a_tree() -> None:
     )
     site = {name: int(states[0]) for name, states in alignment.items()}
     transitions = {
-        node.name: jc_transition_probabilities(node.branch_length, params.k)
+        node.name: jc_transition_probabilities(node.branch_length, params.n_states)
         for node in preorder(params.tau)
         if node.branch_length is not None
     }
-    graph = from_tree(params.tau, params.k, params.pi, site, transitions)
+    graph = from_tree(params.tau, params.n_states, params.pi, site, transitions)
     exact = sum_product(graph).variable
 
     chain = sample_factor_graph(
@@ -429,7 +429,9 @@ def test_the_generic_sweep_recovers_the_exact_marginals_on_a_tree() -> None:
         if name in site:
             assert (chain.states[:, column] == site[name]).all()
             continue
-        counts = np.bincount(chain.states[:, column], minlength=params.k).astype(float)
+        counts = np.bincount(chain.states[:, column], minlength=params.n_states).astype(
+            float
+        )
         assert (
             chi_square_p_value(counts, len(chain.states) * exact[name]) > SIGNIFICANCE
         )
@@ -566,12 +568,12 @@ def test_annealing_reaches_the_closed_form_ground_state_as_the_potts_annealer_do
         annealed = anneal_factor_graph(
             factor_graph, schedule, np.random.default_rng(seed)
         )
-        energy = float(energies(graph, np.zeros(2), annealed.state[None])[0])
+        energy = float(energies(graph, np.zeros(2), annealed.best[None])[0])
         generic += int(abs(energy - target) < 1e-9)
-        assert annealed.trajectory.shape == (201,)
+        assert annealed.trace.shape == (201,)
         names = [variable.name for variable in factor_graph.variables]
         recomputed = factor_graph.log_density(
-            dict(zip(names, annealed.state.tolist(), strict=True))
+            dict(zip(names, annealed.best.tolist(), strict=True))
         )
         assert abs(annealed.log_density - recomputed) < 1e-12
         specialised += int(
@@ -603,7 +605,7 @@ def test_the_temperature_scales_every_table_so_a_hot_chain_is_nearly_uniform() -
 def _five_taxa(n_sites: int) -> tuple[dict[str, np.ndarray], int]:
     params = load_params(fixture_path("tree_search/ci.yaml"), SimulationParams)
     dataset = simulate_tree(params, np.random.default_rng(2), n_sites=n_sites)
-    return dict(dataset.alignment), params.k
+    return dict(dataset.alignment), params.n_states
 
 
 @pytest.mark.oracle
@@ -647,7 +649,7 @@ def test_the_topology_move_at_temperature_one_samples_the_enumerated_flat_prior_
             visits[keys.index(leaf_bipartitions(current))] += 1
 
     assert len(run.scores) == 15
-    assert run.trajectory.shape == (6001,)
+    assert run.trace.shape == (6001,)
     keep = weights * visits.sum() >= 5.0  # pool the rare topologies for the test
     pooled_counts = np.append(visits[keep], visits[~keep].sum())
     pooled_expected = np.append(weights[keep], weights[~keep].sum()) * visits.sum()
@@ -671,8 +673,8 @@ def test_the_annealed_topology_move_reaches_the_enumerated_best() -> None:
             start,
             scores=cache,
         )
-        hits += int(leaf_bipartitions(run.topology) == best)
-        assert run.log_likelihood == cache[leaf_bipartitions(run.topology)]
+        hits += int(leaf_bipartitions(run.best) == best)
+        assert run.log_likelihood == cache[leaf_bipartitions(run.best)]
 
     assert hits >= 5, hits
 

@@ -32,6 +32,7 @@ from sal.likelihood.hmm_paths import (
 from sal.likelihood.message_passing import (
     ConvergenceError,
     Marginals,
+    MaxMarginals,
     MessageScheduleName,
     max_product,
     sum_product,
@@ -139,9 +140,7 @@ def test_an_iterative_schedule_on_the_loopy_lattice_is_belief_propagation(
     result = sum_product(from_potts(LOOPY, FIELD), schedule=schedule, tolerance=1e-12)
 
     assert not result.exact
-    assert math.isclose(
-        result.log_partition, reference.bethe_log_partition, rel_tol=1e-9
-    )
+    assert math.isclose(result.log_partition, reference.log_partition, rel_tol=1e-9)
     single = np.stack([result.variable[f"s{i}"] for i in range(LOOPY.n_nodes)])
     np.testing.assert_allclose(single, reference.single_site, rtol=1e-8, atol=1e-10)
 
@@ -202,13 +201,13 @@ def test_every_chain_evaluator_is_the_path_enumeration() -> None:
             torch.log(torch.from_numpy(params.transition)),
             torch.log(torch.from_numpy(params.emission)),
         )
-        assert enumerated.log_likelihood == pytest.approx(float(forward), rel=1e-12)
+        assert enumerated.log_evidence == pytest.approx(float(forward), rel=1e-12)
 
         # Forward--backward: evidence, posterior, and the pairwise marginals
         # summing to the posterior on either side.
         run = forward_backward(log_density, log_initial, log_transition)
-        assert abs(run.log_evidence - enumerated.log_likelihood) < 1e-12 * abs(
-            enumerated.log_likelihood
+        assert abs(run.log_evidence - enumerated.log_evidence) < 1e-12 * abs(
+            enumerated.log_evidence
         )
         np.testing.assert_allclose(
             run.posterior, enumerated.posterior, rtol=1e-11, atol=1e-13
@@ -227,7 +226,7 @@ def test_every_chain_evaluator_is_the_path_enumeration() -> None:
         result = sum_product(graph)
         assert result.exact
         assert math.isclose(
-            result.log_partition, enumerated.log_likelihood, rel_tol=1e-13
+            result.log_partition, enumerated.log_evidence, rel_tol=1e-13
         )
         posterior = np.stack([result.variable[f"z{t}"] for t in range(length)])
         np.testing.assert_allclose(
@@ -237,7 +236,7 @@ def test_every_chain_evaluator_is_the_path_enumeration() -> None:
         path = np.array([assignment[f"z{t}"] for t in range(length)])
         np.testing.assert_array_equal(path, enumerated.viterbi)
         assert math.isclose(
-            marginals.log_partition, enumerated.viterbi_log_probability, rel_tol=1e-13
+            marginals.map_log_weight, enumerated.viterbi_log_probability, rel_tol=1e-13
         )
 
         # The NumPy route against the dictionary reference, bitwise (issue #341).
@@ -278,19 +277,19 @@ def test_sum_product_per_site_sums_to_pruning(
     params = load_fixture(SMALL_SITES)
     dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=7)
     alignment = dict(dataset.alignment)
-    transitions = _transitions(params.tau, params.k)
+    transitions = _transitions(params.tau, params.n_states)
 
     total = 0.0
     for s in range(7):
         site = {name: int(states[s]) for name, states in alignment.items()}
         result = sum_product(
-            from_tree(params.tau, params.k, params.pi, site, transitions),
+            from_tree(params.tau, params.n_states, params.pi, site, transitions),
             schedule=schedule,
         )
         assert result.guarantee is guarantee
         total += result.log_partition
 
-    reference = log_likelihood(params.tau, params.k, params.pi, alignment)
+    reference = log_likelihood(params.tau, params.n_states, params.pi, alignment)
     assert math.isclose(total, reference, rel_tol=1e-13)
 
 
@@ -304,12 +303,16 @@ def test_the_leaf_marginals_on_the_tree_are_the_observed_indicators() -> None:
 
     result = sum_product(
         from_tree(
-            params.tau, params.k, params.pi, site, _transitions(params.tau, params.k)
+            params.tau,
+            params.n_states,
+            params.pi,
+            site,
+            _transitions(params.tau, params.n_states),
         )
     )
 
     for name, state in site.items():
-        expected = np.zeros(params.k)
+        expected = np.zeros(params.n_states)
         expected[state] = 1.0
         np.testing.assert_allclose(result.variable[name], expected, atol=ATOL)
 
@@ -423,7 +426,7 @@ def test_max_product_decodes_the_mode_of_the_coupled_e_step_s_path_law() -> None
             assert abs(float(logsumexp(log_q, axis=0))) < 1e-13
             at_decoded = float(log_q[np.flatnonzero((paths == decoded).all(axis=1))[0]])
             assert at_decoded == pytest.approx(
-                marginals.log_partition - step.log_evidence[m], abs=1e-12
+                marginals.map_log_weight - step.log_evidence[m], abs=1e-12
             )
 
             ranked = np.argsort(-log_q)
@@ -533,7 +536,18 @@ def test_a_malformed_graph_is_refused_at_construction() -> None:
 # places and is pinned in `test_message_passing_rust.py`.
 
 
-def _assert_same_marginals(realized: Marginals, expected: Marginals) -> None:
+def _value(beliefs: Marginals | MaxMarginals) -> float:
+    """The scalar each result carries: ``log Z``, or the MAP's log-weight (#1090)."""
+    return (
+        beliefs.log_partition
+        if isinstance(beliefs, Marginals)
+        else beliefs.map_log_weight
+    )
+
+
+def _assert_same_marginals(
+    realized: Marginals | MaxMarginals, expected: Marginals | MaxMarginals
+) -> None:
     assert realized.iterations == expected.iterations
     assert realized.exact == expected.exact
     assert set(realized.variable) == set(expected.variable)
@@ -542,12 +556,10 @@ def _assert_same_marginals(realized: Marginals, expected: Marginals) -> None:
         np.testing.assert_array_equal(realized.variable[name], values, err_msg=name)
     for name, values in expected.factor.items():
         np.testing.assert_array_equal(realized.factor[name], values, err_msg=name)
-    if math.isnan(expected.log_partition):
-        assert math.isnan(realized.log_partition)
+    if math.isnan(_value(expected)):
+        assert math.isnan(_value(realized))
     else:
-        assert math.isclose(
-            realized.log_partition, expected.log_partition, rel_tol=1e-12
-        )
+        assert math.isclose(_value(realized), _value(expected), rel_tol=1e-12)
 
 
 def _coupled_mixed_cardinality() -> FactorGraph:
@@ -594,7 +606,11 @@ def test_the_tree_site_reproduces_the_dictionary_oracle_bitwise() -> None:
     dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=1)
     site = {name: int(states[0]) for name, states in dict(dataset.alignment).items()}
     graph = from_tree(
-        params.tau, params.k, params.pi, site, _transitions(params.tau, params.k)
+        params.tau,
+        params.n_states,
+        params.pi,
+        site,
+        _transitions(params.tau, params.n_states),
     )
 
     _assert_same_marginals(

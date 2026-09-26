@@ -52,13 +52,15 @@ def _four_taxon_posterior() -> WithGaussianPrior:
     params = load_fixture(FOUR_TAXA)
     dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=500)
     return WithGaussianPrior(
-        BranchLengthObjective(params.tau, params.k, params.pi, dict(dataset.alignment)),
+        BranchLengthObjective(
+            params.tau, params.n_states, params.pi, dict(dataset.alignment)
+        ),
         scale=2.0,
     )
 
 
 def _ess_per_gradient(chain: HmcChain) -> np.ndarray:
-    return (effective_sample_size(chain.draws) / chain.force_evaluations).numpy()
+    return effective_sample_size(chain.draws) / chain.spent
 
 
 # --- exact ------------------------------------------------------------------
@@ -178,7 +180,7 @@ def test_the_effective_sample_size_recovers_an_ar1_autocorrelation_time() -> Non
                 phi * draws[index - 1] + math.sqrt(1.0 - phi**2) * noise[index]
             )
 
-        ratio = (effective_sample_size(draws) / (n / tau)).numpy()
+        ratio = effective_sample_size(draws) / (n / tau)
 
         np.testing.assert_allclose(ratio, np.ones(2), rtol=0.2)
 
@@ -189,9 +191,8 @@ def test_the_effective_sample_size_recovers_an_ar1_autocorrelation_time() -> Non
 def test_the_effective_sample_size_of_a_constant_chain_is_its_length() -> None:
     # No autocorrelation to estimate, and a division by a zero variance to
     # avoid; reported as the length rather than as NaN.
-    assert torch.equal(
-        effective_sample_size(torch.ones(50, 1, dtype=torch.float64)),
-        torch.tensor([50.0], dtype=torch.float64),
+    assert np.array_equal(
+        effective_sample_size(torch.ones(50, 1, dtype=torch.float64)), [50.0]
     )
     with pytest.raises(ValueError, match="at least 4 draws"):
         effective_sample_size(torch.zeros(3, 1, dtype=torch.float64))
@@ -239,7 +240,7 @@ def test_a_warm_up_whose_chain_did_not_move_is_refused() -> None:
     with pytest.raises(ValueError, match=r"zero on coordinate\(s\) \[0, 1\]"):
         sample(
             wall,
-            generator=torch.Generator().manual_seed(1),
+            rng=torch.Generator().manual_seed(1),
             n_samples=10,
             step_size=0.1,
             n_steps=3,
@@ -266,7 +267,7 @@ def test_a_chain_without_adaptation_reports_no_warm_up_and_counts_its_gradients(
     )
 
     assert chain.adapted is None
-    assert chain.force_evaluations == 50 * leapfrog.force_evaluations(6)
+    assert chain.spent == 50 * leapfrog.force_evaluations(6)
 
 
 # --- the statistics ----------------------------------------------------------
@@ -276,7 +277,7 @@ def _pooled_acceptance(objective: Objective, seeds: range, n_samples: int) -> fl
     chains = [
         sample(
             objective,
-            generator=torch.Generator().manual_seed(seed),
+            rng=torch.Generator().manual_seed(seed),
             n_samples=n_samples,
             step_size=0.05,
             n_steps=5,
@@ -303,6 +304,7 @@ def test_the_adapted_acceptance_lands_at_its_target_on_the_gaussian() -> None:
 
 @pytest.mark.smoke
 @at_scale("n_seeds", ci=3, stress=20)
+@pytest.mark.release  # 12.0 s in the tier, over the 10 s cap (#1088)
 def test_the_adapted_acceptance_lands_at_its_target_on_the_four_taxon_posterior(
     n_seeds: int,
 ) -> None:
@@ -326,7 +328,7 @@ def _agreement(
     """
     adapted = sample(
         objective,
-        generator=torch.Generator().manual_seed(21),
+        rng=torch.Generator().manual_seed(21),
         n_samples=n_samples,
         step_size=0.05,
         n_steps=5,
@@ -334,7 +336,7 @@ def _agreement(
     )
     fixed = sample(
         objective,
-        generator=torch.Generator().manual_seed(22),
+        rng=torch.Generator().manual_seed(22),
         n_samples=n_samples,
         step_size=fixed_step,
         n_steps=fixed_steps,
@@ -342,8 +344,8 @@ def _agreement(
     )
     for chain in (adapted, fixed):
         assert chain.acceptance_rate > 0.5
-    ess_adapted = effective_sample_size(adapted.draws)
-    ess_fixed = effective_sample_size(fixed.draws)
+    ess_adapted = torch.from_numpy(effective_sample_size(adapted.draws))
+    ess_fixed = torch.from_numpy(effective_sample_size(fixed.draws))
     sd_adapted, sd_fixed = adapted.draws.std(0), fixed.draws.std(0)
 
     mean_gap = (adapted.draws.mean(0) - fixed.draws.mean(0)).abs()
@@ -388,6 +390,7 @@ def test_the_adapted_chain_agrees_with_the_fixed_chain_and_the_exact_gaussian() 
 
 
 @pytest.mark.oracle
+@pytest.mark.release  # 11.6 s in the tier, over the 10 s cap (#1088)
 def test_the_adapted_chain_agrees_with_the_fixed_chain_on_the_four_taxon_posterior() -> (
     None
 ):
@@ -449,7 +452,7 @@ def test_the_adapted_chains_marginals_are_the_exact_gaussians_within_three_error
     """
     below_the_cliff = sample(
         GAUSSIAN,
-        generator=torch.Generator().manual_seed(729),
+        rng=torch.Generator().manual_seed(729),
         n_samples=1200,
         step_size=0.05,
         n_steps=5,
@@ -462,12 +465,12 @@ def test_the_adapted_chains_marginals_are_the_exact_gaussians_within_three_error
     exact_variance = GAUSSIAN.covariance.diagonal()
     mean_errors = (
         (below_the_cliff.draws.mean(0) - GAUSSIAN.mean).abs()
-        * effective_sample_size(below_the_cliff.draws).sqrt()
+        * torch.from_numpy(effective_sample_size(below_the_cliff.draws)).sqrt()
         / exact_variance.sqrt()
     )
     variance_errors = (
         (squares.mean(0) - exact_variance).abs()
-        * effective_sample_size(squares).sqrt()
+        * torch.from_numpy(effective_sample_size(squares)).sqrt()
         / squares.std(0)
     )
     print(
@@ -499,7 +502,7 @@ def _largest_energy_errors(target: float) -> tuple[list[float], float]:
     chains = [
         sample(
             GAUSSIAN,
-            generator=torch.Generator().manual_seed(seed),
+            rng=torch.Generator().manual_seed(seed),
             n_samples=1200,
             step_size=0.05,
             n_steps=5,
@@ -514,6 +517,7 @@ def _largest_energy_errors(target: float) -> tuple[list[float], float]:
 
 
 @pytest.mark.analytic
+@pytest.mark.release  # 10.1 s in the tier, over the 10 s cap (#1088)
 def test_the_energy_error_and_not_the_acceptance_rate_says_the_step_is_safe() -> None:
     """Two warm-ups that each land where they were asked, one on the cliff.
 

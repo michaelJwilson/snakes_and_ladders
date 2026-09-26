@@ -36,6 +36,21 @@ from sal.sim.graph import (
 )
 
 
+def states_of(field: np.ndarray, n_nodes: int, n_states: int | None = None) -> int:
+    """The state count a field carries on its last axis, checked against ``n_states`` if given (issue #1091).
+
+    One reading of the state count for every solver: the field's, so it is
+    never a separate argument that can disagree with it.
+
+    Raises
+    ------
+    ValueError
+        If the field is not ``(n_states,)`` or ``(n_nodes, n_states)``, or
+        ``n_states`` is given and differs from it.
+    """
+    return int(site_field(np.asarray(field), n_nodes, n_states=n_states).shape[1])
+
+
 def site_field(
     field: np.ndarray, n_nodes: int, *, n_states: int | None = None
 ) -> np.ndarray:
@@ -190,6 +205,60 @@ def check_labelling(
 def log_weight_of(field: SiteField | np.ndarray) -> np.ndarray:
     """The log-weight a consumer reads: a :class:`SiteField`'s, or a bare array as given."""
     return field.log_weight if isinstance(field, SiteField) else np.asarray(field)
+
+
+def forbid(field: SiteField | np.ndarray, allowed: np.ndarray) -> np.ndarray:
+    """``field`` with ``-inf`` wherever ``allowed`` is False: the forbidden-label convention (issue #1081).
+
+    A forbidden label is a log-weight of ``-inf`` --- the field says "never
+    this label" and no solver takes a second argument for it. This writes a
+    boolean mask ``(n_nodes, n_states)`` into that form, so a mask and a
+    ``-inf`` field are one problem, bitwise.
+
+    Raises
+    ------
+    ValueError
+        If ``allowed``'s shape is not the field's, or a site allows no label.
+    """
+    values = np.asarray(log_weight_of(field), dtype=float)
+    mask = np.asarray(allowed, dtype=bool)
+    if mask.shape != values.shape:
+        msg = f"allowed has shape {mask.shape}, the field {values.shape}"
+        raise ValueError(msg)
+    if not mask.any(axis=1).all():
+        site = int(np.argmin(mask.any(axis=1)))
+        msg = f"site {site} allows no label"
+        raise ValueError(msg)
+    return np.where(mask, values, -np.inf)
+
+
+def penalized(graph: PottsGraph, rows: np.ndarray) -> np.ndarray:
+    """``rows`` with each ``-inf`` replaced by a finite log-weight no optimum takes (issue #1081).
+
+    For a solver whose arithmetic cannot carry ``-inf`` --- a dual that
+    subtracts two, a continuous relaxation. A forbidden entry at site ``i``
+    becomes ``min_a h_i(a) - (1 + sum_e |J_e|)`` over its allowed labels:
+    moving that site to any allowed label then raises the log-weight by more
+    than any change in the couplings can take away, so every optimum of the
+    penalized problem is allowed and scores what the constrained problem's
+    does, and a lower bound on the penalized minimum energy bounds the
+    constrained one.
+
+    Raises
+    ------
+    ValueError
+        If a site allows no label.
+    """
+    finite = np.isfinite(rows)
+    if finite.all():
+        return rows
+    if not finite.any(axis=1).all():
+        site = int(np.argmin(finite.any(axis=1)))
+        msg = f"site {site} allows no label"
+        raise ValueError(msg)
+    margin = 1.0 + float(np.abs(graph.edge_coupling).sum())
+    floor = np.where(finite, rows, np.inf).min(axis=1, keepdims=True) - margin
+    return np.where(finite, rows, floor)
 
 
 def energies(graph: PottsGraph, field: np.ndarray, states: np.ndarray) -> np.ndarray:
@@ -717,7 +786,7 @@ class SimulatedPottsDataset:
 
 def simulate_potts(
     graph: PottsGraph,
-    field: np.ndarray,
+    field: SiteField | np.ndarray,
     rng: np.random.Generator,
     n_samples: int,
     burn_in: int = 500,
@@ -728,7 +797,7 @@ def simulate_potts(
     ----------
     graph : PottsGraph
         The graph to sample on.
-    field : np.ndarray
+    field : SiteField | np.ndarray
         External field ``h``, shape ``(n_states,)`` or ``(n_nodes, n_states)``.
     rng : np.random.Generator
         Passed in rather than seeded here, so a caller drawing an *ensemble*
@@ -746,6 +815,7 @@ def simulate_potts(
     SimulatedPottsDataset
         The configurations, the graph, and the generating truth.
     """
+    field = log_weight_of(field)
     rows = site_field(field, graph.n_nodes)
     if graph.is_open_chain():
         configurations = _simulate_open_chain_exact(graph, rows, rng, n_samples)
@@ -1071,14 +1141,16 @@ _SPATIO_TILING_REQUIRED_FIELDS = frozenset(
 )
 
 #: The keys a tiling fixture's ``tiles`` declares: the seed its centres are
-#: drawn from and ``k``, the tile count.
-_TILES_KEYS = frozenset({"seed", "k"})
+#: drawn from and ``n_tiles``, the tile count.
+_TILES_KEYS = frozenset({"seed", "n_tiles"})
 
 
-def tile_partition(graph: PottsGraph, k: int, rng: np.random.Generator) -> np.ndarray:
-    """Every node assigned to the nearest of ``k`` centres drawn from ``rng``: a seeded Voronoi tiling.
+def tile_partition(
+    graph: PottsGraph, n_tiles: int, rng: np.random.Generator
+) -> np.ndarray:
+    """Every node assigned to the nearest of ``n_tiles`` centres drawn from ``rng``: a seeded Voronoi tiling.
 
-    The centres are ``k`` distinct nodes drawn uniformly without replacement,
+    The centres are ``n_tiles`` distinct nodes drawn uniformly without replacement,
     in draw order; a node joins the centre nearest it in graph distance
     (hops), and a tie goes to the centre drawn first. Tile ``t`` holds centre
     ``t``.
@@ -1096,8 +1168,8 @@ def tile_partition(graph: PottsGraph, k: int, rng: np.random.Generator) -> np.nd
     ----------
     graph : PottsGraph
         Connected.
-    k : int
-        The tile count, ``1 <= k <= graph.n_nodes``.
+    n_tiles : int
+        The tile count, ``1 <= n_tiles <= graph.n_nodes``.
     rng : np.random.Generator
         Draws the centres, and nothing else.
 
@@ -1109,7 +1181,7 @@ def tile_partition(graph: PottsGraph, k: int, rng: np.random.Generator) -> np.nd
     Raises
     ------
     ValueError
-        If ``k`` is out of range, or a node is reached from no centre, which a
+        If ``n_tiles`` is out of range, or a node is reached from no centre, which a
         disconnected graph allows.
 
     Examples
@@ -1123,14 +1195,14 @@ def tile_partition(graph: PottsGraph, k: int, rng: np.random.Generator) -> np.nd
     >>> tile_partition(chain, 2, np.random.default_rng(3))
     array([0, 0, 0, 1, 1, 1])
     """
-    if not 1 <= k <= graph.n_nodes:
-        msg = f"k must be in [1, {graph.n_nodes}], got {k}"
+    if not 1 <= n_tiles <= graph.n_nodes:
+        msg = f"n_tiles must be in [1, {graph.n_nodes}], got {n_tiles}"
         raise ValueError(msg)
-    centres = rng.choice(graph.n_nodes, size=k, replace=False)
+    centres = rng.choice(graph.n_nodes, size=n_tiles, replace=False)
     offsets, neighbours, _ = graph.compressed_adjacency()
     # Hop counts from each centre, one row per centre in draw order, by a
     # breadth-first search whose frontier expands one layer per step.
-    distances = np.full((k, graph.n_nodes), np.inf)
+    distances = np.full((n_tiles, graph.n_nodes), np.inf)
     for row, centre in enumerate(centres):
         reached = distances[row]
         reached[centre] = 0.0
@@ -1300,17 +1372,17 @@ class SpatioTilingParams:
         if not isinstance(raw, Mapping) or set(raw) != _TILES_KEYS:
             msg = f"{path}: tiles declares exactly {sorted(_TILES_KEYS)}"
             raise ValueError(msg)
-        k = int(raw["k"])
+        n_tiles = int(raw["n_tiles"])
         states = np.asarray(declared["states"], dtype=np.int64)
         strengths = np.asarray(declared["strengths"], dtype=np.float64)
-        if states.shape != (k,) or strengths.shape != (k,):
+        if states.shape != (n_tiles,) or strengths.shape != (n_tiles,):
             msg = (
                 f"{path}: states {states.shape} and strengths {strengths.shape} "
-                f"must each be one per tile, ({k},)"
+                f"must each be one per tile, ({n_tiles},)"
             )
             raise ValueError(msg)
         seed = int(raw["seed"])
-        tiles = tile_partition(graph, k, np.random.default_rng(seed))
+        tiles = tile_partition(graph, n_tiles, np.random.default_rng(seed))
         try:
             field = tiling_field(tiles, states, strengths, n_states)
         except ValueError as error:

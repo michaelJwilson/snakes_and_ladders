@@ -96,6 +96,12 @@ class ConvergenceError(RuntimeError):
     propagation on a Potts graph and the general flooding schedule raised two
     classes of this name until #1059.
 
+    The one exhausted loop that raises rather than returning a
+    :class:`~sal.opt.termination.Termination` (issue #1089): unsettled loopy
+    messages oscillate, so the marginals and the partition estimate read from
+    them at the cap are not an answer to return with a flag, unlike an
+    iterate that only stopped short of its tolerance.
+
     Parameters
     ----------
     method : str
@@ -122,8 +128,8 @@ class ConvergenceError(RuntimeError):
 
 
 @dataclass(frozen=True)
-class Marginals:
-    """What message passing returns.
+class Beliefs:
+    """What sum-product and max-product both return: the beliefs, and how far to trust them.
 
     Parameters
     ----------
@@ -132,10 +138,6 @@ class Marginals:
     factor : Mapping[str, np.ndarray]
         Per factor, the belief over its variables, normalized, in the linear
         domain, shaped as its table.
-    log_partition : float
-        ``log Z`` exactly on a tree; the negated Bethe free energy otherwise.
-        For max-product, the unnormalized log-density at the returned
-        assignment: the maximum, on a tree with a unique maximum.
     iterations : int
         Sweeps run; ``2`` for the tree schedule, ``1`` for each of its halves.
     guarantee : Guarantee
@@ -153,7 +155,6 @@ class Marginals:
 
     variable: Mapping[str, np.ndarray]
     factor: Mapping[str, np.ndarray]
-    log_partition: float
     iterations: int
     guarantee: Guarantee
     tree: bool
@@ -169,6 +170,37 @@ class Marginals:
         return self.guarantee is Guarantee.EXACT or (
             self.tree and self.guarantee is Guarantee.APPROXIMATE
         )
+
+
+@dataclass(frozen=True, kw_only=True)
+class Marginals(Beliefs):
+    """What sum-product returns: :class:`Beliefs` and the log partition function.
+
+    Parameters
+    ----------
+    log_partition : float
+        ``log Z`` exactly on a tree; the negated Bethe free energy otherwise.
+    """
+
+    log_partition: float
+
+
+@dataclass(frozen=True, kw_only=True)
+class MaxMarginals(Beliefs):
+    """What max-product returns: :class:`Beliefs` and the value at its assignment (issue #1090).
+
+    Max-product reused :class:`Marginals`' ``log_partition`` for this, a
+    quantity of another kind under the same name.
+
+    Parameters
+    ----------
+    map_log_weight : float
+        The unnormalized log-density at the returned assignment: the maximum,
+        on a tree with a unique maximum; ``nan`` where the assignment is
+        partial.
+    """
+
+    map_log_weight: float
 
 
 def _logsumexp_last(values: np.ndarray) -> np.ndarray:
@@ -516,12 +548,14 @@ def sum_product(
         run.layout, run.to_variable, run.to_factor, False, run.plan.defined(run.layout)
     )
     return Marginals(
-        variable,
-        factor,
-        run.plan.log_partition(run.layout, run.to_variable, log_partition, run.scale),
-        run.iterations,
-        run.plan.guarantee,
-        graph.is_tree(),
+        variable=variable,
+        factor=factor,
+        log_partition=run.plan.log_partition(
+            run.layout, run.to_variable, log_partition, run.scale
+        ),
+        iterations=run.iterations,
+        guarantee=run.plan.guarantee,
+        tree=graph.is_tree(),
     )
 
 
@@ -533,7 +567,7 @@ def max_product(
     tolerance: float = DEFAULT_TOLERANCE,
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
     backend: Backend = Backend.RUST,
-) -> tuple[dict[str, int], Marginals]:
+) -> tuple[dict[str, int], MaxMarginals]:
     """The MAP assignment by max-marginals, and the max-marginals themselves.
 
     On a tree with a unique maximum this is the exact MAP -- Viterbi on a
@@ -555,8 +589,13 @@ def max_product(
         if len(assignment) == len(graph.variables)
         else math.nan
     )
-    return assignment, Marginals(
-        variable, factor, density, run.iterations, run.plan.guarantee, graph.is_tree()
+    return assignment, MaxMarginals(
+        variable=variable,
+        factor=factor,
+        map_log_weight=density,
+        iterations=run.iterations,
+        guarantee=run.plan.guarantee,
+        tree=graph.is_tree(),
     )
 
 
@@ -574,9 +613,11 @@ __all__ = [
     "DEFAULT_DAMPING",
     "DEFAULT_MAX_ITERATIONS",
     "DEFAULT_TOLERANCE",
+    "Beliefs",
     "ConvergenceError",
     "Guarantee",
     "Marginals",
+    "MaxMarginals",
     "MessageScheduleName",
     "max_product",
     "sum_product",

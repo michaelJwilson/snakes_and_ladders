@@ -102,7 +102,7 @@ def test_the_optimal_value_over_a_long_horizon_reaches_the_enumerated_optimum() 
         # The reward is the rise in the environment's score, so the best return
         # from a start is the distance up to the enumerated optimum.
         assert exact_optimal_value(environment, state, 8) == pytest.approx(
-            best - environment.energy(state), abs=1e-9
+            best - environment.log_weight(state), abs=1e-9
         )
     assert checked >= 5
 
@@ -217,13 +217,13 @@ def test_actor_critic_reaches_the_optimum_at_least_as_often_as_greedy() -> None:
         batch=32,
         max_steps=6,
     )
-    assert training.episodes == 1920
+    assert training.spent == 1920
     best = optimum(environment)[1]
     rng = np.random.default_rng(1)
     reached = np.mean(
         [
             abs(
-                environment.energy(
+                environment.log_weight(
                     rollout(environment, policy, rng, max_steps=6, start=s).states[-1]
                 )
                 - best
@@ -329,7 +329,9 @@ def test_the_bootstrapped_targets_telescope_to_the_closed_form_return() -> None:
         if not episode.actions:
             continue
         assert episode.terminated, "the closed form below needs a finished episode"
-        closed = environment.energy(episode.states[-1]) - environment.energy(start)
+        closed = environment.log_weight(episode.states[-1]) - environment.log_weight(
+            start
+        )
         assert episode.total_reward == pytest.approx(closed, abs=1e-12)
 
         features, targets = temporal_difference_targets(environment, [episode], critic)
@@ -343,6 +345,7 @@ def test_the_bootstrapped_targets_telescope_to_the_closed_form_return() -> None:
         _, returns = state_targets(environment, [episode])
         for step, state in enumerate(episode.states[:-1]):
             assert float(returns[step]) == pytest.approx(
-                environment.energy(episode.states[-1]) - environment.energy(state),
+                environment.log_weight(episode.states[-1])
+                - environment.log_weight(state),
                 abs=1e-12,
             )

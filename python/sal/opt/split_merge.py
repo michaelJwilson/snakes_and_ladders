@@ -54,10 +54,12 @@ from sal.opt.em import EMISSION_MIXTURE_EM, EmConfig
 from sal.opt.emission_mixture import (
     ComponentsAt,
     EmissionMixtureFit,
+    SeedMethod,
     expectation_maximization,
     log_densities,
     partial_expectation_maximization,
     responsibilities_at,
+    seed,
 )
 from sal.track import current
 
@@ -333,3 +335,84 @@ def split_and_merge(
                 improved = True
                 break
     return SplitMerge(fit=fit, steps=tuple(steps))
+
+
+#: Moves :func:`fit` tries per split-and-merge round when refining.
+REFINE_CANDIDATES = 5
+
+
+def fit(
+    observations: np.ndarray,
+    n_components: int,
+    at: ComponentsAt,
+    *,
+    method: SeedMethod | str,
+    rng: np.random.Generator,
+    restarts: int = 1,
+    refine: bool = False,
+    covariate: np.ndarray | None = None,
+    config: EmConfig = EMISSION_MIXTURE_EM,
+) -> EmissionMixtureFit:
+    """Seed, fit, refine and restart a mixture in one call, from the observations alone (issue #1085).
+
+    Each restart seeds by :func:`~sal.opt.emission_mixture.seed` on its own
+    stream --- ``rng.spawn(restarts)``, in order --- fits by
+    :func:`~sal.opt.emission_mixture.expectation_maximization`, and, with
+    ``refine``, runs :func:`split_and_merge` from that fit with the seam the
+    seeding already had. The fit of highest log-likelihood is returned, the
+    first on a tie, so ``restarts=1`` is the hand-wired chain on
+    ``rng.spawn(1)[0]``, bitwise. Every fit carries its ``termination``.
+
+    Parameters
+    ----------
+    observations : np.ndarray
+        Observations, shape ``(n_samples,)`` or ``(n_samples, channels)``.
+    n_components : int
+        Components to fit.
+    at : ComponentsAt
+        The seam the seeding and the splits place components by.
+    method : SeedMethod | str
+        The seeding rule.
+    rng : np.random.Generator
+        Spawns one stream per restart.
+    restarts : int
+        Independent seed-and-fit runs, at least 1.
+    refine : bool
+        Whether to run split-and-merge on each fit, :data:`REFINE_CANDIDATES`
+        moves a round.
+    covariate : np.ndarray | None
+        Per-observation covariate every fit conditions on. Refinement does
+        not take one, so ``refine`` with a covariate is refused.
+    config : EmConfig
+        EM's stopping rule, for the fits and the refinement alike.
+
+    Returns
+    -------
+    EmissionMixtureFit
+        The best restart's fit, refined where asked.
+
+    Raises
+    ------
+    ValueError
+        If ``restarts < 1``, or ``refine`` is asked with a covariate.
+    """
+    if restarts < 1:
+        msg = f"restarts must be at least 1, got {restarts}"
+        raise ValueError(msg)
+    if refine and covariate is not None:
+        msg = "split_and_merge takes no covariate, so a covariate fit cannot be refined"
+        raise ValueError(msg)
+    best: EmissionMixtureFit | None = None
+    for stream in rng.spawn(restarts):
+        start = seed(observations, n_components, at, method=method, rng=stream)
+        fitted = expectation_maximization(
+            observations, *start, config=config, covariate=covariate
+        )
+        if refine:
+            fitted = split_and_merge(
+                fitted, observations, at, candidates=REFINE_CANDIDATES, config=config
+            ).fit
+        if best is None or fitted.log_likelihood > best.log_likelihood:
+            best = fitted
+    assert best is not None
+    return best

@@ -108,7 +108,7 @@ def min_cut(
 
 def ising_ground_state(
     graph: PottsGraph,
-    field_values: np.ndarray,
+    field: np.ndarray,
     kernel: DeclinedKernel,
     threads: int | None = None,
 ) -> tuple[np.ndarray, float]:
@@ -120,9 +120,7 @@ def ising_ground_state(
     rather than read back from the cut.
     """
     _require()
-    values = site_field(
-        np.asarray(field_values, dtype=float), graph.n_nodes, n_states=2
-    )
+    values = site_field(np.asarray(field, dtype=float), graph.n_nodes, n_states=2)
     states = oxisal.ising_ground_state_declined(
         graph.n_nodes,
         np.ascontiguousarray(values, dtype=np.float64).reshape(-1),

@@ -65,7 +65,7 @@ def _fit(
         covariate=exposure,
         config=replace(EM, max_iterations=200),
     )
-    family = result.emissions
+    family = result.components
     assert isinstance(family, NegativeBinomialEmission)
     return np.sort(family.mean.detach().numpy())
 

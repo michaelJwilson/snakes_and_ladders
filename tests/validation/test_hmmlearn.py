@@ -136,7 +136,7 @@ def test_the_streamed_family_fit_is_hmmlearns(family: str) -> None:
     np.testing.assert_allclose(
         ours.log_transition.exp().numpy(), theirs.transition, rtol=1e-9
     )
-    fitted = ours.emissions.named_parameters()
+    fitted = ours.components.named_parameters()
     if family == "gaussian":
         np.testing.assert_allclose(
             fitted["mean"].numpy(), theirs.emission["mean"], rtol=1e-9

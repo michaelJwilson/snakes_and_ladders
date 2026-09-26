@@ -26,6 +26,7 @@ import time
 import numpy as np
 
 from sal.opt.budget import Budget
+from sal.opt.termination import Termination
 from sal.sample.potts_mcmc import (
     ClusterCounter,
     cluster_tempering,
@@ -81,8 +82,10 @@ def run_cluster_tempering(
     )
     return MethodRun(
         labelling=run.best,
-        energy=run.best_energy,
-        spent=run.site_visits,
+        energy=run.energy,
+        spent=run.spent,
         seconds=time.perf_counter() - started,
         trace=(counter,),
+        # A step count fixed before the run: it ends on its budget (#1085).
+        termination=Termination.after(steps, converged=False),
     )

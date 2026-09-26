@@ -65,7 +65,7 @@ oracle: enumeration
 seed: 20260906
 n_sites: 400
 tolerance: 0.01
-k: 4
+n_states: 4
 pi: [0.25, 0.25, 0.25, 0.25]
 tau:
   name: root

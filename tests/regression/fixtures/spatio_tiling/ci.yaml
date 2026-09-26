@@ -25,7 +25,7 @@ coupling: 0.7
 # labelling on any two states is 1.40 above it.
 tiles:
   seed: 6
-  k: 3
+  n_tiles: 3
 
 # One favoured state per tile, each distinct, so all three are in play.
 states: [0, 1, 2]

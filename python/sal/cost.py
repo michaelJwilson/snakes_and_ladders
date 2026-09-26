@@ -51,6 +51,8 @@ class Cost(StrEnum):
     # comparison's table names the unit in the words it named it in before.
     DECISIONS = "decisions"
     """Actions a policy takes in an environment: the learner's unit (`learn/CLAUDE.md`)."""
+    EPISODES = "episodes"
+    """Episodes a learner trains on, each a rollout to termination (issue #1090)."""
     FITS = "fits"
     """Whole fits, where one run of the inner optimizer is the indivisible cost."""
     SITE_VISITS = "site visits"

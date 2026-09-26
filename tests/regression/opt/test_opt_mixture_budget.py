@@ -163,7 +163,7 @@ def _em_then_polish(
         # A component collapsed: refused, and charged the iterations it had.
         return Outcome(np.inf, budget.size - POLISH_RESERVE)
     value, polish = _polish(fixture, _theta_of(fixture, em), -em.log_likelihood)
-    return Outcome(value, em.iterations + polish)
+    return Outcome(value, em.termination.iterations + polish)
 
 
 def _anneal(fixture: Fixture, budget: Budget, rng: np.random.Generator) -> Outcome:
@@ -177,9 +177,9 @@ def _anneal(fixture: Fixture, budget: Budget, rng: np.random.Generator) -> Outco
         torch.Generator().manual_seed(int(rng.integers(2**31 - 1))),
         step_size=STEP_SIZE,
         n_steps=N_STEPS,
-        theta0=theta,
+        start=theta,
     )
-    value, polish = _polish(fixture, run.theta, run.value)
+    value, polish = _polish(fixture, run.best, run.value)
     return Outcome(value, counted.calls + polish)
 
 
@@ -195,9 +195,9 @@ def _tempering(fixture: Fixture, budget: Budget, rng: np.random.Generator) -> Ou
         n_rounds,
         step_size=STEP_SIZE,
         n_steps=N_STEPS,
-        theta0=theta,
+        start=theta,
     )
-    value, polish = _polish(fixture, run.theta, run.value)
+    value, polish = _polish(fixture, run.best, run.value)
     return Outcome(value, counted.calls + polish)
 
 
@@ -298,6 +298,7 @@ def _assert_nothing_beats_the_referee(measurement: Measurement) -> None:
 
 
 @pytest.mark.end2end
+@pytest.mark.release  # 34.3 s in the tier, over the 10 s cap (#1088)
 def test_at_eight_starts_restarts_reach_the_optimum_from_the_most_starts() -> None:
     # The per-pull-request tier of the release measurement below: the same code
     # on its first 8 starts. Realized: restarts 2/8, annealing 1/8, tempering

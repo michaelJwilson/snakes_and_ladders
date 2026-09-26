@@ -9,10 +9,13 @@ the science is refereed in `test_opt_fit.py`, `test_opt_mixture.py`,
 
 from __future__ import annotations
 
+import ast
 from dataclasses import replace
+from pathlib import Path
 
 import numpy as np
 import pytest
+import sal
 import torch
 from sal.cost import Cost
 from sal.emissions import GaussianEmission
@@ -121,18 +124,18 @@ def test_the_iteration_count_a_caller_compared_is_the_reason_already() -> None:
         draws, _WEIGHTS, _components(), config=replace(EM, max_iterations=200)
     )
 
-    assert capped.iterations == 1
+    assert capped.termination.iterations == 1
     assert capped.termination == Termination(
         converged=False, iterations=1, reason=Stop.BUDGET
     )
     assert settled.termination is not None
     assert settled.termination.converged
-    assert settled.termination.iterations == settled.iterations
+    assert 1 < settled.termination.iterations < 200
 
 
 @pytest.mark.smoke
 def test_the_optimal_property_answers_about_the_gap_and_not_about_the_loop() -> None:
-    # Encoding 5: `Certificate.optimal` was read as "did it finish" and is a
+    # Encoding 5: `BoundedLabelling.optimal` was read as "did it finish" and is a
     # statement about the instance --- a run whose sweeps settled can leave a
     # gap open. One sweep cannot settle, so the two answers separate here.
     graph = lattice_graph((4, 4), BoundaryCondition.PERIODIC, coupling=-1.0)
@@ -140,15 +143,15 @@ def test_the_optimal_property_answers_about_the_gap_and_not_about_the_loop() -> 
     # sweep found it and both runs then settle on sweep one.
     field = np.random.default_rng([860, 3]).normal(size=(graph.n_nodes, 3))
 
-    capped = dual_bound(graph, field, iterations=1)
-    settled = dual_bound(graph, field, iterations=400)
+    capped = dual_bound(graph, field, max_iterations=1)
+    settled = dual_bound(graph, field, max_iterations=400)
 
     assert capped.termination == Termination(
         converged=False, iterations=1, reason=Stop.BUDGET
     )
     assert settled.termination is not None
     assert settled.termination.converged
-    assert settled.termination.iterations == settled.iterations
+    assert 1 < settled.termination.iterations <= 400
 
 
 @pytest.mark.smoke
@@ -161,3 +164,25 @@ def test_a_termination_that_contradicts_itself_is_refused() -> None:
         Termination(converged=False, iterations=3, reason=Stop.CONVERGED)
     with pytest.raises(ValueError, match="at least no iterations"):
         Termination(converged=True, iterations=-1, reason=Stop.CONVERGED)
+
+
+@pytest.mark.critical
+@pytest.mark.smoke
+def test_every_result_with_a_termination_requires_one() -> None:
+    # Issue #1085: a `termination` field is required on every result that has
+    # one, so a caller handles one case and not three. Read from the source,
+    # so a new result declaring `Termination | None` fails here.
+    package = Path(sal.__file__).resolve().parent
+    optional = []
+    for path in sorted(package.rglob("*.py")):
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.AnnAssign)
+                and isinstance(node.target, ast.Name)
+                and node.target.id == "termination"
+                and "None" in ast.unparse(node.annotation)
+            ):
+                optional.append(f"{path.relative_to(package)}:{node.lineno}")
+
+    assert optional == []

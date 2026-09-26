@@ -210,12 +210,14 @@ def test_every_declined_kernel_gives_the_package_expansion(
     # same cycle count, and the final energy bitwise equal. A labelling may
     # differ only where a cut is degenerate, and none is on this instance.
     graph, field = _spots(12, n_states)
-    reference = alpha_expansion(graph, field, n_states, backend=Backend.RUST)
-    reference_swap = alpha_beta_swap(graph, field, n_states, backend=Backend.RUST)
+    reference = alpha_expansion(graph, field, backend=Backend.RUST, n_states=n_states)
+    reference_swap = alpha_beta_swap(
+        graph, field, backend=Backend.RUST, n_states=n_states
+    )
 
     declined_inner_solver(kernel)
-    result = alpha_expansion(graph, field, n_states, backend=Backend.RUST)
-    swapped = alpha_beta_swap(graph, field, n_states, backend=Backend.RUST)
+    result = alpha_expansion(graph, field, backend=Backend.RUST, n_states=n_states)
+    swapped = alpha_beta_swap(graph, field, backend=Backend.RUST, n_states=n_states)
 
     assert result.energy.hex() == reference.energy.hex()
     assert np.array_equal(result.labelling, reference.labelling)

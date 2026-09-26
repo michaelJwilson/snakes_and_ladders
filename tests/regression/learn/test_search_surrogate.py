@@ -62,7 +62,7 @@ def _alignments(n: int) -> tuple[list[dict[str, np.ndarray]], int, np.ndarray]:
         )
         for seed in range(n)
     ]
-    return alignments, params.k, np.asarray(params.pi)
+    return alignments, params.n_states, np.asarray(params.pi)
 
 
 def _recorded_target(problem: str, tier: str) -> TreeTarget:
@@ -99,7 +99,7 @@ def test_learned_surrogates_rank_held_out_neighbourhoods() -> None:
         SetSurrogate(n_features, n_token_features),
     ):
         fitted = fit_surrogate(
-            model, train, validation, generator=torch.Generator().manual_seed(0)
+            model, train, validation, rng=torch.Generator().manual_seed(0)
         )
         predicted = fitted.predict(test)
         assert r_squared(predicted, test.targets) > 0.8
@@ -142,7 +142,7 @@ def test_learned_surrogates_rank_a_held_out_alignment_from_the_recorded_fits() -
         SetSurrogate(n_features, n_token_features),
     ):
         fitted = fit_surrogate(
-            model, train, validation, generator=torch.Generator().manual_seed(0)
+            model, train, validation, rng=torch.Generator().manual_seed(0)
         )
         predicted = fitted.predict(test)
         assert r_squared(predicted, test.targets) > 0.8
@@ -188,7 +188,7 @@ def test_the_learned_surrogate_ranks_the_topologies_the_plug_in_bound_ranks() ->
         LinearSurrogate(examples.features.shape[1]),
         train,
         validation,
-        generator=torch.Generator().manual_seed(0),
+        rng=torch.Generator().manual_seed(0),
     )
 
     held_out = int(np.unique(examples.groups[split.test])[0])
@@ -217,7 +217,7 @@ def test_surrogate_ranked_search_reaches_what_the_full_search_reaches() -> None:
             params, np.random.default_rng(params.seed), n_sites=2000
         ).alignment
     )
-    k, pi = params.k, np.asarray(params.pi)
+    k, pi = params.n_states, np.asarray(params.pi)
     for seed in range(3):
         full = infer(alignment, k, rng=np.random.default_rng(seed), moves=MoveSet.NNI)
         ranked = infer(

@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 import torch
 from sal.emissions import BetaBinomialEmission, mstep
-from sal.opt.mixture import responsibilities
+from sal.opt.mixture import responsibilities_torch
 from sal.search.projection import flatten, project
 from sal.sim.count_pairs import binned_model
 from sal.sim.fixtures import fixture
@@ -38,7 +38,7 @@ def problem() -> Problem:
     truth = flatten(params)
     values = torch.as_tensor(instance.observations, dtype=torch.float64)
     k = truth.n_states
-    posterior = responsibilities(
+    posterior = responsibilities_torch(
         values, torch.full((k,), -float(np.log(k)), dtype=torch.float64), truth
     )
     channel = truth._successes

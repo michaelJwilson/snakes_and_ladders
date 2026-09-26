@@ -17,7 +17,7 @@ import torch
 from sal import emissions
 from sal.backend import Backend
 from sal.emissions import BetaBinomialEmission, CountPairEmission, mstep
-from sal.opt.mixture import responsibilities
+from sal.opt.mixture import responsibilities_torch
 from sal.search.projection import flatten, project
 from sal.sim.count_pairs import binned_model
 from sal.sim.emission_mixture import simulate_emission_mixture
@@ -34,7 +34,7 @@ def _mixture(tier: str) -> tuple[torch.Tensor, torch.Tensor, CountPairEmission]:
     values = torch.as_tensor(
         simulate_emission_mixture(params).observations, dtype=torch.float64
     )
-    posterior = responsibilities(
+    posterior = responsibilities_torch(
         values, torch.log(torch.as_tensor(params.weights, dtype=torch.float64)), truth
     )
     return values, posterior, truth
@@ -112,7 +112,7 @@ def test_the_kernel_takes_a_trial_count_per_component() -> None:
     truth = flatten(params)
     values = torch.as_tensor(instance.observations, dtype=torch.float64)
     k = truth.n_states
-    posterior = responsibilities(
+    posterior = responsibilities_torch(
         values, torch.full((k,), -float(np.log(k)), dtype=torch.float64), truth
     )
     channel = truth._successes

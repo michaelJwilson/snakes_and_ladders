@@ -94,14 +94,17 @@ LATTICE_TOKEN_NAMES = (
 
 
 def tree_features(
-    topology: Topology, alignment: Mapping[str, np.ndarray], k: int, pi: np.ndarray
+    topology: Topology,
+    alignment: Mapping[str, np.ndarray],
+    n_states: int,
+    pi: np.ndarray,
 ) -> np.ndarray:
     """One vector per topology, in ``TREE_FEATURE_NAMES`` order, per-site where it scales with sites."""
     n_sites = int(next(iter(alignment.values())).shape[0])
-    distances = jc_distances(alignment, k)
+    distances = jc_distances(alignment, n_states)
     lengths = least_squares_lengths(topology, distances)
-    plug_in = float(PlugInLikelihood(k, pi)(topology, alignment))
-    bound = float(ParsimonyUpperBound(k, pi)(topology, alignment))
+    plug_in = float(PlugInLikelihood(n_states, pi)(topology, alignment))
+    bound = float(ParsimonyUpperBound(n_states, pi)(topology, alignment))
     fitch = float(site_fitch_scores(topology, alignment).sum())
     return np.array(
         [
@@ -118,10 +121,10 @@ def tree_features(
 
 
 def tree_tokens(
-    topology: Topology, alignment: Mapping[str, np.ndarray], k: int
+    topology: Topology, alignment: Mapping[str, np.ndarray], n_states: int
 ) -> np.ndarray:
     """One row per branch, in ``TREE_TOKEN_NAMES`` order: its least-squares length, how evenly its split divides the taxa, and the mean distance across and within the split."""
-    distances = jc_distances(alignment, k)
+    distances = jc_distances(alignment, n_states)
     lengths = least_squares_lengths(topology, distances)
     names = sorted(alignment)
     rows = []
@@ -155,20 +158,12 @@ def lattice_features(graph: PottsGraph, field: np.ndarray) -> np.ndarray:
     covariate pushes and how unevenly. A shared field makes the second of
     them zero, which is the statement that there is no covariate.
     """
-    # The mean-field bound is differentiable and takes a tensor; it is the one
-    # call here that loads torch, and the field crosses into it once.
-    import torch
-
     rows = site_field(np.asarray(field, dtype=np.float64), graph.n_nodes)
     n_nodes = float(graph.n_nodes)
     span = rows.max(axis=1) - rows.min(axis=1)
     return np.array(
         [
-            float(
-                mean_field_log_partition(
-                    graph, torch.from_numpy(rows), n_iterations=MEAN_FIELD_ITERATIONS
-                )
-            )
+            mean_field_log_partition(graph, rows, n_iterations=MEAN_FIELD_ITERATIONS)
             / n_nodes,
             decoupled_log_partition(graph, rows) / n_nodes,
             saturated_log_partition(graph, rows) / n_nodes,

@@ -21,6 +21,7 @@ from sal.likelihood import message_passing_reference as reference
 from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
 from sal.likelihood.message_passing import (
     Marginals,
+    MaxMarginals,
     MessageScheduleName,
     _run,
     max_product,
@@ -93,7 +94,18 @@ TREES = {
 }
 
 
-def _assert_agrees(realized: Marginals, expected: Marginals, tag: str) -> None:
+def _value(beliefs: Marginals | MaxMarginals) -> float:
+    """The scalar each result carries: ``log Z``, or the MAP's log-weight (#1090)."""
+    return (
+        beliefs.log_partition
+        if isinstance(beliefs, Marginals)
+        else beliefs.map_log_weight
+    )
+
+
+def _assert_agrees(
+    realized: Marginals | MaxMarginals, expected: Marginals | MaxMarginals, tag: str
+) -> None:
     """The decisions equal, the floats inside the declared tolerance."""
     assert realized.iterations == expected.iterations
     assert realized.guarantee is expected.guarantee
@@ -116,11 +128,11 @@ def _assert_agrees(realized: Marginals, expected: Marginals, tag: str) -> None:
             atol=0.0,
             err_msg=f"{tag}: factor {name}",
         )
-    if math.isnan(expected.log_partition):
-        assert math.isnan(realized.log_partition)
+    if math.isnan(_value(expected)):
+        assert math.isnan(_value(realized))
     else:
-        assert realized.log_partition == pytest.approx(
-            expected.log_partition, rel=CROSS_DEVICE_RTOL_FLOAT64
+        assert _value(realized) == pytest.approx(
+            _value(expected), rel=CROSS_DEVICE_RTOL_FLOAT64
         )
 
 
