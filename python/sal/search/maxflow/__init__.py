@@ -321,15 +321,26 @@ class GroundState:
         yield from (self.configuration, self.energy)
 
 
-def max_flow(network: FlowNetwork, source: int, sink: int) -> MinCut:
+def max_flow(
+    network: FlowNetwork,
+    source: int,
+    sink: int,
+    *,
+    backend: Backend = Backend.PYTHON,
+) -> MinCut:
     """Dinic's algorithm: repeated level graphs and blocking flows.
 
     Parameters
     ----------
     network : FlowNetwork
-        Mutated in place --- its capacities become residual capacities.
+        Mutated in place --- its capacities become residual capacities. The
+        Rust route leaves it unchanged.
     source, sink : int
         Terminals.
+    backend : Backend
+        ``PYTHON``, this function's Dinic and the default; ``RUST``,
+        :func:`sal.search.maxflow.rust.min_cut`, reached through this
+        gateway rather than imported by a caller (issue #1070).
 
     Returns
     -------
@@ -342,6 +353,8 @@ def max_flow(network: FlowNetwork, source: int, sink: int) -> MinCut:
         If the terminals coincide, where "the" flow is unbounded and every
         answer is as good as any other.
     """
+    if (rust := twin("max_flow", backend, __name__)) is not None:
+        return cast("MinCut", rust.min_cut(network, source, sink))
     if source == sink:
         msg = f"source and sink must differ, both are {source}"
         raise ValueError(msg)

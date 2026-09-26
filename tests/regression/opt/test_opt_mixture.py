@@ -35,7 +35,7 @@ from sal.opt.mixture import (
     kmeans_plus_plus,
     mixture_log_likelihood,
     optimal_clustering_cost,
-    responsibilities,
+    responsibilities_torch,
     seeding_guarantee,
     uniform_seeds,
 )
@@ -137,7 +137,7 @@ def test_the_component_m_step_is_the_emission_family_s_own() -> None:
     components = GaussianEmission([-1.0, 1.0], [2.0, 2.0], 1e-9)
     log_weight = torch.log(torch.tensor([0.4, 0.6], dtype=torch.float64))
 
-    posterior = responsibilities(values, log_weight, components)
+    posterior = responsibilities_torch(values, log_weight, components)
     direct = components.reestimate(
         values.reshape(1, -1), posterior.reshape(1, *posterior.shape)
     ).emissions
@@ -159,7 +159,7 @@ def test_the_responsibilities_are_a_distribution_over_components() -> None:
     values = torch.as_tensor(_dataset(n_samples=100), dtype=torch.float64)
     components = GaussianEmission(MEAN, SCALE, 1e-12)
 
-    posterior = responsibilities(
+    posterior = responsibilities_torch(
         values, torch.log(torch.as_tensor(WEIGHTS)), components
     )
 
@@ -440,7 +440,7 @@ def test_the_evidence_and_the_e_step_match_the_enumerated_assignments() -> None:
             rtol=1e-12,
         )
         assert_allclose(
-            responsibilities(values, log_weight, family).numpy(),
+            responsibilities_torch(values, log_weight, family).numpy(),
             exact.responsibilities,
             atol=1e-12,
         )
@@ -480,7 +480,7 @@ def test_the_seeded_start_lands_in_the_enumerated_maximum_posterior_assignment()
             torch.exp(named["log_weight"]).numpy(), family, observations
         )
         drift = np.abs(
-            responsibilities(
+            responsibilities_torch(
                 torch.as_tensor(observations, dtype=torch.float64),
                 named["log_weight"],
                 family,
@@ -734,7 +734,7 @@ def test_the_streamed_mixture_em_is_the_tensor_one() -> None:
         streamed.components.scale.numpy(), oracle.components.scale.numpy(), atol=1e-10
     )
     assert_allclose(streamed.log_likelihood, oracle.log_likelihood, rtol=1e-12)
-    assert streamed.iterations == oracle.iterations == 10
+    assert streamed.termination.iterations == oracle.termination.iterations == 10
 
 
 @pytest.mark.oracle

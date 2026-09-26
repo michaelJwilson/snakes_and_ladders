@@ -275,7 +275,7 @@ def polish_by_baum_welch(
         {
             "log_initial": fitted.log_initial,
             "log_transition": fitted.log_transition,
-            **fitted.emissions.named_parameters(),
+            **fitted.components.named_parameters(),
         }
     )
     return PolishedPoint(

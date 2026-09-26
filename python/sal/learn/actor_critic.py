@@ -18,6 +18,7 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 
+from sal.cost import Cost
 from sal.learn.critic import (
     Critic,
     fit_critic,
@@ -25,27 +26,25 @@ from sal.learn.critic import (
     state_values,
 )
 from sal.learn.environment import Environment, Episode
-from sal.learn.policy import TrainablePolicy
+from sal.learn.policy import TrainablePolicy, TrainingRun
 from sal.learn.rollout import log_probabilities_of, rollout
+from sal.opt.termination import Termination
 
 
-@dataclass(frozen=True)
-class ActorCriticTraining:
-    """The outcome of an actor-critic run.
+@dataclass(frozen=True, kw_only=True)
+class ActorCriticTraining(TrainingRun):
+    """The outcome of an actor-critic run (issue #1090).
+
+    A :class:`~sal.learn.policy.TrainingRun`, ``spent`` in episodes, whose
+    ``mean_returns`` is a diagnostic, as in ``reinforce.py``.
 
     Parameters
     ----------
-    mean_returns : tuple[float, ...]
-        Mean sampled return per iteration; a diagnostic, as in ``reinforce.py``.
     critic_losses : tuple[float, ...]
         The critic's final squared error per iteration.
-    episodes : int
-        Episodes sampled in total, the budget's unit.
     """
 
-    mean_returns: tuple[float, ...]
     critic_losses: tuple[float, ...]
-    episodes: int
 
 
 def advantage_surrogate_loss[S, A](
@@ -130,7 +129,11 @@ def actor_critic[S, A](
             float(np.mean([episode.total_reward for episode in episodes]))
         )
     return ActorCriticTraining(
-        tuple(mean_returns), tuple(critic_losses), iterations * batch
+        mean_returns=tuple(mean_returns),
+        critic_losses=tuple(critic_losses),
+        spent=iterations * batch,
+        unit=Cost.EPISODES,
+        termination=Termination.after(iterations, converged=False),
     )
 
 

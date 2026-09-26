@@ -95,6 +95,7 @@ from sal.search.icm import (
     SweepOrder,
     check_min_sites,
     iterated_conditional_modes,
+    merge_small_labels,
 )
 from sal.sim.factor_graph import from_potts
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
@@ -751,6 +752,57 @@ def run_descent(
     )
 
 
+def run_merge(
+    problem: Problem | Rung,
+    budget: Budget,
+    rng: np.random.Generator,
+    *,
+    start: np.ndarray | None = None,
+    min_sites: int | None = None,
+    backend: Backend | None = None,
+) -> MethodRun:
+    """The stage after a solver that floors its labelling: ``merge(min_sites=k)`` (issue #1081).
+
+    :func:`~sal.search.icm.merge_small_labels` on the labelling the stage
+    before handed over, charged ``visits_per_sweep`` per ICM sweep it ran, as
+    :func:`run_descent` is. So ``alpha-expansion>merge(min_sites=20)`` is the
+    expansion's labelling with no class under 20 sites, at a local minimum.
+
+    Raises
+    ------
+    ValueError
+        If there is no labelling to floor --- a merge is never a first stage
+        --- or ``min_sites`` is not given.
+    """
+    if start is None:
+        msg = (
+            "'merge' floors the labelling a stage before it found; it is no first stage"
+        )
+        raise ValueError(msg)
+    if min_sites is None:
+        msg = "'merge' needs min_sites, e.g. merge(min_sites=20)"
+        raise ValueError(msg)
+    problem = _problem(problem)
+    check_min_sites(min_sites, problem.n_nodes)
+    started = time.perf_counter()
+    floored = merge_small_labels(
+        problem.graph,
+        problem.field,
+        np.array(start, dtype=np.int64),
+        rng,
+        min_sites=min_sites,
+        max_iterations=budget.size // problem.visits_per_sweep,
+        backend=Backend.NUMBA if backend is None else backend,
+    )
+    return MethodRun(
+        labelling=floored.labelling,
+        energy=floored.energy,
+        spent=floored.sweeps * problem.visits_per_sweep,
+        seconds=time.perf_counter() - started,
+        termination=floored.termination,
+    )
+
+
 #: What a stage hands the next: its labelling (issue #1077).
 handover = operator.attrgetter("labelling")
 
@@ -1161,8 +1213,9 @@ FLOORED = frozenset({"icm", "icm-random"})
 _ANNEALED_METHODS = frozenset({"anneal", "swendsen-wang", "wolff"})
 
 #: Parts a chain can name beside :data:`METHODS` and :data:`ARMS`: the warm
-#: chain's descent, which charges only the sweeps it ran (issue #1077).
-STAGES: dict[str, Method] = {"descent": run_descent}
+#: chain's descent, which charges only the sweeps it ran (issue #1077), and
+#: the merge that floors a labelling after any solver (issue #1081).
+STAGES: dict[str, Method] = {"descent": run_descent, "merge": run_merge}
 
 #: Separates the parts of a chain in a method name.
 CHAIN = ">"
@@ -1170,7 +1223,7 @@ CHAIN = ">"
 
 def _options(name: str) -> frozenset[str]:
     """The keyword options the part ``name`` takes: an arm's are an anneal's."""
-    if name in FLOORED:
+    if name in FLOORED or name == "merge":
         return DESCENT_OPTIONS
     if name in _ANNEALED_METHODS:
         return ANNEAL_OPTIONS
@@ -1826,8 +1879,12 @@ def ground_state(
         keywords["schedule"] = schedule
     if steps is not None:
         keywords["steps"] = steps
-    if takes & DESCENT_OPTIONS:
+    # Only what the caller gave: a default forwarded would override the
+    # argument a stage was built with, `icm(min_sites=5)`'s floor or
+    # `merge(min_sites=20)`'s (issue #1081).
+    if backend is not None:
         keywords["backend"] = backend
+    if min_sites != 0:
         keywords["min_sites"] = min_sites
     return solver(problem, budget, rng, start=start, **keywords)
 

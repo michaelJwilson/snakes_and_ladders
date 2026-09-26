@@ -22,9 +22,11 @@ from sal.emissions.base import (
     ParameterDomainError,
     Reestimate,
     Values,
+    as_array,
     as_tensor,
     exposure,
     refuse_covariate,
+    split_covariate,
     trial_count,
     validated_exposure,
     validated_trials,
@@ -1066,6 +1068,14 @@ class CountPairEmission(EmissionFamily, CountEmissionFamily):
     negative argument: a fit whose likelihood is ``nan`` is not a fit that
     lost.
 
+    **The independent form takes a covariate per channel** (issue #1083):
+    shape ``(..., 2)`` as an observation is, channel ``0`` the total's
+    exposure and channel ``1`` the successes' trial count per observation,
+    split by :func:`~sal.emissions.base.split_covariate` as
+    ``sim.count_pairs.IndependentCountPair`` splits it. The declared
+    ``trials`` then stand only where no covariate is given. The joint form
+    refuses a covariate: its trials are the observed total already.
+
     Parameters
     ----------
     dispersion, mean : Values
@@ -1229,13 +1239,17 @@ class CountPairEmission(EmissionFamily, CountEmissionFamily):
         np.ndarray
             Shape ``(n_draws, 2)``.
         """
-        refuse_covariate(self, covariate)
-        totals = self._total.sample(states, rng)
+        if self._joint:
+            refuse_covariate(self, covariate)
+        exposure, trials = split_covariate(
+            self, None if covariate is None else as_array(covariate)
+        )
+        totals = self._total.sample(states, rng, exposure)
         if self._joint:
             rate = rng.beta(self._alpha.numpy()[states], self._beta.numpy()[states])
             successes = np.asarray(rng.binomial(totals.astype(np.int64), rate))
         else:
-            successes = self._success.sample(states, rng)
+            successes = self._success.sample(states, rng, trials)
         return np.stack([totals, successes], axis=-1)
 
     def log_density(
@@ -1253,8 +1267,16 @@ class CountPairEmission(EmissionFamily, CountEmissionFamily):
         torch.Tensor
             Shape ``(..., n_states)``.
         """
-        refuse_covariate(self, covariate)
+        if self._joint:
+            refuse_covariate(self, covariate)
         values = observations.to(self._alpha.dtype)
+        if covariate is not None:
+            # Each channel scored by its own family against its own covariate,
+            # the per-observation trials included (issue #1083).
+            exposure, trials_given = split_covariate(self, covariate)
+            return self._total.log_density(
+                values[..., 0], covariate=exposure
+            ) + self._success.log_density(values[..., 1], covariate=trials_given)
         totals = values[..., 0].unsqueeze(-1)
         successes = values[..., 1].unsqueeze(-1)
         trials = totals if self._joint else self._success.trials
@@ -1356,7 +1378,8 @@ class CountPairEmission(EmissionFamily, CountEmissionFamily):
             were, at the boundary if either was, and reporting the larger
             iteration count and residual of the two.
         """
-        refuse_covariate(self, covariate)
+        if self._joint:
+            refuse_covariate(self, covariate)
         posterior = as_tensor(posterior)
         values = (
             as_tensor(observations, self.observation_dtype)
@@ -1365,10 +1388,16 @@ class CountPairEmission(EmissionFamily, CountEmissionFamily):
         )
         weights = posterior.reshape(-1, self.n_states)
         totals, successes = values[:, 0], values[:, 1]
+        exposure, trials = split_covariate(
+            self,
+            None
+            if covariate is None
+            else as_tensor(covariate).reshape(-1, self.N_CHANNELS),
+        )
 
-        depth = self._total.reestimate(totals, weights)
+        depth = self._total.reestimate(totals, weights, exposure)
         if not self._joint:
-            rate = self._success.reestimate(successes, weights)
+            rate = self._success.reestimate(successes, weights, trials)
             return Reestimate(
                 CountPairEmission(
                     depth.emissions.dispersion,

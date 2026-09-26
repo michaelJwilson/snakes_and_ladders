@@ -20,7 +20,7 @@ from sal.emissions import (
     NegativeBinomialEmission,
     mstep,
 )
-from sal.opt.mixture import responsibilities
+from sal.opt.mixture import responsibilities_torch
 from sal.sim.emission_mixture import simulate_emission_mixture
 from sal.sim.fixtures import fixture
 
@@ -36,7 +36,7 @@ def _draw(tier: str) -> tuple[torch.Tensor, torch.Tensor, NegativeBinomialEmissi
     values = torch.as_tensor(
         simulate_emission_mixture(params).observations, dtype=torch.float64
     )
-    posterior = responsibilities(
+    posterior = responsibilities_torch(
         values, torch.log(torch.as_tensor(params.weights, dtype=torch.float64)), truth
     )
     total = truth.total

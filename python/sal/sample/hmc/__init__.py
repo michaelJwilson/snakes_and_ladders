@@ -1043,7 +1043,7 @@ def compiled_trajectory(
     return PhaseSpace(torch.from_numpy(end), torch.from_numpy(velocity))
 
 
-def effective_sample_size(draws: torch.Tensor) -> torch.Tensor:
+def effective_sample_size(draws: torch.Tensor | np.ndarray) -> np.ndarray:
     """Effective sample size per coordinate, by Geyer's initial positive sequence.
 
     The integrated autocorrelation time ``tau = 1 + 2 sum_k rho_k`` is
@@ -1056,13 +1056,14 @@ def effective_sample_size(draws: torch.Tensor) -> torch.Tensor:
 
     Parameters
     ----------
-    draws : torch.Tensor
+    draws : torch.Tensor | np.ndarray
         Shape ``(n, dimension)``, one chain.
 
     Returns
     -------
-    torch.Tensor
-        Shape ``(dimension,)``. A coordinate that did not move has no
+    np.ndarray
+        Shape ``(dimension,)``, a diagnostic and so NumPy, whichever the draws
+        came as (issue #1092). A coordinate that did not move has no
         autocorrelation and is reported as ``n``.
 
     Raises
@@ -1071,6 +1072,7 @@ def effective_sample_size(draws: torch.Tensor) -> torch.Tensor:
         If fewer than 4 draws are given, which is fewer than the two pairs
         the truncation rule needs.
     """
+    draws = torch.as_tensor(draws)
     n = int(draws.shape[0])
     if n < 4:
         msg = f"effective sample size needs at least 4 draws, got {n}"
@@ -1092,4 +1094,4 @@ def effective_sample_size(draws: torch.Tensor) -> torch.Tensor:
         cutoff = int(negative[0]) if negative.numel() else int(pairs.shape[0])
         tau = -1.0 + 2.0 * float(pairs[:cutoff].sum())
         sizes[coordinate] = n / tau
-    return sizes
+    return sizes.numpy()

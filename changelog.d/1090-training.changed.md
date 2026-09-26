@@ -1,0 +1,1 @@
+The four trainers return one `sal.learn.policy.TrainingRun` each: `reinforce`'s `Training`, `PPOTraining`, `ActorCriticTraining` and `ExpertIterationTraining`. The cost is `spent` in a declared `unit` (was `episodes`, or `evaluations` on expert iteration), counted in the new `Cost.EPISODES` for the policy-gradient trainers, and each carries a `termination` (#1090).

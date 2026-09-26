@@ -23,7 +23,7 @@ from sal.opt.emission_mixture import (
     expectation_maximization,
     uniform_start,
 )
-from sal.opt.mixture import mixture_log_likelihood, responsibilities
+from sal.opt.mixture import mixture_log_likelihood, responsibilities_torch
 from sal.sample.mixture_anneal import anneal_assignments, draw_assignments
 from sal.search.mixture_starts import (
     STARTS,
@@ -117,7 +117,7 @@ def test_the_anneal_keeps_its_best_state_and_em_from_it_never_falls() -> None:
     )
     assert polished.log_likelihood >= run.log_likelihood
     # And each E step's posterior sums to one, as EM's does.
-    posterior = responsibilities(values, torch.log(run.weights), run.components)
+    posterior = responsibilities_torch(values, torch.log(run.weights), run.components)
     assert float((posterior.sum(dim=1) - 1.0).abs().max()) < 1e-12
 
 

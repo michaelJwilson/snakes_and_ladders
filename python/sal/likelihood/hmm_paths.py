@@ -62,7 +62,7 @@ class PathEnumeration:
     posterior_path : np.ndarray
         Per-site ``argmax`` of ``posterior``, shape ``(T,)``. Not in general
         a path the model favours, and not in general the Viterbi path.
-    log_likelihood : float
+    log_evidence : float
         ``log P(observations)``, summed over every path.
     """
 
@@ -70,7 +70,7 @@ class PathEnumeration:
     viterbi_log_probability: float
     posterior: np.ndarray
     posterior_path: np.ndarray
-    log_likelihood: float
+    log_evidence: float
 
     def decoders_agree(self) -> bool:
         """Whether the two decodings coincide site for site."""
@@ -211,5 +211,5 @@ def enumerate_hidden_paths(
         viterbi_log_probability=float(joint[best]),
         posterior=posterior,
         posterior_path=posterior.argmax(axis=1).astype(np.int64),
-        log_likelihood=log_likelihood,
+        log_evidence=log_likelihood,
     )

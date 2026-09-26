@@ -84,7 +84,7 @@ def test_a_marginal_is_the_summed_joint_over_paths_through_that_state() -> None:
         if path[site] == state
     )
     assert result.posterior[site, state] == pytest.approx(
-        through / np.exp(result.log_likelihood)
+        through / np.exp(result.log_evidence)
     )
 
 
@@ -126,7 +126,7 @@ def test_the_sampled_paths_are_drawn_from_the_enumerated_path_posterior() -> Non
                 for path in paths
             ]
         )
-        law = np.exp(joint - enumerated.log_likelihood)
+        law = np.exp(joint - enumerated.log_evidence)
         index = {path: position for position, path in enumerate(paths)}
 
         log_density = emission_log_density(params, observations)
@@ -192,7 +192,7 @@ def test_the_evidence_bounds_the_best_path_from_above() -> None:
 
     result = enumerate_hidden_paths(params, observations)
 
-    assert result.viterbi_log_probability < result.log_likelihood
+    assert result.viterbi_log_probability < result.log_evidence
 
 
 @pytest.mark.smoke
@@ -230,7 +230,7 @@ def test_a_single_observation_is_decoded_by_the_prior_and_the_emission() -> None
     expected = int(np.argmax(params.initial * params.emission[:, 1]))
     assert list(result.viterbi) == [expected]
     assert list(result.posterior_path) == [expected]
-    assert result.log_likelihood == pytest.approx(
+    assert result.log_evidence == pytest.approx(
         float(np.log((params.initial * params.emission[:, 1]).sum()))
     )
 
