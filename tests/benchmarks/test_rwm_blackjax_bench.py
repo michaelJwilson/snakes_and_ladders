@@ -79,7 +79,7 @@ def test_random_walk_beside_blackjax_benchmark(
             np.random.default_rng(1006),
             N_DRAWS,
             step_size=step,
-            theta0=start,
+            start=start,
         ),
         rounds=REPEATS,
         iterations=1,

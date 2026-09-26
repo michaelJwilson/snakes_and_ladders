@@ -176,7 +176,7 @@ def test_a_surrogate_learns_the_gap_above_the_mean_field_bound_at_nine_sites() -
             model,
             train,
             validation,
-            generator=torch.Generator().manual_seed(0),
+            rng=torch.Generator().manual_seed(0),
             max_epochs=MAX_EPOCHS,
             patience=PATIENCE,
         )
@@ -223,7 +223,7 @@ def test_a_ci_fit_collapses_at_the_transfer_matrix_rung_and_recovers_on_transfer
                 Stage("ci", ci_train, ci_validation),
                 Stage("stress", stress_train, stress_validation),
             ],
-            generator=torch.Generator().manual_seed(0),
+            rng=torch.Generator().manual_seed(0),
             max_epochs=MAX_EPOCHS,
             patience=PATIENCE,
         )
@@ -271,7 +271,7 @@ def test_the_surrogates_predict_the_ground_state_energy_at_five_thousand_sites()
             model,
             train,
             validation,
-            generator=torch.Generator().manual_seed(0),
+            rng=torch.Generator().manual_seed(0),
             max_epochs=MAX_EPOCHS,
             patience=PATIENCE,
         )
@@ -284,7 +284,7 @@ def test_the_surrogates_predict_the_ground_state_energy_at_five_thousand_sites()
         GraphSurrogate(n_features, n_token_features),
         train,
         validation,
-        generator=torch.Generator().manual_seed(0),
+        rng=torch.Generator().manual_seed(0),
         max_epochs=30,
         patience=PATIENCE,
     ).predict(test)

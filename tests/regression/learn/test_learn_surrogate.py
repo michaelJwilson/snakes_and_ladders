@@ -99,7 +99,7 @@ def test_linear_surrogate_recovers_a_linear_target_on_held_out_groups() -> None:
         LinearSurrogate(N_FEATURES),
         plain.subset(split.train),
         plain.subset(split.validation),
-        generator=torch.Generator().manual_seed(1),
+        rng=torch.Generator().manual_seed(1),
         max_epochs=2000,
         patience=200,
         weight_decay=0.0,
@@ -131,7 +131,7 @@ def test_models_explain_the_target_on_held_out_groups(make: object) -> None:
         make(),  # type: ignore[operator]
         examples.subset(split.train),
         examples.subset(split.validation),
-        generator=torch.Generator().manual_seed(3),
+        rng=torch.Generator().manual_seed(3),
         max_epochs=200,
         patience=40,
     )
@@ -160,7 +160,7 @@ def test_token_models_are_invariant_to_token_order(make: object) -> None:
         make(),  # type: ignore[operator]
         examples,
         examples,
-        generator=torch.Generator().manual_seed(5),
+        rng=torch.Generator().manual_seed(5),
         max_epochs=5,
     )
     before = fitted.predict(examples)
@@ -193,7 +193,7 @@ def test_calibrated_bound_holds_at_its_coverage_on_fresh_groups() -> None:
         LinearSurrogate(N_FEATURES),
         examples.subset(split.train),
         examples.subset(split.validation),
-        generator=torch.Generator().manual_seed(7),
+        rng=torch.Generator().manual_seed(7),
     )
     test = examples.subset(split.test)
     for kind in (Bound.LOWER, Bound.UPPER):
@@ -230,7 +230,7 @@ def test_curriculum_carries_weights_and_standardization_forward() -> None:
     fits = curriculum(
         lambda: MLPSurrogate(N_FEATURES),
         [Stage("a", first, first), Stage("b", second, second)],
-        generator=torch.Generator().manual_seed(9),
+        rng=torch.Generator().manual_seed(9),
         max_epochs=3,
     )
     assert fits.stages == ("a", "b")
