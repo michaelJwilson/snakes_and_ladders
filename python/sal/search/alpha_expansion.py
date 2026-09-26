@@ -48,7 +48,6 @@ from sal.search.maxflow import (
     check_non_negative_couplings,
     max_flow,
 )
-from sal.search.maxflow.rust import min_cut
 from sal.sim.graph import PottsGraph
 from sal.sim.potts import (
     SiteField,
@@ -1115,11 +1114,7 @@ def fuse(
         capacity,
         np.zeros(capacity.size),
     )
-    cut = (
-        min_cut(network, source, sink)
-        if backend is Backend.RUST
-        else max_flow(network, source, sink)
-    )
+    cut = max_flow(network, source, sink, backend=backend)
     side = cut.source_side
     kept, flipped = side[unary] & ~side[complement], ~side[unary] & side[complement]
     fused = better.copy()
