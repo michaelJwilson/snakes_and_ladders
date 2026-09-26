@@ -155,20 +155,12 @@ def lattice_features(graph: PottsGraph, field: np.ndarray) -> np.ndarray:
     covariate pushes and how unevenly. A shared field makes the second of
     them zero, which is the statement that there is no covariate.
     """
-    # The mean-field bound is differentiable and takes a tensor; it is the one
-    # call here that loads torch, and the field crosses into it once.
-    import torch
-
     rows = site_field(np.asarray(field, dtype=np.float64), graph.n_nodes)
     n_nodes = float(graph.n_nodes)
     span = rows.max(axis=1) - rows.min(axis=1)
     return np.array(
         [
-            float(
-                mean_field_log_partition(
-                    graph, torch.from_numpy(rows), n_iterations=MEAN_FIELD_ITERATIONS
-                )
-            )
+            mean_field_log_partition(graph, rows, n_iterations=MEAN_FIELD_ITERATIONS)
             / n_nodes,
             decoupled_log_partition(graph, rows) / n_nodes,
             saturated_log_partition(graph, rows) / n_nodes,

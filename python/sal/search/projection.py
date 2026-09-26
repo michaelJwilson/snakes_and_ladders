@@ -70,7 +70,7 @@ from sal.opt.mixture import (
     KMeansPlusPlus,
     emission_mixture_plus_plus,
     mixture_log_likelihood,
-    responsibilities,
+    responsibilities_torch,
 )
 from sal.opt.mixture import (
     expectation_maximization as gaussian_expectation_maximization,
@@ -1025,7 +1025,7 @@ def _scored(
         component's negative-binomial mean over that renaming.
     """
     values = torch.as_tensor(instance.observations, dtype=torch.float64)
-    posterior = responsibilities(values, torch.log(weights), components)
+    posterior = responsibilities_torch(values, torch.log(weights), components)
     assigned = np.asarray(posterior.argmax(dim=1).numpy())
     columns = match_components(components, instance.truth)
     fitted_mean = components.total.mean.numpy()

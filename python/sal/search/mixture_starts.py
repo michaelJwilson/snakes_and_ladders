@@ -73,7 +73,7 @@ from sal.opt.mixture import (
     KMeansPlusPlus,
     kmeans_plus_plus,
     mixture_log_likelihood,
-    responsibilities,
+    responsibilities_torch,
 )
 from sal.opt.mixture import (
     expectation_maximization as gaussian_expectation_maximization,
@@ -1098,7 +1098,7 @@ def polish(
         except ValueError:
             # The one refusal this stop reads: a component the E step leaves
             # no responsibility on, whose M step has nothing to solve on.
-            owned = responsibilities(
+            owned = responsibilities_torch(
                 values,
                 torch.log(weights),
                 components,
@@ -1320,7 +1320,7 @@ class TimedStart:
                 if index > 0
             )
 
-        posterior = responsibilities(
+        posterior = responsibilities_torch(
             values,
             torch.log(polished.weights),
             polished.components,

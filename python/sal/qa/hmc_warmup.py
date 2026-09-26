@@ -239,7 +239,7 @@ def _ess_per_gradient(chain: HmcChain) -> float:
     The warm-up's gradients are inside ``force_evaluations``, so this charges
     the adapted chain for them rather than comparing at equal recorded draws.
     """
-    sizes: np.ndarray = effective_sample_size(chain.draws).detach().numpy()
+    sizes: np.ndarray = effective_sample_size(chain.draws)
     return float(sizes.min()) / chain.force_evaluations
 
 

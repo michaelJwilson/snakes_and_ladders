@@ -59,7 +59,7 @@ CAP_LITERAL = re.compile(r"^\s*MAX_ENUMERABLE\w* = \d", re.MULTILINE)
 SQUARE_TRANSITION = re.compile(r"log\(\s*1(\.0)?\s*\+\s*(np\.|numpy\.|math\.)?sqrt")
 #: Every list-of-lists adjacency carries this annotation (`mypy --strict`
 #: refuses the empty comprehension without it). A `torch.Tensor` coupling does
-#: not match: `tree_log_partition` needs couplings that carry gradients.
+#: not match: `tree_log_partition_torch` needs couplings that carry gradients.
 NEIGHBOUR_LISTS = re.compile(r"list\[list\[tuple\[int, ?float\]\]\]")
 #: Environment names retired for naming a mechanism, not the problem (#644,
 #: #705); `Topology` was the third spelling of one seam.

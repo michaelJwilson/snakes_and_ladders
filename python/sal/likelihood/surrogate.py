@@ -32,9 +32,9 @@ Two hard evaluations, two families of surrogate:
   :func:`prune_with_matrices` is kept because the vertex argument is checked
   by enumerating the vertices with it.
 * **Lattice Potts.** ``log Z`` is what enumeration cannot reach.
-  :func:`mean_field_log_partition` is the naive mean-field lower bound,
+  :func:`mean_field_log_partition_torch` is the naive mean-field lower bound,
   Gibbs' inequality at the fixed point of a product distribution
-  (``eq:mean-field-bound``). :func:`spanning_tree_log_partition` is the
+  (``eq:mean-field-bound``). :func:`spanning_tree_log_partition_torch` is the
   Jensen upper bound over a distribution on spanning trees, each tree's
   partition function exact and the parameters split so they average to the
   original (``eq:spanning-tree-bound``). From any pair of bounds on
@@ -316,7 +316,7 @@ def site_rows(field: torch.Tensor, n_nodes: int) -> torch.Tensor:
     raise ValueError(msg)
 
 
-def mean_field_log_partition(
+def mean_field_log_partition_torch(
     graph: PottsGraph,
     field: torch.Tensor,
     *,
@@ -379,7 +379,7 @@ def _spanning_trees_covering_every_edge(graph: PottsGraph) -> list[list[int]]:
     return trees
 
 
-def tree_log_partition(
+def tree_log_partition_torch(
     n_nodes: int,
     tree_edges: Sequence[tuple[int, int]],
     couplings: torch.Tensor,
@@ -412,7 +412,7 @@ def tree_log_partition(
     return torch.logsumexp(message(0, -1), dim=0)
 
 
-def spanning_tree_log_partition(
+def spanning_tree_log_partition_torch(
     graph: PottsGraph,
     field: torch.Tensor,
     *,
@@ -443,7 +443,7 @@ def spanning_tree_log_partition(
         tree_couplings = torch.stack(
             [couplings[index] / appearances[index] for index in tree]
         )
-        total = total + tree_log_partition(
+        total = total + tree_log_partition_torch(
             graph.n_nodes, tree_pairs, tree_couplings, field
         )
     return total / len(trees)
@@ -456,13 +456,60 @@ def decoupled_ground_energy(graph: PottsGraph, field: npt.ArrayLike) -> float:
     least the sum of each term's own minimum; the labelling attaining every
     minimum at once need not exist, which is the slack. ``O(N + E)``, which
     is what makes it the bracket's lower end at sizes
-    :func:`spanning_tree_log_partition` does not reach
+    :func:`spanning_tree_log_partition_torch` does not reach
     (``eq:decoupled-energy-bound``). No derivative is taken through it, so
     it is NumPy: ``field`` is shared or per site, widened by
     :func:`~sal.sim.potts.site_field` (issue #1011).
     """
     rows = site_field(np.asarray(field, dtype=np.float64), graph.n_nodes)
     return float(-rows.max(axis=1).sum() - np.maximum(graph.edge_coupling, 0.0).sum())
+
+
+def mean_field_log_partition(
+    graph: PottsGraph,
+    field: np.ndarray,
+    *,
+    couplings: np.ndarray | None = None,
+    n_iterations: int = 200,
+) -> float:
+    """:func:`mean_field_log_partition_torch`'s bound as a ``float``, from NumPy (issue #1092).
+
+    The public form a caller comparing it with :func:`decoupled_log_partition`
+    reads; the tensor, and its gradient in ``field`` and ``couplings``, stay
+    behind the ``_torch`` name.
+    """
+    import torch
+
+    return float(
+        mean_field_log_partition_torch(
+            graph,
+            torch.as_tensor(np.asarray(field, dtype=np.float64)),
+            couplings=None
+            if couplings is None
+            else torch.as_tensor(np.asarray(couplings, dtype=np.float64)),
+            n_iterations=n_iterations,
+        )
+    )
+
+
+def spanning_tree_log_partition(
+    graph: PottsGraph,
+    field: np.ndarray,
+    *,
+    couplings: np.ndarray | None = None,
+) -> float:
+    """:func:`spanning_tree_log_partition_torch`'s bound as a ``float``, from NumPy (issue #1092)."""
+    import torch
+
+    return float(
+        spanning_tree_log_partition_torch(
+            graph,
+            torch.as_tensor(np.asarray(field, dtype=np.float64)),
+            couplings=None
+            if couplings is None
+            else torch.as_tensor(np.asarray(couplings, dtype=np.float64)),
+        )
+    )
 
 
 def decoupled_log_partition(graph: PottsGraph, field: npt.ArrayLike) -> float:
@@ -482,7 +529,7 @@ def saturated_log_partition(graph: PottsGraph, field: npt.ArrayLike) -> float:
 
     ``Z <= q^N exp(-E_min)`` and :func:`decoupled_ground_energy` bounds
     ``E_min`` below, so the two compose. ``O(N + E)`` against
-    :func:`spanning_tree_log_partition`'s one exact tree pass per edge,
+    :func:`spanning_tree_log_partition_torch`'s one exact tree pass per edge,
     which is why this is the upper end of the bracket on a lattice of
     thousands of sites and the spanning-tree bound the tighter one where it
     runs (``eq:saturated-bound``). NumPy, as :func:`decoupled_ground_energy`
@@ -536,10 +583,12 @@ def ground_state_energy_bounds(
     )
     scaled_couplings = torch.as_tensor(graph.edge_coupling * beta)
     lower_log_z = float(
-        mean_field_log_partition(graph, scaled_field, couplings=scaled_couplings)
+        mean_field_log_partition_torch(graph, scaled_field, couplings=scaled_couplings)
     )
     upper_log_z = float(
-        spanning_tree_log_partition(graph, scaled_field, couplings=scaled_couplings)
+        spanning_tree_log_partition_torch(
+            graph, scaled_field, couplings=scaled_couplings
+        )
     )
     q = int(scaled_field.shape[1])
     return EnergyBounds(
@@ -558,10 +607,12 @@ __all__ = [
     "least_squares_lengths",
     "least_squares_residual",
     "mean_field_log_partition",
+    "mean_field_log_partition_torch",
     "prune_with_matrices",
     "saturated_log_partition",
     "site_fitch_scores",
     "site_rows",
     "spanning_tree_log_partition",
-    "tree_log_partition",
+    "spanning_tree_log_partition_torch",
+    "tree_log_partition_torch",
 ]

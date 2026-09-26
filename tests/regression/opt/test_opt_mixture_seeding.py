@@ -37,7 +37,7 @@ from sal.opt.mixture import (
     emission_mixture_plus_plus,
     kmeans_plus_plus,
     optimal_clustering_cost,
-    responsibilities,
+    responsibilities_torch,
     uniform_seeds,
 )
 from sal.opt.objective import Objective
@@ -453,7 +453,7 @@ def bayes_recovery(instance: Instance) -> float:
     """
     return label_recovery(
         instance,
-        responsibilities(
+        responsibilities_torch(
             torch.as_tensor(instance.observations, dtype=torch.float64),
             torch.log(torch.as_tensor(instance.truth.weights, dtype=torch.float64)),
             instance.truth.components,
@@ -518,7 +518,7 @@ def recovered(instance: Instance, objective: Objective, theta: torch.Tensor) -> 
     named = objective.constrain(theta)
     return label_recovery(
         instance,
-        responsibilities(
+        responsibilities_torch(
             objective.observations, named["log_weight"], objective.components(theta)
         ),
     )

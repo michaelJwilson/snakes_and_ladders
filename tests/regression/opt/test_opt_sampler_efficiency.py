@@ -31,7 +31,7 @@ MALA_ADAPTATION = Adaptation(
 
 def effective_per_thousand(draws: torch.Tensor, evaluations: int) -> float:
     """Effective samples per 1,000 evaluations, on the worst coordinate."""
-    return 1000.0 * float(effective_sample_size(draws).numpy().min()) / evaluations
+    return 1000.0 * float(effective_sample_size(draws).min()) / evaluations
 
 
 @pytest.mark.analytic
@@ -109,4 +109,4 @@ def test_one_gradient_buys_more_from_a_langevin_step_than_from_a_trajectory(
         # Every number above is a chain that mixed, not a chain that stood
         # still: an effective sample size at the draw count would make the
         # ratios meaningless.
-        assert np.all(effective_sample_size(hamiltonian.draws).numpy() > 10.0)
+        assert np.all(effective_sample_size(hamiltonian.draws) > 10.0)
