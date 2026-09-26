@@ -427,6 +427,7 @@ def test_force_evaluations_counts_what_a_trajectory_actually_costs(
 
 
 @pytest.mark.analytic
+@pytest.mark.release  # 63.3 s in the tier, over the 10 s cap (#1088)
 def test_leapfrog_reaches_the_acceptance_target_more_cheaply_than_yoshida() -> None:
     # Negative: the step is limited by stability, not accuracy. Yoshida's
     # |w0| = 1.70 gives ~0.59 of leapfrog's limit (0.0333 against 0.0500).

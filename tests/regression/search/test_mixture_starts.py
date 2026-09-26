@@ -296,6 +296,7 @@ def test_best_of_one_is_the_start_and_best_of_five_is_the_best_of_its_seedings()
 
 @pytest.mark.smoke
 @pytest.mark.backend
+@pytest.mark.release  # 13.6 s in the tier, over the 10 s cap (#1088)
 def test_a_parallel_best_of_is_the_serial_one_bitwise() -> None:
     # Issue #912: every seeding draws from its own spawned generator and
     # records into a run private to its thread, so four threads, and four

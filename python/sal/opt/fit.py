@@ -19,6 +19,7 @@ import logging
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
+from dataclasses import field as dataclass_field
 
 import torch
 
@@ -87,7 +88,7 @@ class FitResult:
     iterations: int
     converged: bool
     standard_errors: Mapping[str, torch.Tensor] | None = None
-    termination: Termination | None = None
+    termination: Termination = dataclass_field(kw_only=True)
 
 
 def fit(
@@ -439,7 +440,7 @@ class MultiStartResult:
     best: FitResult
     all_fits: tuple[FitResult, ...]
     spread: float
-    termination: Termination | None = None
+    termination: Termination = dataclass_field(kw_only=True)
 
 
 def _fit_start(task: tuple[Objective, torch.Tensor, int, float]) -> FitResult:

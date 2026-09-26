@@ -65,6 +65,7 @@ def test_gcos_labelling_is_a_fixed_point_of_the_package_move() -> None:
 
 
 @pytest.mark.oracle
+@pytest.mark.release  # 22.6 s in the tier, over the 10 s cap (#1088)
 def test_both_expansions_are_within_the_factor_two_bound_of_the_optimum() -> None:
     graph, field = _potts(4, 3, 974)
     # 3^16 in 81 blocks of 3^12, each block's tail enumerated once.
