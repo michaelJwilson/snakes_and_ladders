@@ -76,7 +76,7 @@ def test_the_score_is_the_negated_energy_bitwise() -> None:
         for _ in range(200):
             state = environment.reset(rng)
             theirs = -float(energies(graph, field, np.asarray(state)[None])[0])
-            assert environment.score(state) == theirs
+            assert environment.log_weight(state) == theirs
 
     every_row([(3, 3), (6, 3), (8, 2)], check)
 
@@ -95,7 +95,8 @@ def test_a_step_is_the_score_difference() -> None:
         for action in environment.actions(state):
             successor, reward = environment.step(state, action)
             assert reward == pytest.approx(
-                environment.score(successor) - environment.score(state), abs=1e-12
+                environment.log_weight(successor) - environment.log_weight(state),
+                abs=1e-12,
             )
 
 
@@ -162,7 +163,7 @@ def test_the_sweep_at_zero_is_one_icm_sweep() -> None:
         )
 
         assert state == tuple(int(label) for label in theirs)
-        assert environment.score(state) == pytest.approx(-value, abs=1e-9)
+        assert environment.log_weight(state) == pytest.approx(-value, abs=1e-9)
 
     every_value([4, 6], check)
 
@@ -201,7 +202,7 @@ def test_the_zero_field_optimum_is_the_closed_form() -> None:
 
     uniform = tuple([0] * environment.n_nodes)
 
-    assert environment.score(uniform) == pytest.approx(closed, rel=1e-12)
+    assert environment.log_weight(uniform) == pytest.approx(closed, rel=1e-12)
 
 
 @pytest.mark.oracle
@@ -213,7 +214,7 @@ def test_two_labels_agree_with_the_exact_cut() -> None:
     environment, graph, field = _instance(8, 2)
     labelling, cut = ising_ground_state(graph, field)
 
-    scored = environment.score(tuple(int(value) for value in labelling))
+    scored = environment.log_weight(tuple(int(value) for value in labelling))
 
     assert scored == pytest.approx(-cut, abs=1e-9)
 
@@ -227,7 +228,7 @@ def test_nine_sites_enumerate_to_the_same_optimum() -> None:
     environment, graph, field = _instance(3, 3)
 
     best = max(
-        environment.score(state)
+        environment.log_weight(state)
         for state in itertools.product(range(3), repeat=environment.n_nodes)
     )
     _, exact = max(
@@ -394,7 +395,7 @@ def test_the_planted_labelling_is_the_enumerated_maximum() -> None:
 
     assert tuple(int(value) for value in states[best]) == planted
     assert int((scores == scores[best]).sum()) == 1, "the plant is the only maximum"
-    assert environment.score(planted) == float(scores[best])
+    assert environment.log_weight(planted) == float(scores[best])
     assert margin > environment.coupling * len(graph.edges)
 
 
@@ -425,7 +426,7 @@ def test_both_grains_recover_the_planted_ground_state() -> None:
             )
             assert [action.kind for action in episode.actions] == [MoveKind.SWEEP] * 3
             assert episode.rewards[1:] == (0.0, 0.0), "the first sweep did all of it"
-            assert max(episode.states, key=environment.score) == planted
+            assert max(episode.states, key=environment.log_weight) == planted
 
             state = environment.reset(np.random.default_rng(2000 + start))
             spent = 0

@@ -12,23 +12,24 @@ reference **environment**, searched discretely. One model, both halves of
 the problem this repository is about. Local search over an Ising or Potts
 environment is classical (Newman & Barkema, ch. 3).
 
-The model is the one ``sal.opt.potts`` documents, read as an energy to be
-maximized over configurations at *known* parameters::
+The model is the one ``sal.opt.potts`` documents, read as a log weight to be
+maximized over configurations at *known* parameters (the negated energy, in
+root ``CLAUDE.md``'s one sign: ``energy`` is minimized, #1089)::
 
-    E(s) = J * sum_i delta(s_i, s_{i+1}) + sum_i h[s_i]
+    W(s) = J * sum_i delta(s_i, s_{i+1}) + sum_i h[s_i]
 
-**Known parameters, no inner solve.** ``E`` is evaluated at the fixture's
+**Known parameters, no inner solve.** ``W`` is evaluated at the fixture's
 true ``J`` and ``h``. Nothing here calls ``sal.opt.fit``. That is issue
 #131's simplification stated in the reference instance, and the reason an
 episode costs microseconds rather than seconds.
 
 **Two gauges, both benign here, both worth naming.**
 
-* Adding a constant ``c`` to every entry of ``h`` shifts ``E`` by ``L * c``
+* Adding a constant ``c`` to every entry of ``h`` shifts ``W`` by ``L * c``
   for every configuration alike, so it leaves every *reward* unchanged --
   a reward is a difference. The environment is therefore insensitive to the
   gauge ``sal.opt.potts`` has to fix, and a test pins that.
-* ``delta_energy = J * agreement_delta + field_delta`` exactly, so the two
+* ``delta_log_weight = J * agreement_delta + field_delta`` exactly, so the two
   features below span the reward. A greedy searcher is the weight vector
   proportional to ``(J, 1)``, which puts the classical baseline *inside*
   the policy class rather than beside it -- and makes "did the agent learn
@@ -212,11 +213,13 @@ class PottsEnvironment(Environment[Configuration, Flip]):
         """
         return self._field.copy()
 
-    def energy(self, state: Configuration) -> float:
-        """``E(s)``: the unnormalized log-density of one configuration.
+    def log_weight(self, state: Configuration) -> float:
+        """``W(s)``: the unnormalized log-density of one configuration, maximized.
 
-        Absolute energies are reported for tests and for the exhaustive
-        oracle; an agent only ever sees differences of them.
+        ``energy`` until #1089, which named the minimized quantity's negation
+        by the minimized quantity's name. Absolute values are reported for
+        tests and for the exhaustive oracle; an agent only ever sees
+        differences of them.
         """
         # Each edge once: the adjacency lists it from both ends.
         agreement = 0.5 * sum(
@@ -319,7 +322,7 @@ class PottsEnvironment(Environment[Configuration, Flip]):
     def greedy_weights(self) -> NDArray[np.float64]:
         """The weight vector whose policy is greedy, up to temperature.
 
-        ``delta_energy = J * agreement_delta + field_delta``, so scoring with
+        ``delta_log_weight = J * agreement_delta + field_delta``, so scoring with
         ``(J, 1)`` scores exactly by reward and the argmax is the greedy
         move. Exposed because it is the truth a recovery test compares a
         learned policy against.
@@ -390,9 +393,9 @@ def optimum(environment: PottsEnvironment) -> tuple[Configuration, float]:
     Returns
     -------
     tuple[Configuration, float]
-        The maximizing configuration and its energy. Ties resolve to the
+        The maximizing configuration and its log weight. Ties resolve to the
         lexicographically first, so the answer is deterministic.
     """
     return enumerated_optimum(
-        environment.n_states, environment.chain_length, environment.energy
+        environment.n_states, environment.chain_length, environment.log_weight
     )
