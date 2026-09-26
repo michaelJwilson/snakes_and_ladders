@@ -37,6 +37,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from typing import Any
 
 import numpy as np
@@ -78,7 +79,7 @@ class MaxCutResult:
     value: float
     relaxation: float
     ratio: float
-    termination: Termination | None = None
+    termination: Termination = dataclass_field(kw_only=True)
 
 
 @dataclass(frozen=True)

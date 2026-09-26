@@ -88,16 +88,16 @@ def test_the_compressed_log_likelihood_equals_the_uncompressed() -> None:
         compressed = patterns.alignment
         pi = np.asarray(params.pi)
 
-        full = pruning.log_likelihood(params.tau, params.k, pi, alignment)
+        full = pruning.log_likelihood(params.tau, params.n_states, pi, alignment)
         assert pruning.log_likelihood(
-            params.tau, params.k, pi, compressed, weights=patterns.weights
+            params.tau, params.n_states, pi, compressed, weights=patterns.weights
         ) == pytest.approx(full, rel=CROSS_DEVICE_RTOL_FLOAT64)
 
         lengths = branch_lengths_from_tree(params.tau)
         assert float(
             pruning_torch.log_likelihood(
                 params.tau,
-                params.k,
+                params.n_states,
                 pi,
                 compressed,
                 lengths,
@@ -106,7 +106,7 @@ def test_the_compressed_log_likelihood_equals_the_uncompressed() -> None:
         ) == pytest.approx(full, rel=CROSS_DEVICE_RTOL_FLOAT64)
 
         assert pruning_rust.log_likelihood(
-            params.tau, params.k, pi, compressed, weights=patterns.weights
+            params.tau, params.n_states, pi, compressed, weights=patterns.weights
         ) == pytest.approx(full, rel=CROSS_DEVICE_RTOL_FLOAT64)
 
     assert min(ratios.values()) > 1.0
@@ -121,7 +121,7 @@ def test_the_compression_ratio_at_each_fixtures_declared_size() -> None:
         params = load_fixture(name)
         dataset = simulate_tree(params, np.random.default_rng(params.seed))
         patterns = compress(dict(dataset.alignment))
-        ceiling = min(params.n_sites, params.k ** len(patterns.names))
+        ceiling = min(params.n_sites, params.n_states ** len(patterns.names))
         assert patterns.n_patterns <= ceiling
         assert patterns.compression_ratio >= params.n_sites / ceiling
         print(
@@ -147,7 +147,7 @@ def test_weights_carry_through_the_gradient() -> None:
     ) -> np.ndarray:
         lengths = branch_lengths_from_tree(params.tau).requires_grad_(True)
         value = pruning_torch.log_likelihood(
-            params.tau, params.k, pi, columns, lengths, weights=weights
+            params.tau, params.n_states, pi, columns, lengths, weights=weights
         )
         (found,) = torch.autograd.grad(value, lengths)
         return np.asarray(found.detach().numpy())
@@ -173,7 +173,7 @@ def test_an_uncompressible_alignment_compresses_to_itself() -> None:
     n_sites = 64
     digits = np.arange(n_sites)
     alignment = {
-        name: ((digits // params.k**index) % params.k).astype(np.int64)
+        name: ((digits // params.n_states**index) % params.n_states).astype(np.int64)
         for index, name in enumerate(names)
     }
     patterns = compress(alignment)
@@ -182,9 +182,9 @@ def test_an_uncompressible_alignment_compresses_to_itself() -> None:
     assert np.array_equal(patterns.weights, np.ones(n_sites, dtype=np.int64))
     pi = np.asarray(params.pi)
     assert pruning.log_likelihood(
-        params.tau, params.k, pi, patterns.alignment, weights=patterns.weights
+        params.tau, params.n_states, pi, patterns.alignment, weights=patterns.weights
     ) == pytest.approx(
-        pruning.log_likelihood(params.tau, params.k, pi, alignment),
+        pruning.log_likelihood(params.tau, params.n_states, pi, alignment),
         rel=CROSS_DEVICE_RTOL_FLOAT64,
     )
 
@@ -194,7 +194,9 @@ def test_a_malformed_weight_or_alignment_is_refused() -> None:
     params, alignment = _alignment("tree_search/ci.yaml", 50)
     pi = np.asarray(params.pi)
     with pytest.raises(ValueError, match="one per column"):
-        pruning.log_likelihood(params.tau, params.k, pi, alignment, weights=np.ones(3))
+        pruning.log_likelihood(
+            params.tau, params.n_states, pi, alignment, weights=np.ones(3)
+        )
     with pytest.raises(ValueError, match="non-negative"):
         check_weights(-np.ones(4), 4)
     with pytest.raises(ValueError, match="no taxa"):

@@ -250,14 +250,14 @@ def pearson_correlation(first: np.ndarray, second: np.ndarray) -> float:
     return float(centred[0] @ centred[1] / (norms[0] * norms[1]))
 
 
-def state_label(state: int, k: int) -> str:
+def state_label(state: int, n_states: int) -> str:
     """Render a simulated state as a nucleotide letter when ``k == 4``.
 
     Parameters
     ----------
     state : int
         Simulated state, in ``[0, k)``.
-    k : int
+    n_states : int
         Number of states in the model.
 
     Returns
@@ -267,7 +267,7 @@ def state_label(state: int, k: int) -> str:
         state's decimal digit, since the nucleotide labelling only applies
         to the 4-state alphabet.
     """
-    if k == len(_NUCLEOTIDES):
+    if n_states == len(_NUCLEOTIDES):
         return _NUCLEOTIDES[state]
     return str(state)
 

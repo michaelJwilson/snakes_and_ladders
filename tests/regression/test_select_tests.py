@@ -9,6 +9,10 @@ needs nothing, and skipping a run that would have measured different coverage
 
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -16,13 +20,15 @@ from select_tests import (
     ALWAYS,
     ALWAYS_DESELECTED,
     BENCHMARKED,
-    EVERYTHING,
     GUARDS,
     KEY_TRIGGERS,
     MODULES,
+    SOURCE_READERS,
+    UNATTRIBUTABLE,
     _benchmarks_for,
     dependents,
     guards_for,
+    import_graph,
     select,
 )
 
@@ -32,9 +38,11 @@ from tests._paths import REPO_ROOT
 def _modules_of(chosen: dict[str, list[str]]) -> set[str]:
     """The submodule names a selection runs the tests of."""
     return {
-        path.rsplit("/", 1)[1]
+        path.split("/")[2]
         for path in chosen["paths"]
-        if path.startswith("tests/regression/") and not path.endswith(".py")
+        if path.startswith("tests/regression/")
+        and path.count("/") >= 3
+        and path.split("/")[2] in MODULES
     }
 
 
@@ -98,7 +106,7 @@ def test_each_class_of_prose_selects_its_guard(path: str, guard: str) -> None:
 
     assert guard in chosen["paths"]
     assert chosen["cov"] == []
-    assert _modules_of(chosen) == set()
+    assert set(chosen["paths"]) == set(guards_for([path]))
 
 
 @pytest.mark.critical
@@ -135,15 +143,15 @@ def test_a_change_selects_the_modules_that_import_it() -> None:
 
 @pytest.mark.critical
 @pytest.mark.smoke
-def test_a_leaf_module_selects_only_itself() -> None:
-    # A module nothing imports needs nothing else run. The leaf is derived
-    # rather than named: `sal.learn` was one until
-    # `sal.qa.rl_tree_policy` imported it (issue #178), and a
-    # test naming a module goes stale the moment an import is added.
-    leaves = [module for module in MODULES if dependents({module}) == {module}]
-    assert leaves, "no submodule is a leaf; the selection can save nothing"
-    for leaf in leaves:
-        assert _modules_of(select([f"python/sal/{leaf}/__init__.py"])) == {leaf}
+def test_a_module_selects_the_test_files_that_import_it_and_no_others() -> None:
+    # File level (issue #1086): a module a handful of test files import
+    # selects those files, not its whole subpackage's directory.
+    chosen = select(["python/sal/validation/highs.py"])
+    files = set(chosen["paths"])
+
+    assert "tests/validation/test_highs.py" in files
+    assert "tests/regression/search/test_trws.py" not in files
+    assert set(SOURCE_READERS) <= files
 
 
 @pytest.mark.critical
@@ -157,8 +165,11 @@ def test_the_dependency_expansion_is_transitive() -> None:
 @pytest.mark.critical
 @pytest.mark.smoke
 def test_changing_a_test_selects_its_module() -> None:
-    # A test file is as capable of lowering coverage as a source file.
-    assert _modules_of(select(["tests/regression/opt/test_opt_fit.py"])) >= {"opt"}
+    # A test file is as capable of lowering coverage as a source file, and a
+    # changed test file runs itself.
+    chosen = select(["tests/regression/opt/test_opt_fit.py"])
+
+    assert "tests/regression/opt/test_opt_fit.py" in chosen["paths"]
 
 
 @pytest.mark.critical
@@ -168,7 +179,7 @@ def test_a_likelihood_change_still_runs_the_conserved_gradient_tape() -> None:
     # the likelihood tape, so a likelihood change must still select it.
     for changed in (
         "python/sal/likelihood/pruning/torch.py",
-        "python/sal/search/topology.py",
+        "python/sal/sim/topology.py",
         "python/sal/sim/tree.py",
     ):
         assert "sandbox" in _modules_of(select([changed])), changed
@@ -195,11 +206,10 @@ def test_the_sandbox_import_guard_runs_on_every_package_it_guards() -> None:
         "uv.lock",
         "pyproject.toml",
         "Cargo.lock",
-        "src/lib.rs",
-        "tests/_fixtures.py",
+        "tests/conftest.py",
         "tests/regression/fixtures/tree_jc/stress.yaml",
         ".github/workflows/ci.yml",
-        "python/sal/numerics.py",
+        "Makefile.custom",
     ],
 )
 def test_a_change_it_cannot_attribute_selects_everything(path: str) -> None:
@@ -213,12 +223,13 @@ def test_a_change_it_cannot_attribute_selects_everything(path: str) -> None:
 
 @pytest.mark.critical
 @pytest.mark.smoke
-def test_an_unrecognised_code_path_selects_everything() -> None:
-    # Not documentation, not attributable to a module: the unsafe answer is
-    # the one that looks like a saving.
+def test_a_module_nothing_imports_runs_the_guards_that_read_the_source() -> None:
+    # A new module no test imports can only fail a test that reads the
+    # package's source, and those run on any change under `python/sal/`.
     chosen = select(["python/sal/some_new_module.py"])
 
-    assert chosen["paths"] == ["tests"]
+    assert chosen["paths"] != ["tests"]
+    assert set(SOURCE_READERS) <= set(chosen["paths"])
 
 
 @pytest.mark.critical
@@ -228,9 +239,11 @@ def test_coverage_targets_match_the_selected_modules() -> None:
     # what is measured must be exactly what was selected -- no more, since a
     # module whose tests did not run would drag the figure down, and no less,
     # since an unmeasured module is an unmade claim.
-    chosen = select(["python/sal/search/infer.py"])
+    chosen = select(["python/sal/search/infer.py", "python/sal/sim/tree.py"])
 
-    assert set(chosen["cov"]) == {f"sal.{m}" for m in _modules_of(chosen)}
+    assert chosen["cov"] == ["sal.search", "sal.sim"]
+    assert {"tests/regression/search", "tests/regression/sim"} <= set(chosen["paths"])
+    assert select(["infra/select_tests.py"])["cov"] == []
 
 
 def _benchmarks_of(chosen: dict[str, list[str]]) -> set[str]:
@@ -318,7 +331,7 @@ def test_every_always_run_path_names_a_file_that_exists() -> None:
 
 @pytest.mark.smoke
 def test_every_whole_suite_trigger_names_something_in_the_tree() -> None:
-    # `EVERYTHING` decides when the saving is abandoned and the whole suite
+    # `UNATTRIBUTABLE` decides when the saving is abandoned and the whole suite
     # runs. An entry that matches nothing is a trigger that never fires, so
     # a change to what it was meant to guard would select a partial suite.
     root = Path(__file__).resolve().parents[2]
@@ -329,7 +342,7 @@ def test_every_whole_suite_trigger_names_something_in_the_tree() -> None:
     ]
     unmatched = [
         trigger
-        for trigger in EVERYTHING
+        for trigger in UNATTRIBUTABLE
         if not any(path.startswith(trigger) for path in tracked)
     ]
 
@@ -352,7 +365,7 @@ def test_the_key_tier_runs_only_for_what_could_move_it() -> None:
 
 @pytest.mark.smoke
 def test_every_key_trigger_names_something_in_the_tree() -> None:
-    # `EVERYTHING`'s check, for the second trigger list: an entry renamed on
+    # `UNATTRIBUTABLE`'s check, for the second trigger list: an entry renamed on
     # one side only stops selecting the key tier and fails nothing.
     root = Path(__file__).resolve().parents[2]
     missing = [trigger for trigger in KEY_TRIGGERS if not (root / trigger).exists()]
@@ -367,3 +380,86 @@ def test_the_release_and_stress_tiers_are_never_selected_locally() -> None:
     # not the per-pull-request run's.
     for changed in ([], ["src/coupled.rs"], ["README.md"]):
         assert set(ALWAYS_DESELECTED) <= set(select(changed)["deselect"])
+
+
+@pytest.mark.critical
+@pytest.mark.smoke
+@pytest.mark.parametrize(
+    ("changed", "reader"),
+    [
+        # The two packages the subpackage list had missed since they were
+        # created (#777, #972): each now selects its own tests.
+        ("python/sal/sample/chain.py", "tests/regression/sample/"),
+        ("python/sal/validation/runner.py", "tests/validation/"),
+        # A backend twin is loaded by name; its gateway's importers run.
+        ("python/sal/search/icm/numba.py", "tests/regression/search/test_icm.py"),
+        # An adapter runs its script in a subprocess.
+        ("python/sal/validation/scripts/highs.py", "tests/validation/test_highs.py"),
+        # A Rust change is a change to the extension's importers.
+        ("src/coupled.rs", "tests/test_oxisal_bindings.py"),
+        # A shared test helper selects the files that import it.
+        ("tests/_rows.py", "tests/regression/search/test_trws.py"),
+    ],
+)
+def test_what_the_subpackage_list_could_not_attribute_is_attributed(
+    changed: str, reader: str
+) -> None:
+    chosen = select([changed])
+
+    assert chosen["paths"] != ["tests"], changed
+    assert any(path.startswith(reader) for path in chosen["paths"]), (changed, reader)
+
+
+@pytest.mark.oracle
+def test_python_imports_no_sal_module_outside_the_static_closure() -> None:
+    # The referee is the import system itself: for each sampled test file,
+    # every `sal` module importing it adds to `sys.modules` must be in the
+    # closure `ast` reads. A module the static graph missed would be a test
+    # the selection could skip while the change breaks it.
+    sample = [
+        "tests/regression/search/test_icm.py",
+        "tests/regression/search/test_ground_state_compose.py",
+        "tests/regression/sample/test_metropolis.py",
+        "tests/regression/opt/test_opt_fit.py",
+        "tests/regression/likelihood/test_forward_backward.py",
+        "tests/regression/learn/test_arena.py",
+        "tests/regression/sim/test_fixture_registry.py",
+        "tests/validation/test_highs.py",
+    ]
+    sample = [path for path in sample if (REPO_ROOT / path).is_file()]
+    script = (
+        "import importlib, json, sys\n"
+        "out = {}\n"
+        "for name in sys.argv[1:]:\n"
+        "    before = set(sys.modules)\n"
+        "    importlib.import_module(name)\n"
+        "    out[name] = sorted(m for m in set(sys.modules) - before"
+        " if m == 'sal' or m.startswith('sal.'))\n"
+        "print(json.dumps(out))\n"
+    )
+    names = [path.removesuffix(".py").replace("/", ".") for path in sample]
+    result = subprocess.run(
+        [sys.executable, "-c", script, *names],
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+        env={**os.environ, "PYTHONPATH": f"{REPO_ROOT}:{REPO_ROOT / 'infra'}"},
+        check=True,
+    )
+    loaded = json.loads(result.stdout.splitlines()[-1])
+    graph = import_graph()
+    for name, modules in loaded.items():
+        static = _closure_of(name, graph)
+        missed = [module for module in modules if module not in static]
+
+        assert missed == [], (name, missed)
+
+
+def _closure_of(name: str, graph: dict[str, frozenset[str]]) -> set[str]:
+    seen, stack = {name}, [name]
+    while stack:
+        for target in graph.get(stack.pop(), ()):
+            if target not in seen:
+                seen.add(target)
+                stack.append(target)
+    return seen

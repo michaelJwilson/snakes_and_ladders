@@ -96,6 +96,12 @@ class ConvergenceError(RuntimeError):
     propagation on a Potts graph and the general flooding schedule raised two
     classes of this name until #1059.
 
+    The one exhausted loop that raises rather than returning a
+    :class:`~sal.opt.termination.Termination` (issue #1089): unsettled loopy
+    messages oscillate, so the marginals and the partition estimate read from
+    them at the cap are not an answer to return with a flag, unlike an
+    iterate that only stopped short of its tolerance.
+
     Parameters
     ----------
     method : str

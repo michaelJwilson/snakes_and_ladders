@@ -318,7 +318,7 @@ def test_a_ladder_or_band_the_warm_up_cannot_use_is_refused() -> None:
         adapt_ladder(_ratio_acceptance, (1.0, 0.0), BAND, 1, 4)
     with pytest.raises(ValueError, match="0 < low < high < 1"):
         adapt_ladder(_ratio_acceptance, (2.0, 1.0), (0.7, 0.4), 1, 4)
-    with pytest.raises(ValueError, match="max_rounds"):
+    with pytest.raises(ValueError, match="max_iterations"):
         adapt_ladder(_ratio_acceptance, (2.0, 1.0), BAND, 0, 4)
     with pytest.raises(ValueError, match="already has"):
         adapt_ladder(_ratio_acceptance, (2.0, 1.0, 0.5), BAND, 1, 2)
@@ -397,7 +397,7 @@ def test_a_ladder_or_a_measurement_the_placement_cannot_use_is_refused() -> None
         adapt_ladder_by_round_trips(_linear_up_fraction, (1.0, 3.0, 2.0), 1e-3, 4)
     with pytest.raises(ValueError, match="tolerance must be positive"):
         adapt_ladder_by_round_trips(_linear_up_fraction, (4.0, 2.0, 1.0), 0.0, 4)
-    with pytest.raises(ValueError, match="max_rounds"):
+    with pytest.raises(ValueError, match="max_iterations"):
         adapt_ladder_by_round_trips(_linear_up_fraction, (4.0, 2.0, 1.0), 1e-3, 0)
     with pytest.raises(ValueError, match="one per rung"):
         adapt_ladder_by_round_trips(lambda _l: [1.0, 0.0], (4.0, 2.0, 1.0), 1e-3, 1)

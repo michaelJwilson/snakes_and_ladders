@@ -69,10 +69,10 @@ def test_parsimony_score_eight_taxa_benchmark(
     alignment = dict(dataset.alignment)
 
     if scorer == "fitch":
-        score = benchmark(fitch_score, params.tau, alignment, params.k)
+        score = benchmark(fitch_score, params.tau, alignment, params.n_states)
     else:
         score = benchmark(
-            sankoff_score, params.tau, alignment, unit_step_matrix(params.k)
+            sankoff_score, params.tau, alignment, unit_step_matrix(params.n_states)
         )
 
-    assert score == fitch_score(params.tau, alignment, params.k)
+    assert score == fitch_score(params.tau, alignment, params.n_states)

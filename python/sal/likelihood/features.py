@@ -94,14 +94,17 @@ LATTICE_TOKEN_NAMES = (
 
 
 def tree_features(
-    topology: Topology, alignment: Mapping[str, np.ndarray], k: int, pi: np.ndarray
+    topology: Topology,
+    alignment: Mapping[str, np.ndarray],
+    n_states: int,
+    pi: np.ndarray,
 ) -> np.ndarray:
     """One vector per topology, in ``TREE_FEATURE_NAMES`` order, per-site where it scales with sites."""
     n_sites = int(next(iter(alignment.values())).shape[0])
-    distances = jc_distances(alignment, k)
+    distances = jc_distances(alignment, n_states)
     lengths = least_squares_lengths(topology, distances)
-    plug_in = float(PlugInLikelihood(k, pi)(topology, alignment))
-    bound = float(ParsimonyUpperBound(k, pi)(topology, alignment))
+    plug_in = float(PlugInLikelihood(n_states, pi)(topology, alignment))
+    bound = float(ParsimonyUpperBound(n_states, pi)(topology, alignment))
     fitch = float(site_fitch_scores(topology, alignment).sum())
     return np.array(
         [
@@ -118,10 +121,10 @@ def tree_features(
 
 
 def tree_tokens(
-    topology: Topology, alignment: Mapping[str, np.ndarray], k: int
+    topology: Topology, alignment: Mapping[str, np.ndarray], n_states: int
 ) -> np.ndarray:
     """One row per branch, in ``TREE_TOKEN_NAMES`` order: its least-squares length, how evenly its split divides the taxa, and the mean distance across and within the split."""
-    distances = jc_distances(alignment, k)
+    distances = jc_distances(alignment, n_states)
     lengths = least_squares_lengths(topology, distances)
     names = sorted(alignment)
     rows = []

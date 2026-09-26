@@ -165,15 +165,6 @@ def refuse_start(name: str, objective: Objective, reason: str) -> NoReturn:
     raise ValueError(msg)
 
 
-def _ended(termination: Termination | None, iterations: int) -> Termination:
-    """``termination``, or the budget branch where a producer left it unknown."""
-    return (
-        termination
-        if termination is not None
-        else Termination.after(iterations, converged=False)
-    )
-
-
 def polish_by_fit(
     objective: Objective, theta: torch.Tensor, budget: Budget
 ) -> PolishedPoint:
@@ -186,7 +177,7 @@ def polish_by_fit(
     result = fit(objective, theta, max_iterations=budget.size)
     return PolishedPoint(
         value=result.value,
-        termination=_ended(result.termination, result.iterations),
+        termination=result.termination,
         theta=result.theta,
     )
 
@@ -242,7 +233,7 @@ def polish_by_emission_em(
     )
     return PolishedPoint(
         value=-fitted.log_likelihood,
-        termination=_ended(fitted.termination, fitted.iterations),
+        termination=fitted.termination,
         theta=polished,
     )
 
@@ -289,7 +280,7 @@ def polish_by_baum_welch(
     )
     return PolishedPoint(
         value=-fitted.log_likelihood,
-        termination=_ended(fitted.termination, budget.size),
+        termination=fitted.termination,
         theta=polished,
     )
 
