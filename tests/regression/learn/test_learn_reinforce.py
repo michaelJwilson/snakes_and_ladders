@@ -189,7 +189,7 @@ def test_training_raises_the_enumerated_expected_return() -> None:
         max_steps=EPISODE_HORIZON,
     )
     assert enumerated_return() > before
-    assert training.episodes == 60 * 32
+    assert training.spent == 60 * 32
     assert len(training.mean_returns) == 60
 
 

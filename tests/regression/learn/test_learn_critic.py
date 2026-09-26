@@ -217,7 +217,7 @@ def test_actor_critic_reaches_the_optimum_at_least_as_often_as_greedy() -> None:
         batch=32,
         max_steps=6,
     )
-    assert training.episodes == 1920
+    assert training.spent == 1920
     best = optimum(environment)[1]
     rng = np.random.default_rng(1)
     reached = np.mean(

@@ -139,7 +139,7 @@ def test_expert_iteration_makes_the_planner_reach_the_optimum_at_a_fraction_of_g
         horizon=6,
         n_simulations=20,
     )
-    assert training.evaluations > 0
+    assert training.spent > 0
     assert len(training.mean_returns) == 10
     rng = np.random.default_rng(1)
     planned = [
@@ -266,7 +266,7 @@ def test_the_expert_iteration_curve_is_the_one_a_fixed_seed_produces() -> None:
         return (
             training.mean_returns,
             training.policy_losses,
-            training.evaluations,
+            training.spent,
         )
 
     first = curve()
