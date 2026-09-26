@@ -41,6 +41,7 @@ from dataclasses import dataclass, field, replace
 import numpy as np
 import torch
 
+from sal import param_tree
 from sal.bound import Bound
 
 
@@ -519,7 +520,7 @@ def fit_surrogate(
     optimizer = torch.optim.Adam(
         model.parameters(), lr=learning_rate, weight_decay=weight_decay
     )
-    best_state = {name: value.clone() for name, value in model.state_dict().items()}
+    best_state = param_tree.map_leaves(torch.Tensor.clone, dict(model.state_dict()))
     best, since_best = float("inf"), 0
     train_losses: list[float] = []
     validation_losses: list[float] = []

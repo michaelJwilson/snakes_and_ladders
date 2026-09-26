@@ -64,6 +64,9 @@ whether or not it has members yet.
 .. automodule:: sal.ragged
    :members:
 
+.. automodule:: sal.param_tree
+   :members:
+
 .. automodule:: sal.track
    :members:
 

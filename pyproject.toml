@@ -39,6 +39,12 @@ dependencies = [
     # 1e4-1e5 positions. CPU wheels on linux-64 and osx-arm64; jax-metal is
     # experimental and not pulled.
     "jax>=0.7.2",
+    # Apache-2.0, approved on #1129: the parameter trees behind
+    # `sal.param_tree`. Below the 1,000-star bar, flagged per root CLAUDE.md;
+    # chosen over dm-tree (3.9x slower on a 64-restart stack, and it takes a
+    # frozen dataclass for a leaf) and jax.tree_util (an autodiff import, 1.2 s,
+    # on paths that take no derivative). torch's own pytree backend.
+    "optree>=0.20.0",
     "torch>=2.4.0",
 ]
 
