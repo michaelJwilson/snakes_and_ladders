@@ -57,7 +57,7 @@ import bisect
 import itertools
 import math
 from abc import abstractmethod
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol, runtime_checkable
@@ -365,20 +365,47 @@ def ladder(values: TempSchedule | Sequence[float]) -> tuple[float, ...]:
     return tuple(float(value) for value in values)
 
 
-def beta_ladder(values: TempSchedule | Sequence[float]) -> tuple[float, ...]:
-    """A tuple of inverse temperatures from a schedule or from a sequence.
+class InverseTemperatures(tuple[float, ...]):
+    """A ladder of inverse temperatures, ``beta = 1 / T``, named by its type (issue #1089).
+
+    A bare sequence is read as temperatures wherever one is accepted
+    (:func:`ladder`); the annealers read ``beta``, so they take this or a
+    :class:`TempSchedule` and refuse a bare sequence, which one module once
+    read as ``beta`` and its sibling as ``T``. A tuple, so indexing,
+    iteration and equality are a tuple's.
+    """
+
+    __slots__ = ()
+
+    def __new__(cls, values: Iterable[float]) -> InverseTemperatures:
+        return super().__new__(cls, (float(value) for value in values))
+
+
+def beta_ladder(values: TempSchedule | InverseTemperatures) -> tuple[float, ...]:
+    """A tuple of inverse temperatures from a schedule or from :class:`InverseTemperatures`.
 
     :func:`ladder` for a consumer whose rungs are ``beta`` rather than ``T``.
     A schedule declares temperatures, so it is read step by step and
-    inverted; a sequence is the inverse temperatures as given. The one
-    spelling a schedule cannot carry is ``beta = 0``, the infinite
-    temperature :func:`_check_temperature` refuses, so a consumer anchored
-    there refuses a schedule on its own terms rather than on this one
-    (issue #861).
+    inverted. The one spelling a schedule cannot carry is ``beta = 0``, the
+    infinite temperature :func:`_check_temperature` refuses, so a consumer
+    anchored there refuses a schedule on its own terms rather than on this
+    one (issue #861).
+
+    Raises
+    ------
+    TypeError
+        If ``values`` is a bare sequence, whose reading as ``beta`` or ``T``
+        is a guess (issue #1089).
     """
     if isinstance(values, TempSchedule):
         return tuple(1.0 / temperature for temperature in temperatures(values))
-    return tuple(float(value) for value in values)
+    if isinstance(values, InverseTemperatures):
+        return tuple(values)
+    msg = (
+        "a bare sequence is read as temperatures elsewhere; pass a TempSchedule "
+        "or wrap inverse temperatures in InverseTemperatures (issue #1089)"
+    )
+    raise TypeError(msg)
 
 
 class Monotone(StrEnum):

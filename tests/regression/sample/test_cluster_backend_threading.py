@@ -22,6 +22,7 @@ from sal.sample.annealed import (
     simulated_tempering,
 )
 from sal.sample.potts_mcmc import PottsMove, sample_potts_pair
+from sal.sample.schedule import InverseTemperatures
 from sal.sample.tempered import tempered_potts_pair
 from sal.sim.graph import BoundaryCondition, lattice_graph
 
@@ -29,7 +30,7 @@ GRAPH = lattice_graph((4, 4), BoundaryCondition.OPEN, 0.9)
 #: A per-site field, so each cluster carries an accept step and the two
 #: passes consume their uniforms in different orders.
 FIELD = np.random.default_rng(7).normal(scale=0.5, size=(16, 3))
-BETAS = (0.0, 0.5, 1.0)
+BETAS = InverseTemperatures((0.0, 0.5, 1.0))
 MOVE = PottsMove.SWENDSEN_WANG
 
 

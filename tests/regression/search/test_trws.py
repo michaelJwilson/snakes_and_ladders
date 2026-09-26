@@ -333,13 +333,13 @@ def test_the_labelling_energy_is_sim_potts_energy() -> None:
             {},
             "edge 0 joins site 1 to itself",
         ),
-        (TREE, np.zeros(3), {"max_iterations": 0}, "max_iterations must be >= 1"),
+        (TREE, np.zeros(3), {"max_iterations": 0}, "max_iterations is a loop's cap"),
         (TREE, np.zeros(3), {"tolerance": -1.0}, "tolerance must be >= 0"),
         (
             TREE,
             np.zeros(3),
             {"max_iterations": 0, "backend": Backend.PYTHON},
-            "max_iterations must be >= 1",
+            "max_iterations is a loop's cap",
         ),
         (
             TREE,
@@ -415,3 +415,16 @@ def test_each_kernel_shape_error_names_wanted_and_given(
     arguments.update(change)
     with pytest.raises(ValueError, match=message):
         trws_iterations_checked(**arguments)  # type: ignore[arg-type]
+
+
+@pytest.mark.smoke
+def test_every_bound_refuses_a_cap_below_one_alike() -> None:
+    # Issue #1089: `dual_bound(max_iterations=0)` returned a bound of -inf where
+    # TRW-S refused; both refuse through `check_cap`.
+    field = np.zeros(3)
+    for call in (
+        lambda: trws(TREE, field, max_iterations=0),
+        lambda: dual_bound(TREE, field, max_iterations=0, plaquettes=()),
+    ):
+        with pytest.raises(ValueError, match="a loop's cap and must be at least 1"):
+            call()
