@@ -48,8 +48,8 @@ def test_every_order_stops_at_a_single_site_local_minimum(order: SweepOrder) -> 
     run = iterated_conditional_modes(
         GRAPH,
         FIELD,
-        4,
-        np.random.default_rng(0),
+        n_states=4,
+        rng=np.random.default_rng(0),
         sweep_order=order,
         stop_when_clean=order is not SweepOrder.RANDOM,
         backend=Backend.PYTHON,
@@ -87,8 +87,8 @@ def test_the_checkerboard_order_is_bitwise_on_both_routes() -> None:
         iterated_conditional_modes(
             GRAPH,
             FIELD,
-            4,
-            np.random.default_rng(3),
+            n_states=4,
+            rng=np.random.default_rng(3),
             sweep_order=SweepOrder.CHECKERBOARD,
             backend=backend,
         )
@@ -103,5 +103,9 @@ def test_the_checkerboard_order_is_bitwise_on_both_routes() -> None:
 def test_the_residual_order_refuses_the_compiled_kernel() -> None:
     with pytest.raises(ValueError, match="needs python"):
         iterated_conditional_modes(
-            GRAPH, FIELD, 4, np.random.default_rng(0), sweep_order=SweepOrder.RESIDUAL
+            GRAPH,
+            FIELD,
+            n_states=4,
+            rng=np.random.default_rng(0),
+            sweep_order=SweepOrder.RESIDUAL,
         )
