@@ -31,6 +31,7 @@ precede them.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from enum import StrEnum
 
 import numpy as np
@@ -38,7 +39,7 @@ import numpy as np
 from sal.backend import Backend, refuse_backend
 from sal.opt.termination import Termination
 from sal.search.alpha_expansion import Labelling
-from sal.search.icm.numba import icm_sweeps_checked, no_survivor
+from sal.search.icm.numba import greedy_colouring, icm_sweeps_checked, no_survivor
 from sal.sim.graph import PottsGraph
 from sal.sim.potts import (
     SiteField,
@@ -64,6 +65,81 @@ class SweepOrder(StrEnum):
     """``range(n_nodes)``: the sites in index order, every sweep."""
     RANDOM = "random"
     """A fresh ``rng.permutation(n_nodes)`` per sweep, which is Gibbs at T = 0."""
+    CHECKERBOARD = "checkerboard"
+    """The classes of a greedy colouring, one after another, every sweep (issue #1073).
+
+    Sites of one class share no edge, so the class's updates commute: the
+    order within it does not change the result, and a class could be swept
+    in parallel. :func:`colouring`'s classes: two on the square lattice, four
+    on the triangular.
+    """
+    RESIDUAL = "residual"
+    """By descending gain of each site's best move, recomputed as each sweep starts (issue #1073).
+
+    Greedy best-first; the Python route only.
+    """
+
+
+def colouring(graph: PottsGraph, *, backend: Backend = Backend.NUMBA) -> np.ndarray:
+    """A greedy colouring: each site, in index order, the smallest colour its earlier neighbours lack (issue #1073).
+
+    Two colours on the square lattice. On the triangular lattice the greedy
+    order takes four where three suffice --- measured on 7x6 --- which costs a
+    fourth class and nothing else: no class holds an edge either way.
+
+    Parameters
+    ----------
+    graph : PottsGraph
+        Any.
+    backend : Backend
+        ``NUMBA`` runs :func:`sal.search.icm.numba.greedy_colouring`;
+        ``PYTHON`` is the loop below, its oracle.
+
+    Returns
+    -------
+    np.ndarray
+        Colour per site, ``int64``.
+    """
+    refuse_backend("colouring", backend, (Backend.NUMBA, Backend.PYTHON))
+    offsets, neighbours, _ = graph.compressed_adjacency()
+    if backend is Backend.NUMBA:
+        return np.asarray(greedy_colouring(offsets, neighbours))
+    colour = np.full(graph.n_nodes, -1, dtype=np.int64)
+    for node in range(graph.n_nodes):
+        taken = {int(colour[j]) for j in neighbours[offsets[node] : offsets[node + 1]]}
+        chosen = 0
+        while chosen in taken:
+            chosen += 1
+        colour[node] = chosen
+    return colour
+
+
+def colour_order(graph: PottsGraph) -> np.ndarray:
+    """The sites grouped by :func:`colouring`'s classes, in index order within a class.
+
+    Returns
+    -------
+    np.ndarray
+        A permutation of ``range(n_nodes)``, ``int64``.
+    """
+    return np.argsort(colouring(graph), kind="stable").astype(np.int64)
+
+
+def _residual_order(
+    labels: list[int],
+    values: np.ndarray,
+    bounds: list[int],
+    neighbours: list[int],
+    couplings: list[float],
+) -> list[int]:
+    """The sites by descending gain of their best single-site move, ties by index."""
+    gains = np.empty(len(labels))
+    for node in range(len(labels)):
+        local = -values[node].copy()
+        for position in range(bounds[node], bounds[node + 1]):
+            local[labels[neighbours[position]]] -= couplings[position]
+        gains[node] = local[labels[node]] - local.min()
+    return np.argsort(-gains, kind="stable").tolist()
 
 
 def check_min_sites(min_sites: int, n_nodes: int) -> None:
@@ -185,6 +261,9 @@ def iterated_conditional_modes(
         else check_labelling(start, n_nodes, n_states)
     )
     lazy = sweep_order is SweepOrder.RANDOM and stop_when_clean
+    if backend is Backend.NUMBA and sweep_order is SweepOrder.RESIDUAL:
+        msg = f"{sweep_order} order reorders from each sweep's labels; it needs {Backend.PYTHON}"
+        raise ValueError(msg)
     if backend is Backend.NUMBA and lazy:
         msg = (
             f"the compiled sweep takes every sweep's order drawn up front, "
@@ -199,13 +278,15 @@ def iterated_conditional_modes(
     # The permutations the sweep visits in, one per sweep and in the order a
     # per-sweep draw would take them (issue #923): with every sweep run, the
     # same stream. No rows is index order.
-    orders = (
-        np.stack([rng.permutation(n_nodes) for _ in range(max_iterations)]).astype(
-            np.int64
-        )
-        if sweep_order is SweepOrder.RANDOM and not lazy and max_iterations > 0
-        else np.empty((0, n_nodes), dtype=np.int64)
-    )
+    if sweep_order is SweepOrder.RANDOM and not lazy and max_iterations > 0:
+        orders = np.stack(
+            [rng.permutation(n_nodes) for _ in range(max_iterations)]
+        ).astype(np.int64)
+    elif sweep_order is SweepOrder.CHECKERBOARD:
+        # One order every sweep repeats: the kernel reads row `sweep % 1`.
+        orders = colour_order(graph)[np.newaxis, :]
+    else:
+        orders = np.empty((0, n_nodes), dtype=np.int64)
     draws = (
         rng.random(max_iterations * n_nodes)
         if min_sites > 0
@@ -246,11 +327,15 @@ def iterated_conditional_modes(
     sweeps = 0
     for sweep in range(max_iterations):
         sweeps += 1
-        order = (
-            rng.permutation(n_nodes)
-            if lazy
-            else (orders[sweep] if orders.shape[0] else range(n_nodes))
-        )
+        order: Sequence[int] | np.ndarray
+        if lazy:
+            order = rng.permutation(n_nodes)
+        elif sweep_order is SweepOrder.RESIDUAL:
+            order = _residual_order(labels, values, bounds, neighbours, couplings)
+        else:
+            order = (
+                orders[sweep % orders.shape[0]] if orders.shape[0] else range(n_nodes)
+            )
         changed = False
         for node in order:
             local = -values[node].copy()

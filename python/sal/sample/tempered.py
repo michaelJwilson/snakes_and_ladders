@@ -676,7 +676,7 @@ def tempered_topologies(
 def adapt_ladder_round_trips(
     graph: PottsGraph,
     field: SiteField | np.ndarray,
-    start: TempSchedule | Sequence[float],
+    temperatures: TempSchedule | Sequence[float],
     rng: np.random.Generator,
     n_sweeps: int,
     tolerance: float,
@@ -700,7 +700,7 @@ def adapt_ladder_round_trips(
     ----------
     graph, field, rng, backend
         As :func:`~sal.sample.potts_mcmc.parallel_tempering`.
-    start : TempSchedule | Sequence[float]
+    temperatures : TempSchedule | Sequence[float]
         The starting ladder, in either spelling and read by
         :func:`~sal.sample.schedule.ladder` into the same
         floats; its endpoints and its length are the result's.
@@ -723,5 +723,5 @@ def adapt_ladder_round_trips(
         return [float(value) for value in up_fraction(run.walkers)]
 
     return adapt_ladder_by_round_trips(
-        measure, ladder(start), tolerance, max_iterations
+        measure, ladder(temperatures), tolerance, max_iterations
     )

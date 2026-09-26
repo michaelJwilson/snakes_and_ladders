@@ -329,7 +329,7 @@ def seed_hmc(instance: Instance, rng: np.random.Generator) -> Seeding:
         max(1, BUDGET.size // PER_PROPOSAL),
         step_size=STEP_SIZE,
         n_steps=N_STEPS,
-        theta0=_theta_at(instance, objective, start.components),
+        start=_theta_at(instance, objective, start.components),
         temperature=chain_temperature(instance),
     )
     # One mode's lowest-valued draw, components ordered by `_from_theta`.
@@ -353,7 +353,7 @@ def seed_tempering(instance: Instance, rng: np.random.Generator) -> Seeding:
         max(1, BUDGET.size // (PER_PROPOSAL * len(LADDER))),
         step_size=STEP_SIZE,
         n_steps=N_STEPS,
-        theta0=_theta_at(instance, objective, start.components),
+        start=_theta_at(instance, objective, start.components),
     )
     return Seeding(
         _from_theta(instance, objective, run.theta),
@@ -376,7 +376,7 @@ def seed_anneal(instance: Instance, rng: np.random.Generator) -> Seeding:
         torch.Generator().manual_seed(int(rng.integers(2**31 - 1))),
         step_size=STEP_SIZE,
         n_steps=N_STEPS,
-        theta0=_theta_at(instance, objective, start.components),
+        start=_theta_at(instance, objective, start.components),
     )
     return Seeding(
         _from_theta(instance, objective, run.best),
