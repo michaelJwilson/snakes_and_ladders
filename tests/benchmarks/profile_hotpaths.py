@@ -356,7 +356,7 @@ def search_sections(mid: bool) -> list[Section]:
         energies(graph, ising_field, configurations)
 
     def _expansion() -> None:
-        alpha_expansion(graph, potts_field, 3)
+        alpha_expansion(graph, potts_field, n_states=3)
 
     def _single_site() -> None:
         # The oracle sweep explicitly, though it is no longer the default:

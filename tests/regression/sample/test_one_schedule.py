@@ -27,9 +27,11 @@ from sal.sample.annealed import (
 from sal.sample.potts_mcmc import adapt_ladder_potts, parallel_tempering
 from sal.sample.schedule import (
     ExponentialTempSchedule,
+    InverseTemperatures,
     LadderTempSchedule,
     adapt_ladder,
     adapt_ladder_by_round_trips,
+    beta_ladder,
     ladder,
     temperatures,
 )
@@ -203,7 +205,7 @@ def test_simulated_tempering_reads_a_schedule_as_temperatures_inverted() -> None
     # schedule that spells it runs hot to cold.
     graph = _graph()
     hot_to_cold = tuple(reversed(LADDER))
-    betas = tuple(1.0 / temperature for temperature in hot_to_cold)
+    betas = InverseTemperatures(1.0 / temperature for temperature in hot_to_cold)
     first = simulated_tempering(
         graph, FIELD, betas, np.ones(3), np.random.default_rng(5), SWEEPS
     )
@@ -218,3 +220,14 @@ def test_simulated_tempering_reads_a_schedule_as_temperatures_inverted() -> None
 
     assert first.betas == second.betas == betas
     np.testing.assert_array_equal(first.rungs, second.rungs)
+
+
+@pytest.mark.smoke
+def test_a_bare_sequence_is_refused_where_a_ladder_is_read_as_beta() -> None:
+    # Issue #1089: a list was inverse temperatures to the annealers and
+    # temperatures to tempering; the annealers now take a type that says so.
+    with pytest.raises(TypeError, match="InverseTemperatures"):
+        beta_ladder((0.5, 1.0))  # type: ignore[arg-type]
+
+    assert beta_ladder(InverseTemperatures((0.5, 1.0))) == (0.5, 1.0)
+    assert beta_ladder(LadderTempSchedule((2.0, 1.0))) == (0.5, 1.0)

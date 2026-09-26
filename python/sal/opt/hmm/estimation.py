@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from typing import Any, Protocol
 
 import numpy as np
@@ -64,7 +65,7 @@ class EmFit:
     emissions: EmissionFamily
     log_likelihood: float
     emission_at_boundary: bool = False
-    termination: Termination | None = None
+    termination: Termination = dataclass_field(kw_only=True)
 
 
 @dataclass(frozen=True)
@@ -96,7 +97,7 @@ class CategoricalFit:
     log_transition: torch.Tensor
     log_emission: torch.Tensor
     log_likelihood: float
-    termination: Termination | None = None
+    termination: Termination = dataclass_field(kw_only=True)
 
     def __iter__(self) -> Iterator[Any]:
         """The declared order (#865): the three parameters, the value, the termination.

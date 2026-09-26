@@ -43,6 +43,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 
 import numpy as np
 import torch
@@ -120,7 +121,7 @@ class Inference:
     converged: bool
     fits: int = 0
     likelihood_evaluations: int = 0
-    termination: Termination | None = None
+    termination: Termination = dataclass_field(kw_only=True)
 
 
 @dataclass(frozen=True)
@@ -662,7 +663,7 @@ class ParsimonyInference:
     evaluations: int
     trace: tuple[float, ...]
     converged: bool
-    termination: Termination | None = None
+    termination: Termination = dataclass_field(kw_only=True)
 
 
 def _metric_step_matrix(step_matrix: np.ndarray, n_states: int) -> np.ndarray:

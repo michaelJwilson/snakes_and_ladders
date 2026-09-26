@@ -231,7 +231,7 @@ def ground_state_target(
     """
 
     def target(graph: PottsGraph, field: np.ndarray) -> float:
-        return alpha_expansion(graph, field, n_states, backend=backend).energy
+        return alpha_expansion(graph, field, backend=backend, n_states=n_states).energy
 
     return target
 

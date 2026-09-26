@@ -125,10 +125,12 @@ def measure(
     """
     environment, taxa = _environment(params, MoveSet.NNI)
     topologies = list(enumerate_topologies(taxa))
-    scores = np.array(sorted(environment.score(topology) for topology in topologies))
+    scores = np.array(
+        sorted(environment.log_weight(topology) for topology in topologies)
+    )
     optima = np.array(
         sorted(
-            environment.score(topology)
+            environment.log_weight(topology)
             for topology in topologies
             if environment.is_terminal(topology)
         )
@@ -141,7 +143,10 @@ def measure(
     def reached(endpoints: list[Topology]) -> float:
         return float(
             np.mean(
-                [abs(environment.score(state) - best) < 1e-9 for state in endpoints]
+                [
+                    abs(environment.log_weight(state) - best) < 1e-9
+                    for state in endpoints
+                ]
             )
         )
 

@@ -73,14 +73,18 @@ def starts(environment: TreeEnvironment, params: SimulationParams) -> list[Topol
 @pytest.fixture(scope="module")
 def maximum(environment: TreeEnvironment, taxa: list[str]) -> float:
     """The enumerated maximum over all 945 unrooted topologies."""
-    return max(environment.score(topology) for topology in enumerate_topologies(taxa))
+    return max(
+        environment.log_weight(topology) for topology in enumerate_topologies(taxa)
+    )
 
 
 def _rate(
     environment: TreeEnvironment, endpoints: list[Topology], best: float
 ) -> float:
     return float(
-        np.mean([abs(environment.score(state) - best) < 1e-9 for state in endpoints])
+        np.mean(
+            [abs(environment.log_weight(state) - best) < 1e-9 for state in endpoints]
+        )
     )
 
 

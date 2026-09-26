@@ -183,7 +183,7 @@ def _starts(built: TreeEnvironment, seed: int) -> list[Topology]:
 def _rate(built: TreeEnvironment, endpoints: Sequence[Topology], best: float) -> float:
     """The fraction of ``endpoints`` scoring the enumerated maximum."""
     return float(
-        np.mean([abs(built.score(state) - best) < 1e-9 for state in endpoints])
+        np.mean([abs(built.log_weight(state) - best) < 1e-9 for state in endpoints])
     )
 
 
@@ -203,7 +203,7 @@ def tree_policy_baseline(loaded: Fixture[Any]) -> dict[str, Measurement]:
         "start_seed_offset": START_SEED_OFFSET,
     }
 
-    best = max(built.score(topology) for topology in enumerate_topologies(taxa))
+    best = max(built.log_weight(topology) for topology in enumerate_topologies(taxa))
     starts = _starts(built, params.seed)
     greedy = _rate(
         built,
@@ -325,7 +325,7 @@ def potts_environment_baseline(loaded: Fixture[Any]) -> dict[str, Measurement]:
         np.mean(
             [
                 abs(
-                    environment.energy(
+                    environment.log_weight(
                         rollout(
                             environment,
                             untrained,
@@ -429,7 +429,9 @@ def planted_glass_baseline(loaded: Fixture[Any]) -> dict[str, Measurement]:
     for offset in range(GLASS_RESTART_SEEDS):
         generator = np.random.default_rng(params.seed + offset)
         found = [
-            iterated_conditional_modes(glass.graph, GLASS_FIELD, 2, generator).energy
+            iterated_conditional_modes(
+                glass.graph, GLASS_FIELD, generator, n_states=2
+            ).energy
             for _ in range(params.glass_restarts)
         ]
         hits = [abs(energy - best) < 1e-9 for energy in found]

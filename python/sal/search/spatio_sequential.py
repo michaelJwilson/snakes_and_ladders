@@ -31,6 +31,7 @@ Bregman divergence, in :mod:`sal.opt.mixture`.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from dataclasses import field as dataclass_field
 from enum import StrEnum
 from functools import partial
 from typing import TYPE_CHECKING
@@ -112,7 +113,7 @@ class SpatioSequentialFit:
     labels: np.ndarray
     log_likelihoods: np.ndarray
     field: np.ndarray
-    termination: Termination | None = None
+    termination: Termination = dataclass_field(kw_only=True)
 
 
 def m_step(
@@ -259,7 +260,9 @@ def label_step(
     potential = -field
     if solver is LabelSolver.ALPHA_EXPANSION:
         return np.asarray(
-            alpha_expansion(graph, potential, params.n_classes, start=labels).labelling
+            alpha_expansion(
+                graph, potential, start=labels, n_states=params.n_classes
+            ).labelling
         )
     if solver is LabelSolver.ICM:
         # The sweep `search.icm` runs, started from `labels` in a random site
@@ -272,12 +275,12 @@ def label_step(
         return iterated_conditional_modes(
             graph,
             potential,
-            params.n_classes,
             rng,
             start=labels,
             sweep_order=SweepOrder.RANDOM,
             min_sites=min_sites,
             backend=Backend.PYTHON,
+            n_states=params.n_classes,
         ).labelling
     if wolff_schedule is None:
         msg = "the Wolff solver needs a schedule"
@@ -471,7 +474,7 @@ def fit_spatio_sequential(
         current,
         np.array(values),
         field,
-        Termination.after(n_blocks, converged=False),
+        termination=Termination.after(n_blocks, converged=False),
     )
 
 
@@ -802,5 +805,5 @@ def graph_burn_in(
         labels,
         np.array(values),
         field,
-        Termination.after(schedule.n_steps, converged=False),
+        termination=Termination.after(schedule.n_steps, converged=False),
     )

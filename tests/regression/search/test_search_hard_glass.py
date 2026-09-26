@@ -44,7 +44,7 @@ def glass() -> PlantedSpinGlass:
 def _descents(instance: PlantedSpinGlass, seed: int, restarts: int) -> list[Labelling]:
     generator = np.random.default_rng(seed)
     return [
-        iterated_conditional_modes(instance.graph, FIELD, 2, generator)
+        iterated_conditional_modes(instance.graph, FIELD, generator, n_states=2)
         for _ in range(restarts)
     ]
 

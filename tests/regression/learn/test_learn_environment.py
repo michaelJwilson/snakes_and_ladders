@@ -111,7 +111,7 @@ def test_total_reward_is_the_improvement_between_first_and_last_state() -> None:
     environment = potts_environment()
     policy = LinearPolicy(2)
     episode = rollout(environment, policy, np.random.default_rng(0), max_steps=5)
-    improvement = environment.energy(episode.states[-1]) - environment.energy(
+    improvement = environment.log_weight(episode.states[-1]) - environment.log_weight(
         episode.states[0]
     )
     assert_allclose(episode.total_reward, improvement, atol=1e-12)

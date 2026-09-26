@@ -345,8 +345,8 @@ def test_ground_state_bracket_contains_the_enumerated_minimum() -> None:
     expansion = alpha_expansion(
         graph,
         np.tile(field, (graph.n_nodes, 1)),
-        3,
         start=np.zeros(graph.n_nodes, dtype=np.int64),
+        n_states=3,
     )
     assert expansion.energy == pytest.approx(minimum, abs=1e-9)
 

@@ -36,6 +36,21 @@ from sal.sim.graph import (
 )
 
 
+def states_of(field: np.ndarray, n_nodes: int, n_states: int | None = None) -> int:
+    """The state count a field carries on its last axis, checked against ``n_states`` if given (issue #1091).
+
+    One reading of the state count for every solver: the field's, so it is
+    never a separate argument that can disagree with it.
+
+    Raises
+    ------
+    ValueError
+        If the field is not ``(n_states,)`` or ``(n_nodes, n_states)``, or
+        ``n_states`` is given and differs from it.
+    """
+    return int(site_field(np.asarray(field), n_nodes, n_states=n_states).shape[1])
+
+
 def site_field(
     field: np.ndarray, n_nodes: int, *, n_states: int | None = None
 ) -> np.ndarray:
