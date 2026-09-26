@@ -51,7 +51,7 @@ SITE_FIELD = np.random.default_rng(365).normal(0.0, 0.4, (9, 3))
 def _alignment() -> tuple[dict[str, np.ndarray], int, np.ndarray]:
     params = load_fixture(FIVE_TAXA)
     dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=1000)
-    return dict(dataset.alignment), params.k, np.asarray(params.pi)
+    return dict(dataset.alignment), params.n_states, np.asarray(params.pi)
 
 
 def test_full_fit_benchmark(benchmark: BenchmarkFixture) -> None:

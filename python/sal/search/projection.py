@@ -34,6 +34,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
+from dataclasses import field as dataclass_field
 
 import numpy as np
 import torch
@@ -856,7 +857,7 @@ class Fitted:
     iterations: int
     recovery: float
     mean_error: float
-    termination: Termination | None = None
+    termination: Termination = dataclass_field(kw_only=True)
     components: IndependentCountPair | None = None
 
     @property

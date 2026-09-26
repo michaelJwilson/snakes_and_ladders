@@ -300,3 +300,23 @@ def test_torch_is_imported_only_by_a_body_that_imports_it(
     )
 
     assert result.stdout.splitlines() == ["[False, False] False", "[1, 1] 3"]
+
+
+@pytest.mark.analytic
+def test_the_defaults_are_the_serial_loop() -> None:
+    # Issue #1085: `map_tasks(f, items, generator=rng)` needs no pool spelled
+    # out, and is the spelled-out serial call bitwise.
+    def draw(item: int, rng: np.random.Generator) -> float:
+        return item + float(rng.random())
+
+    defaulted = map_tasks(draw, range(5), generator=np.random.default_rng(3))
+    spelled = map_tasks(
+        draw,
+        range(5),
+        workers=1,
+        pool="serial",
+        intra_op_threads=None,
+        generator=np.random.default_rng(3),
+    )
+
+    assert defaulted == spelled

@@ -52,7 +52,9 @@ def _four_taxon_posterior() -> WithGaussianPrior:
     params = load_fixture(FOUR_TAXA)
     dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=500)
     return WithGaussianPrior(
-        BranchLengthObjective(params.tau, params.k, params.pi, dict(dataset.alignment)),
+        BranchLengthObjective(
+            params.tau, params.n_states, params.pi, dict(dataset.alignment)
+        ),
         scale=2.0,
     )
 
@@ -302,6 +304,7 @@ def test_the_adapted_acceptance_lands_at_its_target_on_the_gaussian() -> None:
 
 @pytest.mark.smoke
 @at_scale("n_seeds", ci=3, stress=20)
+@pytest.mark.release  # 12.0 s in the tier, over the 10 s cap (#1088)
 def test_the_adapted_acceptance_lands_at_its_target_on_the_four_taxon_posterior(
     n_seeds: int,
 ) -> None:
@@ -387,6 +390,7 @@ def test_the_adapted_chain_agrees_with_the_fixed_chain_and_the_exact_gaussian() 
 
 
 @pytest.mark.oracle
+@pytest.mark.release  # 11.6 s in the tier, over the 10 s cap (#1088)
 def test_the_adapted_chain_agrees_with_the_fixed_chain_on_the_four_taxon_posterior() -> (
     None
 ):
@@ -513,6 +517,7 @@ def _largest_energy_errors(target: float) -> tuple[list[float], float]:
 
 
 @pytest.mark.analytic
+@pytest.mark.release  # 10.1 s in the tier, over the 10 s cap (#1088)
 def test_the_energy_error_and_not_the_acceptance_rate_says_the_step_is_safe() -> None:
     """Two warm-ups that each land where they were asked, one on the cliff.
 

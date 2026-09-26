@@ -464,7 +464,7 @@ def test_the_score_after_a_cluster_move_is_the_negated_energy_bitwise(
         )
         successor, _ = environment.step(state, action)
         reference = -float(energies(graph, field, np.asarray(successor)[None])[0])
-        assert environment.score(successor) == reference
+        assert environment.log_weight(successor) == reference
 
 
 @pytest.mark.analytic
@@ -710,7 +710,7 @@ def _declared_control(
     for seed in range(COMPARISON_SEEDS):
         rng = np.random.default_rng(seed)
         state = environment.reset(rng)
-        best, spent = environment.score(state), 0
+        best, spent = environment.log_weight(state), 0
         for rung_index in order:
             action = PottsAction(
                 kind,
@@ -720,7 +720,7 @@ def _declared_control(
             )
             spent += environment.visits(state, action)
             state, _ = environment.step(state, action)
-            best = max(best, environment.score(state))
+            best = max(best, environment.log_weight(state))
         energy.append(-best)
         spend.append(spent)
     return energy, spend, rung, budget
