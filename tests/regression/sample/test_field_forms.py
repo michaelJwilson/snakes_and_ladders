@@ -85,7 +85,7 @@ CALLS: dict[str, Callable[[PottsGraph, Any], Any]] = {
     "ground_state": lambda g, f: ground_state(
         g, f, "alpha-expansion", Budget(Cost.SITE_VISITS, 50 * g.n_nodes), _rng()
     ),
-    "dual_bound": lambda g, f: dual_bound(g, f, iterations=20),
+    "dual_bound": lambda g, f: dual_bound(g, f, max_iterations=20),
     "from_potts": lambda g, f: [
         factor.log_table for factor in from_potts(g, f).factors
     ],

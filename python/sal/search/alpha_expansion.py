@@ -1048,7 +1048,9 @@ def fuse(
     variables = np.flatnonzero(differs)
     n_variables = variables.size
     if n_variables == 0:
-        return Fused(better.copy(), energy(graph, values, better))
+        return Fused(
+            better.copy(), energy(graph, values, better), termination=_ONE_MOVE
+        )
     index = np.full(n_nodes, -1, dtype=np.int64)
     index[variables] = np.arange(n_variables)
     rows = np.arange(n_nodes)
@@ -1126,5 +1128,6 @@ def fuse(
     return Fused(
         fused,
         energy(graph, values, fused),
+        termination=_ONE_MOVE,
         unlabelled=int(n_variables - kept.sum() - flipped.sum()),
     )
