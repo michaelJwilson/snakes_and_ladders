@@ -797,6 +797,7 @@ def run_merge(
         energy=floored.energy,
         spent=floored.sweeps * problem.visits_per_sweep,
         seconds=time.perf_counter() - started,
+        termination=floored.termination,
     )
 
 
