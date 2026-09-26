@@ -65,9 +65,9 @@ def test_equal_lengths_reproduce_the_conserved_route_bitwise() -> None:
     assert ragged.log_likelihood == conserved.log_likelihood
     assert torch.equal(ragged.log_initial, conserved.log_initial)
     assert torch.equal(ragged.log_transition, conserved.log_transition)
-    assert isinstance(ragged.emissions, PoissonEmission)
-    assert isinstance(conserved.emissions, PoissonEmission)
-    np.testing.assert_array_equal(ragged.emissions.mean, conserved.emissions.mean)
+    assert isinstance(ragged.components, PoissonEmission)
+    assert isinstance(conserved.components, PoissonEmission)
+    np.testing.assert_array_equal(ragged.components.mean, conserved.components.mean)
 
     # The default compiled E step (#933) sums in its own order: measured
     # 4.4e-16 relative on the likelihood and 4.3e-14 on the log initial,
@@ -82,9 +82,9 @@ def test_equal_lengths_reproduce_the_conserved_route_bitwise() -> None:
     torch.testing.assert_close(
         compiled.log_transition, conserved.log_transition, rtol=0.0, atol=1e-11
     )
-    assert isinstance(compiled.emissions, PoissonEmission)
+    assert isinstance(compiled.components, PoissonEmission)
     torch.testing.assert_close(
-        compiled.emissions.mean, conserved.emissions.mean, rtol=1e-11, atol=0.0
+        compiled.components.mean, conserved.components.mean, rtol=1e-11, atol=0.0
     )
 
 
@@ -144,8 +144,8 @@ def test_the_planted_rates_are_recovered_from_ragged_segments() -> None:
 
     fit = baum_welch_family(batch, initial, transition, family)
 
-    assert isinstance(fit.emissions, PoissonEmission)
-    recovered = np.sort(fit.emissions.mean)
+    assert isinstance(fit.components, PoissonEmission)
+    recovered = np.sort(fit.components.mean)
     np.testing.assert_allclose(recovered, np.sort(RATES), rtol=0.15)
 
 

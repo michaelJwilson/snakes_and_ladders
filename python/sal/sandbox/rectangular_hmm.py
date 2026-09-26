@@ -189,8 +189,8 @@ def baum_welch_rectangular(
     return EmFit(
         log_initial=log_initial,
         log_transition=log_transition,
-        emissions=emissions,
+        components=emissions,
         log_likelihood=log_likelihood,
-        emission_at_boundary=at_boundary,
+        at_boundary=at_boundary,
         termination=Termination.after(iterations, converged=converged),
     )

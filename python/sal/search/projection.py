@@ -471,7 +471,7 @@ def burn_in_seeding(
     )
     return Seeding(
         _count_pair(fit.components),
-        fit.iterations * size / instance.n_samples,
+        fit.termination.iterations * size / instance.n_samples,
     )
 
 
@@ -734,7 +734,7 @@ def gaussian_em_seeding(
     ended = fitted.termination
     return Seeding(
         seed_at_means(instance, fitted.components.mean, at),
-        float(fitted.iterations),
+        float(fitted.termination.iterations),
         "" if ended is None else f"{ended.reason.value} after {ended.iterations}",
     )
 
