@@ -19,14 +19,19 @@ import itertools
 import numpy as np
 import pytest
 from sal.backend import Backend
+from sal.cost import Cost
+from sal.opt.budget import Budget
 from sal.search.alpha_expansion import expand, fuse
+from sal.search.ground_state import ground_state
+from sal.search.potts_starts import tiling_rung
+from sal.sim.fixtures import fixture
 from sal.sim.graph import (
     BoundaryCondition,
     PottsGraph,
     erdos_renyi_graph,
     lattice_graph,
 )
-from sal.sim.potts import energy
+from sal.sim.potts import energies, energy
 
 #: Fusions drawn per graph, each with its own field and proposals.
 DRAWS = 40
@@ -138,3 +143,50 @@ def test_identical_proposals_fuse_to_themselves() -> None:
 
     assert np.array_equal(fused.labelling, labelling)
     assert fused.unlabelled == 0
+
+
+#: The three fusion arms of `search.ground_state` (issue #1070).
+FUSION_ARMS = ("fusion-anneal", "fusion-sw", "fusion-chain")
+
+
+def _tiling(tier: str) -> tuple[PottsGraph, np.ndarray, Budget]:
+    """A `spatio_tiling` tier, and the 1,000-sweep budget `potts_starts` runs at."""
+    params = fixture("spatio_tiling", tier).params
+    rung = tiling_rung(params, tier)
+    return (
+        params.graph,
+        params.field,
+        Budget(Cost.SITE_VISITS, 1_000 * rung.visits_per_sweep),
+    )
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("arm", FUSION_ARMS)
+def test_a_fusion_arm_reaches_the_enumerated_optimum_at_ci(arm: str) -> None:
+    graph, field, budget = _tiling("ci")
+    every = np.array(
+        list(itertools.product(range(field.shape[1]), repeat=graph.n_nodes)),
+        dtype=np.int64,
+    )
+    optimum = float(energies(graph, field, every).min())
+
+    run = ground_state(graph, field, arm, budget, np.random.default_rng(0))
+
+    assert run.energy == pytest.approx(optimum, abs=1e-9)
+    assert run.spent <= budget.size
+
+
+@pytest.mark.analytic
+@pytest.mark.parametrize("arm", FUSION_ARMS)
+def test_a_fusion_arm_is_never_worse_than_the_expansion_at_release(arm: str) -> None:
+    graph, field, budget = _tiling("release")
+    expansion = ground_state(
+        graph, field, "alpha-expansion", budget, np.random.default_rng(0)
+    )
+
+    for seed in range(2):
+        run = ground_state(graph, field, arm, budget, np.random.default_rng(seed))
+
+        assert run.energy <= expansion.energy + 1e-9
+        assert run.energy == pytest.approx(energy(graph, field, run.labelling))
+        assert run.spent <= budget.size

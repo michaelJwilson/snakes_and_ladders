@@ -89,7 +89,12 @@ from sal.sample.potts_mcmc import (
     parallel_tempering,
 )
 from sal.sample.schedule import ScheduleParams, ScheduleShape
-from sal.search.alpha_expansion import Labelling, alpha_beta_swap, alpha_expansion
+from sal.search.alpha_expansion import (
+    Labelling,
+    alpha_beta_swap,
+    alpha_expansion,
+    fuse,
+)
 from sal.search.bifurcation import simulated_bifurcation
 from sal.search.icm import (
     SweepOrder,
@@ -1723,9 +1728,81 @@ WARM_SCHEDULE = replace(SWENDSEN_WANG_SCHEDULE, t_start=1.0)
 #: Swendsen-Wang's tuned end, cooled to :data:`ANNEAL_END` (issue #1041).
 EXPANSION_SW_SCHEDULE = ScheduleParams(ScheduleShape.LINEAR, 0.3236, ANNEAL_END)
 
+
 #: The tuned, warm and hybrid solvers of issues #1038 and #1041, by name.
 #: Not in :data:`METHODS`, which is issue #906's table and whose rows
 #: `docs/nb/potts_starts.ipynb` reproduces; :func:`ground_state` reaches both.
+@dataclass(frozen=True)
+class Fusion:
+    """Alpha-expansion fused with each proposer's labelling in turn (issue #1070).
+
+    The expansion runs first on :data:`EXPANSION_RESERVE_CYCLES` cycles, as
+    the ``swendsen-wang>expansion`` arm holds back. Each proposer then runs
+    on an equal share of what is left, from ``start`` and its own spawned
+    generator, and :func:`~sal.search.alpha_expansion.fuse` folds its
+    labelling into the running one. A fusion is charged one sweep's site
+    visits: its cut spans at most every site and edge once. The run is never
+    worse than the expansion or any proposal, by the fusion's own bound.
+
+    Parameters
+    ----------
+    proposers : tuple[str, ...]
+        :data:`METHODS` or :data:`ARMS` names, run in order; a name may
+        repeat, each run from its own generator.
+    """
+
+    proposers: tuple[str, ...]
+
+    def __call__(
+        self,
+        problem: Problem | Rung,
+        budget: Budget,
+        rng: np.random.Generator,
+        *,
+        start: np.ndarray | None = None,
+        schedule: ScheduleParams | None = None,
+        steps: int | None = None,
+    ) -> MethodRun:
+        """Expansion, each proposer, and a fusion after each."""
+        problem = _problem(problem)
+        started = time.perf_counter()
+        reserve = ExpansionReserve(EXPANSION_RESERVE_CYCLES)(problem)
+        fusions = len(self.proposers) * problem.visits_per_sweep
+        share = max(1, (budget.size - reserve - fusions) // len(self.proposers))
+        base = run_alpha_expansion(
+            problem, Budget(budget.unit, reserve), rng, start=start
+        )
+        labelling, spent = base.labelling, base.spent
+        keywords: dict[str, Any] = {}
+        if schedule is not None:
+            keywords["schedule"] = schedule
+        if steps is not None:
+            keywords["steps"] = steps
+        for name, stream in zip(
+            self.proposers, rng.spawn(len(self.proposers)), strict=True
+        ):
+            proposal = _solver(name)(
+                problem, Budget(budget.unit, share), stream, start=start, **keywords
+            )
+            labelling = fuse(
+                problem.graph, problem.field, labelling, proposal.labelling
+            ).labelling
+            spent += proposal.spent + problem.visits_per_sweep
+        return MethodRun(
+            labelling=labelling,
+            energy=energy(problem.graph, problem.field, labelling),
+            spent=spent,
+            seconds=time.perf_counter() - started,
+            # The proposers run their shares out: the arm ends on its budget,
+            # after one fusion per proposer.
+            termination=Termination.after(len(self.proposers), converged=False),
+        )
+
+
+#: Proposals the ``fusion-chain`` arm fuses into the expansion.
+FUSION_CHAIN_PROPOSALS = 4
+
+
 ARMS: dict[str, Method] = {
     "tuned-swendsen-wang": functools.partial(
         run_annealed, move=PottsMove.SWENDSEN_WANG, schedule=SWENDSEN_WANG_SCHEDULE
@@ -1749,6 +1826,11 @@ ARMS: dict[str, Method] = {
     "expansion>swendsen-wang": chain(
         "alpha-expansion", part("swendsen-wang", schedule=EXPANSION_SW_SCHEDULE)
     ),
+    # The expansion fused with one anneal, one tuned Swendsen-Wang, or
+    # several anneals in turn (#1070).
+    "fusion-anneal": Fusion(("anneal",)),
+    "fusion-sw": Fusion(("tuned-swendsen-wang",)),
+    "fusion-chain": Fusion(("anneal",) * FUSION_CHAIN_PROPOSALS),
 }
 
 #: The names that run an anneal, and so take a ``schedule`` and ``steps``.
