@@ -269,6 +269,63 @@ def iterated_conditional_modes(
     return _descended(graph, values, labelling, sweeps, n_states, min_sites, offsets)
 
 
+def merge_small_labels(
+    graph: PottsGraph,
+    field: SiteField | np.ndarray,
+    labelling: np.ndarray,
+    rng: np.random.Generator,
+    *,
+    min_sites: int,
+    max_iterations: int = 200,
+    backend: Backend = Backend.NUMBA,
+) -> Labelling:
+    """``labelling`` with no state below ``min_sites`` sites, descended again: the floor after any solver (issue #1081).
+
+    The floor lived inside :func:`iterated_conditional_modes` only, so a
+    labelling from alpha-expansion, TRW-S or an anneal could not be floored
+    without being handed to ICM by hand. This is that hand-off, named: ICM
+    from ``labelling`` with ``min_sites``, which dissolves each state below
+    the floor into the surviving ones on the floor's draws and descends to a
+    labelling a clean sweep leaves. Bitwise
+    ``iterated_conditional_modes(graph, field, rng, start=labelling,
+    min_sites=min_sites, ...)``, the one implementation; a labelling already
+    at the floor and at a local minimum comes back unchanged.
+
+    Parameters
+    ----------
+    graph, field
+        The problem, as :func:`iterated_conditional_modes` takes it.
+    labelling : np.ndarray
+        The labelling to floor, shape ``(n_nodes,)``.
+    rng : np.random.Generator
+        The floor's uniforms, ``max_iterations * n_nodes`` drawn up front.
+    min_sites : int
+        The floor, at least one.
+    max_iterations : int
+        ICM sweeps to run at most.
+    backend : Backend
+        :func:`iterated_conditional_modes`'s.
+
+    Raises
+    ------
+    ValueError
+        If ``min_sites < 1``, or as :func:`iterated_conditional_modes`
+        raises.
+    """
+    if min_sites < 1:
+        msg = f"a merge floors at least one site, got min_sites={min_sites}"
+        raise ValueError(msg)
+    return iterated_conditional_modes(
+        graph,
+        field,
+        rng,
+        start=labelling,
+        max_iterations=max_iterations,
+        min_sites=min_sites,
+        backend=backend,
+    )
+
+
 def _descended(
     graph: PottsGraph,
     values: np.ndarray,
