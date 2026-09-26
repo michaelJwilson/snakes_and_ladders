@@ -4137,7 +4137,7 @@ So of the tiling bracket's 0.81, TRW-S stopping short is 0.05 and the other
 0.75 lies between the LP and the best labelling, -17,022.18. TRW-S takes 0.82 s
 and 8.7 s on the two, the `highs` goals in `test_goals.py`.
 
-**A MIP on the fractional sites, #1069.** `validation.highs.mip` solves the
+**A MIP on the fractional sites, #1069, conserved in `sandbox.potts_mip`.** It solves the
 local polytope with integer node marginals by HiGHS's `milp`. Integral node
 marginals fix every edge table, so the MIP's optimum is the minimum energy. On
 the nine 3x3 and 2x4 lattices and a 4x4 two-state lattice it is the enumerated
