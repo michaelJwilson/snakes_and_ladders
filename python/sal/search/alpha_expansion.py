@@ -33,10 +33,12 @@ energies a cut can represent.
 
 from __future__ import annotations
 
+import dataclasses
 import warnings
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
+from enum import StrEnum
 from typing import Any, NamedTuple
 
 import numpy as np
@@ -63,6 +65,18 @@ from sal.sim.potts import (
 UNIFORM_POTTS_BOUND = 2.0
 
 DEFAULT_MAX_CYCLES = 50
+
+
+class Sense(StrEnum):
+    """Which way a solver optimizes the Potts energy (issue #1081).
+
+    ``MIN`` finds a ground state; ``MAX`` the highest-energy labelling, as
+    the minimum of the negated energy: couplings and field negated once at
+    the entry, the energy and any bound turned back once at the exit.
+    """
+
+    MIN = "min"
+    MAX = "max"
 
 
 @dataclass(frozen=True)
@@ -95,14 +109,22 @@ class Labelling:
     energy: float
     sweeps: int = 0
     termination: Termination = dataclass_field(kw_only=True)
+    #: The way ``energy`` was optimized: the lowest found, or the highest.
+    sense: Sense = dataclass_field(default=Sense.MIN, kw_only=True)
 
     def __iter__(self) -> Iterator[Any]:
-        """``(labelling, energy, sweeps, termination)``: the declared order (#865).
+        """``(labelling, energy, sweeps, termination, sense)``: the declared order (#865).
 
         ``Any`` and not a union: an unpacking gives every name the element
         type, so a union would mistype each of them.
         """
-        yield from (self.labelling, self.energy, self.sweeps, self.termination)
+        yield from (
+            self.labelling,
+            self.energy,
+            self.sweeps,
+            self.termination,
+            self.sense,
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -118,15 +140,20 @@ class BoundedLabelling(Labelling):
     Parameters
     ----------
     bound : float
-        A lower bound on ``min_x E(x)``, valid at every iteration.
+        A lower bound on ``min_x E(x)``, valid at every iteration; an upper
+        bound on ``max_x E(x)`` under :attr:`Sense.MAX`.
     """
 
     bound: float
 
     @property
     def gap(self) -> float:
-        """``energy - bound``: what is not established. Zero certifies the labelling optimal."""
-        return self.energy - self.bound
+        """What is not established: ``energy - bound`` minimizing, ``bound - energy`` maximizing.
+
+        Never negative for a valid bound; zero certifies the labelling optimal.
+        """
+        difference = self.energy - self.bound
+        return difference if self.sense is Sense.MIN else -difference
 
     @property
     def optimal(self) -> bool:
@@ -138,16 +165,46 @@ class BoundedLabelling(Labelling):
         return bool(self.gap <= 1e-9 * max(1.0, abs(self.bound)))
 
 
-@dataclass(frozen=True)
-class ExpansionResult:
-    """A labelling, and what reaching it cost.
+def oriented(
+    graph: PottsGraph, field: SiteField | np.ndarray, sense: Sense
+) -> tuple[PottsGraph, SiteField | np.ndarray]:
+    """``(graph, field)`` a minimizer reads for ``sense``: negated for :attr:`Sense.MAX`.
+
+    ``E`` is linear in ``(J, h)``, so ``max E`` on ``(J, h)`` is ``min E`` on
+    ``(-J, -h)`` and its labelling bitwise.
+    """
+    if Sense(sense) is Sense.MIN:
+        return graph, field
+    negated = PottsGraph(
+        graph.n_nodes,
+        graph.edges,
+        tuple(-coupling for coupling in graph.coupling),
+        shape=graph.shape,
+        boundary=graph.boundary,
+    )
+    return negated, -np.asarray(log_weight_of(field), dtype=float)
+
+
+def reoriented[L: Labelling](result: L, sense: Sense) -> L:
+    """``result`` of a minimizer run on :func:`oriented`'s problem, in ``sense``'s sign.
+
+    The energy, and a bound where there is one, turn back; the labelling does
+    not change.
+    """
+    if Sense(sense) is Sense.MIN:
+        return result
+    changes: dict[str, Any] = {"energy": -result.energy, "sense": Sense.MAX}
+    if isinstance(result, BoundedLabelling):
+        changes["bound"] = -result.bound
+    return dataclasses.replace(result, **changes)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ExpansionResult(Labelling):
+    """A :class:`Labelling`, and what reaching it cost (issue #1081).
 
     Parameters
     ----------
-    labelling : np.ndarray
-        One state per node.
-    energy : float
-        Its energy under :func:`energy`.
     cycles : int
         Complete sweeps over the label set. The loop stops on the first sweep
         that lowers nothing, so this is one more than the number that helped.
@@ -164,11 +221,8 @@ class ExpansionResult:
         derives one from site visits), and a budget returns what it holds.
     """
 
-    labelling: np.ndarray
-    energy: float
     cycles: int
     moves: int
-    termination: Termination = dataclass_field(kw_only=True)
 
 
 class _Arcs(NamedTuple):
@@ -690,6 +744,7 @@ def alpha_expansion(
     start: np.ndarray | None = None,
     max_cycles: int = DEFAULT_MAX_CYCLES,
     backend: Backend = Backend.RUST,
+    sense: Sense = Sense.MIN,
 ) -> ExpansionResult:
     """Cycle over labels until a full sweep lowers nothing.
 
@@ -718,6 +773,10 @@ def alpha_expansion(
     backend : Backend
         Which network and minimum-cut solver each :func:`expand` runs; see
         :func:`expand` for the two and why the Rust one is the default.
+    sense : Sense
+        :attr:`Sense.MIN` for a ground state, :attr:`Sense.MAX` for the
+        highest-energy labelling, as the minimum of the negated problem
+        (issue #1081).
 
     Raises
     ------
@@ -732,15 +791,19 @@ def alpha_expansion(
         result then carries ``cycles = max_cycles`` and a termination
         recording the budget (issue #1059).
     """
+    graph, field = oriented(graph, field, sense)
     field = log_weight_of(field)
-    return _cycle_to_a_local_minimum(
-        graph,
-        field,
-        n_states,
-        EXPANSION,
-        start=start,
-        max_cycles=max_cycles,
-        backend=backend,
+    return reoriented(
+        _cycle_to_a_local_minimum(
+            graph,
+            field,
+            n_states,
+            EXPANSION,
+            start=start,
+            max_cycles=max_cycles,
+            backend=backend,
+        ),
+        sense,
     )
 
 
@@ -958,12 +1021,13 @@ SWAP = _Move(
 
 def alpha_beta_swap(
     graph: PottsGraph,
-    field: np.ndarray,
+    field: SiteField | np.ndarray,
     n_states: int,
     *,
     start: np.ndarray | None = None,
     max_cycles: int = DEFAULT_MAX_CYCLES,
     backend: Backend = Backend.RUST,
+    sense: Sense = Sense.MIN,
 ) -> ExpansionResult:
     """Cycle over every label pair until a full sweep lowers nothing.
 
@@ -975,6 +1039,10 @@ def alpha_beta_swap(
     #551 measures. A cycle is ``n_states * (n_states - 1) / 2`` cuts against
     the expansion's ``n_states``, so "cheaper per move" is not "cheaper per
     cycle" and the comparison is run at equal budget rather than equal cycles.
+    sense : Sense
+        :attr:`Sense.MIN` for a ground state, :attr:`Sense.MAX` for the
+        highest-energy labelling, as the minimum of the negated problem
+        (issue #1081).
 
     Raises
     ------
@@ -987,12 +1055,16 @@ def alpha_beta_swap(
     UserWarning
         Where ``max_cycles`` runs out first, as :func:`alpha_expansion` does.
     """
-    return _cycle_to_a_local_minimum(
-        graph,
-        field,
-        n_states,
-        SWAP,
-        start=start,
-        max_cycles=max_cycles,
-        backend=backend,
+    graph, field = oriented(graph, field, sense)
+    return reoriented(
+        _cycle_to_a_local_minimum(
+            graph,
+            np.asarray(log_weight_of(field), dtype=float),
+            n_states,
+            SWAP,
+            start=start,
+            max_cycles=max_cycles,
+            backend=backend,
+        ),
+        sense,
     )

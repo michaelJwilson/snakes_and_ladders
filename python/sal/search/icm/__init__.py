@@ -37,7 +37,7 @@ import numpy as np
 
 from sal.backend import Backend, refuse_backend
 from sal.opt.termination import Termination
-from sal.search.alpha_expansion import Labelling
+from sal.search.alpha_expansion import Labelling, Sense, oriented, reoriented
 from sal.search.icm.numba import icm_sweeps_checked, no_survivor
 from sal.sim.graph import PottsGraph
 from sal.sim.potts import (
@@ -97,6 +97,7 @@ def iterated_conditional_modes(
     stop_when_clean: bool = True,
     min_sites: int = 0,
     backend: Backend = Backend.NUMBA,
+    sense: Sense = Sense.MIN,
 ) -> Labelling:
     """Single-site descent to a local minimum, dissolving states below ``min_sites`` after each sweep.
 
@@ -154,6 +155,10 @@ def iterated_conditional_modes(
         needs :data:`~sal.backend.Backend.PYTHON` and is
         refused. The floor's uniforms are drawn up front on both backends,
         so a floored index-order descent that stops early runs on either.
+    sense : Sense
+        :attr:`Sense.MIN` for a ground state, :attr:`Sense.MAX` for the
+        highest-energy labelling, as the minimum of the negated problem
+        (issue #1081).
 
     Returns
     -------
@@ -172,6 +177,7 @@ def iterated_conditional_modes(
         if ``start`` is not one integer state in range per node
         (:func:`~sal.sim.potts.check_labelling`).
     """
+    graph, field = oriented(graph, field, sense)
     n_nodes = graph.n_nodes
     check_min_sites(min_sites, n_nodes)
     values = site_field(np.asarray(log_weight_of(field), dtype=float), n_nodes)
@@ -219,8 +225,9 @@ def iterated_conditional_modes(
             stop_when_clean,
             min_sites,
         )
-        return _descended(
-            graph, values, labelling, sweeps, n_states, min_sites, offsets
+        return reoriented(
+            _descended(graph, values, labelling, sweeps, n_states, min_sites, offsets),
+            sense,
         )
 
     # The compressed rows as Python sequences, converted once rather than
@@ -258,7 +265,10 @@ def iterated_conditional_modes(
             break
     labelling[:] = labels
 
-    return _descended(graph, values, labelling, sweeps, n_states, min_sites, offsets)
+    return reoriented(
+        _descended(graph, values, labelling, sweeps, n_states, min_sites, offsets),
+        sense,
+    )
 
 
 def _descended(

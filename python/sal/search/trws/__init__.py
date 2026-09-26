@@ -66,7 +66,7 @@ import numpy as np
 from sal.backend import Backend, refuse_backend
 from sal.incidence import SparseIncidence
 from sal.opt.termination import Termination
-from sal.search.alpha_expansion import BoundedLabelling
+from sal.search.alpha_expansion import BoundedLabelling, Sense, oriented, reoriented
 from sal.search.trws.numba import trws_iterations_checked
 from sal.sim.graph import PottsGraph
 from sal.sim.potts import SiteField, energy, log_weight_of, site_field
@@ -213,6 +213,7 @@ def trws(
     max_iterations: int = MAX_ITERATIONS,
     tolerance: float = TOLERANCE,
     backend: Backend = Backend.NUMBA,
+    sense: Sense = Sense.MIN,
 ) -> TrwsResult:
     """Bound the Potts ground-state energy from below by TRW-S, and decode under it.
 
@@ -240,6 +241,10 @@ def trws(
     backend : Backend
         :data:`~sal.backend.Backend.NUMBA` or
         :data:`~sal.backend.Backend.PYTHON`.
+    sense : Sense
+        :attr:`Sense.MIN` for a ground state, :attr:`Sense.MAX` for the
+        highest-energy labelling, as the minimum of the negated problem
+        (issue #1081).
 
     Returns
     -------
@@ -253,6 +258,7 @@ def trws(
         ``max_iterations < 1``, ``tolerance < 0``, or ``backend`` is neither
         of the two.
     """
+    graph, field = oriented(graph, field, sense)
     refuse_backend("TRW-S", backend, (Backend.NUMBA, Backend.PYTHON))
     values = site_field(
         np.asarray(log_weight_of(field), dtype=np.float64), graph.n_nodes
@@ -284,12 +290,15 @@ def trws(
         labelling, trace, taken, converged = _reference(
             unary, layout, max_iterations, tolerance
         )
-    return TrwsResult(
-        bound=float(trace.max()),
-        labelling=labelling,
-        energy=energy(graph, values, labelling),
-        trace=trace,
-        termination=Termination.after(taken, converged=converged),
+    return reoriented(
+        TrwsResult(
+            bound=float(trace.max()),
+            labelling=labelling,
+            energy=energy(graph, values, labelling),
+            trace=trace,
+            termination=Termination.after(taken, converged=converged),
+        ),
+        sense,
     )
 
 

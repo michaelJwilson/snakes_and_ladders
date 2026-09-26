@@ -1,0 +1,1 @@
+`sense="min" | "max"` on `iterated_conditional_modes`, `alpha_expansion`, `alpha_beta_swap` and `trws`: `max` is the minimum of the problem with couplings and field negated once at the entry, its energy and bound turned back at the exit, so the labelling is bitwise the negated minimum's. `Labelling` carries its `sense`, and `ExpansionResult` is a `Labelling` (#1081).
