@@ -72,7 +72,9 @@ def taxa(params: SimulationParams) -> list[str]:
 
 @pytest.fixture(scope="module")
 def maximum(environment: TreeEnvironment, taxa: list[str]) -> float:
-    return max(environment.score(topology) for topology in enumerate_topologies(taxa))
+    return max(
+        environment.log_weight(topology) for topology in enumerate_topologies(taxa)
+    )
 
 
 @pytest.fixture(scope="module")
@@ -84,7 +86,7 @@ def traps(
         topology
         for topology in enumerate_topologies(taxa)
         if environment.is_terminal(topology)
-        and abs(environment.score(topology) - maximum) >= 1e-9
+        and abs(environment.log_weight(topology) - maximum) >= 1e-9
     ]
 
 
@@ -100,7 +102,7 @@ def _hill_climbing_policy(environment: TreeEnvironment) -> LinearPolicy:
 
 def _best_seen(environment: TreeEnvironment, states: tuple[Topology, ...]) -> float:
     """A wandering searcher keeps its best state, not its last."""
-    return max(environment.score(state) for state in states)
+    return max(environment.log_weight(state) for state in states)
 
 
 @pytest.mark.smoke
@@ -188,7 +190,7 @@ def test_stopping_at_a_local_optimum_never_escapes(
     for trap in traps:
         episode = rollout(environment, agent, rng, max_steps=BUDGET, start=trap)
         assert episode.states == (trap,)
-        assert abs(environment.score(trap) - maximum) >= 1e-9
+        assert abs(environment.log_weight(trap) - maximum) >= 1e-9
 
 
 @pytest.mark.oracle

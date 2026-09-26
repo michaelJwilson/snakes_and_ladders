@@ -12,6 +12,7 @@ energy, so the bracket is shifted, checked where the optimum is enumerable
 from __future__ import annotations
 
 import itertools
+import warnings
 
 import numpy as np
 import pytest
@@ -518,14 +519,16 @@ def test_the_swap_refuses_a_negative_coupling() -> None:
 
 
 @pytest.mark.smoke
-def test_the_swap_warns_and_returns_what_it_holds_at_its_cycle_cap() -> None:
+def test_the_swap_returns_what_it_holds_at_its_cycle_cap_and_says_so() -> None:
     # Issue #1059: a caller's cap is a budget (`ground_state` derives one from
-    # site visits), so reaching it warns and returns the labelling held, its
-    # energy in full, and a termination recording the cap rather than raising.
+    # site visits), so reaching it returns the labelling held, its energy in
+    # full, and a termination recording the cap; neither a warning nor a raise
+    # (issue #1089).
     rung = _rung(CI, 3)
     start = np.array([0, 1, 2, 0, 1, 2, 0, 1, 2], dtype=np.int64)
 
-    with pytest.warns(UserWarning, match="did not settle in max_cycles=1"):
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
         capped = alpha_beta_swap(
             rung.graph, rung.field, start=start, max_cycles=1, n_states=3
         )
