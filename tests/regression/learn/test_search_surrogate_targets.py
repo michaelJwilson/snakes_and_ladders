@@ -136,7 +136,7 @@ def test_shuffling_a_node_s_children_moves_no_likelihood() -> None:
     )
     rng = np.random.default_rng(17)
     topology = random_topology(sorted(alignment), np.random.default_rng(2))
-    expected = score_topology(topology, alignment, params.k)
+    expected = score_topology(topology, alignment, params.n_states)
 
     moved = 0.0
     spellings = set()
@@ -145,7 +145,7 @@ def test_shuffling_a_node_s_children_moves_no_likelihood() -> None:
         spellings.add(to_newick(shuffled))
         assert validate_unrooted_newick(to_newick(shuffled))
         assert leaf_bipartitions(shuffled) == leaf_bipartitions(topology)
-        score = score_topology(shuffled, alignment, params.k)
+        score = score_topology(shuffled, alignment, params.n_states)
         moved = max(moved, abs(score - expected) / abs(expected))
     assert moved < EXACT_RTOL, moved
     # A shuffle that never reordered anything would pass every line above.

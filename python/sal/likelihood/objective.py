@@ -83,7 +83,7 @@ class BranchLengthObjective(Objective):
         The topology, held fixed. Branch lengths on the ``Node`` tree are
         ignored -- ``likelihood.pruning.torch`` takes them as a tensor, per
         ``likelihood/CLAUDE.md``.
-    k : int
+    n_states : int
         Number of states.
     pi : np.ndarray
         Root state distribution, shape ``(k,)``.
@@ -123,7 +123,7 @@ class BranchLengthObjective(Objective):
     def __init__(
         self,
         tau: Node,
-        k: int,
+        n_states: int,
         pi: np.ndarray,
         alignment: Mapping[str, np.ndarray],
         dtype: torch.dtype = torch.float64,
@@ -148,7 +148,7 @@ class BranchLengthObjective(Objective):
         self._backend = backend
         self._jax: tuple[Any, dict[str, Any]] | None = None
         self._tau = tau
-        self._k = k
+        self._n_states = n_states
         self._pi = pi
         self._alignment = dict(alignment)
         self._dtype = dtype
@@ -174,9 +174,9 @@ class BranchLengthObjective(Objective):
         return self._tau
 
     @property
-    def k(self) -> int:
+    def n_states(self) -> int:
         """Number of states."""
-        return self._k
+        return self._n_states
 
     @property
     def alignment(self) -> Mapping[str, np.ndarray]:
@@ -293,10 +293,12 @@ class BranchLengthObjective(Objective):
             return value.detach(), gradient
         if self._jax is None:
             source, halves = self.branch_map()
-            data, weight = pruning_jax.leaves(self._tau, self._k, self._alignment, None)
+            data, weight = pruning_jax.leaves(
+                self._tau, self._n_states, self._alignment, None
+            )
             program = pruning_jax.branch_length_program(
                 pruning_jax.steps(self._tau),
-                self._k,
+                self._n_states,
                 len(self._branch_order),
                 source,
                 halves,
@@ -325,7 +327,7 @@ class BranchLengthObjective(Objective):
         )
         return -route(
             self._tau,
-            self._k,
+            self._n_states,
             self._pi,
             self._alignment,
             self.branch_lengths(theta),
@@ -435,7 +437,7 @@ class SubstitutionModelObjective(Objective):
     ----------
     tau : Node
         The topology, held fixed.
-    k : int
+    n_states : int
         Number of states.
     alignment : Mapping[str, np.ndarray]
         Observed states per taxon.
@@ -451,7 +453,7 @@ class SubstitutionModelObjective(Objective):
     def __init__(
         self,
         tau: Node,
-        k: int,
+        n_states: int,
         alignment: Mapping[str, np.ndarray],
         dtype: torch.dtype = torch.float64,
         device: torch.device | str | None = None,
@@ -467,16 +469,21 @@ class SubstitutionModelObjective(Objective):
         # the two cannot drift; pi is a placeholder here because this class
         # fits its own.
         self._branches = BranchLengthObjective(
-            tau, k, np.full(k, 1.0 / k), alignment, dtype=dtype, device=device
+            tau,
+            n_states,
+            np.full(n_states, 1.0 / n_states),
+            alignment,
+            dtype=dtype,
+            device=device,
         )
         self._tau = tau
-        self._k = k
+        self._n_states = n_states
         self._alignment = dict(alignment)
         self._dtype = dtype
         self._device = device
 
-        self._n_free_exchangeabilities = n_exchangeabilities(k) - 1
-        rows, columns = np.triu_indices(k, k=1)
+        self._n_free_exchangeabilities = n_exchangeabilities(n_states) - 1
+        rows, columns = np.triu_indices(n_states, k=1)
         self._rows = torch.as_tensor(rows, device=device)
         self._columns = torch.as_tensor(columns, device=device)
 
@@ -486,9 +493,9 @@ class SubstitutionModelObjective(Objective):
         return self._tau
 
     @property
-    def k(self) -> int:
+    def n_states(self) -> int:
         """Number of states."""
-        return self._k
+        return self._n_states
 
     @property
     def alignment(self) -> Mapping[str, np.ndarray]:
@@ -499,7 +506,9 @@ class SubstitutionModelObjective(Objective):
     def n_parameters(self) -> int:
         """Branch lengths, free exchangeabilities, and free ``pi`` entries."""
         return (
-            self._branches.n_parameters + self._n_free_exchangeabilities + (self._k - 1)
+            self._branches.n_parameters
+            + self._n_free_exchangeabilities
+            + (self._n_states - 1)
         )
 
     @property
@@ -508,7 +517,7 @@ class SubstitutionModelObjective(Objective):
         return [
             *self._branches.parameter_names,
             *(f"s{index}" for index in range(self._n_free_exchangeabilities)),
-            *(f"pi{index}" for index in range(1, self._k)),
+            *(f"pi{index}" for index in range(1, self._n_states)),
         ]
 
     def _split(self, theta: torch.Tensor) -> tuple[torch.Tensor, ...]:
@@ -538,7 +547,7 @@ class SubstitutionModelObjective(Objective):
             ]
         )
         upper = torch.zeros(
-            (self._k, self._k), dtype=self._dtype, device=self._device
+            (self._n_states, self._n_states), dtype=self._dtype, device=self._device
         ).index_put((self._rows, self._columns), values)
         symmetric = upper + upper.T
         rate = symmetric * pi.unsqueeze(0)
@@ -561,7 +570,7 @@ class SubstitutionModelObjective(Objective):
                     dtype=self._dtype,
                     device=self._device,
                 ),
-                torch.zeros(self._k - 1, dtype=self._dtype, device=self._device),
+                torch.zeros(self._n_states - 1, dtype=self._dtype, device=self._device),
             ]
         )
 
@@ -597,7 +606,7 @@ class SubstitutionModelObjective(Objective):
         branches, _, free_pi = self._split(theta)
         return -pruning_torch.log_likelihood(
             self._tau,
-            self._k,
+            self._n_states,
             torch.exp(log_simplex(free_pi)),
             self._alignment,
             self._branches.branch_lengths(branches),
@@ -615,10 +624,12 @@ class SubstitutionModelObjective(Objective):
             return value.detach(), gradient
         if self._jax is None:
             source, halves = self._branches.branch_map()
-            data, weight = pruning_jax.leaves(self._tau, self._k, self._alignment, None)
+            data, weight = pruning_jax.leaves(
+                self._tau, self._n_states, self._alignment, None
+            )
             program = pruning_jax.substitution_model_program(
                 pruning_jax.steps(self._tau),
-                self._k,
+                self._n_states,
                 len(source),
                 source,
                 halves,
@@ -716,7 +727,7 @@ class TreeMetrics:
 
     Parameters
     ----------
-    k : int
+    n_states : int
         Number of states.
     pi : np.ndarray
         Root state distribution, shape ``(k,)``.
@@ -727,7 +738,7 @@ class TreeMetrics:
         none: a simulated fixture carries one and a real alignment does not.
     """
 
-    k: int
+    n_states: int
     pi: np.ndarray
     alignment: Mapping[str, np.ndarray]
     truth: Node | None = None
@@ -745,10 +756,10 @@ class TreeMetrics:
         """The metrics of the topology ``state``, in :attr:`names`' order."""
         measured = {
             "log_likelihood": pruning.log_likelihood(
-                state, self.k, self.pi, dict(self.alignment)
+                state, self.n_states, self.pi, dict(self.alignment)
             ),
             "parsimony_score": float(
-                parsimony.fitch_score(state, self.alignment, self.k)
+                parsimony.fitch_score(state, self.alignment, self.n_states)
             ),
         }
         if self.truth is not None:

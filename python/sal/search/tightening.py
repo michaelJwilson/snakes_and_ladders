@@ -34,10 +34,11 @@ zero it is an honest interval, reported and never assumed small.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 
 import numpy as np
 
-from sal.opt.termination import Termination
+from sal.opt.termination import Termination, check_cap
 from sal.sim.graph import PottsGraph
 from sal.sim.potts import energy, site_field
 
@@ -78,7 +79,7 @@ class Certificate:
     energy: float
     bound: float
     iterations: int
-    termination: Termination | None = None
+    termination: Termination = dataclass_field(kw_only=True)
 
     @property
     def gap(self) -> float:
@@ -227,6 +228,7 @@ def dual_bound(
     best_shares = node_shares()
     taken = 0
     settled = False
+    check_cap("iterations", iterations)
     for sweep in range(1, iterations + 1):
         taken = sweep
         before = dual_value()

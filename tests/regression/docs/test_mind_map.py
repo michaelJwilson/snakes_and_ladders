@@ -103,6 +103,7 @@ def test_the_layout_is_a_tree_and_is_deterministic() -> None:
 
 
 @pytest.mark.infra
+@pytest.mark.release  # 39.9 s in the tier, over the 10 s cap (#1088)
 def test_every_drawn_leaf_carries_its_docstring_as_a_tooltip() -> None:
     """The hover text is the module's own summary, escaped for both readers.
 

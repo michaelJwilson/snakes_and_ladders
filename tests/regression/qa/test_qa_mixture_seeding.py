@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 import torch
 from sal.opt.mixture import MixtureFit, seeding_guarantee
+from sal.opt.termination import Termination
 from sal.qa.mixture_seeding import (
     EM_ITERATIONS,
     SEEDINGS,
@@ -80,6 +81,7 @@ def test_the_caption_reports_the_numbers_it_was_handed(tmp_path: Path) -> None:
         log_likelihood=-1000.25,
         iterations=EM_ITERATIONS,
         at_boundary=False,
+        termination=Termination.after(EM_ITERATIONS, converged=True),
     )
     ratios = SeedingRatios(
         kmeans_plus_plus=np.array([1.0, 3.0]),

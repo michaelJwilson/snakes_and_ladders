@@ -26,6 +26,7 @@ import itertools
 import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from enum import StrEnum
 from typing import NamedTuple
 
@@ -104,7 +105,7 @@ class EmissionMixtureFit:
     log_likelihood: float
     iterations: int
     at_boundary: bool
-    termination: Termination | None = None
+    termination: Termination = dataclass_field(kw_only=True)
 
 
 def expectation_maximization(

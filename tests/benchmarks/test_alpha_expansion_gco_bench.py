@@ -53,7 +53,9 @@ def test_rust_expansion_beside_gco_benchmark(
         (side, side), BoundaryCondition.OPEN, critical_coupling(N_STATES)
     )
     field = np.random.default_rng(974).normal(size=(graph.n_nodes, N_STATES))
-    runs = [gco.alpha_expansion(graph, field, N_STATES) for _ in range(REPEATS)]
+    runs = [
+        gco.alpha_expansion(graph, field, n_states=N_STATES) for _ in range(REPEATS)
+    ]
     benchmark.extra_info["gco_build_s"] = float(
         np.median([one.build_seconds for one in runs])
     )

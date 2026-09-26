@@ -34,7 +34,7 @@ _SITES = 2000
 def _alignment() -> tuple[dict[str, np.ndarray], int]:
     params = load_fixture(SMALL_SITES)
     dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=_SITES)
-    return dict(dataset.alignment), params.k
+    return dict(dataset.alignment), params.n_states
 
 
 def test_one_candidate_fit_benchmark(benchmark: BenchmarkFixture) -> None:
@@ -78,7 +78,7 @@ def test_hill_climb_benchmark(benchmark: BenchmarkFixture) -> None:
 def _eight_taxa() -> tuple[dict[str, np.ndarray], int]:
     params = load_fixture(EIGHT_TAXA)
     dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=1000)
-    return dict(dataset.alignment), params.k
+    return dict(dataset.alignment), params.n_states
 
 
 @pytest.mark.parametrize(

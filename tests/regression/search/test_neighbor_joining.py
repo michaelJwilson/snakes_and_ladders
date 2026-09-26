@@ -187,7 +187,9 @@ def test_recovery_rises_with_sites_and_is_certain_inside_attesons_radius() -> No
             dataset = simulate_tree(
                 params, np.random.default_rng([364, n_sites, seed]), n_sites=n_sites
             )
-            estimated_names, distances, _ = distance_matrix(dataset.alignment, params.k)
+            estimated_names, distances, _ = distance_matrix(
+                dataset.alignment, params.n_states
+            )
             assert estimated_names == names
             hit = leaf_bipartitions(
                 neighbor_joining(names, distances)
