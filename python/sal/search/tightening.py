@@ -62,7 +62,7 @@ class Certificate:
     iterations : int
         Coordinate-ascent sweeps taken.
     termination : Termination | None
-        Whether the sweeps settled --- the dual moved by less than 1e-12 ---
+        Whether the sweeps settled --- the dual moved by at most ``tolerance`` ---
         or the count ran out (issue #860). Not ``optimal``, which is a
         statement about the gap and so about the instance, not about the
         loop.
@@ -147,7 +147,8 @@ def dual_bound(
     graph: PottsGraph,
     field_values: np.ndarray,
     *,
-    iterations: int = 200,
+    max_iterations: int = 200,
+    tolerance: float = 1e-12,
     plaquettes: tuple[tuple[int, ...], ...] = (),
 ) -> Certificate:
     """Bound the Potts ground-state energy from below, and decode under it.
@@ -165,9 +166,13 @@ def dual_bound(
         is where this earns its place, since minimum cut cannot take it.
     field_values : np.ndarray
         The external field, ``(n_states,)`` or ``(n_nodes, n_states)``.
-    iterations : int
+    max_iterations : int
         Coordinate-descent sweeps. More can only raise the lower bound, never
         lower it, so this trades time for tightness and never for validity.
+    tolerance : float
+        The sweeps have settled where one moves the dual by at most this,
+        absolute: the dual is an energy, and a relative change would stall
+        where it crosses zero.
     plaquettes : tuple[tuple[int, ...], ...]
         Sites of each higher-order cluster, typically a lattice's unit cells or
         its triangles. Empty runs the pairwise relaxation, whose bound on a
@@ -227,7 +232,7 @@ def dual_bound(
     best_shares = node_shares()
     taken = 0
     settled = False
-    for sweep in range(1, iterations + 1):
+    for sweep in range(1, max_iterations + 1):
         taken = sweep
         before = dual_value()
         shares = node_shares()
@@ -256,7 +261,7 @@ def dual_bound(
         current = dual_value()
         if current < best:
             best, best_shares = current, node_shares()
-        if abs(before - current) <= 1e-12:
+        if abs(before - current) <= tolerance:
             settled = True
             break
 

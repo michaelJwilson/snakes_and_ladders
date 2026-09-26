@@ -525,9 +525,9 @@ def test_the_swap_warns_and_returns_what_it_holds_at_its_cycle_cap() -> None:
     rung = _rung(CI, 3)
     start = np.array([0, 1, 2, 0, 1, 2, 0, 1, 2], dtype=np.int64)
 
-    with pytest.warns(UserWarning, match="did not settle in max_cycles=1"):
+    with pytest.warns(UserWarning, match="did not settle in max_iterations=1"):
         capped = alpha_beta_swap(
-            rung.graph, rung.field, start=start, max_cycles=1, n_states=3
+            rung.graph, rung.field, start=start, max_iterations=1, n_states=3
         )
     assert capped.cycles == 1
     assert capped.termination == Termination(False, 1, Stop.BUDGET)

@@ -140,8 +140,8 @@ def test_the_optimal_property_answers_about_the_gap_and_not_about_the_loop() -> 
     # sweep found it and both runs then settle on sweep one.
     field = np.random.default_rng([860, 3]).normal(size=(graph.n_nodes, 3))
 
-    capped = dual_bound(graph, field, iterations=1)
-    settled = dual_bound(graph, field, iterations=400)
+    capped = dual_bound(graph, field, max_iterations=1)
+    settled = dual_bound(graph, field, max_iterations=400)
 
     assert capped.termination == Termination(
         converged=False, iterations=1, reason=Stop.BUDGET

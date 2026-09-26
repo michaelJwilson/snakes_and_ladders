@@ -659,7 +659,7 @@ def run_annealed(
 def descend(
     problem: Problem | Rung,
     rng: np.random.Generator,
-    max_sweeps: int,
+    max_iterations: int,
     *,
     start: np.ndarray | None = None,
     backend: Backend | None = None,
@@ -677,14 +677,14 @@ def descend(
     ``backend`` and ``min_sites`` are
     :func:`~sal.search.icm.iterated_conditional_modes`'s;
     ``None`` is its default backend. A floored descent draws its
-    ``max_sweeps * n_nodes`` uniforms up front, as :func:`run_icm`'s one call
+    ``max_iterations * n_nodes`` uniforms up front, as :func:`run_icm`'s one call
     does, so the labelling is the one sweep-at-a-time descents reached and
     the generator is left where one call leaves it.
 
     Returns
     -------
     tuple[np.ndarray, int]
-        The labelling, and the sweeps run, at most ``max_sweeps``.
+        The labelling, and the sweeps run, at most ``max_iterations``.
     """
     problem = _problem(problem)
     check_min_sites(min_sites, problem.n_nodes)
@@ -698,7 +698,7 @@ def descend(
         problem.field,
         rng,
         start=labelling,
-        max_sweeps=max_sweeps,
+        max_iterations=max_iterations,
         min_sites=min_sites,
         backend=Backend.NUMBA if backend is None else backend,
         n_states=problem.n_states,
@@ -797,7 +797,7 @@ def run_icm(
         problem.field,
         rng,
         start=start,
-        max_sweeps=steps,
+        max_iterations=steps,
         min_sites=min_sites,
         backend=Backend.NUMBA if backend is None else backend,
         n_states=problem.n_states,
@@ -843,7 +843,7 @@ def run_icm_random(
         problem.field,
         rng,
         start=start,
-        max_sweeps=steps,
+        max_iterations=steps,
         sweep_order=SweepOrder.RANDOM,
         stop_when_clean=False,
         min_sites=min_sites,
@@ -943,7 +943,7 @@ def run_alpha_expansion(
         problem.graph,
         problem.field,
         start=start,
-        max_cycles=cycles,
+        max_iterations=cycles,
         backend=Backend.RUST,
         n_states=problem.n_states,
     )
@@ -982,7 +982,7 @@ def run_alpha_beta_swap(
         problem.graph,
         problem.field,
         start=start,
-        max_cycles=cycles,
+        max_iterations=cycles,
         backend=Backend.RUST,
         n_states=problem.n_states,
     )
