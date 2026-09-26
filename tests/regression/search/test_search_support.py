@@ -353,7 +353,7 @@ def test_the_enumerated_decoding_weight_is_the_path_posterior_and_pins_the_ambig
 
     for support, path in ((viterbi, paths.viterbi), (posterior, paths.posterior_path)):
         expected = np.exp(
-            path_log_probability(params, path, observations) - paths.log_likelihood
+            path_log_probability(params, path, observations) - paths.log_evidence
         )
         assert abs(support.weight - expected) < 1e-12
         assert support.n_candidates == 32

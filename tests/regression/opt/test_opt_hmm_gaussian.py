@@ -130,7 +130,7 @@ def test_the_forward_recursion_matches_enumeration_over_every_path() -> None:
             )
         )
 
-        assert_allclose(recursed, enumerated.log_likelihood, rtol=1e-11)
+        assert_allclose(recursed, enumerated.log_evidence, rtol=1e-11)
 
     every_row([(2, 5, 1), (2, 7, 2), (3, 4, 3), (3, 6, 4)], check)
 
@@ -154,7 +154,7 @@ def test_the_evidence_of_a_continuous_emission_can_exceed_one() -> None:
 
     enumerated = enumerate_hidden_paths(params, observations[0])
 
-    assert enumerated.log_likelihood > 0.0
+    assert enumerated.log_evidence > 0.0
 
 
 @pytest.mark.analytic

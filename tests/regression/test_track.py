@@ -428,7 +428,7 @@ def test_hmm_metrics_report_the_forward_log_likelihood() -> None:
     # relative 1e-12 rather than bitwise.
     assert measured["log_likelihood"] == pytest.approx(
         sum(
-            enumerate_hidden_paths(truth, sequence).log_likelihood
+            enumerate_hidden_paths(truth, sequence).log_evidence
             for sequence in observations
         ),
         rel=1e-12,
@@ -706,9 +706,9 @@ def test_the_null_run_leaves_the_five_loops_bitwise_what_they_were() -> None:
     assert inside[0].objective_evaluations == outside[0].objective_evaluations
     assert torch.equal(inside[1].draws, outside[1].draws)
     for one, other in ((inside[2], outside[2]), (inside[3], outside[3])):
-        assert one.log_z == other.log_z
+        assert one.log_partition == other.log_partition
         assert one.stderr == other.stderr
-        assert np.array_equal(one.rung_log_z, other.rung_log_z)
+        assert np.array_equal(one.rung_log_partition, other.rung_log_partition)
     assert np.array_equal(inside[4].states, outside[4].states)
     assert inside[4].acceptance == outside[4].acceptance
     assert np.array_equal(inside[5].walkers, outside[5].walkers)
@@ -740,11 +740,11 @@ def test_the_annealed_estimators_record_log_z_its_error_and_its_ess_per_rung() -
             estimate = estimator()
         run = _memory(tracked.run)
         assert [step for step, _ in run.series("log_z")] == [1, 2]
-        assert run.last("log_z") == estimate.log_z
+        assert run.last("log_z") == estimate.log_partition
         assert run.last("log_z_stderr") == estimate.stderr
         assert run.last("ess") == estimate.ess
         assert [value for _, value in run.series("log_z")] == list(
-            estimate.rung_log_z[1:]
+            estimate.rung_log_partition[1:]
         )
         assert run.last("state_bytes") > 0.0
 

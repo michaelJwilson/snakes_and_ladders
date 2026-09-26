@@ -43,22 +43,22 @@ class Posteriors:
 
     Parameters
     ----------
-    gamma : np.ndarray
+    log_posterior : np.ndarray
         ``(total, n_states)``, the log marginal at every position.
-    counts : np.ndarray
+    log_counts : np.ndarray
         ``(n_states, n_states)``, the log transition counts summed over
         segments. The pair spanning a boundary is in none of them.
-    evidence : np.ndarray
+    log_evidence : np.ndarray
         One log evidence per segment.
     """
 
-    gamma: np.ndarray
-    counts: np.ndarray
-    evidence: np.ndarray
+    log_posterior: np.ndarray
+    log_counts: np.ndarray
+    log_evidence: np.ndarray
 
     def __iter__(self) -> Iterator[np.ndarray]:
-        """``(gamma, counts, evidence)``: the order callers unpack."""
-        yield from (self.gamma, self.counts, self.evidence)
+        """``(log_posterior, log_counts, log_evidence)``: the order callers unpack."""
+        yield from (self.log_posterior, self.log_counts, self.log_evidence)
 
 
 def posteriors(

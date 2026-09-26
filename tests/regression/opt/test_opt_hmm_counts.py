@@ -133,7 +133,7 @@ def test_the_forward_recursion_matches_enumeration_over_every_path(name: str) ->
         )
     )
 
-    assert_allclose(recursed, enumerated.log_likelihood, rtol=1e-11)
+    assert_allclose(recursed, enumerated.log_evidence, rtol=1e-11)
 
 
 @pytest.mark.smoke
@@ -147,7 +147,7 @@ def test_the_evidence_of_a_count_model_is_a_probability(name: str) -> None:
     observations = simulate_sequences(params).observations[0][:7]
 
     assert truth.is_discrete
-    assert enumerate_hidden_paths(params, observations).log_likelihood <= 0.0
+    assert enumerate_hidden_paths(params, observations).log_evidence <= 0.0
 
 
 @pytest.mark.analytic
