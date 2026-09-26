@@ -31,6 +31,7 @@ Bregman divergence, in :mod:`sal.opt.mixture`.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from dataclasses import field as dataclass_field
 from enum import StrEnum
 from functools import partial
 from typing import TYPE_CHECKING
@@ -112,7 +113,7 @@ class SpatioSequentialFit:
     labels: np.ndarray
     log_likelihoods: np.ndarray
     field: np.ndarray
-    termination: Termination | None = None
+    termination: Termination = dataclass_field(kw_only=True)
 
 
 def m_step(
@@ -473,7 +474,7 @@ def fit_spatio_sequential(
         current,
         np.array(values),
         field,
-        Termination.after(n_blocks, converged=False),
+        termination=Termination.after(n_blocks, converged=False),
     )
 
 
@@ -804,5 +805,5 @@ def graph_burn_in(
         labels,
         np.array(values),
         field,
-        Termination.after(schedule.n_steps, converged=False),
+        termination=Termination.after(schedule.n_steps, converged=False),
     )

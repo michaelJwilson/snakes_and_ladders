@@ -67,7 +67,7 @@ def _alignment(
         np.random.default_rng(params.seed),
         n_sites=params.n_sites if n_sites is None else n_sites,
     )
-    return dict(dataset.alignment), params.k
+    return dict(dataset.alignment), params.n_states
 
 
 def _score(

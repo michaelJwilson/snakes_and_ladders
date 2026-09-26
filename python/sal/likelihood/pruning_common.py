@@ -68,14 +68,14 @@ def postorder(root: Node) -> list[Node]:
     return order
 
 
-def check_pi_shape(shape: tuple[int, ...], k: int) -> None:
+def check_pi_shape(shape: tuple[int, ...], n_states: int) -> None:
     """Refuse a root distribution that is not ``(k,)``.
 
     Parameters
     ----------
     shape : tuple[int, ...]
         ``pi``'s shape, as a tuple whatever library holds it.
-    k : int
+    n_states : int
         Number of states.
 
     Raises
@@ -83,8 +83,8 @@ def check_pi_shape(shape: tuple[int, ...], k: int) -> None:
     ValueError
         If ``shape`` is not ``(k,)``.
     """
-    if shape != (k,):
-        msg = f"pi has shape {shape}, expected ({k},)"
+    if shape != (n_states,):
+        msg = f"pi has shape {shape}, expected ({n_states},)"
         raise ValueError(msg)
 
 
@@ -158,7 +158,7 @@ def require_branch_length(node: Node) -> float:
     return float(node.branch_length)
 
 
-def leaf_indicator_array(states: np.ndarray, n_sites: int, k: int) -> np.ndarray:
+def leaf_indicator_array(states: np.ndarray, n_sites: int, n_states: int) -> np.ndarray:
     """The one-hot partial of a leaf's observed states, as a NumPy array.
 
     Parameters
@@ -168,7 +168,7 @@ def leaf_indicator_array(states: np.ndarray, n_sites: int, k: int) -> np.ndarray
         ``[0, k)``.
     n_sites : int
         Columns in the alignment.
-    k : int
+    n_states : int
         Alphabet size.
 
     Returns
@@ -178,7 +178,7 @@ def leaf_indicator_array(states: np.ndarray, n_sites: int, k: int) -> np.ndarray
         indicator of ``eq:pruning``.
     """
     observed = np.asarray(states, dtype=np.int64)
-    table = np.zeros((n_sites, k))
+    table = np.zeros((n_sites, n_states))
     table[np.arange(n_sites), observed] = 1.0
     return table
 
@@ -186,7 +186,7 @@ def leaf_indicator_array(states: np.ndarray, n_sites: int, k: int) -> np.ndarray
 def leaf_indicator(
     states: object,
     n_sites: int,
-    k: int,
+    n_states: int,
     dtype: torch.dtype,
     device: torch.device,
     *,
@@ -200,7 +200,7 @@ def leaf_indicator(
         The leaf's observed states, as the alignment holds them.
     n_sites : int
         Columns in the alignment.
-    k : int
+    n_states : int
         Alphabet size.
     dtype : torch.dtype
         Tensor type, taken from the branch lengths.
@@ -223,7 +223,7 @@ def leaf_indicator(
     import torch
 
     observed = torch.as_tensor(states, dtype=torch.long, device=device)
-    partial = torch.zeros((n_sites, k), dtype=dtype, device=device)
+    partial = torch.zeros((n_sites, n_states), dtype=dtype, device=device)
     partial[torch.arange(n_sites, device=index_device), observed] = 1.0
     return partial
 

@@ -26,7 +26,9 @@ NAMED = [Bracket, GroundState, Labelling, MaxCut, PairedArcs, RungField]
 @pytest.mark.parametrize("result", NAMED, ids=lambda cls: cls.__name__)
 def test_a_named_result_unpacks_to_its_fields_in_order(result: type) -> None:
     names = [field.name for field in fields(result)]
-    instance = result(*names)
+    # By keyword: `termination` is keyword-only since #1085, and the claim is
+    # the unpacking order, not the constructor's.
+    instance = result(**{name: name for name in names})
 
     assert list(instance) == names
     assert [getattr(instance, name) for name in names] == names

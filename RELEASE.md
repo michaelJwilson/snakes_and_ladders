@@ -132,6 +132,7 @@ the machine for as long as it runs.
 | `pytest`, every tier, with the coverage gate | **Over an hour**, and never yet run to completion. **The largest sink** |
 | `qa.build --all --check`, every figure rendered and compared | **Around 10 minutes**. **The second sink**, and the part that grows with the manifest |
 | `infra/build_documents.sh --no-figures` | **Under a minute**: the tables, the citation check and `latexmk`, no renders |
+| `infra/check_notebooks.py`, every notebook re-executed and compared | **About 20 minutes**: 590 to 1,438 s in the last seven local CI runs. The one place all of them run; a pull request runs only the notebooks it changes (issue #1087) |
 | `cargo clippy`, `cargo fmt`, `cargo test`, each also `--features sandbox` | **A few minutes** on a cold `cargo` cache |
 | `ruff`, `mypy --strict`, `sphinx-build -E -a -W`, `infra/ledgers.sh --check`, `infra/baselines.py` | **Under a minute** each |
 
@@ -246,9 +247,6 @@ damage the union merge itself had created (issue #468).
   request, from a **Rebuild the documents** ticket
   (`.github/ISSUE_TEMPLATE/documents.yml`, issue #483). A release ships the PDFs
   its base carried.
-* **It does not re-execute the notebooks.** `infra/check_notebooks.py` runs one
-  kernel per notebook over the six under `docs/nb/`; the `notebooks` CI job runs
-  it, `infra/release.sh` does not.
 * **It does not run the audits.** `pip-audit` and `cargo audit` are the `audit`
   CI job's, network-bound, and skipped there on a cache hit when the lockfiles
   are unchanged.

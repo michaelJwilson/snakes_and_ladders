@@ -72,14 +72,14 @@ def fit_model(
     """
     dataset = simulate_alignment(
         tau=params.tau,
-        k=params.k,
+        n_states=params.n_states,
         pi=pi,
         rng=np.random.default_rng(params.seed),
         n_sites=SITES,
         rate_matrix=rate_matrix,
     )
     objective = SubstitutionModelObjective(
-        params.tau, params.k, dict(dataset.alignment)
+        params.tau, params.n_states, dict(dataset.alignment)
     )
     result = fit(objective)
     estimate = objective.constrain(result.theta)
@@ -154,7 +154,8 @@ def build_figure(
     """
     gtr_truth = truth_vector(TRUE_EXCHANGEABILITIES, TRUE_PI)
     jc_truth = truth_vector(
-        np.ones(TRUE_EXCHANGEABILITIES.size), np.full(params.k, 1.0 / params.k)
+        np.ones(TRUE_EXCHANGEABILITIES.size),
+        np.full(params.n_states, 1.0 / params.n_states),
     )
 
     with letter_style():
@@ -201,7 +202,9 @@ def _fit_and_build(params: SimulationParams) -> tuple[Figure, str]:
     general = fit_model(
         params, gtr_rate_matrix(TRUE_EXCHANGEABILITIES, TRUE_PI), TRUE_PI
     )
-    jukes_cantor = fit_model(params, None, np.full(params.k, 1.0 / params.k))
+    jukes_cantor = fit_model(
+        params, None, np.full(params.n_states, 1.0 / params.n_states)
+    )
     return build_figure(params, general, jukes_cantor)
 
 

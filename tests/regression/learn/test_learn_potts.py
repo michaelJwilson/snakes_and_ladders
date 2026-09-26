@@ -41,7 +41,7 @@ def test_energy_matches_its_definition_term_by_term() -> None:
     environment = potts_environment()
     state = (2, 2, 0, 1)
     expected = 0.75 * 1 + (FIELD[2] + FIELD[2] + FIELD[0] + FIELD[1])
-    assert_allclose(environment.energy(state), expected, atol=1e-12)
+    assert_allclose(environment.log_weight(state), expected, atol=1e-12)
 
 
 @pytest.mark.oracle
@@ -51,10 +51,12 @@ def test_the_local_reward_equals_a_full_energy_difference() -> None:
     # be checked exhaustively instead of sampled.
     environment = potts_environment()
     for state in enumerate_configurations(3, 4):
-        base = environment.energy(state)
+        base = environment.log_weight(state)
         for action in environment.actions(state):
             successor, reward = environment.step(state, action)
-            assert_allclose(reward, environment.energy(successor) - base, atol=1e-12)
+            assert_allclose(
+                reward, environment.log_weight(successor) - base, atol=1e-12
+            )
 
 
 @pytest.mark.analytic
@@ -123,10 +125,11 @@ def test_the_optimum_is_the_best_of_every_configuration() -> None:
     environment = potts_environment()
     state, energy = optimum(environment)
     energies = [
-        environment.energy(candidate) for candidate in enumerate_configurations(3, 4)
+        environment.log_weight(candidate)
+        for candidate in enumerate_configurations(3, 4)
     ]
     assert_allclose(energy, max(energies), atol=1e-12)
-    assert_allclose(environment.energy(state), energy, atol=1e-12)
+    assert_allclose(environment.log_weight(state), energy, atol=1e-12)
     # The optimum must be a fixed point of the search, or "reached the
     # optimum" and "stopped improving" would be different events.
     assert environment.is_terminal(state)
@@ -141,7 +144,7 @@ def test_the_environment_is_hard_enough_to_be_worth_searching() -> None:
     best = optimum(environment)[1]
     stalled = sum(
         abs(
-            environment.energy(
+            environment.log_weight(
                 greedy_rollout(environment, start=start, max_steps=50).states[-1]
             )
             - best

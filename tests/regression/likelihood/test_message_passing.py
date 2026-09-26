@@ -278,19 +278,19 @@ def test_sum_product_per_site_sums_to_pruning(
     params = load_fixture(SMALL_SITES)
     dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=7)
     alignment = dict(dataset.alignment)
-    transitions = _transitions(params.tau, params.k)
+    transitions = _transitions(params.tau, params.n_states)
 
     total = 0.0
     for s in range(7):
         site = {name: int(states[s]) for name, states in alignment.items()}
         result = sum_product(
-            from_tree(params.tau, params.k, params.pi, site, transitions),
+            from_tree(params.tau, params.n_states, params.pi, site, transitions),
             schedule=schedule,
         )
         assert result.guarantee is guarantee
         total += result.log_partition
 
-    reference = log_likelihood(params.tau, params.k, params.pi, alignment)
+    reference = log_likelihood(params.tau, params.n_states, params.pi, alignment)
     assert math.isclose(total, reference, rel_tol=1e-13)
 
 
@@ -304,12 +304,16 @@ def test_the_leaf_marginals_on_the_tree_are_the_observed_indicators() -> None:
 
     result = sum_product(
         from_tree(
-            params.tau, params.k, params.pi, site, _transitions(params.tau, params.k)
+            params.tau,
+            params.n_states,
+            params.pi,
+            site,
+            _transitions(params.tau, params.n_states),
         )
     )
 
     for name, state in site.items():
-        expected = np.zeros(params.k)
+        expected = np.zeros(params.n_states)
         expected[state] = 1.0
         np.testing.assert_allclose(result.variable[name], expected, atol=ATOL)
 
@@ -594,7 +598,11 @@ def test_the_tree_site_reproduces_the_dictionary_oracle_bitwise() -> None:
     dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=1)
     site = {name: int(states[0]) for name, states in dict(dataset.alignment).items()}
     graph = from_tree(
-        params.tau, params.k, params.pi, site, _transitions(params.tau, params.k)
+        params.tau,
+        params.n_states,
+        params.pi,
+        site,
+        _transitions(params.tau, params.n_states),
     )
 
     _assert_same_marginals(

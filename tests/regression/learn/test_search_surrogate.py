@@ -62,7 +62,7 @@ def _alignments(n: int) -> tuple[list[dict[str, np.ndarray]], int, np.ndarray]:
         )
         for seed in range(n)
     ]
-    return alignments, params.k, np.asarray(params.pi)
+    return alignments, params.n_states, np.asarray(params.pi)
 
 
 def _recorded_target(problem: str, tier: str) -> TreeTarget:
@@ -217,7 +217,7 @@ def test_surrogate_ranked_search_reaches_what_the_full_search_reaches() -> None:
             params, np.random.default_rng(params.seed), n_sites=2000
         ).alignment
     )
-    k, pi = params.k, np.asarray(params.pi)
+    k, pi = params.n_states, np.asarray(params.pi)
     for seed in range(3):
         full = infer(alignment, k, rng=np.random.default_rng(seed), moves=MoveSet.NNI)
         ranked = infer(

@@ -137,7 +137,7 @@ class RelaxedPotts(RelaxedObjective):
     """The Potts chain's score, extended to the simplex.
 
     ``J * sum_t sum_a P[t, a] P[t+1, a] + sum_t sum_a P[t, a] h[a]``, which at
-    a one-hot is :meth:`sal.learn.potts.PottsEnvironment.energy` exactly. The
+    a one-hot is :meth:`sal.learn.potts.PottsEnvironment.log_weight` exactly. The
     parameters are read off the environment rather than re-declared, so the
     extension cannot drift from what it extends.
     """
@@ -158,7 +158,7 @@ class RelaxedPotts(RelaxedObjective):
         return self.environment.coupling * agreement + (probabilities * field).sum()
 
     def discrete(self, configuration: Configuration) -> float:
-        return self.environment.energy(configuration)
+        return self.environment.log_weight(configuration)
 
 
 @dataclass(frozen=True)
