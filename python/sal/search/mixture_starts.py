@@ -58,9 +58,9 @@ from sal.opt.budget import Budget, Outcome
 from sal.opt.em import EmConfig
 from sal.opt.emission_mixture import (
     ComponentsAt,
+    SeedMethod,
     expectation_maximization,
-    plus_plus_start,
-    uniform_start,
+    seed,
 )
 from sal.opt.initialize import (
     FromObjective,
@@ -71,7 +71,6 @@ from sal.opt.initialize import (
 from sal.opt.mixture import (
     GaussianMixtureObjective,
     KMeansPlusPlus,
-    kmeans_plus_plus,
     mixture_log_likelihood,
     responsibilities,
 )
@@ -260,10 +259,15 @@ def data_seeding(
     -------
     Seeding
     """
-    return Seeding(
-        uniform_start(instance.rows, instance.n_components, instance.at, rng),
-        0.0,
+    start = seed(
+        instance.observations,
+        instance.n_components,
+        instance.at,
+        method=SeedMethod.UNIFORM,
+        rng=rng,
+        rows=instance.rows,
     )
+    return Seeding(start.components, 0.0)
 
 
 def emission_seeding(
@@ -275,10 +279,15 @@ def emission_seeding(
     -------
     Seeding
     """
-    return Seeding(
-        plus_plus_start(instance.rows, instance.n_components, instance.at, rng),
-        1.0,
+    start = seed(
+        instance.observations,
+        instance.n_components,
+        instance.at,
+        method=SeedMethod.PLUS_PLUS,
+        rng=rng,
+        rows=instance.rows,
     )
+    return Seeding(start.components, 1.0)
 
 
 def kmeans_seeding(
@@ -290,10 +299,15 @@ def kmeans_seeding(
     -------
     Seeding
     """
-    centres = kmeans_plus_plus(
-        np.asarray(instance.rows, dtype=np.float64), instance.n_components, rng
+    start = seed(
+        instance.observations,
+        instance.n_components,
+        instance.at,
+        method=SeedMethod.KMEANS,
+        rng=rng,
+        rows=instance.rows,
     )
-    return Seeding(instance.at(centres), 1.0)
+    return Seeding(start.components, 1.0)
 
 
 def gaussian_em_seeding(
