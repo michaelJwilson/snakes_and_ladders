@@ -80,7 +80,7 @@ def test_learned_tree_prediction_benchmark(benchmark: BenchmarkFixture) -> None:
         MLPSurrogate(examples.features.shape[1]),
         examples,
         examples,
-        generator=torch.Generator().manual_seed(0),
+        rng=torch.Generator().manual_seed(0),
         max_epochs=20,
     )
     surrogate = LearnedTreeSurrogate(fitted, k, pi)

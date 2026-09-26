@@ -66,6 +66,7 @@ import numpy as np
 from sal.backend import Backend, refuse_backend
 from sal.incidence import SparseIncidence
 from sal.opt.termination import Termination, check_cap
+from sal.search.alpha_expansion import BoundedLabelling
 from sal.search.trws.numba import trws_iterations_checked
 from sal.sim.graph import PottsGraph
 from sal.sim.potts import SiteField, energy, log_weight_of, site_field
@@ -76,40 +77,25 @@ MAX_ITERATIONS = 5000
 TOLERANCE = 1e-12
 
 
-@dataclass(frozen=True)
-class TrwsResult:
-    """A lower bound on the minimum energy, the best labelling decoded, and the gap.
+@dataclass(frozen=True, kw_only=True)
+class TrwsResult(BoundedLabelling):
+    """TRW-S's :class:`~sal.search.alpha_expansion.BoundedLabelling`, and its bound's trace.
+
+    ``bound`` is the largest chain bound over the iterations, ``labelling``
+    the lowest-energy one decoded over them, ``int64``, and ``termination``
+    :attr:`~sal.opt.termination.Stop.CONVERGED` where the bound rose by at
+    most ``tolerance * max(1, |bound|)`` in an iteration or the gap closed to
+    that, :attr:`~sal.opt.termination.Stop.BUDGET` where ``max_iterations``
+    ran out.
 
     Parameters
     ----------
-    bound : float
-        The largest chain bound over the iterations: a **lower** bound on
-        ``min_x E(x)`` in `sim.potts.energy`'s sign.
-    labelling : np.ndarray
-        The lowest-energy labelling decoded over the iterations, ``int64``.
-    energy : float
-        Its energy by :func:`sal.sim.potts.energy`: an **upper** bound on the
-        minimum.
     trace : np.ndarray
         The chain bound after each iteration, ``float64``, one per iteration
         taken.
-    termination : Termination
-        :attr:`~sal.opt.termination.Stop.CONVERGED` where the bound rose by at
-        most ``tolerance * max(1, |bound|)`` in an iteration or the gap closed
-        to that; :attr:`~sal.opt.termination.Stop.BUDGET` where
-        ``max_iterations`` ran out.
     """
 
-    bound: float
-    labelling: np.ndarray
-    energy: float
     trace: np.ndarray
-    termination: Termination
-
-    @property
-    def gap(self) -> float:
-        """``energy - bound``: what is not established. Zero certifies the labelling optimal."""
-        return self.energy - self.bound
 
     @property
     def iterations(self) -> int:

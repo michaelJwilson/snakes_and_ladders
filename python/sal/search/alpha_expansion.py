@@ -105,6 +105,39 @@ class Labelling:
         yield from (self.labelling, self.energy, self.sweeps, self.termination)
 
 
+@dataclass(frozen=True, kw_only=True)
+class BoundedLabelling(Labelling):
+    """A labelling, and a lower bound on the minimum it is measured against (issue #1081).
+
+    What the bounded solvers return: TRW-S and the tightened dual decomposition
+    did the same job with two types, different field orders and an optional
+    termination. ``energy`` is an **upper** bound on the minimum --- some
+    labelling attains it --- and ``bound`` a **lower** one, both in
+    :func:`~sal.sim.potts.energy`'s sign.
+
+    Parameters
+    ----------
+    bound : float
+        A lower bound on ``min_x E(x)``, valid at every iteration.
+    """
+
+    bound: float
+
+    @property
+    def gap(self) -> float:
+        """``energy - bound``: what is not established. Zero certifies the labelling optimal."""
+        return self.energy - self.bound
+
+    @property
+    def optimal(self) -> bool:
+        """Whether the gap has closed to floating-point noise.
+
+        A real certificate: nothing can beat the bound, and this labelling
+        attains it.
+        """
+        return bool(self.gap <= 1e-9 * max(1.0, abs(self.bound)))
+
+
 @dataclass(frozen=True)
 class ExpansionResult:
     """A labelling, and what reaching it cost.
