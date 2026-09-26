@@ -47,6 +47,7 @@ from sal.sample.potts_mcmc import (
     wolff_sweep,
 )
 from sal.sim.graph import PottsGraph
+from sal.sim.potts import SiteField, log_weight_of
 
 
 def monochrome_partition(
@@ -407,7 +408,7 @@ class SwendsenWangMove:
 
 def cluster_moves(
     graph: PottsGraph,
-    field: np.ndarray,
+    field: SiteField | np.ndarray,
     backend: Backend = Backend.PYTHON,
 ) -> dict[MoveKind, WolffMove | SwendsenWangMove | NiedermayerMove]:
     """Every cluster move on one lattice, keyed as the environment expects them.
@@ -423,6 +424,7 @@ def cluster_moves(
     :func:`~sal.sample.tempered.tempered_potts_pair` are where
     it is offered (issue #756).
     """
+    field = log_weight_of(field)
     return {
         MoveKind.WOLFF: WolffMove(graph, field),
         MoveKind.SWENDSEN_WANG: SwendsenWangMove(graph, field, backend),
