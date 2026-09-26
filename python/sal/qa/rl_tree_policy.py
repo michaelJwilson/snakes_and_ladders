@@ -184,7 +184,7 @@ def measure(
             batch=BATCH,
             max_steps=HORIZON,
         )
-        episodes = training.episodes
+        episodes = training.spent
         probe = np.random.default_rng(1000 + seed)
         learned.append(
             reached(
