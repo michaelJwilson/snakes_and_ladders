@@ -1,0 +1,1 @@
+Root `CLAUDE.md` gains six API conventions (one name, one meaning, one sign; match the sibling; one result type per concept with `spent` and a required `Termination`; meaning by type, not by value; NumPy at the boundary; a guard test per convention), and `DEV.md` lists the vocabulary they refer to, with the ticket converging each divergence (#1085, #1089–#1092).
