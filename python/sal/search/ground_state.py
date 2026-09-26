@@ -60,6 +60,7 @@ for the ordering coupling the rungs sit either side of.
 
 from __future__ import annotations
 
+import copy
 import functools
 import operator
 import re
@@ -67,7 +68,7 @@ import time
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, replace
 from dataclasses import field as dataclass_field
-from typing import Any, Protocol
+from typing import Any, NoReturn, Protocol
 
 import numpy as np
 
@@ -79,7 +80,7 @@ from sal.likelihood.message_passing import (
     max_product,
 )
 from sal.opt.budget import Budget, Comparison, Outcome
-from sal.opt.compose import Step, Then
+from sal.opt.compose import BestOf, Step, Then
 from sal.opt.termination import Stop, Termination
 from sal.sample.potts_mcmc import (
     ClusterCounter,
@@ -1239,19 +1240,6 @@ ARGUMENTS: dict[str, Callable[[Any], Any]] = {
 }
 
 
-def _split(text: str) -> list[str]:
-    """``text`` split at each :data:`CHAIN` outside parentheses."""
-    parts: list[str] = []
-    depth, begun = 0, 0
-    for index, character in enumerate(text):
-        depth += {"(": 1, ")": -1}.get(character, 0)
-        if character == CHAIN and depth == 0:
-            parts.append(text[begun:index])
-            begun = index + 1
-    parts.append(text[begun:])
-    return parts
-
-
 def _refuse_argument(name: str, keys: Iterable[str], reason: str) -> None:
     """Raise for arguments a stage cannot take."""
     msg = f"{name!r} takes no {sorted(keys)!r}: {reason}"
@@ -1367,6 +1355,26 @@ class SolverStage:
         return f"{self.name}({shown})"
 
 
+#: The separators of a chain's text: stages in order, realizations, and a
+#: realization count.
+REALIZATIONS = "|"
+REPEAT = "**"
+
+#: A stage's name in a chain's text.
+_NAME = re.compile(r"[A-Za-z0-9_\-]+")
+
+#: What a realization's run is judged on.
+_ENERGY = operator.attrgetter("energy")
+
+
+def _as_step(node: SolverStage | SolverChain | SolverRealizations) -> Step:
+    """A node as one step of the chain around it."""
+    if isinstance(node, SolverStage):
+        return node.step()
+    built = node.then() if isinstance(node, SolverChain) else node.best_of()
+    return Step(built, takes=built.takes)
+
+
 @dataclass
 class SolverChain:
     """Stages run in order under one budget, built when called (issue #1077).
@@ -1376,15 +1384,23 @@ class SolverChain:
     sets a stage's arguments, and :func:`ground_state` runs it. Each stage
     starts from the labelling of the one before and gets the budget the
     stages before it left less its reserve; the run is the last stage's,
-    ``spent`` summed. ``schedule`` and ``steps`` passed at call time reach
-    every annealed stage and replace its arguments; ``backend`` and
-    ``min_sites`` every single-site descent. A stage that refuses a start,
-    such as ``field_argmax``, can only come first; and since
+    ``spent`` summed. A stage is a :class:`SolverStage` or a
+    :class:`SolverRealizations`. ``schedule`` and ``steps`` passed at call
+    time reach every annealed stage and replace its arguments; ``backend``
+    and ``min_sites`` every single-site descent. A stage that refuses a
+    start, such as ``field_argmax``, can only come first; and since
     :func:`run_icm` charges its whole budget, a descent before another stage
-    is ``descent``. ``str(chain)`` is text :meth:`parse` reads back.
+    is ``descent``.
+
+    The text is stages joined by ``>``; ``a|b`` is realizations of ``a`` and
+    ``b`` and ``x**n`` is ``n`` realizations of ``x``, :class:`SolverRealizations`;
+    parentheses group. ``**`` binds tightest, then ``>``, then ``|``, so
+    ``descent>alpha-expansion**2`` repeats the expansion alone and
+    ``(descent>alpha-expansion)**2`` the whole chain. ``str(chain)`` is text
+    :meth:`parse` reads back.
     """
 
-    stages: list[SolverStage]
+    stages: list[SolverStage | SolverRealizations]
 
     def __post_init__(self) -> None:
         if not self.stages:
@@ -1393,12 +1409,19 @@ class SolverChain:
 
     @classmethod
     def parse(cls, text: str) -> SolverChain:
-        """A chain from ``a>b(key=value,...)>...``, each stage read by :meth:`SolverStage.parse`."""
-        return cls([SolverStage.parse(stage) for stage in _split(text)])
+        """A chain from its text; realizations at the top are a chain of one stage.
+
+        Raises
+        ------
+        ValueError
+            If the text does not read, or a stage or argument is refused.
+        """
+        node = _Reader(text).read()
+        return node if isinstance(node, SolverChain) else cls([node])
 
     def then(self) -> Then:
         """The chain as it runs, built from the stages' current arguments."""
-        return Then(tuple(stage.step() for stage in self.stages), handover)
+        return Then(tuple(_as_step(stage) for stage in self.stages), handover)
 
     @property
     def takes(self) -> frozenset[str]:
@@ -1421,11 +1444,185 @@ class SolverChain:
 
     def __str__(self) -> str:
         """The chain's text, which :meth:`parse` reads back."""
-        return CHAIN.join(str(stage) for stage in self.stages)
+        return CHAIN.join(
+            f"({stage})"
+            if isinstance(stage, SolverRealizations) and len(self.stages) > 1
+            else str(stage)
+            for stage in self.stages
+        )
+
+
+@dataclass
+class SolverRealizations:
+    """Independent realizations from one start, the lowest energy kept (issue #1077).
+
+    :class:`~sal.opt.compose.BestOf`: each branch, a :class:`SolverStage` or
+    a :class:`SolverChain`, runs from the same start on an equal share of
+    the budget and its own generator spawned in branch order; the run is
+    the lowest-energy branch's, ``spent`` summed. ``x**n`` in a chain's text
+    is ``n`` copies of ``x``, each updated on its own.
+    """
+
+    branches: list[SolverStage | SolverChain]
+
+    def __post_init__(self) -> None:
+        if len(self.branches) < 2:
+            msg = f"realizations are at least two, got {len(self.branches)}"
+            raise ValueError(msg)
+
+    def update(self, **arguments: Any) -> SolverRealizations:
+        """:meth:`SolverStage.update` on every branch; update one through :attr:`branches`.
+
+        Raises
+        ------
+        ValueError
+            If a branch is a chain, whose stages are updated one by one, or
+            an argument is refused; no branch is changed then.
+        """
+        updated = [
+            branch
+            for branch in copy.deepcopy(self.branches)
+            if isinstance(branch, SolverStage)
+        ]
+        if len(updated) != len(self.branches):
+            msg = "a branch is a chain: update its stages through branches"
+            raise ValueError(msg)
+        for branch in updated:
+            branch.update(**arguments)
+        self.branches = list(updated)
+        return self
+
+    def best_of(self) -> BestOf:
+        """The realizations as they run."""
+        return BestOf(
+            tuple(
+                branch.then()
+                if isinstance(branch, SolverChain)
+                else Then((_as_step(branch),), handover)
+                for branch in self.branches
+            ),
+            _ENERGY,
+        )
+
+    @property
+    def takes(self) -> frozenset[str]:
+        """Every option some branch takes at call time."""
+        return self.best_of().takes
+
+    def __call__(
+        self,
+        problem: Problem | Rung,
+        budget: Budget,
+        rng: np.random.Generator,
+        /,
+        *,
+        start: np.ndarray | None = None,
+        **options: Any,
+    ) -> MethodRun:
+        """Run every realization on its share and keep the lowest."""
+        run: MethodRun = self.best_of()(problem, budget, rng, start=start, **options)
+        return run
+
+    def __str__(self) -> str:
+        """``x**n`` where every branch is the same, else branches joined by ``|``."""
+        first = self.branches[0]
+        if all(branch == first for branch in self.branches):
+            shown = f"({first})" if isinstance(first, SolverChain) else str(first)
+            return f"{shown}{REPEAT}{len(self.branches)}"
+        return REALIZATIONS.join(str(branch) for branch in self.branches)
+
+
+class _Reader:
+    """Recursive descent over a chain's text: ``|`` below ``>`` below ``**``."""
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+        self.at = 0
+
+    def _fail(self, what: str) -> NoReturn:
+        msg = f"expected {what} at {self.at} in {self.text!r}"
+        raise ValueError(msg)
+
+    def _peek(self, token: str) -> bool:
+        while self.at < len(self.text) and self.text[self.at].isspace():
+            self.at += 1
+        return self.text.startswith(token, self.at)
+
+    def read(self) -> SolverStage | SolverChain | SolverRealizations:
+        node = self._branches()
+        if self._peek("") and self.at != len(self.text):
+            self._fail("the end")
+        return node
+
+    def _branches(self) -> SolverStage | SolverChain | SolverRealizations:
+        branches = [self._sequence()]
+        while self._peek(REALIZATIONS):
+            self.at += len(REALIZATIONS)
+            branches.append(self._sequence())
+        if len(branches) == 1:
+            return branches[0]
+        return SolverRealizations(
+            [
+                SolverChain([branch])
+                if isinstance(branch, SolverRealizations)
+                else branch
+                for branch in branches
+            ]
+        )
+
+    def _sequence(self) -> SolverStage | SolverChain | SolverRealizations:
+        stages: list[SolverStage | SolverRealizations] = []
+        while True:
+            node = self._repeated()
+            # A group that is a chain is its stages here: the same run.
+            stages.extend(node.stages if isinstance(node, SolverChain) else [node])
+            if not self._peek(CHAIN):
+                break
+            self.at += len(CHAIN)
+        return stages[0] if len(stages) == 1 else SolverChain(stages)
+
+    def _repeated(self) -> SolverStage | SolverChain | SolverRealizations:
+        node = self._atom()
+        if not self._peek(REPEAT):
+            return node
+        self.at += len(REPEAT)
+        self._peek("")
+        count = re.match(r"\d+", self.text[self.at :])
+        if count is None:
+            self._fail("a count after **")
+        self.at += count.end()
+        n = int(count.group())
+        if n < 1:
+            self._fail("a count of at least one")
+        if n == 1:
+            return node
+        branch = SolverChain([node]) if isinstance(node, SolverRealizations) else node
+        return SolverRealizations([copy.deepcopy(branch) for _ in range(n)])
+
+    def _atom(self) -> SolverStage | SolverChain | SolverRealizations:
+        if self._peek("("):
+            self.at += 1
+            node = self._branches()
+            if not self._peek(")"):
+                self._fail("a closing parenthesis")
+            self.at += 1
+            return node
+        name = _NAME.match(self.text, self.at)
+        if name is None:
+            self._fail("a stage name")
+        self.at = name.end()
+        body = ""
+        if self.text.startswith("(", self.at):
+            close = self.text.find(")", self.at)
+            if close < 0:
+                self._fail("a closing parenthesis")
+            body = self.text[self.at : close + 1]
+            self.at = close + 1
+        return SolverStage.parse(name.group() + body)
 
 
 def compose(text: str) -> SolverChain:
-    """:meth:`SolverChain.parse`: any chain of :data:`METHODS`, :data:`ARMS` and :data:`STAGES` stages, from its text."""
+    """:meth:`SolverChain.parse`: any chain or realizations of :data:`METHODS`, :data:`ARMS` and :data:`STAGES` stages, from its text."""
     return SolverChain.parse(text)
 
 
@@ -1486,7 +1683,7 @@ ANNEALED = _ANNEALED_METHODS | frozenset(ARMS)
 def ground_state(
     graph: PottsGraph,
     field: np.ndarray,
-    method: str | SolverChain | Then,
+    method: str | SolverChain | SolverRealizations | Then | BestOf,
     budget: Budget,
     rng: np.random.Generator,
     *,
@@ -1562,11 +1759,11 @@ def ground_state(
     """
     solvers = METHODS | ARMS
     solver: Callable[..., MethodRun]
-    if isinstance(method, Then | SolverChain):
+    if isinstance(method, Then | BestOf | SolverChain | SolverRealizations):
         solver, takes = method, method.takes
     elif method in solvers:
         solver, takes = solvers[method], _options(method)
-    elif CHAIN in method or "(" in method:
+    elif any(token in method for token in (CHAIN, "(", REALIZATIONS, REPEAT)):
         composed = SolverChain.parse(method)
         solver, takes = composed, composed.takes
     else:

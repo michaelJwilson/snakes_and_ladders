@@ -19,6 +19,10 @@ Keyword options (a schedule, a step count) go to the steps that declare them
 in ``takes``. An option no step takes is refused, as is a step left no
 budget.
 
+:class:`BestOf` is the other combinator: independent realizations from one
+start, each on an equal share of the budget and its own spawned generator,
+the lowest value kept.
+
 Model-agnostic, per ``opt/CLAUDE.md``: nothing here knows what a problem is.
 """
 
@@ -158,3 +162,84 @@ def then(stages: Sequence[Stage | Step], handover: Callable[[Any], Any]) -> Then
         tuple(stage if isinstance(stage, Step) else Step(stage) for stage in stages),
         handover,
     )
+
+
+@dataclass(frozen=True)
+class BestOf:
+    """Independent realizations from one start, the lowest value kept (issue #1077).
+
+    Each branch runs on ``budget.size // len(branches)`` units, the equal
+    split :func:`~sal.opt.budget.restarts` makes, from the same ``start``,
+    on its own generator spawned from ``rng`` in branch order. The spawned
+    streams are what make a branch's run independent of the others' and of
+    their order, so a parallel run is the serial one bitwise. The run is the
+    branch with the lowest ``value``, the first on a tie, with ``spent``
+    summed over every branch and ``seconds`` the whole.
+
+    Parameters
+    ----------
+    branches : tuple[Then, ...]
+        At least two; a bare stage is a one-step :class:`Then`.
+    value : Callable[[Any], float]
+        Reads what is minimized out of a run.
+    """
+
+    branches: tuple[Then, ...]
+    value: Callable[[Any], float]
+
+    def __post_init__(self) -> None:
+        if len(self.branches) < 2:
+            msg = f"realizations are at least two, got {len(self.branches)}"
+            raise ValueError(msg)
+
+    @property
+    def takes(self) -> frozenset[str]:
+        """Every option some branch takes."""
+        return frozenset().union(*(branch.takes for branch in self.branches))
+
+    def __call__(
+        self,
+        problem: Any,
+        budget: Budget,
+        rng: np.random.Generator,
+        /,
+        *,
+        start: Any = None,
+        **options: Any,
+    ) -> Any:
+        """Run every branch on its share and keep the lowest.
+
+        Raises
+        ------
+        ValueError
+            If an option is taken by no branch, or a share is under one unit.
+        """
+        unknown = set(options) - self.takes
+        if unknown:
+            msg = (
+                f"no branch takes {sorted(unknown)}; the branches take "
+                f"{sorted(self.takes)}"
+            )
+            raise ValueError(msg)
+        share = budget.size // len(self.branches)
+        if share < 1:
+            msg = (
+                f"{len(self.branches)} realizations of {budget.size} "
+                f"{budget.unit} leave each less than one"
+            )
+            raise ValueError(msg)
+        started = time.perf_counter()
+        streams = rng.spawn(len(self.branches))
+        best: Any = None
+        spent = 0
+        for branch, stream in zip(self.branches, streams, strict=True):
+            chosen = {name: options[name] for name in branch.takes if name in options}
+            run = branch(
+                problem, Budget(budget.unit, share), stream, start=start, **chosen
+            )
+            spent += run.spent
+            if best is None or self.value(run) < self.value(best):
+                best = run
+        return dataclasses.replace(
+            best, spent=spent, seconds=time.perf_counter() - started
+        )

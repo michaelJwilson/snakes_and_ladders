@@ -23,11 +23,14 @@ from sal.search.ground_state import (
     ARMS,
     EXPANSION_RESERVE_CYCLES,
     EXPANSION_SW_SCHEDULE,
+    METHODS,
     SWENDSEN_WANG_SCHEDULE,
     WARM_SCHEDULE,
     MethodRun,
     Rung,
     SolverChain,
+    SolverRealizations,
+    SolverStage,
     chain,
     ground_state,
     part,
@@ -289,3 +292,124 @@ def test_an_update_a_stage_cannot_take_is_refused_and_leaves_it_unchanged() -> N
         solver.stages[1].update(bogus=1)
 
     assert str(solver) == "alpha-expansion>swendsen-wang(steps=4)"
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("seed", SEEDS)
+def test_repeated_realizations_are_the_best_of_their_branches_by_hand(
+    seed: int,
+) -> None:
+    # `(descent>alpha-expansion)**3`: three realizations, each on a third of
+    # the budget and its own spawned generator, from the same (drawn) start;
+    # the lowest energy is kept and every branch's spend is charged.
+    rung = _rung()
+    budget = _budget(rung)
+    run = ground_state(
+        rung.graph,
+        rung.field,
+        "(descent>alpha-expansion)**3",
+        budget,
+        np.random.default_rng(seed),
+    )
+    share = Budget(budget.unit, budget.size // 3)
+    branches = [
+        chain("descent", "alpha-expansion")(rung, share, stream)
+        for stream in np.random.default_rng(seed).spawn(3)
+    ]
+    best = min(branches, key=lambda branch: branch.energy)
+
+    assert np.array_equal(run.labelling, best.labelling)
+    assert run.energy == best.energy
+    assert run.spent == sum(branch.spent for branch in branches) <= budget.size
+
+
+@pytest.mark.oracle
+def test_alternatives_start_from_the_same_labelling() -> None:
+    # `icm|alpha-expansion` from a given start: each realization starts from
+    # it, so each is its solver called from that start on its share.
+    rung = _rung()
+    budget = _budget(rung)
+    start = rung.field.argmax(axis=1).astype(np.int64)
+    run = ground_state(
+        rung.graph,
+        rung.field,
+        "icm|alpha-expansion",
+        budget,
+        np.random.default_rng(4),
+        start=start,
+    )
+    share = Budget(budget.unit, budget.size // 2)
+    first, second = np.random.default_rng(4).spawn(2)
+    icm = METHODS.__getitem__("icm")(rung, share, first, start=start)
+    cut = METHODS.__getitem__("alpha-expansion")(rung, share, second, start=start)
+
+    best = min((icm, cut), key=lambda branch: branch.energy)
+
+    assert np.array_equal(run.labelling, best.labelling)
+    assert run.energy == best.energy
+    assert run.spent == icm.spent + cut.spent
+
+
+@pytest.mark.analytic
+@pytest.mark.parametrize(
+    ("text", "shown"),
+    [
+        ("descent>alpha-expansion**2", "descent>(alpha-expansion**2)"),
+        ("(descent>alpha-expansion)**3", "(descent>alpha-expansion)**3"),
+        ("icm|anneal(steps=5)>alpha-expansion", "icm|anneal(steps=5)>alpha-expansion"),
+        ("swendsen-wang**1>alpha-expansion", "swendsen-wang>alpha-expansion"),
+        (
+            "field_argmax>(descent>alpha-expansion|swendsen-wang**2)>alpha-beta-swap",
+            "field_argmax>(descent>alpha-expansion|swendsen-wang**2)>alpha-beta-swap",
+        ),
+    ],
+)
+def test_repetition_binds_tighter_than_a_chain_and_a_chain_than_alternatives(
+    text: str, shown: str
+) -> None:
+    solver = SolverChain.parse(text)
+
+    assert str(solver) == shown
+    assert SolverChain.parse(str(solver)) == solver
+
+
+@pytest.mark.smoke
+def test_repeated_copies_update_on_their_own() -> None:
+    solver = SolverChain.parse("swendsen-wang**2")
+    realizations = solver.stages[0]
+    assert isinstance(realizations, SolverRealizations)
+    first = realizations.branches[0]
+    assert isinstance(first, SolverStage)
+    first.update(steps=3)
+
+    assert str(solver) == "swendsen-wang(steps=3)|swendsen-wang"
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize(
+    ("text", "match"),
+    [
+        ("swendsen-wang**", "a count after"),
+        ("swendsen-wang**0", "at least one"),
+        ("(descent>alpha-expansion", "closing parenthesis"),
+        ("descent>>alpha-expansion", "a stage name"),
+        ("descent alpha-expansion", "the end"),
+    ],
+)
+def test_text_that_does_not_read_is_refused_where_it_stops(
+    text: str, match: str
+) -> None:
+    with pytest.raises(ValueError, match=match):
+        SolverChain.parse(text)
+
+
+@pytest.mark.smoke
+def test_an_update_on_realizations_reaches_every_branch_or_none() -> None:
+    solver = SolverChain.parse("swendsen-wang**2>alpha-expansion")
+    solver.stages[0].update(steps=3)
+
+    assert str(solver) == "(swendsen-wang(steps=3)**2)>alpha-expansion"
+    with pytest.raises(ValueError, match="runs no anneal"):
+        SolverChain.parse("(swendsen-wang|alpha-expansion)>icm").stages[0].update(
+            steps=3
+        )

@@ -19,7 +19,7 @@ import numpy as np
 import pytest
 from sal.cost import Cost
 from sal.opt.budget import Budget
-from sal.opt.compose import Step, Then, then
+from sal.opt.compose import BestOf, Step, Then, then
 
 
 @dataclass(frozen=True)
@@ -29,7 +29,7 @@ class Run:
     x: int
     spent: int
     seconds: float
-    seen: tuple[object, ...]
+    seen: tuple[int, int, int]
 
 
 def _stage(
@@ -117,3 +117,42 @@ def test_a_chain_of_module_level_parts_crosses_a_process_boundary() -> None:
     original = chain(2, budget, np.random.default_rng(4))
 
     assert replace(copied, seconds=0.0) == replace(original, seconds=0.0)
+
+
+def _value(run: Run) -> float:
+    """What realizations are judged on: the draw each stage recorded."""
+    return float(run.seen[2])
+
+
+@pytest.mark.analytic
+def test_realizations_split_the_budget_and_keep_the_lowest_on_spawned_streams() -> None:
+    # Three realizations of 30 units: each sees 10 from the same start, on
+    # the generator's three spawned children in order; the lowest draw wins
+    # and the spend is summed.
+    one = _chain(Step(_stage))
+    best = BestOf((one, one, one), _value)
+    run = best(5, Budget(Cost.SITE_VISITS, 30), np.random.default_rng(9), start=1)
+    draws = [
+        int(child.integers(0, 1_000)) for child in np.random.default_rng(9).spawn(3)
+    ]
+
+    assert run.seen == (10, 1, min(draws))
+    assert run.spent == 3 * 5
+    assert run.x == 2
+
+
+@pytest.mark.analytic
+def test_realizations_refuse_an_unknown_option_a_single_branch_and_a_thin_share() -> (
+    None
+):
+    one = _chain(Step(_stage))
+    with pytest.raises(ValueError, match="at least two"):
+        BestOf((one,), _value)
+    with pytest.raises(ValueError, match="no branch takes"):
+        BestOf((one, one), _value)(
+            0, Budget(Cost.SITE_VISITS, 8), np.random.default_rng(0), scale=2
+        )
+    with pytest.raises(ValueError, match="less than one"):
+        BestOf((one, one, one), _value)(
+            0, Budget(Cost.SITE_VISITS, 2), np.random.default_rng(0)
+        )
