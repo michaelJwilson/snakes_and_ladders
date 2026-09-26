@@ -51,7 +51,7 @@ def test_transition_probabilities_reproduce_the_jc_closed_form() -> None:
         rate = gtr_rate_matrix(np.ones(n_exchangeabilities(k)), pi)
         assert_allclose(
             reversible_transition_probabilities(rate, pi, t),
-            jc_transition_probabilities(t, k=k),
+            jc_transition_probabilities(t, n_states=k),
             atol=1e-15,
         )
 
@@ -218,7 +218,7 @@ def test_the_default_simulator_path_is_unchanged() -> None:
     def common() -> dict[str, object]:
         return {
             "tau": params.tau,
-            "k": params.k,
+            "n_states": params.n_states,
             "pi": params.pi,
             "rng": np.random.default_rng(params.seed),
             "n_sites": 2000,
@@ -235,8 +235,8 @@ def test_simulating_under_a_jc_equivalent_gtr_matches_the_jc_path() -> None:
     # Same model, same alignment: eigendecomposition and closed form differ by
     # ~3e-16, which can flip a rare inverse-CDF draw, and no more.
     params = load_fixture(SMALL_SITES)
-    uniform = np.full(params.k, 1.0 / params.k)
-    equivalent = gtr_rate_matrix(np.ones(n_exchangeabilities(params.k)), uniform)
+    uniform = np.full(params.n_states, 1.0 / params.n_states)
+    equivalent = gtr_rate_matrix(np.ones(n_exchangeabilities(params.n_states)), uniform)
 
     # A generator is stateful, so the two calls each need their own, seeded
     # alike. Under the old `seed: int` signature each call rebuilt the stream
@@ -245,7 +245,7 @@ def test_simulating_under_a_jc_equivalent_gtr_matches_the_jc_path() -> None:
     def common() -> dict[str, object]:
         return {
             "tau": params.tau,
-            "k": params.k,
+            "n_states": params.n_states,
             "pi": uniform,
             "rng": np.random.default_rng(params.seed),
             "n_sites": 20000,
@@ -268,14 +268,14 @@ def test_simulated_frequencies_match_the_generating_stationary_distribution() ->
     rate = gtr_rate_matrix(TRUE_EXCHANGEABILITIES, TRUE_PI)
     dataset = simulate_alignment(
         tau=params.tau,
-        k=params.k,
+        n_states=params.n_states,
         pi=TRUE_PI,
         rng=np.random.default_rng(params.seed),
         n_sites=200000,
         rate_matrix=rate,
     )
     for states in dataset.alignment.values():
-        observed = np.bincount(states, minlength=params.k) / states.size
+        observed = np.bincount(states, minlength=params.n_states) / states.size
         # Monte Carlo standard error at 2e5 draws is ~0.001; 0.01 is well
         # outside that and well inside a wrong stationary distribution.
         assert_allclose(observed, TRUE_PI, atol=0.01)

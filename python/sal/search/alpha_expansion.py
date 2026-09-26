@@ -33,7 +33,6 @@ energies a cut can represent.
 
 from __future__ import annotations
 
-import warnings
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
@@ -56,6 +55,7 @@ from sal.sim.potts import (
     energy,
     log_weight_of,
     site_field,
+    states_of,
 )
 
 # The bound is `2 * c_max / c_min` for a metric pairwise term; with a uniform
@@ -124,7 +124,7 @@ class ExpansionResult:
         than a failure.
     termination : Termination | None
         Converged after ``cycles`` where a cycle lowered nothing. Where
-        ``max_cycles`` ran out first it is the budget after ``max_cycles``,
+        ``max_iterations`` ran out first it is the budget after ``max_iterations``,
         and a warning says so (issue #1059): the default cap is a defect
         guard, since monotonicity over a finite state space bounds the
         cycles, but a caller's cap is a budget (`search.ground_state`
@@ -332,7 +332,7 @@ def _cycle_to_a_local_minimum(
     move: _Move,
     *,
     start: np.ndarray | None,
-    max_cycles: int,
+    max_iterations: int,
     backend: Backend,
 ) -> ExpansionResult:
     """Cycle over ``move``'s label sets until a full sweep lowers nothing.
@@ -361,7 +361,7 @@ def _cycle_to_a_local_minimum(
     cut = _lattice_cut(graph) if backend is Backend.RUST else None
 
     moves = 0
-    for cycle in range(1, max_cycles + 1):
+    for cycle in range(1, max_iterations + 1):
         improved = False
         for labels in move.label_sets(n_states):
             moved = move.apply(
@@ -382,18 +382,14 @@ def _cycle_to_a_local_minimum(
                 termination=Termination.after(cycle, converged=True),
             )
 
-    warnings.warn(
-        f"{move.name} did not settle in max_cycles={max_cycles} cycles; ran "
-        f"{max_cycles} and returns the labelling it holds, with a Termination "
-        "recording the cap",
-        stacklevel=3,
-    )
+    # The cap is a termination, not a warning (issue #1089): the result says
+    # it ran to `max_iterations`, which is all a caller needs to decide.
     return ExpansionResult(
         labelling=labelling,
         energy=energy(graph, values, labelling),
-        cycles=max_cycles,
+        cycles=max_iterations,
         moves=moves,
-        termination=Termination.after(max_cycles, converged=False),
+        termination=Termination.after(max_iterations, converged=False),
     )
 
 
@@ -652,10 +648,10 @@ EXPANSION = _Move(
 def alpha_expansion(
     graph: PottsGraph,
     field: SiteField | np.ndarray,
-    n_states: int,
     *,
+    n_states: int | None = None,
     start: np.ndarray | None = None,
-    max_cycles: int = DEFAULT_MAX_CYCLES,
+    max_iterations: int = DEFAULT_MAX_CYCLES,
     backend: Backend = Backend.RUST,
 ) -> ExpansionResult:
     """Cycle over labels until a full sweep lowers nothing.
@@ -673,12 +669,13 @@ def alpha_expansion(
         bound rests on.
     field : SiteField | np.ndarray
         ``(n_states,)`` or ``(n_nodes, n_states)``.
-    n_states : int
-        Label count.
+    n_states : int | None
+        Label count, read from the field's state axis; given, it is checked
+        against it (issue #1091).
     start : np.ndarray | None
         Initial labelling; the per-node data optimum when omitted, which is
         the labelling ignoring every coupling.
-    max_cycles : int
+    max_iterations : int
         Cycles to run at most. The default, :data:`DEFAULT_MAX_CYCLES`, is a
         defect guard: monotonicity makes a correct run settle inside it. A
         caller's cap is a budget, and reaching it returns the labelling held.
@@ -695,18 +692,18 @@ def alpha_expansion(
     Warns
     -----
     UserWarning
-        Where ``max_cycles`` runs out before a cycle lowers nothing; the
-        result then carries ``cycles = max_cycles`` and a termination
+        Where ``max_iterations`` runs out before a cycle lowers nothing; the
+        result then carries ``cycles = max_iterations`` and a termination
         recording the budget (issue #1059).
     """
     field = log_weight_of(field)
     return _cycle_to_a_local_minimum(
         graph,
         field,
-        n_states,
+        states_of(field, graph.n_nodes, n_states),
         EXPANSION,
         start=start,
-        max_cycles=max_cycles,
+        max_iterations=max_iterations,
         backend=backend,
     )
 
@@ -925,11 +922,11 @@ SWAP = _Move(
 
 def alpha_beta_swap(
     graph: PottsGraph,
-    field: np.ndarray,
-    n_states: int,
+    field: SiteField | np.ndarray,
     *,
+    n_states: int | None = None,
     start: np.ndarray | None = None,
-    max_cycles: int = DEFAULT_MAX_CYCLES,
+    max_iterations: int = DEFAULT_MAX_CYCLES,
     backend: Backend = Backend.RUST,
 ) -> ExpansionResult:
     """Cycle over every label pair until a full sweep lowers nothing.
@@ -952,14 +949,15 @@ def alpha_beta_swap(
     Warns
     -----
     UserWarning
-        Where ``max_cycles`` runs out first, as :func:`alpha_expansion` does.
+        Where ``max_iterations`` runs out first, as :func:`alpha_expansion` does.
     """
+    field = log_weight_of(field)
     return _cycle_to_a_local_minimum(
         graph,
         field,
-        n_states,
+        states_of(field, graph.n_nodes, n_states),
         SWAP,
         start=start,
-        max_cycles=max_cycles,
+        max_iterations=max_iterations,
         backend=backend,
     )

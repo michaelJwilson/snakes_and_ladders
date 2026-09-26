@@ -54,7 +54,7 @@ def test_matrix_exp_rate_matrix_path_matches_closed_form() -> None:
     k = 4
     pi = np.full(k, 0.25)
     dataset = simulate_alignment(
-        tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260913), n_sites=50
+        tau=tau, n_states=k, pi=pi, rng=np.random.default_rng(20260913), n_sites=50
     )
     branch_lengths = pruning_torch.branch_lengths_from_tree(tau)
     rate_matrix = torch.as_tensor(jc_rate_matrix(k), dtype=torch.float64)
@@ -76,7 +76,7 @@ def test_gradient_matches_finite_differences_of_numpy_oracle() -> None:
     k = 4
     pi = np.full(k, 0.25)
     dataset = simulate_alignment(
-        tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260914), n_sites=30
+        tau=tau, n_states=k, pi=pi, rng=np.random.default_rng(20260914), n_sites=30
     )
     order = pruning_torch.branch_order(tau)
     branch_lengths = pruning_torch.branch_lengths_from_tree(tau).requires_grad_(True)
@@ -149,7 +149,7 @@ def test_the_gateways_torch_door_is_the_taped_value_at_the_oracles_tolerance() -
     k = 4
     pi = np.full(k, 0.25)
     alignment = simulate_alignment(
-        tau=tau, k=k, pi=pi, rng=np.random.default_rng(1059), n_sites=50
+        tau=tau, n_states=k, pi=pi, rng=np.random.default_rng(1059), n_sites=50
     ).alignment
     through = pruning.log_likelihood(tau, k, pi, alignment, backend=Backend.TORCH)
     taped = pruning_torch.log_likelihood(

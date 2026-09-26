@@ -1164,7 +1164,8 @@ def _expansion_seconds(side: int) -> float:
     graph = lattice_graph((side, side), BoundaryCondition.OPEN, critical_coupling(10))
     field = np.random.default_rng(974).normal(size=(graph.n_nodes, 10))
     return median_seconds(
-        lambda: alpha_expansion(graph, field, 10, backend=Backend.RUST), repeats=3
+        lambda: alpha_expansion(graph, field, backend=Backend.RUST, n_states=10),
+        repeats=3,
     )
 
 

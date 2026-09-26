@@ -558,7 +558,7 @@ def swap_log_ratio(
 
 def parallel_tempering(
     graph: PottsGraph,
-    field: np.ndarray,
+    field: SiteField | np.ndarray,
     temperatures: TempSchedule | Sequence[float],
     rng: np.random.Generator,
     n_sweeps: int,
@@ -586,7 +586,7 @@ def parallel_tempering(
     graph : PottsGraph
         The instance. Couplings of either sign; single-site moves only, for
         the reason :func:`anneal_potts` gives.
-    field : np.ndarray
+    field : SiteField | np.ndarray
         External field, shape ``(n_states,)``.
     temperatures : TempSchedule | Sequence[float]
         The ladder, in any order; at least two, all positive. The stationary
@@ -613,6 +613,7 @@ def parallel_tempering(
         nothing to exchange and is :func:`sample_potts` --- or any is not
         positive.
     """
+    field = log_weight_of(field)
     temperatures = check_ladder(ladder(temperatures), needed_by="parallel tempering")
 
     rows = site_field(np.asarray(field, dtype=float), graph.n_nodes)
@@ -879,12 +880,12 @@ def cluster_tempering(
 
 def adapt_ladder_potts(
     graph: PottsGraph,
-    field: np.ndarray,
+    field: SiteField | np.ndarray,
     start: TempSchedule | Sequence[float],
     rng: np.random.Generator,
     n_sweeps: int,
     band: tuple[float, float],
-    max_rounds: int,
+    max_iterations: int,
     max_replicas: int,
     *,
     backend: Backend = Backend.RUST,
@@ -909,13 +910,14 @@ def adapt_ladder_potts(
     n_sweeps : int
         Sweeps per replica per measurement. Each acceptance is a fraction of
         ``n_sweeps`` proposals, so this sets what the band can resolve.
-    band, max_rounds, max_replicas
+    band, max_iterations, max_replicas
         As :func:`sal.sample.schedule.adapt_ladder`.
 
     Returns
     -------
     AdaptedLadder
     """
+    field = log_weight_of(field)
 
     def measure(candidate: tuple[float, ...]) -> list[float]:
         run = parallel_tempering(
@@ -923,7 +925,7 @@ def adapt_ladder_potts(
         )
         return [float(value) for value in run.swap_acceptance]
 
-    return adapt_ladder(measure, ladder(start), band, max_rounds, max_replicas)
+    return adapt_ladder(measure, ladder(start), band, max_iterations, max_replicas)
 
 
 def sweep_for(
@@ -1065,7 +1067,7 @@ class PottsPair:
 
 def sample_potts_pair(
     graph: PottsGraph,
-    field: np.ndarray,
+    field: SiteField | np.ndarray,
     move: PottsMove,
     rng: np.random.Generator,
     n_sweeps: int,
@@ -1126,6 +1128,7 @@ def sample_potts_pair(
         Fortuin-Kasteleyn cluster move on a graph with a negative coupling, as
         :func:`sample_potts` refuses it.
     """
+    field = log_weight_of(field)
     refuse_negative_coupling(move, graph)
 
     model = tempered(graph, field, temperature)

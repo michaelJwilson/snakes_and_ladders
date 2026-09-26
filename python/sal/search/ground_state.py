@@ -99,10 +99,12 @@ from sal.search.icm import (
 from sal.sim.factor_graph import from_potts
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from sal.sim.potts import (
+    SiteField,
     SpatioOnlyParams,
     check_labelling,
     critical_coupling,
     energy,
+    log_weight_of,
     spatio_only_field,
 )
 
@@ -659,7 +661,7 @@ def run_annealed(
 def _descend(
     problem: Problem | Rung,
     rng: np.random.Generator,
-    max_sweeps: int,
+    max_iterations: int,
     *,
     start: np.ndarray | None = None,
     backend: Backend | None = None,
@@ -676,19 +678,19 @@ def _descend(
     return iterated_conditional_modes(
         problem.graph,
         problem.field,
-        problem.n_states,
         rng,
         start=labelling,
-        max_sweeps=max_sweeps,
+        max_iterations=max_iterations,
         min_sites=min_sites,
         backend=Backend.NUMBA if backend is None else backend,
+        n_states=problem.n_states,
     )
 
 
 def descend(
     problem: Problem | Rung,
     rng: np.random.Generator,
-    max_sweeps: int,
+    max_iterations: int,
     *,
     start: np.ndarray | None = None,
     backend: Backend | None = None,
@@ -706,17 +708,17 @@ def descend(
     ``backend`` and ``min_sites`` are
     :func:`~sal.search.icm.iterated_conditional_modes`'s;
     ``None`` is its default backend. A floored descent draws its
-    ``max_sweeps * n_nodes`` uniforms up front, as :func:`run_icm`'s one call
+    ``max_iterations * n_nodes`` uniforms up front, as :func:`run_icm`'s one call
     does, so the labelling is the one sweep-at-a-time descents reached and
     the generator is left where one call leaves it.
 
     Returns
     -------
     tuple[np.ndarray, int]
-        The labelling, and the sweeps run, at most ``max_sweeps``.
+        The labelling, and the sweeps run, at most ``max_iterations``.
     """
     settled = _descend(
-        problem, rng, max_sweeps, start=start, backend=backend, min_sites=min_sites
+        problem, rng, max_iterations, start=start, backend=backend, min_sites=min_sites
     )
     return settled.labelling, settled.sweeps
 
@@ -812,12 +814,12 @@ def run_icm(
     settled = iterated_conditional_modes(
         problem.graph,
         problem.field,
-        problem.n_states,
         rng,
         start=start,
-        max_sweeps=steps,
+        max_iterations=steps,
         min_sites=min_sites,
         backend=Backend.NUMBA if backend is None else backend,
+        n_states=problem.n_states,
     )
     return MethodRun(
         labelling=settled.labelling,
@@ -859,14 +861,14 @@ def run_icm_random(
     settled = iterated_conditional_modes(
         problem.graph,
         problem.field,
-        problem.n_states,
         rng,
         start=start,
-        max_sweeps=steps,
+        max_iterations=steps,
         sweep_order=SweepOrder.RANDOM,
         stop_when_clean=False,
         min_sites=min_sites,
         backend=Backend.NUMBA if backend is None else backend,
+        n_states=problem.n_states,
     )
     return MethodRun(
         labelling=settled.labelling,
@@ -962,10 +964,10 @@ def run_alpha_expansion(
     run = alpha_expansion(
         problem.graph,
         problem.field,
-        problem.n_states,
         start=start,
-        max_cycles=cycles,
+        max_iterations=cycles,
         backend=Backend.RUST,
+        n_states=problem.n_states,
     )
     return MethodRun(
         labelling=run.labelling,
@@ -1001,10 +1003,10 @@ def run_alpha_beta_swap(
     run = alpha_beta_swap(
         problem.graph,
         problem.field,
-        problem.n_states,
         start=start,
-        max_cycles=cycles,
+        max_iterations=cycles,
         backend=Backend.RUST,
+        n_states=problem.n_states,
     )
     return MethodRun(
         labelling=run.labelling,
@@ -1089,7 +1091,7 @@ def run_bifurcation(
     steps = max(1, budget.size // problem.visits_per_sweep)
     started = time.perf_counter()
     result = simulated_bifurcation(
-        problem.graph, problem.field, problem.n_states, rng, steps=steps
+        problem.graph, problem.field, rng, steps=steps, n_states=problem.n_states
     )
     return MethodRun(
         labelling=result.labelling,
@@ -1702,7 +1704,7 @@ ANNEALED = _ANNEALED_METHODS | frozenset(ARMS)
 
 def ground_state(
     graph: PottsGraph,
-    field: np.ndarray,
+    field: SiteField | np.ndarray,
     method: str | SolverChain | SolverRealizations | Then | BestOf,
     budget: Budget,
     rng: np.random.Generator,
@@ -1734,7 +1736,7 @@ def ground_state(
     ----------
     graph : PottsGraph
         The lattice; every coupling non-negative.
-    field : np.ndarray
+    field : SiteField | np.ndarray
         ``h``, shape ``(n_nodes, n_states)``.
     method : str | SolverChain | Then
         A key of :data:`METHODS` or :data:`ARMS`; the text of a
@@ -1777,6 +1779,7 @@ def ground_state(
         is given to a method that runs no anneal, or ``backend`` or
         ``min_sites > 0`` to one outside :data:`FLOORED`.
     """
+    field = log_weight_of(field)
     solvers = METHODS | ARMS
     solver: Callable[..., MethodRun]
     if isinstance(method, Then | BestOf | SolverChain | SolverRealizations):

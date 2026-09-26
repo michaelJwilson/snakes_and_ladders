@@ -884,7 +884,7 @@ class AnnealedTopology(Annealed[Topology]):
 
 def anneal_topology(
     alignment: Mapping[str, np.ndarray],
-    k: int,
+    n_states: int,
     schedule: TempSchedule,
     rng: np.random.Generator,
     start: Topology,
@@ -909,7 +909,7 @@ def anneal_topology(
     """
     cache = {} if scores is None else scores
     fitted_before = len(cache)
-    score = cached_topology_score(alignment, k, cache, model=model)
+    score = cached_topology_score(alignment, n_states, cache, model=model)
     current, value = start, score(start)
     best, best_value = current, value
     trajectory = [value]
@@ -937,7 +937,7 @@ def anneal_topology(
 
 def cached_topology_score(
     alignment: Mapping[str, np.ndarray],
-    k: int,
+    n_states: int,
     cache: dict[frozenset[frozenset[str]], float],
     *,
     model: Model = Model.JC,
@@ -952,7 +952,7 @@ def cached_topology_score(
     def score(topology: Topology) -> float:
         key = leaf_bipartitions(topology)
         if key not in cache:
-            cache[key] = score_topology(topology, alignment, k, model)
+            cache[key] = score_topology(topology, alignment, n_states, model)
         return cache[key]
 
     return score
