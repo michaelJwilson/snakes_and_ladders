@@ -148,8 +148,8 @@ def test_both_cut_move_sets_reach_the_enumerated_optimum() -> None:
         rung = _rung(CI, n_states)
         _, exact = _enumerated(rung)
 
-        expansion = alpha_expansion(rung.graph, rung.field, n_states)
-        swapped = alpha_beta_swap(rung.graph, rung.field, n_states)
+        expansion = alpha_expansion(rung.graph, rung.field, n_states=n_states)
+        swapped = alpha_beta_swap(rung.graph, rung.field, n_states=n_states)
 
         assert expansion.energy == pytest.approx(exact, abs=_EXACT)
         assert swapped.energy == pytest.approx(exact, abs=_EXACT)
@@ -166,7 +166,7 @@ def test_the_swap_never_raises_the_energy_from_any_start() -> None:
 
     for _ in range(12):
         start = rng.integers(0, 3, size=rung.n_nodes)
-        run = alpha_beta_swap(rung.graph, rung.field, 3, start=start)
+        run = alpha_beta_swap(rung.graph, rung.field, start=start, n_states=3)
         assert run.energy <= energy(rung.graph, rung.field, start) + _EXACT
 
 
@@ -193,7 +193,7 @@ def test_the_bracket_contains_the_known_optimum() -> None:
     # Unshifted, the lower end lands above the optimum and this fails.
     rung = _rung(CI, 3)
     _, exact = _enumerated(rung)
-    expansion = alpha_expansion(rung.graph, rung.field, 3)
+    expansion = alpha_expansion(rung.graph, rung.field, n_states=3)
 
     lower, upper = ground_state.expansion_bracket(rung, expansion.energy)
 
@@ -514,7 +514,7 @@ def test_the_swap_refuses_a_negative_coupling() -> None:
     graph = lattice_graph((3, 3), BoundaryCondition.OPEN, -0.5)
 
     with pytest.raises(ValueError, match="submodular only then"):
-        alpha_beta_swap(graph, np.zeros((graph.n_nodes, 3)), 3)
+        alpha_beta_swap(graph, np.zeros((graph.n_nodes, 3)), n_states=3)
 
 
 @pytest.mark.smoke
@@ -526,11 +526,13 @@ def test_the_swap_warns_and_returns_what_it_holds_at_its_cycle_cap() -> None:
     start = np.array([0, 1, 2, 0, 1, 2, 0, 1, 2], dtype=np.int64)
 
     with pytest.warns(UserWarning, match="did not settle in max_cycles=1"):
-        capped = alpha_beta_swap(rung.graph, rung.field, 3, start=start, max_cycles=1)
+        capped = alpha_beta_swap(
+            rung.graph, rung.field, start=start, max_cycles=1, n_states=3
+        )
     assert capped.cycles == 1
     assert capped.termination == Termination(False, 1, Stop.BUDGET)
     assert capped.energy == energy(rung.graph, rung.field, capped.labelling)
-    settled = alpha_beta_swap(rung.graph, rung.field, 3, start=start)
+    settled = alpha_beta_swap(rung.graph, rung.field, start=start, n_states=3)
     assert settled.energy <= capped.energy
 
 

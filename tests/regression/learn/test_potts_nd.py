@@ -158,7 +158,7 @@ def test_the_sweep_at_zero_is_one_icm_sweep() -> None:
             state = successor
 
         theirs, value, *_ = iterated_conditional_modes(
-            graph, field, n_states, np.random.default_rng(0)
+            graph, field, np.random.default_rng(0), n_states=n_states
         )
 
         assert state == tuple(int(label) for label in theirs)

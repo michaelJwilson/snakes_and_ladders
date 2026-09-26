@@ -55,6 +55,7 @@ from sal.sim.potts import (
     energy,
     log_weight_of,
     site_field,
+    states_of,
 )
 
 # The bound is `2 * c_max / c_min` for a metric pairwise term; with a uniform
@@ -647,8 +648,8 @@ EXPANSION = _Move(
 def alpha_expansion(
     graph: PottsGraph,
     field: SiteField | np.ndarray,
-    n_states: int,
     *,
+    n_states: int | None = None,
     start: np.ndarray | None = None,
     max_cycles: int = DEFAULT_MAX_CYCLES,
     backend: Backend = Backend.RUST,
@@ -668,8 +669,9 @@ def alpha_expansion(
         bound rests on.
     field : SiteField | np.ndarray
         ``(n_states,)`` or ``(n_nodes, n_states)``.
-    n_states : int
-        Label count.
+    n_states : int | None
+        Label count, read from the field's state axis; given, it is checked
+        against it (issue #1091).
     start : np.ndarray | None
         Initial labelling; the per-node data optimum when omitted, which is
         the labelling ignoring every coupling.
@@ -698,7 +700,7 @@ def alpha_expansion(
     return _cycle_to_a_local_minimum(
         graph,
         field,
-        n_states,
+        states_of(field, graph.n_nodes, n_states),
         EXPANSION,
         start=start,
         max_cycles=max_cycles,
@@ -920,9 +922,9 @@ SWAP = _Move(
 
 def alpha_beta_swap(
     graph: PottsGraph,
-    field: np.ndarray,
-    n_states: int,
+    field: SiteField | np.ndarray,
     *,
+    n_states: int | None = None,
     start: np.ndarray | None = None,
     max_cycles: int = DEFAULT_MAX_CYCLES,
     backend: Backend = Backend.RUST,
@@ -949,10 +951,11 @@ def alpha_beta_swap(
     UserWarning
         Where ``max_cycles`` runs out first, as :func:`alpha_expansion` does.
     """
+    field = log_weight_of(field)
     return _cycle_to_a_local_minimum(
         graph,
         field,
-        n_states,
+        states_of(field, graph.n_nodes, n_states),
         SWAP,
         start=start,
         max_cycles=max_cycles,

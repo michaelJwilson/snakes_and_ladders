@@ -120,10 +120,10 @@ def test_the_icm_polish_ends_at_a_local_minimum_never_above_its_start() -> None:
     whole = iterated_conditional_modes(
         rung.graph,
         rung.field,
-        3,
         np.random.default_rng(0),
         start=start,
         max_sweeps=POLISH.size,
+        n_states=3,
     )
     assert np.array_equal(whole.labelling, labelling)
 
