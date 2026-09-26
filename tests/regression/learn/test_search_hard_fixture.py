@@ -57,7 +57,7 @@ def _environment(
     """The reward surface an agent sees, at the tree's own mean branch length."""
     return TreeEnvironment(
         alignment,
-        params.k,
+        params.n_states,
         np.asarray(params.pi),
         branch_length=float(
             np.mean([child.branch_length for _, child in edges(params.tau)])

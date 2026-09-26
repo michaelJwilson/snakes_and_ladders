@@ -59,7 +59,10 @@ def placed(arrays: Mapping[str, np.ndarray]) -> dict[str, Any]:
 
 
 def leaves(
-    tau: Node, k: int, alignment: Mapping[str, np.ndarray], weights: np.ndarray | None
+    tau: Node,
+    n_states: int,
+    alignment: Mapping[str, np.ndarray],
+    weights: np.ndarray | None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """The leaf indicator partials in post-order, ``(n_leaves, n_sites, k)``, and the site weights.
 
@@ -71,7 +74,7 @@ def leaves(
     n_sites = int(np.asarray(alignment[schedule.leaf_names[0]]).shape[0])
     stacked = np.stack(
         [
-            leaf_indicator_array(np.asarray(alignment[name]), n_sites, k)
+            leaf_indicator_array(np.asarray(alignment[name]), n_sites, n_states)
             for name in schedule.leaf_names
         ]
     )
@@ -80,7 +83,7 @@ def leaves(
 
 
 def _log_likelihood(
-    jax: Any, steps: Steps, k: int, rescale: bool
+    jax: Any, steps: Steps, n_states: int, rescale: bool
 ) -> Callable[[Any, Any, Any, Any, Any], Any]:
     """``(lengths, pi, rate, leaves, weight) -> log L``, traced over ``steps``."""
     jnp = jax.numpy
@@ -92,10 +95,10 @@ def _log_likelihood(
     def transitions(lengths: Any, rate: Any) -> Any:
         if rate is None:
             # eq:jc, as pruning_torch._jc_transition_probabilities.
-            decay = jnp.exp(-k * lengths / (k - 1))[..., None, None]
-            off = (1.0 - decay) / k
-            diagonal = 1.0 / k + (k - 1) / k * decay
-            eye = jnp.eye(k)
+            decay = jnp.exp(-n_states * lengths / (n_states - 1))[..., None, None]
+            off = (1.0 - decay) / n_states
+            diagonal = 1.0 / n_states + (n_states - 1) / n_states * decay
+            eye = jnp.eye(n_states)
             return off * (1.0 - eye) + diagonal * eye
         return jax.scipy.linalg.expm(rate * lengths[..., None, None])
 
@@ -113,7 +116,7 @@ def _log_likelihood(
                 message = partials.pop(child_slot) @ matrices[branch].T
                 partial = message if partial is None else partial * message
             if partial is None:
-                partial = jnp.ones((data.shape[1], k))
+                partial = jnp.ones((data.shape[1], n_states))
             if rescale:
                 # As pruning_common.rescale_partial: a vanished scale is
                 # replaced by one, so log(0) reaches the total.
@@ -131,7 +134,7 @@ def _log_likelihood(
 @functools.cache
 def branch_length_program(
     steps: Steps,
-    k: int,
+    n_states: int,
     n_branches: int,
     source: tuple[int, ...],
     halves: tuple[int, ...],
@@ -145,7 +148,7 @@ def branch_length_program(
     """
     jax = _jax()
     jnp = jax.numpy
-    log_likelihood = _log_likelihood(jax, steps, k, rescale=True)
+    log_likelihood = _log_likelihood(jax, steps, n_states, rescale=True)
     gather = np.asarray(source)
     factor = np.ones(n_branches)
     factor[list(halves)] = 0.5
@@ -160,7 +163,7 @@ def branch_length_program(
 @functools.cache
 def substitution_model_program(
     steps: Steps,
-    k: int,
+    n_states: int,
     n_branches: int,
     source: tuple[int, ...],
     halves: tuple[int, ...],
@@ -174,11 +177,11 @@ def substitution_model_program(
     """
     jax = _jax()
     jnp = jax.numpy
-    log_likelihood = _log_likelihood(jax, steps, k, rescale=True)
+    log_likelihood = _log_likelihood(jax, steps, n_states, rescale=True)
     gather = np.asarray(source)
     factor = np.ones(n_branches)
     factor[list(halves)] = 0.5
-    rows, columns = np.triu_indices(k, k=1)
+    rows, columns = np.triu_indices(n_states, k=1)
     n_exchange = rows.size - 1
 
     def negative(theta: Any, data: Any, weight: Any) -> Any:
@@ -187,7 +190,7 @@ def substitution_model_program(
         free_pi = theta[n_branch_parameters + n_exchange :]
         pi = jnp.exp(jax.nn.log_softmax(jnp.concatenate([jnp.zeros(1), free_pi])))
         values = jnp.concatenate([jnp.exp(free_exchange), jnp.ones(1)])
-        upper = jnp.zeros((k, k)).at[rows, columns].set(values)
+        upper = jnp.zeros((n_states, n_states)).at[rows, columns].set(values)
         rate = (upper + upper.T) * pi[None, :]
         rate = rate - jnp.diag(rate.sum(axis=1))
         rate = rate / -(pi * jnp.diagonal(rate)).sum()

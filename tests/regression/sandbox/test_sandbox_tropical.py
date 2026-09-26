@@ -94,7 +94,7 @@ class Instance:
 
     params: SimulationParams
     alignment: dict[str, np.ndarray]
-    k: int
+    n_states: int
     table: QuartetTable
     positions: np.ndarray
     scores: dict[frozenset[frozenset[str]], float]
@@ -113,15 +113,15 @@ class Instance:
 
     def start(self) -> np.ndarray:
         """The estimated distance matrix, condensed: what a caller already has."""
-        _, matrix, _ = distance_matrix(self.alignment, self.k)
+        _, matrix, _ = distance_matrix(self.alignment, self.n_states)
         return condensed(matrix)
 
 
 def _instance(name: str, n_sites: int | None = None) -> Instance:
     """Load a fixture, fit its quartet table, and enumerate the quartet surface."""
     params, alignment = simulated_alignment(name, n_sites)
-    k = params.k
-    table = quartet_table(alignment, k)
+    n_states = params.n_states
+    table = quartet_table(alignment, n_states)
     scores = {
         leaf_bipartitions(topology): discrete_score(table, topology)
         for topology in enumerate_topologies(sorted(alignment))
@@ -129,7 +129,7 @@ def _instance(name: str, n_sites: int | None = None) -> Instance:
     return Instance(
         params=params,
         alignment=alignment,
-        k=k,
+        n_states=n_states,
         table=table,
         positions=pairing_positions(table.n_taxa),
         scores=scores,
@@ -339,7 +339,7 @@ def test_the_quartet_argmax_is_the_likelihood_argmax(five_taxon: Instance) -> No
     # what lets everything above be read as tree search. 15 full fits, 2.1 s.
     likelihoods = {
         leaf_bipartitions(topology): score_topology(
-            topology, five_taxon.alignment, five_taxon.k
+            topology, five_taxon.alignment, five_taxon.n_states
         )
         for topology in enumerate_topologies(five_taxon.names)
     }
@@ -464,7 +464,7 @@ def test_the_two_state_recoding_resolves_every_quartet_as_the_tree_does(
     # and topology asserted; the scale is an estimate (0.049 off 2/3 at 1,200
     # sites), pinned exactly on the closed form above.
     params = five_taxon.params
-    recoded = dict(binary_recoding(five_taxon.alignment, five_taxon.k))
+    recoded = dict(binary_recoding(five_taxon.alignment, five_taxon.n_states))
     names, spectrum = sequence_spectrum(recoded)
     weights = split_weights(hadamard_conjugation(spectrum), names)
     metric = metric_from_split_weights(weights, names)
@@ -586,7 +586,7 @@ def test_the_relaxation_holds_at_six_taxa(six_taxon: Instance) -> None:
 
     likelihoods = {
         leaf_bipartitions(topology): score_topology(
-            topology, six_taxon.alignment, six_taxon.k
+            topology, six_taxon.alignment, six_taxon.n_states
         )
         for topology in enumerate_topologies(six_taxon.names)
     }
@@ -626,7 +626,7 @@ def test_at_seven_taxa_the_top_two_of_the_quartet_surface_are_tied(
         steps=STEPS,
         learning_rate=LEARNING_RATE,
     )
-    _, matrix, _ = distance_matrix(seven_taxon.alignment, seven_taxon.k)
+    _, matrix, _ = distance_matrix(seven_taxon.alignment, seven_taxon.n_states)
     joined = neighbor_joining(seven_taxon.names, matrix)
 
     assert normalized_robinson_foulds(result.topology, seven_taxon.params.tau) == 0.0

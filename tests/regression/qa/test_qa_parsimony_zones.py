@@ -50,7 +50,11 @@ def test_the_zone_gap_is_the_brute_force_gap_on_a_small_alignment() -> None:
     # the same integer, so the per-site gap is pinned to it.
     uniform = np.full(4, 0.25)
     dataset = simulate_alignment(
-        tau=FELSENSTEIN_ZONE, k=4, pi=uniform, rng=np.random.default_rng(3), n_sites=60
+        tau=FELSENSTEIN_ZONE,
+        n_states=4,
+        pi=uniform,
+        rng=np.random.default_rng(3),
+        n_sites=60,
     )
     wrong = brute_force_parsimony_score(LONG_BRANCH_GROUPING, dataset.alignment, 4)
     right = brute_force_parsimony_score(FELSENSTEIN_ZONE, dataset.alignment, 4)

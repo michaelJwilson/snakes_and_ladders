@@ -76,7 +76,7 @@ def _objective(gradient: GradientRoute) -> BranchLengthObjective:
     tau = _topology(_TAXA)
     pi = np.full(4, 0.25)
     dataset = simulate_alignment(
-        tau=tau, k=4, pi=pi, rng=np.random.default_rng(_SEED), n_sites=_SITES
+        tau=tau, n_states=4, pi=pi, rng=np.random.default_rng(_SEED), n_sites=_SITES
     )
     return BranchLengthObjective(tau, 4, pi, dict(dataset.alignment), gradient=gradient)
 
@@ -152,7 +152,7 @@ def test_general_model_gradient_update_at_roadmap_scale(
     rate = gtr_rate_matrix(np.array([1.6, 0.4, 0.9, 0.7, 2.1, 1.0]), pi)
     dataset = simulate_alignment(
         tau=tau,
-        k=4,
+        n_states=4,
         pi=pi,
         rng=np.random.default_rng(_SEED),
         n_sites=_SITES,

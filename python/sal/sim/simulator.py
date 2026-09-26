@@ -69,7 +69,7 @@ def simulate_tree(
     """
     return simulate_alignment(
         params.tau,
-        params.k,
+        params.n_states,
         params.pi,
         rng,
         params.n_sites if n_sites is None else n_sites,

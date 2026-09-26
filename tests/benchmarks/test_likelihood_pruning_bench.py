@@ -36,7 +36,7 @@ def test_log_likelihood_benchmark(
     dataset = simulate_tree(params, np.random.default_rng(params.seed))
 
     result = benchmark(
-        log_likelihood, params.tau, params.k, params.pi, dataset.alignment
+        log_likelihood, params.tau, params.n_states, params.pi, dataset.alignment
     )
 
     # Benchmarks only assert finiteness -- numerical correctness is pinned

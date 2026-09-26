@@ -50,15 +50,15 @@ def test_pruning_over_patterns_benchmark(
 
     calls: dict[str, Callable[[], float]] = {
         "numpy": lambda: pruning.log_likelihood(
-            params.tau, params.k, pi, columns, weights=weights
+            params.tau, params.n_states, pi, columns, weights=weights
         ),
         "torch": lambda: float(
             pruning_torch.log_likelihood(
-                params.tau, params.k, pi, columns, lengths, weights=weights
+                params.tau, params.n_states, pi, columns, lengths, weights=weights
             )
         ),
         "rust": lambda: pruning_rust.log_likelihood(
-            params.tau, params.k, pi, columns, weights=weights
+            params.tau, params.n_states, pi, columns, weights=weights
         ),
     }
 

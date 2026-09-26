@@ -115,7 +115,7 @@ def render_sim_example(dataset: SimulatedDataset, n_sites_shown: int, ax: Axes) 
     leaves = sorted(dataset.alignment)
     rows = [
         [
-            state_label(int(state), dataset.k)
+            state_label(int(state), dataset.n_states)
             for state in dataset.alignment[name][:n_shown]
         ]
         for name in leaves
