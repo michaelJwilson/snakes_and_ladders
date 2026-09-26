@@ -71,14 +71,14 @@ def test_one_langevin_step_is_the_hamiltonian_transition() -> None:
     for step in (0.3, 0.7, 1.0):
         hamiltonian_route = sample(
             GAUSSIAN,
-            generator=torch.Generator().manual_seed(5),
+            rng=torch.Generator().manual_seed(5),
             n_samples=400,
             step_size=step,
             n_steps=LANGEVIN_STEPS,
         )
         langevin_route = mala(
             GAUSSIAN,
-            generator=torch.Generator().manual_seed(5),
+            rng=torch.Generator().manual_seed(5),
             n_samples=400,
             step_size=step,
         )
@@ -105,7 +105,7 @@ def test_the_langevin_chain_recovers_an_analytic_gaussian() -> None:
     for seed in (11, 12):
         chain = mala(
             GAUSSIAN,
-            generator=torch.Generator().manual_seed(seed),
+            rng=torch.Generator().manual_seed(seed),
             n_samples=4000,
             step_size=1.0,
             burn_in=400,
@@ -136,7 +136,7 @@ def test_the_langevin_chain_recovers_the_enumerated_assignment_posterior() -> No
     for seed in (756, 757):
         chain = mala(
             target,
-            generator=torch.Generator().manual_seed(seed),
+            rng=torch.Generator().manual_seed(seed),
             n_samples=1500,
             step_size=0.9,
             burn_in=200,
@@ -163,7 +163,7 @@ def test_unadjusted_langevin_realizes_the_closed_form_discretization_bias() -> N
     for step in ULA_STEPS:
         chain = mala(
             target,
-            generator=torch.Generator().manual_seed(3),
+            rng=torch.Generator().manual_seed(3),
             n_samples=ULA_DRAWS,
             step_size=step,
             burn_in=500,
@@ -190,7 +190,7 @@ def test_dropping_the_correction_misses_the_variance_that_mala_recovers() -> Non
     truth = np.array([ULA_VARIANCE_TRUTH])
     uncorrected = mala(
         target,
-        generator=torch.Generator().manual_seed(3),
+        rng=torch.Generator().manual_seed(3),
         n_samples=ULA_DRAWS,
         step_size=1.0,
         burn_in=500,
@@ -198,7 +198,7 @@ def test_dropping_the_correction_misses_the_variance_that_mala_recovers() -> Non
     )
     corrected = mala(
         target,
-        generator=torch.Generator().manual_seed(3),
+        rng=torch.Generator().manual_seed(3),
         n_samples=ULA_DRAWS,
         step_size=1.0,
         burn_in=500,
@@ -224,7 +224,7 @@ def test_the_warm_up_adapts_the_step_to_the_langevin_acceptance() -> None:
     for seed in range(4):
         chain = mala(
             GAUSSIAN,
-            generator=torch.Generator().manual_seed(seed),
+            rng=torch.Generator().manual_seed(seed),
             n_samples=2000,
             step_size=0.5,
             burn_in=200,
@@ -252,14 +252,14 @@ def test_a_langevin_chain_refuses_a_step_or_a_temperature_that_is_not_positive()
     with pytest.raises(ValueError, match="step_size must be positive"):
         mala(
             GAUSSIAN,
-            generator=torch.Generator().manual_seed(1),
+            rng=torch.Generator().manual_seed(1),
             n_samples=4,
             step_size=0.0,
         )
     with pytest.raises(ValueError, match="temperature must be positive"):
         mala(
             GAUSSIAN,
-            generator=torch.Generator().manual_seed(1),
+            rng=torch.Generator().manual_seed(1),
             n_samples=4,
             step_size=0.5,
             temperature=0.0,

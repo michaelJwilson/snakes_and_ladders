@@ -15,7 +15,12 @@ from dataclasses import replace
 import numpy as np
 import pytest
 import torch
-from sal.emissions import CovariateNotSupportedError
+from sal.emissions import (
+    BetaBinomialEmission,
+    CountPairEmission,
+    CovariateNotSupportedError,
+    NegativeBinomialEmission,
+)
 from sal.sim.count_pairs import (
     SUCCESSES,
     TOTAL,
@@ -307,3 +312,46 @@ def test_a_scalar_family_still_draws_the_array_it_always_did() -> None:
 
     assert first.observations.shape == (entry.params.n_positions, 4)
     np.testing.assert_array_equal(first.observations, second.observations)
+
+
+#: Issue #1083's two-state pair, as `test_emissions_count_pair.py` declares it.
+DISPERSION = [4.0, 12.0]
+MEAN = [40.0, 150.0]
+ALPHA = [2.0, 6.0]
+BETA = [6.0, 3.0]
+TRIALS = [20.0, 30.0]
+
+
+@pytest.mark.oracle
+def test_the_emission_pair_is_this_pair_under_per_observation_trials() -> None:
+    # Issue #1083: `emissions.CountPairEmission`'s independent form under a
+    # covariate per channel is this family's model through the same split,
+    # so the two agree bitwise, value and M step.
+    rng = np.random.default_rng(83)
+    family = CountPairEmission(DISPERSION, MEAN, ALPHA, BETA, TRIALS, joint=False)
+    other = IndependentCountPair(
+        NegativeBinomialEmission(DISPERSION, MEAN),
+        BetaBinomialEmission(TRIALS, ALPHA, BETA),
+    )
+    covariate = torch.as_tensor(
+        np.stack(
+            [rng.uniform(0.5, 2.0, 300), rng.integers(1, 61, 300).astype(float)],
+            axis=-1,
+        )
+    )
+    states = rng.integers(0, 2, 300)
+    observations = torch.as_tensor(
+        family.sample(states, rng, covariate.numpy()).astype(float)
+    )
+    posterior = torch.zeros((300, 2), dtype=torch.float64)
+    posterior[np.arange(300), states] = 1.0
+
+    assert torch.equal(
+        family.log_density(observations, covariate),
+        other.log_density(observations, covariate),
+    )
+    ours = family.reestimate(observations, posterior, covariate).emissions
+    theirs = other.reestimate(observations, posterior, covariate).emissions
+    assert torch.equal(ours.alpha, theirs.successes.alpha)
+    assert torch.equal(ours.beta, theirs.successes.beta)
+    assert torch.equal(ours.total.mean, theirs.total.mean)

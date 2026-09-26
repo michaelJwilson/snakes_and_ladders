@@ -89,7 +89,9 @@ def test_both_chains_recover_the_exact_mean_within_monte_carlo_error() -> None:
     gaussian = target()
     exact_sd = torch.sqrt(torch.diagonal(gaussian.covariance))
     for chain in (ADAPTED, FIXED):
-        standard_error = exact_sd / torch.sqrt(effective_sample_size(chain.draws))
+        standard_error = exact_sd / torch.sqrt(
+            torch.from_numpy(effective_sample_size(chain.draws))
+        )
         deviation = torch.abs(chain.draws.mean(dim=0) - gaussian.mean)
 
         assert bool(torch.all(deviation < 4.0 * standard_error)), (

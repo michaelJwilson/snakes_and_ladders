@@ -92,6 +92,7 @@ from sal.sample.chain import (
     run_chain,
     run_compiled,
     start_point,
+    torch_stream,
 )
 from sal.sample.declared import (
     Power,
@@ -404,12 +405,12 @@ def hamiltonian(
 
 def sample(
     objective: Objective,
-    generator: torch.Generator,
+    rng: np.random.Generator | torch.Generator,
     n_samples: int,
     *,
     step_size: float,
     n_steps: int = DEFAULT_STEPS,
-    theta0: torch.Tensor | None = None,
+    start: torch.Tensor | None = None,
     burn_in: int = 0,
     integrator: Integrator = leapfrog,
     temperature: float = 1.0,
@@ -424,7 +425,7 @@ def sample(
     ----------
     objective : Objective
         Read as an unnormalized negative log density.
-    generator : torch.Generator
+    rng : np.random.Generator | torch.Generator
         The stream every momentum and acceptance draw comes from, passed in
         rather than seeded here (`sim/CLAUDE.md`): a chain is reproducible
         from ``torch.Generator().manual_seed(seed)`` at the call site, and two
@@ -437,7 +438,7 @@ def sample(
         ``adaptation`` it is the warm-up's starting point.
     n_steps : int
         Leapfrog steps per proposal.
-    theta0 : torch.Tensor | None
+    start : torch.Tensor | None
         Starting point; ``objective.initial()`` when omitted.
     burn_in : int
         Draws discarded before recording.
@@ -494,6 +495,7 @@ def sample(
         time: it accepts at rate 1 and samples nothing, looking healthy by
         every diagnostic.
     """
+    generator = torch_stream(rng)
     _check_trajectory(step_size, n_steps)
     refuse_backend("hmc.sample", backend, (Backend.PYTHON, Backend.RUST))
     declared = declared_energy(objective)
@@ -516,7 +518,7 @@ def sample(
             n_samples,
             unit=Cost.GRADIENTS,
             step_size=step_size,
-            theta0=start_point(objective, theta0),
+            start=start_point(objective, start),
             burn_in=burn_in,
             adaptation=adaptation,
             store_chain=store_chain,
@@ -531,7 +533,7 @@ def sample(
             n_samples,
             unit=Cost.GRADIENTS,
             step_size=step_size,
-            theta0=theta0,
+            start=start,
             burn_in=burn_in,
             temperature=temperature,
             adaptation=adaptation,
@@ -574,11 +576,11 @@ class AnnealedTheta(Annealed[torch.Tensor]):
 def anneal(
     objective: Objective,
     schedule: TempSchedule,
-    generator: torch.Generator,
+    rng: np.random.Generator | torch.Generator,
     *,
     step_size: float,
     n_steps: int = DEFAULT_STEPS,
-    theta0: torch.Tensor | None = None,
+    start: torch.Tensor | None = None,
     integrator: Integrator = leapfrog,
 ) -> AnnealedTheta:
     """Simulated annealing with Hamiltonian proposals: :func:`sample` on a schedule.
@@ -598,9 +600,9 @@ def anneal(
     schedule : TempSchedule
         Temperature per proposal. Its length is the budget in proposals;
         ``spent`` on the result is the budget in gradients.
-    generator : torch.Generator
+    rng : np.random.Generator | torch.Generator
         As :func:`sample`.
-    step_size, n_steps, theta0, integrator
+    step_size, n_steps, start, integrator
         As :func:`sample`. The step needs no rescaling with temperature ---
         see the module note --- but a step that is stable at the hot end can
         still reject at the cold end, which the acceptance rate reports.
@@ -609,8 +611,9 @@ def anneal(
     -------
     AnnealedTheta
     """
+    generator = torch_stream(rng)
     _check_trajectory(step_size, n_steps)
-    position = start_point(objective, theta0)
+    position = start_point(objective, start)
 
     best, best_value = position.clone(), float(objective(position))
     accepted = 0
@@ -693,12 +696,12 @@ class Tempered(TemperedRun[torch.Tensor]):
 def parallel_tempering(
     objective: Objective,
     temperatures: TempSchedule | Sequence[float],
-    generator: torch.Generator,
+    rng: np.random.Generator | torch.Generator,
     n_rounds: int,
     *,
     step_size: float,
     n_steps: int = DEFAULT_STEPS,
-    theta0: torch.Tensor | None = None,
+    start: torch.Tensor | None = None,
     integrator: Integrator = leapfrog,
     deadline: float | None = None,
 ) -> Tempered:
@@ -736,15 +739,15 @@ def parallel_tempering(
     temperatures : TempSchedule | Sequence[float]
         The ladder, coldest first; at least two, all positive, strictly
         increasing so that adjacent pairs are the ones that exchange.
-    generator : torch.Generator
+    rng : np.random.Generator | torch.Generator
         The parent stream, seeded by the caller (issue #337); it draws the
         replicas' seeds and the exchange uniforms.
     n_rounds : int
         Transitions per replica, at least one. The budget in proposals is
         ``n_rounds * len(temperatures)``; ``spent`` on the result
         is the budget in gradients.
-    step_size, n_steps, theta0, integrator
-        As :func:`sample`; every replica starts at ``theta0``.
+    step_size, n_steps, start, integrator
+        As :func:`sample`; every replica starts at ``start``.
     deadline : float | None
         A :func:`time.perf_counter` reading. A round after the first starts
         only if the longest round so far would end by it, so ``n_rounds`` is
@@ -766,6 +769,7 @@ def parallel_tempering(
         nothing to exchange and is :func:`sample` --- if any is not positive
         or the ladder is not increasing, or if ``n_rounds`` is below one.
     """
+    generator = torch_stream(rng)
     _check_trajectory(step_size, n_steps)
     temperatures = check_ladder(
         ladder(temperatures),
@@ -782,10 +786,10 @@ def parallel_tempering(
         torch.Generator().manual_seed(int(child))
         for child in torch.randint(0, 2**31 - 1, (n_replicas,), generator=parent)
     ]
-    start = start_point(objective, theta0)
-    positions = [start.clone() for _ in range(n_replicas)]
-    value = float(objective(start))
-    best, best_value = start.clone(), value
+    origin = start_point(objective, start)
+    positions = [origin.clone() for _ in range(n_replicas)]
+    value = float(objective(origin))
+    best, best_value = origin.clone(), value
     accepted = torch.zeros(n_replicas, dtype=torch.float64)
     # A list rather than a tensor sized to `n_rounds`: under a deadline that
     # count is a ceiling, and the stacked rounds are the same values.
@@ -1014,7 +1018,7 @@ def compiled_trajectory(
     return PhaseSpace(torch.from_numpy(end), torch.from_numpy(velocity))
 
 
-def effective_sample_size(draws: torch.Tensor) -> torch.Tensor:
+def effective_sample_size(draws: torch.Tensor | np.ndarray) -> np.ndarray:
     """Effective sample size per coordinate, by Geyer's initial positive sequence.
 
     The integrated autocorrelation time ``tau = 1 + 2 sum_k rho_k`` is
@@ -1027,13 +1031,14 @@ def effective_sample_size(draws: torch.Tensor) -> torch.Tensor:
 
     Parameters
     ----------
-    draws : torch.Tensor
+    draws : torch.Tensor | np.ndarray
         Shape ``(n, dimension)``, one chain.
 
     Returns
     -------
-    torch.Tensor
-        Shape ``(dimension,)``. A coordinate that did not move has no
+    np.ndarray
+        Shape ``(dimension,)``, a diagnostic and so NumPy, whichever the draws
+        came as (issue #1092). A coordinate that did not move has no
         autocorrelation and is reported as ``n``.
 
     Raises
@@ -1042,6 +1047,7 @@ def effective_sample_size(draws: torch.Tensor) -> torch.Tensor:
         If fewer than 4 draws are given, which is fewer than the two pairs
         the truncation rule needs.
     """
+    draws = torch.as_tensor(draws)
     n = int(draws.shape[0])
     if n < 4:
         msg = f"effective sample size needs at least 4 draws, got {n}"
@@ -1063,4 +1069,4 @@ def effective_sample_size(draws: torch.Tensor) -> torch.Tensor:
         cutoff = int(negative[0]) if negative.numel() else int(pairs.shape[0])
         tau = -1.0 + 2.0 * float(pairs[:cutoff].sum())
         sizes[coordinate] = n / tau
-    return sizes
+    return sizes.numpy()

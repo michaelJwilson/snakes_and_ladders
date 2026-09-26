@@ -87,7 +87,7 @@ def test_the_slice_chain_recovers_an_analytic_gaussian(
     for seed in (11, 12):
         chain = slice_sample(
             GAUSSIAN,
-            generator=torch.Generator().manual_seed(seed),
+            rng=torch.Generator().manual_seed(seed),
             n_samples=4000,
             width=WIDTH,
             max_steps_out=MAX_STEPS_OUT,
@@ -119,7 +119,7 @@ def test_the_slice_chain_recovers_the_enumerated_assignment_posterior() -> None:
     for seed in (756, 757):
         chain = slice_sample(
             target,
-            generator=torch.Generator().manual_seed(seed),
+            rng=torch.Generator().manual_seed(seed),
             n_samples=1500,
             width=1.0,
             max_steps_out=MAX_STEPS_OUT,
@@ -146,7 +146,7 @@ def test_shrinkage_is_what_bounds_the_evaluations_a_draw_costs() -> None:
     for width in (2.0, 10.0, 40.0):
         chain = slice_sample(
             GAUSSIAN,
-            generator=torch.Generator().manual_seed(7),
+            rng=torch.Generator().manual_seed(7),
             n_samples=400,
             width=width,
             max_steps_out=MAX_STEPS_OUT,
@@ -158,7 +158,7 @@ def test_shrinkage_is_what_bounds_the_evaluations_a_draw_costs() -> None:
         with pytest.raises(ValueError, match="shrinkage is off"):
             slice_sample(
                 GAUSSIAN,
-                generator=torch.Generator().manual_seed(7),
+                rng=torch.Generator().manual_seed(7),
                 n_samples=400,
                 width=width,
                 max_steps_out=MAX_STEPS_OUT,
@@ -183,7 +183,7 @@ def test_a_slice_chain_refuses_a_width_a_step_count_and_a_density_it_cannot_use(
     with pytest.raises(ValueError, match="width must be positive"):
         slice_sample(
             GAUSSIAN,
-            generator=torch.Generator().manual_seed(1),
+            rng=torch.Generator().manual_seed(1),
             n_samples=4,
             width=0.0,
             max_steps_out=MAX_STEPS_OUT,
@@ -191,7 +191,7 @@ def test_a_slice_chain_refuses_a_width_a_step_count_and_a_density_it_cannot_use(
     with pytest.raises(ValueError, match="max_steps_out must be at least 1"):
         slice_sample(
             GAUSSIAN,
-            generator=torch.Generator().manual_seed(1),
+            rng=torch.Generator().manual_seed(1),
             n_samples=4,
             width=WIDTH,
             max_steps_out=0,
@@ -199,7 +199,7 @@ def test_a_slice_chain_refuses_a_width_a_step_count_and_a_density_it_cannot_use(
     with pytest.raises(ValueError, match="no slice level"):
         slice_sample(
             _Infinite(),
-            generator=torch.Generator().manual_seed(1),
+            rng=torch.Generator().manual_seed(1),
             n_samples=4,
             width=WIDTH,
             max_steps_out=MAX_STEPS_OUT,
@@ -214,7 +214,7 @@ def test_the_tempered_slice_chain_samples_the_tempered_gaussian() -> None:
     temperature = 2.0
     chain = slice_sample(
         GAUSSIAN,
-        generator=torch.Generator().manual_seed(1059),
+        rng=torch.Generator().manual_seed(1059),
         n_samples=4000,
         width=WIDTH,
         max_steps_out=MAX_STEPS_OUT,
@@ -236,7 +236,7 @@ def test_an_unstored_slice_chain_spends_what_the_stored_one_spends() -> None:
     def run(store_chain: bool) -> SliceChain:
         return slice_sample(
             GAUSSIAN,
-            generator=torch.Generator().manual_seed(7),
+            rng=torch.Generator().manual_seed(7),
             n_samples=50,
             width=WIDTH,
             max_steps_out=MAX_STEPS_OUT,
@@ -253,7 +253,7 @@ def test_an_unstored_slice_chain_spends_what_the_stored_one_spends() -> None:
 @pytest.mark.smoke
 def test_a_slice_chain_refuses_an_adaptation_a_backend_and_a_temperature() -> None:
     options = {
-        "generator": torch.Generator().manual_seed(1),
+        "rng": torch.Generator().manual_seed(1),
         "n_samples": 4,
         "width": WIDTH,
         "max_steps_out": MAX_STEPS_OUT,

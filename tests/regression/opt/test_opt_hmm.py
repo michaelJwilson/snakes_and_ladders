@@ -311,7 +311,7 @@ def _enumerated_evidence(params: HmmParams, observations: np.ndarray) -> float:
     """``sum_sequences log P(sequence)``, summed over every path of each."""
     return float(
         sum(
-            enumerate_hidden_paths(params, sequence).log_likelihood
+            enumerate_hidden_paths(params, sequence).log_evidence
             for sequence in observations
         )
     )
@@ -323,7 +323,7 @@ def _stepped(params: HmmParams, fitted: EmFit) -> HmmParams:
         params,
         initial=torch.exp(fitted.log_initial).numpy(),
         transition=torch.exp(fitted.log_transition).numpy(),
-        emissions=fitted.emissions,
+        emissions=fitted.components,
     )
 
 
@@ -360,7 +360,7 @@ def test_baum_welch_reaches_the_enumerated_path_evidence_and_its_fixed_point() -
         iterate = baum_welch_family(
             observations, *walked, config=replace(EM, max_iterations=1)
         )
-        walked = (iterate.log_initial, iterate.log_transition, iterate.emissions)
+        walked = (iterate.log_initial, iterate.log_transition, iterate.components)
         evidence.append(_enumerated_evidence(_stepped(params, iterate), observations))
     assert evidence == sorted(evidence), evidence
 
@@ -640,7 +640,7 @@ def test_the_streamed_family_step_is_the_batched_one(
                 (False, None, True),
             )
         )
-    assert type(fits[1].emissions) is type(family)
+    assert type(fits[1].components) is type(family)
     for streamed in fits[1:]:
         for name_ in ("log_initial", "log_transition"):
             assert_allclose(
@@ -649,15 +649,15 @@ def test_the_streamed_family_step_is_the_batched_one(
                 rtol=0.0,
                 atol=1e-10,
             )
-        for key, value in fits[0].emissions.named_parameters().items():
+        for key, value in fits[0].components.named_parameters().items():
             assert_allclose(
-                streamed.emissions.named_parameters()[key].numpy(),
+                streamed.components.named_parameters()[key].numpy(),
                 value.numpy(),
                 rtol=1e-9,
                 err_msg=key,
             )
         assert_allclose(streamed.log_likelihood, fits[0].log_likelihood, rtol=1e-12)
-        assert streamed.emission_at_boundary == fits[0].emission_at_boundary
+        assert streamed.at_boundary == fits[0].at_boundary
 
 
 @pytest.mark.oracle

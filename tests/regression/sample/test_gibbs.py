@@ -414,11 +414,11 @@ def test_the_generic_sweep_recovers_the_exact_marginals_on_a_tree() -> None:
     )
     site = {name: int(states[0]) for name, states in alignment.items()}
     transitions = {
-        node.name: jc_transition_probabilities(node.branch_length, params.k)
+        node.name: jc_transition_probabilities(node.branch_length, params.n_states)
         for node in preorder(params.tau)
         if node.branch_length is not None
     }
-    graph = from_tree(params.tau, params.k, params.pi, site, transitions)
+    graph = from_tree(params.tau, params.n_states, params.pi, site, transitions)
     exact = sum_product(graph).variable
 
     chain = sample_factor_graph(
@@ -429,7 +429,9 @@ def test_the_generic_sweep_recovers_the_exact_marginals_on_a_tree() -> None:
         if name in site:
             assert (chain.states[:, column] == site[name]).all()
             continue
-        counts = np.bincount(chain.states[:, column], minlength=params.k).astype(float)
+        counts = np.bincount(chain.states[:, column], minlength=params.n_states).astype(
+            float
+        )
         assert (
             chi_square_p_value(counts, len(chain.states) * exact[name]) > SIGNIFICANCE
         )
@@ -603,7 +605,7 @@ def test_the_temperature_scales_every_table_so_a_hot_chain_is_nearly_uniform() -
 def _five_taxa(n_sites: int) -> tuple[dict[str, np.ndarray], int]:
     params = load_params(fixture_path("tree_search/ci.yaml"), SimulationParams)
     dataset = simulate_tree(params, np.random.default_rng(2), n_sites=n_sites)
-    return dict(dataset.alignment), params.k
+    return dict(dataset.alignment), params.n_states
 
 
 @pytest.mark.oracle

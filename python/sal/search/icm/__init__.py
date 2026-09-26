@@ -20,9 +20,9 @@ may be joined. A recolouring is a change, so the descent continues past it.
 **The draws.** Both backends read the same randomness, drawn up front in one
 order: the start where none is given (``rng.integers``), then one
 permutation per sweep for a random order that runs every sweep, then
-``rng.random(max_sweeps * n_nodes)`` for the floor, only where
+``rng.random(max_iterations * n_nodes)`` for the floor, only where
 ``min_sites > 0``. So an unfloored descent spends the generator exactly as it
-did before the floor, and a floored one spends ``max_sweeps * n_nodes``
+did before the floor, and a floored one spends ``max_iterations * n_nodes``
 uniforms however early it stops. A random order that stops on a clean sweep
 draws its permutations per sweep, which only
 :data:`~sal.backend.Backend.PYTHON` runs; its floor's uniforms
@@ -31,6 +31,7 @@ precede them.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from enum import StrEnum
 
 import numpy as np
@@ -38,7 +39,7 @@ import numpy as np
 from sal.backend import Backend, refuse_backend
 from sal.opt.termination import Termination
 from sal.search.alpha_expansion import Labelling
-from sal.search.icm.numba import icm_sweeps_checked, no_survivor
+from sal.search.icm.numba import greedy_colouring, icm_sweeps_checked, no_survivor
 from sal.sim.graph import PottsGraph
 from sal.sim.potts import (
     SiteField,
@@ -64,6 +65,81 @@ class SweepOrder(StrEnum):
     """``range(n_nodes)``: the sites in index order, every sweep."""
     RANDOM = "random"
     """A fresh ``rng.permutation(n_nodes)`` per sweep, which is Gibbs at T = 0."""
+    CHECKERBOARD = "checkerboard"
+    """The classes of a greedy colouring, one after another, every sweep (issue #1073).
+
+    Sites of one class share no edge, so the class's updates commute: the
+    order within it does not change the result, and a class could be swept
+    in parallel. :func:`colouring`'s classes: two on the square lattice, four
+    on the triangular.
+    """
+    RESIDUAL = "residual"
+    """By descending gain of each site's best move, recomputed as each sweep starts (issue #1073).
+
+    Greedy best-first; the Python route only.
+    """
+
+
+def colouring(graph: PottsGraph, *, backend: Backend = Backend.NUMBA) -> np.ndarray:
+    """A greedy colouring: each site, in index order, the smallest colour its earlier neighbours lack (issue #1073).
+
+    Two colours on the square lattice. On the triangular lattice the greedy
+    order takes four where three suffice --- measured on 7x6 --- which costs a
+    fourth class and nothing else: no class holds an edge either way.
+
+    Parameters
+    ----------
+    graph : PottsGraph
+        Any.
+    backend : Backend
+        ``NUMBA`` runs :func:`sal.search.icm.numba.greedy_colouring`;
+        ``PYTHON`` is the loop below, its oracle.
+
+    Returns
+    -------
+    np.ndarray
+        Colour per site, ``int64``.
+    """
+    refuse_backend("colouring", backend, (Backend.NUMBA, Backend.PYTHON))
+    offsets, neighbours, _ = graph.compressed_adjacency()
+    if backend is Backend.NUMBA:
+        return np.asarray(greedy_colouring(offsets, neighbours))
+    colour = np.full(graph.n_nodes, -1, dtype=np.int64)
+    for node in range(graph.n_nodes):
+        taken = {int(colour[j]) for j in neighbours[offsets[node] : offsets[node + 1]]}
+        chosen = 0
+        while chosen in taken:
+            chosen += 1
+        colour[node] = chosen
+    return colour
+
+
+def colour_order(graph: PottsGraph) -> np.ndarray:
+    """The sites grouped by :func:`colouring`'s classes, in index order within a class.
+
+    Returns
+    -------
+    np.ndarray
+        A permutation of ``range(n_nodes)``, ``int64``.
+    """
+    return np.argsort(colouring(graph), kind="stable").astype(np.int64)
+
+
+def _residual_order(
+    labels: list[int],
+    values: np.ndarray,
+    bounds: list[int],
+    neighbours: list[int],
+    couplings: list[float],
+) -> list[int]:
+    """The sites by descending gain of their best single-site move, ties by index."""
+    gains = np.empty(len(labels))
+    for node in range(len(labels)):
+        local = -values[node].copy()
+        for position in range(bounds[node], bounds[node + 1]):
+            local[labels[neighbours[position]]] -= couplings[position]
+        gains[node] = local[labels[node]] - local.min()
+    return np.argsort(-gains, kind="stable").tolist()
 
 
 def check_min_sites(min_sites: int, n_nodes: int) -> None:
@@ -88,11 +164,11 @@ def check_min_sites(min_sites: int, n_nodes: int) -> None:
 def iterated_conditional_modes(
     graph: PottsGraph,
     field: SiteField | np.ndarray,
-    n_states: int,
     rng: np.random.Generator,
     *,
+    n_states: int | None = None,
     start: np.ndarray | None = None,
-    max_sweeps: int = 200,
+    max_iterations: int = 200,
     sweep_order: SweepOrder = SweepOrder.INDEX,
     stop_when_clean: bool = True,
     min_sites: int = 0,
@@ -128,21 +204,22 @@ def iterated_conditional_modes(
     field : SiteField | np.ndarray
         External field as a log-weight, ``(n_states,)`` or
         ``(n_nodes, n_states)``, or a :class:`~sal.sim.potts.SiteField`.
-    n_states : int
-        Labels available at each site.
     rng : np.random.Generator
         Draws the start where ``start`` is ``None``, one permutation per
         sweep under :data:`SweepOrder.RANDOM`, and the floor's uniforms where
         ``min_sites > 0``, in that order.
+    n_states : int | None
+        Labels available at each site. Read from the field's state axis;
+        given, it is checked against that axis (issue #1091).
     start : np.ndarray | None
         The labelling to descend from, or ``None`` to draw one uniformly.
-    max_sweeps : int
+    max_iterations : int
         Sweeps the descent is allowed.
     sweep_order : SweepOrder
         The order sites are visited in; index order by default.
     stop_when_clean : bool
         Whether a sweep that changes nothing, recolouring included, ends the
-        descent. ``False`` runs every sweep of ``max_sweeps``.
+        descent. ``False`` runs every sweep of ``max_iterations``.
     min_sites : int
         The floor: after each sweep a state holding at least one and fewer
         than this many sites is dissolved into the states at or above it.
@@ -174,13 +251,19 @@ def iterated_conditional_modes(
     """
     n_nodes = graph.n_nodes
     check_min_sites(min_sites, n_nodes)
-    values = site_field(np.asarray(log_weight_of(field), dtype=float), n_nodes)
+    values = site_field(
+        np.asarray(log_weight_of(field), dtype=float), n_nodes, n_states=n_states
+    )
+    n_states = values.shape[1]
     labelling = (
         rng.integers(0, n_states, size=n_nodes)
         if start is None
         else check_labelling(start, n_nodes, n_states)
     )
     lazy = sweep_order is SweepOrder.RANDOM and stop_when_clean
+    if backend is Backend.NUMBA and sweep_order is SweepOrder.RESIDUAL:
+        msg = f"{sweep_order} order reorders from each sweep's labels; it needs {Backend.PYTHON}"
+        raise ValueError(msg)
     if backend is Backend.NUMBA and lazy:
         msg = (
             f"the compiled sweep takes every sweep's order drawn up front, "
@@ -195,13 +278,19 @@ def iterated_conditional_modes(
     # The permutations the sweep visits in, one per sweep and in the order a
     # per-sweep draw would take them (issue #923): with every sweep run, the
     # same stream. No rows is index order.
-    orders = (
-        np.stack([rng.permutation(n_nodes) for _ in range(max_sweeps)]).astype(np.int64)
-        if sweep_order is SweepOrder.RANDOM and not lazy and max_sweeps > 0
-        else np.empty((0, n_nodes), dtype=np.int64)
-    )
+    if sweep_order is SweepOrder.RANDOM and not lazy and max_iterations > 0:
+        orders = np.stack(
+            [rng.permutation(n_nodes) for _ in range(max_iterations)]
+        ).astype(np.int64)
+    elif sweep_order is SweepOrder.CHECKERBOARD:
+        # One order every sweep repeats: the kernel reads row `sweep % 1`.
+        orders = colour_order(graph)[np.newaxis, :]
+    else:
+        orders = np.empty((0, n_nodes), dtype=np.int64)
     draws = (
-        rng.random(max_sweeps * n_nodes) if min_sites > 0 else np.empty(0, np.float64)
+        rng.random(max_iterations * n_nodes)
+        if min_sites > 0
+        else np.empty(0, np.float64)
     )
     offsets, neighbour_index, edge_couplings = graph.compressed_adjacency()
 
@@ -215,7 +304,7 @@ def iterated_conditional_modes(
             edge_couplings,
             orders,
             draws,
-            max_sweeps,
+            max_iterations,
             stop_when_clean,
             min_sites,
         )
@@ -236,13 +325,17 @@ def iterated_conditional_modes(
     # cheaper than a NumPy scalar one. Same reads, same order, same writes.
     labels = labelling.tolist()
     sweeps = 0
-    for sweep in range(max_sweeps):
+    for sweep in range(max_iterations):
         sweeps += 1
-        order = (
-            rng.permutation(n_nodes)
-            if lazy
-            else (orders[sweep] if orders.shape[0] else range(n_nodes))
-        )
+        order: Sequence[int] | np.ndarray
+        if lazy:
+            order = rng.permutation(n_nodes)
+        elif sweep_order is SweepOrder.RESIDUAL:
+            order = _residual_order(labels, values, bounds, neighbours, couplings)
+        else:
+            order = (
+                orders[sweep % orders.shape[0]] if orders.shape[0] else range(n_nodes)
+            )
         changed = False
         for node in order:
             local = -values[node].copy()
@@ -259,6 +352,63 @@ def iterated_conditional_modes(
     labelling[:] = labels
 
     return _descended(graph, values, labelling, sweeps, n_states, min_sites, offsets)
+
+
+def merge_small_labels(
+    graph: PottsGraph,
+    field: SiteField | np.ndarray,
+    labelling: np.ndarray,
+    rng: np.random.Generator,
+    *,
+    min_sites: int,
+    max_iterations: int = 200,
+    backend: Backend = Backend.NUMBA,
+) -> Labelling:
+    """``labelling`` with no state below ``min_sites`` sites, descended again: the floor after any solver (issue #1081).
+
+    The floor lived inside :func:`iterated_conditional_modes` only, so a
+    labelling from alpha-expansion, TRW-S or an anneal could not be floored
+    without being handed to ICM by hand. This is that hand-off, named: ICM
+    from ``labelling`` with ``min_sites``, which dissolves each state below
+    the floor into the surviving ones on the floor's draws and descends to a
+    labelling a clean sweep leaves. Bitwise
+    ``iterated_conditional_modes(graph, field, rng, start=labelling,
+    min_sites=min_sites, ...)``, the one implementation; a labelling already
+    at the floor and at a local minimum comes back unchanged.
+
+    Parameters
+    ----------
+    graph, field
+        The problem, as :func:`iterated_conditional_modes` takes it.
+    labelling : np.ndarray
+        The labelling to floor, shape ``(n_nodes,)``.
+    rng : np.random.Generator
+        The floor's uniforms, ``max_iterations * n_nodes`` drawn up front.
+    min_sites : int
+        The floor, at least one.
+    max_iterations : int
+        ICM sweeps to run at most.
+    backend : Backend
+        :func:`iterated_conditional_modes`'s.
+
+    Raises
+    ------
+    ValueError
+        If ``min_sites < 1``, or as :func:`iterated_conditional_modes`
+        raises.
+    """
+    if min_sites < 1:
+        msg = f"a merge floors at least one site, got min_sites={min_sites}"
+        raise ValueError(msg)
+    return iterated_conditional_modes(
+        graph,
+        field,
+        rng,
+        start=labelling,
+        max_iterations=max_iterations,
+        min_sites=min_sites,
+        backend=backend,
+    )
 
 
 def _descended(

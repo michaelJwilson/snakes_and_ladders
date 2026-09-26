@@ -21,7 +21,7 @@ import numpy as np
 import torch
 from sal.cost import Cost
 from sal.opt.budget import Budget
-from sal.opt.mixture import mixture_log_likelihood, responsibilities
+from sal.opt.mixture import mixture_log_likelihood, responsibilities_torch
 from sal.opt.starts import SolverComparison, Start, StartsBenchmark
 from sal.parallel import map_tasks
 from sal.search.projection import (
@@ -106,7 +106,7 @@ def bayes(instance: ProjectedCounts) -> dict[str, float]:
     """
     values = torch.as_tensor(instance.observations, dtype=torch.float64)
     log_weight = torch.log(torch.as_tensor(instance.weights, dtype=torch.float64))
-    posterior = responsibilities(values, log_weight, instance.truth)
+    posterior = responsibilities_torch(values, log_weight, instance.truth)
     return {
         "log_likelihood": float(
             mixture_log_likelihood(values, log_weight, instance.truth)

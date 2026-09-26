@@ -75,13 +75,16 @@ DUAL_AVERAGING_KAPPA = 0.75
 Stream = TypeVar("Stream", torch.Generator, np.random.Generator)
 
 
-def torch_stream(rng: np.random.Generator) -> torch.Generator:
+def torch_stream(rng: np.random.Generator | torch.Generator) -> torch.Generator:
     """A torch :data:`Stream` seeded by one draw from ``rng``, so one seed runs a torch chain.
 
     The one derivation a caller holding a NumPy generator makes before a
     torch-kernel sampler; ``search.projection`` and ``search.mixture_starts``
-    each wrote it until #1059.
+    each wrote it until #1059. A torch generator is its own stream and is
+    returned as given, so a torch entry point takes either (issue #1091).
     """
+    if isinstance(rng, torch.Generator):
+        return rng
     return torch.Generator().manual_seed(int(rng.integers(0, 2**31 - 1)))
 
 
@@ -334,7 +337,7 @@ def run_chain(
     *,
     unit: Cost,
     step_size: float,
-    theta0: torch.Tensor | np.ndarray | None,
+    start: torch.Tensor | np.ndarray | None,
     burn_in: int,
     temperature: float,
     adaptation: Adaptation | None,
@@ -358,7 +361,7 @@ def run_chain(
         Evaluations one proposal costs, in the unit the sampler is compared
         on: gradients for :func:`sample` and
         :func:`sal.sample.langevin.mala`.
-    objective, generator, n_samples, step_size, theta0, burn_in, temperature, adaptation
+    objective, generator, n_samples, step_size, start, burn_in, temperature, adaptation
         As :func:`sample`.
     store_chain, operators
         As :func:`sample` (issue #988).
@@ -379,7 +382,7 @@ def run_chain(
         msg = f"temperature must be positive, got {temperature}"
         raise ValueError(msg)
 
-    position = start_point(objective, theta0)
+    position = start_point(objective, start)
 
     adapted: Adapted | None = None
     target: Objective = objective
@@ -489,7 +492,7 @@ def run_compiled(
     *,
     unit: Cost,
     step_size: float,
-    theta0: torch.Tensor,
+    start: torch.Tensor,
     burn_in: int,
     adaptation: Adaptation | None,
     store_chain: bool,
@@ -511,7 +514,7 @@ def run_compiled(
     it (issues #988, #1006).
     """
     family, parameters = declared
-    dimension = int(theta0.shape[0])
+    dimension = int(start.shape[0])
     seed = _seed(generator)
     declared_operators = {
         name: operator
@@ -521,7 +524,7 @@ def run_compiled(
     walk = walk_class(
         family,
         parameters,
-        np.ascontiguousarray(theta0.numpy(), dtype=np.float64),
+        np.ascontiguousarray(start.numpy(), dtype=np.float64),
         step_size,
         seed,
         0 if adaptation is None else adaptation.warmup,
@@ -586,19 +589,19 @@ def run_compiled(
 
 
 def start_point(
-    objective: Objective, theta0: torch.Tensor | np.ndarray | None
+    objective: Objective, start: torch.Tensor | np.ndarray | None
 ) -> torch.Tensor:
-    """Where a chain starts: ``theta0``, or ``objective.initial()``, detached, in ``float64``.
+    """Where a chain starts: ``start``, or ``objective.initial()``, detached, in ``float64``.
 
-    An array ``theta0`` is copied into the loop's tensor, so a sampler that
+    An array ``start`` is copied into the loop's tensor, so a sampler that
     takes no derivative takes its start as an array (issue #1059).
     """
-    if isinstance(theta0, np.ndarray):
-        return torch.tensor(theta0, dtype=torch.float64)
+    if isinstance(start, np.ndarray):
+        return torch.tensor(start, dtype=torch.float64)
     return (
         objective.initial().detach().clone()
-        if theta0 is None
-        else theta0.detach().clone()
+        if start is None
+        else start.detach().clone()
     ).to(torch.float64)
 
 

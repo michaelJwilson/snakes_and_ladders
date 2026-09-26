@@ -51,7 +51,7 @@ def _reached(environment: PottsEnvironment, policy: LinearPolicy | MLPPolicy) ->
         np.mean(
             [
                 abs(
-                    environment.energy(
+                    environment.log_weight(
                         rollout(environment, policy, rng, max_steps=6, start=s).states[
                             -1
                         ]
@@ -164,7 +164,7 @@ def test_ppo_raises_the_enumerated_expected_return_and_beats_reinforce_at_a_matc
         batch=32,
         max_steps=6,
     )
-    assert training.episodes == 1920
+    assert training.spent == 1920
     assert len(training.clipped_fraction) == 60
     after = _mean_return(environment, ppo_policy)
     assert after > before
@@ -306,7 +306,7 @@ def test_ppo_raises_the_recorded_expected_return_and_stays_ahead_of_reinforce() 
         batch=SIBLING_BATCH,
         max_steps=6,
     )
-    assert training.episodes == SIBLING_ITERATIONS * SIBLING_BATCH
+    assert training.spent == SIBLING_ITERATIONS * SIBLING_BATCH
 
     baselined = LinearPolicy(2)
     reinforce(

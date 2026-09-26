@@ -25,7 +25,7 @@ from sal.opt.emission_mixture import (
 )
 from sal.opt.mixture import (
     mixture_log_likelihood,
-    responsibilities,
+    responsibilities_torch,
 )
 from sal.sim.emission_mixture import (
     EmissionMixtureParams,
@@ -111,7 +111,7 @@ def test_the_responsibilities_are_the_enumerated_posterior(
     prefix = torch.as_tensor(observations[:ENUMERATED])
     log_weight = torch.log(torch.as_tensor(params.weights))
 
-    posterior = responsibilities(prefix, log_weight, params.components)
+    posterior = responsibilities_torch(prefix, log_weight, params.components)
 
     enumerated = enumerated_posterior(prefix, log_weight, params.components)
     assert_allclose(posterior.numpy(), enumerated.numpy(), rtol=1e-12)

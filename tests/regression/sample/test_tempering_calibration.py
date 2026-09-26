@@ -61,7 +61,7 @@ SEED = 0
 def _calibration() -> LadderCalibration:
     """150 rounds a measurement, so an acceptance resolves to about 0.04; at most 4."""
     return LadderCalibration(
-        LadderRule.ACCEPTANCE, rounds=150, max_rounds=4, band=BAND, max_replicas=6
+        LadderRule.ACCEPTANCE, rounds=150, max_iterations=4, band=BAND, max_replicas=6
     )
 
 
@@ -168,7 +168,7 @@ def test_one_seed_reproduces_the_calibrated_ladder_and_the_start_bitwise() -> No
     """
     target, _, _ = weight_posterior()
     calibration = LadderCalibration(
-        LadderRule.ACCEPTANCE, rounds=40, max_rounds=3, band=BAND, max_replicas=6
+        LadderRule.ACCEPTANCE, rounds=40, max_iterations=3, band=BAND, max_replicas=6
     )
     first, second = (_start(3, calibration, rounds=20) for _ in range(2))
     one, two = first.run(target), second.run(target)
@@ -237,7 +237,7 @@ def test_a_budget_in_seconds_stops_inside_it_and_another_unit_is_refused() -> No
     )
 
     calibration = LadderCalibration(
-        LadderRule.ACCEPTANCE, rounds=50, max_rounds=3, band=BAND, max_replicas=6
+        LadderRule.ACCEPTANCE, rounds=50, max_iterations=3, band=BAND, max_replicas=6
     )
     warmed = _start(0, calibration, FIXED, Budget(Cost.SECONDS, 2))
     warmed.run(target)
@@ -251,7 +251,7 @@ def test_a_budget_in_seconds_stops_inside_it_and_another_unit_is_refused() -> No
     slow = _start(
         0,
         LadderCalibration(
-            LadderRule.ACCEPTANCE, rounds=1, max_rounds=1, band=BAND, max_replicas=2
+            LadderRule.ACCEPTANCE, rounds=1, max_iterations=1, band=BAND, max_replicas=2
         ),
         (1.0, 2.0),
         Budget(Cost.SECONDS, 1),
@@ -268,7 +268,7 @@ def test_the_round_trip_rule_keeps_the_length_and_the_endpoints() -> None:
     """
     target, _, _ = weight_posterior()
     calibration = LadderCalibration(
-        LadderRule.ROUND_TRIPS, rounds=100, max_rounds=2, tolerance=0.05
+        LadderRule.ROUND_TRIPS, rounds=100, max_iterations=2, tolerance=0.05
     )
     start = _start(0, calibration, (1.0, 8.0, 64.0), rounds=5)
     start.run(target)
@@ -285,30 +285,34 @@ def test_the_round_trip_rule_keeps_the_length_and_the_endpoints() -> None:
 @pytest.mark.smoke
 def test_a_calibration_refuses_a_setting_off_its_rule() -> None:
     with pytest.raises(ValueError, match="needs a band and max_replicas"):
-        LadderCalibration(LadderRule.ACCEPTANCE, rounds=10, max_rounds=2)
+        LadderCalibration(LadderRule.ACCEPTANCE, rounds=10, max_iterations=2)
     with pytest.raises(ValueError, match="round-trip rule's"):
         LadderCalibration(
             LadderRule.ACCEPTANCE,
             rounds=10,
-            max_rounds=2,
+            max_iterations=2,
             band=BAND,
             max_replicas=4,
             tolerance=0.1,
         )
     with pytest.raises(ValueError, match="needs a tolerance"):
-        LadderCalibration(LadderRule.ROUND_TRIPS, rounds=10, max_rounds=2)
+        LadderCalibration(LadderRule.ROUND_TRIPS, rounds=10, max_iterations=2)
     with pytest.raises(ValueError, match="keeps the ladder's length"):
         LadderCalibration(
-            LadderRule.ROUND_TRIPS, rounds=10, max_rounds=2, band=BAND, tolerance=0.1
+            LadderRule.ROUND_TRIPS,
+            rounds=10,
+            max_iterations=2,
+            band=BAND,
+            tolerance=0.1,
         )
     with pytest.raises(ValueError, match="at least 1"):
         LadderCalibration(
-            LadderRule.ACCEPTANCE, rounds=0, max_rounds=2, band=BAND, max_replicas=4
+            LadderRule.ACCEPTANCE, rounds=0, max_iterations=2, band=BAND, max_replicas=4
         )
     with pytest.raises(ValueError, match="is not a valid LadderRule"):
-        LadderCalibration("bisect", rounds=10, max_rounds=2)  # type: ignore[arg-type]
+        LadderCalibration("bisect", rounds=10, max_iterations=2)  # type: ignore[arg-type]
     assert (
-        LadderCalibration("round_trips", rounds=1, max_rounds=1, tolerance=0.1).rule  # type: ignore[arg-type]
+        LadderCalibration("round_trips", rounds=1, max_iterations=1, tolerance=0.1).rule  # type: ignore[arg-type]
         is LadderRule.ROUND_TRIPS
     )
 
@@ -316,7 +320,7 @@ def test_a_calibration_refuses_a_setting_off_its_rule() -> None:
 #: The warm-up the ticket costs on the mixture's surrogate: measurements of 20
 #: rounds, at most 3, on 4 to 8 replicas.
 MIXTURE_CALIBRATION = LadderCalibration(
-    LadderRule.ACCEPTANCE, rounds=20, max_rounds=3, band=BAND, max_replicas=8
+    LadderRule.ACCEPTANCE, rounds=20, max_iterations=3, band=BAND, max_replicas=8
 )
 
 

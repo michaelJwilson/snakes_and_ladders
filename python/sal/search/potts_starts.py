@@ -514,11 +514,11 @@ def polish_by_icm(
         settled = iterated_conditional_modes(
             rung.graph,
             rung.field,
-            rung.n_states,
             floor_draws,
             start=labelling,
-            max_sweeps=1,
+            max_iterations=1,
             min_sites=min_sites,
+            n_states=rung.n_states,
         )
         sweeps += 1
         tracked.record(sweeps, objective=settled.energy)

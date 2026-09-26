@@ -91,7 +91,7 @@ def test_the_potts_relaxation_is_exact_at_every_corner() -> None:
 
     for candidate in itertools.product(range(3), repeat=5):
         relaxed = float(objective.relaxed(one_hot(candidate, 3)))
-        assert relaxed == pytest.approx(environment.energy(candidate), rel=1e-11)
+        assert relaxed == pytest.approx(environment.log_weight(candidate), rel=1e-11)
 
 
 @pytest.mark.oracle
@@ -375,7 +375,7 @@ def test_an_annealed_sampled_run_cannot_pass_the_enumerated_optimum() -> None:
 
     found = optimize(
         objective,
-        generator=torch.Generator().manual_seed(729),
+        rng=torch.Generator().manual_seed(729),
         temperature=1.0,
         final_temperature=0.1,
         steps=120,
@@ -435,7 +435,7 @@ def test_the_deterministic_relaxation_beats_single_flip_hill_climbing() -> None:
 
     greedy = np.array(
         [
-            environment.energy(
+            environment.log_weight(
                 greedy_rollout(
                     environment,
                     start=environment.reset(np.random.default_rng(seed)),
@@ -450,7 +450,7 @@ def test_the_deterministic_relaxation_beats_single_flip_hill_climbing() -> None:
         [
             optimize(
                 objective,
-                generator=torch.Generator().manual_seed(seed),
+                rng=torch.Generator().manual_seed(seed),
                 temperature=0.5,
                 steps=100,
                 stochastic=False,
@@ -476,7 +476,7 @@ def test_the_sampled_estimators_only_tie_with_the_baseline() -> None:
 
     greedy = np.array(
         [
-            environment.energy(
+            environment.log_weight(
                 greedy_rollout(
                     environment,
                     start=environment.reset(np.random.default_rng(seed)),
@@ -492,7 +492,7 @@ def test_the_sampled_estimators_only_tie_with_the_baseline() -> None:
             [
                 optimize(
                     objective,
-                    generator=torch.Generator().manual_seed(seed),
+                    rng=torch.Generator().manual_seed(seed),
                     temperature=0.5,
                     steps=100,
                     mode=mode,
@@ -517,7 +517,7 @@ def test_the_hmm_path_is_recovered_from_every_restart() -> None:
     reached = sum(
         optimize(
             objective,
-            generator=torch.Generator().manual_seed(seed),
+            rng=torch.Generator().manual_seed(seed),
             temperature=0.5,
             steps=150,
             stochastic=False,
@@ -624,14 +624,14 @@ def test_annealing_reaches_the_final_temperature_during_optimization() -> None:
 
     fixed = optimize(
         objective,
-        generator=torch.Generator().manual_seed(1),
+        rng=torch.Generator().manual_seed(1),
         temperature=0.5,
         steps=40,
         stochastic=False,
     )
     annealed = optimize(
         objective,
-        generator=torch.Generator().manual_seed(1),
+        rng=torch.Generator().manual_seed(1),
         temperature=0.5,
         final_temperature=0.01,
         steps=40,

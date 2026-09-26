@@ -133,7 +133,7 @@ def test_the_forward_recursion_matches_enumeration_over_every_path(name: str) ->
         )
     )
 
-    assert_allclose(recursed, enumerated.log_likelihood, rtol=1e-11)
+    assert_allclose(recursed, enumerated.log_evidence, rtol=1e-11)
 
 
 @pytest.mark.smoke
@@ -147,7 +147,7 @@ def test_the_evidence_of_a_count_model_is_a_probability(name: str) -> None:
     observations = simulate_sequences(params).observations[0][:7]
 
     assert truth.is_discrete
-    assert enumerate_hidden_paths(params, observations).log_likelihood <= 0.0
+    assert enumerate_hidden_paths(params, observations).log_evidence <= 0.0
 
 
 @pytest.mark.analytic
@@ -182,12 +182,12 @@ def test_the_gradient_fit_and_baum_welch_reach_the_same_optimum(name: str) -> No
         _start(name),
     )
 
-    assert not fitted.emission_at_boundary
+    assert not fitted.at_boundary
     assert_allclose(-float(result.value), fitted.log_likelihood, rtol=1e-8)
-    order = list(align_families(objective.emissions(result.theta), fitted.emissions))
+    order = list(align_families(objective.emissions(result.theta), fitted.components))
     assert order == [0, 1]
     estimate = objective.constrain(result.theta)
-    for parameter, value in fitted.emissions.named_parameters().items():
+    for parameter, value in fitted.components.named_parameters().items():
         assert_allclose(estimate[parameter].numpy(), value.numpy(), rtol=1e-3)
 
 
@@ -248,8 +248,8 @@ def test_a_symmetric_start_collapses_the_states_and_the_asymmetric_one_does_not(
 
     symmetric = baum_welch_family(
         *arguments, BetaBinomialEmission(TRIALS, [1.0, 1.0], [1.0, 1.0])
-    ).emissions
-    asymmetric = baum_welch_family(*arguments, _start("beta_binomial")).emissions
+    ).components
+    asymmetric = baum_welch_family(*arguments, _start("beta_binomial")).components
     assert isinstance(symmetric, BetaBinomialEmission)
     assert isinstance(asymmetric, BetaBinomialEmission)
 
@@ -322,6 +322,7 @@ def _dispersion_coverage(dispersion: float, replicates: int) -> tuple[int, int, 
 
 
 @pytest.mark.smoke
+@pytest.mark.release  # 15.9 s in the tier, over the 10 s cap (#1088)
 def test_an_interval_stops_existing_at_both_ends_of_the_dispersion_range() -> None:
     # What degrades at both ends is whether an interval exists. The release
     # sweep: 7 of 16 without one at dispersion 100, 0 of 16 at 2; at eight

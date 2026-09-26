@@ -59,7 +59,7 @@ class BeliefPropagationResult:
     pairwise : np.ndarray
         Belief ``b_ij(a, b)`` per edge, in the graph's own edge order, shape
         ``(n_edges, n_states, n_states)``.
-    bethe_log_partition : float
+    log_partition : float
         ``-F_Bethe``, which equals ``log Z`` exactly on a tree.
     iterations : int
         Sweeps taken to reach the tolerance. Reported beside every deviation,
@@ -70,7 +70,7 @@ class BeliefPropagationResult:
 
     single_site: np.ndarray
     pairwise: np.ndarray
-    bethe_log_partition: float
+    log_partition: float
     iterations: int
     residual: float
 
@@ -190,7 +190,7 @@ def belief_propagation(
     return BeliefPropagationResult(
         single_site=single_site,
         pairwise=pairwise,
-        bethe_log_partition=-_bethe_free_energy(
+        log_partition=-_bethe_free_energy(
             graph, field, single_site, pairwise, log_pair, log_single
         ),
         iterations=taken,
@@ -245,9 +245,7 @@ def _disconnected(graph: PottsGraph, field: np.ndarray) -> BeliefPropagationResu
     return BeliefPropagationResult(
         single_site=single_site,
         pairwise=np.zeros((0, field.shape[0], field.shape[0])),
-        bethe_log_partition=float(
-            graph.n_nodes * logsumexp(field[np.newaxis, :], axis=1)[0]
-        ),
+        log_partition=float(graph.n_nodes * logsumexp(field[np.newaxis, :], axis=1)[0]),
         iterations=0,
         residual=0.0,
     )

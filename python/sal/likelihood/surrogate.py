@@ -32,9 +32,9 @@ Two hard evaluations, two families of surrogate:
   :func:`prune_with_matrices` is kept because the vertex argument is checked
   by enumerating the vertices with it.
 * **Lattice Potts.** ``log Z`` is what enumeration cannot reach.
-  :func:`mean_field_log_partition` is the naive mean-field lower bound,
+  :func:`mean_field_log_partition_torch` is the naive mean-field lower bound,
   Gibbs' inequality at the fixed point of a product distribution
-  (``eq:mean-field-bound``). :func:`spanning_tree_log_partition` is the
+  (``eq:mean-field-bound``). :func:`spanning_tree_log_partition_torch` is the
   Jensen upper bound over a distribution on spanning trees, each tree's
   partition function exact and the parameters split so they average to the
   original (``eq:spanning-tree-bound``). From any pair of bounds on
@@ -58,7 +58,7 @@ from sal.bound import Bound, Surrogate
 from sal.likelihood.pruning_common import leaf_indicator_array
 from sal.numerics import logsumexp
 from sal.sim.graph import PottsGraph
-from sal.sim.potts import site_field
+from sal.sim.potts import SiteField, log_weight_of, site_field
 from sal.sim.topology import Topology, branch_splits
 from sal.sim.tree import Node
 
@@ -69,11 +69,11 @@ if TYPE_CHECKING:
 
 
 def jc_distances(
-    alignment: Mapping[str, np.ndarray], k: int
+    alignment: Mapping[str, np.ndarray], n_states: int
 ) -> dict[frozenset[str], float]:
     """Pairwise Jukes--Cantor distances, ``-(k-1)/k log(1 - k p/(k-1))``, saturating where undefined."""
     names = sorted(alignment)
-    limit = (k - 1) / k
+    limit = (n_states - 1) / n_states
     distances: dict[frozenset[str], float] = {}
     for i, first in enumerate(names):
         for second in names[i + 1 :]:
@@ -150,15 +150,15 @@ class PlugInLikelihood(Surrogate):
 
     kind = Bound.LOWER
 
-    def __init__(self, k: int, pi: np.ndarray) -> None:
-        self.k = k
+    def __init__(self, n_states: int, pi: np.ndarray) -> None:
+        self.n_states = n_states
         self.pi = np.asarray(pi, dtype=float)
 
     def lengths(
         self, topology: Topology, alignment: Mapping[str, np.ndarray]
     ) -> np.ndarray:
         """The feasible branch lengths the bound is evaluated at, in ``branch_order``."""
-        return least_squares_lengths(topology, jc_distances(alignment, self.k))
+        return least_squares_lengths(topology, jc_distances(alignment, self.n_states))
 
     def __call__(self, structure: object, data: object) -> float:
         topology, alignment = _tree_arguments(structure, data)
@@ -171,7 +171,7 @@ class PlugInLikelihood(Surrogate):
         return float(
             log_likelihood(
                 topology,
-                self.k,
+                self.n_states,
                 self.pi,
                 alignment,
                 torch.from_numpy(self.lengths(topology, alignment)),
@@ -181,7 +181,7 @@ class PlugInLikelihood(Surrogate):
 
 def prune_with_matrices(
     tau: Node,
-    k: int,
+    n_states: int,
     pi: np.ndarray,
     alignment: Mapping[str, np.ndarray],
     matrices: Mapping[str, np.ndarray],
@@ -196,8 +196,8 @@ def prune_with_matrices(
 
     def partial(node: Node) -> np.ndarray:
         if node.is_leaf:
-            return leaf_indicator_array(alignment[node.name], n_sites, k)
-        table = np.ones((n_sites, k))
+            return leaf_indicator_array(alignment[node.name], n_sites, n_states)
+        table = np.ones((n_sites, n_states))
         for child in node.children:
             table = table * (partial(child) @ np.asarray(matrices[child.name]).T)
         return table
@@ -247,15 +247,17 @@ class ParsimonyUpperBound(Surrogate):
 
     kind = Bound.UPPER
 
-    def __init__(self, k: int, pi: np.ndarray) -> None:
-        self.k = k
+    def __init__(self, n_states: int, pi: np.ndarray) -> None:
+        self.n_states = n_states
         self.pi = np.asarray(pi, dtype=float)
 
     def __call__(self, structure: object, data: object) -> float:
         topology, alignment = _tree_arguments(structure, data)
         first = np.asarray(alignment[sorted(alignment)[0]], dtype=np.int64)
         changes = int(site_fitch_scores(topology, alignment).sum())
-        return float(np.sum(np.log(self.pi[first]))) - changes * float(np.log(self.k))
+        return float(np.sum(np.log(self.pi[first]))) - changes * float(
+            np.log(self.n_states)
+        )
 
 
 def _tree_arguments(
@@ -316,7 +318,7 @@ def site_rows(field: torch.Tensor, n_nodes: int) -> torch.Tensor:
     raise ValueError(msg)
 
 
-def mean_field_log_partition(
+def mean_field_log_partition_torch(
     graph: PottsGraph,
     field: torch.Tensor,
     *,
@@ -379,7 +381,7 @@ def _spanning_trees_covering_every_edge(graph: PottsGraph) -> list[list[int]]:
     return trees
 
 
-def tree_log_partition(
+def tree_log_partition_torch(
     n_nodes: int,
     tree_edges: Sequence[tuple[int, int]],
     couplings: torch.Tensor,
@@ -412,7 +414,7 @@ def tree_log_partition(
     return torch.logsumexp(message(0, -1), dim=0)
 
 
-def spanning_tree_log_partition(
+def spanning_tree_log_partition_torch(
     graph: PottsGraph,
     field: torch.Tensor,
     *,
@@ -443,7 +445,7 @@ def spanning_tree_log_partition(
         tree_couplings = torch.stack(
             [couplings[index] / appearances[index] for index in tree]
         )
-        total = total + tree_log_partition(
+        total = total + tree_log_partition_torch(
             graph.n_nodes, tree_pairs, tree_couplings, field
         )
     return total / len(trees)
@@ -456,13 +458,60 @@ def decoupled_ground_energy(graph: PottsGraph, field: npt.ArrayLike) -> float:
     least the sum of each term's own minimum; the labelling attaining every
     minimum at once need not exist, which is the slack. ``O(N + E)``, which
     is what makes it the bracket's lower end at sizes
-    :func:`spanning_tree_log_partition` does not reach
+    :func:`spanning_tree_log_partition_torch` does not reach
     (``eq:decoupled-energy-bound``). No derivative is taken through it, so
     it is NumPy: ``field`` is shared or per site, widened by
     :func:`~sal.sim.potts.site_field` (issue #1011).
     """
     rows = site_field(np.asarray(field, dtype=np.float64), graph.n_nodes)
     return float(-rows.max(axis=1).sum() - np.maximum(graph.edge_coupling, 0.0).sum())
+
+
+def mean_field_log_partition(
+    graph: PottsGraph,
+    field: np.ndarray,
+    *,
+    couplings: np.ndarray | None = None,
+    n_iterations: int = 200,
+) -> float:
+    """:func:`mean_field_log_partition_torch`'s bound as a ``float``, from NumPy (issue #1092).
+
+    The public form a caller comparing it with :func:`decoupled_log_partition`
+    reads; the tensor, and its gradient in ``field`` and ``couplings``, stay
+    behind the ``_torch`` name.
+    """
+    import torch
+
+    return float(
+        mean_field_log_partition_torch(
+            graph,
+            torch.as_tensor(np.asarray(field, dtype=np.float64)),
+            couplings=None
+            if couplings is None
+            else torch.as_tensor(np.asarray(couplings, dtype=np.float64)),
+            n_iterations=n_iterations,
+        )
+    )
+
+
+def spanning_tree_log_partition(
+    graph: PottsGraph,
+    field: np.ndarray,
+    *,
+    couplings: np.ndarray | None = None,
+) -> float:
+    """:func:`spanning_tree_log_partition_torch`'s bound as a ``float``, from NumPy (issue #1092)."""
+    import torch
+
+    return float(
+        spanning_tree_log_partition_torch(
+            graph,
+            torch.as_tensor(np.asarray(field, dtype=np.float64)),
+            couplings=None
+            if couplings is None
+            else torch.as_tensor(np.asarray(couplings, dtype=np.float64)),
+        )
+    )
 
 
 def decoupled_log_partition(graph: PottsGraph, field: npt.ArrayLike) -> float:
@@ -482,7 +531,7 @@ def saturated_log_partition(graph: PottsGraph, field: npt.ArrayLike) -> float:
 
     ``Z <= q^N exp(-E_min)`` and :func:`decoupled_ground_energy` bounds
     ``E_min`` below, so the two compose. ``O(N + E)`` against
-    :func:`spanning_tree_log_partition`'s one exact tree pass per edge,
+    :func:`spanning_tree_log_partition_torch`'s one exact tree pass per edge,
     which is why this is the upper end of the bracket on a lattice of
     thousands of sites and the spanning-tree bound the tighter one where it
     runs (``eq:saturated-bound``). NumPy, as :func:`decoupled_ground_energy`
@@ -516,7 +565,7 @@ class EnergyBounds:
 
 
 def ground_state_energy_bounds(
-    graph: PottsGraph, field: np.ndarray, beta: float
+    graph: PottsGraph, field: SiteField | np.ndarray, beta: float
 ) -> EnergyBounds:
     """``[-U/beta, (N log q - L)/beta]`` brackets the ground-state energy, from ``L <= log Z(beta) <= U``.
 
@@ -526,6 +575,7 @@ def ground_state_energy_bounds(
     bounds on the scaled model. Tighter as ``beta`` grows, until the bounds
     on ``log Z`` themselves loosen.
     """
+    field = log_weight_of(field)
     if beta <= 0.0:
         msg = f"beta must be positive, got {beta}"
         raise ValueError(msg)
@@ -536,10 +586,12 @@ def ground_state_energy_bounds(
     )
     scaled_couplings = torch.as_tensor(graph.edge_coupling * beta)
     lower_log_z = float(
-        mean_field_log_partition(graph, scaled_field, couplings=scaled_couplings)
+        mean_field_log_partition_torch(graph, scaled_field, couplings=scaled_couplings)
     )
     upper_log_z = float(
-        spanning_tree_log_partition(graph, scaled_field, couplings=scaled_couplings)
+        spanning_tree_log_partition_torch(
+            graph, scaled_field, couplings=scaled_couplings
+        )
     )
     q = int(scaled_field.shape[1])
     return EnergyBounds(
@@ -558,10 +610,12 @@ __all__ = [
     "least_squares_lengths",
     "least_squares_residual",
     "mean_field_log_partition",
+    "mean_field_log_partition_torch",
     "prune_with_matrices",
     "saturated_log_partition",
     "site_fitch_scores",
     "site_rows",
     "spanning_tree_log_partition",
-    "tree_log_partition",
+    "spanning_tree_log_partition_torch",
+    "tree_log_partition_torch",
 ]

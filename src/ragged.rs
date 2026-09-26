@@ -39,6 +39,30 @@ fn log_sum(values: &[f64]) -> f64 {
         .fold(f64::NEG_INFINITY, |total, &one| log_add(total, one))
 }
 
+/// The log transition into `position`: `log_transition` itself without a
+/// switch, else `ln((1 - s) [from == to] + s A[from, to])` written to `out`.
+#[inline]
+fn step_kernel<'a>(
+    log_transition: &'a [f64],
+    probability: &[f64],
+    switch: &[f64],
+    position: usize,
+    n_states: usize,
+    out: &'a mut [f64],
+) -> &'a [f64] {
+    if switch.is_empty() {
+        return log_transition;
+    }
+    let s = switch[position];
+    for from in 0..n_states {
+        for to in 0..n_states {
+            let stay = if from == to { 1.0 - s } else { 0.0 };
+            out[from * n_states + to] = (stay + s * probability[from * n_states + to]).ln();
+        }
+    }
+    out
+}
+
 /// Posterior marginals, transition counts and evidence, segment by segment.
 ///
 /// # Parameters
@@ -50,6 +74,10 @@ fn log_sum(values: &[f64]) -> f64 {
 /// - `counts`: written, `n_states * n_states`, log expected transitions summed
 ///   over every segment --- the boundary pairs are not among them.
 /// - `evidence`: written, one log evidence per segment.
+/// - `switch`: empty, or one `s` in `[0, 1]` per position (issue #1082). The
+///   step into position `t` then takes `(1 - s[t]) I + s[t] A` with `A` the
+///   transition, the stay-or-switch form, built per step from the one `A`
+///   rather than stored `T` times; a segment's first entry is never read.
 ///
 /// # Returns
 /// `Ok(())`, or `Err` naming the first violated precondition.
@@ -63,6 +91,7 @@ pub fn ragged_posteriors_into(
     gamma: &mut [f64],
     counts: &mut [f64],
     evidence: &mut [f64],
+    switch: &[f64],
 ) -> Result<(), String> {
     if n_states == 0 {
         return Err("n_states must be positive".to_string());
@@ -100,6 +129,34 @@ pub fn ragged_posteriors_into(
     if gamma.len() != log_density.len() || evidence.len() != lengths.len() {
         return Err("gamma and evidence must match the segments they describe".to_string());
     }
+    if !switch.is_empty() && switch.len() != total {
+        return Err(format!(
+            "switch has {} entries for {} positions; one per position or none",
+            switch.len(),
+            total
+        ));
+    }
+    if let Some(index) = switch.iter().position(|&one| !(0.0..=1.0).contains(&one)) {
+        return Err(format!(
+            "switch[{}] is {}; a switch probability is in [0, 1]",
+            index, switch[index]
+        ));
+    }
+    // The transition in probability space, read by every switched step; the
+    // unswitched path reads `log_transition` itself and is unchanged.
+    let probability: Vec<f64> = if switch.is_empty() {
+        Vec::new()
+    } else {
+        log_transition.iter().map(|&one| one.exp()).collect()
+    };
+    let mut switched = vec![
+        0.0_f64;
+        if switch.is_empty() {
+            0
+        } else {
+            n_states * n_states
+        }
+    ];
 
     counts.fill(f64::NEG_INFINITY);
     let mut alpha = vec![0.0_f64; n_states];
@@ -121,13 +178,18 @@ pub fn ragged_posteriors_into(
         }
         for step in 1..length {
             previous.copy_from_slice(&alpha);
+            let kernel = step_kernel(
+                log_transition,
+                &probability,
+                switch,
+                start + step,
+                n_states,
+                &mut switched,
+            );
             for state in 0..n_states {
                 let mut carried = f64::NEG_INFINITY;
                 for from in 0..n_states {
-                    carried = log_add(
-                        carried,
-                        previous[from] + log_transition[from * n_states + state],
-                    );
+                    carried = log_add(carried, previous[from] + kernel[from * n_states + state]);
                 }
                 alpha[state] = carried + log_density[base + step * n_states + state];
                 forward[step * n_states + state] = alpha[state];
@@ -148,15 +210,22 @@ pub fn ragged_posteriors_into(
             for state in 0..n_states {
                 ahead[state] = log_density[next + state] + beta[state];
             }
+            let kernel = step_kernel(
+                log_transition,
+                &probability,
+                switch,
+                start + step + 1,
+                n_states,
+                &mut switched,
+            );
             for from in 0..n_states {
                 let row = from * n_states;
                 let mut carried = f64::NEG_INFINITY;
                 for to in 0..n_states {
-                    let pair =
-                        forward[step * n_states + from] + log_transition[row + to] + ahead[to]
-                            - total_evidence;
+                    let pair = forward[step * n_states + from] + kernel[row + to] + ahead[to]
+                        - total_evidence;
                     counts[row + to] = log_add(counts[row + to], pair);
-                    carried = log_add(carried, log_transition[row + to] + ahead[to]);
+                    carried = log_add(carried, kernel[row + to] + ahead[to]);
                 }
                 beta[from] = carried;
                 gamma[base + step * n_states + from] =
@@ -172,9 +241,10 @@ pub fn ragged_posteriors_into(
 ///
 /// The recursion touches no Python object, so it runs with the GIL released
 /// and a thread pool runs segments' batches at once (#604, #1059).
+#[allow(clippy::too_many_arguments)]
 #[pyfunction]
 #[pyo3(name = "ragged_posteriors")]
-#[allow(clippy::too_many_arguments)]
+#[pyo3(signature = (log_density, lengths, log_initial, log_transition, gamma, counts, evidence, switch = None))]
 pub fn ragged_posteriors(
     py: Python<'_>,
     log_density: PyReadonlyArray2<f64>,
@@ -184,6 +254,7 @@ pub fn ragged_posteriors(
     mut gamma: PyReadwriteArray2<f64>,
     mut counts: PyReadwriteArray2<f64>,
     mut evidence: PyReadwriteArray1<f64>,
+    switch: Option<PyReadonlyArray1<f64>>,
 ) -> PyResult<()> {
     let density = log_density.as_slice()?;
     let n_states = log_initial.len()?;
@@ -198,9 +269,13 @@ pub fn ragged_posteriors(
         counts.as_slice_mut()?,
         evidence.as_slice_mut()?,
     );
+    let switch = match &switch {
+        Some(values) => values.as_slice()?,
+        None => &[],
+    };
     py.detach(|| {
         ragged_posteriors_into(
-            density, n_states, &widths, initial, transition, gamma, counts, evidence,
+            density, n_states, &widths, initial, transition, gamma, counts, evidence, switch,
         )
     })
     .map_err(PyValueError::new_err)
@@ -229,6 +304,7 @@ mod tests {
             &mut gamma,
             &mut counts,
             &mut evidence,
+            &[],
         )
         .unwrap();
         // Every density is one and every choice even, so each segment's
@@ -255,6 +331,7 @@ mod tests {
             &mut gamma,
             &mut counts,
             &mut evidence,
+            &[],
         )
         .unwrap_err();
         assert!(error.contains("at least 2 positions"), "{error}");

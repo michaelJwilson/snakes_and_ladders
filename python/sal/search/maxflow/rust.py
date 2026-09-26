@@ -50,14 +50,14 @@ from sal.sim.graph import PottsGraph
 from sal.sim.potts import energy, site_field
 
 
-def ising_ground_state(graph: PottsGraph, field_values: np.ndarray) -> GroundState:
+def ising_ground_state(graph: PottsGraph, field: np.ndarray) -> GroundState:
     """The exact two-state ferromagnetic ground state, computed in Rust.
 
     Parameters
     ----------
     graph : PottsGraph
         Every coupling must be non-negative.
-    field_values : np.ndarray
+    field : np.ndarray
         ``(2,)`` or ``(n_nodes, 2)``, as :func:`sal.search.maxflow.ising_ground_state`.
 
     Returns
@@ -69,9 +69,7 @@ def ising_ground_state(graph: PottsGraph, field_values: np.ndarray) -> GroundSta
         function independent, so a construction that were wrong could not
         also report itself as right.
     """
-    values = site_field(
-        np.asarray(field_values, dtype=float), graph.n_nodes, n_states=2
-    )
+    values = site_field(np.asarray(field, dtype=float), graph.n_nodes, n_states=2)
     # `as_slice` on the Rust side succeeds only for a C-contiguous array, so
     # every argument is normalized here; `ascontiguousarray` is free when the
     # array already is one, and `site_field` already returns `float64`.

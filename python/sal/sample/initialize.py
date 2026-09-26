@@ -28,6 +28,7 @@ import time
 from dataclasses import dataclass
 from enum import StrEnum
 
+import numpy as np
 import torch
 
 from sal.cost import Cost
@@ -35,6 +36,7 @@ from sal.opt.budget import Budget
 from sal.opt.initialize import Initializer
 from sal.opt.objective import Objective
 from sal.sample import hmc
+from sal.sample.chain import torch_stream
 from sal.sample.schedule import (
     AdaptedLadder,
     FeedbackLadder,
@@ -344,7 +346,7 @@ class FromTempering(Initializer):
             rounds,
             step_size=self.step_size,
             n_steps=self.n_steps,
-            theta0=theta0,
+            start=theta0,
             deadline=deadline,
         )
         run_rounds = int(tempered.positions.shape[0])
@@ -407,7 +409,7 @@ class LadderCalibration:
         What is driven; its string value is read into the member.
     rounds : int
         Rounds per measurement, at least 1.
-    max_rounds : int
+    max_iterations : int
         Measurements before the warm-up stops, at least 1.
     band : tuple[float, float] | None
         ``(low, high)`` inside ``(0, 1)``; the acceptance rule's, and refused
@@ -428,17 +430,17 @@ class LadderCalibration:
 
     rule: LadderRule
     rounds: int
-    max_rounds: int
+    max_iterations: int
     band: tuple[float, float] | None = None
     max_replicas: int | None = None
     tolerance: float | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "rule", LadderRule(self.rule))
-        if self.rounds < 1 or self.max_rounds < 1:
+        if self.rounds < 1 or self.max_iterations < 1:
             msg = (
-                f"rounds and max_rounds must be at least 1, got {self.rounds} "
-                f"and {self.max_rounds}"
+                f"rounds and max_iterations must be at least 1, got {self.rounds} "
+                f"and {self.max_iterations}"
             )
             raise ValueError(msg)
         if self.rule is LadderRule.ACCEPTANCE:
@@ -541,7 +543,7 @@ def calibrate_ladder(
     objective: Objective,
     temperatures: TempSchedule | tuple[float, ...],
     calibration: LadderCalibration,
-    generator: torch.Generator,
+    rng: np.random.Generator | torch.Generator,
     *,
     step_size: float,
     n_steps: int = hmc.DEFAULT_STEPS,
@@ -568,6 +570,7 @@ def calibrate_ladder(
         As the adapter refuses, or if the settled ladder is not positive and
         strictly increasing.
     """
+    generator = torch_stream(rng)
     began = time.perf_counter()
     best: torch.Tensor | None = None
     best_value = float("inf")
@@ -583,7 +586,7 @@ def calibrate_ladder(
             calibration.rounds,
             step_size=step_size,
             n_steps=n_steps,
-            theta0=best,
+            start=best,
         )
         transitions += calibration.rounds * len(candidate)
         force_evaluations += tempered.spent
@@ -606,13 +609,13 @@ def calibrate_ladder(
             acceptance,
             temperatures,
             calibration.band,
-            calibration.max_rounds,
+            calibration.max_iterations,
             calibration.max_replicas,
         )
     else:
         assert calibration.tolerance is not None
         placement = adapt_ladder_by_round_trips(
-            circulation, temperatures, calibration.tolerance, calibration.max_rounds
+            circulation, temperatures, calibration.tolerance, calibration.max_iterations
         )
     check_ladder(
         placement.temperatures,

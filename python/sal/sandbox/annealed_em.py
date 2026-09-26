@@ -32,7 +32,7 @@ import torch
 from sal.emissions import EmissionFamily
 from sal.opt.em import EMISSION_MIXTURE_EM, EmConfig, em_loop
 from sal.opt.emission_mixture import EmissionMixtureFit
-from sal.opt.mixture import mixture_log_likelihood, responsibilities
+from sal.opt.mixture import mixture_log_likelihood, responsibilities_torch
 from sal.opt.termination import Termination
 from sal.track import current
 
@@ -130,7 +130,7 @@ def annealed_expectation_maximization(
         log_weight = torch.log(present)
         log_likelihood = float(mixture_log_likelihood(values, log_weight, family))
         if temperature == 1.0:
-            posterior = responsibilities(values, log_weight, family)
+            posterior = responsibilities_torch(values, log_weight, family)
         else:
             joint = log_weight + family.log_density(values)
             free_energies.append(free_energy(joint, temperature))
@@ -179,7 +179,6 @@ def annealed_expectation_maximization(
         components=components,
         responsibilities=posterior,
         log_likelihood=log_likelihood,
-        iterations=termination.iterations,
         at_boundary=boundary,
         termination=termination,
     )
