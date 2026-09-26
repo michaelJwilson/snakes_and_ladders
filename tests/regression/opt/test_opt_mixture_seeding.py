@@ -379,8 +379,8 @@ def seed_anneal(instance: Instance, rng: np.random.Generator) -> Seeding:
         start=_theta_at(instance, objective, start.components),
     )
     return Seeding(
-        _from_theta(instance, objective, run.theta),
-        2.0 * run.force_evaluations * instance.n_components,
+        _from_theta(instance, objective, run.best),
+        2.0 * run.spent * instance.n_components,
         acceptance=run.acceptance_rate,
     )
 

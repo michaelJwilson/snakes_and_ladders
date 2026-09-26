@@ -15,6 +15,8 @@ from typing import Any
 import numpy as np
 
 from sal.backend import Backend
+from sal.cost import Cost
+from sal.opt.termination import Termination
 from sal.sample.accept import accept
 from sal.sample.potts_mcmc.moves import (
     PottsMove,
@@ -36,6 +38,7 @@ from sal.sample.potts_mcmc.sweeps import (
 )
 from sal.sample.schedule import (
     AdaptedLadder,
+    Annealed,
     Monotone,
     TempSchedule,
     adapt_ladder,
@@ -241,39 +244,31 @@ def sample_potts(
     return PottsChain(states=recorded, mean_cluster_size=mean_cluster)
 
 
-@dataclass(frozen=True)
-class AnnealedPotts:
-    """What one annealing run found, and what it cost.
+@dataclass(frozen=True, kw_only=True)
+class AnnealedPotts(Annealed[np.ndarray]):
+    """What one annealing run found, and what it cost (issue #1090).
+
+    An :class:`~sal.sample.schedule.Annealed` over labellings: ``best`` is the
+    lowest-energy configuration visited, shape ``(n_nodes,)``, ``final``
+    where the chain ended, and ``spent`` the site visits, the unit a budget
+    is matched on rather than the sweep count: a Wolff sweep flips one
+    cluster while a heat-bath sweep touches every site, so equal sweeps
+    hand the cluster moves a free lattice per move (issue #551).
 
     Parameters
     ----------
-    labelling : np.ndarray
-        The lowest-energy configuration visited, shape ``(n_nodes,)``. The
-        *best* rather than the last: the final sweeps run cold but not at
-        zero, so the chain can leave the best state it found.
     energy : float
-        Its energy, in :func:`energies`' convention.
-    final : np.ndarray
-        Where the chain ended, kept so a caller can see whether the best was
-        the end or a state passed through.
+        ``best``'s energy, in :func:`energies`' convention.
     n_sweeps : int
         Sweeps run, one per schedule step.
-    site_visits : int
-        Site labels read or written by the move set. **This** is what a
-        budget is matched on, not the sweep count: a Wolff sweep flips one
-        cluster while a heat-bath sweep touches every site, so equal sweeps
-        hand the cluster moves a free lattice per move (issue #551).
     trace : tuple[ClusterCounter, ...]
         One counter per schedule step for a cluster move set, empty for
         single-site. Kept per step because the quantity issue #551 predicts
         is a function of temperature and the schedule is what varies it.
     """
 
-    labelling: np.ndarray
     energy: float
-    final: np.ndarray
     n_sweeps: int
-    site_visits: int = 0
     trace: tuple[ClusterCounter, ...] = ()
 
 
@@ -489,11 +484,13 @@ def anneal_potts(
         )
     tracked.record_cost(max(schedule.n_steps - 1, 0), state.nbytes)
     return AnnealedPotts(
-        labelling=best_state,
+        best=best_state,
         energy=best_energy,
         final=state,
         n_sweeps=schedule.n_steps,
-        site_visits=visits,
+        spent=visits,
+        unit=Cost.SITE_VISITS,
+        termination=Termination.after(schedule.n_steps, converged=False),
         trace=tuple(trace),
     )
 

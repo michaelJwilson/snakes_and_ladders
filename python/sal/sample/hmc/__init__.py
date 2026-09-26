@@ -66,10 +66,12 @@ import torch
 
 from sal import oxisal
 from sal.backend import Backend, refuse_backend
+from sal.cost import Cost
 from sal.emissions import ParameterDomainError
 from sal.opt.objective import (
     Objective,
 )
+from sal.opt.termination import Termination
 from sal.sample.accept import (
     accept_ratio,
     accept_with,
@@ -100,6 +102,7 @@ from sal.sample.declared import (
 from sal.sample.expectation import Expectation
 from sal.sample.hmc.jax import JaxWalk
 from sal.sample.schedule import (
+    Annealed,
     Monotone,
     TempSchedule,
     check_ladder,
@@ -567,33 +570,26 @@ def sample(
     )
 
 
-@dataclass(frozen=True)
-class AnnealedTheta:
-    """What one annealing run found, and what it cost.
+@dataclass(frozen=True, kw_only=True)
+class AnnealedTheta(Annealed[torch.Tensor]):
+    """What one annealing run found, and what it cost (issue #1090).
+
+    An :class:`~sal.sample.schedule.Annealed` over points in unconstrained
+    coordinates: ``best`` is the lowest-valued point visited, ``final``
+    where the chain ended, and ``spent`` the gradients, so the run is
+    comparable to any other optimizer at equal evaluations.
 
     Parameters
     ----------
-    theta : torch.Tensor
-        The lowest-valued point visited, in unconstrained coordinates. The
-        *best* rather than the last: the final proposals run cold but not at
-        zero, so the chain can leave its best point.
     value : float
-        The objective there.
-    final : torch.Tensor
-        Where the chain ended.
+        The objective at ``best``, which the objective minimizes.
     acceptance_rate : float
         Over the whole schedule. Near zero at the cold end is the symptom of
         a step too large for the final temperature.
-    force_evaluations : int
-        Gradients spent, so the run is comparable to any other optimizer at
-        equal evaluations.
     """
 
-    theta: torch.Tensor
     value: float
-    final: torch.Tensor
     acceptance_rate: float
-    force_evaluations: int
 
 
 def anneal(
@@ -664,11 +660,13 @@ def anneal(
         tracked.record(step, state=best, temperature=temperature, energy=best_value)
     tracked.record_cost(max(schedule.n_steps - 1, 0), best.nbytes)
     return AnnealedTheta(
-        theta=best,
+        best=best,
         value=best_value,
         final=position,
         acceptance_rate=accepted / schedule.n_steps,
-        force_evaluations=schedule.n_steps * integrator.force_evaluations(n_steps),
+        spent=schedule.n_steps * integrator.force_evaluations(n_steps),
+        unit=Cost.GRADIENTS,
+        termination=Termination.after(schedule.n_steps, converged=False),
     )
 
 

@@ -210,7 +210,7 @@ class FromAnnealing(Initializer):
         list[torch.Tensor]
             Exactly one start.
         """
-        return [self.run(objective).theta]
+        return [self.run(objective).best]
 
 
 class FromTempering(Initializer):

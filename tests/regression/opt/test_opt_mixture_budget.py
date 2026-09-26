@@ -179,7 +179,7 @@ def _anneal(fixture: Fixture, budget: Budget, rng: np.random.Generator) -> Outco
         n_steps=N_STEPS,
         start=theta,
     )
-    value, polish = _polish(fixture, run.theta, run.value)
+    value, polish = _polish(fixture, run.best, run.value)
     return Outcome(value, counted.calls + polish)
 
 

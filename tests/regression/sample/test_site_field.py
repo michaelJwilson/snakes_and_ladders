@@ -124,7 +124,7 @@ def test_the_declared_field_is_one_model_whichever_way_it_arrives() -> None:
     annealed = [
         anneal_potts(
             graph, f, schedule, np.random.default_rng(0), move=PottsMove.WOLFF
-        ).labelling
+        ).best
         for f in forms
     ]
     for runs in (expansions, modes, annealed):
