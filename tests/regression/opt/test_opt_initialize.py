@@ -373,17 +373,14 @@ def test_a_chain_start_warms_up_by_default_and_none_is_the_chain_it_drew_before(
     ).chain(objective)
     assert torch.equal(warmed.draws, chain(CHAIN_ADAPTATION).draws)
     assert warmed.adapted is not None
-    assert (
-        warmed.force_evaluations
-        == (CHAIN_ADAPTATION.warmup + burn_in + draws) * per_proposal
-    )
+    assert warmed.spent == (CHAIN_ADAPTATION.warmup + burn_in + draws) * per_proposal
 
     fixed = FromChain(
         draws, step, torch.Generator().manual_seed(898), steps, burn_in, None
     ).chain(objective)
     assert torch.equal(fixed.draws, chain(None).draws)
     assert fixed.adapted is None
-    assert fixed.force_evaluations == (burn_in + draws) * per_proposal
+    assert fixed.spent == (burn_in + draws) * per_proposal
 
 
 def _annealed_start(seed: int) -> FromAnnealing:

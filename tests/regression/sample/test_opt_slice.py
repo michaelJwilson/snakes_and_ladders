@@ -103,9 +103,7 @@ def test_the_slice_chain_recovers_an_analytic_gaussian(
             seed,
         )
         # The cost unit, reported rather than inferred: what the objective saw.
-        assert chain.objective_evaluations == pytest.approx(
-            chain.evaluations_per_draw * 4400, rel=1e-9
-        )
+        assert chain.spent == pytest.approx(chain.evaluations_per_draw * 4400, rel=1e-9)
 
 
 @pytest.mark.oracle
@@ -248,7 +246,7 @@ def test_an_unstored_slice_chain_spends_what_the_stored_one_spends() -> None:
     stored, free = run(True), run(False)
     assert free.draws.shape == (0, 2)
     assert stored.draws.shape == (50, 2)
-    assert free.objective_evaluations == stored.objective_evaluations
+    assert free.spent == stored.spent
     assert free.shrinkages_per_draw == stored.shrinkages_per_draw
 
 

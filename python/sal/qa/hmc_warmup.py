@@ -236,11 +236,11 @@ def settling_draw(trace: np.ndarray, exact_mean: float, exact_sd: float) -> int 
 def _ess_per_gradient(chain: HmcChain) -> float:
     """Effective draws per gradient evaluation, the smallest over coordinates.
 
-    The warm-up's gradients are inside ``force_evaluations``, so this charges
+    The warm-up's gradients are inside ``spent``, so this charges
     the adapted chain for them rather than comparing at equal recorded draws.
     """
     sizes: np.ndarray = effective_sample_size(chain.draws)
-    return float(sizes.min()) / chain.force_evaluations
+    return float(sizes.min()) / chain.spent
 
 
 def build_figure(adapted: HmcChain, fixed: HmcChain) -> tuple[Figure, str]:

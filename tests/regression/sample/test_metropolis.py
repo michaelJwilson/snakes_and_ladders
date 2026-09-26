@@ -98,7 +98,7 @@ def test_both_warm_ups_settle_on_the_target_acceptance() -> None:
         chain = _chain(backend, n=4_000, adaptation=adaptation, store_chain=False)
         assert chain.adapted is not None
         assert chain.adapted.force_evaluations == 2_000
-        assert chain.force_evaluations == 6_000
+        assert chain.spent == 6_000
         rates.append(chain.acceptance_rate)
     assert abs(rates[0] - metropolis.RWM_TARGET_ACCEPTANCE) < 0.05
     assert abs(rates[0] - rates[1]) < 0.03

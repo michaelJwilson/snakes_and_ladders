@@ -60,7 +60,7 @@ def _four_taxon_posterior() -> WithGaussianPrior:
 
 
 def _ess_per_gradient(chain: HmcChain) -> np.ndarray:
-    return effective_sample_size(chain.draws) / chain.force_evaluations
+    return effective_sample_size(chain.draws) / chain.spent
 
 
 # --- exact ------------------------------------------------------------------
@@ -267,7 +267,7 @@ def test_a_chain_without_adaptation_reports_no_warm_up_and_counts_its_gradients(
     )
 
     assert chain.adapted is None
-    assert chain.force_evaluations == 50 * leapfrog.force_evaluations(6)
+    assert chain.spent == 50 * leapfrog.force_evaluations(6)
 
 
 # --- the statistics ----------------------------------------------------------

@@ -58,7 +58,7 @@ import itertools
 import math
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -99,7 +99,6 @@ from sal.sample.declared import (
     declared_energy,
     declared_jax_energy,
 )
-from sal.sample.expectation import Expectation
 from sal.sample.hmc.jax import JaxWalk
 from sal.sample.schedule import (
     Annealed,
@@ -199,41 +198,19 @@ class WithGaussianPrior(Objective):
 
 
 @dataclass(frozen=True)
-class HmcChain:
-    """A chain, and what it cost to get it.
+class HmcChain(Chain):
+    """A Hamiltonian chain, and what it cost to get it (issue #1090).
 
-    Parameters
-    ----------
-    draws : torch.Tensor
-        Draws in unconstrained coordinates, shape ``(n_samples, dimension)``.
-    acceptance_rate : float
-        Fraction of proposals accepted. Hamiltonian dynamics conserves energy
-        exactly, so a correct implementation with a small step size accepts
-        nearly everything; a rate near zero means the integrator is diverging
-        rather than that the target is hard.
-    energy_error : torch.Tensor
-        ``|H(proposal) - H(current)|`` per proposal. The diagnostic that
-        distinguishes a step size too large from a bug: the first grows
-        smoothly with the step size, the second does not.
-    force_evaluations : int
-        Gradients spent, warm-up and burn-in included, so an effective
-        sample size divided by it is the cost of a draw and two chains
-        compare at equal evaluations rather than equal samples.
-    adapted : Adapted | None
-        What the warm-up settled on, when :func:`sample` was given an
-        :class:`Adaptation`; ``None`` for a fixed-parameter chain.
-    expectations : Mapping[str, Expectation]
-        Each operator's expectation over the recorded draws, by the Kalman
-        filter of :mod:`sal.sample.expectation`, keyed as the
-        ``operators`` given to :func:`sample`; empty when none were.
+    A :class:`~sal.sample.chain.Chain`, ``spent`` in gradients, warm-up and
+    burn-in included, so an effective sample size divided by it is the cost
+    of a draw and two chains compare at equal evaluations rather than equal
+    samples. The acceptance rate reads as Hamiltonian dynamics has it:
+    energy is conserved exactly, so a correct implementation with a small
+    step accepts nearly everything, and a rate near zero means the
+    integrator is diverging rather than that the target is hard. The
+    energy error is the diagnostic that tells a step too large from a bug:
+    the first grows smoothly with the step, the second does not.
     """
-
-    draws: torch.Tensor
-    acceptance_rate: float
-    energy_error: torch.Tensor
-    force_evaluations: int
-    adapted: Adapted | None
-    expectations: Mapping[str, Expectation] = field(default_factory=dict)
 
 
 #: The cube root that Yoshida's fourth-order composition is built from.
@@ -539,6 +516,7 @@ def sample(
             integrator.force_evaluations(n_steps),
             generator,
             n_samples,
+            unit=Cost.GRADIENTS,
             step_size=step_size,
             start=start_point(objective, start),
             burn_in=burn_in,
@@ -553,6 +531,7 @@ def sample(
             objective,
             generator,
             n_samples,
+            unit=Cost.GRADIENTS,
             step_size=step_size,
             start=start,
             burn_in=burn_in,
@@ -565,7 +544,8 @@ def sample(
         draws=chain.draws,
         acceptance_rate=chain.acceptance_rate,
         energy_error=chain.energy_error,
-        force_evaluations=chain.force_evaluations,
+        spent=chain.spent,
+        unit=chain.unit,
         adapted=chain.adapted,
         expectations=chain.expectations,
     )
