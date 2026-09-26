@@ -16,6 +16,7 @@ from typing import Any
 
 import check_notebooks
 import pytest
+from _paths import REPO_ROOT
 from check_notebooks import (
     differences,
     image_count,
@@ -376,3 +377,51 @@ def test_a_code_cell_set_to_scroll_is_reported() -> None:
     assert len(reported) == 1
     assert "code cell 1" in reported[0]
     assert structure_problems("n.ipynb", [whole, _cell(), further]) == []
+
+
+@pytest.mark.analytic
+@pytest.mark.parametrize(
+    ("changed", "expected"),
+    [
+        (["docs/nb/hmm.ipynb"], ["hmm.ipynb"]),
+        (["docs/nb/hmm.ipynb", "README.md"], ["hmm.ipynb"]),
+        (["python/sal/search/icm/__init__.py", "README.md"], []),
+        (["docs/nb/removed.ipynb"], []),
+        ([], []),
+    ],
+)
+def test_a_change_selects_the_notebooks_it_touches(
+    changed: list[str], expected: list[str]
+) -> None:
+    # Issue #1087: a pull request re-executes the notebooks it changes and
+    # nothing else; the release gate runs every one.
+    selected = check_notebooks.changed_notebooks(changed)
+
+    assert [path.name for path in selected] == expected
+
+
+@pytest.mark.analytic
+@pytest.mark.parametrize(
+    "path", ["docs/nb/data/potts_schedule.json", "infra/check_notebooks.py"]
+)
+def test_the_data_or_the_checker_selects_every_notebook(path: str) -> None:
+    every = sorted(check_notebooks.NOTEBOOK_DIR.glob("*.ipynb"))
+
+    assert check_notebooks.changed_notebooks([path]) == every
+
+
+@pytest.mark.analytic
+def test_the_pull_request_job_selects_and_the_release_gate_runs_every_notebook() -> (
+    None
+):
+    # Held to the workflow and the gate, so the full run cannot drift back onto
+    # every pull request or out of the release unnoticed (issue #1087).
+    workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    job = workflow[workflow.index("  notebooks:") :]
+    job = job[: job.index("\n  validation:")]
+    runs = [line.strip() for line in job.splitlines() if "check_notebooks.py" in line]
+    gate = (REPO_ROOT / "infra" / "release.sh").read_text()
+
+    assert runs
+    assert all("--changed" in run or "steps.select.outputs" in run for run in runs)
+    assert 'run_check "notebooks" uv run python infra/check_notebooks.py\n' in gate

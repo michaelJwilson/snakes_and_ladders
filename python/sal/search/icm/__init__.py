@@ -88,9 +88,9 @@ def check_min_sites(min_sites: int, n_nodes: int) -> None:
 def iterated_conditional_modes(
     graph: PottsGraph,
     field: SiteField | np.ndarray,
-    n_states: int,
     rng: np.random.Generator,
     *,
+    n_states: int | None = None,
     start: np.ndarray | None = None,
     max_sweeps: int = 200,
     sweep_order: SweepOrder = SweepOrder.INDEX,
@@ -128,12 +128,13 @@ def iterated_conditional_modes(
     field : SiteField | np.ndarray
         External field as a log-weight, ``(n_states,)`` or
         ``(n_nodes, n_states)``, or a :class:`~sal.sim.potts.SiteField`.
-    n_states : int
-        Labels available at each site.
     rng : np.random.Generator
         Draws the start where ``start`` is ``None``, one permutation per
         sweep under :data:`SweepOrder.RANDOM`, and the floor's uniforms where
         ``min_sites > 0``, in that order.
+    n_states : int | None
+        Labels available at each site. Read from the field's state axis;
+        given, it is checked against that axis (issue #1091).
     start : np.ndarray | None
         The labelling to descend from, or ``None`` to draw one uniformly.
     max_sweeps : int
@@ -174,7 +175,10 @@ def iterated_conditional_modes(
     """
     n_nodes = graph.n_nodes
     check_min_sites(min_sites, n_nodes)
-    values = site_field(np.asarray(log_weight_of(field), dtype=float), n_nodes)
+    values = site_field(
+        np.asarray(log_weight_of(field), dtype=float), n_nodes, n_states=n_states
+    )
+    n_states = values.shape[1]
     labelling = (
         rng.integers(0, n_states, size=n_nodes)
         if start is None

@@ -1,0 +1,1 @@
+Fix main: `qa/test_potts_schedule.py`'s recorded-evaluation rerun holds at a declared 1e-12 relative, not bitwise: #1045 reordered the energy's sum, and the rerun differs from the record by 6.8e-15 relative.

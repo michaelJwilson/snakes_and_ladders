@@ -30,6 +30,7 @@ from sal.sample.potts_mcmc.chains import (
     parallel_tempering,
     sample_potts_pair,
 )
+from sal.sample.schedule import InverseTemperatures
 from sal.sample.tempered import adapt_ladder_round_trips, tempered_potts_pair
 from sal.search.ground_state import ground_state
 from sal.search.maxflow import cut_energy, ising_ground_state
@@ -43,7 +44,7 @@ WALL_CLOCK = frozenset({"seconds", "wall_seconds", "elapsed"})
 
 GRAPH = lattice_graph((4, 4), BoundaryCondition.OPEN, 0.7)
 ENERGY = np.random.default_rng(1091).normal(0.0, 1.0, (GRAPH.n_nodes, 3))
-BETAS = (0.0, 1.0, 2.0)
+BETAS = InverseTemperatures((0.0, 1.0, 2.0))
 SWEEPS = 6
 
 

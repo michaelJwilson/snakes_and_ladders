@@ -34,20 +34,20 @@ SITE_AND_TAXA_FIXTURES = (
 
 @pytest.mark.analytic
 def test_jc_transition_probabilities_rows_sum_to_one() -> None:
-    p = jc_transition_probabilities(0.3, k=4)
+    p = jc_transition_probabilities(0.3, n_states=4)
     assert_allclose(p.sum(axis=1), np.ones(4), rtol=1e-12)
 
 
 @pytest.mark.oracle
 def test_jc_transition_probabilities_at_zero_is_identity() -> None:
-    p = jc_transition_probabilities(0.0, k=4)
+    p = jc_transition_probabilities(0.0, n_states=4)
     assert_allclose(p, np.eye(4), atol=1e-12)
 
 
 @pytest.mark.analytic
 def test_jc_transition_probabilities_at_infinity_is_stationary() -> None:
     # k*t/(k-1) = 40 drives exp(...) to ~4e-18, well past float64 precision.
-    p = jc_transition_probabilities(30.0, k=4)
+    p = jc_transition_probabilities(30.0, n_states=4)
     assert_allclose(p, np.full((4, 4), 0.25), atol=1e-12)
 
 
@@ -67,7 +67,7 @@ def test_jc_rate_matrix_is_normalised() -> None:
 def test_jc_detailed_balance_under_uniform_stationary_distribution() -> None:
     k = 4
     pi = np.full(k, 1.0 / k)
-    p = jc_transition_probabilities(0.4, k=k)
+    p = jc_transition_probabilities(0.4, n_states=k)
 
     lhs = pi[:, np.newaxis] * p
     rhs = pi[np.newaxis, :] * p.T
@@ -88,12 +88,14 @@ def test_simulated_substitution_frequencies_match_analytic_jc(
         parent_states = dataset.node_states[parent.name]
         child_states = dataset.node_states[child.name]
 
-        expected = jc_transition_probabilities(child.branch_length, k=params.k)
-        observed = np.zeros((params.k, params.k))
-        for i in range(params.k):
+        expected = jc_transition_probabilities(
+            child.branch_length, n_states=params.n_states
+        )
+        observed = np.zeros((params.n_states, params.n_states))
+        for i in range(params.n_states):
             from_i = parent_states == i
             observed[i] = np.bincount(
-                child_states[from_i], minlength=params.k
+                child_states[from_i], minlength=params.n_states
             ) / np.sum(from_i)
 
         assert_allclose(

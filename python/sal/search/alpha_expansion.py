@@ -33,9 +33,9 @@ energies a cut can represent.
 
 from __future__ import annotations
 
-import warnings
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from typing import Any, NamedTuple
 
 import numpy as np
@@ -55,6 +55,7 @@ from sal.sim.potts import (
     energy,
     log_weight_of,
     site_field,
+    states_of,
 )
 
 # The bound is `2 * c_max / c_min` for a metric pairwise term; with a uniform
@@ -93,7 +94,7 @@ class Labelling:
     labelling: np.ndarray
     energy: float
     sweeps: int = 0
-    termination: Termination | None = None
+    termination: Termination = dataclass_field(kw_only=True)
 
     def __iter__(self) -> Iterator[Any]:
         """``(labelling, energy, sweeps, termination)``: the declared order (#865).
@@ -134,7 +135,7 @@ class ExpansionResult:
     energy: float
     cycles: int
     moves: int
-    termination: Termination | None = None
+    termination: Termination = dataclass_field(kw_only=True)
 
 
 class _Arcs(NamedTuple):
@@ -233,6 +234,10 @@ class _Carried(NamedTuple):
     energy: float
 
 
+#: One binary move by one minimum cut: a single iteration, run to completion.
+_ONE_MOVE = Termination.after(1, converged=True)
+
+
 def _lowest_by_cut(
     graph: PottsGraph,
     field: np.ndarray,
@@ -253,7 +258,7 @@ def _lowest_by_cut(
     built = build(values)
     current = energy(graph, values, labelling) if held is None else held
     if built is None:
-        return Labelling(labelling, current)
+        return Labelling(labelling, current, termination=_ONE_MOVE)
 
     proposed = built.place(built.source_side())
 
@@ -262,8 +267,8 @@ def _lowest_by_cut(
     # (issue #997). The cycle re-scores its result in full once.
     candidate = current + _energy_change(graph, values, labelling, proposed)
     if candidate < current:
-        return Labelling(proposed, candidate)
-    return Labelling(labelling, current)
+        return Labelling(proposed, candidate, termination=_ONE_MOVE)
+    return Labelling(labelling, current, termination=_ONE_MOVE)
 
 
 def _energy_change(
@@ -377,12 +382,8 @@ def _cycle_to_a_local_minimum(
                 termination=Termination.after(cycle, converged=True),
             )
 
-    warnings.warn(
-        f"{move.name} did not settle in max_cycles={max_cycles} cycles; ran "
-        f"{max_cycles} and returns the labelling it holds, with a Termination "
-        "recording the cap",
-        stacklevel=3,
-    )
+    # The cap is a termination, not a warning (issue #1089): the result says
+    # it ran to `max_cycles`, which is all a caller needs to decide.
     return ExpansionResult(
         labelling=labelling,
         energy=energy(graph, values, labelling),
@@ -647,8 +648,8 @@ EXPANSION = _Move(
 def alpha_expansion(
     graph: PottsGraph,
     field: SiteField | np.ndarray,
-    n_states: int,
     *,
+    n_states: int | None = None,
     start: np.ndarray | None = None,
     max_cycles: int = DEFAULT_MAX_CYCLES,
     backend: Backend = Backend.RUST,
@@ -668,8 +669,9 @@ def alpha_expansion(
         bound rests on.
     field : SiteField | np.ndarray
         ``(n_states,)`` or ``(n_nodes, n_states)``.
-    n_states : int
-        Label count.
+    n_states : int | None
+        Label count, read from the field's state axis; given, it is checked
+        against it (issue #1091).
     start : np.ndarray | None
         Initial labelling; the per-node data optimum when omitted, which is
         the labelling ignoring every coupling.
@@ -698,7 +700,7 @@ def alpha_expansion(
     return _cycle_to_a_local_minimum(
         graph,
         field,
-        n_states,
+        states_of(field, graph.n_nodes, n_states),
         EXPANSION,
         start=start,
         max_cycles=max_cycles,
@@ -920,9 +922,9 @@ SWAP = _Move(
 
 def alpha_beta_swap(
     graph: PottsGraph,
-    field: np.ndarray,
-    n_states: int,
+    field: SiteField | np.ndarray,
     *,
+    n_states: int | None = None,
     start: np.ndarray | None = None,
     max_cycles: int = DEFAULT_MAX_CYCLES,
     backend: Backend = Backend.RUST,
@@ -949,10 +951,11 @@ def alpha_beta_swap(
     UserWarning
         Where ``max_cycles`` runs out first, as :func:`alpha_expansion` does.
     """
+    field = log_weight_of(field)
     return _cycle_to_a_local_minimum(
         graph,
         field,
-        n_states,
+        states_of(field, graph.n_nodes, n_states),
         SWAP,
         start=start,
         max_cycles=max_cycles,

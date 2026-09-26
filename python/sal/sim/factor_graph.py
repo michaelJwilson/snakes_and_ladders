@@ -347,7 +347,7 @@ def from_hmm(
 
 def from_tree(
     tau: Node,
-    k: int,
+    n_states: int,
     pi: np.ndarray,
     site: Mapping[str, int],
     transitions: Mapping[str, np.ndarray],
@@ -364,7 +364,7 @@ def from_tree(
     ----------
     tau : Node
         The rooted topology.
-    k : int
+    n_states : int
         States.
     pi : np.ndarray
         Root distribution, shape ``(k,)``.
@@ -373,7 +373,7 @@ def from_tree(
     transitions : Mapping[str, np.ndarray]
         Child name to its branch's ``P(t)``, shape ``(k, k)``.
     """
-    variables = [Variable(node.name, k) for node in preorder(tau)]
+    variables = [Variable(node.name, n_states) for node in preorder(tau)]
     factors = [Factor("pi", (tau.name,), np.log(np.asarray(pi, dtype=float)))]
     with np.errstate(divide="ignore"):
         for parent, child in edges(tau):
@@ -386,7 +386,7 @@ def from_tree(
             )
         for node in preorder(tau):
             if node.is_leaf:
-                indicator = np.full(k, -np.inf)
+                indicator = np.full(n_states, -np.inf)
                 indicator[site[node.name]] = 0.0
                 factors.append(Factor(f"x:{node.name}", (node.name,), indicator))
     return FactorGraph(variables, factors)

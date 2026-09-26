@@ -615,7 +615,7 @@ def tempered_potts_pair(
 
 def tempered_topologies(
     alignment: Mapping[str, np.ndarray],
-    k: int,
+    n_states: int,
     temperatures: TempSchedule | Sequence[float],
     rng: np.random.Generator,
     n_sweeps: int,
@@ -649,7 +649,7 @@ def tempered_topologies(
     temperatures = check_ladder(ladder(temperatures), needed_by="a tempered ensemble")
     _check_budget(n_sweeps, thin, burn_in)
     cache = {} if scores is None else scores
-    score = cached_topology_score(alignment, k, cache, model=model)
+    score = cached_topology_score(alignment, n_states, cache, model=model)
     children = rng.spawn(len(temperatures))
     value = score(start)
 

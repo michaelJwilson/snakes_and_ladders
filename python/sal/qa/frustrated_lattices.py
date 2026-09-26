@@ -166,7 +166,7 @@ def glass_scan(params: FrustratedLatticeParams, rng: np.random.Generator) -> Gla
         instance = params.glass(frustration, rng)
         planted[index] = instance.planted_energy
         descended[index] = min(
-            iterated_conditional_modes(instance.graph, field, 2, rng).energy
+            iterated_conditional_modes(instance.graph, field, rng, n_states=2).energy
             for _ in range(params.glass_restarts)
         )
     return GlassScan(planted=planted, descended=descended)
