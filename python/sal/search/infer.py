@@ -48,6 +48,7 @@ from dataclasses import field as dataclass_field
 import numpy as np
 import torch
 
+from sal import param_tree
 from sal.bound import Surrogate
 from sal.likelihood.objective import (
     BranchLengthObjective,
@@ -291,7 +292,7 @@ def _score(
     lengths = named["branch_lengths"].tolist()
     return _Fitted(
         value=-result.value,
-        parameters={name: value.numpy() for name, value in named.items()},
+        parameters=param_tree.map_leaves(torch.Tensor.numpy, named),
         named=named,
         lengths_by_split=dict(zip(branch_splits(topology), lengths, strict=True)),
         default_length=float(torch.exp(objective.initial()[0])),

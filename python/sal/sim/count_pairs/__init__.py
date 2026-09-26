@@ -40,6 +40,7 @@ import numpy as np
 import torch
 from numpy.typing import ArrayLike
 
+from sal import param_tree
 from sal.backend import Backend, twin
 from sal.emissions import (
     BetaBinomialEmission,
@@ -253,13 +254,12 @@ class IndependentCountPair(EmissionFamily):
 
     def named_parameters(self) -> Mapping[str, torch.Tensor]:
         """Both channels' parameters, each prefixed by its channel."""
-        named: dict[str, torch.Tensor] = {}
-        for prefix, family in (
-            ("total", self._total.named_parameters()),
-            ("successes", self._successes.named_parameters()),
-        ):
-            named.update({f"{prefix}.{name}": value for name, value in family.items()})
-        return named
+        return param_tree.named(
+            {
+                "total": dict(self._total.named_parameters()),
+                "successes": dict(self._successes.named_parameters()),
+            }
+        )
 
 
 type Reflectable = BetaBinomialEmission | IndependentCountPair
