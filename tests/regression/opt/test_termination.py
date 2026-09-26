@@ -167,7 +167,7 @@ def test_a_termination_that_contradicts_itself_is_refused() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.infra
+@pytest.mark.smoke
 def test_every_result_with_a_termination_requires_one() -> None:
     # Issue #1085: a `termination` field is required on every result that has
     # one, so a caller handles one case and not three. Read from the source,
