@@ -33,7 +33,6 @@ energies a cut can represent.
 
 from __future__ import annotations
 
-import warnings
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Any, NamedTuple
@@ -377,12 +376,8 @@ def _cycle_to_a_local_minimum(
                 termination=Termination.after(cycle, converged=True),
             )
 
-    warnings.warn(
-        f"{move.name} did not settle in max_cycles={max_cycles} cycles; ran "
-        f"{max_cycles} and returns the labelling it holds, with a Termination "
-        "recording the cap",
-        stacklevel=3,
-    )
+    # The cap is a termination, not a warning (issue #1089): the result says
+    # it ran to `max_cycles`, which is all a caller needs to decide.
     return ExpansionResult(
         labelling=labelling,
         energy=energy(graph, values, labelling),

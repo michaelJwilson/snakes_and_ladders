@@ -253,7 +253,7 @@ def _tree_instance() -> tuple[TreeEnvironment, float]:
     )
     taxa = sorted(dataset.alignment)
     maximum = max(
-        environment.score(topology) for topology in enumerate_topologies(taxa)
+        environment.log_weight(topology) for topology in enumerate_topologies(taxa)
     )
     return environment, maximum
 
@@ -267,7 +267,7 @@ def _descent(
     """
     state = instance.reset(rng)
     episode = greedy_rollout(instance, start=state, max_steps=budget.size)
-    best = max(instance.score(visited) for visited in episode.states)
+    best = max(instance.log_weight(visited) for visited in episode.states)
     return Outcome(-best, max(len(episode.actions), 1))
 
 

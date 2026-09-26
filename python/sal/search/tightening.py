@@ -37,7 +37,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from sal.opt.termination import Termination
+from sal.opt.termination import Termination, check_cap
 from sal.sim.graph import PottsGraph
 from sal.sim.potts import energy, site_field
 
@@ -227,6 +227,7 @@ def dual_bound(
     best_shares = node_shares()
     taken = 0
     settled = False
+    check_cap("iterations", iterations)
     for sweep in range(1, iterations + 1):
         taken = sweep
         before = dual_value()
