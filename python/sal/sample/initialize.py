@@ -407,7 +407,7 @@ class LadderCalibration:
         What is driven; its string value is read into the member.
     rounds : int
         Rounds per measurement, at least 1.
-    max_rounds : int
+    max_iterations : int
         Measurements before the warm-up stops, at least 1.
     band : tuple[float, float] | None
         ``(low, high)`` inside ``(0, 1)``; the acceptance rule's, and refused
@@ -428,17 +428,17 @@ class LadderCalibration:
 
     rule: LadderRule
     rounds: int
-    max_rounds: int
+    max_iterations: int
     band: tuple[float, float] | None = None
     max_replicas: int | None = None
     tolerance: float | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "rule", LadderRule(self.rule))
-        if self.rounds < 1 or self.max_rounds < 1:
+        if self.rounds < 1 or self.max_iterations < 1:
             msg = (
-                f"rounds and max_rounds must be at least 1, got {self.rounds} "
-                f"and {self.max_rounds}"
+                f"rounds and max_iterations must be at least 1, got {self.rounds} "
+                f"and {self.max_iterations}"
             )
             raise ValueError(msg)
         if self.rule is LadderRule.ACCEPTANCE:
@@ -606,13 +606,13 @@ def calibrate_ladder(
             acceptance,
             temperatures,
             calibration.band,
-            calibration.max_rounds,
+            calibration.max_iterations,
             calibration.max_replicas,
         )
     else:
         assert calibration.tolerance is not None
         placement = adapt_ladder_by_round_trips(
-            circulation, temperatures, calibration.tolerance, calibration.max_rounds
+            circulation, temperatures, calibration.tolerance, calibration.max_iterations
         )
     check_ladder(
         placement.temperatures,

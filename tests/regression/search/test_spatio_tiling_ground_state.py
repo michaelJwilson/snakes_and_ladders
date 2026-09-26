@@ -189,7 +189,7 @@ def test_the_graph_cuts_recover_every_bounded_tile_at_five_thousand_sites() -> N
     rung = _release()
     held = _held(rung)
     runs = [
-        move(rung.graph, rung.field, max_cycles=50, backend=Backend.RUST)
+        move(rung.graph, rung.field, max_iterations=50, backend=Backend.RUST)
         for move in (alpha_expansion, alpha_beta_swap)
     ]
 
