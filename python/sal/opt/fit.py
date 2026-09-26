@@ -95,7 +95,7 @@ def fit(
     objective: Objective,
     theta0: torch.Tensor | None = None,
     max_iterations: int = 500,
-    gradient_tolerance: float = 1e-8,
+    tolerance: float = 1e-8,
     *,
     include_intervals: bool = False,
 ) -> FitResult:
@@ -114,7 +114,7 @@ def fit(
         Starting point; ``objective.initial()`` when omitted.
     max_iterations : int
         Maximum optimizer steps.
-    gradient_tolerance : float
+    tolerance : float
         Convergence threshold on ``max|grad| / max(1, |value|)``.
     include_intervals : bool
         Also compute :func:`constrained_standard_errors` at the fit. Off by
@@ -185,7 +185,7 @@ def fit(
             relative_gradient_norm=gradient_norm,
             wall_s=time.perf_counter() - started,
         )
-        if gradient_norm <= gradient_tolerance:
+        if gradient_norm <= tolerance:
             converged = True
             break
 
@@ -445,15 +445,15 @@ class MultiStartResult:
 
 def _fit_start(task: tuple[Objective, torch.Tensor, int, float]) -> FitResult:
     """One start of a multi-start fit, importable so a process pool can run it."""
-    objective, theta0, max_iterations, gradient_tolerance = task
-    return fit(objective, theta0, max_iterations, gradient_tolerance)
+    objective, theta0, max_iterations, tolerance = task
+    return fit(objective, theta0, max_iterations, tolerance)
 
 
 def fit_from(
     objective: Objective,
     initializer: Initializer,
     max_iterations: int = 500,
-    gradient_tolerance: float = 1e-8,
+    tolerance: float = 1e-8,
     *,
     workers: int,
     include_intervals: bool = False,
@@ -471,7 +471,7 @@ def fit_from(
         Where to start. See `sal.opt.initialize`.
     max_iterations : int
         Passed to each fit.
-    gradient_tolerance : float
+    tolerance : float
         Passed to each fit.
     workers : int
         Starts fitted at once, through :func:`sal.parallel.map_tasks`
@@ -504,7 +504,7 @@ def fit_from(
 
     results = map_tasks(
         _fit_start,
-        [(objective, theta0, max_iterations, gradient_tolerance) for theta0 in starts],
+        [(objective, theta0, max_iterations, tolerance) for theta0 in starts],
         workers=workers,
         pool=_MULTI_START_POOL,
         intra_op_threads=_MULTI_START_INTRA_OP_THREADS,

@@ -43,7 +43,7 @@ def test_floored_descent_benchmark(
             rung.graph,
             rung.field,
             np.random.default_rng(0),
-            max_sweeps=MAX_SWEEPS,
+            max_iterations=MAX_SWEEPS,
             min_sites=MIN_SITES,
             backend=backend,
             n_states=rung.n_states,

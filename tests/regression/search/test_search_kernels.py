@@ -114,7 +114,7 @@ def _descend(
     graph: PottsGraph,
     values: np.ndarray,
     labelling: np.ndarray,
-    max_sweeps: int,
+    max_iterations: int,
 ) -> tuple[np.ndarray, int, int]:
     """Both forms of the kernel on one start; the labelling and both sweep counts."""
     offsets, neighbours, couplings = graph.compressed_adjacency()
@@ -126,7 +126,7 @@ def _descend(
     unfloored = (
         np.empty((0, labelling.size), dtype=np.int64),
         np.empty(0, dtype=np.float64),
-        max_sweeps,
+        max_iterations,
         True,
         0,
     )
@@ -202,7 +202,7 @@ def test_every_descent_the_kernel_settles_on_is_a_certified_local_minimum() -> N
 def test_the_descent_kernel_reproduces_a_sweep_stepped_by_hand() -> None:
     # J = 0.5, h = [[0.0, 0.3], [0.2, 0.0]], start [0, 1]: site 0 takes 1
     # (0.0 against -0.8), site 1 keeps 1 (-0.2 against -0.5); [1, 1] at 2
-    # sweeps, bitwise; `max_sweeps = 1` returns the first sweep and 1.
+    # sweeps, bitwise; `max_iterations = 1` returns the first sweep and 1.
     graph = lattice_graph((2,), BoundaryCondition.OPEN, 0.5)
     values = np.array([[0.0, 0.3], [0.2, 0.0]])
 

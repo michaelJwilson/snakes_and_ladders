@@ -175,7 +175,7 @@ def test_at_convergence_the_bound_is_dual_bounds_pairwise_value() -> None:
 
     def check(name: str, graph: PottsGraph, field: np.ndarray, _n_states: int) -> None:
         result = trws(graph, field)
-        reference = dual_bound(graph, field, iterations=5000)
+        reference = dual_bound(graph, field, max_iterations=5000)
 
         assert result.termination.converged, name
         assert reference.termination is not None
@@ -198,7 +198,7 @@ def test_on_two_frustrated_instances_both_ascents_stop_short_of_each_other() -> 
     # above both, so neither is the LP value there. Both stay bounds.
     def check(name: str, graph: PottsGraph, field: np.ndarray, n_states: int) -> None:
         result = trws(graph, field)
-        reference = dual_bound(graph, field, iterations=5000)
+        reference = dual_bound(graph, field, max_iterations=5000)
 
         assert result.termination.converged, name
         assert result.bound < reference.bound - 1e-3, name
@@ -419,12 +419,12 @@ def test_each_kernel_shape_error_names_wanted_and_given(
 
 @pytest.mark.smoke
 def test_every_bound_refuses_a_cap_below_one_alike() -> None:
-    # Issue #1089: `dual_bound(iterations=0)` returned a bound of -inf where
+    # Issue #1089: `dual_bound(max_iterations=0)` returned a bound of -inf where
     # TRW-S refused; both refuse through `check_cap`.
     field = np.zeros(3)
     for call in (
         lambda: trws(TREE, field, max_iterations=0),
-        lambda: dual_bound(TREE, field, iterations=0, plaquettes=()),
+        lambda: dual_bound(TREE, field, max_iterations=0, plaquettes=()),
     ):
         with pytest.raises(ValueError, match="a loop's cap and must be at least 1"):
             call()

@@ -732,7 +732,7 @@ class SimulatedPottsDataset:
 
 def simulate_potts(
     graph: PottsGraph,
-    field: np.ndarray,
+    field: SiteField | np.ndarray,
     rng: np.random.Generator,
     n_samples: int,
     burn_in: int = 500,
@@ -743,7 +743,7 @@ def simulate_potts(
     ----------
     graph : PottsGraph
         The graph to sample on.
-    field : np.ndarray
+    field : SiteField | np.ndarray
         External field ``h``, shape ``(n_states,)`` or ``(n_nodes, n_states)``.
     rng : np.random.Generator
         Passed in rather than seeded here, so a caller drawing an *ensemble*
@@ -761,6 +761,7 @@ def simulate_potts(
     SimulatedPottsDataset
         The configurations, the graph, and the generating truth.
     """
+    field = log_weight_of(field)
     rows = site_field(field, graph.n_nodes)
     if graph.is_open_chain():
         configurations = _simulate_open_chain_exact(graph, rows, rng, n_samples)

@@ -516,7 +516,7 @@ def polish_by_icm(
             rung.field,
             floor_draws,
             start=labelling,
-            max_sweeps=1,
+            max_iterations=1,
             min_sites=min_sites,
             n_states=rung.n_states,
         )
