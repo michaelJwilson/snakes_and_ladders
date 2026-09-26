@@ -36,6 +36,7 @@ nine sites, and the dual bound's certificate where neither reaches.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -84,7 +85,7 @@ class BifurcationResult:
     energy: float
     steps: int
     n_replicas: int
-    termination: Termination | None = None
+    termination: Termination = dataclass_field(kw_only=True)
 
 
 def _coupling_scale(graph: PottsGraph, rows: np.ndarray) -> float:

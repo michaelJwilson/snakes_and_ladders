@@ -34,6 +34,7 @@ zero it is an honest interval, reported and never assumed small.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 
 import numpy as np
 
@@ -78,7 +79,7 @@ class Certificate:
     energy: float
     bound: float
     iterations: int
-    termination: Termination | None = None
+    termination: Termination = dataclass_field(kw_only=True)
 
     @property
     def gap(self) -> float:

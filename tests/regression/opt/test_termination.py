@@ -9,10 +9,13 @@ the science is refereed in `test_opt_fit.py`, `test_opt_mixture.py`,
 
 from __future__ import annotations
 
+import ast
 from dataclasses import replace
+from pathlib import Path
 
 import numpy as np
 import pytest
+import sal
 import torch
 from sal.cost import Cost
 from sal.emissions import GaussianEmission
@@ -161,3 +164,25 @@ def test_a_termination_that_contradicts_itself_is_refused() -> None:
         Termination(converged=False, iterations=3, reason=Stop.CONVERGED)
     with pytest.raises(ValueError, match="at least no iterations"):
         Termination(converged=True, iterations=-1, reason=Stop.CONVERGED)
+
+
+@pytest.mark.critical
+@pytest.mark.infra
+def test_every_result_with_a_termination_requires_one() -> None:
+    # Issue #1085: a `termination` field is required on every result that has
+    # one, so a caller handles one case and not three. Read from the source,
+    # so a new result declaring `Termination | None` fails here.
+    package = Path(sal.__file__).resolve().parent
+    optional = []
+    for path in sorted(package.rglob("*.py")):
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.AnnAssign)
+                and isinstance(node.target, ast.Name)
+                and node.target.id == "termination"
+                and "None" in ast.unparse(node.annotation)
+            ):
+                optional.append(f"{path.relative_to(package)}:{node.lineno}")
+
+    assert optional == []

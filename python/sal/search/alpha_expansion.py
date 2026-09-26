@@ -36,6 +36,7 @@ from __future__ import annotations
 import warnings
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from typing import Any, NamedTuple
 
 import numpy as np
@@ -93,7 +94,7 @@ class Labelling:
     labelling: np.ndarray
     energy: float
     sweeps: int = 0
-    termination: Termination | None = None
+    termination: Termination = dataclass_field(kw_only=True)
 
     def __iter__(self) -> Iterator[Any]:
         """``(labelling, energy, sweeps, termination)``: the declared order (#865).
@@ -134,7 +135,7 @@ class ExpansionResult:
     energy: float
     cycles: int
     moves: int
-    termination: Termination | None = None
+    termination: Termination = dataclass_field(kw_only=True)
 
 
 class _Arcs(NamedTuple):
@@ -233,6 +234,10 @@ class _Carried(NamedTuple):
     energy: float
 
 
+#: One binary move by one minimum cut: a single iteration, run to completion.
+_ONE_MOVE = Termination.after(1, converged=True)
+
+
 def _lowest_by_cut(
     graph: PottsGraph,
     field: np.ndarray,
@@ -253,7 +258,7 @@ def _lowest_by_cut(
     built = build(values)
     current = energy(graph, values, labelling) if held is None else held
     if built is None:
-        return Labelling(labelling, current)
+        return Labelling(labelling, current, termination=_ONE_MOVE)
 
     proposed = built.place(built.source_side())
 
@@ -262,8 +267,8 @@ def _lowest_by_cut(
     # (issue #997). The cycle re-scores its result in full once.
     candidate = current + _energy_change(graph, values, labelling, proposed)
     if candidate < current:
-        return Labelling(proposed, candidate)
-    return Labelling(labelling, current)
+        return Labelling(proposed, candidate, termination=_ONE_MOVE)
+    return Labelling(labelling, current, termination=_ONE_MOVE)
 
 
 def _energy_change(
