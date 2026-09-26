@@ -62,8 +62,9 @@ from __future__ import annotations
 
 import functools
 import operator
+import re
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
@@ -1116,6 +1117,17 @@ class ExpansionReserve:
         return self.cycles * problem.n_states * problem.visits_per_sweep
 
 
+@dataclass(frozen=True)
+class SweepReserve:
+    """Site visits of ``sweeps`` heat-bath sweeps on a problem: a reserve in sweeps."""
+
+    sweeps: int
+
+    def __call__(self, problem: Problem | Rung) -> int:
+        """``sweeps`` times ``visits_per_sweep``."""
+        return self.sweeps * problem.visits_per_sweep
+
+
 #: The names that are a single-site descent, and so take its ``backend`` and
 #: ``min_sites`` floor (issue #1055). The annealers, the cuts and the hybrids
 #: have no floor of their own and refuse one.
@@ -1204,15 +1216,118 @@ def chain(*parts: str | Step) -> Then:
     )
 
 
-def compose(method: str) -> Then:
-    """:func:`chain` over a name ``a>b>...``, each part a :data:`METHODS`, :data:`ARMS` or :data:`STAGES` name.
+#: One part of a chain's name: a solver's name and, in parentheses, its
+#: arguments as ``key=value`` pairs separated by commas.
+_PART = re.compile(r"^\s*([A-Za-z0-9_\-]+)\s*(?:\((.*)\))?\s*$")
+
+#: The arguments that set fields of an annealed part's schedule, whose
+#: other fields are :data:`ANNEAL_SCHEDULE`'s.
+SCHEDULE_FIELDS: dict[str, Callable[[str], Any]] = {
+    "shape": ScheduleShape,
+    "t_start": float,
+    "t_end": float,
+    "hold": float,
+}
+
+
+def _split(method: str) -> list[str]:
+    """``method`` split at each :data:`CHAIN` outside parentheses."""
+    parts: list[str] = []
+    depth, begun = 0, 0
+    for index, character in enumerate(method):
+        depth += {"(": 1, ")": -1}.get(character, 0)
+        if character == CHAIN and depth == 0:
+            parts.append(method[begun:index])
+            begun = index + 1
+    parts.append(method[begun:])
+    return parts
+
+
+def _refuse_argument(name: str, keys: Iterable[str], reason: str) -> None:
+    """Raise for arguments a part cannot take."""
+    msg = f"{name!r} takes no {sorted(keys)!r}: {reason}"
+    raise ValueError(msg)
+
+
+def rendered(text: str) -> Step:
+    """One part read from its name and arguments, e.g. ``swendsen-wang(t_start=1.0,steps=40)`` (issue #1077).
+
+    The arguments are ``shape``, ``t_start``, ``t_end`` and ``hold``, which
+    replace those fields of :data:`ANNEAL_SCHEDULE`, and ``steps``, on an
+    annealed part; ``backend`` and ``min_sites`` on a single-site descent;
+    and ``reserve_cycles`` (expansion cycles) or ``reserve_sweeps`` on any
+    part, held back for the parts after it. An :data:`ARMS` name is a
+    chain already and takes none. A keyword passed at call time replaces
+    the one an argument bound.
 
     Raises
     ------
     ValueError
-        If a part is in no table, or the name has one part.
+        If the text is not a name with arguments, the name is in no table,
+        or an argument is unknown, malformed or not the part's.
     """
-    return chain(*method.split(CHAIN))
+    match = _PART.match(text)
+    if match is None:
+        msg = f"a part is a name and optional (key=value, ...), got {text!r}"
+        raise ValueError(msg)
+    name, body = match.groups()
+    _solver(name)
+    if not body or not body.strip():
+        return part(name)
+    arguments: dict[str, str] = {}
+    for item in body.split(","):
+        key, equals, value = item.partition("=")
+        if not equals or not key.strip() or not value.strip():
+            msg = f"an argument is key=value, got {item.strip()!r} in {text!r}"
+            raise ValueError(msg)
+        arguments[key.strip()] = value.strip()
+    if name in ARMS:
+        _refuse_argument(name, arguments, "an arm is a chain already")
+    takes = _options(name)
+    bound: dict[str, Any] = {}
+    fields = {key: arguments.pop(key) for key in SCHEDULE_FIELDS if key in arguments}
+    annealing = {key for key in ("steps",) if key in arguments} | set(fields)
+    if annealing and not takes & ANNEAL_OPTIONS:
+        _refuse_argument(name, annealing, "it runs no anneal")
+    if fields:
+        bound["schedule"] = replace(
+            ANNEAL_SCHEDULE,
+            **{key: SCHEDULE_FIELDS[key](value) for key, value in fields.items()},
+        )
+    if "steps" in arguments:
+        bound["steps"] = int(arguments.pop("steps"))
+    descending = {key for key in ("backend", "min_sites") if key in arguments}
+    if descending and not takes & DESCENT_OPTIONS:
+        _refuse_argument(name, descending, "it is no single-site descent")
+    if "backend" in arguments:
+        bound["backend"] = Backend(arguments.pop("backend"))
+    if "min_sites" in arguments:
+        bound["min_sites"] = int(arguments.pop("min_sites"))
+    reserve: Callable[[Any], int] | None = None
+    if "reserve_cycles" in arguments and "reserve_sweeps" in arguments:
+        _refuse_argument(name, arguments, "one reserve, in cycles or in sweeps")
+    if "reserve_cycles" in arguments:
+        reserve = ExpansionReserve(int(arguments.pop("reserve_cycles")))
+    if "reserve_sweeps" in arguments:
+        reserve = SweepReserve(int(arguments.pop("reserve_sweeps")))
+    if arguments:
+        _refuse_argument(name, arguments, "unknown arguments")
+    return part(name, reserve=reserve, **bound)
+
+
+def compose(method: str) -> Then:
+    """:func:`chain` over a name ``a>b(...)>...``, each part read by :func:`rendered` (issue #1077).
+
+    Any chain of :data:`METHODS`, :data:`ARMS` and :data:`STAGES` parts, each
+    with its own arguments, is built from its text when it is called for; the
+    table entries are names for some of them, not the limit of what runs.
+
+    Raises
+    ------
+    ValueError
+        If a part cannot be read, or the name has one part.
+    """
+    return chain(*(rendered(text) for text in _split(method)))
 
 
 # The arms' constants are issue #1038's results, copied from
@@ -1272,7 +1387,7 @@ ANNEALED = _ANNEALED_METHODS | frozenset(ARMS)
 def ground_state(
     graph: PottsGraph,
     field: np.ndarray,
-    method: str,
+    method: str | Then,
     budget: Budget,
     rng: np.random.Generator,
     *,
@@ -1305,10 +1420,12 @@ def ground_state(
         The lattice; every coupling non-negative.
     field : np.ndarray
         ``h``, shape ``(n_nodes, n_states)``.
-    method : str
-        A key of :data:`METHODS` or :data:`ARMS`, or a chain of those and
-        :data:`STAGES` joined by ``>``, :func:`compose`'s; a key is read as
-        itself before it is read as a chain.
+    method : str | Then
+        A key of :data:`METHODS` or :data:`ARMS`; a part with arguments or a
+        chain of parts joined by ``>``, read by :func:`compose`, e.g.
+        ``swendsen-wang(t_start=1.0,reserve_cycles=10)>alpha-expansion``; or a
+        chain built by :func:`chain`. A key is read as itself before it is
+        read as a chain.
     budget : Budget
         In :attr:`~sal.cost.Cost.SITE_VISITS`, the unit every
         entry is charged in.
@@ -1345,17 +1462,22 @@ def ground_state(
         ``min_sites > 0`` to one outside :data:`FLOORED`.
     """
     solvers = METHODS | ARMS
-    if method in solvers:
-        solver: Method = solvers[method]
-        takes = _options(method)
+    solver: Callable[..., MethodRun]
+    if isinstance(method, Then):
+        solver, takes = method, method.takes
+    elif method in solvers:
+        solver, takes = solvers[method], _options(method)
     elif CHAIN in method:
-        solver = chain = compose(method)
-        takes = chain.takes
+        composed = compose(method)
+        solver, takes = composed, composed.takes
+    elif "(" in method:
+        one = rendered(method)
+        solver, takes = one.stage, one.takes
     else:
         msg = (
             f"no ground-state method {method!r}; the methods are {sorted(METHODS)} "
             f"and the arms {sorted(ARMS)}, or a chain of those and "
-            f"{sorted(STAGES)} joined by {CHAIN!r}"
+            f"{sorted(STAGES)} joined by {CHAIN!r}, each with its arguments"
         )
         raise ValueError(msg)
     values = np.asarray(field, dtype=np.float64)

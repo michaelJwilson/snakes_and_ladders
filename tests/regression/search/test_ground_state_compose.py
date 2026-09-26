@@ -16,10 +16,15 @@ import numpy as np
 import pytest
 from sal.cost import Cost
 from sal.opt.budget import Budget
+from sal.sample.schedule import ScheduleParams
 from sal.search.ground_state import (
     ANNEAL_SCHEDULE,
     ARMS,
+    EXPANSION_RESERVE_CYCLES,
     EXPANSION_SW_SCHEDULE,
+    SWENDSEN_WANG_SCHEDULE,
+    WARM_SCHEDULE,
+    MethodRun,
     Rung,
     chain,
     ground_state,
@@ -27,6 +32,7 @@ from sal.search.ground_state import (
     run_alpha_expansion,
     run_descent,
     run_field_argmax,
+    run_swendsen_wang,
 )
 from sal.search.potts_starts import spatio_rung
 from sal.sim.fixtures import fixture
@@ -142,3 +148,103 @@ def test_a_keyword_at_call_time_replaces_the_one_a_part_bound() -> None:
 
     assert np.array_equal(replaced.labelling, built.labelling)
     assert (replaced.energy, replaced.spent) == (built.energy, built.spent)
+
+
+def _text(schedule: ScheduleParams) -> str:
+    """A schedule as :func:`~sal.search.ground_state.rendered` reads it."""
+    return (
+        f"shape={schedule.shape.value},t_start={schedule.t_start!r},"
+        f"t_end={schedule.t_end!r},hold={schedule.hold!r}"
+    )
+
+
+def _same(first: MethodRun, second: MethodRun) -> None:
+    assert np.array_equal(first.labelling, second.labelling)
+    assert (first.energy, first.spent) == (second.energy, second.spent)
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize(
+    ("arm", "text"),
+    [
+        (
+            "swendsen-wang>expansion",
+            f"swendsen-wang({_text(SWENDSEN_WANG_SCHEDULE)},"
+            f"reserve_cycles={EXPANSION_RESERVE_CYCLES})>alpha-expansion",
+        ),
+        (
+            "expansion>swendsen-wang",
+            f"alpha-expansion>swendsen-wang({_text(EXPANSION_SW_SCHEDULE)})",
+        ),
+        ("warm-anneal", f"descent>swendsen-wang({_text(WARM_SCHEDULE)})"),
+    ],
+)
+def test_an_arm_written_as_text_is_the_arm(arm: str, text: str) -> None:
+    # The table's chains are names for text the factory reads on the fly:
+    # each spelled with its schedule and reserve is the entry, bitwise.
+    rung = _rung()
+    budget = _budget(rung)
+    for seed in SEEDS:
+        rendered = ground_state(
+            rung.graph, rung.field, text, budget, np.random.default_rng(seed)
+        )
+        _same(rendered, ARMS[arm](rung, budget, np.random.default_rng(seed)))
+
+
+@pytest.mark.oracle
+def test_a_part_with_arguments_and_a_chain_in_no_table_run_on_the_fly() -> None:
+    # One part with a step count is the method called with it; a chain no
+    # table names, built in code or read from text, is charged within the
+    # budget and returns a labelling whose energy it reports.
+    rung = _rung()
+    budget = _budget(rung)
+    one = ground_state(
+        rung.graph,
+        rung.field,
+        "swendsen-wang(steps=7)",
+        budget,
+        np.random.default_rng(2),
+    )
+    _same(one, run_swendsen_wang(rung, budget, np.random.default_rng(2), steps=7))
+
+    text = "field_argmax>descent>wolff(t_start=2.0,steps=30)>alpha-beta-swap"
+    built = chain(
+        "field_argmax",
+        "descent",
+        part(
+            "wolff",
+            schedule=ScheduleParams(ANNEAL_SCHEDULE.shape, 2.0, ANNEAL_SCHEDULE.t_end),
+            steps=30,
+        ),
+        "alpha-beta-swap",
+    )
+    read = ground_state(rung.graph, rung.field, text, budget, np.random.default_rng(3))
+    handed = ground_state(
+        rung.graph, rung.field, built, budget, np.random.default_rng(3)
+    )
+
+    _same(read, handed)
+    assert read.spent <= budget.size
+    assert read.energy == energy(rung.graph, rung.field, read.labelling)
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize(
+    ("text", "match"),
+    [
+        ("alpha-expansion(steps=3)", "runs no anneal"),
+        ("icm(t_start=1.0)>alpha-expansion", "runs no anneal"),
+        ("alpha-expansion(min_sites=2)", "no single-site descent"),
+        ("warm-anneal(steps=3)>alpha-expansion", "an arm is a chain already"),
+        ("swendsen-wang(bogus=1)", "unknown arguments"),
+        ("swendsen-wang(steps)", "key=value"),
+        ("swendsen-wang(reserve_cycles=1,reserve_sweeps=1)>icm", "one reserve"),
+        ("nothing(steps=3)", "no ground-state part"),
+    ],
+)
+def test_an_argument_a_part_cannot_take_is_refused(text: str, match: str) -> None:
+    rung = _rung()
+    with pytest.raises(ValueError, match=match):
+        ground_state(
+            rung.graph, rung.field, text, _budget(rung), np.random.default_rng(0)
+        )
