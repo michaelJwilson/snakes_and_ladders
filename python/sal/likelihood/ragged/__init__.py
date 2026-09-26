@@ -66,6 +66,7 @@ def posteriors(
     log_initial: np.ndarray,
     log_transition: np.ndarray,
     *,
+    switch: np.ndarray | None = None,
     backend: Backend = Backend.RUST,
 ) -> Posteriors:
     """Marginals, transition counts and per-segment evidence, by default in Rust.
@@ -78,6 +79,14 @@ def posteriors(
         ``(n_states,)``, the distribution each segment restarts at.
     log_transition : np.ndarray
         ``(n_states, n_states)`` in log space.
+    switch : np.ndarray | None
+        One probability ``s`` in ``[0, 1]`` per position, or ``None`` for
+        ``log_transition`` at every step (issue #1082). The step into
+        position ``t`` then takes ``(1 - s[t]) I + s[t] A``, ``A`` the
+        transition: the chain stays with probability ``1 - s[t]`` and
+        otherwise moves by ``A``. The kernel builds each step's transition
+        from the one ``A`` rather than a ``(T, K, K)`` stack, and a
+        segment's first entry is never read.
     backend : Backend
         Which implementation runs it. ``RUST`` is the compiled kernel,
         :func:`sal.likelihood.ragged.rust.posteriors`, and is the default;
@@ -102,29 +111,43 @@ def posteriors(
     """
     if (rust := twin("ragged posteriors", backend, __name__)) is not None:
         return cast(
-            "Posteriors", rust.posteriors(log_density, log_initial, log_transition)
+            "Posteriors",
+            rust.posteriors(log_density, log_initial, log_transition, switch),
         )
-    return posteriors_oracle(log_density, log_initial, log_transition)
+    return posteriors_oracle(log_density, log_initial, log_transition, switch)
 
 
 def posteriors_oracle(
     log_density: Ragged,
     log_initial: np.ndarray,
     log_transition: np.ndarray,
+    switch: np.ndarray | None = None,
 ) -> Posteriors:
     """The same, one segment at a time through `forward_backward`.
 
     The oracle the compiled path is pinned against: it reuses the per-chain
     recursion this repository already refereed rather than writing a second
-    batched one, so what it adds is only the segmentation.
+    batched one, so what it adds is only the segmentation. With ``switch``
+    it materializes each segment's ``(T - 1, K, K)`` stack of
+    ``log((1 - s) I + s A)``, the storage the kernel avoids, and hands it to
+    `forward_backward`'s per-step form.
     """
     gamma = np.empty_like(log_density.values)
     n_states = log_density.values.shape[1]
     counts = np.full((n_states, n_states), -np.inf)
     evidence = np.empty(log_density.n_segments)
     at = 0
+    if switch is not None:
+        switch = np.asarray(switch, dtype=float).reshape(-1)
+        stay = np.eye(n_states)
+        moved = np.exp(np.asarray(log_transition, dtype=float))
     for index, segment in enumerate(log_density.segments()):
-        run = forward_backward(segment, log_initial, log_transition)
+        kernel = np.asarray(log_transition, dtype=float)
+        if switch is not None:
+            steps = switch[at + 1 : at + len(segment), None, None]
+            with np.errstate(divide="ignore"):
+                kernel = np.log((1.0 - steps) * stay + steps * moved)
+        run = forward_backward(segment, log_initial, kernel)
         # `forward_backward` returns probabilities; this returns logs, which
         # is what the accumulator below needs and what the compiled kernel
         # carries. Converting here keeps the comparison in one space.
