@@ -191,7 +191,7 @@ def _log_total(terms: np.ndarray, axis: int) -> np.ndarray:
 
 def site_log_likelihood_extremes(
     tau: Node,
-    k: int,
+    n_states: int,
     pi: npt.ArrayLike,
     branch_lengths: npt.ArrayLike,
     *,
@@ -208,7 +208,7 @@ def site_log_likelihood_extremes(
     ----------
     tau : Node
         Root of the topology. Its own ``branch_length`` fields are ignored.
-    k : int
+    n_states : int
         Number of states.
     pi : npt.ArrayLike
         Root state distribution, shape ``(k,)``.
@@ -241,14 +241,14 @@ def site_log_likelihood_extremes(
 
     lengths = np.asarray(branch_lengths, dtype=np.float64)
     pi_values = np.asarray(pi, dtype=np.float64)
-    check_pi_shape(pi_values.shape, k)
+    check_pi_shape(pi_values.shape, n_states)
     order = branch_order(tau)
     check_branch_lengths_shape(lengths.shape, len(order))
     index = {name: position for position, name in enumerate(order)}
     # `P(t)` is the model's definition and lives with the tensors the fits
     # differentiate; it crosses here once, and everything after is NumPy.
     transitions = transition_probabilities(
-        torch.from_numpy(lengths), k, _rate_tensor(rate_matrix)
+        torch.from_numpy(lengths), n_states, _rate_tensor(rate_matrix)
     ).numpy()
     with np.errstate(divide="ignore"):
         log_transitions = np.log(transitions)
@@ -270,8 +270,8 @@ def site_log_likelihood_extremes(
 
     def _partial(node: Node) -> tuple[np.ndarray, np.ndarray]:
         """Bounds on ``log L_node(s)``, shape ``(k,)`` each."""
-        lower = np.zeros(k)
-        upper = np.zeros(k)
+        lower = np.zeros(n_states)
+        upper = np.zeros(n_states)
         for child in node.children:
             child_lower, child_upper = message(child)
             lower = lower + child_lower
@@ -314,7 +314,7 @@ def _partition(columns: np.ndarray, block_size: int) -> tuple[np.ndarray, np.nda
 
 def block_frequency_interval(
     tau: Node,
-    k: int,
+    n_states: int,
     pi: npt.ArrayLike,
     alignment: Mapping[str, np.ndarray],
     branch_lengths: npt.ArrayLike,
@@ -329,7 +329,7 @@ def block_frequency_interval(
     ----------
     tau : Node
         Root of the topology. Its own ``branch_length`` fields are ignored.
-    k : int
+    n_states : int
         Number of states.
     pi : npt.ArrayLike
         Root state distribution, shape ``(k,)``.
@@ -423,7 +423,7 @@ def block_frequency_interval(
         exact = float(
             log_likelihood(
                 tau,
-                k,
+                n_states,
                 np.asarray(pi, dtype=np.float64),
                 patterns.alignment,
                 torch.from_numpy(lengths),
@@ -440,7 +440,7 @@ def block_frequency_interval(
 
     bounded_sites = n_sites - exact_sites
     extremes = site_log_likelihood_extremes(
-        tau, k, pi, lengths, rate_matrix=rate_matrix
+        tau, n_states, pi, lengths, rate_matrix=rate_matrix
     )
     return Interval(
         lower=exact + bounded_sites * extremes.lower,
@@ -487,7 +487,7 @@ class BlockFrequencyBound(Surrogate):
 
     Parameters
     ----------
-    k : int
+    n_states : int
         Number of states.
     pi : np.ndarray
         Root state distribution, shape ``(k,)``.
@@ -505,7 +505,7 @@ class BlockFrequencyBound(Surrogate):
 
     def __init__(
         self,
-        k: int,
+        n_states: int,
         pi: np.ndarray,
         *,
         block_size: int,
@@ -515,7 +515,7 @@ class BlockFrequencyBound(Surrogate):
         if claim not in (Bound.LOWER, Bound.UPPER, Bound.POINT):
             msg = f"claim must be a Bound, got {claim}"
             raise ValueError(msg)
-        self.k = k
+        self.n_states = n_states
         self.pi = np.asarray(pi, dtype=float)
         self.block_size = block_size
         self.min_count = min_count
@@ -530,7 +530,7 @@ class BlockFrequencyBound(Surrogate):
         self, topology: Topology, alignment: Mapping[str, np.ndarray]
     ) -> np.ndarray:
         """The feasible branch lengths the interval is evaluated at."""
-        return least_squares_lengths(topology, jc_distances(alignment, self.k))
+        return least_squares_lengths(topology, jc_distances(alignment, self.n_states))
 
     def interval(
         self, topology: Topology, alignment: Mapping[str, np.ndarray]
@@ -538,7 +538,7 @@ class BlockFrequencyBound(Surrogate):
         """The whole interval, and what it cost, at :meth:`lengths`."""
         return block_frequency_interval(
             topology,
-            self.k,
+            self.n_states,
             self.pi,
             alignment,
             self.lengths(topology, alignment),

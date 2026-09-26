@@ -120,7 +120,7 @@ class HmmEnvironment(Environment[Path, Revision]):
         """Positions in the path."""
         return self._length
 
-    def energy(self, state: Path) -> float:
+    def log_weight(self, state: Path) -> float:
         """Joint log-probability of the path and the observed sequence.
 
         ``log pi[s_0] + sum_t log A[s_{t-1}, s_t] + sum_t log B[s_t, o_t]``.
@@ -159,7 +159,7 @@ class HmmEnvironment(Environment[Path, Revision]):
 
         The reward is the change in joint log-probability, computed from the
         at most two transitions and the one emission the change touches
-        rather than by re-evaluating :meth:`energy`. A test pins the two
+        rather than by re-evaluating :meth:`log_weight`. A test pins the two
         against each other, because an ``O(1)`` update that disagrees with a
         full evaluation is the failure this class is most exposed to.
         """
@@ -258,5 +258,5 @@ def optimum(environment: HmmEnvironment) -> tuple[Path, float]:
         the lexicographically first, so the answer is deterministic.
     """
     return enumerated_optimum(
-        environment.n_states, environment.length, environment.energy
+        environment.n_states, environment.length, environment.log_weight
     )

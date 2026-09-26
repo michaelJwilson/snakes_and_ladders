@@ -48,12 +48,12 @@ def _check_lengths(alignment: Mapping[str, np.ndarray]) -> int:
     return lengths.pop() if lengths else 0
 
 
-def unit_step_matrix(k: int) -> np.ndarray:
+def unit_step_matrix(n_states: int) -> np.ndarray:
     """The step matrix under which :func:`sankoff_score` is :func:`fitch_score`.
 
     Parameters
     ----------
-    k : int
+    n_states : int
         Number of states.
 
     Returns
@@ -61,10 +61,10 @@ def unit_step_matrix(k: int) -> np.ndarray:
     np.ndarray
         Shape ``(k, k)``: 1 off the diagonal, 0 on it.
     """
-    return np.ones((k, k)) - np.eye(k)
+    return np.ones((n_states, n_states)) - np.eye(n_states)
 
 
-def fitch_score(tau: Node, alignment: Mapping[str, np.ndarray], k: int) -> int:
+def fitch_score(tau: Node, alignment: Mapping[str, np.ndarray], n_states: int) -> int:
     """Fewest state changes on ``tau`` explaining ``alignment``, summed over sites (``eq:fitch``).
 
     One post-order pass. Each node carries the set of states achievable at it
@@ -84,7 +84,7 @@ def fitch_score(tau: Node, alignment: Mapping[str, np.ndarray], k: int) -> int:
     alignment : Mapping[str, np.ndarray]
         Leaf name to integer states, shape ``(n_sites,)``, values in
         ``[0, k)``.
-    k : int
+    n_states : int
         Number of states, ``<= 63`` so a mask fits in a signed 64-bit integer.
 
     Returns
@@ -96,12 +96,12 @@ def fitch_score(tau: Node, alignment: Mapping[str, np.ndarray], k: int) -> int:
     ------
     ValueError
         If a leaf of ``tau`` is missing from ``alignment``, if the sequences
-        differ in length, or if ``k`` exceeds what a bitmask holds. A missing
+        differ in length, or if ``n_states`` exceeds what a bitmask holds. A missing
         leaf would score a strict subtree, returning a number smaller for the
         wrong reason.
     """
-    if not 2 <= k <= 63:
-        msg = f"k must be in [2, 63] to fit a bitmask, got {k}"
+    if not 2 <= n_states <= 63:
+        msg = f"k must be in [2, 63] to fit a bitmask, got {n_states}"
         raise ValueError(msg)
 
     _check_lengths(alignment)
@@ -209,7 +209,7 @@ def sankoff_score(
 
 
 def brute_force_parsimony_score(
-    tau: Node, alignment: Mapping[str, np.ndarray], k: int
+    tau: Node, alignment: Mapping[str, np.ndarray], n_states: int
 ) -> int:
     """The same score, by enumerating every internal-node labelling.
 
@@ -242,7 +242,7 @@ def brute_force_parsimony_score(
     position = {name: index for index, name in enumerate(internal)}
     edge_list = [(parent.name, child.name) for parent, child in edges(tau)]
     n_sites = int(next(iter(alignment.values())).shape[0])
-    labellings = list(itertools.product(range(k), repeat=len(internal)))
+    labellings = list(itertools.product(range(n_states), repeat=len(internal)))
 
     total = 0
     for site in range(n_sites):

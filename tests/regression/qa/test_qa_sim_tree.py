@@ -89,7 +89,9 @@ def test_every_leaf_gets_its_own_sequence_aligned_to_its_row() -> None:
         params, np.random.default_rng(params.seed), n_sites=SITES_SHOWN
     )
     _, ax = plt.subplots()
-    layout = render_sim_tree(params.tau, ax, alignment=dataset.alignment, k=params.k)
+    layout = render_sim_tree(
+        params.tau, ax, alignment=dataset.alignment, n_states=params.n_states
+    )
 
     drawn = {
         text.get_text(): text.get_position()[1]
@@ -102,7 +104,7 @@ def test_every_leaf_gets_its_own_sequence_aligned_to_its_row() -> None:
     assert len(drawn) == len(leaves)
     for leaf in leaves:
         expected = "".join(
-            state_label(int(state), params.k)
+            state_label(int(state), params.n_states)
             for state in dataset.alignment[leaf][:SITES_SHOWN]
         )
         assert expected in drawn

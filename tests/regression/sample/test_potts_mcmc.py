@@ -1120,7 +1120,9 @@ def test_annealing_reaches_the_closed_form_ground_energy_where_descent_does_not(
         for seed in range(20)
     ]
     descended = [
-        iterated_conditional_modes(graph, field, 2, np.random.default_rng(seed)).energy
+        iterated_conditional_modes(
+            graph, field, np.random.default_rng(seed), n_states=2
+        ).energy
         for seed in range(20)
     ]
 
@@ -1311,7 +1313,7 @@ def test_tempering_and_annealing_beat_restarts_at_equal_budget_on_the_glass() ->
         instance: PlantedSpinGlass, budget: Budget, rng: np.random.Generator
     ) -> Outcome:
         energy = iterated_conditional_modes(
-            instance.graph, np.zeros(2), 2, rng, max_sweeps=budget.size
+            instance.graph, np.zeros(2), rng, max_iterations=budget.size, n_states=2
         ).energy
         return Outcome(energy, budget.size)
 

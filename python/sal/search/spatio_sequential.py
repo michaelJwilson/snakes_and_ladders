@@ -260,7 +260,9 @@ def label_step(
     potential = -field
     if solver is LabelSolver.ALPHA_EXPANSION:
         return np.asarray(
-            alpha_expansion(graph, potential, params.n_classes, start=labels).labelling
+            alpha_expansion(
+                graph, potential, start=labels, n_states=params.n_classes
+            ).labelling
         )
     if solver is LabelSolver.ICM:
         # The sweep `search.icm` runs, started from `labels` in a random site
@@ -273,12 +275,12 @@ def label_step(
         return iterated_conditional_modes(
             graph,
             potential,
-            params.n_classes,
             rng,
             start=labels,
             sweep_order=SweepOrder.RANDOM,
             min_sites=min_sites,
             backend=Backend.PYTHON,
+            n_states=params.n_classes,
         ).labelling
     if wolff_schedule is None:
         msg = "the Wolff solver needs a schedule"

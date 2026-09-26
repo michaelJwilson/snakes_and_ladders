@@ -68,7 +68,7 @@ from sal.sample.schedule import (
 )
 from sal.sim.factor_graph import FactorGraph
 from sal.sim.graph import PottsGraph
-from sal.sim.potts import site_field
+from sal.sim.potts import SiteField, log_weight_of, site_field
 from sal.sim.topology import Model, MoveSet, Topology, leaf_bipartitions
 from sal.track import TrackedOptimization, current
 
@@ -479,7 +479,7 @@ def tempered_factor_graph(
 
 def tempered_potts_pair(
     graph: PottsGraph,
-    field: np.ndarray,
+    field: SiteField | np.ndarray,
     temperatures: TempSchedule | Sequence[float],
     rng: np.random.Generator,
     n_sweeps: int,
@@ -511,7 +511,7 @@ def tempered_potts_pair(
     graph : PottsGraph
         The lattice. Couplings of either sign, subject to ``move``'s own
         refusal.
-    field : np.ndarray
+    field : SiteField | np.ndarray
         External field ``h``, shape ``(n_states,)`` or ``(n_nodes, n_states)``.
     temperatures : TempSchedule | Sequence[float]
         The ladder, at least two, all positive, in the order that fixes which
@@ -550,6 +550,7 @@ def tempered_potts_pair(
         Fortuin-Kasteleyn cluster move on a graph with a negative coupling, as
         :func:`~sal.sample.potts_mcmc.sample_potts` refuses it.
     """
+    field = log_weight_of(field)
     temperatures = check_ladder(ladder(temperatures), needed_by="a tempered ensemble")
     _check_budget(n_sweeps, thin, burn_in)
     refuse_negative_coupling(move, graph)
@@ -614,7 +615,7 @@ def tempered_potts_pair(
 
 def tempered_topologies(
     alignment: Mapping[str, np.ndarray],
-    k: int,
+    n_states: int,
     temperatures: TempSchedule | Sequence[float],
     rng: np.random.Generator,
     n_sweeps: int,
@@ -648,7 +649,7 @@ def tempered_topologies(
     temperatures = check_ladder(ladder(temperatures), needed_by="a tempered ensemble")
     _check_budget(n_sweeps, thin, burn_in)
     cache = {} if scores is None else scores
-    score = cached_topology_score(alignment, k, cache, model=model)
+    score = cached_topology_score(alignment, n_states, cache, model=model)
     children = rng.spawn(len(temperatures))
     value = score(start)
 
@@ -674,12 +675,12 @@ def tempered_topologies(
 
 def adapt_ladder_round_trips(
     graph: PottsGraph,
-    field: np.ndarray,
+    field: SiteField | np.ndarray,
     start: TempSchedule | Sequence[float],
     rng: np.random.Generator,
     n_sweeps: int,
     tolerance: float,
-    max_rounds: int,
+    max_iterations: int,
     *,
     backend: Backend = Backend.RUST,
 ) -> FeedbackLadder:
@@ -706,13 +707,14 @@ def adapt_ladder_round_trips(
     n_sweeps : int
         Sweeps per replica per measurement. The up-fraction is a ratio of
         visit counts over these, so it sets what the placement can resolve.
-    tolerance, max_rounds
+    tolerance, max_iterations
         As :func:`sal.sample.schedule.adapt_ladder_by_round_trips`.
 
     Returns
     -------
     FeedbackLadder
     """
+    field = log_weight_of(field)
 
     def measure(candidate: tuple[float, ...]) -> list[float]:
         run = parallel_tempering(
@@ -720,4 +722,6 @@ def adapt_ladder_round_trips(
         )
         return [float(value) for value in up_fraction(run.walkers)]
 
-    return adapt_ladder_by_round_trips(measure, ladder(start), tolerance, max_rounds)
+    return adapt_ladder_by_round_trips(
+        measure, ladder(start), tolerance, max_iterations
+    )
