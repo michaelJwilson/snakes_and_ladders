@@ -62,7 +62,9 @@ def test_the_bounded_solvers_bound_the_constrained_minimum() -> None:
         assert np.isfinite(bounded.energy)
         assert np.isfinite(bounded.bound)
         assert bounded.bound <= minimum + 1e-9 <= bounded.energy + 2e-9
-    relaxed = simulated_bifurcation(GRAPH, FIELD, 3, np.random.default_rng(0))
+    relaxed = simulated_bifurcation(
+        GRAPH, FIELD, n_states=3, rng=np.random.default_rng(0)
+    )
     assert _allowed(relaxed.labelling)
 
 
