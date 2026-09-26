@@ -535,8 +535,8 @@ def annealed_seeding(
     objective = surrogate(instance)
     run = annealing_initializer(rng).run(objective)
     return Seeding(
-        at_locations(instance, objective.components(run.theta).mean),
-        PASSES_PER_GRADIENT * run.force_evaluations,
+        at_locations(instance, objective.components(run.best).mean),
+        PASSES_PER_GRADIENT * run.spent,
         f"acceptance {run.acceptance_rate:.2f}",
     )
 

@@ -552,7 +552,7 @@ def test_a_constant_schedule_at_one_is_the_sampler_draw_for_draw() -> None:
     )
 
     assert torch.equal(annealed.final, chain.draws[-1])
-    assert annealed.force_evaluations == 200 * leapfrog.force_evaluations(10)
+    assert annealed.spent == 200 * leapfrog.force_evaluations(10)
 
 
 @pytest.mark.smoke
@@ -570,12 +570,12 @@ def test_annealing_reports_the_best_point_visited_not_the_last() -> None:
         theta0=start,
     )
 
-    assert result.value == pytest.approx(float(GAUSSIAN(result.theta)), rel=EXACT)
+    assert result.value == pytest.approx(float(GAUSSIAN(result.best)), rel=EXACT)
     assert result.value <= float(GAUSSIAN(start))
     assert result.value <= float(GAUSSIAN(result.final))
     # On a quadratic bowl the cold end sits at the mode: within a tenth of a
     # standard deviation of the exact minimizer after 300 proposals.
-    deviation = (result.theta - GAUSSIAN.mean) / GAUSSIAN.covariance.diagonal().sqrt()
+    deviation = (result.best - GAUSSIAN.mean) / GAUSSIAN.covariance.diagonal().sqrt()
     assert float(deviation.abs().max()) < 0.1
 
 

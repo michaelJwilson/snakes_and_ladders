@@ -426,8 +426,8 @@ def test_the_sampled_starts_are_their_runs_own_records_and_leave_the_cell_descen
         assert torch.equal(start, draw)
 
     annealed = _annealed_start(0).run(objective)
-    assert torch.equal(_annealed_start(0).starts(objective)[0], annealed.theta)
-    assert annealed.value == float(objective(annealed.theta))
+    assert torch.equal(_annealed_start(0).starts(objective)[0], annealed.best)
+    assert annealed.value == float(objective(annealed.best))
     assert annealed.value <= float(objective(annealed.final))
 
     trapped = fit(objective)
@@ -445,7 +445,7 @@ def test_the_sampled_starts_are_their_runs_own_records_and_leave_the_cell_descen
 
         annealed = _annealed_start(seed).run(objective)
         reached["anneal"].append(
-            _lowest(objective, [fit(objective, theta0=annealed.theta).theta])
+            _lowest(objective, [fit(objective, theta0=annealed.best).theta])
         )
 
         tempered = _tempered_start(seed).run(objective)

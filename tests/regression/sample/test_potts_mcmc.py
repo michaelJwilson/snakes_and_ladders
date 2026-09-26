@@ -1127,7 +1127,7 @@ def test_annealing_reaches_the_closed_form_ground_energy_where_descent_does_not(
     for result in annealed:
         # The reported energy is the energy of the reported labelling, in the
         # convention the exact solvers use, and never below the closed form.
-        assert result.energy == pytest.approx(energy(graph, field, result.labelling))
+        assert result.energy == pytest.approx(energy(graph, field, result.best))
         assert result.energy >= ground - 1e-12
         assert result.n_sweeps == 200
     annealed_hits = sum(abs(result.energy - ground) < 1e-12 for result in annealed)

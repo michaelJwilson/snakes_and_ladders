@@ -646,9 +646,9 @@ def run_annealed(
         start=start,
     )
     return MethodRun(
-        labelling=run.labelling,
+        labelling=run.best,
         energy=run.energy,
-        spent=run.site_visits,
+        spent=run.spent,
         seconds=time.perf_counter() - started,
         trace=run.trace,
         # A step count fixed before the run: it ends on its budget (#1085).

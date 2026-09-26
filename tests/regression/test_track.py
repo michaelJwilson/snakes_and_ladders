@@ -181,10 +181,10 @@ def test_the_null_run_leaves_an_annealed_and_a_tempered_run_bitwise() -> None:
     with track(NULL_RUN):
         inside_annealed, inside_tempered = _annealed(), _tempered()
 
-    assert np.array_equal(inside_annealed.labelling, outside_annealed.labelling)
+    assert np.array_equal(inside_annealed.best, outside_annealed.best)
     assert np.array_equal(inside_annealed.final, outside_annealed.final)
     assert inside_annealed.energy == outside_annealed.energy
-    assert inside_annealed.site_visits == outside_annealed.site_visits
+    assert inside_annealed.spent == outside_annealed.spent
     assert np.array_equal(inside_tempered.states, outside_tempered.states)
     assert np.array_equal(
         inside_tempered.swap_acceptance, outside_tempered.swap_acceptance
@@ -570,7 +570,7 @@ def test_bound_potts_metrics_score_the_labelling_the_annealer_returns() -> None:
     # of the labelling the result carries: two names, one number, because the
     # annealer passes the best labelling it holds.
     assert run.last("energy") == annealed.energy
-    assert run.last("state_energy") == energy(graph, FIELD, annealed.labelling)
+    assert run.last("state_energy") == energy(graph, FIELD, annealed.best)
     assert len(run.series("state_energy")) == SWEEPS
 
 
@@ -801,7 +801,7 @@ def test_every_loop_records_what_it_cost_the_machine() -> None:
             step_size=STEP_SIZE,
             n_steps=3,
         )
-    assert _memory(tracked.run).last("state_bytes") == float(annealed_hmc.theta.nbytes)
+    assert _memory(tracked.run).last("state_bytes") == float(annealed_hmc.best.nbytes)
     with track() as tracked:
         tempered_hmc = hmc.parallel_tempering(
             _objective(),

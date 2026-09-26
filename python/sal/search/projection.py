@@ -647,8 +647,8 @@ def annealed_seeding(
         n_steps=CHAIN_TRAJECTORY,
     ).run(surrogate(instance))
     return Seeding(
-        _from_theta(instance, run.theta, at),
-        PASSES_PER_GRADIENT * run.force_evaluations,
+        _from_theta(instance, run.best, at),
+        PASSES_PER_GRADIENT * run.spent,
         f"acceptance {run.acceptance_rate:.2f}",
     )
 
