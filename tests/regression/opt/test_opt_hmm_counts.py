@@ -182,12 +182,12 @@ def test_the_gradient_fit_and_baum_welch_reach_the_same_optimum(name: str) -> No
         _start(name),
     )
 
-    assert not fitted.emission_at_boundary
+    assert not fitted.at_boundary
     assert_allclose(-float(result.value), fitted.log_likelihood, rtol=1e-8)
-    order = list(align_families(objective.emissions(result.theta), fitted.emissions))
+    order = list(align_families(objective.emissions(result.theta), fitted.components))
     assert order == [0, 1]
     estimate = objective.constrain(result.theta)
-    for parameter, value in fitted.emissions.named_parameters().items():
+    for parameter, value in fitted.components.named_parameters().items():
         assert_allclose(estimate[parameter].numpy(), value.numpy(), rtol=1e-3)
 
 
@@ -248,8 +248,8 @@ def test_a_symmetric_start_collapses_the_states_and_the_asymmetric_one_does_not(
 
     symmetric = baum_welch_family(
         *arguments, BetaBinomialEmission(TRIALS, [1.0, 1.0], [1.0, 1.0])
-    ).emissions
-    asymmetric = baum_welch_family(*arguments, _start("beta_binomial")).emissions
+    ).components
+    asymmetric = baum_welch_family(*arguments, _start("beta_binomial")).components
     assert isinstance(symmetric, BetaBinomialEmission)
     assert isinstance(asymmetric, BetaBinomialEmission)
 

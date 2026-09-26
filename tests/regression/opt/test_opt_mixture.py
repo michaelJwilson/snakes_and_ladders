@@ -734,7 +734,7 @@ def test_the_streamed_mixture_em_is_the_tensor_one() -> None:
         streamed.components.scale.numpy(), oracle.components.scale.numpy(), atol=1e-10
     )
     assert_allclose(streamed.log_likelihood, oracle.log_likelihood, rtol=1e-12)
-    assert streamed.iterations == oracle.iterations == 10
+    assert streamed.termination.iterations == oracle.termination.iterations == 10
 
 
 @pytest.mark.oracle

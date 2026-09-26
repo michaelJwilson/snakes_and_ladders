@@ -438,7 +438,7 @@ def fit_from(instance: Instance, seeding: Seeding, iterations: int) -> Fitted:
         )
     return Fitted(
         -run.log_likelihood,
-        run.iterations,
+        run.termination.iterations,
         seeding.evaluations(),
         label_recovery(instance, run.responsibilities),
         seeding.acceptance,

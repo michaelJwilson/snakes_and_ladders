@@ -83,8 +83,6 @@ class EmissionMixtureFit:
     log_likelihood : float
         The log-likelihood at the returned parameters. A probability, since
         every count family is discrete, so it is at most zero.
-    iterations : int
-        EM iterations run.
     at_boundary : bool
         Whether a component's M step reached the edge of the range this data
         identifies its parameter over --- a flat likelihood in a dispersion or
@@ -92,15 +90,14 @@ class EmissionMixtureFit:
         #122).
     termination : Termination | None
         Whether the loop met its relative tolerance or ran out of iterations,
-        in the form every result states it in (issue #860). ``iterations``
-        stays: it is what this result has always been read by.
+        in the form every result states it in (issue #860); its
+        ``iterations`` are the EM iterations run (issue #1090).
     """
 
     weights: torch.Tensor
     components: EmissionFamily
     responsibilities: torch.Tensor
     log_likelihood: float
-    iterations: int
     at_boundary: bool
     termination: Termination = dataclass_field(kw_only=True)
 
@@ -230,7 +227,6 @@ def expectation_maximization(
         components=components,
         responsibilities=posterior,
         log_likelihood=log_likelihood,
-        iterations=termination.iterations,
         at_boundary=boundary,
         termination=termination,
     )
@@ -424,7 +420,6 @@ def _cell_expectation_maximization(
         components=components,
         responsibilities=responsibilities,
         log_likelihood=log_likelihood,
-        iterations=termination.iterations,
         at_boundary=boundary,
         termination=termination,
     )

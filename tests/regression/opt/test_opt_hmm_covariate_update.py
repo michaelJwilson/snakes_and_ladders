@@ -90,8 +90,8 @@ def test_an_update_returning_its_covariate_is_the_fit_without_one() -> None:
         config=replace(EM, max_iterations=5),
     )
     assert plain.log_likelihood == held.log_likelihood
-    for name, value in plain.emissions.named_parameters().items():
-        assert torch.equal(value, held.emissions.named_parameters()[name])
+    for name, value in plain.components.named_parameters().items():
+        assert torch.equal(value, held.components.named_parameters()[name])
 
 
 @pytest.mark.critical
@@ -126,7 +126,7 @@ def test_two_iterations_are_the_enumerated_plug_in_fit() -> None:
     )
     assert abs(one.log_likelihood - expected_one) <= 1e-10 * abs(expected_one)
 
-    fitted = one.emissions
+    fitted = one.components
     assert isinstance(fitted, NegativeBinomialEmission)
     second_z = (lam.numpy() * (marginals @ fitted.mean.numpy())).sum(axis=1)
     two = baum_welch_family(
@@ -177,7 +177,7 @@ def test_the_rate_ratios_of_a_normalized_chain_are_recovered() -> None:
         update=ExpectedRateNormalizer(torch.as_tensor(lam)),
         config=replace(EM, max_iterations=200),
     )
-    means = np.sort(fit.emissions.alignment_key()[:, 0].numpy())
+    means = np.sort(fit.components.alignment_key()[:, 0].numpy())
     np.testing.assert_allclose(means / means[0], [1.0, 2.0, 4.0], rtol=0.05)
 
 

@@ -179,7 +179,6 @@ def annealed_expectation_maximization(
         components=components,
         responsibilities=posterior,
         log_likelihood=log_likelihood,
-        iterations=termination.iterations,
         at_boundary=boundary,
         termination=termination,
     )
