@@ -888,7 +888,7 @@ def adapt_ladder_potts(
     rng: np.random.Generator,
     n_sweeps: int,
     band: tuple[float, float],
-    max_rounds: int,
+    max_iterations: int,
     max_replicas: int,
     *,
     backend: Backend = Backend.RUST,
@@ -913,7 +913,7 @@ def adapt_ladder_potts(
     n_sweeps : int
         Sweeps per replica per measurement. Each acceptance is a fraction of
         ``n_sweeps`` proposals, so this sets what the band can resolve.
-    band, max_rounds, max_replicas
+    band, max_iterations, max_replicas
         As :func:`sal.sample.schedule.adapt_ladder`.
 
     Returns
@@ -928,7 +928,7 @@ def adapt_ladder_potts(
         )
         return [float(value) for value in run.swap_acceptance]
 
-    return adapt_ladder(measure, ladder(start), band, max_rounds, max_replicas)
+    return adapt_ladder(measure, ladder(start), band, max_iterations, max_replicas)
 
 
 def sweep_for(

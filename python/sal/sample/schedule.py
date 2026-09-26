@@ -597,7 +597,7 @@ def adapt_ladder(
     measure: Callable[[tuple[float, ...]], Sequence[float]],
     start: TempSchedule | Sequence[float],
     band: tuple[float, float],
-    max_rounds: int,
+    max_iterations: int,
     max_replicas: int,
 ) -> AdaptedLadder:
     """Insert and remove temperatures until every neighbouring pair exchanges within ``band``.
@@ -629,7 +629,7 @@ def adapt_ladder(
     band : tuple[float, float]
         ``(low, high)``, the acceptance every pair is driven into, with
         ``0 < low < high < 1``.
-    max_rounds : int
+    max_iterations : int
         Measurements to take before stopping, at least 1.
     max_replicas : int
         The most temperatures the ladder may hold; no insertion is made
@@ -652,8 +652,8 @@ def adapt_ladder(
     if not 0.0 < low < high < 1.0:
         msg = f"band must satisfy 0 < low < high < 1, got {band}"
         raise ValueError(msg)
-    if max_rounds < 1:
-        msg = f"max_rounds must be at least 1, got {max_rounds}"
+    if max_iterations < 1:
+        msg = f"max_iterations must be at least 1, got {max_iterations}"
         raise ValueError(msg)
     if max_replicas < len(rungs):
         msg = (
@@ -664,7 +664,7 @@ def adapt_ladder(
 
     current = rungs
     replicas_measured = 0
-    for round_index in range(1, max_rounds + 1):
+    for round_index in range(1, max_iterations + 1):
         acceptance = tuple(float(value) for value in measure(current))
         replicas_measured += len(current)
         if len(acceptance) != len(current) - 1:
@@ -674,7 +674,7 @@ def adapt_ladder(
             )
             raise ValueError(msg)
         within = all(low <= value <= high for value in acceptance)
-        if within or round_index == max_rounds:
+        if within or round_index == max_iterations:
             return AdaptedLadder(
                 current, acceptance, within, round_index, replicas_measured
             )
@@ -786,7 +786,7 @@ def adapt_ladder_by_round_trips(
     measure: Callable[[tuple[float, ...]], Sequence[float]],
     start: TempSchedule | Sequence[float],
     tolerance: float,
-    max_rounds: int,
+    max_iterations: int,
 ) -> FeedbackLadder:
     """Redistribute a ladder of fixed length so a walker's round trip is fastest.
 
@@ -824,7 +824,7 @@ def adapt_ladder_by_round_trips(
     tolerance : float
         Relative move, positive: a round whose largest ``|T' / T - 1|`` is
         below it stops the warm-up and reports ``converged``.
-    max_rounds : int
+    max_iterations : int
         Measurements to take before stopping, at least 1.
 
     Returns
@@ -836,7 +836,7 @@ def adapt_ladder_by_round_trips(
     ValueError
         If the ladder has fewer than three temperatures, is not strictly
         monotone or is not positive; if ``tolerance`` is not positive or
-        ``max_rounds`` is below 1; if ``measure`` returns other than one value
+        ``max_iterations`` is below 1; if ``measure`` returns other than one value
         per rung, or a value that is not finite; or if ``f`` is flat over the
         whole ladder, which is a run in which no walker circulated and so
         carries no placement.
@@ -851,13 +851,13 @@ def adapt_ladder_by_round_trips(
     if not tolerance > 0.0:
         msg = f"tolerance must be positive, got {tolerance}"
         raise ValueError(msg)
-    if max_rounds < 1:
-        msg = f"max_rounds must be at least 1, got {max_rounds}"
+    if max_iterations < 1:
+        msg = f"max_iterations must be at least 1, got {max_iterations}"
         raise ValueError(msg)
 
     current = rungs
     replicas_measured = 0
-    for round_index in range(1, max_rounds + 1):
+    for round_index in range(1, max_iterations + 1):
         fraction = tuple(float(value) for value in measure(current))
         replicas_measured += len(current)
         if len(fraction) != len(current):
@@ -876,7 +876,7 @@ def adapt_ladder_by_round_trips(
         moved = max(
             abs(new / old - 1.0) for new, old in zip(proposal, current, strict=True)
         )
-        if moved < tolerance or round_index == max_rounds:
+        if moved < tolerance or round_index == max_iterations:
             return FeedbackLadder(
                 proposal, fraction, moved < tolerance, round_index, replicas_measured
             )

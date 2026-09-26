@@ -680,7 +680,7 @@ def adapt_ladder_round_trips(
     rng: np.random.Generator,
     n_sweeps: int,
     tolerance: float,
-    max_rounds: int,
+    max_iterations: int,
     *,
     backend: Backend = Backend.RUST,
 ) -> FeedbackLadder:
@@ -707,7 +707,7 @@ def adapt_ladder_round_trips(
     n_sweeps : int
         Sweeps per replica per measurement. The up-fraction is a ratio of
         visit counts over these, so it sets what the placement can resolve.
-    tolerance, max_rounds
+    tolerance, max_iterations
         As :func:`sal.sample.schedule.adapt_ladder_by_round_trips`.
 
     Returns
@@ -722,4 +722,6 @@ def adapt_ladder_round_trips(
         )
         return [float(value) for value in up_fraction(run.walkers)]
 
-    return adapt_ladder_by_round_trips(measure, ladder(start), tolerance, max_rounds)
+    return adapt_ladder_by_round_trips(
+        measure, ladder(start), tolerance, max_iterations
+    )
