@@ -1,0 +1,1 @@
+A forbidden label is a field entry of `-inf`, and `sal.sim.potts.forbid(field, allowed)` writes a boolean mask into that form. Every ground-state method, TRW-S and the dual bound return an allowed labelling with a finite energy; the dual bound and simulated bifurcation, whose arithmetic cannot carry `-inf`, read it through `penalized`, a finite penalty no optimum takes (#1081).

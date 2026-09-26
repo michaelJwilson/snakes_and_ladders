@@ -89,9 +89,9 @@ def test_the_default_schedule_is_the_run_it_replaces_bitwise(
         else Backend.PYTHON,
     )
 
-    assert np.array_equal(entry.labelling, replaced.labelling)
+    assert np.array_equal(entry.labelling, replaced.best)
     assert entry.energy == replaced.energy
-    assert entry.spent == replaced.site_visits
+    assert entry.spent == replaced.spent
 
 
 @pytest.mark.smoke
@@ -110,9 +110,9 @@ def test_a_start_given_is_the_start_drawn_bitwise(move: PottsMove) -> None:
         rung.graph, rung.field, schedule, rng, move=move, start=initial
     )
 
-    assert np.array_equal(drawn.labelling, given.labelling)
+    assert np.array_equal(drawn.best, given.best)
     assert drawn.energy == given.energy
-    assert drawn.site_visits == given.site_visits
+    assert drawn.spent == given.spent
 
 
 @pytest.mark.smoke

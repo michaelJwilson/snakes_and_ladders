@@ -28,6 +28,7 @@ import numpy as np
 import torch
 
 from sal.backend import Backend
+from sal.cost import Cost
 from sal.opt.objective import (
     Objective,
     declares_gradient,
@@ -74,13 +75,16 @@ DUAL_AVERAGING_KAPPA = 0.75
 Stream = TypeVar("Stream", torch.Generator, np.random.Generator)
 
 
-def torch_stream(rng: np.random.Generator) -> torch.Generator:
+def torch_stream(rng: np.random.Generator | torch.Generator) -> torch.Generator:
     """A torch :data:`Stream` seeded by one draw from ``rng``, so one seed runs a torch chain.
 
     The one derivation a caller holding a NumPy generator makes before a
     torch-kernel sampler; ``search.projection`` and ``search.mixture_starts``
-    each wrote it until #1059.
+    each wrote it until #1059. A torch generator is its own stream and is
+    returned as given, so a torch entry point takes either (issue #1091).
     """
+    if isinstance(rng, torch.Generator):
+        return rng
     return torch.Generator().manual_seed(int(rng.integers(0, 2**31 - 1)))
 
 
@@ -273,10 +277,9 @@ class Adapted:
 class Chain:
     """What a run of :func:`run_chain` drew, whatever kernel drew it.
 
-    The fields :class:`HmcChain` and
-    :class:`~sal.sample.langevin.LangevinChain` are built
-    from, in the unit each sampler spends: the evaluations are gradients for
-    both kernels here.
+    The one chain result (issue #1090): :class:`HmcChain` and
+    :class:`~sal.sample.langevin.LangevinChain` are subclasses of it, and
+    ``spent`` is counted in the ``unit`` each kernel declares.
 
     Parameters
     ----------
@@ -289,8 +292,12 @@ class Chain:
         counted.
     energy_error : torch.Tensor
         ``|H(proposal) - H(current)|`` per recorded proposal.
-    force_evaluations : int
-        Evaluations spent, the warm-up's and the burn-in's included.
+    spent : int
+        Evaluations spent, the warm-up's and the burn-in's included, so an
+        effective sample size divided by it is the cost of a draw.
+    unit : Cost
+        What ``spent`` counts: gradients for the Hamiltonian and Langevin
+        kernels, objective evaluations for the random walk (issue #1090).
     adapted : Adapted | None
         What the warm-up settled on, or ``None`` for a fixed-parameter chain.
     """
@@ -298,13 +305,14 @@ class Chain:
     draws: torch.Tensor
     acceptance_rate: float
     energy_error: torch.Tensor
-    force_evaluations: int
+    spent: int
+    unit: Cost
     adapted: Adapted | None
     #: Each operator's expectation over the recorded draws (issue #988).
     expectations: Mapping[str, Expectation] = field(default_factory=dict)
 
     def __iter__(self) -> Iterator[Any]:
-        """``(draws, acceptance_rate, energy_error, force_evaluations, adapted, expectations)``.
+        """``(draws, acceptance_rate, energy_error, spent, unit, adapted, expectations)``.
 
         The order callers unpack. ``Any`` for :meth:`Transition.__iter__`'s
         reason.
@@ -313,7 +321,8 @@ class Chain:
             self.draws,
             self.acceptance_rate,
             self.energy_error,
-            self.force_evaluations,
+            self.spent,
+            self.unit,
             self.adapted,
             self.expectations,
         )
@@ -326,8 +335,9 @@ def run_chain(
     generator: Stream,
     n_samples: int,
     *,
+    unit: Cost,
     step_size: float,
-    theta0: torch.Tensor | np.ndarray | None,
+    start: torch.Tensor | np.ndarray | None,
     burn_in: int,
     temperature: float,
     adaptation: Adaptation | None,
@@ -351,7 +361,7 @@ def run_chain(
         Evaluations one proposal costs, in the unit the sampler is compared
         on: gradients for :func:`sample` and
         :func:`sal.sample.langevin.mala`.
-    objective, generator, n_samples, step_size, theta0, burn_in, temperature, adaptation
+    objective, generator, n_samples, step_size, start, burn_in, temperature, adaptation
         As :func:`sample`.
     store_chain, operators
         As :func:`sample` (issue #988).
@@ -372,7 +382,7 @@ def run_chain(
         msg = f"temperature must be positive, got {temperature}"
         raise ValueError(msg)
 
-    position = start_point(objective, theta0)
+    position = start_point(objective, start)
 
     adapted: Adapted | None = None
     target: Objective = objective
@@ -446,7 +456,8 @@ def run_chain(
         draws=draws,
         acceptance_rate=accepted / n_samples if n_samples else 0.0,
         energy_error=errors[burn_in:],
-        force_evaluations=(n_samples + burn_in) * per_proposal + warmup_evaluations,
+        spent=(n_samples + burn_in) * per_proposal + warmup_evaluations,
+        unit=unit,
         adapted=adapted,
         expectations={name: kalman.estimate() for name, kalman in filters.items()},
     )
@@ -479,8 +490,9 @@ def run_compiled(
     generator: Stream,
     n_samples: int,
     *,
+    unit: Cost,
     step_size: float,
-    theta0: torch.Tensor,
+    start: torch.Tensor,
     burn_in: int,
     adaptation: Adaptation | None,
     store_chain: bool,
@@ -502,7 +514,7 @@ def run_compiled(
     it (issues #988, #1006).
     """
     family, parameters = declared
-    dimension = int(theta0.shape[0])
+    dimension = int(start.shape[0])
     seed = _seed(generator)
     declared_operators = {
         name: operator
@@ -512,7 +524,7 @@ def run_compiled(
     walk = walk_class(
         family,
         parameters,
-        np.ascontiguousarray(theta0.numpy(), dtype=np.float64),
+        np.ascontiguousarray(start.numpy(), dtype=np.float64),
         step_size,
         seed,
         0 if adaptation is None else adaptation.warmup,
@@ -562,7 +574,8 @@ def run_compiled(
         else torch.empty((0, dimension)),
         acceptance_rate=accepted / n_samples if n_samples else 0.0,
         energy_error=torch.from_numpy(np.concatenate(errors)),
-        force_evaluations=(n_samples + burn_in) * per_proposal + warmup_evaluations,
+        spent=(n_samples + burn_in) * per_proposal + warmup_evaluations,
+        unit=unit,
         adapted=None
         if adaptation is None
         else Adapted(
@@ -576,19 +589,19 @@ def run_compiled(
 
 
 def start_point(
-    objective: Objective, theta0: torch.Tensor | np.ndarray | None
+    objective: Objective, start: torch.Tensor | np.ndarray | None
 ) -> torch.Tensor:
-    """Where a chain starts: ``theta0``, or ``objective.initial()``, detached, in ``float64``.
+    """Where a chain starts: ``start``, or ``objective.initial()``, detached, in ``float64``.
 
-    An array ``theta0`` is copied into the loop's tensor, so a sampler that
+    An array ``start`` is copied into the loop's tensor, so a sampler that
     takes no derivative takes its start as an array (issue #1059).
     """
-    if isinstance(theta0, np.ndarray):
-        return torch.tensor(theta0, dtype=torch.float64)
+    if isinstance(start, np.ndarray):
+        return torch.tensor(start, dtype=torch.float64)
     return (
         objective.initial().detach().clone()
-        if theta0 is None
-        else theta0.detach().clone()
+        if start is None
+        else start.detach().clone()
     ).to(torch.float64)
 
 

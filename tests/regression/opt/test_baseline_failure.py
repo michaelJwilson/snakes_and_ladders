@@ -243,7 +243,7 @@ def _tree_instance() -> tuple[TreeEnvironment, float]:
     dataset = simulate_tree(params, np.random.default_rng(params.seed))
     environment = TreeEnvironment(
         dict(dataset.alignment),
-        params.k,
+        params.n_states,
         np.asarray(params.pi),
         branch_length=float(
             np.mean([child.branch_length for _, child in edges(params.tau)])
@@ -253,7 +253,7 @@ def _tree_instance() -> tuple[TreeEnvironment, float]:
     )
     taxa = sorted(dataset.alignment)
     maximum = max(
-        environment.score(topology) for topology in enumerate_topologies(taxa)
+        environment.log_weight(topology) for topology in enumerate_topologies(taxa)
     )
     return environment, maximum
 
@@ -267,7 +267,7 @@ def _descent(
     """
     state = instance.reset(rng)
     episode = greedy_rollout(instance, start=state, max_steps=budget.size)
-    best = max(instance.score(visited) for visited in episode.states)
+    best = max(instance.log_weight(visited) for visited in episode.states)
     return Outcome(-best, max(len(episode.actions), 1))
 
 

@@ -67,7 +67,7 @@ def search_trajectories(
     for moves in (MoveSet.NNI, MoveSet.SPR):
         result = infer(
             alignment,
-            params.k,
+            params.n_states,
             rng=np.random.default_rng(SEEDS[0]),
             moves=moves,
             max_evaluations=MAX_EVALUATIONS,
@@ -83,11 +83,11 @@ def search_trajectories(
 
     environment = np.array(
         sorted(
-            score_topology(topology, alignment, params.k)
+            score_topology(topology, alignment, params.n_states)
             for topology in enumerate_topologies(sorted(alignment))
         )
     )
-    truth = score_topology(params.tau, alignment, params.k)
+    truth = score_topology(params.tau, alignment, params.n_states)
     return trajectories, truth, environment, reached
 
 

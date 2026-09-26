@@ -132,9 +132,7 @@ def min_cut(network: FlowNetwork, source: int, sink: int) -> Cut:
     return Cut(value + direct, side, seconds, build_seconds, peak_bytes)
 
 
-def ising_ground_state(
-    graph: PottsGraph, field_values: np.ndarray
-) -> tuple[GroundState, Cut]:
+def ising_ground_state(graph: PottsGraph, field: np.ndarray) -> tuple[GroundState, Cut]:
     """The two-state ferromagnetic ground state, cut by PyMaxflow.
 
     The capacities are :func:`sal.search.maxflow.ising_ground_state`'s:
@@ -143,9 +141,7 @@ def ising_ground_state(
     on the sink side takes state 1. The cut's :attr:`Cut.source_side` spans
     the lattice's nodes alone.
     """
-    values = site_field(
-        np.asarray(field_values, dtype=float), graph.n_nodes, n_states=2
-    )
+    values = site_field(np.asarray(field, dtype=float), graph.n_nodes, n_states=2)
     cost = -values
     offsets = cost.min(axis=1)
     edges = graph.edge_index

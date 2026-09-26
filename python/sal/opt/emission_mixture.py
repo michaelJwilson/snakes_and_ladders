@@ -26,6 +26,9 @@ import itertools
 import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
+from enum import StrEnum
+from typing import NamedTuple
 
 import numpy as np
 import torch
@@ -49,8 +52,9 @@ from sal.opt.em import EMISSION_MIXTURE_EM, EmConfig, em_loop
 from sal.opt.mixture import (
     e_step,
     emission_mixture_plus_plus,
+    kmeans_plus_plus,
     mixture_log_likelihood,
-    responsibilities,
+    responsibilities_torch,
     uniform_seeds,
 )
 from sal.opt.objective import Objective
@@ -82,8 +86,6 @@ class EmissionMixtureFit:
     log_likelihood : float
         The log-likelihood at the returned parameters. A probability, since
         every count family is discrete, so it is at most zero.
-    iterations : int
-        EM iterations run.
     at_boundary : bool
         Whether a component's M step reached the edge of the range this data
         identifies its parameter over --- a flat likelihood in a dispersion or
@@ -91,17 +93,16 @@ class EmissionMixtureFit:
         #122).
     termination : Termination | None
         Whether the loop met its relative tolerance or ran out of iterations,
-        in the form every result states it in (issue #860). ``iterations``
-        stays: it is what this result has always been read by.
+        in the form every result states it in (issue #860); its
+        ``iterations`` are the EM iterations run (issue #1090).
     """
 
     weights: torch.Tensor
     components: EmissionFamily
     responsibilities: torch.Tensor
     log_likelihood: float
-    iterations: int
     at_boundary: bool
-    termination: Termination | None = None
+    termination: Termination = dataclass_field(kw_only=True)
 
 
 def expectation_maximization(
@@ -114,7 +115,7 @@ def expectation_maximization(
 ) -> EmissionMixtureFit:
     """Fit a mixture of count emissions by EM.
 
-    The E step is :func:`sal.opt.mixture.responsibilities` and
+    The E step is :func:`sal.opt.mixture.responsibilities_torch` and
     the M step is the family's own :meth:`reestimate`: independent
     observations carry no message between them, and the family receives the
     posterior an HMM's forward--backward pass would hand it. The alternation
@@ -229,7 +230,6 @@ def expectation_maximization(
         components=components,
         responsibilities=posterior,
         log_likelihood=log_likelihood,
-        iterations=termination.iterations,
         at_boundary=boundary,
         termination=termination,
     )
@@ -251,12 +251,12 @@ def responsibilities_at(
 ) -> np.ndarray:
     """The E step at ``weights`` and ``components``, shape ``(n_samples, K)``, as an array.
 
-    :func:`sal.opt.mixture.responsibilities` on the observations
+    :func:`sal.opt.mixture.responsibilities_torch` on the observations
     as float64 and ``log(weights)``, read out once (issue #1011).
     """
     values = torch.as_tensor(observations, dtype=torch.float64)
     log_weight = torch.log(torch.as_tensor(weights, dtype=torch.float64))
-    return responsibilities(values, log_weight, components).detach().numpy()
+    return responsibilities_torch(values, log_weight, components).detach().numpy()
 
 
 def partial_expectation_maximization(
@@ -423,7 +423,6 @@ def _cell_expectation_maximization(
         components=components,
         responsibilities=responsibilities,
         log_likelihood=log_likelihood,
-        iterations=termination.iterations,
         at_boundary=boundary,
         termination=termination,
     )
@@ -436,7 +435,7 @@ def enumerated_posterior(
 ) -> torch.Tensor:
     """``P(component | observations)`` summed over every joint labelling.
 
-    The independent answer :func:`sal.opt.mixture.responsibilities`
+    The independent answer :func:`sal.opt.mixture.responsibilities_torch`
     is refereed against, sharing no line with it: the responsibilities
     normalize each observation's row on its own, while this scores each of the
     ``K ** N`` labellings of the whole dataset, normalizes over all of them,
@@ -777,3 +776,83 @@ class EmissionMixtureObjective(Objective):
             log_simplex(theta[: self._k - 1]),
             self.components(theta),
         )
+
+
+class SeedMethod(StrEnum):
+    """How :func:`seed` places the components (issue #1085).
+
+    Each reads the observations alone, so data with no known truth seeds.
+    """
+
+    UNIFORM = "uniform"
+    """:func:`uniform_start`: observations drawn uniformly, without replacement."""
+    PLUS_PLUS = "plus_plus"
+    """:func:`plus_plus_start`: D-squared sampling under the family's Bregman divergence."""
+    KMEANS = "kmeans"
+    """:func:`~sal.opt.mixture.kmeans_plus_plus` on the raw rows, the centres handed to ``at``."""
+
+
+class Start(NamedTuple):
+    """Where an EM fit begins: mixing weights and components (issue #1085).
+
+    One type for every seeding, which a fit takes as it is: a pair, so
+    ``expectation_maximization(observations, *start)`` passes the two
+    arguments the fit already has, and a type checker knows there are two.
+
+    Parameters
+    ----------
+    weights : np.ndarray
+        Mixing weights, shape ``(n_components,)``, summing to one.
+    components : EmissionFamily
+        The seeded components.
+    """
+
+    weights: np.ndarray
+    components: EmissionFamily
+
+
+def seed(
+    observations: np.ndarray,
+    n_components: int,
+    at: ComponentsAt,
+    *,
+    method: SeedMethod | str,
+    rng: np.random.Generator,
+    rows: np.ndarray | None = None,
+) -> Start:
+    """A :class:`Start` from the observations alone: the seeding a caller with no truth can run (issue #1085).
+
+    The seeding rules of `search.mixture_starts` read a simulated instance,
+    whose truth they used only for its component count, so data with no known
+    truth could not be seeded. These are the rules that read the data alone,
+    in one place, with uniform weights; `search.mixture_starts` calls them.
+
+    Parameters
+    ----------
+    observations : np.ndarray
+        Observations, shape ``(n_samples,)`` or ``(n_samples, channels)``.
+    n_components : int
+        Components to seed.
+    at : ComponentsAt
+        Builds the family from the rows chosen.
+    method : SeedMethod | str
+        Which rule places them.
+    rng : np.random.Generator
+        Generator, passed in.
+    rows : np.ndarray | None
+        Where the rule reads from, when that is not ``observations``: under a
+        covariate, the rows in rate space (issue #933).
+
+    Returns
+    -------
+    Start
+    """
+    read = np.asarray(observations if rows is None else rows, dtype=np.float64)
+    chosen = SeedMethod(method)
+    if chosen is SeedMethod.UNIFORM:
+        components = uniform_start(read, n_components, at, rng)
+    elif chosen is SeedMethod.PLUS_PLUS:
+        components = plus_plus_start(read, n_components, at, rng)
+    else:
+        components = at(kmeans_plus_plus(read, n_components, rng))
+    return Start(np.full(n_components, 1.0 / n_components), components)

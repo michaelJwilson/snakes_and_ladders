@@ -55,7 +55,7 @@ def test_single_site_descent_settles_at_a_local_minimum() -> None:
     field_values = rng.normal(size=(graph.n_nodes, 3))
 
     labelling, settled, *_ = iterated_conditional_modes(
-        graph, field_values, 3, np.random.default_rng(1)
+        graph, field_values, np.random.default_rng(1), n_states=3
     )
 
     for node in range(graph.n_nodes):
@@ -79,10 +79,14 @@ def test_the_numba_descent_reproduces_the_python_one_bitwise() -> None:
         field = np.random.default_rng(100 + seed).normal(size=(graph.n_nodes, 3))
 
         python = iterated_conditional_modes(
-            graph, field, 3, np.random.default_rng(seed), backend=Backend.PYTHON
+            graph,
+            field,
+            np.random.default_rng(seed),
+            backend=Backend.PYTHON,
+            n_states=3,
         )
         compiled = iterated_conditional_modes(
-            graph, field, 3, np.random.default_rng(seed), backend=Backend.NUMBA
+            graph, field, np.random.default_rng(seed), backend=Backend.NUMBA, n_states=3
         )
 
         assert np.array_equal(python.labelling, compiled.labelling)
@@ -109,12 +113,12 @@ def test_the_numba_descent_in_any_order_every_sweep_run_is_the_python_one(
             iterated_conditional_modes(
                 graph,
                 field,
-                3,
                 stream,
-                max_sweeps=12,
+                max_iterations=12,
                 sweep_order=sweep_order,
                 stop_when_clean=False,
                 backend=backend,
+                n_states=3,
             )
             for stream, backend in zip(
                 streams, (Backend.PYTHON, Backend.NUMBA), strict=True
@@ -133,7 +137,11 @@ def test_descent_has_no_rust_backend() -> None:
 
     with pytest.raises(ValueError, match="runs on numba or python, not rust"):
         iterated_conditional_modes(
-            graph, np.zeros(3), 3, np.random.default_rng(0), backend=Backend.RUST
+            graph,
+            np.zeros(3),
+            np.random.default_rng(0),
+            backend=Backend.RUST,
+            n_states=3,
         )
 
 
@@ -181,11 +189,11 @@ def test_the_local_delta_sweep_is_the_recomputing_descent() -> None:
         swept, *_ = iterated_conditional_modes(
             graph,
             field,
-            3,
             np.random.default_rng(seed),
             start=start,
             sweep_order=SweepOrder.RANDOM,
             backend=Backend.PYTHON,
+            n_states=3,
         )
         recomputed = _recomputing_descent(
             graph,
@@ -210,21 +218,21 @@ def test_a_random_order_runs_every_sweep_when_a_clean_one_does_not_end_it() -> N
     labelling, value, *_ = iterated_conditional_modes(
         graph,
         field,
-        3,
         np.random.default_rng(4),
-        max_sweeps=25,
+        max_iterations=25,
         sweep_order=SweepOrder.RANDOM,
         stop_when_clean=False,
         backend=Backend.PYTHON,
+        n_states=3,
     )
     settled, settled_value, *_ = iterated_conditional_modes(
         graph,
         field,
-        3,
         np.random.default_rng(4),
-        max_sweeps=25,
+        max_iterations=25,
         sweep_order=SweepOrder.RANDOM,
         backend=Backend.PYTHON,
+        n_states=3,
     )
 
     assert value <= energy(graph, field, labelling) + 1e-12
@@ -243,9 +251,9 @@ def test_the_compiled_sweep_refuses_an_order_it_does_not_walk() -> None:
         iterated_conditional_modes(
             graph,
             np.zeros(3),
-            3,
             np.random.default_rng(0),
             sweep_order=SweepOrder.RANDOM,
+            n_states=3,
         )
 
 
@@ -388,13 +396,13 @@ def test_the_floored_kernel_is_the_python_oracle_bitwise(
             iterated_conditional_modes(
                 graph,
                 field,
-                FLOOR_STATES,
                 stream,
-                max_sweeps=12,
+                max_iterations=12,
                 sweep_order=sweep_order,
                 stop_when_clean=stop_when_clean,
                 min_sites=min_sites,
                 backend=backend,
+                n_states=FLOOR_STATES,
             )
             for stream, backend in zip(
                 streams, (Backend.PYTHON, Backend.NUMBA), strict=True
@@ -424,21 +432,21 @@ def test_every_floored_sweep_dissolves_onto_the_survivors_by_its_draw(
             swept = iterated_conditional_modes(
                 graph,
                 field,
-                FLOOR_STATES,
                 np.random.default_rng(sweep),
                 start=labelling,
-                max_sweeps=1,
+                max_iterations=1,
                 backend=backend,
+                n_states=FLOOR_STATES,
             ).labelling
             floored = iterated_conditional_modes(
                 graph,
                 field,
-                FLOOR_STATES,
                 np.random.default_rng(sweep),
                 start=labelling,
-                max_sweeps=1,
+                max_iterations=1,
                 min_sites=min_sites,
                 backend=backend,
+                n_states=FLOOR_STATES,
             ).labelling
             uniforms = np.random.default_rng(sweep).random(graph.n_nodes)
             counts = np.bincount(swept, minlength=FLOOR_STATES)
@@ -476,7 +484,12 @@ def test_dissolved_sites_split_uniformly_among_the_survivors() -> None:
     picks = np.zeros(3, dtype=np.int64)
     for seed in range(400):
         run = iterated_conditional_modes(
-            graph, field, 4, np.random.default_rng(seed), max_sweeps=1, min_sites=10
+            graph,
+            field,
+            np.random.default_rng(seed),
+            max_iterations=1,
+            min_sites=10,
+            n_states=4,
         )
         assert int(np.sum(run.labelling == 3)) == 0
         picks += np.bincount(run.labelling[:5], minlength=3)
@@ -646,16 +659,18 @@ def test_an_unsatisfiable_floor_raises(backend: Backend) -> None:
     rng = np.random.default_rng(0)
     with pytest.raises(ValueError, match="min_sites=5 exceeds the 4 sites"):
         iterated_conditional_modes(
-            graph, np.zeros(2), 2, rng, min_sites=5, backend=backend
+            graph, np.zeros(2), rng, min_sites=5, backend=backend, n_states=2
         )
     with pytest.raises(ValueError, match="min_sites must be >= 0, got -1"):
         iterated_conditional_modes(
-            graph, np.zeros(2), 2, rng, min_sites=-1, backend=backend
+            graph, np.zeros(2), rng, min_sites=-1, backend=backend, n_states=2
         )
     # Every site prefers its own state: one site each, none at a floor of 2.
     field = 5.0 * np.eye(4)
     with pytest.raises(ValueError, match="sweep 1 left no state holding min_sites=2"):
-        iterated_conditional_modes(graph, field, 4, rng, min_sites=2, backend=backend)
+        iterated_conditional_modes(
+            graph, field, rng, min_sites=2, backend=backend, n_states=4
+        )
 
 
 @pytest.mark.smoke
@@ -665,10 +680,10 @@ def test_the_compiled_sweep_still_refuses_a_random_order_that_stops_clean() -> N
         iterated_conditional_modes(
             graph,
             np.zeros(3),
-            3,
             np.random.default_rng(0),
             sweep_order=SweepOrder.RANDOM,
             min_sites=2,
+            n_states=3,
         )
 
 
@@ -749,12 +764,12 @@ def test_one_descent_counts_the_sweeps_one_sweep_calls_count(min_sites: int) -> 
                 moved = iterated_conditional_modes(
                     rung.graph,
                     rung.field,
-                    rung.n_states,
                     rng,
                     start=labelling,
-                    max_sweeps=1,
+                    max_iterations=1,
                     min_sites=min_sites,
                     backend=backend,
+                    n_states=rung.n_states,
                 ).labelling
                 stepped += 1
                 if np.array_equal(moved, labelling):
@@ -763,12 +778,12 @@ def test_one_descent_counts_the_sweeps_one_sweep_calls_count(min_sites: int) -> 
             one = iterated_conditional_modes(
                 rung.graph,
                 rung.field,
-                rung.n_states,
                 np.random.default_rng(0),
                 start=start,
-                max_sweeps=40,
+                max_iterations=40,
                 min_sites=min_sites,
                 backend=backend,
+                n_states=rung.n_states,
             )
             assert np.array_equal(one.labelling, labelling)
             assert one.termination is not None
@@ -792,20 +807,20 @@ def test_a_descent_cut_short_reads_the_budget(backend: Backend) -> None:
     run = iterated_conditional_modes(
         graph,
         values,
-        2,
         np.random.default_rng(0),
         start=np.array([0, 1, 1], dtype=np.int64),
-        max_sweeps=1,
+        max_iterations=1,
         backend=backend,
+        n_states=2,
     )
     settled = iterated_conditional_modes(
         graph,
         values,
-        2,
         np.random.default_rng(0),
         start=run.labelling,
-        max_sweeps=1,
+        max_iterations=1,
         backend=backend,
+        n_states=2,
     )
     assert run.sweeps == 1
     assert run.termination is not None

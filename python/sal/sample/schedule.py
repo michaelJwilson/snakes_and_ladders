@@ -57,10 +57,15 @@ import bisect
 import itertools
 import math
 from abc import abstractmethod
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol, runtime_checkable
+
+import numpy as np
+
+from sal.cost import Cost
+from sal.opt.termination import Termination
 
 
 @runtime_checkable
@@ -365,20 +370,47 @@ def ladder(values: TempSchedule | Sequence[float]) -> tuple[float, ...]:
     return tuple(float(value) for value in values)
 
 
-def beta_ladder(values: TempSchedule | Sequence[float]) -> tuple[float, ...]:
-    """A tuple of inverse temperatures from a schedule or from a sequence.
+class InverseTemperatures(tuple[float, ...]):
+    """A ladder of inverse temperatures, ``beta = 1 / T``, named by its type (issue #1089).
+
+    A bare sequence is read as temperatures wherever one is accepted
+    (:func:`ladder`); the annealers read ``beta``, so they take this or a
+    :class:`TempSchedule` and refuse a bare sequence, which one module once
+    read as ``beta`` and its sibling as ``T``. A tuple, so indexing,
+    iteration and equality are a tuple's.
+    """
+
+    __slots__ = ()
+
+    def __new__(cls, values: Iterable[float]) -> InverseTemperatures:
+        return super().__new__(cls, (float(value) for value in values))
+
+
+def beta_ladder(values: TempSchedule | InverseTemperatures) -> tuple[float, ...]:
+    """A tuple of inverse temperatures from a schedule or from :class:`InverseTemperatures`.
 
     :func:`ladder` for a consumer whose rungs are ``beta`` rather than ``T``.
     A schedule declares temperatures, so it is read step by step and
-    inverted; a sequence is the inverse temperatures as given. The one
-    spelling a schedule cannot carry is ``beta = 0``, the infinite
-    temperature :func:`_check_temperature` refuses, so a consumer anchored
-    there refuses a schedule on its own terms rather than on this one
-    (issue #861).
+    inverted. The one spelling a schedule cannot carry is ``beta = 0``, the
+    infinite temperature :func:`_check_temperature` refuses, so a consumer
+    anchored there refuses a schedule on its own terms rather than on this
+    one (issue #861).
+
+    Raises
+    ------
+    TypeError
+        If ``values`` is a bare sequence, whose reading as ``beta`` or ``T``
+        is a guess (issue #1089).
     """
     if isinstance(values, TempSchedule):
         return tuple(1.0 / temperature for temperature in temperatures(values))
-    return tuple(float(value) for value in values)
+    if isinstance(values, InverseTemperatures):
+        return tuple(values)
+    msg = (
+        "a bare sequence is read as temperatures elsewhere; pass a TempSchedule "
+        "or wrap inverse temperatures in InverseTemperatures (issue #1089)"
+    )
+    raise TypeError(msg)
 
 
 class Monotone(StrEnum):
@@ -568,9 +600,9 @@ class AdaptedLadder:
 
 def adapt_ladder(
     measure: Callable[[tuple[float, ...]], Sequence[float]],
-    start: TempSchedule | Sequence[float],
+    temperatures: TempSchedule | Sequence[float],
     band: tuple[float, float],
-    max_rounds: int,
+    max_iterations: int,
     max_replicas: int,
 ) -> AdaptedLadder:
     """Insert and remove temperatures until every neighbouring pair exchanges within ``band``.
@@ -595,14 +627,14 @@ def adapt_ladder(
     ----------
     measure : Callable[[tuple[float, ...]], Sequence[float]]
         Exchange acceptance per neighbouring pair of a ladder.
-    start : TempSchedule | Sequence[float]
+    temperatures : TempSchedule | Sequence[float]
         The starting ladder, in either spelling and read by :func:`ladder`
         into the same floats: at least two temperatures, strictly monotone in
         either direction. Its two endpoints are the result's.
     band : tuple[float, float]
         ``(low, high)``, the acceptance every pair is driven into, with
         ``0 < low < high < 1``.
-    max_rounds : int
+    max_iterations : int
         Measurements to take before stopping, at least 1.
     max_replicas : int
         The most temperatures the ladder may hold; no insertion is made
@@ -620,13 +652,15 @@ def adapt_ladder(
         monotone or is not positive, the band is not an interval inside
         ``(0, 1)``, or a budget is below 1.
     """
-    rungs = check_ladder(ladder(start), needed_by="a ladder", monotone=Monotone.EITHER)
+    rungs = check_ladder(
+        ladder(temperatures), needed_by="a ladder", monotone=Monotone.EITHER
+    )
     low, high = band
     if not 0.0 < low < high < 1.0:
         msg = f"band must satisfy 0 < low < high < 1, got {band}"
         raise ValueError(msg)
-    if max_rounds < 1:
-        msg = f"max_rounds must be at least 1, got {max_rounds}"
+    if max_iterations < 1:
+        msg = f"max_iterations must be at least 1, got {max_iterations}"
         raise ValueError(msg)
     if max_replicas < len(rungs):
         msg = (
@@ -637,7 +671,7 @@ def adapt_ladder(
 
     current = rungs
     replicas_measured = 0
-    for round_index in range(1, max_rounds + 1):
+    for round_index in range(1, max_iterations + 1):
         acceptance = tuple(float(value) for value in measure(current))
         replicas_measured += len(current)
         if len(acceptance) != len(current) - 1:
@@ -647,7 +681,7 @@ def adapt_ladder(
             )
             raise ValueError(msg)
         within = all(low <= value <= high for value in acceptance)
-        if within or round_index == max_rounds:
+        if within or round_index == max_iterations:
             return AdaptedLadder(
                 current, acceptance, within, round_index, replicas_measured
             )
@@ -757,9 +791,9 @@ class FeedbackLadder:
 
 def adapt_ladder_by_round_trips(
     measure: Callable[[tuple[float, ...]], Sequence[float]],
-    start: TempSchedule | Sequence[float],
+    temperatures: TempSchedule | Sequence[float],
     tolerance: float,
-    max_rounds: int,
+    max_iterations: int,
 ) -> FeedbackLadder:
     """Redistribute a ladder of fixed length so a walker's round trip is fastest.
 
@@ -789,7 +823,7 @@ def adapt_ladder_by_round_trips(
         finite.
         :func:`sal.sample.tempered.up_fraction` computes it
         from a walker trace.
-    start : TempSchedule | Sequence[float]
+    temperatures : TempSchedule | Sequence[float]
         The starting ladder, in either spelling and read by :func:`ladder`
         into the same floats: at least three temperatures --- two are the
         endpoints and there is nothing to place --- strictly monotone in
@@ -797,7 +831,7 @@ def adapt_ladder_by_round_trips(
     tolerance : float
         Relative move, positive: a round whose largest ``|T' / T - 1|`` is
         below it stops the warm-up and reports ``converged``.
-    max_rounds : int
+    max_iterations : int
         Measurements to take before stopping, at least 1.
 
     Returns
@@ -809,12 +843,14 @@ def adapt_ladder_by_round_trips(
     ValueError
         If the ladder has fewer than three temperatures, is not strictly
         monotone or is not positive; if ``tolerance`` is not positive or
-        ``max_rounds`` is below 1; if ``measure`` returns other than one value
+        ``max_iterations`` is below 1; if ``measure`` returns other than one value
         per rung, or a value that is not finite; or if ``f`` is flat over the
         whole ladder, which is a run in which no walker circulated and so
         carries no placement.
     """
-    rungs = check_ladder(ladder(start), needed_by="a ladder", monotone=Monotone.EITHER)
+    rungs = check_ladder(
+        ladder(temperatures), needed_by="a ladder", monotone=Monotone.EITHER
+    )
     if len(rungs) < 3:
         msg = (
             f"a round-trip placement needs at least three temperatures, got "
@@ -824,13 +860,13 @@ def adapt_ladder_by_round_trips(
     if not tolerance > 0.0:
         msg = f"tolerance must be positive, got {tolerance}"
         raise ValueError(msg)
-    if max_rounds < 1:
-        msg = f"max_rounds must be at least 1, got {max_rounds}"
+    if max_iterations < 1:
+        msg = f"max_iterations must be at least 1, got {max_iterations}"
         raise ValueError(msg)
 
     current = rungs
     replicas_measured = 0
-    for round_index in range(1, max_rounds + 1):
+    for round_index in range(1, max_iterations + 1):
         fraction = tuple(float(value) for value in measure(current))
         replicas_measured += len(current)
         if len(fraction) != len(current):
@@ -849,7 +885,7 @@ def adapt_ladder_by_round_trips(
         moved = max(
             abs(new / old - 1.0) for new, old in zip(proposal, current, strict=True)
         )
-        if moved < tolerance or round_index == max_rounds:
+        if moved < tolerance or round_index == max_iterations:
             return FeedbackLadder(
                 proposal, fraction, moved < tolerance, round_index, replicas_measured
             )
@@ -895,3 +931,78 @@ def _place(ladder: tuple[float, ...], fraction: Sequence[float]) -> tuple[float,
         )
     placed.append(ladder[-1])
     return tuple(placed)
+
+
+@dataclass(frozen=True, kw_only=True)
+class Annealed[T]:
+    """What an annealing run found, where it ended, and what it cost (issue #1090).
+
+    Five annealers returned five shapes: the best point was ``labelling``,
+    ``state``, ``theta`` or ``topology``, the cost ``site_visits``,
+    ``force_evaluations`` or unreported, and none said why it stopped. This
+    is the shape they share; each annealer's result is a thin subclass
+    adding its value in its own sign --- an ``energy`` it minimizes or a
+    ``log_*`` it maximizes, per root ``CLAUDE.md`` --- and its per-step
+    record. The value stays on the subclass because one field name across
+    the two signs is the drift #1089 removed.
+
+    Parameters
+    ----------
+    best : T
+        The best point visited. The *best* rather than the last: the final
+        steps run cold but not at zero, so the chain can leave it.
+    final : T
+        Where the chain ended, so a caller can see whether the best was the
+        end or a point passed through.
+    spent : int
+        What the run cost, in ``unit``.
+    unit : Cost
+        The unit ``spent`` is counted in, so two annealers are compared on a
+        budget they both declare.
+    termination : Termination
+        Why the run stopped. An annealer runs its schedule to the end, so
+        this is the schedule's length and not converged.
+    """
+
+    best: T
+    final: T
+    spent: int
+    unit: Cost
+    termination: Termination
+
+
+@dataclass(frozen=True, kw_only=True)
+class Tempered[T]:
+    """What a parallel-tempering run found, and what it cost (issue #1090).
+
+    Three temperings returned three shapes, the cost as ``site_visits``,
+    ``force_evaluations`` or a sweep count to multiply out. This is the
+    shape they share; each tempering's result is a thin subclass adding its
+    value in its own sign and what its move set records, as
+    :class:`Annealed` does.
+
+    Parameters
+    ----------
+    best : T
+        The best point seen at any temperature.
+    temperatures : tuple[float, ...]
+        The ladder, as given.
+    swap_acceptance : np.ndarray
+        Fraction of proposed exchanges accepted per adjacent pair, shape
+        ``(n_replicas - 1,)``. Near zero means the ladder has a gap nothing
+        crosses and the replicas are independent chains; near one means two
+        temperatures are close enough that one is redundant.
+    spent : int
+        What the run cost over every replica, in ``unit``.
+    unit : Cost
+        The unit ``spent`` is counted in.
+    termination : Termination
+        Why the run stopped: its steps ran out, or a deadline cut it short.
+    """
+
+    best: T
+    temperatures: tuple[float, ...]
+    swap_acceptance: np.ndarray
+    spent: int
+    unit: Cost
+    termination: Termination

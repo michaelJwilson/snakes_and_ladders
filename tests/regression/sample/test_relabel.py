@@ -17,7 +17,7 @@ import numpy as np
 import pytest
 import torch
 from sal.emissions import GaussianEmission
-from sal.opt.mixture import responsibilities
+from sal.opt.mixture import responsibilities_torch
 from sal.sample.relabel import (
     MAX_SJW_COMPONENTS,
     RelabelMethod,
@@ -228,7 +228,7 @@ def test_allocation_probabilities_are_the_responsibilities() -> None:
     log_weights = np.log(np.array([[0.2, 0.3, 0.5], [0.6, 0.3, 0.1]]))
     drawn = allocation_draws(observations, log_weights, [family, family], rng)
     for t in range(2):
-        expected = responsibilities(
+        expected = responsibilities_torch(
             torch.as_tensor(observations), torch.as_tensor(log_weights[t]), family
         ).numpy()
         np.testing.assert_allclose(drawn.probabilities[t], expected, rtol=1e-12)

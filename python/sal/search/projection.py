@@ -34,6 +34,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
+from dataclasses import field as dataclass_field
 
 import numpy as np
 import torch
@@ -70,7 +71,7 @@ from sal.opt.mixture import (
     KMeansPlusPlus,
     emission_mixture_plus_plus,
     mixture_log_likelihood,
-    responsibilities,
+    responsibilities_torch,
 )
 from sal.opt.mixture import (
     expectation_maximization as gaussian_expectation_maximization,
@@ -470,7 +471,7 @@ def burn_in_seeding(
     )
     return Seeding(
         _count_pair(fit.components),
-        fit.iterations * size / instance.n_samples,
+        fit.termination.iterations * size / instance.n_samples,
     )
 
 
@@ -624,7 +625,7 @@ def chain_seeding(
     chain = initializer.chain(surrogate(instance))
     return Seeding(
         _from_theta(instance, chain.draws[-1], at),
-        PASSES_PER_GRADIENT * chain.force_evaluations,
+        PASSES_PER_GRADIENT * chain.spent,
         f"acceptance {chain.acceptance_rate:.2f}, mean energy error "
         f"{float(chain.energy_error.mean()):.2e}",
     )
@@ -646,8 +647,8 @@ def annealed_seeding(
         n_steps=CHAIN_TRAJECTORY,
     ).run(surrogate(instance))
     return Seeding(
-        _from_theta(instance, run.theta, at),
-        PASSES_PER_GRADIENT * run.force_evaluations,
+        _from_theta(instance, run.best, at),
+        PASSES_PER_GRADIENT * run.spent,
         f"acceptance {run.acceptance_rate:.2f}",
     )
 
@@ -672,8 +673,8 @@ def tempered_seeding(
         n_steps=CHAIN_TRAJECTORY,
     ).run(surrogate(instance))
     return Seeding(
-        _from_theta(instance, run.theta, at),
-        PASSES_PER_GRADIENT * run.force_evaluations,
+        _from_theta(instance, run.best, at),
+        PASSES_PER_GRADIENT * run.spent,
         f"cold acceptance {float(run.acceptance_rate[0]):.2f}, lowest swap "
         f"{float(run.swap_acceptance.min()):.2f}",
     )
@@ -733,7 +734,7 @@ def gaussian_em_seeding(
     ended = fitted.termination
     return Seeding(
         seed_at_means(instance, fitted.components.mean, at),
-        float(fitted.iterations),
+        float(fitted.termination.iterations),
         "" if ended is None else f"{ended.reason.value} after {ended.iterations}",
     )
 
@@ -856,7 +857,7 @@ class Fitted:
     iterations: int
     recovery: float
     mean_error: float
-    termination: Termination | None = None
+    termination: Termination = dataclass_field(kw_only=True)
     components: IndependentCountPair | None = None
 
     @property
@@ -1025,7 +1026,7 @@ def _scored(
         component's negative-binomial mean over that renaming.
     """
     values = torch.as_tensor(instance.observations, dtype=torch.float64)
-    posterior = responsibilities(values, torch.log(weights), components)
+    posterior = responsibilities_torch(values, torch.log(weights), components)
     assigned = np.asarray(posterior.argmax(dim=1).numpy())
     columns = match_components(components, instance.truth)
     fitted_mean = components.total.mean.numpy()

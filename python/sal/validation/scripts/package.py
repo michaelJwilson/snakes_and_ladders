@@ -77,7 +77,7 @@ def _alpha_expansion(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
     )
 
     def call() -> Outputs:
-        result = solver(graph, field, n_states, backend=Backend.RUST)
+        result = solver(graph, field, n_states=n_states, backend=Backend.RUST)
         return {"labelling": result.labelling, "energy": np.asarray(result.energy)}
 
     return call
@@ -419,7 +419,7 @@ def _random_walk_sample(inputs: Mapping[str, np.ndarray]) -> Callable[[], Output
             np.random.default_rng(seed),
             n_draws,
             step_size=step_size,
-            theta0=theta0,
+            start=theta0,
             adaptation=adaptation,
             store_chain=store_chain,
         )
@@ -486,7 +486,7 @@ def _hmc_declared(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
             n_draws,
             step_size=step_size,
             n_steps=n_steps,
-            theta0=theta0,
+            start=theta0,
             adaptation=adaptation,
             store_chain=store_chain,
         )

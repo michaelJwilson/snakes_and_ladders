@@ -19,6 +19,7 @@ import logging
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
+from dataclasses import field as dataclass_field
 
 import torch
 
@@ -87,14 +88,14 @@ class FitResult:
     iterations: int
     converged: bool
     standard_errors: Mapping[str, torch.Tensor] | None = None
-    termination: Termination | None = None
+    termination: Termination = dataclass_field(kw_only=True)
 
 
 def fit(
     objective: Objective,
-    theta0: torch.Tensor | None = None,
+    start: torch.Tensor | None = None,
     max_iterations: int = 500,
-    gradient_tolerance: float = 1e-8,
+    tolerance: float = 1e-8,
     *,
     include_intervals: bool = False,
 ) -> FitResult:
@@ -109,11 +110,11 @@ def fit(
     ----------
     objective : Objective
         The objective to minimize.
-    theta0 : torch.Tensor | None
+    start : torch.Tensor | None
         Starting point; ``objective.initial()`` when omitted.
     max_iterations : int
         Maximum optimizer steps.
-    gradient_tolerance : float
+    tolerance : float
         Convergence threshold on ``max|grad| / max(1, |value|)``.
     include_intervals : bool
         Also compute :func:`constrained_standard_errors` at the fit. Off by
@@ -134,7 +135,7 @@ def fit(
         is returned for inspection.
     """
     theta = (
-        (objective.initial() if theta0 is None else theta0)
+        (objective.initial() if start is None else start)
         .detach()
         .clone()
         .requires_grad_(True)
@@ -184,7 +185,7 @@ def fit(
             relative_gradient_norm=gradient_norm,
             wall_s=time.perf_counter() - started,
         )
-        if gradient_norm <= gradient_tolerance:
+        if gradient_norm <= tolerance:
             converged = True
             break
 
@@ -439,20 +440,20 @@ class MultiStartResult:
     best: FitResult
     all_fits: tuple[FitResult, ...]
     spread: float
-    termination: Termination | None = None
+    termination: Termination = dataclass_field(kw_only=True)
 
 
 def _fit_start(task: tuple[Objective, torch.Tensor, int, float]) -> FitResult:
     """One start of a multi-start fit, importable so a process pool can run it."""
-    objective, theta0, max_iterations, gradient_tolerance = task
-    return fit(objective, theta0, max_iterations, gradient_tolerance)
+    objective, theta0, max_iterations, tolerance = task
+    return fit(objective, theta0, max_iterations, tolerance)
 
 
 def fit_from(
     objective: Objective,
     initializer: Initializer,
     max_iterations: int = 500,
-    gradient_tolerance: float = 1e-8,
+    tolerance: float = 1e-8,
     *,
     workers: int,
     include_intervals: bool = False,
@@ -470,7 +471,7 @@ def fit_from(
         Where to start. See `sal.opt.initialize`.
     max_iterations : int
         Passed to each fit.
-    gradient_tolerance : float
+    tolerance : float
         Passed to each fit.
     workers : int
         Starts fitted at once, through :func:`sal.parallel.map_tasks`
@@ -503,7 +504,7 @@ def fit_from(
 
     results = map_tasks(
         _fit_start,
-        [(objective, theta0, max_iterations, gradient_tolerance) for theta0 in starts],
+        [(objective, theta0, max_iterations, tolerance) for theta0 in starts],
         workers=workers,
         pool=_MULTI_START_POOL,
         intra_op_threads=_MULTI_START_INTRA_OP_THREADS,

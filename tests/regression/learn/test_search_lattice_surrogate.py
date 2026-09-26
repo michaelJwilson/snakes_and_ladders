@@ -44,9 +44,9 @@ from sal.likelihood.potts import enumerate_potts, log_weights
 from sal.likelihood.surrogate import (
     decoupled_ground_energy,
     decoupled_log_partition,
-    mean_field_log_partition,
+    mean_field_log_partition_torch,
     saturated_log_partition,
-    spanning_tree_log_partition,
+    spanning_tree_log_partition_torch,
 )
 from sal.sim.fixtures import fixture
 from sal.sim.graph import PottsGraph
@@ -87,11 +87,11 @@ def _log_partition_bracket(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Mean field below and the spanning-tree bound above, per instance."""
     lower = [
-        float(mean_field_log_partition(graph, torch.as_tensor(field)))
+        float(mean_field_log_partition_torch(graph, torch.as_tensor(field)))
         for graph, field in zip(graphs, fields, strict=True)
     ]
     upper = [
-        float(spanning_tree_log_partition(graph, torch.as_tensor(field)))
+        float(spanning_tree_log_partition_torch(graph, torch.as_tensor(field)))
         for graph, field in zip(graphs, fields, strict=True)
     ]
     return np.array(lower), np.array(upper)
@@ -122,8 +122,8 @@ def test_four_bounds_bracket_the_enumerated_log_partition() -> None:
     field = torch.as_tensor(CI.field)
     exact = enumerate_potts(CI.graph, CI.field).log_partition
 
-    mean_field = float(mean_field_log_partition(CI.graph, field))
-    spanning = float(spanning_tree_log_partition(CI.graph, field))
+    mean_field = float(mean_field_log_partition_torch(CI.graph, field))
+    spanning = float(spanning_tree_log_partition_torch(CI.graph, field))
     decoupled = float(decoupled_log_partition(CI.graph, field))
     saturated = float(saturated_log_partition(CI.graph, field))
 
@@ -176,7 +176,7 @@ def test_a_surrogate_learns_the_gap_above_the_mean_field_bound_at_nine_sites() -
             model,
             train,
             validation,
-            generator=torch.Generator().manual_seed(0),
+            rng=torch.Generator().manual_seed(0),
             max_epochs=MAX_EPOCHS,
             patience=PATIENCE,
         )
@@ -223,7 +223,7 @@ def test_a_ci_fit_collapses_at_the_transfer_matrix_rung_and_recovers_on_transfer
                 Stage("ci", ci_train, ci_validation),
                 Stage("stress", stress_train, stress_validation),
             ],
-            generator=torch.Generator().manual_seed(0),
+            rng=torch.Generator().manual_seed(0),
             max_epochs=MAX_EPOCHS,
             patience=PATIENCE,
         )
@@ -271,7 +271,7 @@ def test_the_surrogates_predict_the_ground_state_energy_at_five_thousand_sites()
             model,
             train,
             validation,
-            generator=torch.Generator().manual_seed(0),
+            rng=torch.Generator().manual_seed(0),
             max_epochs=MAX_EPOCHS,
             patience=PATIENCE,
         )
@@ -284,7 +284,7 @@ def test_the_surrogates_predict_the_ground_state_energy_at_five_thousand_sites()
         GraphSurrogate(n_features, n_token_features),
         train,
         validation,
-        generator=torch.Generator().manual_seed(0),
+        rng=torch.Generator().manual_seed(0),
         max_epochs=30,
         patience=PATIENCE,
     ).predict(test)

@@ -24,6 +24,7 @@ import torch
 from sal.emissions import EmissionFamily
 from sal.opt.em import EM, EmConfig
 from sal.opt.hmm import EmFit
+from sal.opt.termination import Termination
 
 
 def baum_welch_rectangular(
@@ -122,9 +123,10 @@ def baum_welch_rectangular(
             exposure = exposure[..., None]
 
     previous = -float("inf")
+    iterations, converged = 0, False
     log_likelihood = previous
     at_boundary = False
-    for _ in range(config.max_iterations):
+    for iterations in range(1, config.max_iterations + 1):  # noqa: B007
         # --- E step: forward and backward messages in log space ----------
         emit = emissions.log_density(data, covariate=exposure)
         alpha = torch.empty((n_sequences, length, m), dtype=log_initial.dtype)
@@ -180,13 +182,15 @@ def baum_welch_rectangular(
         at_boundary = at_boundary or step.at_boundary
 
         if abs(log_likelihood - previous) <= config.tolerance * abs(log_likelihood):
+            converged = True
             break
         previous = log_likelihood
 
     return EmFit(
         log_initial=log_initial,
         log_transition=log_transition,
-        emissions=emissions,
+        components=emissions,
         log_likelihood=log_likelihood,
-        emission_at_boundary=at_boundary,
+        at_boundary=at_boundary,
+        termination=Termination.after(iterations, converged=converged),
     )

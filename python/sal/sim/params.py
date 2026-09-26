@@ -26,7 +26,7 @@ import numpy as np
 
 from sal.sim.tree import Node, balanced_tree
 
-_REQUIRED_FIELDS = frozenset({"seed", "n_sites", "tolerance", "k", "pi", "tau"})
+_REQUIRED_FIELDS = frozenset({"seed", "n_sites", "tolerance", "n_states", "pi", "tau"})
 
 
 @dataclass(frozen=True)
@@ -38,7 +38,7 @@ class SimulationParams:
     tau : Node
         Root of the topology, with branch lengths attached to each non-root
         node.
-    k : int
+    n_states : int
         Number of states.
     pi : np.ndarray
         Root state distribution, shape (k,), summing to 1.
@@ -53,7 +53,7 @@ class SimulationParams:
     """
 
     tau: Node
-    k: int
+    n_states: int
     pi: np.ndarray
     seed: int
     n_sites: int
@@ -77,13 +77,13 @@ class SimulationParams:
         Raises
         ------
         ValueError
-            If a required field is missing, or ``pi`` does not have shape (k,)
+            If a required field is missing, or ``pi`` does not have shape (n_states,)
             and sum to 1.
         """
-        k = int(declared["k"])
+        n_states = int(declared["n_states"])
         pi = np.asarray(declared["pi"], dtype=np.float64)
-        if pi.shape != (k,):
-            msg = f"{path}: pi has shape {pi.shape}, expected ({k},)"
+        if pi.shape != (n_states,):
+            msg = f"{path}: pi has shape {pi.shape}, expected ({n_states},)"
             raise ValueError(msg)
         if not np.isclose(pi.sum(), 1.0):
             msg = f"{path}: pi sums to {pi.sum()}, expected 1.0"
@@ -93,7 +93,7 @@ class SimulationParams:
 
         return cls(
             tau=tau,
-            k=k,
+            n_states=n_states,
             pi=pi,
             seed=int(declared["seed"]),
             n_sites=int(declared["n_sites"]),

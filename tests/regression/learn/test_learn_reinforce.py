@@ -189,7 +189,7 @@ def test_training_raises_the_enumerated_expected_return() -> None:
         max_steps=EPISODE_HORIZON,
     )
     assert enumerated_return() > before
-    assert training.episodes == 60 * 32
+    assert training.spent == 60 * 32
     assert len(training.mean_returns) == 60
 
 
@@ -211,7 +211,7 @@ def test_the_learned_policy_is_at_least_as_good_as_hill_climbing() -> None:
     )
 
     def final_energy(states: tuple[tuple[int, ...], ...]) -> float:
-        return environment.energy(states[-1])
+        return environment.log_weight(states[-1])
 
     greedy = float(
         np.mean(

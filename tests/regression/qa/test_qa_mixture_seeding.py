@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 import torch
 from sal.opt.mixture import MixtureFit, seeding_guarantee
+from sal.opt.termination import Termination
 from sal.qa.mixture_seeding import (
     EM_ITERATIONS,
     SEEDINGS,
@@ -63,7 +64,7 @@ def test_the_fit_lands_within_the_generating_density_scale() -> None:
     observations = simulate_mixture(TRUTH).observations
     fit = fitted(observations, TRUTH.n_components, np.random.default_rng(SEED))
 
-    assert fit.iterations <= EM_ITERATIONS
+    assert fit.termination.iterations <= EM_ITERATIONS
     assert (fit.components.mean.numpy() > min(MEANS) - 1.0).all()
     assert (fit.components.mean.numpy() < max(MEANS) + 1.0).all()
     assert (fit.components.scale.numpy() > 0.2).all()
@@ -78,8 +79,8 @@ def test_the_caption_reports_the_numbers_it_was_handed(tmp_path: Path) -> None:
         weights=torch.as_tensor(truth.weights, dtype=torch.float64),
         components=truth.components,
         log_likelihood=-1000.25,
-        iterations=EM_ITERATIONS,
         at_boundary=False,
+        termination=Termination.after(EM_ITERATIONS, converged=True),
     )
     ratios = SeedingRatios(
         kmeans_plus_plus=np.array([1.0, 3.0]),

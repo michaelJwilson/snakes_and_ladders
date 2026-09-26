@@ -208,9 +208,9 @@ def map_tasks(
     function: Callable[[T], R],
     items: Iterable[T],
     *,
-    workers: int,
-    pool: Pool,
-    intra_op_threads: int | None,
+    workers: int = 1,
+    pool: Pool = "serial",
+    intra_op_threads: int | None = None,
     generator: None = None,
 ) -> list[R]: ...
 
@@ -220,9 +220,9 @@ def map_tasks(
     function: Callable[[T, np.random.Generator], R],
     items: Iterable[T],
     *,
-    workers: int,
-    pool: Pool,
-    intra_op_threads: int | None,
+    workers: int = 1,
+    pool: Pool = "serial",
+    intra_op_threads: int | None = None,
     generator: np.random.Generator,
 ) -> list[R]: ...
 
@@ -231,12 +231,16 @@ def map_tasks(
     function: Callable[..., R],
     items: Iterable[T],
     *,
-    workers: int,
-    pool: Pool,
-    intra_op_threads: int | None,
+    workers: int = 1,
+    pool: Pool = "serial",
+    intra_op_threads: int | None = None,
     generator: np.random.Generator | None = None,
 ) -> list[R]:
     """Apply ``function`` to every item, in parallel where asked, results in input order.
+
+    Serial by default (issue #1085): ``map_tasks(f, items, generator=rng)``
+    runs every item in the calling thread on its own spawned stream, the loop
+    a caller would write, and a parallel call states its pool.
 
     Parameters
     ----------
@@ -260,9 +264,10 @@ def map_tasks(
         ``torch.set_num_threads`` inside every worker, and in this process
         for the serial and thread pools, restored afterwards; set at
         ``torch``'s import where ``torch`` is not yet loaded, so it is never
-        imported here. ``None`` leaves the setting alone. Stated by the caller rather than defaulted
-        because it decides whether the pool oversubscribes the machine;
-        ``DEV.md`` carries the measured rule.
+        imported here. ``None``, the default, leaves the setting alone, which is what a serial
+        call wants; a parallel call states it, because it decides whether the
+        pool oversubscribes the machine, and ``DEV.md`` carries the measured
+        rule.
     generator : np.random.Generator | None
         When given, one child generator per item is spawned from it, in item
         order, and passed as the task's second argument. The parent's spawn

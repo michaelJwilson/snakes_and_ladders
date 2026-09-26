@@ -51,7 +51,7 @@ class Expansion:
 
 def alpha_expansion(
     graph: PottsGraph,
-    field_values: np.ndarray,
+    field: np.ndarray,
     n_states: int,
     *,
     start: np.ndarray | None = None,
@@ -62,7 +62,7 @@ def alpha_expansion(
     ``move="swap"`` runs gco's alpha-beta swap to convergence instead
     (issue #997).
     """
-    values = site_field(np.asarray(field_values, dtype=float), graph.n_nodes)
+    values = site_field(np.asarray(field, dtype=float), graph.n_nodes)
     if values.shape[1] != n_states:
         msg = f"the field has {values.shape[1]} states, not {n_states}"
         raise ValueError(msg)

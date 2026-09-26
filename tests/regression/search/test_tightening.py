@@ -76,7 +76,7 @@ def test_the_bound_never_exceeds_the_enumerated_ground_state() -> None:
     def check(coupling: float, iterations: int) -> None:
         graph = lattice_graph((3, 3), BoundaryCondition.OPEN, coupling)
 
-        certificate = dual_bound(graph, FIELD, iterations=iterations)
+        certificate = dual_bound(graph, FIELD, max_iterations=iterations)
 
         assert certificate.bound <= _ground_state(graph) + 1e-9
 
@@ -92,7 +92,7 @@ def test_the_decoded_labelling_is_certified_optimal_on_the_square_lattice() -> N
     def check(coupling: float) -> None:
         graph = lattice_graph((3, 3), BoundaryCondition.OPEN, coupling)
 
-        certificate = dual_bound(graph, FIELD, iterations=200)
+        certificate = dual_bound(graph, FIELD, max_iterations=200)
 
         assert certificate.optimal
         assert certificate.energy == pytest.approx(_ground_state(graph), abs=1e-9)
@@ -114,7 +114,7 @@ def _cooled(graph: PottsGraph, beta: float) -> PottsGraph:
 @pytest.mark.potts_lattice
 def test_the_dual_bound_is_the_zero_temperature_belief_propagation_energy() -> None:
     # The rung below (#734). On the tree the bound is max-product's MAP energy:
-    # 8.9e-16 (1e-9, `Certificate.optimal`'s slack). `-log Z / beta` rises to
+    # 8.9e-16 (1e-9, `BoundedLabelling.optimal`'s slack). `-log Z / beta` rises to
     # it within `log(k ** n) / beta`: gaps 3.7e-2 at beta 10, 4.5e-7 at 100
     # (bounds 0.659, 0.066). On the loopy 3x3 the bound is below the Bethe
     # decoding's energy: slack 0.0 at J = 0.4, 9.0 at J = -0.8.
@@ -124,7 +124,7 @@ def test_the_dual_bound_is_the_zero_temperature_belief_propagation_energy() -> N
     )
     map_energy = energy(TREE, FIELD, decoded)
 
-    certificate = dual_bound(TREE, FIELD, iterations=200)
+    certificate = dual_bound(TREE, FIELD, max_iterations=200)
 
     assert certificate.optimal
     assert certificate.bound == pytest.approx(map_energy, abs=1e-9)
@@ -151,7 +151,7 @@ def test_the_dual_bound_is_the_zero_temperature_belief_propagation_energy() -> N
 
         assert not marginals.exact
         assert (
-            dual_bound(loopy, FIELD, iterations=200).bound
+            dual_bound(loopy, FIELD, max_iterations=200).bound
             <= energy(loopy, FIELD, bethe) + 1e-9
         )
 
@@ -165,8 +165,29 @@ def test_a_decoded_labelling_is_never_better_than_the_bound() -> None:
     graph = triangular_lattice_graph((3, 3), BoundaryCondition.OPEN, -0.8)
 
     for iterations in (1, 5, 50):
-        certificate = dual_bound(graph, FIELD, iterations=iterations)
+        certificate = dual_bound(graph, FIELD, max_iterations=iterations)
         assert certificate.gap >= -1e-9
+
+
+@pytest.mark.analytic
+@pytest.mark.potts_lattice
+def test_the_tolerance_is_the_one_it_hard_coded_and_a_looser_one_settles_sooner() -> (
+    None
+):
+    # Issue #1091 lifted the 1e-12 out of the loop: at that value the run is
+    # the default's, bitwise; a looser one settles in no more sweeps, and
+    # the bound it certifies stays a lower bound.
+    graph = triangular_lattice_graph((3, 3), BoundaryCondition.OPEN, -0.8)
+    ground = _ground_state(graph)
+
+    default = dual_bound(graph, FIELD, max_iterations=300)
+    spelled = dual_bound(graph, FIELD, max_iterations=300, tolerance=1e-12)
+    loose = dual_bound(graph, FIELD, max_iterations=300, tolerance=1e-3)
+
+    assert spelled.bound == default.bound
+    assert spelled.termination.iterations == default.termination.iterations
+    assert loose.termination.iterations <= default.termination.iterations
+    assert loose.bound <= ground + 1e-9
 
 
 @pytest.mark.oracle
@@ -180,9 +201,9 @@ def test_triangles_tighten_what_the_pairwise_relaxation_cannot_see() -> None:
         graph = triangular_lattice_graph((3, 3), BoundaryCondition.OPEN, coupling)
         ground = _ground_state(graph)
 
-        pairwise = dual_bound(graph, FIELD, iterations=300)
+        pairwise = dual_bound(graph, FIELD, max_iterations=300)
         tightened = dual_bound(
-            graph, FIELD, iterations=300, plaquettes=_triangles(graph)
+            graph, FIELD, max_iterations=300, plaquettes=_triangles(graph)
         )
 
         assert pairwise.bound <= ground + 1e-9
@@ -200,6 +221,6 @@ def test_the_pairwise_bound_does_not_depend_on_the_coupling_here() -> None:
     weak = triangular_lattice_graph((3, 3), BoundaryCondition.OPEN, -0.8)
     strong = triangular_lattice_graph((3, 3), BoundaryCondition.OPEN, -1.5)
 
-    assert dual_bound(weak, FIELD, iterations=300).bound == pytest.approx(
-        dual_bound(strong, FIELD, iterations=300).bound, rel=1e-12
+    assert dual_bound(weak, FIELD, max_iterations=300).bound == pytest.approx(
+        dual_bound(strong, FIELD, max_iterations=300).bound, rel=1e-12
     )

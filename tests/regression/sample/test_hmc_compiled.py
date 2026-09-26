@@ -199,7 +199,7 @@ def test_the_compiled_warm_up_settles_where_the_torch_one_does() -> None:
         ratio = chain.adapted.mass_diagonal.numpy() / precision
         assert ratio.min() > 0.5
         assert ratio.max() < 2.0
-        assert chain.force_evaluations == 3_000 * hmc.leapfrog.force_evaluations(10)
+        assert chain.spent == 3_000 * hmc.leapfrog.force_evaluations(10)
     assert abs(chains[0].acceptance_rate - chains[1].acceptance_rate) < 0.05
 
 
@@ -345,7 +345,7 @@ def test_both_routes_sample_the_mixture_posterior_alike() -> None:
             1_500,
             step_size=0.01,
             n_steps=8,
-            theta0=theta0,
+            start=theta0,
             burn_in=200,
             store_chain=False,
             operators={"x": Power(1)},
@@ -429,7 +429,7 @@ def test_both_routes_sample_the_hmm_posterior_alike(family: str) -> None:
             500,
             step_size=step,
             n_steps=8,
-            theta0=theta0,
+            start=theta0,
             burn_in=100,
             store_chain=False,
             operators={"x": Power(1)},
@@ -453,7 +453,7 @@ def test_the_jax_walk_filters_and_warms_up_as_the_rust_one_does() -> None:
         400,
         step_size=0.05,
         n_steps=6,
-        theta0=theta0,
+        start=theta0,
         adaptation=hmc.Adaptation(200, 0.65, 0.2),
         operators={"x2": Power(2)},
     )

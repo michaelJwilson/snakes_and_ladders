@@ -25,7 +25,7 @@ from sal.opt.emission_mixture import (
     expectation_maximization,
     uniform_start,
 )
-from sal.opt.mixture import mixture_log_likelihood, responsibilities
+from sal.opt.mixture import mixture_log_likelihood, responsibilities_torch
 from sal.opt.split_merge import (
     SplitMerge,
     candidate_moves,
@@ -83,7 +83,7 @@ def _reference(draw: SimulatedEmissionMixtureDataset) -> tuple[float, float]:
     truth = draw.components
     return (
         float(mixture_log_likelihood(values, log_weight, truth)),
-        _recovery(responsibilities(values, log_weight, truth), draw.labels),
+        _recovery(responsibilities_torch(values, log_weight, truth), draw.labels),
     )
 
 
