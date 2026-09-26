@@ -66,9 +66,12 @@ def test_the_guard_has_a_subject_and_it_still_imports() -> None:
     # asserted against is named here and imported. An import that stopped
     # working is the bit-rot the conservation rule exists to prevent, and
     # nothing else in the package would notice it.
+    # Walked, not globbed: a subpackage such as `surrogate.potts` (#1067) is
+    # conserved code the top level alone would not name.
+    sandbox = PACKAGE / "sandbox"
     modules = sorted(
-        path.stem
-        for path in (PACKAGE / "sandbox").glob("*.py")
+        ".".join(path.relative_to(sandbox).with_suffix("").parts)
+        for path in sandbox.rglob("*.py")
         if path.name != "__init__.py"
     )
     assert modules, "the sandbox carries nothing for the import guard to guard"
