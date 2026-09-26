@@ -10,8 +10,15 @@ columns are the node marginals, site-major, then each edge's ``n_states^2``
 table, row-major. Outputs: ``value``, the LP's optimal value;
 ``node_marginals``; ``status`` and ``message``, `linprog`'s; ``iterations``;
 ``build_seconds``, the constraint matrix's assembly. The measured seconds are
-``linprog`` alone; the peak resident memory is the assembly and the solve
+the solve alone; the peak resident memory is the assembly and the solve
 together.
+
+With ``time_limit`` among the inputs the node marginals are integer (issue
+#1069) and ``milp`` solves the MIP to a relative gap of zero within that many
+seconds. The edge tables stay continuous: integral node marginals fix every
+table, so the MIP's optimum is the minimum energy. It adds ``dual_bound``,
+HiGHS's lower bound, which equals ``value`` when the optimum is proven, and
+``nodes``, the branch-and-bound node count; ``iterations`` is then 0.
 """
 
 from __future__ import annotations
@@ -72,12 +79,30 @@ def _polytope(
     return cost, matrix, right
 
 
+def _mip(
+    cost: np.ndarray, matrix: Any, right: np.ndarray, n_integer: int, limit: float
+) -> Any:
+    """``milp`` on the polytope with the first ``n_integer`` columns integer."""
+    from scipy.optimize import Bounds, LinearConstraint, milp
+
+    integrality = np.zeros(cost.shape[0], dtype=np.int64)
+    integrality[:n_integer] = 1
+    return milp(
+        cost,
+        integrality=integrality,
+        bounds=Bounds(0.0, np.inf),
+        constraints=LinearConstraint(matrix, right, right),
+        options={"time_limit": limit, "mip_rel_gap": 0.0},
+    )
+
+
 def main() -> None:
-    """Assemble the LP, solve it under the timer, and write the value back."""
+    """Assemble the LP or the MIP, solve it under the timer, and write the value back."""
     from scipy.optimize import linprog  # HiGHS, imported only in this interpreter
 
     inputs, returned = received()
     unary = inputs["unary"]
+    limit = float(inputs["time_limit"]) if "time_limit" in inputs else None
 
     def build_and_solve() -> tuple[Any, float, float]:
         (cost, matrix, right), build_seconds = timed(
@@ -85,11 +110,16 @@ def main() -> None:
                 unary, inputs["first"], inputs["second"], inputs["coupling"]
             )
         )
-        result, seconds = timed(
-            lambda: linprog(
-                cost, A_eq=matrix, b_eq=right, bounds=(0.0, None), method="highs"
+        if limit is not None:
+            result, seconds = timed(
+                lambda: _mip(cost, matrix, right, unary.size, limit)
             )
-        )
+        else:
+            result, seconds = timed(
+                lambda: linprog(
+                    cost, A_eq=matrix, b_eq=right, bounds=(0.0, None), method="highs"
+                )
+            )
         return result, seconds, build_seconds
 
     (result, seconds, build_seconds), peak_bytes = peaked(build_and_solve)
@@ -107,7 +137,11 @@ def main() -> None:
             "node_marginals": np.ascontiguousarray(marginals, dtype=np.float64),
             "status": np.asarray(result.status, dtype=np.int64),
             "message": np.asarray(str(result.message)),
-            "iterations": np.asarray(result.nit, dtype=np.int64),
+            "iterations": np.asarray(getattr(result, "nit", 0), dtype=np.int64),
+            "dual_bound": np.asarray(
+                getattr(result, "mip_dual_bound", np.nan), dtype=np.float64
+            ),
+            "nodes": np.asarray(getattr(result, "mip_node_count", 0), dtype=np.int64),
             "build_seconds": np.asarray(build_seconds, dtype=np.float64),
         },
         seconds,
