@@ -55,9 +55,9 @@ def _score_once(
     def run() -> float:
         # A fresh environment per call: the cache is the point of the class,
         # and timing a cache hit would measure a dictionary lookup.
-        return TreeEnvironment(alignment, k, pi, branch_length, reward=reward).score(
-            topology
-        )
+        return TreeEnvironment(
+            alignment, k, pi, branch_length, reward=reward
+        ).log_weight(topology)
 
     return float(benchmark(run))
 

@@ -50,6 +50,15 @@ runs are separate questions. A run too expensive to make unconditional is cut
 by a stated budget, never by a hash; ``DEV.md`` carries the budget. The digest
 and the ``<name>.inputs`` stamps are gone with issue #490.
 
+**A pull request runs the notebooks it changes; the release gate runs all of
+them** (issue #1087). ``--changed`` reads changed paths on stdin and checks what
+:func:`changed_notebooks` selects: a changed notebook itself, every notebook when
+``docs/nb/data/`` or this checker changes, and none otherwise. The full run moved
+to ``infra/release.sh`` because it was 590 to 1,438 s of a local CI run. A
+notebook a change breaks without touching it is then found at the next release;
+the digest #490 removed skipped one for as long as nothing merged, which a
+release bounds.
+
 ``--write`` re-executes and saves instead of comparing, which regenerates a
 notebook after a change moves what it prints. Both live here rather than in two
 tools because they must execute a notebook *identically* --- a regenerator
@@ -68,8 +77,9 @@ from __future__ import annotations
 import argparse
 import difflib
 import re
+import sys
 import time
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -395,6 +405,33 @@ def compare(path: Path) -> list[str]:
     ]
 
 
+#: A changed path under one of these selects every notebook: the data they
+#: read, and this checker itself (issue #1087).
+SELECTS_ALL = ("docs/nb/data/", "infra/check_notebooks.py")
+
+
+def changed_notebooks(changed: Iterable[str]) -> list[Path]:
+    """The notebooks a change re-executes on a pull request (issue #1087).
+
+    A changed notebook selects itself; a changed path under
+    :data:`SELECTS_ALL` selects every notebook; any other change selects
+    none. Every notebook runs at release (`infra/release.sh`) whatever this
+    returns, so a notebook a change breaks without touching it is found at
+    the next release, never skipped for good (issues #480, #507).
+    """
+    paths = [line.strip() for line in changed if line.strip()]
+    if any(path.startswith(SELECTS_ALL) for path in paths):
+        return sorted(NOTEBOOK_DIR.glob("*.ipynb"))
+    return sorted(
+        REPO_ROOT / path
+        for path in paths
+        if path.startswith("docs/nb/")
+        and path.endswith(".ipynb")
+        and "/" not in path.removeprefix("docs/nb/")
+        and (REPO_ROOT / path).exists()
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     """Check every notebook, or the ones named.
 
@@ -418,7 +455,30 @@ def main(argv: list[str] | None = None) -> int:
             "change moves what a notebook prints, then commit the result."
         ),
     )
+    parser.add_argument(
+        "--changed",
+        action="store_true",
+        help=(
+            "Read changed paths, one per line, from stdin and check only the "
+            "notebooks they select (changed_notebooks); the release gate "
+            "checks every notebook."
+        ),
+    )
+    parser.add_argument(
+        "--list",
+        action="store_true",
+        help="With --changed: print the selected notebooks and exit.",
+    )
     arguments = parser.parse_args(argv)
+    if arguments.changed:
+        selected = changed_notebooks(sys.stdin)
+        if arguments.list:
+            print(" ".join(str(path.relative_to(REPO_ROOT)) for path in selected))
+            return 0
+        if not selected:
+            print("no notebook selected: notebooks run at release (issue #1087)")
+            return 0
+        arguments.notebooks = selected
     from sal.log import get_logger, phase
 
     log = get_logger("check_notebooks", start_time=time.time())

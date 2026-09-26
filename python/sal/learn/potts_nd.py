@@ -351,14 +351,13 @@ class PottsNDEnvironment(Environment[Configuration, PottsAction]):
         """Site visits one sweep costs, as ``search.ground_state`` charges it."""
         return self._sweep_visits
 
-    def score(self, state: Configuration) -> float:
+    def log_weight(self, state: Configuration) -> float:
         """``J * agreements + sum_i h_i[s_i]``, which the agent maximizes.
 
-        The negation of ``sim.potts.energies``, and named ``score`` rather than
-        ``energy`` because it is the quantity that goes *up*:
-        :class:`~sal.learn.potts.PottsEnvironment` calls the
-        same thing ``energy`` while returning the log weight, which is one
-        vocabulary too many.
+        The negation of ``sim.potts.energies``, and named for the quantity that
+        goes *up*: every ``learn`` environment calls it ``log_weight`` since
+        #1089, which retired ``score`` here and ``energy`` on
+        :class:`~sal.learn.potts.PottsEnvironment`.
 
         The field term is summed first and the coupling term added as one
         gather and a pairwise sum over the edges *in the order they were
@@ -545,7 +544,7 @@ class PottsNDEnvironment(Environment[Configuration, PottsAction]):
             rng=self._move_generator(state, action),
         )
         after = tuple(int(value) for value in successor)
-        return after, self.score(after) - self.score(state)
+        return after, self.log_weight(after) - self.log_weight(state)
 
     def _flip(
         self, state: Configuration, action: PottsAction, temperature: float
@@ -572,7 +571,7 @@ class PottsNDEnvironment(Environment[Configuration, PottsAction]):
         ``sample.potts_mcmc.sweeps.single_site_sweep`` does.
         """
         labels = np.asarray(state, dtype=np.int64).copy()
-        before = self.score(tuple(int(value) for value in labels))
+        before = self.log_weight(tuple(int(value) for value in labels))
         rng = self._move_generator(state, action)
         for site in range(self._n_nodes):
             neighbours = self._neighbour_table[site][self._neighbour_mask[site]]
@@ -586,7 +585,7 @@ class PottsNDEnvironment(Environment[Configuration, PottsAction]):
             weights = np.exp((local - local.max()) / temperature)
             labels[site] = int(rng.choice(self._n_states, p=weights / weights.sum()))
         successor = tuple(int(value) for value in labels)
-        return successor, self.score(successor) - before
+        return successor, self.log_weight(successor) - before
 
     def _flip_gain(self, labels: np.ndarray, action: PottsAction) -> float:
         """``score`` after the flip less before it, from the affected terms alone."""

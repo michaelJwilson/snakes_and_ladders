@@ -96,7 +96,7 @@ def reward_surfaces(
         environment = TreeEnvironment(
             alignment, params.k, params.pi, branch_length, reward=reward
         )
-        return np.array([environment.score(t) for t in topologies])
+        return np.array([environment.log_weight(t) for t in topologies])
 
     fitted = surface(RewardModel.FITTED, default)
     known = surface(RewardModel.KNOWN, default)

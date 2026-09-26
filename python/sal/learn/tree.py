@@ -322,7 +322,7 @@ class TreeEnvironment(Environment[Topology, Topology]):
         """Which columns :meth:`features` returns."""
         return self._features
 
-    def score(self, topology: Topology) -> float:
+    def log_weight(self, topology: Topology) -> float:
         """Log-likelihood of ``topology`` under this environment's reward model.
 
         Memoized on ``leaf_bipartitions``, which is rooting- and
@@ -412,7 +412,7 @@ class TreeEnvironment(Environment[Topology, Topology]):
 
     def step(self, state: Topology, action: Topology) -> tuple[Topology, float]:
         """Move to ``action`` and return it with the improvement it bought."""
-        return action, self.score(action) - self.score(state)
+        return action, self.log_weight(action) - self.log_weight(state)
 
     def raw_features(
         self, state: Topology, actions: Sequence[Topology]
@@ -427,7 +427,7 @@ class TreeEnvironment(Environment[Topology, Topology]):
         two. Every column is in the move's own units, which is what the
         pins in the regression suite read; :meth:`features` standardizes.
         """
-        current = self.score(state)
+        current = self.log_weight(state)
         current_parsimony = self.parsimony(state)
         state_splits = leaf_bipartitions(state)
         rows = []
@@ -438,7 +438,7 @@ class TreeEnvironment(Environment[Topology, Topology]):
             detached, attached = exchanged_subtrees(state_splits, action_splits)
             rows.append(
                 [
-                    self.score(action) - current,
+                    self.log_weight(action) - current,
                     float(self.parsimony(action) - current_parsimony),
                     float(np.mean([self.split_support(split) for split in broken])),
                     float(np.mean([self.split_support(split) for split in made])),
@@ -481,8 +481,8 @@ class TreeEnvironment(Environment[Topology, Topology]):
         tensor is read out without a copy (issue #1011).
         """
         if self._features is FeatureSet.IMPROVEMENT:
-            current = self.score(state)
-            rows = [[self.score(action) - current] for action in actions]
+            current = self.log_weight(state)
+            rows = [[self.log_weight(action) - current] for action in actions]
             return np.array(rows, dtype=np.float64).reshape(len(actions), 1)
         return standardize(self.raw_features(state, actions)).numpy()
 
@@ -497,5 +497,7 @@ class TreeEnvironment(Environment[Topology, Topology]):
         greedy baseline stop in the same places and are comparable at a
         matched budget.
         """
-        current = self.score(state)
-        return not any(self.score(action) > current for action in self.actions(state))
+        current = self.log_weight(state)
+        return not any(
+            self.log_weight(action) > current for action in self.actions(state)
+        )

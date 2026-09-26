@@ -53,11 +53,13 @@ def environment() -> TreeEnvironment:
 def maximum(environment: TreeEnvironment) -> float:
     params = load_params(FIXTURE, SimulationParams)
     leaves = sorted(node.name for _, node in edges(params.tau) if node.is_leaf)
-    return max(environment.score(t) for t in enumerate_topologies(leaves))
+    return max(environment.log_weight(t) for t in enumerate_topologies(leaves))
 
 
 def _rate(environment: TreeEnvironment, finals: list[Topology], best: float) -> float:
-    return float(np.mean([abs(environment.score(t) - best) < 1e-9 for t in finals]))
+    return float(
+        np.mean([abs(environment.log_weight(t) - best) < 1e-9 for t in finals])
+    )
 
 
 @pytest.mark.release

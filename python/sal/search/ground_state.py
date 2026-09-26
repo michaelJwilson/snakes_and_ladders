@@ -89,7 +89,7 @@ from sal.sample.potts_mcmc import (
     parallel_tempering,
 )
 from sal.sample.schedule import ScheduleParams, ScheduleShape
-from sal.search.alpha_expansion import alpha_beta_swap, alpha_expansion
+from sal.search.alpha_expansion import Labelling, alpha_beta_swap, alpha_expansion
 from sal.search.bifurcation import simulated_bifurcation
 from sal.search.icm import (
     SweepOrder,
@@ -577,16 +577,14 @@ class MethodRun:
         infinite energy rather than a fallback labelling's, so it ranks last
         and a reader is told it failed instead of being shown another
         method's numbers under its name.
-    termination : Termination | None
-        Why the method's own loop ended, where the method says (issue #860).
-        Not a restatement of ``converged``: that field answers *did this
-        return an answer*, and a sweep loop that answers it with ``True``
-        still ran to its budget and met no criterion. So the rows carrying
-        one are the two that know --- the cut-based moves, which return on a
-        cycle that lowers nothing, and max-product, which converges or
-        refuses. The Monte Carlo and descent rows leave it ``None``: their
-        kernels report a labelling and an energy and not which branch ended
-        the loop.
+    termination : Termination
+        Why the method's own loop ended (issues #860, #1085), required. Not a
+        restatement of ``converged``: that field answers *did this return an
+        answer*, and a sweep loop that answers it with ``True`` still ran to
+        its budget and met no criterion. The cut-based moves return on a cycle
+        that lowers nothing, max-product converges or refuses, ICM stops on a
+        clean sweep or its cap, and the Monte Carlo rows run a step count
+        fixed before the run, so they end on their budget.
     """
 
     labelling: np.ndarray
@@ -595,7 +593,7 @@ class MethodRun:
     seconds: float
     trace: tuple[ClusterCounter, ...] = ()
     converged: bool = True
-    termination: Termination | None = None
+    termination: Termination = dataclass_field(kw_only=True)
 
 
 def step_cost(problem: Problem | Rung, move: PottsMove) -> int:
@@ -654,6 +652,37 @@ def run_annealed(
         spent=run.site_visits,
         seconds=time.perf_counter() - started,
         trace=run.trace,
+        # A step count fixed before the run: it ends on its budget (#1085).
+        termination=Termination.after(count, converged=False),
+    )
+
+
+def _descend(
+    problem: Problem | Rung,
+    rng: np.random.Generator,
+    max_iterations: int,
+    *,
+    start: np.ndarray | None = None,
+    backend: Backend | None = None,
+    min_sites: int = 0,
+) -> Labelling:
+    """:func:`descend`'s run, whole: the labelling, its sweeps and its termination."""
+    problem = _problem(problem)
+    check_min_sites(min_sites, problem.n_nodes)
+    labelling = (
+        rng.integers(0, problem.n_states, size=problem.n_nodes)
+        if start is None
+        else np.array(start, dtype=np.int64)
+    )
+    return iterated_conditional_modes(
+        problem.graph,
+        problem.field,
+        rng,
+        start=labelling,
+        max_iterations=max_iterations,
+        min_sites=min_sites,
+        backend=Backend.NUMBA if backend is None else backend,
+        n_states=problem.n_states,
     )
 
 
@@ -687,22 +716,8 @@ def descend(
     tuple[np.ndarray, int]
         The labelling, and the sweeps run, at most ``max_iterations``.
     """
-    problem = _problem(problem)
-    check_min_sites(min_sites, problem.n_nodes)
-    labelling = (
-        rng.integers(0, problem.n_states, size=problem.n_nodes)
-        if start is None
-        else np.array(start, dtype=np.int64)
-    )
-    settled = iterated_conditional_modes(
-        problem.graph,
-        problem.field,
-        rng,
-        start=labelling,
-        max_iterations=max_iterations,
-        min_sites=min_sites,
-        backend=Backend.NUMBA if backend is None else backend,
-        n_states=problem.n_states,
+    settled = _descend(
+        problem, rng, max_iterations, start=start, backend=backend, min_sites=min_sites
     )
     return settled.labelling, settled.sweeps
 
@@ -723,14 +738,15 @@ def run_descent(
     """
     problem = _problem(problem)
     started = time.perf_counter()
-    labelling, sweeps = descend(
+    settled = _descend(
         problem, rng, budget.size // problem.visits_per_sweep, start=start
     )
     return MethodRun(
-        labelling=labelling,
-        energy=energy(problem.graph, problem.field, labelling),
-        spent=sweeps * problem.visits_per_sweep,
+        labelling=settled.labelling,
+        energy=energy(problem.graph, problem.field, settled.labelling),
+        spent=settled.sweeps * problem.visits_per_sweep,
         seconds=time.perf_counter() - started,
+        termination=settled.termination,
     )
 
 
@@ -821,6 +837,7 @@ def run_field_argmax(
         energy=energy(problem.graph, problem.field, labelling),
         spent=problem.n_nodes,
         seconds=time.perf_counter() - started,
+        termination=Termination.after(1, converged=True),
     )
 
 
@@ -858,6 +875,7 @@ def run_icm(
         energy=settled.energy,
         spent=steps * problem.visits_per_sweep,
         seconds=time.perf_counter() - started,
+        termination=settled.termination,
     )
 
 
@@ -906,6 +924,7 @@ def run_icm_random(
         energy=settled.energy,
         spent=steps * problem.visits_per_sweep,
         seconds=time.perf_counter() - started,
+        termination=settled.termination,
     )
 
 
@@ -971,6 +990,7 @@ def run_tempering(
         energy=run.best_energy,
         spent=N_REPLICAS * per_replica * problem.visits_per_sweep,
         seconds=time.perf_counter() - started,
+        termination=Termination.after(per_replica, converged=False),
     )
 
 
