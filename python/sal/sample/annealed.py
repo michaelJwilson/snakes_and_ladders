@@ -63,7 +63,7 @@ from sal.sample.schedule import (
     temperatures,
 )
 from sal.sim.graph import PottsGraph
-from sal.sim.potts import site_field
+from sal.sim.potts import SiteField, log_weight_of, site_field
 from sal.track import TrackedOptimization, current
 
 
@@ -253,7 +253,7 @@ def _entropy(labels: np.ndarray, n_replicas: int) -> float:
 
 def annealed_importance_sampling(
     graph: PottsGraph,
-    field: np.ndarray,
+    field: SiteField | np.ndarray,
     betas: TempSchedule | Sequence[float],
     rng: np.random.Generator,
     n_replicas: int,
@@ -282,7 +282,7 @@ def annealed_importance_sampling(
     graph : PottsGraph
         The lattice. Couplings of either sign, subject to ``move``'s own
         refusal.
-    field : np.ndarray
+    field : SiteField | np.ndarray
         External field ``h``, shape ``(n_states,)`` or ``(n_nodes, n_states)``.
     betas : TempSchedule | Sequence[float]
         The ladder of inverse temperatures, starting at ``0.0`` and strictly
@@ -319,6 +319,7 @@ def annealed_importance_sampling(
         :func:`~sal.sample.potts_mcmc.sample_potts` for a
         Fortuin-Kasteleyn cluster move on a negative coupling.
     """
+    field = log_weight_of(field)
     ladder = _check_rungs(betas, from_zero=True)
     states, children, advance, rows = _population(
         graph, field, rng, n_replicas, move, backend, cluster_backend
@@ -388,7 +389,7 @@ def _resampled(
 
 def population_annealing(
     graph: PottsGraph,
-    field: np.ndarray,
+    field: SiteField | np.ndarray,
     betas: TempSchedule | Sequence[float],
     rng: np.random.Generator,
     n_replicas: int,
@@ -436,6 +437,7 @@ def population_annealing(
     ValueError
         As :func:`annealed_importance_sampling`.
     """
+    field = log_weight_of(field)
     ladder = _check_rungs(betas, from_zero=True)
     states, children, advance, rows = _population(
         graph, field, rng, n_replicas, move, backend, cluster_backend
@@ -554,7 +556,7 @@ def rung_weights(estimate: LogPartition) -> np.ndarray:
 
 def simulated_tempering(
     graph: PottsGraph,
-    field: np.ndarray,
+    field: SiteField | np.ndarray,
     betas: TempSchedule | Sequence[float],
     weights: np.ndarray,
     rng: np.random.Generator,
@@ -618,6 +620,7 @@ def simulated_tempering(
         If the ladder is unusable, ``weights`` does not carry one entry per
         rung, or ``n_sweeps`` or ``thin`` is below 1 or ``burn_in`` below 0.
     """
+    field = log_weight_of(field)
     ladder = _check_rungs(betas, from_zero=False)
     g = np.asarray(weights, dtype=float)
     if g.shape != (len(ladder),):

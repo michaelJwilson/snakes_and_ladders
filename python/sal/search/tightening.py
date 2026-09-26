@@ -39,7 +39,7 @@ import numpy as np
 
 from sal.opt.termination import Termination
 from sal.sim.graph import PottsGraph
-from sal.sim.potts import energy, site_field
+from sal.sim.potts import SiteField, energy, log_weight_of, site_field
 
 
 @dataclass(frozen=True)
@@ -145,7 +145,7 @@ def _clusters(
 
 def dual_bound(
     graph: PottsGraph,
-    field_values: np.ndarray,
+    field: SiteField | np.ndarray,
     *,
     iterations: int = 200,
     plaquettes: tuple[tuple[int, ...], ...] = (),
@@ -163,7 +163,7 @@ def dual_bound(
     graph : PottsGraph
         The lattice or graph. Couplings may be of either sign: a repulsive one
         is where this earns its place, since minimum cut cannot take it.
-    field_values : np.ndarray
+    field : SiteField | np.ndarray
         The external field, ``(n_states,)`` or ``(n_nodes, n_states)``.
     iterations : int
         Coordinate-descent sweeps. More can only raise the lower bound, never
@@ -180,7 +180,8 @@ def dual_bound(
     Certificate
         The labelling, its energy, the lower bound, and the gap between them.
     """
-    values = site_field(field_values, graph.n_nodes)
+    field = log_weight_of(field)
+    values = site_field(field, graph.n_nodes)
     n_nodes, n_states = values.shape
     clusters = _clusters(graph, n_states, plaquettes)
 
@@ -263,7 +264,7 @@ def dual_bound(
     labelling = np.asarray(best_shares.argmax(axis=1), dtype=np.int64)
     return Certificate(
         labelling=labelling,
-        energy=float(energy(graph, field_values, labelling)),
+        energy=float(energy(graph, field, labelling)),
         # The dual bounds the log-weight from above; the energy is its
         # negative, so an upper bound there is a lower bound here.
         bound=-float(best),

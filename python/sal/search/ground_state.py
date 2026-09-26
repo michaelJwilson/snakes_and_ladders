@@ -99,10 +99,12 @@ from sal.search.icm import (
 from sal.sim.factor_graph import from_potts
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from sal.sim.potts import (
+    SiteField,
     SpatioOnlyParams,
     check_labelling,
     critical_coupling,
     energy,
+    log_weight_of,
     spatio_only_field,
 )
 
@@ -1682,7 +1684,7 @@ ANNEALED = _ANNEALED_METHODS | frozenset(ARMS)
 
 def ground_state(
     graph: PottsGraph,
-    field: np.ndarray,
+    field: SiteField | np.ndarray,
     method: str | SolverChain | SolverRealizations | Then | BestOf,
     budget: Budget,
     rng: np.random.Generator,
@@ -1714,7 +1716,7 @@ def ground_state(
     ----------
     graph : PottsGraph
         The lattice; every coupling non-negative.
-    field : np.ndarray
+    field : SiteField | np.ndarray
         ``h``, shape ``(n_nodes, n_states)``.
     method : str | SolverChain | Then
         A key of :data:`METHODS` or :data:`ARMS`; the text of a
@@ -1757,6 +1759,7 @@ def ground_state(
         is given to a method that runs no anneal, or ``backend`` or
         ``min_sites > 0`` to one outside :data:`FLOORED`.
     """
+    field = log_weight_of(field)
     solvers = METHODS | ARMS
     solver: Callable[..., MethodRun]
     if isinstance(method, Then | BestOf | SolverChain | SolverRealizations):

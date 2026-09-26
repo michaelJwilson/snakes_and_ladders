@@ -58,7 +58,7 @@ from sal.bound import Bound, Surrogate
 from sal.likelihood.pruning_common import leaf_indicator_array
 from sal.numerics import logsumexp
 from sal.sim.graph import PottsGraph
-from sal.sim.potts import site_field
+from sal.sim.potts import SiteField, log_weight_of, site_field
 from sal.sim.topology import Topology, branch_splits
 from sal.sim.tree import Node
 
@@ -516,7 +516,7 @@ class EnergyBounds:
 
 
 def ground_state_energy_bounds(
-    graph: PottsGraph, field: np.ndarray, beta: float
+    graph: PottsGraph, field: SiteField | np.ndarray, beta: float
 ) -> EnergyBounds:
     """``[-U/beta, (N log q - L)/beta]`` brackets the ground-state energy, from ``L <= log Z(beta) <= U``.
 
@@ -526,6 +526,7 @@ def ground_state_energy_bounds(
     bounds on the scaled model. Tighter as ``beta`` grows, until the bounds
     on ``log Z`` themselves loosen.
     """
+    field = log_weight_of(field)
     if beta <= 0.0:
         msg = f"beta must be positive, got {beta}"
         raise ValueError(msg)
