@@ -20,7 +20,7 @@ from sal.likelihood.mixture_assignments import (
     enumerate_mixture_assignments,
 )
 from sal.opt.constrain import free_from_log_simplex, log_simplex
-from sal.opt.mixture import mixture_log_likelihood, responsibilities
+from sal.opt.mixture import mixture_log_likelihood, responsibilities_torch
 from sal.sample.expectation import Expectation, KalmanMean
 from sal.sample.hmc import WithGaussianPrior, effective_sample_size
 from sal.sim.mixture import MixtureParams, simulate_mixture
@@ -139,11 +139,9 @@ def monte_carlo_sigmas(
     """
     centred = draws - draws.mean(dim=0)
     squares = centred * centred
-    mean_error = draws.std(dim=0).numpy() / np.sqrt(
-        effective_sample_size(draws).numpy()
-    )
+    mean_error = draws.std(dim=0).numpy() / np.sqrt(effective_sample_size(draws))
     variance_error = squares.std(dim=0).numpy() / np.sqrt(
-        effective_sample_size(squares).numpy()
+        effective_sample_size(squares)
     )
     return (
         np.abs(draws.mean(dim=0).numpy() - mean) / mean_error,
@@ -183,7 +181,7 @@ def assert_recovers_assignment_posterior(
     drawn_weight = torch.exp(log_weights)[:, 0].numpy()
     drawn_marginal = np.stack(
         [
-            responsibilities(
+            responsibilities_torch(
                 torch.as_tensor(observations, dtype=torch.float64), row, components
             ).numpy()[:, 0]
             for row in log_weights

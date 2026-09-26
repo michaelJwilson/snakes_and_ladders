@@ -16,7 +16,7 @@ from sal.emissions import CountPairEmission, GaussianEmission
 from sal.opt.mixture import (
     e_step,
     mixture_log_likelihood,
-    responsibilities,
+    responsibilities_torch,
 )
 from sal.sim.emission_mixture import simulate_emission_mixture
 from sal.sim.fixtures import fixture
@@ -33,7 +33,7 @@ def test_the_e_step_is_both_functions_bitwise_on_the_count_pair() -> None:
     log_weight = torch.log(torch.as_tensor(params.weights, dtype=torch.float64))
     evidence, posterior = e_step(values, log_weight, truth)
     assert torch.equal(evidence, mixture_log_likelihood(values, log_weight, truth))
-    assert torch.equal(posterior, responsibilities(values, log_weight, truth))
+    assert torch.equal(posterior, responsibilities_torch(values, log_weight, truth))
 
 
 @pytest.mark.analytic
@@ -56,7 +56,7 @@ def test_the_e_step_is_both_functions_bitwise_on_a_gaussian() -> None:
         evidence,
         mixture_log_likelihood(values, log_weight, family, backend=Backend.PYTHON),
     )
-    assert torch.equal(posterior, responsibilities(values, log_weight, family))
+    assert torch.equal(posterior, responsibilities_torch(values, log_weight, family))
 
 
 @pytest.mark.analytic

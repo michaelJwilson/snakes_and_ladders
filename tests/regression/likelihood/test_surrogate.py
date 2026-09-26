@@ -36,10 +36,10 @@ from sal.likelihood.surrogate import (
     jc_distances,
     least_squares_lengths,
     least_squares_residual,
-    mean_field_log_partition,
+    mean_field_log_partition_torch,
     prune_with_matrices,
     site_fitch_scores,
-    spanning_tree_log_partition,
+    spanning_tree_log_partition_torch,
 )
 from sal.search.alpha_expansion import alpha_expansion
 from sal.search.infer import score_topology
@@ -283,8 +283,10 @@ def test_mean_field_and_spanning_tree_bounds_sandwich_log_z() -> None:
             graph = _random_lattice(shape, rng)
             field = rng.normal(0.0, 0.4, 3)
             exact = enumerate_potts(graph, field).log_partition
-            lower = float(mean_field_log_partition(graph, torch.as_tensor(field)))
-            upper = float(spanning_tree_log_partition(graph, torch.as_tensor(field)))
+            lower = float(mean_field_log_partition_torch(graph, torch.as_tensor(field)))
+            upper = float(
+                spanning_tree_log_partition_torch(graph, torch.as_tensor(field))
+            )
             assert lower <= exact + 1e-9 <= upper + 1e-9
             assert (exact - lower) / graph.n_nodes < 0.1
             assert (upper - exact) / graph.n_nodes < 0.1
@@ -301,20 +303,20 @@ def test_spanning_tree_bound_is_exact_on_a_tree_and_mean_field_without_couplings
     # where nothing couples, the product distribution is exact.
     chain = lattice_graph((6,), BoundaryCondition.OPEN, 0.8)
     exact = enumerate_potts(chain, FIELD).log_partition
-    assert float(spanning_tree_log_partition(chain, torch.as_tensor(FIELD))) == (
+    assert float(spanning_tree_log_partition_torch(chain, torch.as_tensor(FIELD))) == (
         pytest.approx(exact, abs=1e-9)
     )
     independent = PottsGraph(chain.n_nodes, chain.edges, (0.0,) * len(chain.edges))
     exact = enumerate_potts(independent, FIELD).log_partition
-    assert float(mean_field_log_partition(independent, torch.as_tensor(FIELD))) == (
-        pytest.approx(exact, abs=1e-9)
-    )
+    assert float(
+        mean_field_log_partition_torch(independent, torch.as_tensor(FIELD))
+    ) == (pytest.approx(exact, abs=1e-9))
 
 
 @pytest.mark.analytic
 def test_lattice_bounds_differentiate_like_finite_differences() -> None:
     graph = lattice_graph((2, 3), BoundaryCondition.PERIODIC, 0.5)
-    for bound in (mean_field_log_partition, spanning_tree_log_partition):
+    for bound in (mean_field_log_partition_torch, spanning_tree_log_partition_torch):
         field = torch.tensor(FIELD, dtype=torch.float64, requires_grad=True)
         bound(graph, field).backward()  # type: ignore[no-untyped-call]
         assert field.grad is not None

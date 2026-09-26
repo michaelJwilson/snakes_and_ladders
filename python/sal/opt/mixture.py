@@ -418,7 +418,7 @@ def _streams_score(
     )
 
 
-def responsibilities(
+def responsibilities_torch(
     observations: torch.Tensor,
     log_weight: torch.Tensor,
     components: EmissionFamily,
@@ -444,7 +444,7 @@ def e_step(
     *,
     covariate: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """:func:`mixture_log_likelihood` and :func:`responsibilities` from one log-density pass (issue #924).
+    """:func:`mixture_log_likelihood` and :func:`responsibilities_torch` from one log-density pass (issue #924).
 
     An EM step needs both at the same parameters, and each of the two
     functions evaluates the components' log-density on every observation.
