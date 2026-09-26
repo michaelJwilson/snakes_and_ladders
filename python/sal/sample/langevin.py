@@ -47,6 +47,7 @@ import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
+import numpy as np
 import torch
 
 from sal import oxisal
@@ -62,6 +63,7 @@ from sal.sample.chain import (
     run_chain,
     run_compiled,
     start_point,
+    torch_stream,
 )
 from sal.sample.declared import declared_energy
 from sal.sample.expectation import Expectation
@@ -131,11 +133,11 @@ class LangevinChain:
 
 def mala(
     objective: Objective,
-    generator: torch.Generator,
+    rng: np.random.Generator | torch.Generator,
     n_samples: int,
     *,
     step_size: float,
-    theta0: torch.Tensor | None = None,
+    start: torch.Tensor | None = None,
     burn_in: int = 0,
     temperature: float = 1.0,
     adaptation: Adaptation | None = None,
@@ -153,7 +155,7 @@ def mala(
         :func:`~sal.sample.hmc.sample` reads it. The same warning
         applies: a bare negative log-likelihood here is a posterior under an
         improper flat prior and nothing in this module can tell.
-    generator : torch.Generator
+    rng : np.random.Generator | torch.Generator
         The stream every noise and acceptance draw comes from, passed in
         rather than seeded here.
     n_samples : int
@@ -163,7 +165,7 @@ def mala(
         ``h^2 / 2`` times a gradient whose scale is the target's, so a default
         would be wrong silently. With an ``adaptation`` it is the warm-up's
         starting point.
-    theta0 : torch.Tensor | None
+    start : torch.Tensor | None
         Starting point; ``objective.initial()`` when omitted.
     burn_in : int
         Draws discarded before recording.
@@ -212,6 +214,7 @@ def mala(
     ValueError
         If ``step_size`` or ``temperature`` is not positive.
     """
+    generator = torch_stream(rng)
     if step_size <= 0.0:
         msg = f"step_size must be positive, got {step_size}"
         raise ValueError(msg)
@@ -228,7 +231,7 @@ def mala(
             generator,
             n_samples,
             step_size=step_size,
-            theta0=start_point(objective, theta0),
+            start=start_point(objective, start),
             burn_in=burn_in,
             adaptation=adaptation,
             store_chain=store_chain,
@@ -251,7 +254,7 @@ def mala(
         generator,
         n_samples,
         step_size=step_size,
-        theta0=theta0,
+        start=start,
         burn_in=burn_in,
         temperature=temperature,
         adaptation=adaptation,
