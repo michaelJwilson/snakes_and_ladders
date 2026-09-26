@@ -12,7 +12,7 @@ data, the rescaling step and the four validations --- and each rung keeps its
 own entry point above it.
 
 **Nothing here unifies arithmetic that differed.** The two rescaling copies
-replaced a vanished scale with different objects: ``pruning_torch`` builds one
+replaced a vanished scale with different objects: ``likelihood.pruning.torch`` builds one
 scalar per call, ``pruning_analytic`` and ``log_likelihood_cached`` a tensor
 of ones per node. Which object is passed stays the caller's, as ``fallback``,
 because a fold that picks one for both is a fold that has to prove the bits
@@ -25,7 +25,7 @@ The fifth copy of the checks, in ``brute_force``, stays where it is for the
 first reason above: it is the referee that pins the NumPy oracle.
 
 **The module imports no torch** (issue #1011). The checks, the post-order and
-the NumPy indicator serve routes that take no derivative --- ``pruning_rust``,
+the NumPy indicator serve routes that take no derivative --- ``likelihood.pruning.rust``,
 ``likelihood.blocks``, ``likelihood.surrogate`` --- and loading torch for them
 cost 1.3 s and 590 MB. :func:`leaf_indicator` imports it where it builds a
 tensor, and :func:`rescale_partial` reaches it through its argument's methods.
@@ -68,14 +68,14 @@ def postorder(root: Node) -> list[Node]:
     return order
 
 
-def check_pi_shape(shape: tuple[int, ...], k: int) -> None:
+def check_pi_shape(shape: tuple[int, ...], n_states: int) -> None:
     """Refuse a root distribution that is not ``(k,)``.
 
     Parameters
     ----------
     shape : tuple[int, ...]
         ``pi``'s shape, as a tuple whatever library holds it.
-    k : int
+    n_states : int
         Number of states.
 
     Raises
@@ -83,8 +83,8 @@ def check_pi_shape(shape: tuple[int, ...], k: int) -> None:
     ValueError
         If ``shape`` is not ``(k,)``.
     """
-    if shape != (k,):
-        msg = f"pi has shape {shape}, expected ({k},)"
+    if shape != (n_states,):
+        msg = f"pi has shape {shape}, expected ({n_states},)"
         raise ValueError(msg)
 
 
@@ -158,7 +158,7 @@ def require_branch_length(node: Node) -> float:
     return float(node.branch_length)
 
 
-def leaf_indicator_array(states: np.ndarray, n_sites: int, k: int) -> np.ndarray:
+def leaf_indicator_array(states: np.ndarray, n_sites: int, n_states: int) -> np.ndarray:
     """The one-hot partial of a leaf's observed states, as a NumPy array.
 
     Parameters
@@ -168,7 +168,7 @@ def leaf_indicator_array(states: np.ndarray, n_sites: int, k: int) -> np.ndarray
         ``[0, k)``.
     n_sites : int
         Columns in the alignment.
-    k : int
+    n_states : int
         Alphabet size.
 
     Returns
@@ -178,7 +178,7 @@ def leaf_indicator_array(states: np.ndarray, n_sites: int, k: int) -> np.ndarray
         indicator of ``eq:pruning``.
     """
     observed = np.asarray(states, dtype=np.int64)
-    table = np.zeros((n_sites, k))
+    table = np.zeros((n_sites, n_states))
     table[np.arange(n_sites), observed] = 1.0
     return table
 
@@ -186,7 +186,7 @@ def leaf_indicator_array(states: np.ndarray, n_sites: int, k: int) -> np.ndarray
 def leaf_indicator(
     states: object,
     n_sites: int,
-    k: int,
+    n_states: int,
     dtype: torch.dtype,
     device: torch.device,
     *,
@@ -200,7 +200,7 @@ def leaf_indicator(
         The leaf's observed states, as the alignment holds them.
     n_sites : int
         Columns in the alignment.
-    k : int
+    n_states : int
         Alphabet size.
     dtype : torch.dtype
         Tensor type, taken from the branch lengths.
@@ -209,7 +209,7 @@ def leaf_indicator(
     index_device : torch.device | None
         Where the scatter's row index is built. ``None`` builds it on the
         default device, which is what
-        :func:`sal.likelihood.pruning_torch.log_likelihood_cached`
+        :func:`sal.likelihood.pruning.torch.log_likelihood_cached`
         does and keeps doing; the other callers pass ``device``. A parameter
         rather than a choice made here, so no call site's device behaviour
         moves.
@@ -223,7 +223,7 @@ def leaf_indicator(
     import torch
 
     observed = torch.as_tensor(states, dtype=torch.long, device=device)
-    partial = torch.zeros((n_sites, k), dtype=dtype, device=device)
+    partial = torch.zeros((n_sites, n_states), dtype=dtype, device=device)
     partial[torch.arange(n_sites, device=index_device), observed] = 1.0
     return partial
 
@@ -256,7 +256,7 @@ def rescale_partial(
         What replaces a vanished scale. ``None`` builds ``ones_like(scale)``,
         which is what :mod:`sal.likelihood.pruning_analytic`
         and ``log_likelihood_cached`` build per node;
-        :func:`sal.likelihood.pruning_torch.log_likelihood`
+        :func:`sal.likelihood.pruning.torch.log_likelihood`
         passes the one scalar it builds per call instead. The selected value
         is the same either way; which object is allocated stays the caller's.
 

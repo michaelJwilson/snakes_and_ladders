@@ -17,12 +17,9 @@ import pytest
 import torch
 from sal.emissions import GaussianEmission, PoissonEmission
 from sal.fixtures import load_params
-from sal.opt.hmm import (
-    baum_welch,
-    baum_welch_family,
-    hmm_log_likelihood,
-    viterbi,
-)
+from sal.likelihood.hmm import hmm_log_likelihood, viterbi
+from sal.opt.em import EmConfig
+from sal.opt.hmm import baum_welch, baum_welch_family
 from sal.sim.hmm import HmmParams, simulate_sequences
 from sal.validation import hmmlearn
 
@@ -64,8 +61,7 @@ def _ours(
         initial,
         transition,
         emission,
-        max_iterations=n_iter,
-        tolerance=-np.inf,
+        config=EmConfig(max_iterations=n_iter, tolerance=-np.inf),
     )
     return (
         fit.log_initial.exp().numpy(),
@@ -131,8 +127,7 @@ def test_the_streamed_family_fit_is_hmmlearns(family: str) -> None:
         torch.log(torch.as_tensor(initial)),
         torch.log(torch.as_tensor(transition)),
         family_start,
-        max_iterations=10,
-        tolerance=-np.inf,
+        config=EmConfig(max_iterations=10, tolerance=-np.inf),
     )
     theirs = hmmlearn.family_baum_welch(observations, initial, transition, start, 10)
     np.testing.assert_allclose(

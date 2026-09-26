@@ -22,7 +22,9 @@ import numpy as np
 import torch
 
 from sal.emissions import EmissionFamily
+from sal.opt.em import EM, EmConfig
 from sal.opt.hmm import EmFit
+from sal.opt.termination import Termination
 
 
 def baum_welch_rectangular(
@@ -30,8 +32,7 @@ def baum_welch_rectangular(
     log_initial: torch.Tensor,
     log_transition: torch.Tensor,
     emissions: EmissionFamily,
-    max_iterations: int = 500,
-    tolerance: float = 1e-12,
+    config: EmConfig = EM,
     covariate: np.ndarray | None = None,
 ) -> EmFit:
     """Baum-Welch over any emission family, with no autodiff involved.
@@ -50,12 +51,10 @@ def baum_welch_rectangular(
         Symbol indices or real values, as the family says.
     emissions : EmissionFamily
         Starting emission family.
-    max_iterations : int
-        Maximum EM iterations.
-    tolerance : float
-        Stop when the log-likelihood improves by less than this *relative*
-        to its magnitude -- absolute would not transfer across data sizes
-        (``DEV.md``, issue #111).
+    config : EmConfig
+        The EM budget and its relative tolerance; :data:`~sal.opt.em.EM`,
+        500 iterations at 1e-12, by default. Relative, since an absolute
+        tolerance does not transfer across data sizes (``DEV.md``, issue #111).
     log_initial, log_transition : torch.Tensor
         Starting parameters, as log-probabilities. ``log_transition`` is either
         ``(m, m)``, one kernel for the whole chain, or ``(length - 1, m, m)``,
@@ -124,9 +123,10 @@ def baum_welch_rectangular(
             exposure = exposure[..., None]
 
     previous = -float("inf")
+    iterations, converged = 0, False
     log_likelihood = previous
     at_boundary = False
-    for _ in range(max_iterations):
+    for iterations in range(1, config.max_iterations + 1):  # noqa: B007
         # --- E step: forward and backward messages in log space ----------
         emit = emissions.log_density(data, covariate=exposure)
         alpha = torch.empty((n_sequences, length, m), dtype=log_initial.dtype)
@@ -181,7 +181,8 @@ def baum_welch_rectangular(
         emissions = step.emissions
         at_boundary = at_boundary or step.at_boundary
 
-        if abs(log_likelihood - previous) <= tolerance * abs(log_likelihood):
+        if abs(log_likelihood - previous) <= config.tolerance * abs(log_likelihood):
+            converged = True
             break
         previous = log_likelihood
 
@@ -191,4 +192,5 @@ def baum_welch_rectangular(
         emissions=emissions,
         log_likelihood=log_likelihood,
         emission_at_boundary=at_boundary,
+        termination=Termination.after(iterations, converged=converged),
     )

@@ -143,8 +143,8 @@ def test_the_chain_recovers_an_analytic_gaussian() -> None:
         burn_in=400,
     )
 
-    mean = chain.theta.mean(dim=0)
-    covariance = torch.cov(chain.theta.T)
+    mean = chain.draws.mean(dim=0)
+    covariance = torch.cov(chain.draws.T)
 
     assert chain.acceptance_rate > 0.9
     np.testing.assert_allclose(mean.numpy(), GAUSSIAN.mean.numpy(), atol=0.12)
@@ -172,7 +172,7 @@ def test_the_chain_matches_grid_quadrature_on_a_real_objective() -> None:
                 step_size=0.01,
                 n_steps=15,
                 burn_in=100,
-            ).theta
+            ).draws
             for index in range(3)
         ]
     )
@@ -221,8 +221,8 @@ def test_a_step_size_that_diverges_biases_the_spread_not_the_mean() -> None:
 
     assert float(coarse.energy_error.max()) > 100.0 * float(fine.energy_error.max())
     # The mean survives a step size that the spread does not.
-    assert abs(float(coarse.theta.mean(dim=0)[0]) - QUADRATURE_MEAN[0]) < 0.01
-    assert float(coarse.theta.std(dim=0)[0]) < float(fine.theta.std(dim=0)[0])
+    assert abs(float(coarse.draws.mean(dim=0)[0]) - QUADRATURE_MEAN[0]) < 0.01
+    assert float(coarse.draws.std(dim=0)[0]) < float(fine.draws.std(dim=0)[0])
 
 
 @pytest.mark.analytic
@@ -314,7 +314,7 @@ def test_a_chain_is_reproducible_from_generators_seeded_alike() -> None:
         n_steps=10,
     )
 
-    assert torch.equal(first.theta, second.theta)
+    assert torch.equal(first.draws, second.draws)
 
 
 # --- the fourth-order composition (#266) ----------------------------------
@@ -427,6 +427,7 @@ def test_force_evaluations_counts_what_a_trajectory_actually_costs(
 
 
 @pytest.mark.analytic
+@pytest.mark.release  # 63.3 s in the tier, over the 10 s cap (#1088)
 def test_leapfrog_reaches_the_acceptance_target_more_cheaply_than_yoshida() -> None:
     # Negative: the step is limited by stability, not accuracy. Yoshida's
     # |w0| = 1.70 gives ~0.59 of leapfrog's limit (0.0333 against 0.0500).
@@ -473,7 +474,7 @@ def test_the_default_integrator_is_the_one_every_committed_result_used() -> None
         integrator=leapfrog,
     )
 
-    assert torch.equal(chain.theta, explicit.theta)
+    assert torch.equal(chain.draws, explicit.draws)
     assert leapfrog.order == 2
     assert leapfrog.weights == (1.0,)
 
@@ -507,12 +508,12 @@ def test_tempering_a_gaussian_scales_the_chain_by_the_square_root_of_t() -> None
             temperature=temperature,
         )
         scaled = GAUSSIAN.mean + math.sqrt(temperature) * (
-            reference.theta - GAUSSIAN.mean
+            reference.draws - GAUSSIAN.mean
         )
 
-        assert torch.allclose(chain.theta, scaled, atol=1e-10, rtol=0.0)
+        assert torch.allclose(chain.draws, scaled, atol=1e-10, rtol=0.0)
         np.testing.assert_allclose(
-            chain.theta.std(0).numpy(),
+            chain.draws.std(0).numpy(),
             math.sqrt(temperature) * exact.numpy(),
             rtol=0.05,
         )
@@ -551,7 +552,7 @@ def test_a_constant_schedule_at_one_is_the_sampler_draw_for_draw() -> None:
         n_steps=10,
     )
 
-    assert torch.equal(annealed.final, chain.theta[-1])
+    assert torch.equal(annealed.final, chain.draws[-1])
     assert annealed.force_evaluations == 200 * leapfrog.force_evaluations(10)
 
 
@@ -752,7 +753,7 @@ def test_the_chain_recovers_the_enumerated_assignment_posterior_of_a_mixture() -
     assert chain.acceptance_rate > 0.6, chain.acceptance_rate
 
     worst = 0.0
-    for theta in chain.theta[:: MIXTURE_DRAWS // 50]:
+    for theta in chain.draws[:: MIXTURE_DRAWS // 50]:
         enumerated = enumerate_mixture_assignments(
             torch.exp(log_simplex(theta)).numpy(), components, observations
         )
@@ -763,7 +764,7 @@ def test_the_chain_recovers_the_enumerated_assignment_posterior_of_a_mixture() -
     assert worst < 1e-12, worst
 
     assert_recovers_assignment_posterior(
-        chain.theta,
+        chain.draws,
         observations,
         components,
         reference,
@@ -801,5 +802,5 @@ def test_a_divergent_trajectory_is_a_rejected_proposal() -> None:
         _Bounded(), torch.Generator().manual_seed(912), 200, step_size=0.4, n_steps=8
     )
     assert 0.0 < chain.acceptance_rate < 1.0
-    assert bool((chain.theta.abs() < 1.0).all())
+    assert bool((chain.draws.abs() < 1.0).all())
     assert any(math.isinf(float(error)) for error in chain.energy_error)

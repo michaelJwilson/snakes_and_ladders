@@ -23,8 +23,9 @@ from numpy.testing import assert_allclose
 from pytest_benchmark.fixture import BenchmarkFixture
 from sal.fixtures import load_params
 from sal.learn.tree import with_uniform_branch_lengths
-from sal.likelihood import pruning, pruning_rust
+from sal.likelihood import pruning
 from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
+from sal.likelihood.pruning import rust as pruning_rust
 from sal.sim.params import SimulationParams
 from sal.sim.simulate import simulate_alignment
 from sal.sim.simulator import simulate_tree
@@ -49,7 +50,11 @@ def test_rust_log_likelihood_benchmark(
     dataset = simulate_tree(params, np.random.default_rng(params.seed))
 
     result = benchmark(
-        pruning_rust.log_likelihood, params.tau, params.k, params.pi, dataset.alignment
+        pruning_rust.log_likelihood,
+        params.tau,
+        params.n_states,
+        params.pi,
+        dataset.alignment,
     )
 
     # Benchmarks only assert finiteness -- numerical correctness is pinned
@@ -64,10 +69,14 @@ def test_numpy_vs_rust_forward_pass(benchmark: BenchmarkFixture) -> None:
     dataset = simulate_tree(params, np.random.default_rng(params.seed))
 
     numpy_result = pruning.log_likelihood(
-        params.tau, params.k, params.pi, dataset.alignment
+        params.tau, params.n_states, params.pi, dataset.alignment
     )
     rust_result = benchmark(
-        pruning_rust.log_likelihood, params.tau, params.k, params.pi, dataset.alignment
+        pruning_rust.log_likelihood,
+        params.tau,
+        params.n_states,
+        params.pi,
+        dataset.alignment,
     )
 
     assert math.isclose(rust_result, numpy_result, abs_tol=1e-9)
@@ -89,7 +98,7 @@ def _problem(
     tau = with_uniform_branch_lengths(random_topology(names, rng), 0.1)
     pi = np.full(4, 0.25)
     dataset = simulate_alignment(
-        tau=tau, k=4, pi=pi, rng=np.random.default_rng(1), n_sites=n_sites
+        tau=tau, n_states=4, pi=pi, rng=np.random.default_rng(1), n_sites=n_sites
     )
     return tau, pi, dict(dataset.alignment)
 

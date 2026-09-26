@@ -8,8 +8,7 @@ states. The single-move arms are
 :func:`~sal.search.ground_state.run_annealed` under another
 :class:`~sal.sample.potts_mcmc.PottsMove`, and the two
 hybrids, each charged both parts' visits, are
-:func:`~sal.search.ground_state.run_swendsen_wang_then_expansion`
-and :func:`~sal.search.ground_state.run_expansion_then_swendsen_wang`,
+the ``swendsen-wang>expansion`` and ``expansion>swendsen-wang`` chains,
 in :data:`~sal.search.ground_state.ARMS` since issue #1052.
 This module holds the replica ladder.
 
@@ -27,6 +26,7 @@ import time
 import numpy as np
 
 from sal.opt.budget import Budget
+from sal.opt.termination import Termination
 from sal.sample.potts_mcmc import (
     ClusterCounter,
     cluster_tempering,
@@ -86,4 +86,6 @@ def run_cluster_tempering(
         spent=run.site_visits,
         seconds=time.perf_counter() - started,
         trace=(counter,),
+        # A step count fixed before the run: it ends on its budget (#1085).
+        termination=Termination.after(steps, converged=False),
     )

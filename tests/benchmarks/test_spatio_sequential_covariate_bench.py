@@ -1,9 +1,10 @@
 """What the covariate costs the compiled backend (issue #658).
 
-`emission_rows` tabulates by count where there is no covariate and by the
-distinct `(count, covariate)` pairs where there is. The second calls
-`np.unique` over one pair array per channel, which the first does not, so the
-pair is the ratio this change is about. Correctness is pinned in
+`emission_rows` tabulates by count where there is no covariate and, under
+`covariate_rows="distinct"`, by the `(count, trial count)` pairs where there
+is, the distinct trial counts found in one pass by `oxisal.factorize`; the
+exposure is factored either way (issue #1064). The pair is the ratio this
+change is about. Correctness is pinned in
 tests/regression/likelihood/test_spatio_sequential_rust_covariate.py.
 
 The E step is timed too, because the tabulation is per call and the question is
@@ -18,9 +19,9 @@ from dataclasses import replace
 
 import numpy as np
 from pytest_benchmark.fixture import BenchmarkFixture
-from sal.likelihood import spatio_sequential_rust as rust
+from sal.likelihood.spatio_sequential import rust
 from sal.sim.count_pairs import CountPairInstance
-from sal.sim.count_pairs_rust import fine_instance
+from sal.sim.count_pairs.rust import fine_instance
 from sal.sim.fixtures import fixture
 
 PROBLEM = "spatio_sequential_counts"
@@ -51,11 +52,13 @@ def test_emission_rows_by_count_benchmark(benchmark: BenchmarkFixture) -> None:
 
 
 def test_emission_rows_by_pair_benchmark(benchmark: BenchmarkFixture) -> None:
-    """Tabulated by the distinct `(count, covariate)` pairs: the added cost."""
+    """Tabulated by the distinct `(count, trial count)` pairs: the added cost."""
     instance = _instance()
     params = replace(instance.params, covariate=_covariate(instance.observations))
 
-    rows = benchmark(rust.emission_rows, params, instance.observations)
+    rows = benchmark(
+        rust.emission_rows, params, instance.observations, covariate_rows="distinct"
+    )
 
     assert np.isfinite(rows.total_table).any()
 

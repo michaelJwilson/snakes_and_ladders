@@ -168,6 +168,9 @@ pub fn walk(
 walk_class!(HmcWalk, Hamiltonian, walk, n_steps: usize);
 
 /// One leapfrog trajectory from `(theta, momentum)` at unit scale; returns the end point.
+///
+/// The trajectory runs with the GIL released: it touches no Python object
+/// between reading its arguments and building the two arrays (#604, #1059).
 #[pyfunction]
 #[allow(clippy::type_complexity)]
 #[pyo3(signature = (family, parameters, theta, momentum, step_size, n_steps))]
@@ -187,12 +190,14 @@ pub fn leapfrog_trajectory<'py>(
     }
     let energy =
         energy_of(family, parameters.as_slice()?, x.len()).map_err(PyValueError::new_err)?;
-    let (mut start, mut force) = (vec![0.0; x.len()], vec![0.0; x.len()]);
-    let scale = vec![1.0; x.len()];
-    energy.force(&x, &mut start, false);
-    leapfrog(
-        &energy, &mut x, &mut p, step_size, n_steps, &start, &mut force, &scale,
-    );
+    py.detach(|| {
+        let (mut start, mut force) = (vec![0.0; x.len()], vec![0.0; x.len()]);
+        let scale = vec![1.0; x.len()];
+        energy.force(&x, &mut start, false);
+        leapfrog(
+            &energy, &mut x, &mut p, step_size, n_steps, &start, &mut force, &scale,
+        );
+    });
     Ok((PyArray1::from_vec(py, x), PyArray1::from_vec(py, p)))
 }
 

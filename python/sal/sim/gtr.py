@@ -36,12 +36,12 @@ from __future__ import annotations
 import numpy as np
 
 
-def n_exchangeabilities(k: int) -> int:
-    """Number of free entries in a ``k``-state symmetric exchangeability matrix.
+def n_exchangeabilities(n_states: int) -> int:
+    """Number of free entries in a ``n_states``-state symmetric exchangeability matrix.
 
     Parameters
     ----------
-    k : int
+    n_states : int
         Number of states, >= 2.
 
     Returns
@@ -49,20 +49,20 @@ def n_exchangeabilities(k: int) -> int:
     int
         ``k * (k - 1) / 2`` -- the upper triangle.
     """
-    if k < 2:
-        msg = f"k must be >= 2, got {k}"
+    if n_states < 2:
+        msg = f"k must be >= 2, got {n_states}"
         raise ValueError(msg)
-    return k * (k - 1) // 2
+    return n_states * (n_states - 1) // 2
 
 
-def exchangeability_matrix(values: np.ndarray, k: int) -> np.ndarray:
+def exchangeability_matrix(values: np.ndarray, n_states: int) -> np.ndarray:
     """Fill a symmetric ``(k, k)`` matrix from its upper triangle.
 
     Parameters
     ----------
     values : np.ndarray
         The ``k * (k - 1) / 2`` upper-triangular entries, row-major.
-    k : int
+    n_states : int
         Number of states.
 
     Returns
@@ -75,16 +75,16 @@ def exchangeability_matrix(values: np.ndarray, k: int) -> np.ndarray:
     ValueError
         If ``values`` has the wrong length or any entry is not positive.
     """
-    expected = n_exchangeabilities(k)
+    expected = n_exchangeabilities(n_states)
     if values.shape != (expected,):
-        msg = f"expected {expected} exchangeabilities for k={k}, got {values.shape}"
+        msg = f"expected {expected} exchangeabilities for n_states={n_states}, got {values.shape}"
         raise ValueError(msg)
     if not bool(np.all(values > 0.0)):
         msg = "exchangeabilities must be strictly positive"
         raise ValueError(msg)
 
-    matrix = np.zeros((k, k), dtype=np.float64)
-    rows, columns = np.triu_indices(k, k=1)
+    matrix = np.zeros((n_states, n_states), dtype=np.float64)
+    rows, columns = np.triu_indices(n_states, k=1)
     matrix[rows, columns] = values
     matrix[columns, rows] = values
     return matrix
@@ -132,7 +132,7 @@ def gtr_rate_matrix(values: np.ndarray, pi: np.ndarray) -> np.ndarray:
     return normalized
 
 
-def exchangeabilities_from_free(free: np.ndarray, k: int) -> np.ndarray:
+def exchangeabilities_from_free(free: np.ndarray, n_states: int) -> np.ndarray:
     """Complete a free parameter vector to a full exchangeability vector.
 
     The last entry is held at 1. Scaling every exchangeability by a constant
@@ -143,7 +143,7 @@ def exchangeabilities_from_free(free: np.ndarray, k: int) -> np.ndarray:
     ----------
     free : np.ndarray
         The first ``k * (k - 1) / 2 - 1`` exchangeabilities.
-    k : int
+    n_states : int
         Number of states.
 
     Returns
@@ -151,9 +151,9 @@ def exchangeabilities_from_free(free: np.ndarray, k: int) -> np.ndarray:
     np.ndarray
         All ``k * (k - 1) / 2`` entries, the last equal to 1.
     """
-    expected = n_exchangeabilities(k) - 1
+    expected = n_exchangeabilities(n_states) - 1
     if free.shape != (expected,):
-        msg = f"expected {expected} free exchangeabilities for k={k}, got {free.shape}"
+        msg = f"expected {expected} free exchangeabilities for n_states={n_states}, got {free.shape}"
         raise ValueError(msg)
     return np.concatenate([free, np.ones(1)])
 

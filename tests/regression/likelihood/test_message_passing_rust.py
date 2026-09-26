@@ -18,7 +18,6 @@ import numpy as np
 import pytest
 from sal.backend import Backend
 from sal.likelihood import message_passing_reference as reference
-from sal.likelihood import message_passing_rust
 from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
 from sal.likelihood.message_passing import (
     Marginals,
@@ -27,6 +26,7 @@ from sal.likelihood.message_passing import (
     max_product,
     sum_product,
 )
+from sal.likelihood.message_passing import rust as message_passing_rust
 from sal.likelihood.schedule import Layout
 from sal.sim.factor_graph import (
     Factor,

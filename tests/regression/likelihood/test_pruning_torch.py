@@ -1,4 +1,4 @@
-"""Regression tests for ``sal.likelihood.pruning_torch``.
+"""Regression tests for ``sal.likelihood.pruning.torch``.
 
 Issue #70's shared checks run over ``ROUTES`` (#982): the oracle in
 ``test_pruning_common.py``, brute force and rescaling in
@@ -16,8 +16,10 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from sal.likelihood import pruning, pruning_torch
+from sal.backend import Backend
+from sal.likelihood import pruning
 from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
+from sal.likelihood.pruning import torch as pruning_torch
 from sal.sim.jc import jc_rate_matrix
 from sal.sim.simulate import simulate_alignment
 from sal.sim.tree import Node
@@ -52,7 +54,7 @@ def test_matrix_exp_rate_matrix_path_matches_closed_form() -> None:
     k = 4
     pi = np.full(k, 0.25)
     dataset = simulate_alignment(
-        tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260913), n_sites=50
+        tau=tau, n_states=k, pi=pi, rng=np.random.default_rng(20260913), n_sites=50
     )
     branch_lengths = pruning_torch.branch_lengths_from_tree(tau)
     rate_matrix = torch.as_tensor(jc_rate_matrix(k), dtype=torch.float64)
@@ -74,7 +76,7 @@ def test_gradient_matches_finite_differences_of_numpy_oracle() -> None:
     k = 4
     pi = np.full(k, 0.25)
     dataset = simulate_alignment(
-        tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260914), n_sites=30
+        tau=tau, n_states=k, pi=pi, rng=np.random.default_rng(20260914), n_sites=30
     )
     order = pruning_torch.branch_order(tau)
     branch_lengths = pruning_torch.branch_lengths_from_tree(tau).requires_grad_(True)
@@ -135,3 +137,25 @@ def test_the_batched_transition_matrices_are_the_scalar_ones() -> None:
         )
         scalar_gtr = pruning_torch.transition_probabilities(length, 4, rate)
         assert float((batched_gtr[position] - scalar_gtr).abs().max()) < 1e-12
+
+
+@pytest.mark.oracle
+@pytest.mark.backend
+def test_the_gateways_torch_door_is_the_taped_value_at_the_oracles_tolerance() -> None:
+    # Issue #1059: `pruning.log_likelihood(backend=TORCH)` is this module at
+    # the lengths `tau` carries, detached; bitwise that, and within the
+    # float64 agreement bound of the NumPy oracle.
+    tau = load_fixture(SMALL_SITES).tau
+    k = 4
+    pi = np.full(k, 0.25)
+    alignment = simulate_alignment(
+        tau=tau, n_states=k, pi=pi, rng=np.random.default_rng(1059), n_sites=50
+    ).alignment
+    through = pruning.log_likelihood(tau, k, pi, alignment, backend=Backend.TORCH)
+    taped = pruning_torch.log_likelihood(
+        tau, k, pi, alignment, pruning_torch.branch_lengths_from_tree(tau)
+    )
+    assert through == float(taped)
+    assert_allclose(
+        through, pruning.log_likelihood(tau, k, pi, alignment), rtol=_RTOL_ORACLE
+    )

@@ -12,6 +12,7 @@ energy, so the bracket is shifted, checked where the optimum is enumerable
 from __future__ import annotations
 
 import itertools
+import warnings
 
 import numpy as np
 import pytest
@@ -22,6 +23,7 @@ from sal.likelihood.message_passing import (
     max_product,
 )
 from sal.opt.budget import Budget
+from sal.opt.termination import Stop, Termination
 from sal.sample.potts_mcmc import (
     PottsMove,
     anneal_potts,
@@ -36,7 +38,7 @@ from sal.search.alpha_expansion import (
     swap,
 )
 from sal.search.maxflow import ising_ground_state
-from sal.search.maxflow_rust import (
+from sal.search.maxflow.rust import (
     ising_ground_state as rust_ground_state,
 )
 from sal.sim.factor_graph import from_potts
@@ -147,8 +149,8 @@ def test_both_cut_move_sets_reach_the_enumerated_optimum() -> None:
         rung = _rung(CI, n_states)
         _, exact = _enumerated(rung)
 
-        expansion = alpha_expansion(rung.graph, rung.field, n_states)
-        swapped = alpha_beta_swap(rung.graph, rung.field, n_states)
+        expansion = alpha_expansion(rung.graph, rung.field, n_states=n_states)
+        swapped = alpha_beta_swap(rung.graph, rung.field, n_states=n_states)
 
         assert expansion.energy == pytest.approx(exact, abs=_EXACT)
         assert swapped.energy == pytest.approx(exact, abs=_EXACT)
@@ -165,7 +167,7 @@ def test_the_swap_never_raises_the_energy_from_any_start() -> None:
 
     for _ in range(12):
         start = rng.integers(0, 3, size=rung.n_nodes)
-        run = alpha_beta_swap(rung.graph, rung.field, 3, start=start)
+        run = alpha_beta_swap(rung.graph, rung.field, start=start, n_states=3)
         assert run.energy <= energy(rung.graph, rung.field, start) + _EXACT
 
 
@@ -192,7 +194,7 @@ def test_the_bracket_contains_the_known_optimum() -> None:
     # Unshifted, the lower end lands above the optimum and this fails.
     rung = _rung(CI, 3)
     _, exact = _enumerated(rung)
-    expansion = alpha_expansion(rung.graph, rung.field, 3)
+    expansion = alpha_expansion(rung.graph, rung.field, n_states=3)
 
     lower, upper = ground_state.expansion_bracket(rung, expansion.energy)
 
@@ -354,7 +356,7 @@ def test_the_exact_ground_state_at_five_thousand_sites() -> None:
 @pytest.mark.end2end
 @pytest.mark.release
 def test_the_exact_ground_state_at_five_thousand_sites_tilts_with_size() -> None:
-    # #551's Step 1 gate: greedy agreement under ~95% (not field-dominated);
+    # #551's Step 1 gate: field_argmax agreement under ~95% (not field-dominated);
     # tilt positive and below 0.4935, the cut exact at nine sites.
     rung = _rung(RELEASE, 2)
     labelling, _ = rust_ground_state(rung.graph, rung.field)
@@ -372,7 +374,7 @@ def test_the_exact_ground_state_at_five_thousand_sites_tilts_with_size() -> None
 @pytest.mark.critical
 def test_the_runners_record_the_energy_their_kernels_return() -> None:
     # The rung below (#734): a runner records its kernel's number and labelling
-    # on the same rung, seed and budget. `run_tempering`, `run_greedy` and
+    # on the same rung, seed and budget. `run_tempering`, `run_field_argmax` and
     # `run_max_product` against `parallel_tempering`, the field argmax and
     # flooding `max_product`: difference 0.0, exact equality declared.
     rung = _rung(CI, 3)
@@ -399,12 +401,12 @@ def test_the_runners_record_the_energy_their_kernels_return() -> None:
         tempering.spent == ground_state.N_REPLICAS * per_replica * rung.visits_per_sweep
     )
 
-    greedy = ground_state.run_greedy(rung, budget, np.random.default_rng(seed))
+    argmax = ground_state.run_field_argmax(rung, budget, np.random.default_rng(seed))
     field_only = rung.field.argmax(axis=1).astype(np.int64)
 
-    assert greedy.energy == energy(rung.graph, rung.field, field_only)
-    assert np.array_equal(greedy.labelling, field_only)
-    assert greedy.spent == rung.n_nodes
+    assert argmax.energy == energy(rung.graph, rung.field, field_only)
+    assert np.array_equal(argmax.labelling, field_only)
+    assert argmax.spent == rung.n_nodes
 
     product = ground_state.run_max_product(rung, budget, np.random.default_rng(seed))
     iterations = max(1, budget.size // rung.visits_per_sweep)
@@ -500,7 +502,7 @@ def test_a_swap_of_two_labels_no_site_carries_is_the_identity() -> None:
     rung = _rung(CI, 3)
     labelling = np.zeros(rung.n_nodes, dtype=np.int64)
 
-    moved, value = swap(rung.graph, rung.field, labelling, 1, 2)
+    moved, value, *_ = swap(rung.graph, rung.field, labelling, 1, 2)
 
     assert np.array_equal(moved, labelling)
     assert value == pytest.approx(energy(rung.graph, rung.field, labelling))
@@ -513,19 +515,28 @@ def test_the_swap_refuses_a_negative_coupling() -> None:
     graph = lattice_graph((3, 3), BoundaryCondition.OPEN, -0.5)
 
     with pytest.raises(ValueError, match="submodular only then"):
-        alpha_beta_swap(graph, np.zeros((graph.n_nodes, 3)), 3)
+        alpha_beta_swap(graph, np.zeros((graph.n_nodes, 3)), n_states=3)
 
 
 @pytest.mark.smoke
-def test_the_swap_refuses_rather_than_looping_past_its_cycle_cap() -> None:
-    # Monotonicity over a finite state space makes reaching the cap
-    # impossible on a correct implementation, so it is a defect report and
-    # not a budget -- the same contract `alpha_expansion` states.
+def test_the_swap_returns_what_it_holds_at_its_cycle_cap_and_says_so() -> None:
+    # Issue #1059: a caller's cap is a budget (`ground_state` derives one from
+    # site visits), so reaching it returns the labelling held, its energy in
+    # full, and a termination recording the cap; neither a warning nor a raise
+    # (issue #1089).
     rung = _rung(CI, 3)
     start = np.array([0, 1, 2, 0, 1, 2, 0, 1, 2], dtype=np.int64)
 
-    with pytest.raises(ValueError, match="did not settle in 1 cycles"):
-        alpha_beta_swap(rung.graph, rung.field, 3, start=start, max_cycles=1)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        capped = alpha_beta_swap(
+            rung.graph, rung.field, start=start, max_cycles=1, n_states=3
+        )
+    assert capped.cycles == 1
+    assert capped.termination == Termination(False, 1, Stop.BUDGET)
+    assert capped.energy == energy(rung.graph, rung.field, capped.labelling)
+    settled = alpha_beta_swap(rung.graph, rung.field, start=start, n_states=3)
+    assert settled.energy <= capped.energy
 
 
 @pytest.mark.smoke

@@ -7,13 +7,20 @@ files: which test paths to run, and which modules to measure coverage over.
 
 Two properties matter more than the saving.
 
-A module's tests are not enough alone: `sal.search` imports
-`sal.likelihood`, so a change to the latter must run the
-former's tests too. The dependents are derived from the source rather than
-listed, since a list goes stale silently and an import does not.
+A change runs the test files that import what it changed, transitively (issue
+#1086). Each test file's import closure over `sal`, the `tests` helpers and
+`infra` is read with `ast`, never by importing; a package reaches its backend
+twins, which `backend.twin` loads by name, and a validation
+adapter reaches its script. The dependents are derived from the source rather
+than listed, since a list goes stale silently and an import does not: the
+subpackage list this replaced had missed `sample` and `validation` since they
+were created, and so sent every change to them to the whole suite. Of the 30
+merges before #1086, 13 ran the whole suite.
 
-Anything the mapping does not recognise selects everything. A changed lockfile,
-shared fixture or workflow -- the safe answer is the whole suite.
+What no import can say still selects everything: a lockfile, `pyproject.toml`,
+the root `conftest.py`, the fixtures, the workflows, and a code path the graph
+does not know. Tests that read the package's source rather than import it (the
+duplication guards, the API map) run on any change under `python/sal/`.
 
 A change that is not code selects the guards that read it (issue #372). A
 paragraph of the textbook cannot break a likelihood but can break a label or a
@@ -41,6 +48,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import functools
 import json
 import sys
 from collections.abc import Iterable
@@ -58,7 +66,19 @@ from _paths import REPO_ROOT
 # so a change to any of those selects it, which is what
 # `tests/regression/sandbox/test_pruning_burn.py` needs now that it no longer
 # sits under `likelihood/`.
-MODULES = ("sim", "likelihood", "opt", "learn", "search", "qa", "sandbox")
+MODULES = (
+    "sim",
+    "likelihood",
+    "opt",
+    "learn",
+    "search",
+    "qa",
+    "sandbox",
+    "sample",
+)
+
+#: Subpackages whose tests live outside `tests/regression/<name>`.
+TEST_DIRS = {"validation": "tests/validation"}
 
 # The modules a benchmark measures. `qa` renders figures from what these
 # compute and is not itself timed, as issue #109's trigger had it. `sandbox`
@@ -79,23 +99,6 @@ ALWAYS = (
     "tests/test_oxisal_bindings.py",
 )
 
-# A change to any of these could alter any result, so the whole suite runs.
-EVERYTHING = (
-    "pyproject.toml",
-    "uv.lock",
-    "Cargo.toml",
-    "Cargo.lock",
-    "src/",
-    "tests/_",
-    "tests/regression/fixtures/",
-    ".github/workflows/",
-    "python/sal/__init__.py",
-    "python/sal/backend.py",
-    "python/sal/emissions/",
-    "python/sal/numerics.py",
-    "python/sal/oxisal.pyi",
-    "python/sal/scripts/",
-)
 
 # What could move a key fixture's own result, and so selects the `key` tier.
 # Everything else deselects it: the tier costs two minutes a test (issue #399).
@@ -105,10 +108,9 @@ KEY_TRIGGERS = (
     "Cargo.lock",
     "tests/regression/fixtures/",
     "python/sal/emissions/",
-    "python/sal/sim/count_pairs.py",
+    "python/sal/sim/count_pairs/",
     "python/sal/sim/spatio_sequential.py",
-    "python/sal/likelihood/spatio_sequential.py",
-    "python/sal/likelihood/spatio_sequential_rust.py",
+    "python/sal/likelihood/spatio_sequential/",
     "python/sal/search/spatio_sequential.py",
 )
 
@@ -118,7 +120,7 @@ ALWAYS_DESELECTED = ("release", "stress")
 
 # Nothing here can change what a test does, so no test needs to run.
 NO_TESTS_SUFFIXES = (".md", ".tex", ".bib", ".pdf", ".txt", ".rst")
-NO_TESTS_PREFIXES = ("docs/", "changelog.d/", "infra/")
+NO_TESTS_PREFIXES = ("docs/", "changelog.d/")
 
 # The guards a non-code change selects: what a path starts with, and the tests
 # that read files under it. A guard reads the repository directly, so it is
@@ -160,6 +162,7 @@ GUARDS: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
 )
 
 
+@functools.cache
 def _module_imports() -> dict[str, set[str]]:
     """Read which submodules each submodule imports.
 
@@ -286,6 +289,174 @@ def deselected(changed: Iterable[str]) -> list[str]:
     return [*ALWAYS_DESELECTED, "key"]
 
 
+# --- File-level selection (issue #1086) -------------------------------------
+
+#: Test files that read the package's source rather than import it, so any
+#: change under `python/sal/` can fail them.
+SOURCE_READERS = (
+    "tests/regression/test_directory_imports.py",
+    "tests/regression/test_duplication_guards.py",
+    "tests/regression/test_sandbox.py",
+    "tests/regression/test_validation.py",
+    "tests/regression/test_environment.py",
+    "tests/regression/sim/test_generator_signatures.py",
+    "tests/regression/docs/test_mind_map.py",
+    "tests/regression/docs/test_docs_index_covers_every_module.py",
+    "tests/regression/docs/test_api_map.py",
+)
+
+#: What no import can attribute: a change to any of these runs the whole suite.
+UNATTRIBUTABLE = (
+    "pyproject.toml",
+    "uv.lock",
+    "Cargo.toml",
+    "Cargo.lock",
+    "tests/conftest.py",
+    "tests/regression/fixtures/",
+    ".github/workflows/",
+)
+
+#: The backend twins a gateway loads by name (`backend.twin`), which no
+#: import statement shows: a package reaches its children of these names.
+TWINS = frozenset({"rust", "numba", "torch", "jax", "python"})
+
+#: The module a Rust change is a change to: every binding is reached through it.
+RUST_MODULE = "sal.oxisal"
+
+
+def _module_name(path: str) -> str | None:
+    """The dotted name a repository path imports as, or ``None`` if it is not Python."""
+    if not path.endswith((".py", ".pyi")):
+        return None
+    stem = path.removesuffix(".pyi").removesuffix(".py")
+    if path.startswith("python/"):
+        stem = stem.removeprefix("python/")
+    elif path.startswith("infra/"):
+        stem = stem.removeprefix("infra/")
+    elif not path.startswith("tests/"):
+        return None
+    parts = stem.split("/")
+    if parts[-1] == "__init__":
+        parts = parts[:-1]
+    return ".".join(parts)
+
+
+def _sources() -> dict[str, str]:
+    """Every importable Python file under `python/`, `tests/` and `infra/`, by module name."""
+    found: dict[str, str] = {}
+    for root in ("python/sal", "tests", "infra"):
+        for file in sorted((REPO_ROOT / root).rglob("*.py*")):
+            relative = file.relative_to(REPO_ROOT).as_posix()
+            name = _module_name(relative)
+            if name is not None and "__pycache__" not in relative:
+                found.setdefault(name, relative)
+    return found
+
+
+def _resolve(name: str, known: dict[str, str]) -> str | None:
+    """The longest prefix of ``name`` that is a known module."""
+    parts = name.split(".")
+    while parts:
+        candidate = ".".join(parts)
+        if candidate in known:
+            return candidate
+        parts.pop()
+    return None
+
+
+@functools.cache
+def import_graph() -> dict[str, frozenset[str]]:
+    """Module name to the known modules it reaches directly (issue #1086).
+
+    An import reaches the module named and, where ``from a import b`` names a
+    submodule, that submodule; every module reaches its parent packages, which
+    its import runs; a package reaches its backend twins (:data:`TWINS`),
+    which a gateway loads by name; and ``sal.validation.<name>`` reaches its script.
+    """
+    known = _sources()
+    graph: dict[str, set[str]] = {name: set() for name in known}
+    for name, relative in known.items():
+        package = name if relative.endswith("__init__.py") else name.rpartition(".")[0]
+        edges = graph[name]
+        try:
+            tree = ast.parse((REPO_ROOT / relative).read_text())
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            targets: list[str] = []
+            if isinstance(node, ast.Import):
+                targets = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                base = node.module or ""
+                if node.level:
+                    anchor = package.split(".")
+                    anchor = anchor[: len(anchor) - node.level + 1]
+                    base = ".".join([*anchor, base] if base else anchor)
+                targets = [base] + [f"{base}.{alias.name}" for alias in node.names]
+            for target in targets:
+                resolved = _resolve(target, known)
+                if resolved is not None and resolved != name:
+                    edges.add(resolved)
+        parent = name.rpartition(".")[0]
+        while parent:
+            if parent in known:
+                edges.add(parent)
+            parent = parent.rpartition(".")[0]
+    for name in known:
+        parent = name.rpartition(".")[0]
+        if parent in graph and name.rpartition(".")[2] in TWINS:
+            graph[parent].add(name)
+        if name.startswith("sal.validation.") and name.count(".") == 2:
+            script = f"sal.validation.scripts.{name.rpartition('.')[2]}"
+            if script in known:
+                graph[name].add(script)
+    # Read once per process: the source does not change under a run.
+    return {name: frozenset(edges) for name, edges in graph.items()}
+
+
+def _closure(start: str, graph: dict[str, frozenset[str]]) -> set[str]:
+    """Every module ``start`` reaches, itself included."""
+    seen = {start}
+    stack = [start]
+    while stack:
+        for target in graph.get(stack.pop(), ()):
+            if target not in seen:
+                seen.add(target)
+                stack.append(target)
+    return seen
+
+
+@functools.cache
+def test_files() -> tuple[str, ...]:
+    """Every collected test file: `test_*.py` under `tests/`, benchmarks aside."""
+    return tuple(
+        sorted(
+            path.relative_to(REPO_ROOT).as_posix()
+            for path in (REPO_ROOT / "tests").rglob("test_*.py")
+            if "benchmarks" not in path.parts
+        )
+    )
+
+
+def importers(modules: Iterable[str]) -> list[str]:
+    """The test files whose import closure contains any of ``modules``."""
+    wanted = set(modules)
+    if not wanted:
+        return []
+    closures = _test_closures()
+    return [test for test in test_files() if closures[test] & wanted]
+
+
+@functools.cache
+def _test_closures() -> dict[str, frozenset[str]]:
+    """Each test file's import closure, read once per process."""
+    graph = import_graph()
+    return {
+        test: frozenset(_closure(_module_name(test) or "", graph))
+        for test in test_files()
+    }
+
+
 def select(changed: Iterable[str]) -> dict[str, list[str]]:
     """Choose test paths, coverage targets and deselected tiers for a change.
 
@@ -324,33 +495,59 @@ def select(changed: Iterable[str]) -> dict[str, list[str]]:
     if not relevant:
         return {"paths": guards, "cov": [], "deselect": deselect}
 
-    everything = any(_touches(path, EVERYTHING) for path in relevant)
+    whole = {"paths": ["tests"], "cov": ["sal"], "deselect": deselect}
+    if any(_touches(path, UNATTRIBUTABLE) for path in relevant):
+        return whole
 
-    touched: set[str] = set()
+    modules: set[str] = set()
+    tests: set[str] = set()
     for path in relevant:
-        for module in MODULES:
-            if path.startswith(
-                (f"python/sal/{module}/", f"tests/regression/{module}/")
-            ):
-                touched.add(module)
-
-    # Recognised as code, but not attributable to a module: the whole suite.
-    if everything or not touched:
-        return {
-            "paths": ["tests"],
-            "cov": ["sal"],
-            "deselect": deselect,
-        }
-
-    selected = dependents(touched)
-    paths = [f"tests/regression/{module}" for module in sorted(selected)]
-    paths += list(ALWAYS)
-    paths += [guard for guard in guards if guard not in paths]
+        if path.startswith("src/"):
+            modules.add(RUST_MODULE)
+            continue
+        name = _module_name(path)
+        if name is None:
+            # Recognised as code, but no import can say what reads it.
+            return whole
+        if path.startswith("tests/") and path.rpartition("/")[2].startswith("test_"):
+            tests.add(path)
+        modules.add(name)
+    if not (REPO_ROOT / "tests").is_dir():
+        return whole
+    tests |= set(importers(modules))
     if any(path.startswith("python/sal/") for path in relevant):
-        paths += _benchmarks_for(selected & set(BENCHMARKED))
+        tests |= set(SOURCE_READERS)
+    tests = {test for test in tests if (REPO_ROOT / test).is_file()}
+    paths = sorted(tests) + [path for path in ALWAYS if path not in tests]
+    paths += [guard for guard in guards if guard not in paths]
+    packages = {
+        name.split(".")[1]
+        for name in modules
+        if name.startswith("sal.") and name.count(".") >= 1
+    }
+    touched = {module for module in packages if module in MODULES}
+    if any(path.startswith("python/sal/") for path in relevant):
+        paths += _benchmarks_for(dependents(touched) & set(BENCHMARKED))
+    # Coverage is measured per changed subpackage, over that subpackage's own
+    # tests as well as the importers: a subpackage measured by only the files
+    # importing one of its modules would read low against the push run's
+    # floor, and a single module reads low where its kernels are compiled
+    # (`sal.search.icm` alone is 72%, its numba twin untraced). Nothing is
+    # measured when no `sal` subpackage changed, as for prose.
+    measured = sorted(
+        package for package in packages if package in MODULES or package in TEST_DIRS
+    )
+    touched_tests = [
+        TEST_DIRS.get(package, f"tests/regression/{package}") for package in measured
+    ]
+    paths += [
+        path
+        for path in touched_tests
+        if path not in paths and (REPO_ROOT / path).is_dir()
+    ]
     return {
         "paths": paths,
-        "cov": [f"sal.{module}" for module in sorted(selected)],
+        "cov": [f"sal.{package}" for package in measured],
         "deselect": deselect,
     }
 

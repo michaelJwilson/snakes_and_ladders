@@ -69,11 +69,11 @@ if TYPE_CHECKING:
 
 
 def jc_distances(
-    alignment: Mapping[str, np.ndarray], k: int
+    alignment: Mapping[str, np.ndarray], n_states: int
 ) -> dict[frozenset[str], float]:
     """Pairwise Jukes--Cantor distances, ``-(k-1)/k log(1 - k p/(k-1))``, saturating where undefined."""
     names = sorted(alignment)
-    limit = (k - 1) / k
+    limit = (n_states - 1) / n_states
     distances: dict[frozenset[str], float] = {}
     for i, first in enumerate(names):
         for second in names[i + 1 :]:
@@ -150,28 +150,28 @@ class PlugInLikelihood(Surrogate):
 
     kind = Bound.LOWER
 
-    def __init__(self, k: int, pi: np.ndarray) -> None:
-        self.k = k
+    def __init__(self, n_states: int, pi: np.ndarray) -> None:
+        self.n_states = n_states
         self.pi = np.asarray(pi, dtype=float)
 
     def lengths(
         self, topology: Topology, alignment: Mapping[str, np.ndarray]
     ) -> np.ndarray:
         """The feasible branch lengths the bound is evaluated at, in ``branch_order``."""
-        return least_squares_lengths(topology, jc_distances(alignment, self.k))
+        return least_squares_lengths(topology, jc_distances(alignment, self.n_states))
 
     def __call__(self, structure: object, data: object) -> float:
         topology, alignment = _tree_arguments(structure, data)
-        # `pruning_torch.log_likelihood` takes tensors, since the fits
+        # `likelihood.pruning.torch.log_likelihood` takes tensors, since the fits
         # differentiate through it: the lengths cross into it here, once.
         import torch
 
-        from sal.likelihood.pruning_torch import log_likelihood
+        from sal.likelihood.pruning.torch import log_likelihood
 
         return float(
             log_likelihood(
                 topology,
-                self.k,
+                self.n_states,
                 self.pi,
                 alignment,
                 torch.from_numpy(self.lengths(topology, alignment)),
@@ -181,7 +181,7 @@ class PlugInLikelihood(Surrogate):
 
 def prune_with_matrices(
     tau: Node,
-    k: int,
+    n_states: int,
     pi: np.ndarray,
     alignment: Mapping[str, np.ndarray],
     matrices: Mapping[str, np.ndarray],
@@ -196,8 +196,8 @@ def prune_with_matrices(
 
     def partial(node: Node) -> np.ndarray:
         if node.is_leaf:
-            return leaf_indicator_array(alignment[node.name], n_sites, k)
-        table = np.ones((n_sites, k))
+            return leaf_indicator_array(alignment[node.name], n_sites, n_states)
+        table = np.ones((n_sites, n_states))
         for child in node.children:
             table = table * (partial(child) @ np.asarray(matrices[child.name]).T)
         return table
@@ -247,15 +247,17 @@ class ParsimonyUpperBound(Surrogate):
 
     kind = Bound.UPPER
 
-    def __init__(self, k: int, pi: np.ndarray) -> None:
-        self.k = k
+    def __init__(self, n_states: int, pi: np.ndarray) -> None:
+        self.n_states = n_states
         self.pi = np.asarray(pi, dtype=float)
 
     def __call__(self, structure: object, data: object) -> float:
         topology, alignment = _tree_arguments(structure, data)
         first = np.asarray(alignment[sorted(alignment)[0]], dtype=np.int64)
         changes = int(site_fitch_scores(topology, alignment).sum())
-        return float(np.sum(np.log(self.pi[first]))) - changes * float(np.log(self.k))
+        return float(np.sum(np.log(self.pi[first]))) - changes * float(
+            np.log(self.n_states)
+        )
 
 
 def _tree_arguments(

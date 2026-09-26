@@ -20,13 +20,13 @@ from sal.backend import Backend
 from sal.sandbox import maxflow_declined
 from sal.sandbox.maxflow_declined import DeclinedKernel
 from sal.search import alpha_expansion as expansion_module
-from sal.search import maxflow_rust
 from sal.search.alpha_expansion import alpha_beta_swap, alpha_expansion
 from sal.search.maxflow import (
     FlowNetwork,
     ising_ground_state,
     max_flow,
 )
+from sal.search.maxflow import rust as maxflow_rust
 from sal.sim.graph import (
     BoundaryCondition,
     PottsGraph,
@@ -210,12 +210,14 @@ def test_every_declined_kernel_gives_the_package_expansion(
     # same cycle count, and the final energy bitwise equal. A labelling may
     # differ only where a cut is degenerate, and none is on this instance.
     graph, field = _spots(12, n_states)
-    reference = alpha_expansion(graph, field, n_states, backend=Backend.RUST)
-    reference_swap = alpha_beta_swap(graph, field, n_states, backend=Backend.RUST)
+    reference = alpha_expansion(graph, field, backend=Backend.RUST, n_states=n_states)
+    reference_swap = alpha_beta_swap(
+        graph, field, backend=Backend.RUST, n_states=n_states
+    )
 
     declined_inner_solver(kernel)
-    result = alpha_expansion(graph, field, n_states, backend=Backend.RUST)
-    swapped = alpha_beta_swap(graph, field, n_states, backend=Backend.RUST)
+    result = alpha_expansion(graph, field, backend=Backend.RUST, n_states=n_states)
+    swapped = alpha_beta_swap(graph, field, backend=Backend.RUST, n_states=n_states)
 
     assert result.energy.hex() == reference.energy.hex()
     assert np.array_equal(result.labelling, reference.labelling)

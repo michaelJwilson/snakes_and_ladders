@@ -32,12 +32,16 @@ from sal.learn.surrogate import (
     SetSurrogate,
     _Batch,
 )
+from sal.opt.em import EmConfig
 from sal.opt.hmm import GaussianHmmObjective, baum_welch
 from sal.opt.mixture import expectation_maximization
 from sal.sample import hmc, metropolis
 from sal.sample.potts_mcmc.sweeps import bond_probability
 from sal.search.alpha_expansion import alpha_expansion
 from sal.search.ground_state import lattice_rung
+from sal.search.potts_starts import spatio_rung, tiling_rung
+from sal.search.trws import trws
+from sal.sim.fixtures import fixture
 from sal.sim.graph import BoundaryCondition, lattice_graph
 from sal.sim.hmm import HmmParams, simulate_sequences
 from sal.sim.potts import critical_coupling, site_field
@@ -215,6 +219,33 @@ def _gradient_inputs(case: str) -> dict[str, np.ndarray]:
         "n_components": np.asarray(3),
         "points": centre + 0.05 * rng.normal(size=(100, 8)),
     }
+
+
+#: HiGHS's `linprog` on the explicit local-polytope LP at 5,041 sites and ten
+#: states, the largest fixtures both it and `search.trws` solve: one
+#: subprocess run each, the solve alone (#1063). TRW-S reaches the LP value on
+#: the first and stops 0.0496 below it on the second; the goal is the time.
+HIGHS_LOCAL_POLYTOPE = {
+    name: Goal(
+        "highs",
+        f"the local-polytope bound on {name}/release by TRW-S",
+        seconds,
+        "2026-09-25, 4-core reference host, one run at a 1-minute load of 5.3, #1063",
+    )
+    for name, seconds in (("spatio_only", 343.86), ("spatio_tiling", 267.62))
+}
+
+
+def _trws_seconds(name: str) -> float:
+    """`trws` at its defaults on one release fixture, after a warm-up that compiles it."""
+    params = fixture(name, "release").params
+    rung = (
+        spatio_rung(params, "release")
+        if name == "spatio_only"
+        else tiling_rung(params, "release")
+    )
+    trws(rung.graph, rung.field, max_iterations=1)
+    return median_seconds(lambda: trws(rung.graph, rung.field), repeats=3)
 
 
 def _cut_inputs(side: int) -> dict[str, np.ndarray]:
@@ -1133,7 +1164,8 @@ def _expansion_seconds(side: int) -> float:
     graph = lattice_graph((side, side), BoundaryCondition.OPEN, critical_coupling(10))
     field = np.random.default_rng(974).normal(size=(graph.n_nodes, 10))
     return median_seconds(
-        lambda: alpha_expansion(graph, field, 10, backend=Backend.RUST), repeats=3
+        lambda: alpha_expansion(graph, field, backend=Backend.RUST, n_states=10),
+        repeats=3,
     )
 
 
@@ -1163,8 +1195,7 @@ def _baum_welch_seconds(n_sequences: int) -> float:
             initial,
             transition,
             emission,
-            max_iterations=10,
-            tolerance=-np.inf,
+            config=EmConfig(max_iterations=10, tolerance=-np.inf),
         ),
         repeats=3,
     )
@@ -1189,7 +1220,10 @@ def _mixture_em_seconds(n_samples: int) -> float:
     weights = torch.tensor([0.3, 0.3, 0.4], dtype=torch.float64)
     return median_seconds(
         lambda: expectation_maximization(
-            observations, weights, start, max_iterations=10, tolerance=-np.inf
+            observations,
+            weights,
+            start,
+            config=EmConfig(max_iterations=10, tolerance=-np.inf),
         ),
         repeats=3,
     )
@@ -1393,6 +1427,7 @@ RUNTIME_GOALS = [
         _partial(_forward_seconds, lambda: GraphSurrogate(3, 4, hidden=8, n_layers=2)),
     ),
     *_goals(GCO_EXPANSION, _expansion_seconds),
+    *_goals(HIGHS_LOCAL_POLYTOPE, _trws_seconds),
     *_goals(HMMLEARN_BAUM_WELCH, _baum_welch_seconds),
     *_goals(SCIKIT_LEARN_EM, _mixture_em_seconds),
     *_goals(BLACKJAX_HMC, _hmc_seconds),

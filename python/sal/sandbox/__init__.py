@@ -33,7 +33,10 @@ Rust half behind the ``sandbox`` feature: the three max-flow kernels issue
 referee of the kept one arc for arc. ``surrogate.potts`` is here as
 ``tropical`` is, declined: a multigrid network for the Potts ground state on
 ``spatio_tiling`` (issue #1067), which beat ICM and Swendsen--Wang and did
-not beat alpha-expansion on energy or time.
+not beat alpha-expansion on energy or time. ``covariate_grid`` is here as
+``tropical`` is, declined: a continuous covariate coded on a power-of-two grid
+(issue #1064), which no family reaches, since the exposure factors and the
+trial count is exact.
 """
 
 from sal import _submodules

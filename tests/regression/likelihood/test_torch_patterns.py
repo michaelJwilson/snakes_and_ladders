@@ -16,7 +16,7 @@ from sal.likelihood.objective import (
     BranchLengthObjective,
     SubstitutionModelObjective,
 )
-from sal.likelihood.pruning_torch import (
+from sal.likelihood.pruning.torch import (
     branch_lengths_from_tree,
     log_likelihood,
     transition_probabilities,
@@ -34,7 +34,7 @@ def _dataset() -> tuple[Node, int, np.ndarray, dict[str, np.ndarray], torch.Tens
     params, alignment = simulated_alignment(EIGHT_TAXA, _SITES)
     return (
         params.tau,
-        params.k,
+        params.n_states,
         params.pi,
         alignment,
         branch_lengths_from_tree(params.tau),

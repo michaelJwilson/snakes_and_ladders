@@ -49,7 +49,7 @@ from sal.learn.potts import PottsEnvironment
 from sal.learn.ranking import fixed_length_target, tree_examples
 from sal.learn.reinforce import reinforce
 from sal.learn.surrogate import MLPSurrogate, fit_surrogate
-from sal.likelihood import pruning, pruning_rust, pruning_torch
+from sal.likelihood import pruning
 from sal.likelihood.belief_propagation import belief_propagation
 from sal.likelihood.convolutional import bcjr
 from sal.likelihood.ldpc import DecodingAlgorithm, decode
@@ -59,6 +59,8 @@ from sal.likelihood.message_passing import (
 )
 from sal.likelihood.objective import BranchLengthObjective
 from sal.likelihood.parsimony import fitch_score
+from sal.likelihood.pruning import rust as pruning_rust
+from sal.likelihood.pruning import torch as pruning_torch
 from sal.likelihood.turbo import decode_turbo, noise_scale, split_streams
 from sal.numerics import sample_rows
 from sal.opt.budget import Budget, Outcome, compare
@@ -127,7 +129,11 @@ def _branched(n_taxa: int, seed: int) -> Node:
 def _alignment(n_taxa: int, n_sites: int) -> tuple[Node, dict[str, np.ndarray]]:
     tau = _branched(n_taxa, seed=0)
     dataset = simulate_alignment(
-        tau, k=4, pi=np.full(4, 0.25), rng=np.random.default_rng(1), n_sites=n_sites
+        tau,
+        n_states=4,
+        pi=np.full(4, 0.25),
+        rng=np.random.default_rng(1),
+        n_sites=n_sites,
     )
     return tau, dict(dataset.alignment)
 
@@ -156,7 +162,7 @@ def sim_sections(mid: bool) -> list[Section]:
 
     def _simulate() -> None:
         simulate_alignment(
-            tau, k=4, pi=pi, rng=np.random.default_rng(1), n_sites=n_sites
+            tau, n_states=4, pi=pi, rng=np.random.default_rng(1), n_sites=n_sites
         )
 
     def _lattices() -> None:
@@ -228,11 +234,11 @@ def likelihood_sections(mid: bool) -> list[Section]:
     return [
         (f"likelihood.pruning NumPy @ {n_taxa} taxa x {n_sites}", _numpy, 5),
         (
-            f"likelihood.pruning_torch + backward @ {n_taxa} x {n_sites}",
+            f"likelihood.pruning.torch + backward @ {n_taxa} x {n_sites}",
             _torch_with_gradient,
             5,
         ),
-        (f"likelihood.pruning_rust @ {n_taxa} x {n_sites}", _rust, 5),
+        (f"likelihood.pruning.rust @ {n_taxa} x {n_sites}", _rust, 5),
         (f"likelihood.message_passing flooding @ {extent}x{extent}", _flooding, 1),
         (f"likelihood.belief_propagation @ {extent}x{extent}", _bp, 1),
         (
@@ -350,7 +356,7 @@ def search_sections(mid: bool) -> list[Section]:
         energies(graph, ising_field, configurations)
 
     def _expansion() -> None:
-        alpha_expansion(graph, potts_field, 3)
+        alpha_expansion(graph, potts_field, n_states=3)
 
     def _single_site() -> None:
         # The oracle sweep explicitly, though it is no longer the default:

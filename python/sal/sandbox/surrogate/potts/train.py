@@ -145,7 +145,7 @@ def mixed_buffer(
         mixed_example,
         items,
         workers=workers,
-        backend="processes" if workers > 1 else "serial",
+        pool="processes" if workers > 1 else "serial",
         intra_op_threads=1,
     )
 
@@ -164,7 +164,7 @@ def noisy_buffer(
         noisy_example,
         items,
         workers=workers,
-        backend="processes" if workers > 1 else "serial",
+        pool="processes" if workers > 1 else "serial",
         intra_op_threads=1,
     )
 
@@ -279,8 +279,8 @@ def _polished(
     return iterated_conditional_modes(
         graph,
         values,
-        values.shape[1],
-        np.random.default_rng(0),
+        n_states=values.shape[1],
+        rng=np.random.default_rng(0),
         start=predict(model, grids, values),
         max_sweeps=100_000,
     ).energy

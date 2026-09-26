@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import math
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -55,6 +55,7 @@ from sal.sample.potts_mcmc import (
 )
 from sal.sample.schedule import (
     ExponentialTempSchedule,
+    InverseTemperatures,
     Monotone,
     Quantity,
     TempSchedule,
@@ -131,7 +132,9 @@ class LogPartition:
     family_entropy: float
 
 
-def geometric_betas(beta: float, n_rungs: int, *, beta_min: float) -> tuple[float, ...]:
+def geometric_betas(
+    beta: float, n_rungs: int, *, beta_min: float
+) -> InverseTemperatures:
     """A ladder of inverse temperatures: exactly ``0``, then geometric to ``beta``.
 
     The zero rung is prepended rather than approached, because a geometric
@@ -155,7 +158,7 @@ def geometric_betas(beta: float, n_rungs: int, *, beta_min: float) -> tuple[floa
 
     Returns
     -------
-    tuple[float, ...]
+    InverseTemperatures
 
     Raises
     ------
@@ -170,12 +173,14 @@ def geometric_betas(beta: float, n_rungs: int, *, beta_min: float) -> tuple[floa
         msg = f"beta_min must lie in (0, {beta}], got {beta_min}"
         raise ValueError(msg)
     if n_rungs == 2:
-        return (0.0, beta)
-    return (0.0, *temperatures(ExponentialTempSchedule(beta_min, beta, n_rungs - 1)))
+        return InverseTemperatures((0.0, beta))
+    return InverseTemperatures(
+        (0.0, *temperatures(ExponentialTempSchedule(beta_min, beta, n_rungs - 1)))
+    )
 
 
 def _check_rungs(
-    betas: TempSchedule | Sequence[float], *, from_zero: bool
+    betas: TempSchedule | InverseTemperatures, *, from_zero: bool
 ) -> tuple[float, ...]:
     """The ladder in ``beta``, read from either spelling and validated as one.
 
@@ -199,6 +204,7 @@ def _population(
     n_replicas: int,
     move: PottsMove,
     backend: Backend,
+    cluster_backend: Backend,
 ) -> tuple[
     np.ndarray,
     list[np.random.Generator],
@@ -232,7 +238,9 @@ def _population(
         dtype=np.int64,
     )
     offsets, neighbours, couplings = graph.compressed_adjacency()
-    advance = sweep_for(move, graph, rows, offsets, neighbours, couplings, backend)
+    advance = sweep_for(
+        move, graph, rows, offsets, neighbours, couplings, backend, cluster_backend
+    )
     return states, children, advance, rows
 
 
@@ -251,12 +259,13 @@ def _entropy(labels: np.ndarray, n_replicas: int) -> float:
 def annealed_importance_sampling(
     graph: PottsGraph,
     field: np.ndarray,
-    betas: TempSchedule | Sequence[float],
+    betas: TempSchedule | InverseTemperatures,
     rng: np.random.Generator,
     n_replicas: int,
     *,
     move: PottsMove = PottsMove.SINGLE_SITE,
     backend: Backend = Backend.RUST,
+    cluster_backend: Backend = Backend.PYTHON,
 ) -> LogPartition:
     """``log Z`` from independent annealing runs, weighted by what each one cost (Neal 2001).
 
@@ -280,7 +289,7 @@ def annealed_importance_sampling(
         refusal.
     field : np.ndarray
         External field ``h``, shape ``(n_states,)`` or ``(n_nodes, n_states)``.
-    betas : TempSchedule | Sequence[float]
+    betas : TempSchedule | InverseTemperatures
         The ladder of inverse temperatures, starting at ``0.0`` and strictly
         increasing; :func:`geometric_betas` builds one. A
         :class:`~sal.sample.schedule.TempSchedule` is read as
@@ -295,6 +304,11 @@ def annealed_importance_sampling(
         The move set each rung's sweep uses.
     backend : Backend
         As :func:`~sal.sample.potts_mcmc.sample_potts`.
+    cluster_backend : Backend
+        Which implementation runs a cluster move's pass, as
+        :func:`~sal.sample.potts_mcmc.sample_potts` takes it;
+        :data:`~sal.backend.Backend.PYTHON`, the default, is the chain before
+        #1059 threaded it here, bitwise.
 
     Returns
     -------
@@ -312,7 +326,7 @@ def annealed_importance_sampling(
     """
     ladder = _check_rungs(betas, from_zero=True)
     states, children, advance, rows = _population(
-        graph, field, rng, n_replicas, move, backend
+        graph, field, rng, n_replicas, move, backend, cluster_backend
     )
     log_zero = _log_z_zero(graph, rows)
     log_n = np.log(n_replicas)
@@ -380,12 +394,13 @@ def _resampled(
 def population_annealing(
     graph: PottsGraph,
     field: np.ndarray,
-    betas: TempSchedule | Sequence[float],
+    betas: TempSchedule | InverseTemperatures,
     rng: np.random.Generator,
     n_replicas: int,
     *,
     move: PottsMove = PottsMove.SINGLE_SITE,
     backend: Backend = Backend.RUST,
+    cluster_backend: Backend = Backend.PYTHON,
     resample: Resampling = Resampling.SYSTEMATIC,
 ) -> LogPartition:
     """``log Z`` from a population resampled at every rung (Hukushima & Iba 2003; Machta 2010).
@@ -406,7 +421,7 @@ def population_annealing(
 
     Parameters
     ----------
-    graph, field, betas, rng, n_replicas, move, backend
+    graph, field, betas, rng, n_replicas, move, backend, cluster_backend
         As :func:`annealed_importance_sampling`, with the parent generator
         drawing the resampling uniforms beside spawning the children.
     resample : Resampling
@@ -428,7 +443,7 @@ def population_annealing(
     """
     ladder = _check_rungs(betas, from_zero=True)
     states, children, advance, rows = _population(
-        graph, field, rng, n_replicas, move, backend
+        graph, field, rng, n_replicas, move, backend, cluster_backend
     )
     log_zero = _log_z_zero(graph, rows)
     log_n = np.log(n_replicas)
@@ -545,7 +560,7 @@ def rung_weights(estimate: LogPartition) -> np.ndarray:
 def simulated_tempering(
     graph: PottsGraph,
     field: np.ndarray,
-    betas: TempSchedule | Sequence[float],
+    betas: TempSchedule | InverseTemperatures,
     weights: np.ndarray,
     rng: np.random.Generator,
     n_sweeps: int,
@@ -554,6 +569,7 @@ def simulated_tempering(
     *,
     move: PottsMove = PottsMove.SINGLE_SITE,
     backend: Backend = Backend.RUST,
+    cluster_backend: Backend = Backend.PYTHON,
 ) -> SimulatedTempered:
     """One walker over the ladder, with the rung as a sampled variable (Marinari & Parisi 1992).
 
@@ -573,9 +589,9 @@ def simulated_tempering(
 
     Parameters
     ----------
-    graph, field, move, backend
+    graph, field, move, backend, cluster_backend
         As :func:`annealed_importance_sampling`.
-    betas : TempSchedule | Sequence[float]
+    betas : TempSchedule | InverseTemperatures
         Read by
         :func:`~sal.sample.schedule.beta_ladder`: a
         :class:`~sal.sample.schedule.TempSchedule` as
@@ -624,7 +640,9 @@ def simulated_tempering(
     )
     offsets, neighbours, couplings = graph.compressed_adjacency()
     refuse_negative_coupling(move, graph)
-    advance = sweep_for(move, graph, rows, offsets, neighbours, couplings, backend)
+    advance = sweep_for(
+        move, graph, rows, offsets, neighbours, couplings, backend, cluster_backend
+    )
 
     rung = 0
     accepted = 0

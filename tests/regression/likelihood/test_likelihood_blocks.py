@@ -21,7 +21,7 @@ from sal.likelihood.blocks import (
     block_frequency_interval,
     site_log_likelihood_extremes,
 )
-from sal.likelihood.pruning_torch import (
+from sal.likelihood.pruning.torch import (
     branch_lengths_from_tree,
     log_likelihood,
 )
@@ -70,7 +70,8 @@ def _random_alignment(
     rng = np.random.default_rng(seed)
     names = [node.name for node in preorder(params.tau) if node.is_leaf]
     return {
-        name: rng.integers(0, params.k, size=n_sites, dtype=np.int64) for name in names
+        name: rng.integers(0, params.n_states, size=n_sites, dtype=np.int64)
+        for name in names
     }
 
 
@@ -89,12 +90,14 @@ def test_the_interval_contains_the_exact_log_likelihood() -> None:
             _random_alignment(params, seed, N_SITES) for seed in range(4)
         ]
         for columns in cases:
-            exact = float(log_likelihood(params.tau, params.k, pi, columns, lengths))
+            exact = float(
+                log_likelihood(params.tau, params.n_states, pi, columns, lengths)
+            )
             for block_size in BLOCK_SIZES:
                 for cutoff in CUTOFFS:
                     interval = block_frequency_interval(
                         params.tau,
-                        params.k,
+                        params.n_states,
                         pi,
                         columns,
                         lengths,
@@ -113,11 +116,13 @@ def test_every_cutoff_of_one_evaluates_the_alignment_exactly() -> None:
     for name in FIXTURES:
         params, alignment, lengths = _instance(name, 200)
         pi = np.asarray(params.pi)
-        exact = float(log_likelihood(params.tau, params.k, pi, alignment, lengths))
+        exact = float(
+            log_likelihood(params.tau, params.n_states, pi, alignment, lengths)
+        )
         for block_size in BLOCK_SIZES:
             interval = block_frequency_interval(
                 params.tau,
-                params.k,
+                params.n_states,
                 pi,
                 alignment,
                 lengths,
@@ -137,18 +142,20 @@ def test_the_site_extremes_bracket_every_column() -> None:
     params, _, lengths = _instance("tree_jc/ci.yaml", 10)
     pi = np.asarray(params.pi)
     names = sorted(node.name for node in preorder(params.tau) if node.is_leaf)
-    n_columns = params.k ** len(names)
+    n_columns = params.n_states ** len(names)
     digits = np.arange(n_columns)
     every = {
-        name: ((digits // params.k**index) % params.k).astype(np.int64)
+        name: ((digits // params.n_states**index) % params.n_states).astype(np.int64)
         for index, name in enumerate(names)
     }
-    lower, upper = site_log_likelihood_extremes(params.tau, params.k, pi, lengths)
+    lower, upper = site_log_likelihood_extremes(
+        params.tau, params.n_states, pi, lengths
+    )
     # One evaluation per column: the total over a single-column alignment is
     # that column's site log-likelihood.
     for column in range(n_columns):
         single = {name: every[name][column : column + 1] for name in names}
-        value = float(log_likelihood(params.tau, params.k, pi, single, lengths))
+        value = float(log_likelihood(params.tau, params.n_states, pi, single, lengths))
         assert float(lower) <= value + 1e-12
         assert float(upper) >= value - 1e-12
 
@@ -190,13 +197,15 @@ def test_the_width_is_the_bounded_sites_times_the_per_site_range() -> None:
     # about the cutoff rather than about the tree.
     params, alignment, lengths = _instance("tree_search/ci.yaml", 400)
     pi = np.asarray(params.pi)
-    lower, upper = site_log_likelihood_extremes(params.tau, params.k, pi, lengths)
+    lower, upper = site_log_likelihood_extremes(
+        params.tau, params.n_states, pi, lengths
+    )
     span = float(upper - lower)
     for block_size in BLOCK_SIZES:
         for cutoff in CUTOFFS:
             interval = block_frequency_interval(
                 params.tau,
-                params.k,
+                params.n_states,
                 pi,
                 alignment,
                 lengths,
@@ -219,14 +228,16 @@ def test_the_width_grows_with_the_cutoff_and_with_the_block_size() -> None:
     for name in ("tree_search/ci.yaml", "tree_jc/ci.yaml"):
         params, alignment, lengths = _instance(name, 2000)
         pi = np.asarray(params.pi)
-        exact = abs(float(log_likelihood(params.tau, params.k, pi, alignment, lengths)))
+        exact = abs(
+            float(log_likelihood(params.tau, params.n_states, pi, alignment, lengths))
+        )
         print(f"  {name} (|LL| = {exact:.0f}, 2000 sites)")
         for block_size in BLOCK_SIZES:
             widths, bounded, columns = [], [], []
             for cutoff in CUTOFFS:
                 interval = block_frequency_interval(
                     params.tau,
-                    params.k,
+                    params.n_states,
                     pi,
                     alignment,
                     lengths,
@@ -253,7 +264,9 @@ def test_the_lower_end_is_a_bound_on_the_fitted_log_likelihood() -> None:
     pi = np.asarray(params.pi)
     topologies = list(enumerate_topologies(sorted(alignment)))
     fitted = {
-        leaf_bipartitions(topology): score_topology(topology, alignment, params.k)
+        leaf_bipartitions(topology): score_topology(
+            topology, alignment, params.n_states
+        )
         for topology in topologies
     }
 
@@ -264,7 +277,7 @@ def test_the_lower_end_is_a_bound_on_the_fitted_log_likelihood() -> None:
         for cutoff in (1, 4, 16):
             certificate = certify(
                 BlockFrequencyBound(
-                    params.k, pi, block_size=block_size, min_count=cutoff
+                    params.n_states, pi, block_size=block_size, min_count=cutoff
                 ),
                 exact,
                 topologies,
@@ -281,12 +294,14 @@ def test_neither_end_ranks_and_the_frequent_half_does() -> None:
     params, alignment, _ = _instance("tree_search/ci.yaml", 2000)
     pi = np.asarray(params.pi)
     topologies = list(enumerate_topologies(sorted(alignment)))
-    fitted = np.array([score_topology(t, alignment, params.k) for t in topologies])
+    fitted = np.array(
+        [score_topology(t, alignment, params.n_states) for t in topologies]
+    )
     best = int(np.argmax(fitted))
 
     def order(claim: Bound, cutoff: int) -> np.ndarray:
         surrogate = BlockFrequencyBound(
-            params.k, pi, block_size=1, min_count=cutoff, claim=claim
+            params.n_states, pi, block_size=1, min_count=cutoff, claim=claim
         )
         return np.array([float(surrogate(t, alignment)) for t in topologies])
 
@@ -316,15 +331,17 @@ def _ranked_against_exact(
     params, alignment, _ = _instance(fixture, n_sites)
     pi = np.asarray(params.pi)
     surrogate = BlockFrequencyBound(
-        params.k, pi, block_size=1, min_count=4, claim=Bound.POINT
+        params.n_states, pi, block_size=1, min_count=4, claim=Bound.POINT
     )
     rows = []
     print(f"\n{fixture}, {n_sites} sites, cutoff 4:")
     for moves, seed in moves_and_seeds:
-        full = infer(alignment, params.k, rng=np.random.default_rng(seed), moves=moves)
+        full = infer(
+            alignment, params.n_states, rng=np.random.default_rng(seed), moves=moves
+        )
         ranked = infer(
             alignment,
-            params.k,
+            params.n_states,
             rng=np.random.default_rng(seed),
             moves=moves,
             lazy_top=1,
@@ -384,7 +401,9 @@ def test_the_bound_is_a_surrogate_with_a_claim() -> None:
     params, alignment, _ = _instance("tree_search/ci.yaml", 200)
     pi = np.asarray(params.pi)
     claims = {
-        claim: BlockFrequencyBound(params.k, pi, block_size=3, min_count=4, claim=claim)
+        claim: BlockFrequencyBound(
+            params.n_states, pi, block_size=3, min_count=4, claim=claim
+        )
         for claim in (Bound.LOWER, Bound.UPPER, Bound.POINT)
     }
     for claim, surrogate in claims.items():
@@ -405,7 +424,7 @@ def test_a_malformed_partition_or_alignment_is_refused() -> None:
         with pytest.raises(ValueError, match=message):
             block_frequency_interval(
                 params.tau,
-                params.k,
+                params.n_states,
                 pi,
                 alignment,
                 lengths,
@@ -414,29 +433,37 @@ def test_a_malformed_partition_or_alignment_is_refused() -> None:
             )
     with pytest.raises(ValueError, match="no taxa"):
         block_frequency_interval(
-            params.tau, params.k, pi, {}, lengths, block_size=1, min_count=1
+            params.tau, params.n_states, pi, {}, lengths, block_size=1, min_count=1
         )
     ragged = dict(alignment)
     first = next(iter(ragged))
     ragged[first] = ragged[first][:-1]
     with pytest.raises(ValueError, match="ragged"):
         block_frequency_interval(
-            params.tau, params.k, pi, ragged, lengths, block_size=1, min_count=1
+            params.tau, params.n_states, pi, ragged, lengths, block_size=1, min_count=1
         )
     # A cutoff that empties the exact half leaves the point claim with a
     # zero to scale, which is above every log-likelihood and orders nothing;
     # it must refuse rather than rank by it. Block size 5 at 40 sites and a
     # cutoff of 2 is that case: no block of 5 columns repeats.
     empty = block_frequency_interval(
-        params.tau, params.k, pi, alignment, lengths, block_size=5, min_count=2
+        params.tau, params.n_states, pi, alignment, lengths, block_size=5, min_count=2
     )
     assert empty.exact_sites == 0
     assert empty.contains(
-        float(log_likelihood(params.tau, params.k, pi, alignment, lengths))
+        float(log_likelihood(params.tau, params.n_states, pi, alignment, lengths))
     )
     with pytest.raises(ValueError, match="no block of the .* reached the cutoff"):
         _ = empty.extrapolated
     with pytest.raises(ValueError, match="claim must be a Bound"):
-        BlockFrequencyBound(params.k, pi, block_size=1, min_count=1, claim="middle")  # type: ignore[arg-type]
+        BlockFrequencyBound(
+            params.n_states,
+            pi,
+            block_size=1,
+            min_count=1,
+            claim="middle",  # type: ignore[arg-type]
+        )
     with pytest.raises(TypeError, match="a topology and an alignment"):
-        BlockFrequencyBound(params.k, pi, block_size=1, min_count=1)(3, alignment)
+        BlockFrequencyBound(params.n_states, pi, block_size=1, min_count=1)(
+            3, alignment
+        )

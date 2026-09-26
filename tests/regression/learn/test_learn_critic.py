@@ -102,7 +102,7 @@ def test_the_optimal_value_over_a_long_horizon_reaches_the_enumerated_optimum() 
         # The reward is the rise in the environment's score, so the best return
         # from a start is the distance up to the enumerated optimum.
         assert exact_optimal_value(environment, state, 8) == pytest.approx(
-            best - environment.energy(state), abs=1e-9
+            best - environment.log_weight(state), abs=1e-9
         )
     assert checked >= 5
 
@@ -149,7 +149,8 @@ def test_the_estimator_with_the_exact_critic_is_unbiased_for_the_exact_gradient(
     exact = exact_policy_gradient(environment, policy, start, HORIZON)
     rng = np.random.default_rng(0)
     episodes = [
-        rollout(environment, policy, rng, HORIZON, start=start) for _ in range(4000)
+        rollout(environment, policy, rng, max_steps=HORIZON, start=start)
+        for _ in range(4000)
     ]
     advantages = [
         [
@@ -169,7 +170,7 @@ def test_the_estimator_with_the_exact_critic_is_unbiased_for_the_exact_gradient(
 def test_targets_and_advantages_line_up_with_the_decisions() -> None:
     environment, policy = potts_environment(), _policy([0.3, -0.6])
     rng = np.random.default_rng(1)
-    episodes = [rollout(environment, policy, rng, HORIZON) for _ in range(5)]
+    episodes = [rollout(environment, policy, rng, max_steps=HORIZON) for _ in range(5)]
     n_decisions = sum(len(e.actions) for e in episodes)
     features, targets = state_targets(environment, episodes)
     assert features.shape == (n_decisions, n_state_features(environment))
@@ -222,8 +223,8 @@ def test_actor_critic_reaches_the_optimum_at_least_as_often_as_greedy() -> None:
     reached = np.mean(
         [
             abs(
-                environment.energy(
-                    rollout(environment, policy, rng, 6, start=s).states[-1]
+                environment.log_weight(
+                    rollout(environment, policy, rng, max_steps=6, start=s).states[-1]
                 )
                 - best
             )
@@ -324,11 +325,13 @@ def test_the_bootstrapped_targets_telescope_to_the_closed_form_return() -> None:
     )
 
     for start in _states(environment)[::10]:
-        episode = greedy_rollout(environment, start, 12)
+        episode = greedy_rollout(environment, start=start, max_steps=12)
         if not episode.actions:
             continue
         assert episode.terminated, "the closed form below needs a finished episode"
-        closed = environment.energy(episode.states[-1]) - environment.energy(start)
+        closed = environment.log_weight(episode.states[-1]) - environment.log_weight(
+            start
+        )
         assert episode.total_reward == pytest.approx(closed, abs=1e-12)
 
         features, targets = temporal_difference_targets(environment, [episode], critic)
@@ -342,6 +345,7 @@ def test_the_bootstrapped_targets_telescope_to_the_closed_form_return() -> None:
         _, returns = state_targets(environment, [episode])
         for step, state in enumerate(episode.states[:-1]):
             assert float(returns[step]) == pytest.approx(
-                environment.energy(episode.states[-1]) - environment.energy(state),
+                environment.log_weight(episode.states[-1])
+                - environment.log_weight(state),
                 abs=1e-12,
             )

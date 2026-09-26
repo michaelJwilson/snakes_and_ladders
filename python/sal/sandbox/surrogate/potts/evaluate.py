@@ -123,8 +123,8 @@ def _icm(graph: PottsGraph, field: np.ndarray, start: np.ndarray) -> float:
     return iterated_conditional_modes(
         graph,
         field,
-        field.shape[1],
-        np.random.default_rng(0),
+        n_states=field.shape[1],
+        rng=np.random.default_rng(0),
         start=np.asarray(start, dtype=np.int64),
         max_sweeps=ICM_SWEEPS,
     ).energy
@@ -170,7 +170,7 @@ def evaluate_field(
             result = alpha_expansion(
                 graph,
                 field,
-                n_states,
+                n_states=n_states,
                 start=None if start is None else start.copy(),
                 backend=Backend.RUST,
             )

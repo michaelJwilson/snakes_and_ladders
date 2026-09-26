@@ -55,7 +55,7 @@ def environment(params: SimulationParams) -> TreeEnvironment:
     dataset = simulate_tree(params, np.random.default_rng(params.seed))
     return TreeEnvironment(
         dict(dataset.alignment),
-        params.k,
+        params.n_states,
         np.asarray(params.pi),
         branch_length=float(
             np.mean([child.branch_length for _, child in edges(params.tau)])
@@ -72,7 +72,9 @@ def taxa(params: SimulationParams) -> list[str]:
 
 @pytest.fixture(scope="module")
 def maximum(environment: TreeEnvironment, taxa: list[str]) -> float:
-    return max(environment.score(topology) for topology in enumerate_topologies(taxa))
+    return max(
+        environment.log_weight(topology) for topology in enumerate_topologies(taxa)
+    )
 
 
 @pytest.fixture(scope="module")
@@ -84,7 +86,7 @@ def traps(
         topology
         for topology in enumerate_topologies(taxa)
         if environment.is_terminal(topology)
-        and abs(environment.score(topology) - maximum) >= 1e-9
+        and abs(environment.log_weight(topology) - maximum) >= 1e-9
     ]
 
 
@@ -100,7 +102,7 @@ def _hill_climbing_policy(environment: TreeEnvironment) -> LinearPolicy:
 
 def _best_seen(environment: TreeEnvironment, states: tuple[Topology, ...]) -> float:
     """A wandering searcher keeps its best state, not its last."""
-    return max(environment.score(state) for state in states)
+    return max(environment.log_weight(state) for state in states)
 
 
 @pytest.mark.smoke
@@ -133,9 +135,9 @@ def test_epsilon_zero_reproduces_hill_climbing_exactly(
     agent = EpsilonGreedyPolicy(_hill_climbing_policy(environment), 0.0)
     for start in traps[:3]:
         under_policy = rollout(
-            environment, agent, np.random.default_rng(0), BUDGET, start=start
+            environment, agent, np.random.default_rng(0), max_steps=BUDGET, start=start
         )
-        under_greedy = greedy_rollout(environment, start, BUDGET)
+        under_greedy = greedy_rollout(environment, start=start, max_steps=BUDGET)
         assert under_policy.states == under_greedy.states
 
 
@@ -159,7 +161,7 @@ def test_an_episode_can_leave_a_local_optimum(
                         environment,
                         agent,
                         rng,
-                        BUDGET,
+                        max_steps=BUDGET,
                         start=trap,
                         stop_at_local_optimum=False,
                     ).states,
@@ -186,9 +188,9 @@ def test_stopping_at_a_local_optimum_never_escapes(
     agent = EpsilonGreedyPolicy(_hill_climbing_policy(environment), _HIGH_EPSILON)
     rng = np.random.default_rng(7)
     for trap in traps:
-        episode = rollout(environment, agent, rng, BUDGET, start=trap)
+        episode = rollout(environment, agent, rng, max_steps=BUDGET, start=trap)
         assert episode.states == (trap,)
-        assert abs(environment.score(trap) - maximum) >= 1e-9
+        assert abs(environment.log_weight(trap) - maximum) >= 1e-9
 
 
 @pytest.mark.oracle
@@ -204,7 +206,7 @@ def test_random_restart_hill_climbing_solves_this_fixture(
     for _ in range(PROBE_STARTS):
         state, spent, seen = environment.reset(start_rng), 0, -np.inf
         while spent < BUDGET:
-            episode = greedy_rollout(environment, state, BUDGET - spent)
+            episode = greedy_rollout(environment, start=state, max_steps=BUDGET - spent)
             spent += max(len(episode.actions), 1)
             seen = max(seen, _best_seen(environment, episode.states))
             state = environment.reset(restart_rng)

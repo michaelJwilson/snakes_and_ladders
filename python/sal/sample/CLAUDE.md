@@ -7,7 +7,7 @@ from `opt/` (continuous: `hmc`, `langevin`, `slice`, `schedule`) and `search/`
 annealing: `tempered`, `annealed`; diagnostics: `statistics`), where the rules
 for one kind of sampler were stated in one file and the rules for the other in
 the other. `metropolis` (#1006) joined the continuous samplers, `declared` names the
-energy families and operators a compiled chain runs, and `hmc_jax` runs a
+energy families and operators a compiled chain runs, and `sample.hmc.jax` runs a
 chain on an objective whose energy is a JAX function (#1008). An optimizer is judged by the optimum it reaches and a sampler by
 the distribution it converges to, which is why the two directories are two.
 

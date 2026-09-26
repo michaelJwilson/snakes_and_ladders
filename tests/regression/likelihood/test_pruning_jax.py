@@ -36,7 +36,7 @@ def _alignment(
 ) -> tuple[Node, int, np.ndarray, dict[str, np.ndarray]]:
     params = load_fixture(name)
     dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites)
-    return params.tau, params.k, params.pi, dict(dataset.alignment)
+    return params.tau, params.n_states, params.pi, dict(dataset.alignment)
 
 
 def _points(objective: BranchLengthObjective, tau: Node) -> list[torch.Tensor]:
@@ -93,7 +93,7 @@ def test_the_jax_value_is_the_brute_force_likelihood() -> None:
 def test_the_jax_gradient_passes_finite_differences() -> None:
     """``jax.test_util.check_grads`` on the compiled program, reverse mode."""
     from jax.test_util import check_grads
-    from sal.likelihood import pruning_jax
+    from sal.likelihood.pruning import jax as pruning_jax
 
     tau, k, pi, alignment = _alignment(SMALL_SITES, n_sites=200)
     objective = BranchLengthObjective(tau, k, pi, alignment)

@@ -41,7 +41,7 @@ def environment() -> TreeEnvironment:
     ]
     return TreeEnvironment(
         dict(dataset.alignment),
-        params.k,
+        params.n_states,
         params.pi,
         branch_length=float(np.mean(lengths)),
         reward=RewardModel.KNOWN,
@@ -53,11 +53,13 @@ def environment() -> TreeEnvironment:
 def maximum(environment: TreeEnvironment) -> float:
     params = load_params(FIXTURE, SimulationParams)
     leaves = sorted(node.name for _, node in edges(params.tau) if node.is_leaf)
-    return max(environment.score(t) for t in enumerate_topologies(leaves))
+    return max(environment.log_weight(t) for t in enumerate_topologies(leaves))
 
 
 def _rate(environment: TreeEnvironment, finals: list[Topology], best: float) -> float:
-    return float(np.mean([abs(environment.score(t) - best) < 1e-9 for t in finals]))
+    return float(
+        np.mean([abs(environment.log_weight(t) - best) < 1e-9 for t in finals])
+    )
 
 
 @pytest.mark.release
@@ -72,7 +74,10 @@ def test_ppo_on_the_hard_fixture_is_no_worse_than_reinforce_at_the_same_budget(
     starts = [environment.reset(rng) for _ in range(STARTS)]
     greedy = _rate(
         environment,
-        [greedy_rollout(environment, s, HORIZON).states[-1] for s in starts],
+        [
+            greedy_rollout(environment, start=s, max_steps=HORIZON).states[-1]
+            for s in starts
+        ],
         maximum,
     )
     outcomes = {}
@@ -116,7 +121,9 @@ def test_ppo_on_the_hard_fixture_is_no_worse_than_reinforce_at_the_same_budget(
         outcomes[label] = _rate(
             environment,
             [
-                rollout(environment, policy, probe, HORIZON, start=s).states[-1]
+                rollout(environment, policy, probe, max_steps=HORIZON, start=s).states[
+                    -1
+                ]
                 for s in starts
                 for _ in range(ROLLOUTS_PER_START)
             ],

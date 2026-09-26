@@ -27,10 +27,10 @@ from sal.sim.count_pairs import (
     simulate_count_pairs,
     split_covariate,
 )
-from sal.sim.count_pairs_rust import (
+from sal.sim.count_pairs.rust import (
     _channels,
 )
-from sal.sim.count_pairs_rust import (
+from sal.sim.count_pairs.rust import (
     simulate_count_pairs as simulate_rust,
 )
 from sal.sim.fixtures import fixture

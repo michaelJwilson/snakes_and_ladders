@@ -56,7 +56,11 @@ def _rolled[S, A](
     policy = LinearPolicy(len(weights))
     policy.set_weights(torch.tensor(weights, dtype=torch.float64))
     episode = rollout(
-        environment, policy, np.random.default_rng(seed), max_steps, start=start
+        environment,
+        policy,
+        np.random.default_rng(seed),
+        max_steps=max_steps,
+        start=start,
     )
     scored = sum(len(environment.actions(state)) for state in episode.states)
     states = [gymnasium.encode(state) for state in episode.states]

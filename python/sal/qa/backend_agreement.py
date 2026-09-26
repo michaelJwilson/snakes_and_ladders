@@ -21,7 +21,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
 
-from sal.likelihood import pruning, pruning_rust, pruning_torch
+from sal.backend import Backend
+from sal.likelihood import pruning
 from sal.likelihood.brute_force import brute_force_log_likelihood
 from sal.qa.figure import QAFigure
 from sal.qa.runner import FIXTURE_PARAMS, figure_main
@@ -40,51 +41,43 @@ from sal.sim.simulator import simulate_tree
 # the figure exists partly to show which of the two is stable.
 SITE_COUNTS = (100, 300, 1000, 3000)
 
-BACKENDS = ("numpy", "torch", "rust")
+#: Every `Backend` member `pruning.log_likelihood` runs, reached through its
+#: `backend=` (issue #1059).
+BACKENDS = (Backend.PYTHON, Backend.TORCH, Backend.RUST)
+
+#: The legend's name for each: the oracle is the NumPy recursion.
+LABELS = {Backend.PYTHON: "numpy", Backend.TORCH: "torch", Backend.RUST: "rust"}
 
 
-def _log_likelihood(
-    backend: str, params: SimulationParams, alignment: dict[str, np.ndarray]
-) -> float:
-    """One backend's log-likelihood of ``alignment`` under the fixture's tree."""
-    if backend == "numpy":
-        return pruning.log_likelihood(params.tau, params.k, params.pi, alignment)
-    if backend == "rust":
-        return pruning_rust.log_likelihood(params.tau, params.k, params.pi, alignment)
-    return float(
-        pruning_torch.log_likelihood(
-            params.tau,
-            params.k,
-            params.pi,
-            alignment,
-            pruning_torch.branch_lengths_from_tree(params.tau),
-        ).detach()
-    )
-
-
-def agreement(params: SimulationParams) -> dict[str, list[tuple[int, float]]]:
+def agreement(params: SimulationParams) -> dict[Backend, list[tuple[int, float]]]:
     """Relative deviation of each backend from brute force, per site count.
 
     Returns
     -------
-    dict[str, list[tuple[int, float]]]
+    dict[Backend, list[tuple[int, float]]]
         Per backend, ``(n_sites, |backend - oracle| / |oracle|)`` pairs.
     """
-    measured: dict[str, list[tuple[int, float]]] = {name: [] for name in BACKENDS}
+    measured: dict[Backend, list[tuple[int, float]]] = {
+        backend: [] for backend in BACKENDS
+    }
     for n_sites in SITE_COUNTS:
         dataset = simulate_tree(
             params, np.random.default_rng(params.seed), n_sites=n_sites
         )
         alignment = dict(dataset.alignment)
-        oracle = brute_force_log_likelihood(params.tau, params.k, params.pi, alignment)
-        for name in BACKENDS:
-            value = _log_likelihood(name, params, alignment)
-            measured[name].append((n_sites, abs(value - oracle) / abs(oracle)))
+        oracle = brute_force_log_likelihood(
+            params.tau, params.n_states, params.pi, alignment
+        )
+        for backend in BACKENDS:
+            value = pruning.log_likelihood(
+                params.tau, params.n_states, params.pi, alignment, backend=backend
+            )
+            measured[backend].append((n_sites, abs(value - oracle) / abs(oracle)))
     return measured
 
 
 def build_figure(
-    measured: dict[str, list[tuple[int, float]]], params: SimulationParams
+    measured: dict[Backend, list[tuple[int, float]]], params: SimulationParams
 ) -> tuple[Figure, str]:
     """Assemble the figure and its caption.
 
@@ -96,9 +89,9 @@ def build_figure(
     worst = max(value for points in measured.values() for _, value in points)
     with letter_style():
         fig, axis = plt.subplots(figsize=ONE_COLUMN)
-        for index, name in enumerate(BACKENDS):
+        for index, backend in enumerate(BACKENDS):
             style = series_style(index)
-            points = measured[name]
+            points = measured[backend]
             axis.plot(
                 [x for x, _ in points],
                 [max(y, 1e-18) for _, y in points],
@@ -107,7 +100,7 @@ def build_figure(
                 color=style["color"],
                 markersize=4,
                 linewidth=1.0,
-                label=name,
+                label=LABELS[backend],
             )
         axis.axhline(
             np.finfo(np.float64).eps,

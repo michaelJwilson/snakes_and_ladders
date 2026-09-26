@@ -69,10 +69,15 @@ def icm_label(graph: PottsGraph, field: np.ndarray, seed: int) -> Label:
     n_states = field.shape[1]
     rng = np.random.default_rng(seed)
     argmax = iterated_conditional_modes(
-        graph, field, n_states, rng, start=field.argmax(1), max_sweeps=ICM_SWEEPS
+        graph,
+        field,
+        n_states=n_states,
+        rng=rng,
+        start=field.argmax(1),
+        max_sweeps=ICM_SWEEPS,
     )
     random = iterated_conditional_modes(
-        graph, field, n_states, rng, max_sweeps=ICM_SWEEPS
+        graph, field, n_states=n_states, rng=rng, max_sweeps=ICM_SWEEPS
     )
     if argmax.energy <= random.energy:
         return Label(np.asarray(argmax.labelling, dtype=np.int64), "icm-argmax")
@@ -86,7 +91,9 @@ def expansion_label(graph: PottsGraph, field: np.ndarray) -> Label:
     -------
     Label
     """
-    result = alpha_expansion(graph, field, field.shape[1], backend=Backend.RUST)
+    result = alpha_expansion(
+        graph, field, n_states=field.shape[1], backend=Backend.RUST
+    )
     return Label(np.asarray(result.labelling, dtype=np.int64), "expansion")
 
 

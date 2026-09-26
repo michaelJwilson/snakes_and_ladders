@@ -64,7 +64,8 @@ def test_the_local_reward_matches_re_evaluating_the_joint_probability() -> None:
         for action in environment.actions(state):
             successor, reward = environment.step(state, action)
             assert reward == pytest.approx(
-                environment.energy(successor) - environment.energy(state), abs=1e-12
+                environment.log_weight(successor) - environment.log_weight(state),
+                abs=1e-12,
             )
 
 
@@ -97,10 +98,10 @@ def test_hill_climbing_reaches_the_enumerated_optimum() -> None:
     _, best = optimum(environment)
     rng = np.random.default_rng(2)
     reached = [
-        environment.energy(
-            greedy_rollout(environment, environment.reset(rng), EPISODE_HORIZON).states[
-                -1
-            ]
+        environment.log_weight(
+            greedy_rollout(
+                environment, start=environment.reset(rng), max_steps=EPISODE_HORIZON
+            ).states[-1]
         )
         for _ in range(40)
     ]

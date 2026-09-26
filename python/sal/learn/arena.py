@@ -348,12 +348,19 @@ class Learner:
         if self._train is None:
             if budget.stop_at_local_optimum:
                 return [
-                    (greedy_rollout(environment, start, budget.max_steps),)
+                    (
+                        greedy_rollout(
+                            environment, start=start, max_steps=budget.max_steps
+                        ),
+                    )
                     for start in starts
                 ]
             return [
                 greedy_restarts(
-                    environment, start, budget.max_steps, streams.evaluation
+                    environment,
+                    streams.evaluation,
+                    start=start,
+                    max_steps=budget.max_steps,
                 )
                 for start in starts
             ]
@@ -368,7 +375,7 @@ class Learner:
                     environment,
                     policy,
                     streams.evaluation,
-                    budget.max_steps,
+                    max_steps=budget.max_steps,
                     start=start,
                     stop_at_local_optimum=budget.stop_at_local_optimum,
                 ),
@@ -394,9 +401,9 @@ def _reinforce[S, A](
         environment,
         policy,
         streams.training,
-        budget.iterations,
-        budget.batch,
-        budget.max_steps,
+        iterations=budget.iterations,
+        batch=budget.batch,
+        max_steps=budget.max_steps,
         stop_at_local_optimum=budget.stop_at_local_optimum,
     )
     return policy

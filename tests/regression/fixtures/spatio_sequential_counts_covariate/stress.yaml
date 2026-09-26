@@ -1,0 +1,71 @@
+model: spatio-sequential-counts
+oracle: none
+
+# The count-pair coupled model under a continuous covariate (issue #1064), at
+# the lattice and the classes of `spatio_sequential_counts/stress.yaml`: 71 x
+# 71 = 5,041 vertices, M = K = 10. Every field is required -- see
+# python/sal/sim/count_pairs.py.
+#
+# S = 2,000, the resolution of that file's factor-10 instance, which is where
+# the uncovaried Rust E step's speedups in STATUS.md are measured: 1.008e7
+# count pairs, each with its own log-normal exposure and trial count. The
+# covariate is (S, n_nodes, 2) float64, 161.3 MB, and is drawn when the file
+# is loaded. It is declared at the fine resolution and not binned from the
+# 20,000-position draw, because a sum of negative binomials at unequal
+# exposures is not negative binomial.
+#
+# The stated oracle is none: at 5,041 vertices there is no exact evidence.
+# The NumPy E step is the reference an accelerated one is measured against,
+# and the ci instance is where both are held to the transfer matrix.
+seed: 20260908
+
+# What the counts hash to. Written by `sim.count_pairs.counts_digest` over the
+# draw `sim.count_pairs_rust.simulate_count_pairs` makes of this file.
+counts_digest: ade610250edae577
+shape: [71, 71]
+boundary: open
+coupling: 1.0
+n_classes: 10
+n_states: 10
+n_positions: 2000
+beta: 1.0
+self_transition: 0.7
+initial:
+  - [0.19, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09]
+  - [0.09, 0.19, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09]
+  - [0.09, 0.09, 0.19, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09]
+  - [0.09, 0.09, 0.09, 0.19, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09]
+  - [0.09, 0.09, 0.09, 0.09, 0.19, 0.09, 0.09, 0.09, 0.09, 0.09]
+  - [0.09, 0.09, 0.09, 0.09, 0.09, 0.19, 0.09, 0.09, 0.09, 0.09]
+  - [0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.19, 0.09, 0.09, 0.09]
+  - [0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.19, 0.09, 0.09]
+  - [0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.19, 0.09]
+  - [0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.19]
+
+# The fine instance alone, for the reason stated above.
+bin:
+  - factor: 1
+    marker: stress
+
+emissions:
+  form: independent
+  mean: [20.0, 40.0, 60.0, 80.0, 100.0, 120.0, 140.0, 160.0, 180.0, 200.0]
+  dispersion: [4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0]
+  # Constant across the states, as in the uncovaried file: the trial count is
+  # a property of the observation, and here the covariate replaces it.
+  trials: [40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0]
+  rate: [0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65]
+  concentration: [12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0, 30.0]
+  class_mean_scale: [0.60, 0.70, 0.80, 0.90, 1.00, 1.10, 1.20, 1.30, 1.40, 1.50]
+  class_rate_shift: [-0.14, -0.11, -0.08, -0.05, -0.02, 0.01, 0.04, 0.07, 0.10, 0.13]
+
+# The ci file's covariate, drawn at this size.
+covariate:
+  form: lognormal
+  seed: 20260925
+  exposure:
+    median: 1.0
+    sigma: 0.5
+  trials:
+    median: 40.0
+    sigma: 0.25

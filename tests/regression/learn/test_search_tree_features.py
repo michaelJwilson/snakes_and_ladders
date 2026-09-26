@@ -89,7 +89,7 @@ def environment(
     alignment = dict(dataset.alignment)
     built = TreeEnvironment(
         alignment,
-        params.k,
+        params.n_states,
         np.asarray(params.pi),
         branch_length=float(
             np.mean([child.branch_length for _, child in edges(params.tau)])
@@ -109,19 +109,22 @@ def starting_topologies(
 
 
 def enumerated_maximum(built: TreeEnvironment, taxa: list[str]) -> float:
-    return max(built.score(topology) for topology in enumerate_topologies(taxa))
+    return max(built.log_weight(topology) for topology in enumerate_topologies(taxa))
 
 
 def _reached(built: TreeEnvironment, endpoints: list[Topology], best: float) -> float:
     return float(
-        np.mean([abs(built.score(state) - best) < 1e-9 for state in endpoints])
+        np.mean([abs(built.log_weight(state) - best) < 1e-9 for state in endpoints])
     )
 
 
 def greedy_rate(built: TreeEnvironment, starts: list[Topology], best: float) -> float:
     return _reached(
         built,
-        [greedy_rollout(built, start, HORIZON).states[-1] for start in starts],
+        [
+            greedy_rollout(built, start=start, max_steps=HORIZON).states[-1]
+            for start in starts
+        ],
         best,
     )
 
@@ -137,7 +140,7 @@ def policy_rate(
     return _reached(
         built,
         [
-            rollout(built, policy, rng, HORIZON, start=start).states[-1]
+            rollout(built, policy, rng, max_steps=HORIZON, start=start).states[-1]
             for start in starts
             for _ in range(rollouts_per_start)
         ],
@@ -337,7 +340,7 @@ def test_the_greedy_weights_reproduce_the_greedy_searcher(
     policy.set_weights(weights)
     decisions = 0
     for start in starts:
-        episode = greedy_rollout(built, start, HORIZON)
+        episode = greedy_rollout(built, start=start, max_steps=HORIZON)
         for state, action in zip(episode.states, episode.actions, strict=False):
             actions = built.actions(state)
             chosen = actions[policy.greedy(built.features(state, actions))]

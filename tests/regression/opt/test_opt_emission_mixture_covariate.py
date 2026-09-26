@@ -10,16 +10,19 @@ recovered from starts placed in `rate_space`.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 import torch
 from sal.emissions import BetaBinomialEmission, NegativeBinomialEmission
+from sal.opt.em import EMISSION_MIXTURE_EM
 from sal.opt.emission_mixture import (
-    anneal_assignments,
     expectation_maximization,
     plus_plus_start,
 )
 from sal.opt.mixture import e_step, mixture_log_likelihood
+from sal.sample.mixture_anneal import anneal_assignments
 from sal.search.mixture_starts import (
     MixtureInstance,
     emission_seeding,
@@ -77,9 +80,15 @@ def test_a_unit_covariate_is_the_covariate_free_fit() -> None:
     )
     assert torch.equal(free[0], conditioned[0])
     assert torch.equal(free[1], conditioned[1])
-    plain = expectation_maximization(pairs, weights, start, max_iterations=20)
+    plain = expectation_maximization(
+        pairs, weights, start, config=replace(EMISSION_MIXTURE_EM, max_iterations=20)
+    )
     covaried = expectation_maximization(
-        pairs, weights, start, max_iterations=20, covariate=unit
+        pairs,
+        weights,
+        start,
+        covariate=unit,
+        config=replace(EMISSION_MIXTURE_EM, max_iterations=20),
     )
     assert abs(plain.log_likelihood - covaried.log_likelihood) < FLOOR * abs(
         plain.log_likelihood
@@ -122,8 +131,8 @@ def test_a_mixture_under_a_varying_covariate_is_recovered_from_rate_space_starts
         pairs,
         torch.full((3,), 1.0 / 3.0, dtype=torch.float64),
         start,
-        max_iterations=300,
         covariate=covariate,
+        config=replace(EMISSION_MIXTURE_EM, max_iterations=300),
     )
     assert isinstance(fitted.components, IndependentCountPair)
     order = np.argsort(fitted.components.total.mean.numpy())

@@ -12,10 +12,8 @@ import math
 
 import numpy as np
 import pytest
-from sal.likelihood.belief_propagation import (
-    ConvergenceError,
-    belief_propagation,
-)
+from sal.likelihood.belief_propagation import belief_propagation
+from sal.likelihood.message_passing import ConvergenceError
 from sal.likelihood.potts import enumerate_potts, strip_log_partition
 from sal.sim.fixtures import fixture
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph

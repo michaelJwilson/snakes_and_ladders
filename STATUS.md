@@ -373,7 +373,7 @@ sites the plan lists after these — the candidate fits of `search.infer`,
 
 ## Milestone 1.1 — Simulation & Ground Truth Engine
 
-**Modules.** The generators and the registry this milestone's ground truth comes from: `sim.jc`, `sim.gtr`, `sim.simulate`, `sim.simulator` (the one way to simulate, #829), `sim.tree`, `sim.newick`, `sim.params`, `sim.css`, `sim.emission_mixture`, `sim.count_pairs_rust` and `sim.fixtures`, which declares every instance the suite is checked on. `sim.galois`, `sim.reed_solomon`, `sim.elementary_codes` and `sim.capacity` are the algebraic codes and the capacity they are read against (#700); `sim.polar` is the polar construction, promoted from `sandbox` with its row (#826).
+**Modules.** The generators and the registry this milestone's ground truth comes from: `sim.jc`, `sim.gtr`, `sim.simulate`, `sim.simulator` (the one way to simulate, #829), `sim.tree`, `sim.newick`, `sim.params`, `sim.css`, `sim.emission_mixture`, `sim.count_pairs.rust` and `sim.fixtures`, which declares every instance the suite is checked on. `sim.galois`, `sim.reed_solomon`, `sim.elementary_codes` and `sim.capacity` are the algebraic codes and the capacity they are read against (#700); `sim.polar` is the polar construction, promoted from `sandbox` with its row (#826).
 
 **Phylogenetics: landed.** A `k`-state Jukes-Cantor simulator generates an
 alignment and the ancestral tree in Newick from a typed tree fixture, retaining
@@ -729,7 +729,7 @@ comparison.
 
 ## Milestone 1.2 — Differentiable Likelihood & Energy Engine
 
-**Modules.** The evaluators and the oracle they are pinned to: `likelihood.brute_force`, `likelihood.parsimony`, `likelihood.algebraic`, `likelihood.polar` (successive cancellation and the list, #826), `likelihood.css`, `likelihood.mixture_assignments`, `likelihood.schedule`, `likelihood.spatio_sequential_rust`, and `likelihood.device`, which owns the cross-device tolerance this milestone's claims are stated against. `likelihood.ragged_rust` is the compiled kernel behind the ragged path, conserved beside `sandbox.rectangular_hmm` (#666).
+**Modules.** The evaluators and the oracle they are pinned to: `likelihood.brute_force`, `likelihood.parsimony`, `likelihood.algebraic`, `likelihood.polar` (successive cancellation and the list, #826), `likelihood.css`, `likelihood.mixture_assignments`, `likelihood.schedule`, `likelihood.spatio_sequential.rust`, and `likelihood.device`, which owns the cross-device tolerance this milestone's claims are stated against. `likelihood.ragged` is the gateway of the ragged path and its oracle, and `likelihood.ragged.rust` the compiled kernel behind it, conserved beside `sandbox.rectangular_hmm` (#666).
 
 **Polar codes are a row, and the CRC-aided list is built and measured**
 ([#826](https://github.com/michaelJwilson/snakes_and_ladders/issues/826)).
@@ -917,7 +917,7 @@ ratio come from one profiled run, so a shared load moves neither.
 
 1. **`inference_mode` on evaluation-only paths.** Every such path already runs
    under `no_grad` — **20 blocks** outside the sandbox, across
-   `likelihood.pruning_torch`, `learn.policy`, `planning`, `critic`, `ppo`,
+   `likelihood.pruning.torch`, `learn.policy`, `planning`, `critic`, `ppo`,
    `actor_critic`, `surrogate`, `relaxed`, `search.rl` and `search.max_cut`.
    The residue `inference_mode` would remove is the version counter and view
    tracking. One gradient-free evaluation at 8
@@ -1212,7 +1212,7 @@ The specialised evaluators stay; the factor graph is the structure for the
 model none of them can express. The audit of
 [#341](https://github.com/michaelJwilson/snakes_and_ladders/issues/341) below
 brought those ratios to 1.8x and 4.7x with the arithmetic unchanged, and
-`likelihood.message_passing_rust` --- the tree schedule's two passes in Rust,
+`likelihood.message_passing.rust` --- the tree schedule's two passes in Rust,
 the default since
 [#754](https://github.com/michaelJwilson/snakes_and_ladders/issues/754) ---
 turned the second around: the general algorithm is now 2.11x *ahead* of the
@@ -1225,7 +1225,11 @@ posteriors and the pairwise posteriors of one chain in the log domain, and a
 forward-filter backward-sample draw of the path; it is pinned against the path
 enumeration on four chains to 1e-12 and the coupled model's E step against the
 enumerated conditional posterior to 1e-11. Baum–Welch keeps its own recursion
-for the gradient it needs.
+for the gradient it needs. `likelihood.hmm` holds the scored evidence and the
+Viterbi path at given parameters, compiled for the categorical, one-channel
+Gaussian and count families (#997) and pinned to hmmlearn's `score` and
+`decode` in `tests/validation/test_hmmlearn.py`; #1059 moved both out of
+`opt.hmm`.
 
 **The tree was audited against the runtime-optimization opportunities, and
 five of the ten lines had a measurement behind them**
@@ -1669,7 +1673,7 @@ unchanged at 2.8e-14 in log-odds and 1.4e-14 on the evidence, which is what
 says the reassociation moved nothing. After the change 95.1% of self time is
 `bcjr`'s own bytecode --- the Python loop over `K + m` steps --- the shape a
 compiled backend would take next. Issue #754 took it: `src/bcjr.rs`, behind
-`likelihood.convolutional_rust`, is 26.2x the decode at the declared
+`likelihood.convolutional.rust`, is 26.2x the decode at the declared
 `K = 256` and is now `bcjr`'s default backend, with the `(7, 5)` register's
 outputs bitwise unchanged. *The BCJR trellis in Rust*
 below carries the table.
@@ -1861,7 +1865,7 @@ state.
 
 **The phylogenetic objectives' value and gradient under JAX**
 ([#1005](https://github.com/michaelJwilson/snakes_and_ladders/issues/1005)).
-`likelihood.pruning_jax` traces `pruning_torch`'s post-order once per
+`likelihood.pruning.jax` traces `pruning_torch`'s post-order once per
 topology under `jit`, the map from `theta` inside the same program;
 `BranchLengthObjective` and `SubstitutionModelObjective` take
 `backend=Backend.JAX`. Against the taped route on `tree_jc/release.yaml` at
@@ -1877,7 +1881,7 @@ runtime at 1.25x memory, or the converse). JAX stays the opt-in route.
 post-order, the leaf indicator, the rescaling step and the `pi`-shape,
 missing-leaf, branch-length and branch-order validations were written five
 times over. `likelihood.pruning_common` holds one of each and
-`likelihood.pruning_rust`, `pruning_torch`, `pruning_analytic`,
+`likelihood.pruning.rust`, `pruning_torch`, `pruning_analytic`,
 `surrogate.prune_with_matrices`, `blocks` and `sandbox.pruning_burn` call it:
 130 lines out of the routes. `likelihood.pruning` is byte for byte unchanged,
 being the oracle each route is pinned against, and `brute_force`, the referee
@@ -1890,7 +1894,7 @@ and `tree_search/ci`, identical before and after.
 
 ## Milestone 1.3 — Continuous Optimization via Autodiff
 
-**Modules.** The optimization interface and what is fitted through it: `opt.objective`, `opt.constrain`, and `opt.testfunctions`, whose functions are the problem a fit is checked on before any model is. `sample.langevin` and `sample.slice`: the two samplers an HMC number is read against, one module each, both over the same `Objective` (#756; under `opt` until #777, with `sample.hmc` and `sample.schedule`). `opt.em`: the E step, M step alternation and the relative stopping rule the three expectation-maximization entry points ran a copy of each, which no oracle is pinned against (#859). `cost`: the unit a method spends, declared once for the oracle ladder and for `opt.budget.Budget`, which took a bare string until #860. `opt.termination`: whether a loop finished and why, one answer on fourteen results that carried five encodings between them (#860). `opt.starts`: one loop that seeds every start, polishes it at a held budget and records its curve, which four consumers wrote by hand (#894). `opt.split_merge`: split-and-merge moves on a converged mixture fit, kept only where the log-likelihood rises; the planted fixed point on `emission_mixture/ci` gains 165.7 nats on its first move (#904). `opt.hmm_jax`: the HMM objectives' default value and gradient under JAX, the scaled forward recursion with the backward recursion as its reverse pass, at 0.07x--0.18x PyTorch autograd's runtime at 10^4--10^5 positions and pinned to autograd at 1e-10; `opt.objective.DeclaredGradient` is how `fit` and the samplers read it (#1000). `sample.metropolis`: gradient-free random-walk Metropolis over any `Objective`, a `Kernel` on the shared `run_chain` so its warm-up is `Adaptation`'s; on an energy declared in `sample.declared` (Gaussian, Rosenbrock) the chain, the warm-up and `Power` operators' Kalman statistics run in `oxisal.MetropolisWalk`, draw for draw with BlackJAX's `rmh` on shared randomness and at 0.03x--0.37x its runtime (#1006). `sample.hmc` on the same compiled loop (`src/chain.rs`): the declared Gaussian, Rosenbrock, mixture and Gaussian HMM run the whole chain, warm-up and `Power` filters in `oxisal.HmcWalk`, and an objective with a traceable JAX energy in `sample.hmc_jax.JaxWalk`; against BlackJAX 0.11x--0.39x on Rosenbrock and the Gaussian with warm-up, 0.34x--0.36x on the HMM, 0.56x--0.58x on the mixture after two attempts (#1008).
+**Modules.** The optimization interface and what is fitted through it: `opt.objective`, `opt.constrain`, and `opt.testfunctions`, whose functions are the problem a fit is checked on before any model is. `sample.langevin` and `sample.slice`: the two samplers an HMC number is read against, one module each, both over the same `Objective` (#756; under `opt` until #777, with `sample.hmc` and `sample.schedule`). `opt.em`: the E step, M step alternation and the relative stopping rule the three expectation-maximization entry points ran a copy of each, which no oracle is pinned against (#859). `cost`: the unit a method spends, declared once for the oracle ladder and for `opt.budget.Budget`, which took a bare string until #860. `opt.termination`: whether a loop finished and why, one answer on fourteen results that carried five encodings between them (#860). `opt.starts`: one loop that seeds every start, polishes it at a held budget and records its curve, which four consumers wrote by hand (#894). `opt.split_merge`: split-and-merge moves on a converged mixture fit, kept only where the log-likelihood rises; the planted fixed point on `emission_mixture/ci` gains 165.7 nats on its first move (#904). `opt.hmm.jax`: the HMM objectives' default value and gradient under JAX, the scaled forward recursion with the backward recursion as its reverse pass, at 0.07x--0.18x PyTorch autograd's runtime at 10^4--10^5 positions and pinned to autograd at 1e-10; `opt.objective.DeclaredGradient` is how `fit` and the samplers read it (#1000). `sample.metropolis`: gradient-free random-walk Metropolis over any `Objective`, a `Kernel` on the shared `run_chain` so its warm-up is `Adaptation`'s; on an energy declared in `sample.declared` (Gaussian, Rosenbrock) the chain, the warm-up and `Power` operators' Kalman statistics run in `oxisal.MetropolisWalk`, draw for draw with BlackJAX's `rmh` on shared randomness and at 0.03x--0.37x its runtime (#1006). `sample.hmc` on the same compiled loop (`src/chain.rs`): the declared Gaussian, Rosenbrock, mixture and Gaussian HMM run the whole chain, warm-up and `Power` filters in `oxisal.HmcWalk`, and an objective with a traceable JAX energy in `sample.hmc.jax.JaxWalk`; against BlackJAX 0.11x--0.39x on Rosenbrock and the Gaussian with warm-up, 0.34x--0.36x on the HMM, 0.56x--0.58x on the mixture after two attempts (#1008).
 
 **The interface is model-agnostic, and that is measured rather than asserted.**
 An `Objective` is an unconstrained parameter vector, a differentiable scalar,
@@ -2374,7 +2378,7 @@ since the hand ladder hits 18/20 at 100 sweeps. NUTS remains out of scope.
 
 ## Milestone 1.4 — Discrete Move Sets & Classical Baselines
 
-**Modules.** The discrete solvers and their compiled counterparts: `search.ground_state`, `search.projection`, `sim.topology` and `sample.kernels` (`search.topology` and `search.kernels` until #830, which also put the chain's params in `sim.potts_chain`, the sampler-built initializers in `sample.initialize` and the algebraic decoders in `likelihood.algebraic`) (`search.potts_mcmc_rust`, a one-line twin, folded by #717). `search.decoding`: two estimators of a labelling, and which loss each one minimizes (#696). `search.tightening`: a dual bound on a Potts ground state, and the plaquettes that tighten it (#696). `sample.potts_keyed`: the cluster moves, as something a deterministic ``step`` can call (#706). `sample.balanced`: the locally balanced proposal kernel the Potts lattice and the factor graph share (#756). Those two, `sample.potts_mcmc`, `sample.gibbs`, `sample.tempered`, `sample.annealed` and `sample.statistics` were under `search` until #777. `search.mixture_starts`: the joint count-pair mixture started every way the package can start it, each start polished by EM at one budget and timed through `track` (#891). `search.potts_starts`: every ground-state solver as a start of the `opt.starts` seam on a size-tilted lattice, the energy an `Objective` over labellings and ICM the polish; at `potts_lattice/release`, q = 3, the graph cuts hand over the q = 2 sibling's exact optimum (#906). `search.icm`: iterated conditional modes and its minimum-sites floor, moved out of `search.alpha_expansion` (#1055); its `numba` kernel is `search.numba.icm`, the `<subpackage>.<backend>` layout (#1059). `search.trws`: the local-polytope lower bound on a Potts ground state by sequential tree-reweighted message passing, its Python reference the oracle of the `numba` kernel `search.trws.numba` (#1060).
+**Modules.** The discrete solvers and their compiled counterparts: `search.ground_state`, `search.projection`, `sim.topology` and `sample.gibbs.numba` (`sample.kernels`, then `sample.numba.{gibbs,factor_graph}`, until #1059, `search.topology` and `search.kernels` until #830, which also put the chain's params in `sim.potts_chain`, the sampler-built initializers in `sample.initialize` and the algebraic decoders in `likelihood.algebraic`) (`search.potts_mcmc_rust`, a one-line twin, folded by #717). `search.decoding`: two estimators of a labelling, and which loss each one minimizes (#696). `search.tightening`: a dual bound on a Potts ground state, and the plaquettes that tighten it (#696). `sample.potts_keyed`: the cluster moves, as something a deterministic ``step`` can call (#706). `sample.balanced`: the locally balanced proposal kernel the Potts lattice and the factor graph share (#756). Those two, `sample.potts_mcmc`, `sample.gibbs`, `sample.tempered`, `sample.annealed` and `sample.statistics` were under `search` until #777. `search.mixture_starts`: the joint count-pair mixture started every way the package can start it, each start polished by EM at one budget and timed through `track` (#891). `search.potts_starts`: every ground-state solver as a start of the `opt.starts` seam on a size-tilted lattice, the energy an `Objective` over labellings and ICM the polish; at `potts_lattice/release`, q = 3, the graph cuts hand over the q = 2 sibling's exact optimum (#906). `search.icm`: iterated conditional modes and its minimum-sites floor, moved out of `search.alpha_expansion` (#1055); its `numba` kernel is `search.icm.numba`, the `<subpackage>.<backend>` layout (#1059). `search.trws`: the local-polytope lower bound on a Potts ground state by sequential tree-reweighted message passing, its Python reference the oracle of the `numba` kernel `search.trws.numba` (#1060).
 
 **NNI and SPR: landed and counted.** Both neighbourhoods sit behind one
 `Topology -> Iterator[Topology]` interface and are verified exhaustively
@@ -3105,7 +3109,7 @@ neighbourhoods at eight taxa, ranking the fitted best first on every held-out
 neighbourhood; the three token models return the same value for a tree with
 its children shuffled, to 1e-13.
 
-**Four max-flow kernels measured, one kept** ([#715](https://github.com/michaelJwilson/snakes_and_ladders/issues/715)). Boykov-Kolmogorov replaces Dinic as the package kernel behind `search.maxflow_rust`, and Dinic, highest-label push-relabel and a synchronous parallel push-relabel move to `sandbox.maxflow_declined` behind the `sandbox` Cargo feature, each still pinned to the package kernel's cut: every kernel certifies the source-reachable set of the residual graph, the minimal minimum cut every maximum flow shares, so 40 seeded networks agree arc for arc and the expansion gives the same labelling, cycle count and bitwise energy under each. Measured 2026-09-18 on the 4-core host, min of 5 rounds, ms, a random per-node field on an open lattice:
+**Four max-flow kernels measured, one kept** ([#715](https://github.com/michaelJwilson/snakes_and_ladders/issues/715)). Boykov-Kolmogorov replaces Dinic as the package kernel behind `search.maxflow.rust`, and Dinic, highest-label push-relabel and a synchronous parallel push-relabel move to `sandbox.maxflow_declined` behind the `sandbox` Cargo feature, each still pinned to the package kernel's cut: every kernel certifies the source-reachable set of the residual graph, the minimal minimum cut every maximum flow shares, so 40 seeded networks agree arc for arc and the expansion gives the same labelling, cycle count and bitwise energy under each. Measured 2026-09-18 on the 4-core host, min of 5 rounds, ms, a random per-node field on an open lattice:
 
 | kernel | 16x16 | 32x32 | 64x64 | 128x128 | 256x256 | exponent in `n` | 64x64 x 10-label expansion |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -3117,6 +3121,8 @@ its children shuffled, to 1e-13.
 3.8x on the 256x256 cut and 1.8x on the expansion, both at stress size. Push-relabel has the best generic worst case and the worst constant on a grid: its gap and global-relabel scans are `O(n)` each, and its last doubling reads 1.98. The parallel kernel's rounds are barrier-bound, 269 / 255 / 297 ms at 1 / 2 / 4 threads on 256x256, so no thread buys anything inside a cut; threads pay across cuts, where the batch entry `ising_ground_states` releases the GIL over eight independent 256x256 cuts, 2,158 to 900 ms from one thread to four (2.4x). One defect found by the move: the parallel kernel's global relabel kept a source-side node's running label, which on a network with no path to the sink (the expansion's first swap network, 81 nodes, flow 0) pinned every label at `n`, so none reached `n + 1` and pushed its excess back, and the round never ended. It is two-sided now, as the sequential kernel's, and the case is a test.
 
 **ICM takes a minimum-sites floor** ([#1055](https://github.com/michaelJwilson/snakes_and_ladders/issues/1055), [#1056](https://github.com/michaelJwilson/snakes_and_ladders/pull/1056)). After each sweep a state holding `0 < count < min_sites` sites is dissolved, each site to `surviving[floor(u * m)]` from uniforms drawn up front. `min_sites = 0` reproduces the descent before, bitwise: `ground_state` `icm` and `icm-random` on both backends, `descend`, and the ICM label step and fit, seeds 0 to 4 at `spatio_only` ci and release, as sha256 digests recorded before the change. The `numba` kernel equals the Python oracle bitwise at floors 0, 1, 3 and 10 in both orders over six seeds, and releases the GIL. At `spatio_only/release`, 5,041 sites and q = 10, floor 50: 8.4 ms against 377.7 ms in Python, medians of 5, 45x.
+
+**Hybrid solvers are compositions** ([#1077](https://github.com/michaelJwilson/snakes_and_ladders/issues/1077)). `opt.compose.Then` runs stages in order: each starts from the one before's answer, gets the budget the stages before it left less its own reserve, and draws from one generator. One factory, `search.ground_state.chain(*parts)`, with a part being a name or `part(solver, reserve=..., **bound)`, builds every hybrid. It replaces three hand-written Potts loops, the warm chain and #1041's two expansion hybrids, and the `ARMS` entries are now `chain(...)` expressions. The composed arms reproduce the pre-#1052 hashes of all 5 arms on `spatio_only/{ci,release}` bitwise (`test_ground_state_start.py`). Their medians over 7 seeds at `spatio_only/release`, 1,000 sweeps, are 490–560 ms, against 500–570 ms for the hand-written loops. `opt.compose.BestOf` adds realizations: from one start, each on an equal share and its own spawned generator, the lowest energy kept; in text `a|b`, and `x**n` for n realizations of `x`. `ground_state` also takes a chain built at call time, as a `SolverChain` or as its text with per-stage arguments, e.g. `swendsen-wang(t_start=1.0,reserve_cycles=10)>alpha-expansion`, so the `ARMS` table names some chains and does not limit which run. Each chain is pinned bitwise to its parts run by hand, and each arm to its own text (`test_ground_state_compose.py`). `run_descent` is the part that charges only the sweeps ICM ran, since `run_icm` charges its whole budget and leaves a later part nothing.
 
 ## Milestone 1.5 — Continuous Samplers, HMC & Parallel Tempering
 
@@ -4107,8 +4113,54 @@ row and in 176.3 s to -17,025.92 on the second, both unconverged. The compiled
 kernel runs 10 iterations in 68.6 ms against the Python reference's 10,338 ms,
 151x (`test_trws_bench.py`, 1-minute load 4). On two frustrated 3x3
 triangular lattices TRW-S converges below `dual_bound`'s value of the same
-relaxation, and both below the explicit LP (`test_trws.py`); the LP
-comparison at size is #1063.
+relaxation, and both below the explicit LP (`test_trws.py`).
+
+**The explicit LP, #1063.** `validation.highs` solves the local-polytope LP
+with every node and edge marginal written out, by HiGHS through SciPy's
+`linprog`, in a subprocess. Where TRW-S converges to it, it is the LP value to
+1e-8 relative, and so is `dual_bound`'s: seven of the nine 3x3 and 2x4
+lattices, `potts_lattice/{ci,stress,release}`, `spatio_only/{ci,stress}` and
+`spatio_tiling/ci`, the largest 1.8 s for HiGHS against 0.07 s for TRW-S. On
+the two stalled triangular lattices the LP is -1.14911 and -1.40024, TRW-S
+0.0160 and 0.0271 below it, `dual_bound` 7.4e-5 and 0.0204. The primal's node
+marginals are integral on every instance but the three frustrated ones, and
+there the LP value is the minimum (`tests/validation/test_highs.py`). At
+5,041 sites and ten states, 1,534,410 columns, one run each at a 1-minute load
+of 5.3, 2.1 GB peak:
+
+| instance | LP value | HiGHS seconds | node marginals | TRW-S bound | TRW-S below LP |
+| --- | --- | --- | --- | --- | --- |
+| `spatio_only/release` | -10,454.16 | 343.9 | integral | -10,454.16 | 8e-14 relative |
+| `spatio_tiling/release` | **-17,022.93** | 267.6 | fractional at 95 sites | -17,022.98 | 0.0496 |
+
+So of the tiling bracket's 0.81, TRW-S stopping short is 0.05 and the other
+0.75 lies between the LP and the best labelling, -17,022.18. TRW-S takes 0.82 s
+and 8.7 s on the two, the `highs` goals in `test_goals.py`.
+
+**A MIP on the fractional sites, #1069, conserved in `sandbox.potts_mip`.** It solves the
+local polytope with integer node marginals by HiGHS's `milp`. Integral node
+marginals fix every edge table, so the MIP's optimum is the minimum energy. On
+the nine 3x3 and 2x4 lattices and a 4x4 two-state lattice it is the enumerated
+minimum to 1e-12, and proven, the three frustrated triangular lattices
+included, where the LP is more than 1e-3 below it. On `spatio_tiling/release`,
+with the LP's labelling held at its integral sites and the rest folded into
+the free sites' field:
+
+| free region | free sites | energy | seconds | peak |
+| --- | --- | --- | --- | --- |
+| the 95 fractional sites | 95 | **-17,022.1988** | 4.6 | 160 MB |
+| and 1 ring | 220 | -17,022.1988 | 12.8 | 345 MB |
+| and 2 rings | 363 | -17,022.1988 | 16.4 | 512 MB |
+| and 3 rings | 524 | -17,022.1988 | 32.4 | 895 MB |
+| and 4 rings | 703 | -17,022.1988 | 46.7 | 1.1 GB |
+
+The held sites do not bind out to four rings, and the labelling is 0.02 below
+the best before it, -17,022.18. That is a labelling, an upper bound, not a
+proof: the whole problem as a MIP (50,410 integer columns), stopped at its
+1,800 s limit still at the root node, raises the lower bound from the LP's
+-17,022.93 to **-17,022.82** (4.9 GB peak), and its own labelling there is
+-17,013.01. So the optimum lies in **[-17,022.82, -17,022.20]**, 0.62 wide,
+and is not recorded as the fixture's reference energy.
 
 Two implementation notes worth keeping. The block update is the exact
 minimizer of its own block, checked against a numerical minimum over the
@@ -4962,7 +5014,7 @@ it rather than as a cut of its own (#754).
 saves 35.6 ms of 37.0, so the default flipped.** The ranking above put `bcjr`
 at 95.8% of one pass and 95.5% of a decode, one Python loop over `K + m`
 steps with four states to vectorize over; `src/bcjr.rs` runs the same
-recursions and `likelihood.convolutional_rust` marshals the two trellis
+recursions and `likelihood.convolutional.rust` marshals the two trellis
 tables and the three ratio vectors across once, contiguous and borrowed, with
 the GIL released. `pytest-benchmark`, two readings, 1-minute load 1.40 and
 1.79 on the shared 4-core host:
@@ -5064,7 +5116,7 @@ message per level, so 200 positions are 798 steps of NumPy calls over a
 single four-wide row. `src/message_passing.rs` walks the breadth-first order
 and its reverse instead of grouping by height --- a message depends only on
 messages of lower height, so the levels are a batching of the order and not a
-constraint on it --- and `likelihood.message_passing_rust` marshals the
+constraint on it --- and `likelihood.message_passing.rust` marshals the
 layout across once as offsets and flat arrays with the tables stacked,
 borrowed, with the GIL released. `pytest-benchmark` mean, two readings,
 1-minute load 3.05 and 3.51 on the shared 4-core host:

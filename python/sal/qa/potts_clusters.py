@@ -88,15 +88,16 @@ from sal.search.ground_state import (
     ANNEAL_SCHEDULE,
     EXPANSION_RESERVE_CYCLES,
     EXPANSION_SW_SCHEDULE,
+    ExpansionReserve,
     MethodRun,
     Rung,
+    chain,
+    part,
     run_alpha_expansion,
     run_annealed,
-    run_expansion_then_swendsen_wang,
-    run_swendsen_wang_then_expansion,
 )
 from sal.search.potts_starts import (
-    PottsObjective,
+    LabellingEnergy,
     RunStart,
     polish_by_icm,
 )
@@ -398,7 +399,7 @@ def matched_niedermayer(budget: Budget, start: int) -> tuple[int, list[dict[str,
             _niedermayer_spend,
             [(steps, seed) for seed in TUNING_SEEDS],
             workers=WORKERS,
-            backend="processes",
+            pool="processes",
             intra_op_threads=1,
         )
         spent = [visits for _, visits in runs]
@@ -458,11 +459,16 @@ def arms() -> dict[str, Callable[[np.random.Generator], RunStart]]:
         "niedermayer matched": functools.partial(
             run_annealed, move=PottsMove.NIEDERMAYER, schedule=sw, steps=matched
         ),
-        "swendsen-wang>expansion": functools.partial(
-            run_swendsen_wang_then_expansion, schedule=sw
+        "swendsen-wang>expansion": chain(
+            part(
+                "swendsen-wang",
+                schedule=sw,
+                reserve=ExpansionReserve(EXPANSION_RESERVE_CYCLES),
+            ),
+            "alpha-expansion",
         ),
-        "expansion>swendsen-wang": functools.partial(
-            run_expansion_then_swendsen_wang, schedule=EXPANSION_SW_SCHEDULE
+        "expansion>swendsen-wang": chain(
+            "alpha-expansion", part("swendsen-wang", schedule=EXPANSION_SW_SCHEDULE)
         ),
         "ghost-spin": functools.partial(
             run_annealed, move=PottsMove.GHOST_SPIN, schedule=sw
@@ -492,7 +498,7 @@ def run_arms(names: Sequence[str] | None = None) -> dict[str, Any]:
     table = arms()
     chosen = {name: table[name] for name in (names or list(table))}
     result = StartsBenchmark(
-        PottsObjective(rung),
+        LabellingEnergy(rung),
         chosen,
         polish_by_icm,
         seeding_budget=SEEDING,
@@ -553,10 +559,10 @@ def main(parts: Sequence[str] = PARTS) -> None:
             "mixed_floor": MIXED_FLOOR,
         }
     )
-    for part in parts:
+    for piece in parts:
         load_before = os.getloadavg()
         opened = time.perf_counter()
-        if part == "diagnosis":
+        if piece == "diagnosis":
             tasks = [
                 (name, seed)
                 for name in ("swendsen-wang", "wolff")
@@ -566,7 +572,7 @@ def main(parts: Sequence[str] = PARTS) -> None:
                 diagnose,
                 tasks,
                 workers=WORKERS,
-                backend="processes",
+                pool="processes",
                 intra_op_threads=1,
             )
             result["diagnosis"] = {
@@ -574,22 +580,22 @@ def main(parts: Sequence[str] = PARTS) -> None:
                 "rows": DIAGNOSIS_ROWS,
                 "moves": summarise(runs),
             }
-        elif part == "matched":
+        elif piece == "matched":
             steps, probes = matched_niedermayer(budget, load_tuned().matched_steps)
             result["matched_niedermayer"] = {
                 "schedule": asdict(load_tuned().chosen["swendsen-wang"]),
                 "steps": steps,
                 "probes": probes,
             }
-        elif part == "arms":
+        elif piece == "arms":
             result["arms"] = run_arms()
             result["arms"]["reserve_cycles"] = EXPANSION_RESERVE_CYCLES
             result["arms"]["replicas"] = CLUSTER_LADDER_REPLICAS
             result["arms"]["expansion_sw_schedule"] = asdict(EXPANSION_SW_SCHEDULE)
         else:
-            msg = f"no part {part!r}; the parts are {PARTS}"
+            msg = f"no piece {piece!r}; the parts are {PARTS}"
             raise ValueError(msg)
-        result.setdefault("host", {})[part] = {
+        result.setdefault("host", {})[piece] = {
             "cores": os.cpu_count(),
             "workers": WORKERS,
             "threads": {

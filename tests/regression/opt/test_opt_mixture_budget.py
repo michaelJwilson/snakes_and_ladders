@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 import pytest
@@ -28,6 +28,7 @@ from sal.opt.budget import (
     compare,
     restarts,
 )
+from sal.opt.em import EM
 from sal.opt.fit import fit
 from sal.opt.mixture import (
     GaussianMixtureObjective,
@@ -156,7 +157,7 @@ def _em_then_polish(
             GaussianEmission(
                 named["mean"], named["scale"], fixture.objective.variance_floor
             ),
-            max_iterations=budget.size - POLISH_RESERVE,
+            config=replace(EM, max_iterations=budget.size - POLISH_RESERVE),
         )
     except ValueError:
         # A component collapsed: refused, and charged the iterations it had.
@@ -297,6 +298,7 @@ def _assert_nothing_beats_the_referee(measurement: Measurement) -> None:
 
 
 @pytest.mark.end2end
+@pytest.mark.release  # 34.3 s in the tier, over the 10 s cap (#1088)
 def test_at_eight_starts_restarts_reach_the_optimum_from_the_most_starts() -> None:
     # The per-pull-request tier of the release measurement below: the same code
     # on its first 8 starts. Realized: restarts 2/8, annealing 1/8, tempering

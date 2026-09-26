@@ -254,7 +254,7 @@ def matched_steps(budget: Budget, lower: int) -> tuple[int, list[dict[str, Any]]
             _wolff_spend,
             [(steps, seed) for seed in TUNING_SEEDS],
             workers=WORKERS,
-            backend="processes",
+            pool="processes",
             intra_op_threads=1,
         )
         spent = [visits for _, visits in runs]
@@ -291,7 +291,7 @@ def main() -> None:
     opened = time.perf_counter()
     tasks = [(move, shape) for move in MOVES for shape in ScheduleShape]
     traces = map_tasks(
-        tune, tasks, workers=WORKERS, backend="processes", intra_op_threads=1
+        tune, tasks, workers=WORKERS, pool="processes", intra_op_threads=1
     )
     tuned_seconds = time.perf_counter() - opened
     moves: dict[str, Any] = {}

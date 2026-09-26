@@ -31,7 +31,7 @@ from sal.search.ground_state import (
 )
 from sal.search.icm import iterated_conditional_modes
 from sal.search.potts_starts import (
-    PottsObjective,
+    LabellingEnergy,
     SolverStart,
     binary_sibling,
     describe,
@@ -105,7 +105,7 @@ def test_the_binary_siblings_optimum_is_the_cut_and_expansion_reaches_it() -> No
 @pytest.mark.analytic
 def test_the_icm_polish_ends_at_a_local_minimum_never_above_its_start() -> None:
     rung = _small()
-    objective = PottsObjective(rung)
+    objective = LabellingEnergy(rung)
     assert isinstance(objective, Objective)
     start = np.random.default_rng(1).integers(0, 3, size=rung.n_nodes)
     theta = torch.as_tensor(start)
@@ -120,10 +120,10 @@ def test_the_icm_polish_ends_at_a_local_minimum_never_above_its_start() -> None:
     whole = iterated_conditional_modes(
         rung.graph,
         rung.field,
-        3,
         np.random.default_rng(0),
         start=start,
         max_sweeps=POLISH.size,
+        n_states=3,
     )
     assert np.array_equal(whole.labelling, labelling)
 
@@ -135,7 +135,7 @@ def test_every_solver_through_the_seam_is_polished_inside_the_bracket() -> None:
     # nothing may end below the bracket's lower end, and one seed reproduces
     # the whole comparison bitwise.
     rung = _small()
-    objective = PottsObjective(rung)
+    objective = LabellingEnergy(rung)
     budget = Budget(Cost.SITE_VISITS, SWEEPS * rung.visits_per_sweep)
     expansion = run_alpha_expansion(rung, budget, np.random.default_rng(0)).energy
     bracket = expansion_bracket(rung, expansion)
@@ -178,7 +178,7 @@ def test_the_adapter_refuses_what_it_cannot_read(tmp_path: Path) -> None:
     from sal.opt.mixture import GaussianMixtureObjective
 
     rung = _small()
-    objective = PottsObjective(rung)
+    objective = LabellingEnergy(rung)
     theta = objective.initial()
     with pytest.raises(ValueError, match="in sweeps"):
         polish_by_icm(objective, theta, Budget(Cost.SITE_VISITS, 10))
@@ -223,8 +223,8 @@ def test_at_ten_states_the_polish_never_rises_and_nothing_ends_below_the_bracket
     budget = Budget(Cost.SITE_VISITS, 50 * rung.visits_per_sweep)
     expansion = run_alpha_expansion(rung, budget, np.random.default_rng(0)).energy
     bracket = expansion_bracket(rung, expansion)
-    objective = PottsObjective(rung)
-    for name in ("greedy", "anneal", "alpha-expansion"):
+    objective = LabellingEnergy(rung)
+    for name in ("field_argmax", "anneal", "alpha-expansion"):
         (seeded,) = SolverStart(name, budget, np.random.default_rng(1)).starts(
             objective
         )

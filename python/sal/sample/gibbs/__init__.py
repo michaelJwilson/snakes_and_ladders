@@ -1,0 +1,999 @@
+"""One Gibbs sampler and one annealer for every problem, over the factor graph (issue #309).
+
+A variable's conditional given everything else is the product of the factors
+that touch it, so a heat-bath sweep over a :class:`~sal.sim.factor_graph.FactorGraph`
+serves the Potts lattice, the hidden Markov chain, a tree at one site and the
+coupled model alike, through the adapters that already exist -- no sampler
+knows what the variables mean. Tempering multiplies every factor's log table
+by ``beta``, which is the same graph with its tables scaled; annealing is the
+sweep on a :class:`~sal.sample.schedule.TempSchedule`, returning the
+best state visited.
+
+Three things are held fixed from the specialised samplers. The single-site
+update draws one uniform per variable and searches a cumulative sum, the
+arithmetic of :func:`sal.sample.potts_mcmc.sweeps.single_site_sweep`,
+so on a Potts graph the two agree draw for draw except where a uniform lands
+within rounding of a boundary; the pin is distributional and the agreement is
+reported. A sweep never stops on a state-dependent condition
+(``search/CLAUDE.md``). And every instance is held to the distribution it
+converges to, by goodness-of-fit against enumeration or against the exact
+marginals sum-product gives on a tree.
+
+Three moves beyond the single site: an exact block draw of a chain-shaped
+subset of variables, by forward filter and backward sample over whatever
+factors touch it (the block Gibbs move the coupled model's chains need); a
+Metropolis move over tree topologies whose stationary distribution at
+temperature one is the flat-prior weight over fitted likelihoods that
+:mod:`sal.search.support` enumerates; and the gradient-informed
+single-variable proposals of :mod:`sal.sample.balanced`, which
+choose *which* variable to change from the whole neighbourhood rather than
+visiting every one in turn. The first-order estimate Gibbs-with-gradients
+proposes from is **exact here**: the multilinear extension of a sum of factor
+tables is affine in each variable's row, so a single-variable change has no
+second-order term, and :func:`factor_autodiff_log_ratios` pins the tape's
+gradient against the conditional :meth:`Indexed.conditional` already forms.
+
+The sweep runs through a ``numba`` kernel over an edge layout -- every
+factor's table in one array, and offsets into it per variable (issue #561) --
+and the log-density a chain records through a second kernel over the same
+array (issue #563), with the NumPy path beside each as the oracle it
+reproduces bitwise. Their cost against the Potts kernels is measured in
+``tests/benchmarks/test_gibbs_bench.py`` and recorded in ``STATUS.md``; the
+specialised kernels stay the default for the Potts lattice, and this sampler
+is the one for the model none of them can express.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from dataclasses import dataclass
+from enum import StrEnum
+from typing import Any
+
+import numpy as np
+
+from sal.backend import Backend, refuse_backend
+from sal.numerics import logsumexp
+from sal.sample.accept import accept
+from sal.sample.balanced import (
+    draw_change,
+    log_balanced_weights,
+    log_metropolis_ratio,
+    log_normalizer,
+    log_ratios,
+)
+from sal.sample.schedule import TempSchedule
+from sal.search.infer import score_topology
+from sal.sim.factor_graph import Factor, FactorGraph
+from sal.sim.topology import (
+    Model,
+    MoveSet,
+    Topology,
+    leaf_bipartitions,
+    nni_neighbours,
+    spr_neighbours,
+)
+
+
+class GibbsMove(StrEnum):
+    """Which single-variable move a chain over the factor graph proposes from.
+
+    A ``StrEnum`` for the reason
+    :class:`~sal.sample.potts_mcmc.PottsMove` is one: an
+    unrecognized move is refused by ``mypy --strict`` at the call site.
+    """
+
+    #: Every variable redrawn from its exact conditional, in graph order.
+    HEAT_BATH = "heat-bath"
+    #: One variable-and-value drawn from the locally balanced kernel over the
+    #: whole single-change neighbourhood, Metropolis-corrected (Zanella 2020).
+    LOCALLY_BALANCED = "locally-balanced"
+    #: The same, from the first-order Taylor estimate of the change
+    #: (Grathwohl et al. 2021).
+    GIBBS_WITH_GRADIENTS = "gibbs-with-gradients"
+
+
+@dataclass(frozen=True)
+class GibbsChain:
+    """What a run of the sampler returns.
+
+    Parameters
+    ----------
+    variables : tuple[str, ...]
+        The variables in the order the columns of ``states`` take: the
+        graph's own.
+    states : np.ndarray
+        Integer states, shape ``(n_recorded, n_variables)``, one row per
+        recorded sweep after burn-in and thinning.
+    log_densities : np.ndarray
+        The unnormalized log-density of every recorded state, shape
+        ``(n_recorded,)``, at temperature one.
+    """
+
+    variables: tuple[str, ...]
+    states: np.ndarray
+    log_densities: np.ndarray
+
+
+@dataclass(frozen=True)
+class AnnealedLabelling:
+    """What annealing returns: the best state visited, and the path there.
+
+    Parameters
+    ----------
+    state : np.ndarray
+        The state of highest log-density seen, shape ``(n_variables,)``.
+    log_density : float
+        Its unnormalized log-density at temperature one.
+    trajectory : np.ndarray
+        The log-density after every step, shape ``(n_steps + 1,)``; the first
+        entry is the start.
+    """
+
+    state: np.ndarray
+    log_density: float
+    trajectory: np.ndarray
+
+
+# How far from a cumulative boundary a draw must land for the compiled sweep
+# to decide a site itself, in units of the last place per state. NumPy's
+# ``exp`` and ``libm``'s differ by at most one such unit, the cumulative sum
+# carries that difference across at most ``n_states`` additions, and the draw
+# is scaled by the last entry, which carries it once more: four units per
+# state bounds it, and this is four times that.
+_GUARD = 16.0
+
+
+@dataclass(frozen=True)
+class _EdgeLayout:
+    """Every factor's table in one array, and offsets into it per variable.
+
+    The layout root ``CLAUDE.md``'s memory rule asks for, replacing
+    :attr:`Indexed.touching`: a list of lists of tables, walked per site per
+    sweep, becomes contiguous arrays walked in stride order. One *entry* is
+    one (factor, axis) pair that touches a variable, and one *term* is one of
+    that factor's other axes, which fixes a coordinate of the table.
+
+    A conditional is then a gather: for each entry of a variable, start at
+    ``entry_start``, add ``state[term_column] * term_stride`` over its terms,
+    and step by ``entry_stride`` through the variable's own states.
+
+    The entries are grouped by variable, so a factor of degree ``d`` appears
+    ``d`` times among them and not in graph order. A density sums each factor
+    once, left to right in graph order
+    (:meth:`~sal.sim.factor_graph.FactorGraph.log_density`), so it
+    reads the four ``factor_`` arrays instead: the same ``tables``, indexed
+    whole rather than along one axis.
+
+    Parameters
+    ----------
+    tables : np.ndarray
+        Every factor's log table, flattened in C order and concatenated.
+    entry_offsets : np.ndarray
+        ``entry_offsets[v]:entry_offsets[v + 1]`` are variable ``v``'s
+        entries, in the order :attr:`Indexed.touching` holds them, so the
+        conditional sums its factors in the order the NumPy path sums them.
+    entry_start : np.ndarray
+        Where each entry's factor begins in ``tables``.
+    entry_stride : np.ndarray
+        The stride, in elements, of the axis that entry varies.
+    term_offsets : np.ndarray
+        ``term_offsets[e]:term_offsets[e + 1]`` are entry ``e``'s terms.
+    term_column, term_stride : np.ndarray
+        The variable a term reads, and the stride of the axis it fixes.
+    factor_start : np.ndarray
+        Where each factor begins in ``tables``, in graph order.
+    factor_offsets : np.ndarray
+        ``factor_offsets[f]:factor_offsets[f + 1]`` are factor ``f``'s axes.
+    factor_column, factor_stride : np.ndarray
+        The variable an axis reads, and its stride.
+    """
+
+    tables: np.ndarray
+    entry_offsets: np.ndarray
+    entry_start: np.ndarray
+    entry_stride: np.ndarray
+    term_offsets: np.ndarray
+    term_column: np.ndarray
+    term_stride: np.ndarray
+    factor_start: np.ndarray
+    factor_offsets: np.ndarray
+    factor_column: np.ndarray
+    factor_stride: np.ndarray
+
+
+class Indexed:
+    """A factor graph with its variables numbered and each variable's factors located."""
+
+    def __init__(self, graph: FactorGraph) -> None:
+        self.graph = graph
+        self.names = tuple(variable.name for variable in graph.variables)
+        self.index = {name: position for position, name in enumerate(self.names)}
+        self.cardinality = np.array(
+            [variable.cardinality for variable in graph.variables], dtype=np.int64
+        )
+        self.touching: list[list[tuple[Factor, int, np.ndarray]]] = [
+            [] for _ in self.names
+        ]
+        for factor in graph.factors:
+            columns = np.array(
+                [self.index[name] for name in factor.variables], dtype=np.int64
+            )
+            for axis, name in enumerate(factor.variables):
+                self.touching[self.index[name]].append((factor, axis, columns))
+        self._layout: _EdgeLayout | None = None
+        self._companions: tuple[np.ndarray, ...] | None = None
+
+    @property
+    def width(self) -> int:
+        """The widest cardinality: the columns a rectangular neighbourhood needs.
+
+        The neighbourhood of single-variable changes is ragged where the
+        cardinalities differ, and
+        :mod:`sal.sample.balanced` takes one rectangle with
+        ``-inf`` past each variable's own count --- a weight of zero, so a
+        value a variable does not have is never drawn.
+        """
+        return int(self.cardinality.max())
+
+    def companions(self) -> tuple[np.ndarray, ...]:
+        """Per variable, the variables whose conditional its value enters.
+
+        Everything sharing a factor with it. A changed variable moves those
+        conditionals and no others, which is what lets a proposal update the
+        neighbourhood rather than rebuild it (the recompute-or-store rule).
+        Built once and kept, for the reason :meth:`layout` is.
+        """
+        if self._companions is None:
+            sharing: list[set[int]] = [set() for _ in self.names]
+            for factor in self.graph.factors:
+                columns = [self.index[name] for name in factor.variables]
+                for column in columns:
+                    sharing[column].update(
+                        other for other in columns if other != column
+                    )
+            self._companions = tuple(
+                np.array(sorted(one), dtype=np.int64) for one in sharing
+            )
+        return self._companions
+
+    def conditionals(self, state: np.ndarray, beta: float = 1.0) -> np.ndarray:
+        """Every variable's tempered log conditional, one row each, ``-inf`` padded.
+
+        :meth:`conditional` over every variable, in the rectangle
+        :attr:`width` describes.
+        """
+        local = np.full((len(self.names), self.width), -np.inf)
+        for position in range(len(self.names)):
+            self.write_conditional(local, state, position, beta)
+        return local
+
+    def write_conditional(
+        self, local: np.ndarray, state: np.ndarray, position: int, beta: float
+    ) -> None:
+        """Refresh one row of :meth:`conditionals`, in place."""
+        cardinality = int(self.cardinality[position])
+        local[position, :cardinality] = beta * self.conditional(state, position)
+
+    def layout(self) -> _EdgeLayout:
+        """The edge layout of this graph, built once and kept.
+
+        Built on demand because only the compiled sweep reads it, and kept
+        because a sampler builds one graph and runs thousands of sweeps over
+        it (the allocation rule).
+        """
+        if self._layout is not None:
+            return self._layout
+
+        flattened = []
+        table_start: dict[str, int] = {}
+        strides: dict[str, list[int]] = {}
+        total = 0
+        factor_start: list[int] = []
+        factor_offsets = [0]
+        factor_column: list[int] = []
+        factor_stride: list[int] = []
+        for factor in self.graph.factors:
+            table_start[factor.name] = total
+            flat = np.ascontiguousarray(factor.log_table, dtype=np.float64).ravel()
+            flattened.append(flat)
+            total += int(flat.shape[0])
+            shape = factor.log_table.shape
+            stride = [1] * len(shape)
+            for axis in range(len(shape) - 2, -1, -1):
+                stride[axis] = stride[axis + 1] * shape[axis + 1]
+            strides[factor.name] = stride
+            factor_start.append(table_start[factor.name])
+            factor_column.extend(self.index[name] for name in factor.variables)
+            factor_stride.extend(stride)
+            factor_offsets.append(len(factor_column))
+
+        entry_offsets = [0]
+        entry_start: list[int] = []
+        entry_stride: list[int] = []
+        term_offsets = [0]
+        term_column: list[int] = []
+        term_stride: list[int] = []
+        for position in range(len(self.names)):
+            for factor, axis, columns in self.touching[position]:
+                stride = strides[factor.name]
+                entry_start.append(table_start[factor.name])
+                entry_stride.append(stride[axis])
+                term_column.extend(
+                    int(column) for other, column in enumerate(columns) if other != axis
+                )
+                term_stride.extend(
+                    step for other, step in enumerate(stride) if other != axis
+                )
+                term_offsets.append(len(term_column))
+            entry_offsets.append(len(entry_start))
+
+        self._layout = _EdgeLayout(
+            np.concatenate(flattened),
+            np.array(entry_offsets, dtype=np.int64),
+            np.array(entry_start, dtype=np.int64),
+            np.array(entry_stride, dtype=np.int64),
+            np.array(term_offsets, dtype=np.int64),
+            np.array(term_column, dtype=np.int64),
+            np.array(term_stride, dtype=np.int64),
+            np.array(factor_start, dtype=np.int64),
+            np.array(factor_offsets, dtype=np.int64),
+            np.array(factor_column, dtype=np.int64),
+            np.array(factor_stride, dtype=np.int64),
+        )
+        return self._layout
+
+    def conditional(self, state: np.ndarray, position: int) -> np.ndarray:
+        """``sum_a log psi_a`` over the states of one variable, the others fixed."""
+        local = np.zeros(int(self.cardinality[position]))
+        for factor, axis, columns in self.touching[position]:
+            key: list[int | slice] = [int(state[column]) for column in columns]
+            key[axis] = slice(None)
+            local += factor.log_table[tuple(key)]
+        return local
+
+    def log_density(self, state: np.ndarray, backend: Backend = Backend.NUMBA) -> float:
+        """``sum_f log psi_f`` at one state, in the graph's variable order.
+
+        :meth:`sal.sim.factor_graph.FactorGraph.log_density` is the
+        definition and the oracle: a dictionary lookup per variable and a tuple
+        key per factor, which #561 promoted to 47.8% of a run once the sweep
+        was compiled. The
+        :data:`~sal.backend.Backend.NUMBA` path
+        (:func:`sal.sample.gibbs.numba.factor_graph_log_density`) reads
+        the same tables through the edge layout and sums the same terms in the
+        same order, so it reproduces it **bitwise** (#563).
+
+        Raises
+        ------
+        ValueError
+            If ``backend`` is one this density has no implementation for.
+        """
+        if backend is Backend.NUMBA:
+            from sal.sample.gibbs.numba import factor_graph_log_density
+
+            layout = self.layout()
+            return float(
+                factor_graph_log_density(
+                    state,
+                    layout.tables,
+                    layout.factor_start,
+                    layout.factor_offsets,
+                    layout.factor_column,
+                    layout.factor_stride,
+                )
+            )
+        refuse_backend("the log-density", backend, (Backend.NUMBA, Backend.PYTHON))
+        return self.graph.log_density(
+            dict(zip(self.names, map(int, state), strict=True))
+        )
+
+    def start(self, rng: np.random.Generator, start: np.ndarray | None) -> np.ndarray:
+        if start is None:
+            return np.array(
+                [int(rng.integers(card)) for card in self.cardinality], dtype=np.int64
+            )
+        state = np.asarray(start, dtype=np.int64)
+        if (
+            state.shape != self.cardinality.shape
+            or (state < 0).any()
+            or (state >= self.cardinality).any()
+        ):
+            msg = f"start must hold one state per variable inside its cardinality, got {state}"
+            raise ValueError(msg)
+        return state.copy()
+
+
+def _site_update(
+    indexed: Indexed,
+    state: np.ndarray,
+    position: int,
+    draw: float,
+    beta: float,
+) -> None:
+    """One variable's heat-bath update in NumPy, in place: the oracle's arithmetic.
+
+    Held in one function because two callers must perform it identically ---
+    :func:`gibbs_sweep`'s NumPy path, and the site the compiled kernel
+    declines to decide.
+    """
+    local = indexed.conditional(state, position)
+    local *= beta
+    local -= local.max()
+    cumulative = np.cumsum(np.exp(local))
+    state[position] = np.searchsorted(cumulative, draw * cumulative[-1])
+
+
+def gibbs_sweep(
+    graph: FactorGraph | Indexed,
+    state: np.ndarray,
+    rng: np.random.Generator,
+    *,
+    beta: float = 1.0,
+    backend: Backend = Backend.NUMBA,
+) -> None:
+    """One heat-bath update of every variable in graph order, in place.
+
+    One uniform per variable drawn up front and a search of the cumulative
+    conditional, the arithmetic of the Potts single-site sweep, so the two
+    agree draw for draw on a Potts graph up to rounding.
+
+    ``backend`` chooses the implementation and nothing else. The
+    :data:`~sal.backend.Backend.NUMBA` kernel
+    (:func:`sal.sample.gibbs.numba.gibbs_sweep_sites`) walks the edge
+    layout and returns the state the NumPy path returns **bitwise**, deciding
+    a site itself only where the last place of ``exp`` cannot reach the draw
+    and leaving the rest to NumPy, which is what lets it be the default: the
+    audit behind it (#341, #561) measured the conditional at 43.4% of a
+    32x32 run and the sweep around it at a further 18.0%, and no recorded
+    chain moves. :data:`~sal.backend.Backend.PYTHON` is the
+    oracle that pins it.
+
+    Raises
+    ------
+    ValueError
+        If ``backend`` is one this sweep has no implementation for.
+    """
+    indexed = graph if isinstance(graph, Indexed) else Indexed(graph)
+    draws = np.asarray(rng.random(len(indexed.names)))
+
+    if backend is Backend.NUMBA:
+        from sal.sample.gibbs.numba import gibbs_sweep_sites
+
+        layout = indexed.layout()
+        local = np.empty(int(indexed.cardinality.max()), dtype=np.float64)
+        position = 0
+        while position < state.shape[0]:
+            position = gibbs_sweep_sites(
+                state,
+                draws,
+                indexed.cardinality,
+                layout.tables,
+                layout.entry_offsets,
+                layout.entry_start,
+                layout.entry_stride,
+                layout.term_offsets,
+                layout.term_column,
+                layout.term_stride,
+                local,
+                beta,
+                _GUARD,
+                position,
+            )
+            if position < state.shape[0]:
+                _site_update(indexed, state, position, float(draws[position]), beta)
+                position += 1
+        return
+
+    refuse_backend("the Gibbs sweep", backend, (Backend.NUMBA, Backend.PYTHON))
+
+    for position in range(len(indexed.names)):
+        _site_update(indexed, state, position, float(draws[position]), beta)
+
+
+def factor_taylor_log_ratios(
+    graph: FactorGraph | Indexed, state: np.ndarray, beta: float = 1.0
+) -> np.ndarray:
+    """Gibbs-with-gradients' first-order estimate of every single-variable change.
+
+    Grathwohl et al. (2021) relax the state to the simplex and estimate
+    ``log pi(s') - log pi(s)`` by ``grad(log pi)(x) . (x' - x)``. **Here the
+    estimate is exact.** The multilinear extension
+    ``sum_a sum_c log psi_a[c] prod_(v in a) x[v, c_v]`` is affine in each
+    variable's row --- no factor carries a variable twice --- so a change of
+    one variable has no second-order term, and the gradient at a one-hot is
+    that variable's conditional. The closed form is therefore
+    :meth:`Indexed.conditionals` differenced, which is what this computes;
+    :func:`factor_autodiff_log_ratios` is the same quantity from the tape and
+    pins it.
+
+    Returns
+    -------
+    np.ndarray
+        Shape ``(n_variables, width)``, ``-inf`` past a variable's own
+        cardinality.
+    """
+    indexed = graph if isinstance(graph, Indexed) else Indexed(graph)
+    return log_ratios(indexed.conditionals(state, beta), state)
+
+
+def factor_autodiff_log_ratios(
+    graph: FactorGraph | Indexed, state: np.ndarray, beta: float = 1.0
+) -> np.ndarray:
+    """:func:`factor_taylor_log_ratios` from the tape: the definition, not the route.
+
+    The multilinear extension is built in ``torch`` on the one-hot state, one
+    factor at a time by contracting its table against its variables' rows, and
+    differentiated by ``torch.autograd.grad``. It is the oracle rather than
+    the sampler's route: the closed form reproduces it to ``1e-12``
+    (`tests/regression/search/test_gibbs.py`) at one conditional per variable
+    against a tape over every factor.
+
+    ``torch`` is imported here rather than at module scope: it is the heaviest
+    import in the package and no chain this module runs needs it.
+    """
+    import torch
+
+    indexed = graph if isinstance(graph, Indexed) else Indexed(graph)
+    labels = np.asarray(state, dtype=np.int64)
+    n_variables, width = len(indexed.names), indexed.width
+    probabilities = torch.zeros((n_variables, width), dtype=torch.float64)
+    # `torch.tensor` rather than `from_numpy`: a factor hands out a read-only
+    # view of its table, which `from_numpy` takes with a warning about
+    # undefined behaviour on write. These are read and never written.
+    probabilities[torch.arange(n_variables), torch.tensor(labels)] = 1.0
+    probabilities.requires_grad_(True)
+
+    value = torch.zeros((), dtype=torch.float64)
+    for factor in indexed.graph.factors:
+        # Contract axis 0 against that variable's row and repeat: after each
+        # contraction the next axis is axis 0, so the loop follows the
+        # factor's own variable order and needs no index arithmetic.
+        term = torch.tensor(factor.log_table, dtype=torch.float64)
+        for name in factor.variables:
+            column = indexed.index[name]
+            cardinality = int(indexed.cardinality[column])
+            term = torch.tensordot(
+                term, probabilities[column, :cardinality], dims=([0], [0])
+            )
+        value = value + term
+    (gradient,) = torch.autograd.grad(beta * value, probabilities)
+
+    ratios = log_ratios(gradient.detach().numpy(), labels)
+    # A padding column carries no value, so its gradient is zero and its
+    # difference would be a finite number standing for a move that does not
+    # exist.
+    ratios[np.arange(width)[None, :] >= indexed.cardinality[:, None]] = -np.inf
+    return ratios
+
+
+def balanced_sweep(
+    graph: FactorGraph | Indexed,
+    state: np.ndarray,
+    rng: np.random.Generator,
+    *,
+    move: GibbsMove = GibbsMove.LOCALLY_BALANCED,
+    beta: float = 1.0,
+) -> None:
+    """``n_variables`` gradient-informed proposals, each Metropolis-corrected, in place.
+
+    The factor-graph form of
+    :func:`sal.sample.potts_mcmc.sweeps.balanced_sweep_at`, over the
+    same kernel (:mod:`sal.sample.balanced`). One sweep is one
+    proposal per variable, :func:`gibbs_sweep`'s sweep size, so the two are
+    comparable in sweeps without a normalization --- but a sweep here is
+    ``n_variables`` *proposals over the whole neighbourhood*, not one visit
+    each, and the two spend differently: a heat-bath sweep touches every
+    variable once, this one may change the same variable twice and another
+    never.
+
+    **The conditionals are maintained, not rebuilt.** A change at ``v`` moves
+    only the rows of :meth:`Indexed.companions` of ``v``; those rows are
+    copied before the change and restored on a rejection, so a rejected
+    proposal leaves the array it found. They are rebuilt once per sweep, which
+    is what lets ``beta`` change between sweeps.
+
+    Raises
+    ------
+    ValueError
+        If ``move`` is :data:`GibbsMove.HEAT_BATH`, which is
+        :func:`gibbs_sweep` and is not proposed from a neighbourhood.
+    """
+    if move is GibbsMove.HEAT_BATH:
+        msg = (
+            f"{move} is gibbs_sweep, not a balanced proposal: "
+            "call it through sample_factor_graph or directly"
+        )
+        raise ValueError(msg)
+
+    indexed = graph if isinstance(graph, Indexed) else Indexed(graph)
+    gradient_informed = move is GibbsMove.GIBBS_WITH_GRADIENTS
+    companions = indexed.companions()
+    local = indexed.conditionals(state, beta)
+
+    for _ in range(len(indexed.names)):
+        exact = log_ratios(local, state)
+        estimate = (
+            factor_taylor_log_ratios(indexed, state, beta)
+            if gradient_informed
+            else exact
+        )
+        forward_weights = log_balanced_weights(estimate, state)
+        forward_total = log_normalizer(forward_weights)
+        change = draw_change(forward_weights, forward_total, rng)
+        position, value = change.variable, change.value
+
+        previous = int(state[position])
+        log_ratio = float(exact[position, value])
+        forward = float(forward_weights[position, value])
+
+        # Advanced indexing already copies, so this is the restore buffer and
+        # not a view of the rows about to change.
+        touched = companions[position]
+        restored = local[touched]
+        state[position] = value
+        for other in touched:
+            indexed.write_conditional(local, state, int(other), beta)
+
+        reverse_estimate = (
+            factor_taylor_log_ratios(indexed, state, beta)
+            if gradient_informed
+            else log_ratios(local, state)
+        )
+        reverse_weights = log_balanced_weights(reverse_estimate, state)
+        reverse_total = log_normalizer(reverse_weights)
+        reverse = float(reverse_weights[position, previous])
+
+        log_alpha = log_metropolis_ratio(
+            log_ratio, forward, forward_total, reverse, reverse_total
+        )
+        if not accept(log_alpha, rng):
+            local[touched] = restored
+            state[position] = previous
+
+
+def _sweep_once(
+    indexed: Indexed,
+    state: np.ndarray,
+    rng: np.random.Generator,
+    move: GibbsMove,
+    beta: float,
+    backend: Backend,
+) -> None:
+    """One sweep of whichever move set the chain runs.
+
+    The one branch on ``move``, so a recording loop reads as a loop and the
+    move set is chosen once per sweep rather than per recorded state.
+    """
+    if move is GibbsMove.HEAT_BATH:
+        gibbs_sweep(indexed, state, rng, beta=beta, backend=backend)
+    else:
+        balanced_sweep(indexed, state, rng, move=move, beta=beta)
+
+
+def sample_factor_graph(
+    graph: FactorGraph,
+    rng: np.random.Generator,
+    n_sweeps: int,
+    burn_in: int = 0,
+    thin: int = 1,
+    *,
+    temperature: float = 1.0,
+    start: np.ndarray | None = None,
+    move: GibbsMove = GibbsMove.HEAT_BATH,
+    backend: Backend = Backend.NUMBA,
+) -> GibbsChain:
+    """Run one chain of single-variable sweeps and record its states.
+
+    Parameters
+    ----------
+    graph : FactorGraph
+        Any of the adapters' graphs.
+    rng : np.random.Generator
+        Passed in rather than seeded here (``sim/CLAUDE.md``).
+    n_sweeps : int
+        Sweeps after burn-in; every ``thin``-th is recorded.
+    burn_in, thin : int
+        As :func:`sal.sample.potts_mcmc.sample_potts`.
+    temperature : float
+        Every factor's log table is scaled by ``1 / temperature``.
+    start : np.ndarray | None
+        A starting state in the graph's variable order; ``None`` draws one
+        uniformly.
+    move : GibbsMove
+        The move set. All three leave the same law invariant, which is what
+        `tests/regression/search/test_gibbs.py` asserts against enumeration.
+    backend : Backend
+        Which sweep runs, as :func:`gibbs_sweep` states; the chain is the
+        same either way. The balanced move sets have one implementation and
+        ignore it.
+
+    Raises
+    ------
+    ValueError
+        If ``n_sweeps`` or ``thin`` is below one, ``burn_in`` negative, or
+        ``temperature`` not positive.
+    """
+    if n_sweeps < 1 or thin < 1 or burn_in < 0:
+        msg = f"n_sweeps {n_sweeps} and thin {thin} must be >= 1 and burn_in {burn_in} >= 0"
+        raise ValueError(msg)
+    if temperature <= 0.0:
+        msg = f"temperature must be positive, got {temperature}"
+        raise ValueError(msg)
+    indexed = Indexed(graph)
+    beta = 1.0 / temperature
+    state = indexed.start(rng, start)
+    for _ in range(burn_in):
+        _sweep_once(indexed, state, rng, move, beta, backend)
+    states = []
+    densities = []
+    for sweep in range(n_sweeps):
+        _sweep_once(indexed, state, rng, move, beta, backend)
+        if sweep % thin == 0:
+            states.append(state.copy())
+            densities.append(indexed.log_density(state, backend))
+    return GibbsChain(indexed.names, np.array(states), np.array(densities))
+
+
+def anneal_factor_graph(
+    graph: FactorGraph,
+    schedule: TempSchedule,
+    rng: np.random.Generator,
+    *,
+    start: np.ndarray | None = None,
+    backend: Backend = Backend.NUMBA,
+) -> AnnealedLabelling:
+    """Simulated annealing by heat-bath sweeps: one sweep per schedule step at that step's temperature.
+
+    The generic form of :func:`sal.sample.potts_mcmc.anneal_potts`,
+    tracking the state of highest log-density seen. At ``T -> 0`` the heat
+    bath is the argmax over each variable's conditional, so the two ends of a
+    schedule are single-site descent and free sampling, as there.
+    """
+    indexed = Indexed(graph)
+    state = indexed.start(rng, start)
+    best_state = state.copy()
+    best = indexed.log_density(state, backend)
+    trajectory = [best]
+    for step in range(schedule.n_steps):
+        gibbs_sweep(indexed, state, rng, beta=1.0 / schedule(step), backend=backend)
+        value = indexed.log_density(state, backend)
+        trajectory.append(value)
+        if value > best:
+            best, best_state = value, state.copy()
+    return AnnealedLabelling(best_state, best, np.array(trajectory))
+
+
+def chain_block_sweep(
+    graph: FactorGraph,
+    state: np.ndarray,
+    rng: np.random.Generator,
+    chain: Sequence[str],
+    *,
+    beta: float = 1.0,
+) -> None:
+    """Redraw a chain-shaped subset of variables from its exact conditional, in place.
+
+    ``chain`` names variables in order; every factor touching one of them
+    contributes a unary term, every factor touching two consecutive ones a
+    transition, each conditioned on the current states of the variables it
+    touches outside the chain. Forward filter, backward sample: the block
+    Gibbs move for a hidden Markov chain inside a larger model.
+
+    Raises
+    ------
+    ValueError
+        If a factor touches two non-consecutive chain variables or more than
+        two of them, so the subset is not a chain of this graph.
+    """
+    indexed = Indexed(graph)
+    positions = [indexed.index[name] for name in chain]
+    where = {position: step for step, position in enumerate(positions)}
+    length = len(positions)
+    if length == 0:
+        msg = "a chain names at least one variable"
+        raise ValueError(msg)
+    unary = [np.zeros(int(indexed.cardinality[p])) for p in positions]
+    transition: list[np.ndarray | None] = [None] * max(length - 1, 0)
+    seen: set[str] = set()
+    for position in positions:
+        for factor, _, columns in indexed.touching[position]:
+            if factor.name in seen:
+                continue
+            seen.add(factor.name)
+            steps = sorted(where[c] for c in columns if int(c) in where)
+            key: list[int | slice] = [int(state[c]) for c in columns]
+            if len(steps) == 1:
+                axis = list(columns).index(positions[steps[0]])
+                key[axis] = slice(None)
+                unary[steps[0]] += beta * factor.log_table[tuple(key)]
+            elif len(steps) == 2 and steps[1] == steps[0] + 1:
+                first = list(columns).index(positions[steps[0]])
+                second = list(columns).index(positions[steps[1]])
+                key[first] = slice(None)
+                key[second] = slice(None)
+                table = beta * factor.log_table[tuple(key)]
+                if first > second:
+                    table = table.T
+                current = transition[steps[0]]
+                transition[steps[0]] = table if current is None else current + table
+            else:
+                msg = (
+                    f"factor {factor.name!r} touches chain variables at steps {steps}, "
+                    "which are not consecutive"
+                )
+                raise ValueError(msg)
+    alpha = [unary[0]]
+    for t in range(1, length):
+        step_table = transition[t - 1]
+        if step_table is None:
+            step_table = np.zeros((unary[t - 1].shape[0], unary[t].shape[0]))
+        alpha.append(logsumexp(alpha[t - 1][:, None] + step_table, axis=0) + unary[t])
+    weights = np.exp(alpha[-1] - logsumexp(alpha[-1], axis=0))
+    state[positions[-1]] = rng.choice(weights.shape[0], p=weights / weights.sum())
+    for t in range(length - 2, -1, -1):
+        step_table = transition[t]
+        column = (
+            np.zeros(alpha[t].shape[0])
+            if step_table is None
+            else step_table[:, int(state[positions[t + 1]])]
+        )
+        scores = alpha[t] + column
+        weights = np.exp(scores - logsumexp(scores, axis=0))
+        state[positions[t]] = rng.choice(weights.shape[0], p=weights / weights.sum())
+
+
+@dataclass(frozen=True)
+class AnnealedTopology:
+    """What the topology move returns.
+
+    Parameters
+    ----------
+    topology : Topology
+        The topology of highest fitted log-likelihood visited.
+    log_likelihood : float
+        Its fitted log-likelihood.
+    trajectory : np.ndarray
+        The current topology's fitted log-likelihood after every step.
+    acceptance : float
+        The fraction of proposals accepted.
+    scores : Mapping[frozenset, float]
+        Every topology scored, keyed on its leaf bipartitions: a fit is paid
+        once per topology however often the chain returns to it.
+    """
+
+    topology: Topology
+    log_likelihood: float
+    trajectory: np.ndarray
+    acceptance: float
+    scores: Mapping[frozenset[frozenset[str]], float]
+
+
+def anneal_topology(
+    alignment: Mapping[str, np.ndarray],
+    n_states: int,
+    schedule: TempSchedule,
+    rng: np.random.Generator,
+    start: Topology,
+    *,
+    moves: MoveSet = MoveSet.NNI,
+    model: Model = Model.JC,
+    scores: dict[frozenset[frozenset[str]], float] | None = None,
+) -> AnnealedTopology:
+    """Metropolis over topologies on the fitted log-likelihood, at the schedule's temperature.
+
+    A proposal is a uniform neighbour under ``moves``; every binary topology
+    has the same number of NNI neighbours and the same number of SPR ones, so
+    the proposal is symmetric and the acceptance is
+    ``min(1, exp((l' - l) / T))``. At ``T = 1`` the stationary distribution
+    is the flat-prior weight over fitted likelihoods that
+    :func:`sal.search.support.enumerated_support` computes,
+    which is what pins it; at ``T -> 0`` it is hill climbing with a random
+    neighbour, which is what the annealed end reaches.
+
+    ``scores`` caches fitted log-likelihoods by leaf bipartitions across
+    calls, since the fit is the whole cost.
+    """
+    cache = {} if scores is None else scores
+    score = cached_topology_score(alignment, n_states, cache, model=model)
+    current, value = start, score(start)
+    best, best_value = current, value
+    trajectory = [value]
+    accepted = 0
+    for step in range(schedule.n_steps):
+        taken = topology_step(current, value, schedule(step), rng, score, moves=moves)
+        current, value = taken.topology, taken.log_likelihood
+        if taken.moved:
+            accepted += 1
+            if value > best_value:
+                best, best_value = current, value
+        trajectory.append(value)
+    return AnnealedTopology(
+        best, best_value, np.array(trajectory), accepted / schedule.n_steps, cache
+    )
+
+
+def cached_topology_score(
+    alignment: Mapping[str, np.ndarray],
+    n_states: int,
+    cache: dict[frozenset[frozenset[str]], float],
+    *,
+    model: Model = Model.JC,
+) -> Callable[[Topology], float]:
+    """A scorer that fits a topology once per leaf bipartitions and reads ``cache`` after.
+
+    The fit is the whole cost of a walk over topologies, so every walk
+    shares this: :func:`anneal_topology` and the tempered ensemble of
+    :mod:`sal.sample.tempered` alike.
+    """
+
+    def score(topology: Topology) -> float:
+        key = leaf_bipartitions(topology)
+        if key not in cache:
+            cache[key] = score_topology(topology, alignment, n_states, model)
+        return cache[key]
+
+    return score
+
+
+@dataclass(frozen=True)
+class TopologyStep:
+    """Where one Metropolis step over topologies left the chain.
+
+    Parameters
+    ----------
+    topology : Topology
+        The topology after the step: the proposal if it was accepted, the
+        current one if it was not.
+    log_likelihood : float
+        The fitted log-likelihood there, so a caller that accepts does not
+        refit what the step already scored.
+    moved : bool
+        Whether the proposal was accepted. Summed over a walk, it is the
+        acceptance rate.
+    """
+
+    topology: Topology
+    log_likelihood: float
+    moved: bool
+
+    def __iter__(self) -> Iterator[Any]:
+        """``(topology, log_likelihood, moved)``: the order callers unpack.
+
+        ``Any`` and not a union: an unpacking gives every name the element
+        type, so a union would mistype each of them.
+        """
+        yield from (self.topology, self.log_likelihood, self.moved)
+
+
+def topology_step(
+    current: Topology,
+    value: float,
+    temperature: float,
+    rng: np.random.Generator,
+    score: Callable[[Topology], float],
+    *,
+    moves: MoveSet = MoveSet.NNI,
+) -> TopologyStep:
+    """One Metropolis step over topologies at ``temperature``.
+
+    A uniform neighbour under ``moves`` is proposed and accepted with
+    ``min(1, exp((l' - l) / T))``, drawing one integer and, where the
+    proposal is worse, one uniform from ``rng`` -- the step
+    :func:`anneal_topology` takes, so a run there and a replica of the
+    tempered ensemble are the same chain draw for draw.
+
+    Returns
+    -------
+    TopologyStep
+        The topology and fitted log-likelihood after the step, and whether
+        the proposal was accepted.
+    """
+    neighbours = nni_neighbours if moves is MoveSet.NNI else spr_neighbours
+    options = list(neighbours(current))
+    proposal = options[int(rng.integers(len(options)))]
+    proposed = score(proposal)
+    difference = (proposed - value) / temperature
+    if accept(difference, rng):
+        return TopologyStep(topology=proposal, log_likelihood=proposed, moved=True)
+    return TopologyStep(topology=current, log_likelihood=value, moved=False)

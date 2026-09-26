@@ -7,12 +7,15 @@ only the recovery spends a tolerance.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 import torch
 from sal.backend import Backend
 from sal.emissions import CategoricalEmission, PoissonEmission
 from sal.likelihood.forward_backward import forward_backward
+from sal.opt.em import EM
 from sal.opt.hmm import baum_welch_family
 from sal.ragged import Ragged
 from sal.sandbox.rectangular_hmm import baum_welch_rectangular
@@ -93,7 +96,9 @@ def test_the_evidence_is_the_sum_over_segments() -> None:
     batch = Ragged(_draw(lengths, seed=3), lengths)
     initial, transition, family = _model()
 
-    fit = baum_welch_family(batch, initial, transition, family, max_iterations=1)
+    fit = baum_welch_family(
+        batch, initial, transition, family, config=replace(EM, max_iterations=1)
+    )
 
     per_segment = 0.0
     for segment in batch.segments():
@@ -123,7 +128,9 @@ def test_a_boundary_is_not_a_transition() -> None:
     assert whole != split, "a cut that changed nothing is not a boundary"
 
     batch = Ragged(counts, (6, 6))
-    fit = baum_welch_family(batch, initial, transition, family, max_iterations=1)
+    fit = baum_welch_family(
+        batch, initial, transition, family, config=replace(EM, max_iterations=1)
+    )
     np.testing.assert_allclose(fit.log_likelihood, split, rtol=1e-12)
 
 
@@ -177,7 +184,7 @@ def test_the_declared_ragged_instance_recovers_its_transition() -> None:
         torch.log(torch.as_tensor(declared.initial)),
         torch.log(torch.as_tensor(declared.transition)),
         start,
-        max_iterations=50,
+        config=replace(EM, max_iterations=50),
     )
     # The batch took one transition fewer per boundary, and the fit is over
     # that many: what is asserted is that it ran on the declared instance and

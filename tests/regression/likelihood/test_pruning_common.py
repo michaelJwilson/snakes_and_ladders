@@ -19,10 +19,10 @@ from sal.likelihood import (
     pruning,
     pruning_analytic,
     pruning_common,
-    pruning_rust,
-    pruning_torch,
 )
 from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
+from sal.likelihood.pruning import rust as pruning_rust
+from sal.likelihood.pruning import torch as pruning_torch
 from sal.sim.fixtures import fixture
 from sal.sim.simulate import simulate_alignment
 from sal.sim.tree import Node
@@ -34,12 +34,12 @@ def _instance() -> tuple[Node, int, np.ndarray, dict[str, np.ndarray]]:
     pi = np.asarray(params.pi, dtype=float)
     dataset = simulate_alignment(
         tau=params.tau,
-        k=params.k,
+        n_states=params.n_states,
         pi=pi,
         rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
-    return params.tau, params.k, pi, dataset.alignment
+    return params.tau, params.n_states, pi, dataset.alignment
 
 
 @pytest.mark.oracle

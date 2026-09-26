@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 import torch
-from sal.likelihood import pruning_torch
+from sal.likelihood.pruning import torch as pruning_torch
 from sal.sandbox import pruning_burn
 
 from tests._fixtures import SMALL_SITES, simulated_alignment
@@ -27,7 +27,7 @@ def _case(name: str, n_sites: int):  # type: ignore[no-untyped-def]
     params, alignment = simulated_alignment(name, n_sites)
     return (
         params.tau,
-        params.k,
+        params.n_states,
         params.pi,
         alignment,
         pruning_torch.branch_lengths_from_tree(params.tau),

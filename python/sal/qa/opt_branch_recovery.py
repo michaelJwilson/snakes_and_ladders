@@ -26,8 +26,8 @@ import numpy as np
 import torch
 from matplotlib.figure import Figure
 
-from sal.likelihood import pruning_torch
 from sal.likelihood.objective import BranchLengthObjective
+from sal.likelihood.pruning import torch as pruning_torch
 from sal.opt.fit import constrained_standard_errors, covers, fit
 from sal.qa.figure import QAFigure
 from sal.qa.runner import figure_main, fixture_params
@@ -68,7 +68,7 @@ def recovery(
     """
     dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=SITES)
     objective = BranchLengthObjective(
-        params.tau, params.k, params.pi, dict(dataset.alignment)
+        params.tau, params.n_states, params.pi, dict(dataset.alignment)
     )
     result = fit(objective)
     estimate = objective.constrain(result.theta)["branch_lengths"]
@@ -117,7 +117,7 @@ def split_profile(
         scores.append(
             float(
                 pruning_torch.log_likelihood(
-                    params.tau, params.k, params.pi, alignment, candidate
+                    params.tau, params.n_states, params.pi, alignment, candidate
                 )
             )
         )

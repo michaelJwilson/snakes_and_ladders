@@ -34,7 +34,8 @@ import pytest
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
 from sal.fixtures import load_params
-from sal.likelihood import pruning_analytic, pruning_torch
+from sal.likelihood import pruning_analytic
+from sal.likelihood.pruning import torch as pruning_torch
 from sal.sandbox import pruning_burn
 from sal.sim.params import SimulationParams
 from sal.sim.simulator import simulate_tree
@@ -60,7 +61,7 @@ def _dataset(
     dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=n_sites)
     return (
         params.tau,
-        params.k,
+        params.n_states,
         params.pi,
         dataset.alignment,
         pruning_torch.branch_lengths_from_tree(params.tau),

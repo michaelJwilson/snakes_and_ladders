@@ -1,6 +1,6 @@
 """Analytic gradient of Felsenstein pruning, behind one ``torch.autograd.Function``.
 
-The forward value is ``pruning_torch.log_likelihood``'s, computed with the
+The forward value is ``likelihood.pruning.torch.log_likelihood``'s, computed with the
 same operations in the same order; the gradient in ``branch_lengths`` comes
 from the closed form rather than from a tape. ``alg:pruning-backward`` of
 ``docs/tex/textbook.tex`` states the recursion; this module implements it.
@@ -32,7 +32,7 @@ prefix/suffix scan over the children gives the same product with no division.
 The gradient in the root distribution, in a general rate matrix, or in the
 alignment is not computed: those are constants of the fit this attacks
 (``likelihood.objective.BranchLengthObjective``), and a caller that needs them
-uses ``pruning_torch`` instead. Passing a ``pi`` or ``rate_matrix`` that
+uses ``likelihood.pruning.torch`` instead. Passing a ``pi`` or ``rate_matrix`` that
 requires a gradient is refused rather than silently returning zero for it.
 """
 
@@ -45,6 +45,10 @@ import numpy as np
 import torch
 
 from sal.likelihood.patterns import check_weights
+from sal.likelihood.pruning.torch import (
+    branch_order,
+    transition_probabilities,
+)
 from sal.likelihood.pruning_common import (
     check_alignment_covers,
     check_branch_lengths_shape,
@@ -53,16 +57,12 @@ from sal.likelihood.pruning_common import (
     postorder,
     rescale_partial,
 )
-from sal.likelihood.pruning_torch import (
-    branch_order,
-    transition_probabilities,
-)
 from sal.sim.tree import Node, preorder
 
 
 def _transition_derivatives(
     t: torch.Tensor,
-    k: int,
+    n_states: int,
     rate_matrix: torch.Tensor | None,
     transitions: torch.Tensor,
 ) -> torch.Tensor:
@@ -72,7 +72,7 @@ def _transition_derivatives(
     ----------
     t : torch.Tensor
         Branch lengths, shape ``(n_branches,)``.
-    k : int
+    n_states : int
         Number of states.
     rate_matrix : torch.Tensor | None
         ``None`` for the closed-form Jukes-Cantor derivative of ``eq:jc``;
@@ -88,9 +88,9 @@ def _transition_derivatives(
     """
     if rate_matrix is None:
         # d/dt [1/k + (delta_ij - 1/k) exp(-k t / (k - 1))].
-        decay = torch.exp(-k * t / (k - 1))[..., None, None]
-        eye = torch.eye(k, dtype=t.dtype, device=t.device)
-        return (eye - 1.0 / k) * (-k / (k - 1)) * decay
+        decay = torch.exp(-n_states * t / (n_states - 1))[..., None, None]
+        eye = torch.eye(n_states, dtype=t.dtype, device=t.device)
+        return (eye - 1.0 / n_states) * (-n_states / (n_states - 1)) * decay
     return rate_matrix @ transitions
 
 
@@ -147,7 +147,7 @@ class _PruningLogLikelihood(torch.autograd.Function):
         ctx: Any,
         branch_lengths: torch.Tensor,
         tau: Node,
-        k: int,
+        n_states: int,
         pi: torch.Tensor,
         alignment: Mapping[str, torch.Tensor],
         weight: torch.Tensor | None,
@@ -162,7 +162,9 @@ class _PruningLogLikelihood(torch.autograd.Function):
         n_sites = int(alignment[leaves[0].name].shape[0])
 
         with torch.no_grad():
-            transitions = transition_probabilities(branch_lengths, k, rate_matrix)
+            transitions = transition_probabilities(
+                branch_lengths, n_states, rate_matrix
+            )
             partials: dict[str, torch.Tensor] = {}
             messages: dict[str, torch.Tensor] = {}
             scales: dict[str, torch.Tensor] = {}
@@ -173,14 +175,14 @@ class _PruningLogLikelihood(torch.autograd.Function):
                     partials[node.name] = leaf_indicator(
                         alignment[node.name],
                         n_sites,
-                        k,
+                        n_states,
                         dtype,
                         device,
                         index_device=device,
                     )
                     continue
 
-                partial = torch.ones((n_sites, k), dtype=dtype, device=device)
+                partial = torch.ones((n_sites, n_states), dtype=dtype, device=device)
                 for child in node.children:
                     transition = transitions[index[child.name]]
                     # message[s, i] = sum_j P_ij(t) L_child(s, j) -- eq:pruning.
@@ -205,7 +207,7 @@ class _PruningLogLikelihood(torch.autograd.Function):
 
         ctx.branch_lengths_value = branch_lengths.detach()
         ctx.tau = tau
-        ctx.k = k
+        ctx.n_states = n_states
         ctx.pi = pi
         ctx.weight = weight
         ctx.rate_matrix = rate_matrix
@@ -224,7 +226,7 @@ class _PruningLogLikelihood(torch.autograd.Function):
         ctx: Any, grad_output: torch.Tensor
     ) -> tuple[torch.Tensor | None, ...]:
         tau: Node = ctx.tau
-        k: int = ctx.k
+        k: int = ctx.n_states
         pi: torch.Tensor = ctx.pi
         transitions: torch.Tensor = ctx.transitions
         index: dict[str, int] = ctx.index
@@ -274,7 +276,7 @@ class _PruningLogLikelihood(torch.autograd.Function):
 
 def log_likelihood(
     tau: Node,
-    k: int,
+    n_states: int,
     pi: np.ndarray | torch.Tensor,
     alignment: Mapping[str, np.ndarray | torch.Tensor],
     branch_lengths: torch.Tensor,
@@ -286,13 +288,13 @@ def log_likelihood(
     """Total log-likelihood, differentiable w.r.t. ``branch_lengths``.
 
     Signature and value match
-    :func:`sal.likelihood.pruning_torch.log_likelihood`, which
+    :func:`sal.likelihood.pruning.torch.log_likelihood`, which
     stays the oracle; only how the gradient is obtained differs.
 
     Parameters
     ----------
     tau, k, pi, alignment, branch_lengths, weights, rate_matrix, rescale
-        As :func:`sal.likelihood.pruning_torch.log_likelihood`.
+        As :func:`sal.likelihood.pruning.torch.log_likelihood`.
         ``pi`` and ``rate_matrix`` are constants here: this backward computes
         no gradient for them.
 
@@ -312,11 +314,11 @@ def log_likelihood(
     """
     dtype, device = branch_lengths.dtype, branch_lengths.device
     pi_t = torch.as_tensor(pi, dtype=dtype, device=device)
-    check_pi_shape(tuple(pi_t.shape), k)
+    check_pi_shape(tuple(pi_t.shape), n_states)
     if pi_t.requires_grad or (rate_matrix is not None and rate_matrix.requires_grad):
         msg = (
             "pruning_analytic computes a gradient in branch_lengths only; "
-            "pi and rate_matrix must be constants -- use pruning_torch"
+            "pi and rate_matrix must be constants -- use likelihood.pruning.torch"
         )
         raise ValueError(msg)
 
@@ -332,6 +334,6 @@ def log_likelihood(
         None if weight is None else torch.as_tensor(weight, dtype=dtype, device=device)
     )
     result: torch.Tensor = _PruningLogLikelihood.apply(  # type: ignore[no-untyped-call]
-        branch_lengths, tau, k, pi_t, alignment, weight_t, rate_matrix, rescale
+        branch_lengths, tau, n_states, pi_t, alignment, weight_t, rate_matrix, rescale
     )
     return result

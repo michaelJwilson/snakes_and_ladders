@@ -12,12 +12,14 @@ plain EM.
 from __future__ import annotations
 
 import itertools
+from dataclasses import replace
 
 import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
 from sal.emissions import CountPairEmission
+from sal.opt.em import EMISSION_MIXTURE_EM
 from sal.opt.emission_mixture import (
     CountPairSeeding,
     EmissionMixtureFit,
@@ -109,7 +111,10 @@ def plain(data_start: tuple[np.ndarray, CountPairEmission]) -> EmissionMixtureFi
     """Plain EM from the `data` start, read by two tests."""
     observations, start = data_start
     return expectation_maximization(
-        observations, _uniform(start.n_states), start, tolerance=EM_TOLERANCE
+        observations,
+        _uniform(start.n_states),
+        start,
+        config=replace(EMISSION_MIXTURE_EM, tolerance=EM_TOLERANCE),
     )
 
 
@@ -121,10 +126,18 @@ def test_no_schedule_and_one_step_at_one_are_the_plain_fit_bitwise(
     observations, start = data_start
     k = start.n_states
     unset = annealed_expectation_maximization(
-        observations, _uniform(k), start, [], tolerance=EM_TOLERANCE
+        observations,
+        _uniform(k),
+        start,
+        [],
+        config=replace(EMISSION_MIXTURE_EM, tolerance=EM_TOLERANCE),
     )
     at_one = annealed_expectation_maximization(
-        observations, _uniform(k), start, [1.0], tolerance=EM_TOLERANCE
+        observations,
+        _uniform(k),
+        start,
+        [1.0],
+        config=replace(EMISSION_MIXTURE_EM, tolerance=EM_TOLERANCE),
     )
     assert _same(plain, unset.fit)
     assert _same(plain, at_one.fit)
@@ -149,7 +162,11 @@ def test_a_hot_step_spreads_every_pair_evenly_and_fits_the_pooled_pairs(
     _, _, at = _instance()
     k = start.n_states
     hot = annealed_expectation_maximization(
-        observations, _uniform(k), start, [HOT], max_iterations=1
+        observations,
+        _uniform(k),
+        start,
+        [HOT],
+        config=replace(EMISSION_MIXTURE_EM, max_iterations=1),
     ).fit
     assert hot.iterations == 1
     assert float((hot.responsibilities - 1.0 / k).abs().max()) < 1e-12
@@ -177,7 +194,11 @@ def test_the_free_energy_does_not_fall_within_a_temperature(
     k = start.n_states
     steps = [8.0] * 10 + [4.0] * 10 + [2.0] * 10 + [1.0] * 10
     fit = annealed_expectation_maximization(
-        observations, _uniform(k), start, steps, max_iterations=len(steps)
+        observations,
+        _uniform(k),
+        start,
+        steps,
+        config=replace(EMISSION_MIXTURE_EM, max_iterations=len(steps)),
     )
     assert fit.temperatures == tuple(steps)
     energies = np.asarray(fit.free_energies)
@@ -188,7 +209,11 @@ def test_the_free_energy_does_not_fall_within_a_temperature(
     # The free energy at T is the free_energy of the joint at the state each
     # step was handed; at the last step's state and temperature, recomputed.
     last = annealed_expectation_maximization(
-        observations, _uniform(k), start, steps[:-1], max_iterations=len(steps) - 1
+        observations,
+        _uniform(k),
+        start,
+        steps[:-1],
+        config=replace(EMISSION_MIXTURE_EM, max_iterations=len(steps) - 1),
     ).fit
     values_t = torch.as_tensor(observations, dtype=torch.float64)
     joint = torch.log(last.weights) + last.components.log_density(values_t)
@@ -210,7 +235,11 @@ def test_annealing_from_the_data_start_is_read_against_plain_em(
     reference = float(mixture_log_likelihood(values, log_weight, params.components))
     labels = simulate_emission_mixture(params).labels
     run = annealed_expectation_maximization(
-        observations, _uniform(k), start, SCHEDULE, tolerance=EM_TOLERANCE
+        observations,
+        _uniform(k),
+        start,
+        SCHEDULE,
+        config=replace(EMISSION_MIXTURE_EM, tolerance=EM_TOLERANCE),
     )
     assert run.temperatures == SCHEDULE
     annealed = run.fit
@@ -235,5 +264,9 @@ def test_a_temperature_is_positive_and_the_schedule_fits_the_budget(
             annealed_expectation_maximization(observations, _uniform(k), start, [bad])
     with pytest.raises(ValueError, match="do not fit"):
         annealed_expectation_maximization(
-            observations, _uniform(k), start, [2.0, 1.0], max_iterations=1
+            observations,
+            _uniform(k),
+            start,
+            [2.0, 1.0],
+            config=replace(EMISSION_MIXTURE_EM, max_iterations=1),
         )

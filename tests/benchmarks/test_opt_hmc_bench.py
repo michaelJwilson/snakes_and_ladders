@@ -40,4 +40,4 @@ def test_hmc_sample_benchmark(
         burn_in=20,
     )
 
-    assert torch.isfinite(chain.theta).all()
+    assert torch.isfinite(chain.draws).all()

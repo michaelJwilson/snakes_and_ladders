@@ -63,7 +63,7 @@ def test_two_labels_reproduce_the_exact_minimum_cut() -> None:
         for _ in range(3):
             field_values = rng.normal(size=(graph.n_nodes, 2))
 
-            realized = alpha_expansion(graph, field_values, 2).energy
+            realized = alpha_expansion(graph, field_values, n_states=2).energy
             _, exact = ising_ground_state(graph, field_values)
 
             assert realized == pytest.approx(exact, abs=1e-9)
@@ -85,7 +85,7 @@ def test_the_energy_never_rises_across_an_expansion() -> None:
     previous = energy(graph, field_values, labelling)
     for _ in range(4):
         for alpha in range(3):
-            labelling, current = expand(graph, field_values, labelling, alpha)
+            labelling, current, *_ = expand(graph, field_values, labelling, alpha)
 
             assert current <= previous + 1e-12
             previous = current
@@ -100,7 +100,7 @@ def test_the_cycle_terminates_well_inside_its_cap() -> None:
     graph = lattice_graph((6, 6), BoundaryCondition.OPEN, 1.2)
 
     for _ in range(3):
-        result = alpha_expansion(graph, rng.normal(size=(graph.n_nodes, 4)), 4)
+        result = alpha_expansion(graph, rng.normal(size=(graph.n_nodes, 4)), n_states=4)
 
         assert result.cycles <= 6
 
@@ -122,7 +122,7 @@ def test_the_realized_energy_is_inside_the_proved_bound(coupling: float) -> None
             for labelling in itertools.product(range(3), repeat=graph.n_nodes)
         )
 
-        realized = alpha_expansion(graph, field_values, 3).energy
+        realized = alpha_expansion(graph, field_values, n_states=3).energy
 
         # Both energies are negative, so the ratio is taken on the improvement
         # over the worst labelling, which is positive and is what the bound is
@@ -143,10 +143,10 @@ def test_expansion_beats_single_site_descent_past_enumeration() -> None:
     for _ in range(2):
         field_values = rng.normal(size=(graph.n_nodes, 4))
 
-        expansion = alpha_expansion(graph, field_values, 4).energy
+        expansion = alpha_expansion(graph, field_values, n_states=4).energy
         descent = min(
             iterated_conditional_modes(
-                graph, field_values, 4, np.random.default_rng(seed)
+                graph, field_values, np.random.default_rng(seed), n_states=4
             ).energy
             for seed in range(8)
         )
@@ -163,7 +163,7 @@ def test_a_zero_coupling_problem_is_solved_exactly_by_the_data_term() -> None:
     graph = lattice_graph((5, 5), BoundaryCondition.OPEN, 0.0)
     field_values = rng.normal(size=(graph.n_nodes, 4))
 
-    result = alpha_expansion(graph, field_values, 4)
+    result = alpha_expansion(graph, field_values, n_states=4)
 
     np.testing.assert_array_equal(result.labelling, field_values.argmax(axis=1))
 
@@ -176,7 +176,7 @@ def test_a_dominant_coupling_drives_every_site_to_one_label() -> None:
     graph = lattice_graph((4, 4), BoundaryCondition.OPEN, 50.0)
     field_values = rng.normal(size=(graph.n_nodes, 3))
 
-    result = alpha_expansion(graph, field_values, 3)
+    result = alpha_expansion(graph, field_values, n_states=3)
 
     assert len(set(result.labelling.tolist())) == 1
     assert int(result.labelling[0]) == int(field_values.sum(axis=0).argmax())
@@ -190,7 +190,7 @@ def test_a_negative_coupling_is_refused() -> None:
     graph = lattice_graph((3, 3), BoundaryCondition.OPEN, -0.4)
 
     with pytest.raises(ValueError, match="metric only then"):
-        alpha_expansion(graph, np.zeros(3), 3)
+        alpha_expansion(graph, np.zeros(3), n_states=3)
 
 
 @pytest.mark.smoke
@@ -201,8 +201,8 @@ def test_an_already_optimal_start_makes_no_moves() -> None:
     graph = lattice_graph((4, 4), BoundaryCondition.OPEN, 0.8)
     field_values = rng.normal(size=(graph.n_nodes, 3))
 
-    settled = alpha_expansion(graph, field_values, 3)
-    again = alpha_expansion(graph, field_values, 3, start=settled.labelling)
+    settled = alpha_expansion(graph, field_values, n_states=3)
+    again = alpha_expansion(graph, field_values, start=settled.labelling, n_states=3)
 
     assert again.moves == 0
     assert again.energy == pytest.approx(settled.energy, abs=1e-12)
@@ -217,8 +217,12 @@ def test_the_rust_cut_reproduces_the_python_expansion() -> None:
         graph = lattice_graph((8, 8), BoundaryCondition.PERIODIC, 0.5)
         field = np.random.default_rng(500 + seed).normal(size=(graph.n_nodes, n_states))
 
-        python = alpha_expansion(graph, field, n_states, backend=Backend.PYTHON)
-        compiled = alpha_expansion(graph, field, n_states, backend=Backend.RUST)
+        python = alpha_expansion(
+            graph, field, backend=Backend.PYTHON, n_states=n_states
+        )
+        compiled = alpha_expansion(
+            graph, field, backend=Backend.RUST, n_states=n_states
+        )
 
         assert np.array_equal(python.labelling, compiled.labelling)
         assert python.energy == compiled.energy
@@ -234,7 +238,7 @@ def test_expansion_has_no_numba_backend() -> None:
     with pytest.raises(
         ValueError, match="minimum cut runs on python or rust, not numba"
     ):
-        alpha_expansion(graph, np.zeros(3), 3, backend=Backend.NUMBA)
+        alpha_expansion(graph, np.zeros(3), backend=Backend.NUMBA, n_states=3)
 
 
 def _network_by_hand(
@@ -338,7 +342,7 @@ def test_a_move_through_the_template_returns_its_recorded_result(
     graph = lattice_graph((4, 4), BoundaryCondition.OPEN, 0.8)
     field = np.random.default_rng(858).normal(size=(graph.n_nodes, 3))
 
-    result = method(graph, field, 3)  # type: ignore[operator]
+    result = method(graph, field)  # type: ignore[operator]
 
     assert list(result.labelling) == RECORDED_LABELLING
     assert result.energy == RECORDED_ENERGY
@@ -353,9 +357,9 @@ def test_the_one_coupling_guard_keeps_each_move_its_own_reason() -> None:
     prefix = "every coupling must be non-negative, got -0.4: "
 
     with pytest.raises(ValueError, match="metric only then") as expansion:
-        alpha_expansion(graph, np.zeros(3), 3)
+        alpha_expansion(graph, np.zeros(3), n_states=3)
     with pytest.raises(ValueError, match="submodular only then") as swap_refusal:
-        alpha_beta_swap(graph, np.zeros(3), 3)
+        alpha_beta_swap(graph, np.zeros(3), n_states=3)
     with pytest.raises(ValueError, match="non-submodular") as cut:
         ising_ground_state(graph, np.zeros(2))
 
@@ -430,8 +434,8 @@ def test_the_cut_moves_agree_across_solvers_on_tied_fields() -> None:
         n_states = int(rng.choice([2, 3, 5]))
         field = np.round(rng.normal(size=(graph.n_nodes, n_states)), 1)
         for solve in (alpha_expansion, alpha_beta_swap):
-            python = solve(graph, field, n_states, backend=Backend.PYTHON)
-            compiled = solve(graph, field, n_states, backend=Backend.RUST)
+            python = solve(graph, field, n_states=n_states, backend=Backend.PYTHON)
+            compiled = solve(graph, field, n_states=n_states, backend=Backend.RUST)
             assert np.array_equal(python.labelling, compiled.labelling), solve.__name__
             assert python.energy == compiled.energy
 

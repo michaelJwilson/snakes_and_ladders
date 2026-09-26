@@ -51,7 +51,7 @@ objective = {
 }[family]()
 theta = objective.initial()
 if backend == "jax":
-    from sal.opt.hmm_jax import value_and_grad
+    from sal.opt.hmm.jax import value_and_grad
     twin = value_and_grad(objective)
     point = theta.numpy()
     one = lambda: twin(point)

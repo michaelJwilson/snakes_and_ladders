@@ -54,7 +54,7 @@ def environment(params: SimulationParams) -> TreeEnvironment:
     dataset = simulate_tree(params, np.random.default_rng(params.seed))
     return TreeEnvironment(
         dict(dataset.alignment),
-        params.k,
+        params.n_states,
         np.asarray(params.pi),
         branch_length=float(
             np.mean([child.branch_length for _, child in edges(params.tau)])
@@ -73,14 +73,18 @@ def starts(environment: TreeEnvironment, params: SimulationParams) -> list[Topol
 @pytest.fixture(scope="module")
 def maximum(environment: TreeEnvironment, taxa: list[str]) -> float:
     """The enumerated maximum over all 945 unrooted topologies."""
-    return max(environment.score(topology) for topology in enumerate_topologies(taxa))
+    return max(
+        environment.log_weight(topology) for topology in enumerate_topologies(taxa)
+    )
 
 
 def _rate(
     environment: TreeEnvironment, endpoints: list[Topology], best: float
 ) -> float:
     return float(
-        np.mean([abs(environment.score(state) - best) < 1e-9 for state in endpoints])
+        np.mean(
+            [abs(environment.log_weight(state) - best) < 1e-9 for state in endpoints]
+        )
     )
 
 
@@ -103,10 +107,11 @@ def test_every_episode_ends_where_no_move_improves(
     probe = np.random.default_rng(1000)
 
     greedy_ends = [
-        greedy_rollout(environment, start, HORIZON).states[-1] for start in starts
+        greedy_rollout(environment, start=start, max_steps=HORIZON).states[-1]
+        for start in starts
     ]
     learned_ends = [
-        rollout(environment, policy, probe, HORIZON, start=start).states[-1]
+        rollout(environment, policy, probe, max_steps=HORIZON, start=start).states[-1]
         for start in starts
     ]
 
@@ -127,7 +132,9 @@ def test_an_untrained_policy_is_far_worse_than_greedy(
     rate = _rate(
         environment,
         [
-            rollout(environment, untrained, rng, HORIZON, start=start).states[-1]
+            rollout(environment, untrained, rng, max_steps=HORIZON, start=start).states[
+                -1
+            ]
             for start in starts
             for _ in range(ROLLOUTS_PER_START)
         ],
@@ -147,7 +154,10 @@ def test_a_trained_policy_is_no_worse_than_hill_climbing(
     best = maximum
     greedy = _rate(
         environment,
-        [greedy_rollout(environment, start, HORIZON).states[-1] for start in starts],
+        [
+            greedy_rollout(environment, start=start, max_steps=HORIZON).states[-1]
+            for start in starts
+        ],
         best,
     )
     assert greedy == pytest.approx(_GREEDY)
@@ -165,7 +175,9 @@ def test_a_trained_policy_is_no_worse_than_hill_climbing(
     learned = _rate(
         environment,
         [
-            rollout(environment, policy, probe, HORIZON, start=start).states[-1]
+            rollout(environment, policy, probe, max_steps=HORIZON, start=start).states[
+                -1
+            ]
             for start in starts
             for _ in range(ROLLOUTS_PER_START)
         ],

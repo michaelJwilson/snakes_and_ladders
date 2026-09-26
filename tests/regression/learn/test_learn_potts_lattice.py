@@ -47,7 +47,9 @@ def test_a_chain_built_as_a_graph_is_the_chain() -> None:
     as_graph = _lattice((length,), BoundaryCondition.OPEN)
 
     for state in enumerate_configurations(3, length):
-        assert chain.energy(state) == pytest.approx(as_graph.energy(state), abs=1e-12)
+        assert chain.log_weight(state) == pytest.approx(
+            as_graph.log_weight(state), abs=1e-12
+        )
         assert chain.actions(state) == as_graph.actions(state)
         assert chain.is_terminal(state) == as_graph.is_terminal(state)
 
@@ -64,7 +66,8 @@ def test_the_local_reward_matches_re_evaluating_the_energy_on_a_lattice() -> Non
         for action in environment.actions(state):
             successor, reward = environment.step(state, action)
             assert reward == pytest.approx(
-                environment.energy(successor) - environment.energy(state), abs=1e-12
+                environment.log_weight(successor) - environment.log_weight(state),
+                abs=1e-12,
             )
 
 
@@ -80,7 +83,8 @@ def test_the_reward_matches_a_full_evaluation_under_a_periodic_boundary() -> Non
         for action in environment.actions(state):
             successor, reward = environment.step(state, action)
             assert reward == pytest.approx(
-                environment.energy(successor) - environment.energy(state), abs=1e-12
+                environment.log_weight(successor) - environment.log_weight(state),
+                abs=1e-12,
             )
 
 
@@ -104,8 +108,10 @@ def test_hill_climbing_reaches_the_enumerated_optimum_on_a_lattice() -> None:
     _, best = optimum(environment)
     rng = np.random.default_rng(3)
     reached = [
-        environment.energy(
-            greedy_rollout(environment, environment.reset(rng), 30).states[-1]
+        environment.log_weight(
+            greedy_rollout(
+                environment, start=environment.reset(rng), max_steps=30
+            ).states[-1]
         )
         for _ in range(30)
     ]

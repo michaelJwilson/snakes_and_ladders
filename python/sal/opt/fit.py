@@ -19,6 +19,7 @@ import logging
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
+from dataclasses import field as dataclass_field
 
 import torch
 
@@ -48,7 +49,7 @@ _RCOND = 1e-6
 # slowed the serial fit 2.9x, because torch's intra-op parallelism over the
 # sites is the parallelism that pays here, and no pool reached 2x at 4
 # workers. STATUS.md carries the measurement (issue #344).
-_MULTI_START_BACKEND: Pool = "processes"
+_MULTI_START_POOL: Pool = "processes"
 _MULTI_START_INTRA_OP_THREADS: int | None = None
 
 
@@ -87,7 +88,7 @@ class FitResult:
     iterations: int
     converged: bool
     standard_errors: Mapping[str, torch.Tensor] | None = None
-    termination: Termination | None = None
+    termination: Termination = dataclass_field(kw_only=True)
 
 
 def fit(
@@ -439,7 +440,7 @@ class MultiStartResult:
     best: FitResult
     all_fits: tuple[FitResult, ...]
     spread: float
-    termination: Termination | None = None
+    termination: Termination = dataclass_field(kw_only=True)
 
 
 def _fit_start(task: tuple[Objective, torch.Tensor, int, float]) -> FitResult:
@@ -505,7 +506,7 @@ def fit_from(
         _fit_start,
         [(objective, theta0, max_iterations, gradient_tolerance) for theta0 in starts],
         workers=workers,
-        backend=_MULTI_START_BACKEND,
+        pool=_MULTI_START_POOL,
         intra_op_threads=_MULTI_START_INTRA_OP_THREADS,
     )
     ordered = tuple(sorted(results, key=lambda result: result.value))

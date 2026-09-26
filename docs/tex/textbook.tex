@@ -1817,6 +1817,20 @@ $1.008 \times 10^{8}$ count pairs and past every oracle in this document ---
 there the reference implementation is the referee for the accelerated one, and
 the planted labels for the fit.
 
+\paragraph{A continuous covariate.}
+\label{par:coupled:covariate}
+A third instance is the per-pull-request one above with a covariate on every
+observation: each position, vertex and channel draws its own log-normal,
+$c = \exp(\sigma z)$ with $\sigma = 0.5$ for the exposure and $40 \exp(\sigma
+z)$ with $\sigma = 0.25$, rounded to a whole number, for the trial count. The
+exposure then takes one value per observation, $64{,}000$ at the
+per-pull-request size, so a tabulation of the density by count and distinct
+covariate value is no smaller than the observations it tabulates. It is
+declared at the fine resolution only, since a sum of negative binomials at
+unequal exposures is not negative binomial and binning would misspecify it;
+past it the $71 \times 71$ lattice at $M = K = 10$ is declared over $2{,}000$
+positions under the same covariate.
+
 \paragraph{Chains of unequal length.}
 \label{par:coupled:ragged}
 The chains of Equation~\ref{eq:joint} need not share a length. Class $m$

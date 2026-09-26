@@ -49,7 +49,7 @@ from sal.sample import (
     slice,
     tempered,
 )
-from sal.sample.schedule import ExponentialTempSchedule
+from sal.sample.schedule import ExponentialTempSchedule, InverseTemperatures
 from sal.sim.elementary_codes import hamming_code
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from sal.sim.hmm import HmmParams
@@ -168,7 +168,7 @@ def test_the_null_run_leaves_a_chain_bitwise_what_it_was() -> None:
     with track(NULL_RUN):
         inside = _chain()
 
-    assert torch.equal(inside.theta, outside.theta)
+    assert torch.equal(inside.draws, outside.draws)
     assert torch.equal(inside.energy_error, outside.energy_error)
     assert inside.acceptance_rate == outside.acceptance_rate
     assert inside.force_evaluations == outside.force_evaluations
@@ -209,7 +209,7 @@ def test_the_chain_records_the_counters_the_chain_returns() -> None:
     assert [value for _, value in run.series("energy_error")] == [
         float(error) for error in chain.energy_error
     ]
-    assert run.last("state_bytes") == float(chain.theta.nbytes)
+    assert run.last("state_bytes") == float(chain.draws.nbytes)
     assert run.last("peak_rss_bytes") > 0.0
 
 
@@ -306,16 +306,16 @@ def test_the_fit_records_the_value_and_the_norm_the_result_reports() -> None:
 
 @pytest.mark.smoke
 def test_two_contexts_record_only_their_own_and_outside_records_nothing() -> None:
-    # `map_tasks` on the serial backend runs the task in the calling context,
+    # `map_tasks` on the serial pool runs the task in the calling context,
     # which is the context the run lives in.
     def task(item: int) -> int:
         current().record(item, item=float(item))
         return item
 
     with track(name="first") as first:
-        map_tasks(task, [0, 1], workers=1, backend="serial", intra_op_threads=None)
+        map_tasks(task, [0, 1], workers=1, pool="serial", intra_op_threads=None)
     with track(name="second") as second:
-        map_tasks(task, [2], workers=1, backend="serial", intra_op_threads=None)
+        map_tasks(task, [2], workers=1, pool="serial", intra_op_threads=None)
 
     assert _memory(first.run).series("item") == [(0, 0.0), (1, 1.0)]
     assert _memory(second.run).series("item") == [(2, 2.0)]
@@ -348,7 +348,7 @@ def test_a_pool_worker_starts_outside_the_context_and_records_nothing() -> None:
     # left to be discovered from an empty series.
     with track() as tracked:
         map_tasks(
-            _record_in_worker, [0, 1], workers=2, backend="threads", intra_op_threads=1
+            _record_in_worker, [0, 1], workers=2, pool="threads", intra_op_threads=1
         )
 
     with pytest.raises(KeyError):
@@ -623,7 +623,7 @@ def test_an_aim_run_reads_back_what_the_memory_run_recorded(tmp_path: Path) -> N
 # --- The five loops #799 named, and the five metrics nothing recorded -------
 
 #: A three-rung ladder from the uniform law, as the annealed estimators need.
-BETAS = (0.0, 0.5, 1.0)
+BETAS = InverseTemperatures((0.0, 0.5, 1.0))
 
 
 def _slice() -> slice.SliceChain:
@@ -663,7 +663,7 @@ def _simulated_tempering() -> annealed.SimulatedTempered:
     return annealed.simulated_tempering(
         _graph(),
         FIELD,
-        (0.5, 1.0, 2.0),
+        InverseTemperatures((0.5, 1.0, 2.0)),
         np.zeros(3),
         np.random.default_rng(SEED),
         SWEEPS,
@@ -702,9 +702,9 @@ def test_the_null_run_leaves_the_five_loops_bitwise_what_they_were() -> None:
             _simulated_tempering(),
             _ensemble(),
         )
-    assert torch.equal(inside[0].theta, outside[0].theta)
+    assert torch.equal(inside[0].draws, outside[0].draws)
     assert inside[0].objective_evaluations == outside[0].objective_evaluations
-    assert torch.equal(inside[1].theta, outside[1].theta)
+    assert torch.equal(inside[1].draws, outside[1].draws)
     for one, other in ((inside[2], outside[2]), (inside[3], outside[3])):
         assert one.log_z == other.log_z
         assert one.stderr == other.stderr
@@ -722,7 +722,7 @@ def test_the_slice_and_langevin_chains_record_the_unit_each_is_counted_in() -> N
     run = _memory(tracked.run)
     assert len(run.series("objective_evaluations")) == N_SAMPLES
     assert run.last("objective_evaluations") == float(sliced.objective_evaluations)
-    assert run.last("state_bytes") == float(sliced.theta.nbytes)
+    assert run.last("state_bytes") == float(sliced.draws.nbytes)
     with track() as tracked:
         chain = _mala()
     run = _memory(tracked.run)

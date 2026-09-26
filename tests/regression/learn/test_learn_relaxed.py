@@ -91,7 +91,7 @@ def test_the_potts_relaxation_is_exact_at_every_corner() -> None:
 
     for candidate in itertools.product(range(3), repeat=5):
         relaxed = float(objective.relaxed(one_hot(candidate, 3)))
-        assert relaxed == pytest.approx(environment.energy(candidate), rel=1e-11)
+        assert relaxed == pytest.approx(environment.log_weight(candidate), rel=1e-11)
 
 
 @pytest.mark.oracle
@@ -435,9 +435,11 @@ def test_the_deterministic_relaxation_beats_single_flip_hill_climbing() -> None:
 
     greedy = np.array(
         [
-            environment.energy(
+            environment.log_weight(
                 greedy_rollout(
-                    environment, environment.reset(np.random.default_rng(seed)), 200
+                    environment,
+                    start=environment.reset(np.random.default_rng(seed)),
+                    max_steps=200,
                 ).states[-1]
             )
             > best - 1e-9
@@ -474,9 +476,11 @@ def test_the_sampled_estimators_only_tie_with_the_baseline() -> None:
 
     greedy = np.array(
         [
-            environment.energy(
+            environment.log_weight(
                 greedy_rollout(
-                    environment, environment.reset(np.random.default_rng(seed)), 200
+                    environment,
+                    start=environment.reset(np.random.default_rng(seed)),
+                    max_steps=200,
                 ).states[-1]
             )
             > best - 1e-9

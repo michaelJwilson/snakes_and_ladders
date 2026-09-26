@@ -12,7 +12,7 @@ from __future__ import annotations
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from sal.likelihood import pruning, pruning_torch
+from sal.likelihood import pruning
 from sal.likelihood.device import (
     CROSS_DEVICE_RTOL_FLOAT32,
     CROSS_DEVICE_RTOL_FLOAT64,
@@ -21,6 +21,7 @@ from sal.likelihood.device import (
     default_dtype,
     select_device,
 )
+from sal.likelihood.pruning import torch as pruning_torch
 
 from tests._fixtures import FOUR_TAXA, SMALL_SITES, simulated_alignment
 
@@ -122,14 +123,16 @@ def test_every_device_the_policy_selects_holds_its_tolerance_to_the_numpy_oracle
     print("\nrelative deviation from the NumPy oracle, per selected route:")
     for fixture in (SMALL_SITES, FOUR_TAXA):
         params, alignment = simulated_alignment(fixture)
-        exact = pruning.log_likelihood(params.tau, params.k, params.pi, alignment)
+        exact = pruning.log_likelihood(
+            params.tau, params.n_states, params.pi, alignment
+        )
 
         for cuda, mps in ((True, True), (False, True), (False, False)):
             device = select_device(cuda_available=cuda, mps_available=mps)
             dtype = default_dtype(device)
             tensor = pruning_torch.log_likelihood(
                 params.tau,
-                params.k,
+                params.n_states,
                 params.pi,
                 alignment,
                 pruning_torch.branch_lengths_from_tree(params.tau, dtype=dtype),
@@ -180,14 +183,14 @@ def test_the_device_agrees_with_cpu(device: str) -> None:  # pragma: no cover
     dtype = default_dtype(device)
     on_cpu = pruning_torch.log_likelihood(
         params.tau,
-        params.k,
+        params.n_states,
         params.pi,
         alignment,
         pruning_torch.branch_lengths_from_tree(params.tau, dtype=dtype),
     )
     on_device = pruning_torch.log_likelihood(
         params.tau,
-        params.k,
+        params.n_states,
         params.pi,
         alignment,
         pruning_torch.branch_lengths_from_tree(params.tau, dtype=dtype, device=device),

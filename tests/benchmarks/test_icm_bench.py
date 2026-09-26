@@ -17,7 +17,7 @@ from pytest_benchmark.fixture import BenchmarkFixture
 from sal.backend import Backend
 from sal.search.ground_state import Rung
 from sal.search.icm import iterated_conditional_modes
-from sal.search.numba.icm import icm_sweeps_checked
+from sal.search.icm.numba import icm_sweeps_checked
 from sal.search.potts_starts import spatio_rung
 from sal.sim.fixtures import fixture
 from sal.sim.potts import site_field
@@ -42,11 +42,11 @@ def test_floored_descent_benchmark(
         return iterated_conditional_modes(
             rung.graph,
             rung.field,
-            rung.n_states,
             np.random.default_rng(0),
             max_sweeps=MAX_SWEEPS,
             min_sites=MIN_SITES,
             backend=backend,
+            n_states=rung.n_states,
         ).energy
 
     value = benchmark.pedantic(descend, rounds=5, iterations=1, warmup_rounds=1)  # type: ignore[no-untyped-call]

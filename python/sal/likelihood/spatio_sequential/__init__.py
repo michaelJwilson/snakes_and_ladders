@@ -1,0 +1,686 @@
+"""Exact quantities for the coupled spatio-sequential model, by enumeration.
+
+The oracle the rest of issue #290 is held to: the marginal likelihood, the
+label posterior, the per-class state posterior, and the state posterior given
+a labelling, each a sum over every joint assignment of ``eq:joint``.
+Deliberately exponential (``likelihood/CLAUDE.md``): it is an oracle because
+it shares no recursion with what it referees.
+
+It is itself pinned two ways. Its unnormalized log-density is the factor
+graph's :meth:`~sal.sim.factor_graph.FactorGraph.log_density`,
+assignment by assignment; and its evidence equals a second route that shares
+no code with it -- given the labels the chains decouple, so
+``p(x) = sum_l p(l) prod_m p(x_{.,l=m} | chain m)`` with each inner term from
+the forward recursion of :mod:`sal.opt.hmm`.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+from dataclasses import dataclass
+from typing import Literal, cast, get_args
+
+import numpy as np
+import torch
+
+from sal.backend import Backend, twin
+from sal.enumeration import (
+    configurations,
+    refuse_oversized,
+)
+from sal.likelihood.forward_backward import forward_backward
+from sal.numerics import logsumexp
+from sal.opt.hmm import forward_log_likelihood_from_density
+from sal.sim.spatio_sequential import (
+    SpatioSequentialParams,
+    gated_log_density,
+)
+
+#: How the beta-binomial's trial count reaches the kernel (issue #1064).
+#: ``factored`` tabulates its density's terms each by its own integer and the
+#: kernel sums them per observation; ``range`` tabulates every
+#: ``(successes, trial count)`` pair over the trial counts from the least to the
+#: greatest; ``distinct`` over the trial counts that occur. All three are exact
+#: and bitwise to one another. The negative binomial's exposure is factored
+#: whichever is chosen: it is continuous, and a table by its values has a row
+#: per observation.
+CovariateRows = Literal["factored", "range", "distinct"]
+
+#: The layouts :data:`CovariateRows` names, for a refusal to list.
+COVARIATE_ROWS: tuple[CovariateRows, ...] = get_args(CovariateRows)
+
+#: Bytes one channel's covariate table may take (issue #1064): the refusal a
+#: wide trial-count range meets before it allocates, under ``range`` and
+#: ``distinct`` and in ``factored``'s trial-count tables. 1 GiB is
+#: 6.2x the covariate of the stress instance of
+#: ``spatio_sequential_counts_covariate``, the largest array the E step already
+#: holds there.
+COVARIATE_TABLE_CEILING = 2**30
+
+
+@dataclass(frozen=True)
+class ChannelRows:
+    """One channel's rows and what its table is built over; no parameter enters.
+
+    Parameters
+    ----------
+    rows : np.ndarray
+        ``(S, n_nodes)`` contiguous ``uint32``, each observation's table row.
+    extent : int
+        One past the largest count, the counts the table spans.
+    levels : np.ndarray | None
+        The covariate value of each code where the table is over
+        ``(count, code)`` pairs, row ``count * len(levels) + code``; ``None``
+        where it is by count alone.
+    covariate : np.ndarray | None
+        The covariate a factored channel's kernel term reads per observation:
+        the exposure as ``float64`` or the trial count as ``uint32``, both
+        ``(S, n_nodes)`` contiguous; ``None`` where nothing is factored.
+    """
+
+    rows: np.ndarray
+    extent: int
+    levels: np.ndarray | None = None
+    covariate: np.ndarray | None = None
+
+
+@dataclass(frozen=True)
+class ObservationRows:
+    """Both channels' rows, built once per fit and reused by every E step (issue #1064).
+
+    A row depends on the observations and the covariate and on no parameter,
+    so an E step handed these builds only the tables. They are interpretable
+    only against the observations and the covariate they were built from, and
+    an E step refuses them for any other.
+
+    Parameters
+    ----------
+    layout : CovariateRows
+        The trial count's layout they were built in.
+    observations : np.ndarray
+        The observations they were built from, held to be compared by identity.
+    covariate : np.ndarray | None
+        The covariate, likewise.
+    total : ChannelRows
+        The first channel's.
+    successes : ChannelRows
+        The second channel's.
+    """
+
+    layout: CovariateRows
+    observations: np.ndarray
+    covariate: np.ndarray | None
+    total: ChannelRows
+    successes: ChannelRows
+
+
+def observation_rows(
+    observations: np.ndarray,
+    covariate: np.ndarray | None,
+    *,
+    covariate_rows: CovariateRows = "range",
+) -> ObservationRows:
+    """Every observation's table row in both channels, built once per fit (issue #1064).
+
+    The Rust twin's :func:`~sal.likelihood.spatio_sequential.rust.observation_rows`,
+    reached through this gateway: the rows are an input only the
+    :data:`~sal.backend.Backend.RUST` E step reads.
+    """
+    kernel = twin("observation_rows", Backend.RUST, __name__)
+    assert kernel is not None
+    return cast(
+        ObservationRows,
+        kernel.observation_rows(observations, covariate, covariate_rows=covariate_rows),
+    )
+
+
+#: What a refusal names: the coupled E step runs on NumPy, the oracle, or on
+#: the tabulated Rust kernel. One enum names the kernel, as it does for
+#: `maxflow` and `count_pairs` (#819); the frozen triple of callables it
+#: replaced spelled the same choice a second way for one problem (#828).
+_COUPLED = "the coupled model"
+
+
+@dataclass(frozen=True)
+class ExactSpatioSequential:
+    """What enumeration returns.
+
+    Parameters
+    ----------
+    log_evidence : float
+        ``log p(x)``, summed over every labelling and every joint chain path.
+    label_posterior : np.ndarray
+        ``p(l_n = m | x)``, shape ``(n_nodes, M)``.
+    state_posterior : np.ndarray
+        ``p(k_{s,m} | x)``, shape ``(M, S, K)``.
+    log_prior_normalizer : float
+        ``log Z_Potts`` of the Potts term of ``eq:joint``, the constant the factor
+        graph's log-density omits.
+    """
+
+    log_evidence: float
+    label_posterior: np.ndarray
+    state_posterior: np.ndarray
+    log_prior_normalizer: float
+
+
+def _labellings(params: SpatioSequentialParams) -> np.ndarray:
+    # `_log_joint` refuses the product of the two factors first, which is
+    # what a caller pays for; the cap here reaches only the callers that
+    # enumerate one factor alone.
+    return configurations(
+        params.n_classes,
+        params.graph.n_nodes,
+        what=f"{params.n_classes}**{params.graph.n_nodes} labellings",
+    )
+
+
+def _paths(params: SpatioSequentialParams) -> np.ndarray:
+    return configurations(
+        params.n_states,
+        params.n_positions,
+        what=f"{params.n_states}**{params.n_positions} paths",
+    )
+
+
+def log_prior(params: SpatioSequentialParams, labellings: np.ndarray) -> np.ndarray:
+    """Unnormalized ``log p(l)``, the Potts term of ``eq:joint``, per labelling, shape ``(n_labellings,)``."""
+    total = np.zeros(labellings.shape[0])
+    for (first, second), coupling in params.graph.weighted_edges():
+        total += (
+            params.beta * coupling * (labellings[:, first] == labellings[:, second])
+        )
+    return total
+
+
+def log_chain(params: SpatioSequentialParams, m: int, paths: np.ndarray) -> np.ndarray:
+    """``log p(k_{.,m})`` per path, written out term by term, shape ``(n_paths,)``."""
+    log_transition = np.log(params.transition)
+    total = np.log(params.initial[m])[paths[:, 0]]
+    for s in range(1, params.n_positions):
+        total = total + log_transition[paths[:, s - 1], paths[:, s]]
+    return np.asarray(total)
+
+
+def _log_joint(
+    params: SpatioSequentialParams, observations: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """``log p(x, l, k)`` up to ``log Z_Potts`` over every assignment.
+
+    Returns the labellings ``(L, n_nodes)``, the paths ``(P, S)`` and the table
+    of shape ``(L, P, ..., P)`` with one path axis per class, in that order.
+    """
+    # The joint space is refused before either factor is built, so the
+    # refusal names the product a caller pays for rather than one factor.
+    n_labellings = params.n_classes**params.graph.n_nodes
+    n_paths = params.n_states**params.n_positions
+    refuse_oversized(
+        n_labellings * n_paths**params.n_classes,
+        what=(
+            f"{params.n_classes}**{params.graph.n_nodes} labellings times "
+            f"{params.n_states}**{params.n_positions} paths per class for "
+            f"{params.n_classes} classes"
+        ),
+    )
+    labellings = _labellings(params)
+    paths = _paths(params)
+    gated = gated_log_density(params, observations)  # (n_nodes, S, M, K)
+    # emission[n, m, p]: what node n contributes if it belongs to class m and
+    # class m's chain follows path p.
+    emission = np.zeros((params.graph.n_nodes, params.n_classes, n_paths))
+    for n in range(params.graph.n_nodes):
+        for m in range(params.n_classes):
+            emission[n, m] = gated[n, np.arange(params.n_positions), m, :][
+                np.arange(params.n_positions), paths
+            ].sum(axis=1)
+    table = np.empty((n_labellings,) + (n_paths,) * params.n_classes)
+    prior = log_prior(params, labellings)
+    chain = [log_chain(params, m, paths) for m in range(params.n_classes)]
+    for index, labelling in enumerate(labellings):
+        per_class = []
+        for m in range(params.n_classes):
+            members = np.flatnonzero(labelling == m)
+            per_class.append(chain[m] + emission[members, m, :].sum(axis=0))
+        total = np.array(prior[index])
+        for m in range(params.n_classes):
+            shape = [1] * params.n_classes
+            shape[m] = n_paths
+            total = total + per_class[m].reshape(shape)
+        table[index] = total
+    return labellings, paths, table
+
+
+def log_joint_at(
+    params: SpatioSequentialParams,
+    observations: np.ndarray,
+    labels: np.ndarray,
+    states: np.ndarray,
+) -> float:
+    """``eq:joint`` at one assignment, up to ``log Z_Potts``, written out term by term."""
+    labellings = np.asarray(labels, dtype=np.int64)[None, :]
+    total = float(log_prior(params, labellings)[0])
+    gated = gated_log_density(params, observations)
+    for m in range(params.n_classes):
+        total += float(log_chain(params, m, np.asarray(states[m])[None, :])[0])
+        for n in np.flatnonzero(labels == m):
+            for s in range(params.n_positions):
+                total += float(gated[n, s, m, states[m, s]])
+    return total
+
+
+def enumerate_spatio_sequential(
+    params: SpatioSequentialParams, observations: np.ndarray
+) -> ExactSpatioSequential:
+    """Sum ``eq:joint`` over every assignment.
+
+    Raises
+    ------
+    ValueError
+        Above :data:`~sal.enumeration.MAX_ENUMERABLE_CONFIGURATIONS`
+        joint assignments.
+    """
+    labellings, paths, table = _log_joint(params, observations)
+    flat = table.reshape(1, -1)
+    log_z_prior = float(logsumexp(log_prior(params, labellings), axis=0))
+    log_total = float(logsumexp(flat, axis=1)[0])
+    weights = np.exp(table - log_total)  # posterior over (l, k_1, ..., k_M)
+
+    label_posterior = np.zeros((params.graph.n_nodes, params.n_classes))
+    per_labelling = weights.reshape(labellings.shape[0], -1).sum(axis=1)
+    for index, labelling in enumerate(labellings):
+        label_posterior[np.arange(params.graph.n_nodes), labelling] += per_labelling[
+            index
+        ]
+
+    state_posterior = np.zeros((params.n_classes, params.n_positions, params.n_states))
+    for m in range(params.n_classes):
+        axes = tuple(axis for axis in range(table.ndim) if axis != m + 1)
+        per_path = weights.sum(axis=axes)  # (P,)
+        for s in range(params.n_positions):
+            np.add.at(state_posterior[m, s], paths[:, s], per_path)
+
+    return ExactSpatioSequential(
+        log_evidence=log_total - log_z_prior,
+        label_posterior=label_posterior,
+        state_posterior=state_posterior,
+        log_prior_normalizer=log_z_prior,
+    )
+
+
+def conditional_state_posterior(
+    params: SpatioSequentialParams, observations: np.ndarray, labels: np.ndarray
+) -> np.ndarray:
+    """``Q(k_{s,m} | l, x)`` by enumeration over paths, shape ``(M, S, K)``.
+
+    Given the labels the classes decouple, so each is a sum over its own
+    ``K**S`` paths. This is what part 3's per-class forward--backward is
+    pinned to.
+    """
+    labels = np.asarray(labels, dtype=np.int64)
+    paths = _paths(params)
+    gated = gated_log_density(params, observations)
+    posterior = np.zeros((params.n_classes, params.n_positions, params.n_states))
+    for m in range(params.n_classes):
+        members = np.flatnonzero(labels == m)
+        scores = log_chain(params, m, paths)
+        for n in members:
+            scores = scores + gated[n, np.arange(params.n_positions), m, :][
+                np.arange(params.n_positions), paths
+            ].sum(axis=1)
+        weights = np.exp(scores - logsumexp(scores, axis=0))
+        for s in range(params.n_positions):
+            np.add.at(posterior[m, s], paths[:, s], weights)
+    return posterior
+
+
+def log_evidence_by_forward(
+    params: SpatioSequentialParams, observations: np.ndarray
+) -> float:
+    """``log p(x)`` by a route that shares no code with the enumeration.
+
+    Sums over labellings; for each, the classes decouple and every class's
+    evidence is the forward recursion on the product of its members'
+    emission scores.
+    """
+    labellings = _labellings(params)
+    prior = log_prior(params, labellings)
+    log_z_prior = float(logsumexp(prior, axis=0))
+    gated = gated_log_density(params, observations)
+    log_transition = torch.log(torch.as_tensor(params.transition))
+    terms = np.empty(labellings.shape[0])
+    for index, labelling in enumerate(labellings):
+        total = prior[index] - log_z_prior
+        for m in range(params.n_classes):
+            members = np.flatnonzero(labelling == m)
+            density = gated[members, :, m, :].sum(axis=0)  # (S, K)
+            total += float(
+                forward_log_likelihood_from_density(
+                    torch.as_tensor(density)[None],
+                    torch.log(torch.as_tensor(params.initial[m])),
+                    log_transition,
+                )
+            )
+        terms[index] = total
+    return float(logsumexp(terms, axis=0))
+
+
+# --- the E step, the field and the joint given a labelling (issue #306) ----
+
+
+#: Vertices whose emission scores are evaluated at once. The table
+#: :func:`gated_log_density` returns is ``(n_nodes, S, M, K)``, which at the
+#: declared 5,041-vertex instance is 1.0e10 entries and 80 GB: the E step and
+#: the field therefore never build it, and walk the vertices in blocks whose
+#: largest intermediate, ``(S, block, K)``, stays in the tens of megabytes at
+#: every declared size. The answer does not depend on the block --- only the
+#: order the members' scores are summed in, which moves the result by less
+#: than the tolerance the Rust backend is pinned at.
+VERTEX_BLOCK = 256
+
+
+def _refuse_rows_on_the_oracle(
+    backend: Backend, covariate_rows: CovariateRows | ObservationRows
+) -> None:
+    """Refuse a covariate layout where no table is built.
+
+    ``covariate_rows`` sets how the Rust backend lays out the trial count's
+    table, or hands it rows already built (issue #1064). The NumPy oracle
+    scores every observation at its own covariate and builds no table, so a
+    layout other than the default handed to it would be ignored rather than
+    followed.
+
+    Raises
+    ------
+    ValueError
+        If ``covariate_rows`` is not ``"range"`` and ``backend`` is not
+        :data:`~sal.backend.Backend.RUST`.
+    """
+    if covariate_rows != "range" and backend is not Backend.RUST:
+        what = (
+            covariate_rows
+            if isinstance(covariate_rows, str)
+            else type(covariate_rows).__name__
+        )
+        msg = (
+            f"covariate_rows={what!r} lays out the Rust backend's tables; the "
+            f"{backend} backend builds none and scores every covariate exactly"
+        )
+        raise ValueError(msg)
+
+
+def _blocks(members: np.ndarray) -> Iterator[np.ndarray]:
+    """``members`` in contiguous blocks of at most :data:`VERTEX_BLOCK`."""
+    for start in range(0, members.size, VERTEX_BLOCK):
+        yield members[start : start + VERTEX_BLOCK]
+
+
+def covariate_block(
+    params: SpatioSequentialParams, members: np.ndarray
+) -> torch.Tensor | None:
+    """``params.covariate`` for one block of vertices, ready for a family.
+
+    Every seam here slices the covariate the way it slices the observations ---
+    a column selection over the vertex axis. Written once because three seams
+    do it, and a covariate sliced differently from the block it accompanies is
+    a fit conditioning on the wrong exposures that converges anyway (#658).
+
+    The singleton is added **only** where the covariate has no axes of its own
+    --- :mod:`sal.emissions` states the contract and enforces
+    it, and #677 stopped the five seams that slice a covariate from each
+    carrying their own copy of it. What is local here: a covariate that
+    carries the family's axes is passed through, because
+    :func:`~sal.sim.count_pairs.split_covariate` is what puts
+    the singleton inside each channel, and appending it here made a
+    ``(S, V, 2)`` covariate ``(S, V, 2, 1)`` (#670).
+
+    Returns
+    -------
+    torch.Tensor | None
+        ``(S, len(members), 1)`` for a scalar-observation family and
+        ``(S, len(members), ...)`` for one with its own axes, or ``None``
+        where the params carry no covariate.
+    """
+    columns = covariate_columns(params, members)
+    return None if columns is None else torch.as_tensor(columns)
+
+
+def covariate_columns(
+    params: SpatioSequentialParams, members: np.ndarray
+) -> np.ndarray | None:
+    """:func:`covariate_block`'s slice as an array, for a seam that takes no derivative.
+
+    The one slice every seam shares; :func:`covariate_block` wraps it for a
+    family's ``log_density``, and an M step, which takes arrays, reads it as
+    it is (issue #1011).
+
+    Returns
+    -------
+    np.ndarray | None
+        The shape :func:`covariate_block` states, or ``None`` where the params
+        carry no covariate.
+    """
+    if params.covariate is None:
+        return None
+    block = params.covariate[:, members]
+    return block[..., None] if block.ndim == 2 else block
+
+
+def class_log_density(
+    params: SpatioSequentialParams, observations: np.ndarray, labels: np.ndarray
+) -> np.ndarray:
+    """Per class, the summed emission scores of its members, shape ``(M, S, K)``.
+
+    Given the labels the classes decouple, and each class's chain sees the
+    product of its members' emissions -- a class with no members sees a flat
+    score and its posterior is its prior.
+
+    The sum is accumulated over blocks of members rather than over
+    :func:`gated_log_density`'s whole table, which is what keeps it usable at
+    the sizes `ROADMAP.md` declares; see :data:`VERTEX_BLOCK`.
+
+    ``params.covariate`` is sliced by the same block as the observations, so a
+    family scores each member against that member's own exposure (issue #652).
+    The block is a column selection, which is why the covariate is stored with
+    the observations' axes and not the class's.
+    """
+    labels = np.asarray(labels, dtype=np.int64)
+    density = np.zeros((params.n_classes, params.n_positions, params.n_states))
+    for m, family in enumerate(params.emissions):
+        for block in _blocks(np.flatnonzero(labels == m)):
+            scores = family.log_density(
+                torch.as_tensor(observations[:, block], dtype=family.observation_dtype),
+                covariate=covariate_block(params, block),
+            )  # (S, block, K)
+            density[m] += scores.detach().numpy().sum(axis=1)
+    return density
+
+
+@dataclass(frozen=True)
+class ClassPosteriors:
+    """The E step of the coupled model, given a labelling.
+
+    Parameters
+    ----------
+    posterior : np.ndarray
+        ``Q(k_{s,m} | l, x)``, shape ``(M, S, K)``.
+    pairwise : np.ndarray
+        ``Q(k_{s-1,m}, k_{s,m} | l, x)``, shape ``(M, S - 1, K, K)``.
+    log_evidence : np.ndarray
+        Per class, ``log p(x_{., l = m} | chain m)``, shape ``(M,)``.
+    """
+
+    posterior: np.ndarray
+    pairwise: np.ndarray
+    log_evidence: np.ndarray
+
+
+def class_posteriors(
+    params: SpatioSequentialParams,
+    observations: np.ndarray,
+    labels: np.ndarray,
+    *,
+    backend: Backend = Backend.PYTHON,
+    covariate_rows: CovariateRows | ObservationRows = "range",
+) -> ClassPosteriors:
+    """Forward--backward on every class's chain over its members' summed scores.
+
+    ``covariate_rows`` is the Rust backend's
+    (:func:`sal.likelihood.spatio_sequential.rust.emission_rows`), and refused
+    on this one unless it is the default.
+    """
+    _refuse_rows_on_the_oracle(backend, covariate_rows)
+    if (rust := twin(_COUPLED, backend, __name__)) is not None:
+        return cast(
+            "ClassPosteriors",
+            rust.class_posteriors(
+                params,
+                observations,
+                labels,
+                covariate_rows=covariate_rows,
+            ),
+        )
+    density = class_log_density(params, observations, labels)
+    log_transition = np.log(params.transition)
+    posterior = np.empty_like(density)
+    pairwise = np.empty(
+        (
+            params.n_classes,
+            max(params.n_positions - 1, 0),
+            params.n_states,
+            params.n_states,
+        )
+    )
+    evidence = np.empty(params.n_classes)
+    for m in range(params.n_classes):
+        run = forward_backward(density[m], np.log(params.initial[m]), log_transition)
+        posterior[m] = run.posterior
+        pairwise[m] = run.pairwise
+        evidence[m] = run.log_evidence
+    return ClassPosteriors(posterior, pairwise, evidence)
+
+
+def external_field(
+    params: SpatioSequentialParams,
+    observations: np.ndarray,
+    labels: np.ndarray,
+    posterior: np.ndarray | None = None,
+    *,
+    backend: Backend = Backend.PYTHON,
+    covariate_rows: CovariateRows | ObservationRows = "range",
+) -> np.ndarray:
+    """`    `H_nm`` of the external-field equation of the textbook: minus the posterior-expected emission score, shape ``(n_nodes, M)``.
+
+    ``posterior`` defaults to the E step at ``labels``; passing one computed
+    under other parameters is the ``theta'`` of the equation.
+
+    This scores through its **own** ``log_density`` rather than through
+    :func:`class_log_density`, so threading ``params.covariate`` here is not
+    tidiness (issue #658):
+    :func:`~sal.search.spatio_sequential.fit_spatio_sequential`
+    passes a ``posterior`` computed *with* the covariate, and until this the
+    field was computed *without* --- so the step proposed labels under one
+    model and accepted them under another. The ascent stays monotone either
+    way, which is why nothing failed.
+
+    ``covariate_rows`` is as :func:`class_posteriors` takes it.
+    """
+    _refuse_rows_on_the_oracle(backend, covariate_rows)
+    if (rust := twin(_COUPLED, backend, __name__)) is not None:
+        return cast(
+            "np.ndarray",
+            rust.external_field(
+                params,
+                observations,
+                labels,
+                posterior,
+                covariate_rows=covariate_rows,
+            ),
+        )
+    if posterior is None:
+        posterior = class_posteriors(params, observations, labels).posterior
+    # The vertices the observations carry, not the graph's: a slice of a
+    # declared instance is scored against the same parameters, and the field
+    # is over what was observed.
+    n_nodes = int(observations.shape[1])
+    field = np.empty((n_nodes, params.n_classes))
+    every = np.arange(n_nodes)
+    for m, family in enumerate(params.emissions):
+        for block in _blocks(every):
+            scores = family.log_density(
+                torch.as_tensor(observations[:, block], dtype=family.observation_dtype),
+                covariate=covariate_block(params, block),
+            )  # (S, block, K)
+            field[block, m] = -np.einsum(
+                "sbk,sk->b", scores.detach().numpy(), posterior[m]
+            )
+    return field
+
+
+def labelled_log_likelihood(
+    params: SpatioSequentialParams,
+    observations: np.ndarray,
+    labels: np.ndarray,
+    *,
+    backend: Backend = Backend.PYTHON,
+    covariate_rows: CovariateRows | ObservationRows = "range",
+) -> float:
+    """``log p(x, l | theta)`` with the chains marginalized, up to ``log Z_Potts``.
+
+    The quantity a block ascent must not decrease. The Potts normalizer is
+    constant across the blocks (``beta`` and ``J`` are not fitted) and
+    intractable past enumeration, so it is left out; add
+    :attr:`ExactSpatioSequential.log_prior_normalizer` where enumeration
+    reaches, which is how the test pins this against the oracle.
+    ``covariate_rows`` is as :func:`class_posteriors` takes it.
+    """
+    _refuse_rows_on_the_oracle(backend, covariate_rows)
+    if (rust := twin(_COUPLED, backend, __name__)) is not None:
+        return cast(
+            "float",
+            rust.labelled_log_likelihood(
+                params,
+                observations,
+                labels,
+                covariate_rows=covariate_rows,
+            ),
+        )
+    own = float(log_prior(params, np.asarray(labels, dtype=np.int64)[None, :])[0])
+    evidence = class_posteriors(params, observations, labels).log_evidence
+    return own + float(evidence.sum())
+
+
+def map_labelling(
+    params: SpatioSequentialParams, observations: np.ndarray
+) -> np.ndarray:
+    """The labelling of highest ``p(l | x)``, by enumeration: the oracle a label step is held to."""
+    labellings, _, table = _log_joint(params, observations)
+    per_labelling = logsumexp(table.reshape(labellings.shape[0], -1), axis=1)
+    return np.asarray(labellings[int(np.argmax(per_labelling))])
+
+
+def marginal_log_likelihood_torch(
+    params: SpatioSequentialParams, observations: np.ndarray, labels: np.ndarray
+) -> torch.Tensor:
+    """``log p(x | l, theta)`` as a differentiable scalar, through the forward recursion.
+
+    The left side of the M-step identity of the textbook's coupled-model section: its gradient with respect to a
+    family's parameters is what the posterior-weighted score must equal.
+
+    It conditions on ``params.covariate`` like every other seam (issue #658):
+    an identity checked between a covaried score and an uncovaried likelihood
+    is an identity between two different models.
+    """
+    labels = np.asarray(labels, dtype=np.int64)
+    log_transition = torch.log(torch.as_tensor(params.transition))
+    total = torch.zeros((), dtype=torch.float64)
+    for m, family in enumerate(params.emissions):
+        members = np.flatnonzero(labels == m)
+        scores = family.log_density(
+            torch.as_tensor(observations[:, members], dtype=family.observation_dtype),
+            covariate=covariate_block(params, members),
+        )  # (S, n_m, K)
+        density = scores.sum(dim=1)[None]  # (1, S, K)
+        total = total + forward_log_likelihood_from_density(
+            density, torch.log(torch.as_tensor(params.initial[m])), log_transition
+        )
+    return total

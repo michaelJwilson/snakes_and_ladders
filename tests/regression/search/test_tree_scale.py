@@ -39,7 +39,7 @@ def _dataset(
 ) -> tuple[Node, dict[str, np.ndarray], int]:
     params = instance.params
     dataset = simulate_tree(params, np.random.default_rng(params.seed))
-    return params.tau, dict(dataset.alignment), params.k
+    return params.tau, dict(dataset.alignment), params.n_states
 
 
 @pytest.mark.end2end
@@ -70,7 +70,7 @@ def test_a_budgeted_search_reaches_its_own_maximum_at_this_size(
     result = infer(
         alignment,
         4,
-        topology=truth,
+        start=truth,
         max_evaluations=_BUDGET,
         lazy_top=_LAZY_TOP,
     )

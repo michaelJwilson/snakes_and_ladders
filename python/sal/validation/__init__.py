@@ -20,8 +20,9 @@ Only ``tests/`` imports from here, never ``sim``, ``likelihood``, ``opt``,
 ``tests/regression/test_validation.py`` asserts them.
 
 :data:`FRAMEWORKS` is the registry: one :class:`Framework` per
-``validation-*`` extra, naming the module its script imports, so the guard
-knows which imports to refuse outside ``scripts/``. The adapter, the script,
+``validation-*`` extra, and one for HiGHS, which SciPy, a core dependency,
+carries with no extra; each names the module its script imports, so the
+guard knows which imports to refuse outside ``scripts/``. The adapter, the script,
 the test module and the extra share the framework's name, which need not be
 the module it imports: PyMaxflow imports as ``maxflow``.
 """
@@ -144,6 +145,16 @@ FRAMEWORKS: Mapping[str, Framework] = {
             licence="Apache-2.0",
             source="https://github.com/jax-ml/jax",
             ticket=991,
+        ),
+        # HiGHS ships inside SciPy, a core dependency, as
+        # `linprog(method="highs")`: no extra installs it (#1063).
+        Framework(
+            name="highs",
+            distribution="scipy",
+            module="scipy",
+            licence="MIT (HiGHS); BSD-3-Clause (SciPy)",
+            source="https://github.com/ERGO-Code/HiGHS",
+            ticket=1063,
         ),
     )
 }

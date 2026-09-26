@@ -113,7 +113,9 @@ def test_expert_iteration_makes_the_planner_reach_the_optimum_at_a_fraction_of_g
         np.mean(
             [
                 abs(
-                    environment.energy(greedy_rollout(environment, s, 6).states[-1])
+                    environment.log_weight(
+                        greedy_rollout(environment, start=s, max_steps=6).states[-1]
+                    )
                     - best
                 )
                 < 1e-9
@@ -154,7 +156,9 @@ def test_expert_iteration_makes_the_planner_reach_the_optimum_at_a_fraction_of_g
         for s in starts
     ]
     reached = float(
-        np.mean([abs(environment.energy(e.states[-1]) - best) < 1e-9 for e in planned])
+        np.mean(
+            [abs(environment.log_weight(e.states[-1]) - best) < 1e-9 for e in planned]
+        )
     )
     evaluations = float(np.mean([e.evaluations for e in planned]))
     assert reached >= greedy, (reached, greedy)

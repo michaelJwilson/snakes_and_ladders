@@ -241,20 +241,18 @@ jobs:
       # It runs unconditionally, not through `select_tests`: these are exactly
       # the checks that must not depend on which module the diff touched, since
       # a change `select_tests` mis-attributes is one of the things they catch.
+      # One run, under coverage (issue #1088). It ran twice, bare to gate and
+      # instrumented to measure the tier's own floor (issue #635), because
+      # instrumentation costs about 4x. The bare run bought an earlier red on
+      # a failing gate and cost the whole bare run on every green one: 65 s
+      # bare and 103 s instrumented on the local replica at four workers. The report
+      # is what `tests/regression/test_critical_coverage.py` reads; it skips
+      # where there is none, so a local `-m critical` pays nothing.
       - name: Critical gate
-        run: uv run pytest -m critical -q
-      # The tier's own coverage floor (issue #635), measured here rather than
-      # on the gate above: instrumentation costs about 4x -- 15.9 s bare
-      # against 61.56 s under `--cov` on the reference host -- and the gate
-      # exists to be fast. So the tier runs twice, once to gate and once to
-      # measure, and the second run's report is what
-      # `tests/regression/test_critical_coverage.py` reads. It skips where
-      # there is no report, so a local `-m critical` pays nothing.
-      - name: Critical tier coverage floor
         run: |
           uv run pytest -m critical -q \
             --cov=sal \
-            --cov-report=json:coverage-critical.json >/dev/null
+            --cov-report=json:coverage-critical.json
           uv run pytest tests/regression/test_critical_coverage.py -q
       # CHECKS.md and the textbook's applicability tables are written from
       # the tree and are not committed (issue #425). This regenerates both --
@@ -442,20 +440,39 @@ jobs:
       - run: uv run sphinx-build -b html docs/source docs/_build/html -W
 
   notebooks:
-    name: Notebooks (re-execute docs/nb)
+    name: Notebooks (re-execute the ones a change touches)
     runs-on: ubuntu-24.04
+    if: github.event_name != 'schedule'
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+        with:
+          fetch-depth: 0
+      # Release only (issue #1087): a pull request or push re-executes the
+      # notebooks it changes, and every one when it touches `docs/nb/data/`
+      # or the checker; any other change runs none, and nothing is installed.
+      # `infra/release.sh` executes all of them, so a notebook a change breaks
+      # without touching it is found at the next release, never skipped for
+      # good as a digest once skipped one (issues #480, #507). The selection
+      # is `changed_notebooks`, read with the system Python before any sync.
+      - name: Select the changed notebooks
+        id: select
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: echo "notebooks=$(git diff --name-only "$BASE" HEAD | python3 infra/check_notebooks.py --changed --list)" >> "$GITHUB_OUTPUT"
+      - if: steps.select.outputs.notebooks != ''
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Cache the uv environment
+      - if: steps.select.outputs.notebooks != ''
+        uses: dtolnay/rust-toolchain@stable
+      - if: steps.select.outputs.notebooks != ''
+        name: Cache the uv environment
         uses: actions/cache@v4
         with:
           path: ~/.cache/uv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-      - name: Cache Cargo registry and the oxisal build
+      - if: steps.select.outputs.notebooks != ''
+        name: Cache Cargo registry and the oxisal build
         uses: actions/cache@v4
         with:
           path: |
@@ -465,18 +482,12 @@ jobs:
           key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
             cargo-${{ runner.os }}-
-      - run: pip install "uv==${UV_VERSION}"
-      - run: uv sync --locked --extra notebooks
-      # Re-executes every notebook under docs/nb/ -- all six of them -- and
-      # diffs what each printed against what is committed. Which ones run is
-      # not a digest's decision (issues #480, #507): a stamp skipped
-      # `turbo.ipynb` for as long as no diff reached its import closure, and
-      # the check it had been skipping failed on the merge that first ran it.
-      # The set is fixed, so what a run verified does not depend on what the
-      # diff happened to touch. Its own job rather than release-gated: a
-      # notebook that stopped running would otherwise reach main and sit
-      # there until a release.
-      - run: uv run python infra/check_notebooks.py
+      - if: steps.select.outputs.notebooks != ''
+        run: pip install "uv==${UV_VERSION}"
+      - if: steps.select.outputs.notebooks != ''
+        run: uv sync --locked --extra notebooks
+      - if: steps.select.outputs.notebooks != ''
+        run: uv run python infra/check_notebooks.py ${{ steps.select.outputs.notebooks }}
 
   # External frameworks as referees (issue #972). Each is one
   # `validation-<framework>` extra, installed here and in no other job, and
@@ -511,7 +522,8 @@ jobs:
             cargo-${{ runner.os }}-
       - run: pip install "uv==${UV_VERSION}"
       - run: uv sync --locked --extra test $(python3 infra/validation_extras.py)
-      - run: uv run pytest -m "(validation or infra) and not goal" tests/validation tests/regression/test_validation.py -rs
+      # `release` stays for the release: HiGHS's full-size LP is minutes (#1063).
+      - run: uv run pytest -m "(validation or infra) and not goal and not release" tests/validation tests/regression/test_validation.py -rs
       # The runtimes the package has to meet, each an external framework's on
       # a declared fixture, measured on the reference host and hardcoded in
       # `tests/validation/test_goals.py`, so no framework is needed to run

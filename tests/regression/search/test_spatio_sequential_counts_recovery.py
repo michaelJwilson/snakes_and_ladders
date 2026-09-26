@@ -29,7 +29,7 @@ from sal.sim.count_pairs import (
     IndependentCountPair,
     aggregate,
 )
-from sal.sim.count_pairs_rust import binned_instance
+from sal.sim.count_pairs.rust import binned_instance
 from sal.sim.fixtures import KEY, fixture
 
 from tests._scale import at_bin, stress_only
@@ -81,6 +81,7 @@ def _fitted(instance: CountPairInstance) -> np.ndarray:
 
 @pytest.mark.end2end
 @at_bin("factor", PROBLEM)
+@pytest.mark.release  # 38.2 s in the tier, over the 10 s cap (#1088)
 def test_the_planted_labelling_is_recovered_at_every_bin_factor(factor: int) -> None:
     # The full test of one declared instance: simulate, bin, fit, assert. The
     # key factor is the largest of the three that fits the key budget, which

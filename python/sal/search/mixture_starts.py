@@ -55,9 +55,9 @@ import torch
 from sal.cost import Cost
 from sal.emissions import EmissionFamily
 from sal.opt.budget import Budget, Outcome
+from sal.opt.em import EmConfig
 from sal.opt.emission_mixture import (
     ComponentsAt,
-    anneal_assignments,
     expectation_maximization,
     plus_plus_start,
     uniform_start,
@@ -81,7 +81,9 @@ from sal.opt.mixture import (
 from sal.opt.starts import Curve, Polished, Trial
 from sal.opt.termination import Stop, Termination
 from sal.parallel import Pool, map_tasks
+from sal.sample.chain import torch_stream
 from sal.sample.initialize import FromAnnealing, FromChain, FromTempering
+from sal.sample.mixture_anneal import anneal_assignments
 from sal.sample.schedule import ExponentialTempSchedule, ladder
 from sal.search.projection import (
     ANNEAL_STEPS,
@@ -95,6 +97,7 @@ from sal.search.projection import (
     RESTARTS,
     TEMPERATURES,
     TEMPERING_ROUNDS,
+    Seeding,
     match_components,
 )
 from sal.sim.emission_mixture import SimulatedEmissionMixtureDataset
@@ -195,29 +198,6 @@ def instance_from(
     )
 
 
-@dataclass(frozen=True)
-class Seeded:
-    """What one start produced, what it charged, and the path it took there.
-
-    Parameters
-    ----------
-    components : EmissionFamily
-        The seeded components.
-    passes : float
-        The start's own cost, in passes over the data.
-    diagnostics : str
-        Empty for a rule; for a chain or a fit, what says how it ended.
-    path : tuple[tuple[int, EmissionFamily], ...]
-        For a start that iterates, the step of its run at which it held each
-        of these components; empty for one that does not.
-    """
-
-    components: EmissionFamily
-    passes: float
-    diagnostics: str = ""
-    path: tuple[tuple[int, EmissionFamily], ...] = ()
-
-
 def surrogate(instance: MixtureInstance) -> GaussianMixtureObjective:
     """The Gaussian mixture over both channels: the ``Objective`` a surrogate start reads.
 
@@ -250,12 +230,9 @@ def at_locations(instance: MixtureInstance, locations: torch.Tensor) -> Emission
     return instance.at(rows[distance.argmin(axis=1)])
 
 
-def _generator(rng: np.random.Generator) -> torch.Generator:
-    """A torch stream derived from the caller's generator, so one seed runs the start."""
-    return torch.Generator().manual_seed(int(rng.integers(0, 2**31 - 1)))
-
-
-def prior_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded:
+def prior_seeding(
+    instance: MixtureInstance, rng: np.random.Generator
+) -> Seeding[EmissionFamily]:
     """Components drawn from a prior over the observed range, reading no pair.
 
     A total log-uniform on the observed range of totals and an allele fraction
@@ -265,55 +242,63 @@ def prior_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded
 
     Returns
     -------
-    Seeded
+    Seeding
     """
     totals = np.asarray(instance.rows, dtype=np.float64)[:, 0]
     low, high = float(max(totals.min(), 1.0)), float(max(totals.max(), 2.0))
     means = np.exp(rng.uniform(np.log(low), np.log(high), size=instance.n_components))
     rates = rng.uniform(0.0, 1.0, size=instance.n_components)
-    return Seeded(instance.at(np.stack([means, rates * means], axis=1)), 0.0)
+    return Seeding(instance.at(np.stack([means, rates * means], axis=1)), 0.0)
 
 
-def data_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded:
+def data_seeding(
+    instance: MixtureInstance, rng: np.random.Generator
+) -> Seeding[EmissionFamily]:
     """``uniform_start``: components on pairs drawn uniformly without replacement.
 
     Returns
     -------
-    Seeded
+    Seeding
     """
-    return Seeded(
+    return Seeding(
         uniform_start(instance.rows, instance.n_components, instance.at, rng),
         0.0,
     )
 
 
-def emission_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded:
+def emission_seeding(
+    instance: MixtureInstance, rng: np.random.Generator
+) -> Seeding[EmissionFamily]:
     """``plus_plus_start``: D-squared sampling under the family's Bregman divergence.
 
     Returns
     -------
-    Seeded
+    Seeding
     """
-    return Seeded(
+    return Seeding(
         plus_plus_start(instance.rows, instance.n_components, instance.at, rng),
         1.0,
     )
 
 
-def kmeans_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded:
+def kmeans_seeding(
+    instance: MixtureInstance, rng: np.random.Generator
+) -> Seeding[EmissionFamily]:
     """``kmeans_plus_plus`` on the raw pair, its centres handed to the seam.
 
     Returns
     -------
-    Seeded
+    Seeding
     """
     centres = kmeans_plus_plus(
         np.asarray(instance.rows, dtype=np.float64), instance.n_components, rng
     )
-    return Seeded(instance.at(centres), 1.0)
+    return Seeding(instance.at(centres), 1.0)
 
 
-def gaussian_em_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded:
+def gaussian_em_seeding(
+    instance: MixtureInstance, rng: np.random.Generator
+) -> Seeding[EmissionFamily]:
     """The Gaussian mixture fitted to the first channel from k-means++, its means the locations.
 
     One EM iteration per call, so each is recorded into the enclosing run,
@@ -322,7 +307,7 @@ def gaussian_em_seeding(instance: MixtureInstance, rng: np.random.Generator) -> 
 
     Returns
     -------
-    Seeded
+    Seeding
     """
     channel = np.asarray(instance.rows, dtype=np.float64)[:, 0]
     objective = GaussianMixtureObjective(channel, instance.n_components)
@@ -333,14 +318,17 @@ def gaussian_em_seeding(instance: MixtureInstance, rng: np.random.Generator) -> 
     path: list[tuple[int, EmissionFamily]] = []
     for iteration in range(GAUSSIAN_EM_ITERATIONS):
         fitted = gaussian_expectation_maximization(
-            channel, weights, components, max_iterations=1, tolerance=0.0
+            channel,
+            weights,
+            components,
+            config=EmConfig(max_iterations=1, tolerance=0.0),
         )
         weights, components = fitted.weights, fitted.components
         tracked.record(iteration, surrogate_log_likelihood=fitted.log_likelihood)
         last = iteration == GAUSSIAN_EM_ITERATIONS - 1
         if iteration % PATH_STRIDE == 0 or last:
             path.append((iteration, at_locations(instance, components.mean)))
-    return Seeded(
+    return Seeding(
         path[-1][1],
         float(GAUSSIAN_EM_ITERATIONS),
         f"budget after {GAUSSIAN_EM_ITERATIONS}",
@@ -353,7 +341,9 @@ BURN_IN_FRACTION = 0.2
 BURN_IN_ITERATIONS = 3
 
 
-def burn_in_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded:
+def burn_in_seeding(
+    instance: MixtureInstance, rng: np.random.Generator
+) -> Seeding[EmissionFamily]:
     """A short EM fit on a subsample, started from the data draw.
 
     :data:`BURN_IN_ITERATIONS` iterations on a :data:`BURN_IN_FRACTION`
@@ -362,7 +352,7 @@ def burn_in_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seed
 
     Returns
     -------
-    Seeded
+    Seeding
     """
     components = data_seeding(instance, rng).components
     size = max(instance.n_components, int(BURN_IN_FRACTION * instance.n_samples))
@@ -379,14 +369,13 @@ def burn_in_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seed
             subsample,
             weights,
             components,
-            max_iterations=1,
-            tolerance=0.0,
             covariate=covariate,
+            config=EmConfig(max_iterations=1, tolerance=0.0),
         )
         weights, components = fitted.weights, fitted.components
         tracked.record(iteration, subsample_log_likelihood=fitted.log_likelihood)
         path.append((iteration, components))
-    return Seeded(
+    return Seeding(
         components,
         BURN_IN_ITERATIONS * size / instance.n_samples,
         f"{size} pairs, {BURN_IN_ITERATIONS} iterations",
@@ -409,7 +398,7 @@ def chain_initializer(rng: np.random.Generator) -> FromChain:
     return FromChain(
         CHAIN_DRAWS,
         CHAIN_STEP,
-        _generator(rng),
+        torch_stream(rng),
         n_steps=CHAIN_TRAJECTORY,
         burn_in=CHAIN_BURN_IN,
     )
@@ -420,7 +409,7 @@ def annealing_initializer(rng: np.random.Generator) -> FromAnnealing:
     return FromAnnealing(
         ExponentialTempSchedule(float(TEMPERATURES[-1]), 1.0, ANNEAL_STEPS),
         CHAIN_STEP,
-        _generator(rng),
+        torch_stream(rng),
         n_steps=CHAIN_TRAJECTORY,
     )
 
@@ -431,61 +420,69 @@ def tempering_initializer(rng: np.random.Generator) -> FromTempering:
         TEMPERATURES,
         TEMPERING_ROUNDS,
         CHAIN_STEP,
-        _generator(rng),
+        torch_stream(rng),
         n_steps=CHAIN_TRAJECTORY,
     )
 
 
-def objective_seeding(instance: MixtureInstance, _rng: np.random.Generator) -> Seeded:
+def objective_seeding(
+    instance: MixtureInstance, _rng: np.random.Generator
+) -> Seeding[EmissionFamily]:
     """``FromObjective``: the surrogate's own nominated point.
 
     Returns
     -------
-    Seeded
+    Seeding
     """
     objective = surrogate(instance)
     theta = FromObjective().starts(objective)[0]
-    return Seeded(at_locations(instance, objective.components(theta).mean), 0.0)
+    return Seeding(at_locations(instance, objective.components(theta).mean), 0.0)
 
 
-def perturbed_seeding(instance: MixtureInstance, _rng: np.random.Generator) -> Seeded:
+def perturbed_seeding(
+    instance: MixtureInstance, _rng: np.random.Generator
+) -> Seeding[EmissionFamily]:
     """``Perturbed``: that point, tilted off a symmetry it may be stationary at.
 
     Returns
     -------
-    Seeded
+    Seeding
     """
     objective = surrogate(instance)
     theta = perturbation().starts(objective)[0]
-    return Seeded(at_locations(instance, objective.components(theta).mean), 0.0)
+    return Seeding(at_locations(instance, objective.components(theta).mean), 0.0)
 
 
-def restart_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded:
+def restart_seeding(
+    instance: MixtureInstance, rng: np.random.Generator
+) -> Seeding[EmissionFamily]:
     """``RandomRestart``: the best by surrogate value of points drawn around it.
 
     Returns
     -------
-    Seeded
+    Seeding
     """
     objective = surrogate(instance)
     thetas = restart_initializer(rng).starts(objective)
     best = min(thetas, key=lambda theta: float(objective(theta)))
-    return Seeded(
+    return Seeding(
         at_locations(instance, objective.components(best).mean), float(len(thetas))
     )
 
 
-def quantile_seeding(instance: MixtureInstance, _rng: np.random.Generator) -> Seeded:
+def quantile_seeding(
+    instance: MixtureInstance, _rng: np.random.Generator
+) -> Seeding[EmissionFamily]:
     """``quantile_locations``: each channel's evenly spaced quantiles, paired in order.
 
     Returns
     -------
-    Seeded
+    Seeding
     """
     values = torch.as_tensor(
         np.asarray(instance.rows, dtype=np.float64), dtype=torch.float64
     )
-    return Seeded(
+    return Seeding(
         at_locations(
             instance, quantile_locations(values, instance.n_components, dim=0)
         ),
@@ -493,7 +490,9 @@ def quantile_seeding(instance: MixtureInstance, _rng: np.random.Generator) -> Se
     )
 
 
-def chain_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded:
+def chain_seeding(
+    instance: MixtureInstance, rng: np.random.Generator
+) -> Seeding[EmissionFamily]:
     """``FromChain``: a short Hamiltonian chain on the surrogate, warmed up; its last draw seeds.
 
     The warm-up is ``FromChain``'s default,
@@ -502,16 +501,16 @@ def chain_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded
 
     Returns
     -------
-    Seeded
+    Seeding
         Its path is every kept draw, at the step the chain recorded it.
     """
     objective = surrogate(instance)
     chain = chain_initializer(rng).chain(objective)
     path = tuple(
         (draw, at_locations(instance, objective.components(theta).mean))
-        for draw, theta in enumerate(chain.theta)
+        for draw, theta in enumerate(chain.draws)
     )
-    return Seeded(
+    return Seeding(
         path[-1][1],
         PASSES_PER_GRADIENT * chain.force_evaluations,
         f"acceptance {chain.acceptance_rate:.2f}"
@@ -524,32 +523,36 @@ def chain_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded
     )
 
 
-def annealed_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded:
+def annealed_seeding(
+    instance: MixtureInstance, rng: np.random.Generator
+) -> Seeding[EmissionFamily]:
     """``FromAnnealing``: the best point of a falling temperature.
 
     Returns
     -------
-    Seeded
+    Seeding
     """
     objective = surrogate(instance)
     run = annealing_initializer(rng).run(objective)
-    return Seeded(
+    return Seeding(
         at_locations(instance, objective.components(run.theta).mean),
         PASSES_PER_GRADIENT * run.force_evaluations,
         f"acceptance {run.acceptance_rate:.2f}",
     )
 
 
-def tempered_seeding(instance: MixtureInstance, rng: np.random.Generator) -> Seeded:
+def tempered_seeding(
+    instance: MixtureInstance, rng: np.random.Generator
+) -> Seeding[EmissionFamily]:
     """``FromTempering``: the best point at any temperature of a ladder.
 
     Returns
     -------
-    Seeded
+    Seeding
     """
     objective = surrogate(instance)
     run = tempering_initializer(rng).run(objective)
-    return Seeded(
+    return Seeding(
         at_locations(instance, objective.components(run.theta).mean),
         PASSES_PER_GRADIENT * run.force_evaluations,
         f"cold acceptance {float(run.acceptance_rate[0]):.2f}, lowest swap "
@@ -564,7 +567,7 @@ def gibbs_schedule() -> tuple[float, ...]:
 
 def annealed_gibbs_seeding(
     instance: MixtureInstance, rng: np.random.Generator
-) -> Seeded:
+) -> Seeding[EmissionFamily]:
     """``anneal_assignments``: heat-bath sweeps over the assignments at a falling temperature, on the count-pair likelihood itself.
 
     Starts at the data draw, sweeps once per temperature of
@@ -577,7 +580,7 @@ def annealed_gibbs_seeding(
 
     Returns
     -------
-    Seeded
+    Seeding
     """
     components = data_seeding(instance, rng).components
     weights = torch.full(
@@ -591,7 +594,7 @@ def annealed_gibbs_seeding(
         rng,
         covariate=instance.covariate,
     )
-    return Seeded(
+    return Seeding(
         run.components,
         float(len(run.temperatures) + 1),
         f"best at sweep {run.best_step} of {len(run.temperatures)}",
@@ -604,7 +607,9 @@ def annealed_gibbs_seeding(
 #: the burn-in and the three of `sample.initialize` with the annealed Gibbs
 #: start after `anneal`, the one schedule read two ways. Module-level, so a
 #: process pool can run each.
-STARTS: dict[str, Callable[[MixtureInstance, np.random.Generator], Seeded]] = {
+STARTS: dict[
+    str, Callable[[MixtureInstance, np.random.Generator], Seeding[EmissionFamily]]
+] = {
     "prior": prior_seeding,
     "data": data_seeding,
     "kmeans++": kmeans_seeding,
@@ -644,7 +649,7 @@ class _Seeding:
 class _Seeded:
     """What one seeding produced: the start, its score at equal weights, and its fit."""
 
-    seeded: Seeded
+    seeded: Seeding[EmissionFamily]
     score: float
     fit: MixturePolished | None
 
@@ -786,7 +791,7 @@ class BestOf:
             _run_seeding,
             [task] * self.n,
             workers=self.workers,
-            backend=self.pool if self.workers > 1 else "serial",
+            pool=self.pool if self.workers > 1 else "serial",
             intra_op_threads=1,
             generator=rng,
         )
@@ -800,12 +805,14 @@ class BestOf:
         )
         return results, path, passes
 
-    def __call__(self, instance: MixtureInstance, rng: np.random.Generator) -> Seeded:
+    def __call__(
+        self, instance: MixtureInstance, rng: np.random.Generator
+    ) -> Seeding[EmissionFamily]:
         """The best of ``n`` seedings, each scored at equal weights.
 
         Returns
         -------
-        Seeded
+        Seeding
 
         Raises
         ------
@@ -818,7 +825,7 @@ class BestOf:
             raise ValueError(msg)
         results, path, passes = self._seedings(_Seeding(self.name, instance), rng)
         best = int(np.argmax([r.score for r in results]))
-        return Seeded(
+        return Seeding(
             results[best].seeded.components,
             passes,
             f"best of {self.n}: seeding {best}",
@@ -833,7 +840,7 @@ class BestOf:
         seconds: float | None = None,
         passes: int | None = None,
         tolerance: float | None = None,
-    ) -> tuple[Seeded, MixturePolished]:
+    ) -> tuple[Seeding[EmissionFamily], MixturePolished]:
         """Every seeding polished by EM, and the fit of highest log-likelihood.
 
         Given ``seconds``, the seedings run in ``ceil(n / workers)`` rounds
@@ -846,7 +853,7 @@ class BestOf:
 
         Returns
         -------
-        tuple[Seeded, MixturePolished]
+        tuple[Seeding[EmissionFamily], MixturePolished]
             The chosen seeding, as :meth:`__call__` returns one, and its fit.
 
         Raises
@@ -874,7 +881,7 @@ class BestOf:
             msg = "a polished best-of polishes every seeding"
             raise TypeError(msg)
         return (
-            Seeded(
+            Seeding(
                 results[best].seeded.components,
                 charged,
                 f"best of {self.n} after EM: seeding {best}",
@@ -927,12 +934,14 @@ BEST_OF_EM_STARTS: dict[str, BestOf] = {
 }
 
 
-def lookup(name: str) -> Callable[[MixtureInstance, np.random.Generator], Seeded]:
+def lookup(
+    name: str,
+) -> Callable[[MixtureInstance, np.random.Generator], Seeding[EmissionFamily]]:
     """A start by name, from :data:`STARTS`, :data:`BEST_OF_STARTS` or :data:`BEST_OF_EM_STARTS`.
 
     Returns
     -------
-    Callable[[MixtureInstance, np.random.Generator], Seeded]
+    Callable[[MixtureInstance, np.random.Generator], Seeding[EmissionFamily]]
     """
     if name in STARTS:
         return STARTS[name]
@@ -1083,9 +1092,8 @@ def polish(
                 instance.observations,
                 weights,
                 components,
-                max_iterations=1,
-                tolerance=0.0,
                 covariate=instance.covariate,
+                config=EmConfig(max_iterations=1, tolerance=0.0),
             )
         except ValueError:
             # The one refusal this stop reads: a component the E step leaves
@@ -1140,7 +1148,7 @@ class MixtureTrial(Trial):
     ----------
     name : str
         The start.
-    seeded : Seeded
+    seeded : Seeding[EmissionFamily]
         What the start produced, without its path.
     polished : MixturePolished
         The fit it handed over to.
@@ -1159,7 +1167,7 @@ class MixtureTrial(Trial):
     """
 
     name: str
-    seeded: Seeded
+    seeded: Seeding[EmissionFamily]
     polished: MixturePolished
     curve: tuple[tuple[float, float], ...]
     handover: int
@@ -1325,7 +1333,7 @@ class TimedStart:
         seconds = float(outer_run.last("seconds"))
         trial = MixtureTrial(
             name=self.name,
-            seeded=Seeded(seeded.components, seeded.passes, seeded.diagnostics),
+            seeded=Seeding(seeded.components, seeded.passes, seeded.diagnostics),
             polished=polished,
             curve=tuple(curve),
             handover=handover,

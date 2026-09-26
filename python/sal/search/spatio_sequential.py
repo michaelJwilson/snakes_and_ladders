@@ -31,8 +31,10 @@ Bregman divergence, in :mod:`sal.opt.mixture`.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from dataclasses import field as dataclass_field
 from enum import StrEnum
 from functools import partial
+from typing import TYPE_CHECKING
 
 import numpy as np
 from scipy.optimize import linear_sum_assignment
@@ -69,6 +71,9 @@ from sal.sim.count_pairs import (
 from sal.sim.potts import SiteField, energy
 from sal.sim.spatio_sequential import SpatioSequentialParams
 from sal.track import current as current_tracked
+
+if TYPE_CHECKING:
+    from sal.likelihood.spatio_sequential import CovariateRows, ObservationRows
 
 
 class LabelSolver(StrEnum):
@@ -108,7 +113,7 @@ class SpatioSequentialFit:
     labels: np.ndarray
     log_likelihoods: np.ndarray
     field: np.ndarray
-    termination: Termination | None = None
+    termination: Termination = dataclass_field(kw_only=True)
 
 
 def m_step(
@@ -255,7 +260,9 @@ def label_step(
     potential = -field
     if solver is LabelSolver.ALPHA_EXPANSION:
         return np.asarray(
-            alpha_expansion(graph, potential, params.n_classes, start=labels).labelling
+            alpha_expansion(
+                graph, potential, start=labels, n_states=params.n_classes
+            ).labelling
         )
     if solver is LabelSolver.ICM:
         # The sweep `search.icm` runs, started from `labels` in a random site
@@ -268,12 +275,12 @@ def label_step(
         return iterated_conditional_modes(
             graph,
             potential,
-            params.n_classes,
             rng,
             start=labels,
             sweep_order=SweepOrder.RANDOM,
             min_sites=min_sites,
             backend=Backend.PYTHON,
+            n_states=params.n_classes,
         ).labelling
     if wolff_schedule is None:
         msg = "the Wolff solver needs a schedule"
@@ -351,6 +358,7 @@ def fit_spatio_sequential(
     wolff_schedule: TempSchedule | None = None,
     backend: Backend = Backend.PYTHON,
     min_label_sites: int = 0,
+    covariate_rows: CovariateRows = "range",
 ) -> SpatioSequentialFit:
     """Block-coordinate ascent on ``log p(x, l | theta)``.
 
@@ -384,7 +392,7 @@ def fit_spatio_sequential(
         Which kernel runs the E step, the field and the labelled log-likelihood:
         :data:`~sal.backend.Backend.PYTHON` is the NumPy oracle
         and :data:`~sal.backend.Backend.RUST` the tabulated
-        kernel of :mod:`sal.likelihood.spatio_sequential_rust`,
+        kernel of :mod:`sal.likelihood.spatio_sequential.rust`,
         chosen inside :mod:`sal.likelihood.spatio_sequential`
         so the three cannot be mixed (#828).
     min_label_sites : int
@@ -393,11 +401,19 @@ def fit_spatio_sequential(
         (:func:`redraw_small_labels`), so the block's M step fits no class to
         a handful of sites. ``0``, the default, redraws nothing and draws
         nothing from ``rng``.
+    covariate_rows : CovariateRows
+        The Rust backend's layout for the trial count's table
+        (:func:`sal.likelihood.spatio_sequential.rust.observation_rows`, issue
+        #1064). The rows depend on the observations and the covariate alone,
+        so on the Rust backend they are built once here and every E step, field
+        and labelled log-likelihood of the fit reuses them. ``"range"``, the
+        default, is the only value the NumPy backend takes: it builds no table.
 
     Raises
     ------
     ValueError
-        If ``n_blocks < 1``, or a re-estimated family did not converge.
+        If ``n_blocks < 1``, a re-estimated family did not converge, or
+        ``covariate_rows`` is not the default on the NumPy backend.
     """
     if n_blocks < 1:
         msg = f"at least one block, got {n_blocks}"
@@ -408,9 +424,20 @@ def fit_spatio_sequential(
         if labels is None
         else np.asarray(labels, dtype=np.int64).copy()
     )
-    posteriors_of = partial(class_posteriors, backend=backend)
-    field_of = partial(external_field, backend=backend)
-    log_likelihood_of = partial(labelled_log_likelihood, backend=backend)
+    rows: CovariateRows | ObservationRows = covariate_rows
+    if backend is Backend.RUST:
+        # Imported here, as `sal.backend.twin` imports it, so the NumPy
+        # backend never loads the extension.
+        from sal.likelihood.spatio_sequential import observation_rows
+
+        rows = observation_rows(
+            observations, params.covariate, covariate_rows=covariate_rows
+        )
+    posteriors_of = partial(class_posteriors, backend=backend, covariate_rows=rows)
+    field_of = partial(external_field, backend=backend, covariate_rows=rows)
+    log_likelihood_of = partial(
+        labelled_log_likelihood, backend=backend, covariate_rows=rows
+    )
     values = [log_likelihood_of(params, observations, current)]
     tracked = current_tracked()
     tracked.record(0, objective=-values[0], log_likelihood=values[0])
@@ -447,7 +474,7 @@ def fit_spatio_sequential(
         current,
         np.array(values),
         field,
-        Termination.after(n_blocks, converged=False),
+        termination=Termination.after(n_blocks, converged=False),
     )
 
 
@@ -778,5 +805,5 @@ def graph_burn_in(
         labels,
         np.array(values),
         field,
-        Termination.after(schedule.n_steps, converged=False),
+        termination=Termination.after(schedule.n_steps, converged=False),
     )

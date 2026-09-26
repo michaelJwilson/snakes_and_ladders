@@ -10,6 +10,7 @@ No CI Profiling rule.
 
 from __future__ import annotations
 
+import inspect
 import math
 import os
 import subprocess
@@ -20,7 +21,7 @@ import numpy as np
 import pytest
 import torch
 from sal import parallel
-from sal.parallel import BACKENDS, Pool, map_tasks
+from sal.parallel import POOLS, Pool, map_tasks
 
 WORKERS = (1, 4)
 
@@ -46,15 +47,15 @@ def _thread_count(_item: int) -> int:
 
 
 @pytest.mark.infra
-@pytest.mark.parametrize("backend", list(BACKENDS))
-def test_results_come_back_in_input_order_under_every_backend(backend: Pool) -> None:
+@pytest.mark.parametrize("pool", list(POOLS))
+def test_results_come_back_in_input_order_under_every_backend(pool: Pool) -> None:
     # Input order, not completion order: the items are unequal enough in
     # cost that a pool returning as tasks finish would permute them.
     items = list(range(12))
-    workers = 1 if backend == "serial" else 4
+    workers = 1 if pool == "serial" else 4
 
     results = map_tasks(
-        _square, items, workers=workers, backend=backend, intra_op_threads=None
+        _square, items, workers=workers, pool=pool, intra_op_threads=None
     )
 
     assert results == [_square(item) for item in items]
@@ -62,8 +63,8 @@ def test_results_come_back_in_input_order_under_every_backend(backend: Pool) -> 
 
 @pytest.mark.oracle
 @pytest.mark.backend
-@pytest.mark.parametrize("backend", ["threads", "processes"])
-def test_four_workers_draw_the_streams_one_worker_draws(backend: Pool) -> None:
+@pytest.mark.parametrize("pool", ["threads", "processes"])
+def test_four_workers_draw_the_streams_one_worker_draws(pool: Pool) -> None:
     # The ticket's first rule: a parallel run is bitwise the serial run. Each
     # task's generator is spawned from the caller's, in item order, so what
     # a task draws depends on its index and on nothing about scheduling.
@@ -73,7 +74,7 @@ def test_four_workers_draw_the_streams_one_worker_draws(backend: Pool) -> None:
         _draw,
         items,
         workers=1,
-        backend="serial",
+        pool="serial",
         intra_op_threads=None,
         generator=np.random.default_rng(7),
     )
@@ -81,7 +82,7 @@ def test_four_workers_draw_the_streams_one_worker_draws(backend: Pool) -> None:
         _draw,
         items,
         workers=4,
-        backend=backend,
+        pool=pool,
         intra_op_threads=None,
         generator=np.random.default_rng(7),
     )
@@ -102,16 +103,16 @@ def test_a_second_call_on_the_same_generator_draws_fresh_children() -> None:
     rng = np.random.default_rng(3)
 
     first = map_tasks(
-        _draw, [0, 1], workers=1, backend="serial", intra_op_threads=None, generator=rng
+        _draw, [0, 1], workers=1, pool="serial", intra_op_threads=None, generator=rng
     )
     second = map_tasks(
-        _draw, [0, 1], workers=1, backend="serial", intra_op_threads=None, generator=rng
+        _draw, [0, 1], workers=1, pool="serial", intra_op_threads=None, generator=rng
     )
     again = map_tasks(
         _draw,
         [0, 1],
         workers=1,
-        backend="serial",
+        pool="serial",
         intra_op_threads=None,
         generator=np.random.default_rng(3),
     )
@@ -121,18 +122,18 @@ def test_a_second_call_on_the_same_generator_draws_fresh_children() -> None:
 
 
 @pytest.mark.smoke
-@pytest.mark.parametrize("backend", list(BACKENDS))
+@pytest.mark.parametrize("pool", list(POOLS))
 def test_a_task_that_raises_propagates_with_the_item_that_raised(
-    backend: Pool,
+    pool: Pool,
 ) -> None:
-    workers = 1 if backend == "serial" else 4
+    workers = 1 if pool == "serial" else 4
 
     with pytest.raises(ValueError, match="three is refused") as excinfo:
         map_tasks(
             _refuse_three,
             [1, 2, 3, 4],
             workers=workers,
-            backend=backend,
+            pool=pool,
             intra_op_threads=None,
         )
 
@@ -142,32 +143,30 @@ def test_a_task_that_raises_propagates_with_the_item_that_raised(
 @pytest.mark.smoke
 def test_an_unusable_worker_count_or_backend_is_refused() -> None:
     with pytest.raises(ValueError, match="at least one"):
-        map_tasks(_square, [1], workers=0, backend="serial", intra_op_threads=None)
+        map_tasks(_square, [1], workers=0, pool="serial", intra_op_threads=None)
     with pytest.raises(ValueError, match="one of"):
-        map_tasks(_square, [1], workers=1, backend="fibres", intra_op_threads=None)  # type: ignore[call-overload]
-    with pytest.raises(ValueError, match="serial backend runs one worker"):
-        map_tasks(_square, [1], workers=2, backend="serial", intra_op_threads=None)
+        map_tasks(_square, [1], workers=1, pool="fibres", intra_op_threads=None)  # type: ignore[call-overload]
+    with pytest.raises(ValueError, match="serial pool runs one worker"):
+        map_tasks(_square, [1], workers=2, pool="serial", intra_op_threads=None)
 
 
 @pytest.mark.smoke
 def test_no_items_is_an_empty_result_and_spawns_nothing() -> None:
-    assert (
-        map_tasks(_square, [], workers=4, backend="processes", intra_op_threads=1) == []
-    )
+    assert map_tasks(_square, [], workers=4, pool="processes", intra_op_threads=1) == []
 
 
 @pytest.mark.infra
-@pytest.mark.parametrize("backend", ["serial", "threads"])
+@pytest.mark.parametrize("pool", ["serial", "threads"])
 def test_the_intra_op_thread_count_is_applied_inside_and_restored_after(
-    backend: Pool,
+    pool: Pool,
 ) -> None:
     # The thread rule DEV.md states: a worker runs at the count the caller
     # named, and the calling process is left as it was found.
     before = torch.get_num_threads()
-    workers = 1 if backend == "serial" else 2
+    workers = 1 if pool == "serial" else 2
 
     inside = map_tasks(
-        _thread_count, [0, 1], workers=workers, backend=backend, intra_op_threads=1
+        _thread_count, [0, 1], workers=workers, pool=pool, intra_op_threads=1
     )
 
     assert inside == [1, 1]
@@ -177,7 +176,7 @@ def test_the_intra_op_thread_count_is_applied_inside_and_restored_after(
 @pytest.mark.infra
 def test_a_spawned_process_runs_at_the_thread_count_it_was_given() -> None:
     inside = map_tasks(
-        _thread_count, [0, 1], workers=2, backend="processes", intra_op_threads=1
+        _thread_count, [0, 1], workers=2, pool="processes", intra_op_threads=1
     )
 
     assert inside == [1, 1]
@@ -190,9 +189,9 @@ def _square_and_draw(item: int, rng: np.random.Generator) -> tuple[float, float]
 
 @pytest.mark.oracle
 @pytest.mark.backend
-@pytest.mark.parametrize("backend", ["threads", "processes"])
+@pytest.mark.parametrize("pool", ["threads", "processes"])
 def test_each_backend_maps_the_seeded_tasks_onto_the_serial_map_bitwise(
-    backend: Pool,
+    pool: Pool,
 ) -> None:
     """The three backends are one map, refereed from outside it (issue #729).
 
@@ -205,7 +204,7 @@ def test_each_backend_maps_the_seeded_tasks_onto_the_serial_map_bitwise(
         _square_and_draw,
         items,
         workers=1,
-        backend="serial",
+        pool="serial",
         intra_op_threads=1,
         generator=np.random.default_rng(11),
     )
@@ -213,7 +212,7 @@ def test_each_backend_maps_the_seeded_tasks_onto_the_serial_map_bitwise(
         _square_and_draw,
         items,
         workers=4,
-        backend=backend,
+        pool=pool,
         intra_op_threads=1,
         generator=np.random.default_rng(11),
     )
@@ -228,12 +227,14 @@ def test_each_backend_maps_the_seeded_tasks_onto_the_serial_map_bitwise(
 
 
 @pytest.mark.smoke
-def test_the_pool_alias_still_resolves_under_its_old_name() -> None:
-    # #860 renamed this `Pool`, the word `Backend` naming which
-    # implementation runs a kernel. The old name is kept, so an annotation
-    # written before the rename still means the same three values.
-    assert parallel.Backend is parallel.Pool
-    assert set(BACKENDS) == {"serial", "threads", "processes"}
+def test_a_pool_is_named_pool_and_never_backend() -> None:
+    # #860 renamed the type `Pool`, the word `Backend` naming which
+    # implementation runs a kernel; #1059 renamed the keyword `pool=` and
+    # dropped the old alias, so `backend` means `sal.backend.Backend` alone.
+    assert not hasattr(parallel, "Backend")
+    assert set(POOLS) == {"serial", "threads", "processes"}
+    assert "pool" in inspect.signature(parallel.map_tasks).parameters
+    assert "backend" not in inspect.signature(parallel.map_tasks).parameters
 
 
 _BODIES = """
@@ -256,14 +257,14 @@ import sys
 import _bodies
 from sal.parallel import map_tasks
 
-backend = sys.argv[1]
-workers = 1 if backend == "serial" else 2
+pool = sys.argv[1]
+workers = 1 if pool == "serial" else 2
 numpy_only = map_tasks(
-    _bodies.torch_loaded, [0, 1], workers=workers, backend=backend, intra_op_threads=1
+    _bodies.torch_loaded, [0, 1], workers=workers, pool=pool, intra_op_threads=1
 )
 print(numpy_only, "torch" in sys.modules)
 pinned = map_tasks(
-    _bodies.torch_threads, [0, 1], workers=workers, backend=backend, intra_op_threads=1
+    _bodies.torch_threads, [0, 1], workers=workers, pool=pool, intra_op_threads=1
 )
 import torch
 
@@ -272,9 +273,9 @@ print(pinned, torch.get_num_threads())
 
 
 @pytest.mark.infra
-@pytest.mark.parametrize("backend", list(BACKENDS))
+@pytest.mark.parametrize("pool", list(POOLS))
 def test_torch_is_imported_only_by_a_body_that_imports_it(
-    backend: Pool, tmp_path: Path
+    pool: Pool, tmp_path: Path
 ) -> None:
     """A NumPy body loads no ``torch``; a ``torch`` body runs at the count (issue #1011).
 
@@ -291,7 +292,7 @@ def test_torch_is_imported_only_by_a_body_that_imports_it(
     }
 
     result = subprocess.run(
-        [sys.executable, "-c", _PROBE, backend],
+        [sys.executable, "-c", _PROBE, pool],
         capture_output=True,
         text=True,
         check=True,
@@ -299,3 +300,23 @@ def test_torch_is_imported_only_by_a_body_that_imports_it(
     )
 
     assert result.stdout.splitlines() == ["[False, False] False", "[1, 1] 3"]
+
+
+@pytest.mark.analytic
+def test_the_defaults_are_the_serial_loop() -> None:
+    # Issue #1085: `map_tasks(f, items, generator=rng)` needs no pool spelled
+    # out, and is the spelled-out serial call bitwise.
+    def draw(item: int, rng: np.random.Generator) -> float:
+        return item + float(rng.random())
+
+    defaulted = map_tasks(draw, range(5), generator=np.random.default_rng(3))
+    spelled = map_tasks(
+        draw,
+        range(5),
+        workers=1,
+        pool="serial",
+        intra_op_threads=None,
+        generator=np.random.default_rng(3),
+    )
+
+    assert defaulted == spelled

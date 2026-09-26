@@ -28,7 +28,7 @@ from sal.likelihood.features import (
 )
 from sal.likelihood.parsimony import fitch_score
 from sal.likelihood.potts import enumerate_potts, log_weights
-from sal.likelihood.pruning_torch import branch_order, log_likelihood
+from sal.likelihood.pruning.torch import branch_order, log_likelihood
 from sal.likelihood.surrogate import (
     ParsimonyUpperBound,
     PlugInLikelihood,
@@ -60,7 +60,7 @@ FIELD = np.array([0.3, -0.2, 0.1])
 def _alignment(n_sites: int = N_SITES) -> tuple[dict[str, np.ndarray], int, np.ndarray]:
     params = load_fixture(FIVE_TAXA)
     dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=n_sites)
-    return dict(dataset.alignment), params.k, np.asarray(params.pi)
+    return dict(dataset.alignment), params.n_states, np.asarray(params.pi)
 
 
 @pytest.fixture(scope="module")
@@ -345,8 +345,8 @@ def test_ground_state_bracket_contains_the_enumerated_minimum() -> None:
     expansion = alpha_expansion(
         graph,
         np.tile(field, (graph.n_nodes, 1)),
-        3,
         start=np.zeros(graph.n_nodes, dtype=np.int64),
+        n_states=3,
     )
     assert expansion.energy == pytest.approx(minimum, abs=1e-9)
 

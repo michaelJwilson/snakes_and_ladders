@@ -49,7 +49,7 @@ _LIKELIHOOD_TOLERANCE = 1e-5
 def _alignment(path: Path = FIXTURE) -> tuple[dict[str, np.ndarray], int, Topology]:
     params = load_params(path, SimulationParams)
     dataset = simulate_tree(params, np.random.default_rng(params.seed))
-    return dict(dataset.alignment), params.k, params.tau
+    return dict(dataset.alignment), params.n_states, params.tau
 
 
 def _exhaustive_maximum(
@@ -309,7 +309,7 @@ def _search(
     return infer(
         alignment,
         k,
-        topology=start,
+        start=start,
         rng=rng,
         moves=MoveSet.SPR,
         max_evaluations=500,

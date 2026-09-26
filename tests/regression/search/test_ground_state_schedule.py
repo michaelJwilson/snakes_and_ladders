@@ -25,17 +25,19 @@ from sal.sample.schedule import (
 )
 from sal.search.ground_state import (
     ANNEAL_END,
+    ANNEAL_OPTIONS,
     ANNEAL_SCHEDULE,
     ANNEAL_START,
     METHODS,
     Rung,
+    chain,
     descend,
+    part,
     run_annealed,
     run_icm,
-    warm_anneal,
 )
 from sal.search.potts_starts import (
-    PottsObjective,
+    LabellingEnergy,
     ScheduleStart,
     SolverStart,
     spatio_rung,
@@ -105,7 +107,7 @@ def test_a_start_given_is_the_start_drawn_bitwise(move: PottsMove) -> None:
     # The draw `anneal_potts` makes, made here and handed in.
     initial = rng.integers(0, rung.n_states, size=rung.n_nodes)
     given = anneal_potts(
-        rung.graph, rung.field, schedule, rng, move=move, initial=initial
+        rung.graph, rung.field, schedule, rng, move=move, start=initial
     )
 
     assert np.array_equal(drawn.labelling, given.labelling)
@@ -121,13 +123,13 @@ def test_a_start_of_the_wrong_shape_or_range_is_refused() -> None:
         np.zeros(rung.n_nodes - 1, dtype=np.int64),
         np.full(rung.n_nodes, rung.n_states, dtype=np.int64),
     ):
-        with pytest.raises(ValueError, match="one state"):
+        with pytest.raises(ValueError, match="one integer state"):
             anneal_potts(
                 rung.graph,
                 rung.field,
                 schedule,
                 np.random.default_rng(0),
-                initial=initial,
+                start=initial,
             )
 
 
@@ -157,7 +159,10 @@ def test_a_warm_chain_is_charged_its_descent_and_its_anneal(move: PottsMove) -> 
     _, sweeps = descend(
         rung, np.random.default_rng([0, 0]), budget.size // rung.visits_per_sweep
     )
-    warm = warm_anneal(rung, budget, np.random.default_rng([0, 0]), move, schedule)
+    warm = chain(
+        "descent",
+        part(run_annealed, takes=ANNEAL_OPTIONS, move=move, schedule=schedule),
+    )(rung, budget, np.random.default_rng([0, 0]))
 
     descent = sweeps * rung.visits_per_sweep
     remaining = Budget(budget.unit, budget.size - descent)
@@ -168,6 +173,7 @@ def test_a_warm_chain_is_charged_its_descent_and_its_anneal(move: PottsMove) -> 
     )
     assert warm.spent == descent + anneal.spent
     assert warm.energy == anneal.energy
+    assert np.array_equal(warm.labelling, anneal.labelling)
     assert warm.spent <= budget.size
 
 
@@ -193,7 +199,7 @@ def test_a_schedule_start_on_the_default_is_the_solver_start_bitwise(
     name: str,
 ) -> None:
     rung = _rung()
-    objective = PottsObjective(rung)
+    objective = LabellingEnergy(rung)
     budget = _budget(rung)
 
     solver = SolverStart(name, budget, np.random.default_rng([3, 0]))

@@ -44,7 +44,8 @@ Rosenthal (1998) for the 0.574 acceptance the step is adapted toward.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
 
 import torch
 
@@ -63,6 +64,7 @@ from sal.sample.chain import (
     start_point,
 )
 from sal.sample.declared import declared_energy
+from sal.sample.expectation import Expectation
 
 #: The acceptance a MALA step is adapted toward: the optimal scaling of the
 #: Langevin diffusion in the limit of many dimensions (Roberts & Rosenthal,
@@ -93,7 +95,7 @@ class LangevinChain:
 
     Parameters
     ----------
-    theta : torch.Tensor
+    draws : torch.Tensor
         Draws in unconstrained coordinates, shape ``(n_samples, dimension)``.
     acceptance_rate : float
         Fraction of proposals accepted. **1.0 by construction when
@@ -113,14 +115,18 @@ class LangevinChain:
     corrected : bool
         Whether the Metropolis correction was applied. False is ULA, whose
         draws are from a distribution that is not the target.
+    expectations : Mapping[str, Expectation]
+        Each operator's expectation over the recorded draws, keyed as the
+        ``operators`` given to :func:`mala`; empty when none were.
     """
 
-    theta: torch.Tensor
+    draws: torch.Tensor
     acceptance_rate: float
     energy_error: torch.Tensor
     force_evaluations: int
     adapted: Adapted | None
     corrected: bool
+    expectations: Mapping[str, Expectation] = field(default_factory=dict)
 
 
 def mala(
@@ -135,6 +141,7 @@ def mala(
     adaptation: Adaptation | None = None,
     corrected: bool = True,
     store_chain: bool = True,
+    operators: Mapping[str, Callable[[torch.Tensor], torch.Tensor]] | None = None,
     backend: Backend = Backend.RUST,
 ) -> LangevinChain:
     """Draw ``n_samples`` from ``exp(-objective / temperature)`` by Langevin steps.
@@ -175,10 +182,13 @@ def mala(
         is biased, by an amount ``energy_error`` reports and no diagnostic
         inside the chain corrects.
     store_chain : bool
-        Whether the draws are kept. False keeps none --- ``theta`` has zero
-        rows --- and the chain reports its acceptance and energy errors
-        alone, as :func:`~sal.sample.hmc.sample`'s does (issues
-        #988, #997).
+        Whether the draws are kept. False keeps none --- ``draws`` has zero
+        rows --- and the chain reports its acceptance, energy errors and
+        ``operators``' expectations alone, as :func:`~sal.sample.hmc.sample`'s
+        does (issues #988, #997).
+    operators : Mapping[str, Callable[[torch.Tensor], torch.Tensor]] | None
+        As :func:`~sal.sample.hmc.sample`: functions of a draw, each
+        Kalman-filtered over the recorded draws (issue #1059).
     backend : Backend
         :data:`~sal.backend.Backend.RUST`, the default since
         issue #997, runs the whole chain in ``oxisal.HmcWalk`` at one
@@ -222,15 +232,16 @@ def mala(
             burn_in=burn_in,
             adaptation=adaptation,
             store_chain=store_chain,
-            operators=None,
+            operators=operators,
         )
         return LangevinChain(
-            theta=chain.draws,
+            draws=chain.draws,
             acceptance_rate=chain.acceptance_rate,
             energy_error=chain.energy_error,
             force_evaluations=chain.force_evaluations,
             adapted=chain.adapted,
             corrected=True,
+            expectations=chain.expectations,
         )
 
     chain = run_chain(
@@ -245,14 +256,16 @@ def mala(
         temperature=temperature,
         adaptation=adaptation,
         store_chain=store_chain,
+        operators=operators,
     )
     return LangevinChain(
-        theta=chain.draws,
+        draws=chain.draws,
         acceptance_rate=chain.acceptance_rate,
         energy_error=chain.energy_error,
         force_evaluations=chain.force_evaluations,
         adapted=chain.adapted,
         corrected=corrected,
+        expectations=chain.expectations,
     )
 
 

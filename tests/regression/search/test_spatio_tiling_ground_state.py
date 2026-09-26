@@ -23,12 +23,14 @@ from sal.opt.budget import Budget
 from sal.search.alpha_expansion import alpha_beta_swap, alpha_expansion
 from sal.search.ground_state import (
     ANNEAL_SCHEDULE,
+    EXPANSION_RESERVE_CYCLES,
+    ExpansionReserve,
     MethodRun,
+    chain,
     expansion_bracket,
+    part,
     run_alpha_beta_swap,
     run_alpha_expansion,
-    run_expansion_then_swendsen_wang,
-    run_swendsen_wang_then_expansion,
 )
 from sal.search.potts_starts import (
     TilingRung,
@@ -160,12 +162,17 @@ def test_the_annealed_handovers_end_no_lower_than_the_optimum_and_no_higher_than
     held = _held(rung)
     expansion = _graph_cuts(rung)["alpha-expansion"]
     for seed in range(3):
-        then_cut = run_swendsen_wang_then_expansion(
-            rung, _budget(rung), np.random.default_rng(seed), schedule=ANNEAL_SCHEDULE
-        )
-        then_anneal = run_expansion_then_swendsen_wang(
-            rung, _budget(rung), np.random.default_rng(seed), schedule=ANNEAL_SCHEDULE
-        )
+        then_cut = chain(
+            part(
+                "swendsen-wang",
+                schedule=ANNEAL_SCHEDULE,
+                reserve=ExpansionReserve(EXPANSION_RESERVE_CYCLES),
+            ),
+            "alpha-expansion",
+        )(rung, _budget(rung), np.random.default_rng(seed))
+        then_anneal = chain(
+            "alpha-expansion", part("swendsen-wang", schedule=ANNEAL_SCHEDULE)
+        )(rung, _budget(rung), np.random.default_rng(seed))
 
         assert then_cut.termination is not None
         assert then_cut.termination.converged
@@ -182,7 +189,7 @@ def test_the_graph_cuts_recover_every_bounded_tile_at_five_thousand_sites() -> N
     rung = _release()
     held = _held(rung)
     runs = [
-        move(rung.graph, rung.field, rung.n_states, max_cycles=50, backend=Backend.RUST)
+        move(rung.graph, rung.field, max_cycles=50, backend=Backend.RUST)
         for move in (alpha_expansion, alpha_beta_swap)
     ]
 

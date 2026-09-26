@@ -80,7 +80,7 @@ class Instance:
     """One simulated dataset with the tree that generated it."""
 
     alignment: Mapping[str, np.ndarray]
-    k: int
+    n_states: int
     pi: np.ndarray
     truth: Node
 
@@ -96,7 +96,12 @@ def _instances(name: str | None, seeds: range, n_taxa: int = 20) -> list[Instanc
             k, pi, n_sites = 4, np.full(4, 0.25), TWENTY_TAXA_SITES
         else:
             params = load_fixture(name)
-            truth, k, pi, n_sites = params.tau, params.k, params.pi, params.n_sites
+            truth, k, pi, n_sites = (
+                params.tau,
+                params.n_states,
+                params.pi,
+                params.n_sites,
+            )
         dataset = simulate_alignment(
             truth, k, pi, np.random.default_rng([364, seed]), n_sites
         )
@@ -136,7 +141,7 @@ class FitFrom:
         self, instance: Instance, budget: Budget, rng: np.random.Generator
     ) -> Outcome:
         objective = BranchLengthObjective(
-            instance.truth, instance.k, instance.pi, instance.alignment
+            instance.truth, instance.n_states, instance.pi, instance.alignment
         )
         counted = Counted(objective)
         theta0 = _initializer(self.start, rng).starts(objective)[0]
@@ -157,13 +162,13 @@ class SearchFrom:
     ) -> Outcome:
         topology: Topology | None = None
         if self.start is Start.DISTANCES:
-            topology = FromDistances().tree(instance.alignment, instance.k)
+            topology = FromDistances().tree(instance.alignment, instance.n_states)
         elif self.start is Start.HADAMARD:
-            topology = FromHadamard().tree(instance.alignment, instance.k)
+            topology = FromHadamard().tree(instance.alignment, instance.n_states)
         inference = infer(
             instance.alignment,
-            instance.k,
-            topology=topology,
+            instance.n_states,
+            start=topology,
             moves=MoveSet.NNI,
             max_evaluations=budget.size,
             rng=rng,
@@ -174,7 +179,7 @@ class SearchFrom:
 def _enumerated_optimum(instance: Instance) -> float:
     """The negative log-likelihood of the best of every topology, fitted."""
     return -max(
-        score_topology(topology, instance.alignment, instance.k)
+        score_topology(topology, instance.alignment, instance.n_states)
         for topology in enumerate_topologies(sorted(instance.alignment))
     )
 
@@ -235,7 +240,7 @@ def test_the_start_is_one_point_in_the_objective_s_coordinates(
     params = load_fixture(FIVE_TAXA)
     dataset = simulate_tree(params, np.random.default_rng(params.seed))
     objective = BranchLengthObjective(
-        params.tau, params.k, params.pi, dataset.alignment
+        params.tau, params.n_states, params.pi, dataset.alignment
     )
     assert isinstance(initializer, Initializer)
 
@@ -257,11 +262,13 @@ def test_the_general_model_start_carries_the_log_det_lengths_and_jukes_cantor_ra
     """On a `SubstitutionModelObjective` only the branch block moves off `initial()`."""
     params = load_fixture(FIVE_TAXA)
     dataset = simulate_tree(params, np.random.default_rng(params.seed))
-    objective = SubstitutionModelObjective(params.tau, params.k, dataset.alignment)
+    objective = SubstitutionModelObjective(
+        params.tau, params.n_states, dataset.alignment
+    )
 
     start = FromDistances(kind=DistanceKind.LOG_DET).starts(objective)[0]
 
-    n_branches = len(objective.parameter_names) - (6 - 1) - (params.k - 1)
+    n_branches = len(objective.parameter_names) - (6 - 1) - (params.n_states - 1)
     assert torch.equal(start[n_branches:], objective.initial()[n_branches:])
     named = objective.constrain(start)
     assert float(named["branch_lengths"].min()) >= 1e-4
@@ -274,13 +281,13 @@ def test_a_rooted_binary_topology_places_the_root_pair_as_its_sum() -> None:
     params = load_fixture(EIGHT_TAXA)
     dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites=2000)
     objective = BranchLengthObjective(
-        params.tau, params.k, params.pi, dataset.alignment
+        params.tau, params.n_states, params.pi, dataset.alignment
     )
     initializer = FromDistances()
 
     start = initializer.starts(objective)[0]
 
-    estimate = split_lengths(initializer.tree(dataset.alignment, params.k))
+    estimate = split_lengths(initializer.tree(dataset.alignment, params.n_states))
     placed = split_lengths(objective.fitted_tree(start))
     assert placed.keys() == estimate.keys()
     for split, length in estimate.items():

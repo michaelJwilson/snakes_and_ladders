@@ -17,9 +17,11 @@ from collections.abc import Callable
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from sal.likelihood import pruning, pruning_rust, pruning_torch
+from sal.likelihood import pruning
 from sal.likelihood.patterns import compress
-from sal.likelihood.pruning_torch import branch_lengths_from_tree
+from sal.likelihood.pruning import rust as pruning_rust
+from sal.likelihood.pruning import torch as pruning_torch
+from sal.likelihood.pruning.torch import branch_lengths_from_tree
 from sal.sim.simulator import simulate_tree
 
 from tests._fixtures import load_fixture
@@ -48,15 +50,15 @@ def test_pruning_over_patterns_benchmark(
 
     calls: dict[str, Callable[[], float]] = {
         "numpy": lambda: pruning.log_likelihood(
-            params.tau, params.k, pi, columns, weights=weights
+            params.tau, params.n_states, pi, columns, weights=weights
         ),
         "torch": lambda: float(
             pruning_torch.log_likelihood(
-                params.tau, params.k, pi, columns, lengths, weights=weights
+                params.tau, params.n_states, pi, columns, lengths, weights=weights
             )
         ),
         "rust": lambda: pruning_rust.log_likelihood(
-            params.tau, params.k, pi, columns, weights=weights
+            params.tau, params.n_states, pi, columns, weights=weights
         ),
     }
 

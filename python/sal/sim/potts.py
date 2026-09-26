@@ -36,6 +36,21 @@ from sal.sim.graph import (
 )
 
 
+def states_of(field: np.ndarray, n_nodes: int, n_states: int | None = None) -> int:
+    """The state count a field carries on its last axis, checked against ``n_states`` if given (issue #1091).
+
+    One reading of the state count for every solver: the field's, so it is
+    never a separate argument that can disagree with it.
+
+    Raises
+    ------
+    ValueError
+        If the field is not ``(n_states,)`` or ``(n_nodes, n_states)``, or
+        ``n_states`` is given and differs from it.
+    """
+    return int(site_field(np.asarray(field), n_nodes, n_states=n_states).shape[1])
+
+
 def site_field(
     field: np.ndarray, n_nodes: int, *, n_states: int | None = None
 ) -> np.ndarray:
@@ -140,6 +155,51 @@ class SiteField:
     def widened(cls, field: np.ndarray, n_nodes: int) -> SiteField:
         """A log-weight shared by every site, ``(n_states,)``, as one row per site."""
         return cls(site_field(np.asarray(field, dtype=np.float64), n_nodes))
+
+
+def check_labelling(
+    labelling: np.ndarray, n_nodes: int, n_states: int, *, name: str = "start"
+) -> np.ndarray:
+    """``labelling`` as an ``int64`` copy, checked to be one integer state in range per node.
+
+    The one check every Potts sampler and solver runs on a labelling it is
+    handed, so they refuse the same starts with the same sentence (issue
+    #1059): ``search.ground_state`` and ``sample.potts_mcmc.chains`` each
+    wrote it, the second without the dtype test, and expansion, swap and ICM
+    wrote none.
+
+    Parameters
+    ----------
+    labelling : np.ndarray
+        The labelling to check, shape ``(n_nodes,)``.
+    n_nodes, n_states : int
+        The instance's sites and states.
+    name : str
+        What the caller calls it, as the message names it.
+
+    Returns
+    -------
+    np.ndarray
+        An ``int64`` copy the caller may write to.
+
+    Raises
+    ------
+    ValueError
+        If it is not of an integer dtype, not shape ``(n_nodes,)``, or holds
+        a state outside ``[0, n_states)``.
+    """
+    array = np.asarray(labelling)
+    if (
+        array.shape != (n_nodes,)
+        or not np.issubdtype(array.dtype, np.integer)
+        or not ((array >= 0).all() and (array < n_states).all())
+    ):
+        msg = (
+            f"{name} must hold one integer state in [0, {n_states}) per node of "
+            f"{n_nodes}; got shape {array.shape}, dtype {array.dtype}"
+        )
+        raise ValueError(msg)
+    return np.array(array, dtype=np.int64)
 
 
 def log_weight_of(field: SiteField | np.ndarray) -> np.ndarray:
@@ -1026,14 +1086,16 @@ _SPATIO_TILING_REQUIRED_FIELDS = frozenset(
 )
 
 #: The keys a tiling fixture's ``tiles`` declares: the seed its centres are
-#: drawn from and ``k``, the tile count.
-_TILES_KEYS = frozenset({"seed", "k"})
+#: drawn from and ``n_tiles``, the tile count.
+_TILES_KEYS = frozenset({"seed", "n_tiles"})
 
 
-def tile_partition(graph: PottsGraph, k: int, rng: np.random.Generator) -> np.ndarray:
-    """Every node assigned to the nearest of ``k`` centres drawn from ``rng``: a seeded Voronoi tiling.
+def tile_partition(
+    graph: PottsGraph, n_tiles: int, rng: np.random.Generator
+) -> np.ndarray:
+    """Every node assigned to the nearest of ``n_tiles`` centres drawn from ``rng``: a seeded Voronoi tiling.
 
-    The centres are ``k`` distinct nodes drawn uniformly without replacement,
+    The centres are ``n_tiles`` distinct nodes drawn uniformly without replacement,
     in draw order; a node joins the centre nearest it in graph distance
     (hops), and a tie goes to the centre drawn first. Tile ``t`` holds centre
     ``t``.
@@ -1051,8 +1113,8 @@ def tile_partition(graph: PottsGraph, k: int, rng: np.random.Generator) -> np.nd
     ----------
     graph : PottsGraph
         Connected.
-    k : int
-        The tile count, ``1 <= k <= graph.n_nodes``.
+    n_tiles : int
+        The tile count, ``1 <= n_tiles <= graph.n_nodes``.
     rng : np.random.Generator
         Draws the centres, and nothing else.
 
@@ -1064,7 +1126,7 @@ def tile_partition(graph: PottsGraph, k: int, rng: np.random.Generator) -> np.nd
     Raises
     ------
     ValueError
-        If ``k`` is out of range, or a node is reached from no centre, which a
+        If ``n_tiles`` is out of range, or a node is reached from no centre, which a
         disconnected graph allows.
 
     Examples
@@ -1078,14 +1140,14 @@ def tile_partition(graph: PottsGraph, k: int, rng: np.random.Generator) -> np.nd
     >>> tile_partition(chain, 2, np.random.default_rng(3))
     array([0, 0, 0, 1, 1, 1])
     """
-    if not 1 <= k <= graph.n_nodes:
-        msg = f"k must be in [1, {graph.n_nodes}], got {k}"
+    if not 1 <= n_tiles <= graph.n_nodes:
+        msg = f"n_tiles must be in [1, {graph.n_nodes}], got {n_tiles}"
         raise ValueError(msg)
-    centres = rng.choice(graph.n_nodes, size=k, replace=False)
+    centres = rng.choice(graph.n_nodes, size=n_tiles, replace=False)
     offsets, neighbours, _ = graph.compressed_adjacency()
     # Hop counts from each centre, one row per centre in draw order, by a
     # breadth-first search whose frontier expands one layer per step.
-    distances = np.full((k, graph.n_nodes), np.inf)
+    distances = np.full((n_tiles, graph.n_nodes), np.inf)
     for row, centre in enumerate(centres):
         reached = distances[row]
         reached[centre] = 0.0
@@ -1255,17 +1317,17 @@ class SpatioTilingParams:
         if not isinstance(raw, Mapping) or set(raw) != _TILES_KEYS:
             msg = f"{path}: tiles declares exactly {sorted(_TILES_KEYS)}"
             raise ValueError(msg)
-        k = int(raw["k"])
+        n_tiles = int(raw["n_tiles"])
         states = np.asarray(declared["states"], dtype=np.int64)
         strengths = np.asarray(declared["strengths"], dtype=np.float64)
-        if states.shape != (k,) or strengths.shape != (k,):
+        if states.shape != (n_tiles,) or strengths.shape != (n_tiles,):
             msg = (
                 f"{path}: states {states.shape} and strengths {strengths.shape} "
-                f"must each be one per tile, ({k},)"
+                f"must each be one per tile, ({n_tiles},)"
             )
             raise ValueError(msg)
         seed = int(raw["seed"])
-        tiles = tile_partition(graph, k, np.random.default_rng(seed))
+        tiles = tile_partition(graph, n_tiles, np.random.default_rng(seed))
         try:
             field = tiling_field(tiles, states, strengths, n_states)
         except ValueError as error:

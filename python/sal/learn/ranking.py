@@ -36,7 +36,7 @@ from sal.likelihood.features import (
     tree_tokens,
 )
 from sal.likelihood.potts import enumerate_potts, strip_log_partition
-from sal.likelihood.pruning_torch import branch_order, log_likelihood
+from sal.likelihood.pruning.torch import branch_order, log_likelihood
 from sal.likelihood.surrogate import decoupled_ground_energy
 from sal.search.alpha_expansion import alpha_expansion
 from sal.search.infer import score_topology
@@ -53,33 +53,33 @@ LatticeTarget = Callable[[PottsGraph, np.ndarray], float]
 _FEATURE = {name: index for index, name in enumerate(LATTICE_FEATURE_NAMES)}
 
 
-def maximized_target(k: int, model: Model = Model.JC) -> TreeTarget:
+def maximized_target(n_states: int, model: Model = Model.JC) -> TreeTarget:
     """The maximized log-likelihood of a topology: a fit per call."""
 
     def target(topology: Topology, alignment: Mapping[str, np.ndarray]) -> float:
-        return score_topology(topology, alignment, k, model)
+        return score_topology(topology, alignment, n_states, model)
 
     return target
 
 
-def fixed_length_target(k: int, pi: np.ndarray, length: float) -> TreeTarget:
+def fixed_length_target(n_states: int, pi: np.ndarray, length: float) -> TreeTarget:
     """The log-likelihood of a topology with every branch at ``length``: one pruning pass per call."""
 
     def target(topology: Topology, alignment: Mapping[str, np.ndarray]) -> float:
         lengths = torch.full(
             (len(branch_order(topology)),), length, dtype=torch.float64
         )
-        return float(log_likelihood(topology, k, pi, alignment, lengths))
+        return float(log_likelihood(topology, n_states, pi, alignment, lengths))
 
     return target
 
 
 def tree_node_tokens(
-    topology: Topology, alignment: Mapping[str, np.ndarray], k: int
+    topology: Topology, alignment: Mapping[str, np.ndarray], n_states: int
 ) -> tuple[torch.Tensor, np.ndarray]:
     """Per-node tokens and the tree's edges, for the graph model: a node carries its branch's token, the root zeros."""
     names, adjacency = tree_adjacency(topology)
-    tokens = torch.from_numpy(tree_tokens(topology, alignment, k))
+    tokens = torch.from_numpy(tree_tokens(topology, alignment, n_states))
     by_branch = dict(zip(branch_order(topology), tokens, strict=True))
     width = next(iter(by_branch.values())).shape[0]
     rows = torch.stack(
@@ -91,7 +91,7 @@ def tree_node_tokens(
 def tree_examples(
     alignments: Sequence[Mapping[str, np.ndarray]],
     topologies: Sequence[Sequence[Topology]],
-    k: int,
+    n_states: int,
     pi: np.ndarray,
     target: TreeTarget,
 ) -> Examples:
@@ -106,10 +106,12 @@ def tree_examples(
         zip(alignments, topologies, strict=True)
     ):
         for topology in candidates:
-            features.append(torch.from_numpy(tree_features(topology, alignment, k, pi)))
+            features.append(
+                torch.from_numpy(tree_features(topology, alignment, n_states, pi))
+            )
             targets.append(target(topology, alignment))
             groups.append(group)
-            rows, edges = tree_node_tokens(topology, alignment, k)
+            rows, edges = tree_node_tokens(topology, alignment, n_states)
             tokens.append(rows)
             adjacency.append(edges)
     return Examples(
@@ -229,7 +231,7 @@ def ground_state_target(
     """
 
     def target(graph: PottsGraph, field: np.ndarray) -> float:
-        return alpha_expansion(graph, field, n_states, backend=backend).energy
+        return alpha_expansion(graph, field, backend=backend, n_states=n_states).energy
 
     return target
 
@@ -277,10 +279,10 @@ class LearnedTreeSurrogate(Surrogate):
     """A fit, or a calibrated bound made from one, as the ``Surrogate`` a search ranks by."""
 
     def __init__(
-        self, fitted: Fitted | CalibratedBound, k: int, pi: np.ndarray
+        self, fitted: Fitted | CalibratedBound, n_states: int, pi: np.ndarray
     ) -> None:
         self.fitted = fitted
-        self.k = k
+        self.n_states = n_states
         self.pi = np.asarray(pi, dtype=float)
 
     @property
@@ -291,10 +293,10 @@ class LearnedTreeSurrogate(Surrogate):
         if not isinstance(structure, Node) or not isinstance(data, Mapping):
             msg = "a tree surrogate takes a topology and an alignment"
             raise TypeError(msg)
-        rows, edges = tree_node_tokens(structure, data, self.k)
-        features = torch.from_numpy(tree_features(structure, data, self.k, self.pi))[
-            None, :
-        ]
+        rows, edges = tree_node_tokens(structure, data, self.n_states)
+        features = torch.from_numpy(
+            tree_features(structure, data, self.n_states, self.pi)
+        )[None, :]
         examples = Examples(
             features,
             torch.zeros(1, dtype=torch.float64),

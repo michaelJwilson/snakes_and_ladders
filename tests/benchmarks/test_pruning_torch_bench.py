@@ -20,7 +20,8 @@ import pytest
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
 from sal.fixtures import load_params
-from sal.likelihood import pruning, pruning_torch
+from sal.likelihood import pruning
+from sal.likelihood.pruning import torch as pruning_torch
 from sal.sim.params import SimulationParams
 from sal.sim.simulate import simulate_alignment
 from sal.sim.simulator import simulate_tree
@@ -47,7 +48,7 @@ def test_torch_log_likelihood_benchmark(
     result = benchmark(
         pruning_torch.log_likelihood,
         params.tau,
-        params.k,
+        params.n_states,
         params.pi,
         dataset.alignment,
         branch_lengths,
@@ -66,12 +67,12 @@ def test_numpy_vs_torch_forward_pass(benchmark: BenchmarkFixture) -> None:
     branch_lengths = pruning_torch.branch_lengths_from_tree(params.tau)
 
     numpy_result = pruning.log_likelihood(
-        params.tau, params.k, params.pi, dataset.alignment
+        params.tau, params.n_states, params.pi, dataset.alignment
     )
     torch_result = benchmark(
         pruning_torch.log_likelihood,
         params.tau,
-        params.k,
+        params.n_states,
         params.pi,
         dataset.alignment,
         branch_lengths,
@@ -88,20 +89,20 @@ def test_fit_general_rate_matrix_benchmark(benchmark: BenchmarkFixture) -> None:
         True
     )
     raw_rates = torch.zeros(
-        (params.k, params.k), dtype=torch.float64, requires_grad=True
+        (params.n_states, params.n_states), dtype=torch.float64, requires_grad=True
     )
     optimizer = torch.optim.Adam([branch_lengths, raw_rates], lr=1e-2)
 
     def _fit_step() -> float:
         off_diagonal = torch.nn.functional.softplus(raw_rates) * (
-            1.0 - torch.eye(params.k, dtype=torch.float64)
+            1.0 - torch.eye(params.n_states, dtype=torch.float64)
         )
         rate_matrix = off_diagonal - torch.diag(off_diagonal.sum(dim=1))
 
         optimizer.zero_grad()
         negative_log_likelihood = -pruning_torch.log_likelihood(
             params.tau,
-            params.k,
+            params.n_states,
             params.pi,
             dataset.alignment,
             branch_lengths,
@@ -137,7 +138,7 @@ def test_gradient_at_many_leaves_benchmark(
     tau = balanced_tree(n_taxa, 0.5)
     dataset = simulate_alignment(
         tau=tau,
-        k=4,
+        n_states=4,
         pi=np.full(4, 0.25),
         rng=np.random.default_rng(754),
         n_sites=n_sites,

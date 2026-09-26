@@ -24,13 +24,13 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 import torch
 
 from sal.emissions import EmissionFamily
-from sal.opt.em import em_loop
+from sal.opt.em import EMISSION_MIXTURE_EM, EmConfig, em_loop
 from sal.opt.emission_mixture import EmissionMixtureFit
 from sal.opt.mixture import mixture_log_likelihood, responsibilities
 from sal.opt.termination import Termination
@@ -80,12 +80,11 @@ def annealed_expectation_maximization(
     components: EmissionFamily,
     temperatures: Sequence[float],
     *,
-    max_iterations: int = 200,
-    tolerance: float = 1e-10,
+    config: EmConfig = EMISSION_MIXTURE_EM,
 ) -> AnnealedFit:
-    """One E and one M step at each temperature, then plain EM at one to ``tolerance``.
+    """One E and one M step at each temperature, then plain EM at one to ``config.tolerance``.
 
-    The tempered steps count against ``max_iterations`` and are not tested
+    The tempered steps count against ``config.max_iterations`` and are not tested
     for convergence. Each is recorded into the enclosing ``track`` run at its
     index: its temperature, the log-likelihood and :func:`free_energy` at the
     state it was handed.
@@ -98,17 +97,17 @@ def annealed_expectation_maximization(
     ------
     ValueError
         If a temperature is not positive and finite, there are more of them
-        than ``max_iterations``, or a component's M step did not converge.
+        than ``config.max_iterations``, or a component's M step did not converge.
     """
     schedule = [float(t) for t in temperatures]
     for value in schedule:
         if not (math.isfinite(value) and value > 0.0):
             msg = f"a temperature is positive and finite, got {value}"
             raise ValueError(msg)
-    if len(schedule) > max_iterations:
+    if len(schedule) > config.max_iterations:
         msg = (
             f"{len(schedule)} tempered steps do not fit in "
-            f"max_iterations={max_iterations}"
+            f"max_iterations={config.max_iterations}"
         )
         raise ValueError(msg)
     values = torch.as_tensor(observations, dtype=torch.float64)
@@ -168,8 +167,7 @@ def annealed_expectation_maximization(
     (weights, components, posterior), log_likelihood, termination = em_loop(
         step,
         start,
-        tolerance=tolerance,
-        max_iterations=max_iterations - len(schedule),
+        config=replace(config, max_iterations=config.max_iterations - len(schedule)),
         previous=previous,
     )
     if schedule:

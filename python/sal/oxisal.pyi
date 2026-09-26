@@ -220,6 +220,14 @@ def class_posteriors(
     posterior: np.ndarray,
     pairwise: np.ndarray,
     log_evidence: np.ndarray,
+    exposure: np.ndarray | None = None,
+    dispersion: np.ndarray | None = None,
+    mean: np.ndarray | None = None,
+    trials: np.ndarray | None = None,
+    failure_table: np.ndarray | None = None,
+    trial_table: np.ndarray | None = None,
+    log_factorial: np.ndarray | None = None,
+    log_beta: np.ndarray | None = None,
 ) -> None: ...
 def external_field(
     totals: np.ndarray,
@@ -232,7 +240,16 @@ def external_field(
     n_classes: int,
     n_states: int,
     field: np.ndarray,
+    exposure: np.ndarray | None = None,
+    dispersion: np.ndarray | None = None,
+    mean: np.ndarray | None = None,
+    trials: np.ndarray | None = None,
+    failure_table: np.ndarray | None = None,
+    trial_table: np.ndarray | None = None,
+    log_factorial: np.ndarray | None = None,
+    log_beta: np.ndarray | None = None,
 ) -> None: ...
+def factorize(values: np.ndarray) -> tuple[np.ndarray, np.ndarray]: ...
 def simulate_count_pairs(
     seed: int,
     states: np.ndarray,

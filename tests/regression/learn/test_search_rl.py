@@ -29,8 +29,8 @@ from sal.learn.tree import (
 )
 from sal.likelihood.parsimony import fitch_score
 from sal.likelihood.pruning import log_likelihood
-from sal.likelihood.pruning_torch import branch_order
-from sal.likelihood.pruning_torch import (
+from sal.likelihood.pruning.torch import branch_order
+from sal.likelihood.pruning.torch import (
     log_likelihood as log_likelihood_torch,
 )
 from sal.search.infer import score_topology
@@ -77,7 +77,7 @@ def _environment(
     alignment = _alignment(params)
     environment = TreeEnvironment(
         alignment,
-        params.k,
+        params.n_states,
         params.pi,
         _BRANCH_LENGTH,
         reward=reward,
@@ -106,7 +106,7 @@ def _gtr_alignment(
     rate_matrix = gtr_rate_matrix(_GTR_EXCHANGEABILITIES, _GTR_PI)
     dataset = simulate_alignment(
         tau=params.tau,
-        k=params.k,
+        n_states=params.n_states,
         pi=_GTR_PI,
         rng=np.random.default_rng(params.seed),
         n_sites=_GTR_SITES,
@@ -166,11 +166,11 @@ def test_the_known_score_is_the_likelihood_at_a_fixed_branch_length() -> None:
     for topology in enumerate_topologies(sorted(alignment)):
         expected = log_likelihood(
             with_uniform_branch_lengths(topology, _BRANCH_LENGTH),
-            params.k,
+            params.n_states,
             params.pi,
             alignment,
         )
-        assert_allclose(environment.score(topology), expected, rtol=1e-12)
+        assert_allclose(environment.log_weight(topology), expected, rtol=1e-12)
 
 
 @pytest.mark.oracle
@@ -178,8 +178,8 @@ def test_the_fitted_score_is_the_maximized_likelihood() -> None:
     environment, params, alignment = _environment(RewardModel.FITTED)
     topology = next(iter(enumerate_topologies(sorted(alignment))))
     assert_allclose(
-        environment.score(topology),
-        score_topology(topology, alignment, params.k),
+        environment.log_weight(topology),
+        score_topology(topology, alignment, params.n_states),
         rtol=1e-9,
     )
 
@@ -191,11 +191,13 @@ def test_the_fitted_score_is_never_below_the_known_one() -> None:
     # surface rather than a noisy estimate of the same one.
     _, params, alignment = _environment()
     known, fitted = (
-        TreeEnvironment(alignment, params.k, params.pi, _BRANCH_LENGTH, reward=reward)
+        TreeEnvironment(
+            alignment, params.n_states, params.pi, _BRANCH_LENGTH, reward=reward
+        )
         for reward in (RewardModel.KNOWN, RewardModel.FITTED)
     )
     for topology in enumerate_topologies(sorted(alignment)):
-        assert fitted.score(topology) >= known.score(topology) - 1e-9
+        assert fitted.log_weight(topology) >= known.log_weight(topology) - 1e-9
 
 
 @pytest.mark.analytic
@@ -206,7 +208,9 @@ def test_a_reward_is_the_improvement_it_reports() -> None:
         successor, reward = environment.step(state, action)
         assert leaf_bipartitions(successor) == leaf_bipartitions(action)
         assert_allclose(
-            reward, environment.score(action) - environment.score(state), atol=1e-12
+            reward,
+            environment.log_weight(action) - environment.log_weight(state),
+            atol=1e-12,
         )
 
 
@@ -214,10 +218,10 @@ def test_a_reward_is_the_improvement_it_reports() -> None:
 def test_an_episode_return_telescopes_to_its_total_improvement() -> None:
     environment, _, alignment = _environment()
     start = next(iter(enumerate_topologies(sorted(alignment))))
-    episode = greedy_rollout(environment, start, max_steps=10)
+    episode = greedy_rollout(environment, start=start, max_steps=10)
     assert_allclose(
         episode.total_reward,
-        environment.score(episode.states[-1]) - environment.score(start),
+        environment.log_weight(episode.states[-1]) - environment.log_weight(start),
         atol=1e-9,
     )
 
@@ -255,14 +259,19 @@ def test_a_policy_rollout_telescopes_like_the_greedy_one() -> None:
     policy = LinearPolicy(1)
     policy.set_weights(torch.tensor([200.0], dtype=torch.float64))
 
-    episode = rollout(environment, policy, np.random.default_rng(0), 20, start=start)
+    episode = rollout(
+        environment, policy, np.random.default_rng(0), max_steps=20, start=start
+    )
 
     assert_allclose(
         episode.total_reward,
-        environment.score(episode.states[-1]) - environment.score(start),
+        environment.log_weight(episode.states[-1]) - environment.log_weight(start),
         atol=1e-9,
     )
-    assert episode.actions == greedy_rollout(environment, start, 20).actions
+    assert (
+        episode.actions
+        == greedy_rollout(environment, start=start, max_steps=20).actions
+    )
 
 
 # --- caching --------------------------------------------------------------
@@ -276,10 +285,10 @@ def test_a_topology_is_scored_once_however_it_is_spelled() -> None:
     # and an SPR neighbourhood overlaps its predecessor heavily.
     environment, _, alignment = _environment()
     topology = next(iter(enumerate_topologies(sorted(alignment))))
-    first = environment.score(topology)
+    first = environment.log_weight(topology)
     assert environment.evaluations == 1
-    assert environment.score(topology) == first
-    assert environment.score(_mirrored(topology)) == first
+    assert environment.log_weight(topology) == first
+    assert environment.log_weight(_mirrored(topology)) == first
     assert environment.evaluations == 1
 
 
@@ -305,7 +314,7 @@ def test_a_terminal_state_is_one_no_move_improves() -> None:
     environment, _, alignment = _environment()
     for topology in enumerate_topologies(sorted(alignment)):
         improvable = any(
-            environment.score(action) > environment.score(topology)
+            environment.log_weight(action) > environment.log_weight(topology)
             for action in environment.actions(topology)
         )
         assert environment.is_terminal(topology) is not improvable
@@ -319,10 +328,10 @@ def test_greedy_search_reaches_the_enumerated_optimum() -> None:
     # validates the environment and no policy's advantage over the baseline.
     environment, params, alignment = _environment()
     topologies = list(enumerate_topologies(sorted(alignment)))
-    best = max(environment.score(topology) for topology in topologies)
+    best = max(environment.log_weight(topology) for topology in topologies)
     for start in topologies:
-        episode = greedy_rollout(environment, start, max_steps=20)
-        assert environment.score(episode.states[-1]) == pytest.approx(best)
+        episode = greedy_rollout(environment, start=start, max_steps=20)
+        assert environment.log_weight(episode.states[-1]) == pytest.approx(best)
         assert episode.terminated
 
 
@@ -330,7 +339,7 @@ def test_greedy_search_reaches_the_enumerated_optimum() -> None:
 def test_the_known_optimum_is_the_generating_topology_here() -> None:
     environment, params, alignment = _environment()
     scored = {
-        leaf_bipartitions(t): environment.score(t)
+        leaf_bipartitions(t): environment.log_weight(t)
         for t in enumerate_topologies(sorted(alignment))
     }
     best = max(scored, key=lambda key: scored[key])
@@ -358,7 +367,7 @@ def test_the_known_reward_under_a_general_model_needs_its_rate_matrix() -> None:
     with pytest.raises(ValueError, match="under gtr needs a rate_matrix"):
         TreeEnvironment(
             alignment,
-            params.k,
+            params.n_states,
             params.pi,
             _BRANCH_LENGTH,
             model=Model.GTR,
@@ -367,7 +376,7 @@ def test_the_known_reward_under_a_general_model_needs_its_rate_matrix() -> None:
     with pytest.raises(ValueError, match="must have shape"):
         TreeEnvironment(
             alignment,
-            params.k,
+            params.n_states,
             params.pi,
             _BRANCH_LENGTH,
             model=Model.GTR,
@@ -377,11 +386,11 @@ def test_the_known_reward_under_a_general_model_needs_its_rate_matrix() -> None:
     with pytest.raises(ValueError, match="fixes its rate matrix"):
         TreeEnvironment(
             alignment,
-            params.k,
+            params.n_states,
             params.pi,
             _BRANCH_LENGTH,
             model=Model.JC,
-            rate_matrix=jc_rate_matrix(params.k),
+            rate_matrix=jc_rate_matrix(params.n_states),
         )
 
 
@@ -397,7 +406,7 @@ def test_the_known_gtr_score_is_the_pruning_recursion_at_the_fixed_length() -> N
     alignment, rate_matrix = _gtr_alignment(params)
     environment = TreeEnvironment(
         alignment,
-        params.k,
+        params.n_states,
         _GTR_PI,
         _BRANCH_LENGTH,
         model=Model.GTR,
@@ -411,14 +420,14 @@ def test_the_known_gtr_score_is_the_pruning_recursion_at_the_fixed_length() -> N
         expected = float(
             log_likelihood_torch(
                 topology,
-                params.k,
+                params.n_states,
                 _GTR_PI,
                 alignment,
                 lengths,
                 rate_matrix=torch.as_tensor(rate_matrix),
             )
         )
-        assert_allclose(environment.score(topology), expected, rtol=1e-12)
+        assert_allclose(environment.log_weight(topology), expected, rtol=1e-12)
 
 
 @pytest.mark.oracle
@@ -430,15 +439,17 @@ def test_the_general_q_path_reduces_to_jukes_cantor_at_its_rate_matrix() -> None
     environment, params, alignment = _environment(RewardModel.KNOWN)
     general = TreeEnvironment(
         alignment,
-        params.k,
+        params.n_states,
         params.pi,
         _BRANCH_LENGTH,
         model=Model.GTR,
         reward=RewardModel.KNOWN,
-        rate_matrix=jc_rate_matrix(params.k),
+        rate_matrix=jc_rate_matrix(params.n_states),
     )
     for topology in enumerate_topologies(sorted(alignment)):
-        assert_allclose(general.score(topology), environment.score(topology), rtol=1e-9)
+        assert_allclose(
+            general.log_weight(topology), environment.log_weight(topology), rtol=1e-9
+        )
 
 
 @pytest.mark.analytic
@@ -453,7 +464,7 @@ def test_the_fitted_gtr_score_is_never_below_the_known_one() -> None:
     alignment, rate_matrix = _gtr_alignment(params)
     known = TreeEnvironment(
         alignment,
-        params.k,
+        params.n_states,
         _GTR_PI,
         _BRANCH_LENGTH,
         model=Model.GTR,
@@ -462,14 +473,14 @@ def test_the_fitted_gtr_score_is_never_below_the_known_one() -> None:
     )
     fitted = TreeEnvironment(
         alignment,
-        params.k,
+        params.n_states,
         _GTR_PI,
         _BRANCH_LENGTH,
         model=Model.GTR,
         reward=RewardModel.FITTED,
     )
     for topology in list(enumerate_topologies(sorted(alignment)))[:2]:
-        assert fitted.score(topology) >= known.score(topology) - 1e-6
+        assert fitted.log_weight(topology) >= known.log_weight(topology) - 1e-6
 
 
 # --- the full feature set --------------------------------------------------
@@ -501,8 +512,8 @@ def test_the_parsimony_column_is_the_change_in_fitch_score() -> None:
         actions = environment.actions(state)
         raw = environment.raw_features(state, actions)
         expected = [
-            fitch_score(action, alignment, params.k)
-            - fitch_score(state, alignment, params.k)
+            fitch_score(action, alignment, params.n_states)
+            - fitch_score(state, alignment, params.n_states)
             for action in actions
         ]
         assert_allclose(raw[:, 1].numpy(), expected, atol=0.0)
@@ -527,8 +538,12 @@ def test_the_support_columns_are_the_pattern_support_of_the_split_broken_and_mad
         for row, action in enumerate(actions):
             (broken,) = internal_splits(state) - internal_splits(action)
             (made,) = internal_splits(action) - internal_splits(state)
-            assert raw[row, 2] == split_pattern_support(broken, alignment, params.k)
-            assert raw[row, 3] == split_pattern_support(made, alignment, params.k)
+            assert raw[row, 2] == split_pattern_support(
+                broken, alignment, params.n_states
+            )
+            assert raw[row, 3] == split_pattern_support(
+                made, alignment, params.n_states
+            )
             assert 0.0 < raw[row, 2] <= 1.0
             assert 0.0 < raw[row, 3] <= 1.0
 
@@ -589,7 +604,7 @@ def test_too_few_taxa_is_rejected() -> None:
     alignment = _alignment(params)
     trimmed = {name: alignment[name] for name in sorted(alignment)[:3]}
     with pytest.raises(ValueError, match="need at least 4 taxa"):
-        TreeEnvironment(trimmed, params.k, params.pi, _BRANCH_LENGTH)
+        TreeEnvironment(trimmed, params.n_states, params.pi, _BRANCH_LENGTH)
 
 
 @pytest.mark.oracle

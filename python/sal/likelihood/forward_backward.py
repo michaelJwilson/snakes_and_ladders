@@ -10,7 +10,7 @@ and any caller that wants a posterior rather than a fit, does not reach into
 an optimizer's internals to get one. Pinned against the path enumeration,
 which shares no recursion with it.
 
-**No `backend` here, and `ragged_rust.posteriors` says why** (issue #860).
+**No `backend` here, and `likelihood.ragged.posteriors` says why** (issue #860).
 The compiled ragged kernel returns log marginals and the transition counts
 *summed over the segments*; this returns probabilities and the per-step
 pairwise posterior. The sum is not the steps, so no conversion recovers this
