@@ -45,7 +45,7 @@ from sal import oxisal
 from sal.backend import Backend, refuse_backend
 from sal.opt.termination import Termination
 from sal.sim.graph import CompressedAdjacency, PottsGraph
-from sal.sim.potts import energy, site_field, states_of
+from sal.sim.potts import energy, penalized, site_field, states_of
 
 if TYPE_CHECKING:
     import torch
@@ -265,8 +265,13 @@ def simulated_bifurcation(
     refuse_backend(
         "simulated_bifurcation", backend, (Backend.PYTHON, Backend.TORCH, Backend.RUST)
     )
-    rows = site_field(
-        np.asarray(field, dtype=np.float64), graph.n_nodes, n_states=n_states
+    # The relaxation is continuous: a forbidden label's -inf is a finite
+    # penalty no optimum takes (#1081).
+    rows = penalized(
+        graph,
+        site_field(
+            np.asarray(field, dtype=np.float64), graph.n_nodes, n_states=n_states
+        ),
     )
     c0 = _coupling_scale(graph, rows) if coupling_scale is None else coupling_scale
     index = graph.edge_index.reshape(-1, 2)

@@ -38,7 +38,7 @@ import numpy as np
 from sal.opt.termination import Termination, check_cap
 from sal.search.alpha_expansion import BoundedLabelling
 from sal.sim.graph import PottsGraph
-from sal.sim.potts import SiteField, energy, log_weight_of, site_field
+from sal.sim.potts import SiteField, energy, log_weight_of, penalized, site_field
 
 
 def _edge_tables(graph: PottsGraph, n_states: int) -> np.ndarray:
@@ -136,7 +136,8 @@ def dual_bound(
         The labelling, its energy, the lower bound, and the gap between them.
     """
     field = log_weight_of(field)
-    values = site_field(field, graph.n_nodes)
+    # A forbidden label's -inf cannot enter the dual's differences (#1081).
+    values = penalized(graph, site_field(field, graph.n_nodes))
     n_nodes, n_states = values.shape
     clusters = _clusters(graph, n_states, plaquettes)
 
