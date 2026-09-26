@@ -9,10 +9,10 @@ encodings are five readings, and a caller that applies one result's to
 another reads a fit that ran out of iterations as a fit that converged.
 
 The answer is **additive**. Every result keeps the fields it had, with their
-values, and gains a trailing ``termination: Termination | None = None``.
-``None`` is *not known*, never *did not converge*: a producer that cannot say
-which branch ended its loop leaves it, and a caller reading that as a failure
-reads something nobody wrote.
+values, and gains a ``termination``. Since issue #1085 it is **required**, a
+keyword-only field every producer fills, so a caller handles one case and not
+three: a loop of a fixed step count ends on its budget, and says so, rather
+than leaving the field ``None`` for *not known*.
 
 A raise is not replaced by a field. Where a module refuses to return an
 unconverged number it still refuses (`likelihood/CLAUDE.md`);
