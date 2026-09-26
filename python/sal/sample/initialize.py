@@ -344,7 +344,7 @@ class FromTempering(Initializer):
             rounds,
             step_size=self.step_size,
             n_steps=self.n_steps,
-            theta0=theta0,
+            start=theta0,
             deadline=deadline,
         )
         run_rounds = int(tempered.positions.shape[0])
@@ -583,7 +583,7 @@ def calibrate_ladder(
             calibration.rounds,
             step_size=step_size,
             n_steps=n_steps,
-            theta0=best,
+            start=best,
         )
         transitions += calibration.rounds * len(candidate)
         force_evaluations += tempered.force_evaluations

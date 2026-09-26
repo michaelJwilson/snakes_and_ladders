@@ -135,7 +135,7 @@ def mala(
     n_samples: int,
     *,
     step_size: float,
-    theta0: torch.Tensor | None = None,
+    start: torch.Tensor | None = None,
     burn_in: int = 0,
     temperature: float = 1.0,
     adaptation: Adaptation | None = None,
@@ -163,7 +163,7 @@ def mala(
         ``h^2 / 2`` times a gradient whose scale is the target's, so a default
         would be wrong silently. With an ``adaptation`` it is the warm-up's
         starting point.
-    theta0 : torch.Tensor | None
+    start : torch.Tensor | None
         Starting point; ``objective.initial()`` when omitted.
     burn_in : int
         Draws discarded before recording.
@@ -228,7 +228,7 @@ def mala(
             generator,
             n_samples,
             step_size=step_size,
-            theta0=start_point(objective, theta0),
+            start=start_point(objective, start),
             burn_in=burn_in,
             adaptation=adaptation,
             store_chain=store_chain,
@@ -251,7 +251,7 @@ def mala(
         generator,
         n_samples,
         step_size=step_size,
-        theta0=theta0,
+        start=start,
         burn_in=burn_in,
         temperature=temperature,
         adaptation=adaptation,

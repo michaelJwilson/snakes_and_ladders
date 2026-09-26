@@ -93,7 +93,7 @@ class FitResult:
 
 def fit(
     objective: Objective,
-    theta0: torch.Tensor | None = None,
+    start: torch.Tensor | None = None,
     max_iterations: int = 500,
     tolerance: float = 1e-8,
     *,
@@ -110,7 +110,7 @@ def fit(
     ----------
     objective : Objective
         The objective to minimize.
-    theta0 : torch.Tensor | None
+    start : torch.Tensor | None
         Starting point; ``objective.initial()`` when omitted.
     max_iterations : int
         Maximum optimizer steps.
@@ -135,7 +135,7 @@ def fit(
         is returned for inspection.
     """
     theta = (
-        (objective.initial() if theta0 is None else theta0)
+        (objective.initial() if start is None else start)
         .detach()
         .clone()
         .requires_grad_(True)

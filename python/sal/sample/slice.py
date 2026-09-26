@@ -136,7 +136,7 @@ def slice_sample(
     width: float,
     max_steps_out: int,
     direction: SliceDirection = SliceDirection.COORDINATE,
-    theta0: torch.Tensor | None = None,
+    start: torch.Tensor | None = None,
     burn_in: int = 0,
     shrink: bool = True,
     temperature: float = 1.0,
@@ -170,7 +170,7 @@ def slice_sample(
         At least 1.
     direction : SliceDirection
         The lines a sweep runs along.
-    theta0 : torch.Tensor | None
+    start : torch.Tensor | None
         Starting point; ``objective.initial()`` when omitted.
     burn_in : int
         Sweeps discarded before recording.
@@ -229,8 +229,8 @@ def slice_sample(
 
     position = (
         objective.initial().detach().clone()
-        if theta0 is None
-        else theta0.detach().clone()
+        if start is None
+        else start.detach().clone()
     ).to(torch.float64)
     dimension = int(position.shape[0])
 
