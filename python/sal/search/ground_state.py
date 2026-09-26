@@ -936,7 +936,7 @@ def run_tempering(
     )
     return MethodRun(
         labelling=run.best,
-        energy=run.best_energy,
+        energy=run.energy,
         spent=N_REPLICAS * per_replica * problem.visits_per_sweep,
         seconds=time.perf_counter() - started,
         termination=Termination.after(per_replica, converged=False),

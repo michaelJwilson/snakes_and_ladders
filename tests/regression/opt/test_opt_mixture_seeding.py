@@ -356,8 +356,8 @@ def seed_tempering(instance: Instance, rng: np.random.Generator) -> Seeding:
         theta0=_theta_at(instance, objective, start.components),
     )
     return Seeding(
-        _from_theta(instance, objective, run.theta),
-        2.0 * run.force_evaluations * instance.n_components,
+        _from_theta(instance, objective, run.best),
+        2.0 * run.spent * instance.n_components,
         acceptance=float(run.acceptance_rate[0]),
         swap_acceptance=float(run.swap_acceptance.min()),
     )

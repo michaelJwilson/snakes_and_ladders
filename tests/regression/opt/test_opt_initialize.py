@@ -449,8 +449,8 @@ def test_the_sampled_starts_are_their_runs_own_records_and_leave_the_cell_descen
         )
 
         tempered = _tempered_start(seed).run(objective)
-        assert torch.equal(_tempered_start(seed).starts(objective)[0], tempered.theta)
-        assert tempered.value == float(objective(tempered.theta))
+        assert torch.equal(_tempered_start(seed).starts(objective)[0], tempered.best)
+        assert tempered.value == float(objective(tempered.best))
         visited = np.array(
             [
                 [float(objective(position)) for position in exchange]
@@ -460,7 +460,7 @@ def test_the_sampled_starts_are_their_runs_own_records_and_leave_the_cell_descen
         assert visited.min() - tempered.value == 0.0
         coldest += int(np.unravel_index(int(visited.argmin()), visited.shape)[1] == 0)
         reached["temper"].append(
-            _lowest(objective, [fit(objective, theta0=tempered.theta).theta])
+            _lowest(objective, [fit(objective, theta0=tempered.best).theta])
         )
 
     for name, values in reached.items():

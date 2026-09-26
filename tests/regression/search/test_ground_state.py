@@ -394,7 +394,7 @@ def test_the_runners_record_the_energy_their_kernels_return() -> None:
         rung.graph, rung.field, ladder, np.random.default_rng(seed), per_replica
     )
 
-    assert tempering.energy == kernel.best_energy
+    assert tempering.energy == kernel.energy
     assert np.array_equal(tempering.labelling, kernel.best)
     assert (
         tempering.spent == ground_state.N_REPLICAS * per_replica * rung.visits_per_sweep

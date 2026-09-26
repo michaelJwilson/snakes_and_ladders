@@ -107,6 +107,7 @@ from sal.sample.schedule import (
     check_ladder,
     ladder,
 )
+from sal.sample.schedule import Tempered as TemperedRun
 from sal.sample.tempered import exchange
 
 # `current` is aliased: `_coefficients` already binds that name to a
@@ -616,7 +617,7 @@ def anneal(
         which they meant.
     schedule : TempSchedule
         Temperature per proposal. Its length is the budget in proposals;
-        ``force_evaluations`` on the result is the budget in gradients.
+        ``spent`` on the result is the budget in gradients.
     generator : torch.Generator
         As :func:`sample`.
     step_size, n_steps, theta0, integrator
@@ -667,16 +668,20 @@ def anneal(
     )
 
 
-@dataclass(frozen=True)
-class Tempered:
-    """What one parallel-tempering run found, and what it cost.
+@dataclass(frozen=True, kw_only=True)
+class Tempered(TemperedRun[torch.Tensor]):
+    """What one parallel-tempering run found, and what it cost (issue #1090).
+
+    A :class:`~sal.sample.schedule.Tempered` over points: ``best`` is the
+    lowest-valued point visited at any temperature, ``spent`` the gradients
+    over every replica, so the run is comparable to any other optimizer at
+    equal evaluations, and ``swap_acceptance`` an array, the NumPy the
+    exchange bookkeeping already kept.
 
     Parameters
     ----------
-    theta : torch.Tensor
-        The lowest-valued point visited at any temperature.
     value : float
-        The objective there.
+        The objective at ``best``, which the objective minimizes.
     positions : torch.Tensor
         Every replica after every round, shape ``(n_rounds, n_replicas,
         dimension)``; replica ``r`` sits at ``temperatures[r]`` throughout,
@@ -686,14 +691,6 @@ class Tempered:
     acceptance_rate : torch.Tensor
         Fraction of Hamiltonian proposals accepted per replica, shape
         ``(n_replicas,)``.
-    swap_acceptance : torch.Tensor
-        Fraction of proposed exchanges accepted per adjacent pair, shape
-        ``(n_replicas - 1,)``. Near zero means the ladder has a gap no
-        position crosses and the replicas are independent chains; near one
-        means two temperatures are close enough that one is redundant.
-    force_evaluations : int
-        Gradients spent over every replica, so the run is comparable to any
-        other optimizer at equal evaluations.
     walkers : np.ndarray
         ``walkers[t, w]`` is the rung walker ``w`` sat at, at round ``t``,
         shape ``(n_rounds, n_replicas)``. The other reading of the same run:
@@ -707,12 +704,9 @@ class Tempered:
         differentiates it (issue #861).
     """
 
-    theta: torch.Tensor
     value: float
     positions: torch.Tensor
     acceptance_rate: torch.Tensor
-    swap_acceptance: torch.Tensor
-    force_evaluations: int
     walkers: np.ndarray
 
 
@@ -767,7 +761,7 @@ def parallel_tempering(
         replicas' seeds and the exchange uniforms.
     n_rounds : int
         Transitions per replica, at least one. The budget in proposals is
-        ``n_rounds * len(temperatures)``; ``force_evaluations`` on the result
+        ``n_rounds * len(temperatures)``; ``spent`` on the result
         is the budget in gradients.
     step_size, n_steps, theta0, integrator
         As :func:`sample`; every replica starts at ``theta0``.
@@ -873,14 +867,15 @@ def parallel_tempering(
     tracked.record_cost(max(round_index - 1, 0), rounds.nbytes)
 
     return Tempered(
-        theta=best,
+        best=best,
         value=best_value,
         positions=rounds,
         acceptance_rate=accepted / round_index,
-        swap_acceptance=torch.tensor(ensemble.swap_acceptance, dtype=torch.float64),
-        force_evaluations=round_index
-        * n_replicas
-        * integrator.force_evaluations(n_steps),
+        temperatures=tuple(temperatures),
+        swap_acceptance=np.asarray(ensemble.swap_acceptance, dtype=np.float64),
+        spent=round_index * n_replicas * integrator.force_evaluations(n_steps),
+        unit=Cost.GRADIENTS,
+        termination=Termination.after(round_index, converged=False),
         walkers=ensemble.walkers,
     )
 
