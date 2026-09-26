@@ -69,7 +69,7 @@ def test_both_chains_centre_on_the_mean_and_accept_alike() -> None:
     )
     theirs = blackjax.sample(precision, np.zeros(DIMENSION), 0.15, 7, 5_000, SEED)
     for draws in (ours.draws.numpy(), theirs.draws):
-        size = hmc.effective_sample_size(torch.as_tensor(draws)).numpy()
+        size = hmc.effective_sample_size(torch.as_tensor(draws))
         assert size.min() > 100.0
         error = np.sqrt(variance / size)
         assert np.abs(draws.mean(axis=0)).max() < 4.0 * error.max()

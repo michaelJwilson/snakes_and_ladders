@@ -59,7 +59,7 @@ CAP_LITERAL = re.compile(r"^\s*MAX_ENUMERABLE\w* = \d", re.MULTILINE)
 SQUARE_TRANSITION = re.compile(r"log\(\s*1(\.0)?\s*\+\s*(np\.|numpy\.|math\.)?sqrt")
 #: Every list-of-lists adjacency carries this annotation (`mypy --strict`
 #: refuses the empty comprehension without it). A `torch.Tensor` coupling does
-#: not match: `tree_log_partition` needs couplings that carry gradients.
+#: not match: `tree_log_partition_torch` needs couplings that carry gradients.
 NEIGHBOUR_LISTS = re.compile(r"list\[list\[tuple\[int, ?float\]\]\]")
 #: Environment names retired for naming a mechanism, not the problem (#644,
 #: #705); `Topology` was the third spelling of one seam.
@@ -144,7 +144,7 @@ MEASURE_OWNER = "validation/protocol.py"
 #: handed to `simulate_alignment` one by one rather than the fixture to
 #: `sim.simulator.simulate_tree`, which 104 sites spelled out (issue #1010).
 FIXTURE_ALIGNMENT = re.compile(
-    r"simulate_alignment\(\s*(?:tau=)?(\w+)\.tau,\s*(?:k=)?\1\.k,\s*(?:pi=)?\1\.pi\b"
+    r"simulate_alignment\(\s*(?:tau=)?(\w+)\.tau,\s*(?:n_states=)?\1\.n_states,\s*(?:pi=)?\1\.pi\b"
 )
 FIXTURE_ALIGNMENT_OWNER = "sim/simulator.py"
 #: A Rust twin imported inside a function by hand: the refusal, the local
@@ -534,7 +534,8 @@ def test_each_guard_fails_on_violating_source() -> None:
         HAND_MEDIAN: "s = np.median(" + '[package("viterbi", inputs).seconds])\n',
         HAND_SKIP: "mark = pytest.mark.skipif(" + 'not available("gco"), reason="")\n',
         HAND_MEASURE: "r, p = peaked(" + "lambda: timed(call))\n",
-        FIXTURE_ALIGNMENT: "d = simulate_" + "alignment(p.tau, p.k, p.pi, rng, 9)\n",
+        FIXTURE_ALIGNMENT: "d = simulate_"  # noqa: ISC003
+        + "alignment(p.tau, p.n_states, p.pi, rng, 9)\n",
         TWIN_IMPORT: "        from sal.likelihood.pruning import rust\n",
         # Unsplit: anchored at a line start, and this literal is indented.
         ICM_DEFINITION: "def iterated_conditional_modes(\n    graph,\n",
@@ -547,7 +548,7 @@ def test_each_guard_fails_on_violating_source() -> None:
             "offsets, neighbours, couplings = graph.compressed_adjacency()\n"
         ),
         SQUARE_TRANSITION: 'print(f"at J_c = ln(1 + sqrt(3)) = {coupling:.4f}")\n',
-        RETIRED_ENVIRONMENTS: "environment = TreeEnvironment(alignment, k=4)\n",
+        RETIRED_ENVIRONMENTS: "environment = TreeEnvironment(alignment, n_states=4)\n",
         SCHEDULE_NAME_BRANCH: (
             "    if plan.requires_tree and not graph.is_tree():\n"
             '        msg = f"the {plan.name} schedule is exact only on a tree"\n'

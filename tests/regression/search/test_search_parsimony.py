@@ -67,7 +67,7 @@ def _alignment(
         np.random.default_rng(params.seed),
         n_sites=params.n_sites if n_sites is None else n_sites,
     )
-    return dict(dataset.alignment), params.k
+    return dict(dataset.alignment), params.n_states
 
 
 def _score(
@@ -119,7 +119,12 @@ def test_every_start_reaches_the_enumerated_minimum_at_five_taxa(
 
     for start in enumerate_topologies(sorted(alignment)):
         result = parsimony_search(
-            alignment, k, step_matrix=step_matrix, start=start, moves=moves
+            alignment,
+            k,
+            step_matrix=step_matrix,
+            start=start,
+            moves=moves,
+            rng=np.random.default_rng(0),
         )
         assert result.converged
         assert _reaches_the_minimum(result, best, scores), (
@@ -149,6 +154,7 @@ def test_every_start_reaches_the_enumerated_minimum_at_six_taxa(
             start=start,
             moves=moves,
             max_evaluations=500,
+            rng=np.random.default_rng(0),
         )
         assert result.converged
         assert _reaches_the_minimum(result, best, scores), (
@@ -256,7 +262,9 @@ def test_a_zero_budget_scores_the_start_and_nothing_else() -> None:
     alignment, k = _alignment(SIX_TAXA)
     params = load_fixture(SIX_TAXA)
 
-    result = parsimony_search(alignment, k, start=params.tau, max_evaluations=0)
+    result = parsimony_search(
+        alignment, k, start=params.tau, max_evaluations=0, rng=np.random.default_rng(0)
+    )
 
     assert result.converged
     assert result.evaluations == 0
@@ -311,11 +319,17 @@ def test_a_step_matrix_without_a_root_free_score_is_refused(
 
 @pytest.mark.smoke
 def test_too_few_taxa_and_a_missing_rng_are_refused() -> None:
+    # The rng is required at the signature since #1091, so its absence is a
+    # TypeError at the call rather than a ValueError from inside.
     with pytest.raises(ValueError, match="at least 4 taxa"):
-        parsimony_search({name: np.zeros(5, dtype=np.int64) for name in "ABC"}, 4)
+        parsimony_search(
+            {name: np.zeros(5, dtype=np.int64) for name in "ABC"},
+            4,
+            rng=np.random.default_rng(0),
+        )
     alignment, k = _alignment(FIVE_TAXA)
-    with pytest.raises(ValueError, match="needs an rng"):
-        parsimony_search(alignment, k)
+    with pytest.raises(TypeError, match="rng"):
+        parsimony_search(alignment, k)  # type: ignore[call-arg]
 
 
 # --- the Felsenstein zone ---------------------------------------------------
@@ -348,7 +362,9 @@ def test_large_parsimony_returns_the_wrong_tree_in_the_felsenstein_zone(
     assert scores[ZONE_TRUE_SPLIT] - best > 0
 
     for start in topologies:
-        result = parsimony_search(alignment, 4, start=start, moves=moves)
+        result = parsimony_search(
+            alignment, 4, start=start, moves=moves, rng=np.random.default_rng(0)
+        )
         assert result.converged
         assert _reaches_the_minimum(result, best, scores)
     weighted_best, weighted = _enumerated(alignment, 4, TRANSITION_TRANSVERSION)

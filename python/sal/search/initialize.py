@@ -126,7 +126,7 @@ def _theta(objective: TreeObjective, tree: Node) -> torch.Tensor:
         return objective.theta_from_truth(tree)
     # Equal exchangeabilities and a uniform pi are the objective's own
     # initial(), Jukes--Cantor exactly; only the branch block changes.
-    k = objective.k
+    k = objective.n_states
     return objective.theta_from_truth(
         tree, np.ones(n_exchangeabilities(k)), np.full(k, 1.0 / k)
     )
@@ -164,14 +164,14 @@ class FromDistances(Initializer):
         self.kind = kind
         self.minimum_length = minimum_length
 
-    def tree(self, alignment: Mapping[str, np.ndarray], k: int) -> Node:
+    def tree(self, alignment: Mapping[str, np.ndarray], n_states: int) -> Node:
         """The neighbor-joining tree of the alignment's distances, lengths floored.
 
         Parameters
         ----------
         alignment : Mapping[str, np.ndarray]
             Taxon name to states, at least 3 taxa.
-        k : int
+        n_states : int
             Number of states.
 
         Returns
@@ -180,7 +180,7 @@ class FromDistances(Initializer):
             An unrooted binary tree in the trifurcating-root convention with
             a branch length on every non-root node.
         """
-        names, distances, _ = distance_matrix(alignment, k, self.kind)
+        names, distances, _ = distance_matrix(alignment, n_states, self.kind)
         return _floored(neighbor_joining(names, distances), self.minimum_length)
 
     def starts(self, objective: Objective) -> list[torch.Tensor]:
@@ -199,7 +199,7 @@ class FromDistances(Initializer):
             If the objective is not one of the tree's.
         """
         tree_objective = _tree_objective(objective, "FromDistances")
-        estimate = self.tree(tree_objective.alignment, tree_objective.k)
+        estimate = self.tree(tree_objective.alignment, tree_objective.n_states)
         placed = _on_topology(
             tree_objective.topology, split_lengths(estimate), self.minimum_length
         )
@@ -230,7 +230,7 @@ class FromHadamard(Initializer):
         _check_floor(minimum_length)
         self.minimum_length = minimum_length
 
-    def tree(self, alignment: Mapping[str, np.ndarray], k: int) -> Node:
+    def tree(self, alignment: Mapping[str, np.ndarray], n_states: int) -> Node:
         """The closest tree of the alignment's spectrum, lengths in the model's units.
 
         Parameters
@@ -238,7 +238,7 @@ class FromHadamard(Initializer):
         alignment : Mapping[str, np.ndarray]
             Taxon name to states, 3 to
             :data:`~sal.likelihood.hadamard.MAX_TAXA` taxa.
-        k : int
+        n_states : int
             Number of states, even.
 
         Returns
@@ -247,9 +247,9 @@ class FromHadamard(Initializer):
             An unrooted binary tree in the trifurcating-root convention with
             a branch length on every non-root node.
         """
-        names, spectrum = sequence_spectrum(binary_recoding(alignment, k))
+        names, spectrum = sequence_spectrum(binary_recoding(alignment, n_states))
         weights = split_weights(hadamard_conjugation(spectrum), names)
-        scale = recoding_scale(k)
+        scale = recoding_scale(n_states)
         return closest_tree(
             {split: weight / scale for split, weight in weights.items()},
             names,
@@ -273,9 +273,9 @@ class FromHadamard(Initializer):
         """
         tree_objective = _tree_objective(objective, "FromHadamard")
         names, spectrum = sequence_spectrum(
-            binary_recoding(tree_objective.alignment, tree_objective.k)
+            binary_recoding(tree_objective.alignment, tree_objective.n_states)
         )
-        scale = recoding_scale(tree_objective.k)
+        scale = recoding_scale(tree_objective.n_states)
         weights = {
             split: weight / scale
             for split, weight in split_weights(

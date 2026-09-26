@@ -25,6 +25,7 @@ from sal.opt.constrain import log_simplex
 from sal.opt.objective import Objective
 from sal.opt.potts import PottsObjective
 from sal.sample import hmc
+from sal.sample.chain import torch_stream
 from sal.sample.hmc import (
     YOSHIDA_WEIGHTS,
     Integrator,
@@ -136,7 +137,7 @@ def test_the_chain_recovers_an_analytic_gaussian() -> None:
     # chains, measured at 0.030 and 0.041 on the two coordinates.
     chain = sample(
         GAUSSIAN,
-        generator=torch.Generator().manual_seed(11),
+        rng=torch.Generator().manual_seed(11),
         n_samples=4000,
         step_size=0.25,
         n_steps=12,
@@ -167,7 +168,7 @@ def test_the_chain_matches_grid_quadrature_on_a_real_objective() -> None:
         [
             sample(
                 posterior,
-                generator=torch.Generator().manual_seed(200 + index),
+                rng=torch.Generator().manual_seed(200 + index),
                 n_samples=700,
                 step_size=0.01,
                 n_steps=15,
@@ -204,7 +205,7 @@ def test_a_step_size_that_diverges_biases_the_spread_not_the_mean() -> None:
 
     coarse = sample(
         posterior,
-        generator=torch.Generator().manual_seed(3),
+        rng=torch.Generator().manual_seed(3),
         n_samples=400,
         step_size=0.05,
         n_steps=20,
@@ -212,7 +213,7 @@ def test_a_step_size_that_diverges_biases_the_spread_not_the_mean() -> None:
     )
     fine = sample(
         posterior,
-        generator=torch.Generator().manual_seed(3),
+        rng=torch.Generator().manual_seed(3),
         n_samples=400,
         step_size=0.005,
         n_steps=40,
@@ -249,7 +250,7 @@ def test_a_zero_length_trajectory_is_refused() -> None:
     with pytest.raises(ValueError, match="looks healthy and samples nothing"):
         sample(
             GAUSSIAN,
-            generator=torch.Generator().manual_seed(1),
+            rng=torch.Generator().manual_seed(1),
             n_samples=10,
             step_size=0.1,
             n_steps=0,
@@ -261,7 +262,7 @@ def test_a_non_positive_step_size_is_refused() -> None:
     with pytest.raises(ValueError, match="step_size must be positive"):
         sample(
             GAUSSIAN,
-            generator=torch.Generator().manual_seed(1),
+            rng=torch.Generator().manual_seed(1),
             n_samples=10,
             step_size=0.0,
         )
@@ -301,20 +302,35 @@ def test_the_prior_leaves_the_coordinates_it_is_stated_in_alone() -> None:
 def test_a_chain_is_reproducible_from_generators_seeded_alike() -> None:
     first = sample(
         GAUSSIAN,
-        generator=torch.Generator().manual_seed(5),
+        rng=torch.Generator().manual_seed(5),
         n_samples=50,
         step_size=0.2,
         n_steps=10,
     )
     second = sample(
         GAUSSIAN,
-        generator=torch.Generator().manual_seed(5),
+        rng=torch.Generator().manual_seed(5),
         n_samples=50,
         step_size=0.2,
         n_steps=10,
     )
 
     assert torch.equal(first.draws, second.draws)
+
+
+@pytest.mark.smoke
+def test_a_numpy_rng_runs_the_chain_its_torch_stream_runs() -> None:
+    # Issue #1091: a torch entry point takes the package's `rng` and derives
+    # its stream with `torch_stream`, which hands a torch generator back as
+    # given, so the old call and the new one run one chain each, bitwise.
+    def run(rng: np.random.Generator | torch.Generator) -> torch.Tensor:
+        return sample(GAUSSIAN, rng=rng, n_samples=50, step_size=0.2, n_steps=10).draws
+
+    derived = run(torch_stream(np.random.default_rng(5)))
+
+    assert torch.equal(run(np.random.default_rng(5)), derived)
+    torch_generator = torch.Generator().manual_seed(5)
+    assert torch_stream(torch_generator) is torch_generator
 
 
 # --- the fourth-order composition (#266) ----------------------------------
@@ -427,6 +443,7 @@ def test_force_evaluations_counts_what_a_trajectory_actually_costs(
 
 
 @pytest.mark.analytic
+@pytest.mark.release  # 63.3 s in the tier, over the 10 s cap (#1088)
 def test_leapfrog_reaches_the_acceptance_target_more_cheaply_than_yoshida() -> None:
     # Negative: the step is limited by stability, not accuracy. Yoshida's
     # |w0| = 1.70 gives ~0.59 of leapfrog's limit (0.0333 against 0.0500).
@@ -438,7 +455,7 @@ def test_leapfrog_reaches_the_acceptance_target_more_cheaply_than_yoshida() -> N
         for n_steps in (4, 6, 8, 10, 14, 20, 30, 45, 70):
             chain = sample(
                 target,
-                generator=torch.Generator().manual_seed(11),
+                rng=torch.Generator().manual_seed(11),
                 n_samples=200,
                 step_size=1.0 / n_steps,
                 n_steps=n_steps,
@@ -459,14 +476,14 @@ def test_the_default_integrator_is_the_one_every_committed_result_used() -> None
     # A default changed here silently redraws every chain in the repository.
     chain = sample(
         GAUSSIAN,
-        generator=torch.Generator().manual_seed(3),
+        rng=torch.Generator().manual_seed(3),
         n_samples=40,
         step_size=0.2,
         n_steps=6,
     )
     explicit = sample(
         GAUSSIAN,
-        generator=torch.Generator().manual_seed(3),
+        rng=torch.Generator().manual_seed(3),
         n_samples=40,
         step_size=0.2,
         n_steps=6,
@@ -489,7 +506,7 @@ def test_tempering_a_gaussian_scales_the_chain_by_the_square_root_of_t() -> None
     exact = GAUSSIAN.covariance.diagonal().sqrt()
     reference = sample(
         GAUSSIAN,
-        generator=torch.Generator().manual_seed(3),
+        rng=torch.Generator().manual_seed(3),
         n_samples=2000,
         step_size=0.2,
         n_steps=10,
@@ -499,7 +516,7 @@ def test_tempering_a_gaussian_scales_the_chain_by_the_square_root_of_t() -> None
     for temperature in (2.0, 0.5):
         chain = sample(
             GAUSSIAN,
-            generator=torch.Generator().manual_seed(3),
+            rng=torch.Generator().manual_seed(3),
             n_samples=2000,
             step_size=0.2,
             n_steps=10,
@@ -523,7 +540,7 @@ def test_a_non_positive_temperature_is_refused() -> None:
     with pytest.raises(ValueError, match="temperature must be positive"):
         sample(
             GAUSSIAN,
-            generator=torch.Generator().manual_seed(1),
+            rng=torch.Generator().manual_seed(1),
             n_samples=10,
             step_size=0.1,
             temperature=0.0,
@@ -538,7 +555,7 @@ def test_a_constant_schedule_at_one_is_the_sampler_draw_for_draw() -> None:
     # agreeing.
     chain = sample(
         GAUSSIAN,
-        generator=torch.Generator().manual_seed(5),
+        rng=torch.Generator().manual_seed(5),
         n_samples=200,
         step_size=0.2,
         n_steps=10,
@@ -546,7 +563,7 @@ def test_a_constant_schedule_at_one_is_the_sampler_draw_for_draw() -> None:
     annealed = anneal(
         GAUSSIAN,
         ConstantTempSchedule(1.0, 200),
-        generator=torch.Generator().manual_seed(5),
+        rng=torch.Generator().manual_seed(5),
         step_size=0.2,
         n_steps=10,
     )
@@ -564,10 +581,10 @@ def test_annealing_reports_the_best_point_visited_not_the_last() -> None:
     result = anneal(
         GAUSSIAN,
         ExponentialTempSchedule(4.0, 0.01, 300),
-        generator=torch.Generator().manual_seed(2),
+        rng=torch.Generator().manual_seed(2),
         step_size=0.2,
         n_steps=10,
-        theta0=start,
+        start=start,
     )
 
     assert result.value == pytest.approx(float(GAUSSIAN(result.best)), rel=EXACT)
@@ -587,7 +604,7 @@ def test_each_tempering_replica_samples_the_gaussian_at_its_own_temperature() ->
     run = parallel_tempering(
         GAUSSIAN,
         ladder,
-        generator=torch.Generator().manual_seed(11),
+        rng=torch.Generator().manual_seed(11),
         n_rounds=2000,
         step_size=0.25,
         n_steps=12,
@@ -623,7 +640,7 @@ def test_tempering_costs_what_its_accounting_says_and_is_reproducible() -> None:
     run = parallel_tempering(
         counted,
         ladder,
-        generator=torch.Generator().manual_seed(5),
+        rng=torch.Generator().manual_seed(5),
         n_rounds=25,
         step_size=0.2,
         n_steps=6,
@@ -634,7 +651,7 @@ def test_tempering_costs_what_its_accounting_says_and_is_reproducible() -> None:
     again = parallel_tempering(
         GAUSSIAN,
         ladder,
-        generator=torch.Generator().manual_seed(5),
+        rng=torch.Generator().manual_seed(5),
         n_rounds=25,
         step_size=0.2,
         n_steps=6,
@@ -652,7 +669,7 @@ def test_the_walker_trace_counts_the_round_trips_a_two_rung_ladder_makes() -> No
     run = parallel_tempering(
         GAUSSIAN,
         (1.0, 4.0),
-        generator=torch.Generator().manual_seed(12),
+        rng=torch.Generator().manual_seed(12),
         n_rounds=rounds,
         step_size=0.3,
         n_steps=5,
@@ -678,7 +695,7 @@ def test_a_ladder_that_cannot_exchange_is_refused() -> None:
         parallel_tempering(
             GAUSSIAN,
             (1.0,),
-            generator=torch.Generator().manual_seed(1),
+            rng=torch.Generator().manual_seed(1),
             n_rounds=5,
             step_size=0.2,
         )
@@ -686,7 +703,7 @@ def test_a_ladder_that_cannot_exchange_is_refused() -> None:
         parallel_tempering(
             GAUSSIAN,
             (2.0, 1.0),
-            generator=torch.Generator().manual_seed(1),
+            rng=torch.Generator().manual_seed(1),
             n_rounds=5,
             step_size=0.2,
         )
@@ -694,7 +711,7 @@ def test_a_ladder_that_cannot_exchange_is_refused() -> None:
         parallel_tempering(
             GAUSSIAN,
             (0.0, 1.0),
-            generator=torch.Generator().manual_seed(1),
+            rng=torch.Generator().manual_seed(1),
             n_rounds=5,
             step_size=0.2,
         )
@@ -702,7 +719,7 @@ def test_a_ladder_that_cannot_exchange_is_refused() -> None:
         parallel_tempering(
             GAUSSIAN,
             (1.0, 2.0),
-            generator=torch.Generator().manual_seed(1),
+            rng=torch.Generator().manual_seed(1),
             n_rounds=0,
             step_size=0.2,
         )
@@ -710,7 +727,7 @@ def test_a_ladder_that_cannot_exchange_is_refused() -> None:
         parallel_tempering(
             GAUSSIAN,
             (1.0, 2.0),
-            generator=torch.Generator().manual_seed(1),
+            rng=torch.Generator().manual_seed(1),
             n_rounds=5,
             step_size=0.2,
             n_steps=0,
@@ -743,7 +760,7 @@ def test_the_chain_recovers_the_enumerated_assignment_posterior_of_a_mixture() -
 
     chain = sample(
         target,
-        generator=torch.Generator().manual_seed(734),
+        rng=torch.Generator().manual_seed(734),
         n_samples=MIXTURE_DRAWS,
         step_size=MIXTURE_STEP,
         n_steps=MIXTURE_TRAJECTORY,

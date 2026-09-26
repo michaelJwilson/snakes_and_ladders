@@ -12,6 +12,8 @@ reference bitwise. `spatio_only/release`'s optimum, the two-state graph cut
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import numpy as np
 import pytest
 from sal.backend import Backend
@@ -175,7 +177,7 @@ def test_at_convergence_the_bound_is_dual_bounds_pairwise_value() -> None:
 
     def check(name: str, graph: PottsGraph, field: np.ndarray, _n_states: int) -> None:
         result = trws(graph, field)
-        reference = dual_bound(graph, field, iterations=5000)
+        reference = dual_bound(graph, field, max_iterations=5000)
 
         assert result.termination.converged, name
         assert reference.termination is not None
@@ -198,7 +200,7 @@ def test_on_two_frustrated_instances_both_ascents_stop_short_of_each_other() -> 
     # above both, so neither is the LP value there. Both stay bounds.
     def check(name: str, graph: PottsGraph, field: np.ndarray, n_states: int) -> None:
         result = trws(graph, field)
-        reference = dual_bound(graph, field, iterations=5000)
+        reference = dual_bound(graph, field, max_iterations=5000)
 
         assert result.termination.converged, name
         assert result.bound < reference.bound - 1e-3, name
@@ -333,13 +335,13 @@ def test_the_labelling_energy_is_sim_potts_energy() -> None:
             {},
             "edge 0 joins site 1 to itself",
         ),
-        (TREE, np.zeros(3), {"max_iterations": 0}, "max_iterations must be >= 1"),
+        (TREE, np.zeros(3), {"max_iterations": 0}, "max_iterations is a loop's cap"),
         (TREE, np.zeros(3), {"tolerance": -1.0}, "tolerance must be >= 0"),
         (
             TREE,
             np.zeros(3),
             {"max_iterations": 0, "backend": Backend.PYTHON},
-            "max_iterations must be >= 1",
+            "max_iterations is a loop's cap",
         ),
         (
             TREE,
@@ -415,3 +417,17 @@ def test_each_kernel_shape_error_names_wanted_and_given(
     arguments.update(change)
     with pytest.raises(ValueError, match=message):
         trws_iterations_checked(**arguments)  # type: ignore[arg-type]
+
+
+@pytest.mark.smoke
+def test_every_bound_refuses_a_cap_below_one_alike() -> None:
+    # Issue #1089: `dual_bound(max_iterations=0)` returned a bound of -inf where
+    # TRW-S refused; both refuse through `check_cap`.
+    field = np.zeros(3)
+    calls: tuple[Callable[[], object], ...] = (
+        lambda: trws(TREE, field, max_iterations=0),
+        lambda: dual_bound(TREE, field, max_iterations=0, plaquettes=()),
+    )
+    for call in calls:
+        with pytest.raises(ValueError, match="a loop's cap and must be at least 1"):
+            call()

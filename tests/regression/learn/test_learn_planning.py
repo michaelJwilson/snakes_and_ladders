@@ -113,7 +113,7 @@ def test_expert_iteration_makes_the_planner_reach_the_optimum_at_a_fraction_of_g
         np.mean(
             [
                 abs(
-                    environment.energy(
+                    environment.log_weight(
                         greedy_rollout(environment, start=s, max_steps=6).states[-1]
                     )
                     - best
@@ -139,7 +139,7 @@ def test_expert_iteration_makes_the_planner_reach_the_optimum_at_a_fraction_of_g
         horizon=6,
         n_simulations=20,
     )
-    assert training.evaluations > 0
+    assert training.spent > 0
     assert len(training.mean_returns) == 10
     rng = np.random.default_rng(1)
     planned = [
@@ -156,7 +156,9 @@ def test_expert_iteration_makes_the_planner_reach_the_optimum_at_a_fraction_of_g
         for s in starts
     ]
     reached = float(
-        np.mean([abs(environment.energy(e.states[-1]) - best) < 1e-9 for e in planned])
+        np.mean(
+            [abs(environment.log_weight(e.states[-1]) - best) < 1e-9 for e in planned]
+        )
     )
     evaluations = float(np.mean([e.evaluations for e in planned]))
     assert reached >= greedy, (reached, greedy)
@@ -266,7 +268,7 @@ def test_the_expert_iteration_curve_is_the_one_a_fixed_seed_produces() -> None:
         return (
             training.mean_returns,
             training.policy_losses,
-            training.evaluations,
+            training.spent,
         )
 
     first = curve()

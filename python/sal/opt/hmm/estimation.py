@@ -46,12 +46,13 @@ class EmFit:
     ----------
     log_initial, log_transition : torch.Tensor
         Fitted transition parameters, as log-probabilities.
-    emissions : EmissionFamily
-        The fitted emission family.
+    components : EmissionFamily
+        The fitted emission family, named as the mixture fits name theirs
+        (issue #1090).
     log_likelihood : float
         The final log-likelihood. A density, and so possibly positive, where
         the family is continuous.
-    emission_at_boundary : bool
+    at_boundary : bool
         Whether any M step returned a parameter at the edge of the range this
         data identifies it over.
     termination : Termination | None
@@ -62,9 +63,9 @@ class EmFit:
 
     log_initial: torch.Tensor
     log_transition: torch.Tensor
-    emissions: EmissionFamily
+    components: EmissionFamily
     log_likelihood: float
-    emission_at_boundary: bool = False
+    at_boundary: bool = False
     termination: Termination = dataclass_field(kw_only=True)
 
 
@@ -172,7 +173,7 @@ def baum_welch(
         CategoricalEmission.from_log(log_emission),
         config=config,
     )
-    family = result.emissions
+    family = result.components
     if not isinstance(family, CategoricalEmission):  # pragma: no cover
         msg = f"expected a categorical M step, got {type(family).__name__}"
         raise TypeError(msg)
@@ -532,9 +533,9 @@ def _streamed_family(
     return EmFit(
         log_initial=torch.from_numpy(initial),
         log_transition=torch.from_numpy(transition.reshape(m, m)),
-        emissions=fitted,
+        components=fitted,
         log_likelihood=log_likelihood,
-        emission_at_boundary=at_boundary,
+        at_boundary=at_boundary,
         termination=termination,
     )
 
@@ -917,8 +918,8 @@ def baum_welch_family(
     return EmFit(
         log_initial=log_initial,
         log_transition=log_transition,
-        emissions=emissions,
+        components=emissions,
         log_likelihood=log_likelihood,
-        emission_at_boundary=at_boundary,
+        at_boundary=at_boundary,
         termination=termination,
     )

@@ -66,7 +66,7 @@ def _fit(observations: np.ndarray, covariate: np.ndarray | None) -> np.ndarray:
         covariate=covariate,
         config=replace(EM, max_iterations=60),
     )
-    family = result.emissions
+    family = result.components
     assert isinstance(family, IndependentCountPair)
     return np.sort(family.total.mean.detach().numpy())
 

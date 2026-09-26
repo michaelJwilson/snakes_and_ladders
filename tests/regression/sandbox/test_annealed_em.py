@@ -90,7 +90,7 @@ def _same(first: EmissionMixtureFit, second: EmissionMixtureFit) -> bool:
     return (
         all(torch.equal(a, b) for a, b in tensors)
         and first.log_likelihood == second.log_likelihood
-        and first.iterations == second.iterations
+        and first.termination.iterations == second.termination.iterations
         and first.termination == second.termination
     )
 
@@ -168,7 +168,7 @@ def test_a_hot_step_spreads_every_pair_evenly_and_fits_the_pooled_pairs(
         [HOT],
         config=replace(EMISSION_MIXTURE_EM, max_iterations=1),
     ).fit
-    assert hot.iterations == 1
+    assert hot.termination.iterations == 1
     assert float((hot.responsibilities - 1.0 / k).abs().max()) < 1e-12
     assert float((hot.weights - 1.0 / k).abs().max()) < 1e-12
     values = torch.as_tensor(observations, dtype=torch.float64)

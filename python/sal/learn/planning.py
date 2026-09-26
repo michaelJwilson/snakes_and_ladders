@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import torch
 
+from sal.cost import Cost
 from sal.learn.critic import (
     Critic,
     fit_critic,
@@ -39,8 +40,9 @@ from sal.learn.critic import (
     state_values,
 )
 from sal.learn.environment import Environment, Episode
-from sal.learn.policy import TrainablePolicy
+from sal.learn.policy import TrainablePolicy, TrainingRun
 from sal.learn.rollout import log_probabilities_of
+from sal.opt.termination import Termination
 
 LeafValue = Callable[[object, int], float]
 
@@ -271,14 +273,16 @@ def plan_episode[S, A](
     )
 
 
-@dataclass(frozen=True)
-class ExpertIterationTraining:
-    """The outcome of expert iteration: mean planned return per iteration, the losses, and the evaluations spent."""
+@dataclass(frozen=True, kw_only=True)
+class ExpertIterationTraining(TrainingRun):
+    """The outcome of expert iteration: a :class:`~sal.learn.policy.TrainingRun` and its losses (issue #1090).
 
-    mean_returns: tuple[float, ...]
+    ``spent`` is the search's leaf evaluations, in
+    :attr:`~sal.cost.Cost.EVALUATIONS`.
+    """
+
     policy_losses: tuple[float, ...]
     critic_losses: tuple[float, ...]
-    evaluations: int
 
 
 def expert_iteration[S, A](
@@ -340,7 +344,12 @@ def expert_iteration[S, A](
             policy_losses.append(float(loss.detach()) / count)
         mean_returns.append(float(np.mean([e.total_reward for e in episodes])))
     return ExpertIterationTraining(
-        tuple(mean_returns), tuple(policy_losses), tuple(critic_losses), evaluations
+        mean_returns=tuple(mean_returns),
+        policy_losses=tuple(policy_losses),
+        critic_losses=tuple(critic_losses),
+        spent=evaluations,
+        unit=Cost.EVALUATIONS,
+        termination=Termination.after(iterations, converged=False),
     )
 
 

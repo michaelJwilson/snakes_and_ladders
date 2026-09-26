@@ -61,7 +61,7 @@ def test_the_jukes_cantor_distance_inverts_the_transition_probabilities() -> Non
 
     def check(t: float, k: int) -> None:
         n_sites = 10**6
-        frequencies = jc_transition_probabilities(t, k=k) / k
+        frequencies = jc_transition_probabilities(t, n_states=k) / k
         first, second = _pair_from_frequencies(frequencies, n_sites)
         # Rounding to integer counts moves the total by at most k^2 sites and p
         # by at most that fraction; the closed form is held at the realized p.
@@ -82,7 +82,7 @@ def test_the_log_det_distance_equals_the_branch_length_under_jukes_cantor() -> N
 
     def check(t: float) -> None:
         k = 4
-        frequencies = jc_transition_probabilities(t, k=k) / k
+        frequencies = jc_transition_probabilities(t, n_states=k) / k
         first, second = _pair_from_frequencies(frequencies, 10**6)
 
         estimate = log_det_distance(first, second, k)

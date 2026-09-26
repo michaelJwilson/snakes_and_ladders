@@ -26,6 +26,7 @@ from sal.likelihood.message_passing import (
     ConvergenceError,
     Guarantee,
     Marginals,
+    MaxMarginals,
     MessageScheduleName,
 )
 from sal.numerics import logsumexp
@@ -259,12 +260,12 @@ def sum_product(
     )
     variable, factor, log_partition = _beliefs(graph, to_variable, to_factor, False)
     return Marginals(
-        variable,
-        factor,
-        log_partition,
-        iterations,
-        _guarantee(schedule),
-        graph.is_tree(),
+        variable=variable,
+        factor=factor,
+        log_partition=log_partition,
+        iterations=iterations,
+        guarantee=_guarantee(schedule),
+        tree=graph.is_tree(),
     )
 
 
@@ -275,7 +276,7 @@ def max_product(
     damping: float = DEFAULT_DAMPING,
     tolerance: float = DEFAULT_TOLERANCE,
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
-) -> tuple[dict[str, int], Marginals]:
+) -> tuple[dict[str, int], MaxMarginals]:
     """The MAP assignment by max-marginals, and the max-marginals themselves.
 
     On a tree with a unique maximum this is the exact MAP -- Viterbi on a
@@ -287,11 +288,11 @@ def max_product(
     )
     variable, factor, _ = _beliefs(graph, to_variable, to_factor, True)
     assignment = {name: int(np.argmax(values)) for name, values in variable.items()}
-    return assignment, Marginals(
-        variable,
-        factor,
-        graph.log_density(assignment),
-        iterations,
-        _guarantee(schedule),
-        graph.is_tree(),
+    return assignment, MaxMarginals(
+        variable=variable,
+        factor=factor,
+        map_log_weight=graph.log_density(assignment),
+        iterations=iterations,
+        guarantee=_guarantee(schedule),
+        tree=graph.is_tree(),
     )

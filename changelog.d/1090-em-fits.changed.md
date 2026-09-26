@@ -1,0 +1,1 @@
+The EM fits share one field set: `EmFit` names its family `components` and its flag `at_boundary` (were `emissions`, `emission_at_boundary`), as `MixtureFit` and `EmissionMixtureFit` do, and those two drop `iterations`, which repeated `termination.iterations` (#1090).

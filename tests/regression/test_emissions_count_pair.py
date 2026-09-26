@@ -239,3 +239,87 @@ def test_a_pair_outside_the_support_is_refused_and_scored_at_minus_infinity() ->
     # Impossible under the model, not merely improbable, and stated as a
     # number a sum can carry rather than as a `nan` out of `lgamma`.
     assert not bool(torch.isnan(scored).any())
+
+
+def _covariate(n_pairs: int, rng: np.random.Generator) -> np.ndarray:
+    """``(n_pairs, 2)``: an exposure in [0.5, 2] and a trial count in 1..60 per pair."""
+    return np.stack(
+        [rng.uniform(0.5, 2.0, n_pairs), rng.integers(1, 61, n_pairs).astype(float)],
+        axis=-1,
+    )
+
+
+@pytest.mark.oracle
+def test_per_observation_trials_score_as_scipy_does() -> None:
+    # Issue #1083: the independent form's trials per observation, channel 1
+    # of the covariate, with channel 0 the total's exposure. Each pair against
+    # scipy's negative binomial at mean mu * c and beta-binomial at its own n.
+    stats = pytest.importorskip("scipy.stats")
+    rng = np.random.default_rng(1083)
+    family = _family(joint=False)
+    covariate = _covariate(200, rng)
+    states = rng.integers(0, 2, 200)
+    observations = family.sample(states, rng, covariate).astype(float)
+
+    scored = family.log_density(
+        torch.as_tensor(observations), torch.as_tensor(covariate)
+    ).numpy()
+
+    r = np.asarray(DISPERSION)
+    mu = np.asarray(MEAN)[None, :] * covariate[:, :1]
+    expected = stats.nbinom.logpmf(
+        observations[:, :1], r[None, :], r[None, :] / (r[None, :] + mu)
+    ) + stats.betabinom.logpmf(
+        observations[:, 1:], covariate[:, 1:], np.asarray(ALPHA), np.asarray(BETA)
+    )
+    assert_allclose(scored, expected, rtol=1e-12)
+    assert bool(np.all(observations[:, 1] <= covariate[:, 1]))
+
+
+@pytest.mark.oracle
+def test_a_constant_covariate_is_the_declared_trials() -> None:
+    # The per-state form read as a broadcast: exposure one and each pair's
+    # trials its state's declared count score what no covariate scores, to
+    # the two routes' rounding.
+    rng = np.random.default_rng(1)
+    family = _family(joint=False)
+    states = rng.integers(0, 2, 100)
+    observations = torch.as_tensor(family.sample(states, rng).astype(float))
+    covariate = torch.as_tensor(
+        np.stack([np.ones(100), np.asarray(TRIALS)[states]], axis=-1)
+    )
+    declared = family.log_density(observations)
+
+    scored = family.log_density(observations, covariate)
+
+    rows = np.arange(100)
+    assert_allclose(
+        scored.numpy()[rows, states], declared.numpy()[rows, states], rtol=1e-12
+    )
+
+
+@pytest.mark.end2end
+def test_the_m_step_recovers_the_rate_under_per_observation_trials() -> None:
+    # 4,000 pairs whose trials run 1..60 per pair: the planted label as the
+    # posterior, the M step alone, the tolerances the per-state test uses.
+    rng = np.random.default_rng(4083)
+    truth = _family(joint=False)
+    covariate = _covariate(4_000, rng)
+    states = rng.integers(0, 2, 4_000)
+    observations = torch.as_tensor(truth.sample(states, rng, covariate).astype(float))
+    posterior = torch.zeros((4_000, 2), dtype=torch.float64)
+    posterior[np.arange(4_000), states] = 1.0
+    start = CountPairEmission(
+        [1.0, 1.0], [10.0, 10.0], [1.0, 1.0], [1.0, 1.0], TRIALS, joint=False
+    )
+
+    step = start.reestimate(observations, posterior, covariate)
+
+    fitted = step.emissions
+    rate = np.asarray(ALPHA) / (np.asarray(ALPHA) + np.asarray(BETA))
+    assert step.converged
+    assert_allclose(fitted.total.mean.numpy(), MEAN, rtol=0.03)
+    assert_allclose(fitted.rate.numpy(), rate, rtol=0.05)
+    assert_allclose(
+        fitted.concentration.numpy(), np.asarray(ALPHA) + np.asarray(BETA), rtol=0.25
+    )

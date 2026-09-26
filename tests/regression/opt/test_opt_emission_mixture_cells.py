@@ -78,5 +78,5 @@ def test_the_distinct_count_fit_is_the_per_observation_one(name: str) -> None:
         rtol=0.0,
         atol=1e-10,
     )
-    assert cells.iterations == oracle.iterations
+    assert cells.termination.iterations == oracle.termination.iterations
     assert cells.at_boundary == oracle.at_boundary
