@@ -42,7 +42,7 @@ from sal.sim.tree import Node, preorder
 
 def log_likelihood(
     tau: Node,
-    k: int,
+    n_states: int,
     pi: np.ndarray,
     alignment: dict[str, np.ndarray],
     *,
@@ -57,7 +57,7 @@ def log_likelihood(
     tau : Node
         Root of the topology, with branch lengths attached to each non-root
         node.
-    k : int
+    n_states : int
         Number of states.
     pi : np.ndarray
         Root state distribution, shape (k,).
@@ -110,7 +110,7 @@ def log_likelihood(
         return float(
             taped.log_likelihood(
                 tau,
-                k,
+                n_states,
                 pi,
                 alignment,
                 taped.branch_lengths_from_tree(tau),
@@ -122,12 +122,12 @@ def log_likelihood(
         return cast(
             "float",
             rust.log_likelihood(
-                tau, k, pi, alignment, weights=weights, rescale=rescale
+                tau, n_states, pi, alignment, weights=weights, rescale=rescale
             ),
         )
 
-    if pi.shape != (k,):
-        msg = f"pi has shape {pi.shape}, expected ({k},)"
+    if pi.shape != (n_states,):
+        msg = f"pi has shape {pi.shape}, expected ({n_states},)"
         raise ValueError(msg)
 
     leaves = [node for node in preorder(tau) if node.is_leaf]
@@ -143,17 +143,19 @@ def log_likelihood(
     def _post_order(node: Node) -> np.ndarray:
         if node.is_leaf:
             states = alignment[node.name]
-            partial = np.zeros((n_sites, k))
+            partial = np.zeros((n_sites, n_states))
             partial[np.arange(n_sites), states] = 1.0
             return partial
 
-        partial = np.ones((n_sites, k))
+        partial = np.ones((n_sites, n_states))
         for child in node.children:
             if child.branch_length is None:
                 msg = f"non-root node {child.name!r} has no branch_length"
                 raise ValueError(msg)
             child_partial = _post_order(child)
-            transition = jc_transition_probabilities(child.branch_length, k=k)
+            transition = jc_transition_probabilities(
+                child.branch_length, n_states=n_states
+            )
             # message[s, i] = sum_j P_ij(t) * L_child(s, j) -- eq:pruning.
             partial = partial * (child_partial @ transition.T)
 

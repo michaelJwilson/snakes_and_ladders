@@ -40,7 +40,7 @@ def _alignment(
 ) -> tuple[dict[str, np.ndarray], int, np.ndarray]:
     params = load_params(fixture, SimulationParams)
     dataset = simulate_tree(params, np.random.default_rng(params.seed))
-    return dict(dataset.alignment), params.k, params.pi
+    return dict(dataset.alignment), params.n_states, params.pi
 
 
 def _score_once(
@@ -55,9 +55,9 @@ def _score_once(
     def run() -> float:
         # A fresh environment per call: the cache is the point of the class,
         # and timing a cache hit would measure a dictionary lookup.
-        return TreeEnvironment(alignment, k, pi, branch_length, reward=reward).score(
-            topology
-        )
+        return TreeEnvironment(
+            alignment, k, pi, branch_length, reward=reward
+        ).log_weight(topology)
 
     return float(benchmark(run))
 

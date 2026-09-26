@@ -68,7 +68,7 @@ def _icm_draw(rng: np.random.Generator) -> tuple[int, ...]:
 
     A random field against a comparable coupling: 6 draws reach 3 optima.
     """
-    labelling, *_ = iterated_conditional_modes(_graph(), ICM_FIELD, 3, rng)
+    labelling, *_ = iterated_conditional_modes(_graph(), ICM_FIELD, rng, n_states=3)
     return tuple(int(v) for v in labelling)
 
 

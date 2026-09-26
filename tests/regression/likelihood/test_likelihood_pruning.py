@@ -95,7 +95,7 @@ def test_pruning_matches_brute_force(
     k = 4
     pi = np.full(k, 0.25)
     dataset = simulate_alignment(
-        tau=tau, k=k, pi=pi, rng=np.random.default_rng(seed), n_sites=n_sites
+        tau=tau, n_states=k, pi=pi, rng=np.random.default_rng(seed), n_sites=n_sites
     )
 
     pruned = float(route(tau, k, pi, dataset.alignment))
@@ -111,7 +111,7 @@ def test_rescaled_and_unrescaled_agree_on_small_problems(route: Route) -> None:
     k = 4
     pi = np.full(k, 0.25)
     dataset = simulate_alignment(
-        tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260904), n_sites=100
+        tau=tau, n_states=k, pi=pi, rng=np.random.default_rng(20260904), n_sites=100
     )
 
     rescaled = float(route(tau, k, pi, dataset.alignment, rescale=True))
@@ -136,7 +136,7 @@ def test_pulley_principle_is_invariant_to_root_position() -> None:
     k = 4
     pi = np.full(k, 0.25)
     dataset = simulate_alignment(
-        tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260905), n_sites=200
+        tau=tau, n_states=k, pi=pi, rng=np.random.default_rng(20260905), n_sites=200
     )
 
     left, right = tau.children
@@ -165,7 +165,9 @@ def test_pulley_principle_is_invariant_to_root_position() -> None:
 def test_generating_topology_outscores_random_wrong_topologies() -> None:
     params, alignment = simulated_alignment("tree_jc/release.yaml")
 
-    true_log_likelihood = log_likelihood(params.tau, params.k, params.pi, alignment)
+    true_log_likelihood = log_likelihood(
+        params.tau, params.n_states, params.pi, alignment
+    )
 
     leaf_names = [node.name for node in preorder(params.tau) if node.is_leaf]
     rng = np.random.default_rng(20260906)
@@ -179,7 +181,7 @@ def test_generating_topology_outscores_random_wrong_topologies() -> None:
         mapping = dict(zip(leaf_names, permuted, strict=True))
         wrong_tau = _relabel_leaves(params.tau, mapping)
         wrong_log_likelihoods.append(
-            log_likelihood(wrong_tau, params.k, params.pi, alignment)
+            log_likelihood(wrong_tau, params.n_states, params.pi, alignment)
         )
 
     assert true_log_likelihood > max(wrong_log_likelihoods)

@@ -93,7 +93,7 @@ def test_where_trws_converges_its_bound_is_the_lp_value() -> None:
         assert result.termination.converged, name
         assert abs(result.bound - value) <= scale, (name, result.bound, value)
         if graph.n_nodes <= 144:
-            pairwise = dual_bound(graph, field, iterations=5000, plaquettes=())
+            pairwise = dual_bound(graph, field, max_iterations=5000, plaquettes=())
             assert abs(pairwise.bound - value) <= scale, (name, pairwise.bound, value)
 
     every_row(rows, check)
@@ -108,7 +108,7 @@ def test_where_trws_stalls_both_ascents_are_below_the_lp() -> None:
     def check(name: str, graph: PottsGraph, field: np.ndarray, n_states: int) -> None:
         value = _solved(graph, field).value
         result = trws(graph, field)
-        pairwise = dual_bound(graph, field, iterations=5000, plaquettes=())
+        pairwise = dual_bound(graph, field, max_iterations=5000, plaquettes=())
 
         assert value == pytest.approx(STALLED_LP[name], rel=LP_AGREEMENT), name
         assert result.termination.converged, name
