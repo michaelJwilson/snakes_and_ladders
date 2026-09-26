@@ -429,7 +429,7 @@ def covariate_block(
     it, and #677 stopped the five seams that slice a covariate from each
     carrying their own copy of it. What is local here: a covariate that
     carries the family's axes is passed through, because
-    :func:`~sal.sim.count_pairs.split_covariate` is what puts
+    :func:`~sal.emissions.base.split_covariate` is what puts
     the singleton inside each channel, and appending it here made a
     ``(S, V, 2)`` covariate ``(S, V, 2, 1)`` (#670).
 

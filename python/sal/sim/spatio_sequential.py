@@ -550,7 +550,7 @@ def _drawing_covariate(
     (:mod:`sal.emissions`). Appending it to a per-channel
     covariate makes ``(S * n_m, 2)`` into ``(S * n_m, 2, 1)``, whose last axis
     names no channel, and
-    :func:`sal.sim.count_pairs.split_covariate` refuses it ---
+    :func:`sal.emissions.base.split_covariate` refuses it ---
     which is how a pair family could not be drawn here at all (issue #672).
 
     Returns
