@@ -49,7 +49,10 @@ lattice, the field and ``q`` --- and a :class:`Rung` hands its own.
 :data:`ARMS` entry (issue #1038's tuned Swendsen-Wang, matched Wolff and warm
 chain, #1041's two expansion hybrids) from a ``(graph, field)``, and takes a
 ``start``, a ``schedule`` and a step count; with all three left ``None`` a run
-is the entry's own bitwise (issue #1052).
+is the entry's own bitwise (issue #1052). The warm chain and the two hybrids
+are built by one factory, :func:`chain` over :func:`part`, and
+:func:`compose` reads any chain of entries from a name such as
+``field_argmax>descent>alpha-expansion`` (issue #1077).
 
 See Boykov, Veksler & Zabih (2001) for the expansion bound and Baxter ch. 12
 for the ordering coupling the rungs sit either side of.
@@ -57,11 +60,15 @@ for the ordering coupling the rungs sit either side of.
 
 from __future__ import annotations
 
+import copy
 import functools
+import operator
+import re
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, replace
-from typing import Any, Protocol
+from dataclasses import field as dataclass_field
+from typing import Any, NoReturn, Protocol
 
 import numpy as np
 
@@ -73,6 +80,7 @@ from sal.likelihood.message_passing import (
     max_product,
 )
 from sal.opt.budget import Budget, Comparison, Outcome
+from sal.opt.compose import BestOf, Step, Then
 from sal.opt.termination import Stop, Termination
 from sal.sample.potts_mcmc import (
     ClusterCounter,
@@ -698,47 +706,41 @@ def descend(
     return settled.labelling, settled.sweeps
 
 
-def warm_anneal(
+def run_descent(
     problem: Problem | Rung,
     budget: Budget,
     rng: np.random.Generator,
-    move: PottsMove,
-    schedule: ScheduleParams,
     *,
-    steps: int | None = None,
     start: np.ndarray | None = None,
 ) -> MethodRun:
-    """ICM from a uniform draw, or from ``start``, to its first clean sweep, then an anneal from its labelling.
+    """ICM from a uniform draw, or from ``start``, to its first clean sweep, charged the sweeps it ran.
 
-    A warm chain (issue #1038): the descent's sweeps are charged at
-    ``visits_per_sweep`` each, clean sweep included, and the anneal gets what
-    is left of ``budget`` by :func:`run_annealed`'s rule, or ``steps`` where the
-    caller fixed a count. Both draw from ``rng`` in that order, so the
-    descent is the one :func:`run_icm` runs on the same generator.
-
-    Returns
-    -------
-    MethodRun
-        The anneal's labelling and energy, ``spent`` the two charges summed.
+    :func:`descend` as a stage: the warm chain's first part (issue #1038).
+    Where :func:`run_icm` charges its whole budget, this charges
+    ``visits_per_sweep`` per sweep run, the clean one included, so a stage
+    after it gets the rest (issue #1077).
     """
     problem = _problem(problem)
     started = time.perf_counter()
     labelling, sweeps = descend(
         problem, rng, budget.size // problem.visits_per_sweep, start=start
     )
-    descent = sweeps * problem.visits_per_sweep
-    run = run_annealed(
-        problem,
-        Budget(budget.unit, budget.size - descent),
-        rng,
-        move,
-        schedule=schedule,
-        steps=steps,
-        start=labelling,
+    return MethodRun(
+        labelling=labelling,
+        energy=energy(problem.graph, problem.field, labelling),
+        spent=sweeps * problem.visits_per_sweep,
+        seconds=time.perf_counter() - started,
     )
-    return replace(
-        run, spent=descent + run.spent, seconds=time.perf_counter() - started
-    )
+
+
+#: What a stage hands the next: its labelling (issue #1077).
+handover = operator.attrgetter("labelling")
+
+#: The options an annealed stage takes.
+ANNEAL_OPTIONS = frozenset({"schedule", "steps"})
+
+#: The options a single-site descent takes.
+DESCENT_OPTIONS = frozenset({"backend", "min_sites"})
 
 
 def run_field_argmax(
@@ -1099,104 +1101,529 @@ METHODS: dict[str, Method] = {
 ONE_AXIS = ("icm", "icm-random")
 
 
-#: Cycles of the expansion :func:`run_swendsen_wang_then_expansion` holds
+#: Cycles of the expansion the ``swendsen-wang>expansion`` arm holds
 #: back from Swendsen-Wang's share. From a uniform start the expansion ends in
 #: 3 cycles on `spatio_only/release` at ten states; 10 leaves it room from a
 #: labelling that is not its own.
 EXPANSION_RESERVE_CYCLES = 10
 
 
-def run_swendsen_wang_then_expansion(
-    problem: Problem | Rung,
-    budget: Budget,
-    rng: np.random.Generator,
+@dataclass(frozen=True)
+class ExpansionReserve:
+    """Site visits of ``cycles`` expansion cycles on a problem: what a stage before the expansion holds back."""
+
+    cycles: int
+
+    def __call__(self, problem: Problem | Rung) -> int:
+        """``cycles`` times one cycle's ``n_states`` sweeps."""
+        return self.cycles * problem.n_states * problem.visits_per_sweep
+
+
+@dataclass(frozen=True)
+class SweepReserve:
+    """Site visits of ``sweeps`` heat-bath sweeps on a problem: a reserve in sweeps."""
+
+    sweeps: int
+
+    def __call__(self, problem: Problem | Rung) -> int:
+        """``sweeps`` times ``visits_per_sweep``."""
+        return self.sweeps * problem.visits_per_sweep
+
+
+#: The names that are a single-site descent, and so take its ``backend`` and
+#: ``min_sites`` floor (issue #1055). The annealers, the cuts and the hybrids
+#: have no floor of their own and refuse one.
+FLOORED = frozenset({"icm", "icm-random"})
+
+#: The :data:`METHODS` names that run an anneal.
+_ANNEALED_METHODS = frozenset({"anneal", "swendsen-wang", "wolff"})
+
+#: Parts a chain can name beside :data:`METHODS` and :data:`ARMS`: the warm
+#: chain's descent, which charges only the sweeps it ran (issue #1077).
+STAGES: dict[str, Method] = {"descent": run_descent}
+
+#: Separates the parts of a chain in a method name.
+CHAIN = ">"
+
+
+def _options(name: str) -> frozenset[str]:
+    """The keyword options the part ``name`` takes: an arm's are an anneal's."""
+    if name in FLOORED:
+        return DESCENT_OPTIONS
+    if name in _ANNEALED_METHODS:
+        return ANNEAL_OPTIONS
+    if name in METHODS or name in STAGES:
+        return frozenset()
+    return ANNEAL_OPTIONS
+
+
+def _solver(name: str) -> Method:
+    """The solver a part names, from :data:`METHODS`, :data:`STAGES` or :data:`ARMS`."""
+    for table in (METHODS, STAGES):
+        if name in table:
+            return table[name]
+    # :data:`ARMS` is read last and only here: it is built from parts named
+    # in the other two, so it is defined by the time a name reaches it.
+    if name in ARMS:
+        return ARMS[name]
+    msg = (
+        f"no ground-state part {name!r}; the parts are {sorted(METHODS)}, "
+        f"{sorted(ARMS)} and {sorted(STAGES)}"
+    )
+    raise ValueError(msg)
+
+
+def part(
+    solver: str | Callable[..., MethodRun],
     *,
-    schedule: ScheduleParams,
-    reserve_cycles: int = EXPANSION_RESERVE_CYCLES,
-    steps: int | None = None,
-    start: np.ndarray | None = None,
-) -> MethodRun:
-    """Swendsen-Wang on ``schedule``, then alpha-expansion from its labelling (issue #1041).
+    reserve: Callable[[Any], int] | None = None,
+    takes: frozenset[str] | None = None,
+    **bound: Any,
+) -> Step:
+    """One part of a chain: a solver by name or itself, with keywords bound (issue #1077).
 
-    The anneal runs from a uniform draw or ``start`` on ``budget`` less
-    ``reserve_cycles`` expansion cycles, by :func:`run_annealed`'s rule or at
-    ``steps``; the expansion starts from the anneal's best labelling with
-    what is left as its cap, and is charged the cycles it ran.
-
-    Returns
-    -------
-    MethodRun
-        The expansion's labelling and energy, ``spent`` both parts summed.
+    A solver given itself may take more than a :class:`Method` does, such as
+    :func:`run_annealed`'s ``move``, which ``bound`` then supplies. ``bound`` is bound to the solver, as ``schedule=`` or ``move=``, and a
+    keyword of the same name passed to the chain at call time replaces it.
+    ``reserve`` is what the part holds back for the parts after it. ``takes``
+    is read from the name where one is given, and is otherwise the options
+    the caller routes to the solver, none by default.
     """
-    problem = _problem(problem)
-    started = time.perf_counter()
-    per_cycle = problem.n_states * problem.visits_per_sweep
-    anneal = run_annealed(
-        problem,
-        Budget(budget.unit, budget.size - reserve_cycles * per_cycle),
-        rng,
-        PottsMove.SWENDSEN_WANG,
-        schedule=schedule,
-        steps=steps,
-        start=start,
-    )
-    left = budget.size - anneal.spent
-    expansion = alpha_expansion(
-        problem.graph,
-        problem.field,
-        problem.n_states,
-        start=anneal.labelling,
-        max_cycles=max(1, left // per_cycle),
-        backend=Backend.RUST,
-    )
-    return MethodRun(
-        labelling=expansion.labelling,
-        energy=expansion.energy,
-        spent=anneal.spent + expansion.cycles * per_cycle,
-        seconds=time.perf_counter() - started,
-        termination=expansion.termination,
-    )
+    stage: Callable[..., MethodRun]
+    if isinstance(solver, str):
+        stage = _solver(solver)
+        routed = _options(solver) if takes is None else takes
+    else:
+        stage = solver
+        routed = frozenset() if takes is None else takes
+    if bound:
+        stage = functools.partial(stage, **bound)
+    return Step(stage, takes=routed, reserve=reserve)
 
 
-def run_expansion_then_swendsen_wang(
-    problem: Problem | Rung,
-    budget: Budget,
-    rng: np.random.Generator,
-    *,
-    schedule: ScheduleParams,
-    steps: int | None = None,
-    start: np.ndarray | None = None,
-) -> MethodRun:
-    """Alpha-expansion, then Swendsen-Wang on ``schedule`` from its labelling (issue #1041).
+def chain(*parts: str | Step) -> Then:
+    """A chain of parts, each a name or a :func:`part`: the one factory for every hybrid (issue #1077).
 
-    The expansion runs as :func:`run_alpha_expansion` does, from ``start``
-    where one is given, and is charged its cycles; the anneal gets the rest
-    of ``budget`` by :func:`run_annealed`'s rule or ``steps``. The anneal
-    returns the lowest energy it visited, its start included, so the arm
-    hands over the expansion's energy or lower.
-
-    Returns
-    -------
-    MethodRun
-        The anneal's labelling and energy, ``spent`` both parts summed.
+    Each part starts from the labelling of the one before, gets the budget the
+    parts before it left less its reserve, and draws from the one generator.
+    The run is the last part's, ``spent`` summed. ``schedule`` and ``steps``
+    reach every annealed part, ``backend`` and ``min_sites`` every
+    single-site descent. A part that refuses a start, such as
+    ``field_argmax``, can only come first; and since :func:`run_icm` charges
+    its whole budget, a descent before another part is ``descent``.
     """
-    problem = _problem(problem)
-    started = time.perf_counter()
-    expansion = run_alpha_expansion(problem, budget, rng, start=start)
-    anneal = run_annealed(
-        problem,
-        Budget(budget.unit, budget.size - expansion.spent),
-        rng,
-        PottsMove.SWENDSEN_WANG,
-        schedule=schedule,
-        steps=steps,
-        start=expansion.labelling,
+    return Then(
+        tuple(item if isinstance(item, Step) else part(item) for item in parts),
+        handover,
     )
-    return replace(
-        anneal,
-        spent=expansion.spent + anneal.spent,
-        seconds=time.perf_counter() - started,
-    )
+
+
+#: One stage of a chain's text: a solver's name and, in parentheses, its
+#: arguments as ``key=value`` pairs separated by commas.
+_STAGE = re.compile(r"^\s*([A-Za-z0-9_\-]+)\s*(?:\((.*)\))?\s*$")
+
+#: The fields of an annealed stage's schedule an argument sets; the others
+#: are :data:`ANNEAL_SCHEDULE`'s.
+SCHEDULE_FIELDS = ("shape", "t_start", "t_end", "hold")
+
+#: Every argument a stage can take, and how a value, typed or text, is read.
+ARGUMENTS: dict[str, Callable[[Any], Any]] = {
+    "shape": ScheduleShape,
+    "t_start": float,
+    "t_end": float,
+    "hold": float,
+    "steps": int,
+    "backend": Backend,
+    "min_sites": int,
+    "reserve_cycles": int,
+    "reserve_sweeps": int,
+}
+
+
+def _refuse_argument(name: str, keys: Iterable[str], reason: str) -> None:
+    """Raise for arguments a stage cannot take."""
+    msg = f"{name!r} takes no {sorted(keys)!r}: {reason}"
+    raise ValueError(msg)
+
+
+@dataclass
+class SolverStage:
+    """One stage of a :class:`SolverChain`: a solver's name and its arguments (issue #1077).
+
+    ``arguments`` are :data:`ARGUMENTS`' keys: the schedule's fields and
+    ``steps`` on an annealed stage, ``backend`` and ``min_sites`` on a
+    single-site descent, and ``reserve_cycles`` or ``reserve_sweeps`` on any
+    stage, held back for the stages after it. Set them with :meth:`update`,
+    which checks each against the stage. An :data:`ARMS` name is a chain
+    already and takes none.
+    """
+
+    name: str
+    arguments: dict[str, Any] = dataclass_field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        _solver(self.name)
+        given, self.arguments = self.arguments, {}
+        self.update(**given)
+
+    @classmethod
+    def parse(cls, text: str) -> SolverStage:
+        """A stage from ``name`` or ``name(key=value,...)``."""
+        match = _STAGE.match(text)
+        if match is None:
+            msg = f"a stage is a name and optional (key=value, ...), got {text!r}"
+            raise ValueError(msg)
+        name, body = match.groups()
+        arguments: dict[str, str] = {}
+        for item in (body or "").split(","):
+            if not item.strip():
+                continue
+            key, equals, value = item.partition("=")
+            if not equals or not key.strip() or not value.strip():
+                msg = f"an argument is key=value, got {item.strip()!r} in {text!r}"
+                raise ValueError(msg)
+            arguments[key.strip()] = value.strip()
+        return cls(name, arguments)
+
+    def update(self, **arguments: Any) -> SolverStage:
+        """Set arguments, checked against the stage; ``schedule=`` sets all four fields.
+
+        Returns the stage, so calls chain.
+
+        Raises
+        ------
+        ValueError
+            If an argument is unknown, unreadable or not the stage's, or
+            both reserves would be set.
+        """
+        if "schedule" in arguments:
+            schedule = arguments.pop("schedule")
+            arguments = {
+                **{key: getattr(schedule, key) for key in SCHEDULE_FIELDS},
+                **arguments,
+            }
+        if not arguments:
+            return self
+        unknown = set(arguments) - set(ARGUMENTS)
+        if unknown:
+            _refuse_argument(self.name, unknown, "unknown arguments")
+        if self.name in ARMS:
+            _refuse_argument(self.name, arguments, "an arm is a chain already")
+        takes = _options(self.name)
+        annealing = set(arguments) & {*SCHEDULE_FIELDS, "steps"}
+        if annealing and not takes & ANNEAL_OPTIONS:
+            _refuse_argument(self.name, annealing, "it runs no anneal")
+        descending = set(arguments) & {"backend", "min_sites"}
+        if descending and not takes & DESCENT_OPTIONS:
+            _refuse_argument(self.name, descending, "it is no single-site descent")
+        read = {key: ARGUMENTS[key](value) for key, value in arguments.items()}
+        merged = {**self.arguments, **read}
+        if "reserve_cycles" in merged and "reserve_sweeps" in merged:
+            _refuse_argument(self.name, read, "one reserve, in cycles or in sweeps")
+        self.arguments = merged
+        return self
+
+    def step(self) -> Step:
+        """The stage as a :class:`~sal.opt.compose.Step`."""
+        arguments = dict(self.arguments)
+        bound: dict[str, Any] = {}
+        fields = {
+            key: arguments.pop(key) for key in SCHEDULE_FIELDS if key in arguments
+        }
+        if fields:
+            bound["schedule"] = replace(ANNEAL_SCHEDULE, **fields)
+        for key in ("steps", "backend", "min_sites"):
+            if key in arguments:
+                bound[key] = arguments.pop(key)
+        reserve: Callable[[Any], int] | None = None
+        if "reserve_cycles" in arguments:
+            reserve = ExpansionReserve(arguments.pop("reserve_cycles"))
+        if "reserve_sweeps" in arguments:
+            reserve = SweepReserve(arguments.pop("reserve_sweeps"))
+        return part(self.name, reserve=reserve, **bound)
+
+    def __str__(self) -> str:
+        """The stage's text, which :meth:`parse` reads back."""
+        if not self.arguments:
+            return self.name
+        shown = ",".join(
+            f"{key}={getattr(value, 'value', value)!s}"
+            if not isinstance(value, float)
+            else f"{key}={value!r}"
+            for key, value in self.arguments.items()
+        )
+        return f"{self.name}({shown})"
+
+
+#: The separators of a chain's text: stages in order, realizations, and a
+#: realization count.
+REALIZATIONS = "|"
+REPEAT = "**"
+
+#: A stage's name in a chain's text.
+_NAME = re.compile(r"[A-Za-z0-9_\-]+")
+
+#: What a realization's run is judged on.
+_ENERGY = operator.attrgetter("energy")
+
+
+def _as_step(node: SolverStage | SolverChain | SolverRealizations) -> Step:
+    """A node as one step of the chain around it."""
+    if isinstance(node, SolverStage):
+        return node.step()
+    built = node.then() if isinstance(node, SolverChain) else node.best_of()
+    return Step(built, takes=built.takes)
+
+
+@dataclass
+class SolverChain:
+    """Stages run in order under one budget, built when called (issue #1077).
+
+    ``SolverChain.parse("swendsen-wang>alpha-expansion")`` reads one from
+    its text, ``chain.stages[0].update(t_start=1.0, reserve_cycles=10)``
+    sets a stage's arguments, and :func:`ground_state` runs it. Each stage
+    starts from the labelling of the one before and gets the budget the
+    stages before it left less its reserve; the run is the last stage's,
+    ``spent`` summed. A stage is a :class:`SolverStage` or a
+    :class:`SolverRealizations`. ``schedule`` and ``steps`` passed at call
+    time reach every annealed stage and replace its arguments; ``backend``
+    and ``min_sites`` every single-site descent. A stage that refuses a
+    start, such as ``field_argmax``, can only come first; and since
+    :func:`run_icm` charges its whole budget, a descent before another stage
+    is ``descent``.
+
+    The text is stages joined by ``>``; ``a|b`` is realizations of ``a`` and
+    ``b`` and ``x**n`` is ``n`` realizations of ``x``, :class:`SolverRealizations`;
+    parentheses group. ``**`` binds tightest, then ``>``, then ``|``, so
+    ``descent>alpha-expansion**2`` repeats the expansion alone and
+    ``(descent>alpha-expansion)**2`` the whole chain. ``str(chain)`` is text
+    :meth:`parse` reads back.
+    """
+
+    stages: list[SolverStage | SolverRealizations]
+
+    def __post_init__(self) -> None:
+        if not self.stages:
+            msg = "a chain has at least one stage"
+            raise ValueError(msg)
+
+    @classmethod
+    def parse(cls, text: str) -> SolverChain:
+        """A chain from its text; realizations at the top are a chain of one stage.
+
+        Raises
+        ------
+        ValueError
+            If the text does not read, or a stage or argument is refused.
+        """
+        node = _Reader(text).read()
+        return node if isinstance(node, SolverChain) else cls([node])
+
+    def then(self) -> Then:
+        """The chain as it runs, built from the stages' current arguments."""
+        return Then(tuple(_as_step(stage) for stage in self.stages), handover)
+
+    @property
+    def takes(self) -> frozenset[str]:
+        """Every option some stage takes at call time."""
+        return self.then().takes
+
+    def __call__(
+        self,
+        problem: Problem | Rung,
+        budget: Budget,
+        rng: np.random.Generator,
+        /,
+        *,
+        start: np.ndarray | None = None,
+        **options: Any,
+    ) -> MethodRun:
+        """Run the stages on ``problem`` within ``budget``, the first from ``start``."""
+        run: MethodRun = self.then()(problem, budget, rng, start=start, **options)
+        return run
+
+    def __str__(self) -> str:
+        """The chain's text, which :meth:`parse` reads back."""
+        return CHAIN.join(
+            f"({stage})"
+            if isinstance(stage, SolverRealizations) and len(self.stages) > 1
+            else str(stage)
+            for stage in self.stages
+        )
+
+
+@dataclass
+class SolverRealizations:
+    """Independent realizations from one start, the lowest energy kept (issue #1077).
+
+    :class:`~sal.opt.compose.BestOf`: each branch, a :class:`SolverStage` or
+    a :class:`SolverChain`, runs from the same start on an equal share of
+    the budget and its own generator spawned in branch order; the run is
+    the lowest-energy branch's, ``spent`` summed. ``x**n`` in a chain's text
+    is ``n`` copies of ``x``, each updated on its own.
+    """
+
+    branches: list[SolverStage | SolverChain]
+
+    def __post_init__(self) -> None:
+        if len(self.branches) < 2:
+            msg = f"realizations are at least two, got {len(self.branches)}"
+            raise ValueError(msg)
+
+    def update(self, **arguments: Any) -> SolverRealizations:
+        """:meth:`SolverStage.update` on every branch; update one through :attr:`branches`.
+
+        Raises
+        ------
+        ValueError
+            If a branch is a chain, whose stages are updated one by one, or
+            an argument is refused; no branch is changed then.
+        """
+        updated = [
+            branch
+            for branch in copy.deepcopy(self.branches)
+            if isinstance(branch, SolverStage)
+        ]
+        if len(updated) != len(self.branches):
+            msg = "a branch is a chain: update its stages through branches"
+            raise ValueError(msg)
+        for branch in updated:
+            branch.update(**arguments)
+        self.branches = list(updated)
+        return self
+
+    def best_of(self) -> BestOf:
+        """The realizations as they run."""
+        return BestOf(
+            tuple(
+                branch.then()
+                if isinstance(branch, SolverChain)
+                else Then((_as_step(branch),), handover)
+                for branch in self.branches
+            ),
+            _ENERGY,
+        )
+
+    @property
+    def takes(self) -> frozenset[str]:
+        """Every option some branch takes at call time."""
+        return self.best_of().takes
+
+    def __call__(
+        self,
+        problem: Problem | Rung,
+        budget: Budget,
+        rng: np.random.Generator,
+        /,
+        *,
+        start: np.ndarray | None = None,
+        **options: Any,
+    ) -> MethodRun:
+        """Run every realization on its share and keep the lowest."""
+        run: MethodRun = self.best_of()(problem, budget, rng, start=start, **options)
+        return run
+
+    def __str__(self) -> str:
+        """``x**n`` where every branch is the same, else branches joined by ``|``."""
+        first = self.branches[0]
+        if all(branch == first for branch in self.branches):
+            shown = f"({first})" if isinstance(first, SolverChain) else str(first)
+            return f"{shown}{REPEAT}{len(self.branches)}"
+        return REALIZATIONS.join(str(branch) for branch in self.branches)
+
+
+class _Reader:
+    """Recursive descent over a chain's text: ``|`` below ``>`` below ``**``."""
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+        self.at = 0
+
+    def _fail(self, what: str) -> NoReturn:
+        msg = f"expected {what} at {self.at} in {self.text!r}"
+        raise ValueError(msg)
+
+    def _peek(self, token: str) -> bool:
+        while self.at < len(self.text) and self.text[self.at].isspace():
+            self.at += 1
+        return self.text.startswith(token, self.at)
+
+    def read(self) -> SolverStage | SolverChain | SolverRealizations:
+        node = self._branches()
+        if self._peek("") and self.at != len(self.text):
+            self._fail("the end")
+        return node
+
+    def _branches(self) -> SolverStage | SolverChain | SolverRealizations:
+        branches = [self._sequence()]
+        while self._peek(REALIZATIONS):
+            self.at += len(REALIZATIONS)
+            branches.append(self._sequence())
+        if len(branches) == 1:
+            return branches[0]
+        return SolverRealizations(
+            [
+                SolverChain([branch])
+                if isinstance(branch, SolverRealizations)
+                else branch
+                for branch in branches
+            ]
+        )
+
+    def _sequence(self) -> SolverStage | SolverChain | SolverRealizations:
+        stages: list[SolverStage | SolverRealizations] = []
+        while True:
+            node = self._repeated()
+            # A group that is a chain is its stages here: the same run.
+            stages.extend(node.stages if isinstance(node, SolverChain) else [node])
+            if not self._peek(CHAIN):
+                break
+            self.at += len(CHAIN)
+        return stages[0] if len(stages) == 1 else SolverChain(stages)
+
+    def _repeated(self) -> SolverStage | SolverChain | SolverRealizations:
+        node = self._atom()
+        if not self._peek(REPEAT):
+            return node
+        self.at += len(REPEAT)
+        self._peek("")
+        count = re.match(r"\d+", self.text[self.at :])
+        if count is None:
+            self._fail("a count after **")
+        self.at += count.end()
+        n = int(count.group())
+        if n < 1:
+            self._fail("a count of at least one")
+        if n == 1:
+            return node
+        branch = SolverChain([node]) if isinstance(node, SolverRealizations) else node
+        return SolverRealizations([copy.deepcopy(branch) for _ in range(n)])
+
+    def _atom(self) -> SolverStage | SolverChain | SolverRealizations:
+        if self._peek("("):
+            self.at += 1
+            node = self._branches()
+            if not self._peek(")"):
+                self._fail("a closing parenthesis")
+            self.at += 1
+            return node
+        name = _NAME.match(self.text, self.at)
+        if name is None:
+            self._fail("a stage name")
+        self.at = name.end()
+        body = ""
+        if self.text.startswith("(", self.at):
+            close = self.text.find(")", self.at)
+            if close < 0:
+                self._fail("a closing parenthesis")
+            body = self.text[self.at : close + 1]
+            self.at = close + 1
+        return SolverStage.parse(name.group() + body)
+
+
+def compose(text: str) -> SolverChain:
+    """:meth:`SolverChain.parse`: any chain or realizations of :data:`METHODS`, :data:`ARMS` and :data:`STAGES` stages, from its text."""
+    return SolverChain.parse(text)
 
 
 # The arms' constants are issue #1038's results, copied from
@@ -1217,7 +1644,7 @@ WOLFF_MATCHED_STEPS = 41250
 #: The warm chain's schedule: Swendsen-Wang's tuned shape, hold and end from
 #: ``t_start = 1.0``, the notebook's ``swendsen-wang warm 1.0`` arm.
 WARM_SCHEDULE = replace(SWENDSEN_WANG_SCHEDULE, t_start=1.0)
-#: Where :func:`run_expansion_then_swendsen_wang`'s chain starts and ends:
+#: Where the ``expansion>swendsen-wang`` arm's anneal starts and ends:
 #: Swendsen-Wang's tuned end, cooled to :data:`ANNEAL_END` (issue #1041).
 EXPANSION_SW_SCHEDULE = ScheduleParams(ScheduleShape.LINEAR, 0.3236, ANNEAL_END)
 
@@ -1231,30 +1658,32 @@ ARMS: dict[str, Method] = {
     "matched-wolff": functools.partial(
         run_annealed, move=PottsMove.WOLFF, steps=WOLFF_MATCHED_STEPS
     ),
-    "warm-anneal": functools.partial(
-        warm_anneal, move=PottsMove.SWENDSEN_WANG, schedule=WARM_SCHEDULE
+    # ICM to its first clean sweep, then Swendsen-Wang from 1.0 (#1038).
+    "warm-anneal": chain("descent", part("swendsen-wang", schedule=WARM_SCHEDULE)),
+    # Swendsen-Wang, holding ten expansion cycles back, then the expansion
+    # from its labelling on what is left (#1041).
+    "swendsen-wang>expansion": chain(
+        part(
+            "swendsen-wang",
+            schedule=SWENDSEN_WANG_SCHEDULE,
+            reserve=ExpansionReserve(EXPANSION_RESERVE_CYCLES),
+        ),
+        "alpha-expansion",
     ),
-    "swendsen-wang>expansion": functools.partial(
-        run_swendsen_wang_then_expansion, schedule=SWENDSEN_WANG_SCHEDULE
-    ),
-    "expansion>swendsen-wang": functools.partial(
-        run_expansion_then_swendsen_wang, schedule=EXPANSION_SW_SCHEDULE
+    # The expansion, then Swendsen-Wang from its labelling (#1041).
+    "expansion>swendsen-wang": chain(
+        "alpha-expansion", part("swendsen-wang", schedule=EXPANSION_SW_SCHEDULE)
     ),
 }
 
 #: The names that run an anneal, and so take a ``schedule`` and ``steps``.
-ANNEALED = frozenset({"anneal", "swendsen-wang", "wolff", *ARMS})
-
-#: The names that are a single-site descent, and so take its ``backend`` and
-#: ``min_sites`` floor (issue #1055). The annealers, the cuts and the hybrids
-#: have no floor of their own and refuse one.
-FLOORED = frozenset({"icm", "icm-random"})
+ANNEALED = _ANNEALED_METHODS | frozenset(ARMS)
 
 
 def ground_state(
     graph: PottsGraph,
     field: np.ndarray,
-    method: str,
+    method: str | SolverChain | SolverRealizations | Then | BestOf,
     budget: Budget,
     rng: np.random.Generator,
     *,
@@ -1287,8 +1716,12 @@ def ground_state(
         The lattice; every coupling non-negative.
     field : np.ndarray
         ``h``, shape ``(n_nodes, n_states)``.
-    method : str
-        A key of :data:`METHODS` or :data:`ARMS`.
+    method : str | SolverChain | Then
+        A key of :data:`METHODS` or :data:`ARMS`; the text of a
+        :class:`SolverChain`, stages joined by ``>`` with their arguments,
+        e.g. ``swendsen-wang(t_start=1.0,reserve_cycles=10)>alpha-expansion``;
+        a :class:`SolverChain`; or a chain built by :func:`chain`. A key is
+        read as itself before it is read as a chain.
     budget : Budget
         In :attr:`~sal.cost.Cost.SITE_VISITS`, the unit every
         entry is charged in.
@@ -1325,10 +1758,19 @@ def ground_state(
         ``min_sites > 0`` to one outside :data:`FLOORED`.
     """
     solvers = METHODS | ARMS
-    if method not in solvers:
+    solver: Callable[..., MethodRun]
+    if isinstance(method, Then | BestOf | SolverChain | SolverRealizations):
+        solver, takes = method, method.takes
+    elif method in solvers:
+        solver, takes = solvers[method], _options(method)
+    elif any(token in method for token in (CHAIN, "(", REALIZATIONS, REPEAT)):
+        composed = SolverChain.parse(method)
+        solver, takes = composed, composed.takes
+    else:
         msg = (
             f"no ground-state method {method!r}; the methods are {sorted(METHODS)} "
-            f"and the arms {sorted(ARMS)}"
+            f"and the arms {sorted(ARMS)}, or a chain of those and "
+            f"{sorted(STAGES)} joined by {CHAIN!r}, each with its arguments"
         )
         raise ValueError(msg)
     values = np.asarray(field, dtype=np.float64)
@@ -1341,13 +1783,13 @@ def ground_state(
     if budget.unit is not Cost.SITE_VISITS:
         msg = f"every entry is charged in site visits, not {budget.unit}"
         raise ValueError(msg)
-    if (schedule is not None or steps is not None) and method not in ANNEALED:
+    if (schedule is not None or steps is not None) and not takes & ANNEAL_OPTIONS:
         msg = (
             f"{method!r} runs no anneal, so takes no schedule or steps; those "
             f"apply to {sorted(ANNEALED)}"
         )
         raise ValueError(msg)
-    if (backend is not None or min_sites != 0) and method not in FLOORED:
+    if (backend is not None or min_sites != 0) and not takes & DESCENT_OPTIONS:
         msg = (
             f"{method!r} runs no single-site descent, so takes no backend or "
             f"min_sites; those apply to {sorted(FLOORED)}"
@@ -1361,10 +1803,10 @@ def ground_state(
         keywords["schedule"] = schedule
     if steps is not None:
         keywords["steps"] = steps
-    if method in FLOORED:
+    if takes & DESCENT_OPTIONS:
         keywords["backend"] = backend
         keywords["min_sites"] = min_sites
-    return solvers[method](problem, budget, rng, start=start, **keywords)
+    return solver(problem, budget, rng, start=start, **keywords)
 
 
 def outcome(run: MethodRun) -> Outcome:

@@ -43,12 +43,14 @@ from sal.opt.termination import Termination
 from sal.sample.potts_mcmc import PottsMove
 from sal.sample.schedule import ScheduleParams
 from sal.search.ground_state import (
+    ANNEAL_OPTIONS,
     METHODS,
     MethodRun,
     Rung,
+    chain,
+    part,
     run_annealed,
     rung_field,
-    warm_anneal,
 )
 from sal.search.icm import iterated_conditional_modes
 from sal.search.maxflow import ising_ground_state
@@ -345,7 +347,7 @@ class ScheduleStart:
     :class:`SolverStart` runs a :data:`~sal.search.ground_state.METHODS`
     entry, whose schedule is fixed; this runs
     :func:`~sal.search.ground_state.run_annealed` or, with
-    ``warm``, :func:`~sal.search.ground_state.warm_anneal`, on
+    ``warm``, :func:`~sal.search.ground_state.chain` of ``descent`` and it, on
     ``schedule``. Built per cell as ``functools.partial(ScheduleStart, move,
     budget, schedule, steps, warm)`` called with the generator.
 
@@ -384,9 +386,15 @@ class ScheduleStart:
         """
         rung = _rung(objective, f"{self.move} on a schedule")
         run = (
-            warm_anneal(
-                rung, self.budget, self.rng, self.move, self.schedule, steps=self.steps
-            )
+            chain(
+                "descent",
+                part(
+                    run_annealed,
+                    takes=ANNEAL_OPTIONS,
+                    move=self.move,
+                    schedule=self.schedule,
+                ),
+            )(rung, self.budget, self.rng, steps=self.steps)
             if self.warm
             else run_annealed(
                 rung,

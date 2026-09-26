@@ -53,7 +53,7 @@ DESCENTS = ("icm", "alpha-expansion", "alpha-beta-swap", "expansion>swendsen-wan
 #: bytes, the energy's repr and the spend, first 16 hex digits. The `METHODS`
 #: cells are `ground_state` at `origin/main` b6bc5d63; the `ARMS` cells are
 #: the calls #1038 and #1041 made there: `run_annealed` on the tuned schedule,
-#: on Wolff's matched steps, `warm_anneal` from 1.0, and the two hybrids of
+#: on Wolff's matched steps, the warm chain from 1.0, and the two hybrids of
 #: `search.cluster_moves`.
 BEFORE = {
     "ci/field_argmax": "dd8ab86c204a8c39",
