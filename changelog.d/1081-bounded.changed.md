@@ -1,0 +1,1 @@
+The bounded solvers return one `BoundedLabelling`, a `Labelling` with a lower `bound`, `gap` and `optimal`: `dual_bound` returns it where it returned `tightening.Certificate`, whose `iterations` is `termination.iterations`, and `TrwsResult` is its subclass with the bound's `trace` (#1081).
