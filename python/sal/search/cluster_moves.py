@@ -8,8 +8,7 @@ states. The single-move arms are
 :func:`~sal.search.ground_state.run_annealed` under another
 :class:`~sal.sample.potts_mcmc.PottsMove`, and the two
 hybrids, each charged both parts' visits, are
-:func:`~sal.search.ground_state.swendsen_wang_then_expansion`
-and :func:`~sal.search.ground_state.expansion_then_swendsen_wang`,
+the ``swendsen-wang>expansion`` and ``expansion>swendsen-wang`` chains,
 in :data:`~sal.search.ground_state.ARMS` since issue #1052.
 This module holds the replica ladder.
 

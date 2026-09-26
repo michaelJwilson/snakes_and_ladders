@@ -50,9 +50,9 @@ lattice, the field and ``q`` --- and a :class:`Rung` hands its own.
 chain, #1041's two expansion hybrids) from a ``(graph, field)``, and takes a
 ``start``, a ``schedule`` and a step count; with all three left ``None`` a run
 is the entry's own bitwise (issue #1052). The warm chain and the two hybrids
-are :class:`~sal.opt.compose.Then` chains, and :func:`compose` reads any
-chain of entries from a name such as ``field_argmax>descent>alpha-expansion``
-(issue #1077).
+are built by one factory, :func:`chain` over :func:`part`, and
+:func:`compose` reads any chain of entries from a name such as
+``field_argmax>descent>alpha-expansion`` (issue #1077).
 
 See Boykov, Veksler & Zabih (2001) for the expansion bound and Baxter ch. 12
 for the ordering coupling the rungs sit either side of.
@@ -63,7 +63,7 @@ from __future__ import annotations
 import functools
 import operator
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
@@ -740,28 +740,6 @@ ANNEAL_OPTIONS = frozenset({"schedule", "steps"})
 DESCENT_OPTIONS = frozenset({"backend", "min_sites"})
 
 
-def warm(move: PottsMove, schedule: ScheduleParams) -> Then:
-    """ICM to its first clean sweep, then an anneal on ``schedule`` from its labelling (issue #1038).
-
-    The warm chain as a composition (issue #1077): :func:`run_descent`, then
-    :func:`run_annealed` with ``move`` on what is left of the budget by its
-    rule, or at ``steps`` where the caller fixes a count. Both draw from the
-    one generator in that order, so the descent is the one :func:`run_icm`
-    runs on the same generator. ``schedule`` and ``steps`` passed at call
-    time replace the anneal's.
-    """
-    return Then(
-        (
-            Step(run_descent),
-            Step(
-                functools.partial(run_annealed, move=move, schedule=schedule),
-                takes=ANNEAL_OPTIONS,
-            ),
-        ),
-        handover,
-    )
-
-
 def run_field_argmax(
     problem: Problem | Rung,
     budget: Budget,
@@ -1120,7 +1098,7 @@ METHODS: dict[str, Method] = {
 ONE_AXIS = ("icm", "icm-random")
 
 
-#: Cycles of the expansion :func:`swendsen_wang_then_expansion` holds
+#: Cycles of the expansion the ``swendsen-wang>expansion`` arm holds
 #: back from Swendsen-Wang's share. From a uniform start the expansion ends in
 #: 3 cycles on `spatio_only/release` at ten states; 10 leaves it room from a
 #: labelling that is not its own.
@@ -1138,51 +1116,103 @@ class ExpansionReserve:
         return self.cycles * problem.n_states * problem.visits_per_sweep
 
 
-def swendsen_wang_then_expansion(
-    schedule: ScheduleParams, reserve_cycles: int = EXPANSION_RESERVE_CYCLES
-) -> Then:
-    """Swendsen-Wang on ``schedule``, then alpha-expansion from its labelling (issue #1041).
+#: The names that are a single-site descent, and so take its ``backend`` and
+#: ``min_sites`` floor (issue #1055). The annealers, the cuts and the hybrids
+#: have no floor of their own and refuse one.
+FLOORED = frozenset({"icm", "icm-random"})
 
-    The anneal runs on the budget less ``reserve_cycles`` expansion cycles,
-    by :func:`run_annealed`'s rule or at ``steps``; the expansion starts from
-    the anneal's labelling with what is left as its cap, and is charged the
-    cycles it ran. The run is the expansion's, ``spent`` both parts summed.
+#: The :data:`METHODS` names that run an anneal.
+_ANNEALED_METHODS = frozenset({"anneal", "swendsen-wang", "wolff"})
+
+#: Parts a chain can name beside :data:`METHODS` and :data:`ARMS`: the warm
+#: chain's descent, which charges only the sweeps it ran (issue #1077).
+STAGES: dict[str, Method] = {"descent": run_descent}
+
+#: Separates the parts of a chain in a method name.
+CHAIN = ">"
+
+
+def _options(name: str) -> frozenset[str]:
+    """The keyword options the part ``name`` takes: an arm's are an anneal's."""
+    if name in FLOORED:
+        return DESCENT_OPTIONS
+    if name in _ANNEALED_METHODS:
+        return ANNEAL_OPTIONS
+    if name in METHODS or name in STAGES:
+        return frozenset()
+    return ANNEAL_OPTIONS
+
+
+def _solver(name: str) -> Method:
+    """The solver a part names, from :data:`METHODS`, :data:`STAGES` or :data:`ARMS`."""
+    for table in (METHODS, STAGES):
+        if name in table:
+            return table[name]
+    # :data:`ARMS` is read last and only here: it is built from parts named
+    # in the other two, so it is defined by the time a name reaches it.
+    if name in ARMS:
+        return ARMS[name]
+    msg = (
+        f"no ground-state part {name!r}; the parts are {sorted(METHODS)}, "
+        f"{sorted(ARMS)} and {sorted(STAGES)}"
+    )
+    raise ValueError(msg)
+
+
+def part(
+    solver: str | Callable[..., MethodRun],
+    *,
+    reserve: Callable[[Any], int] | None = None,
+    takes: frozenset[str] | None = None,
+    **bound: Any,
+) -> Step:
+    """One part of a chain: a solver by name or itself, with keywords bound (issue #1077).
+
+    A solver given itself may take more than a :class:`Method` does, such as
+    :func:`run_annealed`'s ``move``, which ``bound`` then supplies. ``bound`` is bound to the solver, as ``schedule=`` or ``move=``, and a
+    keyword of the same name passed to the chain at call time replaces it.
+    ``reserve`` is what the part holds back for the parts after it. ``takes``
+    is read from the name where one is given, and is otherwise the options
+    the caller routes to the solver, none by default.
+    """
+    stage: Callable[..., MethodRun]
+    if isinstance(solver, str):
+        stage = _solver(solver)
+        routed = _options(solver) if takes is None else takes
+    else:
+        stage = solver
+        routed = frozenset() if takes is None else takes
+    if bound:
+        stage = functools.partial(stage, **bound)
+    return Step(stage, takes=routed, reserve=reserve)
+
+
+def chain(*parts: str | Step) -> Then:
+    """A chain of parts, each a name or a :func:`part`: the one factory for every hybrid (issue #1077).
+
+    Each part starts from the labelling of the one before, gets the budget the
+    parts before it left less its reserve, and draws from the one generator.
+    The run is the last part's, ``spent`` summed. ``schedule`` and ``steps``
+    reach every annealed part, ``backend`` and ``min_sites`` every
+    single-site descent. A part that refuses a start, such as
+    ``field_argmax``, can only come first; and since :func:`run_icm` charges
+    its whole budget, a descent before another part is ``descent``.
     """
     return Then(
-        (
-            Step(
-                functools.partial(
-                    run_annealed, move=PottsMove.SWENDSEN_WANG, schedule=schedule
-                ),
-                takes=ANNEAL_OPTIONS,
-                reserve=ExpansionReserve(reserve_cycles),
-            ),
-            Step(run_alpha_expansion),
-        ),
+        tuple(item if isinstance(item, Step) else part(item) for item in parts),
         handover,
     )
 
 
-def expansion_then_swendsen_wang(schedule: ScheduleParams) -> Then:
-    """Alpha-expansion, then Swendsen-Wang on ``schedule`` from its labelling (issue #1041).
+def compose(method: str) -> Then:
+    """:func:`chain` over a name ``a>b>...``, each part a :data:`METHODS`, :data:`ARMS` or :data:`STAGES` name.
 
-    The expansion runs as :func:`run_alpha_expansion` does and is charged its
-    cycles; the anneal gets the rest of the budget by :func:`run_annealed`'s
-    rule or ``steps``. The anneal returns the lowest energy it visited, its
-    start included, so the arm hands over the expansion's energy or lower.
+    Raises
+    ------
+    ValueError
+        If a part is in no table, or the name has one part.
     """
-    return Then(
-        (
-            Step(run_alpha_expansion),
-            Step(
-                functools.partial(
-                    run_annealed, move=PottsMove.SWENDSEN_WANG, schedule=schedule
-                ),
-                takes=ANNEAL_OPTIONS,
-            ),
-        ),
-        handover,
-    )
+    return chain(*method.split(CHAIN))
 
 
 # The arms' constants are issue #1038's results, copied from
@@ -1203,7 +1233,7 @@ WOLFF_MATCHED_STEPS = 41250
 #: The warm chain's schedule: Swendsen-Wang's tuned shape, hold and end from
 #: ``t_start = 1.0``, the notebook's ``swendsen-wang warm 1.0`` arm.
 WARM_SCHEDULE = replace(SWENDSEN_WANG_SCHEDULE, t_start=1.0)
-#: Where :func:`expansion_then_swendsen_wang`'s anneal starts and ends:
+#: Where the ``expansion>swendsen-wang`` arm's anneal starts and ends:
 #: Swendsen-Wang's tuned end, cooled to :data:`ANNEAL_END` (issue #1041).
 EXPANSION_SW_SCHEDULE = ScheduleParams(ScheduleShape.LINEAR, 0.3236, ANNEAL_END)
 
@@ -1217,64 +1247,26 @@ ARMS: dict[str, Method] = {
     "matched-wolff": functools.partial(
         run_annealed, move=PottsMove.WOLFF, steps=WOLFF_MATCHED_STEPS
     ),
-    "warm-anneal": warm(PottsMove.SWENDSEN_WANG, WARM_SCHEDULE),
-    "swendsen-wang>expansion": swendsen_wang_then_expansion(SWENDSEN_WANG_SCHEDULE),
-    "expansion>swendsen-wang": expansion_then_swendsen_wang(EXPANSION_SW_SCHEDULE),
+    # ICM to its first clean sweep, then Swendsen-Wang from 1.0 (#1038).
+    "warm-anneal": chain("descent", part("swendsen-wang", schedule=WARM_SCHEDULE)),
+    # Swendsen-Wang, holding ten expansion cycles back, then the expansion
+    # from its labelling on what is left (#1041).
+    "swendsen-wang>expansion": chain(
+        part(
+            "swendsen-wang",
+            schedule=SWENDSEN_WANG_SCHEDULE,
+            reserve=ExpansionReserve(EXPANSION_RESERVE_CYCLES),
+        ),
+        "alpha-expansion",
+    ),
+    # The expansion, then Swendsen-Wang from its labelling (#1041).
+    "expansion>swendsen-wang": chain(
+        "alpha-expansion", part("swendsen-wang", schedule=EXPANSION_SW_SCHEDULE)
+    ),
 }
 
 #: The names that run an anneal, and so take a ``schedule`` and ``steps``.
-ANNEALED = frozenset({"anneal", "swendsen-wang", "wolff", *ARMS})
-
-#: The names that are a single-site descent, and so take its ``backend`` and
-#: ``min_sites`` floor (issue #1055). The annealers, the cuts and the hybrids
-#: have no floor of their own and refuse one.
-FLOORED = frozenset({"icm", "icm-random"})
-
-
-#: Parts a chain can name beside :data:`METHODS` and :data:`ARMS`: the warm
-#: chain's descent, which charges only the sweeps it ran (issue #1077).
-STAGES: dict[str, Method] = {"descent": run_descent}
-
-#: Separates the parts of a chain in a method name.
-CHAIN = ">"
-
-
-def _options(name: str) -> frozenset[str]:
-    """The keyword options the part ``name`` takes."""
-    if name in ANNEALED:
-        return ANNEAL_OPTIONS
-    if name in FLOORED:
-        return DESCENT_OPTIONS
-    return frozenset()
-
-
-def compose(method: str) -> Then:
-    """A chain named ``a>b>...``, each part a :data:`METHODS`, :data:`ARMS` or :data:`STAGES` name (issue #1077).
-
-    Each part starts from the labelling of the one before and gets the budget
-    the parts before it left. ``schedule`` and ``steps`` go to every annealed
-    part, ``backend`` and ``min_sites`` to every single-site descent. A part
-    that refuses a start, such as ``field_argmax``, can only come first; and
-    since :func:`run_icm` charges its whole budget, a descent before another
-    part is ``descent``.
-
-    Raises
-    ------
-    ValueError
-        If a part is in no table, or the name has one part.
-    """
-    parts = method.split(CHAIN)
-    solvers = METHODS | ARMS | STAGES
-    unknown = [part for part in parts if part not in solvers]
-    if unknown:
-        msg = (
-            f"no ground-state part {unknown}; the parts are {sorted(METHODS)}, "
-            f"{sorted(ARMS)} and {sorted(STAGES)}"
-        )
-        raise ValueError(msg)
-    return Then(
-        tuple(Step(solvers[part], takes=_options(part)) for part in parts), handover
-    )
+ANNEALED = _ANNEALED_METHODS | frozenset(ARMS)
 
 
 def ground_state(

@@ -17,10 +17,13 @@ import pytest
 from sal.cost import Cost
 from sal.opt.budget import Budget
 from sal.search.ground_state import (
+    ANNEAL_SCHEDULE,
     ARMS,
     EXPANSION_SW_SCHEDULE,
     Rung,
+    chain,
     ground_state,
+    part,
     run_alpha_expansion,
     run_descent,
     run_field_argmax,
@@ -118,3 +121,24 @@ def test_a_chain_that_cannot_run_is_refused_by_name(
             np.random.default_rng(0),
             **keywords,  # type: ignore[arg-type]
         )
+
+
+@pytest.mark.oracle
+def test_a_keyword_at_call_time_replaces_the_one_a_part_bound() -> None:
+    # The factory binds a schedule into the arm; `ground_state(schedule=)`
+    # replaces it, so the arm on another schedule is the chain built on it.
+    rung = _rung()
+    budget = _budget(rung)
+    bound = chain("alpha-expansion", part("swendsen-wang", schedule=ANNEAL_SCHEDULE))
+    replaced = ground_state(
+        rung.graph,
+        rung.field,
+        "expansion>swendsen-wang",
+        budget,
+        np.random.default_rng(7),
+        schedule=ANNEAL_SCHEDULE,
+    )
+    built = bound(rung, budget, np.random.default_rng(7))
+
+    assert np.array_equal(replaced.labelling, built.labelling)
+    assert (replaced.energy, replaced.spent) == (built.energy, built.spent)

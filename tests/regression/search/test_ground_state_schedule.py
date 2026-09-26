@@ -25,14 +25,16 @@ from sal.sample.schedule import (
 )
 from sal.search.ground_state import (
     ANNEAL_END,
+    ANNEAL_OPTIONS,
     ANNEAL_SCHEDULE,
     ANNEAL_START,
     METHODS,
     Rung,
+    chain,
     descend,
+    part,
     run_annealed,
     run_icm,
-    warm,
 )
 from sal.search.potts_starts import (
     LabellingEnergy,
@@ -157,7 +159,10 @@ def test_a_warm_chain_is_charged_its_descent_and_its_anneal(move: PottsMove) -> 
     _, sweeps = descend(
         rung, np.random.default_rng([0, 0]), budget.size // rung.visits_per_sweep
     )
-    chain = warm(move, schedule)(rung, budget, np.random.default_rng([0, 0]))
+    warm = chain(
+        "descent",
+        part(run_annealed, takes=ANNEAL_OPTIONS, move=move, schedule=schedule),
+    )(rung, budget, np.random.default_rng([0, 0]))
 
     descent = sweeps * rung.visits_per_sweep
     remaining = Budget(budget.unit, budget.size - descent)
@@ -166,10 +171,10 @@ def test_a_warm_chain_is_charged_its_descent_and_its_anneal(move: PottsMove) -> 
     anneal = run_annealed(
         rung, remaining, rng, move, schedule=schedule, start=labelling
     )
-    assert chain.spent == descent + anneal.spent
-    assert chain.energy == anneal.energy
-    assert np.array_equal(chain.labelling, anneal.labelling)
-    assert chain.spent <= budget.size
+    assert warm.spent == descent + anneal.spent
+    assert warm.energy == anneal.energy
+    assert np.array_equal(warm.labelling, anneal.labelling)
+    assert warm.spent <= budget.size
 
 
 @pytest.mark.smoke

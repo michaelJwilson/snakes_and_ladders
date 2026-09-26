@@ -88,12 +88,13 @@ from sal.search.ground_state import (
     ANNEAL_SCHEDULE,
     EXPANSION_RESERVE_CYCLES,
     EXPANSION_SW_SCHEDULE,
+    ExpansionReserve,
     MethodRun,
     Rung,
-    expansion_then_swendsen_wang,
+    chain,
+    part,
     run_alpha_expansion,
     run_annealed,
-    swendsen_wang_then_expansion,
 )
 from sal.search.potts_starts import (
     LabellingEnergy,
@@ -458,8 +459,17 @@ def arms() -> dict[str, Callable[[np.random.Generator], RunStart]]:
         "niedermayer matched": functools.partial(
             run_annealed, move=PottsMove.NIEDERMAYER, schedule=sw, steps=matched
         ),
-        "swendsen-wang>expansion": swendsen_wang_then_expansion(sw),
-        "expansion>swendsen-wang": expansion_then_swendsen_wang(EXPANSION_SW_SCHEDULE),
+        "swendsen-wang>expansion": chain(
+            part(
+                "swendsen-wang",
+                schedule=sw,
+                reserve=ExpansionReserve(EXPANSION_RESERVE_CYCLES),
+            ),
+            "alpha-expansion",
+        ),
+        "expansion>swendsen-wang": chain(
+            "alpha-expansion", part("swendsen-wang", schedule=EXPANSION_SW_SCHEDULE)
+        ),
         "ghost-spin": functools.partial(
             run_annealed, move=PottsMove.GHOST_SPIN, schedule=sw
         ),
@@ -549,10 +559,10 @@ def main(parts: Sequence[str] = PARTS) -> None:
             "mixed_floor": MIXED_FLOOR,
         }
     )
-    for part in parts:
+    for piece in parts:
         load_before = os.getloadavg()
         opened = time.perf_counter()
-        if part == "diagnosis":
+        if piece == "diagnosis":
             tasks = [
                 (name, seed)
                 for name in ("swendsen-wang", "wolff")
@@ -570,22 +580,22 @@ def main(parts: Sequence[str] = PARTS) -> None:
                 "rows": DIAGNOSIS_ROWS,
                 "moves": summarise(runs),
             }
-        elif part == "matched":
+        elif piece == "matched":
             steps, probes = matched_niedermayer(budget, load_tuned().matched_steps)
             result["matched_niedermayer"] = {
                 "schedule": asdict(load_tuned().chosen["swendsen-wang"]),
                 "steps": steps,
                 "probes": probes,
             }
-        elif part == "arms":
+        elif piece == "arms":
             result["arms"] = run_arms()
             result["arms"]["reserve_cycles"] = EXPANSION_RESERVE_CYCLES
             result["arms"]["replicas"] = CLUSTER_LADDER_REPLICAS
             result["arms"]["expansion_sw_schedule"] = asdict(EXPANSION_SW_SCHEDULE)
         else:
-            msg = f"no part {part!r}; the parts are {PARTS}"
+            msg = f"no piece {piece!r}; the parts are {PARTS}"
             raise ValueError(msg)
-        result.setdefault("host", {})[part] = {
+        result.setdefault("host", {})[piece] = {
             "cores": os.cpu_count(),
             "workers": WORKERS,
             "threads": {

@@ -21,12 +21,13 @@ from sal.sample.schedule import ScheduleParams, ScheduleShape
 from sal.search.cluster_moves import run_cluster_tempering
 from sal.search.ground_state import (
     EXPANSION_RESERVE_CYCLES,
+    ExpansionReserve,
     Rung,
+    chain,
     ends_labelling,
-    expansion_then_swendsen_wang,
+    part,
     run_alpha_expansion,
     run_annealed,
-    swendsen_wang_then_expansion,
 )
 from sal.search.potts_starts import spatio_rung
 from sal.sim.fixtures import fixture
@@ -125,7 +126,7 @@ def test_expansion_then_swendsen_wang_hands_over_no_more_than_the_expansion(
     rung = _release()
     budget = _budget(rung)
     expansion = run_alpha_expansion(rung, budget, np.random.default_rng(seed))
-    run = expansion_then_swendsen_wang(SCHEDULE)(
+    run = chain("alpha-expansion", part("swendsen-wang", schedule=SCHEDULE))(
         rung, budget, np.random.default_rng(seed)
     )
 
@@ -142,7 +143,14 @@ def test_swendsen_wang_then_expansion_is_charged_both_parts() -> None:
         Cost.SITE_VISITS,
         EXPANSION_RESERVE_CYCLES * per_cycle + SWEEPS * rung.visits_per_sweep,
     )
-    run = swendsen_wang_then_expansion(SCHEDULE)(rung, budget, np.random.default_rng(3))
+    run = chain(
+        part(
+            "swendsen-wang",
+            schedule=SCHEDULE,
+            reserve=ExpansionReserve(EXPANSION_RESERVE_CYCLES),
+        ),
+        "alpha-expansion",
+    )(rung, budget, np.random.default_rng(3))
     anneal = run_annealed(
         rung,
         _budget(rung),
