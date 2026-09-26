@@ -125,9 +125,14 @@ def test_fusion_benchmark(benchmark: BenchmarkFixture, backend: Backend) -> None
     # descent's, which differ on 1,189 sites. Against the expansion's own
     # 20 ms, the Rust cut's fusion is the cheaper of the two.
     params = fixture("spatio_tiling", "release").params
-    first = alpha_expansion(params.graph, params.field, params.n_states).labelling
+    first = alpha_expansion(
+        params.graph, params.field, n_states=params.n_states
+    ).labelling
     second = iterated_conditional_modes(
-        params.graph, params.field, params.n_states, np.random.default_rng(0)
+        params.graph,
+        params.field,
+        n_states=params.n_states,
+        rng=np.random.default_rng(0),
     ).labelling
 
     fused = benchmark.pedantic(  # type: ignore[no-untyped-call]
