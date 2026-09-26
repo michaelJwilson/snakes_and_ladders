@@ -36,7 +36,7 @@ def _alignment(
 ) -> tuple[Node, int, np.ndarray, dict[str, np.ndarray]]:
     params = load_fixture(name)
     dataset = simulate_tree(params, np.random.default_rng(params.seed), n_sites)
-    return params.tau, params.k, params.pi, dict(dataset.alignment)
+    return params.tau, params.n_states, params.pi, dict(dataset.alignment)
 
 
 def _points(objective: BranchLengthObjective, tau: Node) -> list[torch.Tensor]:
