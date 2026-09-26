@@ -22,6 +22,7 @@ pub mod chain;
 pub mod count_mstep;
 pub mod count_pairs;
 pub mod coupled;
+pub mod dense_emission;
 pub mod energy;
 pub mod hmc;
 pub mod hmm_decode;
@@ -48,6 +49,7 @@ pub use count_mstep::{
 };
 pub use count_pairs::simulate_count_pairs;
 pub use coupled::{class_posteriors, external_field, factorize};
+pub use dense_emission::dense_log_emission;
 pub use hmc::leapfrog_trajectory;
 pub use hmm_decode::{hmm_score, hmm_viterbi};
 pub use hmm_stream::{
@@ -100,6 +102,7 @@ fn oxisal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(swendsen_wang_sweep, m)?)?;
     m.add_function(wrap_pyfunction!(class_posteriors, m)?)?;
     m.add_function(wrap_pyfunction!(external_field, m)?)?;
+    m.add_function(wrap_pyfunction!(dense_log_emission, m)?)?;
     m.add_function(wrap_pyfunction!(factorize, m)?)?;
     m.add_function(wrap_pyfunction!(simulate_count_pairs, m)?)?;
     m.add_function(wrap_pyfunction!(negative_binomial_dispersions, m)?)?;

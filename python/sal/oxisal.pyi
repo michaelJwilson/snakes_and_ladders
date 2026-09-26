@@ -414,3 +414,20 @@ def leapfrog_trajectory(
     step_size: float,
     n_steps: int,
 ) -> tuple[np.ndarray, np.ndarray]: ...
+def dense_log_emission(
+    n_states: int,
+    family_order: bool,
+    out: np.ndarray,
+    totals: np.ndarray | None = None,
+    total_table: np.ndarray | None = None,
+    exposure: np.ndarray | None = None,
+    dispersion: np.ndarray | None = None,
+    mean: np.ndarray | None = None,
+    successes: np.ndarray | None = None,
+    success_table: np.ndarray | None = None,
+    trials: np.ndarray | None = None,
+    failure_table: np.ndarray | None = None,
+    trial_table: np.ndarray | None = None,
+    log_factorial: np.ndarray | None = None,
+    log_beta: np.ndarray | None = None,
+) -> None: ...

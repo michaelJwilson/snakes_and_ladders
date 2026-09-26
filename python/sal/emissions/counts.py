@@ -1164,6 +1164,15 @@ class CountPairEmission(EmissionFamily, CountEmissionFamily):
         return self._total
 
     @property
+    def successes(self) -> BetaBinomialEmission | None:
+        """The independent form's success channel, as the family it is; ``None`` in the joint form.
+
+        The joint form's trial count is the observed total, which no
+        :class:`BetaBinomialEmission` carries, so it has no such family.
+        """
+        return None if self._joint else self._success
+
+    @property
     def alpha(self) -> torch.Tensor:
         """The success channel's ``a``, shape ``(n_states,)``."""
         return self._alpha

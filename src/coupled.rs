@@ -164,7 +164,14 @@ impl ExposureTerm<'_> {
     /// costs two logarithms and two divisions per score and agrees to fewer
     /// ulp (issue #1064).
     #[inline]
-    fn score_into(&self, table: &[f64], count: u32, c: f64, from: usize, out: &mut [f64]) {
+    pub(crate) fn score_into(
+        &self,
+        table: &[f64],
+        count: u32,
+        c: f64,
+        from: usize,
+        out: &mut [f64],
+    ) {
         if c == 0.0 {
             out.fill(0.0);
             return;
@@ -192,8 +199,43 @@ impl ExposureTerm<'_> {
         }
     }
 
+    /// The same score in the family's order of operations, `table` the row of `A`.
+    ///
+    /// `A[y] + r ln(r / t) + y ln(mu c / t)`, `t = r + mu c`, `A[y] = lgamma(y +
+    /// r) - lgamma(r) - lgamma(y + 1)` (`sal.emissions.nb.count_log_factor`):
+    /// the operations of `NegativeBinomialEmission.log_density` on the same
+    /// numbers, so each score differs from it by the rounding of the two `ln`
+    /// alone. Two logarithms and two divisions per score where
+    /// [`Self::score_into`] takes one logarithm (issue #1132).
+    #[inline]
+    pub(crate) fn score_family_into(
+        &self,
+        table: &[f64],
+        count: u32,
+        c: f64,
+        from: usize,
+        out: &mut [f64],
+    ) {
+        if c == 0.0 {
+            out.fill(0.0);
+            return;
+        }
+        let y = f64::from(count);
+        let n = out.len();
+        let (dispersion, mean, table) = (
+            &self.dispersion[from..][..n],
+            &self.mean[from..][..n],
+            &table[..n],
+        );
+        for (((cell, &r), &mu), &a) in out.iter_mut().zip(dispersion).zip(mean).zip(table) {
+            let rate = c * mu;
+            let t = r + rate;
+            *cell = (a + r * (r / t).ln()) + y * (rate / t).ln();
+        }
+    }
+
     /// Check the lengths against the shape, and every exposure against its support.
-    fn validate(&self, shape: &CoupledShape) -> Result<(), String> {
+    pub(crate) fn validate(&self, shape: &CoupledShape) -> Result<(), String> {
         let observations = shape.n_positions * shape.n_nodes;
         if self.exposure.len() != observations {
             return Err(format!(
@@ -252,7 +294,7 @@ impl TrialTerm<'_> {
     /// first, then `U`, `V`, `W` and the three `lgamma` of the Beta
     /// function --- so each score is its `log_density` to the bit.
     #[inline]
-    fn score_into(
+    pub(crate) fn score_into(
         &self,
         table: &[f64],
         successes: u32,
@@ -289,7 +331,7 @@ impl TrialTerm<'_> {
     }
 
     /// Check the lengths against the shape, and every trial count against the tables' extent.
-    fn validate(&self, shape: &CoupledShape) -> Result<(), String> {
+    pub(crate) fn validate(&self, shape: &CoupledShape) -> Result<(), String> {
         let observations = shape.n_positions * shape.n_nodes;
         if self.trials.len() != observations {
             return Err(format!(
@@ -798,7 +840,7 @@ fn check_inputs(
 }
 
 /// Read a borrowed 1-D array as a contiguous slice, or say why it is not one.
-fn borrowed<'a, T: numpy::Element>(
+pub(crate) fn borrowed<'a, T: numpy::Element>(
     array: &'a PyReadonlyArray1<'_, T>,
     name: &str,
 ) -> PyResult<&'a [T]> {
@@ -808,7 +850,7 @@ fn borrowed<'a, T: numpy::Element>(
 }
 
 /// The exposure term from its three optional arrays: all three, or none.
-fn exposure_term<'a>(
+pub(crate) fn exposure_term<'a>(
     exposure: &'a Option<PyReadonlyArray1<'_, f64>>,
     dispersion: &'a Option<PyReadonlyArray1<'_, f64>>,
     mean: &'a Option<PyReadonlyArray1<'_, f64>>,
@@ -827,7 +869,7 @@ fn exposure_term<'a>(
 }
 
 /// The trial term from its five optional arrays: all five, or none.
-fn trial_term<'a>(
+pub(crate) fn trial_term<'a>(
     trials: &'a Option<PyReadonlyArray1<'_, u32>>,
     failure_table: &'a Option<PyReadonlyArray1<'_, f64>>,
     trial_table: &'a Option<PyReadonlyArray1<'_, f64>>,
