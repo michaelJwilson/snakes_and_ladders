@@ -49,6 +49,9 @@ whether or not it has members yet.
 .. automodule:: sal.emissions.bb
    :members:
 
+.. automodule:: sal.emissions.dense
+   :members:
+
 .. automodule:: sal.fixtures
    :members:
 
