@@ -66,14 +66,14 @@ class Distance:
         return float(np.sqrt(self.variance))
 
 
-def pair_counts(first: np.ndarray, second: np.ndarray, k: int) -> np.ndarray:
+def pair_counts(first: np.ndarray, second: np.ndarray, n_states: int) -> np.ndarray:
     """The ``k x k`` joint count matrix of two aligned sequences.
 
     Parameters
     ----------
     first, second : np.ndarray
         Integer states in ``[0, k)``, the same length.
-    k : int
+    n_states : int
         Number of states.
 
     Returns
@@ -95,12 +95,10 @@ def pair_counts(first: np.ndarray, second: np.ndarray, k: int) -> np.ndarray:
         msg = "a distance needs at least one site"
         raise ValueError(msg)
     for sequence in (first, second):
-        if sequence.min() < 0 or sequence.max() >= k:
-            msg = (
-                f"states must lie in [0, {k}), got [{sequence.min()}, {sequence.max()}]"
-            )
+        if sequence.min() < 0 or sequence.max() >= n_states:
+            msg = f"states must lie in [0, {n_states}), got [{sequence.min()}, {sequence.max()}]"
             raise ValueError(msg)
-    counts = np.zeros((k, k), dtype=np.int64)
+    counts = np.zeros((n_states, n_states), dtype=np.int64)
     np.add.at(counts, (first, second), 1)
     return counts
 
@@ -135,7 +133,9 @@ def multinomial_delta_variance(
     )
 
 
-def jukes_cantor_distance(first: np.ndarray, second: np.ndarray, k: int) -> Distance:
+def jukes_cantor_distance(
+    first: np.ndarray, second: np.ndarray, n_states: int
+) -> Distance:
     """The closed-form inversion of ``eq:jc`` from the fraction of differing sites, ``eq:jc-distance``.
 
     ``d = -((k-1)/k) log(1 - k p / (k-1))`` for ``p`` the observed fraction
@@ -148,7 +148,7 @@ def jukes_cantor_distance(first: np.ndarray, second: np.ndarray, k: int) -> Dist
     ----------
     first, second : np.ndarray
         Integer states in ``[0, k)``, the same length ``L``.
-    k : int
+    n_states : int
         Number of states.
 
     Returns
@@ -162,14 +162,14 @@ def jukes_cantor_distance(first: np.ndarray, second: np.ndarray, k: int) -> Dist
         If the pair is saturated --- ``p >= (k-1)/k`` --- where no finite
         distance exists.
     """
-    counts = pair_counts(first, second, k)
+    counts = pair_counts(first, second, n_states)
     n_sites = int(counts.sum())
     p = 1.0 - float(np.trace(counts)) / n_sites
-    saturation = (k - 1) / k
+    saturation = (n_states - 1) / n_states
     if p >= saturation:
         msg = (
             f"the pair differs at a fraction {p:.4f} of sites, at or beyond the "
-            f"saturation {saturation:.4f} of the {k}-state model; no finite "
+            f"saturation {saturation:.4f} of the {n_states}-state model; no finite "
             "distance exists"
         )
         raise ValueError(msg)
@@ -179,7 +179,7 @@ def jukes_cantor_distance(first: np.ndarray, second: np.ndarray, k: int) -> Dist
     return Distance(float(value), float(variance))
 
 
-def log_det_distance(first: np.ndarray, second: np.ndarray, k: int) -> Distance:
+def log_det_distance(first: np.ndarray, second: np.ndarray, n_states: int) -> Distance:
     """The log-det distance of Steel (1994) from the pair frequency matrix, ``eq:logdet``.
 
     ``d = -(1/k) [log det F - (log det Pi_x + log det Pi_y) / 2]`` for ``F``
@@ -198,7 +198,7 @@ def log_det_distance(first: np.ndarray, second: np.ndarray, k: int) -> Distance:
     ----------
     first, second : np.ndarray
         Integer states in ``[0, k)``, the same length.
-    k : int
+    n_states : int
         Number of states.
 
     Returns
@@ -212,7 +212,7 @@ def log_det_distance(first: np.ndarray, second: np.ndarray, k: int) -> Distance:
         If ``F`` is singular, or either marginal has a state with no sites,
         where the logarithm is undefined.
     """
-    counts = pair_counts(first, second, k)
+    counts = pair_counts(first, second, n_states)
     n_sites = int(counts.sum())
     frequencies = counts / n_sites
     rows = frequencies.sum(axis=1)
@@ -224,10 +224,13 @@ def log_det_distance(first: np.ndarray, second: np.ndarray, k: int) -> Distance:
             "the log-det distance is undefined"
         )
         raise ValueError(msg)
-    value = -(log_det - 0.5 * (np.sum(np.log(rows)) + np.sum(np.log(columns)))) / k
+    value = (
+        -(log_det - 0.5 * (np.sum(np.log(rows)) + np.sum(np.log(columns)))) / n_states
+    )
     inverse = np.linalg.inv(frequencies)
     gradient = (
-        -(inverse.T - 0.5 / rows[:, np.newaxis] - 0.5 / columns[np.newaxis, :]) / k
+        -(inverse.T - 0.5 / rows[:, np.newaxis] - 0.5 / columns[np.newaxis, :])
+        / n_states
     )
     return Distance(
         float(value), multinomial_delta_variance(frequencies, gradient, n_sites)
@@ -286,7 +289,7 @@ class TreeDistances:
 
 def distance_matrix(
     alignment: Mapping[str, np.ndarray],
-    k: int,
+    n_states: int,
     kind: DistanceKind = DistanceKind.JUKES_CANTOR,
 ) -> DistanceMatrix:
     """Every pair's distance and variance, over the taxa in sorted order.
@@ -296,7 +299,7 @@ def distance_matrix(
     alignment : Mapping[str, np.ndarray]
         Taxon name to its states, as
         :func:`sal.sim.simulate.simulate_alignment` returns.
-    k : int
+    n_states : int
         Number of states.
     kind : DistanceKind
         Which estimator to apply.
@@ -325,7 +328,7 @@ def distance_matrix(
     variances = np.zeros((len(names), len(names)))
     for row, first in enumerate(names):
         for column in range(row + 1, len(names)):
-            estimate = estimator(alignment[first], alignment[names[column]], k)
+            estimate = estimator(alignment[first], alignment[names[column]], n_states)
             distances[row, column] = distances[column, row] = estimate.value
             variances[row, column] = variances[column, row] = estimate.variance
     return DistanceMatrix(names, distances, variances)

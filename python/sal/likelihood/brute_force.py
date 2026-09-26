@@ -32,7 +32,7 @@ from sal.sim.tree import Node, edges, preorder
 
 def brute_force_log_likelihood(
     tau: Node,
-    k: int,
+    n_states: int,
     pi: np.ndarray,
     alignment: dict[str, np.ndarray],
 ) -> float:
@@ -44,7 +44,7 @@ def brute_force_log_likelihood(
         Root of the topology, with branch lengths attached to each non-root
         node. Keep to ``n <= 6`` leaves -- this enumerates every joint
         assignment of internal-node states.
-    k : int
+    n_states : int
         Number of states.
     pi : np.ndarray
         Root state distribution, shape (k,).
@@ -67,15 +67,15 @@ def brute_force_log_likelihood(
         assignments are past
         :data:`sal.enumeration.MAX_ENUMERABLE_CONFIGURATIONS`.
     """
-    if pi.shape != (k,):
-        msg = f"pi has shape {pi.shape}, expected ({k},)"
+    if pi.shape != (n_states,):
+        msg = f"pi has shape {pi.shape}, expected ({n_states},)"
         raise ValueError(msg)
 
     leaves = [node for node in preorder(tau) if node.is_leaf]
     internal = [node for node in preorder(tau) if not node.is_leaf]
     refuse_oversized(
-        k ** len(internal),
-        what=f"{k}**{len(internal)} ancestral-state assignments",
+        n_states ** len(internal),
+        what=f"{n_states}**{len(internal)} ancestral-state assignments",
     )
     missing = [leaf.name for leaf in leaves if leaf.name not in alignment]
     if missing:
@@ -88,13 +88,15 @@ def brute_force_log_likelihood(
         if child.branch_length is None:
             msg = f"non-root node {child.name!r} has no branch_length"
             raise ValueError(msg)
-        transitions[child.name] = jc_transition_probabilities(child.branch_length, k=k)
+        transitions[child.name] = jc_transition_probabilities(
+            child.branch_length, n_states=n_states
+        )
 
     n_sites = alignment[leaves[0].name].shape[0]
     total_log_likelihood = 0.0
     for site in range(n_sites):
         site_likelihood = 0.0
-        for assignment in itertools.product(range(k), repeat=len(internal)):
+        for assignment in itertools.product(range(n_states), repeat=len(internal)):
             state: dict[str, int] = {
                 node.name: value
                 for node, value in zip(internal, assignment, strict=True)

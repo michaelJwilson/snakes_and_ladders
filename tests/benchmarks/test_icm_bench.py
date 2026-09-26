@@ -42,11 +42,11 @@ def test_floored_descent_benchmark(
         return iterated_conditional_modes(
             rung.graph,
             rung.field,
-            rung.n_states,
             np.random.default_rng(0),
             max_sweeps=MAX_SWEEPS,
             min_sites=MIN_SITES,
             backend=backend,
+            n_states=rung.n_states,
         ).energy
 
     value = benchmark.pedantic(descend, rounds=5, iterations=1, warmup_rounds=1)  # type: ignore[no-untyped-call]

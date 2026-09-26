@@ -57,6 +57,7 @@ def test_a_benchmark_under_xdist_fails_instead_of_measuring_nothing() -> None:
 
 
 @pytest.mark.infra
+@pytest.mark.release  # 11.6 s in the tier, over the 10 s cap (#1088)
 def test_a_capped_run_under_xdist_fails_instead_of_passing_every_cap() -> None:
     """The cap is read where the durations are not, so a capped run refuses `-n`."""
     result = _distributed_pytest(

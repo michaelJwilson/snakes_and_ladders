@@ -226,7 +226,7 @@ class QuartetTable:
 
 
 def quartet_table(
-    alignment: Mapping[str, np.ndarray], k: int, *, model: Model = Model.JC
+    alignment: Mapping[str, np.ndarray], n_states: int, *, model: Model = Model.JC
 ) -> QuartetTable:
     """Fit all three resolutions of every quartet.
 
@@ -234,7 +234,7 @@ def quartet_table(
     ----------
     alignment : Mapping[str, np.ndarray]
         Observed states per taxon, at least :data:`MIN_TAXA` of them.
-    k : int
+    n_states : int
         Number of states.
     model : Model
         Substitution model for each four-taxon fit.
@@ -259,7 +259,7 @@ def quartet_table(
         for topology in enumerate_topologies(members):
             resolution = int(resolutions(single, members, topology)[0])
             scores[row, resolution] = score_topology(
-                topology, restricted, k, model=model
+                topology, restricted, n_states, model=model
             )
     return QuartetTable(names=names, quartets=quartets, scores=scores)
 

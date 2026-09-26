@@ -51,7 +51,7 @@ def _reached(environment: PottsEnvironment, policy: LinearPolicy | MLPPolicy) ->
         np.mean(
             [
                 abs(
-                    environment.energy(
+                    environment.log_weight(
                         rollout(environment, policy, rng, max_steps=6, start=s).states[
                             -1
                         ]

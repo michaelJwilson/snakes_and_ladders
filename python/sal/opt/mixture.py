@@ -31,6 +31,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 
 import numpy as np
 import torch
@@ -546,7 +547,7 @@ class MixtureFit:
     log_likelihood: float
     iterations: int
     at_boundary: bool
-    termination: Termination | None = None
+    termination: Termination = dataclass_field(kw_only=True)
 
 
 def expectation_maximization(
@@ -657,7 +658,7 @@ def expectation_maximization(
         log_likelihood,
         termination.iterations,
         boundary,
-        termination,
+        termination=termination,
     )
 
 
@@ -714,7 +715,7 @@ def _streamed_expectation_maximization(
         log_likelihood,
         termination.iterations,
         False,
-        termination,
+        termination=termination,
     )
 
 

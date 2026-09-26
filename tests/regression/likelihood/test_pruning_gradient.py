@@ -38,9 +38,9 @@ def test_infer_returns_the_same_topology_and_trace(
     """The search's answer does not depend on which route produced the gradient."""
     params, alignment = simulated_alignment(SMALL_SITES, _SITES)
 
-    expected = infer(alignment, params.k, rng=np.random.default_rng(449))
+    expected = infer(alignment, params.n_states, rng=np.random.default_rng(449))
     monkeypatch.setattr(pruning_torch, "log_likelihood", _ROUTES[route])
-    actual = infer(alignment, params.k, rng=np.random.default_rng(449))
+    actual = infer(alignment, params.n_states, rng=np.random.default_rng(449))
 
     assert actual.topology == expected.topology
     assert actual.evaluations == expected.evaluations

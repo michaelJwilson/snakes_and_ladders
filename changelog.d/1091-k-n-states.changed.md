@@ -1,0 +1,1 @@
+The phylogenetic state count is `n_states` wherever it was `k`: every public parameter, `SimulationParams.n_states`, the objectives' `n_states` property, and the fixtures' `n_states:` key. `tile_partition`'s tile count is `n_tiles`, as is the tiling fixture's key. A call passing `k=` raises `TypeError` (#1091).
