@@ -35,8 +35,9 @@ def icm_sweeps(
     The update :func:`sal.search.icm.iterated_conditional_modes`
     states, on the Rust sweeps' signature (issue #1055): each site takes the
     first state minimizing ``-field[node, s] - sum_j J_ij [s == state[j]]``,
-    ``field`` the log-weight, row ``orders[sweep]`` giving the visiting order,
-    or index order where ``orders`` has no rows.
+    ``field`` the log-weight, row ``orders[sweep % rows]`` giving the visiting
+    order --- one row per sweep, or one row every sweep repeats --- or index
+    order where ``orders`` has no rows.
 
     After each sweep's site updates, with ``min_sites > 0``, every state
     holding ``0 < count < min_sites`` sites is dissolved: each of its sites,
@@ -61,12 +62,13 @@ def icm_sweeps(
     counts = np.zeros(n_states, dtype=np.int64)
     surviving = np.empty(n_states, dtype=np.int64)
     ordered = orders.shape[0] > 0
+    rows = max(orders.shape[0], 1)
     sweeps = 0
     for sweep in range(n_sweeps):
         sweeps += 1
         changed = False
         for position in range(n_nodes):
-            node = orders[sweep, position] if ordered else position
+            node = orders[sweep % rows, position] if ordered else position
             for label in range(n_states):
                 local[label] = -field[node, label]
             for edge in range(offsets[node], offsets[node + 1]):
@@ -219,10 +221,11 @@ def icm_sweeps_checked(
     orders = np.ascontiguousarray(orders, dtype=np.int64)
     if orders.size == 0:
         orders = np.empty((0, n_nodes), dtype=np.int64)
-    elif orders.shape != (n_sweeps, n_nodes):
+    elif orders.shape not in {(n_sweeps, n_nodes), (1, n_nodes)}:
         msg = (
             f"orders has shape {orders.shape}, expected ({n_sweeps}, {n_nodes}) "
-            f"(one visiting order per sweep) or empty (index order)"
+            f"(one visiting order per sweep), (1, {n_nodes}) (one order every "
+            f"sweep repeats) or empty (index order)"
         )
         raise ValueError(msg)
     elif not (int(orders.min()) >= 0 and int(orders.max()) < n_nodes):
@@ -254,3 +257,26 @@ def icm_sweeps_checked(
     if sweeps < 0:
         raise ValueError(no_survivor(-sweeps, min_sites))
     return sweeps
+
+
+@njit(cache=True, nogil=True)
+def greedy_colouring(offsets: np.ndarray, neighbours: np.ndarray) -> np.ndarray:
+    """:func:`sal.search.icm.colouring`'s greedy rule, compiled (issue #1073).
+
+    Each site in index order takes the smallest colour none of its earlier
+    neighbours holds. The Python loop is the oracle it is pinned against;
+    it cost 10 ms of a 16 ms checkerboard descent at 75 x 75.
+    """
+    n_nodes = offsets.size - 1
+    colour = np.full(n_nodes, -1, dtype=np.int64)
+    taken = np.full(n_nodes + 1, -1, dtype=np.int64)
+    for node in range(n_nodes):
+        for position in range(offsets[node], offsets[node + 1]):
+            neighbour_colour = colour[neighbours[position]]
+            if neighbour_colour >= 0:
+                taken[neighbour_colour] = node
+        chosen = 0
+        while taken[chosen] == node:
+            chosen += 1
+        colour[node] = chosen
+    return colour

@@ -178,10 +178,10 @@ def test_the_compiled_route_is_reproducible_from_the_generator() -> None:
 def test_an_array_start_is_the_objectives_initial_point_bitwise(
     backend: Backend,
 ) -> None:
-    # Issue #1059: `theta0` is an array, as the chain takes no derivative;
+    # Issue #1059: `start` is an array, as the chain takes no derivative;
     # the zero start `GaussianTarget.initial` gives is the same chain.
     implicit = _chain(backend, n=200)
-    explicit = _chain(backend, n=200, theta0=np.zeros(DIMENSION))
+    explicit = _chain(backend, n=200, start=np.zeros(DIMENSION))
     np.testing.assert_array_equal(implicit.draws.numpy(), explicit.draws.numpy())
 
 
