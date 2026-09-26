@@ -29,7 +29,7 @@ SHAPE = (400, 12)
 
 #: The family order against ``log_density``, relative per score: the two
 #: differ only in which ``log`` rounds ``r / t`` and ``mu c / t``. Measured
-#: 6.7 ulp on these draws.
+#: 3.2 ulp on these draws.
 _FAMILY_ULPS = 16
 
 #: The tabulated order, in ulp of the three terms' summed magnitudes, as
