@@ -124,7 +124,7 @@ def _enumerable() -> dict[str, tuple[PottsGraph, float, np.ndarray]]:
 
 def _within(estimate: LogPartition, exact: float) -> float:
     """The deviation in standard errors, which is the only unit read here."""
-    return abs(estimate.log_z - exact) / estimate.stderr
+    return abs(estimate.log_partition - exact) / estimate.stderr
 
 
 @pytest.mark.oracle
@@ -205,10 +205,10 @@ def test_the_zero_rung_is_n_log_q_bitwise() -> None:
             graph, WIDER_FIELD, (0.0,), np.random.default_rng(0), POPULATION
         )
 
-        assert estimate.log_z == exact
+        assert estimate.log_partition == exact
         assert estimate.stderr == 0.0
         assert estimate.ess == POPULATION
-        assert estimate.rung_log_z.tolist() == [exact]
+        assert estimate.rung_log_partition.tolist() == [exact]
 
 
 @pytest.mark.analytic
@@ -250,7 +250,7 @@ def test_population_annealing_without_resampling_is_the_importance_sampler() -> 
         graph, field, betas, np.random.default_rng(3), 64, resample=Resampling.NONE
     )
 
-    assert unresampled.log_z == pytest.approx(neal.log_z, abs=1e-12)
+    assert unresampled.log_partition == pytest.approx(neal.log_partition, abs=1e-12)
     assert unresampled.family_entropy == pytest.approx(math.log(64))
     shift = float(np.log(np.exp(neal.log_weights - neal.log_weights.max()).sum()))
     normalized = neal.log_weights - neal.log_weights.max() - shift

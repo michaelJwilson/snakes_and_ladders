@@ -311,7 +311,7 @@ def _enumerated_evidence(params: HmmParams, observations: np.ndarray) -> float:
     """``sum_sequences log P(sequence)``, summed over every path of each."""
     return float(
         sum(
-            enumerate_hidden_paths(params, sequence).log_likelihood
+            enumerate_hidden_paths(params, sequence).log_evidence
             for sequence in observations
         )
     )
