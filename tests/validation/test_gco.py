@@ -49,9 +49,13 @@ def _non_negative(graph: PottsGraph, field: np.ndarray, value: float) -> float:
 def test_gcos_labelling_is_a_fixed_point_of_the_package_move() -> None:
     def check(n_states: int, side: int) -> None:
         graph, field = _potts(side, n_states, 974)
-        theirs = gco.alpha_expansion(graph, field, n_states)
+        theirs = gco.alpha_expansion(graph, field, n_states=n_states)
         from_theirs = alpha_expansion(
-            graph, field, n_states, start=theirs.labelling, backend=Backend.RUST
+            graph,
+            field,
+            start=theirs.labelling,
+            backend=Backend.RUST,
+            n_states=n_states,
         )
         assert from_theirs.moves == 0
         assert np.array_equal(from_theirs.labelling, theirs.labelling)
@@ -71,8 +75,8 @@ def test_both_expansions_are_within_the_factor_two_bound_of_the_optimum() -> Non
         block = np.hstack([np.broadcast_to(head, (rest.shape[0], 4)), rest])
         best = min(best, float(energies(graph, field, block).min()))
     optimum = _non_negative(graph, field, best)
-    ours = alpha_expansion(graph, field, 3, backend=Backend.RUST)
-    theirs = gco.alpha_expansion(graph, field, 3)
+    ours = alpha_expansion(graph, field, backend=Backend.RUST, n_states=3)
+    theirs = gco.alpha_expansion(graph, field, n_states=3)
     for found in (ours.energy, theirs.energy):
         shifted = _non_negative(graph, field, found)
         assert optimum <= shifted * (1.0 + 1e-12) <= 2.0 * optimum
@@ -86,8 +90,8 @@ def test_both_expansions_are_within_the_factor_two_bound_of_the_optimum() -> Non
 def test_the_two_energies_agree_within_one_per_cent_at_71() -> None:
     def check(n_states: int) -> None:
         graph, field = _potts(71, n_states, 974)
-        ours = alpha_expansion(graph, field, n_states, backend=Backend.RUST)
-        theirs = gco.alpha_expansion(graph, field, n_states)
+        ours = alpha_expansion(graph, field, backend=Backend.RUST, n_states=n_states)
+        theirs = gco.alpha_expansion(graph, field, n_states=n_states)
         assert theirs.energy == pytest.approx(ours.energy, rel=1e-2)
 
     every_value([3, 10], check)
