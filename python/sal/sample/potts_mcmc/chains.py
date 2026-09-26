@@ -36,9 +36,9 @@ from sal.sample.potts_mcmc.sweeps import (
     swendsen_wang_sweep,
     wolff_sweep,
 )
-from sal.sample.runs import Annealed
 from sal.sample.schedule import (
     AdaptedLadder,
+    Annealed,
     Monotone,
     TempSchedule,
     adapt_ladder,
@@ -248,7 +248,7 @@ def sample_potts(
 class AnnealedPotts(Annealed[np.ndarray]):
     """What one annealing run found, and what it cost (issue #1090).
 
-    An :class:`~sal.sample.runs.Annealed` over labellings: ``best`` is the
+    An :class:`~sal.sample.schedule.Annealed` over labellings: ``best`` is the
     lowest-energy configuration visited, shape ``(n_nodes,)``, ``final``
     where the chain ended, and ``spent`` the site visits, the unit a budget
     is matched on rather than the sweep count: a Wolff sweep flips one

@@ -100,8 +100,8 @@ from sal.sample.declared import (
 )
 from sal.sample.expectation import Expectation
 from sal.sample.hmc.jax import JaxWalk
-from sal.sample.runs import Annealed
 from sal.sample.schedule import (
+    Annealed,
     Monotone,
     TempSchedule,
     check_ladder,
@@ -572,7 +572,7 @@ def sample(
 class AnnealedTheta(Annealed[torch.Tensor]):
     """What one annealing run found, and what it cost (issue #1090).
 
-    An :class:`~sal.sample.runs.Annealed` over points in unconstrained
+    An :class:`~sal.sample.schedule.Annealed` over points in unconstrained
     coordinates: ``best`` is the lowest-valued point visited, ``final``
     where the chain ended, and ``spent`` the gradients, so the run is
     comparable to any other optimizer at equal evaluations.

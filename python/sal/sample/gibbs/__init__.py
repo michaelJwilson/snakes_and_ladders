@@ -64,8 +64,7 @@ from sal.sample.balanced import (
     log_normalizer,
     log_ratios,
 )
-from sal.sample.runs import Annealed
-from sal.sample.schedule import TempSchedule
+from sal.sample.schedule import Annealed, TempSchedule
 from sal.search.infer import score_topology
 from sal.sim.factor_graph import Factor, FactorGraph
 from sal.sim.topology import (
@@ -122,7 +121,7 @@ class GibbsChain:
 class AnnealedLabelling(Annealed[np.ndarray]):
     """What annealing returns: the best state visited, and the path there (issue #1090).
 
-    An :class:`~sal.sample.runs.Annealed` over states: ``best`` is the state
+    An :class:`~sal.sample.schedule.Annealed` over states: ``best`` is the state
     of highest log-density seen, shape ``(n_variables,)``, ``final`` where
     the chain ended, and ``spent`` the heat-bath sweeps.
 
@@ -859,7 +858,7 @@ def chain_block_sweep(
 class AnnealedTopology(Annealed[Topology]):
     """What the topology move returns (issue #1090).
 
-    An :class:`~sal.sample.runs.Annealed` over topologies: ``best`` is the
+    An :class:`~sal.sample.schedule.Annealed` over topologies: ``best`` is the
     topology of highest fitted log-likelihood visited, ``final`` where the
     walk ended, and ``spent`` the topologies this run fitted, the cache
     hits being free.

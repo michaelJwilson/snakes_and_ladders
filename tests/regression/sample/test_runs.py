@@ -15,7 +15,7 @@ import pytest
 from sal.sample.gibbs import AnnealedLabelling, AnnealedTopology
 from sal.sample.hmc import AnnealedTheta
 from sal.sample.potts_mcmc import AnnealedPotts
-from sal.sample.runs import Annealed
+from sal.sample.schedule import Annealed
 
 PACKAGE = Path(__file__).resolve().parents[3] / "python" / "sal"
 
