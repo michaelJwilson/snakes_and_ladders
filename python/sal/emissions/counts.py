@@ -46,10 +46,12 @@ from sal.emissions.rising import (
     LARGE_SHAPE,
     broadcast,
     by_state,
+    distinct_values,
     log1p_over,
     log_rising_scaled,
     on_distinct,
     scaled_rising,
+    tracked,
 )
 
 #: Posterior mass, in effective observations, below which a state's M step has
@@ -1749,7 +1751,7 @@ def _beta_binomial_plain(
             - torch.lgamma(beta)
         )
 
-    if trials.dim() == 1 and _per_state(alpha, beta) and not _tracks(alpha, beta):
+    if trials.dim() == 1 and _per_state(alpha, beta) and not tracked(alpha, beta):
         return on_distinct(counts, terms)
     return terms(counts)
 
@@ -1853,11 +1855,6 @@ def _per_state(*parameters: torch.Tensor) -> bool:
     return all(p.dim() == 1 for p in parameters)
 
 
-def _tracks(*parameters: torch.Tensor) -> bool:
-    """Whether autograd tracks a parameter: a gather sums its gradient in another order (#924)."""
-    return torch.is_grad_enabled() and any(p.requires_grad for p in parameters)
-
-
 def _negative_binomial_large(
     counts: torch.Tensor, dispersion: torch.Tensor, rate: torch.Tensor
 ) -> torch.Tensor:
@@ -1914,7 +1911,7 @@ def _negative_binomial_plain(
             + y * torch.log(rate / total)
         )
 
-    if _per_state(dispersion, rate) and not _tracks(dispersion, rate):
+    if _per_state(dispersion, rate) and not tracked(dispersion, rate):
         return on_distinct(counts, terms)
     return terms(counts)
 
@@ -1937,10 +1934,10 @@ def lgamma_shifted(counts: torch.Tensor, shift: torch.Tensor) -> torch.Tensor:
         or counts.shape[-1] != 1
         or counts.numel() < 64
         or shift.dim() != 1
-        or (shift.requires_grad and torch.is_grad_enabled())
+        or tracked(shift)
     ):
         return torch.lgamma(counts + shift)
-    distinct, inverse = torch.unique(counts, return_inverse=True)
+    distinct, inverse = distinct_values(counts)
     table = torch.lgamma(distinct.unsqueeze(-1) + shift.reshape(-1))
     return table[inverse.reshape(-1)].reshape(*counts.shape[:-1], -1)
 

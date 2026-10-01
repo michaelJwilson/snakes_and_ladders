@@ -217,7 +217,8 @@ def emission_objective(instance: MixtureInstance) -> EmissionMixtureObjective:
     is drawn from the model it initializes rather than from the Gaussian
     :func:`surrogate` and snapped to an observed row. It starts at the
     quantile components, which read no generator, and conditions on the
-    instance's covariate as every fit does.
+    instance's covariate as every fit does. The starts only follow its
+    gradient, so it is taken on the distinct counts.
 
     Returns
     -------
@@ -229,6 +230,7 @@ def emission_objective(instance: MixtureInstance) -> EmissionMixtureObjective:
         start,
         build_like(start),
         covariate=instance.covariate,
+        gradient_on_distinct=True,
     )
 
 

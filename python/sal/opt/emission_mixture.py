@@ -25,6 +25,7 @@ from __future__ import annotations
 import itertools
 import math
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import nullcontext
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from enum import StrEnum
@@ -40,6 +41,11 @@ from sal.emissions import (
     EmissionFamily,
     NegativeBinomialEmission,
     PoissonEmission,
+)
+from sal.emissions.rising import (
+    DistinctCache,
+    gradients_on_distinct,
+    reusing_distinct,
 )
 from sal.enumeration import refuse_oversized
 from sal.opt.constrain import (
@@ -778,6 +784,12 @@ class EmissionMixtureObjective(Objective):
     covariate : np.ndarray | torch.Tensor | None
         Per-observation covariate, scored as the fits score it (issue #1136);
         ``None`` scores without one, as before.
+    gradient_on_distinct : bool
+        Take the gradient on the distinct counts
+        (:func:`~sal.emissions.rising.gradients_on_distinct`): the same
+        gradient to rounding, at a fraction of the work, for a caller that
+        only follows it. Off by default, so a Hessian read off this objective
+        is the one it was.
 
     Raises
     ------
@@ -792,6 +804,7 @@ class EmissionMixtureObjective(Objective):
         build: Callable[[Mapping[str, torch.Tensor]], EmissionFamily],
         *,
         covariate: np.ndarray | torch.Tensor | None = None,
+        gradient_on_distinct: bool = False,
     ) -> None:
         if start.n_states < 2:
             msg = f"a mixture has at least two components, got {start.n_states}"
@@ -811,6 +824,10 @@ class EmissionMixtureObjective(Objective):
             if covariate is None
             else torch.as_tensor(covariate, dtype=torch.float64)
         )
+        self._on_distinct = gradient_on_distinct
+        # The distinct counts of the observations, found once and reused by
+        # every evaluation: the observations do not change between them.
+        self._distinct: DistinctCache = {}
         self._start = named
         self._names = tuple(named)
         self._k = start.n_states
@@ -863,12 +880,16 @@ class EmissionMixtureObjective(Objective):
 
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         """The negative mixture log-likelihood at ``theta``."""
-        return -mixture_log_likelihood(
-            self._observations,
-            log_simplex(theta[: self._k - 1]),
-            self.components(theta),
-            covariate=self._covariate,
-        )
+        with (
+            reusing_distinct(self._distinct),
+            gradients_on_distinct() if self._on_distinct else nullcontext(),
+        ):
+            return -mixture_log_likelihood(
+                self._observations,
+                log_simplex(theta[: self._k - 1]),
+                self.components(theta),
+                covariate=self._covariate,
+            )
 
 
 class SeedMethod(StrEnum):

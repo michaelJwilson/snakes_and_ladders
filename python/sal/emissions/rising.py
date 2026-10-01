@@ -37,7 +37,9 @@ tables of :mod:`sal.emissions.nb` and :mod:`sal.emissions.bb` included.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 
 import torch
 
@@ -154,7 +156,7 @@ def on_distinct(
     """
     if values.dim() == 0 or values.shape[-1] != 1 or values.numel() < 64:
         return table(values)
-    distinct, inverse = torch.unique(values, return_inverse=True)
+    distinct, inverse = distinct_values(values)
     rows = table(distinct.reshape(-1, 1))
     return rows[inverse.reshape(-1)].reshape(*values.shape[:-1], rows.shape[-1])
 
@@ -180,3 +182,85 @@ def by_state(
     columns = torch.cat([above(upper), below(lower)], dim=-1)
     order = torch.argsort(torch.cat([upper, lower]))
     return columns.index_select(-1, order)
+
+
+#: Whether a gradient taken here may be summed over distinct counts.
+_GRADIENT_ON_DISTINCT: ContextVar[bool] = ContextVar(
+    "gradient_on_distinct", default=False
+)
+
+
+@contextmanager
+def gradients_on_distinct() -> Iterator[None]:
+    """Let the count densities tabulate on distinct counts while autograd tracks them (issue #1136).
+
+    Off by default: the gather's backward sums each parameter's gradient over
+    the distinct counts rather than the observations, which is the same
+    gradient to rounding and not bit for bit, and an observed-information
+    Hessian pinned bitwise would move (#924). A sampler that only follows the
+    gradient --- the Hamiltonian, annealing and tempering mixture starts ---
+    takes it inside this block. Per thread and per task, as a
+    :class:`contextvars.ContextVar` is.
+    """
+    token = _GRADIENT_ON_DISTINCT.set(True)
+    try:
+        yield
+    finally:
+        _GRADIENT_ON_DISTINCT.reset(token)
+
+
+def tracked(*parameters: torch.Tensor) -> bool:
+    """Whether autograd tracks a parameter and the gradient must be summed per observation."""
+    return (
+        not _GRADIENT_ON_DISTINCT.get()
+        and torch.is_grad_enabled()
+        and any(p.requires_grad for p in parameters)
+    )
+
+
+#: ``torch.unique(values, return_inverse=True)`` for values seen before in
+#: this context, or ``None`` outside :func:`reusing_distinct`.
+type DistinctCache = dict[
+    tuple[tuple[int, ...], torch.dtype, float],
+    list[tuple[torch.Tensor, torch.Tensor, torch.Tensor]],
+]
+
+_DISTINCT_CACHE: ContextVar[DistinctCache | None] = ContextVar(
+    "distinct_cache", default=None
+)
+
+
+@contextmanager
+def reusing_distinct(cache: DistinctCache) -> Iterator[None]:
+    """Keep the distinct values of the counts scored inside, in ``cache``, across calls (issue #1136).
+
+    A sampler scores the same observations at every step, and each step's
+    ``torch.unique`` of them is the last step's: 4.1 s of a 23.9 s chain at
+    the stress mixture. The caller owns ``cache`` --- an objective holds its
+    own --- and installs it only for its own calls, so no state is shared
+    between threads or tasks. A hit is verified by ``torch.equal`` against
+    the stored values, so it is the recomputation exactly.
+    """
+    token = _DISTINCT_CACHE.set(cache)
+    try:
+        yield
+    finally:
+        _DISTINCT_CACHE.reset(token)
+
+
+def distinct_values(values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """``torch.unique(values, return_inverse=True)``, from the installed cache where it holds them."""
+    cache = _DISTINCT_CACHE.get()
+    if cache is None:
+        found: tuple[torch.Tensor, torch.Tensor] = torch.unique(
+            values, return_inverse=True
+        )
+        return found
+    key = (tuple(values.shape), values.dtype, float(values.sum()))
+    for held, distinct, inverse in cache.get(key, []):
+        if torch.equal(held, values):
+            return distinct, inverse
+    distinct, inverse = torch.unique(values, return_inverse=True)
+    cache.setdefault(key, []).append((values.detach().clone(), distinct, inverse))
+    return distinct, inverse
+

@@ -34,6 +34,7 @@ from sal.opt.emission_mixture import (
     expectation_maximization,
 )
 from sal.opt.mixture import emission_mixture_plus_plus, mixture_log_likelihood
+from sal.opt.objective import value_and_gradient
 from sal.search import mixture_starts
 from sal.search.mixture_starts import (
     BestOf,
@@ -222,3 +223,48 @@ def test_build_like_rebuilds_each_count_family() -> None:
     with pytest.raises(TypeError, match="no build"):
         build_like(object())  # type: ignore[arg-type]
     EmissionMixtureObjective(np.zeros((3, 2)), pair, build_like(pair))
+
+
+@pytest.mark.oracle
+def test_the_gradient_on_distinct_counts_is_the_gradient_to_rounding() -> None:
+    # The opt-in sums each parameter's gradient over the distinct counts; the
+    # value is the same expression, and the gradient the same to rounding.
+    instance = _instance()
+    start = emission_objective(instance)
+    plain = EmissionMixtureObjective(
+        np.asarray(instance.observations, dtype=np.float64),
+        start.components(start.initial()),
+        build_like(start.components(start.initial())),
+    )
+    theta = start.initial() + 0.05 * torch.randn(
+        start.n_parameters,
+        generator=torch.Generator().manual_seed(SEED),
+        dtype=torch.float64,
+    )
+
+    value, gradient = value_and_gradient(start, theta)
+    want_value, want_gradient = value_and_gradient(plain, theta)
+
+    assert float(value) == pytest.approx(float(want_value), rel=1e-14)
+    np.testing.assert_allclose(
+        gradient.numpy(), want_gradient.numpy(), rtol=1e-10, atol=1e-10
+    )
+
+
+@pytest.mark.oracle
+def test_a_reused_distinct_count_is_the_recomputed_one() -> None:
+    from sal.emissions.rising import DistinctCache, distinct_values, reusing_distinct
+
+    rng = np.random.default_rng(SEED)
+    first = torch.as_tensor(rng.integers(0, 50, (500, 1)), dtype=torch.float64)
+    # Same shape and sum, different values: the key collides, the check does not.
+    second = first.flip(0).clone()
+    second[0, 0], second[1, 0] = second[0, 0] + 1.0, second[1, 0] - 1.0
+    cache: DistinctCache = {}
+
+    with reusing_distinct(cache):
+        for values in (first, second, first, second):
+            got = distinct_values(values)
+            want = torch.unique(values, return_inverse=True)
+            assert all(torch.equal(a, b) for a, b in zip(got, want, strict=True))
+    assert sum(len(entries) for entries in cache.values()) == 2
