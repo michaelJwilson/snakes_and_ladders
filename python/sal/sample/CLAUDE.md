@@ -47,9 +47,9 @@ draws reach it without the module importing their type.
 
 - **A sweep must not stop on a state-dependent condition.**
 
-- **A cluster move in an external field needs an accept step**, and in a
-  *per-site* field that step sums the difference over the cluster's own
-  members rather than scaling one shared difference by `|C|` (#551).
+- **A cluster move in an external field needs an accept step or an exact
+  draw**, and in a *per-site* field either sums over the cluster's own
+  members rather than scaling one shared difference by `|C|` (#551, #1142).
 
 - **A cluster move is judged by its cluster as well as by its law.** A
   construction can be exact and still buy nothing: where the cluster is the

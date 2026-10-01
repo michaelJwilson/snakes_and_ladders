@@ -263,4 +263,3 @@ def distinct_values(values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     distinct, inverse = torch.unique(values, return_inverse=True)
     cache.setdefault(key, []).append((values.detach().clone(), distinct, inverse))
     return distinct, inverse
-

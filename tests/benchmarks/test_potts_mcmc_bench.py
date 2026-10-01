@@ -51,3 +51,35 @@ def test_potts_sweep_benchmark(
     )
 
     assert chain.states.shape == (50, graph.n_nodes)
+
+
+@pytest.mark.parametrize(
+    "move", [PottsMove.SWENDSEN_WANG, PottsMove.SWENDSEN_WANG_HEAT_BATH], ids=str
+)
+def test_release_cluster_pass_benchmark(
+    benchmark: BenchmarkFixture, move: PottsMove
+) -> None:
+    # One pass at `spatio_tiling/release` (5,041 sites, q = 10), the size the
+    # anneal comparison of issue #1142 runs at: the uniform proposal on its
+    # compiled pass against the heat bath on NumPy and the compiled union-find.
+    from sal.sample.potts_mcmc import sweeps
+    from sal.search.potts_starts import tiling_rung
+    from sal.sim.fixtures import fixture
+
+    rung = tiling_rung(fixture("spatio_tiling", "release").params, "release")
+    rng = np.random.default_rng(1142)
+    state = rng.integers(0, rung.n_states, size=rung.n_nodes)
+
+    def one_pass() -> None:
+        if move is PottsMove.SWENDSEN_WANG:
+            sweeps.swendsen_wang_sweep(
+                state, rung.graph, rung.field, rng, None, 1.0, backend=Backend.RUST
+            )
+        else:
+            sweeps.swendsen_wang_heat_bath_sweep(
+                state, rung.graph, rung.field, rng, 1.0, backend=Backend.RUST
+            )
+
+    benchmark(one_pass)
+
+    assert state.shape == (rung.n_nodes,)

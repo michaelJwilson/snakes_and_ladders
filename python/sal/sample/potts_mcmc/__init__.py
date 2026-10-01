@@ -16,7 +16,7 @@ recolouring carries a Metropolis accept step on that difference, and the
 chi-square tests in `tests/regression/search/test_potts_mcmc.py` are run with
 and without a field because only the first catches its absence.
 
-**Two of the eight move sets are gradient-informed, and on this energy they are
+**Two of the ten move sets are gradient-informed, and on this energy they are
 one kernel.** A locally balanced proposal (Zanella 2020) weights every
 single-site change by ``sqrt(pi(s') / pi(s))``; Gibbs-with-gradients
 (Grathwohl et al. 2021) weights it by the same function of the *first-order
@@ -29,7 +29,7 @@ which is why it is pinned by a test rather than assumed by a shared branch:
 :func:`taylor_log_ratios` is the estimate, :func:`autodiff_log_ratios` is the
 same quantity from the tape, and the three agree to ``1e-12``.
 
-**Two of the eight run where the Fortuin-Kasteleyn construction cannot.** Its
+**Two of the ten run where the Fortuin-Kasteleyn construction cannot.** Its
 bond probability ``1 - exp(-J)`` is not a probability below zero, so Wolff and
 Swendsen-Wang are refused on an antiferromagnet --- the instance a cluster move
 is wanted for. :func:`niedermayer_sweep` activates a bond on its energy
@@ -42,7 +42,7 @@ package does not report one: on the frustrated triangular lattice both
 clusters percolate, which
 ``docs/experiments/022-cluster-moves-for-frustrated-lattices.md`` measures.
 
-**Two of the eight read the field when they build or propose a cluster**
+**Four of the ten read the field when they build or relabel a cluster**
 (issue #1041). :func:`ghost_spin_sweep` bonds each site to a ghost site of
 its own label with the field as the coupling, so the field is inside the
 Fortuin-Kasteleyn measure and no accept step remains;
@@ -51,6 +51,13 @@ across passes, with a Metropolis-Hastings step on the cluster's field
 difference. :func:`cluster_tempering` runs Swendsen-Wang replicas on a
 ladder and Houdayer's swap between its coldest pairs, with the accept step a
 swap across two temperatures needs.
+
+:func:`swendsen_wang_heat_bath_sweep` and :func:`wolff_heat_bath_sweep`
+(issue #1142) keep Swendsen-Wang's and Wolff's bonds and draw each cluster's
+label from ``exp(beta sum_C h[i, c])`` over all ``q`` labels
+(:func:`heat_bath_labels`): the exact conditional given the bonds, so where
+the uniform proposal's accept step falls with the cluster's size in a strong
+field, the heat bath has no step to fail.
 
 These are samplers, not optimizers: they are validated by the distribution they
 converge to, and nothing here claims to find a ground state. The exception is
@@ -127,14 +134,17 @@ from sal.sample.potts_mcmc.sweeps import (
     find_root,
     ghost_couplings,
     ghost_spin_sweep,
+    heat_bath_labels,
     houdayer_cluster,
     houdayer_move,
     label_directed_sweep,
     niedermayer_sweep,
     niedermayer_threshold,
+    swendsen_wang_heat_bath_sweep,
     swendsen_wang_sweep,
     taylor_log_ratios,
     union_roots,
+    wolff_heat_bath_sweep,
     wolff_sweep,
 )
 from sal.sim.potts import energies
@@ -170,6 +180,7 @@ __all__ = [
     "find_root",
     "ghost_couplings",
     "ghost_spin_sweep",
+    "heat_bath_labels",
     "houdayer_cluster",
     "houdayer_move",
     "label_directed_sweep",
@@ -181,9 +192,11 @@ __all__ = [
     "sample_potts_pair",
     "swap_log_ratio",
     "sweep_for",
+    "swendsen_wang_heat_bath_sweep",
     "swendsen_wang_sweep",
     "taylor_log_ratios",
     "tempered",
     "union_roots",
+    "wolff_heat_bath_sweep",
     "wolff_sweep",
 ]

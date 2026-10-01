@@ -29,6 +29,10 @@ class PottsMove(StrEnum):
     # Fortuin-Kasteleyn clusters proposed onto one label at a time.
     GHOST_SPIN = "ghost-spin"
     LABEL_DIRECTED = "label-directed"
+    # Issue #1142: the Fortuin-Kasteleyn bonds, each cluster relabelled by
+    # the heat bath on its summed field rather than a uniform proposal.
+    SWENDSEN_WANG_HEAT_BATH = "swendsen-wang-heat-bath"
+    WOLFF_HEAT_BATH = "wolff-heat-bath"
 
 
 #: The move sets built on the Fortuin-Kasteleyn bond construction, which needs
@@ -43,6 +47,8 @@ _CLUSTER_MOVES = frozenset(
         PottsMove.WOLFF,
         PottsMove.GHOST_SPIN,
         PottsMove.LABEL_DIRECTED,
+        PottsMove.SWENDSEN_WANG_HEAT_BATH,
+        PottsMove.WOLFF_HEAT_BATH,
     }
 )
 

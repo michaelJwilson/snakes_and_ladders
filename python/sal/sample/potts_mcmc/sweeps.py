@@ -826,6 +826,27 @@ def wolff_sweep(
     """
     rows = log_weight_of(rows)
     walk = adjacency_lists(offsets, neighbours, couplings) if lists is None else lists
+    members = _grow_wolff(state, walk, rng, beta, root)
+    outcome = _recolour(state, members, beta * rows, rng, proposed)
+    if counter is not None:
+        counter.record(members, outcome, graph)
+    return int(members.shape[0])
+
+
+def _grow_wolff(
+    state: np.ndarray,
+    walk: AdjacencyLists,
+    rng: np.random.Generator,
+    beta: float,
+    root: int | None,
+) -> np.ndarray:
+    """One Wolff cluster's members, grown from ``root`` or a uniform seed through like neighbours.
+
+    The construction :func:`wolff_sweep` and :func:`wolff_heat_bath_sweep`
+    share, so the two moves differ in the recolouring alone (issue #1142).
+    Draws: the seed where ``root`` is ``None``, then one uniform per like
+    neighbour reached from outside the cluster, in walk order.
+    """
     bounds, incident, weights = walk.bounds, walk.incident, walk.weights
     seed_node = int(rng.integers(state.shape[0])) if root is None else int(root)
     colour = int(state[seed_node])
@@ -843,11 +864,7 @@ def wolff_sweep(
                 in_cluster[neighbour] = True
                 cluster.append(neighbour)
                 frontier.append(neighbour)
-    members = np.array(cluster, dtype=np.int64)
-    outcome = _recolour(state, members, beta * rows, rng, proposed)
-    if counter is not None:
-        counter.record(members, outcome, graph)
-    return len(cluster)
+    return np.array(cluster, dtype=np.int64)
 
 
 def niedermayer_threshold(couplings: np.ndarray) -> float:
@@ -1197,6 +1214,122 @@ def label_directed_sweep(
     uniforms = rng.random(n_nodes)
     moved = (uniforms < np.exp(np.minimum(log_ratio, 0.0)))[roots]
     state[moved] = proposed[moved]
+
+
+def heat_bath_labels(log_weights: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    """One label per row of ``log_weights``, drawn with probability proportional to ``exp`` of the row, by Gumbel-max.
+
+    ``argmax(w + g)`` with ``g = -log(-log(u))`` standard Gumbel is
+    distributed as ``softmax(w)`` (Gumbel 1954; Maddison et al. 2014), so no
+    row is normalized and no ``exp`` can overflow at a large field or a low
+    temperature. Draws: one uniform per entry, as one ``rng.random`` call of
+    the array's shape, so the labels are a function of the generator's state
+    alone (issue #1142).
+
+    Parameters
+    ----------
+    log_weights : np.ndarray
+        ``(n_rows, n_states)``, already tempered.
+    rng : np.random.Generator
+        The uniforms.
+
+    Returns
+    -------
+    np.ndarray
+        ``(n_rows,)`` ``int64`` labels.
+    """
+    gumbel = -np.log(-np.log(rng.random(log_weights.shape)))
+    return np.asarray(np.argmax(log_weights + gumbel, axis=1), dtype=np.int64)
+
+
+def swendsen_wang_heat_bath_sweep(
+    state: np.ndarray,
+    graph: PottsGraph,
+    rows: SiteField | np.ndarray,
+    rng: np.random.Generator,
+    beta: float = 1.0,
+    backend: Backend = Backend.RUST,
+) -> None:
+    """Fortuin-Kasteleyn clusters, each relabelled by the heat bath on its field (issue #1142).
+
+    The bonds are :func:`swendsen_wang_sweep`'s. Given them, the clusters are
+    independent and cluster ``C`` at label ``c`` has weight
+    ``exp(beta sum_C h[i, c])``, the coupling having cancelled, as
+    :func:`label_directed_sweep` states. Each cluster's label is drawn from
+    that weight over all ``q`` labels, its own included
+    (:func:`heat_bath_labels`): the exact conditional of the joint measure,
+    so there is no accept step to fail. :func:`swendsen_wang_sweep` proposes a
+    uniform label and accepts on the field difference, whose acceptance falls
+    with the cluster's size in a strong field; here a large cluster moves to
+    its field's preferred label with the probability the law gives it.
+
+    ``backend`` merges the bonds (:func:`bond_roots`); the two give the same
+    roots, so the same chain.
+
+    Draws: one uniform per edge, then ``q`` per cluster, clusters in
+    increasing root order.
+    """
+    rows = log_weight_of(rows)
+    n_nodes = graph.n_nodes
+    n_states = int(rows.shape[1])
+    bonds = _like_bonds(state, graph, rng, beta)
+    roots = bond_roots(n_nodes, bonds, backend=backend)
+    # A root is its own root, so the heads are read without a sort.
+    heads = np.flatnonzero(roots == np.arange(n_nodes))
+    rank = np.empty(n_nodes, dtype=np.int64)
+    rank[heads] = np.arange(heads.size)
+    cluster = rank[roots]
+    # Each cluster's field summed per label: one `bincount` over the
+    # flattened (cluster, label) index, in site order.
+    flat = (cluster[:, None] * n_states + np.arange(n_states)).reshape(-1)
+    sums = np.bincount(
+        flat, weights=rows.reshape(-1), minlength=heads.size * n_states
+    ).reshape(heads.size, n_states)
+    labels = heat_bath_labels(beta * sums, rng)
+    state[:] = labels[cluster]
+
+
+def wolff_heat_bath_sweep(
+    state: np.ndarray,
+    rows: SiteField | np.ndarray,
+    offsets: np.ndarray,
+    neighbours: np.ndarray,
+    couplings: np.ndarray,
+    rng: np.random.Generator,
+    counter: ClusterCounter | None = None,
+    graph: PottsGraph | None = None,
+    beta: float = 1.0,
+    lists: AdjacencyLists | None = None,
+) -> int:
+    """Grow one Wolff cluster and relabel it by the heat bath on its field (issue #1142).
+
+    The cluster is :func:`wolff_sweep`'s, grown by :func:`_grow_wolff`. Its
+    construction probability in state ``s`` and in ``s'``, the cluster
+    relabelled ``c -> c'``, differs only in the boundary's like edges, each
+    declined with ``exp(-beta J)``: the ratio is ``exp(-beta (sum_{boundary at
+    c} J - sum_{boundary at c'} J))``, which is the coupling part of
+    ``pi(s') / pi(s)`` inverted. Detailed balance therefore asks of the
+    relabelling only the field ratio ``exp(beta sum_C (h[i, c'] - h[i, c]))``,
+    which the heat bath over all ``q`` labels, ``c`` included, meets exactly
+    for every ``c'``. No accept step.
+
+    Parameters and return as :func:`wolff_sweep`, without the action's
+    ``root`` and ``proposed``. ``counter`` records the cluster as proposed
+    and accepted where its label changed, and as neither where the heat bath
+    drew its own: there is no rejection to count.
+
+    Draws: :func:`_grow_wolff`'s, then ``q`` uniforms.
+    """
+    rows = log_weight_of(rows)
+    walk = adjacency_lists(offsets, neighbours, couplings) if lists is None else lists
+    members = _grow_wolff(state, walk, rng, beta, None)
+    current = int(state[members[0]])
+    label = int(heat_bath_labels(beta * rows[members].sum(axis=0)[None, :], rng)[0])
+    state[members] = label
+    if counter is not None:
+        moved = label != current
+        counter.record(members, Recolour(proposed=moved, accepted=moved), graph)
+    return int(members.shape[0])
 
 
 def houdayer_cluster(

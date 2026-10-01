@@ -101,6 +101,7 @@ from sal.search.icm import (
     SweepOrder,
     check_min_sites,
     iterated_conditional_modes,
+    merge_labels,
     merge_small_labels,
 )
 from sal.sim.factor_graph import from_potts
@@ -135,7 +136,12 @@ N_REPLICAS = 6
 
 #: The move sets :func:`run_annealed` runs on the compiled cluster route.
 _COMPILED_CLUSTERS = frozenset(
-    {PottsMove.SWENDSEN_WANG, PottsMove.GHOST_SPIN, PottsMove.LABEL_DIRECTED}
+    {
+        PottsMove.SWENDSEN_WANG,
+        PottsMove.GHOST_SPIN,
+        PottsMove.LABEL_DIRECTED,
+        PottsMove.SWENDSEN_WANG_HEAT_BATH,
+    }
 )
 
 
@@ -643,8 +649,9 @@ def run_annealed(
     started = time.perf_counter()
     # Swendsen-Wang on the compiled pass: the same law on another order of
     # draws, and the comparison reads no cluster counter (issue #923). The
-    # ghost-spin and label-directed passes merge their bonds on the compiled
-    # union-find, which returns the Python roots, so the chain (issue #1041).
+    # ghost-spin, label-directed and heat-bath Swendsen-Wang passes merge
+    # their bonds on the compiled union-find, which returns the Python roots,
+    # so the chain (issues #1041, #1142).
     run = anneal_potts(
         problem.graph,
         problem.field,
@@ -809,6 +816,55 @@ def run_merge(
     )
 
 
+def run_merge_labels(
+    problem: Problem | Rung,
+    budget: Budget,
+    rng: np.random.Generator,
+    *,
+    start: np.ndarray | None = None,
+) -> MethodRun:
+    """The stage after a solver that merges whole labels while the energy drops: ``merge-labels`` (issue #1142).
+
+    :func:`~sal.search.icm.merge_labels` on the labelling the stage before
+    handed over, charged one ``visits_per_sweep``: its tables are one pass
+    over the sites and the edges, and each merge after is ``O(q^2)``. It
+    draws nothing, so ``rng`` is left where the stage before left it, and
+    the merges are at most ``q - 1``. A stage before it that spends the
+    whole budget leaves it less than its sweep, so it is held back there:
+    ``anneal(reserve_sweeps=1)>merge-labels``.
+
+    Raises
+    ------
+    ValueError
+        If there is no labelling to merge --- it is never a first stage ---
+        or ``budget`` is under one sweep's site visits.
+    """
+    del rng
+    if start is None:
+        msg = (
+            "'merge-labels' merges the labelling a stage before it found; "
+            "it is no first stage"
+        )
+        raise ValueError(msg)
+    problem = _problem(problem)
+    if budget.size < problem.visits_per_sweep:
+        msg = (
+            f"'merge-labels' is charged one sweep, {problem.visits_per_sweep} "
+            f"site visits, and was left {budget.size}; hold it back on the "
+            "stage before with reserve_sweeps=1"
+        )
+        raise ValueError(msg)
+    started = time.perf_counter()
+    merged = merge_labels(problem.graph, problem.field, start)
+    return MethodRun(
+        labelling=merged.labelling,
+        energy=merged.energy,
+        spent=merged.sweeps * problem.visits_per_sweep,
+        seconds=time.perf_counter() - started,
+        termination=merged.termination,
+    )
+
+
 #: What a stage hands the next: its labelling (issue #1077).
 handover = operator.attrgetter("labelling")
 
@@ -965,6 +1021,10 @@ class Method(Protocol):
 run_anneal = functools.partial(run_annealed, move=PottsMove.SINGLE_SITE)
 run_swendsen_wang = functools.partial(run_annealed, move=PottsMove.SWENDSEN_WANG)
 run_wolff = functools.partial(run_annealed, move=PottsMove.WOLFF)
+run_swendsen_wang_heat_bath = functools.partial(
+    run_annealed, move=PottsMove.SWENDSEN_WANG_HEAT_BATH
+)
+run_wolff_heat_bath = functools.partial(run_annealed, move=PottsMove.WOLFF_HEAT_BATH)
 
 
 def run_tempering(
@@ -1169,6 +1229,11 @@ METHODS: dict[str, Method] = {
     "anneal": run_anneal,
     "swendsen-wang": run_swendsen_wang,
     "wolff": run_wolff,
+    # Issue #1142: each cluster relabelled by the heat bath on its field. In
+    # METHODS because each reached a lower anneal energy than its uniform
+    # sibling at equal sweeps on `spatio_tiling/release`, five seeds.
+    "swendsen-wang-heat-bath": run_swendsen_wang_heat_bath,
+    "wolff-heat-bath": run_wolff_heat_bath,
     "tempering": run_tempering,
     "alpha-expansion": run_alpha_expansion,
     "alpha-beta-swap": run_alpha_beta_swap,
@@ -1216,12 +1281,25 @@ class SweepReserve:
 FLOORED = frozenset({"icm", "icm-random"})
 
 #: The :data:`METHODS` names that run an anneal.
-_ANNEALED_METHODS = frozenset({"anneal", "swendsen-wang", "wolff"})
+_ANNEALED_METHODS = frozenset(
+    {
+        "anneal",
+        "swendsen-wang",
+        "wolff",
+        "swendsen-wang-heat-bath",
+        "wolff-heat-bath",
+    }
+)
 
 #: Parts a chain can name beside :data:`METHODS` and :data:`ARMS`: the warm
-#: chain's descent, which charges only the sweeps it ran (issue #1077), and
-#: the merge that floors a labelling after any solver (issue #1081).
-STAGES: dict[str, Method] = {"descent": run_descent, "merge": run_merge}
+#: chain's descent, which charges only the sweeps it ran (issue #1077), the
+#: merge that floors a labelling after any solver (issue #1081), and the
+#: closed-form merge of whole labels while the energy drops (issue #1142).
+STAGES: dict[str, Method] = {
+    "descent": run_descent,
+    "merge": run_merge,
+    "merge-labels": run_merge_labels,
+}
 
 #: Separates the parts of a chain in a method name.
 CHAIN = ">"

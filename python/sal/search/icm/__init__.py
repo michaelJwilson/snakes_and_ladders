@@ -33,7 +33,7 @@ precede them.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from enum import StrEnum
 
 import numpy as np
@@ -423,6 +423,130 @@ def merge_small_labels(
         min_sites=min_sites,
         backend=backend,
     )
+
+
+def merge_labels(
+    graph: PottsGraph, field: SiteField | np.ndarray, labelling: np.ndarray
+) -> Labelling:
+    """``labelling`` with whole labels merged while a merge lowers the energy: the closed-form merge (issue #1142).
+
+    Relabelling every site of label ``u`` to label ``v`` changes
+    ``E(s) = -sum_i h_i[s_i] - sum_(ij) J_ij [s_i = s_j]`` by
+
+    ``delta(u, v) = -(U[u, v] - U[u, u]) - (B[u, v] + B[v, u])``,
+
+    with ``U[k, c]`` the field of label ``k``'s sites summed at ``c`` and
+    ``B[a, b]`` the coupling summed over the edges ``(i, j)`` with
+    ``s_i = a`` and ``s_j = b``, each undirected edge once, in
+    :attr:`~sal.sim.graph.PottsGraph.edge_index`'s orientation. An edge
+    inside ``u`` or ``v`` stays like, an edge from ``u`` or ``v`` to a third
+    label stays unlike, and an edge between them turns like and gains its
+    ``J`` once: there is no halving, because the graph carries each edge
+    once. Each round merges the pair of live labels with the most negative
+    ``delta``, the first in row-major order on a tie, and the run stops when
+    no ``delta`` is negative.
+
+    **Two tables, built once.** ``U`` and ``B`` are each one ``bincount``,
+    over the sites and over the edges; a merge updates them in ``O(q)`` by
+    adding ``u``'s row (and ``B``'s column) into ``v``'s, so a round costs
+    ``O(q^2)`` and the run at most ``q - 1`` rounds, each live label
+    being merged at most once. The energy is
+    :func:`~sal.sim.potts.energy` of the labelling returned, not the start's
+    energy plus the predicted changes.
+
+    No draws: the merge is deterministic, so it takes no generator, where
+    :func:`merge_small_labels` takes one for its floor's uniforms.
+
+    Parameters
+    ----------
+    graph : PottsGraph
+        The instance.
+    field : SiteField | np.ndarray
+        ``h``, shape ``(n_states,)`` or ``(n_nodes, n_states)``.
+    labelling : np.ndarray
+        The labelling to merge, shape ``(n_nodes,)``, checked by
+        :func:`~sal.sim.potts.check_labelling`.
+
+    Returns
+    -------
+    Labelling
+        ``sweeps`` is 1, the one pass over sites and edges that builds the
+        tables; ``termination`` is converged after the merges made, since
+        the run ends only on its criterion.
+
+    Raises
+    ------
+    ValueError
+        As :func:`~sal.sim.potts.check_labelling` raises.
+    """
+    rows = site_field(log_weight_of(field), graph.n_nodes)
+    labels = check_labelling(labelling, graph.n_nodes, int(rows.shape[1]))
+    merged, merges = labels, 0
+    for _, _, _, after in _merge_rounds(graph, rows, labels):
+        merged, merges = after, merges + 1
+    labels = merged
+    return Labelling(
+        labels,
+        energy(graph, rows, labels),
+        sweeps=1,
+        termination=Termination.after(merges, converged=True),
+    )
+
+
+def merge_deltas(
+    summed: np.ndarray, boundary: np.ndarray, alive: np.ndarray
+) -> np.ndarray:
+    """``(q, q)`` energy change of relabelling all of ``u`` to ``v``; ``inf`` on the diagonal and at a dead label.
+
+    ``summed`` is :func:`merge_labels`' ``U`` and ``boundary`` its ``B``;
+    ``alive`` marks the labels holding a site.
+    """
+    delta = -(summed - np.diag(summed)[:, None]) - (boundary + boundary.T)
+    delta[~alive, :] = np.inf
+    delta[:, ~alive] = np.inf
+    np.fill_diagonal(delta, np.inf)
+    return np.asarray(delta)
+
+
+def _merge_rounds(
+    graph: PottsGraph, rows: np.ndarray, labels: np.ndarray
+) -> Iterator[tuple[int, int, float, np.ndarray]]:
+    """Each merge :func:`merge_labels` makes: ``u``, ``v``, the predicted change, and the labelling after it.
+
+    A generator so the referee can recompute the energy after every merge
+    against the change predicted for it, which the result alone does not
+    carry.
+    """
+    n_states = int(rows.shape[1])
+    first, second = graph.edge_index[:, 0], graph.edge_index[:, 1]
+    flat = (labels[:, None] * n_states + np.arange(n_states)).reshape(-1)
+    summed = np.bincount(
+        flat, weights=rows.reshape(-1), minlength=n_states * n_states
+    ).reshape(n_states, n_states)
+    boundary = np.bincount(
+        labels[first] * n_states + labels[second],
+        weights=graph.edge_coupling,
+        minlength=n_states * n_states,
+    ).reshape(n_states, n_states)
+    alive = np.bincount(labels, minlength=n_states) > 0
+    # Where each start label has been merged to; applied once per merge
+    # reported, never to the tables.
+    target = np.arange(n_states)
+    while True:
+        delta = merge_deltas(summed, boundary, alive)
+        u, v = divmod(int(np.argmin(delta)), n_states)
+        change = float(delta[u, v])
+        if not change < 0.0:
+            return
+        summed[v] += summed[u]
+        summed[u] = 0.0
+        boundary[v, :] += boundary[u, :]
+        boundary[u, :] = 0.0
+        boundary[:, v] += boundary[:, u]
+        boundary[:, u] = 0.0
+        alive[u] = False
+        target[target == u] = v
+        yield u, v, change, target[labels]
 
 
 def _descended(

@@ -33,7 +33,9 @@ from sal.sample.potts_mcmc.sweeps import (
     niedermayer_sweep,
     niedermayer_threshold,
     sweep_at,
+    swendsen_wang_heat_bath_sweep,
     swendsen_wang_sweep,
+    wolff_heat_bath_sweep,
     wolff_sweep,
 )
 from sal.sample.schedule import (
@@ -159,7 +161,7 @@ def sample_potts(
     field : SiteField | np.ndarray
         External field ``h``, shape ``(n_states,)``.
     move : PottsMove
-        The move set. All six leave the same Boltzmann distribution
+        The move set. Every one leaves the same Boltzmann distribution
         invariant, which is what
         `tests/regression/search/test_potts_mcmc.py` asserts.
     rng : np.random.Generator
@@ -306,6 +308,9 @@ def anneal_potts(
     :func:`_recolour` applies, and its acceptance falls as the cluster grows.
     That compounding is the measurement, not an implementation detail, so the
     run returns the counters that show it.
+    The heat-bath cluster move sets (issue #1142) draw each cluster's label
+    from its field weight instead, with no accept step; heat-bath
+    Swendsen-Wang keeps no counter, as the ghost-spin pass keeps none.
 
     Parameters
     ----------
@@ -332,9 +337,9 @@ def anneal_potts(
         :data:`~sal.backend.Backend.RUST` is a chain of the
         same law on another order of draws (:func:`_cluster_pass_rust`) and
         keeps no counter, so its steps leave ``trace`` empty (issue #923).
-        For the ghost-spin and label-directed passes it merges the bonds
-        (:func:`bond_roots`), on the same roots either way, and neither
-        keeps a counter (issue #1041).
+        For the ghost-spin, label-directed and heat-bath Swendsen-Wang
+        passes it merges the bonds (:func:`bond_roots`), on the same roots
+        either way, and none keeps a counter (issues #1041, #1142).
     start : np.ndarray | None
         The labelling the chain starts from, copied, shape ``(n_nodes,)``,
         checked by :func:`~sal.sim.potts.check_labelling`;
@@ -441,6 +446,14 @@ def anneal_potts(
                 )
                 visits += per_sweep
                 kept = False
+            elif move is PottsMove.SWENDSEN_WANG_HEAT_BATH:
+                # No counter, as the ghost-spin pass keeps none: the clusters
+                # are roots, and the heat bath rejects nothing (#1142).
+                swendsen_wang_heat_bath_sweep(
+                    state, graph, rows, rng, beta, backend=cluster_backend
+                )
+                visits += per_sweep
+                kept = False
             else:
                 if move is PottsMove.NIEDERMAYER:
                     niedermayer_sweep(
@@ -454,6 +467,19 @@ def anneal_potts(
                         graph,
                         beta,
                         niedermayer_threshold(couplings),
+                        lists=lists,
+                    )
+                elif move is PottsMove.WOLFF_HEAT_BATH:
+                    wolff_heat_bath_sweep(
+                        state,
+                        rows,
+                        offsets,
+                        neighbours,
+                        couplings,
+                        rng,
+                        counter,
+                        graph,
+                        beta,
                         lists=lists,
                     )
                 else:
@@ -985,6 +1011,18 @@ def sweep_for(
 
         return ghost_pass
 
+    if move is PottsMove.SWENDSEN_WANG_HEAT_BATH:
+
+        def heat_bath_pass(
+            state: np.ndarray, rng: np.random.Generator, beta: float = 1.0
+        ) -> int:
+            swendsen_wang_heat_bath_sweep(
+                state, graph, rows, rng, beta, backend=cluster_backend
+            )
+            return 0
+
+        return heat_bath_pass
+
     if move is PottsMove.LABEL_DIRECTED:
         # The target cycles through the labels, one per call, as
         # `anneal_potts` cycles it by step.
@@ -1023,6 +1061,17 @@ def sweep_for(
             )
 
         return generalized
+
+    if move is PottsMove.WOLFF_HEAT_BATH:
+
+        def one_heat_bath_cluster(
+            state: np.ndarray, rng: np.random.Generator, beta: float = 1.0
+        ) -> int:
+            return wolff_heat_bath_sweep(
+                state, rows, offsets, neighbours, couplings, rng, beta=beta, lists=lists
+            )
+
+        return one_heat_bath_cluster
 
     def one_cluster(
         state: np.ndarray, rng: np.random.Generator, beta: float = 1.0

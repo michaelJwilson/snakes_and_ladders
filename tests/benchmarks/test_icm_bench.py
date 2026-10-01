@@ -16,7 +16,7 @@ import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
 from sal.backend import Backend
 from sal.search.ground_state import Rung
-from sal.search.icm import colouring, iterated_conditional_modes
+from sal.search.icm import colouring, iterated_conditional_modes, merge_labels
 from sal.search.icm.numba import icm_sweeps_checked
 from sal.search.potts_starts import spatio_rung
 from sal.sim.fixtures import fixture
@@ -101,3 +101,14 @@ def test_colouring_benchmark(benchmark: BenchmarkFixture, backend: Backend) -> N
     )
 
     assert int(classes.max()) + 1 == 4
+
+
+def test_merge_labels_benchmark(benchmark: BenchmarkFixture) -> None:
+    # The closed-form merge (issue #1142) from a uniform labelling of the
+    # release rung: two tables built in one pass, then at most nine merges.
+    rung = _rung()
+    start = np.random.default_rng(0).integers(0, rung.n_states, size=rung.n_nodes)
+
+    merged = benchmark(merge_labels, rung.graph, rung.field, start)
+
+    assert merged.termination.converged
