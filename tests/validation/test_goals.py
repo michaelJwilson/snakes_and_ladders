@@ -36,7 +36,7 @@ from sal.opt.em import EmConfig
 from sal.opt.hmm import GaussianHmmObjective, baum_welch
 from sal.opt.mixture import expectation_maximization
 from sal.sample import hmc, metropolis
-from sal.sample.potts_mcmc.sweeps import bond_probability
+from sal.sample.potts_mcmc import bond_probability
 from sal.search.alpha_expansion import alpha_expansion
 from sal.search.ground_state import lattice_rung
 from sal.search.potts_starts import spatio_rung, tiling_rung

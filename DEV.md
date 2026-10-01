@@ -454,6 +454,7 @@ The names root `CLAUDE.md`'s API conventions refer to. An entry point uses these
 | Cost of a run | `spent` | `int` in a declared `Cost` | #1090 |
 | Why a loop ended | `termination` | `Termination`, required | #1085, #1090 |
 | Returned arrays | — | NumPy and `float`; a tensor only from a `torch.py` twin or a `*_torch` name | #1092 |
+| Public sampling surface | `sal.sample.potts_mcmc.__all__`, `sal.sample.schedule.__all__` | a caller imports a Potts kernel, move or driver from the package, never from `sweeps`, `chains` or `moves`; each exported kernel's docstring states its arrays, mutation, generator and thread safety; `tests/regression/sample/test_public_surface.py` snapshots the kernels' signatures and refuses a submodule import under `tests/`, `docs/nb/` and `python/sal/validation/` | #1143 |
 
 ### Dependency Management
 

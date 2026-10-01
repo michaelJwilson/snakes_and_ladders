@@ -25,10 +25,11 @@ from sal.sample import potts_mcmc
 from sal.sample.potts_mcmc import (
     ClusterCounter,
     PottsMove,
+    bond_probability,
     sample_potts,
     swendsen_wang_sweep,
 )
-from sal.sample.potts_mcmc.sweeps import GUARD, bond_probability
+from sal.sample.potts_mcmc.sweeps import GUARD
 from sal.sample.statistics import chi_square_p_value
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 

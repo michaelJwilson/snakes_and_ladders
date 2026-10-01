@@ -24,8 +24,8 @@ from sal.sample.annealed import (
     simulated_tempering,
 )
 from sal.sample.potts_keyed import cluster_moves
-from sal.sample.potts_mcmc import PottsMove
-from sal.sample.potts_mcmc.chains import (
+from sal.sample.potts_mcmc import (
+    PottsMove,
     adapt_ladder_potts,
     parallel_tempering,
     sample_potts_pair,

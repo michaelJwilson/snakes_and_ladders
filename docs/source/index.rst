@@ -386,7 +386,7 @@ whether or not it has members yet.
 .. automodule:: sal.sample.potts_mcmc.moves
 
 .. automodule:: sal.sample.potts_mcmc.sweeps
-   :members: GUARD, sweep_at, single_site_sweep, site_update, balanced_sweep_at, bond_probability
+   :members: GUARD, single_site_sweep, site_update, balanced_sweep_at
 
 .. automodule:: sal.sample.potts_mcmc.chains
 
