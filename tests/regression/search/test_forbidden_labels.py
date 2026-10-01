@@ -1,10 +1,15 @@
-"""A label the field forbids, ``-inf``, is never returned (issue #1081).
+"""A label the field forbids, ``-inf``, is never returned (issues #1081, #1139).
 
 Referees: enumeration over every allowed labelling of a 3x3 lattice with 3
-states. Every ground-state method, TRW-S and the dual bound return an
-allowed labelling with a finite energy; the exact ones reach the enumerated
-constrained minimum; the dual's bound stays below it. And ``forbid``'s mask
-is the ``-inf`` field, bitwise, so the two spellings are one problem.
+states, and of a 2x4 lattice with 2 and 3 states. Every ground-state method,
+TRW-S and the dual bound return an allowed labelling with a finite energy;
+the exact ones reach the enumerated constrained minimum; the dual's bound
+stays below it. The same holds from a forbidden start for every method that
+takes one, for the expansion and the swap on both backends (the swap at two
+states is one cut over every site, so exact), and for the floor of
+``merge_small_labels``, which ends ``Stop.INFEASIBLE`` where only a forbidden
+label meets it. And ``forbid``'s mask is the ``-inf`` field, bitwise, so the
+two spellings are one problem.
 """
 
 from __future__ import annotations
@@ -14,10 +19,14 @@ import warnings
 
 import numpy as np
 import pytest
+from sal.backend import Backend
 from sal.cost import Cost
 from sal.opt.budget import Budget
+from sal.opt.termination import Stop
+from sal.search.alpha_expansion import alpha_beta_swap, alpha_expansion
 from sal.search.bifurcation import simulated_bifurcation
 from sal.search.ground_state import METHODS, ground_state
+from sal.search.icm import iterated_conditional_modes, merge_small_labels
 from sal.search.tightening import dual_bound
 from sal.search.trws import trws
 from sal.sim.graph import BoundaryCondition, lattice_graph
@@ -30,6 +39,13 @@ ALLOWED[:, 0] = False  # the first label nowhere
 ALLOWED[::2, 2] = False  # the third on every other site
 FIELD = forbid(FINITE, ALLOWED)
 BUDGET = Budget(Cost.SITE_VISITS, 400 * GRAPH.n_nodes * 5)
+#: Every site at the first label, which ``ALLOWED`` forbids everywhere.
+FORBIDDEN_START = np.zeros(GRAPH.n_nodes, dtype=np.int64)
+#: The methods `ground_state` refuses a start for, each by name.
+STARTLESS = {"bifurcation", "field_argmax", "max-product", "tempering"}
+
+#: Eight sites, the size the issue's exhaustive referee is stated at.
+SMALL = lattice_graph((2, 4), BoundaryCondition.OPEN, 0.7)
 
 
 def _constrained_minimum() -> float:
@@ -79,3 +95,152 @@ def test_a_mask_is_the_negative_infinite_field_and_a_site_allowing_nothing_is_re
     nothing[4] = False
     with pytest.raises(ValueError, match="allows no label"):
         forbid(FINITE, nothing)
+
+
+def _small_problem(seed: int, n_states: int) -> tuple[np.ndarray, np.ndarray]:
+    """A finite field on ``SMALL`` and a mask allowing about half its labels, one per site at least."""
+    rng = np.random.default_rng(seed)
+    finite = rng.normal(0.0, 1.0, (SMALL.n_nodes, n_states))
+    allowed = rng.random((SMALL.n_nodes, n_states)) < 0.5
+    allowed[np.arange(SMALL.n_nodes), rng.integers(n_states, size=SMALL.n_nodes)] = True
+    return finite, allowed
+
+
+def _small_minimum(finite: np.ndarray, allowed: np.ndarray) -> float:
+    """The constrained minimum on ``SMALL``, by enumerating every allowed labelling."""
+    n_states = finite.shape[1]
+    every = np.array(list(itertools.product(range(n_states), repeat=SMALL.n_nodes)))
+    keep = allowed[np.arange(SMALL.n_nodes), every].all(axis=1)
+    return float(energies(SMALL, finite, every[keep]).min())
+
+
+def _forbidden_start(allowed: np.ndarray) -> np.ndarray:
+    """Each site at its first forbidden label, or its first label where it forbids none."""
+    return np.argmin(allowed, axis=1).astype(np.int64)
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("method", sorted(METHODS))
+def test_every_method_taking_a_start_leaves_a_forbidden_one(method: str) -> None:
+    if method in STARTLESS:
+        with pytest.raises(ValueError, match="takes no start"):
+            ground_state(
+                GRAPH,
+                FIELD,
+                method,
+                BUDGET,
+                np.random.default_rng(3),
+                start=FORBIDDEN_START,
+            )
+        return
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        run = ground_state(
+            GRAPH,
+            FIELD,
+            method,
+            BUDGET,
+            np.random.default_rng(3),
+            start=FORBIDDEN_START,
+        )
+
+    assert _allowed(run.labelling)
+    assert np.isfinite(run.energy)
+    assert run.energy >= _constrained_minimum() - 1e-9
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("backend", [Backend.RUST, Backend.PYTHON])
+@pytest.mark.parametrize("move", [alpha_expansion, alpha_beta_swap])
+@pytest.mark.parametrize("n_states", [2, 3])
+@pytest.mark.parametrize("seed", range(6))
+def test_the_cut_moves_leave_a_forbidden_start_for_an_allowed_local_minimum(
+    move: object, backend: Backend, n_states: int, seed: int
+) -> None:
+    finite, allowed = _small_problem(seed, n_states)
+    start = _forbidden_start(allowed)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        run = move(SMALL, forbid(finite, allowed), start=start, backend=backend)  # type: ignore[operator]
+
+    minimum = _small_minimum(finite, allowed)
+    assert allowed[np.arange(SMALL.n_nodes), run.labelling].all()
+    assert run.termination.converged
+    assert np.isfinite(run.energy)
+    assert run.energy == energies(SMALL, finite, run.labelling[None])[0]
+    assert run.energy >= minimum - 1e-9
+    if move is alpha_beta_swap and n_states == 2:
+        # One swap cuts every site over both labels: the exact minimum.
+        assert run.energy == pytest.approx(minimum, abs=1e-9)
+
+
+@pytest.mark.backend
+@pytest.mark.parametrize("move", [alpha_expansion, alpha_beta_swap])
+def test_the_cut_moves_agree_across_backends_from_a_forbidden_start(
+    move: object,
+) -> None:
+    finite, allowed = _small_problem(7, 3)
+    field, start = forbid(finite, allowed), _forbidden_start(allowed)
+    rust = move(SMALL, field, start=start, backend=Backend.RUST)  # type: ignore[operator]
+    python = move(SMALL, field, start=start, backend=Backend.PYTHON)  # type: ignore[operator]
+
+    assert np.array_equal(rust.labelling, python.labelling)
+    assert rust.energy == python.energy
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("backend", [Backend.NUMBA, Backend.PYTHON])
+@pytest.mark.parametrize("min_sites", [2, 3])
+@pytest.mark.parametrize("seed", range(6))
+def test_the_floor_dissolves_only_into_allowed_labels(
+    seed: int, min_sites: int, backend: Backend
+) -> None:
+    finite, allowed = _small_problem(seed, 3)
+    field = forbid(finite, allowed)
+    merged = merge_small_labels(
+        SMALL,
+        field,
+        _forbidden_start(allowed),
+        np.random.default_rng(seed),
+        min_sites=min_sites,
+        backend=backend,
+    )
+
+    rows = np.arange(SMALL.n_nodes)
+    assert allowed[rows, merged.labelling].all()
+    assert np.isfinite(merged.energy)
+    assert merged.energy >= _small_minimum(finite, allowed) - 1e-9
+    counts = np.bincount(merged.labelling, minlength=3)
+    below = (counts > 0) & (counts < min_sites)
+    stuck = below[merged.labelling] & ~allowed[:, counts >= min_sites].any(axis=1)
+    # Infeasible exactly where a site below the floor allows no state at it.
+    assert (merged.termination.reason is Stop.INFEASIBLE) == bool(stuck.any())
+    if merged.termination.converged:
+        assert not below.any()
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("backend", [Backend.NUMBA, Backend.PYTHON])
+def test_a_floor_only_a_forbidden_label_meets_is_infeasible_and_left(
+    backend: Backend,
+) -> None:
+    # Site 0 allows only the second label and every other site only the
+    # first, so one labelling is allowed and a floor of two cannot hold it.
+    allowed = np.zeros((GRAPH.n_nodes, 2), dtype=bool)
+    allowed[0, 1] = True
+    allowed[1:, 0] = True
+    field = forbid(FINITE[:, :2], allowed)
+    only = allowed.argmax(axis=1)
+
+    merged = merge_small_labels(
+        GRAPH, field, only, np.random.default_rng(0), min_sites=2, backend=backend
+    )
+    descended = iterated_conditional_modes(
+        GRAPH, field, np.random.default_rng(0), min_sites=2, backend=backend
+    )
+
+    for run in (merged, descended):
+        assert np.array_equal(run.labelling, only)
+        assert run.energy == energies(GRAPH, FINITE[:, :2], only[None])[0]
+        assert run.termination.reason is Stop.INFEASIBLE
+        assert not run.termination.converged

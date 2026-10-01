@@ -347,6 +347,16 @@ def ragged_posteriors(
     switch: np.ndarray | None = None,
     switch_kind: str = "stay_or_move",
 ) -> None: ...
+def ragged_viterbi(
+    log_density: np.ndarray,
+    lengths: np.ndarray,
+    log_initial: np.ndarray,
+    log_transition: np.ndarray,
+    path: np.ndarray,
+    log_joint: np.ndarray,
+    switch: np.ndarray | None = None,
+    switch_kind: str = "stay_or_move",
+) -> None: ...
 
 class MetropolisWalk:
     def __init__(
@@ -432,3 +442,18 @@ def dense_log_emission(
     log_factorial: np.ndarray | None = None,
     log_beta: np.ndarray | None = None,
 ) -> None: ...
+def count_mixture_value_and_gradient(
+    log_weight: np.ndarray,
+    grad_log_weight: np.ndarray,
+    totals: np.ndarray | None = None,
+    dispersion: np.ndarray | None = None,
+    mean: np.ndarray | None = None,
+    grad_dispersion: np.ndarray | None = None,
+    grad_mean: np.ndarray | None = None,
+    successes: np.ndarray | None = None,
+    alpha: np.ndarray | None = None,
+    beta: np.ndarray | None = None,
+    trials: np.ndarray | None = None,
+    grad_alpha: np.ndarray | None = None,
+    grad_beta: np.ndarray | None = None,
+) -> float: ...

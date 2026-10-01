@@ -7,7 +7,7 @@ them one at a time. Each now runs inside `py.detach`. The referee is the
 calling thread: a kernel holding the GIL stops it for the whole call, so the
 longest pause between two of its clock reads while four worker threads run
 the kernel is at least one call's length; released, the pause is the
-scheduler's.
+scheduler's. `oxisal.ragged_viterbi` (issue #1138) is held to the same.
 """
 
 from __future__ import annotations
@@ -48,6 +48,27 @@ def _ragged_call() -> Callable[[], None]:
     return call
 
 
+def _viterbi_call() -> Callable[[], None]:
+    """A ragged Viterbi over 200 segments of 20,000 positions at eight states (#1138)."""
+    rng = np.random.default_rng(1138)
+    lengths = np.full(200, 20_000, dtype=np.int64)
+    values = rng.normal(size=(int(lengths.sum()), 8))
+    initial = np.log(np.full(8, 0.125))
+    transition = np.log(np.full((8, 8), 0.125))
+
+    def call() -> None:
+        oxisal.ragged_viterbi(
+            values,
+            lengths,
+            initial,
+            transition,
+            np.empty(values.shape[0], dtype=np.int64),
+            np.empty(lengths.size),
+        )
+
+    return call
+
+
 def _leapfrog_call() -> Callable[[], object]:
     """A 2,000-step leapfrog trajectory on a 20,000-dimensional diagonal Gaussian."""
     dimension = 20_000
@@ -65,7 +86,11 @@ def _leapfrog_call() -> Callable[[], object]:
     return call
 
 
-KERNELS = {"ragged_posteriors": _ragged_call, "leapfrog_trajectory": _leapfrog_call}
+KERNELS = {
+    "ragged_posteriors": _ragged_call,
+    "ragged_viterbi": _viterbi_call,
+    "leapfrog_trajectory": _leapfrog_call,
+}
 
 
 def _alone(call: Callable[[], object]) -> float:
