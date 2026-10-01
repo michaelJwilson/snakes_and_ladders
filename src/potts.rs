@@ -595,6 +595,20 @@ pub fn swendsen_wang_sweep_impl(
             held += from;
             magnitude += to.abs() + from.abs();
         }
+        // A forbidden label (`-inf`) is decided before the guard, as the
+        // oracle's `_recolour_drawn` decides it (issue #1146): onto one is a
+        // rejection, off one onto an allowed label an acceptance. Neither
+        // sits near a threshold, so neither is handed back; and the
+        // subtraction below would be `nan` where both sums are `-inf`.
+        if offered == f64::NEG_INFINITY {
+            continue;
+        }
+        if held == f64::NEG_INFINITY {
+            for &node in own {
+                state[node] = proposed as i64;
+            }
+            continue;
+        }
         let difference = offered - held;
         let slack = guard * own.len() as f64 * ULP * magnitude;
         // `slack` is zero only where every term is, and then both orders sum

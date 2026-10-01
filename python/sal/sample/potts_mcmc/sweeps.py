@@ -1004,6 +1004,11 @@ def niedermayer_sweep(
     they do not cancel, and they are what keeps the step a valid
     Metropolis-Hastings move where it is no longer a Fortuin-Kasteleyn one.
 
+    A forbidden label (``-inf`` in ``rows``) sets ``delta`` rather than adding
+    to it (issue #1146): ``-inf`` where the transposition moves any member
+    onto one, else ``+inf`` where it moves any off one --- the rule of
+    :func:`_recolour_drawn`.
+
     Parameters
     ----------
     state, rows, offsets, neighbours, couplings, rng, counter, graph
@@ -1070,6 +1075,11 @@ def niedermayer_sweep(
 
     members = np.array(cluster, dtype=np.int64)
     delta = 0.0
+    # A forbidden label (`-inf`) is decided rather than summed, as
+    # `_recolour_drawn` decides it (issue #1146): any member moved onto one
+    # rejects, else any moved off one accepts. Summed, `-inf - (-inf)` and
+    # `inf + (-inf)` were `nan`; a finite term is added as before.
+    entering = leaving = False
     for node in cluster:
         current = labels[node]
         if current == held:
@@ -1078,7 +1088,13 @@ def niedermayer_sweep(
             moved = held
         else:
             continue
-        delta += float(rows[node, moved] - rows[node, current])
+        to, origin = rows[node, moved], rows[node, current]
+        if to == -np.inf:
+            entering = True
+        elif origin == -np.inf:
+            leaving = True
+        else:
+            delta += float(to - origin)
         for position in range(bounds[node], bounds[node + 1]):
             neighbour = incident[position]
             if in_cluster[neighbour]:
@@ -1092,6 +1108,10 @@ def niedermayer_sweep(
             delta -= max(0.0, threshold + coupling * after)
             delta += max(0.0, threshold + coupling * before)
 
+    if entering:
+        delta = -np.inf
+    elif leaving:
+        delta = np.inf
     accepted = _niedermayer_accept(delta, beta, rng)
     if accepted:
         held_members = members[state[members] == held]
@@ -1309,6 +1329,12 @@ def swendsen_wang_heat_bath_sweep(
     Draws: one uniform per edge, then ``q`` per cluster, clusters in
     increasing root order.
 
+    **Forbidden labels** (issue #1146). A ``-inf`` entry gives its label zero
+    weight, so a cluster never draws a label any member forbids. A cluster
+    whose members forbid every label between them --- only reachable from a
+    forbidden start --- keeps its label; smaller clusters of later passes
+    move it.
+
     **Contract** (issue #1143). ``state``, ``(n_nodes,)`` ``int64``, is
     relabelled in place and is the only argument modified; ``rows`` is
     ``(n_nodes, n_states)`` ``float64`` at temperature 1, or a
@@ -1331,7 +1357,13 @@ def swendsen_wang_heat_bath_sweep(
     sums = np.bincount(
         flat, weights=rows.reshape(-1), minlength=heads.size * n_states
     ).reshape(heads.size, n_states)
-    labels = heat_bath_labels(beta * sums, rng)
+    weights = beta * sums
+    labels = heat_bath_labels(weights, rng)
+    # A cluster whose members forbid every label between them has no
+    # conditional to draw from, and `argmax` of an all `-inf` row is label 0
+    # (issue #1146): it keeps its own label instead.
+    stuck = np.flatnonzero(np.isneginf(weights).all(axis=1))
+    labels[stuck] = state[heads[stuck]]
     state[:] = labels[cluster]
 
 
@@ -1364,6 +1396,8 @@ def wolff_heat_bath_sweep(
     and accepted where its label changed, and as neither where the heat bath
     drew its own: there is no rejection to count.
 
+    Forbidden labels as :func:`swendsen_wang_heat_bath_sweep` treats them.
+
     Draws: :func:`_grow_wolff`'s, then ``q`` uniforms. Thread safety as
     :func:`wolff_sweep`'s (issue #1143).
     """
@@ -1371,7 +1405,12 @@ def wolff_heat_bath_sweep(
     walk = adjacency_lists(offsets, neighbours, couplings) if lists is None else lists
     members = _grow_wolff(state, walk, rng, beta, None)
     current = int(state[members[0]])
-    label = int(heat_bath_labels(beta * rows[members].sum(axis=0)[None, :], rng)[0])
+    weights = beta * rows[members].sum(axis=0)[None, :]
+    label = int(heat_bath_labels(weights, rng)[0])
+    # Members forbidding every label between them: keep it, as
+    # `swendsen_wang_heat_bath_sweep` does (issue #1146).
+    if np.isneginf(weights).all():
+        label = current
     state[members] = label
     if counter is not None:
         moved = label != current
@@ -1533,11 +1572,27 @@ def _recolour_drawn(
     generator on a cluster that never needed it and move every chain after
     it. The caller passes ``rng.random``; the hand-back passes the draw the
     kernel was given.
+
+    **A forbidden label is decided, not subtracted** (issue #1146). A ``-inf``
+    entry (:func:`~sal.sim.potts.forbid`) makes the cluster's sum at that
+    label ``-inf``. A proposal some member forbids is rejected, whatever the
+    current label: the target puts no mass there. Off a forbidden label onto
+    an allowed one the difference is ``+inf`` and is accepted without a draw.
+    Forbidden to forbidden was ``-inf - (-inf) = nan``, a ``RuntimeWarning``
+    and a rejection by a ``nan`` comparison; it is now the same rejection,
+    on a difference of ``-inf``, drawing the uniform it drew before. So the
+    chain never re-enters a forbidden label once every site is allowed, and an
+    all-finite chain is bitwise unchanged.
     """
     current = int(state[members[0]])
     if proposed == current:
         return Recolour(proposed=False, accepted=False)
-    difference = float(rows[members, proposed].sum() - rows[members, current].sum())
+    # Decided before the subtraction, which stays NumPy's in the rows' own
+    # dtype, so a finite cluster's difference is the bits it was.
+    offered = rows[members, proposed].sum()
+    difference = (
+        -np.inf if offered == -np.inf else float(offered - rows[members, current].sum())
+    )
     if accept_drawn(difference, draw):
         state[members] = proposed
         return Recolour(proposed=True, accepted=True)
