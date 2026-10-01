@@ -41,6 +41,13 @@ from sal.emissions.mstep import (
     solve_dispersion_m_step,
     solve_dispersion_tied,
 )
+from sal.emissions.rising import (
+    LARGE_SHAPE,
+    broadcast,
+    log1p_over,
+    log_rising_scaled,
+    scaled_rising,
+)
 
 
 def _check_tied(tied: bool, name: str, values: torch.Tensor, rtol: float = 0.0) -> None:
@@ -153,6 +160,41 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
         p = torch.as_tensor(probability, dtype=torch.float64).reshape(-1)
         return cls(r, r * (1.0 - p) / p)
 
+    @classmethod
+    def from_overdispersion(
+        cls, overdispersion: Values, mean: Values
+    ) -> NegativeBinomialEmission:
+        """Build from ``alpha = 1 / r``, where ``Var = mu + alpha mu**2`` (issue #1136).
+
+        ``alpha = 0`` is the Poisson limit, ``r = inf``, and is scored as the
+        Poisson: an optimizer over ``alpha`` evaluates there on a line search,
+        and a family that refused it would end the fit.
+
+        Parameters
+        ----------
+        overdispersion : Values
+            Per-state ``alpha``, shape ``(n_states,)``, non-negative.
+        mean : Values
+            Per-state ``mu``, shape ``(n_states,)``, strictly positive.
+
+        Returns
+        -------
+        NegativeBinomialEmission
+
+        Raises
+        ------
+        ParameterDomainError
+            If an ``alpha`` is negative or not a number.
+        """
+        alpha = torch.as_tensor(overdispersion, dtype=torch.float64).reshape(-1)
+        if bool(((alpha < 0.0) | alpha.isnan()).any()):
+            msg = f"every overdispersion must be non-negative, got {alpha.tolist()}"
+            raise ParameterDomainError(msg)
+        dispersion = torch.where(
+            alpha == 0.0, torch.full_like(alpha, torch.inf), 1.0 / alpha
+        )
+        return cls(dispersion, mean)
+
     @property
     def n_states(self) -> int:
         """Hidden states this family emits from."""
@@ -229,7 +271,16 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
             # (issue #658).
             offsets = exposure(as_tensor(covariate), self._mean)
             rate = rate * offsets.reshape(states.shape).numpy()
-        return np.asarray(rng.negative_binomial(r, r / (r + rate)))
+        poisson = np.isinf(r)
+        if not poisson.any():
+            return np.asarray(rng.negative_binomial(r, r / (r + rate)))
+        # The Poisson limit, `r = inf` (issue #1136), drawn as the Poisson; the
+        # finite states keep their draw, in the same generator order.
+        finite_r = np.where(poisson, 1.0, r)
+        draws = np.asarray(
+            rng.negative_binomial(finite_r, finite_r / (finite_r + rate))
+        )
+        return np.where(poisson, rng.poisson(rate), draws)
 
     def log_density(
         self, observations: torch.Tensor, covariate: torch.Tensor | None = None
@@ -257,14 +308,7 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
             else:
                 unobserved = None
             rate = offsets * self._mean
-        total = self._dispersion + rate
-        scores = (
-            lgamma_shifted(counts, self._dispersion)
-            - torch.lgamma(self._dispersion)
-            - torch.lgamma(counts + 1.0)
-            + self._dispersion * torch.log(self._dispersion / total)
-            + counts * torch.log(rate / total)
-        )
+        scores = _negative_binomial_log_density(counts, self._dispersion, rate)
         if unobserved is None:
             return scores
         return torch.where(unobserved, torch.zeros_like(scores), scores)
@@ -285,13 +329,32 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
             Shape ``(..., n_states)``.
         """
         counts = observations.unsqueeze(-1).to(self._mean.dtype)
-        total = self._dispersion + self._mean
-        at_count = self._dispersion + counts
+        r = self._dispersion
+        large = r >= LARGE_SHAPE
+        small = torch.where(large, torch.ones_like(r), r) if bool(large.any()) else r
+        total = small + self._mean
+        at_count = small + counts
         # `xlogy` rather than a product, so a count of zero contributes zero
         # rather than the `0 * -inf` a bare `log` gives there.
-        return self._dispersion * torch.log(total / at_count) + torch.xlogy(
+        plain = small * torch.log(total / at_count) + torch.xlogy(
             counts, counts * total / (self._mean * at_count)
         )
+        if not bool(large.any()):
+            return plain
+        # Above the threshold `r log((r + mu) / (r + y))` cancels to `eps r`
+        # (issue #1136): written as `r v log1p(v) / v` with `v = (mu - y) / (r
+        # + y)`, it tends to the Poisson's `mu - y` as `r -> inf`.
+        big = torch.where(large, r, torch.full_like(r, LARGE_SHAPE))
+        y, big, mu = broadcast(counts, big, self._mean)
+        finite = torch.isfinite(big)
+        share = torch.where(finite, big / (torch.where(finite, big, 1.0) + y), 1.0)
+        v = torch.where(finite, (mu - y) / (torch.where(finite, big, 1.0) + y), 0.0)
+        limit = (
+            share * (mu - y) * log1p_over(v)
+            + torch.xlogy(y, y / mu)
+            + y * torch.log1p(v)
+        )
+        return torch.where(large, limit, plain)
 
     def validate(self, observations: np.ndarray) -> None:
         """Raise if an observation is not a non-negative integer."""
@@ -1501,6 +1564,30 @@ def _beta_binomial_log_density(
     observation. Every argument broadcasts, so the caller decides which.
     """
     total = alpha + beta
+    large = total >= LARGE_SHAPE
+    if bool(large.any()):
+        # Above the threshold the `lgamma` differences cancel (issue #1136);
+        # each branch is evaluated on shapes it is accurate and finite at.
+        small = (
+            torch.where(large, torch.ones_like(alpha), alpha),
+            torch.where(large, torch.ones_like(beta), beta),
+        )
+        return torch.where(
+            large,
+            _beta_binomial_large(counts, trials, alpha, beta),
+            _beta_binomial_plain(counts, trials, *small),
+        )
+    return _beta_binomial_plain(counts, trials, alpha, beta)
+
+
+def _beta_binomial_plain(
+    counts: torch.Tensor,
+    trials: torch.Tensor,
+    alpha: torch.Tensor,
+    beta: torch.Tensor,
+) -> torch.Tensor:
+    """The nine ``lgamma`` terms, in the order the factored tables reproduce bit for bit."""
+    total = alpha + beta
     return (
         torch.lgamma(trials + 1.0)
         - torch.lgamma(counts + 1.0)
@@ -1511,6 +1598,79 @@ def _beta_binomial_log_density(
         + torch.lgamma(total)
         - torch.lgamma(alpha)
         - torch.lgamma(beta)
+    )
+
+
+def _beta_binomial_large(
+    counts: torch.Tensor,
+    trials: torch.Tensor,
+    alpha: torch.Tensor,
+    beta: torch.Tensor,
+) -> torch.Tensor:
+    """The density at large concentration, as rates and three scaled rising factorials.
+
+    ``log C(n, z) + z log(a / tau) + (n - z) log(b / tau) + R(a, z) + R(b, n - z)
+    - R(tau, n)``, ``tau = a + b`` and ``R(x, m) = lgamma(x + m) - lgamma(x) -
+    m log x``, each of the size of the answer: the binomial at rate ``a / tau``
+    plus terms that vanish as ``tau -> inf``.
+    """
+    total = alpha + beta
+    rest = trials - counts
+    return (
+        torch.lgamma(trials + 1.0)
+        - torch.lgamma(counts + 1.0)
+        - torch.lgamma(rest + 1.0)
+        + torch.xlogy(counts, alpha / total)
+        + torch.xlogy(rest, beta / total)
+        + scaled_rising(alpha, counts)
+        + scaled_rising(beta, rest)
+        - scaled_rising(total, trials)
+    )
+
+
+def _negative_binomial_log_density(
+    counts: torch.Tensor, dispersion: torch.Tensor, rate: torch.Tensor
+) -> torch.Tensor:
+    """``log NB(y; r, rate)``, broadcast; the Poisson at ``r = inf`` (issue #1136).
+
+    Below :data:`~sal.emissions.rising.LARGE_SHAPE` it is the family's
+    long-standing arithmetic, bit for bit. Above it ``lgamma(y + r) -
+    lgamma(r)`` and ``r log(r / (r + rate))`` each cancel to about ``eps r``
+    nats --- 0.2 at ``r = 1e14`` --- so the density is written as the Poisson
+    plus terms that vanish as ``r -> inf``:
+
+        ``y log rate - lgamma(y + 1) + R(r, y) - rate log1p(u) / u - y log1p(u)``,
+
+    ``u = rate / r`` and ``R(r, y) = lgamma(y + r) - lgamma(r) - y log r``.
+    """
+    large = dispersion >= LARGE_SHAPE
+    if not bool(large.any()):
+        return _negative_binomial_plain(counts, dispersion, rate)
+    small = torch.where(large, torch.ones_like(dispersion), dispersion)
+    big = torch.where(large, dispersion, torch.full_like(dispersion, LARGE_SHAPE))
+    y, big, at = broadcast(counts, big, rate)
+    u = at / big
+    limit = (
+        torch.xlogy(y, at)
+        - torch.lgamma(y + 1.0)
+        + log_rising_scaled(big, y)
+        - at * log1p_over(u)
+        - y * torch.log1p(u)
+    )
+    return torch.where(large, limit, _negative_binomial_plain(counts, small, rate))
+
+
+def _negative_binomial_plain(
+    counts: torch.Tensor, dispersion: torch.Tensor, rate: torch.Tensor
+) -> torch.Tensor:
+    """The five terms of the density, in the order the exposure table reproduces."""
+    total = dispersion + rate
+    return (
+        lgamma_shifted(counts, dispersion)
+        - torch.lgamma(dispersion)
+        - torch.lgamma(counts + 1.0)
+        + dispersion * torch.log(dispersion / total)
+        + counts * torch.log(rate / total)
     )
 
 

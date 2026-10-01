@@ -1161,7 +1161,8 @@ def emission_mixture_plus_plus(
     n_centres : int
         Seeds to draw, in ``[1, n_samples]``.
     divergence : Callable
-        ``(seed, observations) -> scores``, non-negative, shape ``(n_samples,)``.
+        ``(seed, observations) -> scores``, shape ``(n_samples,)``; a score
+        below zero, which only round-off produces, is taken as zero.
     rng : np.random.Generator
         Generator, passed in rather than seeded here (``sim/CLAUDE.md``).
 
@@ -1178,7 +1179,7 @@ def emission_mixture_plus_plus(
     # The same draws in the same order as kmeans_plus_plus, so that with a
     # squared-distance score the two are one algorithm, draw for draw.
     chosen = [rng.choice(values)]
-    nearest = np.asarray(divergence(float(chosen[0]), values), dtype=float)
+    nearest = _non_negative(divergence(float(chosen[0]), values))
     for _ in range(1, n_centres):
         total = float(nearest.sum())
         if total <= 0.0:
@@ -1186,7 +1187,18 @@ def emission_mixture_plus_plus(
         else:
             chosen.append(rng.choice(values, p=nearest / total))
         nearest = np.minimum(
-            nearest,
-            np.asarray(divergence(float(chosen[-1]), values), dtype=float),
+            nearest, _non_negative(divergence(float(chosen[-1]), values))
         )
     return np.array(chosen)
+
+
+def _non_negative(scores: np.ndarray) -> np.ndarray:
+    """``scores`` floored at zero, as floats (issue #1136).
+
+    A divergence is non-negative, but one computed in floating point at a
+    point on its own seed lands a few ulp either side of zero: ``-1e-15`` was
+    measured, and ``rng.choice`` refuses a negative probability. The floor
+    changes no score that is already non-negative, so the draws are bitwise
+    those of a divergence that rounds the right way.
+    """
+    return np.asarray(np.maximum(np.asarray(scores, dtype=float), 0.0))
