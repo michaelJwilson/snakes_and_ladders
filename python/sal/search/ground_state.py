@@ -52,7 +52,8 @@ chain, #1041's two expansion hybrids) from a ``(graph, field)``, and takes a
 is the entry's own bitwise (issue #1052). The warm chain and the two hybrids
 are built by one factory, :func:`chain` over :func:`part`, and
 :func:`compose` reads any chain of entries from a name such as
-``field_argmax>descent>alpha-expansion`` (issue #1077).
+``field_argmax>descent>alpha-expansion`` (issue #1077); ``a&b`` fuses two
+operands' labellings, and the ``fuse-merge`` arm is such a text (issue #1140).
 
 See Boykov, Veksler & Zabih (2001) for the expansion bound and Baxter ch. 12
 for the ordering coupling the rungs sit either side of.
@@ -1369,6 +1370,11 @@ def _options(name: str) -> frozenset[str]:
         return ANNEAL_OPTIONS
     if name in METHODS or name in STAGES:
         return frozenset()
+    # A composed arm takes what its stages take (issue #1140); the hybrid
+    # arms written as a class are anneals.
+    arm = ARMS.get(name)
+    if isinstance(arm, Then | SolverChain):
+        return arm.takes
     return ANNEAL_OPTIONS
 
 
@@ -1574,6 +1580,8 @@ class SolverStage:
 #: realization count.
 REALIZATIONS = "|"
 REPEAT = "**"
+#: Separates the operands of a fusion in a method name (issue #1140).
+FUSE = "&"
 
 #: A stage's name in a chain's text.
 _NAME = re.compile(r"[A-Za-z0-9_\-]+")
@@ -1582,12 +1590,63 @@ _NAME = re.compile(r"[A-Za-z0-9_\-]+")
 _ENERGY = operator.attrgetter("energy")
 
 
-def _as_step(node: SolverStage | SolverChain | SolverRealizations) -> Step:
+def _as_step(
+    node: SolverStage | SolverChain | SolverRealizations | SolverFusion,
+) -> Step:
     """A node as one step of the chain around it."""
     if isinstance(node, SolverStage):
         return node.step()
-    built = node.then() if isinstance(node, SolverChain) else node.best_of()
+    built: Then | BestOf | FuseOf
+    if isinstance(node, SolverChain):
+        built = node.then()
+    elif isinstance(node, SolverRealizations):
+        built = node.best_of()
+    else:
+        built = node.fused()
     return Step(built, takes=built.takes)
+
+
+def _updated(
+    branches: list[SolverStage | SolverChain], arguments: dict[str, Any]
+) -> list[SolverStage | SolverChain]:
+    """:meth:`SolverStage.update` on a copy of every branch, or on none.
+
+    Raises
+    ------
+    ValueError
+        If a branch is a chain, whose stages are updated one by one, or an
+        argument is refused.
+    """
+    updated = [
+        branch for branch in copy.deepcopy(branches) if isinstance(branch, SolverStage)
+    ]
+    if len(updated) != len(branches):
+        msg = "a branch is a chain: update its stages through branches"
+        raise ValueError(msg)
+    for branch in updated:
+        branch.update(**arguments)
+    return list(updated)
+
+
+def _branch(node: SolverStage | SolverChain, within: str) -> str:
+    """A branch's text inside ``|`` or ``&``: parenthesized where it would not read back.
+
+    A fusion inside either is grouped, and realizations joined by ``|``
+    inside a fusion, since the two do not mix; ``x**n`` binds tighter than
+    both and is never grouped, and realizations inside realizations print as
+    they did before fusion existed.
+    """
+    inner = (
+        node.stages[0]
+        if isinstance(node, SolverChain) and len(node.stages) == 1
+        else None
+    )
+    grouped = isinstance(inner, SolverFusion) or (
+        within == FUSE
+        and isinstance(inner, SolverRealizations)
+        and REALIZATIONS in str(inner)
+    )
+    return f"({node})" if grouped else str(node)
 
 
 @dataclass
@@ -1609,13 +1668,14 @@ class SolverChain:
 
     The text is stages joined by ``>``; ``a|b`` is realizations of ``a`` and
     ``b`` and ``x**n`` is ``n`` realizations of ``x``, :class:`SolverRealizations`;
-    parentheses group. ``**`` binds tightest, then ``>``, then ``|``, so
+    ``a&b`` is ``a`` and ``b`` fused, :class:`SolverFusion`; parentheses
+    group. ``**`` binds tightest, then ``>``, then ``|`` and ``&``, so
     ``descent>alpha-expansion**2`` repeats the expansion alone and
-    ``(descent>alpha-expansion)**2`` the whole chain. ``str(chain)`` is text
-    :meth:`parse` reads back.
+    ``(descent>alpha-expansion)**2`` the whole chain; ``|`` and ``&`` do not
+    mix without parentheses. ``str(chain)`` is text :meth:`parse` reads back.
     """
 
-    stages: list[SolverStage | SolverRealizations]
+    stages: list[SolverStage | SolverRealizations | SolverFusion]
 
     def __post_init__(self) -> None:
         if not self.stages:
@@ -1661,7 +1721,8 @@ class SolverChain:
         """The chain's text, which :meth:`parse` reads back."""
         return CHAIN.join(
             f"({stage})"
-            if isinstance(stage, SolverRealizations) and len(self.stages) > 1
+            if isinstance(stage, SolverRealizations | SolverFusion)
+            and len(self.stages) > 1
             else str(stage)
             for stage in self.stages
         )
@@ -1694,17 +1755,7 @@ class SolverRealizations:
             If a branch is a chain, whose stages are updated one by one, or
             an argument is refused; no branch is changed then.
         """
-        updated = [
-            branch
-            for branch in copy.deepcopy(self.branches)
-            if isinstance(branch, SolverStage)
-        ]
-        if len(updated) != len(self.branches):
-            msg = "a branch is a chain: update its stages through branches"
-            raise ValueError(msg)
-        for branch in updated:
-            branch.update(**arguments)
-        self.branches = list(updated)
+        self.branches = _updated(self.branches, arguments)
         return self
 
     def best_of(self) -> BestOf:
@@ -1744,11 +1795,172 @@ class SolverRealizations:
         if all(branch == first for branch in self.branches):
             shown = f"({first})" if isinstance(first, SolverChain) else str(first)
             return f"{shown}{REPEAT}{len(self.branches)}"
-        return REALIZATIONS.join(str(branch) for branch in self.branches)
+        return REALIZATIONS.join(
+            _branch(branch, REALIZATIONS) for branch in self.branches
+        )
+
+
+@dataclass(frozen=True)
+class FuseOf:
+    """Operands run from one start, their labellings fused in turn (issue #1140).
+
+    Each operand runs as a :class:`~sal.opt.compose.BestOf` branch does: from
+    the same ``start``, on its own generator spawned in operand order, on an
+    equal share of the budget less the fusions'. The labellings are then
+    folded left by :func:`~sal.search.alpha_expansion.fuse`, each fusion
+    charged one sweep's site visits as :class:`Fusion` charges it. By the
+    roof dual's bound each fusion is no worse than either of its inputs, so
+    the run is no worse than the best operand. ``spent`` sums the operands'
+    and the fusions'.
+
+    Parameters
+    ----------
+    operands : tuple[Then, ...]
+        At least two; a bare stage is a one-step :class:`~sal.opt.compose.Then`.
+    """
+
+    operands: tuple[Then, ...]
+
+    def __post_init__(self) -> None:
+        if len(self.operands) < 2:
+            msg = f"a fusion has at least two operands, got {len(self.operands)}"
+            raise ValueError(msg)
+
+    @property
+    def takes(self) -> frozenset[str]:
+        """Every option some operand takes."""
+        return frozenset().union(*(operand.takes for operand in self.operands))
+
+    def __call__(
+        self,
+        problem: Problem | Rung,
+        budget: Budget,
+        rng: np.random.Generator,
+        /,
+        *,
+        start: np.ndarray | None = None,
+        **options: Any,
+    ) -> MethodRun:
+        """Run every operand on its share, then fuse their labellings left to right.
+
+        Raises
+        ------
+        ValueError
+            If an option is taken by no operand, or a share is under one unit.
+        """
+        unknown = set(options) - self.takes
+        if unknown:
+            msg = (
+                f"no operand takes {sorted(unknown)}; the operands take "
+                f"{sorted(self.takes)}"
+            )
+            raise ValueError(msg)
+        problem = _problem(problem)
+        fusions = (len(self.operands) - 1) * problem.visits_per_sweep
+        share = (budget.size - fusions) // len(self.operands)
+        if share < 1:
+            msg = (
+                f"{len(self.operands)} operands and their fusions of {budget.size} "
+                f"{budget.unit} leave each operand less than one"
+            )
+            raise ValueError(msg)
+        started = time.perf_counter()
+        runs = [
+            operand(
+                problem,
+                Budget(budget.unit, share),
+                stream,
+                start=start,
+                **{name: options[name] for name in operand.takes if name in options},
+            )
+            for operand, stream in zip(
+                self.operands, rng.spawn(len(self.operands)), strict=True
+            )
+        ]
+        labelling = runs[0].labelling
+        for run in runs[1:]:
+            labelling = fuse(
+                problem.graph, problem.field, labelling, run.labelling
+            ).labelling
+        return MethodRun(
+            labelling=labelling,
+            energy=energy(problem.graph, problem.field, labelling),
+            spent=sum(run.spent for run in runs) + fusions,
+            seconds=time.perf_counter() - started,
+            # A fixed count of fusions, each one cut: the fold ends on the
+            # last of them, converged where every operand's run converged.
+            termination=Termination.after(
+                len(runs) - 1,
+                converged=all(run.termination.converged for run in runs),
+            ),
+        )
+
+
+@dataclass
+class SolverFusion:
+    """Operands from one start, their labellings fused: ``a&b`` in a chain's text (issue #1140).
+
+    :class:`FuseOf` over each operand, a :class:`SolverStage` or a
+    :class:`SolverChain`. ``(alpha-expansion&field_argmax>descent)>merge(min_sites=20)``
+    runs the expansion and a descent from the field's argmax, fuses the two,
+    and floors the fused labelling.
+    """
+
+    branches: list[SolverStage | SolverChain]
+
+    def __post_init__(self) -> None:
+        if len(self.branches) < 2:
+            msg = f"a fusion has at least two operands, got {len(self.branches)}"
+            raise ValueError(msg)
+
+    def update(self, **arguments: Any) -> SolverFusion:
+        """:meth:`SolverStage.update` on every operand; update one through :attr:`branches`.
+
+        Raises
+        ------
+        ValueError
+            If an operand is a chain, whose stages are updated one by one, or
+            an argument is refused; no operand is changed then.
+        """
+        self.branches = _updated(self.branches, arguments)
+        return self
+
+    def fused(self) -> FuseOf:
+        """The fusion as it runs."""
+        return FuseOf(
+            tuple(
+                branch.then()
+                if isinstance(branch, SolverChain)
+                else Then((_as_step(branch),), handover)
+                for branch in self.branches
+            )
+        )
+
+    @property
+    def takes(self) -> frozenset[str]:
+        """Every option some operand takes."""
+        return self.fused().takes
+
+    def __call__(
+        self,
+        problem: Problem | Rung,
+        budget: Budget,
+        rng: np.random.Generator,
+        /,
+        *,
+        start: np.ndarray | None = None,
+        **options: Any,
+    ) -> MethodRun:
+        """Run every operand on its share and fuse their labellings."""
+        return self.fused()(problem, budget, rng, start=start, **options)
+
+    def __str__(self) -> str:
+        """The operands joined by ``&``, which :meth:`SolverChain.parse` reads back."""
+        return FUSE.join(_branch(branch, FUSE) for branch in self.branches)
 
 
 class _Reader:
-    """Recursive descent over a chain's text: ``|`` below ``>`` below ``**``."""
+    """Recursive descent over a chain's text: ``|`` and ``&`` below ``>`` below ``**``."""
 
     def __init__(self, text: str) -> None:
         self.text = text
@@ -1763,30 +1975,41 @@ class _Reader:
             self.at += 1
         return self.text.startswith(token, self.at)
 
-    def read(self) -> SolverStage | SolverChain | SolverRealizations:
+    def read(self) -> SolverStage | SolverChain | SolverRealizations | SolverFusion:
         node = self._branches()
         if self._peek("") and self.at != len(self.text):
             self._fail("the end")
         return node
 
-    def _branches(self) -> SolverStage | SolverChain | SolverRealizations:
+    def _branches(
+        self,
+    ) -> SolverStage | SolverChain | SolverRealizations | SolverFusion:
         branches = [self._sequence()]
-        while self._peek(REALIZATIONS):
-            self.at += len(REALIZATIONS)
+        joined = next(
+            (token for token in (REALIZATIONS, FUSE) if self._peek(token)), None
+        )
+        while joined is not None and self._peek(joined):
+            self.at += len(joined)
             branches.append(self._sequence())
+        other = FUSE if joined == REALIZATIONS else REALIZATIONS
+        if joined is not None and self._peek(other):
+            self._fail(f"parentheses around a mix of {REALIZATIONS!r} and {FUSE!r}")
         if len(branches) == 1:
             return branches[0]
-        return SolverRealizations(
-            [
-                SolverChain([branch])
-                if isinstance(branch, SolverRealizations)
-                else branch
-                for branch in branches
-            ]
-        )
+        wrapped = [
+            SolverChain([branch])
+            if isinstance(branch, SolverRealizations | SolverFusion)
+            else branch
+            for branch in branches
+        ]
+        if joined == FUSE:
+            return SolverFusion(wrapped)
+        return SolverRealizations(wrapped)
 
-    def _sequence(self) -> SolverStage | SolverChain | SolverRealizations:
-        stages: list[SolverStage | SolverRealizations] = []
+    def _sequence(
+        self,
+    ) -> SolverStage | SolverChain | SolverRealizations | SolverFusion:
+        stages: list[SolverStage | SolverRealizations | SolverFusion] = []
         while True:
             node = self._repeated()
             # A group that is a chain is its stages here: the same run.
@@ -1796,7 +2019,9 @@ class _Reader:
             self.at += len(CHAIN)
         return stages[0] if len(stages) == 1 else SolverChain(stages)
 
-    def _repeated(self) -> SolverStage | SolverChain | SolverRealizations:
+    def _repeated(
+        self,
+    ) -> SolverStage | SolverChain | SolverRealizations | SolverFusion:
         node = self._atom()
         if not self._peek(REPEAT):
             return node
@@ -1811,10 +2036,14 @@ class _Reader:
             self._fail("a count of at least one")
         if n == 1:
             return node
-        branch = SolverChain([node]) if isinstance(node, SolverRealizations) else node
+        branch = (
+            SolverChain([node])
+            if isinstance(node, SolverRealizations | SolverFusion)
+            else node
+        )
         return SolverRealizations([copy.deepcopy(branch) for _ in range(n)])
 
-    def _atom(self) -> SolverStage | SolverChain | SolverRealizations:
+    def _atom(self) -> SolverStage | SolverChain | SolverRealizations | SolverFusion:
         if self._peek("("):
             self.at += 1
             node = self._branches()
@@ -1837,7 +2066,7 @@ class _Reader:
 
 
 def compose(text: str) -> SolverChain:
-    """:meth:`SolverChain.parse`: any chain or realizations of :data:`METHODS`, :data:`ARMS` and :data:`STAGES` stages, from its text."""
+    """:meth:`SolverChain.parse`: any chain, realizations or fusion of :data:`METHODS`, :data:`ARMS` and :data:`STAGES` stages, from its text."""
     return SolverChain.parse(text)
 
 
@@ -1937,6 +2166,9 @@ class Fusion:
 #: Proposals the ``fusion-chain`` arm fuses into the expansion.
 FUSION_CHAIN_PROPOSALS = 4
 
+#: The floor of the ``fuse-merge`` arm: `merge`'s docstring example, 20 sites.
+FUSE_MERGE_MIN_SITES = 20
+
 
 ARMS: dict[str, Method] = {
     "tuned-swendsen-wang": functools.partial(
@@ -1967,15 +2199,24 @@ ARMS: dict[str, Method] = {
     "fusion-sw": Fusion(("tuned-swendsen-wang",)),
     "fusion-chain": Fusion(("anneal",) * FUSION_CHAIN_PROPOSALS),
 }
+# The expansion and a descent from the field's argmax, fused, then no class
+# under FUSE_MERGE_MIN_SITES sites (#1140). Added after the table: a stage
+# with arguments is checked against it as it is read.
+ARMS["fuse-merge"] = compose(
+    f"(alpha-expansion{FUSE}field_argmax>descent)"
+    f">merge(min_sites={FUSE_MERGE_MIN_SITES})"
+)
 
 #: The names that run an anneal, and so take a ``schedule`` and ``steps``.
-ANNEALED = _ANNEALED_METHODS | frozenset(ARMS)
+ANNEALED = _ANNEALED_METHODS | frozenset(
+    name for name in ARMS if _options(name) & ANNEAL_OPTIONS
+)
 
 
 def ground_state(
     graph: PottsGraph,
     field: SiteField | np.ndarray,
-    method: str | SolverChain | SolverRealizations | Then | BestOf,
+    method: str | SolverChain | SolverRealizations | SolverFusion | Then | BestOf,
     budget: Budget,
     rng: np.random.Generator,
     *,
@@ -2000,7 +2241,8 @@ def ground_state(
     and the warm chain's descent start from it, the expansion and the swap
     cut from it, and each hybrid hands it to its first part. ``field_argmax``,
     ``tempering``, ``max-product`` and ``bifurcation`` have no single
-    starting labelling and refuse one.
+    starting labelling and refuse one, as does a chain or fusion that runs
+    one of them from the start it is handed, such as ``fuse-merge``.
 
     Parameters
     ----------
@@ -2013,7 +2255,8 @@ def ground_state(
         :class:`SolverChain`, stages joined by ``>`` with their arguments,
         e.g. ``swendsen-wang(t_start=1.0,reserve_cycles=10)>alpha-expansion``;
         a :class:`SolverChain`; or a chain built by :func:`chain`. A key is
-        read as itself before it is read as a chain.
+        read as itself before it is read as a chain. ``a|b`` in the text is
+        realizations and ``a&b`` a fusion (:class:`SolverFusion`).
     budget : Budget
         In :attr:`~sal.cost.Cost.SITE_VISITS`, the unit every
         entry is charged in.
@@ -2052,11 +2295,13 @@ def ground_state(
     field = log_weight_of(field)
     solvers = METHODS | ARMS
     solver: Callable[..., MethodRun]
-    if isinstance(method, Then | BestOf | SolverChain | SolverRealizations):
+    if isinstance(
+        method, Then | BestOf | SolverChain | SolverRealizations | SolverFusion
+    ):
         solver, takes = method, method.takes
     elif method in solvers:
         solver, takes = solvers[method], _options(method)
-    elif any(token in method for token in (CHAIN, "(", REALIZATIONS, REPEAT)):
+    elif any(token in method for token in (CHAIN, "(", REALIZATIONS, REPEAT, FUSE)):
         composed = SolverChain.parse(method)
         solver, takes = composed, composed.takes
     else:

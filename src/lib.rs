@@ -19,6 +19,7 @@ pub mod bcjr;
 pub mod bifurcation;
 pub mod bk;
 pub mod chain;
+pub mod count_mixture;
 pub mod count_mstep;
 pub mod count_pairs;
 pub mod coupled;
@@ -39,11 +40,13 @@ pub mod pruning;
 #[cfg(feature = "sandbox")]
 pub mod pruning_burn;
 pub mod ragged;
+pub mod ragged_viterbi;
 pub mod sampling;
 pub mod special;
 
 pub use bcjr::bcjr_forward_backward;
 pub use bifurcation::bifurcation_integrate;
+pub use count_mixture::count_mixture_value_and_gradient;
 pub use count_mstep::{
     beta_binomial_parameters, negative_binomial_dispersions, negative_binomial_dispersions_exposed,
 };
@@ -66,6 +69,7 @@ pub use pruning::pruning_log_likelihood;
 #[cfg(feature = "sandbox")]
 pub use pruning_burn::pruning_gradient;
 pub use ragged::{ragged_posteriors_into, SwitchKind};
+pub use ragged_viterbi::ragged_viterbi_into;
 pub use sampling::sample_rows;
 
 /// Doubles an integer.
@@ -90,6 +94,7 @@ fn oxisal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pruning_gradient, m)?)?;
     m.add_function(wrap_pyfunction!(sample_rows, m)?)?;
     m.add_function(wrap_pyfunction!(ragged::ragged_posteriors, m)?)?;
+    m.add_function(wrap_pyfunction!(ragged_viterbi::ragged_viterbi, m)?)?;
     m.add_function(wrap_pyfunction!(max_flow, m)?)?;
     m.add_class::<LatticeCut>()?;
     m.add_function(wrap_pyfunction!(ising_ground_state, m)?)?;
@@ -102,6 +107,7 @@ fn oxisal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(swendsen_wang_sweep, m)?)?;
     m.add_function(wrap_pyfunction!(class_posteriors, m)?)?;
     m.add_function(wrap_pyfunction!(external_field, m)?)?;
+    m.add_function(wrap_pyfunction!(count_mixture_value_and_gradient, m)?)?;
     m.add_function(wrap_pyfunction!(dense_log_emission, m)?)?;
     m.add_function(wrap_pyfunction!(factorize, m)?)?;
     m.add_function(wrap_pyfunction!(simulate_count_pairs, m)?)?;

@@ -1,4 +1,4 @@
-"""The ragged forward-backward: the gateway, and the oracle the Rust twin is pinned to.
+"""The ragged forward-backward and Viterbi: the gateways, and the oracles the Rust twins are pinned to.
 
 Issue #666. The Python path pads every segment to the longest and masks, which
 is what lets it take one batched step per position of the longest. The Rust
@@ -22,6 +22,10 @@ probabilities on one dense chain, including the per-step pairwise posterior
 evaluator would have to be a second implementation rather than a door. The
 choice the two do share is this function's --- kernel or oracle, over the
 same inputs and the same return --- and that is where `Backend` names it.
+
+:func:`viterbi` (issue #1138) is the max-product sibling over the same
+arguments: the most probable path of every segment, with
+:func:`viterbi_oracle` the NumPy recursion its compiled twin is pinned to.
 """
 
 from __future__ import annotations
@@ -52,11 +56,53 @@ class SwitchKind(StrEnum):
     - ``KRONECKER_DIAGONAL``: ``S_t`` on ``A``'s diagonal blocks alone, the
       layer switching only where the slow chain stays; an off-diagonal move
       lands on either layer with probability one half.
+
+    The order is state-major (``2 i + a``), as ``np.kron(A, S)``;
+    :func:`kronecker_order` maps a layer-major (``a K + i``) array onto it.
     """
 
     STAY_OR_MOVE = "stay_or_move"
     KRONECKER = "kronecker"
     KRONECKER_DIAGONAL = "kronecker_diagonal"
+
+
+def kronecker_order(n_states: int, *, layer_major: bool = False) -> np.ndarray:
+    """The index array that puts a ``2 K``-state axis in sal's Kronecker order.
+
+    Under either Kronecker :class:`SwitchKind`, state ``(i, a)``, slow state
+    ``i`` and layer ``a``, sits at ``2 i + a``: state-major (``2 i + a``), as
+    ``np.kron(A, S)``. ``order[2 i + a]`` is the caller's index of ``(i, a)``,
+    so ``theirs[..., order]`` is in sal's order, and ``np.argsort(order)``
+    is the way back, ``ours[..., np.argsort(order)]``. A square array, the
+    transition counts, takes the index on both axes,
+    ``counts[np.ix_(back, back)]``.
+
+    Parameters
+    ----------
+    n_states : int
+        The ``2 K`` states the posteriors are over, even.
+    layer_major : bool
+        Whether the caller's layout is layer-major, ``(i, a)`` at ``a K + i``.
+        ``False`` means the caller already holds sal's order and the result is
+        the identity.
+
+    Returns
+    -------
+    np.ndarray
+        ``(n_states,)``, ``int64``, a permutation of ``range(n_states)``.
+
+    Raises
+    ------
+    ValueError
+        If ``n_states`` is not a positive even number.
+    """
+    if n_states < 2 or n_states % 2:
+        msg = f"n_states is the 2 K states, a positive even number; got {n_states}"
+        raise ValueError(msg)
+    index = np.arange(n_states, dtype=np.int64)
+    if not layer_major:
+        return index
+    return np.ascontiguousarray(index.reshape(2, n_states // 2).T.reshape(-1))
 
 
 @dataclass(frozen=True)
@@ -81,6 +127,28 @@ class Posteriors:
     def __iter__(self) -> Iterator[np.ndarray]:
         """``(log_posterior, log_counts, log_evidence)``: the order callers unpack."""
         yield from (self.log_posterior, self.log_counts, self.log_evidence)
+
+
+@dataclass(frozen=True)
+class Paths:
+    """The most probable path of every segment, and its joint log-probability.
+
+    Parameters
+    ----------
+    path : np.ndarray
+        ``(total,)`` ``int64``, the state at every position, segments end to
+        end as the log-density lays them.
+    log_joint : np.ndarray
+        One per segment: the joint log-probability of the segment's path and
+        its scores, the maximum over every path of that segment.
+    """
+
+    path: np.ndarray
+    log_joint: np.ndarray
+
+    def __iter__(self) -> Iterator[np.ndarray]:
+        """``(path, log_joint)``: the order callers unpack."""
+        yield from (self.path, self.log_joint)
 
 
 def posteriors(
@@ -218,3 +286,120 @@ def posteriors_oracle(
         evidence[index] = run.log_evidence
         at += len(segment)
     return Posteriors(gamma, counts, evidence)
+
+
+def viterbi(
+    log_density: Ragged,
+    log_initial: np.ndarray,
+    log_transition: np.ndarray,
+    *,
+    switch: np.ndarray | None = None,
+    switch_kind: SwitchKind = SwitchKind.STAY_OR_MOVE,
+    backend: Backend = Backend.RUST,
+) -> Paths:
+    """The most probable path of every segment, by default in Rust (issue #1138).
+
+    The max-product sibling of :func:`posteriors`, over the same arguments:
+    each segment restarts at ``log_initial``, the per-state log-prior, and
+    the step into position ``t`` takes ``log_transition`` as ``switch`` and
+    ``switch_kind`` say. A tie goes to the lower state, at every back-pointer
+    and at the last position, as :func:`sal.likelihood.hmm.viterbi` breaks it.
+
+    Parameters
+    ----------
+    log_density : Ragged
+        Per-position scores, ``(total, n_states)`` with the segment lengths.
+    log_initial : np.ndarray
+        ``(n_states,)``, the distribution each segment restarts at.
+    log_transition : np.ndarray
+        ``(n_states, n_states)`` in log space, or the slow chain's ``(K, K)``
+        under either Kronecker kind.
+    switch : np.ndarray | None
+        One switch probability per position, or ``None``; as
+        :func:`posteriors` takes it, a segment's first entry unread.
+    switch_kind : SwitchKind
+        How ``switch`` enters; see :class:`SwitchKind`. The kernel takes a
+        Kronecker step in its factors, ``2 K^2 + 4 K`` terms against the
+        ``4 K^2`` of the explicit matrix.
+    backend : Backend
+        ``RUST``, the default, is ``oxisal.ragged_viterbi`` through
+        :func:`sal.likelihood.ragged.rust.viterbi`, segments decoded in
+        parallel; ``PYTHON`` is :func:`viterbi_oracle`. Nothing else.
+
+    Returns
+    -------
+    Paths
+        The path, ``(total,)`` ``int64``, and one maximum joint
+        log-probability per segment.
+
+    Raises
+    ------
+    ValueError
+        If ``backend`` is neither ``RUST`` nor ``PYTHON``, or a Kronecker kind
+        is given no ``switch``.
+    """
+    if (rust := twin("ragged viterbi", backend, __name__)) is not None:
+        return cast(
+            "Paths",
+            rust.viterbi(log_density, log_initial, log_transition, switch, switch_kind),
+        )
+    return viterbi_oracle(log_density, log_initial, log_transition, switch, switch_kind)
+
+
+def viterbi_oracle(
+    log_density: Ragged,
+    log_initial: np.ndarray,
+    log_transition: np.ndarray,
+    switch: np.ndarray | None = None,
+    switch_kind: SwitchKind = SwitchKind.STAY_OR_MOVE,
+) -> Paths:
+    """The same, one segment at a time: a loop over positions, vectorized over states.
+
+    The oracle the compiled path is pinned against. Each step adds the
+    previous ``delta`` to the step's log transition, takes the column
+    maximum with ``np.argmax`` (the first, so the lower state, on a tie) and
+    adds the scores, in the order :func:`sal.likelihood.hmm.viterbi`'s NumPy
+    recursion takes them. With ``switch`` it materializes each segment's
+    ``(T - 1, n, n)`` stack (:func:`step_transitions`), the storage the
+    kernel avoids.
+    """
+    switch_kind = SwitchKind(switch_kind)
+    if switch_kind is not SwitchKind.STAY_OR_MOVE and switch is None:
+        msg = f"a {switch_kind} switch needs a switch probability per position"
+        raise ValueError(msg)
+    if switch is not None:
+        switch = np.asarray(switch, dtype=float).reshape(-1)
+    initial = np.asarray(log_initial, dtype=float)
+    transition = np.asarray(log_transition, dtype=float)
+    n_states = log_density.values.shape[1]
+    columns = np.arange(n_states)
+    path = np.empty(log_density.values.shape[0], dtype=np.int64)
+    log_joint = np.empty(log_density.n_segments)
+    at = 0
+    for index, segment in enumerate(log_density.segments()):
+        length = len(segment)
+        # One `(n, n)` log matrix per step: the shared transition, or the
+        # switched step built from it.
+        kernels = (
+            np.broadcast_to(transition, (length - 1, n_states, n_states))
+            if switch is None
+            else step_transitions(
+                log_transition, switch[at + 1 : at + length], switch_kind
+            )
+        )
+        # The restart: the prior and the first scores, as `hmm.viterbi` starts.
+        delta = initial + segment[0]
+        back = np.zeros((length, n_states), dtype=np.int64)
+        for t in range(1, length):
+            # `scores[i, j]`: reach `j` from `i`; the column maximum is the step.
+            scores = delta[:, None] + kernels[t - 1]
+            back[t] = np.argmax(scores, axis=0)
+            delta = scores[back[t], columns] + segment[t]
+        # The best last state, then the back-pointers read in reverse.
+        state = int(np.argmax(delta))
+        log_joint[index] = delta[state]
+        for t in range(length - 1, -1, -1):
+            path[at + t] = state
+            state = int(back[t, state])
+        at += length
+    return Paths(path, log_joint)

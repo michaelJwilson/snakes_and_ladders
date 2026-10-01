@@ -291,6 +291,90 @@ class PottsGraph:
         graph.__dict__["edge_coupling"] = _read_only(edge_coupling)
         return graph
 
+    @classmethod
+    def from_directed_csr(
+        cls,
+        indptr: np.ndarray,
+        indices: np.ndarray,
+        coupling: np.ndarray | float,
+    ) -> PottsGraph:
+        """The graph a directed CSR adjacency describes, each pair coupled at ``(A_ij + A_ji) / 2`` (issue #1140).
+
+        :meth:`from_csr` refuses an asymmetric ``A``, so a caller holding a
+        directed one --- a k-nearest-neighbour graph, whose ``j`` is among
+        ``i``'s neighbours without ``i`` among ``j``'s --- symmetrised it to
+        ``(A + A^T) / 2`` before the call. This is that symmetrisation, in
+        NumPy alone and without a Python loop over entries.
+
+        **Why the half.** :func:`sal.sim.potts.energy` is
+        ``-sum_i h_i[s_i] - sum_(ij) J_ij [s_i == s_j]`` with each undirected
+        edge counted once. A descent that sums each node's own row scores
+        ``sum_i sum_(j in row i) A_ij [s_i == s_j]``, which over one
+        unordered pair is ``(A_ij + A_ji) [s_i == s_j]``. With
+        ``J_ij = (A_ij + A_ji) / 2`` the edge term here is that row sum
+        halved, the factor 2 a symmetric ``A`` carries between its row sum
+        and :meth:`from_csr`'s edge count. An entry absent in one direction
+        counts as 0 there, and repeated entries of one direction sum, as
+        ``scipy.sparse`` sums them.
+
+        A reciprocated pair of equal weight keeps ``A_ij`` exactly, since
+        ``(a + a) / 2`` is ``a`` in floating point; so on a symmetric ``A``
+        whose rows hold sorted, unrepeated columns the graph equals
+        :meth:`from_csr`'s, edge for edge and bitwise. Edges are in
+        row-major order of ``(i, j)``, ``i < j``. Couplings of either sign
+        are kept, as :meth:`from_csr` keeps them.
+
+        Parameters
+        ----------
+        indptr : np.ndarray
+            Row pointers, shape ``(n_nodes + 1,)``.
+        indices : np.ndarray
+            Column indices, shape ``(indptr[-1],)``.
+        coupling : np.ndarray | float
+            ``A_ij`` per stored entry, shape ``(indptr[-1],)``, or one value
+            for every entry.
+
+        Raises
+        ------
+        ValueError
+            If the adjacency has a self loop, which a Potts coupling does not
+            define.
+        """
+        indptr = np.asarray(indptr, dtype=np.int64)
+        indices = np.asarray(indices, dtype=np.int64)
+        n_nodes = indptr.shape[0] - 1
+        rows = np.repeat(np.arange(n_nodes, dtype=np.int64), np.diff(indptr))
+        weights = np.broadcast_to(np.asarray(coupling, dtype=np.float64), indices.shape)
+        loops = rows == indices
+        if np.any(loops):
+            node = int(rows[np.argmax(loops)])
+            msg = f"node {node} has a self loop, which a Potts coupling does not define"
+            raise ValueError(msg)
+        # One int64 key per unordered pair, `low * n_nodes + high`: its sorted
+        # order is row-major order over (low, high), low < high.
+        # One sort and a segmented sum; `np.unique(..., return_inverse=True)`
+        # with a `bincount` took 90 to 220 ms of this at 10^6 entries, this 50.
+        keys = np.minimum(rows, indices) * n_nodes + np.maximum(rows, indices)
+        order = np.argsort(keys)
+        keys = keys[order]
+        starts = np.flatnonzero(np.diff(keys, prepend=-1))
+        pairs = keys[starts]
+        edge_coupling = (
+            np.add.reduceat(weights[order], starts) / 2.0
+            if starts.size
+            else np.empty(0, dtype=np.float64)
+        )
+        first, second = np.divmod(pairs, max(n_nodes, 1))
+        graph = cls(
+            n_nodes,
+            tuple(zip(first.tolist(), second.tolist(), strict=True)),
+            tuple(edge_coupling.tolist()),
+        )
+        # As in `from_csr`: the array built here is the one the cached
+        # property would rebuild from the tuple.
+        graph.__dict__["edge_coupling"] = _read_only(edge_coupling)
+        return graph
+
     @cached_property
     def edge_index(self) -> np.ndarray:
         """The edges as an ``(n_edges, 2)`` array of node indices, derived once.

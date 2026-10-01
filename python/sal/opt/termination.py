@@ -39,6 +39,9 @@ class Stop(StrEnum):
     REFUSED = "refused"
     """A refusal ended the run and the caller caught it: there is a result, and it is not a fit."""
 
+    INFEASIBLE = "infeasible"
+    """A constraint the run enforces cannot be met where the field allows: a floor no allowed label reaches (issue #1139)."""
+
 
 @dataclass(frozen=True)
 class Termination:

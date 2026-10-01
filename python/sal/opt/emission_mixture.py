@@ -25,6 +25,7 @@ from __future__ import annotations
 import itertools
 import math
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import nullcontext
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from enum import StrEnum
@@ -33,6 +34,7 @@ from typing import NamedTuple
 import numpy as np
 import torch
 
+from sal import oxisal
 from sal.emissions import (
     BetaBinomialEmission,
     BinomialEmission,
@@ -40,6 +42,11 @@ from sal.emissions import (
     EmissionFamily,
     NegativeBinomialEmission,
     PoissonEmission,
+)
+from sal.emissions.rising import (
+    DistinctCache,
+    gradients_on_distinct,
+    reusing_distinct,
 )
 from sal.enumeration import refuse_oversized
 from sal.opt.constrain import (
@@ -57,7 +64,7 @@ from sal.opt.mixture import (
     responsibilities_torch,
     uniform_seeds,
 )
-from sal.opt.objective import Objective
+from sal.opt.objective import Objective, autograd_value_and_gradient
 from sal.opt.termination import Termination
 
 #: Builds a ``k``-state family centred on ``k`` observations, one per row. The
@@ -95,6 +102,12 @@ class EmissionMixtureFit:
         Whether the loop met its relative tolerance or ran out of iterations,
         in the form every result states it in (issue #860); its
         ``iterations`` are the EM iterations run (issue #1090).
+    frozen : tuple[int, ...]
+        Components an M step held at their parameters because the E step
+        left them no data (issue #1136), at any iteration. A collapsed
+        component no longer ends the fit; the loop's own stop is still
+        ``termination``, and this says which components it stopped with
+        unestimated.
     """
 
     weights: torch.Tensor
@@ -103,6 +116,7 @@ class EmissionMixtureFit:
     log_likelihood: float
     at_boundary: bool
     termination: Termination = dataclass_field(kw_only=True)
+    frozen: tuple[int, ...] = dataclass_field(default=(), kw_only=True)
 
 
 def expectation_maximization(
@@ -185,6 +199,7 @@ def expectation_maximization(
     )
     boundary = False
     attempt = 0
+    frozen: set[int] = set()
 
     def step(
         state: tuple[torch.Tensor, EmissionFamily, torch.Tensor],
@@ -209,6 +224,7 @@ def expectation_maximization(
             )
             raise ValueError(msg)
         boundary = boundary or reestimated.at_boundary
+        frozen.update(reestimated.frozen)
         advanced = (posterior.mean(dim=0), reestimated.emissions, posterior)
         return advanced, log_likelihood
 
@@ -232,6 +248,7 @@ def expectation_maximization(
         log_likelihood=log_likelihood,
         at_boundary=boundary,
         termination=termination,
+        frozen=tuple(sorted(frozen)),
     )
 
 
@@ -378,6 +395,7 @@ def _cell_expectation_maximization(
     n_samples = float(multiplicity.sum())
     boundary = False
     attempt = 0
+    frozen: set[int] = set()
 
     def step(
         state: tuple[torch.Tensor, EmissionFamily, torch.Tensor],
@@ -399,6 +417,7 @@ def _cell_expectation_maximization(
             )
             raise ValueError(msg)
         boundary = boundary or reestimated.at_boundary
+        frozen.update(reestimated.frozen)
         return (weighted.sum(dim=0) / n_samples, reestimated.emissions, posterior), (
             log_likelihood
         )
@@ -425,6 +444,7 @@ def _cell_expectation_maximization(
         log_likelihood=log_likelihood,
         at_boundary=boundary,
         termination=termination,
+        frozen=tuple(sorted(frozen)),
     )
 
 
@@ -669,6 +689,74 @@ def uniform_start(
     return at(rows[chosen.astype(np.int64)])
 
 
+def build_like(
+    family: EmissionFamily,
+) -> Callable[[Mapping[str, torch.Tensor]], EmissionFamily]:
+    """The ``build`` :class:`EmissionMixtureObjective` takes, for a count family like ``family``.
+
+    Every constant ``family`` carries --- a trial count, the joint form, a tie
+    --- is kept, and the named parameters are its
+    :meth:`~sal.emissions.EmissionFamily.named_parameters`. A two-channel
+    family of a negative-binomial ``total`` and a beta-binomial
+    ``successes``, whose names are prefixed by channel, is rebuilt as its own
+    type from the two (issue #1136).
+
+    Returns
+    -------
+    Callable[[Mapping[str, torch.Tensor]], EmissionFamily]
+
+    Raises
+    ------
+    TypeError
+        If ``family`` is not one of those.
+    """
+    if isinstance(family, NegativeBinomialEmission):
+        tied = family.tied
+        return lambda named: NegativeBinomialEmission(
+            named["dispersion"], named["mean"], tied=tied
+        )
+    if isinstance(family, BetaBinomialEmission):
+        trials, tied = family.trials, family.tied
+        return lambda named: BetaBinomialEmission(
+            trials, named["alpha"], named["beta"], tied=tied
+        )
+    if isinstance(family, CountPairEmission):
+        pair_trials, joint = family.trials, family.joint
+        return lambda named: CountPairEmission(
+            named["dispersion"],
+            named["mean"],
+            named["alpha"],
+            named["beta"],
+            pair_trials,
+            joint=joint,
+        )
+    total = getattr(family, "total", None)
+    successes = getattr(family, "successes", None)
+    if isinstance(total, NegativeBinomialEmission) and isinstance(
+        successes, BetaBinomialEmission
+    ):
+        rebuild = type(family)
+        build_total, build_successes = build_like(total), build_like(successes)
+
+        def pair(named: Mapping[str, torch.Tensor]) -> EmissionFamily:
+            def channel(prefix: str) -> dict[str, torch.Tensor]:
+                return {
+                    name.removeprefix(prefix): value
+                    for name, value in named.items()
+                    if name.startswith(prefix)
+                }
+
+            return rebuild(  # type: ignore[call-arg]
+                build_total(channel("total.")), build_successes(channel("successes."))
+            )
+
+        return pair
+    msg = (
+        f"no build for a {type(family).__name__}; pass one to EmissionMixtureObjective"
+    )
+    raise TypeError(msg)
+
+
 class EmissionMixtureObjective(Objective):
     """Negative log-likelihood of a mixture of any family whose parameters are positive (issue #964).
 
@@ -693,6 +781,16 @@ class EmissionMixtureObjective(Objective):
     build : Callable[[Mapping[str, torch.Tensor]], EmissionFamily]
         The family at named parameters of shape ``(K,)`` each; constants the
         family carries (a trial count, the joint form) are the closure's.
+        :func:`build_like` makes one for each count family.
+    covariate : np.ndarray | torch.Tensor | None
+        Per-observation covariate, scored as the fits score it (issue #1136);
+        ``None`` scores without one, as before.
+    gradient_on_distinct : bool
+        Take the gradient on the distinct counts
+        (:func:`~sal.emissions.rising.gradients_on_distinct`): the same
+        gradient to rounding, at a fraction of the work, for a caller that
+        only follows it. Off by default, so a Hessian read off this objective
+        is the one it was.
 
     Raises
     ------
@@ -705,6 +803,9 @@ class EmissionMixtureObjective(Objective):
         observations: np.ndarray,
         start: EmissionFamily,
         build: Callable[[Mapping[str, torch.Tensor]], EmissionFamily],
+        *,
+        covariate: np.ndarray | torch.Tensor | None = None,
+        gradient_on_distinct: bool = False,
     ) -> None:
         if start.n_states < 2:
             msg = f"a mixture has at least two components, got {start.n_states}"
@@ -719,6 +820,16 @@ class EmissionMixtureObjective(Objective):
         self._observations = torch.as_tensor(
             observations, dtype=start.observation_dtype
         )
+        self._covariate = (
+            None
+            if covariate is None
+            else torch.as_tensor(covariate, dtype=torch.float64)
+        )
+        self._on_distinct = gradient_on_distinct
+        self._route = _count_route(start, self._observations, self._covariate)
+        # The distinct counts of the observations, found once and reused by
+        # every evaluation: the observations do not change between them.
+        self._distinct: DistinctCache = {}
         self._start = named
         self._names = tuple(named)
         self._k = start.n_states
@@ -770,12 +881,213 @@ class EmissionMixtureObjective(Objective):
         return torch.cat(parts)
 
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
-        """The negative mixture log-likelihood at ``theta``."""
-        return -mixture_log_likelihood(
-            self._observations,
-            log_simplex(theta[: self._k - 1]),
-            self.components(theta),
+        """The negative mixture log-likelihood at ``theta``.
+
+        Where no gradient is tracked --- a sampler's acceptance energy --- and
+        the kernel applies, it is the kernel's value, so a Hamiltonian chain
+        reads its energy and its force from one arithmetic (issue #1136).
+        """
+        if not (torch.is_grad_enabled() and theta.requires_grad):
+            compiled = self._compiled(theta.detach().numpy())
+            if compiled is not None:
+                return torch.tensor(compiled[0], dtype=torch.float64)
+        with (
+            reusing_distinct(self._distinct),
+            gradients_on_distinct() if self._on_distinct else nullcontext(),
+        ):
+            return -mixture_log_likelihood(
+                self._observations,
+                log_simplex(theta[: self._k - 1]),
+                self.components(theta),
+                covariate=self._covariate,
+            )
+
+    def value_and_gradient(
+        self, theta: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """``(U(theta), dU/dtheta)``, detached: compiled for a count family, autograd otherwise (issue #1136).
+
+        For a negative binomial, a beta-binomial with a trial count per
+        state, or their pair (joint or independent), with no covariate and
+        integer counts, ``oxisal.count_mixture_value_and_gradient`` returns
+        the log-likelihood and its gradient in the weights and the natural
+        parameters in one pass, every ``lgamma`` and ``digamma`` difference
+        a prefix sum over integers (:meth:`_compiled`). Any other family, a
+        covariate, or a point that overflows a parameter takes autograd
+        through :meth:`__call__`, which this is pinned to.
+        """
+        compiled = self._compiled(theta.detach().numpy())
+        if compiled is None:
+            return autograd_value_and_gradient(self, theta)
+        value, gradient = compiled
+        return torch.tensor(value, dtype=torch.float64), torch.from_numpy(gradient)
+
+    def energy(self, x: np.ndarray) -> float:
+        """``U(x)`` on an array: compiled where :meth:`value_and_gradient` is, ``__call__`` otherwise."""
+        compiled = self._compiled(np.asarray(x, dtype=np.float64))
+        if compiled is None:
+            with torch.no_grad():
+                return float(self(torch.as_tensor(x, dtype=torch.float64)))
+        return compiled[0]
+
+    def _compiled(self, theta: np.ndarray) -> tuple[float, np.ndarray] | None:
+        """``(U, dU/dtheta)`` through the kernel, or ``None`` where it does not apply.
+
+        The map from ``theta`` is two closed forms, written out in NumPy
+        rather than replayed by autograd, whose bookkeeping was 0.8 ms of a
+        2.4 ms call at the stress mixture: each block is ``exp`` of its
+        entries, so ``dU/dtheta = (dU/dp) p``; the weights are a softmax of
+        ``(0, f)``, so ``dU/df_j = g_{j+1} - w_{j+1} sum_k g_k`` with ``g =
+        dU/d log w``.
+        """
+        route = self._route
+        if route is None:
+            return None
+        k = self._k
+        logits = np.concatenate([[0.0], theta[: k - 1]])
+        top = float(logits.max())
+        log_weight = logits - (top + math.log(float(np.exp(logits - top).sum())))
+        natural: dict[str, np.ndarray] = {}
+        with np.errstate(over="ignore", under="ignore"):
+            for slot, name in route.names.items():
+                offset = k - 1 + self._names.index(name) * k
+                natural[slot] = np.exp(theta[offset : offset + k])
+        if not all(
+            bool(np.isfinite(values).all() and (values > 0.0).all())
+            for values in natural.values()
+        ):
+            # A trajectory that has run a parameter to overflow or underflow
+            # is the chain's to reject; autograd scores it as it always did.
+            return None
+        gradient = {slot: np.empty(k) for slot in ("log_weight", *route.names)}
+        log_likelihood = oxisal.count_mixture_value_and_gradient(
+            log_weight,
+            gradient["log_weight"],
+            totals=route.totals,
+            dispersion=natural.get("dispersion"),
+            mean=natural.get("mean"),
+            grad_dispersion=gradient.get("dispersion"),
+            grad_mean=gradient.get("mean"),
+            successes=route.successes,
+            alpha=natural.get("alpha"),
+            beta=natural.get("beta"),
+            trials=route.trials,
+            grad_alpha=gradient.get("alpha"),
+            grad_beta=gradient.get("beta"),
         )
+        out = np.empty_like(theta)
+        weights = np.exp(log_weight)
+        held = gradient["log_weight"]
+        out[: k - 1] = -(held[1:] - weights[1:] * held.sum())
+        for slot, name in route.names.items():
+            offset = k - 1 + self._names.index(name) * k
+            out[offset : offset + k] = -gradient[slot] * natural[slot]
+        return -log_likelihood, out
+
+
+@dataclass(frozen=True)
+class _CountRoute:
+    """What the compiled gradient reads for one objective, fixed when the objective is built.
+
+    Parameters
+    ----------
+    totals, successes : np.ndarray | None
+        Each channel's counts as ``uint32``, or ``None`` where the family has
+        no such channel.
+    trials : np.ndarray | None
+        The success channel's trial count per state; ``None`` for the joint
+        pair, whose trials are the totals.
+    names : dict[str, str]
+        Each kernel slot (``dispersion``, ``mean``, ``alpha``, ``beta``) to
+        the family's own parameter name.
+    """
+
+    totals: np.ndarray | None
+    successes: np.ndarray | None
+    trials: np.ndarray | None
+    names: dict[str, str]
+
+
+def _as_counts(values: np.ndarray) -> np.ndarray | None:
+    """``values`` as contiguous ``uint32``, or ``None`` unless every one is a non-negative integer."""
+    if not (
+        bool(np.isfinite(values).all())
+        and bool((values >= 0).all())
+        and bool((values == np.floor(values)).all())
+        and float(values.max(initial=0.0)) < 2.0**32
+    ):
+        return None
+    return np.ascontiguousarray(values, dtype=np.uint32)
+
+
+def _count_route(
+    start: EmissionFamily, observations: torch.Tensor, covariate: torch.Tensor | None
+) -> _CountRoute | None:
+    """The compiled gradient's inputs for ``start``'s family, or ``None`` where it does not apply.
+
+    It applies to an untied negative binomial, an untied beta-binomial, the
+    count pair in either form, and a two-channel family of an untied
+    negative binomial ``total`` and beta-binomial ``successes``, with no
+    covariate and integer counts.
+    """
+    if covariate is not None:
+        return None
+    values = observations.detach().numpy().astype(np.float64)
+    if isinstance(start, NegativeBinomialEmission):
+        totals = None if start.tied else _as_counts(values.reshape(-1))
+        if totals is None:
+            return None
+        return _CountRoute(
+            totals, None, None, {"dispersion": "dispersion", "mean": "mean"}
+        )
+    if isinstance(start, BetaBinomialEmission):
+        successes = None if start.tied else _as_counts(values.reshape(-1))
+        if successes is None:
+            return None
+        return _CountRoute(
+            None,
+            successes,
+            np.ascontiguousarray(start.trials.numpy()),
+            {"alpha": "alpha", "beta": "beta"},
+        )
+    if values.ndim != 2 or values.shape[1] != 2:
+        return None
+    totals, successes = _as_counts(values[:, 0]), _as_counts(values[:, 1])
+    if totals is None or successes is None:
+        return None
+    if isinstance(start, CountPairEmission):
+        trials = start.trials
+        return _CountRoute(
+            totals,
+            successes,
+            None if trials is None else np.ascontiguousarray(trials.numpy()),
+            {
+                "dispersion": "dispersion",
+                "mean": "mean",
+                "alpha": "alpha",
+                "beta": "beta",
+            },
+        )
+    total = getattr(start, "total", None)
+    channel = getattr(start, "successes", None)
+    if (
+        isinstance(total, NegativeBinomialEmission)
+        and isinstance(channel, BetaBinomialEmission)
+        and not total.tied
+        and not channel.tied
+    ):
+        return _CountRoute(
+            totals,
+            successes,
+            np.ascontiguousarray(channel.trials.numpy()),
+            {
+                "dispersion": "total.dispersion",
+                "mean": "total.mean",
+                "alpha": "successes.alpha",
+                "beta": "successes.beta",
+            },
+        )
+    return None
 
 
 class SeedMethod(StrEnum):

@@ -43,8 +43,10 @@ def icm_sweeps(
     holding ``0 < count < min_sites`` sites is dissolved: each of its sites,
     in index order, takes ``surviving[floor(draws[sweep * n_nodes + node] *
     m)]``, ``surviving`` the ascending states holding at least ``min_sites``
-    and ``m`` their number, the counts read before any site is recoloured. A
-    recolouring is a change. ``min_sites == 0`` reads no draw.
+    that the site's field allows (not ``-inf``, issue #1139) and ``m`` their
+    number, the counts read before any site is recoloured. A site allowing
+    none keeps its label. A recolouring is a change. ``min_sites == 0``
+    reads no draw.
 
     Unchecked: :func:`icm_sweeps_checked` validates the shapes first. Holds no
     Python object, so the GIL is released for the call.
@@ -61,6 +63,7 @@ def icm_sweeps(
     local = np.empty(n_states, dtype=np.float64)
     counts = np.zeros(n_states, dtype=np.int64)
     surviving = np.empty(n_states, dtype=np.int64)
+    allowed = np.empty(n_states, dtype=np.int64)
     ordered = orders.shape[0] > 0
     rows = max(orders.shape[0], 1)
     sweeps = 0
@@ -99,8 +102,16 @@ def icm_sweeps(
                 base = sweep * n_nodes
                 for node in range(n_nodes):
                     if counts[state[node]] < min_sites:
-                        pick = int(draws[base + node] * m)
-                        state[node] = surviving[min(pick, m - 1)]
+                        # The surviving states this site allows (issue #1139).
+                        n_allowed = 0
+                        for index in range(m):
+                            if field[node, surviving[index]] > -np.inf:
+                                allowed[n_allowed] = surviving[index]
+                                n_allowed += 1
+                        if n_allowed == 0:
+                            continue
+                        pick = int(draws[base + node] * n_allowed)
+                        state[node] = allowed[min(pick, n_allowed - 1)]
                         changed = True
         if stop_when_clean and not changed:
             break

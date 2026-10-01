@@ -54,7 +54,9 @@ def test_alpha_expansion_benchmark(
     # `benches/`, which is the pair `DEV.md` step 3 asks for (#528).
     graph, field_values = _problem(extent, n_states)
 
-    result = benchmark(alpha_expansion, graph, field_values, n_states, backend=backend)
+    result = benchmark(
+        alpha_expansion, graph, field_values, n_states=n_states, backend=backend
+    )
 
     assert result.cycles >= 1
 
@@ -114,7 +116,7 @@ def test_the_rust_cut_moves_at_large_site_counts(
     """
     graph, values = _problem(extent, 10)
     solve = alpha_expansion if name == "expansion" else alpha_beta_swap
-    result = benchmark(solve, graph, values, 10, backend=Backend.RUST)
+    result = benchmark(solve, graph, values, n_states=10, backend=Backend.RUST)
     assert np.isfinite(result.energy)
 
 

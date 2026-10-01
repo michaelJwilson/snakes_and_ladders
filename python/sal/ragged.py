@@ -21,14 +21,23 @@ a caller would have to distrust.
 
 The layout is the compressed-row form this package already uses wherever it
 stores a relation: one array, and offsets into it.
+
+**A reduction and a floor live beside the layout** (issue #1141). `Ragged.reduce`
+is ``ufunc.reduceat`` on the segment starts, which every caller otherwise
+restates; `Ragged.floored` merges adjacent segments greedily until each reaches
+a floor on extent and on summed weight, never across a change of group. Both
+leave `values` as it is: segments are contiguous, so a merge is a relabelling of
+the lengths and nothing is copied.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
+from itertools import accumulate
 
 import numpy as np
+from numpy.typing import ArrayLike
 
 #: The shortest segment that carries a transition, and so the shortest allowed.
 MINIMUM_LENGTH = 2
@@ -79,10 +88,16 @@ class Ragged:
     @property
     def offsets(self) -> tuple[int, ...]:
         """Where each segment starts, and where the last one ends."""
-        edges = [0]
-        for length in self.lengths:
-            edges.append(edges[-1] + length)
-        return tuple(edges)
+        return tuple(accumulate(self.lengths, initial=0))
+
+    def _edges(self) -> np.ndarray:
+        """`offsets` as an int64 array, without the tuple."""
+        edges = np.zeros(self.n_segments + 1, dtype=np.int64)
+        np.cumsum(
+            np.fromiter(self.lengths, dtype=np.int64, count=self.n_segments),
+            out=edges[1:],
+        )
+        return edges
 
     @property
     def n_segments(self) -> int:
@@ -140,3 +155,173 @@ class Ragged:
             block[index, : len(segment)] = segment
             mask[index, : len(segment)] = True
         return block, mask
+
+    def reduce(
+        self, ufunc: np.ufunc = np.add, values: np.ndarray | None = None
+    ) -> np.ndarray:
+        """One reduction per segment, along the position axis.
+
+        Parameters
+        ----------
+        ufunc : np.ufunc
+            A binary ufunc, e.g. `np.add`, `np.maximum`, `np.minimum`.
+        values : np.ndarray, optional
+            The array reduced, shape ``(total, ...)``; `self.values` when
+            omitted. Any array laid out like the batch is admitted, so a weight
+            per position reduces to a weight per segment without a copy of the
+            batch.
+
+        Returns
+        -------
+        np.ndarray
+            Shape ``(n_segments, ...)``. ``ufunc.reduceat`` orders a sum
+            differently from ``ufunc.reduce`` on the slice: on 10^5 standard
+            normals ``np.add`` differs from it by 1.1e-14 at the widest, and
+            ``maximum`` and ``minimum`` agree bitwise.
+
+        Raises
+        ------
+        ValueError
+            If `values` does not have the batch's number of positions.
+        """
+        array = self.values if values is None else np.asarray(values)
+        if array.ndim == 0 or array.shape[0] != self.values.shape[0]:
+            msg = (
+                f"values has shape {array.shape}; the batch has "
+                f"{self.values.shape[0]} positions on the leading axis"
+            )
+            raise ValueError(msg)
+        return np.asarray(ufunc.reduceat(array, self._edges()[:-1], axis=0))
+
+    def floored(
+        self,
+        min_length: float,
+        *,
+        weight: ArrayLike | None = None,
+        min_weight: float = 0.0,
+        groups: ArrayLike | None = None,
+        extent: ArrayLike | None = None,
+    ) -> tuple[Ragged, np.ndarray]:
+        """Adjacent segments merged until each reaches a floor.
+
+        The rule is greedy along each group. A merged segment opens at a
+        segment, takes the segments after it, and closes at the first one at
+        which its extent reaches `min_length` **and** its summed `weight`
+        reaches `min_weight`. A merge never crosses a change in `groups`: at
+        the end of a group, an unclosed remainder joins the merged segment
+        before it in that group, and stands alone when there is none --- the
+        only merged segment of a group may fall short of the floor.
+
+        Parameters
+        ----------
+        min_length : float
+            The floor on a merged segment's extent.
+        weight : array_like, optional
+            One weight per segment, shape ``(n_segments,)``; zero when omitted.
+            A weight per position is reduced to this first, ``self.reduce(values=w)``.
+        min_weight : float
+            The floor on a merged segment's summed weight.
+        groups : array_like, optional
+            One label per segment, shape ``(n_segments,)``; a new group starts
+            wherever the label changes. One group when omitted.
+        extent : array_like, optional
+            A ``(start, end)`` coordinate per segment, shape ``(n_segments, 2)``,
+            non-decreasing along the batch. A merged segment's extent is the
+            ``end`` of its last segment minus the ``start`` of its first, so a
+            gap between segments counts toward it --- a span in base pairs, say.
+            When omitted the coordinates are the offsets, and the extent is the
+            number of positions.
+
+        Returns
+        -------
+        tuple[Ragged, np.ndarray]
+            The merged batch over the same `values`, and the index of its
+            merged segment for each old one, shape ``(n_segments,)``: starting
+            at zero, non-decreasing, and stepping by at most one.
+
+        Raises
+        ------
+        ValueError
+            If `weight`, `groups` or `extent` does not have one entry per segment.
+        """
+        n = self.n_segments
+        edges = self._edges()
+        if extent is None:
+            starts = edges[:-1].astype(np.float64)
+            ends = edges[1:].astype(np.float64)
+        else:
+            span = np.asarray(extent, dtype=np.float64)
+            if span.shape != (n, 2):
+                msg = f"extent has shape {span.shape}; expected ({n}, 2)"
+                raise ValueError(msg)
+            starts, ends = span[:, 0], span[:, 1]
+        mass = _per_segment(weight, n, "weight").astype(np.float64)
+        labels = _per_segment(groups, n, "groups")
+        opens = np.ones(n, dtype=bool)
+        opens[1:] = labels[1:] != labels[:-1]
+        parent = _greedy_floor(
+            starts.tolist(),
+            ends.tolist(),
+            mass.tolist(),
+            opens.tolist(),
+            float(min_length),
+            float(min_weight),
+        )
+        merged = np.add.reduceat(
+            np.diff(edges), np.flatnonzero(np.diff(parent, prepend=-1))
+        )
+        lengths = tuple(int(length) for length in merged)
+        return Ragged(values=self.values, lengths=lengths), parent
+
+
+def _per_segment(array: ArrayLike | None, n: int, name: str) -> np.ndarray:
+    """One entry per segment, zeros when omitted, or a refusal."""
+    if array is None:
+        return np.zeros(n, dtype=np.float64)
+    out = np.asarray(array)
+    if out.shape != (n,):
+        msg = f"{name} has shape {out.shape}; expected ({n},), one per segment"
+        raise ValueError(msg)
+    return out
+
+
+def _greedy_floor(
+    starts: list[float],
+    ends: list[float],
+    mass: list[float],
+    opens: list[bool],
+    min_length: float,
+    min_weight: float,
+) -> np.ndarray:
+    """The parent of each segment under the greedy floor of `Ragged.floored`.
+
+    The rule is sequential --- whether a segment opens a merged segment depends
+    on where the previous one closed --- so it is one pass over segments, not
+    positions, on Python floats: 10^5 segments take tens of milliseconds.
+    """
+    n = len(starts)
+    parent = np.empty(n, dtype=np.int64)
+    label = -1
+    first = 0
+    total = 0.0
+    closed = True
+    previous_closed_in_group = False
+    for index in range(n):
+        if opens[index]:
+            if not closed and previous_closed_in_group:
+                parent[first:index] = label - 1
+                label -= 1
+            previous_closed_in_group = False
+            closed = True
+        if closed:
+            label += 1
+            first = index
+            total = 0.0
+        parent[index] = label
+        total += mass[index]
+        closed = ends[index] - starts[first] >= min_length and total >= min_weight
+        if closed:
+            previous_closed_in_group = True
+    if not closed and previous_closed_in_group:
+        parent[first:] = label - 1
+    return parent

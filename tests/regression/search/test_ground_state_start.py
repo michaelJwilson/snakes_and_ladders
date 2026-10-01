@@ -51,6 +51,11 @@ REFUSED = (
     "max-product",
     "bifurcation",
 )
+#: Arms that refuse a start because a part of them does: ``fuse-merge`` runs
+#: ``field_argmax`` from the start it is handed (issue #1140).
+PART_REFUSED = ("fuse-merge",)
+#: A floor for arms whose own exceeds the 9 sites `ci` holds.
+CI_FLOOR = {"fuse-merge": 3}
 ARGMAX_START = ("alpha-expansion", "alpha-beta-swap", "expansion>swendsen-wang")
 #: The solvers that end on a descent from the start they are handed.
 DESCENTS = ("icm", "alpha-expansion", "alpha-beta-swap", "expansion>swendsen-wang")
@@ -136,7 +141,7 @@ def test_no_start_is_the_run_before_the_entry_took_one(cell: str) -> None:
 
 
 def _takes_start() -> list[str]:
-    return [name for name in (*METHODS, *ARMS) if name not in REFUSED]
+    return [name for name in (*METHODS, *ARMS) if name not in (*REFUSED, *PART_REFUSED)]
 
 
 @pytest.mark.analytic
@@ -197,6 +202,22 @@ def test_a_solver_with_no_single_start_refuses_one_by_name(method: str) -> None:
             _budget(rung, 5),
             np.random.default_rng(0),
             start=np.zeros(rung.n_nodes, dtype=np.int64),
+        )
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize("method", PART_REFUSED)
+def test_an_arm_refuses_a_start_its_first_part_refuses(method: str) -> None:
+    rung = _rung("ci")
+    with pytest.raises(ValueError, match="'field_argmax' takes no start"):
+        ground_state(
+            rung.graph,
+            rung.field,
+            method,
+            _budget(rung, 5),
+            np.random.default_rng(0),
+            start=np.zeros(rung.n_nodes, dtype=np.int64),
+            min_sites=CI_FLOOR[method],
         )
 
 
@@ -271,7 +292,7 @@ def _ci_rung(n_states: int) -> Rung:
 def _from_seeded_start(rung: Rung, method: str, seed: int) -> float:
     start = (
         None
-        if method in REFUSED
+        if method in (*REFUSED, *PART_REFUSED)
         else np.random.default_rng([1052, seed]).integers(
             0, rung.n_states, size=rung.n_nodes
         )
@@ -283,6 +304,7 @@ def _from_seeded_start(rung: Rung, method: str, seed: int) -> float:
         _budget(rung, 200),
         np.random.default_rng(seed),
         start=start,
+        min_sites=CI_FLOOR.get(method, 0),
     ).energy
 
 

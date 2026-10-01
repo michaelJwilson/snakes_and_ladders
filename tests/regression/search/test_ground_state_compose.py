@@ -18,17 +18,20 @@ import pytest
 from sal.cost import Cost
 from sal.opt.budget import Budget
 from sal.sample.schedule import ScheduleParams
+from sal.search.alpha_expansion import fuse
 from sal.search.ground_state import (
     ANNEAL_SCHEDULE,
     ARMS,
     EXPANSION_RESERVE_CYCLES,
     EXPANSION_SW_SCHEDULE,
+    FUSE_MERGE_MIN_SITES,
     METHODS,
     SWENDSEN_WANG_SCHEDULE,
     WARM_SCHEDULE,
     MethodRun,
     Rung,
     SolverChain,
+    SolverFusion,
     SolverRealizations,
     SolverStage,
     chain,
@@ -411,5 +414,160 @@ def test_an_update_on_realizations_reaches_every_branch_or_none() -> None:
     assert str(solver) == "(swendsen-wang(steps=3)**2)>alpha-expansion"
     with pytest.raises(ValueError, match="runs no anneal"):
         SolverChain.parse("(swendsen-wang|alpha-expansion)>icm").stages[0].update(
+            steps=3
+        )
+
+
+# --- fusion, ``a&b`` (issue #1140) ----------------------------------------------
+
+
+@functools.cache
+def _stress_rung() -> Rung:
+    """`spatio_only/stress`: 72 sites, past enumeration, the per-PR stress tier."""
+    return spatio_rung(fixture("spatio_only", "stress").params, "stress")
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("seed", SEEDS)
+def test_a_fusion_is_its_operands_fused_by_hand_and_never_worse(seed: int) -> None:
+    # `anneal&icm-random`: each operand on half of what the one fusion
+    # leaves, from the same start and its own spawned generator; the run is
+    # `fuse` of the two labellings, no worse than either (the roof dual).
+    rung = _stress_rung()
+    budget = _budget(rung)
+    run = ground_state(
+        rung.graph, rung.field, "anneal&icm-random", budget, np.random.default_rng(seed)
+    )
+    share = Budget(budget.unit, (budget.size - rung.visits_per_sweep) // 2)
+    first, second = np.random.default_rng(seed).spawn(2)
+    anneal = METHODS["anneal"](rung, share, first)
+    descent = METHODS["icm-random"](rung, share, second)
+    fused = fuse(rung.graph, rung.field, anneal.labelling, descent.labelling)
+    operands = (
+        energy(rung.graph, rung.field, anneal.labelling),
+        energy(rung.graph, rung.field, descent.labelling),
+    )
+
+    assert np.array_equal(run.labelling, fused.labelling)
+    assert run.energy == energy(rung.graph, rung.field, run.labelling)
+    assert run.energy <= min(operands) + 1e-12
+    assert run.spent == anneal.spent + descent.spent + rung.visits_per_sweep
+    assert run.spent <= budget.size
+
+
+@pytest.mark.oracle
+def test_three_operands_fold_left() -> None:
+    rung = _stress_rung()
+    budget = _budget(rung)
+    run = ground_state(
+        rung.graph,
+        rung.field,
+        "icm&anneal&icm-random",
+        budget,
+        np.random.default_rng(7),
+    )
+    share = Budget(budget.unit, (budget.size - 2 * rung.visits_per_sweep) // 3)
+    streams = np.random.default_rng(7).spawn(3)
+    runs = [
+        METHODS[name](rung, share, stream)
+        for name, stream in zip(("icm", "anneal", "icm-random"), streams, strict=True)
+    ]
+    folded = runs[0].labelling
+    for operand in runs[1:]:
+        folded = fuse(rung.graph, rung.field, folded, operand.labelling).labelling
+
+    assert np.array_equal(run.labelling, folded)
+    assert run.energy <= min(operand.energy for operand in runs) + 1e-12
+
+
+@pytest.mark.analytic
+@pytest.mark.parametrize(
+    ("text", "shown"),
+    [
+        (
+            "(alpha-expansion & icm)>merge(min_sites=20)",
+            "(alpha-expansion&icm)>merge(min_sites=20)",
+        ),
+        # `>` binds tighter than `&`, as it does than `|`.
+        ("icm&field_argmax>descent", "icm&field_argmax>descent"),
+        ("(icm|anneal)&alpha-expansion", "(icm|anneal)&alpha-expansion"),
+        ("(icm&anneal)|alpha-expansion", "(icm&anneal)|alpha-expansion"),
+        ("(icm&anneal)**2>descent", "((icm&anneal)**2)>descent"),
+    ],
+)
+def test_a_fusion_reads_back_from_its_text(text: str, shown: str) -> None:
+    solver = SolverChain.parse(text)
+
+    assert str(solver) == shown
+    assert SolverChain.parse(str(solver)) == solver
+
+
+@pytest.mark.smoke
+def test_realizations_and_a_fusion_do_not_mix_without_parentheses() -> None:
+    assert isinstance(SolverChain.parse("icm&anneal").stages[0], SolverFusion)
+    with pytest.raises(ValueError, match="parentheses around a mix"):
+        SolverChain.parse("icm&anneal|wolff")
+    with pytest.raises(ValueError, match="parentheses around a mix"):
+        SolverChain.parse("icm|anneal&wolff")
+
+
+@pytest.mark.oracle
+def test_fuse_merge_is_its_text() -> None:
+    rung = _stress_rung()
+    budget = _budget(rung)
+    text = (
+        "(alpha-expansion&field_argmax>descent)"
+        f">merge(min_sites={FUSE_MERGE_MIN_SITES})"
+    )
+
+    arm = ground_state(
+        rung.graph, rung.field, "fuse-merge", budget, np.random.default_rng(3)
+    )
+    spelled = ground_state(
+        rung.graph, rung.field, text, budget, np.random.default_rng(3)
+    )
+
+    assert str(ARMS["fuse-merge"]) == text
+    assert np.array_equal(arm.labelling, spelled.labelling)
+    assert arm.spent == spelled.spent
+
+
+@pytest.mark.end2end
+@pytest.mark.parametrize("seed", SEEDS)
+def test_fuse_merge_is_no_worse_than_the_expansion_then_merge_at_stress(
+    seed: int,
+) -> None:
+    # The stress fixture's lattice and field, drawn from its generative
+    # model; both methods floor at FUSE_MERGE_MIN_SITES on the 1,000-sweep
+    # budget `potts_starts` runs at.
+    rung = _stress_rung()
+    budget = Budget(Cost.SITE_VISITS, 1_000 * rung.visits_per_sweep)
+    baseline = ground_state(
+        rung.graph,
+        rung.field,
+        f"alpha-expansion>merge(min_sites={FUSE_MERGE_MIN_SITES})",
+        budget,
+        np.random.default_rng(seed),
+    )
+
+    run = ground_state(
+        rung.graph, rung.field, "fuse-merge", budget, np.random.default_rng(seed)
+    )
+
+    assert run.energy <= baseline.energy + 1e-12
+    assert run.energy == energy(rung.graph, rung.field, run.labelling)
+    counts = np.bincount(run.labelling, minlength=rung.n_states)
+    assert bool(np.all((counts == 0) | (counts >= FUSE_MERGE_MIN_SITES)))
+    assert run.spent <= budget.size
+
+
+@pytest.mark.smoke
+def test_an_update_on_a_fusion_reaches_every_operand_or_none() -> None:
+    solver = SolverChain.parse("(swendsen-wang&anneal)>alpha-expansion")
+    solver.stages[0].update(steps=3)
+
+    assert str(solver) == "(swendsen-wang(steps=3)&anneal(steps=3))>alpha-expansion"
+    with pytest.raises(ValueError, match="runs no anneal"):
+        SolverChain.parse("(swendsen-wang&alpha-expansion)>icm").stages[0].update(
             steps=3
         )
