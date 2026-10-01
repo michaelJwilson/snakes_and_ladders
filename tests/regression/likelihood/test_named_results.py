@@ -17,7 +17,7 @@ from sal.likelihood.forward_backward import StepKernels
 from sal.likelihood.hadamard import Spectrum
 from sal.likelihood.message_passing import _Run
 from sal.likelihood.message_passing.rust import TreeMessages
-from sal.likelihood.ragged import Posteriors
+from sal.likelihood.ragged import Paths, Posteriors
 from sal.likelihood.schedule import UpwardMessageSchedule
 from sal.likelihood.spatio_sequential.rust import (
     EmissionRows,
@@ -35,6 +35,7 @@ NAMED = [
     EmissionTables,
     EnergyBounds,
     Extremes,
+    Paths,
     Posteriors,
     Spectrum,
     StepKernels,

@@ -54,3 +54,38 @@ def test_switched_transition_bench(benchmark: BenchmarkFixture, route: str) -> N
     switch = np.random.default_rng(4).uniform(size=sum(lengths))
     backend = Backend.RUST if route == "switch" else Backend.PYTHON
     benchmark(posteriors, density, initial, transition, switch=switch, backend=backend)
+
+
+@pytest.mark.benchmark(group="ragged-viterbi")
+@pytest.mark.parametrize("route", ["rust", "numpy"])
+@pytest.mark.parametrize("case", ["plain", "switched", "kronecker"])
+def test_ragged_viterbi_bench(
+    benchmark: BenchmarkFixture, case: str, route: str
+) -> None:
+    """The compiled Viterbi against its NumPy oracle at stress size (issue #1138).
+
+    200 segments of 1,000 positions, 2e5 in all, at ten states: `plain` takes
+    one transition, `switched` a stay-or-move step per position, and
+    `kronecker` the `A ⊗ S` step over `2 K = 10` states, which the kernel
+    takes in its factors and the oracle as a materialized stack. Three
+    rounds, since the oracle's call runs for seconds.
+    """
+    from sal.backend import Backend
+    from sal.likelihood.ragged import SwitchKind, viterbi
+
+    n_states, lengths = 10, (1000,) * 200
+    rng = np.random.default_rng(1138)
+    density = Ragged(np.log(rng.random((sum(lengths), n_states))), lengths)
+    slow = n_states // 2 if case == "kronecker" else n_states
+    initial = np.log(np.full(n_states, 1.0 / n_states))
+    transition = np.log(rng.dirichlet(np.ones(slow), slow))
+    switch = None if case == "plain" else rng.uniform(size=sum(lengths))
+    kind = SwitchKind.KRONECKER if case == "kronecker" else SwitchKind.STAY_OR_MOVE
+    backend = Backend.RUST if route == "rust" else Backend.PYTHON
+    benchmark.pedantic(  # type: ignore[no-untyped-call]
+        viterbi,
+        args=(density, initial, transition),
+        kwargs={"switch": switch, "switch_kind": kind, "backend": backend},
+        rounds=3,
+        iterations=1,
+    )
