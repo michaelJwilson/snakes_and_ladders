@@ -42,7 +42,7 @@ fn log_sum(values: &[f64]) -> f64 {
 /// The log transition into `position`: `log_transition` itself without a
 /// switch, else `ln((1 - s) [from == to] + s A[from, to])` written to `out`.
 #[inline]
-fn step_kernel<'a>(
+pub(crate) fn step_kernel<'a>(
     log_transition: &'a [f64],
     probability: &[f64],
     switch: &[f64],
@@ -97,28 +97,28 @@ impl SwitchKind {
 }
 
 /// `ln(1 / 2)`: the layer a moved slow chain lands on, under the diagonal switch.
-const LN_HALF: f64 = -std::f64::consts::LN_2;
+pub(crate) const LN_HALF: f64 = -std::f64::consts::LN_2;
 
 /// One step's Kronecker transition, held as its factors and never as a `2K x 2K` matrix.
 ///
 /// The forward and backward products factor through the slow chain: a
 /// `K x K` product per layer, then a `2 x 2` mix per slow state --- `2 K^2 +
 /// 4 K` terms a step against the `4 K^2` of the explicit matrix (#1133).
-struct KroneckerStep<'a> {
+pub(crate) struct KroneckerStep<'a> {
     /// `ln A`, row-major `K x K`.
-    log_slow: &'a [f64],
+    pub(crate) log_slow: &'a [f64],
     /// `K`.
-    slow: usize,
+    pub(crate) slow: usize,
     /// Whether the layer switches only where the slow chain stays.
-    diagonal: bool,
+    pub(crate) diagonal: bool,
     /// `ln(1 - s)`.
-    stay: f64,
+    pub(crate) stay: f64,
     /// `ln s`.
-    flip: f64,
+    pub(crate) flip: f64,
 }
 
 impl<'a> KroneckerStep<'a> {
-    fn at(log_slow: &'a [f64], slow: usize, diagonal: bool, s: f64) -> Self {
+    pub(crate) fn at(log_slow: &'a [f64], slow: usize, diagonal: bool, s: f64) -> Self {
         Self {
             log_slow,
             slow,
@@ -130,7 +130,7 @@ impl<'a> KroneckerStep<'a> {
 
     /// `ln S[a, b]`.
     #[inline]
-    fn mix(&self, a: usize, b: usize) -> f64 {
+    pub(crate) fn mix(&self, a: usize, b: usize) -> f64 {
         if a == b {
             self.stay
         } else {
@@ -238,39 +238,17 @@ impl<'a> KroneckerStep<'a> {
     }
 }
 
-/// Posterior marginals, transition counts and evidence, segment by segment.
+/// The preconditions [`ragged_posteriors_into`] and
+/// [`crate::ragged_viterbi::ragged_viterbi_into`] share, on the inputs alone.
 ///
-/// # Parameters
-/// - `log_density`: row-major `total * n_states`, the segments end to end.
-/// - `lengths`: one per segment, each at least 2, summing to `total`.
-/// - `log_initial`: `n_states`, the distribution each segment restarts at.
-/// - `log_transition`: row-major `n_states * n_states`.
-/// - `gamma`: written, `total * n_states`, each row a log posterior.
-/// - `counts`: written, `n_states * n_states`, log expected transitions summed
-///   over every segment --- the boundary pairs are not among them.
-/// - `evidence`: written, one log evidence per segment.
-/// - `switch`: empty, or one `s` in `[0, 1]` per position (issue #1082). The
-///   step into position `t` then takes `(1 - s[t]) I + s[t] A` with `A` the
-///   transition, the stay-or-switch form, built per step from the one `A`
-///   rather than stored `T` times; a segment's first entry is never read.
-/// - `kind`: how `switch` enters. Under [`SwitchKind::Kronecker`] and
-///   [`SwitchKind::KroneckerDiagonal`], `n_states` is `2 K`,
-///   `log_transition` is the slow chain's `K x K`, and `switch` is required;
-///   the step is taken in its factors, and `counts` are over the `2 K`
-///   states, the matrix's own.
-///
-/// # Returns
-/// `Ok(())`, or `Err` naming the first violated precondition.
-#[allow(clippy::too_many_arguments)]
-pub fn ragged_posteriors_into(
+/// # Errors
+/// The first violated precondition, named.
+pub(crate) fn check_inputs(
     log_density: &[f64],
     n_states: usize,
     lengths: &[usize],
     log_initial: &[f64],
     log_transition: &[f64],
-    gamma: &mut [f64],
-    counts: &mut [f64],
-    evidence: &mut [f64],
     switch: &[f64],
     kind: SwitchKind,
 ) -> Result<(), String> {
@@ -317,9 +295,6 @@ pub fn ragged_posteriors_into(
             n_states
         ));
     }
-    if gamma.len() != log_density.len() || evidence.len() != lengths.len() {
-        return Err("gamma and evidence must match the segments they describe".to_string());
-    }
     if !switch.is_empty() && switch.len() != total {
         return Err(format!(
             "switch has {} entries for {} positions; one per position or none",
@@ -333,6 +308,59 @@ pub fn ragged_posteriors_into(
             index, switch[index]
         ));
     }
+    Ok(())
+}
+
+/// Posterior marginals, transition counts and evidence, segment by segment.
+///
+/// # Parameters
+/// - `log_density`: row-major `total * n_states`, the segments end to end.
+/// - `lengths`: one per segment, each at least 2, summing to `total`.
+/// - `log_initial`: `n_states`, the distribution each segment restarts at.
+/// - `log_transition`: row-major `n_states * n_states`.
+/// - `gamma`: written, `total * n_states`, each row a log posterior.
+/// - `counts`: written, `n_states * n_states`, log expected transitions summed
+///   over every segment --- the boundary pairs are not among them.
+/// - `evidence`: written, one log evidence per segment.
+/// - `switch`: empty, or one `s` in `[0, 1]` per position (issue #1082). The
+///   step into position `t` then takes `(1 - s[t]) I + s[t] A` with `A` the
+///   transition, the stay-or-switch form, built per step from the one `A`
+///   rather than stored `T` times; a segment's first entry is never read.
+/// - `kind`: how `switch` enters. Under [`SwitchKind::Kronecker`] and
+///   [`SwitchKind::KroneckerDiagonal`], `n_states` is `2 K`,
+///   `log_transition` is the slow chain's `K x K`, and `switch` is required;
+///   the step is taken in its factors, and `counts` are over the `2 K`
+///   states, the matrix's own.
+///
+/// # Returns
+/// `Ok(())`, or `Err` naming the first violated precondition.
+#[allow(clippy::too_many_arguments)]
+pub fn ragged_posteriors_into(
+    log_density: &[f64],
+    n_states: usize,
+    lengths: &[usize],
+    log_initial: &[f64],
+    log_transition: &[f64],
+    gamma: &mut [f64],
+    counts: &mut [f64],
+    evidence: &mut [f64],
+    switch: &[f64],
+    kind: SwitchKind,
+) -> Result<(), String> {
+    check_inputs(
+        log_density,
+        n_states,
+        lengths,
+        log_initial,
+        log_transition,
+        switch,
+        kind,
+    )?;
+    if gamma.len() != log_density.len() || evidence.len() != lengths.len() {
+        return Err("gamma and evidence must match the segments they describe".to_string());
+    }
+    let kronecker = kind != SwitchKind::StayOrMove;
+    let slow = n_states / 2;
     // The transition in probability space, read by every switched step; the
     // unswitched path reads `log_transition` itself and is unchanged.
     let probability: Vec<f64> = if switch.is_empty() || kronecker {
