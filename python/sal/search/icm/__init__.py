@@ -13,8 +13,10 @@ state holding ``0 < count < min_sites`` sites is dissolved: each of its sites,
 in index order, takes ``surviving[floor(u * m)]``, where ``surviving`` is the
 ascending list of states holding at least ``min_sites`` sites, ``m`` its
 length, the counts read after the sweep and before any recolouring, and ``u``
-the site's uniform for that sweep. An empty state is not below the floor and
-may be joined. A recolouring is a change, so the descent continues past it.
+the site's uniform for that sweep. ``surviving`` is read per site, over the
+states its field allows (not ``-inf``): a site allowing none keeps its label,
+and a descent left there ends :attr:`~sal.opt.termination.Stop.INFEASIBLE`
+(issue #1139). An empty state is not below the floor and may be joined. A recolouring is a change, so the descent continues past it.
 ``min_sites = 0`` is the descent before the floor existed, bitwise.
 
 **The draws.** Both backends read the same randomness, drawn up front in one
@@ -37,7 +39,7 @@ from enum import StrEnum
 import numpy as np
 
 from sal.backend import Backend, refuse_backend
-from sal.opt.termination import Termination
+from sal.opt.termination import Stop, Termination
 from sal.search.alpha_expansion import Labelling
 from sal.search.icm.numba import greedy_colouring, icm_sweeps_checked, no_survivor
 from sal.sim.graph import PottsGraph
@@ -237,7 +239,9 @@ def iterated_conditional_modes(
     Labelling
         The labelling it settles on, its energy, the sweeps run (the clean
         one included) and a termination: converged where a sweep would leave
-        the labelling unchanged, the budget otherwise (issue #1059).
+        the labelling unchanged, infeasible where a site below the floor
+        allows no state at it (issue #1139), the budget otherwise (issue
+        #1059).
 
     Raises
     ------
@@ -345,7 +349,9 @@ def iterated_conditional_modes(
             if best != labels[node]:
                 labels[node] = best
                 changed = True
-        if min_sites > 0 and _dissolve(labels, uniforms, sweep, n_states, min_sites):
+        if min_sites > 0 and _dissolve(
+            labels, values, uniforms, sweep, n_states, min_sites
+        ):
             changed = True
         if stop_when_clean and not changed:
             break
@@ -391,6 +397,14 @@ def merge_small_labels(
     backend : Backend
         :func:`iterated_conditional_modes`'s.
 
+    Returns
+    -------
+    Labelling
+        As :func:`iterated_conditional_modes` returns it. A site of a state
+        below the floor moves only to a surviving state its field allows; where
+        none does it keeps its label and the termination is
+        :attr:`~sal.opt.termination.Stop.INFEASIBLE` (issue #1139).
+
     Raises
     ------
     ValueError
@@ -428,31 +442,52 @@ def _descended(
     state held by fewer than ``min_sites`` sites. That is the state a clean
     sweep leaves, so a run stopped by one reads converged, and one that ran
     out of sweeps reads the budget unless its last sweep happened to settle.
+
+    A floor only a forbidden label could meet reads
+    :attr:`~sal.opt.termination.Stop.INFEASIBLE` (issue #1139), whether the
+    sweeps ran out or a clean one stopped them: a site of a state below the
+    floor forbids every state at it, so no draw can move it.
     """
     _, neighbours, couplings = graph.compressed_adjacency()
     local = -values.copy()
     # `subtract.at` applies in edge order, as the sweep's loop does.
     np.subtract.at(local, (owner_rows(offsets), labelling[neighbours]), couplings)
     settled = bool((local.argmin(axis=1) == labelling).all())
-    if settled and min_sites > 0:
+    termination = Termination.after(sweeps, converged=settled)
+    if min_sites > 0:
         counts = np.bincount(labelling, minlength=n_states)
-        settled = not bool(((counts > 0) & (counts < min_sites)).any())
+        below = (counts > 0) & (counts < min_sites)
+        if below.any():
+            # A site below the floor allowing no surviving state: no draw moves it.
+            movable = (values[:, counts >= min_sites] > -np.inf).any(axis=1)
+            stuck = bool((below[labelling] & ~movable).any())
+            termination = (
+                Termination(False, sweeps, Stop.INFEASIBLE)
+                if stuck
+                else Termination.after(sweeps, converged=False)
+            )
     return Labelling(
         labelling,
         energy(graph, values, labelling),
         sweeps=sweeps,
-        termination=Termination.after(sweeps, converged=settled),
+        termination=termination,
     )
 
 
 def _dissolve(
     labels: list[int],
+    values: np.ndarray,
     uniforms: list[float],
     sweep: int,
     n_states: int,
     min_sites: int,
 ) -> bool:
     """The floor after one sweep, in place: the oracle of the kernel's; whether a site moved.
+
+    A site draws among the surviving states its field allows, not ``-inf``
+    (issue #1139); with none, it keeps its label and the state stays below
+    the floor. An all-finite field draws from every surviving state, as
+    before.
 
     Raises
     ------
@@ -467,9 +502,14 @@ def _dissolve(
     surviving = [state for state in range(n_states) if counts[state] >= min_sites]
     if not surviving:
         raise ValueError(no_survivor(sweep + 1, min_sites))
-    m = len(surviving)
     base = sweep * len(labels)
+    moved = False
     for node, label in enumerate(labels):
         if counts[label] < min_sites:
-            labels[node] = surviving[min(int(uniforms[base + node] * m), m - 1)]
-    return True
+            allowed = [state for state in surviving if values[node, state] > -np.inf]
+            m = len(allowed)
+            if m == 0:
+                continue
+            labels[node] = allowed[min(int(uniforms[base + node] * m), m - 1)]
+            moved = True
+    return moved
