@@ -1031,17 +1031,22 @@ def run_tempering(
     budget: Budget,
     rng: np.random.Generator,
     *,
+    move: PottsMove = PottsMove.SINGLE_SITE,
     start: np.ndarray | None = None,
 ) -> MethodRun:
     """Parallel tempering over a geometric ladder, charged for every replica.
 
-    The budget buys ``budget // (N_REPLICAS * visits_per_sweep)`` sweeps per
+    The budget buys ``budget // (N_REPLICAS * step_cost)`` steps per
     replica rather than that many per chain, which is the whole difference
-    between a comparison at equal cost and one at equal sweeps.
+    between a comparison at equal cost and one at equal sweeps. ``move`` is
+    the move set each replica runs (issue #1156), on the cluster backend
+    :func:`run_annealed` picks; its step count is fixed as
+    :func:`run_annealed` fixes one, so a single-cluster move underspends, and
+    ``spent`` is what the run charged.
     """
     _refuse_start("tempering", start, "its ladder draws one labelling per replica")
     problem = _problem(problem)
-    per_replica = max(1, budget.size // (N_REPLICAS * problem.visits_per_sweep))
+    per_replica = max(1, budget.size // (N_REPLICAS * step_cost(problem, move)))
     ladder = tuple(
         float(value) for value in np.geomspace(ANNEAL_START, ANNEAL_END, N_REPLICAS)
     )
@@ -1052,11 +1057,13 @@ def run_tempering(
         ladder,
         rng,
         per_replica,
+        move=move,
+        cluster_backend=Backend.RUST if move in _COMPILED_CLUSTERS else Backend.PYTHON,
     )
     return MethodRun(
         labelling=run.best,
         energy=run.energy,
-        spent=N_REPLICAS * per_replica * problem.visits_per_sweep,
+        spent=run.spent,
         seconds=time.perf_counter() - started,
         termination=Termination.after(per_replica, converged=False),
     )
