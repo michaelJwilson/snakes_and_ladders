@@ -1156,9 +1156,20 @@ def ghost_couplings(rows: SiteField | np.ndarray) -> np.ndarray:
     `tests/regression/sample/test_potts_cluster_field.py` can replace the
     shift with ``max(0, h)`` alone, which drops the negative part of the
     field, and show the enumeration refutes it.
+
+    The minimum is over each site's allowed labels (issue #1154). A forbidden
+    label (``-inf``, :func:`~sal.sim.potts.forbid`) keeps ``K = -inf``, which
+    :func:`ghost_spin_sweep` reads as a hard constraint rather than a bond.
+    Over every label the minimum was ``-inf``, every allowed ``K`` was
+    ``+inf``, and each site bonded to its own ghost with probability one: the
+    chain froze. A finite field's ``K`` is the bits it was.
     """
     rows = log_weight_of(rows)
-    return np.asarray(rows - rows.min(axis=1, keepdims=True))
+    forbidden = np.isneginf(rows)
+    if not forbidden.any():
+        return np.asarray(rows - rows.min(axis=1, keepdims=True))
+    floor = np.where(forbidden, np.inf, rows).min(axis=1, keepdims=True)
+    return np.asarray(rows - floor)
 
 
 def ghost_spin_sweep(
@@ -1194,20 +1205,58 @@ def ghost_spin_sweep(
     once by a caller running many passes: recomputed per pass, its row
     minimum was 0.41 s of a 1.41 s release-size anneal of 873 passes.
 
-    Draws: one uniform per edge, one per site, one label per site.
+    **A forbidden label is a hard ghost bond** (issue #1154). A ``-inf``
+    entry is ``exp(beta h[i, a] [s_i = a]) = [s_i != a]``: the
+    antiferromagnetic limit of a ghost bond, present with probability one and
+    constraining site ``i`` off label ``a``. So a free cluster draws uniformly
+    from the labels every member allows, and the shift is over the allowed
+    labels alone (:func:`ghost_couplings`). From an allowed labelling no move
+    enters a forbidden label, and the law restricted to the allowed
+    labellings is kept: the construction is the joint measure above, with
+    weight zero off the allowed set. A site on a forbidden label --- only
+    reachable from a forbidden start --- has no ghost bond, and a free cluster
+    whose members allow no common label keeps its own, as
+    :func:`swendsen_wang_heat_bath_sweep` keeps it. ``beta = 0`` is the uniform
+    law over each site's allowed labels: no bond forms, and ``0 * -inf`` is
+    never formed.
+
+    Draws: one uniform per edge, one per site, one label per site; on a field
+    with a forbidden label, one uniform per site in place of the label.
     """
     rows = log_weight_of(rows)
     n_nodes, n_states = graph.n_nodes, int(rows.shape[1])
     bonds = _like_bonds(state, graph, rng, beta)
     couplings = ghost_couplings(rows) if ghost is None else ghost
-    own = couplings[np.arange(n_nodes), state]
+    # One reduction decides the path; the mask is built only where it is read.
+    forbidden = bool(couplings.min() == -np.inf)
+    hard = np.isneginf(couplings) if forbidden else None
+    sites = np.arange(n_nodes)
+    own = couplings[sites, state]
+    if hard is not None:
+        # A site on a forbidden label bonds to no ghost: `-beta * -inf` was
+        # `inf`, or `nan` at `beta = 0`.
+        own = np.where(hard[sites, state], 0.0, own)
     ghosted = rng.random(n_nodes) < 1.0 - np.exp(-beta * own)
     roots = bond_roots(n_nodes, bonds, backend=backend)
     frozen = np.zeros(n_nodes, dtype=bool)
     frozen[roots[ghosted]] = True
-    # One label per site, read at each free cluster's root.
-    labels = rng.integers(0, n_states, size=n_nodes)
     free = ~frozen[roots]
+    if hard is None:
+        # One label per site, read at each free cluster's root.
+        labels = rng.integers(0, n_states, size=n_nodes)
+        state[free] = labels[roots[free]]
+        return
+    # The labels each cluster's members allow between them, at its root.
+    blocked = np.zeros(n_nodes * n_states, dtype=bool)
+    site, label = np.nonzero(hard)
+    blocked[roots[site] * n_states + label] = True
+    allowed = ~blocked.reshape(n_nodes, n_states)
+    count = allowed.sum(axis=1)
+    # One uniform per site, read at each free cluster's root as the index of
+    # a label among the allowed ones.
+    pick = np.minimum((rng.random(n_nodes) * count).astype(np.int64), count - 1)
+    labels = np.argmax(np.cumsum(allowed, axis=1) > pick[:, None], axis=1)
+    free &= count[roots] > 0
     state[free] = labels[roots[free]]
 
 
@@ -1251,6 +1300,15 @@ def label_directed_sweep(
 
     ``backend`` merges the bonds, as in :func:`ghost_spin_sweep`.
 
+    **A forbidden label is decided, not summed** (issue #1154), by the rule of
+    :func:`_recolour_drawn`: a proposal onto a label any member forbids is
+    rejected, else one moving any member off a forbidden label is accepted,
+    each on the uniform the cluster draws anyway. Summed, a site forbidding
+    both labels gave ``-inf - (-inf) = nan``, and a cluster ``inf + (-inf)``.
+    The law restricted to the allowed labellings is kept at every ``beta``,
+    ``beta = 0`` included, where it is uniform over them; an all-finite chain
+    is bitwise unchanged.
+
     Draws: one uniform per edge, one label per site and one uniform per site,
     each read at a cluster's root.
     """
@@ -1263,9 +1321,21 @@ def label_directed_sweep(
     at_target = state == target
     proposed = np.where(at_target, partners[roots], target)
     sites = np.arange(n_nodes)
-    gain = beta * (rows[sites, proposed] - rows[sites, state])
-    # Summed per cluster at its root's index; only roots are read below.
-    log_ratio = np.bincount(roots, weights=gain, minlength=n_nodes)
+    to, origin = rows[sites, proposed], rows[sites, state]
+    if min(to.min(), origin.min()) > -np.inf:
+        gain = beta * (to - origin)
+        # Summed per cluster at its root's index; only roots are read below.
+        log_ratio = np.bincount(roots, weights=gain, minlength=n_nodes)
+    else:
+        entering, leaving = np.isneginf(to), np.isneginf(origin)
+        # The finite terms are summed as before; a forbidden one sets the
+        # cluster's ratio, onto one before off one.
+        difference = np.subtract(
+            to, origin, out=np.zeros(n_nodes), where=~(entering | leaving)
+        )
+        log_ratio = np.bincount(roots, weights=beta * difference, minlength=n_nodes)
+        log_ratio[np.bincount(roots, weights=leaving, minlength=n_nodes) > 0] = np.inf
+        log_ratio[np.bincount(roots, weights=entering, minlength=n_nodes) > 0] = -np.inf
     hastings = _label_hastings(n_states)
     log_ratio += np.where(at_target, hastings, -hastings)
     uniforms = rng.random(n_nodes)
