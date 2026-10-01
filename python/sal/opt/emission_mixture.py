@@ -881,7 +881,16 @@ class EmissionMixtureObjective(Objective):
         return torch.cat(parts)
 
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
-        """The negative mixture log-likelihood at ``theta``."""
+        """The negative mixture log-likelihood at ``theta``.
+
+        Where no gradient is tracked --- a sampler's acceptance energy --- and
+        the kernel applies, it is the kernel's value, so a Hamiltonian chain
+        reads its energy and its force from one arithmetic (issue #1136).
+        """
+        if not (torch.is_grad_enabled() and theta.requires_grad):
+            compiled = self._compiled(theta.detach().numpy())
+            if compiled is not None:
+                return torch.tensor(compiled[0], dtype=torch.float64)
         with (
             reusing_distinct(self._distinct),
             gradients_on_distinct() if self._on_distinct else nullcontext(),
@@ -903,30 +912,56 @@ class EmissionMixtureObjective(Objective):
         integer counts, ``oxisal.count_mixture_value_and_gradient`` returns
         the log-likelihood and its gradient in the weights and the natural
         parameters in one pass, every ``lgamma`` and ``digamma`` difference
-        a prefix sum over integers; the ``K``-sized map from ``theta`` to
-        those is chained through torch. Any other family or a covariate
-        takes autograd through :meth:`__call__`, which this is pinned to.
+        a prefix sum over integers (:meth:`_compiled`). Any other family, a
+        covariate, or a point that overflows a parameter takes autograd
+        through :meth:`__call__`, which this is pinned to.
+        """
+        compiled = self._compiled(theta.detach().numpy())
+        if compiled is None:
+            return autograd_value_and_gradient(self, theta)
+        value, gradient = compiled
+        return torch.tensor(value, dtype=torch.float64), torch.from_numpy(gradient)
+
+    def energy(self, x: np.ndarray) -> float:
+        """``U(x)`` on an array: compiled where :meth:`value_and_gradient` is, ``__call__`` otherwise."""
+        compiled = self._compiled(np.asarray(x, dtype=np.float64))
+        if compiled is None:
+            with torch.no_grad():
+                return float(self(torch.as_tensor(x, dtype=torch.float64)))
+        return compiled[0]
+
+    def _compiled(self, theta: np.ndarray) -> tuple[float, np.ndarray] | None:
+        """``(U, dU/dtheta)`` through the kernel, or ``None`` where it does not apply.
+
+        The map from ``theta`` is two closed forms, written out in NumPy
+        rather than replayed by autograd, whose bookkeeping was 0.8 ms of a
+        2.4 ms call at the stress mixture: each block is ``exp`` of its
+        entries, so ``dU/dtheta = (dU/dp) p``; the weights are a softmax of
+        ``(0, f)``, so ``dU/df_j = g_{j+1} - w_{j+1} sum_k g_k`` with ``g =
+        dU/d log w``.
         """
         route = self._route
         if route is None:
-            return autograd_value_and_gradient(self, theta)
-        point = theta.detach().clone().requires_grad_(True)
-        log_weight = log_simplex(point[: self._k - 1])
-        blocks = self._blocks(point)
-        natural = {
-            slot: np.ascontiguousarray(blocks[name].detach().numpy())
-            for slot, name in route.names.items()
-        }
+            return None
+        k = self._k
+        logits = np.concatenate([[0.0], theta[: k - 1]])
+        top = float(logits.max())
+        log_weight = logits - (top + math.log(float(np.exp(logits - top).sum())))
+        natural: dict[str, np.ndarray] = {}
+        with np.errstate(over="ignore", under="ignore"):
+            for slot, name in route.names.items():
+                offset = k - 1 + self._names.index(name) * k
+                natural[slot] = np.exp(theta[offset : offset + k])
         if not all(
             bool(np.isfinite(values).all() and (values > 0.0).all())
             for values in natural.values()
         ):
             # A trajectory that has run a parameter to overflow or underflow
             # is the chain's to reject; autograd scores it as it always did.
-            return autograd_value_and_gradient(self, theta)
-        gradient = {slot: np.empty(self._k) for slot in ("log_weight", *route.names)}
+            return None
+        gradient = {slot: np.empty(k) for slot in ("log_weight", *route.names)}
         log_likelihood = oxisal.count_mixture_value_and_gradient(
-            np.ascontiguousarray(log_weight.detach().numpy()),
+            log_weight,
             gradient["log_weight"],
             totals=route.totals,
             dispersion=natural.get("dispersion"),
@@ -940,14 +975,14 @@ class EmissionMixtureObjective(Objective):
             grad_alpha=gradient.get("alpha"),
             grad_beta=gradient.get("beta"),
         )
-        outputs = [log_weight, *(blocks[name] for name in route.names.values())]
-        seeds = [
-            -torch.from_numpy(gradient["log_weight"]),
-            *(-torch.from_numpy(gradient[slot]) for slot in route.names),
-        ]
-        torch.autograd.backward(outputs, seeds)
-        assert point.grad is not None
-        return torch.tensor(-log_likelihood, dtype=torch.float64), point.grad
+        out = np.empty_like(theta)
+        weights = np.exp(log_weight)
+        held = gradient["log_weight"]
+        out[: k - 1] = -(held[1:] - weights[1:] * held.sum())
+        for slot, name in route.names.items():
+            offset = k - 1 + self._names.index(name) * k
+            out[offset : offset + k] = -gradient[slot] * natural[slot]
+        return -log_likelihood, out
 
 
 @dataclass(frozen=True)
