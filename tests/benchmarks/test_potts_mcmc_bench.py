@@ -83,3 +83,54 @@ def test_release_cluster_pass_benchmark(
     benchmark(one_pass)
 
     assert state.shape == (rung.n_nodes,)
+
+
+#: Tempering steps a benchmark call runs.
+STEPS = 10
+
+
+@pytest.mark.parametrize(
+    "move",
+    [
+        PottsMove.SINGLE_SITE,
+        PottsMove.SWENDSEN_WANG,
+        PottsMove.WOLFF,
+        PottsMove.SWENDSEN_WANG_HEAT_BATH,
+        PottsMove.WOLFF_HEAT_BATH,
+    ],
+    ids=str,
+)
+def test_release_tempering_steps_benchmark(
+    benchmark: BenchmarkFixture, move: PottsMove
+) -> None:
+    # `STEPS` `parallel_tempering` steps at `spatio_tiling/release` on the
+    # ladder and cluster backend `ground_state.run_tempering` runs (issue
+    # #1156), each six replica moves, the energies and five exchange
+    # proposals; ten steps so the per-call setup is not what is timed.
+    from sal.sample.potts_mcmc import parallel_tempering
+    from sal.search.ground_state import (
+        _COMPILED_CLUSTERS,
+        ANNEAL_END,
+        ANNEAL_START,
+        N_REPLICAS,
+    )
+    from sal.search.potts_starts import tiling_rung
+    from sal.sim.fixtures import fixture
+
+    rung = tiling_rung(fixture("spatio_tiling", "release").params, "release")
+    ladder = tuple(np.geomspace(ANNEAL_START, ANNEAL_END, N_REPLICAS).tolist())
+    cluster_backend = Backend.RUST if move in _COMPILED_CLUSTERS else Backend.PYTHON
+
+    run = benchmark(
+        lambda: parallel_tempering(
+            rung.graph,
+            rung.field,
+            ladder,
+            np.random.default_rng(1156),
+            STEPS,
+            move=move,
+            cluster_backend=cluster_backend,
+        )
+    )
+
+    assert run.states.shape == (STEPS, N_REPLICAS, rung.n_nodes)

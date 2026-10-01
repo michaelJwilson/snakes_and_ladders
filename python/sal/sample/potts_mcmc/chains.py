@@ -67,6 +67,11 @@ _BALANCED_MOVES = frozenset(
     {PottsMove.LOCALLY_BALANCED, PottsMove.GIBBS_WITH_GRADIENTS}
 )
 
+#: The move sets that grow one cluster a step, charged by its size.
+_SINGLE_CLUSTER_MOVES = frozenset(
+    {PottsMove.WOLFF, PottsMove.NIEDERMAYER, PottsMove.WOLFF_HEAT_BATH}
+)
+
 
 @dataclass(frozen=True)
 class PottsChain:
@@ -247,6 +252,41 @@ def sample_potts(
     return PottsChain(states=recorded, mean_cluster_size=mean_cluster)
 
 
+def step_visits(move: PottsMove, graph: PottsGraph, cluster_sites: int = 0) -> int:
+    """Site visits one step of ``move`` costs, the unit :func:`anneal_potts` charges.
+
+    A heat-bath sweep reads every site's label once as a neighbour of each
+    incident edge and writes it once; the bond pass of Swendsen-Wang reads
+    the same two labels per edge. Counting both in one unit is what makes
+    the budget comparable across move sets (issue #551). The gradient-informed
+    sets pay ``n_nodes`` sweeps' reads a step, the ghost-spin pass one ghost
+    bond per site beside the edges, and a single-cluster step reads each of
+    its ``cluster_sites`` members' neighbours and writes the members.
+
+    Parameters
+    ----------
+    move : PottsMove
+        The move set.
+    graph : PottsGraph
+        The instance.
+    cluster_sites : int
+        Sites the step's clusters held, read only for the single-cluster
+        moves (Wolff, Niedermayer, heat-bath Wolff).
+
+    Returns
+    -------
+    int
+    """
+    per_sweep = graph.n_nodes + 2 * len(graph.edges)
+    if move in _BALANCED_MOVES:
+        return graph.n_nodes * per_sweep
+    if move is PottsMove.GHOST_SPIN:
+        return per_sweep + graph.n_nodes
+    if move in _SINGLE_CLUSTER_MOVES:
+        return cluster_sites * (1 + 2 * len(graph.edges) // graph.n_nodes)
+    return per_sweep
+
+
 @dataclass(frozen=True, kw_only=True)
 class AnnealedPotts(Annealed[np.ndarray]):
     """What one annealing run found, and what it cost (issue #1090).
@@ -376,11 +416,8 @@ def anneal_potts(
         if move in _BALANCED_MOVES
         else sweep_at(rows, offsets, neighbours, couplings, backend)
     )
-    # A heat-bath sweep reads every site's label once as a neighbour of each
-    # incident edge and writes it once; the bond pass of Swendsen-Wang reads
-    # the same two labels per edge. Counting both in one unit is what makes
-    # the budget comparable across move sets (issue #551).
-    per_sweep = graph.n_nodes + 2 * len(graph.edges)
+    # Every step but a single cluster's costs the same visits (issue #551).
+    per_step = step_visits(move, graph)
     # The ghost couplings are fixed by the field, so stored once (#1041).
     ghost = ghost_couplings(rows) if move is PottsMove.GHOST_SPIN else None
     visits, trace = 0, []
@@ -393,12 +430,9 @@ def anneal_potts(
     tracked: TrackedOptimization = current_tracked()
     for step in range(schedule.n_steps):
         temperature = schedule(step)
-        if move is PottsMove.SINGLE_SITE:
+        if move is PottsMove.SINGLE_SITE or move in _BALANCED_MOVES:
             sweep(state, rng, 1.0 / temperature)
-            visits += per_sweep
-        elif move in _BALANCED_MOVES:
-            sweep(state, rng, 1.0 / temperature)
-            visits += graph.n_nodes * per_sweep
+            visits += per_step
         else:
             counter = ClusterCounter()
             kept = True
@@ -416,7 +450,7 @@ def anneal_potts(
                     beta,
                     backend=cluster_backend,
                 )
-                visits += per_sweep
+                visits += per_step
                 kept = not compiled
             elif move is PottsMove.GHOST_SPIN:
                 # No counter: the pass builds its clusters as roots, and a
@@ -430,7 +464,7 @@ def anneal_potts(
                     backend=cluster_backend,
                     ghost=ghost,
                 )
-                visits += per_sweep + graph.n_nodes
+                visits += per_step
                 kept = False
             elif move is PottsMove.LABEL_DIRECTED:
                 # The target label cycles with the step, so every label is
@@ -444,7 +478,7 @@ def anneal_potts(
                     beta,
                     backend=cluster_backend,
                 )
-                visits += per_sweep
+                visits += per_step
                 kept = False
             elif move is PottsMove.SWENDSEN_WANG_HEAT_BATH:
                 # No counter, as the ghost-spin pass keeps none: the clusters
@@ -452,7 +486,7 @@ def anneal_potts(
                 swendsen_wang_heat_bath_sweep(
                     state, graph, rows, rng, beta, backend=cluster_backend
                 )
-                visits += per_sweep
+                visits += per_step
                 kept = False
             else:
                 if move is PottsMove.NIEDERMAYER:
@@ -498,9 +532,7 @@ def anneal_potts(
                 # A single-cluster step reads each member's neighbours and
                 # writes the members; a heat-bath sweep is charged the same
                 # way, so one budget covers both.
-                visits += sum(counter.sizes) * (
-                    1 + 2 * len(graph.edges) // graph.n_nodes
-                )
+                visits += step_visits(move, graph, sum(counter.sizes))
             if kept:
                 trace.append(counter)
         energy = float(energies(graph, rows, state[None])[0])
@@ -528,7 +560,8 @@ class TemperedChains(Tempered[np.ndarray]):
 
     A :class:`~sal.sample.schedule.Tempered` over labellings: ``best`` is the
     lowest-energy configuration seen at any temperature, and ``spent`` the
-    replica sweeps, burn-in included.
+    site visits of every replica's steps, burn-in included, each move charged
+    as :func:`anneal_potts` charges it (issue #1156).
 
     Parameters
     ----------
@@ -584,15 +617,25 @@ def parallel_tempering(
     burn_in: int = 0,
     thin: int = 1,
     *,
+    move: PottsMove = PottsMove.SINGLE_SITE,
     backend: Backend = Backend.RUST,
+    cluster_backend: Backend = Backend.PYTHON,
+    start: np.ndarray | None = None,
 ) -> TemperedChains:
     """Replicas at fixed temperatures, exchanging configurations by Metropolis.
 
-    Each replica runs one heat-bath sweep per step at its own temperature,
+    Each replica runs one sweep of ``move`` per step at its own temperature,
     then every adjacent pair proposes to exchange configurations and accepts
     on :func:`swap_log_ratio`. The hot replicas cross barriers the cold one
     cannot, and an exchange carries what they find down the ladder (Swendsen &
     Wang, 1986; Geyer, 1991; Earl & Deem, 2005).
+
+    **The exchange is exact for every move set** (issue #1156). The swap ratio
+    reads energies alone, so the product law ``prod_r exp(-beta_r E)`` is
+    invariant whenever each replica's move leaves its own rung's law
+    invariant, which every :class:`~sal.sample.potts_mcmc.moves.PottsMove`
+    does. This is not :func:`cluster_tempering`, which adds Houdayer moves
+    between replicas.
 
     **The replicas must not share a stream and must be reproducible from one
     seed.** The passed generator spawns a child per replica; the parent
@@ -603,8 +646,8 @@ def parallel_tempering(
     Parameters
     ----------
     graph : PottsGraph
-        The instance. Couplings of either sign; single-site moves only, for
-        the reason :func:`anneal_potts` gives.
+        The instance. Couplings of either sign, except under a cluster move,
+        which refuses a negative one as :func:`anneal_potts` does.
     field : SiteField | np.ndarray
         External field, shape ``(n_states,)``.
     temperatures : TempSchedule | Sequence[float]
@@ -616,10 +659,23 @@ def parallel_tempering(
         only the exchange uniforms, so one seeded generator reproduces the run.
     n_sweeps, burn_in, thin : int
         As :func:`sample_potts`, applied per replica.
+    move : PottsMove
+        The move set every replica runs, built by :func:`sweep_for` once per
+        replica so no replica shares another's mutable state. Single-site,
+        the default, is the chain before the parameter existed, bitwise.
     backend : Backend
         As :func:`anneal_potts`: the Rust sweep by default, the oracle that
         pins it on request, each replica on its own child generator either
         way.
+    cluster_backend : Backend
+        Runs the cluster passes, as :func:`anneal_potts` states.
+    start : np.ndarray | None
+        One labelling per rung, shape ``(n_replicas, n_nodes)`` and in the
+        ladder's order, each row checked by
+        :func:`~sal.sim.potts.check_labelling`; ``None`` draws each from its
+        replica's child generator, as before the parameter existed. A given
+        start draws nothing, as :func:`anneal_potts`' does, so one step from a
+        fixed pair is a draw from the product kernel's row (issue #1156).
 
     Returns
     -------
@@ -630,9 +686,11 @@ def parallel_tempering(
     ValueError
         If fewer than two temperatures are given --- a ladder of one has
         nothing to exchange and is :func:`sample_potts` --- or any is not
-        positive.
+        positive, or ``move`` is a cluster move and a coupling is negative,
+        or ``start`` is not one labelling per rung.
     """
     field = log_weight_of(field)
+    refuse_negative_coupling(move, graph)
     temperatures = check_ladder(ladder(temperatures), needed_by="parallel tempering")
 
     rows = site_field(np.asarray(field, dtype=float), graph.n_nodes)
@@ -642,12 +700,17 @@ def parallel_tempering(
     n_states = int(rows.shape[1])
     # One contiguous `int64` row per replica: the kernel borrows a row of
     # this block rather than copying it.
-    states = np.ascontiguousarray(
-        np.stack(
-            [child.integers(0, n_states, size=graph.n_nodes) for child in children]
-        ),
-        dtype=np.int64,
-    )
+    if start is None:
+        drawn = [child.integers(0, n_states, size=graph.n_nodes) for child in children]
+    else:
+        if np.shape(start)[:1] != (n_replicas,):
+            msg = (
+                f"start holds one labelling per rung, {n_replicas}, "
+                f"got shape {np.shape(start)}"
+            )
+            raise ValueError(msg)
+        drawn = [check_labelling(row, graph.n_nodes, n_states) for row in start]
+    states = np.ascontiguousarray(np.stack(drawn), dtype=np.int64)
     offsets, neighbours, couplings = graph.compressed_adjacency()
 
     recorded = np.empty((n_sweeps, n_replicas, graph.n_nodes), dtype=np.int64)
@@ -662,7 +725,17 @@ def parallel_tempering(
     best_index = int(np.argmin(current))
     best, best_energy = states[best_index].copy(), float(current[best_index])
 
-    sweep = sweep_at(rows, offsets, neighbours, couplings, backend)
+    # One sweep per replica: the label-directed pass keeps a call counter, and
+    # a replica's counter is its own. Building a closure draws nothing.
+    sweeps = [
+        sweep_for(
+            move, graph, rows, offsets, neighbours, couplings, backend, cluster_backend
+        )
+        for _ in range(n_replicas)
+    ]
+    single_cluster = move in _SINGLE_CLUSTER_MOVES
+    per_step = step_visits(move, graph)
+    visits = 0
     # `swap_acceptance` is the mean over adjacent pairs of the fraction
     # accepted so far -- the mean of the vector `TemperedChains` returns, and
     # so equal to it at the last sweep. Round trips and rung occupation are
@@ -671,7 +744,10 @@ def parallel_tempering(
     tracked: TrackedOptimization = current_tracked()
     for step in range(-burn_in * thin, n_sweeps * thin):
         for replica in range(n_replicas):
-            sweep(states[replica], children[replica], betas[replica])
+            size = sweeps[replica](states[replica], children[replica], betas[replica])
+            # Charged as `anneal_potts` charges the move: a single cluster by
+            # its size, every other step one `step_visits`.
+            visits += step_visits(move, graph, size) if single_cluster else per_step
         current = energies(graph, rows, states)
         for pair in range(n_replicas - 1):
             log_ratio = swap_log_ratio(
@@ -704,8 +780,8 @@ def parallel_tempering(
         energy=best_energy,
         n_sweeps=n_sweeps,
         walkers=trace,
-        spent=steps * len(temperatures),
-        unit=Cost.SWEEPS,
+        spent=visits,
+        unit=Cost.SITE_VISITS,
         termination=Termination.after(steps, converged=False),
     )
 
