@@ -54,6 +54,7 @@ from sal.sim.potts import (
     check_labelling,
     energy,
     log_weight_of,
+    penalized,
     site_field,
     states_of,
 )
@@ -286,10 +287,44 @@ def _lowest_by_cut(
     which is ``build``'s, and in nothing else. ``build`` returning ``None``
     is a move with no site to make it on, which is the labelling unchanged.
     ``held`` is the input labelling's energy where the caller has it.
+
+    A forbidden label (``-inf``) is cut on :func:`~sal.sim.potts.penalized`'s
+    finite stand-in, and the labelling returned is scored on ``field`` itself
+    (issue #1139): ``inf - inf`` left every move's change ``nan``, so no move
+    out of a forbidden label was accepted. An all-finite field is cut and
+    scored unchanged. A ``held`` energy comes from a cycle, whose field is
+    already the stand-in, so the field is read as given.
     """
-    values = site_field(np.asarray(field, dtype=float), graph.n_nodes)
+    given = site_field(np.asarray(field, dtype=float), graph.n_nodes)
+    # A cycle's field arrives penalized with its energy; scanning it again per
+    # move cost 10% of a swap at 142^2 and ten labels.
+    values = given if held is not None else penalized(graph, given)
     built = build(values)
     current = energy(graph, values, labelling) if held is None else held
+    if values is not given:
+        return _scored_on(
+            graph, given, _lowest(built, graph, values, labelling, current)
+        )
+    return _lowest(built, graph, values, labelling, current)
+
+
+def _scored_on(graph: PottsGraph, field: np.ndarray, moved: Labelling) -> Labelling:
+    """``moved`` with its energy read on ``field``: the given problem, not its stand-in."""
+    return Labelling(
+        moved.labelling,
+        energy(graph, field, moved.labelling),
+        termination=moved.termination,
+    )
+
+
+def _lowest(
+    built: _CutMove | None,
+    graph: PottsGraph,
+    values: np.ndarray,
+    labelling: np.ndarray,
+    current: float,
+) -> Labelling:
+    """``built``'s proposal where it lowers ``current``, else ``labelling``, scored on ``values``."""
     if built is None:
         return Labelling(labelling, current, termination=_ONE_MOVE)
 
@@ -380,9 +415,10 @@ def _cycle_to_a_local_minimum(
     """
     check_non_negative_couplings(graph, move.reason)
 
-    values = site_field(
-        np.asarray(field, dtype=float), graph.n_nodes, n_states=n_states
-    )
+    given = site_field(np.asarray(field, dtype=float), graph.n_nodes, n_states=n_states)
+    # A forbidden label is a finite penalty inside the cycle, so a move out of
+    # it always lowers the energy; the result is scored on `given` (#1139).
+    values = penalized(graph, given)
     labelling = (
         values.argmax(axis=1).astype(np.int64)
         if start is None
@@ -409,7 +445,7 @@ def _cycle_to_a_local_minimum(
             return ExpansionResult(
                 labelling=labelling,
                 # In full: the moves carried it by differences (issue #997).
-                energy=energy(graph, values, labelling),
+                energy=energy(graph, given, labelling),
                 cycles=cycle,
                 moves=moves,
                 termination=Termination.after(cycle, converged=True),
@@ -419,7 +455,7 @@ def _cycle_to_a_local_minimum(
     # it ran to `max_iterations`, which is all a caller needs to decide.
     return ExpansionResult(
         labelling=labelling,
-        energy=energy(graph, values, labelling),
+        energy=energy(graph, given, labelling),
         cycles=max_iterations,
         moves=moves,
         termination=Termination.after(max_iterations, converged=False),
@@ -701,13 +737,18 @@ def alpha_expansion(
         Every coupling must be non-negative --- the metric condition the
         bound rests on.
     field : SiteField | np.ndarray
-        ``(n_states,)`` or ``(n_nodes, n_states)``.
+        ``(n_states,)`` or ``(n_nodes, n_states)``. A ``-inf`` entry forbids
+        that label (:func:`~sal.sim.potts.forbid`): the cuts read
+        :func:`~sal.sim.potts.penalized`'s finite stand-in, under which a move
+        out of a forbidden label always lowers the energy, so a converged
+        result is allowed from any start; the energy is scored on ``field``
+        (issue #1139).
     n_states : int | None
         Label count, read from the field's state axis; given, it is checked
         against it (issue #1091).
     start : np.ndarray | None
         Initial labelling; the per-node data optimum when omitted, which is
-        the labelling ignoring every coupling.
+        the labelling ignoring every coupling. It may hold forbidden labels.
     max_iterations : int
         Cycles to run at most. The default, :data:`DEFAULT_MAX_CYCLES`, is a
         defect guard: monotonicity makes a correct run settle inside it. A
@@ -719,8 +760,9 @@ def alpha_expansion(
     Raises
     ------
     ValueError
-        If a coupling is negative, or ``start`` is not one integer state in
-        range per node (:func:`~sal.sim.potts.check_labelling`).
+        If a coupling is negative, ``start`` is not one integer state in
+        range per node (:func:`~sal.sim.potts.check_labelling`), or a site
+        allows no label.
 
     Warns
     -----
@@ -973,11 +1015,15 @@ def alpha_beta_swap(
     the expansion's ``n_states``, so "cheaper per move" is not "cheaper per
     cycle" and the comparison is run at equal budget rather than equal cycles.
 
+    A forbidden label is cut as :func:`alpha_expansion` cuts it: a site
+    holding one is in the move of every pair naming its label, and leaves it
+    for an allowed one (issue #1139).
+
     Raises
     ------
     ValueError
-        If a coupling is negative, or ``start`` is not one integer state in
-        range per node.
+        If a coupling is negative, ``start`` is not one integer state in
+        range per node, or a site allows no label.
 
     Warns
     -----
