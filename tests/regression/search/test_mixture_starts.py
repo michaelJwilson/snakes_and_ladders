@@ -224,28 +224,21 @@ def test_a_band_holds_each_trial_between_its_samples_and_averages_across_trials(
 
 
 @pytest.mark.analytic
-def test_a_polish_stops_where_em_empties_a_component() -> None:
-    # #898: a component seeded at (1e5, 5e4) keeps weight 6.5e-276 after eight
-    # iterations and is empty at the ninth E step; the seconds polish stops
-    # with the eighth fit, EM never lowering; a fixed-pass polish raises.
+def test_a_polish_runs_past_a_component_em_empties() -> None:
+    # #898 stopped here: a component seeded at (1e5, 5e4) keeps weight
+    # 6.5e-276 after eight iterations and is empty at the ninth E step, where
+    # its M step refused. Since #1136 the step holds that component and EM
+    # goes on to its tolerance, never lowering, at either stop.
     instance = _instance()
     rows = np.array([[30.0, 5.0], [200.0, 160.0], [1e5, 5e4]])
     polished = polish(instance, instance.at(rows), seconds=CEILING.size)
-    assert polished.emptied
-    assert not polished.converged
-    assert polished.iterations == 8
+    assert not polished.emptied
+    assert polished.converged
+    assert polished.iterations > 8
     assert float(polished.weights.min()) < 1e-200
     assert bool((np.diff(polished.log_likelihoods) >= 0.0).all())
-    with pytest.raises(ValueError, match="must be positive"):
-        polish(instance, instance.at(rows), passes=polished.iterations + 1)
-    # A component far from the pairs that EM does not empty is no stop.
-    recovered = polish(
-        instance,
-        instance.at(np.array([*rows[:2].tolist(), [2000.0, 1000.0]])),
-        seconds=60.0,
-    )
-    assert not recovered.emptied
-    assert recovered.converged
+    fixed = polish(instance, instance.at(rows), passes=polished.iterations)
+    assert np.array_equal(fixed.log_likelihoods, polished.log_likelihoods)
 
 
 def _equal(first: EmissionFamily, second: EmissionFamily) -> bool:

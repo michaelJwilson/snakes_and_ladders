@@ -95,6 +95,12 @@ class EmissionMixtureFit:
         Whether the loop met its relative tolerance or ran out of iterations,
         in the form every result states it in (issue #860); its
         ``iterations`` are the EM iterations run (issue #1090).
+    frozen : tuple[int, ...]
+        Components an M step held at their parameters because the E step
+        left them no data (issue #1136), at any iteration. A collapsed
+        component no longer ends the fit; the loop's own stop is still
+        ``termination``, and this says which components it stopped with
+        unestimated.
     """
 
     weights: torch.Tensor
@@ -103,6 +109,7 @@ class EmissionMixtureFit:
     log_likelihood: float
     at_boundary: bool
     termination: Termination = dataclass_field(kw_only=True)
+    frozen: tuple[int, ...] = dataclass_field(default=(), kw_only=True)
 
 
 def expectation_maximization(
@@ -185,6 +192,7 @@ def expectation_maximization(
     )
     boundary = False
     attempt = 0
+    frozen: set[int] = set()
 
     def step(
         state: tuple[torch.Tensor, EmissionFamily, torch.Tensor],
@@ -209,6 +217,7 @@ def expectation_maximization(
             )
             raise ValueError(msg)
         boundary = boundary or reestimated.at_boundary
+        frozen.update(reestimated.frozen)
         advanced = (posterior.mean(dim=0), reestimated.emissions, posterior)
         return advanced, log_likelihood
 
@@ -232,6 +241,7 @@ def expectation_maximization(
         log_likelihood=log_likelihood,
         at_boundary=boundary,
         termination=termination,
+        frozen=tuple(sorted(frozen)),
     )
 
 
@@ -378,6 +388,7 @@ def _cell_expectation_maximization(
     n_samples = float(multiplicity.sum())
     boundary = False
     attempt = 0
+    frozen: set[int] = set()
 
     def step(
         state: tuple[torch.Tensor, EmissionFamily, torch.Tensor],
@@ -399,6 +410,7 @@ def _cell_expectation_maximization(
             )
             raise ValueError(msg)
         boundary = boundary or reestimated.at_boundary
+        frozen.update(reestimated.frozen)
         return (weighted.sum(dim=0) / n_samples, reestimated.emissions, posterior), (
             log_likelihood
         )
@@ -425,6 +437,7 @@ def _cell_expectation_maximization(
         log_likelihood=log_likelihood,
         at_boundary=boundary,
         termination=termination,
+        frozen=tuple(sorted(frozen)),
     )
 
 
@@ -669,6 +682,74 @@ def uniform_start(
     return at(rows[chosen.astype(np.int64)])
 
 
+def build_like(
+    family: EmissionFamily,
+) -> Callable[[Mapping[str, torch.Tensor]], EmissionFamily]:
+    """The ``build`` :class:`EmissionMixtureObjective` takes, for a count family like ``family``.
+
+    Every constant ``family`` carries --- a trial count, the joint form, a tie
+    --- is kept, and the named parameters are its
+    :meth:`~sal.emissions.EmissionFamily.named_parameters`. A two-channel
+    family of a negative-binomial ``total`` and a beta-binomial
+    ``successes``, whose names are prefixed by channel, is rebuilt as its own
+    type from the two (issue #1136).
+
+    Returns
+    -------
+    Callable[[Mapping[str, torch.Tensor]], EmissionFamily]
+
+    Raises
+    ------
+    TypeError
+        If ``family`` is not one of those.
+    """
+    if isinstance(family, NegativeBinomialEmission):
+        tied = family.tied
+        return lambda named: NegativeBinomialEmission(
+            named["dispersion"], named["mean"], tied=tied
+        )
+    if isinstance(family, BetaBinomialEmission):
+        trials, tied = family.trials, family.tied
+        return lambda named: BetaBinomialEmission(
+            trials, named["alpha"], named["beta"], tied=tied
+        )
+    if isinstance(family, CountPairEmission):
+        pair_trials, joint = family.trials, family.joint
+        return lambda named: CountPairEmission(
+            named["dispersion"],
+            named["mean"],
+            named["alpha"],
+            named["beta"],
+            pair_trials,
+            joint=joint,
+        )
+    total = getattr(family, "total", None)
+    successes = getattr(family, "successes", None)
+    if isinstance(total, NegativeBinomialEmission) and isinstance(
+        successes, BetaBinomialEmission
+    ):
+        rebuild = type(family)
+        build_total, build_successes = build_like(total), build_like(successes)
+
+        def pair(named: Mapping[str, torch.Tensor]) -> EmissionFamily:
+            def channel(prefix: str) -> dict[str, torch.Tensor]:
+                return {
+                    name.removeprefix(prefix): value
+                    for name, value in named.items()
+                    if name.startswith(prefix)
+                }
+
+            return rebuild(  # type: ignore[call-arg]
+                build_total(channel("total.")), build_successes(channel("successes."))
+            )
+
+        return pair
+    msg = (
+        f"no build for a {type(family).__name__}; pass one to EmissionMixtureObjective"
+    )
+    raise TypeError(msg)
+
+
 class EmissionMixtureObjective(Objective):
     """Negative log-likelihood of a mixture of any family whose parameters are positive (issue #964).
 
@@ -693,6 +774,10 @@ class EmissionMixtureObjective(Objective):
     build : Callable[[Mapping[str, torch.Tensor]], EmissionFamily]
         The family at named parameters of shape ``(K,)`` each; constants the
         family carries (a trial count, the joint form) are the closure's.
+        :func:`build_like` makes one for each count family.
+    covariate : np.ndarray | torch.Tensor | None
+        Per-observation covariate, scored as the fits score it (issue #1136);
+        ``None`` scores without one, as before.
 
     Raises
     ------
@@ -705,6 +790,8 @@ class EmissionMixtureObjective(Objective):
         observations: np.ndarray,
         start: EmissionFamily,
         build: Callable[[Mapping[str, torch.Tensor]], EmissionFamily],
+        *,
+        covariate: np.ndarray | torch.Tensor | None = None,
     ) -> None:
         if start.n_states < 2:
             msg = f"a mixture has at least two components, got {start.n_states}"
@@ -718,6 +805,11 @@ class EmissionMixtureObjective(Objective):
             raise ValueError(msg)
         self._observations = torch.as_tensor(
             observations, dtype=start.observation_dtype
+        )
+        self._covariate = (
+            None
+            if covariate is None
+            else torch.as_tensor(covariate, dtype=torch.float64)
         )
         self._start = named
         self._names = tuple(named)
@@ -775,6 +867,7 @@ class EmissionMixtureObjective(Objective):
             self._observations,
             log_simplex(theta[: self._k - 1]),
             self.components(theta),
+            covariate=self._covariate,
         )
 
 

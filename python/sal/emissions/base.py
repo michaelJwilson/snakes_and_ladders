@@ -60,6 +60,12 @@ class Reestimate(Generic[FamilyT_co]):
         The weighted score at the returned parameters, divided by the total
         weight, so it is comparable across data sizes. ``0.0`` for a
         closed-form M step, where the score is zero by construction.
+    frozen : tuple[int, ...]
+        States the step left at their parameters because the posterior gave
+        them no data to estimate from (issue #1136): an emptied component,
+        or one whose estimate is undefined on what it holds. **Not** an
+        error: the fit goes on with the other states, and a caller reads
+        which were held.
     """
 
     emissions: FamilyT_co
@@ -67,6 +73,7 @@ class Reestimate(Generic[FamilyT_co]):
     at_boundary: bool = False
     iterations: int = 0
     residual: float = 0.0
+    frozen: tuple[int, ...] = ()
 
 
 class ParameterDomainError(ValueError):

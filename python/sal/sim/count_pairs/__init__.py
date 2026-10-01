@@ -245,6 +245,7 @@ class IndependentCountPair(EmissionFamily):
             at_boundary=first.at_boundary or second.at_boundary,
             iterations=max(first.iterations, second.iterations),
             residual=max(first.residual, second.residual),
+            frozen=tuple(sorted({*first.frozen, *second.frozen})),
         )
 
     def alignment_key(self) -> torch.Tensor:

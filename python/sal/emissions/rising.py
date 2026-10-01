@@ -79,10 +79,14 @@ def _h(t: torch.Tensor) -> torch.Tensor:
 
 
 def log1p_over(u: torch.Tensor) -> torch.Tensor:
-    """``log1p(u) / u``, with its limit ``1`` at ``u = 0``."""
-    zero = u == 0.0
-    safe = torch.where(zero, torch.ones_like(u), u)
-    return torch.where(zero, torch.ones_like(u), torch.log1p(safe) / safe)
+    """``log1p(u) / u``, with its limit ``1`` at ``u = 0``.
+
+    Written ``1 + h(u)`` so that below ``|u| = 1e-3`` it, and its derivative,
+    are the Taylor series: the direct quotient's derivative cancels to a
+    relative ``eps / u``, 7e-9 at ``r = 1e8`` in the negative binomial's
+    gradient.
+    """
+    return 1.0 + _h(u)
 
 
 def _inverse_powers(x: torch.Tensor) -> list[torch.Tensor]:

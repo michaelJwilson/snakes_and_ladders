@@ -10,15 +10,14 @@ separates two starts is where they place the components and nothing after.
 **Four kinds of start.** A prior draw reads no pair. Rules over the pairs
 place a component on each of ``C`` chosen observations: the uniform draw,
 ``Emission_Mixture++``, k-means++ on the raw pair, and a short EM burn-in on a
-subsample from the uniform draw. Starts that take an ``Objective`` run on a
-surrogate, the Gaussian mixture over both channels, because the count-pair
-mixture has no ``theta`` and is not an ``Objective``: the four of
-:mod:`sal.opt.initialize` and the three of
-:mod:`sal.sample.initialize`. The Gaussian-mixture EM start runs
-on the first channel alone, since
-:func:`sal.opt.mixture.expectation_maximization` fits one
-channel. A surrogate start yields locations, and :func:`at_locations` realizes
-them at the observations nearest them.
+subsample from the uniform draw. The three of :mod:`sal.sample.initialize`
+--- a Hamiltonian chain, annealing and tempering --- sample the mixture's own
+likelihood, :func:`emission_objective`, and hand over the components at the
+point they reach (issue #1136). The four of :mod:`sal.opt.initialize` run on
+a surrogate, the Gaussian mixture over both channels, which yields
+locations that :func:`at_locations` realizes at the observations nearest
+them. The Gaussian-mixture EM start runs on the first channel alone, since
+:func:`sal.opt.mixture.expectation_maximization` fits one channel.
 
 **A start that iterates records its iterations.** The Gaussian EM records its
 surrogate log-likelihood per iteration and keeps the components it would hand
@@ -58,7 +57,9 @@ from sal.opt.budget import Budget, Outcome
 from sal.opt.em import EmConfig
 from sal.opt.emission_mixture import (
     ComponentsAt,
+    EmissionMixtureObjective,
     SeedMethod,
+    build_like,
     expectation_maximization,
     seed,
 )
@@ -206,6 +207,28 @@ def surrogate(instance: MixtureInstance) -> GaussianMixtureObjective:
     """
     return GaussianMixtureObjective(
         np.asarray(instance.rows, dtype=np.float64), instance.n_components
+    )
+
+
+def emission_objective(instance: MixtureInstance) -> EmissionMixtureObjective:
+    """The mixture's own likelihood, in its family's parameters: the ``Objective`` the sampling starts read (issue #1136).
+
+    The Hamiltonian, annealing and tempering starts sample this, so a start
+    is drawn from the model it initializes rather than from the Gaussian
+    :func:`surrogate` and snapped to an observed row. It starts at the
+    quantile components, which read no generator, and conditions on the
+    instance's covariate as every fit does.
+
+    Returns
+    -------
+    EmissionMixtureObjective
+    """
+    start = _quantile_components(instance)
+    return EmissionMixtureObjective(
+        np.asarray(instance.observations, dtype=np.float64),
+        start,
+        build_like(start),
+        covariate=instance.covariate,
     )
 
 
@@ -493,21 +516,23 @@ def quantile_seeding(
     -------
     Seeding
     """
+    return Seeding(_quantile_components(instance), 0.0)
+
+
+def _quantile_components(instance: MixtureInstance) -> EmissionFamily:
+    """The components at each channel's evenly spaced quantiles, paired in order."""
     values = torch.as_tensor(
         np.asarray(instance.rows, dtype=np.float64), dtype=torch.float64
     )
-    return Seeding(
-        at_locations(
-            instance, quantile_locations(values, instance.n_components, dim=0)
-        ),
-        0.0,
+    return at_locations(
+        instance, quantile_locations(values, instance.n_components, dim=0)
     )
 
 
 def chain_seeding(
     instance: MixtureInstance, rng: np.random.Generator
 ) -> Seeding[EmissionFamily]:
-    """``FromChain``: a short Hamiltonian chain on the surrogate, warmed up; its last draw seeds.
+    """``FromChain``: a short Hamiltonian chain on the mixture's likelihood, warmed up; its last draw seeds.
 
     The warm-up is ``FromChain``'s default,
     :data:`~sal.sample.initialize.CHAIN_ADAPTATION` (issue
@@ -518,11 +543,10 @@ def chain_seeding(
     Seeding
         Its path is every kept draw, at the step the chain recorded it.
     """
-    objective = surrogate(instance)
+    objective = emission_objective(instance)
     chain = chain_initializer(rng).chain(objective)
     path = tuple(
-        (draw, at_locations(instance, objective.components(theta).mean))
-        for draw, theta in enumerate(chain.draws)
+        (draw, objective.components(theta)) for draw, theta in enumerate(chain.draws)
     )
     return Seeding(
         path[-1][1],
@@ -546,10 +570,10 @@ def annealed_seeding(
     -------
     Seeding
     """
-    objective = surrogate(instance)
+    objective = emission_objective(instance)
     run = annealing_initializer(rng).run(objective)
     return Seeding(
-        at_locations(instance, objective.components(run.best).mean),
+        objective.components(run.best),
         PASSES_PER_GRADIENT * run.spent,
         f"acceptance {run.acceptance_rate:.2f}",
     )
@@ -564,10 +588,10 @@ def tempered_seeding(
     -------
     Seeding
     """
-    objective = surrogate(instance)
+    objective = emission_objective(instance)
     run = tempering_initializer(rng).run(objective)
     return Seeding(
-        at_locations(instance, objective.components(run.best).mean),
+        objective.components(run.best),
         PASSES_PER_GRADIENT * run.spent,
         f"cold acceptance {float(run.acceptance_rate[0]):.2f}, lowest swap "
         f"{float(run.swap_acceptance.min()):.2f}",
@@ -661,11 +685,18 @@ class _Seeding:
 
 @dataclass(frozen=True)
 class _Seeded:
-    """What one seeding produced: the start, its score at equal weights, and its fit."""
+    """What one seeding produced: the start, its score at equal weights, and its fit.
 
-    seeded: Seeding[EmissionFamily]
+    ``failure`` is the refusal a seeding or its polish raised, and then
+    ``seeded`` is ``None`` and ``score`` is ``-inf``: one seeding that cannot
+    be completed is skipped by its :class:`BestOf`, not allowed to end the
+    other ``n - 1`` (issue #1136).
+    """
+
+    seeded: Seeding[EmissionFamily] | None
     score: float
     fit: MixturePolished | None
+    failure: str | None = None
 
 
 def _run_seeding(task: _Seeding, generator: np.random.Generator) -> _Seeded:
@@ -683,22 +714,25 @@ def _run_seeding(task: _Seeding, generator: np.random.Generator) -> _Seeded:
         -math.log(task.instance.n_components),
         dtype=torch.float64,
     )
-    with track(MemoryRun()):
-        seeded = lookup(task.name)(task.instance, generator)
-    score = float(mixture_log_likelihood(values, uniform, seeded.components))
-    fit: MixturePolished | None = None
-    if task.passes is not None:
+    try:
         with track(MemoryRun()):
-            fit = polish(task.instance, seeded.components, passes=task.passes)
-    elif task.seconds is not None:
-        left = task.seconds - (time.perf_counter() - opened)
-        with track(MemoryRun()):
-            fit = polish(
-                task.instance,
-                seeded.components,
-                seconds=max(left, 0.0),
-                tolerance=task.tolerance,
-            )
+            seeded = lookup(task.name)(task.instance, generator)
+        score = float(mixture_log_likelihood(values, uniform, seeded.components))
+        fit: MixturePolished | None = None
+        if task.passes is not None:
+            with track(MemoryRun()):
+                fit = polish(task.instance, seeded.components, passes=task.passes)
+        elif task.seconds is not None:
+            left = task.seconds - (time.perf_counter() - opened)
+            with track(MemoryRun()):
+                fit = polish(
+                    task.instance,
+                    seeded.components,
+                    seconds=max(left, 0.0),
+                    tolerance=task.tolerance,
+                )
+    except ValueError as refusal:
+        return _Seeded(None, -math.inf, None, failure=str(refusal))
     return _Seeded(seeded, score, fit)
 
 
@@ -809,15 +843,34 @@ class BestOf:
             intra_op_threads=1,
             generator=rng,
         )
+        if all(r.seeded is None for r in results):
+            reasons = "; ".join(f"{i}: {r.failure}" for i, r in enumerate(results))
+            msg = f"every one of {self.n} seedings of {self.name} failed ({reasons})"
+            raise ValueError(msg)
         tracked = current()
         for index, result in enumerate(results):
-            tracked.record(index, seeding_log_likelihood=result.score)
-        path = tuple((index, r.seeded.components) for index, r in enumerate(results))
+            if result.seeded is not None:
+                tracked.record(index, seeding_log_likelihood=result.score)
+        path = tuple(
+            (index, r.seeded.components)
+            for index, r in enumerate(results)
+            if r.seeded is not None
+        )
         passes = sum(
             r.seeded.passes + (1.0 if r.fit is None else float(r.fit.iterations))
             for r in results
+            if r.seeded is not None
         )
         return results, path, passes
+
+    @staticmethod
+    def _note(results: list[_Seeded], chosen: str) -> str:
+        """The handover note, naming the seedings skipped and why."""
+        failed = [i for i, r in enumerate(results) if r.failure is not None]
+        if not failed:
+            return chosen
+        reasons = "; ".join(f"{i}: {results[i].failure}" for i in failed)
+        return f"{chosen}; skipped {len(failed)} that failed ({reasons})"
 
     def __call__(
         self, instance: MixtureInstance, rng: np.random.Generator
@@ -839,10 +892,14 @@ class BestOf:
             raise ValueError(msg)
         results, path, passes = self._seedings(_Seeding(self.name, instance), rng)
         best = int(np.argmax([r.score for r in results]))
+        chosen = results[best].seeded
+        if chosen is None:  # pragma: no cover - `_seedings` refuses when none succeeded
+            msg = "a best-of hands over a seeding that succeeded"
+            raise TypeError(msg)
         return Seeding(
-            results[best].seeded.components,
+            chosen.components,
             passes,
-            f"best of {self.n}: seeding {best}",
+            self._note(results, f"best of {self.n}: seeding {best}"),
             path,
         )
 
@@ -888,17 +945,22 @@ class BestOf:
         )
         results, path, charged = self._seedings(task, rng)
         fits = [r.fit for r in results]
-        finals = [float(f.log_likelihoods[-1]) for f in fits if f is not None]
+        # A failed seeding has no fit and ranks last, so the indices stay
+        # aligned with the seedings.
+        finals = [
+            -math.inf if f is None else float(f.log_likelihoods[-1]) for f in fits
+        ]
         best = int(np.argmax(finals))
         chosen = fits[best]
-        if chosen is None:  # pragma: no cover - every task above polishes
-            msg = "a polished best-of polishes every seeding"
+        seeded = results[best].seeded
+        if chosen is None or seeded is None:  # pragma: no cover - refused above
+            msg = "a polished best-of polishes every seeding that succeeded"
             raise TypeError(msg)
         return (
             Seeding(
-                results[best].seeded.components,
+                seeded.components,
                 charged,
-                f"best of {self.n} after EM: seeding {best}",
+                self._note(results, f"best of {self.n} after EM: seeding {best}"),
                 path,
             ),
             chosen,

@@ -34,6 +34,7 @@ from sal.emissions.base import (
 from sal.emissions.mstep import (
     PROBABILITY_MARGIN,
     NoTails,
+    effective_trials,
     solve_beta_binomial_m_step,
     solve_beta_binomial_tied,
     solve_dispersion,
@@ -48,6 +49,22 @@ from sal.emissions.rising import (
     log_rising_scaled,
     scaled_rising,
 )
+
+#: Posterior mass, in effective observations, below which a state's M step has
+#: nothing to estimate from: the state keeps its parameters and is reported as
+#: frozen (issue #1136). An E step that empties a component leaves it about
+#: ``1e-13`` here, or exactly zero once the responsibilities underflow.
+COLLAPSED_MASS = 1e-8
+
+
+def _indices(mask: torch.Tensor) -> tuple[int, ...]:
+    """The states ``mask`` marks, in order."""
+    return tuple(int(i) for i in torch.nonzero(mask).reshape(-1).tolist())
+
+
+def _union(*frozen: tuple[int, ...]) -> tuple[int, ...]:
+    """The states any channel held, in order: a pair's state is held if either channel's was."""
+    return tuple(sorted(set().union(*frozen)))
 
 
 def _check_tied(tied: bool, name: str, values: torch.Tensor, rtol: float = 0.0) -> None:
@@ -414,6 +431,40 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
         # `CLAUDE.md` permits and this measurement is the price of (#649).
         mass = _weighted_mass(weights, offsets)
         mean = (weights.T @ values) / mass
+        live = (weights.sum(dim=0) >= COLLAPSED_MASS) & (mean > 0.0)
+        if bool(live.all()):
+            return self._solve_states(values, weights, offsets, mean)
+        # A state the E step has emptied, or that holds only zero counts, has
+        # no mean or dispersion to estimate and its solve would refuse; it
+        # keeps its parameters and is reported (issue #1136).
+        frozen = _indices(~live)
+        if not bool(live.any()):
+            return Reestimate(self, frozen=frozen)
+        part = NegativeBinomialEmission(
+            self._dispersion[live], self._mean[live], tied=self._tied
+        )._solve_states(values, weights[:, live], offsets, mean[live])
+        dispersion, fitted_mean = self._dispersion.clone(), self._mean.clone()
+        dispersion[live] = part.emissions.dispersion
+        fitted_mean[live] = part.emissions.mean
+        if self._tied:
+            dispersion[:] = part.emissions.dispersion[0]
+        return Reestimate(
+            NegativeBinomialEmission(dispersion, fitted_mean, tied=self._tied),
+            converged=part.converged,
+            at_boundary=part.at_boundary,
+            iterations=part.iterations,
+            residual=part.residual,
+            frozen=frozen,
+        )
+
+    def _solve_states(
+        self,
+        values: torch.Tensor,
+        weights: torch.Tensor,
+        offsets: torch.Tensor | None,
+        mean: torch.Tensor,
+    ) -> Reestimate[NegativeBinomialEmission]:
+        """The dispersion solve for every state, each with data, at its profiled mean."""
         if self._tied:
             tied = solve_dispersion_tied(values, weights, mean, offsets)
             return Reestimate(
@@ -1039,7 +1090,56 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
                 weights[observed],
                 supplied[observed],
             )
+        mass = weights.sum(dim=0)
+        live = torch.tensor(
+            [
+                float(mass[k]) >= COLLAPSED_MASS
+                and effective_trials(
+                    supplied if per_observation else float(self._trials[k]),
+                    weights[:, k],
+                )
+                >= 2.0
+                for k in range(self.n_states)
+            ]
+        )
+        if bool(live.all()):
+            return self._solve_states(values, weights, supplied, per_observation)
+        # An emptied state, or one whose posterior-weighted trial count is
+        # below two, where a beta-binomial is a Bernoulli and no
+        # concentration is identified, keeps its parameters (issue #1136).
+        frozen = _indices(~live)
+        if not bool(live.any()):
+            return Reestimate(self, frozen=frozen)
+        part = BetaBinomialEmission(
+            self._trials[live], self._alpha[live], self._beta[live], tied=self._tied
+        )._solve_states(values, weights[:, live], supplied, per_observation)
+        alpha, beta = self._alpha.clone(), self._beta.clone()
+        alpha[live] = part.emissions.alpha
+        beta[live] = part.emissions.beta
+        if self._tied:
+            # One concentration across states: the held states take the
+            # shared value at their own rate.
+            shared = float(part.emissions.concentration[0])
+            rate = self._alpha / (self._alpha + self._beta)
+            alpha = torch.where(live, alpha, rate * shared)
+            beta = torch.where(live, beta, (1.0 - rate) * shared)
+        return Reestimate(
+            BetaBinomialEmission(self._trials, alpha, beta, tied=self._tied),
+            converged=part.converged,
+            at_boundary=part.at_boundary,
+            iterations=part.iterations,
+            residual=part.residual,
+            frozen=frozen,
+        )
 
+    def _solve_states(
+        self,
+        values: torch.Tensor,
+        weights: torch.Tensor,
+        supplied: torch.Tensor,
+        per_observation: bool,
+    ) -> Reestimate[BetaBinomialEmission]:
+        """The ``(a, b)`` solve for every state, each with data."""
         alpha = torch.empty(self.n_states, dtype=torch.float64)
         beta = torch.empty(self.n_states, dtype=torch.float64)
         boundary = False
@@ -1483,10 +1583,20 @@ class CountPairEmission(EmissionFamily, CountEmissionFamily):
                 at_boundary=depth.at_boundary or rate.at_boundary,
                 iterations=max(depth.iterations, rate.iterations),
                 residual=max(depth.residual, rate.residual),
+                frozen=_union(depth.frozen, rate.frozen),
             )
 
-        alpha = torch.empty(self.n_states, dtype=torch.float64)
-        beta = torch.empty(self.n_states, dtype=torch.float64)
+        # The joint form's trials are the totals, so the success channel's
+        # liveness is read at each state's posterior-weighted total (#1136).
+        live = torch.tensor(
+            [
+                float(weights[:, k].sum()) >= COLLAPSED_MASS
+                and effective_trials(totals, weights[:, k]) >= 2.0
+                for k in range(self.n_states)
+            ]
+        )
+        alpha = self._alpha.clone()
+        beta = self._beta.clone()
         boundary = depth.at_boundary
         converged = depth.converged
         iterations = depth.iterations
@@ -1495,17 +1605,22 @@ class CountPairEmission(EmissionFamily, CountEmissionFamily):
             float(self._alpha[state] + self._beta[state])
             for state in range(self.n_states)
         ]
-        batch = solve_beta_binomial_m_step(
-            successes,
-            weights,
-            totals,
-            [
-                float(self._alpha[state]) / concentrations[state]
-                for state in range(self.n_states)
-            ],
-            concentrations,
+        solved_states = [state for state in range(self.n_states) if bool(live[state])]
+        batch = (
+            solve_beta_binomial_m_step(
+                successes,
+                weights[:, live],
+                totals,
+                [
+                    float(self._alpha[state]) / concentrations[state]
+                    for state in solved_states
+                ],
+                [concentrations[state] for state in solved_states],
+            )
+            if solved_states
+            else []
         )
-        for state, solved in enumerate(batch):
+        for state, solved in zip(solved_states, batch, strict=True):
             alpha[state] = solved.alpha
             beta[state] = solved.beta
             boundary = boundary or solved.at_boundary
@@ -1525,6 +1640,7 @@ class CountPairEmission(EmissionFamily, CountEmissionFamily):
             at_boundary=boundary,
             iterations=iterations,
             residual=residual,
+            frozen=_union(depth.frozen, _indices(~live)),
         )
 
     def alignment_key(self) -> torch.Tensor:
