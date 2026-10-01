@@ -44,7 +44,13 @@ EXACT = 1e-9
 
 #: The solvers that refuse a start, and the ones whose own start is the
 #: field's argmax rather than a uniform draw.
-REFUSED = ("field_argmax", "tempering", "max-product", "bifurcation")
+REFUSED = (
+    "field_argmax",
+    "tempering",
+    "tempering-mixed",
+    "max-product",
+    "bifurcation",
+)
 ARGMAX_START = ("alpha-expansion", "alpha-beta-swap", "expansion>swendsen-wang")
 #: The solvers that end on a descent from the start they are handed.
 DESCENTS = ("icm", "alpha-expansion", "alpha-beta-swap", "expansion>swendsen-wang")

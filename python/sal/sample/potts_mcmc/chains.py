@@ -52,6 +52,7 @@ from sal.sim.graph import PottsGraph
 from sal.sim.potts import (
     SiteField,
     check_labelling,
+    critical_coupling,
     energies,
     log_weight_of,
     site_field,
@@ -285,6 +286,168 @@ def step_visits(move: PottsMove, graph: PottsGraph, cluster_sites: int = 0) -> i
     if move in _SINGLE_CLUSTER_MOVES:
         return cluster_sites * (1 + 2 * len(graph.edges) // graph.n_nodes)
     return per_sweep
+
+
+#: What :func:`parallel_tempering` takes as ``move``: one move set for every
+#: rung, or per rung a move set or a sequence of them run in order (#1158).
+RungMoves = PottsMove | Sequence[PottsMove | Sequence[PottsMove]]
+
+
+def moves_per_rung(move: RungMoves, n_rungs: int) -> tuple[tuple[PottsMove, ...], ...]:
+    """``move`` as one non-empty tuple of move sets per rung (issue #1158).
+
+    A single :class:`~sal.sample.potts_mcmc.moves.PottsMove` is checked
+    first: it is a ``str``, and so a ``Sequence``, which read as one would be
+    its characters.
+
+    Raises
+    ------
+    ValueError
+        If ``move`` is a sequence whose length is not ``n_rungs``, or a
+        rung's sequence is empty.
+    TypeError
+        If an entry holds anything but a ``PottsMove``.
+    """
+    if isinstance(move, PottsMove):
+        return ((move,),) * n_rungs
+    entries = tuple(move)
+    if len(entries) != n_rungs:
+        msg = f"move holds one entry per rung, {n_rungs}, got {len(entries)}"
+        raise ValueError(msg)
+    per_rung = []
+    for entry in entries:
+        rung = (entry,) if isinstance(entry, PottsMove) else tuple(entry)
+        if not rung:
+            msg = "a rung's moves are a non-empty sequence"
+            raise ValueError(msg)
+        for each in rung:
+            if not isinstance(each, PottsMove):
+                msg = f"a rung's moves are PottsMove, got {each!r}"
+                raise TypeError(msg)
+        per_rung.append(rung)
+    return tuple(per_rung)
+
+
+#: :func:`rung_moves`' threshold on :func:`critical_ratio`: a rung at or
+#: above it runs a single-site sweep after its cluster move. The transition
+#: itself; the measurement brackets it between the ladder's rungs at 0.76
+#: and 1.58 (``tests/regression/search/test_tempering_rung_moves.py``).
+PAIR_FROM = 1.0
+
+
+def critical_ratio(graph: PottsGraph, n_states: int, temperature: float) -> float:
+    """``beta J / K_c``: a rung's coupling against the Potts transition (issue #1158).
+
+    ``J`` is the mean coupling and ``K_c = ln(1 + sqrt(q)) * 4 / z``, with
+    ``z = 2 |E| / n`` the mean degree: the square lattice's exact self-dual
+    point (:func:`~sal.sim.potts.critical_coupling`) scaled by ``4 / z``, as
+    the mean-field transition scales with ``1 / z``. Exact for the square
+    lattice; a proxy elsewhere, ``0.951`` against the exact ``0.912`` (the
+    root of ``v^3 + 3 v^2 = q``, ``K = ln(1 + v)``) on the triangular lattice
+    at ``q = 10``, 4% high.
+
+    Returns
+    -------
+    float
+        ``0`` on a graph with no edges.
+    """
+    if not graph.edges:
+        return 0.0
+    degree = 2.0 * len(graph.edges) / graph.n_nodes
+    k_c = critical_coupling(n_states) * 4.0 / degree
+    return float(np.mean(graph.coupling)) / temperature / k_c
+
+
+def field_ratio(graph: PottsGraph, rows: np.ndarray) -> float:
+    """The median site's field spread against its coupling, ``median_i (max h_i - min h_i) / (J z)`` (issue #1158).
+
+    The spread is over each site's allowed labels, those of finite field, so
+    a forbidden label's ``-inf`` does not make it infinite; ``J`` is the mean
+    coupling and ``z = 2 |E| / n`` the mean degree, so the ratio compares the
+    field one site carries with the coupling it has to its neighbours. Both
+    scale with ``beta`` alike, so the ratio is the rung's at every rung.
+
+    Returns
+    -------
+    float
+        ``inf`` on a graph with no edges or no coupling.
+    """
+    allowed = np.isfinite(rows)
+    spread = np.where(allowed, rows, -np.inf).max(axis=1) - np.where(
+        allowed, rows, np.inf
+    ).min(axis=1)
+    bond = (
+        float(np.mean(graph.coupling)) * 2.0 * len(graph.edges) / graph.n_nodes
+        if graph.edges
+        else 0.0
+    )
+    return float(np.median(spread)) / bond if bond > 0.0 else float("inf")
+
+
+def rung_moves(
+    graph: PottsGraph,
+    field: SiteField | np.ndarray,
+    temperatures: TempSchedule | Sequence[float],
+) -> tuple[tuple[PottsMove, ...], ...]:
+    """The moves each rung of a ladder runs, read from its temperature (issue #1158).
+
+    A deterministic rule on :func:`critical_ratio` ``k = beta J / K_c``:
+
+    - ``k < 1`` (:data:`PAIR_FROM`), hot of the transition: heat-bath
+      Swendsen-Wang alone. Clusters span correlated regions and relabel
+      them in one step.
+    - ``k >= 1``, at the transition and colder: heat-bath Swendsen-Wang, then
+      a single-site sweep. The bonds close over whole domains, which the
+      cluster move relabels and cannot reshape; the sweep moves their
+      boundaries.
+
+    **The field enters through the label draw, not the rule.** Every cluster
+    move chosen draws its cluster's label ``~ exp(beta sum_C h)``, near
+    uniform in a weak field and on the best label in a strong one, so no
+    threshold switches between the uniform-proposal and heat-bath variants;
+    the uniform ones are reached through an explicit ``move=``.
+    :func:`field_ratio` does not change the composition either: measured at
+    field x1, x10 and x30 (ratio 0.08 to 5.3), it moved no ladder's energy
+    at x10 or x30.
+
+    **Measured** through :func:`~sal.search.ground_state.run_tempering` at
+    1,000 sweeps' site visits, five seeds, on ``spatio_only/release`` (71 x 71
+    triangular, q = 10, J = 0.7, ``k`` = 0.36, 0.76, 1.58, 3.30, 6.91, 14.5),
+    mean energy (standard error): single-site everywhere -9,900.1 (10.9);
+    the cluster move alone on the three hottest rungs, single-site below,
+    -9,740.4 (13.2); the pair on every rung -10,215.1 (19.1); the pair on
+    the two hottest rungs and single-site below -9,820.3 (37.4); this rule
+    -10,215.9 (19.0), the same as single-site on the two hottest rungs with
+    the pair below. So the rung at 1.58 needs the pair and those at 0.36 and 0.76
+    are indifferent to their move; the threshold sits at the transition
+    between them. On ``spatio_tiling/release`` this rule -17,018.9 (0.6)
+    against single-site's -17,001.2 (5.4).
+
+    Parameters
+    ----------
+    graph : PottsGraph
+        The instance. A negative coupling refuses every cluster move, so
+        such a graph is single-site on every rung.
+    field : SiteField | np.ndarray
+        As :func:`parallel_tempering` takes it.
+    temperatures : TempSchedule | Sequence[float]
+        The ladder, in :func:`parallel_tempering`'s order.
+
+    Returns
+    -------
+    tuple[tuple[PottsMove, ...], ...]
+        One entry per rung, in the ladder's order, as ``move`` takes it.
+    """
+    rows = site_field(np.asarray(log_weight_of(field), dtype=float), graph.n_nodes)
+    n_states = int(rows.shape[1])
+    if min(graph.coupling, default=0.0) < 0.0:
+        return tuple((PottsMove.SINGLE_SITE,) for _ in ladder(temperatures))
+    return tuple(
+        (PottsMove.SWENDSEN_WANG_HEAT_BATH,)
+        if critical_ratio(graph, n_states, temperature) < PAIR_FROM
+        else (PottsMove.SWENDSEN_WANG_HEAT_BATH, PottsMove.SINGLE_SITE)
+        for temperature in ladder(temperatures)
+    )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -617,15 +780,15 @@ def parallel_tempering(
     burn_in: int = 0,
     thin: int = 1,
     *,
-    move: PottsMove = PottsMove.SINGLE_SITE,
+    move: RungMoves = PottsMove.SINGLE_SITE,
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.PYTHON,
     start: np.ndarray | None = None,
 ) -> TemperedChains:
     """Replicas at fixed temperatures, exchanging configurations by Metropolis.
 
-    Each replica runs one sweep of ``move`` per step at its own temperature,
-    then every adjacent pair proposes to exchange configurations and accepts
+    Each replica runs its rung's moves once per step at its own temperature,
+    in the order given, then every adjacent pair proposes to exchange configurations and accepts
     on :func:`swap_log_ratio`. The hot replicas cross barriers the cold one
     cannot, and an exchange carries what they find down the ladder (Swendsen &
     Wang, 1986; Geyer, 1991; Earl & Deem, 2005).
@@ -634,8 +797,19 @@ def parallel_tempering(
     reads energies alone, so the product law ``prod_r exp(-beta_r E)`` is
     invariant whenever each replica's move leaves its own rung's law
     invariant, which every :class:`~sal.sample.potts_mcmc.moves.PottsMove`
-    does. This is not :func:`cluster_tempering`, which adds Houdayer moves
-    between replicas.
+    does, and so does any sequence of them run in order on one rung. Each
+    rung may therefore run its own moves (issue #1158); :func:`rung_moves`
+    chooses them from the temperature. This is not :func:`cluster_tempering`,
+    which adds Houdayer moves between replicas.
+
+    **Moves belong to rungs, configurations to walkers.** An exchange swaps
+    configurations between rungs and leaves each rung's moves where they
+    are, so a configuration handed to a colder rung is next moved by that
+    rung's moves at that rung's ``beta``. Every closure :func:`sweep_for`
+    builds reads ``beta`` per call and stores nothing read from a
+    configuration; the one state any keeps is the label-directed pass's call
+    counter, which cycles the target label and is a rung's own. Each
+    ``(rung, position)`` gets its own closure, so no two share it.
 
     **The replicas must not share a stream and must be reproducible from one
     seed.** The passed generator spawns a child per replica; the parent
@@ -659,10 +833,13 @@ def parallel_tempering(
         only the exchange uniforms, so one seeded generator reproduces the run.
     n_sweeps, burn_in, thin : int
         As :func:`sample_potts`, applied per replica.
-    move : PottsMove
-        The move set every replica runs, built by :func:`sweep_for` once per
-        replica so no replica shares another's mutable state. Single-site,
-        the default, is the chain before the parameter existed, bitwise.
+    move : PottsMove | Sequence[PottsMove | Sequence[PottsMove]]
+        One move set every rung runs, or one entry per rung in the ladder's
+        order, each a move set or a non-empty sequence of them run in order
+        every step. Each is built by :func:`sweep_for` once per rung and
+        position, so no rung shares another's mutable state. A single
+        ``PottsMove`` is the chain of issue #1156 bitwise; single-site, the
+        default, is the chain before the parameter existed, bitwise.
     backend : Backend
         As :func:`anneal_potts`: the Rust sweep by default, the oracle that
         pins it on request, each replica on its own child generator either
@@ -686,12 +863,17 @@ def parallel_tempering(
     ValueError
         If fewer than two temperatures are given --- a ladder of one has
         nothing to exchange and is :func:`sample_potts` --- or any is not
-        positive, or ``move`` is a cluster move and a coupling is negative,
-        or ``start`` is not one labelling per rung.
+        positive, or any move is a cluster move and a coupling is negative,
+        or ``move`` is not one entry per rung, or ``start`` is not one
+        labelling per rung.
+    TypeError
+        If a rung's entry holds anything but a ``PottsMove``.
     """
     field = log_weight_of(field)
-    refuse_negative_coupling(move, graph)
     temperatures = check_ladder(ladder(temperatures), needed_by="parallel tempering")
+    per_rung = moves_per_rung(move, len(temperatures))
+    for each in dict.fromkeys(m for rung in per_rung for m in rung):
+        refuse_negative_coupling(each, graph)
 
     rows = site_field(np.asarray(field, dtype=float), graph.n_nodes)
     n_replicas = len(temperatures)
@@ -725,16 +907,30 @@ def parallel_tempering(
     best_index = int(np.argmin(current))
     best, best_energy = states[best_index].copy(), float(current[best_index])
 
-    # One sweep per replica: the label-directed pass keeps a call counter, and
-    # a replica's counter is its own. Building a closure draws nothing.
+    # One sweep per rung and position: the label-directed pass keeps a call
+    # counter, and a rung's counter is its own. Building a closure draws
+    # nothing. Each carries its move's fixed charge, or -1 for a single
+    # cluster, charged by its size.
     sweeps = [
-        sweep_for(
-            move, graph, rows, offsets, neighbours, couplings, backend, cluster_backend
-        )
-        for _ in range(n_replicas)
+        [
+            (
+                sweep_for(
+                    each,
+                    graph,
+                    rows,
+                    offsets,
+                    neighbours,
+                    couplings,
+                    backend,
+                    cluster_backend,
+                ),
+                each,
+                -1 if each in _SINGLE_CLUSTER_MOVES else step_visits(each, graph),
+            )
+            for each in rung
+        ]
+        for rung in per_rung
     ]
-    single_cluster = move in _SINGLE_CLUSTER_MOVES
-    per_step = step_visits(move, graph)
     visits = 0
     # `swap_acceptance` is the mean over adjacent pairs of the fraction
     # accepted so far -- the mean of the vector `TemperedChains` returns, and
@@ -744,10 +940,11 @@ def parallel_tempering(
     tracked: TrackedOptimization = current_tracked()
     for step in range(-burn_in * thin, n_sweeps * thin):
         for replica in range(n_replicas):
-            size = sweeps[replica](states[replica], children[replica], betas[replica])
-            # Charged as `anneal_potts` charges the move: a single cluster by
-            # its size, every other step one `step_visits`.
-            visits += step_visits(move, graph, size) if single_cluster else per_step
+            for sweep, each, per_step in sweeps[replica]:
+                size = sweep(states[replica], children[replica], betas[replica])
+                # Charged as `anneal_potts` charges the move: a single cluster
+                # by its size, every other step one `step_visits`.
+                visits += step_visits(each, graph, size) if per_step < 0 else per_step
         current = energies(graph, rows, states)
         for pair in range(n_replicas - 1):
             log_ratio = swap_log_ratio(
