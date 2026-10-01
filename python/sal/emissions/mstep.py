@@ -181,7 +181,7 @@ def solve_beta_binomial(
     ``(0, bound]``, so each inner solve is unconditional.
     """
     bound = identifiable_concentration_bound(
-        _effective_trials(trials, weights), float(weights.sum())
+        effective_trials(trials, weights), float(weights.sum())
     )
     concentration = min(concentration, bound)
     at_boundary = False
@@ -332,7 +332,7 @@ def solve_beta_binomial_batched(
     count_grid = counts.reshape(1, -1)
     bounds = [
         identifiable_concentration_bound(
-            _effective_trials(per[k], weights[:, k]), float(weights[:, k].sum())
+            effective_trials(per[k], weights[:, k]), float(weights[:, k].sum())
         )
         for k in range(n_components)
     ]
@@ -452,7 +452,7 @@ def solve_beta_binomial_batched(
     ]
 
 
-def _effective_trials(trials: float | torch.Tensor, weights: torch.Tensor) -> float:
+def effective_trials(trials: float | torch.Tensor, weights: torch.Tensor) -> float:
     """The one trial count :func:`identifiable_concentration_bound` is read at.
 
     A fixed trial count is itself. A per-observation one has no single value,
@@ -828,7 +828,7 @@ def solve_beta_binomial_tied(
 
     per_state = weights.sum(dim=0)
     if per_observation:
-        effective = _effective_trials(trials, weights.sum(dim=1))  # type: ignore[arg-type]
+        effective = effective_trials(trials, weights.sum(dim=1))  # type: ignore[arg-type]
     else:
         depth = torch.tensor(list(trials), dtype=weights.dtype)
         first = depth[0]
@@ -1155,7 +1155,7 @@ def solve_beta_binomial_rust(
         depth = weight_tails(fixed.to(torch.int64), total.reshape(-1, 1))
     bounds = [
         identifiable_concentration_bound(
-            _effective_trials(per[k], weights[:, k]), float(weights[:, k].sum())
+            effective_trials(per[k], weights[:, k]), float(weights[:, k].sum())
         )
         for k in range(n_components)
     ]
@@ -1204,7 +1204,7 @@ def _effective_rate(mean: float | torch.Tensor, weights: torch.Tensor) -> float:
 
     A per-state mean is itself. A per-observation rate has no single value, so
     the bound is taken at the *posterior-weighted mean* rate, which is the
-    construction :func:`_effective_trials` already uses one family over. A
+    construction :func:`effective_trials` already uses one family over. A
     constant rate reduces exactly, for the reason given there.
 
     Returns

@@ -19,6 +19,7 @@ pub mod bcjr;
 pub mod bifurcation;
 pub mod bk;
 pub mod chain;
+pub mod count_mixture;
 pub mod count_mstep;
 pub mod count_pairs;
 pub mod coupled;
@@ -44,6 +45,7 @@ pub mod special;
 
 pub use bcjr::bcjr_forward_backward;
 pub use bifurcation::bifurcation_integrate;
+pub use count_mixture::count_mixture_value_and_gradient;
 pub use count_mstep::{
     beta_binomial_parameters, negative_binomial_dispersions, negative_binomial_dispersions_exposed,
 };
@@ -102,6 +104,7 @@ fn oxisal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(swendsen_wang_sweep, m)?)?;
     m.add_function(wrap_pyfunction!(class_posteriors, m)?)?;
     m.add_function(wrap_pyfunction!(external_field, m)?)?;
+    m.add_function(wrap_pyfunction!(count_mixture_value_and_gradient, m)?)?;
     m.add_function(wrap_pyfunction!(dense_log_emission, m)?)?;
     m.add_function(wrap_pyfunction!(factorize, m)?)?;
     m.add_function(wrap_pyfunction!(simulate_count_pairs, m)?)?;
