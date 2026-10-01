@@ -56,11 +56,53 @@ class SwitchKind(StrEnum):
     - ``KRONECKER_DIAGONAL``: ``S_t`` on ``A``'s diagonal blocks alone, the
       layer switching only where the slow chain stays; an off-diagonal move
       lands on either layer with probability one half.
+
+    The order is state-major (``2 i + a``), as ``np.kron(A, S)``;
+    :func:`kronecker_order` maps a layer-major (``a K + i``) array onto it.
     """
 
     STAY_OR_MOVE = "stay_or_move"
     KRONECKER = "kronecker"
     KRONECKER_DIAGONAL = "kronecker_diagonal"
+
+
+def kronecker_order(n_states: int, *, layer_major: bool = False) -> np.ndarray:
+    """The index array that puts a ``2 K``-state axis in sal's Kronecker order.
+
+    Under either Kronecker :class:`SwitchKind`, state ``(i, a)``, slow state
+    ``i`` and layer ``a``, sits at ``2 i + a``: state-major (``2 i + a``), as
+    ``np.kron(A, S)``. ``order[2 i + a]`` is the caller's index of ``(i, a)``,
+    so ``theirs[..., order]`` is in sal's order, and ``np.argsort(order)``
+    is the way back, ``ours[..., np.argsort(order)]``. A square array, the
+    transition counts, takes the index on both axes,
+    ``counts[np.ix_(back, back)]``.
+
+    Parameters
+    ----------
+    n_states : int
+        The ``2 K`` states the posteriors are over, even.
+    layer_major : bool
+        Whether the caller's layout is layer-major, ``(i, a)`` at ``a K + i``.
+        ``False`` means the caller already holds sal's order and the result is
+        the identity.
+
+    Returns
+    -------
+    np.ndarray
+        ``(n_states,)``, ``int64``, a permutation of ``range(n_states)``.
+
+    Raises
+    ------
+    ValueError
+        If ``n_states`` is not a positive even number.
+    """
+    if n_states < 2 or n_states % 2:
+        msg = f"n_states is the 2 K states, a positive even number; got {n_states}"
+        raise ValueError(msg)
+    index = np.arange(n_states, dtype=np.int64)
+    if not layer_major:
+        return index
+    return np.ascontiguousarray(index.reshape(2, n_states // 2).T.reshape(-1))
 
 
 @dataclass(frozen=True)
