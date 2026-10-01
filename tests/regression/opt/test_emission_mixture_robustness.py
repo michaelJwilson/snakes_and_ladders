@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 
 import numpy as np
 import pytest
@@ -34,7 +35,7 @@ from sal.opt.emission_mixture import (
     expectation_maximization,
 )
 from sal.opt.mixture import emission_mixture_plus_plus, mixture_log_likelihood
-from sal.opt.objective import value_and_gradient
+from sal.opt.objective import autograd_value_and_gradient, value_and_gradient
 from sal.search import mixture_starts
 from sal.search.mixture_starts import (
     BestOf,
@@ -268,3 +269,83 @@ def test_a_reused_distinct_count_is_the_recomputed_one() -> None:
             want = torch.unique(values, return_inverse=True)
             assert all(torch.equal(a, b) for a, b in zip(got, want, strict=True))
     assert sum(len(entries) for entries in cache.values()) == 2
+
+
+def _families() -> dict[str, tuple[EmissionFamily, Callable[[np.ndarray], np.ndarray]]]:
+    """Each family the compiled gradient takes, and how its observations are read from its draws."""
+    joint = CountPairEmission(
+        [6.0, 12.0, 3e5],
+        [20.0, 60.0, 40.0],
+        [2.0, 9.0, 3e5],
+        [8.0, 3.0, 2e5],
+        joint=True,
+    )
+    independent = CountPairEmission(
+        [6.0, 12.0], [20.0, 60.0], [2.0, 9.0], [8.0, 3.0], [40.0, 40.0], joint=False
+    )
+    successes = independent.successes
+    assert successes is not None
+    return {
+        "joint": (joint, lambda pairs: pairs),
+        "independent": (independent, lambda pairs: pairs),
+        "IndependentCountPair": (
+            IndependentCountPair(independent.total, successes),
+            lambda pairs: pairs,
+        ),
+        "negative-binomial": (independent.total, lambda counts: counts),
+        "beta-binomial": (successes, lambda counts: counts),
+    }
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("name", list(_families()))
+def test_the_compiled_gradient_is_autograds(name: str) -> None:
+    # Every lgamma and digamma difference the kernel forms is a prefix sum
+    # over integers; autograd through `__call__` is the reference. The joint
+    # family carries a component at shape 3e5, past the series threshold.
+    family, read = _families()[name]
+    rng = np.random.default_rng([SEED, len(name)])
+    labels = rng.integers(0, family.n_states, 3_000)
+    observations = read(np.asarray(family.sample(labels, rng), dtype=np.float64))
+    objective = EmissionMixtureObjective(observations, family, build_like(family))
+    theta = objective.initial() + 0.1 * torch.randn(
+        objective.n_parameters,
+        generator=torch.Generator().manual_seed(SEED),
+        dtype=torch.float64,
+    )
+
+    value, gradient = objective.value_and_gradient(theta)
+    want_value, want_gradient = autograd_value_and_gradient(objective, theta)
+
+    assert objective._route is not None
+    # Measured: 1.3e-15 relative in the value, 1.8e-11 absolute in a
+    # gradient of magnitude up to 1.4e3.
+    assert float(value) == pytest.approx(float(want_value), rel=1e-13)
+    np.testing.assert_allclose(
+        gradient.numpy(), want_gradient.numpy(), rtol=0, atol=1e-9
+    )
+
+
+@pytest.mark.oracle
+def test_outside_the_kernel_the_gradient_is_autograds_bitwise() -> None:
+    family, _ = _families()["independent"]
+    rng = np.random.default_rng(SEED)
+    pairs = np.asarray(family.sample(rng.integers(0, 2, 500), rng), dtype=np.float64)
+    covariate = np.concatenate([np.ones((500, 1)), np.full((500, 1), 40.0)], axis=-1)
+    conditioned = EmissionMixtureObjective(
+        pairs, family, build_like(family), covariate=covariate
+    )
+    theta = conditioned.initial()
+    # Run past overflow, where the chain rejects and autograd scores it.
+    overflowed = theta.clone()
+    overflowed[-1] = 800.0
+    compiled = EmissionMixtureObjective(pairs, family, build_like(family))
+
+    assert conditioned._route is None
+    for objective, point in ((conditioned, theta), (compiled, overflowed)):
+        got = objective.value_and_gradient(point)
+        want = autograd_value_and_gradient(objective, point)
+        assert all(
+            torch.equal(a, b) or (a.isnan().all() and b.isnan().all())
+            for a, b in zip(got, want, strict=True)
+        )
