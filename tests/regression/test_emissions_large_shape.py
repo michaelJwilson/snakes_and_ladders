@@ -16,7 +16,11 @@ import mpmath  # type: ignore[import-untyped]
 import numpy as np
 import pytest
 import torch
-from sal.emissions import BetaBinomialEmission, NegativeBinomialEmission
+from sal.emissions import (
+    BetaBinomialEmission,
+    CountPairEmission,
+    NegativeBinomialEmission,
+)
 from sal.emissions.rising import LARGE_SHAPE, log_rising_scaled
 
 mpmath.mp.dps = 50
@@ -145,3 +149,32 @@ def test_below_the_threshold_nothing_moves() -> None:
 
     assert torch.equal(nb.log_density(y), plain)
     assert float(log_rising_scaled(torch.tensor(math.inf), torch.tensor(5.0))) == 0.0
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("concentration", [1e3, 1e12], ids=str)
+def test_every_trial_layout_takes_the_large_shape_path_alike(
+    concentration: float,
+) -> None:
+    # Trials per state (the family), per observation and state (the
+    # independent pair, which raises them to the successes), and per
+    # observation (a covariate) reach the series by three routes.
+    a, b = 0.3 * concentration, 0.7 * concentration
+    successes = torch.arange(TRIALS + 1, dtype=torch.float64)
+    want = torch.tensor(
+        [_exact_beta_binomial(z, a, b) for z in range(TRIALS + 1)], dtype=torch.float64
+    )
+    family = BetaBinomialEmission([TRIALS, TRIALS], [a, 2.0], [b, 3.0])
+    pair = CountPairEmission(
+        [5.0, 5.0], [10.0, 10.0], [a, 2.0], [b, 3.0], [TRIALS, TRIALS], joint=False
+    )
+    totals = torch.full_like(successes, 7.0)
+    by_pair = pair.log_density(torch.stack([totals, successes], dim=-1))[:, 0]
+    by_pair = by_pair - pair.total.log_density(totals)[:, 0]
+
+    for got in (
+        family.log_density(successes)[:, 0],
+        family.log_density(successes, torch.full((TRIALS + 1, 1), float(TRIALS)))[:, 0],
+        by_pair,
+    ):
+        assert float((got - want).abs().max()) <= _TOLERANCE

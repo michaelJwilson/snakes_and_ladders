@@ -37,6 +37,8 @@ tables of :mod:`sal.emissions.nb` and :mod:`sal.emissions.bb` included.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import torch
 
 #: The shape at and above which the differenced series replaces ``lgamma``.
@@ -134,3 +136,47 @@ def scaled_rising(x: torch.Tensor, m: torch.Tensor) -> torch.Tensor:
     big_x = torch.where(large, x, torch.full_like(x, LARGE_SHAPE))
     plain = torch.lgamma(small_x + m) - torch.lgamma(small_x) - m * torch.log(small_x)
     return torch.where(large, log_rising_scaled(big_x, m), plain)
+
+
+def on_distinct(
+    values: torch.Tensor, table: Callable[[torch.Tensor], torch.Tensor]
+) -> torch.Tensor:
+    """``table(values)``, evaluated on the distinct values only and gathered back.
+
+    ``values`` ends in a singleton axis, ``(..., 1)``, and ``table`` maps a
+    ``(D, 1)`` column of them to ``(D, K)``: a count takes a few hundred
+    values across thousands of observations, so the series is formed once
+    per (distinct count, state) rather than once per (observation, state),
+    the rule :func:`~sal.emissions.counts.lgamma_shifted` follows (issue
+    #924). Elementwise, so the gathered entries are the direct ones bit for
+    bit. Too few values, or no singleton axis, and ``table`` takes them
+    directly.
+    """
+    if values.dim() == 0 or values.shape[-1] != 1 or values.numel() < 64:
+        return table(values)
+    distinct, inverse = torch.unique(values, return_inverse=True)
+    rows = table(distinct.reshape(-1, 1))
+    return rows[inverse.reshape(-1)].reshape(*values.shape[:-1], rows.shape[-1])
+
+
+def by_state(
+    large: torch.Tensor,
+    above: Callable[[torch.Tensor], torch.Tensor],
+    below: Callable[[torch.Tensor], torch.Tensor],
+) -> torch.Tensor:
+    """Each state from the path its shape takes, and each state computed once.
+
+    ``large`` marks the states at or above :data:`LARGE_SHAPE`; ``above`` and
+    ``below`` take the indices of their states and return their columns,
+    ``(..., len(index))``. Neither path is evaluated on the other's states,
+    and a state below the threshold is the plain arithmetic bit for bit.
+    """
+    upper = torch.nonzero(large).reshape(-1)
+    lower = torch.nonzero(~large).reshape(-1)
+    if lower.numel() == 0:
+        return above(upper)
+    if upper.numel() == 0:
+        return below(lower)
+    columns = torch.cat([above(upper), below(lower)], dim=-1)
+    order = torch.argsort(torch.cat([upper, lower]))
+    return columns.index_select(-1, order)
