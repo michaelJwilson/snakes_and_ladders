@@ -67,6 +67,33 @@ import numpy as np
 from sal.cost import Cost
 from sal.opt.termination import Termination
 
+#: The public surface (issue #1143): every public name this module defines,
+#: and no name it imports.
+__all__ = [
+    "AdaptedLadder",
+    "Annealed",
+    "ConstantTempSchedule",
+    "CosineTempSchedule",
+    "ExponentialTempSchedule",
+    "FeedbackLadder",
+    "HeldTempSchedule",
+    "InverseTemperatures",
+    "LadderTempSchedule",
+    "LinearTempSchedule",
+    "Monotone",
+    "Quantity",
+    "ScheduleParams",
+    "ScheduleShape",
+    "TempSchedule",
+    "Tempered",
+    "adapt_ladder",
+    "adapt_ladder_by_round_trips",
+    "beta_ladder",
+    "check_ladder",
+    "ladder",
+    "temperatures",
+]
+
 
 @runtime_checkable
 class TempSchedule(Protocol):

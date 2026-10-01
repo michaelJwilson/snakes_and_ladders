@@ -16,7 +16,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from sal.sample.potts_mcmc.sweeps import bond_probability
+from sal.sample.potts_mcmc import bond_probability
 from sal.sim.graph import BoundaryCondition, lattice_graph
 from sal.sim.potts import critical_coupling
 from sal.validation import rustworkx

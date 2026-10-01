@@ -168,6 +168,18 @@ def sweep_at(
     The adjacency arrives as the compressed rows both backends read, built
     once by the caller: the Python sweep indexes them and the kernel takes
     them across the boundary without marshalling (issue #277).
+
+    **Contract** (issue #1143). In: ``rows``, ``(n_nodes, n_states)``
+    ``float64`` log weights at temperature 1; ``offsets``,
+    ``(n_nodes + 1,)`` ``int64``; ``neighbours``, ``(offsets[-1],)``
+    ``int64``; ``couplings``, ``(offsets[-1],)`` ``float64``. None is
+    modified, and building the closure draws nothing. Out: a closure
+    ``(state, rng, beta) -> None`` that updates ``state``, ``(n_nodes,)``
+    ``int64`` and C-contiguous, in place, and draws exactly ``n_nodes``
+    uniforms from ``rng``. Thread safety: the closure writes ``state`` alone
+    and reads its captured arrays, so one closure may run on several threads
+    at once given a distinct ``state`` and generator per thread; the Rust
+    sweep releases the GIL.
     """
     if backend is Backend.PYTHON:
 
@@ -655,6 +667,13 @@ def bond_probability(graph: PottsGraph, beta: float) -> np.ndarray:
     Rust would decide an edge differently in the last place. The kernel takes
     this array and compares against it, which leaves the bond pass the
     oracle's arithmetic exactly (#754).
+
+    **Contract** (issue #1143). In: ``graph.edge_coupling``, ``(n_edges,)``
+    ``float64``, and ``beta``. Out: a new ``(n_edges,)`` ``float64`` array;
+    nothing is modified and no generator is drawn from, so it is thread-safe.
+    A negative coupling gives a negative entry, which is not a probability:
+    the cluster moves refuse that graph first
+    (:func:`~sal.sample.potts_mcmc.moves.refuse_negative_coupling`).
     """
     return np.asarray(1.0 - np.exp(-(beta * graph.edge_coupling)))
 
@@ -773,7 +792,15 @@ class AdjacencyLists:
 def adjacency_lists(
     offsets: np.ndarray, neighbours: np.ndarray, couplings: np.ndarray
 ) -> AdjacencyLists:
-    """The compressed adjacency as the lists a cluster move walks."""
+    """The compressed adjacency as the lists a cluster move walks.
+
+    **Contract** (issue #1143). In: ``offsets``, ``(n_nodes + 1,)``
+    ``int64``; ``neighbours``, ``(offsets[-1],)`` ``int64``; ``couplings``,
+    ``(offsets[-1],)`` ``float64``. Out: a new :class:`AdjacencyLists` of
+    Python lists, O(n_nodes + n_edges) to build. Nothing is modified and no
+    generator is drawn from. No kernel writes the result, so one instance is
+    shared across a chain's steps and across threads.
+    """
     return AdjacencyLists(offsets.tolist(), neighbours.tolist(), couplings.tolist())
 
 
@@ -818,6 +845,16 @@ def wolff_sweep(
     omitted, it is converted here, O(n_nodes + n_edges) per step (#919). The
     arrays and the lists are the same adjacency, so the stream is bitwise
     the same either way.
+
+    **Contract** (issue #1143). In: ``state``, ``(n_nodes,)`` ``int64``,
+    recoloured in place; ``rows``, ``(n_nodes, n_states)`` ``float64`` log
+    weights at temperature 1, or a :class:`~sal.sim.potts.SiteField`; the
+    compressed adjacency as :func:`adjacency_lists` takes it. Only ``state``
+    and ``counter`` are modified. Draws from ``rng``: the seed where ``root``
+    is ``None``, one uniform per like neighbour reached from outside the
+    cluster, the colour where ``proposed`` is ``None``, and one uniform where
+    the field difference is negative. Thread-safe given a distinct ``state``,
+    generator and ``counter`` per thread; ``lists`` may be shared.
 
     Returns
     -------
@@ -1226,10 +1263,13 @@ def heat_bath_labels(log_weights: np.ndarray, rng: np.random.Generator) -> np.nd
     the array's shape, so the labels are a function of the generator's state
     alone (issue #1142).
 
+    Nothing is modified; the labels are a new array. Thread-safe given a
+    distinct generator per thread (issue #1143).
+
     Parameters
     ----------
     log_weights : np.ndarray
-        ``(n_rows, n_states)``, already tempered.
+        ``(n_rows, n_states)`` ``float64``, already tempered.
     rng : np.random.Generator
         The uniforms.
 
@@ -1268,6 +1308,12 @@ def swendsen_wang_heat_bath_sweep(
 
     Draws: one uniform per edge, then ``q`` per cluster, clusters in
     increasing root order.
+
+    **Contract** (issue #1143). ``state``, ``(n_nodes,)`` ``int64``, is
+    relabelled in place and is the only argument modified; ``rows`` is
+    ``(n_nodes, n_states)`` ``float64`` at temperature 1, or a
+    :class:`~sal.sim.potts.SiteField`. Thread-safe given a distinct ``state``
+    and generator per thread; the Rust :func:`bond_roots` releases the GIL.
     """
     rows = log_weight_of(rows)
     n_nodes = graph.n_nodes
@@ -1318,7 +1364,8 @@ def wolff_heat_bath_sweep(
     and accepted where its label changed, and as neither where the heat bath
     drew its own: there is no rejection to count.
 
-    Draws: :func:`_grow_wolff`'s, then ``q`` uniforms.
+    Draws: :func:`_grow_wolff`'s, then ``q`` uniforms. Thread safety as
+    :func:`wolff_sweep`'s (issue #1143).
     """
     rows = log_weight_of(rows)
     walk = adjacency_lists(offsets, neighbours, couplings) if lists is None else lists
@@ -1522,7 +1569,13 @@ def bond_roots(
     Returns
     -------
     np.ndarray
-        ``(n_nodes,)`` ``int64`` roots.
+        ``(n_nodes,)`` ``int64`` roots, a new array.
+
+    Notes
+    -----
+    Contract (issue #1143): ``bonds`` is not modified and no generator is
+    drawn from, so the roots are a function of ``bonds`` alone and the call is
+    thread-safe; the Rust route releases the GIL.
     """
     pairs = np.asarray(bonds, dtype=np.int64).reshape(-1, 2)
     if backend is Backend.RUST:

@@ -88,12 +88,20 @@ those kernels over a schedule and record the run. Every public name this module
 defined before the split (issue #1010) is importable from here, so
 ``from sal.sample.potts_mcmc import X`` is unchanged.
 
-**A private name stays in the module that defines it.** The two sweeps the
-drivers call, :func:`~sal.sample.potts_mcmc.sweeps.sweep_at` and
-:func:`~sal.sample.potts_mcmc.sweeps.balanced_sweep_at`, and the
-four names the tests pin --- ``GUARD``, ``bond_probability``,
-``single_site_sweep`` and ``site_update`` --- are public in
-:mod:`~sal.sample.potts_mcmc.sweeps`. A test that replaces a
+**The public surface is ``__all__``, and callers import from here** (issue
+#1143). Callers outside the package compose the kernels as well as the
+drivers: the bond probability (:func:`bond_probability`), the cluster roots
+(:func:`bond_roots`), the adjacency a cluster walks (:func:`adjacency_lists`),
+the single-site sweep closure (:func:`sweep_at`), one Wolff cluster
+(:func:`wolff_sweep`) and the heat-bath label draw (:func:`heat_bath_labels`).
+Each states its arrays, whether it mutates them, the generator it draws from
+and its thread safety, and
+``tests/regression/sample/test_public_surface.py`` snapshots their
+signatures and refuses an import of an exported name from a submodule under
+``tests/``, ``docs/nb/`` or ``python/sal/validation/``. The names only the drivers
+and tests read --- ``GUARD``, ``single_site_sweep``, ``site_update`` and
+:func:`~sal.sample.potts_mcmc.sweeps.balanced_sweep_at` --- stay public in
+:mod:`~sal.sample.potts_mcmc.sweeps` and unexported. A test that replaces a
 kernel's collaborator patches the submodule whose global the kernel reads, not
 this one: a name re-exported here is a copy.
 """
@@ -129,6 +137,7 @@ from sal.sample.potts_mcmc.sweeps import (
     Recolour,
     adjacency_lists,
     autodiff_log_ratios,
+    bond_probability,
     bond_roots,
     cluster_members,
     find_root,
@@ -140,6 +149,7 @@ from sal.sample.potts_mcmc.sweeps import (
     label_directed_sweep,
     niedermayer_sweep,
     niedermayer_threshold,
+    sweep_at,
     swendsen_wang_heat_bath_sweep,
     swendsen_wang_sweep,
     taylor_log_ratios,
@@ -155,7 +165,7 @@ from sal.sim.potts import energies
 #: the simulator could score with it, and every caller that had it from here
 #: still does. ``AdjacencyLists``, ``adjacency_lists`` and ``bond_roots`` were
 #: public and unlisted before the split, and are listed so a re-export is
-#: declared once.
+#: declared once; ``bond_probability`` and ``sweep_at`` joined in issue #1143.
 __all__ = [
     "AdjacencyLists",
     "AnnealedPotts",
@@ -173,6 +183,7 @@ __all__ = [
     "adjacency_lists",
     "anneal_potts",
     "autodiff_log_ratios",
+    "bond_probability",
     "bond_roots",
     "cluster_members",
     "cluster_tempering",
@@ -191,6 +202,7 @@ __all__ = [
     "sample_potts",
     "sample_potts_pair",
     "swap_log_ratio",
+    "sweep_at",
     "sweep_for",
     "swendsen_wang_heat_bath_sweep",
     "swendsen_wang_sweep",

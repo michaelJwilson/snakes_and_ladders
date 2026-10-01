@@ -17,8 +17,7 @@ from itertools import product
 
 import numpy as np
 import pytest
-from sal.sample.potts_mcmc import find_root, union_roots
-from sal.sample.potts_mcmc.sweeps import bond_probability
+from sal.sample.potts_mcmc import bond_probability, find_root, union_roots
 from sal.sim.canonical import planted_spin_glass
 from sal.sim.graph import (
     BoundaryCondition,
