@@ -18,6 +18,7 @@ import torch
 
 from sal import oxisal
 from sal.backend import Backend, refuse_backend
+from sal.cost import Cost
 from sal.emissions import (
     BetaBinomialEmission,
     BinomialEmission,
@@ -60,6 +61,16 @@ class EmFit:
         Whether the outer loop met its relative tolerance and after how many
         EM iterations (issue #860). An unconverged emission M step is refused
         rather than reported, and still is: this answers for the outer loop.
+    spent : int
+        What the fit cost, in ``unit``: the EM iterations run, each one E
+        step and one M step (issue #1165).
+    unit : Cost
+        The unit ``spent`` is counted in, :attr:`~sal.cost.Cost.ITERATIONS`.
+    frozen : tuple[int, ...]
+        States an M step held at their parameters because the E step left
+        them no data (issue #1136), at any iteration, as
+        :attr:`sal.opt.emission_mixture.EmissionMixtureFit.frozen` reports
+        components (issue #1165).
     """
 
     log_initial: torch.Tensor
@@ -68,6 +79,9 @@ class EmFit:
     log_likelihood: float
     at_boundary: bool = False
     termination: Termination = dataclass_field(kw_only=True)
+    spent: int = dataclass_field(kw_only=True)
+    unit: Cost = dataclass_field(default=Cost.ITERATIONS, kw_only=True)
+    frozen: tuple[int, ...] = dataclass_field(default=(), kw_only=True)
 
 
 @dataclass(frozen=True)
@@ -76,9 +90,9 @@ class CategoricalFit:
 
     :class:`EmFit` is the general form, carrying a family rather than a
     matrix and a field a categorical M step cannot fill: no categorical
-    re-estimate sits at a boundary. The outer loop's termination is carried
-    as every EM fit carries it (issue #1059); the four-tuple an unpacking
-    reads is what it was (issue #865).
+    re-estimate sits at a boundary. The outer loop's termination and cost
+    are carried as every EM fit carries them (issues #1059, #1165), and an
+    unpacking reads every field in declared order (issue #865).
 
     Parameters
     ----------
@@ -93,6 +107,10 @@ class CategoricalFit:
     termination : Termination | None
         Why the EM loop stopped and after how many iterations, as
         :class:`EmFit` reports it.
+    spent : int
+        The EM iterations run, in ``unit``, as :class:`EmFit` reports them.
+    unit : Cost
+        :attr:`~sal.cost.Cost.ITERATIONS`.
     """
 
     log_initial: torch.Tensor
@@ -100,9 +118,11 @@ class CategoricalFit:
     log_emission: torch.Tensor
     log_likelihood: float
     termination: Termination = dataclass_field(kw_only=True)
+    spent: int = dataclass_field(kw_only=True)
+    unit: Cost = dataclass_field(default=Cost.ITERATIONS, kw_only=True)
 
     def __iter__(self) -> Iterator[Any]:
-        """The declared order (#865): the three parameters, the value, the termination.
+        """The declared order (#865): the parameters, the value, the termination, the cost.
 
         ``Any`` and not a union: an unpacking gives every name the element
         type, so a union would mistype each of them.
@@ -113,6 +133,8 @@ class CategoricalFit:
             self.log_emission,
             self.log_likelihood,
             self.termination,
+            self.spent,
+            self.unit,
         )
 
 
@@ -122,6 +144,7 @@ def baum_welch(
     log_transition: torch.Tensor,
     log_emission: torch.Tensor,
     config: EmConfig = EM,
+    *,
     backend: Backend = Backend.RUST,
 ) -> CategoricalFit:
     """Fit an HMM by expectation-maximization, with no autodiff involved.
@@ -184,6 +207,7 @@ def baum_welch(
         family.log_matrix,
         result.log_likelihood,
         termination=result.termination,
+        spent=result.spent,
     )
 
 
@@ -343,6 +367,7 @@ def _streamed_baum_welch(
         torch.from_numpy(emission.reshape(m, n_symbols)),
         log_likelihood,
         termination=termination,
+        spent=termination.iterations,
     )
 
 
@@ -442,6 +467,7 @@ def _streamed_family(
     """
     m = emissions.n_states
     at_boundary = False
+    frozen: set[int] = set()
 
     def flat(tensor: torch.Tensor) -> np.ndarray:
         return np.ascontiguousarray(tensor.detach().numpy(), dtype=np.float64).reshape(
@@ -522,6 +548,7 @@ def _streamed_family(
                 )
                 raise ValueError(msg)
             at_boundary = at_boundary or reestimate.at_boundary
+            frozen.update(reestimate.frozen)
             return (initial, transition, reestimate.emissions), log_likelihood
 
         step = tabled
@@ -538,6 +565,8 @@ def _streamed_family(
         log_likelihood=log_likelihood,
         at_boundary=at_boundary,
         termination=termination,
+        spent=termination.iterations,
+        frozen=tuple(sorted(frozen)),
     )
 
 
@@ -567,8 +596,8 @@ def baum_welch_family(
     log_transition: torch.Tensor,
     components: EmissionFamily,
     config: EmConfig = EM,
-    covariate: np.ndarray | Ragged | None = None,
     *,
+    covariate: np.ndarray | Ragged | None = None,
     update: CovariateUpdate | None = None,
     fit_transition: bool = True,
     backend: Backend = Backend.RUST,
@@ -641,23 +670,19 @@ def baum_welch_family(
         ``False`` it is held, as a per-step or per-sequence kernel always is
         (issue #933).
     backend : Backend
-        The E step's recursion. The default,
-        :data:`~sal.backend.Backend.RUST`, walks each sequence
-        in the compiled ragged kernel (issue #933): 19.4x the torch recursion
-        on 200 chains of 100-3,000 positions. It takes one kernel for the
-        whole chain, so a per-step or per-sequence kernel keeps the torch
-        recursion under either. :data:`~sal.backend.Backend.PYTHON`
-        is the padded torch recursion and the oracle, agreeing within 2e-12.
-
-    backend : Backend
-        :data:`~sal.backend.Backend.RUST`, the default since
-        issue #997, streams the E step one sequence at a time into
-        sufficient statistics, where the family is exactly a one-channel
-        :class:`GaussianEmission`, or a :class:`PoissonEmission`,
+        :data:`~sal.backend.Backend.RUST`, the default, takes the compiled
+        route that fits the case. It streams the E step one sequence at a time
+        into sufficient statistics (issue #997) where the family is exactly a
+        one-channel :class:`GaussianEmission`, or a :class:`PoissonEmission`,
         :class:`BinomialEmission`, :class:`NegativeBinomialEmission` or
         :class:`BetaBinomialEmission` over integer counts with no covariate or
         an integer one, the observations are a rectangular array, and the
-        kernel is one ``(m, m)`` matrix.
+        kernel is one ``(m, m)`` matrix. Otherwise it walks each sequence in
+        the compiled ragged kernel (issue #933): 19.4x the torch recursion on
+        200 chains of 100-3,000 positions. That kernel takes one kernel for
+        the whole chain, so a per-step or per-sequence kernel keeps the torch
+        recursion under either. :data:`~sal.backend.Backend.PYTHON` is the
+        padded torch recursion and the oracle, agreeing within 2e-12.
     with_table : bool
         How the streamed count step scores an observation, read only there.
         ``True``, the default, scores each occupied (count, covariate) cell
@@ -683,8 +708,9 @@ def baum_welch_family(
     Returns
     -------
     EmFit
-        The fitted parameters, the final log-likelihood, and whether any M
-        step reported a parameter at the edge of what the data identifies.
+        The fitted parameters, the final log-likelihood, whether any M step
+        reported a parameter at the edge of what the data identifies, the
+        iterations spent, and the states any M step froze.
 
     Raises
     ------
@@ -797,6 +823,7 @@ def baum_welch_family(
     previous = mask.unsqueeze(2).expand(-1, -1, m).to(torch.float64) / m
 
     at_boundary = False
+    frozen: set[int] = set()
 
     def iterate(
         state: tuple[torch.Tensor, torch.Tensor, torch.Tensor, EmissionFamily],
@@ -905,6 +932,7 @@ def baum_welch_family(
             )
             raise ValueError(msg)
         at_boundary = at_boundary or step.at_boundary
+        frozen.update(step.frozen)
         return (log_initial, log_transition, kernels, step.emissions), log_likelihood
 
     (log_initial, log_transition, _, components), log_likelihood, termination = em_loop(
@@ -919,4 +947,6 @@ def baum_welch_family(
         log_likelihood=log_likelihood,
         at_boundary=at_boundary,
         termination=termination,
+        spent=termination.iterations,
+        frozen=tuple(sorted(frozen)),
     )

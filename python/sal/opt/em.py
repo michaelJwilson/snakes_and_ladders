@@ -26,6 +26,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Protocol
 
 from sal.opt.termination import Termination
 
@@ -107,3 +108,31 @@ def em_loop[State](
             break
         previous = log_likelihood
     return state, log_likelihood, Termination.after(iterations, converged=converged)
+
+
+class InnerSolve(Protocol):
+    """What an M step reports of its own loop: :class:`sal.emissions.Reestimate` among others.
+
+    Structural, so this module stays free of ``torch`` and of every model.
+    """
+
+    @property
+    def converged(self) -> bool:
+        """Whether the inner solve met its criterion."""
+        ...
+
+    @property
+    def iterations(self) -> int:
+        """Iterations the inner solve took; ``0`` for a closed form."""
+        ...
+
+
+def inner_termination(step: InnerSolve) -> Termination:
+    """An M step's inner solve as a :class:`Termination`, the form every loop states (issue #1165).
+
+    ``Reestimate`` reports ``converged`` and ``iterations`` and lives in
+    :mod:`sal.emissions.base`, which imports no inference directory
+    (``test_directory_imports.py``), so the conversion lives here rather than
+    as a property on it. A closed-form step reads as converged after none.
+    """
+    return Termination.after(step.iterations, converged=step.converged)

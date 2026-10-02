@@ -38,6 +38,7 @@ import torch
 
 from sal import oxisal
 from sal.backend import Backend, refuse_backend
+from sal.cost import Cost
 from sal.emissions import (
     EmissionFamily,
     GaussianEmission,
@@ -539,6 +540,10 @@ class MixtureFit:
         in the form every result states it in (issue #860); its
         ``iterations`` are the EM iterations run, which a field of their own
         repeated until #1090.
+    spent : int
+        What the fit cost, in ``unit``: the EM iterations run (issue #1165).
+    unit : Cost
+        The unit ``spent`` is counted in, :attr:`~sal.cost.Cost.ITERATIONS`.
     """
 
     weights: torch.Tensor
@@ -546,6 +551,8 @@ class MixtureFit:
     log_likelihood: float
     at_boundary: bool
     termination: Termination = dataclass_field(kw_only=True)
+    spent: int = dataclass_field(kw_only=True)
+    unit: Cost = dataclass_field(default=Cost.ITERATIONS, kw_only=True)
 
 
 def expectation_maximization(
@@ -553,6 +560,7 @@ def expectation_maximization(
     weights: torch.Tensor,
     components: GaussianEmission,
     config: EmConfig = EM,
+    *,
     backend: Backend = Backend.RUST,
 ) -> MixtureFit:
     """Fit a mixture by EM, with no autodiff involved.
@@ -656,6 +664,7 @@ def expectation_maximization(
         log_likelihood,
         boundary,
         termination=termination,
+        spent=termination.iterations,
     )
 
 
@@ -712,6 +721,7 @@ def _streamed_expectation_maximization(
         log_likelihood,
         False,
         termination=termination,
+        spent=termination.iterations,
     )
 
 

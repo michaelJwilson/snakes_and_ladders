@@ -36,6 +36,7 @@ import numpy as np
 import torch
 
 from sal import oxisal
+from sal.cost import Cost
 from sal.emissions import (
     BetaBinomialEmission,
     BinomialEmission,
@@ -111,6 +112,10 @@ class EmissionMixtureFit:
         component no longer ends the fit; the loop's own stop is still
         ``termination``, and this says which components it stopped with
         unestimated.
+    spent : int
+        What the fit cost, in ``unit``: the EM iterations run (issue #1165).
+    unit : Cost
+        The unit ``spent`` is counted in, :attr:`~sal.cost.Cost.ITERATIONS`.
     """
 
     weights: torch.Tensor
@@ -120,6 +125,8 @@ class EmissionMixtureFit:
     at_boundary: bool
     termination: Termination = dataclass_field(kw_only=True)
     frozen: tuple[int, ...] = dataclass_field(default=(), kw_only=True)
+    spent: int = dataclass_field(kw_only=True)
+    unit: Cost = dataclass_field(default=Cost.ITERATIONS, kw_only=True)
 
 
 def expectation_maximization(
@@ -252,6 +259,7 @@ def expectation_maximization(
         at_boundary=boundary,
         termination=termination,
         frozen=tuple(sorted(frozen)),
+        spent=termination.iterations,
     )
 
 
@@ -448,6 +456,7 @@ def _cell_expectation_maximization(
         at_boundary=boundary,
         termination=termination,
         frozen=tuple(sorted(frozen)),
+        spent=termination.iterations,
     )
 
 

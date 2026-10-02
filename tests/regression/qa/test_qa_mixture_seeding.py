@@ -81,6 +81,7 @@ def test_the_caption_reports_the_numbers_it_was_handed(tmp_path: Path) -> None:
         log_likelihood=-1000.25,
         at_boundary=False,
         termination=Termination.after(EM_ITERATIONS, converged=True),
+        spent=EM_ITERATIONS,
     )
     ratios = SeedingRatios(
         kmeans_plus_plus=np.array([1.0, 3.0]),

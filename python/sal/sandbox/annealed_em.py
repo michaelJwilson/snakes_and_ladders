@@ -181,5 +181,6 @@ def annealed_expectation_maximization(
         log_likelihood=log_likelihood,
         at_boundary=boundary,
         termination=termination,
+        spent=termination.iterations,
     )
     return AnnealedFit(fit, tuple(schedule), tuple(free_energies))
