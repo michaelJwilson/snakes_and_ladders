@@ -50,7 +50,8 @@ MEANS = (30.0, 200.0)
 SHORT = EmConfig(max_iterations=3, tolerance=0.0)
 
 
-@pytest.mark.infra
+@pytest.mark.smoke
+@pytest.mark.mixture
 @pytest.mark.parametrize("result", RESULTS, ids=lambda result: result.__name__)
 def test_every_em_result_declares_spent_unit_and_termination(result: type) -> None:
     fields = {field.name: field for field in dataclasses.fields(result)}
@@ -61,7 +62,8 @@ def test_every_em_result_declares_spent_unit_and_termination(result: type) -> No
     assert fields["spent"].default_factory is dataclasses.MISSING
 
 
-@pytest.mark.infra
+@pytest.mark.smoke
+@pytest.mark.mixture
 @pytest.mark.parametrize("backend", [Backend.PYTHON, Backend.RUST])
 def test_every_em_entry_point_spends_the_iterations_it_ran(backend: Backend) -> None:
     rng = np.random.default_rng(1165)
@@ -100,7 +102,7 @@ def test_every_em_entry_point_spends_the_iterations_it_ran(backend: Backend) -> 
         assert fit.unit is Cost.ITERATIONS
 
 
-@pytest.mark.infra
+@pytest.mark.smoke
 def test_baum_welch_takes_its_covariate_and_backend_by_name() -> None:
     log_initial = torch.log(torch.tensor([0.5, 0.5], dtype=torch.float64))
     log_transition = torch.log(torch.tensor([[0.9, 0.1], [0.2, 0.8]]).double())
