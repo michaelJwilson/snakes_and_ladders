@@ -1,6 +1,6 @@
 """`opt/`'s named results iterate in their declared field order (issue #865).
 
-Three entry points return a frozen dataclass where they returned a tuple, and
+Four results are a frozen dataclass where they were a tuple, and
 callers still unpack them, so ``__iter__`` must yield fields in declared
 order. Sentinel values: this checks order; each module's tests check values.
 """
@@ -11,12 +11,14 @@ from dataclasses import fields
 
 import pytest
 from sal.opt.hmm import CategoricalFit
+from sal.opt.hmm.forward import Posteriors
 from sal.opt.potts import GraphStatistics
 from sal.opt.testfunctions import NearestMinimum
 
-#: Every result type this package's share of the ticket names, one per
-#: entry point: no two of the three report the same fields.
-NAMED = [CategoricalFit, GraphStatistics, NearestMinimum]
+#: The result types this package's share of the ticket names, one per entry
+#: point, and `Posteriors`, registered where it is defined since it moved
+#: here from `likelihood` (#1166): no two of the four report the same fields.
+NAMED = [CategoricalFit, GraphStatistics, NearestMinimum, Posteriors]
 
 
 @pytest.mark.smoke

@@ -30,7 +30,7 @@ from sal.emissions import (
     settle_collapse,
 )
 from sal.opt.em import EM, EmConfig, em_loop
-from sal.opt.hmm.forward import forward_messages
+from sal.opt.hmm.forward import Posteriors, forward_messages
 from sal.opt.termination import Termination
 from sal.ragged import Ragged
 
@@ -217,19 +217,20 @@ def _ragged_e_step(
     lengths: np.ndarray,
     log_initial: torch.Tensor,
     log_transition: torch.Tensor,
-) -> tuple[torch.Tensor, torch.Tensor, float]:
-    """The E step in the compiled ragged kernel, returned in the padded layout (issue #933).
+) -> Posteriors:
+    """The E step in the compiled ragged kernel, over the live rows (issues #933, #1166).
 
     ``emit`` is the masked ``(n, length, m)`` block; its live rows, in
-    sequence order, are what the kernel walks. The log marginals are
-    scattered back to the block with ``-inf`` at padding, as the torch
-    recursion leaves them, so the M step reads one layout either way.
+    sequence order, are what the kernel walks. The result is the kernel's own
+    buffers in NumPy, the type :func:`sal.likelihood.ragged.posteriors`
+    returns, so a hook in ``opt`` can be typed against it; the caller scatters
+    the log marginals back to the padded block.
 
     Returns
     -------
-    tuple[torch.Tensor, torch.Tensor, float]
-        Log gamma ``(n, length, m)``, log transition counts ``(m, m)``
-        summed over sequences, and the log-likelihood.
+    Posteriors
+        Log gamma ``(total, m)`` over the live rows, log transition counts
+        ``(m, m)`` summed over sequences, and one log evidence per sequence.
     """
     values = np.ascontiguousarray(emit[mask].numpy(), dtype=np.float64)
     m = values.shape[1]
@@ -245,9 +246,7 @@ def _ragged_e_step(
         counts,
         evidence,
     )
-    padded = torch.full(emit.shape, -float("inf"), dtype=emit.dtype)
-    padded[mask] = torch.as_tensor(gamma)
-    return padded, torch.as_tensor(counts), float(evidence.sum())
+    return Posteriors(gamma, counts, evidence)
 
 
 class CovariateUpdate(Protocol):
@@ -881,9 +880,15 @@ def baum_welch_family(
             # The ragged kernel walks each sequence in place and returns the
             # log marginals, the log transition counts summed over sequences,
             # and each sequence's evidence (issue #933). It takes one kernel.
-            gamma, transition_counts, log_likelihood = _ragged_e_step(
+            posteriors = _ragged_e_step(
                 emit, mask, lengths, log_initial, log_transition
             )
+            # Scattered back to the block with `-inf` at padding, as the torch
+            # recursion leaves them, so the M step reads one layout either way.
+            gamma = torch.full(emit.shape, -float("inf"), dtype=emit.dtype)
+            gamma[mask] = torch.as_tensor(posteriors.log_posterior)
+            transition_counts = torch.as_tensor(posteriors.log_counts)
+            log_likelihood = float(posteriors.log_evidence.sum())
         else:
             # The forward pass is the objective's (issue #1162): one kernel for
             # every sequence, one per step, or each sequence's own (#933), read

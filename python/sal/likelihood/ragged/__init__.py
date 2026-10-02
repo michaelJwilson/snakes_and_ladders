@@ -39,6 +39,12 @@ import numpy as np
 
 from sal.backend import Backend, twin
 from sal.likelihood.forward_backward import forward_backward
+
+# The E step's result moved to `opt.hmm.forward` so `opt` can name it (issue
+# #1166); re-exported so every import from here holds.
+from sal.opt.hmm.forward import (
+    Posteriors as Posteriors,  # noqa: PLC0414
+)
 from sal.ragged import Ragged
 
 
@@ -103,30 +109,6 @@ def kronecker_order(n_states: int, *, layer_major: bool = False) -> np.ndarray:
     if not layer_major:
         return index
     return np.ascontiguousarray(index.reshape(2, n_states // 2).T.reshape(-1))
-
-
-@dataclass(frozen=True)
-class Posteriors:
-    """What one ragged forward--backward pass returns, in the log domain.
-
-    Parameters
-    ----------
-    log_posterior : np.ndarray
-        ``(total, n_states)``, the log marginal at every position.
-    log_counts : np.ndarray
-        ``(n_states, n_states)``, the log transition counts summed over
-        segments. The pair spanning a boundary is in none of them.
-    log_evidence : np.ndarray
-        One log evidence per segment.
-    """
-
-    log_posterior: np.ndarray
-    log_counts: np.ndarray
-    log_evidence: np.ndarray
-
-    def __iter__(self) -> Iterator[np.ndarray]:
-        """``(log_posterior, log_counts, log_evidence)``: the order callers unpack."""
-        yield from (self.log_posterior, self.log_counts, self.log_evidence)
 
 
 @dataclass(frozen=True)

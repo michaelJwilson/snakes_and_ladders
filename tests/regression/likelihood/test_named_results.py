@@ -3,6 +3,8 @@
 Thirteen entry points return a frozen dataclass where they returned a tuple,
 and callers still unpack them, so ``__iter__`` must yield fields in declared
 order. Sentinel values: this checks order; each module's tests check values.
+``Posteriors`` is defined in ``opt`` since #1166 and is checked there; this
+file checks the re-export is the same class.
 """
 
 from __future__ import annotations
@@ -24,9 +26,10 @@ from sal.likelihood.spatio_sequential.rust import (
     EmissionTables,
 )
 from sal.likelihood.surrogate import EnergyBounds
+from sal.opt.hmm import forward
 
-#: Every result type the ticket names, including the private one `_run`
-#: returns: it is unpacked by its two callers and by a test, so its order is
+#: Every result type the ticket names that ``likelihood`` defines, including
+#: the private one `_run` returns: it is unpacked by its two callers and by a test, so its order is
 #: as load-bearing as a public one's.
 NAMED = [
     Adjacency,
@@ -36,7 +39,6 @@ NAMED = [
     EnergyBounds,
     Extremes,
     Paths,
-    Posteriors,
     Spectrum,
     StepKernels,
     TreeDistances,
@@ -53,6 +55,15 @@ def test_a_named_result_unpacks_to_its_fields_in_order() -> None:
 
         assert list(instance) == names, result.__name__
         assert [getattr(instance, name) for name in names] == names, result.__name__
+
+
+@pytest.mark.smoke
+def test_the_ragged_posteriors_are_the_type_opt_defines() -> None:
+    # One class under two import paths (#1166): a second definition would
+    # pass every field check and fail an `isinstance` across the seam. The
+    # module names a problem, so the kind is `smoke`, not `infra` (#729).
+    assert Posteriors is forward.Posteriors
+    assert Posteriors.__module__ == "sal.opt.hmm.forward"
 
 
 @pytest.mark.smoke
