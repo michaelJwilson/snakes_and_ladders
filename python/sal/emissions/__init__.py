@@ -26,9 +26,11 @@ is, so a test can assert the bound exactly where it holds.
 A Gaussian emission's likelihood has no maximum: put one state's mean on a
 single observation and let its variance go to zero (Bishop, *Pattern
 Recognition and Machine Learning*, section 9.2.1).
-:class:`GaussianEmission` therefore carries an explicit variance floor and
-**refuses** rather than clamps when a re-estimate reaches it, because a
-clamped fit returns normally and its intervals mean nothing (issue #122).
+:class:`GaussianEmission` therefore carries an explicit variance floor, and a
+re-estimate that reaches it settles the state as :class:`Collapse` says ---
+held by default, clamped, or refused as #122 did --- and **names it** in
+``Reestimate.frozen`` in every mode, so a fit at a collapse never reads as a
+clean optimum (issue #1160).
 
 **A covariate arrives shaped for the states, and that rule is stated here
 because this is what enforces it.** :func:`trial_count` and :func:`exposure`
@@ -92,6 +94,7 @@ import types
 from sal.backend import Backend
 from sal.emissions import mstep
 from sal.emissions.base import (
+    COLLAPSED_MASS,
     CountEmissionFamily,
     CovariateNotSupportedError,
     Domain,
@@ -117,9 +120,11 @@ from sal.emissions.counts import (
 from sal.emissions.families import (
     COLLAPSE_EXPONENT,
     CategoricalEmission,
+    Collapse,
     GaussianEmission,
     pooled_variance_floor,
     refuse_collapsed,
+    settle_collapse,
 )
 from sal.emissions.mstep import (
     EXPOSED_TAIL_RATIO,
@@ -154,12 +159,14 @@ class _Package(types.ModuleType):
 sys.modules[__name__].__class__ = _Package
 
 __all__ = [
+    "COLLAPSED_MASS",
     "COLLAPSE_EXPONENT",
     "EXPOSED_TAIL_RATIO",
     "M_STEP_BACKEND",
     "BetaBinomialEmission",
     "BinomialEmission",
     "CategoricalEmission",
+    "Collapse",
     "CountEmissionFamily",
     "CountPairEmission",
     "CovariateNotSupportedError",
@@ -179,6 +186,7 @@ __all__ = [
     "refuse_collapsed",
     "refuse_covariate",
     "require_parameter_names",
+    "settle_collapse",
     "trial_count",
     "validated_exposure",
     "validated_trials",

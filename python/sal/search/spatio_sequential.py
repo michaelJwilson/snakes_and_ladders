@@ -676,6 +676,7 @@ def seed_emissions(
                     np.sort(np.asarray(seeds, dtype=float)),
                     np.full(params.n_states, pooled),
                     float(family.variance_floor),
+                    on_collapse=family.on_collapse,
                 )
             )
         else:

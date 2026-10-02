@@ -18,7 +18,7 @@ from numpy.testing import assert_allclose
 from numpy.typing import ArrayLike
 from sal.backend import Backend
 from sal.cost import Cost
-from sal.emissions import GaussianEmission, Reestimate
+from sal.emissions import Collapse, GaussianEmission, Reestimate
 from sal.likelihood.mixture_assignments import (
     enumerate_mixture_assignments,
 )
@@ -168,12 +168,14 @@ def test_the_responsibilities_are_a_distribution_over_components() -> None:
     assert bool((posterior >= 0.0).all())
 
 
-@pytest.mark.smoke
-def test_a_collapsing_component_is_refused_rather_than_returned() -> None:
+@pytest.mark.oracle
+@pytest.mark.parametrize("backend", [Backend.PYTHON, Backend.RUST])
+def test_a_collapsing_component_is_refused_under_refuse(backend: Backend) -> None:
     # The unbounded likelihood transfers from the Gaussian HMM unchanged,
     # being the same family: a component's mean on one observation with its
-    # scale going to zero diverges, so EM is refused rather than reporting a
-    # converged fit at a degenerate optimum.
+    # scale going to zero diverges. Under `Collapse.REFUSE` EM raises, as
+    # every fit did from #122 until #1160 made holding the default; both
+    # routes raise in the same words.
     observations = _dataset(n_samples=200)
     objective = GaussianMixtureObjective(observations, 2)
     floor = objective.variance_floor
@@ -186,7 +188,9 @@ def test_a_collapsing_component_is_refused_rather_than_returned() -> None:
                 [float(observations[0]), 0.0],
                 [float(np.sqrt(floor)) / 100.0, 2.0],
                 floor,
+                on_collapse=Collapse.REFUSE,
             ),
+            backend=backend,
         )
 
 

@@ -353,6 +353,7 @@ def gaussian_em_seeding(
     components = objective.components(start)
     tracked = current()
     path: list[tuple[int, EmissionFamily]] = []
+    frozen: set[int] = set()
     for iteration in range(GAUSSIAN_EM_ITERATIONS):
         fitted = gaussian_expectation_maximization(
             channel,
@@ -361,15 +362,21 @@ def gaussian_em_seeding(
             config=EmConfig(max_iterations=1, tolerance=0.0),
         )
         weights, components = fitted.weights, fitted.components
+        frozen.update(fitted.frozen)
         tracked.record(iteration, surrogate_log_likelihood=fitted.log_likelihood)
         last = iteration == GAUSSIAN_EM_ITERATIONS - 1
         if iteration % PATH_STRIDE == 0 or last:
             path.append((iteration, at_locations(instance, components.mean)))
+    # A collapsed component is held and the seeding goes on, ranked by its
+    # likelihood like any other; the record names it (issue #1160).
+    held = tuple(sorted(frozen))
     return Seeding(
         path[-1][1],
         float(GAUSSIAN_EM_ITERATIONS),
-        f"budget after {GAUSSIAN_EM_ITERATIONS}",
+        f"budget after {GAUSSIAN_EM_ITERATIONS}"
+        + (f", held {list(held)} at a collapse" if held else ""),
         tuple(path),
+        held,
     )
 
 
@@ -864,8 +871,11 @@ class BestOf:
         return results, path, passes
 
     @staticmethod
-    def _note(results: list[_Seeded], chosen: str) -> str:
-        """The handover note, naming the seedings skipped and why."""
+    def _note(results: list[_Seeded], chosen: str, best: int) -> str:
+        """The handover note, naming the chosen seeding's collapse and the seedings skipped and why."""
+        seeded = results[best].seeded
+        if seeded is not None and seeded.frozen:
+            chosen = f"{chosen}, held {list(seeded.frozen)} at a collapse"
         failed = [i for i, r in enumerate(results) if r.failure is not None]
         if not failed:
             return chosen
@@ -899,8 +909,9 @@ class BestOf:
         return Seeding(
             chosen.components,
             passes,
-            self._note(results, f"best of {self.n}: seeding {best}"),
+            self._note(results, f"best of {self.n}: seeding {best}", best),
             path,
+            chosen.frozen,
         )
 
     def polished(
@@ -960,8 +971,9 @@ class BestOf:
             Seeding(
                 seeded.components,
                 charged,
-                self._note(results, f"best of {self.n} after EM: seeding {best}"),
+                self._note(results, f"best of {self.n} after EM: seeding {best}", best),
                 path,
+                seeded.frozen,
             ),
             chosen,
         )
@@ -1060,12 +1072,18 @@ class MixturePolished(Polished):
     emptied : bool
         Whether the polish stopped because EM emptied a component and its M
         step refused, :func:`polish`'s third stop.
+    frozen : tuple[int, ...]
+        Components an M step held or clamped at any iteration, read from
+        each step's ``frozen`` (issues #1136, #1160): the polish goes on past
+        them and is ranked by its likelihood, and this says it is not a
+        clean optimum.
     """
 
     components: EmissionFamily
     weights: torch.Tensor
     log_likelihoods: np.ndarray
     emptied: bool = False
+    frozen: tuple[int, ...] = ()
 
     @classmethod
     def ended(
@@ -1076,6 +1094,7 @@ class MixturePolished(Polished):
         *,
         converged: bool = False,
         emptied: bool = False,
+        frozen: tuple[int, ...] = (),
     ) -> MixturePolished:
         """The fit at the trace's last value, its termination read off the two flags."""
         reason = (
@@ -1090,6 +1109,7 @@ class MixturePolished(Polished):
             weights=weights,
             log_likelihoods=log_likelihoods,
             emptied=emptied,
+            frozen=frozen,
         )
 
 
@@ -1154,6 +1174,7 @@ def polish(
     longest = 0.0
     converged = False
     emptied = False
+    frozen: set[int] = set()
     iteration = 0
     while True:
         if passes is not None and iteration >= passes:
@@ -1185,6 +1206,7 @@ def polish(
             emptied = True
             break
         longest = max(longest, time.perf_counter() - began)
+        frozen.update(step.frozen)
         trace.append(step.log_likelihood)
         tracked.record(iteration, log_likelihood=step.log_likelihood)
         weights, components = step.weights, step.components
@@ -1208,7 +1230,12 @@ def polish(
         iteration, sum(int(t.element_size() * t.nelement()) for t in tensors)
     )
     return MixturePolished.ended(
-        components, weights, np.asarray(trace), converged=converged, emptied=emptied
+        components,
+        weights,
+        np.asarray(trace),
+        converged=converged,
+        emptied=emptied,
+        frozen=tuple(sorted(frozen)),
     )
 
 

@@ -17,7 +17,8 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from sal.emissions import GaussianEmission
+from sal.backend import Backend
+from sal.emissions import Collapse, GaussianEmission
 from sal.likelihood.hmm_paths import enumerate_hidden_paths
 from sal.opt.fit import (
     constrained_standard_errors,
@@ -250,12 +251,13 @@ def test_a_known_truth_round_trips_through_the_unconstrained_coordinates() -> No
     assert_allclose(estimate["scale"].numpy(), truth.scale.numpy(), rtol=1e-13)
 
 
-@pytest.mark.smoke
-def test_a_collapsing_fit_is_refused_rather_than_returned() -> None:
+@pytest.mark.oracle
+@pytest.mark.parametrize("backend", [Backend.PYTHON, Backend.RUST])
+def test_a_collapsing_fit_is_refused_under_refuse(backend: Backend) -> None:
     # Started with one state's mean on a single observation and a scale far
-    # below the floor, EM drives that state's variance down. The refusal is the
-    # deliverable: a run that clamped and returned would report a converged fit
-    # where the likelihood has no maximum.
+    # below the floor, EM drives that state's variance down. Under
+    # `Collapse.REFUSE` the fit raises, #122's behaviour; the default holds
+    # the state instead (#1160), pinned in `test_opt_gaussian_collapse.py`.
     observations = simulate_sequences(_params(_truth(), seed=25)).observations
     floor = GaussianHmmObjective(observations, 2).variance_floor
 
@@ -268,7 +270,9 @@ def test_a_collapsing_fit_is_refused_rather_than_returned() -> None:
                 np.array([float(observations[0, 0]), 0.0]),
                 np.array([np.sqrt(floor) / 100.0, 1.0]),
                 floor,
+                on_collapse=Collapse.REFUSE,
             ),
+            backend=backend,
         )
 
 

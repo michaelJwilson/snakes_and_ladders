@@ -1,25 +1,29 @@
-"""The categorical and Gaussian families, and the variance floor a Gaussian fit refuses at.
+"""The categorical and Gaussian families, and the variance floor a Gaussian state collapses at.
 
 A Gaussian emission's likelihood has no maximum (the package docstring states
-why), so :class:`GaussianEmission` carries an explicit floor and
-:func:`pooled_variance_floor` derives one from the data.
+why), so :class:`GaussianEmission` carries an explicit floor,
+:func:`pooled_variance_floor` derives one from the data, and :class:`Collapse`
+names what a re-estimate does with a state that reaches it.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
+from enum import StrEnum
 
 import numpy as np
 import torch
 from numpy.typing import ArrayLike
 
 from sal.emissions.base import (
+    COLLAPSED_MASS,
     Domain,
     EmissionFamily,
     ParameterDomainError,
     Reestimate,
     Values,
     as_tensor,
+    marked_states,
     refuse_covariate,
     require_parameter_names,
 )
@@ -33,6 +37,27 @@ from sal.numerics import sample_rows
 #: observation has variance heading to zero. Derived from the data rather than
 #: fixed, so it transfers across fixture sizes.
 COLLAPSE_EXPONENT = 2
+
+
+class Collapse(StrEnum):
+    """What a Gaussian re-estimate does with a collapsed state (issue #1160).
+
+    A state has collapsed when its re-estimated variance is at or below the
+    family's ``variance_floor``, in any channel, or when the E step left it
+    less than :data:`~sal.emissions.base.COLLAPSED_MASS` posterior mass to
+    estimate from. Every mode lists the state in
+    :attr:`~sal.emissions.base.Reestimate.frozen`, so the fit says it is not
+    a clean optimum whichever mode ran.
+    """
+
+    HOLD = "hold"
+    """Keep the state's last mean and scale, as the count families hold an emptied state (issue #1136)."""
+
+    CLAMP = "clamp"
+    """Set the collapsed variances to the floor and re-estimate the mean; an emptied state's mean, undefined, is held."""
+
+    REFUSE = "refuse"
+    """Raise :class:`ValueError`, as every Gaussian fit did from issue #122 to #1160."""
 
 
 class CategoricalEmission(EmissionFamily):
@@ -205,7 +230,9 @@ class GaussianEmission(EmissionFamily):
     single observation and ``scale[s] -> 0`` the density diverges, so a
     Gaussian-emission fit that converges was stopped by its initialization or
     by a floor, and which one has to be knowable: the floor is explicit,
-    derived from the data, and reaching it is a refusal rather than a clamp.
+    derived from the data, and a state that reaches it is held, clamped or
+    refused as ``on_collapse`` says, and in every case named in the
+    re-estimate's ``frozen`` (issue #1160).
 
     **One state may emit several channels at once.** Give ``mean`` and
     ``scale`` shape ``(n_states, n_channels)`` and an observation carries a
@@ -222,9 +249,16 @@ class GaussianEmission(EmissionFamily):
     scale : Values
         Per-state standard deviation, of ``mean``'s shape, strictly positive.
     variance_floor : float
-        Variance at or below which :meth:`reestimate` refuses. Derive it from
-        the data with :func:`pooled_variance_floor` rather than choosing a
-        constant, so it scales with the fixture.
+        Variance at or below which :meth:`reestimate` treats a state as
+        collapsed. Derive it from the data with :func:`pooled_variance_floor`
+        rather than choosing a constant, so it scales with the fixture.
+    on_collapse : Collapse
+        What :meth:`reestimate` does with a collapsed state;
+        :attr:`Collapse.HOLD` by default. An attribute of the family rather
+        than an argument of :meth:`reestimate`, as ``variance_floor`` is,
+        because every EM driver calls ``reestimate`` through the
+        :class:`~sal.emissions.base.EmissionFamily` protocol, and the compiled
+        steps read it from the family they are handed.
 
     Raises
     ------
@@ -238,6 +272,8 @@ class GaussianEmission(EmissionFamily):
         mean: Values,
         scale: Values,
         variance_floor: float,
+        *,
+        on_collapse: Collapse = Collapse.HOLD,
     ) -> None:
         self._mean = _one_axis_at_least(torch.as_tensor(mean, dtype=torch.float64))
         self._scale = _one_axis_at_least(torch.as_tensor(scale, dtype=torch.float64))
@@ -260,6 +296,7 @@ class GaussianEmission(EmissionFamily):
             msg = f"variance_floor must be positive, got {variance_floor}"
             raise ValueError(msg)
         self._variance_floor = variance_floor
+        self._on_collapse = Collapse(on_collapse)
 
     @property
     def n_states(self) -> int:
@@ -293,8 +330,13 @@ class GaussianEmission(EmissionFamily):
 
     @property
     def variance_floor(self) -> float:
-        """Variance at or below which a re-estimate is refused."""
+        """Variance at or below which a re-estimate treats a state as collapsed."""
         return self._variance_floor
+
+    @property
+    def on_collapse(self) -> Collapse:
+        """What :meth:`reestimate` does with a collapsed state."""
+        return self._on_collapse
 
     def sample(
         self,
@@ -420,13 +462,16 @@ class GaussianEmission(EmissionFamily):
     ) -> Reestimate[GaussianEmission]:
         """Posterior-weighted mean and variance, in closed form.
 
+        A collapsed state --- variance at or below :attr:`variance_floor`, or
+        posterior mass below :data:`~sal.emissions.base.COLLAPSED_MASS` --- is
+        settled by :func:`settle_collapse` as :attr:`on_collapse` says and
+        listed in ``frozen``.
+
         Raises
         ------
         ValueError
-            If a state's re-estimated variance reaches
-            :attr:`variance_floor`. Refusal rather than clamping: the
-            likelihood is unbounded in that direction, so a clamped fit would
-            report a point estimate at a degenerate optimum (issue #122).
+            Under :attr:`Collapse.REFUSE`, if a state collapsed: the
+            likelihood is unbounded in that direction (issue #122).
         """
         refuse_covariate(self, covariate)
         posterior = as_tensor(posterior)
@@ -449,10 +494,7 @@ class GaussianEmission(EmissionFamily):
         else:
             mean = torch.stack([moments[0] for moments in located], dim=1)
             variance = torch.stack([moments[1] for moments in located], dim=1)
-        refuse_collapsed(variance, self._variance_floor)
-        return Reestimate(
-            GaussianEmission(mean, torch.sqrt(variance), self._variance_floor)
-        )
+        return settle_collapse(self, mass, mean, variance)
 
     def alignment_key(self) -> torch.Tensor:
         """The per-state means, one row per state and one column per channel."""
@@ -467,35 +509,126 @@ class GaussianEmission(EmissionFamily):
         return {"mean": Domain.REAL, "scale": Domain.POSITIVE}
 
     def with_parameters(self, named: Mapping[str, torch.Tensor]) -> GaussianEmission:
-        """The family at ``mean`` and ``scale``, its variance floor kept."""
+        """The family at ``mean`` and ``scale``, its variance floor and :attr:`on_collapse` kept."""
         require_parameter_names(self, named, ("mean", "scale"))
-        return GaussianEmission(named["mean"], named["scale"], self._variance_floor)
+        return GaussianEmission(
+            named["mean"],
+            named["scale"],
+            self._variance_floor,
+            on_collapse=self._on_collapse,
+        )
 
 
-def refuse_collapsed(variance: torch.Tensor, floor: float) -> None:
-    """Raise if a re-estimated variance is at or below ``floor``.
+def settle_collapse(
+    family: GaussianEmission,
+    mass: torch.Tensor,
+    mean: torch.Tensor,
+    variance: torch.Tensor,
+) -> Reestimate[GaussianEmission]:
+    """The re-estimate at ``mean`` and ``variance``, its collapsed states settled (issue #1160).
 
-    Shared by :meth:`GaussianEmission.reestimate` and the streamed M step of
-    :func:`sal.opt.hmm.baum_welch_family` (issue #997), so the
-    two routes refuse the same fits in the same words.
+    Shared by :meth:`GaussianEmission.reestimate` and the compiled steps of
+    :func:`sal.opt.mixture.expectation_maximization` and
+    :func:`sal.opt.hmm.baum_welch_family`, so every route holds, clamps or
+    refuses the same states to the same values.
+
+    Parameters
+    ----------
+    family : GaussianEmission
+        The family re-estimated from: its parameters are the ones a held
+        state keeps, and its floor and ``on_collapse`` decide the rest.
+    mass : torch.Tensor
+        Per-state posterior mass, shape ``(n_states,)``.
+    mean, variance : torch.Tensor
+        The posterior-weighted moments, of ``family.mean``'s shape.
+
+    Returns
+    -------
+    Reestimate[GaussianEmission]
+        With ``frozen`` the collapsed states. With none, the family at
+        ``mean`` and ``sqrt(variance)`` exactly as before issue #1160.
+
+    Raises
+    ------
+    ValueError
+        Under :attr:`Collapse.REFUSE`, if a state collapsed.
+    """
+    floor = family.variance_floor
+    narrow = variance <= floor
+    emptied = mass < COLLAPSED_MASS
+    collapsed = emptied | narrow.reshape(family.n_states, -1).any(dim=1)
+    rebuilt = {"on_collapse": family.on_collapse}
+    if not bool(collapsed.any()):
+        return Reestimate(
+            GaussianEmission(mean, torch.sqrt(variance), floor, **rebuilt)
+        )
+    if family.on_collapse is Collapse.REFUSE:
+        refuse_collapsed(variance, floor, emptied=emptied)
+    row = collapsed if mean.ndim == 1 else collapsed.unsqueeze(-1)
+    if family.on_collapse is Collapse.HOLD:
+        held_mean = torch.where(row, family.mean, mean)
+        held_scale = torch.where(row, family.scale, torch.sqrt(variance))
+    else:
+        undefined = emptied if mean.ndim == 1 else emptied.unsqueeze(-1)
+        held_mean = torch.where(undefined, family.mean, mean)
+        at_floor = narrow | undefined
+        held_scale = torch.where(
+            at_floor,
+            torch.sqrt(torch.tensor(floor, dtype=variance.dtype)),
+            torch.sqrt(variance),
+        )
+    return Reestimate(
+        GaussianEmission(held_mean, held_scale, floor, **rebuilt),
+        frozen=marked_states(collapsed),
+    )
+
+
+def refuse_collapsed(
+    variance: torch.Tensor,
+    floor: float,
+    *,
+    emptied: torch.Tensor | None = None,
+) -> None:
+    """Raise if a re-estimated variance is at or below ``floor``, or a state was emptied.
+
+    The refusal :attr:`Collapse.REFUSE` asks for, in the words every route
+    has raised since issue #122.
+
+    Parameters
+    ----------
+    variance : torch.Tensor
+        Shape ``(n_states,)`` or ``(n_states, n_channels)``.
+    floor : float
+        The family's variance floor.
+    emptied : torch.Tensor | None
+        Per-state flags, shape ``(n_states,)``: states left less than
+        :data:`~sal.emissions.base.COLLAPSED_MASS` posterior mass.
 
     Raises
     ------
     ValueError
         If any entry of ``variance``, per state or per state and channel, is
-        at or below ``floor``.
+        at or below ``floor``, or any state is ``emptied``.
     """
-    collapsed = variance <= floor
-    if bool(collapsed.any()):
-        states = (
-            torch.nonzero(collapsed.reshape(variance.shape[0], -1).any(dim=1))
-            .reshape(-1)
-            .tolist()
-        )
+    narrow = variance <= floor
+    per_state = narrow.reshape(variance.shape[0], -1).any(dim=1)
+    if emptied is not None:
+        per_state = per_state | emptied
+    if bool(per_state.any()):
+        reasons = []
+        if bool(narrow.any()):
+            reasons.append(
+                f"state(s) {list(marked_states(narrow.reshape(variance.shape[0], -1).any(dim=1)))} "
+                f"re-estimated to variance {variance[narrow].tolist()}, at or "
+                f"below the floor {floor:.6g}"
+            )
+        if emptied is not None and bool(emptied.any()):
+            reasons.append(
+                f"state(s) {list(marked_states(emptied))} left posterior mass "
+                f"below {COLLAPSED_MASS:g}"
+            )
         msg = (
-            f"state(s) {states} re-estimated to variance "
-            f"{variance[collapsed].tolist()}, at or below the floor "
-            f"{floor:.6g}: the Gaussian likelihood is "
+            f"{'; '.join(reasons)}: the Gaussian likelihood is "
             f"unbounded as a variance goes to zero, so this fit is "
             f"heading to a degenerate optimum rather than converging"
         )

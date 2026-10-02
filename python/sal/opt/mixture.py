@@ -19,7 +19,9 @@ does not know rather than guessing what the parameter vector means.
 
 **The likelihood is unbounded, exactly as the Gaussian HMM's is.** The floor
 derived in :func:`sal.emissions.pooled_variance_floor`
-transfers unchanged, and reaching it is a refusal rather than a clamp.
+transfers unchanged, and a component that reaches it is settled as the
+family's ``on_collapse`` says --- held by default --- and named in
+:attr:`MixtureFit.frozen` (issue #1160).
 
 Ground truth and data generation live in
 :mod:`sal.sim.mixture`; this module holds the fitting
@@ -40,9 +42,11 @@ from sal import oxisal
 from sal.backend import Backend, refuse_backend
 from sal.cost import Cost
 from sal.emissions import (
+    COLLAPSED_MASS,
     EmissionFamily,
     GaussianEmission,
     pooled_variance_floor,
+    settle_collapse,
 )
 from sal.opt.constrain import (
     free_from_log_simplex,
@@ -544,6 +548,12 @@ class MixtureFit:
         What the fit cost, in ``unit``: the EM iterations run (issue #1165).
     unit : Cost
         The unit ``spent`` is counted in, :attr:`~sal.cost.Cost.ITERATIONS`.
+    frozen : tuple[int, ...]
+        Components an M step settled as collapsed --- variance at the floor,
+        or no posterior mass --- at any iteration (issue #1160), as
+        :attr:`sal.opt.emission_mixture.EmissionMixtureFit.frozen` reports
+        emptied ones. Non-empty means the fit is not a clean optimum, whatever
+        ``termination`` says of the loop.
     """
 
     weights: torch.Tensor
@@ -553,6 +563,7 @@ class MixtureFit:
     termination: Termination = dataclass_field(kw_only=True)
     spent: int = dataclass_field(kw_only=True)
     unit: Cost = dataclass_field(default=Cost.ITERATIONS, kw_only=True)
+    frozen: tuple[int, ...] = dataclass_field(default=(), kw_only=True)
 
 
 def expectation_maximization(
@@ -598,16 +609,17 @@ def expectation_maximization(
     Returns
     -------
     MixtureFit
-        The fitted parameters, the final log-likelihood, and whether an M step
-        reached a boundary.
+        The fitted parameters, the final log-likelihood, whether an M step
+        reached a boundary, and the components settled as collapsed.
 
     Raises
     ------
     ValueError
-        If a component's re-estimated variance reaches its floor. The mixture
-        likelihood is unbounded in that direction exactly as a Gaussian HMM's
-        is, so this is an approach to a degenerate optimum rather than a
-        convergence. Or if a component's M step did not converge: the loop
+        Under ``components.on_collapse == Collapse.REFUSE``, if a component
+        collapses: the mixture likelihood is unbounded in that direction
+        exactly as a Gaussian HMM's is (issue #122); by default the component
+        is held and named in ``frozen`` (issue #1160). Or if a component's M
+        step did not converge: the loop
         reads the report its sibling
         :func:`sal.opt.emission_mixture.expectation_maximization`
         reads, on the terms ``likelihood/CLAUDE.md`` states (issue #856).
@@ -629,6 +641,7 @@ def expectation_maximization(
     values = torch.as_tensor(observations, dtype=torch.float64).reshape(-1)
     boundary = False
     attempt = 0
+    frozen: set[int] = set()
 
     def step(
         state: tuple[torch.Tensor, GaussianEmission],
@@ -651,6 +664,7 @@ def expectation_maximization(
             )
             raise ValueError(msg)
         boundary = boundary or reestimated.at_boundary
+        frozen.update(reestimated.frozen)
         return (posterior.mean(dim=0), reestimated.emissions), log_likelihood
 
     (weights, components), log_likelihood, termination = em_loop(
@@ -665,6 +679,7 @@ def expectation_maximization(
         boundary,
         termination=termination,
         spent=termination.iterations,
+        frozen=tuple(sorted(frozen)),
     )
 
 
@@ -682,27 +697,37 @@ def _streamed_expectation_maximization(
     """
     values = np.ascontiguousarray(observations, dtype=np.float64).reshape(-1)
     floor = components.variance_floor
-    attempt = 0
+    on_collapse = components.on_collapse
+    frozen: set[int] = set()
 
     def step(
         state: tuple[np.ndarray, np.ndarray, np.ndarray],
     ) -> tuple[tuple[np.ndarray, np.ndarray, np.ndarray], float]:
-        nonlocal attempt
-        attempt += 1
         weight, mean, scale = state
+        # A held, emptied component carries weight zero, and its log is the
+        # -inf the step reads as no responsibility.
+        with np.errstate(divide="ignore"):
+            log_weight = np.log(weight)
         new_weight, new_mean, variance, log_likelihood = (
-            oxisal.gaussian_mixture_em_step(values, np.log(weight), mean, scale)
+            oxisal.gaussian_mixture_em_step(values, log_weight, mean, scale)
         )
-        collapsed = variance <= floor
-        if collapsed.any():
-            msg = (
-                f"state(s) {np.flatnonzero(collapsed).tolist()} re-estimated to "
-                f"variance {variance[collapsed].tolist()}, at or below the floor "
-                f"{floor:.6g}: the Gaussian likelihood is unbounded as a "
-                f"variance goes to zero, so this fit is heading to a degenerate "
-                f"optimum rather than converging"
+        # The weight is the mass over the draws, so the mass is read back
+        # from it; the check stays in NumPy, and torch is reached only for a
+        # collapse, where the family's own rule settles it (issue #1160).
+        mass = new_weight * values.size
+        if bool(((variance <= floor) | (mass < COLLAPSED_MASS)).any()):
+            settled = settle_collapse(
+                GaussianEmission(mean, scale, floor, on_collapse=on_collapse),
+                torch.from_numpy(mass),
+                torch.from_numpy(new_mean),
+                torch.from_numpy(variance),
             )
-            raise ValueError(msg)
+            frozen.update(settled.frozen)
+            return (
+                new_weight,
+                settled.emissions.mean.numpy(),
+                settled.emissions.scale.numpy(),
+            ), log_likelihood
         return (new_weight, new_mean, np.sqrt(variance)), log_likelihood
 
     def flat(tensor: torch.Tensor) -> np.ndarray:
@@ -717,11 +742,12 @@ def _streamed_expectation_maximization(
     )
     return MixtureFit(
         torch.from_numpy(weight),
-        GaussianEmission(mean, scale, floor),
+        GaussianEmission(mean, scale, floor, on_collapse=on_collapse),
         log_likelihood,
         False,
         termination=termination,
         spent=termination.iterations,
+        frozen=tuple(sorted(frozen)),
     )
 
 

@@ -21,6 +21,7 @@ from sal.emissions import (
     BetaBinomialEmission,
     BinomialEmission,
     CategoricalEmission,
+    Collapse,
     EmissionFamily,
     GaussianEmission,
     NegativeBinomialEmission,
@@ -135,20 +136,81 @@ def test_the_gaussian_m_step_is_the_posterior_weighted_mean_and_variance() -> No
     assert_allclose(fitted.scale.numpy(), np.sqrt(variance), rtol=1e-13)
 
 
-@pytest.mark.smoke
-def test_a_state_collapsed_onto_one_observation_is_refused_not_clamped() -> None:
-    # Clamping and returning normally is the failure this exists to prevent:
-    # the caller would receive a point estimate at a degenerate optimum, and
-    # an interval around it summarizing nothing (issue #122).
+def _collapsing() -> tuple[torch.Tensor, torch.Tensor]:
+    """Four observations and a posterior that gives state 0 exactly one of them.
+
+    State 0's re-estimated variance is zero; state 1 takes the rest and stays
+    well away from the floor.
+    """
     observations = torch.tensor([[0.0, 1.0, 2.0, 3.0]], dtype=torch.float64)
-    # State 0 takes exactly one observation, so its re-estimated variance is
-    # zero. State 1 takes the rest and stays well away from the floor.
     posterior = torch.tensor(
         [[[1.0, 0.0], [0.0, 1.0], [0.0, 1.0], [0.0, 1.0]]], dtype=torch.float64
     )
+    return observations, posterior
+
+
+@pytest.mark.oracle
+def test_a_state_collapsed_onto_one_observation_is_refused_under_refuse() -> None:
+    # Issue #122's refusal, kept for a caller who asks for it (issue #1160).
+    observations, posterior = _collapsing()
+    family = GaussianEmission(MEAN, SCALE, FLOOR, on_collapse=Collapse.REFUSE)
 
     with pytest.raises(ValueError, match="unbounded as a variance goes to zero"):
-        _gaussian().reestimate(observations, posterior)
+        family.reestimate(observations, posterior)
+
+
+@pytest.mark.oracle
+def test_a_collapsed_state_is_held_at_its_last_parameters_by_default() -> None:
+    # The default since issue #1160, as the count families hold an emptied
+    # state (#1136): state 0 keeps its mean and scale bitwise, state 1 is the
+    # closed-form estimate on the three observations it holds.
+    observations, posterior = _collapsing()
+
+    held = _gaussian().reestimate(observations, posterior)
+
+    assert held.frozen == (0,)
+    assert held.emissions.on_collapse is Collapse.HOLD
+    assert torch.equal(
+        held.emissions.mean[:1], torch.tensor([-2.0], dtype=torch.float64)
+    )
+    assert torch.equal(
+        held.emissions.scale[:1], torch.tensor([0.5], dtype=torch.float64)
+    )
+    assert float(held.emissions.mean[1]) == 2.0
+    assert float(held.emissions.scale[1]) == math.sqrt(2.0 / 3.0)
+
+
+@pytest.mark.oracle
+def test_a_clamped_state_sits_at_the_floor_with_its_mean_re_estimated() -> None:
+    observations, posterior = _collapsing()
+    family = GaussianEmission(MEAN, SCALE, FLOOR, on_collapse=Collapse.CLAMP)
+
+    clamped = family.reestimate(observations, posterior)
+
+    assert clamped.frozen == (0,)
+    assert float(clamped.emissions.mean[0]) == 0.0
+    assert float(clamped.emissions.scale[0]) == math.sqrt(FLOOR)
+    assert float(clamped.emissions.mean[1]) == 2.0
+
+
+@pytest.mark.oracle
+def test_an_emptied_state_is_held_under_hold_and_clamp() -> None:
+    # No posterior mass: the mean is 0/0, so CLAMP has none to re-estimate and
+    # holds it; the variance is the floor under CLAMP and held under HOLD.
+    observations, _ = _collapsing()
+    posterior = torch.zeros(1, 4, 2, dtype=torch.float64)
+    posterior[..., 1] = 1.0
+
+    for mode, scale in ((Collapse.HOLD, 0.5), (Collapse.CLAMP, math.sqrt(FLOOR))):
+        family = GaussianEmission(MEAN, SCALE, FLOOR, on_collapse=mode)
+        settled = family.reestimate(observations, posterior)
+        assert settled.frozen == (0,)
+        assert float(settled.emissions.mean[0]) == -2.0
+        assert float(settled.emissions.scale[0]) == scale
+    with pytest.raises(ValueError, match="posterior mass below"):
+        GaussianEmission(MEAN, SCALE, FLOOR, on_collapse=Collapse.REFUSE).reestimate(
+            observations, posterior
+        )
 
 
 @pytest.mark.analytic

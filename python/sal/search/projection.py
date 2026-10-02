@@ -329,12 +329,17 @@ class Seeding[F: EmissionFamily]:
     path : tuple[tuple[int, F], ...]
         For a start that iterates, the step of its run at which it held each
         of these components; empty for one that does not.
+    frozen : tuple[int, ...]
+        For a start that fits, the components its fit held or clamped at a
+        collapse (issue #1160); empty otherwise. The seeding is still ranked
+        by its likelihood, and this says it is not a clean optimum.
     """
 
     components: F
     passes: float
     diagnostics: str = ""
     path: tuple[tuple[int, F], ...] = ()
+    frozen: tuple[int, ...] = ()
 
 
 def _euclidean_score(rows: np.ndarray) -> Callable[..., np.ndarray]:

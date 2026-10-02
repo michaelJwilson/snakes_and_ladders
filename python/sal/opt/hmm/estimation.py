@@ -27,7 +27,7 @@ from sal.emissions import (
     GaussianEmission,
     NegativeBinomialEmission,
     PoissonEmission,
-    refuse_collapsed,
+    settle_collapse,
 )
 from sal.opt.em import EM, EmConfig, em_loop
 from sal.opt.hmm.forward import forward_messages
@@ -417,6 +417,25 @@ def _streams(
     return (int(observations.max()) + 1) * stride <= _MOST_CELLS
 
 
+def _held_rows(transition: np.ndarray, previous: np.ndarray) -> np.ndarray:
+    """``transition`` with each row the E step emptied replaced by its ``previous`` row (issue #1160).
+
+    The compiled chain M step normalizes each row's expected pair counts in
+    linear space, so a state left no posterior mass has a row of ``0 / 0``.
+    The torch recursion normalizes in log space and never sees the zero. The
+    row is held, as the state's emission parameters are: the state is not
+    visited, so its row does not change the likelihood, and the fit names
+    the state in ``frozen``.
+    """
+    m = round(previous.size**0.5)
+    emptied = np.isnan(transition.reshape(m, m)).any(axis=1)
+    if not emptied.any():
+        return transition
+    held = transition.reshape(m, m).copy()
+    held[emptied] = previous.reshape(m, m)[emptied]
+    return held.reshape(-1)
+
+
 def _whole(values: np.ndarray) -> bool:
     """Whether ``values`` is an integer array with nothing below zero."""
     return np.issubdtype(values.dtype, np.integer) and int(values.min()) >= 0
@@ -475,21 +494,29 @@ def _streamed_family(
 
     if isinstance(emissions, GaussianEmission):
         values = np.ascontiguousarray(observations, dtype=np.float64)
-        floor = emissions.variance_floor
 
         def gaussian(
             state: tuple[np.ndarray, np.ndarray, EmissionFamily],
         ) -> tuple[tuple[np.ndarray, np.ndarray, EmissionFamily], float]:
-            initial, transition, family = state
+            initial, previous, family = state
             assert isinstance(family, GaussianEmission)
-            initial, transition, mean, variance, log_likelihood = (
+            initial, transition, mean, variance, mass, log_likelihood = (
                 oxisal.gaussian_em_step(
-                    values, initial, transition, flat(family.mean), flat(family.scale)
+                    values, initial, previous, flat(family.mean), flat(family.scale)
                 )
             )
-            refuse_collapsed(torch.from_numpy(variance), floor)
-            fitted = GaussianEmission(mean, np.sqrt(variance), floor)
-            return (initial, transition, fitted), log_likelihood
+            transition = _held_rows(transition, previous)
+            # The family's own collapse rule, on the moments the step streamed
+            # (issue #1160): the same states held, clamped or refused as on
+            # the torch route.
+            settled = settle_collapse(
+                family,
+                torch.from_numpy(mass),
+                torch.from_numpy(mean),
+                torch.from_numpy(variance),
+            )
+            frozen.update(settled.frozen)
+            return (initial, transition, settled.emissions), log_likelihood
 
         step = gaussian
     else:
@@ -522,7 +549,7 @@ def _streamed_family(
             state: tuple[np.ndarray, np.ndarray, EmissionFamily],
         ) -> tuple[tuple[np.ndarray, np.ndarray, EmissionFamily], float]:
             nonlocal at_boundary
-            initial, transition, family = state
+            initial, previous, family = state
             initial, transition, histogram, log_likelihood = oxisal.count_em_step(
                 counts,
                 given,
@@ -530,12 +557,13 @@ def _streamed_family(
                 cells,
                 rows,
                 initial,
-                transition,
+                previous,
                 **_direct_scoring(family),
                 tabled=in_table,
                 approx=approx,
                 stirling_from=stirling_from,
             )
+            transition = _held_rows(transition, previous)
             reestimate = family.reestimate(
                 support, torch.from_numpy(histogram.reshape(-1, m)), covariate=exposure
             )
@@ -715,9 +743,9 @@ def baum_welch_family(
     ------
     ValueError
         If the family refuses its own re-estimate. A Gaussian family does so
-        when a state's variance reaches its floor, which is an approach to a
-        degenerate optimum rather than a convergence, and is reported as such
-        rather than clamped away.
+        when a state collapses only under ``on_collapse=Collapse.REFUSE``; by
+        default it holds the state and the fit lists it in ``frozen``
+        (issue #1160).
     """
     refuse_backend("the Baum-Welch E step", backend, (Backend.PYTHON, Backend.RUST))
     # The streamed step re-estimates every block and updates no covariate;

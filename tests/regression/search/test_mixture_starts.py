@@ -236,6 +236,7 @@ def test_a_polish_runs_past_a_component_em_empties() -> None:
     assert polished.converged
     assert polished.iterations > 8
     assert float(polished.weights.min()) < 1e-200
+    assert polished.frozen == (2,)
     assert bool((np.diff(polished.log_likelihoods) >= 0.0).all())
     fixed = polish(instance, instance.at(rows), passes=polished.iterations)
     assert np.array_equal(fixed.log_likelihoods, polished.log_likelihoods)
@@ -285,6 +286,44 @@ def test_best_of_one_is_the_start_and_best_of_five_is_the_best_of_its_seedings()
         assert five.passes == sum(s.passes for s in seedings) + 5.0
         again = best_of(name, 5)(instance, np.random.default_rng(7))
         assert _equal(again.components, five.components), name
+
+
+@pytest.mark.analytic
+def test_a_gaussian_em_seeding_that_collapses_is_ranked_and_named() -> None:
+    # Issue #1160: on twelve pairs the Gaussian EM start collapses components
+    # of every seeding. The Gaussian holds a collapsed state, so each seeding
+    # returns, is ranked by its likelihood at equal weights like any other,
+    # and the handover names the components its fit held.
+    whole = _instance()
+    instance = MixtureInstance(
+        observations=whole.observations[:12],
+        labels=whole.labels[:12],
+        weights=whole.weights,
+        truth=whole.truth,
+        at=whole.at,
+    )
+    values = torch.as_tensor(instance.observations, dtype=torch.float64)
+    uniform = torch.full((3,), -math.log(3.0), dtype=torch.float64)
+    seedings = [
+        STARTS["gaussian-em"](instance, child)
+        for child in np.random.default_rng(7).spawn(3)
+    ]
+    scores = [
+        float(mixture_log_likelihood(values, uniform, s.components)) for s in seedings
+    ]
+
+    three = best_of("gaussian-em", 3)(instance, np.random.default_rng(7))
+
+    assert all(s.frozen for s in seedings)
+    best = int(np.argmax(scores))
+    assert _equal(three.components, seedings[best].components)
+    assert three.frozen == seedings[best].frozen
+    assert three.diagnostics == (
+        f"best of 3: seeding {best}, held {list(three.frozen)} at a collapse"
+    )
+    assert seedings[best].diagnostics.endswith(
+        f"held {list(three.frozen)} at a collapse"
+    )
 
 
 @pytest.mark.smoke
