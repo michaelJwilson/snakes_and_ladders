@@ -67,6 +67,7 @@ from sal.opt.hmm import baum_welch_family
 from sal.opt.initialize import Initializer
 from sal.opt.objective import Objective
 from sal.opt.termination import Termination
+from sal.ragged import Ragged
 from sal.track import MemoryRun, track
 
 #: A start: an initializer, or a factory of one from the cell's generator.
@@ -256,6 +257,14 @@ def polish_by_baum_welch(
     :func:`~sal.opt.hmm.baum_welch` narrows to a categorical
     family and which alone reports its outer loop's termination (issue #865).
 
+    **The data is the objective's, as it scores it** (issue #1172). An
+    objective carrying ``lengths`` --- the segments end to end, as
+    :class:`~sal.opt.hmm.EmissionHmmObjective` holds them --- is handed over
+    as a :class:`~sal.ragged.Ragged` batch, and its ``covariate`` as one of
+    the same lengths; one without is a rectangular batch, its covariate in
+    the same layout, which is the call this adapter made before a covariate
+    was passed through.
+
     Returns
     -------
     PolishedPoint
@@ -268,8 +277,6 @@ def polish_by_baum_welch(
             objective,
             "it is not an HMM objective carrying observations and components(theta)",
         )
-    if getattr(objective, "covariate", None) is not None:
-        refuse_start("baum-welch", objective, "a covariate is not passed through")
     with torch.no_grad():
         named = objective.constrain(theta.detach())
         if "log_initial" not in named:
@@ -281,12 +288,22 @@ def polish_by_baum_welch(
                 "it constrains no log_initial and log_transition to start a chain from",
             )
         family = components(theta.detach())
+    lengths = getattr(objective, "lengths", None)
+    covariate = getattr(objective, "covariate", None)
+    values: np.ndarray = observations.numpy()
+    given: np.ndarray | None = None if covariate is None else covariate.numpy()
+    data: np.ndarray | Ragged = values
+    carried: np.ndarray | Ragged | None = given
+    if lengths is not None:
+        data = Ragged(values, tuple(lengths))
+        carried = None if given is None else Ragged(given, tuple(lengths))
     fitted = baum_welch_family(
-        observations.numpy(),
+        data,
         named["log_initial"],
         named["log_transition"],
         family,
         config=replace(EM, max_iterations=budget.size),
+        covariate=carried,
     )
     polished = objective.theta_from(
         {
