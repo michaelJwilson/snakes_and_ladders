@@ -25,7 +25,7 @@ def viterbi(
     observations: np.ndarray,
     log_initial: torch.Tensor,
     log_transition: torch.Tensor,
-    emissions: EmissionFamily,
+    components: EmissionFamily,
     backend: Backend = Backend.RUST,
 ) -> tuple[np.ndarray, float]:
     """The most probable hidden path of every sequence, and their total log-probability.
@@ -34,15 +34,15 @@ def viterbi(
     ----------
     observations : np.ndarray
         Shape ``(n_sequences, length)``: symbols, real values or counts, as
-        ``emissions`` scores them.
+        ``components`` scores them.
     log_initial, log_transition : torch.Tensor
         Log-probabilities, ``(m,)`` and ``(m, m)``.
-    emissions : EmissionFamily
+    components : EmissionFamily
         The emission family.
     backend : Backend
         :data:`~sal.backend.Backend.RUST`, the default,
         decodes the sequences in parallel in ``oxisal.
-        hmm_viterbi`` where ``emissions`` is exactly a categorical, a
+        hmm_viterbi`` where ``components`` is exactly a categorical, a
         one-channel Gaussian or a count family; any other family, and
         :data:`~sal.backend.Backend.PYTHON`, take the NumPy
         recursion here, which is the oracle (issue #997).
@@ -56,7 +56,7 @@ def viterbi(
     """
     refuse_backend("viterbi", backend, (Backend.PYTHON, Backend.RUST))
     values = np.asarray(observations)
-    compiled = compiled_family(emissions)
+    compiled = compiled_family(components)
     if backend is Backend.RUST and compiled is not None and values.ndim == 2:
         name, parameters = compiled
         # Symbols and counts are read as the int64 NumPy holds them.
@@ -71,8 +71,8 @@ def viterbi(
             parameters,
         )
         return states.reshape(values.shape), float(log_probability)
-    emit = emissions.log_density(
-        torch.as_tensor(values, dtype=emissions.observation_dtype)
+    emit = components.log_density(
+        torch.as_tensor(values, dtype=components.observation_dtype)
     ).numpy()
     kernel = log_transition.detach().numpy()
     n_sequences, length = values.shape
@@ -96,7 +96,7 @@ def hmm_log_likelihood(
     observations: np.ndarray,
     log_initial: torch.Tensor,
     log_transition: torch.Tensor,
-    emissions: EmissionFamily,
+    components: EmissionFamily,
     backend: Backend = Backend.RUST,
 ) -> float:
     """The summed log-likelihood of every sequence at given parameters, with no gradient.
@@ -108,10 +108,10 @@ def hmm_log_likelihood(
     Parameters
     ----------
     observations : np.ndarray
-        Shape ``(n_sequences, length)``, as ``emissions`` scores them.
+        Shape ``(n_sequences, length)``, as ``components`` scores them.
     log_initial, log_transition : torch.Tensor
         Log-probabilities, ``(m,)`` and ``(m, m)``.
-    emissions : EmissionFamily
+    components : EmissionFamily
         The emission family.
     backend : Backend
         :data:`~sal.backend.Backend.RUST`, the default, runs
@@ -128,7 +128,7 @@ def hmm_log_likelihood(
     """
     refuse_backend("hmm_log_likelihood", backend, (Backend.PYTHON, Backend.RUST))
     values = np.asarray(observations)
-    compiled = compiled_family(emissions)
+    compiled = compiled_family(components)
     if backend is Backend.RUST and compiled is not None and values.ndim == 2:
         name, parameters = compiled
         dtype = np.int64 if np.issubdtype(values.dtype, np.integer) else np.float64
@@ -146,8 +146,8 @@ def hmm_log_likelihood(
     with torch.no_grad():
         return float(
             forward_log_likelihood_from_density(
-                emissions.log_density(
-                    torch.as_tensor(values, dtype=emissions.observation_dtype)
+                components.log_density(
+                    torch.as_tensor(values, dtype=components.observation_dtype)
                 ),
                 log_initial,
                 log_transition,

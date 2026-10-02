@@ -306,7 +306,7 @@ class CovariateUpdate(Protocol):
 
     def __call__(
         self,
-        emissions: EmissionFamily,
+        components: EmissionFamily,
         posterior: torch.Tensor,
         covariate: torch.Tensor,
     ) -> torch.Tensor:
@@ -347,21 +347,21 @@ class ExpectedRateNormalizer:
     channel: int | None = None
 
     def normalizer(
-        self, emissions: EmissionFamily, posterior: torch.Tensor
+        self, components: EmissionFamily, posterior: torch.Tensor
     ) -> torch.Tensor:
         """``Z_c`` per sequence, shape ``(n_sequences,)``."""
-        means = emissions.alignment_key()[:, 0].to(posterior.dtype)
+        means = components.alignment_key()[:, 0].to(posterior.dtype)
         expected = posterior @ means  # (n_sequences, length)
         return (self.weights.to(posterior.dtype) * expected).sum(dim=-1)
 
     def __call__(
         self,
-        emissions: EmissionFamily,
+        components: EmissionFamily,
         posterior: torch.Tensor,
         covariate: torch.Tensor,
     ) -> torch.Tensor:
         """``covariate`` with its exposure divided by each sequence's ``Z_c``."""
-        divisor = self.normalizer(emissions, posterior)[:, None]
+        divisor = self.normalizer(components, posterior)[:, None]
         updated = covariate.clone()
         if self.channel is None:
             updated[..., 0] = covariate[..., 0] / divisor
@@ -640,22 +640,22 @@ def _streamed_family(
     )
 
 
-def compiled_family(emissions: EmissionFamily) -> tuple[str, np.ndarray] | None:
-    """The compiled HMM kernels' family name and parameters for ``emissions``, or ``None``.
+def compiled_family(components: EmissionFamily) -> tuple[str, np.ndarray] | None:
+    """The compiled HMM kernels' family name and parameters for ``components``, or ``None``.
 
     Exactly a categorical, a one-channel Gaussian or a count family is
     compiled; ``None`` for any other, whose caller takes its oracle.
     :mod:`sal.likelihood.hmm`'s Viterbi and evidence read it (issue #1059).
     """
-    if type(emissions) is CategoricalEmission:
+    if type(components) is CategoricalEmission:
         return "categorical", np.ascontiguousarray(
-            emissions.log_matrix.detach().numpy(), dtype=np.float64
+            components.log_matrix.detach().numpy(), dtype=np.float64
         ).reshape(-1)
-    if type(emissions) is GaussianEmission and emissions.n_channels == 1:
-        stacked = torch.cat([emissions.mean, emissions.scale]).detach().numpy()
+    if type(components) is GaussianEmission and components.n_channels == 1:
+        stacked = torch.cat([components.mean, components.scale]).detach().numpy()
         return "gaussian", np.ascontiguousarray(stacked, dtype=np.float64)
-    if type(emissions) in _TABLED:
-        scoring = _direct_scoring(emissions)
+    if type(components) in _TABLED:
+        scoring = _direct_scoring(components)
         return str(scoring["family"]), scoring["parameters"]
     return None
 
