@@ -24,13 +24,15 @@ def found() -> list[appraise_kernels.Kernel]:
 def test_the_pool_is_read_from_the_source_and_not_from_a_list(
     found: list[appraise_kernels.Kernel],
 ) -> None:
-    # Two kernels landed after #612 without the thread pool, read from each
-    # module's parallel iterators. Containment both ways, not equality: an
-    # inventory in an assertion broke on #715's ports without a defect (#745).
+    # Read from each module's parallel iterators. Containment both ways, not
+    # equality: an inventory in an assertion broke on #715's ports without a
+    # defect (#745). `count_pairs` landed after #612 without the thread pool;
+    # `ragged` landed without it too and takes it since #1191, which runs the
+    # posteriors over blocks of sequences in parallel.
     pool = {kernel.module for kernel in found if kernel.parallel}
 
-    assert {"coupled", "pruning", "sampling"} <= pool
-    assert {"count_pairs", "ragged"} & pool == set()
+    assert {"coupled", "pruning", "ragged", "sampling"} <= pool
+    assert {"count_pairs"} & pool == set()
 
 
 @pytest.mark.infra

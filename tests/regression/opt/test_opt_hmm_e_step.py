@@ -111,14 +111,16 @@ def test_a_kernel_per_step_is_refused_with_a_hook() -> None:
 def test_monte_carlo_em_reaches_further_than_exact_em_at_stress_size() -> None:
     """2e5 positions over ten overlapping Gaussian states, 120 iterations each.
 
-    Exact EM converges slowly here: after 500 iterations (598 s) it still
-    gains 0.009 nats an iteration. The Monte-Carlo E step at four paths
+    Exact EM converges slowly here: after 500 iterations it still gains 0.009
+    nats an iteration. The Monte-Carlo E step at four paths
     (`ragged.sampled_posteriors`) reaches -3.30 nats from that 500-iteration
-    value at iteration 120 where exact EM reaches -4.76, and within 1 nat of
-    it at 107 s (iteration 173) against exact EM's 440 s (iteration 365), at
-    0.60 s an iteration against 1.20 s on four threads. Recorded, not
-    asserted: the wall times, and the serial cost, 2.17 s an iteration, under
-    which the same 173 iterations take 375 s. Asserted: the ordering at 120.
+    value at iteration 120 where exact EM reaches -4.76. Re-run by #1191 with
+    both E steps on four threads (`ragged_posteriors` parallel over
+    segments): within 1 nat at 110 s (iteration 174) against exact EM's 148 s
+    (iteration 366), at 0.63 s an iteration against 0.40 s, 1.34x sooner. On
+    #1170 the exact kernel ran on one thread, 1.20 s an iteration, and the
+    same comparison read 107 s against 440 s. Recorded, not asserted: the
+    wall times. Asserted: the ordering at 120.
     """
     n = 10
     transition = np.full((n, n), 0.05 / (n - 1))

@@ -346,6 +346,7 @@ def ragged_posteriors(
     evidence: np.ndarray,
     switch: np.ndarray | None = None,
     switch_kind: str = "stay_or_move",
+    threads: int | None = None,
 ) -> None: ...
 def ragged_viterbi(
     log_density: np.ndarray,
