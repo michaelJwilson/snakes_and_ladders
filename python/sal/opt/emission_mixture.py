@@ -875,6 +875,21 @@ class EmissionMixtureObjective(Objective):
         """``K - 1`` free weights and each named parameter's free coordinates."""
         return self._n_parameters
 
+    @property
+    def blocks(self) -> Mapping[str, slice]:
+        """Each named parameter's coordinates in ``theta`` (:class:`~sal.opt.objective.DeclaredBlocks`, issue #1168).
+
+        Keyed as :meth:`constrain` returns: the ``K - 1`` free weights, then
+        each parameter the family names.
+        """
+        return {
+            "log_weight": slice(0, self._k - 1),
+            **{
+                name: slice(block.offset, block.stop)
+                for name, block in self._blocks_at.items()
+            },
+        }
+
     def _blocks(self, theta: torch.Tensor) -> dict[str, torch.Tensor]:
         blocks: dict[str, torch.Tensor] = {}
         for name, block in self._blocks_at.items():

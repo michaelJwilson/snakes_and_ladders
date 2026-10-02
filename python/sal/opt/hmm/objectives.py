@@ -182,6 +182,30 @@ class _HmmObjective(Objective):
     def _emission_slice(self) -> slice:
         return slice(self._transition_slice.stop, self.n_parameters)
 
+    #: The emission family's parameter names, in ``theta``'s order, each an
+    #: equal share of the emission block (:attr:`blocks`).
+    _emission_names: tuple[str, ...] = ()
+
+    @property
+    def blocks(self) -> Mapping[str, slice]:
+        """Each named parameter's coordinates in ``theta`` (:class:`~sal.opt.objective.DeclaredBlocks`, issue #1168).
+
+        Keyed as :meth:`constrain` returns: the initial distribution, the
+        transition matrix, then the emission family's parameters, each an
+        equal share of the emission block.
+        """
+        start = self._emission_slice.start
+        width = self._n_emission_parameters // len(self._emission_names)
+        emission = {
+            name: slice(start + i * width, start + (i + 1) * width)
+            for i, name in enumerate(self._emission_names)
+        }
+        return {
+            "log_initial": self._initial_slice,
+            "log_transition": self._transition_slice,
+            **emission,
+        }
+
     @property
     def n_parameters(self) -> int:
         """Length of ``theta``: one free value per free parameter."""
@@ -278,6 +302,8 @@ class HmmObjective(_HmmObjective):
         Precision of the computation; ``float64`` by default, since a
         finite-difference derivative check is meaningless in ``float32``.
     """
+
+    _emission_names = ("log_emission",)
 
     def __init__(
         self,
@@ -401,6 +427,8 @@ class GaussianHmmObjective(_HmmObjective):
         Precision of the computation; ``float64`` by default, since a
         finite-difference derivative check is meaningless in ``float32``.
     """
+
+    _emission_names = ("mean", "scale")
 
     def __init__(
         self,
@@ -643,6 +671,8 @@ class PoissonHmmObjective(_CountHmmObjective):
         Precision of the computation; ``float64`` by default.
     """
 
+    _emission_names = ("mean",)
+
     @property
     def _n_emission_parameters(self) -> int:
         return self._n_states
@@ -695,6 +725,8 @@ class BinomialHmmObjective(_CountHmmObjective):
     dtype : torch.dtype
         Precision of the computation; ``float64`` by default.
     """
+
+    _emission_names = ("probability",)
 
     def __init__(
         self,
@@ -762,6 +794,8 @@ class BetaBinomialHmmObjective(_CountHmmObjective):
     dtype : torch.dtype
         Precision of the computation; ``float64`` by default.
     """
+
+    _emission_names = ("alpha", "beta")
 
     def __init__(
         self,
@@ -868,6 +902,8 @@ class NegativeBinomialHmmObjective(_HmmObjective):
         Precision of the computation; ``float64`` by default, since a
         finite-difference derivative check is meaningless in ``float32``.
     """
+
+    _emission_names = ("dispersion", "mean")
 
     def __init__(
         self,
