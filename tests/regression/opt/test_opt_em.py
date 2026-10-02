@@ -81,3 +81,22 @@ def test_replacing_a_field_leaves_the_shared_config_unchanged() -> None:
     assert EmConfig(max_iterations=200, tolerance=1e-10) == EMISSION_MIXTURE_EM
     with pytest.raises(FrozenInstanceError):
         EM.tolerance = 0.0  # type: ignore[misc]
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf")])
+def test_a_non_finite_log_likelihood_raises_at_the_iteration_that_produced_it(
+    value: float,
+) -> None:
+    # Issue #1179: `nan` fails every relative test, so the loop ran out its
+    # budget and returned `Stop.BUDGET` on a `nan` fit. It now refuses at the
+    # third step, which made no fourth call.
+    calls: list[int] = []
+
+    def step(state: int) -> tuple[int, float]:
+        calls.append(state)
+        return state + 1, [-100.0, -10.0, value, -1.0][state]
+
+    with pytest.raises(ValueError, match=r"is (nan|inf|-inf) at iteration 3,"):
+        em_loop(step, 0, config=EmConfig(max_iterations=10, tolerance=1e-12))
+    assert calls == [0, 1, 2]
