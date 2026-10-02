@@ -43,6 +43,24 @@ def _imported_modules(source: Path) -> set[str]:
     return imported
 
 
+def _offenders(package: Path) -> dict[str, set[str]]:
+    """Every module under ``package``, subpackages included, that imports a
+    forbidden prefix, keyed by its path relative to ``package``.
+
+    ``package`` is a parameter for the planted tree below (#1161).
+    """
+    offenders: dict[str, set[str]] = {}
+    for source in sorted(package.rglob("*.py")):
+        bad = {
+            name
+            for name in _imported_modules(source)
+            if name.startswith(FORBIDDEN_PREFIXES)
+        }
+        if bad:
+            offenders[source.relative_to(package).as_posix()] = bad
+    return offenders
+
+
 @pytest.mark.critical
 @pytest.mark.smoke
 def test_opt_imports_nothing_from_the_application_modules() -> None:
@@ -50,17 +68,7 @@ def test_opt_imports_nothing_from_the_application_modules() -> None:
     # only worth stating if something checks it: a single `from sal.sim
     # import ...` added in a hurry is invisible to ruff and mypy, and turns
     # the abstraction back into a phylogenetics-specific optimizer.
-    package = Path(sal.opt.__file__).parent
-    offenders: dict[str, set[str]] = {}
-    for source in sorted(package.glob("*.py")):
-        bad = {
-            name
-            for name in _imported_modules(source)
-            if name.startswith(FORBIDDEN_PREFIXES)
-        }
-        if bad:
-            offenders[source.name] = bad
-    assert offenders == {}
+    assert _offenders(Path(sal.opt.__file__).parent) == {}
 
 
 @pytest.mark.critical
@@ -75,6 +83,20 @@ def test_the_check_would_catch_an_application_import(tmp_path: Path) -> None:
         "sal.sim.tree",
         "sal.likelihood",
     }
+
+
+@pytest.mark.critical
+@pytest.mark.smoke
+def test_the_check_reads_subpackages(tmp_path: Path) -> None:
+    # A top-level `glob` never read `opt/hmm/` (#1161): a planted import two
+    # levels down is found, and a clean module beside it is not.
+    package = tmp_path / "opt"
+    (package / "hmm").mkdir(parents=True)
+    (package / "fit.py").write_text("import numpy as np\n")
+    (package / "hmm" / "forward.py").write_text(
+        "from sal.likelihood.hmm import log_forward\n"
+    )
+    assert _offenders(package) == {"hmm/forward.py": {"sal.likelihood.hmm"}}
 
 
 @pytest.mark.analytic
