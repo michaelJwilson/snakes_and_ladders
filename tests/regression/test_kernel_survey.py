@@ -65,13 +65,15 @@ def test_the_gateway_beside_the_twin_is_a_referee(
 
     # `opt.hmm` calls the kernel too (#933, R5), and its torch recursion is its
     # oracle, so the adapter `opt.hmm.estimation` (#1010) is itself a referee;
-    # `opt.hmm.forward` is one on the same terms since #1167.
+    # `opt.hmm.forward` (#1167) and `opt.hmm.objectives` (#1169) are on the
+    # same terms.
     assert "likelihood.ragged" in ragged.referees
     assert ragged.referees == (
         "likelihood.message_passing_reference",
         "likelihood.ragged",
         "opt.hmm.estimation",
         "opt.hmm.forward",
+        "opt.hmm.objectives",
         "sandbox.rectangular_hmm",
     )
 
@@ -102,11 +104,13 @@ def test_the_boundary_names_the_adapter_each_kernel_is_called_through(
     assert adapters["count_pairs"] == ("sim.count_pairs.rust",)
     # Two callers since #933 (R5): `opt.hmm` may not import `likelihood`, so
     # Baum-Welch's compiled E step reaches the kernel through the extension,
-    # and the compiled forward total does too since #1167.
+    # and the compiled forward total (#1167) and the emission-HMM objective
+    # (#1169) do too.
     assert adapters["ragged"] == (
         "likelihood.ragged.rust",
         "opt.hmm.estimation",
         "opt.hmm.forward",
+        "opt.hmm.objectives",
     )
     assert adapters["coupled"] == ("likelihood.spatio_sequential.rust",)
 
