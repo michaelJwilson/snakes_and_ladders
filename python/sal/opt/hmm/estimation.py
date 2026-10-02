@@ -90,9 +90,9 @@ class CategoricalFit:
 
     :class:`EmFit` is the general form, carrying a family rather than a
     matrix and a field a categorical M step cannot fill: no categorical
-    re-estimate sits at a boundary. The outer loop's termination is carried
-    as every EM fit carries it (issue #1059); the four-tuple an unpacking
-    reads is what it was (issue #865).
+    re-estimate sits at a boundary. The outer loop's termination and cost
+    are carried as every EM fit carries them (issues #1059, #1165), and an
+    unpacking reads every field in declared order (issue #865).
 
     Parameters
     ----------
@@ -109,7 +109,6 @@ class CategoricalFit:
         :class:`EmFit` reports it.
     spent : int
         The EM iterations run, in ``unit``, as :class:`EmFit` reports them.
-        Not in the unpacking, which stays the five-tuple of #865.
     unit : Cost
         :attr:`~sal.cost.Cost.ITERATIONS`.
     """
@@ -123,7 +122,7 @@ class CategoricalFit:
     unit: Cost = dataclass_field(default=Cost.ITERATIONS, kw_only=True)
 
     def __iter__(self) -> Iterator[Any]:
-        """The declared order (#865): the three parameters, the value, the termination.
+        """The declared order (#865): the parameters, the value, the termination, the cost.
 
         ``Any`` and not a union: an unpacking gives every name the element
         type, so a union would mistype each of them.
@@ -134,6 +133,8 @@ class CategoricalFit:
             self.log_emission,
             self.log_likelihood,
             self.termination,
+            self.spent,
+            self.unit,
         )
 
 

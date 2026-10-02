@@ -236,7 +236,7 @@ def test_an_em_fit_and_a_gradient_fit_agree_on_the_interval_at_their_optimum() -
     gradient_errors = standard_errors_at(objective, objective.constrain(gradient.theta))
 
     start = objective.constrain(objective.initial())
-    log_initial, log_transition, log_emission, log_likelihood, _ = baum_welch(
+    log_initial, log_transition, log_emission, log_likelihood, *_ = baum_welch(
         observations,
         start["log_initial"],
         start["log_transition"],
