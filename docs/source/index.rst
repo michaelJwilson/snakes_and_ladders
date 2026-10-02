@@ -289,6 +289,9 @@ whether or not it has members yet.
 .. automodule:: sal.opt.em
    :members:
 
+.. automodule:: sal.opt.m_step
+   :members:
+
 .. automodule:: sal.opt.initialize
    :members:
 
