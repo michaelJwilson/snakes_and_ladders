@@ -5,6 +5,11 @@ five iterations. `tests/regression/opt/test_opt_hmm_ragged_estep.py` pins the
 two at the float64 tolerance; this measures the ratio. At 200 chains of
 100-3,000 positions the ratio measured 19.4x (218 s against 11.2 s for ten
 iterations), the stress size the port is kept for.
+
+`test_python_e_step_at_stress_size` times the torch recursion alone at that
+stress size, one iteration per round: the forward pass it runs is the one
+`forward_log_likelihood_from_density` shares (issue #1162), so a change to that
+kernel is read here, where a ratio means something.
 """
 
 from __future__ import annotations
@@ -21,10 +26,12 @@ from sal.opt.hmm import baum_welch_family
 from sal.ragged import Ragged
 
 
-@pytest.fixture(scope="module")
-def problem() -> tuple[Ragged, NegativeBinomialEmission, torch.Tensor]:
+def _batch(
+    n_chains: int, shortest: int, longest: int
+) -> tuple[Ragged, NegativeBinomialEmission, torch.Tensor]:
+    """Sticky negative-binomial chains over four states, seeded."""
     rng = np.random.default_rng(933)
-    lengths = rng.integers(40, 300, 30)
+    lengths = rng.integers(shortest, longest, n_chains)
     means = np.geomspace(2.0, 60.0, 4)
     chains = []
     for length in lengths:
@@ -42,6 +49,12 @@ def problem() -> tuple[Ragged, NegativeBinomialEmission, torch.Tensor]:
         NegativeBinomialEmission([3.0] * 4, means * 1.3),
         torch.log(torch.as_tensor(kernel)),
     )
+
+
+@pytest.fixture(scope="module")
+def problem() -> tuple[Ragged, NegativeBinomialEmission, torch.Tensor]:
+    # The gate size: thirty chains of 40-300 positions.
+    return _batch(30, 40, 300)
 
 
 @pytest.mark.benchmark
@@ -62,5 +75,27 @@ def test_baum_welch_on_a_ragged_batch(
             backend=backend,
             config=EmConfig(max_iterations=5, tolerance=0.0),
         )
+    )
+    assert math.isfinite(fit.log_likelihood)
+
+
+@pytest.mark.benchmark
+@pytest.mark.release
+def test_python_e_step_at_stress_size(benchmark: object) -> None:
+    # The stress size issue #933 kept the compiled port for: 200 chains of
+    # 100-3,000 positions; one E and one M step per round, five rounds.
+    batch, start, kernel = _batch(200, 100, 3000)
+    initial = torch.full((4,), -math.log(4.0), dtype=torch.float64)
+    fit = benchmark.pedantic(  # type: ignore[attr-defined]
+        lambda: baum_welch_family(
+            batch,
+            initial,
+            kernel,
+            start,
+            backend=Backend.PYTHON,
+            config=EmConfig(max_iterations=1, tolerance=0.0),
+        ),
+        rounds=5,
+        iterations=1,
     )
     assert math.isfinite(fit.log_likelihood)

@@ -1,7 +1,8 @@
 """The forward recursion, and the alignment of fitted states to true ones: the kernels the objectives and the EM drivers share.
 
-:func:`forward_log_likelihood_from_density` is the scaled forward pass on
-per-position emission densities; :func:`align_by_key` and its two wrappers
+:func:`forward_messages` is the scaled forward pass on per-position
+emission densities over a padded batch, and
+:func:`forward_log_likelihood_from_density` its differentiable total; :func:`align_by_key` and its two wrappers
 resolve the label switching the package docstring states. Imports no other
 submodule of :mod:`sal.opt.hmm`.
 """
@@ -169,14 +170,13 @@ def forward_log_likelihood_from_density(
 
     Notes
     -----
-    The constant form is expanded to the step axis with
-    :meth:`torch.Tensor.expand`, a stride-zero view rather than a copy, and the
-    choice between the two is hoisted out of the recursion, so the constant
-    case indexes nothing and sees the same numbers in the same order --- the
-    result is the one this function returned before the second shape was
-    admitted, bitwise. The ``length``-fold memory the varying form costs is
-    paid only by a caller who asks for it. The same reasoning and the
-    measurement behind the hoist are in
+    The recursion is :func:`forward_messages`'s, which the Baum--Welch Python
+    E step shares (issue #1162). The choice between the two forms is hoisted
+    out of the recursion, so the constant case indexes nothing and sees the
+    same numbers in the same order --- the result is the one this function
+    returned before the second shape was admitted, bitwise. The
+    ``length``-fold memory the varying form costs is paid only by a caller who
+    asks for it. The same reasoning and the measurement behind the hoist are in
     :func:`sal.likelihood.forward_backward.step_kernels`, whose
     shape check this shares
     (:func:`sal.numerics.constant_chain_kernel`, issue #857):
@@ -184,17 +184,87 @@ def forward_log_likelihood_from_density(
     rather than in either recursion.
     """
     length, n_states = log_density.shape[1], log_density.shape[2]
-    constant: torch.Tensor | None = None
-    if constant_chain_kernel(tuple(log_transition.shape), length, n_states):
-        kernels = log_transition.expand(max(length - 1, 0), n_states, n_states)
-        constant = log_transition
-    else:
-        kernels = log_transition
+    # The shape check refuses a third form and reads `(m, m)` first, so a chain
+    # of `m + 1` positions carrying one matrix is one kernel; the recursion then
+    # reads the form off the kernel's rank.
+    constant_chain_kernel(tuple(log_transition.shape), length, n_states)
+    log_evidence, _ = forward_messages(log_density, log_initial, log_transition)
+    return log_evidence.sum()
+
+
+def forward_messages(
+    log_density: torch.Tensor,
+    log_initial: torch.Tensor,
+    kernels: torch.Tensor,
+    *,
+    final: torch.Tensor | None = None,
+) -> tuple[torch.Tensor, torch.Tensor | None]:
+    """The scaled forward recursion over a padded batch: each chain's evidence, and the messages.
+
+    The one torch forward pass in :mod:`sal.opt.hmm` (issue #1162):
+    :func:`forward_log_likelihood_from_density` differentiates through it and
+    the Baum--Welch Python E step reads its messages for the backward pass and
+    the pair counts. Shapes are not checked here; each caller refuses the
+    kernels it does not admit, in its own words.
+
+    Parameters
+    ----------
+    log_density : torch.Tensor
+        Emission scores, shape ``(n, length, m)``, padded to the longest
+        chain. A padded position must already score zero (log one), so it adds
+        nothing wherever it is reached: the caller masks it, because its own
+        backward pass reads the same masked block.
+    log_initial : torch.Tensor
+        Log initial distribution, shape ``(m,)``.
+    kernels : torch.Tensor
+        Log transition kernels, read off their rank: ``(m, m)``, one for every
+        step and chain; ``(length - 1, m, m)``, one per step, shared by the
+        chains; or ``(n, length - 1, m, m)``, each chain's own per step.
+    final : torch.Tensor | None
+        Each chain's last live position, shape ``(n,)``, integer. Given, the
+        message table is kept and each chain's evidence is gathered at its own
+        last position, since a message beyond it is not a probability of
+        anything. ``None``, every chain runs the full ``length`` and only the
+        running column is kept --- the form a gradient is taken through, which
+        then writes no table.
+
+    Returns
+    -------
+    tuple[torch.Tensor, torch.Tensor | None]
+        Each chain's log evidence, shape ``(n,)``, and the forward messages
+        ``alpha``, shape ``(n, length, m)``, where ``final`` is given, else
+        ``None``.
+
+    Notes
+    -----
+    The kernel's form is read once, outside the recursion, so the constant
+    case indexes nothing per step and sees the same numbers in the same order
+    as the recursion :func:`forward_log_likelihood_from_density` carried before
+    the per-step form was admitted (issue #653) --- the result is unchanged
+    bitwise. Each step is the same elementwise sum and the same ``logsumexp``
+    whichever caller asks, and keeping the table copies each column after it is
+    computed, so the evidence on equal lengths is the same bitwise with or
+    without ``final`` (``tests/regression/opt/test_opt_hmm_forward_messages.py``).
+    """
+    n, length = log_density.shape[0], log_density.shape[1]
     alpha = log_initial.unsqueeze(0) + log_density[:, 0]
+    table: torch.Tensor | None = None
+    if final is not None:
+        table = torch.empty((n, length, alpha.shape[1]), dtype=alpha.dtype)
+        table[:, 0] = alpha
+    # Hoisted: the one-kernel form broadcasts the same `(1, m, m)` view at
+    # every step.
+    constant = kernels.unsqueeze(0) if kernels.ndim == 2 else None
     for t in range(1, length):
-        step = kernels[t - 1] if constant is None else constant
-        alpha = (
-            torch.logsumexp(alpha.unsqueeze(2) + step.unsqueeze(0), dim=1)
-            + log_density[:, t]
-        )
-    return torch.logsumexp(alpha, dim=1).sum()
+        if constant is not None:
+            step = constant
+        elif kernels.ndim == 3:
+            step = kernels[t - 1].unsqueeze(0)
+        else:
+            step = kernels[:, t - 1]
+        alpha = torch.logsumexp(alpha.unsqueeze(2) + step, dim=1) + log_density[:, t]
+        if table is not None:
+            table[:, t] = alpha
+    if table is None or final is None:
+        return torch.logsumexp(alpha, dim=1), None
+    return torch.logsumexp(table[torch.arange(n), final], dim=1), table
