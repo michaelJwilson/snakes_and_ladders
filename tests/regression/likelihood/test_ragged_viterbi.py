@@ -197,6 +197,7 @@ def test_viterbi_is_the_rectangular_decoder_bitwise(backend: Backend) -> None:
 
 
 @pytest.mark.critical
+@pytest.mark.oracle
 @pytest.mark.backend
 @pytest.mark.parametrize("kind", KINDS)
 def test_the_compiled_kernel_matches_the_oracle(kind: SwitchKind) -> None:

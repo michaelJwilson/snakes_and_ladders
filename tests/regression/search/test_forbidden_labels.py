@@ -174,6 +174,7 @@ def test_the_cut_moves_leave_a_forbidden_start_for_an_allowed_local_minimum(
         assert run.energy == pytest.approx(minimum, abs=1e-9)
 
 
+@pytest.mark.oracle
 @pytest.mark.backend
 @pytest.mark.parametrize("move", [alpha_expansion, alpha_beta_swap])
 def test_the_cut_moves_agree_across_backends_from_a_forbidden_start(
