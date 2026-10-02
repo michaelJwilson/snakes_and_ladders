@@ -24,13 +24,15 @@ def found() -> list[appraise_kernels.Kernel]:
 def test_the_pool_is_read_from_the_source_and_not_from_a_list(
     found: list[appraise_kernels.Kernel],
 ) -> None:
-    # Two kernels landed after #612 without the thread pool, read from each
-    # module's parallel iterators. Containment both ways, not equality: an
-    # inventory in an assertion broke on #715's ports without a defect (#745).
+    # Read from each module's parallel iterators. Containment both ways, not
+    # equality: an inventory in an assertion broke on #715's ports without a
+    # defect (#745). `count_pairs` landed after #612 without the thread pool;
+    # `ragged` landed without it too and takes it since #1191, which runs the
+    # posteriors over blocks of sequences in parallel.
     pool = {kernel.module for kernel in found if kernel.parallel}
 
-    assert {"coupled", "pruning", "sampling"} <= pool
-    assert {"count_pairs", "ragged"} & pool == set()
+    assert {"coupled", "pruning", "ragged", "sampling"} <= pool
+    assert {"count_pairs"} & pool == set()
 
 
 @pytest.mark.infra
@@ -64,12 +66,17 @@ def test_the_gateway_beside_the_twin_is_a_referee(
     ragged = next(kernel for kernel in found if kernel.module == "ragged")
 
     # `opt.hmm` calls the kernel too (#933, R5), and its torch recursion is its
-    # oracle, so the adapter `opt.hmm.estimation` (#1010) is itself a referee.
+    # oracle, so the adapter `opt.hmm.estimation` (#1010) is itself a referee;
+    # `opt.hmm.forward` (#1167) and `opt.hmm.objectives` (#1169) are on the
+    # same terms. `sandbox.annealed_em` referees the staged EM path (#1171).
     assert "likelihood.ragged" in ragged.referees
     assert ragged.referees == (
         "likelihood.message_passing_reference",
         "likelihood.ragged",
         "opt.hmm.estimation",
+        "opt.hmm.forward",
+        "opt.hmm.objectives",
+        "sandbox.annealed_em",
         "sandbox.rectangular_hmm",
     )
 
@@ -99,8 +106,15 @@ def test_the_boundary_names_the_adapter_each_kernel_is_called_through(
 
     assert adapters["count_pairs"] == ("sim.count_pairs.rust",)
     # Two callers since #933 (R5): `opt.hmm` may not import `likelihood`, so
-    # Baum-Welch's compiled E step reaches the kernel through the extension.
-    assert adapters["ragged"] == ("likelihood.ragged.rust", "opt.hmm.estimation")
+    # Baum-Welch's compiled E step reaches the kernel through the extension,
+    # and the compiled forward total (#1167) and the emission-HMM objective
+    # (#1169) do too.
+    assert adapters["ragged"] == (
+        "likelihood.ragged.rust",
+        "opt.hmm.estimation",
+        "opt.hmm.forward",
+        "opt.hmm.objectives",
+    )
     assert adapters["coupled"] == ("likelihood.spatio_sequential.rust",)
 
 
