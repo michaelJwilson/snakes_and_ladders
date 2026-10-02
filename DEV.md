@@ -453,6 +453,7 @@ The names root `CLAUDE.md`'s API conventions refer to. An entry point uses these
 | Temperatures | `schedule` | `TempSchedule`; inverse temperatures have their own type | #1089 |
 | Fitted family | `components` | `EmissionFamily`: the objective's `components(theta)`, the starting family `expectation_maximization` and `baum_welch_family` take, and `EmFit.components`; `sal.emissions` names the package of families, not this argument | #1163 |
 | A family's parameter sets | `parameter_domains()`, `with_parameters(named)` | `Mapping[str, Domain]` keyed as `named_parameters()`; `Domain` names the `opt.constrain` map, and an objective builds through `with_parameters` rather than a `build` callable | #1164 |
+| Objective over a family | `(observations, start, *, covariate=None)` | `observations` then the starting `EmissionFamily`, `theta` mapped by its declared domains; an HMM's `observations` is `Ragged \| np.ndarray`, a rectangular batch read as equal-length segments (`opt.hmm.EmissionHmmObjective`, beside `EmissionMixtureObjective`) | #1164, #1169 |
 | Coordinates left variable | `varied` | 1-D integer indices into a full `theta`, the rest held at `at` (`opt.objective.Restricted`); `coordinates(objective, names)` builds them from an objective's `blocks`. Not `free`, which names an unconstrained coordinate (`opt.constrain`) | #1168 |
 | Cost of a run | `spent` | `int` in a declared `Cost`, the `unit` field beside it; every EM result spends `Cost.ITERATIONS` | #1090, #1165 |
 | Why a loop ended | `termination` | `Termination`, required | #1085, #1090 |

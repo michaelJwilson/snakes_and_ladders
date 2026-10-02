@@ -41,7 +41,6 @@ from sal.emissions import (
     BetaBinomialEmission,
     BinomialEmission,
     CountPairEmission,
-    Domain,
     EmissionFamily,
     NegativeBinomialEmission,
     PoissonEmission,
@@ -53,10 +52,8 @@ from sal.emissions.rising import (
 )
 from sal.enumeration import refuse_oversized
 from sal.opt.constrain import (
-    constrained,
-    free_from,
+    domain_blocks,
     free_from_log_simplex,
-    free_shape,
     log_simplex,
 )
 from sal.opt.em import EMISSION_MIXTURE_EM, EmConfig, em_loop
@@ -733,33 +730,6 @@ def build_like(
     return cast("Callable[[Mapping[str, torch.Tensor]], EmissionFamily]", rebuild)
 
 
-@dataclass(frozen=True)
-class _Block:
-    """Where one named parameter sits in ``theta``, and the map onto it.
-
-    Parameters
-    ----------
-    domain : Domain
-        The family's declared domain for the parameter.
-    shape : tuple[int, ...]
-        The parameter's shape.
-    free : tuple[int, ...]
-        The shape of its free coordinates (:func:`~sal.opt.constrain.free_shape`).
-    offset : int
-        Its first entry in ``theta``.
-    """
-
-    domain: Domain
-    shape: tuple[int, ...]
-    free: tuple[int, ...]
-    offset: int
-
-    @property
-    def stop(self) -> int:
-        """One past its last entry in ``theta``."""
-        return self.offset + math.prod(self.free)
-
-
 class EmissionMixtureObjective(Objective):
     """Negative log-likelihood of a mixture of any emission family (issues #964, #1164).
 
@@ -831,16 +801,10 @@ class EmissionMixtureObjective(Objective):
             name: torch.as_tensor(value, dtype=torch.float64)
             for name, value in start.named_parameters().items()
         }
-        offset = start.n_states - 1
-        blocks: dict[str, _Block] = {}
-        for name, value in named.items():
-            domain = domains[name]
-            if not bool(torch.isfinite(free_from(domain, value)).all()):
-                msg = f"parameter {name!r} lies outside its {domain} domain"
-                raise ValueError(msg)
-            shape = tuple(value.shape)
-            blocks[name] = _Block(domain, shape, free_shape(domain, shape), offset)
-            offset = blocks[name].stop
+        blocks = domain_blocks(named, domains, start.n_states - 1)
+        offset = max(
+            (block.stop for block in blocks.values()), default=start.n_states - 1
+        )
         self._observations = torch.as_tensor(
             observations, dtype=start.observation_dtype
         )
@@ -891,13 +855,7 @@ class EmissionMixtureObjective(Objective):
         }
 
     def _blocks(self, theta: torch.Tensor) -> dict[str, torch.Tensor]:
-        blocks: dict[str, torch.Tensor] = {}
-        for name, block in self._blocks_at.items():
-            free = theta[block.offset : block.stop]
-            if len(block.free) != 1:
-                free = free.reshape(block.free)
-            blocks[name] = constrained(block.domain, free)
-        return blocks
+        return {name: block.read(theta) for name, block in self._blocks_at.items()}
 
     def components(self, theta: torch.Tensor) -> EmissionFamily:
         """The family ``theta`` encodes, differentiable in ``theta``."""
@@ -915,11 +873,9 @@ class EmissionMixtureObjective(Objective):
     def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
         """The unconstrained vector whose :meth:`constrain` is ``named``."""
         parts = [free_from_log_simplex(torch.as_tensor(named["log_weight"]))]
-        for name, block in self._blocks_at.items():
-            value = torch.as_tensor(named[name], dtype=torch.float64)
-            parts.append(
-                free_from(block.domain, value.reshape(block.shape)).reshape(-1)
-            )
+        parts.extend(
+            block.free_of(named[name]) for name, block in self._blocks_at.items()
+        )
         return torch.cat(parts)
 
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:

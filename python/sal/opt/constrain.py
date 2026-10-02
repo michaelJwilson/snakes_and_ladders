@@ -14,7 +14,9 @@ the set each of its parameters lives in as a
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import math
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 
 import torch
 
@@ -235,3 +237,79 @@ def free_shape(domain: Domain, shape: tuple[int, ...]) -> tuple[int, ...]:
     if domain is Domain.LOG_SIMPLEX:
         return (*shape[:-1], shape[-1] - 1)
     return shape
+
+
+@dataclass(frozen=True)
+class DomainBlock:
+    """Where one named parameter sits in ``theta``, and the map onto it.
+
+    Shared by the objectives that read a family's declared domains ---
+    :class:`~sal.opt.emission_mixture.EmissionMixtureObjective` and
+    :class:`~sal.opt.hmm.EmissionHmmObjective` --- so the layout is stated
+    once (issues #1164, #1169).
+
+    Parameters
+    ----------
+    domain : Domain
+        The family's declared domain for the parameter.
+    shape : tuple[int, ...]
+        The parameter's shape.
+    free : tuple[int, ...]
+        The shape of its free coordinates (:func:`free_shape`).
+    offset : int
+        Its first entry in ``theta``.
+    """
+
+    domain: Domain
+    shape: tuple[int, ...]
+    free: tuple[int, ...]
+    offset: int
+
+    @property
+    def stop(self) -> int:
+        """One past its last entry in ``theta``."""
+        return self.offset + math.prod(self.free)
+
+    def read(self, theta: torch.Tensor) -> torch.Tensor:
+        """The constrained parameter ``theta`` encodes in this block."""
+        free = theta[self.offset : self.stop]
+        if len(self.free) != 1:
+            free = free.reshape(self.free)
+        return constrained(self.domain, free)
+
+    def free_of(self, value: torch.Tensor) -> torch.Tensor:
+        """The block's free coordinates of ``value``, flat."""
+        value = torch.as_tensor(value, dtype=torch.float64)
+        return free_from(self.domain, value.reshape(self.shape)).reshape(-1)
+
+
+def domain_blocks(
+    named: Mapping[str, torch.Tensor], domains: Mapping[str, Domain], offset: int
+) -> dict[str, DomainBlock]:
+    """One :class:`DomainBlock` per parameter of ``named``, laid end to end from ``offset``.
+
+    Parameters
+    ----------
+    named : Mapping[str, torch.Tensor]
+        A family's :meth:`~sal.emissions.EmissionFamily.named_parameters`.
+    domains : Mapping[str, Domain]
+        Its :meth:`~sal.emissions.EmissionFamily.parameter_domains`.
+    offset : int
+        The first block's first entry in ``theta``.
+
+    Raises
+    ------
+    ValueError
+        If a parameter lies outside its domain, where its free coordinates
+        are not finite.
+    """
+    blocks: dict[str, DomainBlock] = {}
+    for name, value in named.items():
+        domain = domains[name]
+        if not bool(torch.isfinite(free_from(domain, value)).all()):
+            msg = f"parameter {name!r} lies outside its {domain} domain"
+            raise ValueError(msg)
+        shape = tuple(value.shape)
+        blocks[name] = DomainBlock(domain, shape, free_shape(domain, shape), offset)
+        offset = blocks[name].stop
+    return blocks

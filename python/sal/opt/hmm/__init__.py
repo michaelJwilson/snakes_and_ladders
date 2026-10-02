@@ -25,7 +25,8 @@ helper a recovery test needs.
 recursion, the state alignment and the ragged E step's result,
 :class:`~sal.opt.hmm.Posteriors` (issue #1166) --- that the other two share;
 :mod:`~sal.opt.hmm.objectives` the gradient-fit objectives, one
-per emission family; and :mod:`~sal.opt.hmm.estimation` the EM
+per emission family and :class:`~sal.opt.hmm.EmissionHmmObjective` over any
+family on segments of unequal length (issue #1169); and :mod:`~sal.opt.hmm.estimation` the EM
 drivers, with the route each takes between the torch recursion and the
 compiled steps. Viterbi and the scored evidence are evaluators and live in
 :mod:`sal.likelihood.hmm` (issue #1059). Every public name this module defined
@@ -62,6 +63,7 @@ from sal.opt.hmm.forward import (
 from sal.opt.hmm.objectives import (
     BetaBinomialHmmObjective,
     BinomialHmmObjective,
+    EmissionHmmObjective,
     GaussianHmmObjective,
     HmmMetrics,
     HmmObjective,
@@ -82,6 +84,7 @@ __all__ = [
     "CategoricalFit",
     "CovariateUpdate",
     "EmFit",
+    "EmissionHmmObjective",
     "ExpectedRateNormalizer",
     "GaussianHmmObjective",
     "HmmMetrics",
