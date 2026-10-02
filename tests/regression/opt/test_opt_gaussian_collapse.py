@@ -35,7 +35,12 @@ import pytest
 import torch
 from numpy.testing import assert_allclose
 from sal.backend import Backend
-from sal.emissions import Collapse, GaussianEmission, pooled_variance_floor
+from sal.emissions import (
+    Collapse,
+    GaussianEmission,
+    NegativeBinomialEmission,
+    pooled_variance_floor,
+)
 from sal.opt.em import EmConfig
 from sal.opt.hmm.estimation import baum_welch_family
 from sal.opt.mixture import (
@@ -288,3 +293,41 @@ def test_gaussian_collapse_baum_welch_routes_agree(mode: Collapse) -> None:
     )
     assert_allclose(rust_run[1], torch_run[1], rtol=1e-12)
     assert_allclose(rust_run[2], torch_run[2], rtol=1e-12)
+
+
+@pytest.mark.oracle
+def test_an_emptied_state_s_transition_row_is_held_on_the_compiled_count_route() -> (
+    None
+):
+    # The row hold this change makes for the Gaussian serves the streamed
+    # count step too, which normalizes the same linear-space pair counts: on
+    # #1179's reproduction it returned a NaN fit after 500 iterations, and
+    # now matches the log-space torch route within 1e-10.
+    rng = np.random.default_rng(SEED)
+    truth = NegativeBinomialEmission([5.0, 20.0], [30.0, 200.0])
+    labels = rng.integers(0, 2, 4_000)
+    counts = truth.sample(labels, rng).reshape(40, 100).astype(np.int64)
+    start = NegativeBinomialEmission([5.0, 20.0, 5.0], [25.0, 180.0, 1e12])
+    uniform = torch.full((3,), -math.log(3.0), dtype=torch.float64)
+
+    fits = [
+        baum_welch_family(counts, uniform, uniform.repeat(3, 1), start, backend=b)
+        for b in BACKENDS
+    ]
+
+    for fit in fits:
+        assert fit.frozen == (2,)
+        assert fit.termination.converged
+    assert fits[1].log_likelihood == pytest.approx(fits[0].log_likelihood, rel=1e-10)
+    # Between the two live states only: into the emptied one the linear-space
+    # route reads exactly zero (-inf) where the log-space one carries -1e3,
+    # and out of it the held row against a row of no data.
+    assert_allclose(
+        fits[1].log_transition.numpy()[:2, :2],
+        fits[0].log_transition.numpy()[:2, :2],
+        rtol=1e-10,
+    )
+    rust, torch_route = fits[1].components, fits[0].components
+    assert isinstance(rust, NegativeBinomialEmission)
+    assert isinstance(torch_route, NegativeBinomialEmission)
+    assert_allclose(rust.mean.numpy(), torch_route.mean.numpy(), rtol=1e-10)
