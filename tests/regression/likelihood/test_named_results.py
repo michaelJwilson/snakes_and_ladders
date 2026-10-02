@@ -1,6 +1,6 @@
 """The package's named results iterate in their declared field order (issue #865).
 
-Thirteen entry points return a frozen dataclass where they returned a tuple,
+Fifteen entry points return a frozen dataclass where they returned a tuple,
 and callers still unpack them, so ``__iter__`` must yield fields in declared
 order. Sentinel values: this checks order; each module's tests check values.
 ``Posteriors`` is defined in ``opt`` since #1166 and is checked there; this
@@ -15,11 +15,11 @@ import pytest
 from sal.likelihood.blocks import Extremes
 from sal.likelihood.distance import DistanceMatrix, TreeDistances
 from sal.likelihood.features import Adjacency
-from sal.likelihood.forward_backward import StepKernels
+from sal.likelihood.forward_backward import SampledPath, StepKernels
 from sal.likelihood.hadamard import Spectrum
 from sal.likelihood.message_passing import _Run
 from sal.likelihood.message_passing.rust import TreeMessages
-from sal.likelihood.ragged import Paths, Posteriors
+from sal.likelihood.ragged import Paths, Posteriors, SampledPaths
 from sal.likelihood.schedule import UpwardMessageSchedule
 from sal.likelihood.spatio_sequential.rust import (
     EmissionRows,
@@ -39,6 +39,8 @@ NAMED = [
     EnergyBounds,
     Extremes,
     Paths,
+    SampledPath,
+    SampledPaths,
     Spectrum,
     StepKernels,
     TreeDistances,

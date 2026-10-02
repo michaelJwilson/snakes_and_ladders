@@ -249,6 +249,31 @@ def _ragged_e_step(
     return Posteriors(gamma, counts, evidence)
 
 
+class EStep(Protocol):
+    """An E step :func:`baum_welch_family` takes in place of its own (issue #1170).
+
+    Called once per iteration with the live rows' log-density as a `Ragged`
+    batch, one segment per sequence, and the current ``(m,)`` log initial
+    distribution and ``(m, m)`` log transition. It returns what the compiled
+    kernel returns, :class:`~sal.opt.hmm.forward.Posteriors`: log gamma over
+    the live rows, the log transition counts summed over sequences, and one
+    log evidence per sequence, whose sum is the iteration's reported
+    log-likelihood. :func:`sal.likelihood.ragged.posteriors` is one, the
+    default route's kernel; ``functools.partial(sampled_posteriors, rng=rng,
+    n_paths=4)`` over :func:`sal.likelihood.ragged.sampled_posteriors`, a
+    Monte-Carlo average of sampled paths with the exact evidence, is another.
+    """
+
+    def __call__(
+        self,
+        log_density: Ragged,
+        log_initial: np.ndarray,
+        log_transition: np.ndarray,
+    ) -> Posteriors:
+        """Log gamma, log transition counts and per-sequence evidence."""
+        ...
+
+
 class CovariateUpdate(Protocol):
     """A covariate that depends on the parameters, recomputed before every E step (issue #933).
 
@@ -632,6 +657,7 @@ def baum_welch_family(
     table_size: int | None = None,
     approx: bool = False,
     stirling_from: float = 10.0,
+    e_step: EStep | None = None,
 ) -> EmFit:
     """Baum-Welch over any emission family, with no autodiff involved.
 
@@ -731,6 +757,14 @@ def baum_welch_family(
         Where the Stirling series takes over under ``approx``. At the default
         10 it is within 4e-15 relative of the Lanczos sum; its first omitted
         term is ``3617 / (122400 x^13)``, 2.4e-11 absolute at 5.
+    e_step : EStep | None
+        The E step, replacing the route ``backend`` picks (issue #1170). It
+        is handed the live rows' log-density as a `Ragged` batch and the
+        current ``(m,)`` and ``(m, m)`` log parameters, and its
+        :class:`~sal.opt.hmm.forward.Posteriors` feed the M step exactly as
+        the compiled kernel's do. It takes one kernel for the whole chain, so
+        a per-step or per-sequence ``log_transition`` is refused with it.
+        ``None``, the default, is the route above, unchanged.
 
     Returns
     -------
@@ -750,9 +784,10 @@ def baum_welch_family(
     refuse_backend("the Baum-Welch E step", backend, (Backend.PYTHON, Backend.RUST))
     # The streamed step re-estimates every block and updates no covariate;
     # a fit that holds the transition or updates the exposure takes the
-    # general route.
+    # general route, as does one given its own E step.
     if (
-        backend is Backend.RUST
+        e_step is None
+        and backend is Backend.RUST
         and update is None
         and fit_transition
         and _streams(observations, log_transition, components, covariate)
@@ -843,7 +878,13 @@ def baum_welch_family(
     if update is not None and exposure is None:
         msg = "a covariate update needs a covariate to update"
         raise ValueError(msg)
-    compiled = backend is Backend.RUST and not varying
+    if e_step is not None and varying:
+        msg = (
+            f"an e_step takes one ({m}, {m}) transition; got "
+            f"{tuple(log_transition.shape)}"
+        )
+        raise ValueError(msg)
+    compiled = (backend is Backend.RUST and not varying) or e_step is not None
     lengths = np.asarray(batch.lengths, dtype=np.int64)
     # The posterior an update reads before the first E step: uniform over the
     # states, and zero at padded positions as every later one is.
@@ -880,8 +921,19 @@ def baum_welch_family(
             # The ragged kernel walks each sequence in place and returns the
             # log marginals, the log transition counts summed over sequences,
             # and each sequence's evidence (issue #933). It takes one kernel.
-            posteriors = _ragged_e_step(
-                emit, mask, lengths, log_initial, log_transition
+            # A caller's E step is handed the same live rows and returns the
+            # same three (issue #1170).
+            posteriors = (
+                _ragged_e_step(emit, mask, lengths, log_initial, log_transition)
+                if e_step is None
+                else e_step(
+                    Ragged(
+                        np.ascontiguousarray(emit[mask].numpy(), dtype=np.float64),
+                        tuple(int(one) for one in lengths),
+                    ),
+                    log_initial.numpy(),
+                    log_transition.numpy(),
+                )
             )
             # Scattered back to the block with `-inf` at padding, as the torch
             # recursion leaves them, so the M step reads one layout either way.

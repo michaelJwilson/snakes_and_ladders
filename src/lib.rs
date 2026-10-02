@@ -40,6 +40,7 @@ pub mod pruning;
 #[cfg(feature = "sandbox")]
 pub mod pruning_burn;
 pub mod ragged;
+pub mod ragged_sample;
 pub mod ragged_viterbi;
 pub mod sampling;
 pub mod special;
@@ -69,6 +70,7 @@ pub use pruning::pruning_log_likelihood;
 #[cfg(feature = "sandbox")]
 pub use pruning_burn::pruning_gradient;
 pub use ragged::{ragged_posteriors_into, SwitchKind};
+pub use ragged_sample::ragged_sample_paths_into;
 pub use ragged_viterbi::ragged_viterbi_into;
 pub use sampling::sample_rows;
 
@@ -95,6 +97,7 @@ fn oxisal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sample_rows, m)?)?;
     m.add_function(wrap_pyfunction!(ragged::ragged_posteriors, m)?)?;
     m.add_function(wrap_pyfunction!(ragged_viterbi::ragged_viterbi, m)?)?;
+    m.add_function(wrap_pyfunction!(ragged_sample::ragged_sample_paths, m)?)?;
     m.add_function(wrap_pyfunction!(max_flow, m)?)?;
     m.add_class::<LatticeCut>()?;
     m.add_function(wrap_pyfunction!(ising_ground_state, m)?)?;

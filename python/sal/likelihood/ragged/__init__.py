@@ -26,6 +26,15 @@ same inputs and the same return --- and that is where `Backend` names it.
 :func:`viterbi` (issue #1138) is the max-product sibling over the same
 arguments: the most probable path of every segment, with
 :func:`viterbi_oracle` the NumPy recursion its compiled twin is pinned to.
+
+:func:`sample_paths` (issue #1170) is the sampling sibling: one posterior draw
+of every segment's path, forward filter and backward sample. The uniforms are
+drawn here, in Python, and both implementations invert the same CDF at them
+(:func:`sal.likelihood.forward_backward.inverse_cdf`), so the compiled twin
+and :func:`sample_paths_oracle` return the same path from one generator state.
+:func:`sampled_posteriors` averages ``n_paths`` such draws into a Monte-Carlo
+estimate of what :func:`posteriors` returns, an E step
+:func:`sal.opt.hmm.baum_welch_family` takes through its ``e_step`` hook.
 """
 
 from __future__ import annotations
@@ -38,7 +47,7 @@ from typing import cast
 import numpy as np
 
 from sal.backend import Backend, twin
-from sal.likelihood.forward_backward import forward_backward
+from sal.likelihood.forward_backward import draw_path, forward_backward
 
 # The E step's result moved to `opt.hmm.forward` so `opt` can name it (issue
 # #1166); re-exported so every import from here holds.
@@ -131,6 +140,36 @@ class Paths:
     def __iter__(self) -> Iterator[np.ndarray]:
         """``(path, log_joint)``: the order callers unpack."""
         yield from (self.path, self.log_joint)
+
+
+@dataclass(frozen=True)
+class SampledPaths:
+    """One posterior draw of every segment's path, with what scores it (issue #1170).
+
+    Not :class:`Paths`, which is the argmax: a draw is a random variable and
+    its ``log_joint`` is not a maximum.
+
+    Parameters
+    ----------
+    path : np.ndarray
+        ``(total,)`` ``int64``, the drawn state at every position, segments
+        end to end as the log-density lays them.
+    log_joint : np.ndarray
+        One per segment: ``log p(path, y)`` of the segment's draw, summed in
+        position order.
+    log_evidence : np.ndarray
+        One per segment: ``log p(y)`` off the forward filter the draw is made
+        from, so ``log_joint - log_evidence`` is the draw's log posterior
+        probability, and the sum is the batch's log-likelihood.
+    """
+
+    path: np.ndarray
+    log_joint: np.ndarray
+    log_evidence: np.ndarray
+
+    def __iter__(self) -> Iterator[np.ndarray]:
+        """``(path, log_joint, log_evidence)``: the order callers unpack."""
+        yield from (self.path, self.log_joint, self.log_evidence)
 
 
 def posteriors(
@@ -385,3 +424,209 @@ def viterbi_oracle(
             state = int(back[t, state])
         at += length
     return Paths(path, log_joint)
+
+
+def sample_paths(
+    log_density: Ragged,
+    log_initial: np.ndarray,
+    log_transition: np.ndarray,
+    rng: np.random.Generator,
+    *,
+    switch: np.ndarray | None = None,
+    switch_kind: SwitchKind = SwitchKind.STAY_OR_MOVE,
+    backend: Backend = Backend.RUST,
+) -> SampledPaths:
+    """One posterior draw of every segment's path, by default in Rust (issue #1170).
+
+    Forward filter, backward sample, segment by segment, over the arguments
+    :func:`viterbi` takes, with ``rng`` fourth as
+    :func:`sal.likelihood.forward_backward.sample_path` takes it.
+
+    **The uniforms, and the order they are read in.** The generator is read
+    once, ``rng.random(total)``, here and not in either implementation. A
+    segment starting at ``start`` with ``length`` positions owns
+    ``uniforms[start : start + length]``; its draws run from the last
+    position to the first, and the ``k``-th, at position
+    ``start + length - 1 - k``, reads ``uniforms[start + k]`` through
+    :func:`~sal.likelihood.forward_backward.inverse_cdf`. Segments are read
+    in order, so a batch draws what :func:`~sal.likelihood.forward_backward.sample_path`
+    draws segment by segment from the same generator.
+
+    Parameters
+    ----------
+    log_density : Ragged
+        Per-position scores, ``(total, n_states)`` with the segment lengths.
+    log_initial : np.ndarray
+        ``(n_states,)``, the distribution each segment restarts at.
+    log_transition : np.ndarray
+        ``(n_states, n_states)`` in log space, or the slow chain's ``(K, K)``
+        under either Kronecker kind.
+    rng : np.random.Generator
+        Read once, for ``total`` uniforms.
+    switch : np.ndarray | None
+        One switch probability per position, or ``None``; as
+        :func:`posteriors` takes it, a segment's first entry unread.
+    switch_kind : SwitchKind
+        How ``switch`` enters; see :class:`SwitchKind`.
+    backend : Backend
+        ``RUST``, the default, is ``oxisal.ragged_sample_paths`` through
+        :func:`sal.likelihood.ragged.rust.sample_paths`, segments drawn in
+        parallel; ``PYTHON`` is :func:`sample_paths_oracle`. Nothing else.
+
+    Returns
+    -------
+    SampledPaths
+        The path, ``(total,)`` ``int64``; one joint log-probability and one
+        log evidence per segment.
+
+    Raises
+    ------
+    ValueError
+        If ``backend`` is neither ``RUST`` nor ``PYTHON``, or a Kronecker kind
+        is given no ``switch``.
+    """
+    rust = twin("ragged sample paths", backend, __name__)
+    uniforms = rng.random((log_density.values.shape[0],))
+    if rust is not None:
+        return cast(
+            "SampledPaths",
+            rust.sample_paths(
+                log_density,
+                log_initial,
+                log_transition,
+                uniforms,
+                switch,
+                switch_kind,
+            ),
+        )
+    return sample_paths_oracle(
+        log_density, log_initial, log_transition, uniforms, switch, switch_kind
+    )
+
+
+def sample_paths_oracle(
+    log_density: Ragged,
+    log_initial: np.ndarray,
+    log_transition: np.ndarray,
+    uniforms: np.ndarray,
+    switch: np.ndarray | None = None,
+    switch_kind: SwitchKind = SwitchKind.STAY_OR_MOVE,
+) -> SampledPaths:
+    """The same at given uniforms, one segment at a time through `draw_path`.
+
+    The oracle the compiled path is pinned against: each segment is
+    :func:`~sal.likelihood.forward_backward.draw_path` at its own block of
+    ``uniforms``, in the order :func:`sample_paths` states. With ``switch`` it
+    materializes each segment's ``(T - 1, n, n)`` stack
+    (:func:`step_transitions`), the storage the kernel avoids.
+    """
+    switch_kind = SwitchKind(switch_kind)
+    if switch_kind is not SwitchKind.STAY_OR_MOVE and switch is None:
+        msg = f"a {switch_kind} switch needs a switch probability per position"
+        raise ValueError(msg)
+    uniforms = np.asarray(uniforms, dtype=float).reshape(-1)
+    if uniforms.shape != (log_density.values.shape[0],):
+        msg = (
+            f"{uniforms.shape[0]} uniforms for {log_density.values.shape[0]} "
+            "positions; one per position"
+        )
+        raise ValueError(msg)
+    if switch is not None:
+        switch = np.asarray(switch, dtype=float).reshape(-1)
+    path = np.empty(log_density.values.shape[0], dtype=np.int64)
+    log_joint = np.empty(log_density.n_segments)
+    log_evidence = np.empty(log_density.n_segments)
+    at = 0
+    for index, segment in enumerate(log_density.segments()):
+        length = len(segment)
+        kernel = (
+            np.asarray(log_transition, dtype=float)
+            if switch is None
+            else step_transitions(
+                log_transition, switch[at + 1 : at + length], switch_kind
+            )
+        )
+        drawn = draw_path(segment, log_initial, kernel, uniforms[at : at + length])
+        path[at : at + length] = drawn.path
+        log_joint[index] = drawn.log_joint
+        log_evidence[index] = drawn.log_evidence
+        at += length
+    return SampledPaths(path, log_joint, log_evidence)
+
+
+def sampled_posteriors(
+    log_density: Ragged,
+    log_initial: np.ndarray,
+    log_transition: np.ndarray,
+    rng: np.random.Generator,
+    *,
+    n_paths: int = 4,
+    switch: np.ndarray | None = None,
+    switch_kind: SwitchKind = SwitchKind.STAY_OR_MOVE,
+    backend: Backend = Backend.RUST,
+) -> Posteriors:
+    """A Monte-Carlo estimate of :func:`posteriors`: ``n_paths`` draws averaged (issue #1170).
+
+    The stochastic E step: each of ``n_paths`` calls to :func:`sample_paths`
+    draws one path per segment, and the occupancy of each state at each
+    position and the count of each transition within a segment are averaged
+    over the draws. Both are unbiased for what :func:`posteriors` returns in
+    probability space. The evidence is not estimated: it is the forward
+    filter's, exact, as :func:`posteriors` returns it.
+
+    With ``functools.partial(sampled_posteriors, rng=rng, n_paths=n)`` it is
+    an :class:`sal.opt.hmm.EStep`, the generator the caller's own.
+
+    Parameters
+    ----------
+    log_density, log_initial, log_transition, switch, switch_kind, backend
+        As :func:`sample_paths`.
+    rng : np.random.Generator
+        Read ``n_paths`` times, ``total`` uniforms each.
+    n_paths : int
+        Draws averaged, at least one.
+
+    Returns
+    -------
+    Posteriors
+        Log gamma ``(total, n_states)``, ``-inf`` at a state no draw
+        visited; the log transition counts summed over segments, ``-inf``
+        at a pair no draw took; the exact log evidence per segment.
+
+    Raises
+    ------
+    ValueError
+        If ``n_paths`` is below one, or as :func:`sample_paths` raises.
+    """
+    if n_paths < 1:
+        msg = f"n_paths is the number of draws averaged, at least 1; got {n_paths}"
+        raise ValueError(msg)
+    total, n_states = log_density.values.shape
+    # A pair `(t, t + 1)` is a transition only inside a segment.
+    inside = np.ones(max(total - 1, 0), dtype=bool)
+    inside[np.cumsum(log_density.lengths)[:-1] - 1] = False
+    rows = np.arange(total, dtype=np.int64) * n_states
+    occupancy = np.zeros(total * n_states)
+    pairs = np.zeros(n_states * n_states)
+    evidence = np.empty(log_density.n_segments)
+    for draw in range(n_paths):
+        drawn = sample_paths(
+            log_density,
+            log_initial,
+            log_transition,
+            rng,
+            switch=switch,
+            switch_kind=switch_kind,
+            backend=backend,
+        )
+        occupancy += np.bincount(rows + drawn.path, minlength=total * n_states)
+        path = drawn.path
+        pairs += np.bincount(
+            (path[:-1] * n_states + path[1:])[inside], minlength=n_states**2
+        )
+        if draw == 0:
+            evidence = drawn.log_evidence
+    with np.errstate(divide="ignore"):
+        gamma = np.log(occupancy.reshape(total, n_states) / n_paths)
+        counts = np.log(pairs.reshape(n_states, n_states) / n_paths)
+    return Posteriors(gamma, counts, evidence)
