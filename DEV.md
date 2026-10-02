@@ -451,6 +451,7 @@ The names root `CLAUDE.md`'s API conventions refer to. An entry point uses these
 | Loop cap | `max_iterations` | `int >= 1`; the unit of one iteration stated per solver: an ICM sweep, an expansion or swap cycle, a ladder measurement, a dual sweep | #1091 |
 | Tolerance | `tolerance` | relative unless the solver states otherwise; `dual_bound`'s is absolute, the dual being an energy | #1091 |
 | Temperatures | `schedule` | `TempSchedule`; inverse temperatures have their own type | #1089 |
+| Fitted family | `components` | `EmissionFamily`: the objective's `components(theta)`, the starting family `expectation_maximization` and `baum_welch_family` take, and `EmFit.components`; `sal.emissions` names the package of families, not this argument | #1163 |
 | Cost of a run | `spent` | `int` in a declared `Cost` | #1090 |
 | Why a loop ended | `termination` | `Termination`, required | #1085, #1090 |
 | Coupled-layer state order | state-major (`2i + a`), as `np.kron(A, S)` | slow state `i`, layer `a`, under `SwitchKind.KRONECKER*`; `kronecker_order(n_states, layer_major=True)` takes a layer-major `aK + i` array onto it | #1144 |

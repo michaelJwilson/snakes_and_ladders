@@ -90,7 +90,7 @@ def _coverage(separation: float, replicates: int) -> tuple[int, int, int]:
         except ValueError:
             boundary += 1
             continue
-        order = list(align_families(objective.emissions(result.theta), truth))
+        order = list(align_families(objective.components(result.theta), truth))
         for name, reference in (("mean", truth.mean), ("scale", truth.scale)):
             hits = covers(estimate[name][order], error[name][order], reference)
             covered += int(hits.sum())

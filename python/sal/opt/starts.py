@@ -199,7 +199,16 @@ def _mixture_at(objective: Objective, theta: torch.Tensor) -> tuple[Any, Any, An
             "it carries no observations and no components(theta) to start a mixture from",
         )
     with torch.no_grad():
-        weights = torch.exp(objective.constrain(theta)["log_weight"]).detach()
+        named = objective.constrain(theta)
+        if "log_weight" not in named:
+            # An HMM objective carries `observations` and `components(theta)`
+            # too (#1163); its constraint names no mixture weights.
+            refuse_start(
+                "expectation-maximization",
+                objective,
+                "it constrains no log_weight to start a mixture from",
+            )
+        weights = torch.exp(named["log_weight"]).detach()
         family = components(theta.detach())
     return observations, weights, family
 
@@ -251,19 +260,27 @@ def polish_by_baum_welch(
     -------
     PolishedPoint
     """
-    emissions = getattr(objective, "emissions", None)
+    components = getattr(objective, "components", None)
     observations = getattr(objective, "observations", None)
-    if not callable(emissions) or observations is None:
+    if not callable(components) or observations is None:
         refuse_start(
             "baum-welch",
             objective,
-            "it is not an HMM objective carrying observations and emissions(theta)",
+            "it is not an HMM objective carrying observations and components(theta)",
         )
     if getattr(objective, "covariate", None) is not None:
         refuse_start("baum-welch", objective, "a covariate is not passed through")
     with torch.no_grad():
         named = objective.constrain(theta.detach())
-        family = emissions(theta.detach())
+        if "log_initial" not in named:
+            # A mixture objective carries `observations` and
+            # `components(theta)` too (#1163); its constraint names no chain.
+            refuse_start(
+                "baum-welch",
+                objective,
+                "it constrains no log_initial and log_transition to start a chain from",
+            )
+        family = components(theta.detach())
     fitted = baum_welch_family(
         observations.numpy(),
         named["log_initial"],

@@ -302,7 +302,7 @@ def test_the_baum_welch_adapter_is_the_entry_point() -> None:
         observations,
         named["log_initial"],
         named["log_transition"],
-        objective.emissions(theta),
+        objective.components(theta),
         config=replace(EM, max_iterations=30),
     )
     assert polished.value == -direct.log_likelihood
@@ -315,6 +315,17 @@ def test_an_adapter_refuses_an_objective_it_cannot_read() -> None:
         polish_by_emission_em(Himmelblau(), Himmelblau().initial(), POLISH)
     with pytest.raises(ValueError, match="refused on Himmelblau"):
         polish_by_baum_welch(Himmelblau(), Himmelblau().initial(), POLISH)
+
+
+@pytest.mark.smoke
+def test_an_adapter_refuses_the_other_models_objective() -> None:
+    """Both objectives carry `components(theta)` (#1163); each adapter refuses the other's."""
+    mixture = _gaussian_mixture()
+    chain = HmmObjective(np.random.default_rng(894).integers(0, 3, size=(4, 60)), 2, 3)
+    with pytest.raises(ValueError, match="constrains no log_initial"):
+        polish_by_baum_welch(mixture, mixture.initial(), POLISH)
+    with pytest.raises(ValueError, match="constrains no log_weight"):
+        polish_by_emission_em(chain, chain.initial(), POLISH)
 
 
 #: Against `fit_projection`: `log`/`exp` once per start; over six cells of
