@@ -4,9 +4,10 @@ The kernel cuts the segments into blocks by their lengths alone, runs the
 blocks over `rayon`, and sums the blocks' transition counts in block order.
 Referees: the three outputs are equal, bitwise, on pools of 1, 2, 4 and 8
 threads and on the global pool, under every `SwitchKind`, on a layout of
-many blocks; they stay within `CROSS_DEVICE_RTOL_FLOAT64` of the NumPy
-oracle, which sums every pair into one accumulator; and a Baum--Welch fit
-in a process whose global pool is one thread is the fit on eight, bitwise.
+many blocks (`smoke`, an invariant the kernel chose); they stay within
+`CROSS_DEVICE_RTOL_FLOAT64` of the NumPy oracle, which sums every pair into
+one accumulator (`oracle`); and a Baum--Welch fit in a process whose global
+pool is one thread is the fit on eight, bitwise (`smoke`).
 """
 
 from __future__ import annotations
@@ -72,6 +73,7 @@ def _run(
 
 
 @pytest.mark.critical
+@pytest.mark.smoke
 @pytest.mark.backend
 @pytest.mark.parametrize("kind", list(SwitchKind), ids=str)
 def test_every_thread_count_returns_the_same_bits(kind: SwitchKind) -> None:
@@ -138,6 +140,7 @@ def _fit_on(threads: int) -> str:
     ).stdout.strip()
 
 
+@pytest.mark.smoke
 @pytest.mark.backend
 def test_a_baum_welch_fit_is_the_same_on_one_thread_and_on_eight() -> None:
     """300 sequences, 20 iterations: every field of the fit, bitwise."""
