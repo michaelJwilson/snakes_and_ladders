@@ -20,7 +20,7 @@ use pyo3::prelude::*;
 
 /// `ln(exp(a) + exp(b))`, stable and with the `-inf` case exact.
 #[inline]
-fn log_add(a: f64, b: f64) -> f64 {
+pub(crate) fn log_add(a: f64, b: f64) -> f64 {
     if a == f64::NEG_INFINITY {
         return b;
     }
@@ -33,7 +33,7 @@ fn log_add(a: f64, b: f64) -> f64 {
 
 /// `ln(sum(exp(values)))` over a slice, by the same reduction as `log_add`.
 #[inline]
-fn log_sum(values: &[f64]) -> f64 {
+pub(crate) fn log_sum(values: &[f64]) -> f64 {
     values
         .iter()
         .fold(f64::NEG_INFINITY, |total, &one| log_add(total, one))
@@ -140,7 +140,7 @@ impl<'a> KroneckerStep<'a> {
 
     /// `ln P[(i, a), (j, b)]`, one entry of the matrix this never builds.
     #[inline]
-    fn entry(&self, from: usize, to: usize) -> f64 {
+    pub(crate) fn entry(&self, from: usize, to: usize) -> f64 {
         let (i, a, j, b) = (from / 2, from % 2, to / 2, to % 2);
         let layer = if !self.diagonal || i == j {
             self.mix(a, b)
@@ -153,7 +153,7 @@ impl<'a> KroneckerStep<'a> {
     /// `out[(j, b)] = ln sum_(i, a) exp(previous[(i, a)] + ln P[(i, a), (j, b)])`.
     ///
     /// `scratch` holds `2 K` entries.
-    fn forward(&self, previous: &[f64], scratch: &mut [f64], out: &mut [f64]) {
+    pub(crate) fn forward(&self, previous: &[f64], scratch: &mut [f64], out: &mut [f64]) {
         let k = self.slow;
         if self.diagonal {
             // Both layers of a slow state pooled: a moved chain forgets its layer.

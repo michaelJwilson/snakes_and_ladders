@@ -221,6 +221,111 @@ def forward_backward(
     return ForwardBackward(log_evidence, posterior, pairwise)
 
 
+@dataclass(frozen=True)
+class SampledPath:
+    """One posterior draw of a chain's hidden path, with what scores it.
+
+    Parameters
+    ----------
+    path : np.ndarray
+        ``(T,)`` ``int64``, the drawn state at every position.
+    log_joint : float
+        ``log p(path, y)``: the prior of the first state, every step's log
+        transition and every position's score, summed in position order.
+    log_evidence : float
+        ``log p(y)``, read off the forward filter the draw is made from, so
+        ``log_joint - log_evidence`` is the draw's log posterior probability.
+    """
+
+    path: np.ndarray
+    log_joint: float
+    log_evidence: float
+
+    def __iter__(self) -> Iterator[Any]:
+        """``(path, log_joint, log_evidence)``: the order callers unpack.
+
+        ``Any`` because the fields are an array and two floats.
+        """
+        yield from (self.path, self.log_joint, self.log_evidence)
+
+
+def inverse_cdf(log_weights: np.ndarray, uniform: float) -> int:
+    """The state a uniform selects from unnormalized log weights (issue #1170).
+
+    The rule :func:`draw_path` and the compiled ``oxisal.ragged_sample_paths``
+    share, so the two select the same state from the same uniform: shift by
+    the maximum, exponentiate, accumulate left to right, and return the first
+    state whose cumulative weight exceeds ``uniform`` times the total. A state
+    of zero weight is never selected; where rounding leaves the target at the
+    total, the last state of positive weight is.
+
+    Parameters
+    ----------
+    log_weights : np.ndarray
+        ``(K,)``, at least one finite.
+    uniform : float
+        In ``[0, 1)``.
+    """
+    weights = np.exp(log_weights - log_weights.max())
+    cumulative = np.cumsum(weights)
+    state = int(np.searchsorted(cumulative, uniform * cumulative[-1], side="right"))
+    if state == weights.shape[0]:
+        state = int(np.flatnonzero(weights)[-1])
+    return state
+
+
+def draw_path(
+    log_density: np.ndarray,
+    log_initial: np.ndarray,
+    log_transition: np.ndarray,
+    uniforms: np.ndarray,
+) -> SampledPath:
+    """A posterior draw of the path at given uniforms: forward filter, backward sample.
+
+    The deterministic half of :func:`sample_path`, and the per-segment oracle
+    of :func:`sal.likelihood.ragged.sample_paths` (issue #1170). The draws
+    run from the last position to the first, and the ``k``-th of them, the
+    draw at position ``T - 1 - k``, reads ``uniforms[k]`` through
+    :func:`inverse_cdf`: the last state from ``alpha[T - 1]``, then each
+    state from ``alpha[t] + log_transition[t][:, path[t + 1]]``.
+
+    Parameters
+    ----------
+    log_density, log_initial, log_transition : np.ndarray
+        As :func:`forward_backward`; ``log_transition`` takes either shape
+        :func:`step_kernels` accepts.
+    uniforms : np.ndarray
+        ``(T,)``, each in ``[0, 1)``.
+
+    Raises
+    ------
+    ValueError
+        If the shapes disagree or the chain is empty.
+    """
+    log_density = np.asarray(log_density, dtype=float)
+    log_initial = np.asarray(log_initial, dtype=float)
+    log_transition = np.asarray(log_transition, dtype=float)
+    alpha, kernels, constant = _forward(log_density, log_initial, log_transition)
+    length = alpha.shape[0]
+    uniforms = np.asarray(uniforms, dtype=float).reshape(-1)
+    if uniforms.shape != (length,):
+        msg = f"{uniforms.shape[0]} uniforms for a chain of {length} positions"
+        raise ValueError(msg)
+    path = np.empty(length, dtype=np.int64)
+    path[-1] = inverse_cdf(alpha[-1], float(uniforms[0]))
+    for t in range(length - 2, -1, -1):
+        step = kernels[t] if constant is None else constant
+        path[t] = inverse_cdf(
+            alpha[t] + step[:, path[t + 1]], float(uniforms[length - 1 - t])
+        )
+    # The joint in position order, the order the compiled twin sums it in.
+    log_joint = float(log_initial[path[0]] + log_density[0, path[0]])
+    for t in range(1, length):
+        step = kernels[t - 1] if constant is None else constant
+        log_joint += float(step[path[t - 1], path[t]] + log_density[t, path[t]])
+    return SampledPath(path, log_joint, float(logsumexp(alpha[-1], axis=0)))
+
+
 def sample_path(
     log_density: np.ndarray,
     log_initial: np.ndarray,
@@ -236,22 +341,21 @@ def sample_path(
     agree by construction and the draws are refused on the shapes the
     evaluator refuses.
 
+    The generator is read once, ``rng.random(T)``, and the draw is
+    :func:`draw_path` at those uniforms (issue #1170): the one-segment case of
+    :func:`sal.likelihood.ragged.sample_paths`, which reads the same uniforms
+    in the same order. ``rng.choice`` per position, the draw this replaced,
+    read the same ``T`` uniforms in the same order and inverted the same CDF
+    after normalizing it, so a seeded path differs from its draws only where a
+    uniform falls within rounding of a CDF step.
+
     Raises
     ------
     ValueError
         If the shapes disagree or the chain is empty.
     """
-    log_density = np.asarray(log_density, dtype=float)
-    log_initial = np.asarray(log_initial, dtype=float)
-    log_transition = np.asarray(log_transition, dtype=float)
-    alpha, kernels, constant = _forward(log_density, log_initial, log_transition)
-    length, n_states = alpha.shape
-    path = np.empty(length, dtype=np.int64)
-    weights = np.exp(alpha[-1] - logsumexp(alpha[-1], axis=0))
-    path[-1] = rng.choice(n_states, p=weights / weights.sum())
-    for t in range(length - 2, -1, -1):
-        step = kernels[t] if constant is None else constant
-        scores = alpha[t] + step[:, path[t + 1]]
-        weights = np.exp(scores - logsumexp(scores, axis=0))
-        path[t] = rng.choice(n_states, p=weights / weights.sum())
-    return path
+    length = np.shape(log_density)[0] if np.ndim(log_density) == 2 else 0
+    if length < 1:
+        msg = f"log_density must be (T, K) with T >= 1, got {np.shape(log_density)}"
+        raise ValueError(msg)
+    return draw_path(log_density, log_initial, log_transition, rng.random(length)).path
