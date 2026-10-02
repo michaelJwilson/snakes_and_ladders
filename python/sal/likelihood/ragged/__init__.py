@@ -41,7 +41,6 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from enum import StrEnum
 from typing import cast
 
 import numpy as np
@@ -49,36 +48,16 @@ import numpy as np
 from sal.backend import Backend, twin
 from sal.likelihood.forward_backward import draw_path, forward_backward
 
-# The E step's result moved to `opt.hmm.forward` so `opt` can name it (issue
-# #1166); re-exported so every import from here holds.
+# The E step's result (issue #1166) and the switch's kind (issue #1186) moved
+# to `opt.hmm.forward` so `opt` can name them; re-exported so every import
+# from here holds.
 from sal.opt.hmm.forward import (
     Posteriors as Posteriors,  # noqa: PLC0414
 )
+from sal.opt.hmm.forward import (
+    SwitchKind as SwitchKind,  # noqa: PLC0414
+)
 from sal.ragged import Ragged
-
-
-class SwitchKind(StrEnum):
-    """How a per-position switch probability ``s_t`` enters the step into ``t``.
-
-    ``STAY_OR_MOVE`` is ``(1 - s_t) I + s_t A`` (issue #1082). The other two
-    are a slow chain ``A`` over ``K`` states coupled to a fast binary layer,
-    ``2 K`` states with ``(i, a)`` at ``2 i + a`` as ``np.kron`` lays them
-    out (issue #1133):
-
-    - ``KRONECKER``: ``A ⊗ S_t``, ``S_t = [[1 - s_t, s_t], [s_t, 1 - s_t]]``.
-      No ``A'`` makes it ``(1 - s) I + s A'`` unless ``A = I``, since both of
-      ``(1 - s)(A ⊗ I) + s (A ⊗ J)`` carry ``A``.
-    - ``KRONECKER_DIAGONAL``: ``S_t`` on ``A``'s diagonal blocks alone, the
-      layer switching only where the slow chain stays; an off-diagonal move
-      lands on either layer with probability one half.
-
-    The order is state-major (``2 i + a``), as ``np.kron(A, S)``;
-    :func:`kronecker_order` maps a layer-major (``a K + i``) array onto it.
-    """
-
-    STAY_OR_MOVE = "stay_or_move"
-    KRONECKER = "kronecker"
-    KRONECKER_DIAGONAL = "kronecker_diagonal"
 
 
 def kronecker_order(n_states: int, *, layer_major: bool = False) -> np.ndarray:
