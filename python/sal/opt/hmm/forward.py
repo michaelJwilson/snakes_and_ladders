@@ -3,14 +3,20 @@
 :func:`forward_messages` is the scaled forward pass on per-position
 emission densities over a padded batch, and
 :func:`forward_log_likelihood_from_density` its differentiable total; :func:`align_by_key` and its two wrappers
-resolve the label switching the package docstring states. Imports no other
+resolve the label switching the package docstring states.
+:class:`Posteriors` is the ragged E step's result: it is defined here, where
+``opt`` can name it, and :mod:`sal.likelihood.ragged` re-exports it, since
+``opt`` may not import ``likelihood`` (issue #1166). Imports no other
 submodule of :mod:`sal.opt.hmm`.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from dataclasses import dataclass
 from itertools import permutations
 
+import numpy as np
 import torch
 
 from sal.emissions import (
@@ -18,6 +24,30 @@ from sal.emissions import (
     EmissionFamily,
 )
 from sal.numerics import constant_chain_kernel
+
+
+@dataclass(frozen=True)
+class Posteriors:
+    """What one ragged forward--backward pass returns, in the log domain.
+
+    Parameters
+    ----------
+    log_posterior : np.ndarray
+        ``(total, n_states)``, the log marginal at every position.
+    log_counts : np.ndarray
+        ``(n_states, n_states)``, the log transition counts summed over
+        segments. The pair spanning a boundary is in none of them.
+    log_evidence : np.ndarray
+        One log evidence per segment.
+    """
+
+    log_posterior: np.ndarray
+    log_counts: np.ndarray
+    log_evidence: np.ndarray
+
+    def __iter__(self) -> Iterator[np.ndarray]:
+        """``(log_posterior, log_counts, log_evidence)``: the order callers unpack."""
+        yield from (self.log_posterior, self.log_counts, self.log_evidence)
 
 
 def forward_log_likelihood(

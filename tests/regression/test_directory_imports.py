@@ -52,7 +52,10 @@ ADMITTED: dict[tuple[str, str], str] = {
     (
         "likelihood",
         "opt",
-    ): "likelihood.objective implements opt.objective.Objective and constrains through opt.constrain: the seam",
+    ): (
+        "likelihood.objective implements opt.objective.Objective and constrains through opt.constrain: the seam; "
+        "hmm, spatio_sequential and ragged read opt.hmm's forward recursion and E-step result"
+    ),
     ("likelihood", "sim"): "an evaluator reads the model sim/ declares",
     ("qa", "learn"): "qa renders what every directory computes",
     ("qa", "likelihood"): "qa renders what every directory computes",

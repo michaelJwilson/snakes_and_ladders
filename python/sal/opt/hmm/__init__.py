@@ -22,7 +22,8 @@ helper a recovery test needs.
 
 **The package is three modules, and each imports only those before it.**
 :mod:`~sal.opt.hmm.forward` holds the kernels --- the forward
-recursion and the state alignment --- that the other two share;
+recursion, the state alignment and the ragged E step's result,
+:class:`~sal.opt.hmm.Posteriors` (issue #1166) --- that the other two share;
 :mod:`~sal.opt.hmm.objectives` the gradient-fit objectives, one
 per emission family; and :mod:`~sal.opt.hmm.estimation` the EM
 drivers, with the route each takes between the torch recursion and the
@@ -50,6 +51,7 @@ from sal.opt.hmm.estimation import (
     compiled_family,
 )
 from sal.opt.hmm.forward import (
+    Posteriors,
     align_by_key,
     align_families,
     align_states,
@@ -85,6 +87,7 @@ __all__ = [
     "HmmObjective",
     "NegativeBinomialHmmObjective",
     "PoissonHmmObjective",
+    "Posteriors",
     "align_by_key",
     "align_families",
     "align_states",
