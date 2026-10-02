@@ -81,9 +81,9 @@ def test_the_lbfgs_m_step_reaches_the_closed_form_m_step(case: int) -> None:
     closed = family.reestimate(observations, posterior)
     solved = LbfgsMStep()(family, observations, posterior, None)
     assert solved.converged
-    for name, value in closed.emissions.named_parameters().items():
+    for name, value in closed.components.named_parameters().items():
         np.testing.assert_allclose(
-            solved.emissions.named_parameters()[name].numpy(),
+            solved.components.named_parameters()[name].numpy(),
             value.numpy(),
             atol=1e-8,
             rtol=0.0,
@@ -106,15 +106,15 @@ def test_the_lbfgs_m_step_agrees_with_the_negative_binomial_solve() -> None:
     assert closed.converged
     assert solved.converged
     q_closed = expected_complete_log_likelihood(
-        closed.emissions, observations, posterior
+        closed.components, observations, posterior
     )
     q_solved = expected_complete_log_likelihood(
-        solved.emissions, observations, posterior
+        solved.components, observations, posterior
     )
     assert q_solved >= q_closed - 1e-10 * abs(q_closed)
-    for name, value in closed.emissions.named_parameters().items():
+    for name, value in closed.components.named_parameters().items():
         np.testing.assert_allclose(
-            solved.emissions.named_parameters()[name].numpy(),
+            solved.components.named_parameters()[name].numpy(),
             value.numpy(),
             rtol=1e-6,
             err_msg=name,
@@ -131,11 +131,11 @@ def test_an_lbfgs_m_step_never_lowers_the_expected_complete_log_likelihood() -> 
         for _ in range(20):
             posterior = _posterior(rng, family.n_states)
             before = expected_complete_log_likelihood(family, observations, posterior)
-            solved = step(family, observations, posterior, None).emissions
+            solved = step(family, observations, posterior, None).components
             after = expected_complete_log_likelihood(solved, observations, posterior)
             assert after >= before
             # From the maximum it does not move off it.
-            again = step(solved, observations, posterior, None).emissions
+            again = step(solved, observations, posterior, None).components
             assert expected_complete_log_likelihood(
                 again, observations, posterior
             ) >= after - 1e-12 * abs(after)
@@ -149,17 +149,17 @@ def test_a_held_scale_is_held_and_the_mean_reaches_its_closed_form() -> None:
     posterior = _posterior(np.random.default_rng(3), 3)
     held = LbfgsMStep(held=("scale",))(family, observations, posterior, None)
     assert isinstance(family, GaussianEmission)
-    assert isinstance(held.emissions, GaussianEmission)
-    assert torch.equal(held.emissions.scale, family.scale)
-    closed = family.reestimate(observations, posterior).emissions
+    assert isinstance(held.components, GaussianEmission)
+    assert torch.equal(held.components.scale, family.scale)
+    closed = family.reestimate(observations, posterior).components
     assert isinstance(closed, GaussianEmission)
-    np.testing.assert_allclose(held.emissions.mean, closed.mean, atol=1e-8, rtol=0)
+    np.testing.assert_allclose(held.components.mean, closed.mean, atol=1e-8, rtol=0)
     with pytest.raises(ValueError, match="not parameters"):
         LbfgsMStep(held=("variance",))(family, observations, posterior, None)
     everything = LbfgsMStep(held=("mean", "scale"))(
         family, observations, posterior, None
     )
-    assert everything.emissions is family
+    assert everything.components is family
     assert everything.iterations == 0
 
 

@@ -559,7 +559,7 @@ def _streamed_family(
                 torch.from_numpy(variance),
             )
             frozen.update(settled.frozen)
-            return (initial, transition, settled.emissions), log_likelihood
+            return (initial, transition, settled.components), log_likelihood
 
         step = gaussian
     else:
@@ -619,7 +619,7 @@ def _streamed_family(
                 raise ValueError(msg)
             at_boundary = at_boundary or reestimate.at_boundary
             frozen.update(reestimate.frozen)
-            return (initial, transition, reestimate.emissions), log_likelihood
+            return (initial, transition, reestimate.components), log_likelihood
 
         step = tabled
 
@@ -1059,7 +1059,7 @@ def baum_welch_family(
             raise ValueError(msg)
         at_boundary = at_boundary or step.at_boundary
         frozen.update(step.frozen)
-        return (log_initial, log_transition, kernels, step.emissions), log_likelihood
+        return (log_initial, log_transition, kernels, step.components), log_likelihood
 
     (log_initial, log_transition, _, components), log_likelihood, termination = em_loop(
         iterate,

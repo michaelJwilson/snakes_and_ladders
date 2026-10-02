@@ -59,8 +59,8 @@ def test_unit_exposure_changes_nothing_in_scoring_or_the_m_step(
     conserved = Conserved(DISPERSION, MEAN)
     ones = torch.ones_like(counts)
 
-    reference = conserved.reestimate(counts, posterior).emissions
-    fitted = live.reestimate(counts, posterior, ones).emissions
+    reference = conserved.reestimate(counts, posterior).components
+    fitted = live.reestimate(counts, posterior, ones).components
 
     assert torch.equal(
         live.log_density(counts[0], torch.ones(300, 1, dtype=torch.float64)),

@@ -140,7 +140,7 @@ def test_the_component_m_step_is_the_emission_family_s_own() -> None:
     posterior = responsibilities_torch(values, log_weight, components)
     direct = components.reestimate(
         values.reshape(1, -1), posterior.reshape(1, *posterior.shape)
-    ).emissions
+    ).components
     one_step = expectation_maximization(
         observations,
         torch.exp(log_weight),

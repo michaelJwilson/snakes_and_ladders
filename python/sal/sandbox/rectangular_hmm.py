@@ -178,7 +178,7 @@ def baum_welch_rectangular(
                 f"shown it"
             )
             raise ValueError(msg)
-        components = step.emissions
+        components = step.components
         at_boundary = at_boundary or step.at_boundary
         frozen.update(step.frozen)
 

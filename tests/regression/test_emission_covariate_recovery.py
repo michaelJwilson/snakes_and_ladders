@@ -47,7 +47,7 @@ def test_the_exposure_does_not_hide_the_rate_or_the_dispersion() -> None:
     start = NegativeBinomialEmission(torch.tensor([1.0]), torch.tensor([1.0]))
     fitted = start.reestimate(
         draws, torch.ones(1, 2000, 1, dtype=torch.float64), offsets.reshape(1, -1)
-    ).emissions
+    ).components
 
     assert float(fitted.mean[0]) == pytest.approx(mean, rel=0.05)
     assert float(fitted.dispersion[0]) == pytest.approx(dispersion, rel=0.10)
@@ -72,7 +72,7 @@ def test_the_trial_count_does_not_hide_the_beta_parameters() -> None:
     )
     fitted = start.reestimate(
         draws, torch.ones(1, 4000, 1, dtype=torch.float64), trials.reshape(1, -1)
-    ).emissions
+    ).components
 
     assert float(fitted.alpha[0]) == pytest.approx(alpha, rel=0.05)
     assert float(fitted.beta[0]) == pytest.approx(beta, rel=0.05)
@@ -89,7 +89,7 @@ def test_ignoring_a_varying_covariate_does_not_recover_the_truth() -> None:
     posterior = torch.ones(1, 2000, 1, dtype=torch.float64)
     start = NegativeBinomialEmission(torch.tensor([1.0]), torch.tensor([1.0]))
 
-    blind = start.reestimate(draws, posterior).emissions
+    blind = start.reestimate(draws, posterior).components
 
     # The mean recovers the average rate (5.684 against `mu E[e]` = 5.631); the
     # dispersion reads 1.729 against a planted 3.0: heterogeneity as overdispersion.

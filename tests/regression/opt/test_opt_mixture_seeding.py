@@ -233,7 +233,7 @@ def seed_burn_in(instance: Instance, rng: np.random.Generator) -> Seeding:
         one_hot = torch.zeros_like(posterior)
         one_hot[torch.arange(drawn.size), torch.as_tensor(drawn)] = 1.0
         log_weight = torch.log(one_hot.mean(dim=0))
-        components = components.reestimate(values, one_hot).emissions
+        components = components.reestimate(values, one_hot).components
     return Seeding(components, start.passes + BURN_IN_STEPS * instance.n_components)
 
 

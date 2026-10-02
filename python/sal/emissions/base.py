@@ -60,7 +60,7 @@ class Reestimate(Generic[FamilyT_co]):
 
     Parameters
     ----------
-    emissions : FamilyT_co
+    components : FamilyT_co
         The re-estimated family, at its own type.
     converged : bool
         Whether an iterative M step settled; ``True`` by construction for a
@@ -87,7 +87,7 @@ class Reestimate(Generic[FamilyT_co]):
         which were held.
     """
 
-    emissions: FamilyT_co
+    components: FamilyT_co
     converged: bool = True
     at_boundary: bool = False
     iterations: int = 0

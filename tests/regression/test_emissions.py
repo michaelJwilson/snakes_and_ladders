@@ -108,7 +108,7 @@ def test_the_categorical_m_step_is_the_normalized_expected_counts() -> None:
     for row, symbol in zip(weights, observations.numpy().reshape(-1), strict=True):
         counts[:, symbol] += row
     assert_allclose(
-        step.emissions.matrix.numpy(),
+        step.components.matrix.numpy(),
         counts / counts.sum(axis=1, keepdims=True),
         rtol=1e-13,
     )
@@ -125,7 +125,7 @@ def test_the_gaussian_m_step_is_the_posterior_weighted_mean_and_variance() -> No
     observations = torch.as_tensor(rng.normal(size=(5, 7)))
     posterior = torch.as_tensor(rng.dirichlet(np.ones(2), size=(5, 7)))
 
-    fitted = _gaussian().reestimate(observations, posterior).emissions
+    fitted = _gaussian().reestimate(observations, posterior).components
 
     values = observations.numpy().reshape(-1)
     weights = posterior.numpy().reshape(-1, 2)
@@ -169,15 +169,15 @@ def test_a_collapsed_state_is_held_at_its_last_parameters_by_default() -> None:
     held = _gaussian().reestimate(observations, posterior)
 
     assert held.frozen == (0,)
-    assert held.emissions.on_collapse is Collapse.HOLD
+    assert held.components.on_collapse is Collapse.HOLD
     assert torch.equal(
-        held.emissions.mean[:1], torch.tensor([-2.0], dtype=torch.float64)
+        held.components.mean[:1], torch.tensor([-2.0], dtype=torch.float64)
     )
     assert torch.equal(
-        held.emissions.scale[:1], torch.tensor([0.5], dtype=torch.float64)
+        held.components.scale[:1], torch.tensor([0.5], dtype=torch.float64)
     )
-    assert float(held.emissions.mean[1]) == 2.0
-    assert float(held.emissions.scale[1]) == math.sqrt(2.0 / 3.0)
+    assert float(held.components.mean[1]) == 2.0
+    assert float(held.components.scale[1]) == math.sqrt(2.0 / 3.0)
 
 
 @pytest.mark.oracle
@@ -188,9 +188,9 @@ def test_a_clamped_state_sits_at_the_floor_with_its_mean_re_estimated() -> None:
     clamped = family.reestimate(observations, posterior)
 
     assert clamped.frozen == (0,)
-    assert float(clamped.emissions.mean[0]) == 0.0
-    assert float(clamped.emissions.scale[0]) == math.sqrt(FLOOR)
-    assert float(clamped.emissions.mean[1]) == 2.0
+    assert float(clamped.components.mean[0]) == 0.0
+    assert float(clamped.components.scale[0]) == math.sqrt(FLOOR)
+    assert float(clamped.components.mean[1]) == 2.0
 
 
 @pytest.mark.oracle
@@ -205,8 +205,8 @@ def test_an_emptied_state_is_held_under_hold_and_clamp() -> None:
         family = GaussianEmission(MEAN, SCALE, FLOOR, on_collapse=mode)
         settled = family.reestimate(observations, posterior)
         assert settled.frozen == (0,)
-        assert float(settled.emissions.mean[0]) == -2.0
-        assert float(settled.emissions.scale[0]) == scale
+        assert float(settled.components.mean[0]) == -2.0
+        assert float(settled.components.scale[0]) == scale
     with pytest.raises(ValueError, match="posterior mass below"):
         GaussianEmission(MEAN, SCALE, FLOOR, on_collapse=Collapse.REFUSE).reestimate(
             observations, posterior
@@ -449,7 +449,7 @@ def test_the_count_m_step_agrees_with_a_brute_force_grid_search() -> None:
     )
     posterior = torch.as_tensor(rng.dirichlet(np.ones(2), size=(2, 90)))
 
-    fitted = _negative_binomial().reestimate(counts, posterior).emissions
+    fitted = _negative_binomial().reestimate(counts, posterior).components
     dispersion = float(fitted.dispersion[0])
     mean = float(fitted.mean[0])
 
@@ -486,7 +486,7 @@ def test_data_that_is_not_overdispersed_reaches_the_bound_and_says_so() -> None:
 
         assert step.at_boundary
         assert_allclose(
-            float(step.emissions.dispersion[0]),
+            float(step.components.dispersion[0]),
             identifiable_dispersion_bound(float(counts.mean()), float(counts.numel())),
             rtol=1e-12,
         )
@@ -504,8 +504,8 @@ def test_overdispersed_data_recovers_its_dispersion_and_does_not_flag() -> None:
     step = NegativeBinomialEmission([1.0], [1.0]).reestimate(counts, posterior)
 
     assert not step.at_boundary
-    assert_allclose(float(step.emissions.dispersion[0]), 3.0, rtol=0.15)
-    assert_allclose(float(step.emissions.mean[0]), 10.0, rtol=0.05)
+    assert_allclose(float(step.components.dispersion[0]), 3.0, rtol=0.15)
+    assert_allclose(float(step.components.mean[0]), 10.0, rtol=0.05)
 
 
 @pytest.mark.analytic
@@ -696,9 +696,9 @@ def test_the_closed_form_count_m_steps_are_the_weighted_mean() -> None:
     poisson = PoissonEmission(POISSON_MEAN).reestimate(counts, posterior)
     binomial = BinomialEmission(TRIALS, [0.3, 0.6]).reestimate(counts, posterior)
 
-    assert_allclose(poisson.emissions.mean.numpy(), expected, rtol=1e-13)
+    assert_allclose(poisson.components.mean.numpy(), expected, rtol=1e-13)
     assert_allclose(
-        binomial.emissions.probability.numpy(), expected / TRIALS, rtol=1e-13
+        binomial.components.probability.numpy(), expected / TRIALS, rtol=1e-13
     )
     for step in (poisson, binomial):
         assert (step.converged, step.at_boundary, step.iterations) == (True, False, 0)
@@ -722,7 +722,7 @@ def test_the_beta_binomial_m_step_settles_and_is_a_stationary_point() -> None:
     assert step.converged
     assert not step.at_boundary
     assert step.iterations <= 20
-    fitted = step.emissions
+    fitted = step.components
     assert_allclose(float(fitted.alpha[0]), 2.0, rtol=0.25)
     assert_allclose(float(fitted.beta[0]), 5.0, rtol=0.25)
     # First-order optimality, checked by perturbing each coordinate: the
@@ -758,9 +758,9 @@ def test_data_with_no_overdispersion_drives_the_concentration_to_its_bound() -> 
         step = BetaBinomialEmission([12], [1.0], [1.0]).reestimate(counts, posterior)
 
         reached += step.at_boundary
-        fractions.append(float(step.emissions.concentration[0]) / bound)
+        fractions.append(float(step.components.concentration[0]) / bound)
         if step.at_boundary:
-            assert_allclose(float(step.emissions.concentration[0]), bound, rtol=1e-9)
+            assert_allclose(float(step.components.concentration[0]), bound, rtol=1e-9)
 
     assert reached >= 8
     assert min(fractions) >= 0.30

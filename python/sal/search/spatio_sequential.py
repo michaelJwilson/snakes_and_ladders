@@ -184,14 +184,14 @@ def m_step(
                     if covariates[0] is None
                     else np.concatenate([c for c in covariates if c is not None]),
                 )
-                .emissions
+                .components
             )
             emissions = [pooled] * params.n_classes
     else:
         emissions = [
             family
             if block.size == 0
-            else family.reestimate(block, weights, covariate=exposure).emissions
+            else family.reestimate(block, weights, covariate=exposure).components
             for family, (block, weights, exposure) in zip(
                 params.emissions, blocks, strict=True
             )

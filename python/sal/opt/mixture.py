@@ -665,7 +665,7 @@ def expectation_maximization(
             raise ValueError(msg)
         boundary = boundary or reestimated.at_boundary
         frozen.update(reestimated.frozen)
-        return (posterior.mean(dim=0), reestimated.emissions), log_likelihood
+        return (posterior.mean(dim=0), reestimated.components), log_likelihood
 
     (weights, components), log_likelihood, termination = em_loop(
         step,
@@ -725,8 +725,8 @@ def _streamed_expectation_maximization(
             frozen.update(settled.frozen)
             return (
                 new_weight,
-                settled.emissions.mean.numpy(),
-                settled.emissions.scale.numpy(),
+                settled.components.mean.numpy(),
+                settled.components.scale.numpy(),
             ), log_likelihood
         return (new_weight, new_mean, np.sqrt(variance)), log_likelihood
 

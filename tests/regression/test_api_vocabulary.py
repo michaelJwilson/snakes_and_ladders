@@ -15,9 +15,10 @@ import pytest
 PACKAGE = Path(__file__).resolve().parents[2] / "python" / "sal"
 
 #: Names retired from public signatures, and the vocabulary's name for each.
-#: A key is read three ways: ``name`` is any public parameter or field;
+#: A key is read four ways: ``name`` is any public parameter or field;
 #: ``function(name)`` is one function's parameter, where ``name`` keeps another
-#: meaning elsewhere; ``.name`` is a method of any class, public or not.
+#: meaning elsewhere; ``.name`` is a method of any class, public or not;
+#: ``Class.name`` is one public class's field (issue #1197).
 #: ``emissions`` stays a package and a parameters field (issue #1163). A
 #: ``__call__`` is public, as ``__init__`` is: a protocol's call is its
 #: signature (issue #1176).
@@ -31,6 +32,7 @@ RETIRED = {
     "compiled_family(emissions)": "components",
     "normalizer(emissions)": "components",
     "__call__(emissions)": "components",
+    "Reestimate.emissions": "components",
 }
 
 #: The dunder methods a caller writes the parameters of.
@@ -58,12 +60,16 @@ def _public_names(source: str) -> list[tuple[int, str]]:
             )
             if node.name.startswith("_"):
                 continue
-            found.extend(
-                (statement.lineno, statement.target.id)
-                for statement in node.body
-                if isinstance(statement, ast.AnnAssign)
-                and isinstance(statement.target, ast.Name)
-            )
+            for statement in node.body:
+                if isinstance(statement, ast.AnnAssign) and isinstance(
+                    statement.target, ast.Name
+                ):
+                    # A field is read bare and by its class (issue #1197), so
+                    # one class's field retires without its namesakes'.
+                    found.append((statement.lineno, statement.target.id))
+                    found.append(
+                        (statement.lineno, f"{node.name}.{statement.target.id}")
+                    )
     return found
 
 
@@ -92,6 +98,8 @@ class HmmParams:
     emissions: object
 class CovariateUpdate:
     def __call__(self, emissions, posterior, covariate): ...
+class Reestimate:
+    emissions: object
 """
     caught = sorted(
         (line, name) for line, name in _public_names(source) if name in RETIRED
@@ -99,10 +107,12 @@ class CovariateUpdate:
 
     # The function-scoped argument, the bare name and the method are caught;
     # `simulate(emissions)` and the `emissions` field are the other meaning;
-    # a protocol's `__call__` is public (issue #1176).
+    # a protocol's `__call__` is public (issue #1176); `Reestimate`'s field
+    # is caught and `HmmParams`' field of the same name is not (issue #1197).
     assert caught == [
         (2, "baum_welch_family(emissions)"),
         (3, "k"),
         (5, ".emissions"),
         (9, "__call__(emissions)"),
+        (11, "Reestimate.emissions"),
     ]

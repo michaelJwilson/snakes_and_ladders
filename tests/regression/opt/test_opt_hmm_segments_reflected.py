@@ -131,7 +131,7 @@ def test_the_reflected_m_step_maximizes_the_unfolded_likelihood() -> None:
     start = ReflectedEmission(
         BetaBinomialEmission([TRIALS] * 2, [2.0, 5.0], [5.0, 2.0])
     )
-    fitted = start.reestimate(counts, posterior).emissions
+    fitted = start.reestimate(counts, posterior).components
     assert isinstance(fitted, ReflectedEmission)
 
     def negative(point: np.ndarray) -> float:

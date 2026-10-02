@@ -118,7 +118,7 @@ def test_the_m_step_recovers_the_planted_parameters_in_both_forms() -> None:
 
         assert step.converged
         assert not step.at_boundary
-        fitted = step.emissions
+        fitted = step.components
         assert fitted.joint is joint
         assert_allclose(fitted.total.mean.numpy(), MEAN, rtol=0.03)
         assert_allclose(fitted.total.dispersion.numpy(), DISPERSION, rtol=0.15)
@@ -149,7 +149,7 @@ def _maximized_log_likelihood(
     One state, posterior of ones: the M step is the maximum likelihood estimate.
     """
     posterior = torch.ones((observations.shape[0], 1), dtype=torch.float64)
-    fitted = start.reestimate(observations, posterior).emissions
+    fitted = start.reestimate(observations, posterior).components
     return float(fitted.log_density(observations)[:, 0].sum())
 
 
@@ -315,7 +315,7 @@ def test_the_m_step_recovers_the_rate_under_per_observation_trials() -> None:
 
     step = start.reestimate(observations, posterior, covariate)
 
-    fitted = step.emissions
+    fitted = step.components
     rate = np.asarray(ALPHA) / (np.asarray(ALPHA) + np.asarray(BETA))
     assert step.converged
     assert_allclose(fitted.total.mean.numpy(), MEAN, rtol=0.03)

@@ -106,10 +106,10 @@ def test_every_pair_family_reports_the_state_either_channel_held() -> None:
 
     for family in (start, independent):
         held = family.reestimate(pairs, posterior)
-        emissions = held.emissions
+        emissions = held.components
         assert isinstance(emissions, CountPairEmission | IndependentCountPair)
         assert held.frozen == (2,)
-        assert torch.equal(emissions.total.mean[:2], alone.emissions.mean)
+        assert torch.equal(emissions.total.mean[:2], alone.components.mean)
         assert float(emissions.total.mean[2]) == 1e12
 
 

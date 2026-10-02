@@ -59,8 +59,8 @@ def test_the_m_step_at_a_constant_covariate_agrees_to_a_tolerance(
     conserved = Conserved(TRIALS, ALPHA, BETA)
     constant = torch.full_like(counts, 20.0)
 
-    fitted = live.reestimate(counts, posterior, constant).emissions
-    reference = conserved.reestimate(counts, posterior).emissions
+    fitted = live.reestimate(counts, posterior, constant).components
+    reference = conserved.reestimate(counts, posterior).components
     moved = max(
         float(((fitted.alpha - reference.alpha).abs() / reference.alpha).max()),
         float(((fitted.beta - reference.beta).abs() / reference.beta).max()),
@@ -82,8 +82,8 @@ def test_no_covariate_is_the_conserved_family(
     live = BetaBinomialEmission(TRIALS, ALPHA, BETA)
     conserved = Conserved(TRIALS, ALPHA, BETA)
 
-    fitted = live.reestimate(counts, posterior).emissions
-    reference = conserved.reestimate(counts, posterior).emissions
+    fitted = live.reestimate(counts, posterior).components
+    reference = conserved.reestimate(counts, posterior).components
 
     assert torch.equal(live.log_density(counts[0]), conserved.log_density(counts[0]))
     assert torch.equal(fitted.alpha, reference.alpha)
