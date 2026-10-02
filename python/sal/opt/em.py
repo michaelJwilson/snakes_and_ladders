@@ -20,10 +20,21 @@ absolute one does not transfer across data sizes (`DEV.md`, issue #111).
 :class:`EmConfig` as ``config=`` and hands it here; a caller changes one field
 with :func:`dataclasses.replace`, and the config is frozen, so no caller's
 change reaches another's.
+
+**A non-finite log-likelihood is refused, not iterated on** (issue #1179).
+``nan`` fails every relative test, so a loop that read it as a value ran out
+its budget and returned ``Stop.BUDGET`` on a ``nan`` fit. It raises at the step
+that produced it, as `opt/CLAUDE.md` refuses an unbounded likelihood rather
+than clamping it, with the ``ValueError`` `sample.slice` raises on a
+non-finite objective; no :class:`~sal.opt.termination.Stop` is added, since a
+refusal is a raise and :attr:`~sal.opt.termination.Stop.REFUSED` names a
+refusal a caller caught. Non-finite parameters surface here one step later,
+as the log-likelihood evaluated at them.
 """
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -95,6 +106,12 @@ def em_loop[State](
         stopped it or :attr:`Stop.BUDGET` when ``config.max_iterations`` did (issue
         #860). The caller builds its own result type from them and reports
         whatever its M steps said along the way.
+
+    Raises
+    ------
+    ValueError
+        If a step returns a non-finite log-likelihood (``nan`` or ``±inf``),
+        at that iteration, naming it (issue #1179).
     """
     state = start
     log_likelihood = previous
@@ -103,6 +120,16 @@ def em_loop[State](
     while iterations < config.max_iterations:
         iterations += 1
         state, log_likelihood = step(state)
+        if not math.isfinite(log_likelihood):
+            msg = (
+                f"EM log-likelihood is {log_likelihood} at iteration {iterations}, "
+                f"evaluated at the parameters iteration {iterations - 1} produced "
+                "(0 is the start); a non-finite value is refused rather than "
+                "iterated on. Check the data and the start for a state or "
+                "component with no support, or refit on Backend.PYTHON's "
+                "log-space route to compare (issue #1179)"
+            )
+            raise ValueError(msg)
         if abs(log_likelihood - previous) <= config.tolerance * abs(log_likelihood):
             converged = True
             break
