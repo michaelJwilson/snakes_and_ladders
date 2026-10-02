@@ -26,13 +26,13 @@ import numpy as np
 import pytest
 import torch
 from sal.cost import Cost
-from sal.emissions import GaussianEmission
+from sal.emissions import GaussianEmission, NegativeBinomialEmission
 from sal.opt.budget import Budget
 from sal.opt.em import EM
 from sal.opt.hmm import (
     EmissionHmmObjective,
-    NegativeBinomialHmmObjective,
     baum_welch_family,
+    family_start,
 )
 from sal.opt.starts import StartsBenchmark, polish_by_baum_welch
 from sal.ragged import Ragged
@@ -113,10 +113,7 @@ def test_the_polisher_hands_a_segmented_objective_and_its_covariate_to_baum_welc
     None
 ):
     counts, exposure, lengths = _counts()
-    family = NegativeBinomialHmmObjective(
-        counts[None, :30], 2, covariate=exposure[None, :30]
-    )
-    start = family.components(family.initial())
+    start = family_start(NegativeBinomialEmission, counts[:30], 2)
     objective = EmissionHmmObjective(
         Ragged(counts, lengths), start, covariate=exposure[:, None]
     )
@@ -139,22 +136,30 @@ def test_the_polisher_hands_a_segmented_objective_and_its_covariate_to_baum_welc
 
 @pytest.mark.smoke
 @pytest.mark.patch
-def test_a_rectangular_batch_polishes_as_the_per_family_objective_does() -> None:
+def test_a_rectangular_batch_polishes_as_baum_welch_on_the_rectangle_does() -> None:
     # Equal segments through `EmissionHmmObjective`, handed over as a Ragged
-    # batch, against `NegativeBinomialHmmObjective` on the same rectangle,
-    # handed over as an array with its covariate: the route the adapter took
-    # before #1172, now with the covariate it used to refuse.
+    # batch, against Baum-Welch on the same rectangle handed over as an array
+    # with its covariate: the route the adapter took for the per-family
+    # objectives before #1172, which every HMM objective now leaves (#1189).
     counts, exposure, _ = _counts()
     rectangle, rate = counts[:90].reshape(3, 30), exposure[:90].reshape(3, 30)
-    reference = NegativeBinomialHmmObjective(rectangle, 2, covariate=rate)
-    theta = reference.initial()
     objective = EmissionHmmObjective(
-        rectangle, reference.components(theta), covariate=rate[..., None]
+        rectangle,
+        family_start(NegativeBinomialEmission, rectangle, 2),
+        covariate=rate[..., None],
     )
-    budget = Budget(Cost.ITERATIONS, 15)
-    ours = polish_by_baum_welch(objective, objective.initial(), budget)
-    theirs = polish_by_baum_welch(reference, theta, budget)
-    assert ours.value == theirs.value
+    theta = objective.initial()
+    named = objective.constrain(theta)
+    ours = polish_by_baum_welch(objective, theta, Budget(Cost.ITERATIONS, 15))
+    theirs = baum_welch_family(
+        rectangle,
+        named["log_initial"],
+        named["log_transition"],
+        objective.components(theta),
+        config=replace(EM, max_iterations=15),
+        covariate=rate[..., None],
+    )
+    assert ours.value == -theirs.log_likelihood
     assert ours.termination == theirs.termination
 
 

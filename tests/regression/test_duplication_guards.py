@@ -782,12 +782,10 @@ def test_the_problem_catalogue_has_one_reader() -> None:
 
 
 #: Private cross-module imports, each with its reason (#1010, CLEAN's E):
-#: `_submodules` is the lazy-import plumbing; `_HmmObjective` is what
-#: `opt.hmm.jax` narrows on until C5 (#1004), re-exported from `opt.hmm`.
+#: `_submodules` is the lazy-import plumbing. `_HmmObjective`, which
+#: `opt.hmm.jax` narrowed on, left with the per-family objectives (#1189).
 PRIVATE_IMPORTS_ADMITTED = {
     ("sal", "_submodules"),
-    ("sal.opt.hmm", "_HmmObjective"),
-    ("sal.opt.hmm.objectives", "_HmmObjective"),
 }
 
 

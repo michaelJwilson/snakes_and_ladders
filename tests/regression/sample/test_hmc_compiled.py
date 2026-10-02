@@ -15,7 +15,8 @@ import numpy as np
 import pytest
 import torch
 from sal.backend import Backend
-from sal.opt.hmm import GaussianHmmObjective, PoissonHmmObjective
+from sal.emissions import GaussianEmission, PoissonEmission
+from sal.opt.hmm import EmissionHmmObjective, family_start
 from sal.opt.mixture import GaussianMixtureObjective
 from sal.opt.objective import DeclaredGradient
 from sal.opt.testfunctions import Rosenbrock
@@ -387,7 +388,12 @@ _HMM_START = [
 def test_the_compiled_hmm_trajectory_is_the_torch_leapfrog() -> None:
     # Issue #1008: the declared Gaussian HMM's force is Fisher's identity
     # over the streamed statistics, step for step with autograd's leapfrog.
-    objective = GaussianHmmObjective(_sequences(20, 50), 2, backend=Backend.TORCH)
+    observations = _sequences(20, 50)
+    objective = EmissionHmmObjective(
+        observations,
+        family_start(GaussianEmission, observations, 2),
+        backend=Backend.TORCH,
+    )
     rng = np.random.default_rng(10081)
     theta = np.asarray(_HMM_START) + 0.05 * rng.normal(size=7)
     momentum = rng.normal(size=7)
@@ -413,11 +419,17 @@ def test_both_routes_sample_the_hmm_posterior_alike(family: str) -> None:
     # The Gaussian HMM runs the Rust walk, the Poisson HMM the JAX one
     # (`sample.hmc.jax`), each against the torch route in distribution.
     if family == "gaussian-rust":
-        objective: Any = GaussianHmmObjective(_sequences(10, 50), 2)
+        observations = _sequences(10, 50)
+        objective: Any = EmissionHmmObjective(
+            observations, family_start(GaussianEmission, observations, 2)
+        )
         theta0 = torch.as_tensor(_HMM_START)
         step = 0.02
     else:
-        objective = PoissonHmmObjective(_sequences(10, 50, counts=True), 2)
+        observations = _sequences(10, 50, counts=True)
+        objective = EmissionHmmObjective(
+            observations, family_start(PoissonEmission, observations, 2)
+        )
         theta0 = torch.as_tensor(
             [0.0, np.log(0.1 / 0.9), np.log(0.9 / 0.1), np.log(2.0), np.log(9.0)]
         )
@@ -445,7 +457,10 @@ def test_both_routes_sample_the_hmm_posterior_alike(family: str) -> None:
 @pytest.mark.oracle
 @pytest.mark.backend
 def test_the_jax_walk_filters_and_warms_up_as_the_rust_one_does() -> None:
-    objective = PoissonHmmObjective(_sequences(10, 40, counts=True), 2)
+    observations = _sequences(10, 40, counts=True)
+    objective = EmissionHmmObjective(
+        observations, family_start(PoissonEmission, observations, 2)
+    )
     theta0 = torch.as_tensor([0.0, -2.0, 2.0, np.log(2.0), np.log(9.0)])
     chain = hmc.sample(
         objective,

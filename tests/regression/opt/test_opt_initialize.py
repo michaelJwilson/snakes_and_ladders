@@ -17,9 +17,10 @@ import numpy as np
 import pytest
 import torch
 from sal.cost import Cost
+from sal.emissions import CategoricalEmission
 from sal.opt.budget import Budget, Outcome, compare, restarts
 from sal.opt.fit import fit, fit_from
-from sal.opt.hmm import HmmObjective
+from sal.opt.hmm import EmissionHmmObjective, family_start
 from sal.opt.initialize import FromObjective, Perturbed, RandomRestart
 from sal.opt.testfunctions import (
     HIMMELBLAU_MINIMA,
@@ -78,7 +79,9 @@ def test_the_perturbed_start_leaves_the_stationary_point_the_uniform_hmm_sits_on
     A uniform HMM is a stationary point (`opt/hmm.py`); the nudged start has a gradient.
     """
     observations = np.array([[0, 1, 0, 1, 0], [1, 0, 1, 0, 1]], dtype=np.int64)
-    objective = HmmObjective(observations=observations, n_states=2, n_symbols=2)
+    objective = EmissionHmmObjective(
+        observations, family_start(CategoricalEmission, observations, 2, n_symbols=2)
+    )
 
     symmetric = torch.zeros(objective.n_parameters, dtype=torch.float64)
     symmetric.requires_grad_(True)

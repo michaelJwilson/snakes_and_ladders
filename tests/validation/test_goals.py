@@ -33,7 +33,11 @@ from sal.learn.surrogate import (
     _Batch,
 )
 from sal.opt.em import EmConfig
-from sal.opt.hmm import GaussianHmmObjective, baum_welch
+from sal.opt.hmm import (
+    EmissionHmmObjective,
+    baum_welch,
+    family_start,
+)
 from sal.opt.mixture import expectation_maximization
 from sal.sample import hmc, metropolis
 from sal.sample.potts_mcmc import bond_probability
@@ -652,7 +656,7 @@ def _mala_inputs(dimension: int, store_chain: bool) -> dict[str, np.ndarray]:
     }
 
 
-#: JAX's `jit(value_and_grad)` of `GaussianHmmObjective`'s negative
+#: JAX's `jit(value_and_grad)` of a Gaussian `EmissionHmmObjective`'s negative
 #: log-likelihood (three states, sequences of 100) at 20 points about its
 #: `initial()`, the per-point median, and the loop's peak added memory,
 #: medians of three subprocess runs (#997).
@@ -680,7 +684,13 @@ JAX_HMM_GRADIENT_MEMORY = {
 def _hmm_gradient_inputs(n_sequences: int) -> dict[str, np.ndarray]:
     """The gradient harness's inputs: the family fits' Gaussian sequences, 20 points."""
     observations = _family_observations("gaussian", n_sequences)
-    start = GaussianHmmObjective(observations, 3).initial().numpy()
+    start = (
+        EmissionHmmObjective(
+            observations, family_start(GaussianEmission, observations, 3)
+        )
+        .initial()
+        .numpy()
+    )
     rng = np.random.default_rng(997)
     return {
         "points": start + 0.1 * rng.normal(size=(20, start.size)),

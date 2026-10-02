@@ -15,8 +15,9 @@ import pytest
 import sal.opt
 import torch
 from numpy.testing import assert_allclose
+from sal.emissions import CategoricalEmission
 from sal.opt.constrain import free_from_log_simplex, log_simplex
-from sal.opt.hmm import HmmObjective
+from sal.opt.hmm import EmissionHmmObjective, family_start
 from sal.opt.objective import Objective
 from sal.opt.potts import PottsObjective
 
@@ -150,4 +151,9 @@ def test_the_pinned_gauge_leaves_no_flat_direction() -> None:
 def test_both_reference_instances_satisfy_the_protocol() -> None:
     chains = torch.zeros((2, 3), dtype=torch.long).numpy()
     assert isinstance(PottsObjective(chains, n_states=2), Objective)
-    assert isinstance(HmmObjective(chains, n_states=2, n_symbols=2), Objective)
+    assert isinstance(
+        EmissionHmmObjective(
+            chains, family_start(CategoricalEmission, chains, 2, n_symbols=2)
+        ),
+        Objective,
+    )

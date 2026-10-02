@@ -26,6 +26,7 @@ from sal.emissions import (
     GaussianEmission,
     NegativeBinomialEmission,
     PoissonEmission,
+    pooled_variance_floor,
 )
 from sal.fixtures import load_params
 from sal.opt.fit import (
@@ -36,14 +37,10 @@ from sal.opt.fit import (
     standard_errors_at,
 )
 from sal.opt.hmm import (
-    BetaBinomialHmmObjective,
-    BinomialHmmObjective,
-    GaussianHmmObjective,
-    HmmObjective,
-    NegativeBinomialHmmObjective,
-    PoissonHmmObjective,
+    EmissionHmmObjective,
     align_states,
     baum_welch,
+    family_start,
 )
 from sal.opt.initialize import RandomRestart
 from sal.opt.mixture import GaussianMixtureObjective
@@ -63,14 +60,21 @@ TRANSITION = np.array([[0.75, 0.25], [0.25, 0.75]])
 TRIALS = np.array([12, 12])
 
 
-def _hmm_case() -> tuple[HmmObjective, torch.Tensor]:
+def _hmm_case() -> tuple[EmissionHmmObjective, torch.Tensor]:
     """The categorical HMM at its fixture, and a truth point."""
     params = load_params(HMM_FIXTURE, HmmParams)
-    objective = HmmObjective(
-        simulate_sequences(params).observations, params.n_states, params.n_symbols
+    observations = simulate_sequences(params).observations
+    objective = EmissionHmmObjective(
+        observations,
+        family_start(
+            CategoricalEmission,
+            observations,
+            params.n_states,
+            n_symbols=params.n_symbols,
+        ),
     )
     return objective, objective.theta_from_truth(
-        params.initial, params.transition, params.emission
+        params.initial, params.transition, log_emission=np.log(params.emission)
     )
 
 
@@ -102,62 +106,70 @@ def _every_objective() -> list[tuple[Objective, torch.Tensor]]:
 
     gaussian = GaussianEmission([-3.0, 3.0], [1.0, 1.5], 1e-12)
     observations = _two_state(gaussian)
-    objective = GaussianHmmObjective(observations, 2)
+    objective = EmissionHmmObjective(
+        observations, family_start(GaussianEmission, observations, 2)
+    )
     cases.append(
         (
             objective,
             objective.theta_from_truth(
-                INITIAL, TRANSITION, gaussian.mean.numpy(), gaussian.scale.numpy()
+                INITIAL, TRANSITION, **gaussian.named_parameters()
             ),
         )
     )
 
     poisson = PoissonEmission([3.0, 15.0])
-    poisson_objective = PoissonHmmObjective(_two_state(poisson), 2)
+    observations = _two_state(poisson)
+    poisson_objective = EmissionHmmObjective(
+        observations, family_start(PoissonEmission, observations, 2)
+    )
     cases.append(
         (
             poisson_objective,
             poisson_objective.theta_from_truth(
-                INITIAL, TRANSITION, poisson.mean.numpy()
+                INITIAL, TRANSITION, **poisson.named_parameters()
             ),
         )
     )
 
     binomial = BinomialEmission(TRIALS, [0.2, 0.75])
-    binomial_objective = BinomialHmmObjective(_two_state(binomial), 2, TRIALS)
+    observations = _two_state(binomial)
+    binomial_objective = EmissionHmmObjective(
+        observations, family_start(BinomialEmission, observations, 2, trials=TRIALS)
+    )
     cases.append(
         (
             binomial_objective,
             binomial_objective.theta_from_truth(
-                INITIAL, TRANSITION, binomial.probability.numpy()
+                INITIAL, TRANSITION, **binomial.named_parameters()
             ),
         )
     )
 
     beta_binomial = BetaBinomialEmission(TRIALS, [2.0, 8.0], [8.0, 2.0])
-    beta_objective = BetaBinomialHmmObjective(_two_state(beta_binomial), 2, TRIALS)
+    observations = _two_state(beta_binomial)
+    beta_objective = EmissionHmmObjective(
+        observations, family_start(BetaBinomialEmission, observations, 2, trials=TRIALS)
+    )
     cases.append(
         (
             beta_objective,
             beta_objective.theta_from_truth(
-                INITIAL,
-                TRANSITION,
-                beta_binomial.alpha.numpy(),
-                beta_binomial.beta.numpy(),
+                INITIAL, TRANSITION, **beta_binomial.named_parameters()
             ),
         )
     )
 
     negative_binomial = NegativeBinomialEmission([2.0, 8.0], [3.0, 20.0])
-    count_objective = NegativeBinomialHmmObjective(_two_state(negative_binomial), 2)
+    observations = _two_state(negative_binomial)
+    count_objective = EmissionHmmObjective(
+        observations, family_start(NegativeBinomialEmission, observations, 2)
+    )
     cases.append(
         (
             count_objective,
             count_objective.theta_from_truth(
-                INITIAL,
-                TRANSITION,
-                negative_binomial.dispersion.numpy(),
-                negative_binomial.mean.numpy(),
+                INITIAL, TRANSITION, **negative_binomial.named_parameters()
             ),
         )
     )
@@ -230,7 +242,15 @@ def test_an_em_fit_and_a_gradient_fit_agree_on_the_interval_at_their_optimum() -
     # bound is the ridge's width; 1e-8 on the likelihood is what they reach.
     params = load_params(HMM_FIXTURE, HmmParams)
     observations = simulate_sequences(params).observations
-    objective = HmmObjective(observations, params.n_states, params.n_symbols)
+    objective = EmissionHmmObjective(
+        observations,
+        family_start(
+            CategoricalEmission,
+            observations,
+            params.n_states,
+            n_symbols=params.n_symbols,
+        ),
+    )
 
     gradient = fit(objective)
     gradient_errors = standard_errors_at(objective, objective.constrain(gradient.theta))
@@ -264,7 +284,9 @@ def test_a_collapsing_component_is_refused_through_the_new_door_too() -> None:
     # since a guard refusing everything would pass a refusal-only test.
     gaussian = GaussianEmission([-3.0, 3.0], [1.0, 1.0], 1e-12)
     observations = _two_state(gaussian, seed=3)
-    objective = GaussianHmmObjective(observations, 2)
+    objective = EmissionHmmObjective(
+        observations, family_start(GaussianEmission, observations, 2)
+    )
     healthy = {
         "log_initial": torch.log(torch.as_tensor(INITIAL)),
         "log_transition": torch.log(torch.as_tensor(TRANSITION)),
@@ -280,7 +302,8 @@ def test_a_collapsing_component_is_refused_through_the_new_door_too() -> None:
         [float(observations.reshape(-1)[0]), 3.0], dtype=torch.float64
     )
     collapsed["scale"] = torch.tensor(
-        [float(np.sqrt(objective.variance_floor)) * 1.01, 1.0], dtype=torch.float64
+        [float(np.sqrt(pooled_variance_floor(observations))) * 1.01, 1.0],
+        dtype=torch.float64,
     )
     with pytest.raises(ValueError, match="not positive definite"):
         standard_errors_at(objective, collapsed)
@@ -292,8 +315,15 @@ def test_a_multi_start_interval_belongs_beside_the_spread_that_qualifies_it() ->
     # and the spread across starts says whether that matters, so the two are
     # reported together: the interval at `best`, and `spread` beside it.
     params = load_params(HMM_FIXTURE, HmmParams)
-    objective = HmmObjective(
-        simulate_sequences(params).observations, params.n_states, params.n_symbols
+    observations = simulate_sequences(params).observations
+    objective = EmissionHmmObjective(
+        observations,
+        family_start(
+            CategoricalEmission,
+            observations,
+            params.n_states,
+            n_symbols=params.n_symbols,
+        ),
     )
 
     result = fit_from(
@@ -319,8 +349,15 @@ def test_a_fit_asked_for_its_interval_gets_the_one_the_door_gives() -> None:
     # A convenience, bitwise at the same `theta` (the `named` door to 1e-10;
     # round trip 4e-16). Off means `None` and no Hessian.
     params = load_params(HMM_FIXTURE, HmmParams)
-    objective = HmmObjective(
-        simulate_sequences(params).observations, params.n_states, params.n_symbols
+    observations = simulate_sequences(params).observations
+    objective = EmissionHmmObjective(
+        observations,
+        family_start(
+            CategoricalEmission,
+            observations,
+            params.n_states,
+            n_symbols=params.n_symbols,
+        ),
     )
 
     plain = fit(objective)
@@ -342,8 +379,15 @@ def test_an_unconverged_fit_is_refused_an_interval_but_not_a_result() -> None:
     # asking returns the unconverged fit for inspection exactly as before, so
     # the flag changes no existing behaviour.
     params = load_params(HMM_FIXTURE, HmmParams)
-    objective = HmmObjective(
-        simulate_sequences(params).observations, params.n_states, params.n_symbols
+    observations = simulate_sequences(params).observations
+    objective = EmissionHmmObjective(
+        observations,
+        family_start(
+            CategoricalEmission,
+            observations,
+            params.n_states,
+            n_symbols=params.n_symbols,
+        ),
     )
 
     early = fit(objective, max_iterations=1)
@@ -434,7 +478,15 @@ def test_the_intervals_from_an_em_fit_cover_truth_at_the_nominal_rate() -> None:
     for replicate in range(12):
         params = replace(base, seed=base.seed + 7919 * replicate)
         observations = simulate_sequences(params).observations
-        objective = HmmObjective(observations, params.n_states, params.n_symbols)
+        objective = EmissionHmmObjective(
+            observations,
+            family_start(
+                CategoricalEmission,
+                observations,
+                params.n_states,
+                n_symbols=params.n_symbols,
+            ),
+        )
         start = objective.constrain(objective.initial())
         log_initial, log_transition, log_emission, *_ = baum_welch(
             observations,

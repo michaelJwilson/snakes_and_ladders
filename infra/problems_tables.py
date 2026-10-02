@@ -225,7 +225,7 @@ ALGORITHMS: dict[str, str] = {
     "likelihood.objective.SubstitutionModelObjective": "gradient fit",
     "opt.potts.PottsObjective": "gradient fit",
     "opt.potts.PottsLatticeObjective": "gradient fit",
-    "opt.hmm.HmmObjective": "gradient fit",
+    "opt.hmm.EmissionHmmObjective": "gradient fit",
     "opt.mixture.GaussianMixtureObjective": "gradient fit",
     "opt.fit.fit": "gradient fit",
     "opt.hmm.baum_welch_family": "expectation--maximization",
