@@ -44,7 +44,13 @@ EXACT = 1e-9
 
 #: The solvers that refuse a start, and the ones whose own start is the
 #: field's argmax rather than a uniform draw.
-REFUSED = ("field_argmax", "tempering", "max-product", "bifurcation")
+REFUSED = (
+    "field_argmax",
+    "tempering",
+    "tempering-mixed",
+    "max-product",
+    "bifurcation",
+)
 #: Arms that refuse a start because a part of them does: ``fuse-merge`` runs
 #: ``field_argmax`` from the start it is handed (issue #1140).
 PART_REFUSED = ("fuse-merge",)

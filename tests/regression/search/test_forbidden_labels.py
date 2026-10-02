@@ -42,7 +42,13 @@ BUDGET = Budget(Cost.SITE_VISITS, 400 * GRAPH.n_nodes * 5)
 #: Every site at the first label, which ``ALLOWED`` forbids everywhere.
 FORBIDDEN_START = np.zeros(GRAPH.n_nodes, dtype=np.int64)
 #: The methods `ground_state` refuses a start for, each by name.
-STARTLESS = {"bifurcation", "field_argmax", "max-product", "tempering"}
+STARTLESS = {
+    "bifurcation",
+    "field_argmax",
+    "max-product",
+    "tempering",
+    "tempering-mixed",
+}
 
 #: Eight sites, the size the issue's exhaustive referee is stated at.
 SMALL = lattice_graph((2, 4), BoundaryCondition.OPEN, 0.7)

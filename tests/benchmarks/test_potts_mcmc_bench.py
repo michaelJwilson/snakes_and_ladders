@@ -134,3 +134,34 @@ def test_release_tempering_steps_benchmark(
     )
 
     assert run.states.shape == (STEPS, N_REPLICAS, rung.n_nodes)
+
+
+def test_release_rung_moves_tempering_steps_benchmark(
+    benchmark: BenchmarkFixture,
+) -> None:
+    # `STEPS` steps of the ladder `rung_moves` picks at `spatio_tiling/release`
+    # (issue #1158): heat-bath Swendsen-Wang on the two hottest rungs, it and a
+    # single-site sweep on the four below, on the compiled cluster route
+    # `ground_state.run_tempering` takes; beside the single-move rows above.
+    from sal.sample.potts_mcmc import parallel_tempering, rung_moves
+    from sal.search.ground_state import N_REPLICAS, tempering_ladder
+    from sal.search.potts_starts import tiling_rung
+    from sal.sim.fixtures import fixture
+
+    rung = tiling_rung(fixture("spatio_tiling", "release").params, "release")
+    ladder = tempering_ladder()
+    moves = rung_moves(rung.graph, rung.field, ladder)
+
+    run = benchmark(
+        lambda: parallel_tempering(
+            rung.graph,
+            rung.field,
+            ladder,
+            np.random.default_rng(1158),
+            STEPS,
+            move=moves,
+            cluster_backend=Backend.RUST,
+        )
+    )
+
+    assert run.states.shape == (STEPS, N_REPLICAS, rung.n_nodes)
