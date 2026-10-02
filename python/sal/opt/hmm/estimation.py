@@ -8,7 +8,7 @@ under :data:`~sal.backend.Backend.RUST`. Imports
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from typing import Any, Protocol
@@ -981,22 +981,31 @@ def baum_welch_family(
             )
             assert table is not None
             alpha = table
-            beta = torch.zeros((n_sequences, length, m), dtype=log_initial.dtype)
+            # Split once and stack once, as `forward_messages` does (#1199): a
+            # slice per step, read or assigned, is one node whose cost is the
+            # whole block, quadratic in `length`. Only the indexing changes.
+            scores = emit.unbind(dim=1)
+            backward_steps: Sequence[torch.Tensor]
+            if per_sequence:
+                backward_steps = kernels.unbind(dim=1)
+            elif varying:
+                backward_steps = kernels.unsqueeze(1).unbind(dim=0)
+            else:
+                backward_steps = [log_transition.unsqueeze(0)] * (length - 1)
+            onward_beta = torch.zeros((n_sequences, m), dtype=log_initial.dtype)
+            columns = [onward_beta]
             for t in range(length - 2, -1, -1):
-                kernel = (
-                    kernels[:, t]
-                    if per_sequence
-                    else (kernels[t] if varying else log_transition).unsqueeze(0)
-                )
                 onward = torch.logsumexp(
-                    kernel + (emit[:, t + 1] + beta[:, t + 1]).unsqueeze(1),
+                    backward_steps[t] + (scores[t + 1] + onward_beta).unsqueeze(1),
                     dim=2,
                 )
                 # At or past a segment's last position the chain has ended: beta is
                 # one, not whatever the next column carries. This is the backward
                 # half of "the recursions restart at each boundary".
                 ended = (t >= final).unsqueeze(1)
-                beta[:, t] = torch.where(ended, torch.zeros_like(onward), onward)
+                onward_beta = torch.where(ended, torch.zeros_like(onward), onward)
+                columns.append(onward_beta)
+            beta = torch.stack(columns[::-1], dim=1)
 
             log_likelihood = float(evidence.sum())
 

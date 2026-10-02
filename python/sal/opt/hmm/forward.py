@@ -309,23 +309,34 @@ def forward_messages(
     are computed, so the evidence on equal lengths is the same bitwise with or
     without ``final`` (``tests/regression/opt/test_opt_hmm_forward_messages.py``).
     """
-    n, length = log_density.shape[0], log_density.shape[1]
-    alpha = log_initial.unsqueeze(0) + log_density[:, 0]
+    n = log_density.shape[0]
+    # Split once, as `_switched_evidence` splits: a slice per step is one
+    # autograd node whose backward writes a zero block the size of the whole
+    # input, quadratic in `length`; the backward of `unbind` stacks the
+    # per-step gradients once (#1199). Only the indexing changes, so every
+    # value and gradient is the one the sliced loop gave, bitwise.
+    scores = log_density.unbind(dim=1)
+    alpha = log_initial.unsqueeze(0) + scores[0]
     # The columns are collected and stacked once rather than written into a
     # preallocated table: a slice assignment is one autograd node per step
     # whose backward copies the whole table, quadratic in `length` (#1167).
     columns: list[torch.Tensor] | None = [alpha] if final is not None else None
-    # Hoisted: the one-kernel form broadcasts the same `(1, m, m)` view at
-    # every step.
-    constant = kernels.unsqueeze(0) if kernels.ndim == 2 else None
-    for t in range(1, length):
-        if constant is not None:
-            step = constant
-        elif kernels.ndim == 3:
-            step = kernels[t - 1].unsqueeze(0)
-        else:
-            step = kernels[:, t - 1]
-        alpha = torch.logsumexp(alpha.unsqueeze(2) + step, dim=1) + log_density[:, t]
+    # The kernel's form is read once: the one-kernel form broadcasts the same
+    # `(1, m, m)` view at every step; a stack is split along its step axis.
+    steps: Sequence[torch.Tensor]
+    if kernels.ndim == 2:
+        steps = [kernels.unsqueeze(0)] * (len(scores) - 1)
+    elif kernels.ndim == 3:
+        steps = kernels.unsqueeze(1).unbind(dim=0)
+    else:
+        steps = kernels.unbind(dim=1)
+    if len(steps) < len(scores) - 1:
+        msg = f"kernels {tuple(kernels.shape)} hold fewer than {len(scores) - 1} steps"
+        raise ValueError(msg)
+    # A stack longer than `length - 1` steps is read only as far as the
+    # sliced loop read it: `zip` stops at the scores.
+    for step, score in zip(steps, scores[1:], strict=False):
+        alpha = torch.logsumexp(alpha.unsqueeze(2) + step, dim=1) + score
         if columns is not None:
             columns.append(alpha)
     if columns is None or final is None:

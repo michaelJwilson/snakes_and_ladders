@@ -9,10 +9,12 @@ its segment ends, so no table is kept and the evidence is read off the last
 column. Both are differentiated with respect to the scores and the transition
 matrix; the regression file pins the entry point's value and gradients.
 
-Measured at that size (min of three rounds): `ragged` 9.12 s against
-`hand_masked` 10.31 s. Before `forward_messages` stacked its columns, a slice
+Measured at that size (min of three rounds, 4 cores): `ragged` 0.56 s against
+`hand_masked` 9.99 s. Before `forward_messages` stacked its columns, a slice
 assignment per step made the backward pass copy the whole table per step, and
-`ragged` took 15.80 s against 10.75 s (issue #1167).
+`ragged` took 15.80 s against 10.75 s (issue #1167); before it split its
+inputs once with `unbind`, a slice read per step did the same to the scores,
+and `ragged` took 9.22 s against 11.32 s (issue #1199).
 """
 
 from __future__ import annotations
