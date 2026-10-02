@@ -31,7 +31,12 @@ from sal.likelihood.mixture_assignments import (
 from sal.likelihood.objective import TreeMetrics
 from sal.opt import testfunctions
 from sal.opt.fit import fit
-from sal.opt.hmm import HmmMetrics, HmmObjective, forward_log_likelihood
+from sal.opt.hmm import (
+    EmissionHmmObjective,
+    HmmMetrics,
+    family_start,
+    forward_log_likelihood,
+)
 from sal.opt.mixture import (
     GaussianMixtureObjective,
     MixtureMetrics,
@@ -408,7 +413,9 @@ def test_potts_metrics_score_a_labelling_at_its_energy() -> None:
 @pytest.mark.patch
 def test_hmm_metrics_report_the_forward_log_likelihood() -> None:
     observations = np.array([[0, 1, 0, 1], [1, 1, 0, 0]])
-    objective = HmmObjective(observations, 2, 2)
+    objective = EmissionHmmObjective(
+        observations, family_start(CategoricalEmission, observations, 2, n_symbols=2)
+    )
     theta = objective.initial()
     named = objective.constrain(theta)
     truth = HmmParams(

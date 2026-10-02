@@ -14,7 +14,7 @@ package's:
   length)``, under an ``n_states`` Gaussian HMM, over ``theta = (m - 1
   initial, m (m - 1) transition, m means, m log scales)``, each simplex row
   ``log_softmax([0, free])``, by the log-space forward recursion
-  (:class:`sal.opt.hmm.GaussianHmmObjective`; issue #997).
+  (:class:`sal.opt.hmm.EmissionHmmObjective` of a Gaussian; issues #997, #1189).
 
 At each row of ``points`` it returns ``values`` and ``gradients`` from
 ``jax.value_and_grad`` in float64. Three timings, each the median over the
@@ -78,7 +78,7 @@ def _mixture(observations: Any, n_states: int, jax: Any) -> Callable[[Any], Any]
 
 
 def _hmm(observations: Any, m: int, jax: Any) -> Callable[[Any], Any]:
-    """A Gaussian HMM's negative log-likelihood over ``GaussianHmmObjective``'s ``theta``."""
+    """A Gaussian HMM's negative log-likelihood over a Gaussian ``EmissionHmmObjective``'s ``theta``."""
     jnp = jax.numpy
 
     def simplex(free: Any) -> Any:

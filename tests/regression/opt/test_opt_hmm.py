@@ -32,11 +32,11 @@ from sal.likelihood.hmm_paths import enumerate_hidden_paths
 from sal.opt.em import EM, EmConfig
 from sal.opt.hmm import (
     EmFit,
-    GaussianHmmObjective,
-    HmmObjective,
+    EmissionHmmObjective,
     align_states,
     baum_welch,
     baum_welch_family,
+    family_start,
     forward_log_likelihood,
 )
 from sal.opt.termination import Stop, Termination
@@ -144,14 +144,21 @@ def test_gradient_matches_central_finite_differences() -> None:
         # A short slice: the finite-difference check costs two objective
         # evaluations per parameter, and the recursion it exercises is the same
         # at any length.
-        objective = HmmObjective(
-            simulate_sequences(params).observations[:40],
-            params.n_states,
-            params.n_symbols,
+        observations = simulate_sequences(params).observations[:40]
+        objective = EmissionHmmObjective(
+            observations,
+            family_start(
+                CategoricalEmission,
+                observations,
+                params.n_states,
+                n_symbols=params.n_symbols,
+            ),
         )
         theta = (
             objective.theta_from_truth(
-                params.initial, params.transition, params.emission
+                params.initial,
+                params.transition,
+                log_emission=np.log(params.emission),
             )
             if at_truth
             else objective.initial()
@@ -167,11 +174,22 @@ def test_gradient_matches_central_finite_differences() -> None:
 @pytest.mark.oracle
 def test_theta_round_trips_through_the_constraint_map() -> None:
     params = load_params(FIXTURE, HmmParams)
-    objective = HmmObjective(
-        simulate_sequences(params).observations, params.n_states, params.n_symbols
+    observations = simulate_sequences(params).observations
+    objective = EmissionHmmObjective(
+        observations,
+        family_start(
+            CategoricalEmission,
+            observations,
+            params.n_states,
+            n_symbols=params.n_symbols,
+        ),
     )
     constrained = objective.constrain(
-        objective.theta_from_truth(params.initial, params.transition, params.emission)
+        objective.theta_from_truth(
+            params.initial,
+            params.transition,
+            log_emission=np.log(params.emission),
+        )
     )
     assert_allclose(
         torch.exp(constrained["log_initial"]).numpy(), params.initial, rtol=1e-13
@@ -187,7 +205,10 @@ def test_theta_round_trips_through_the_constraint_map() -> None:
 @pytest.mark.smoke
 def test_theta_has_one_entry_per_free_probability() -> None:
     # 2 free initial + 3 rows x 2 free transition + 3 rows x 3 free emission.
-    objective = HmmObjective(np.zeros((2, 5), dtype=np.int64), n_states=3, n_symbols=4)
+    observations = np.zeros((2, 5), dtype=np.int64)
+    objective = EmissionHmmObjective(
+        observations, family_start(CategoricalEmission, observations, 3, n_symbols=4)
+    )
     assert objective.n_parameters == 17
     assert objective.initial().shape == (17,)
 
@@ -197,7 +218,10 @@ def test_the_initial_point_is_uninformative_but_not_symmetric() -> None:
     # Initial and transition start uniform; the emission rows are tilted
     # apart. See the stationary-point test below for why the tilt has to be
     # there.
-    objective = HmmObjective(np.zeros((2, 5), dtype=np.int64), n_states=3, n_symbols=4)
+    observations = np.zeros((2, 5), dtype=np.int64)
+    objective = EmissionHmmObjective(
+        observations, family_start(CategoricalEmission, observations, 3, n_symbols=4)
+    )
     constrained = objective.constrain(objective.initial())
     assert_allclose(
         torch.exp(constrained["log_initial"]).numpy(), np.full(3, 1 / 3), rtol=1e-14
@@ -219,8 +243,15 @@ def test_the_uniform_point_is_a_stationary_point_of_the_likelihood() -> None:
     # With every hidden state identical no change to the initial or transition
     # parameters moves the likelihood; a fit started there keeps one state.
     params = load_params(FIXTURE, HmmParams)
-    objective = HmmObjective(
-        simulate_sequences(params).observations[:40], params.n_states, params.n_symbols
+    observations = simulate_sequences(params).observations[:40]
+    objective = EmissionHmmObjective(
+        observations,
+        family_start(
+            CategoricalEmission,
+            observations,
+            params.n_states,
+            n_symbols=params.n_symbols,
+        ),
     )
     uniform = torch.zeros(objective.n_parameters, dtype=torch.float64)
 
@@ -243,7 +274,15 @@ def test_baum_welch_increases_the_likelihood_monotonically() -> None:
     # the likelihood cannot decrease. A violation means the M step is wrong.
     params = load_params(FIXTURE, HmmParams)
     observations = simulate_sequences(params).observations[:60]
-    objective = HmmObjective(observations, params.n_states, params.n_symbols)
+    objective = EmissionHmmObjective(
+        observations,
+        family_start(
+            CategoricalEmission,
+            observations,
+            params.n_states,
+            n_symbols=params.n_symbols,
+        ),
+    )
     start = objective.constrain(objective.initial())
 
     previous = -float("inf")
@@ -282,7 +321,15 @@ def test_baum_welch_stops_once_the_likelihood_stops_moving() -> None:
     # shows as a worse optimum than a tight one reaches from the same start.
     params = load_params(FIXTURE, HmmParams)
     observations = simulate_sequences(params).observations[:60]
-    objective = HmmObjective(observations, params.n_states, params.n_symbols)
+    objective = EmissionHmmObjective(
+        observations,
+        family_start(
+            CategoricalEmission,
+            observations,
+            params.n_states,
+            n_symbols=params.n_symbols,
+        ),
+    )
     start = objective.constrain(objective.initial())
     arguments = (
         observations,
@@ -776,11 +823,13 @@ def test_the_compiled_hmm_score_is_the_forward_recursion(name: str) -> None:
 
 @pytest.mark.oracle
 def test_the_gaussian_hmm_gradient_is_autograds() -> None:
-    # Issue #997: `GaussianHmmObjective.gradient` by Fisher's identity from
+    # Issue #997: a Gaussian `EmissionHmmObjective.gradient` by Fisher's identity from
     # one streamed pass of expected statistics; autograd through `__call__`
     # is the oracle, at points away from the start in every coordinate.
     observations, _, _ = _streamed_case("gaussian", covariate=False)
-    objective = GaussianHmmObjective(observations, 3)
+    objective = EmissionHmmObjective(
+        observations, family_start(GaussianEmission, observations, 3)
+    )
     rng = np.random.default_rng(997)
     for _ in range(3):
         theta = objective.initial() + 0.3 * torch.as_tensor(

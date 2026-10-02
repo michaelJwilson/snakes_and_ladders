@@ -1,12 +1,15 @@
-"""The HMM objectives' negative log-likelihood and gradient under JAX, their default route (issue #1000).
+"""An HMM objective's negative log-likelihood and gradient under JAX (issues #1000, #1189).
 
-Each twin reads the objective's own ``theta`` layout and constraint maps --- a
+Each twin is keyed on :class:`~sal.opt.hmm.EmissionHmmObjective`'s start
+family and reads the objective's own ``theta`` layout (:attr:`blocks`) and
+constraint maps --- a
 simplex row is ``log_softmax([0, free])``, a positive parameter ``exp``, a
 probability the logistic --- and scores the observations by the scaled
 forward recursion, whose reverse pass is the backward recursion (see
 :func:`_forward`), so ``jit(value_and_grad)`` of it is the gradient PyTorch's
-autograd takes through ``__call__``. PyTorch autograd, asked for as
-:data:`~sal.backend.Backend.TORCH`, is the oracle.
+autograd takes through ``__call__``, the oracle. A twin exists for a
+categorical, Gaussian, Poisson, binomial, beta-binomial or negative binomial
+family of scalar observations on segments of one length (:func:`twinned`).
 
 What is compiled depends on the objective's structure alone --- family,
 state and symbol counts, ``theta`` layout, covariate and table --- and is
@@ -25,25 +28,26 @@ from typing import Any
 import numpy as np
 from scipy.special import gammaln
 
-from sal.opt.hmm import (
-    BetaBinomialHmmObjective,
-    BinomialHmmObjective,
-    GaussianHmmObjective,
-    HmmObjective,
-    NegativeBinomialHmmObjective,
-    PoissonHmmObjective,
-    _HmmObjective,
+from sal.emissions import (
+    BetaBinomialEmission,
+    BinomialEmission,
+    CategoricalEmission,
+    GaussianEmission,
+    NegativeBinomialEmission,
+    PoissonEmission,
 )
+from sal.opt.hmm import EmissionHmmObjective
 
-#: The objectives a twin is written for.
-type Twinned = (
-    HmmObjective
-    | GaussianHmmObjective
-    | PoissonHmmObjective
-    | BinomialHmmObjective
-    | NegativeBinomialHmmObjective
-    | BetaBinomialHmmObjective
-)
+#: The families a twin is written for, by exact type: a subclass may score
+#: otherwise.
+FAMILIES: dict[type, str] = {
+    CategoricalEmission: "categorical",
+    GaussianEmission: "gaussian",
+    PoissonEmission: "poisson",
+    BinomialEmission: "binomial",
+    BetaBinomialEmission: "beta_binomial",
+    NegativeBinomialEmission: "negative_binomial",
+}
 
 #: Above this argument the log rising factorial is taken through ``betaln``.
 RISING_FROM = 1e3
@@ -65,20 +69,32 @@ class _Structure:
     tabled: bool
 
 
+def twinned(objective: EmissionHmmObjective) -> bool:
+    """Whether ``objective`` has a twin: a family of :data:`FAMILIES`, scalar observations, segments of one length, and JAX installed."""
+    import importlib.util
+
+    return (
+        type(objective.start) in FAMILIES
+        and objective.observations.dim() == 1
+        and objective.rectangular() is not None
+        and importlib.util.find_spec("jax") is not None
+    )
+
+
 def value_and_grad(
-    objective: _HmmObjective,
+    objective: EmissionHmmObjective,
 ) -> Callable[[np.ndarray], tuple[float, np.ndarray]]:
     """``theta -> (U(theta), dU/dtheta)`` under ``jit``, the objective's negative log-likelihood.
 
-    Every objective of :data:`Twinned` is covered as the package states it:
+    Every family of :data:`FAMILIES` is covered as the package states it:
     a negative binomial's covariate is an exposure scaling each rate, a
     beta-binomial's a trial count per observation, and the other families
-    refuse one when they are built, so no twin meets it.
+    refuse one when they score, so no twin meets it.
 
     Raises
     ------
     TypeError
-        If the objective has no twin.
+        If the objective has no twin (:func:`twinned`).
     """
     import jax  # an optional backend, imported where it is used
 
@@ -99,65 +115,61 @@ def _span(block: slice) -> tuple[int, int]:
     return int(block.start), int(block.stop)
 
 
-def _prepared(objective: _HmmObjective) -> tuple[_Structure, dict[str, np.ndarray]]:
-    """The objective's structure, and its data in NumPy with the terms free of ``theta`` read once."""
-    observations = objective.observations.numpy()
+def _prepared(
+    objective: EmissionHmmObjective,
+) -> tuple[_Structure, dict[str, np.ndarray]]:
+    """The objective's structure, and its data in NumPy with the terms free of ``theta`` read once.
+
+    The segments are read back as ``(n_sequences, length)`` rows and the
+    covariate as ``(n_sequences, length, 1)``, which broadcasts along the
+    states.
+    """
+    family = objective.start
+    shape = objective.rectangular()
+    if not twinned(objective) or shape is None:
+        msg = f"no JAX twin for an HMM of {type(family).__name__}"
+        raise TypeError(msg)
+    kind = FAMILIES[type(family)]
+    observations = objective.observations.numpy().reshape(shape)
     y = observations.astype(np.float64)[..., None]
     data: dict[str, np.ndarray] = {"y": y}
     given = objective.covariate
     covariate = given is not None
     if given is not None:
-        # Shaped (..., 1) by the objective, so it broadcasts along the states.
-        data["covariate"] = given.numpy()
-    emission: tuple[tuple[int, int], ...]
+        data["covariate"] = given.numpy().reshape(*shape, 1)
+    blocks = objective.blocks
+    names = {
+        "gaussian": ("mean", "scale"),
+        "poisson": ("mean",),
+        "negative_binomial": ("dispersion", "mean"),
+        "beta_binomial": ("alpha", "beta"),
+        "binomial": ("probability",),
+        "categorical": ("log_emission",),
+    }[kind]
     n_symbols = 0
-    if isinstance(objective, GaussianHmmObjective):
-        family = "gaussian"
-        emission = (_span(objective._mean_slice()), _span(objective._log_scale_slice()))
-    elif isinstance(objective, PoissonHmmObjective):
-        family = "poisson"
-        emission = (_span(objective._emission_slice),)
+    if kind in ("poisson", "negative_binomial"):
         data["constant"] = -gammaln(y + 1.0)
-    elif isinstance(objective, NegativeBinomialHmmObjective):
-        family = "negative_binomial"
-        emission = (
-            _span(objective._log_dispersion_slice()),
-            _span(objective._log_mean_slice()),
-        )
-        data["constant"] = -gammaln(y + 1.0)
-    elif isinstance(objective, BetaBinomialHmmObjective):
-        family = "beta_binomial"
-        emission = (
-            _span(objective._log_alpha_slice()),
-            _span(objective._log_beta_slice()),
-        )
-        n = data["covariate"] if covariate else objective._trials.numpy()
+    elif kind == "beta_binomial":
+        n = data["covariate"] if covariate else family.trials.numpy()  # type: ignore[attr-defined]
         data["trials"] = np.asarray(n, dtype=np.float64)
         data["constant"] = gammaln(n + 1.0) - gammaln(y + 1.0) - gammaln(n - y + 1.0)
-    elif isinstance(objective, BinomialHmmObjective):
-        family = "binomial"
-        emission = (_span(objective._emission_slice),)
-        trials = objective._trials.numpy()
+    elif kind == "binomial":
+        trials = family.trials.numpy()  # type: ignore[attr-defined]
         data["trials"] = trials
         data["constant"] = (
             gammaln(trials + 1.0) - gammaln(y + 1.0) - gammaln(trials - y + 1.0)
         )
-    elif type(objective) is HmmObjective:
-        family = "categorical"
-        emission = (_span(objective._emission_slice),)
-        n_symbols = objective._n_symbols
+    elif kind == "categorical":
+        n_symbols = family.n_symbols  # type: ignore[attr-defined]
         data = {"symbols": observations.astype(np.int64)}
-    else:
-        msg = f"no JAX twin for {type(objective).__name__}"
-        raise TypeError(msg)
-    blocks = (
-        _span(objective._initial_slice),
-        _span(objective._transition_slice),
-        *emission,
+    spans = (
+        _span(blocks["log_initial"]),
+        _span(blocks["log_transition"]),
+        *(_span(blocks[name]) for name in names),
     )
-    tabled = family not in ("gaussian", "categorical") and _table(data)
+    tabled = kind not in ("gaussian", "categorical") and _table(data)
     structure = _Structure(
-        family, objective._n_states, n_symbols, blocks, covariate, tabled
+        kind, objective.n_states, n_symbols, spans, covariate, tabled
     )
     return structure, data
 
@@ -242,7 +254,7 @@ def _compiled(structure: _Structure) -> Any:
 
 
 def jax_energy(
-    objective: _HmmObjective,
+    objective: EmissionHmmObjective,
 ) -> tuple[Callable[[Any, Any], Any], dict[str, Any]]:
     """The objective's negative log-likelihood as a traceable ``(theta, data)`` function, and its data on the device (issue #1008)."""
     import jax

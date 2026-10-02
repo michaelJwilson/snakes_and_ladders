@@ -22,11 +22,12 @@ import numpy as np
 import pytest
 import torch
 from sal.cost import Cost
+from sal.emissions import CategoricalEmission
 from sal.opt.budget import Budget
 from sal.opt.em import EM, EMISSION_MIXTURE_EM
 from sal.opt.emission_mixture import expectation_maximization
 from sal.opt.fit import fit
-from sal.opt.hmm import HmmObjective, baum_welch_family
+from sal.opt.hmm import EmissionHmmObjective, baum_welch_family, family_start
 from sal.opt.initialize import FromObjective, Perturbed, RandomRestart
 from sal.opt.mixture import GaussianMixtureObjective
 from sal.opt.starts import (
@@ -294,7 +295,9 @@ def test_the_expectation_maximization_adapter_is_the_entry_point() -> None:
 def test_the_baum_welch_adapter_is_the_entry_point() -> None:
     rng = np.random.default_rng(894)
     observations = rng.integers(0, 3, size=(4, 60))
-    objective = HmmObjective(observations, 2, 3)
+    objective = EmissionHmmObjective(
+        observations, family_start(CategoricalEmission, observations, 2, n_symbols=3)
+    )
     theta = objective.initial()
     polished = polish_by_baum_welch(objective, theta, Budget(Cost.ITERATIONS, 30))
     named = objective.constrain(theta)
@@ -321,7 +324,10 @@ def test_an_adapter_refuses_an_objective_it_cannot_read() -> None:
 def test_an_adapter_refuses_the_other_models_objective() -> None:
     """Both objectives carry `components(theta)` (#1163); each adapter refuses the other's."""
     mixture = _gaussian_mixture()
-    chain = HmmObjective(np.random.default_rng(894).integers(0, 3, size=(4, 60)), 2, 3)
+    observations = np.random.default_rng(894).integers(0, 3, size=(4, 60))
+    chain = EmissionHmmObjective(
+        observations, family_start(CategoricalEmission, observations, 2, n_symbols=3)
+    )
     with pytest.raises(ValueError, match="constrains no log_initial"):
         polish_by_baum_welch(mixture, mixture.initial(), POLISH)
     with pytest.raises(ValueError, match="constrains no log_weight"):

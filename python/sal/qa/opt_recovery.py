@@ -24,8 +24,9 @@ import torch
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
+from sal.emissions import CategoricalEmission
 from sal.opt.fit import constrained_standard_errors, covers, fit
-from sal.opt.hmm import HmmObjective, align_states
+from sal.opt.hmm import EmissionHmmObjective, align_states, family_start
 from sal.opt.potts import PottsObjective
 from sal.qa.figure import QAFigure
 from sal.qa.runner import figure_main, fixture_params
@@ -103,8 +104,15 @@ def hmm_recovery(
         whether each 95% interval covers its truth, over the initial,
         transition and emission entries in that order.
     """
-    objective = HmmObjective(
-        simulate_sequences(params).observations, params.n_states, params.n_symbols
+    observations = simulate_sequences(params).observations
+    objective = EmissionHmmObjective(
+        observations,
+        family_start(
+            CategoricalEmission,
+            observations,
+            params.n_states,
+            n_symbols=params.n_symbols,
+        ),
     )
     result = fit(objective)
     estimate = objective.constrain(result.theta)

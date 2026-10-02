@@ -1,7 +1,9 @@
 """`opt.hmm.EmissionHmmObjective`: one HMM objective over any family, on segments (issue #1169).
 
-Referees, cheapest first: each per-family ``*HmmObjective`` where the two
-overlap, its value and its autograd gradient at the same constrained point;
+Referees, cheapest first: the rectangular forward recursion
+(:func:`~sal.opt.hmm.forward_log_likelihood_from_density`) on each family at
+:func:`~sal.opt.hmm.family_start`, the route the retired per-family
+objectives scored by (issue #1189), its value and its autograd gradient;
 autograd through ``__call__``, which the declared Fisher-identity gradient is
 pinned to; two channel identities of the independent count pair; and the
 planted truth of a simulated segmented HMM, recovered within four standard
@@ -11,6 +13,7 @@ errors for a count, a joint and a Gaussian family.
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 
 import numpy as np
 import pytest
@@ -28,17 +31,12 @@ from sal.emissions import (
 )
 from sal.opt.fit import fit
 from sal.opt.hmm import (
-    BetaBinomialHmmObjective,
-    BinomialHmmObjective,
     EmissionHmmObjective,
-    GaussianHmmObjective,
-    HmmObjective,
-    NegativeBinomialHmmObjective,
-    PoissonHmmObjective,
     align_families,
+    family_start,
+    forward_log_likelihood_from_density,
     forward_log_likelihood_ragged,
 )
-from sal.opt.hmm.objectives import _HmmObjective
 from sal.opt.initialize import quantile_locations
 from sal.opt.objective import (
     DeclaredBlocks,
@@ -64,11 +62,12 @@ TRANSITION = np.array([[0.95, 0.05], [0.08, 0.92]])
 Z_BOUND = 4.0
 
 
-def _overlaps() -> dict[str, tuple[_HmmObjective, EmissionHmmObjective]]:
-    """Each per-family objective and this one on the same rectangular data and family.
+def _overlaps() -> dict[
+    str, tuple[np.ndarray, np.ndarray | None, EmissionHmmObjective]
+]:
+    """Each family at :func:`~sal.opt.hmm.family_start` on rectangular data, with the data and covariate.
 
-    Three sequences of 40, two states; the start family is the per-family
-    objective's own at its initial point.
+    Three sequences of 40, two states.
     """
     rng = np.random.default_rng([SEED, 0])
     counts = rng.poisson(5.0, size=(3, 40))
@@ -76,57 +75,62 @@ def _overlaps() -> dict[str, tuple[_HmmObjective, EmissionHmmObjective]]:
     successes = rng.binomial(12, 0.3, size=(3, 40))
     reals = rng.normal(size=(3, 40))
     symbols = rng.integers(0, 3, size=(3, 40))
-    exposure = rng.uniform(0.5, 2.0, size=(3, 40))
-    references: dict[str, tuple[_HmmObjective, np.ndarray, np.ndarray | None]] = {
+    exposure = rng.uniform(0.5, 2.0, size=(3, 40))[..., None]
+    cases: dict[str, tuple[np.ndarray, EmissionFamily, np.ndarray | None]] = {
         "categorical": (
-            HmmObjective(symbols, 2, 3, backend=Backend.TORCH),
             symbols,
+            family_start(CategoricalEmission, symbols, 2, n_symbols=3),
             None,
         ),
-        "gaussian": (
-            GaussianHmmObjective(reals, 2, backend=Backend.TORCH),
-            reals,
-            None,
-        ),
-        "poisson": (
-            PoissonHmmObjective(counts, 2, backend=Backend.TORCH),
-            counts,
-            None,
-        ),
+        "gaussian": (reals, family_start(GaussianEmission, reals, 2), None),
+        "poisson": (counts, family_start(PoissonEmission, counts, 2), None),
         "binomial": (
-            BinomialHmmObjective(successes, 2, trials, backend=Backend.TORCH),
             successes,
+            family_start(BinomialEmission, successes, 2, trials=trials),
             None,
         ),
         "beta_binomial": (
-            BetaBinomialHmmObjective(successes, 2, trials, backend=Backend.TORCH),
             successes,
+            family_start(BetaBinomialEmission, successes, 2, trials=trials),
             None,
         ),
         "negative_binomial": (
-            NegativeBinomialHmmObjective(counts, 2, backend=Backend.TORCH),
             counts,
+            family_start(NegativeBinomialEmission, counts, 2),
             None,
         ),
         "negative_binomial_exposure": (
-            NegativeBinomialHmmObjective(
-                counts, 2, covariate=exposure, backend=Backend.TORCH
-            ),
             counts,
-            exposure[..., None],
+            family_start(NegativeBinomialEmission, counts, 2),
+            exposure,
         ),
     }
     return {
         name: (
-            reference,
-            EmissionHmmObjective(
-                data,
-                reference.components(reference.initial()),
-                covariate=covariate,
-            ),
+            data,
+            covariate,
+            EmissionHmmObjective(data, start, covariate=covariate),
         )
-        for name, (reference, data, covariate) in references.items()
+        for name, (data, start, covariate) in cases.items()
     }
+
+
+def _rectangular(
+    objective: EmissionHmmObjective, data: np.ndarray, covariate: np.ndarray | None
+) -> Callable[[torch.Tensor], torch.Tensor]:
+    """``theta -> U(theta)`` by the rectangular forward recursion on ``(n_sequences, length)`` densities."""
+
+    def value(theta: torch.Tensor) -> torch.Tensor:
+        named = objective.constrain(theta)
+        values = torch.as_tensor(data, dtype=objective.start.observation_dtype)
+        given = None if covariate is None else torch.as_tensor(covariate)
+        return -forward_log_likelihood_from_density(
+            objective.components(theta).log_density(values, covariate=given),
+            named["log_initial"],
+            named["log_transition"],
+        )
+
+    return value
 
 
 def _off_start(objective: EmissionHmmObjective) -> torch.Tensor:
@@ -137,28 +141,25 @@ def _off_start(objective: EmissionHmmObjective) -> torch.Tensor:
 
 @pytest.mark.parametrize("name", list(_overlaps()))
 @pytest.mark.oracle
-def test_value_and_gradient_equal_the_per_family_objective_s(name: str) -> None:
-    # The same constrained point in both layouts, mapped by `theta_from`; the
-    # gradient compared block by block under `constrain`'s keys, since the
-    # per-family layout orders a family's parameters its own way. Every map
-    # is the same per block, so the free coordinates agree entry for entry.
-    # Measured: value 0.0 relative; gradient 5.7e-14 absolute at worst, on
-    # gradients up to 1.0e2.
-    reference, objective = _overlaps()[name]
+def test_value_and_gradient_equal_the_rectangular_recursion_s(name: str) -> None:
+    # The ragged recursion against the rectangular one the retired per-family
+    # objectives scored by, at the same theta, autograd through each. Before
+    # #1189 the referee was each per-family objective, at 0.0 relative in
+    # value and 5.7e-14 absolute in gradient; those objectives now build this
+    # one. Measured: 0.0 in value and in gradient, bitwise, on gradients up
+    # to 1.0e2.
+    data, covariate, objective = _overlaps()[name]
     theta = _off_start(objective)
-    mapped = reference.theta_from(objective.constrain(theta))
 
     value, gradient = autograd_value_and_gradient(objective, theta)
-    want_value, want_gradient = autograd_value_and_gradient(reference, mapped)
+    want_value, want_gradient = autograd_value_and_gradient(
+        _rectangular(objective, data, covariate), theta
+    )
 
     assert float(value) == pytest.approx(float(want_value), rel=1e-12, abs=0.0)
-    for block, where in objective.blocks.items():
-        np.testing.assert_allclose(
-            gradient[where].numpy(),
-            want_gradient[reference.blocks[block]].numpy(),
-            rtol=0.0,
-            atol=1e-12,
-        )
+    np.testing.assert_allclose(
+        gradient.numpy(), want_gradient.numpy(), rtol=0.0, atol=1e-12
+    )
 
 
 @pytest.mark.parametrize("name", list(_overlaps()))
@@ -167,7 +168,7 @@ def test_the_declared_gradient_is_autograd_s_through_the_value(name: str) -> Non
     # Fisher's identity: the compiled posteriors, then one backward pass of
     # the complete-data surrogate. Measured: value 2.1e-16 relative at worst,
     # gradient 3.8e-12 absolute at worst, on gradients up to 1.0e2.
-    _, objective = _overlaps()[name]
+    *_, objective = _overlaps()[name]
     theta = _off_start(objective)
 
     value, gradient = value_and_gradient(objective, theta)
@@ -239,13 +240,21 @@ def test_a_state_blind_channel_adds_its_own_hmm_s_likelihood() -> None:
         }
     )
     counts = rectangular.values.reshape(3, 50, 2)
-    totals = NegativeBinomialHmmObjective(counts[..., 0], 2, backend=Backend.TORCH)
-    successes = BetaBinomialHmmObjective(
-        counts[..., 1], 2, np.array([20, 20]), backend=Backend.TORCH
+    totals = EmissionHmmObjective(
+        counts[..., 0],
+        family_start(NegativeBinomialEmission, counts[..., 0], 2),
+        backend=Backend.TORCH,
+    )
+    successes = EmissionHmmObjective(
+        counts[..., 1],
+        family_start(
+            BetaBinomialEmission, counts[..., 1], 2, trials=np.array([20, 20])
+        ),
+        backend=Backend.TORCH,
     )
 
     def marginals(theta: torch.Tensor) -> float:
-        """The two per-family HMMs' values summed, at ``theta``'s parameters."""
+        """The two one-channel HMMs' values summed, at ``theta``'s parameters."""
         named = objective.constrain(theta)
         chain = {key: named[key] for key in ("log_initial", "log_transition")}
         first = {key: named[key] for key in ("dispersion", "mean")}
@@ -262,7 +271,7 @@ def test_a_state_blind_channel_adds_its_own_hmm_s_likelihood() -> None:
 
 @pytest.mark.smoke
 def test_the_blocks_partition_theta_and_the_start_is_uniform() -> None:
-    _, objective = _overlaps()["negative_binomial"]
+    *_, objective = _overlaps()["negative_binomial"]
     assert isinstance(objective, DeclaredBlocks)
     blocks = objective.blocks
     stops = [0, *(block.stop for block in blocks.values())]
@@ -292,7 +301,7 @@ def test_restricted_holds_the_transitions_and_keeps_the_compiled_gradient() -> N
     # Bitwise against the full objective's declared route at the embedded
     # point, gathered onto `varied`; then a fit of the restriction leaves the
     # held transitions exactly where they were put.
-    _, objective = _overlaps()["negative_binomial"]
+    *_, objective = _overlaps()["negative_binomial"]
     at = _off_start(objective)
     varied = coordinates(
         objective, [name for name in objective.blocks if name != "log_transition"]

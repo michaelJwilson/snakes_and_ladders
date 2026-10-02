@@ -24,9 +24,10 @@ helper a recovery test needs.
 :mod:`~sal.opt.hmm.forward` holds the kernels --- the forward
 recursion, the state alignment and the ragged E step's result,
 :class:`~sal.opt.hmm.Posteriors` (issue #1166) --- that the other two share;
-:mod:`~sal.opt.hmm.objectives` the gradient-fit objectives, one
-per emission family and :class:`~sal.opt.hmm.EmissionHmmObjective` over any
-family on segments of unequal length (issue #1169); and :mod:`~sal.opt.hmm.estimation` the EM
+:mod:`~sal.opt.hmm.objectives` the gradient-fit objective,
+:class:`~sal.opt.hmm.EmissionHmmObjective`, over any family on segments of
+unequal length (issue #1169), with :func:`~sal.opt.hmm.family_start` and the
+six per-family names it deprecates (issue #1189); and :mod:`~sal.opt.hmm.estimation` the EM
 drivers, with the route each takes between the torch recursion and the
 compiled steps. Viterbi and the scored evidence are evaluators and live in
 :mod:`sal.likelihood.hmm` (issue #1059). Every public name this module defined
@@ -34,10 +35,9 @@ before the split (issue #1010) is re-exported here, so
 ``from sal.opt.hmm import X`` is unchanged.
 
 **A private name stays in the module that defines it**, and no submodule needs
-another's. The one exception is ``_HmmObjective``, the base the objectives
-share, which :mod:`sal.opt.hmm.jax` reads from here until issue
-#1004 gives it a public seam; it is re-exported so that import is unchanged,
-and ``tests/regression/test_duplication_guards.py`` admits both crossings.
+another's: :mod:`sal.opt.hmm.jax` reads
+:class:`~sal.opt.hmm.EmissionHmmObjective`'s public surface alone (issue
+#1189).
 """
 
 from __future__ import annotations
@@ -71,13 +71,7 @@ from sal.opt.hmm.objectives import (
     HmmObjective,
     NegativeBinomialHmmObjective,
     PoissonHmmObjective,
-)
-
-# Re-exported for `opt.hmm.jax`, whose import of it from here predates the
-# split and is admitted until issue #1004; the alias is what declares the
-# re-export to `mypy --strict`.
-from sal.opt.hmm.objectives import (
-    _HmmObjective as _HmmObjective,  # noqa: PLC0414
+    family_start,
 )
 
 __all__ = [
@@ -102,6 +96,7 @@ __all__ = [
     "baum_welch",
     "baum_welch_family",
     "compiled_family",
+    "family_start",
     "forward_log_likelihood",
     "forward_log_likelihood_from_density",
     "forward_log_likelihood_ragged",
