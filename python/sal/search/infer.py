@@ -60,7 +60,7 @@ from sal.likelihood.pruning.torch import (
     log_likelihood_cached,
 )
 from sal.opt.fit import fit
-from sal.opt.objective import Objective
+from sal.opt.objective import Objective, Restricted
 from sal.opt.termination import Termination
 from sal.parallel import Pool, map_tasks
 from sal.sim.topology import (
@@ -158,44 +158,6 @@ class _Counting(Objective):
         return self.inner(theta)
 
 
-class _Restricted(Objective):
-    """``inner`` on the coordinates ``free``, every other one held at ``base``.
-
-    Partial re-optimization (issue #408): a move changes a handful of branches,
-    so a fit varying every coordinate spends most of its evaluations re-deriving
-    lengths the move did not touch. Holding those at the parent's fitted values
-    makes the fit ``len(free)``-dimensional, and the value it reaches lower-
-    bounds the full fit's --- which is why the accepted move is refitted in
-    full before it is reported.
-
-    The protocol is satisfied on the reduced vector: ``initial`` is
-    ``base`` restricted to ``free``, ``constrain`` scatters back before
-    delegating, so a caller reads the same named parameters it always did.
-    """
-
-    def __init__(
-        self, inner: Objective, base: torch.Tensor, free: torch.Tensor
-    ) -> None:
-        self.inner = inner
-        self._base = base
-        self._free = free
-
-    def _full(self, theta: torch.Tensor) -> torch.Tensor:
-        return self._base.index_copy(0, self._free, theta)
-
-    def initial(self) -> torch.Tensor:
-        return self._base[self._free]
-
-    def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
-        return self.inner.constrain(self._full(theta))
-
-    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
-        return self.inner.theta_from(named)[self._free]
-
-    def __call__(self, theta: torch.Tensor) -> torch.Tensor:
-        return self.inner(self._full(theta))
-
-
 def _disturbed(topology: Topology, warm: _Fitted) -> torch.Tensor:
     """Indices into ``theta`` of the branches the move to ``topology`` created.
 
@@ -280,9 +242,9 @@ def _score(
     theta0 = None if warm is None else _warm_theta(objective, topology, warm)
     scored: Objective = objective
     if partial and warm is not None and theta0 is not None:
-        free = _disturbed(topology, warm)
-        if free.numel():
-            scored = _Restricted(objective, theta0, free)
+        varied = _disturbed(topology, warm)
+        if varied.numel():
+            scored = Restricted(objective, theta0, varied)
             theta0 = scored.initial()
     counting = _Counting(scored)
     result = fit(counting, start=theta0)
@@ -445,7 +407,7 @@ def infer(
         which has no pruning point.
     partial_reoptimization : bool
         Fit a candidate over only the branches the move created, holding every
-        other length at the parent's fitted value (:class:`_Restricted`, issue
+        other length at the parent's fitted value (:class:`~sal.opt.objective.Restricted`, issue
         #408, extending the warm starts of issue #289). A partial fit reaches a
         value no higher than the full fit's, so it screens candidates rather
         than scoring them: the accepted move is refitted in full, and

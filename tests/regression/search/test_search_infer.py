@@ -472,7 +472,7 @@ def test_partial_reoptimization_without_warm_start_is_refused() -> None:
 
 @pytest.mark.smoke
 def test_a_partial_fit_moves_only_the_branches_the_move_created() -> None:
-    # What `_Restricted` claims: every coordinate outside the disturbed set
+    # What `Restricted` claims: every coordinate outside the disturbed set
     # comes back at the value it went in with, exactly. A scatter that
     # dropped or transposed an index would still fit and still improve, and
     # only this catches it.
