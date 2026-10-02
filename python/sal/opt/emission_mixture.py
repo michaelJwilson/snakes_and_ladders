@@ -24,12 +24,13 @@ from __future__ import annotations
 
 import itertools
 import math
+import warnings
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import nullcontext
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from enum import StrEnum
-from typing import NamedTuple
+from typing import NamedTuple, cast
 
 import numpy as np
 import torch
@@ -39,6 +40,7 @@ from sal.emissions import (
     BetaBinomialEmission,
     BinomialEmission,
     CountPairEmission,
+    Domain,
     EmissionFamily,
     NegativeBinomialEmission,
     PoissonEmission,
@@ -50,10 +52,11 @@ from sal.emissions.rising import (
 )
 from sal.enumeration import refuse_oversized
 from sal.opt.constrain import (
+    constrained,
+    free_from,
     free_from_log_simplex,
-    free_from_positive,
+    free_shape,
     log_simplex,
-    positive,
 )
 from sal.opt.em import EMISSION_MIXTURE_EM, EmConfig, em_loop
 from sal.opt.mixture import (
@@ -692,14 +695,12 @@ def uniform_start(
 def build_like(
     family: EmissionFamily,
 ) -> Callable[[Mapping[str, torch.Tensor]], EmissionFamily]:
-    """The ``build`` :class:`EmissionMixtureObjective` takes, for a count family like ``family``.
+    """Deprecated: ``family.with_parameters``, the rebuild every family now carries (issue #1164).
 
-    Every constant ``family`` carries --- a trial count, the joint form, a tie
-    --- is kept, and the named parameters are its
-    :meth:`~sal.emissions.EmissionFamily.named_parameters`. A two-channel
-    family of a negative-binomial ``total`` and a beta-binomial
-    ``successes``, whose names are prefixed by channel, is rebuilt as its own
-    type from the two (issue #1136).
+    Kept for one release, then removed. :class:`EmissionMixtureObjective` rebuilds through
+    :meth:`~sal.emissions.EmissionFamily.with_parameters` and takes no
+    ``build``; the callable returned here is that method, so it rebuilds bit
+    for bit as it did.
 
     Returns
     -------
@@ -708,64 +709,60 @@ def build_like(
     Raises
     ------
     TypeError
-        If ``family`` is not one of those.
+        If ``family`` carries no ``with_parameters``.
     """
-    if isinstance(family, NegativeBinomialEmission):
-        tied = family.tied
-        return lambda named: NegativeBinomialEmission(
-            named["dispersion"], named["mean"], tied=tied
-        )
-    if isinstance(family, BetaBinomialEmission):
-        trials, tied = family.trials, family.tied
-        return lambda named: BetaBinomialEmission(
-            trials, named["alpha"], named["beta"], tied=tied
-        )
-    if isinstance(family, CountPairEmission):
-        pair_trials, joint = family.trials, family.joint
-        return lambda named: CountPairEmission(
-            named["dispersion"],
-            named["mean"],
-            named["alpha"],
-            named["beta"],
-            pair_trials,
-            joint=joint,
-        )
-    total = getattr(family, "total", None)
-    successes = getattr(family, "successes", None)
-    if isinstance(total, NegativeBinomialEmission) and isinstance(
-        successes, BetaBinomialEmission
-    ):
-        rebuild = type(family)
-        build_total, build_successes = build_like(total), build_like(successes)
-
-        def pair(named: Mapping[str, torch.Tensor]) -> EmissionFamily:
-            def channel(prefix: str) -> dict[str, torch.Tensor]:
-                return {
-                    name.removeprefix(prefix): value
-                    for name, value in named.items()
-                    if name.startswith(prefix)
-                }
-
-            return rebuild(  # type: ignore[call-arg]
-                build_total(channel("total.")), build_successes(channel("successes."))
-            )
-
-        return pair
-    msg = (
-        f"no build for a {type(family).__name__}; pass one to EmissionMixtureObjective"
+    warnings.warn(
+        "build_like is deprecated: EmissionMixtureObjective rebuilds through "
+        "EmissionFamily.with_parameters; drop the build argument (issue #1164)",
+        DeprecationWarning,
+        stacklevel=2,
     )
-    raise TypeError(msg)
+    rebuild = getattr(family, "with_parameters", None)
+    if rebuild is None:
+        msg = f"no build for a {type(family).__name__}: it has no with_parameters"
+        raise TypeError(msg)
+    return cast("Callable[[Mapping[str, torch.Tensor]], EmissionFamily]", rebuild)
+
+
+@dataclass(frozen=True)
+class _Block:
+    """Where one named parameter sits in ``theta``, and the map onto it.
+
+    Parameters
+    ----------
+    domain : Domain
+        The family's declared domain for the parameter.
+    shape : tuple[int, ...]
+        The parameter's shape.
+    free : tuple[int, ...]
+        The shape of its free coordinates (:func:`~sal.opt.constrain.free_shape`).
+    offset : int
+        Its first entry in ``theta``.
+    """
+
+    domain: Domain
+    shape: tuple[int, ...]
+    free: tuple[int, ...]
+    offset: int
+
+    @property
+    def stop(self) -> int:
+        """One past its last entry in ``theta``."""
+        return self.offset + math.prod(self.free)
 
 
 class EmissionMixtureObjective(Objective):
-    """Negative log-likelihood of a mixture of any family whose parameters are positive (issue #964).
+    """Negative log-likelihood of a mixture of any emission family (issues #964, #1164).
 
     ``theta`` is ``K - 1`` free weights, then for each parameter name the
-    family states, ``K`` log values: the weights through
-    :func:`~sal.opt.constrain.log_simplex` and every
-    parameter through :func:`~sal.opt.constrain.positive`.
-    ``build`` turns the named parameters back into a family, so the
-    objective is differentiable in ``theta`` wherever the family's
+    family states, its free coordinates in that order: the weights through
+    :func:`~sal.opt.constrain.log_simplex` and each parameter through the
+    map its :meth:`~sal.emissions.EmissionFamily.parameter_domains` names
+    (:func:`~sal.opt.constrain.constrained`). A positive parameter is ``K``
+    log values, as it was before the families declared their domains, so a
+    count family's ``theta`` is unchanged. The family rebuilds itself from the
+    named parameters (:meth:`~sal.emissions.EmissionFamily.with_parameters`),
+    so the objective is differentiable in ``theta`` wherever the family's
     ``log_density`` is, and a Hamiltonian or Langevin chain can sample a
     count mixture the Gaussian :class:`~sal.opt.mixture.GaussianMixtureObjective`
     cannot express.
@@ -777,11 +774,12 @@ class EmissionMixtureObjective(Objective):
     start : EmissionFamily
         The family :meth:`initial` starts at, with uniform weights; its
         :meth:`~sal.emissions.EmissionFamily.named_parameters`
-        name the blocks of ``theta``, every one positive.
-    build : Callable[[Mapping[str, torch.Tensor]], EmissionFamily]
-        The family at named parameters of shape ``(K,)`` each; constants the
-        family carries (a trial count, the joint form) are the closure's.
-        :func:`build_like` makes one for each count family.
+        name the blocks of ``theta``, and its constants (a trial count, the
+        joint form) are every iterate's.
+    build : Callable[[Mapping[str, torch.Tensor]], EmissionFamily] | None
+        Deprecated (issue #1164): given, it
+        rebuilds the family in place of ``start.with_parameters`` and warns.
+        Omit it.
     covariate : np.ndarray | torch.Tensor | None
         Per-observation covariate, scored as the fits score it (issue #1136);
         ``None`` scores without one, as before.
@@ -795,14 +793,15 @@ class EmissionMixtureObjective(Objective):
     Raises
     ------
     ValueError
-        If ``start`` has fewer than two states or a parameter is not positive.
+        If ``start`` has fewer than two states or a parameter lies outside
+        its domain, where its free coordinates are not finite.
     """
 
     def __init__(
         self,
         observations: np.ndarray,
         start: EmissionFamily,
-        build: Callable[[Mapping[str, torch.Tensor]], EmissionFamily],
+        build: Callable[[Mapping[str, torch.Tensor]], EmissionFamily] | None = None,
         *,
         covariate: np.ndarray | torch.Tensor | None = None,
         gradient_on_distinct: bool = False,
@@ -810,13 +809,29 @@ class EmissionMixtureObjective(Objective):
         if start.n_states < 2:
             msg = f"a mixture has at least two components, got {start.n_states}"
             raise ValueError(msg)
+        if build is not None:
+            warnings.warn(
+                "EmissionMixtureObjective's build argument is deprecated: the "
+                "family rebuilds itself through with_parameters; omit it "
+                "(issue #1164)",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        domains = start.parameter_domains()
         named = {
-            name: torch.as_tensor(value, dtype=torch.float64).reshape(-1)
+            name: torch.as_tensor(value, dtype=torch.float64)
             for name, value in start.named_parameters().items()
         }
-        if any(bool((value <= 0).any()) for value in named.values()):
-            msg = "every parameter of the family must be positive"
-            raise ValueError(msg)
+        offset = start.n_states - 1
+        blocks: dict[str, _Block] = {}
+        for name, value in named.items():
+            domain = domains[name]
+            if not bool(torch.isfinite(free_from(domain, value)).all()):
+                msg = f"parameter {name!r} lies outside its {domain} domain"
+                raise ValueError(msg)
+            shape = tuple(value.shape)
+            blocks[name] = _Block(domain, shape, free_shape(domain, shape), offset)
+            offset = blocks[name].stop
         self._observations = torch.as_tensor(
             observations, dtype=start.observation_dtype
         )
@@ -831,9 +846,10 @@ class EmissionMixtureObjective(Objective):
         # every evaluation: the observations do not change between them.
         self._distinct: DistinctCache = {}
         self._start = named
-        self._names = tuple(named)
+        self._blocks_at = blocks
+        self._n_parameters = offset
         self._k = start.n_states
-        self._build = build
+        self._build = start.with_parameters if build is None else build
 
     @property
     def observations(self) -> torch.Tensor:
@@ -847,15 +863,16 @@ class EmissionMixtureObjective(Objective):
 
     @property
     def n_parameters(self) -> int:
-        """``K - 1`` free weights and ``K`` per named parameter."""
-        return self._k - 1 + self._k * len(self._names)
+        """``K - 1`` free weights and each named parameter's free coordinates."""
+        return self._n_parameters
 
     def _blocks(self, theta: torch.Tensor) -> dict[str, torch.Tensor]:
-        offset = self._k - 1
         blocks: dict[str, torch.Tensor] = {}
-        for name in self._names:
-            blocks[name] = positive(theta[offset : offset + self._k])
-            offset += self._k
+        for name, block in self._blocks_at.items():
+            free = theta[block.offset : block.stop]
+            if len(block.free) != 1:
+                free = free.reshape(block.free)
+            blocks[name] = constrained(block.domain, free)
         return blocks
 
     def components(self, theta: torch.Tensor) -> EmissionFamily:
@@ -874,10 +891,11 @@ class EmissionMixtureObjective(Objective):
     def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
         """The unconstrained vector whose :meth:`constrain` is ``named``."""
         parts = [free_from_log_simplex(torch.as_tensor(named["log_weight"]))]
-        parts += [
-            free_from_positive(torch.as_tensor(named[name], dtype=torch.float64))
-            for name in self._names
-        ]
+        for name, block in self._blocks_at.items():
+            value = torch.as_tensor(named[name], dtype=torch.float64)
+            parts.append(
+                free_from(block.domain, value.reshape(block.shape)).reshape(-1)
+            )
         return torch.cat(parts)
 
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
@@ -950,7 +968,7 @@ class EmissionMixtureObjective(Objective):
         natural: dict[str, np.ndarray] = {}
         with np.errstate(over="ignore", under="ignore"):
             for slot, name in route.names.items():
-                offset = k - 1 + self._names.index(name) * k
+                offset = self._blocks_at[name].offset
                 natural[slot] = np.exp(theta[offset : offset + k])
         if not all(
             bool(np.isfinite(values).all() and (values > 0.0).all())
@@ -980,7 +998,7 @@ class EmissionMixtureObjective(Objective):
         held = gradient["log_weight"]
         out[: k - 1] = -(held[1:] - weights[1:] * held.sum())
         for slot, name in route.names.items():
-            offset = k - 1 + self._names.index(name) * k
+            offset = self._blocks_at[name].offset
             out[offset : offset + k] = -gradient[slot] * natural[slot]
         return -log_likelihood, out
 

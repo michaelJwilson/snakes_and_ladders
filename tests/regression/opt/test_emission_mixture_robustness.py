@@ -204,7 +204,8 @@ def test_the_sampling_starts_read_the_mixtures_own_likelihood() -> None:
 
 
 @pytest.mark.smoke
-def test_build_like_rebuilds_each_count_family() -> None:
+def test_build_like_is_deprecated_and_still_rebuilds_each_count_family() -> None:
+    # Retired by issue #1164: the alias warns and is the family's own rebuild.
     pair = CountPairEmission(
         [5.0, 9.0], [20.0, 60.0], [2.0, 9.0], [8.0, 3.0], joint=True
     )
@@ -215,15 +216,21 @@ def test_build_like_rebuilds_each_count_family() -> None:
             pair.total, BetaBinomialEmission([40.0, 40.0], [2.0, 9.0], [8.0, 3.0])
         ),
     ):
-        rebuilt = build_like(family)(family.named_parameters())
+        with pytest.warns(DeprecationWarning, match="build_like is deprecated"):
+            build = build_like(family)
+        rebuilt = build(family.named_parameters())
         assert type(rebuilt) is type(family)
         assert all(
             torch.equal(rebuilt.named_parameters()[name], value)
             for name, value in family.named_parameters().items()
         )
-    with pytest.raises(TypeError, match="no build"):
+    with (
+        pytest.warns(DeprecationWarning),
+        pytest.raises(TypeError, match="no build"),
+    ):
         build_like(object())  # type: ignore[arg-type]
-    EmissionMixtureObjective(np.zeros((3, 2)), pair, build_like(pair))
+    with pytest.warns(DeprecationWarning, match="build argument is deprecated"):
+        EmissionMixtureObjective(np.zeros((3, 2)), pair, pair.with_parameters)
 
 
 @pytest.mark.oracle
@@ -235,7 +242,6 @@ def test_the_gradient_on_distinct_counts_is_the_gradient_to_rounding() -> None:
     plain = EmissionMixtureObjective(
         np.asarray(instance.observations, dtype=np.float64),
         start.components(start.initial()),
-        build_like(start.components(start.initial())),
     )
     theta = start.initial() + 0.05 * torch.randn(
         start.n_parameters,
@@ -307,7 +313,7 @@ def test_the_compiled_gradient_is_autograds(name: str) -> None:
     rng = np.random.default_rng([SEED, len(name)])
     labels = rng.integers(0, family.n_states, 3_000)
     observations = read(np.asarray(family.sample(labels, rng), dtype=np.float64))
-    objective = EmissionMixtureObjective(observations, family, build_like(family))
+    objective = EmissionMixtureObjective(observations, family)
     theta = objective.initial() + 0.1 * torch.randn(
         objective.n_parameters,
         generator=torch.Generator().manual_seed(SEED),
@@ -332,14 +338,12 @@ def test_outside_the_kernel_the_gradient_is_autograds_bitwise() -> None:
     rng = np.random.default_rng(SEED)
     pairs = np.asarray(family.sample(rng.integers(0, 2, 500), rng), dtype=np.float64)
     covariate = np.concatenate([np.ones((500, 1)), np.full((500, 1), 40.0)], axis=-1)
-    conditioned = EmissionMixtureObjective(
-        pairs, family, build_like(family), covariate=covariate
-    )
+    conditioned = EmissionMixtureObjective(pairs, family, covariate=covariate)
     theta = conditioned.initial()
     # Run past overflow, where the chain rejects and autograd scores it.
     overflowed = theta.clone()
     overflowed[-1] = 800.0
-    compiled = EmissionMixtureObjective(pairs, family, build_like(family))
+    compiled = EmissionMixtureObjective(pairs, family)
 
     assert conditioned._route is None
     for objective, point in ((conditioned, theta), (compiled, overflowed)):

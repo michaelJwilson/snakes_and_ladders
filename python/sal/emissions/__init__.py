@@ -56,7 +56,9 @@ a family's parameters stay tensors, so importing this package imports torch.
 Parameterization for an unconstrained optimizer belongs to
 ``sal.opt.constrain``; here it would make
 :mod:`sal.sim` import ``sal.opt`` transitively
-to draw a sequence.
+to draw a sequence. A family declares only the set each parameter lives in,
+a :class:`~sal.emissions.base.Domain`, and the optimizer owns the map onto it
+(issue #1164).
 
 **The package is six modules, and each imports only those before it.**
 :mod:`~sal.emissions.base` declares the interface,
@@ -92,6 +94,7 @@ from sal.emissions import mstep
 from sal.emissions.base import (
     CountEmissionFamily,
     CovariateNotSupportedError,
+    Domain,
     EmissionFamily,
     FamilyT_co,
     ParameterDomainError,
@@ -99,6 +102,7 @@ from sal.emissions.base import (
     Values,
     exposure,
     refuse_covariate,
+    require_parameter_names,
     trial_count,
     validated_exposure,
     validated_trials,
@@ -159,6 +163,7 @@ __all__ = [
     "CountEmissionFamily",
     "CountPairEmission",
     "CovariateNotSupportedError",
+    "Domain",
     "EmissionFamily",
     "FamilyT_co",
     "GaussianEmission",
@@ -173,6 +178,7 @@ __all__ = [
     "pooled_variance_floor",
     "refuse_collapsed",
     "refuse_covariate",
+    "require_parameter_names",
     "trial_count",
     "validated_exposure",
     "validated_trials",

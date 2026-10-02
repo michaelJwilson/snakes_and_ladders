@@ -18,6 +18,7 @@ from sal.backend import Backend
 from sal.emissions import mstep
 from sal.emissions.base import (
     CountEmissionFamily,
+    Domain,
     EmissionFamily,
     ParameterDomainError,
     Reestimate,
@@ -26,6 +27,7 @@ from sal.emissions.base import (
     as_tensor,
     exposure,
     refuse_covariate,
+    require_parameter_names,
     split_covariate,
     trial_count,
     validated_exposure,
@@ -551,6 +553,19 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
         """``dispersion`` and ``mean``, the parameters the model is stated in."""
         return {"dispersion": self._dispersion, "mean": self._mean}
 
+    def parameter_domains(self) -> Mapping[str, Domain]:
+        """Both positive."""
+        return {"dispersion": Domain.POSITIVE, "mean": Domain.POSITIVE}
+
+    def with_parameters(
+        self, named: Mapping[str, torch.Tensor]
+    ) -> NegativeBinomialEmission:
+        """The family at ``dispersion`` and ``mean``, its tie kept."""
+        require_parameter_names(self, named, ("dispersion", "mean"))
+        return NegativeBinomialEmission(
+            named["dispersion"], named["mean"], tied=self._tied
+        )
+
 
 class PoissonEmission(EmissionFamily, CountEmissionFamily):
     """A count drawn from ``Poisson(mean[state])``: the equidispersed case.
@@ -670,6 +685,15 @@ class PoissonEmission(EmissionFamily, CountEmissionFamily):
     def named_parameters(self) -> Mapping[str, torch.Tensor]:
         """``mean``, the only parameter there is."""
         return {"mean": self._mean}
+
+    def parameter_domains(self) -> Mapping[str, Domain]:
+        """``mean`` is positive."""
+        return {"mean": Domain.POSITIVE}
+
+    def with_parameters(self, named: Mapping[str, torch.Tensor]) -> PoissonEmission:
+        """The family at ``mean``."""
+        require_parameter_names(self, named, ("mean",))
+        return PoissonEmission(named["mean"])
 
 
 class BinomialEmission(EmissionFamily, CountEmissionFamily):
@@ -853,6 +877,15 @@ class BinomialEmission(EmissionFamily, CountEmissionFamily):
     def named_parameters(self) -> Mapping[str, torch.Tensor]:
         """``probability``. The trial count is a constant, not a fitted value."""
         return {"probability": self._probability}
+
+    def parameter_domains(self) -> Mapping[str, Domain]:
+        """``probability`` lies in ``(0, 1)``."""
+        return {"probability": Domain.PROBABILITY}
+
+    def with_parameters(self, named: Mapping[str, torch.Tensor]) -> BinomialEmission:
+        """The family at ``probability``, its trial counts kept."""
+        require_parameter_names(self, named, ("probability",))
+        return BinomialEmission(self._trials, named["probability"])
 
 
 class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
@@ -1208,6 +1241,19 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
     def named_parameters(self) -> Mapping[str, torch.Tensor]:
         """``alpha`` and ``beta``. The trial count is conditioned on, never fitted."""
         return {"alpha": self._alpha, "beta": self._beta}
+
+    def parameter_domains(self) -> Mapping[str, Domain]:
+        """Both positive."""
+        return {"alpha": Domain.POSITIVE, "beta": Domain.POSITIVE}
+
+    def with_parameters(
+        self, named: Mapping[str, torch.Tensor]
+    ) -> BetaBinomialEmission:
+        """The family at ``alpha`` and ``beta``, its trial counts and tie kept."""
+        require_parameter_names(self, named, ("alpha", "beta"))
+        return BetaBinomialEmission(
+            self._trials, named["alpha"], named["beta"], tied=self._tied
+        )
 
 
 class CountPairEmission(EmissionFamily, CountEmissionFamily):
@@ -1669,6 +1715,22 @@ class CountPairEmission(EmissionFamily, CountEmissionFamily):
             "alpha": self._alpha,
             "beta": self._beta,
         }
+
+    def parameter_domains(self) -> Mapping[str, Domain]:
+        """All four positive."""
+        return dict.fromkeys(("dispersion", "mean", "alpha", "beta"), Domain.POSITIVE)
+
+    def with_parameters(self, named: Mapping[str, torch.Tensor]) -> CountPairEmission:
+        """The family at the four parameters, its form and trial count kept."""
+        require_parameter_names(self, named, ("dispersion", "mean", "alpha", "beta"))
+        return CountPairEmission(
+            named["dispersion"],
+            named["mean"],
+            named["alpha"],
+            named["beta"],
+            self.trials,
+            joint=self._joint,
+        )
 
 
 def _beta_binomial_log_density(

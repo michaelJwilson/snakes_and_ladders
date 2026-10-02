@@ -9,9 +9,10 @@ other submodule of the package, so each of them can import it.
 from __future__ import annotations
 
 from abc import abstractmethod
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Generic, Protocol, TypeVar, runtime_checkable
+from enum import StrEnum
+from typing import Generic, Protocol, Self, TypeVar, runtime_checkable
 
 import numpy as np
 import torch
@@ -85,6 +86,47 @@ class ParameterDomainError(ValueError):
     domain has diverged, and :mod:`sal.sample.hmc` rejects that
     proposal rather than stopping the chain (#912).
     """
+
+
+class Domain(StrEnum):
+    """The set a parameter lives in, which names the map an optimizer reaches it through (issue #1164).
+
+    A family declares the set and an objective applies the map: one value per
+    map in ``sal.opt.constrain``, so this package states a constraint without
+    importing the optimizer that enforces it.
+    """
+
+    #: The real line; the map is the identity.
+    REAL = "real"
+    #: ``(0, inf)``: a rate, a scale, a shape.
+    POSITIVE = "positive"
+    #: ``(0, 1)``, both boundaries open.
+    PROBABILITY = "probability"
+    #: Log-probabilities normalized along the last axis: a row of a matrix of
+    #: symbol probabilities, carried as its logarithm.
+    LOG_SIMPLEX = "log_simplex"
+
+
+def require_parameter_names(
+    family: object, named: Mapping[str, object], expected: Iterable[str]
+) -> None:
+    """Refuse ``named`` unless it names exactly ``expected``.
+
+    Every :meth:`EmissionFamily.with_parameters` calls it, so a misspelled or
+    missing parameter is an error rather than a constant silently kept.
+
+    Raises
+    ------
+    ValueError
+        If the names differ.
+    """
+    wanted = tuple(expected)
+    if set(named) != set(wanted):
+        msg = (
+            f"{type(family).__name__} is parameterized by {sorted(wanted)}, "
+            f"got {sorted(named)}"
+        )
+        raise ValueError(msg)
 
 
 class CovariateNotSupportedError(TypeError):
@@ -492,6 +534,35 @@ class EmissionFamily(Protocol):
     @abstractmethod
     def named_parameters(self) -> Mapping[str, torch.Tensor]:
         """This family's parameters under the names the model states them in."""
+        ...  # pragma: no cover
+
+    @abstractmethod
+    def parameter_domains(self) -> Mapping[str, Domain]:
+        """The :class:`Domain` of each parameter :meth:`named_parameters` names, in its order (issue #1164).
+
+        What an objective needs to map an unconstrained vector onto this
+        family, so the map is declared once, by the family, rather than once
+        per objective.
+        """
+        ...  # pragma: no cover
+
+    @abstractmethod
+    def with_parameters(self, named: Mapping[str, torch.Tensor]) -> Self:
+        """This family at ``named``, every constant it carries kept (issue #1164).
+
+        The constants are what :meth:`named_parameters` omits: a trial count,
+        a tie, the joint form, a variance floor. ``named`` is keyed as
+        :meth:`named_parameters` is and shaped as its values; the family is
+        built from those tensors as given, so it is differentiable in them,
+        and ``with_parameters(named_parameters())`` scores bit for bit as this
+        family does.
+
+        Raises
+        ------
+        ValueError
+            If ``named`` does not name exactly this family's parameters, or a
+            value lies outside the family's domain.
+        """
         ...  # pragma: no cover
 
 
