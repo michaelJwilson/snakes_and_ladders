@@ -29,8 +29,9 @@ from sal.emissions import (
     PoissonEmission,
     settle_collapse,
 )
-from sal.opt.em import EM, EmConfig, em_loop
+from sal.opt.em import EM, EmConfig, check_stages, em_loop
 from sal.opt.hmm.forward import Posteriors, forward_messages
+from sal.opt.m_step import MStep
 from sal.opt.termination import Termination
 from sal.ragged import Ragged
 
@@ -71,6 +72,19 @@ class EmFit:
         them no data (issue #1136), at any iteration, as
         :attr:`sal.opt.emission_mixture.EmissionMixtureFit.frozen` reports
         components (issue #1165).
+    stages : tuple[Termination, ...]
+        How each stage of the fit ended, in order (issue #1171): one stage,
+        ``(termination,)``, for every fit this module runs, and one per
+        temperature before it for the tempered fit
+        :mod:`sal.sandbox.annealed_em` conserves. ``termination`` is the
+        last stage's and ``spent`` their total; omitted, it is
+        ``(termination,)``.
+
+    Raises
+    ------
+    ValueError
+        If ``stages`` does not end in ``termination`` or its iterations do
+        not total ``spent``.
     """
 
     log_initial: torch.Tensor
@@ -82,6 +96,10 @@ class EmFit:
     spent: int = dataclass_field(kw_only=True)
     unit: Cost = dataclass_field(default=Cost.ITERATIONS, kw_only=True)
     frozen: tuple[int, ...] = dataclass_field(default=(), kw_only=True)
+    stages: tuple[Termination, ...] = dataclass_field(default=(), kw_only=True)
+
+    def __post_init__(self) -> None:
+        check_stages(self)
 
 
 @dataclass(frozen=True)
@@ -658,6 +676,7 @@ def baum_welch_family(
     approx: bool = False,
     stirling_from: float = 10.0,
     e_step: EStep | None = None,
+    m_step: MStep | None = None,
 ) -> EmFit:
     """Baum-Welch over any emission family, with no autodiff involved.
 
@@ -765,6 +784,14 @@ def baum_welch_family(
         the compiled kernel's do. It takes one kernel for the whole chain, so
         a per-step or per-sequence ``log_transition`` is refused with it.
         ``None``, the default, is the route above, unchanged.
+    m_step : MStep | None
+        The emission M step, replacing the family's ``reestimate``
+        (issue #1171): handed the current family, the padded observations,
+        the posterior and the covariate the E step scored against, as
+        ``reestimate`` is. :class:`~sal.opt.m_step.LbfgsMStep` is one, for a
+        family with no closed form or with parameters held fixed. Any
+        ``m_step`` takes the general route, as ``update`` does. ``None``, the
+        default, is the family's own, bitwise.
 
     Returns
     -------
@@ -784,9 +811,10 @@ def baum_welch_family(
     refuse_backend("the Baum-Welch E step", backend, (Backend.PYTHON, Backend.RUST))
     # The streamed step re-estimates every block and updates no covariate;
     # a fit that holds the transition or updates the exposure takes the
-    # general route, as does one given its own E step.
+    # general route, as does one given its own E step or M step.
     if (
         e_step is None
+        and m_step is None
         and backend is Backend.RUST
         and update is None
         and fit_transition
@@ -1006,7 +1034,11 @@ def baum_welch_family(
             )
             kernels = log_transition.expand(max(length - 1, 0), m, m)
         previous = torch.exp(gamma)
-        step = components.reestimate(data, previous, covariate=scored)
+        step = (
+            components.reestimate(data, previous, covariate=scored)
+            if m_step is None
+            else m_step(components, data, previous, scored)
+        )
         if not step.converged:
             msg = (
                 f"the emission M step did not settle after {step.iterations} "

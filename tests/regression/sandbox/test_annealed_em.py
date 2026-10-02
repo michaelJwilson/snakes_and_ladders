@@ -4,9 +4,10 @@ One E and M step per temperature on `softmax((log w + log p) / T)`, then plain
 EM. Declined on `emission_mixture/ci` (same maximum as plain EM). Referees: at
 `T = 1` an empty schedule and `[1.0]` equal
 `opt.emission_mixture.expectation_maximization` bitwise; at `T -> inf` the M
-step is the one-component pooled fit; within a temperature the free energy
-does not fall (Ueda & Nakano, 1998); and the `data` start is read against
-plain EM.
+step is the one-component pooled fit; within a temperature the log tempered
+evidence does not fall (Ueda & Nakano, 1998); and the `data` start is read
+against plain EM. The HMM twin, `annealed_baum_welch` (#1171), is refereed in
+`test_annealed_hmm.py`.
 """
 
 from __future__ import annotations
@@ -30,7 +31,7 @@ from sal.opt.mixture import mixture_log_likelihood
 from sal.sample.schedule import ExponentialTempSchedule, ladder
 from sal.sandbox.annealed_em import (
     annealed_expectation_maximization,
-    free_energy,
+    log_tempered_evidence,
 )
 from sal.sim.emission_mixture import (
     EmissionMixtureParams,
@@ -77,7 +78,11 @@ def _uniform(k: int) -> torch.Tensor:
 
 
 def _same(first: EmissionMixtureFit, second: EmissionMixtureFit) -> bool:
-    """Every returned tensor equal bitwise, and the scalars equal."""
+    """Every returned tensor equal bitwise, and the scalars equal.
+
+    A tempered step is a stage of its own (#1171), so the iterations are
+    compared over every stage, ``spent``, and the reason the last one ended.
+    """
     tensors = [
         (first.weights, second.weights),
         (first.responsibilities, second.responsibilities),
@@ -90,8 +95,8 @@ def _same(first: EmissionMixtureFit, second: EmissionMixtureFit) -> bool:
     return (
         all(torch.equal(a, b) for a, b in tensors)
         and first.log_likelihood == second.log_likelihood
-        and first.termination.iterations == second.termination.iterations
-        and first.termination == second.termination
+        and first.spent == second.spent
+        and first.termination.reason == second.termination.reason
     )
 
 
@@ -141,11 +146,17 @@ def test_no_schedule_and_one_step_at_one_are_the_plain_fit_bitwise(
     )
     assert _same(plain, unset.fit)
     assert _same(plain, at_one.fit)
-    # No schedule carries no tempered step; the one at one carries its free
-    # energy, which at one is the log-likelihood at the start.
-    assert unset.temperatures == unset.free_energies == ()
+    # No schedule is one stage, plain EM's; one step at one is a stage of one
+    # iteration before it, and the two total plain EM's iterations.
+    assert unset.fit.stages == (plain.termination,)
+    assert len(at_one.fit.stages) == 2
+    assert at_one.fit.stages[0].iterations == 1
+    assert at_one.fit.termination.iterations == plain.spent - 1
+    # No schedule carries no tempered step; the one at one carries its log
+    # tempered evidence, which at one is the log-likelihood at the start.
+    assert unset.temperatures == unset.log_tempered_evidences == ()
     values = torch.as_tensor(observations, dtype=torch.float64)
-    assert at_one.free_energies == (
+    assert at_one.log_tempered_evidences == (
         float(mixture_log_likelihood(values, torch.log(_uniform(k)), start)),
     )
 
@@ -168,7 +179,8 @@ def test_a_hot_step_spreads_every_pair_evenly_and_fits_the_pooled_pairs(
         [HOT],
         config=replace(EMISSION_MIXTURE_EM, max_iterations=1),
     ).fit
-    assert hot.termination.iterations == 1
+    assert hot.spent == 1
+    assert hot.termination.iterations == 0
     assert float((hot.responsibilities - 1.0 / k).abs().max()) < 1e-12
     assert float((hot.weights - 1.0 / k).abs().max()) < 1e-12
     values = torch.as_tensor(observations, dtype=torch.float64)
@@ -185,10 +197,10 @@ def test_a_hot_step_spreads_every_pair_evenly_and_fits_the_pooled_pairs(
 
 
 @pytest.mark.analytic
-def test_the_free_energy_does_not_fall_within_a_temperature(
+def test_the_log_tempered_evidence_does_not_fall_within_a_temperature(
     data_start: tuple[np.ndarray, CountPairEmission],
 ) -> None:
-    # F_T is non-decreasing at fixed temperature (Ueda & Nakano, 1998): ten
+    # T log Z_T is non-decreasing at fixed temperature (Ueda & Nakano, 1998): ten
     # steps at four temperatures; the inner solve's tolerance allows 1e-10.
     observations, start = data_start
     k = start.n_states
@@ -201,12 +213,12 @@ def test_the_free_energy_does_not_fall_within_a_temperature(
         config=replace(EMISSION_MIXTURE_EM, max_iterations=len(steps)),
     )
     assert fit.temperatures == tuple(steps)
-    energies = np.asarray(fit.free_energies)
+    energies = np.asarray(fit.log_tempered_evidences)
     for block in range(4):
         values = energies[10 * block : 10 * (block + 1)]
         falls = np.diff(values)
         assert bool((falls >= -1e-10 * np.abs(values[1:])).all()), (block, falls)
-    # The free energy at T is the free_energy of the joint at the state each
+    # The value at T is log_tempered_evidence of the joint at the state each
     # step was handed; at the last step's state and temperature, recomputed.
     last = annealed_expectation_maximization(
         observations,
@@ -217,7 +229,9 @@ def test_the_free_energy_does_not_fall_within_a_temperature(
     ).fit
     values_t = torch.as_tensor(observations, dtype=torch.float64)
     joint = torch.log(last.weights) + last.components.log_density(values_t)
-    assert free_energy(joint, steps[-1]) == pytest.approx(energies[-1], rel=1e-12)
+    assert log_tempered_evidence(joint, steps[-1]) == pytest.approx(
+        energies[-1], rel=1e-12
+    )
 
 
 @pytest.mark.end2end
@@ -238,9 +252,10 @@ def test_annealing_from_the_data_start_is_read_against_plain_em(
         observations,
         _uniform(k),
         start,
-        SCHEDULE,
+        ExponentialTempSchedule(8.0, 1.0, 20),
         config=replace(EMISSION_MIXTURE_EM, tolerance=EM_TOLERANCE),
     )
+    # A `TempSchedule` is read step by step, the floats `ladder` reads.
     assert run.temperatures == SCHEDULE
     annealed = run.fit
     assert annealed.log_likelihood >= plain.log_likelihood - EM_TOLERANCE * abs(
