@@ -57,6 +57,7 @@ from sal.opt.hmm.forward import (
     align_states,
     forward_log_likelihood,
     forward_log_likelihood_from_density,
+    forward_log_likelihood_ragged,
 )
 from sal.opt.hmm.objectives import (
     BetaBinomialHmmObjective,
@@ -96,4 +97,5 @@ __all__ = [
     "compiled_family",
     "forward_log_likelihood",
     "forward_log_likelihood_from_density",
+    "forward_log_likelihood_ragged",
 ]
