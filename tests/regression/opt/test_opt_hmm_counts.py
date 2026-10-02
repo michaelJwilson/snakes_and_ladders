@@ -184,7 +184,7 @@ def test_the_gradient_fit_and_baum_welch_reach_the_same_optimum(name: str) -> No
 
     assert not fitted.at_boundary
     assert_allclose(-float(result.value), fitted.log_likelihood, rtol=1e-8)
-    order = list(align_families(objective.emissions(result.theta), fitted.components))
+    order = list(align_families(objective.components(result.theta), fitted.components))
     assert order == [0, 1]
     estimate = objective.constrain(result.theta)
     for parameter, value in fitted.components.named_parameters().items():
@@ -222,7 +222,7 @@ def test_the_start_places_each_state_on_the_data_and_breaks_the_symmetry(
     observations = simulate_sequences(_params(_truth(name), seed=106)).observations
     objective = _objective(name, observations)
 
-    start = objective.emissions(objective.initial())
+    start = objective.components(objective.initial())
 
     means = start.mean.numpy()
     assert means[0] != means[1]
@@ -310,7 +310,7 @@ def _dispersion_coverage(dispersion: float, replicates: int) -> tuple[int, int, 
         except ValueError:
             boundary += 1
             continue
-        order = list(align_families(objective.emissions(result.theta), truth))
+        order = list(align_families(objective.components(result.theta), truth))
         for name, reference in (
             ("dispersion", truth.dispersion),
             ("mean", truth.mean),

@@ -118,7 +118,7 @@ class _HmmObjective(Objective):
         """Free values the emission family occupies in ``theta``."""
         raise NotImplementedError  # pragma: no cover
 
-    def emissions(self, theta: torch.Tensor) -> EmissionFamily:
+    def components(self, theta: torch.Tensor) -> EmissionFamily:
         """The emission family ``theta``'s emission block encodes.
 
         Parameters
@@ -241,7 +241,7 @@ class _HmmObjective(Objective):
         """Negative log-likelihood of every observed sequence."""
         transitions = self._transition_parameters(theta)
         return -forward_log_likelihood_from_density(
-            self.emissions(theta).log_density(
+            self.components(theta).log_density(
                 self._observations, covariate=self._covariate
             ),
             transitions["log_initial"],
@@ -295,7 +295,7 @@ class HmmObjective(_HmmObjective):
     def _n_emission_parameters(self) -> int:
         return self._n_states * (self._n_symbols - 1)
 
-    def emissions(self, theta: torch.Tensor) -> CategoricalEmission:
+    def components(self, theta: torch.Tensor) -> CategoricalEmission:
         """The categorical family ``theta``'s emission block encodes."""
         return CategoricalEmission.from_log(
             log_simplex(
@@ -336,7 +336,7 @@ class HmmObjective(_HmmObjective):
         """
         return {
             **self._transition_parameters(theta),
-            **self.emissions(theta).named_parameters(),
+            **self.components(theta).named_parameters(),
         }
 
     def theta_from_truth(
@@ -432,7 +432,7 @@ class GaussianHmmObjective(_HmmObjective):
         start = self._mean_slice().stop
         return slice(start, start + self._n_states)
 
-    def emissions(self, theta: torch.Tensor) -> GaussianEmission:
+    def components(self, theta: torch.Tensor) -> GaussianEmission:
         """The Gaussian family ``theta``'s emission block encodes.
 
         The mean is unconstrained and the scale reaches the optimizer through
@@ -552,7 +552,7 @@ class GaussianHmmObjective(_HmmObjective):
         """
         return {
             **self._transition_parameters(theta),
-            **self.emissions(theta).named_parameters(),
+            **self.components(theta).named_parameters(),
         }
 
     def theta_from_truth(
@@ -622,7 +622,7 @@ class _CountHmmObjective(_HmmObjective):
         """Log transitions, and the emission family's own named parameters."""
         return {
             **self._transition_parameters(theta),
-            **self.emissions(theta).named_parameters(),
+            **self.components(theta).named_parameters(),
         }
 
 
@@ -647,7 +647,7 @@ class PoissonHmmObjective(_CountHmmObjective):
     def _n_emission_parameters(self) -> int:
         return self._n_states
 
-    def emissions(self, theta: torch.Tensor) -> PoissonEmission:
+    def components(self, theta: torch.Tensor) -> PoissonEmission:
         """The Poisson family ``theta``'s emission block encodes."""
         return PoissonEmission(positive(theta[self._emission_slice]))
 
@@ -712,7 +712,7 @@ class BinomialHmmObjective(_CountHmmObjective):
     def _n_emission_parameters(self) -> int:
         return self._n_states
 
-    def emissions(self, theta: torch.Tensor) -> BinomialEmission:
+    def components(self, theta: torch.Tensor) -> BinomialEmission:
         """The binomial family ``theta``'s emission block encodes."""
         return BinomialEmission(self._trials, probability(theta[self._emission_slice]))
 
@@ -787,7 +787,7 @@ class BetaBinomialHmmObjective(_CountHmmObjective):
         start = self._log_alpha_slice().stop
         return slice(start, start + self._n_states)
 
-    def emissions(self, theta: torch.Tensor) -> BetaBinomialEmission:
+    def components(self, theta: torch.Tensor) -> BetaBinomialEmission:
         """The beta-binomial family ``theta``'s emission block encodes."""
         return BetaBinomialEmission(
             self._trials,
@@ -893,7 +893,7 @@ class NegativeBinomialHmmObjective(_HmmObjective):
         start = self._log_dispersion_slice().stop
         return slice(start, start + self._n_states)
 
-    def emissions(self, theta: torch.Tensor) -> NegativeBinomialEmission:
+    def components(self, theta: torch.Tensor) -> NegativeBinomialEmission:
         """The negative binomial family ``theta``'s emission block encodes."""
         return NegativeBinomialEmission(
             positive(theta[self._log_dispersion_slice()]),
@@ -940,7 +940,7 @@ class NegativeBinomialHmmObjective(_HmmObjective):
         """Split ``theta`` into log transitions and the per-state ``(r, mu)``."""
         return {
             **self._transition_parameters(theta),
-            **self.emissions(theta).named_parameters(),
+            **self.components(theta).named_parameters(),
         }
 
     def theta_from_truth(

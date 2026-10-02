@@ -31,7 +31,7 @@ def baum_welch_rectangular(
     observations: np.ndarray,
     log_initial: torch.Tensor,
     log_transition: torch.Tensor,
-    emissions: EmissionFamily,
+    components: EmissionFamily,
     config: EmConfig = EM,
     covariate: np.ndarray | None = None,
 ) -> EmFit:
@@ -49,7 +49,7 @@ def baum_welch_rectangular(
         trailing axes the family's observation carries --- none for a scalar
         observation, a channel axis for a family over a pair of counts.
         Symbol indices or real values, as the family says.
-    emissions : EmissionFamily
+    components : EmissionFamily
         Starting emission family.
     config : EmConfig
         The EM budget and its relative tolerance; :data:`~sal.opt.em.EM`,
@@ -91,7 +91,7 @@ def baum_welch_rectangular(
         degenerate optimum rather than a convergence, and is reported as such
         rather than clamped away.
     """
-    data = torch.as_tensor(observations, dtype=emissions.observation_dtype)
+    data = torch.as_tensor(observations, dtype=components.observation_dtype)
     # The leading two axes are the sequence and the position. What follows them
     # is the family's own: none where an observation is a scalar, and one or
     # more where it is not --- a family over a pair of counts carries a channel
@@ -99,7 +99,7 @@ def baum_welch_rectangular(
     # family could be made to condition on a covariate and still not be
     # fittable here (issue #658).
     n_sequences, length = data.shape[:2]
-    m = emissions.n_states
+    m = components.n_states
     varying = log_transition.shape != (m, m)
     if varying and log_transition.shape != (max(length - 1, 0), m, m):
         msg = (
@@ -128,7 +128,7 @@ def baum_welch_rectangular(
     at_boundary = False
     for iterations in range(1, config.max_iterations + 1):  # noqa: B007
         # --- E step: forward and backward messages in log space ----------
-        emit = emissions.log_density(data, covariate=exposure)
+        emit = components.log_density(data, covariate=exposure)
         alpha = torch.empty((n_sequences, length, m), dtype=log_initial.dtype)
         alpha[:, 0] = log_initial.unsqueeze(0) + emit[:, 0]
         for t in range(1, length):
@@ -168,7 +168,7 @@ def baum_welch_rectangular(
                 transition_counts, dim=1, keepdim=True
             )
             kernels = log_transition.expand(max(length - 1, 0), m, m)
-        step = emissions.reestimate(data, torch.exp(gamma), covariate=exposure)
+        step = components.reestimate(data, torch.exp(gamma), covariate=exposure)
         if not step.converged:
             msg = (
                 f"the emission M step did not settle after {step.iterations} "
@@ -178,7 +178,7 @@ def baum_welch_rectangular(
                 f"shown it"
             )
             raise ValueError(msg)
-        emissions = step.emissions
+        components = step.emissions
         at_boundary = at_boundary or step.at_boundary
 
         if abs(log_likelihood - previous) <= config.tolerance * abs(log_likelihood):
@@ -189,7 +189,7 @@ def baum_welch_rectangular(
     return EmFit(
         log_initial=log_initial,
         log_transition=log_transition,
-        components=emissions,
+        components=components,
         log_likelihood=log_likelihood,
         at_boundary=at_boundary,
         termination=Termination.after(iterations, converged=converged),

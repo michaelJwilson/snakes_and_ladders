@@ -565,7 +565,7 @@ def baum_welch_family(
     observations: np.ndarray | Ragged,
     log_initial: torch.Tensor,
     log_transition: torch.Tensor,
-    emissions: EmissionFamily,
+    components: EmissionFamily,
     config: EmConfig = EM,
     covariate: np.ndarray | Ragged | None = None,
     *,
@@ -599,7 +599,7 @@ def baum_welch_family(
         trailing axes the family's observation carries --- none for a scalar
         observation, a channel axis for a family over a pair of counts.
         Symbol indices or real values, as the family says.
-    emissions : EmissionFamily
+    components : EmissionFamily
         Starting emission family.
     config : EmConfig
         The EM budget and its relative tolerance; :data:`~sal.opt.em.EM`,
@@ -702,7 +702,7 @@ def baum_welch_family(
         backend is Backend.RUST
         and update is None
         and fit_transition
-        and _streams(observations, log_transition, emissions, covariate)
+        and _streams(observations, log_transition, components, covariate)
     ):
         assert isinstance(observations, np.ndarray)
         assert covariate is None or isinstance(covariate, np.ndarray)
@@ -710,7 +710,7 @@ def baum_welch_family(
             observations,
             log_initial,
             log_transition,
-            emissions,
+            components,
             config=config,
             covariate=covariate,
             with_table=with_table,
@@ -738,13 +738,13 @@ def baum_welch_family(
     # axis. Unpacking the whole shape refused every such family outright, so a
     # family could be made to condition on a covariate and still not be
     # fittable here (issue #658).
-    data = torch.as_tensor(block, dtype=emissions.observation_dtype)
+    data = torch.as_tensor(block, dtype=components.observation_dtype)
     mask = torch.as_tensor(present)
     n_sequences, length = batch.n_segments, batch.longest
     #: The last live position of each segment, which is where its chain ends.
     final = torch.as_tensor(batch.lengths, dtype=torch.long) - 1
     steps = torch.arange(length)
-    m = emissions.n_states
+    m = components.n_states
     varying = log_transition.shape != (m, m)
     per_sequence = log_transition.shape == (n_sequences, max(length - 1, 0), m, m)
     if (
@@ -808,14 +808,14 @@ def baum_welch_family(
         parameter the recursion below reads and the M step rewrites.
         """
         nonlocal at_boundary, previous
-        log_initial, log_transition, kernels, emissions = state
+        log_initial, log_transition, kernels, components = state
         scored = (
             exposure
             if update is None or exposure is None
-            else update(emissions, previous, exposure)
+            else update(components, previous, exposure)
         )
         # --- E step: forward and backward messages in log space ----------
-        emit = emissions.log_density(data, covariate=scored)
+        emit = components.log_density(data, covariate=scored)
         # A padded position scores log 1, so it adds nothing wherever it is
         # reached. Its `alpha` beyond the segment's end is still nonsense, which
         # is why the evidence is gathered at each segment's own last position
@@ -894,7 +894,7 @@ def baum_welch_family(
             )
             kernels = log_transition.expand(max(length - 1, 0), m, m)
         previous = torch.exp(gamma)
-        step = emissions.reestimate(data, previous, covariate=scored)
+        step = components.reestimate(data, previous, covariate=scored)
         if not step.converged:
             msg = (
                 f"the emission M step did not settle after {step.iterations} "
@@ -907,15 +907,15 @@ def baum_welch_family(
         at_boundary = at_boundary or step.at_boundary
         return (log_initial, log_transition, kernels, step.emissions), log_likelihood
 
-    (log_initial, log_transition, _, emissions), log_likelihood, termination = em_loop(
+    (log_initial, log_transition, _, components), log_likelihood, termination = em_loop(
         iterate,
-        (log_initial, log_transition, kernels, emissions),
+        (log_initial, log_transition, kernels, components),
         config=config,
     )
     return EmFit(
         log_initial=log_initial,
         log_transition=log_transition,
-        components=emissions,
+        components=components,
         log_likelihood=log_likelihood,
         at_boundary=at_boundary,
         termination=termination,
