@@ -431,11 +431,11 @@ _MOST_CELLS = 1 << 20
 def _streams(
     observations: np.ndarray | Ragged,
     log_transition: torch.Tensor,
-    emissions: EmissionFamily,
+    components: EmissionFamily,
     covariate: np.ndarray | Ragged | None,
 ) -> bool:
     """Whether :func:`baum_welch_family` has a streamed step for this case (issue #997)."""
-    m = emissions.n_states
+    m = components.n_states
     if (
         not isinstance(observations, np.ndarray)
         or observations.ndim != 2
@@ -443,10 +443,10 @@ def _streams(
         or log_transition.shape != (m, m)
     ):
         return False
-    if type(emissions) is GaussianEmission:
-        return covariate is None and emissions.n_channels == 1
+    if type(components) is GaussianEmission:
+        return covariate is None and components.n_channels == 1
     # Integer counts and an integer covariate: the table is indexed by them.
-    if type(emissions) not in _TABLED or not _whole(observations):
+    if type(components) not in _TABLED or not _whole(observations):
         return False
     stride = 1
     if covariate is not None:
@@ -504,7 +504,7 @@ def _streamed_family(
     observations: np.ndarray,
     log_initial: torch.Tensor,
     log_transition: torch.Tensor,
-    emissions: EmissionFamily,
+    components: EmissionFamily,
     *,
     config: EmConfig,
     covariate: np.ndarray | None = None,
@@ -526,7 +526,7 @@ def _streamed_family(
     taken here, so torch's ``log_density`` is not needed on this route; it
     stays the batched oracle and the autodiff objectives' density.
     """
-    m = emissions.n_states
+    m = components.n_states
     at_boundary = False
     frozen: set[int] = set()
 
@@ -535,7 +535,7 @@ def _streamed_family(
             -1
         )
 
-    if isinstance(emissions, GaussianEmission):
+    if isinstance(components, GaussianEmission):
         values = np.ascontiguousarray(observations, dtype=np.float64)
 
         def gaussian(
@@ -625,7 +625,7 @@ def _streamed_family(
 
     (initial, transition, fitted), log_likelihood, termination = em_loop(
         step,
-        (flat(log_initial), flat(log_transition), emissions),
+        (flat(log_initial), flat(log_transition), components),
         config=config,
     )
     return EmFit(
