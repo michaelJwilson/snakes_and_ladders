@@ -2,7 +2,8 @@
 
 The instance is a four-state Gaussian HMM whose means are one unit apart at
 scale 0.7, twelve segments of 30 to 89 positions (669 in all), drawn from a
-seeded truth. Its likelihood is multimodal: Baum-Welch from twenty points
+seeded truth; the harder instance has five states on the same segments
+(#1195), and four restarts reach its truth's basin in none of ten seeds. Its likelihood is multimodal: Baum-Welch from twenty points
 drawn around the quantile start ends at least 7.5 nats above the truth's
 basin from 15 of them. The reference is Baum-Welch run from the truth for
 1,000 iterations, and a start succeeds when its polish ends within
@@ -44,9 +45,10 @@ from sal.search.hmm_starts import (
 )
 from sal.sim.hmm import HmmParams, simulate_sequences
 
-#: States, and the truth's means and scale.
+#: States of #1172's instance and of the harder one (#1195), and the truth's
+#: scale; the means are one unit apart.
 N_STATES = 4
-MEANS = np.arange(N_STATES, dtype=float)
+HARDER = 5
 SCALE = 0.7
 
 #: Probability of staying in a state; the rest is spread evenly.
@@ -67,28 +69,29 @@ TOLERANCE = 2.0
 SEEDS = tuple(range(10))
 
 
-def _transition() -> np.ndarray:
-    off = (1.0 - STAY) / (N_STATES - 1)
-    return np.full((N_STATES, N_STATES), off) + np.eye(N_STATES) * (STAY - off)
+def _transition(n_states: int) -> np.ndarray:
+    off = (1.0 - STAY) / (n_states - 1)
+    return np.full((n_states, n_states), off) + np.eye(n_states) * (STAY - off)
 
 
-def _instance() -> tuple[EmissionHmmObjective, float]:
+def _instance(n_states: int = N_STATES) -> tuple[EmissionHmmObjective, float]:
     """The objective at a quantile start, and Baum-Welch's value from the truth."""
     lengths = tuple(
         int(one) for one in np.random.default_rng(0).integers(30, 90, size=12)
     )
-    initial = np.full(N_STATES, 1.0 / N_STATES)
-    truth = GaussianEmission(MEANS, np.full(N_STATES, SCALE), 1e-6)
+    initial = np.full(n_states, 1.0 / n_states)
+    means = np.arange(n_states, dtype=float)
+    truth = GaussianEmission(means, np.full(n_states, SCALE), 1e-6)
     data = simulate_sequences(
-        HmmParams(N_STATES, lengths, initial, _transition(), truth, SEED, 0.0)
+        HmmParams(n_states, lengths, initial, _transition(n_states), truth, SEED, 0.0)
     )
     objective = EmissionHmmObjective(
-        data.batch, gaussian_quantile_start(data.batch.values, N_STATES, 1e-6)
+        data.batch, gaussian_quantile_start(data.batch.values, n_states, 1e-6)
     )
     at_truth = objective.theta_from(
         {
             "log_initial": torch.log(torch.as_tensor(initial)),
-            "log_transition": torch.log(torch.as_tensor(_transition())),
+            "log_transition": torch.log(torch.as_tensor(_transition(n_states))),
             **truth.named_parameters(),
         }
     )
@@ -208,17 +211,31 @@ def test_the_quantile_start_reaches_the_truths_basin_more_often_than_restarts() 
     assert reached["restart"] < len(SEEDS)
 
 
-#: Success counts of ten seeds at :data:`EVALUATIONS`, measured on the
-#: reference host (#1172). Every sampler starts at the quantile point; under
-#: the declared step each leaves its basin for a worse one more often than
-#: four restarts miss the truth's.
-MEASURED = {"quantile": 10, "restart": 7, "chain": 1, "annealed": 0, "tempered": 4}
+#: Success counts of ten seeds at :data:`EVALUATIONS`, per instance, measured
+#: on the reference host at the steps of #1195; at #1172's untuned step of
+#: 3e-2 the four-state counts were chain 1, annealed 0 and tempered 4. Every
+#: sampler starts at the quantile point and reaches the truth's basin by
+#: staying near it: its median start is 2 to 51 nats below the quantile
+#: point's, against 192 to 305 at 3e-2.
+MEASURED = {
+    N_STATES: {
+        "quantile": 10,
+        "restart": 7,
+        "chain": 10,
+        "annealed": 10,
+        "tempered": 10,
+    },
+    HARDER: {"quantile": 10, "restart": 0, "chain": 8, "annealed": 8, "tempered": 7},
+}
 
 
 @pytest.mark.release
 @pytest.mark.experiment
-def test_every_start_at_equal_passes_reaches_the_truths_basin_as_measured() -> None:
-    objective, reference = _instance()
+@pytest.mark.parametrize("n_states", [N_STATES, HARDER])
+def test_every_start_at_equal_passes_reaches_the_truths_basin_as_measured(
+    n_states: int,
+) -> None:
+    objective, reference = _instance(n_states)
     began = time.perf_counter()
     runs = at_equal_evaluations(
         objective, tuple(STARTS), EVALUATIONS, SEEDS, reference=[reference]
@@ -239,13 +256,14 @@ def test_every_start_at_equal_passes_reaches_the_truths_basin_as_measured() -> N
             )
         )
     print(
-        f"\n{'start':<10}{'reached':>8}{'start gap':>11}{'gap':>8}{'passes':>8}{'s':>7}"
+        f"\n{n_states} states\n"
+        f"{'start':<10}{'reached':>8}{'start gap':>11}{'gap':>8}{'passes':>8}{'s':>7}"
     )
     for name, reached, start_gap, gap, passes, wall in rows:
         print(
             f"{name:<10}{reached:>8}{start_gap:>11.1f}{gap:>8.2f}{passes:>8}{wall:>7.2f}"
         )
     print(f"total {seconds:.1f} s")
-    assert {name: reached for name, reached, *_ in rows} == MEASURED
+    assert {name: reached for name, reached, *_ in rows} == MEASURED[n_states]
     for _, _, _, _, passes, _ in rows:
         assert passes <= EVALUATIONS

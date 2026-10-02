@@ -28,6 +28,33 @@ placed its locations by :func:`~sal.opt.initialize.quantile_locations`
 (:func:`gaussian_quantile_start` for a Gaussian family). The samplers and the
 restarts start from the same point.
 
+**The step is a grid's, not a warm-up's (issue #1195).** At #1172's step of
+3e-2 the chain, annealing and tempering starts reached the truth's basin in
+1, 0 and 4 of 10 seeds. At every step from 1e-3 to 3e-2 the median acceptance is at least 0.96
+of proposals, so what a larger step costs is distance, not rejection: it
+carries the start from the quantile point into another basin. The chain's
+own warm-up (:class:`~sal.sample.hmc.Adaptation`, 16 to 48 proposals,
+target 0.65 or 0.8) drives the step toward the acceptance target and reaches
+the basin in at most 4 of 10 seeds on either instance below, so it is not
+used. The steps are instead a grid's, 1e-3 to 3e-2 at 300 passes on two
+instances (``test_hmm_starts``' four states and five states), each the
+largest step whose median polished gap is within 1 nat of the grid's best on
+both: :data:`STEP` 5e-3 for the chain and the ladder, :data:`ANNEALING_STEP`
+1e-3. Both were fit at 669 positions; another data size is unmeasured.
+
+**The step is not scaled with temperature.** The fixed step at which a
+chain's acceptance falls to 0.65 is 0.063, 0.063, 0.057 and 0.046 at
+``T`` = 1, 4, 16 and 64 on four states, 0.074 to 0.041 on five: flat to
+falling, where a step scaled by sqrt(T) would rise eightfold. One step serves
+every rung, as the momentum rescaling of :mod:`sal.sample.hmc` states.
+
+**Tuned, a sampler start reaches the basin by staying in it.** Its median
+start is 2 to 51 nats below the quantile point, against 192 to 305 at 3e-2.
+At equal passes every sampler beats restarts (7 of 10 on four states, 0 of 10
+on five) and none beats the quantile start (10 of 10 on both): they tie it
+on four states and reach 7 or 8 of 10 on five, polishing for 174 to 179
+iterations against its 299.
+
 **A unit of every budget here is one pass over the data.** A gradient is
 one compiled E step and one backward pass
 (:meth:`~sal.opt.hmm.EmissionHmmObjective.value_and_gradient`), a Baum-Welch
@@ -57,11 +84,12 @@ from sal.sample.initialize import FromAnnealing, FromChain, FromTempering
 from sal.sample.schedule import ExponentialTempSchedule
 from sal.track import current
 
-#: Leapfrog step of every sampler start, in unconstrained coordinates. On
-#: ``test_hmm_starts``' four-state Gaussian instance (669 positions) the chain
-#: accepts every proposal at it, at a mean energy error of 0.04, and 0.8 of
-#: them at 6e-2 (#1172).
-STEP = 3.0e-2
+#: Leapfrog step of the chain and tempering starts, in unconstrained
+#: coordinates, chosen by the grid of #1195 (module note).
+STEP = 5.0e-3
+
+#: Leapfrog step of the annealing start, by the same grid.
+ANNEALING_STEP = 1.0e-3
 
 #: Leapfrog steps per proposal: a sampler start is charged every gradient.
 TRAJECTORY = 4
@@ -167,7 +195,7 @@ def annealed_start(rng: np.random.Generator) -> SampledStart:
     return SampledStart(
         FromAnnealing(
             ExponentialTempSchedule(TEMPERATURES[-1], 1.0, ANNEAL_STEPS),
-            STEP,
+            ANNEALING_STEP,
             torch_stream(rng),
             n_steps=TRAJECTORY,
         )
@@ -297,6 +325,7 @@ def at_equal_evaluations(
 
 
 __all__ = [
+    "ANNEALING_STEP",
     "ANNEAL_STEPS",
     "CHAIN_BURN_IN",
     "CHARGES",
