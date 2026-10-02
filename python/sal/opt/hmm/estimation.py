@@ -29,6 +29,7 @@ from sal.emissions import (
     refuse_collapsed,
 )
 from sal.opt.em import EM, EmConfig, em_loop
+from sal.opt.hmm.forward import forward_messages
 from sal.opt.termination import Termination
 from sal.ragged import Ragged
 
@@ -742,7 +743,6 @@ def baum_welch_family(
     n_sequences, length = batch.n_segments, batch.longest
     #: The last live position of each segment, which is where its chain ends.
     final = torch.as_tensor(batch.lengths, dtype=torch.long) - 1
-    rows = torch.arange(n_sequences)
     steps = torch.arange(length)
     m = emissions.n_states
     varying = log_transition.shape != (m, m)
@@ -830,19 +830,17 @@ def baum_welch_family(
                 emit, mask, lengths, log_initial, log_transition
             )
         else:
-            alpha = torch.empty((n_sequences, length, m), dtype=log_initial.dtype)
-            alpha[:, 0] = log_initial.unsqueeze(0) + emit[:, 0]
-            for t in range(1, length):
-                # One kernel for every sequence, or each sequence's own (#933).
-                kernel = (
-                    kernels[:, t - 1]
-                    if per_sequence
-                    else (kernels[t - 1] if varying else log_transition).unsqueeze(0)
-                )
-                alpha[:, t] = (
-                    torch.logsumexp(alpha[:, t - 1].unsqueeze(2) + kernel, dim=1)
-                    + emit[:, t]
-                )
+            # The forward pass is the objective's (issue #1162): one kernel for
+            # every sequence, one per step, or each sequence's own (#933), read
+            # off the kernel's rank.
+            evidence, table = forward_messages(
+                emit,
+                log_initial,
+                kernels if varying else log_transition,
+                final=final,
+            )
+            assert table is not None
+            alpha = table
             beta = torch.zeros((n_sequences, length, m), dtype=log_initial.dtype)
             for t in range(length - 2, -1, -1):
                 kernel = (
@@ -860,7 +858,6 @@ def baum_welch_family(
                 ended = (t >= final).unsqueeze(1)
                 beta[:, t] = torch.where(ended, torch.zeros_like(onward), onward)
 
-            evidence = torch.logsumexp(alpha[rows, final], dim=1)
             log_likelihood = float(evidence.sum())
 
             gamma = torch.where(
