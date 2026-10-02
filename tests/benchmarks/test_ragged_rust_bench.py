@@ -128,3 +128,37 @@ def test_ragged_sample_paths_bench(
         )
 
     benchmark.pedantic(draw, rounds=3, iterations=1)  # type: ignore[no-untyped-call]
+
+
+@pytest.mark.benchmark(group="ragged-posteriors-threads")
+@pytest.mark.parametrize("threads", [1, 4])
+@pytest.mark.parametrize("case", ["plain", "kronecker"])
+def test_ragged_posteriors_threads_bench(
+    benchmark: BenchmarkFixture, case: str, threads: int
+) -> None:
+    """The compiled forward-backward on a pool of one thread and of four (issue #1191).
+
+    The Viterbi bench's stress size: 200 segments of 1,000 positions at ten
+    states, `plain` one transition and `kronecker` the `A ⊗ S` step over
+    `2 K = 10` states. Every thread count returns the same bits, so the
+    ratio is the whole difference.
+    """
+    from sal import oxisal
+
+    n_states, lengths = 10, np.full(200, 1000, dtype=np.int64)
+    rng = np.random.default_rng(1191)
+    values = np.log(rng.random((int(lengths.sum()), n_states)))
+    slow = n_states // 2 if case == "kronecker" else n_states
+    initial = np.log(np.full(n_states, 1.0 / n_states))
+    transition = np.log(rng.dirichlet(np.ones(slow), slow))
+    switch = rng.uniform(size=values.shape[0]) if case == "kronecker" else None
+    kind = "kronecker" if case == "kronecker" else "stay_or_move"
+    gamma, counts = np.empty_like(values), np.empty((n_states, n_states))
+    evidence = np.empty(lengths.size)
+    benchmark.pedantic(  # type: ignore[no-untyped-call]
+        oxisal.ragged_posteriors,
+        args=(values, lengths, initial, transition, gamma, counts, evidence),
+        kwargs={"switch": switch, "switch_kind": kind, "threads": threads},
+        rounds=5,
+        iterations=1,
+    )
