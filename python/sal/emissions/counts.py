@@ -437,10 +437,10 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
             self._dispersion[live], self._mean[live], tied=self._tied
         )._solve_states(values, weights[:, live], offsets, mean[live])
         dispersion, fitted_mean = self._dispersion.clone(), self._mean.clone()
-        dispersion[live] = part.emissions.dispersion
-        fitted_mean[live] = part.emissions.mean
+        dispersion[live] = part.components.dispersion
+        fitted_mean[live] = part.components.mean
         if self._tied:
-            dispersion[:] = part.emissions.dispersion[0]
+            dispersion[:] = part.components.dispersion[0]
         return Reestimate(
             NegativeBinomialEmission(dispersion, fitted_mean, tied=self._tied),
             converged=part.converged,
@@ -1138,12 +1138,12 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
             self._trials[live], self._alpha[live], self._beta[live], tied=self._tied
         )._solve_states(values, weights[:, live], supplied, per_observation)
         alpha, beta = self._alpha.clone(), self._beta.clone()
-        alpha[live] = part.emissions.alpha
-        beta[live] = part.emissions.beta
+        alpha[live] = part.components.alpha
+        beta[live] = part.components.beta
         if self._tied:
             # One concentration across states: the held states take the
             # shared value at their own rate.
-            shared = float(part.emissions.concentration[0])
+            shared = float(part.components.concentration[0])
             rate = self._alpha / (self._alpha + self._beta)
             alpha = torch.where(live, alpha, rate * shared)
             beta = torch.where(live, beta, (1.0 - rate) * shared)
@@ -1609,10 +1609,10 @@ class CountPairEmission(EmissionFamily, CountEmissionFamily):
             rate = self._success.reestimate(successes, weights, trials)
             return Reestimate(
                 CountPairEmission(
-                    depth.emissions.dispersion,
-                    depth.emissions.mean,
-                    rate.emissions.alpha,
-                    rate.emissions.beta,
+                    depth.components.dispersion,
+                    depth.components.mean,
+                    rate.components.alpha,
+                    rate.components.beta,
                     self._success.trials,
                     joint=False,
                 ),
@@ -1666,8 +1666,8 @@ class CountPairEmission(EmissionFamily, CountEmissionFamily):
             residual = max(residual, solved.residual)
         return Reestimate(
             CountPairEmission(
-                depth.emissions.dispersion,
-                depth.emissions.mean,
+                depth.components.dispersion,
+                depth.components.mean,
                 alpha,
                 beta,
                 None,

@@ -84,9 +84,9 @@ def test_the_family_m_step_runs_the_batched_solve() -> None:
     values, posterior, family = _draw("stress")
     mean, oracle = _oracle(values, posterior)
     fitted = family.reestimate(values, posterior)
-    assert torch.equal(fitted.emissions.mean, mean)
+    assert torch.equal(fitted.components.mean, mean)
     expected = torch.tensor([o.value for o in oracle], dtype=torch.float64)
-    moved = float(((fitted.emissions.dispersion - expected).abs() / expected).max())
+    moved = float(((fitted.components.dispersion - expected).abs() / expected).max())
     assert moved < FLOOR
     assert fitted.iterations == max(o.iterations for o in oracle)
 

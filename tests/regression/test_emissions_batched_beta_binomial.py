@@ -98,7 +98,7 @@ def test_the_joint_pairs_m_step_is_the_per_component_solve_bitwise(tier: str) ->
     fitted = truth.reestimate(values, posterior)
     assert fitted.converged
     assert torch.equal(
-        fitted.emissions.named_parameters()["alpha"],
+        fitted.components.named_parameters()["alpha"],
         torch.tensor([one.alpha for one in oracle], dtype=torch.float64),
     )
 
@@ -127,7 +127,7 @@ def test_a_trial_count_per_component_is_the_per_component_solve_bitwise() -> Non
     beta = channel.named_parameters()["beta"]
     oracle = _oracle(values, posterior, trials, alpha, beta)
     assert _batched(values, posterior, trials, alpha, beta) == oracle
-    fitted = channel.reestimate(values, posterior).emissions
+    fitted = channel.reestimate(values, posterior).components
     assert torch.equal(
         fitted.named_parameters()["beta"],
         torch.tensor([one.beta for one in oracle], dtype=torch.float64),

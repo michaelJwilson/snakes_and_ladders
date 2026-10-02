@@ -350,8 +350,8 @@ def test_the_emission_pair_is_this_pair_under_per_observation_trials() -> None:
         family.log_density(observations, covariate),
         other.log_density(observations, covariate),
     )
-    ours = family.reestimate(observations, posterior, covariate).emissions
-    theirs = other.reestimate(observations, posterior, covariate).emissions
+    ours = family.reestimate(observations, posterior, covariate).components
+    theirs = other.reestimate(observations, posterior, covariate).components
     assert torch.equal(ours.alpha, theirs.successes.alpha)
     assert torch.equal(ours.beta, theirs.successes.beta)
     assert torch.equal(ours.total.mean, theirs.total.mean)

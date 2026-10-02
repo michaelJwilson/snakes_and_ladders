@@ -242,7 +242,7 @@ class IndependentCountPair(EmissionFamily):
             values[..., SUCCESSES], posterior, covariate=channels.trials
         )
         return Reestimate(
-            emissions=IndependentCountPair(first.emissions, second.emissions),
+            components=IndependentCountPair(first.components, second.components),
             converged=first.converged and second.converged,
             at_boundary=first.at_boundary or second.at_boundary,
             iterations=max(first.iterations, second.iterations),
@@ -430,7 +430,7 @@ class ReflectedEmission(EmissionFamily):
             else np.concatenate([conditioned, conditioned]),
         )
         return Reestimate(
-            ReflectedEmission(step.emissions),
+            ReflectedEmission(step.components),
             converged=step.converged,
             at_boundary=step.at_boundary,
             iterations=step.iterations,

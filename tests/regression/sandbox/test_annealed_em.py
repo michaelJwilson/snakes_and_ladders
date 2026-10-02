@@ -190,7 +190,7 @@ def test_a_hot_step_spreads_every_pair_evenly_and_fits_the_pooled_pairs(
     )
     assert pooled.converged
     for name, value in hot.components.named_parameters().items():
-        reference = pooled.emissions.named_parameters()[name].expand_as(value)
+        reference = pooled.components.named_parameters()[name].expand_as(value)
         # Measured: the widest relative difference is 0 on this draw, the
         # inner solve reading weights 1/K where the pooled one reads ones.
         assert_allclose(value.numpy(), reference.numpy(), rtol=1e-9, err_msg=name)

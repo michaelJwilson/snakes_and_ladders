@@ -87,7 +87,7 @@ def test_the_negative_binomial_m_step_is_the_fit_without_unobserved_totals() -> 
             data["posterior"][observed],
             data["exposure"][observed],
         )
-        _equal_parameters(masked.emissions, removed.emissions)
+        _equal_parameters(masked.components, removed.components)
         assert (masked.iterations, masked.at_boundary) == (
             removed.iterations,
             removed.at_boundary,
@@ -118,7 +118,7 @@ def test_unobserved_successes_score_log_one_and_fit_as_without_them() -> None:
             data["posterior"][observed],
             data["trials"][observed],
         )
-        _equal_parameters(masked.emissions, removed.emissions)
+        _equal_parameters(masked.components, removed.components)
 
     every_value(range(3), check)
 
@@ -150,7 +150,7 @@ def test_the_pair_masks_each_channel_on_its_own() -> None:
         scores[both], torch.zeros(int(both.sum()), 3, dtype=torch.float64)
     )
 
-    fitted = pair.reestimate(observations, data["posterior"], covariate).emissions
+    fitted = pair.reestimate(observations, data["posterior"], covariate).components
     has_total = data["exposure"][:, 0] > 0
     has_successes = data["trials"][:, 0] > 0
     alone_total = NegativeBinomialEmission(DISPERSION, MEAN).reestimate(
@@ -163,8 +163,8 @@ def test_the_pair_masks_each_channel_on_its_own() -> None:
         data["posterior"][has_successes],
         data["trials"][has_successes],
     )
-    _equal_parameters(fitted.total, alone_total.emissions)
-    _equal_parameters(fitted.successes, alone_successes.emissions)
+    _equal_parameters(fitted.total, alone_total.components)
+    _equal_parameters(fitted.successes, alone_successes.components)
 
 
 @pytest.mark.analytic
