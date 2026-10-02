@@ -59,7 +59,6 @@ from sal.opt.emission_mixture import (
     ComponentsAt,
     EmissionMixtureObjective,
     SeedMethod,
-    build_like,
     expectation_maximization,
     seed,
 )
@@ -228,7 +227,6 @@ def emission_objective(instance: MixtureInstance) -> EmissionMixtureObjective:
     return EmissionMixtureObjective(
         np.asarray(instance.observations, dtype=np.float64),
         start,
-        build_like(start),
         covariate=instance.covariate,
         gradient_on_distinct=True,
     )

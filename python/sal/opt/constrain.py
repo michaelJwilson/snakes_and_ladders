@@ -6,12 +6,19 @@ never sees a constrained quantity, because the feasible set is the image of
 the map.
 
 Nothing here knows what the parameters mean --- this is the vocabulary the
-phylogenetic, Potts and HMM objectives are all written in.
+phylogenetic, Potts and HMM objectives are all written in. A family names
+the set each of its parameters lives in as a
+:class:`~sal.emissions.base.Domain`, and :func:`constrained` and
+:func:`free_from` apply the map that value names (issue #1164).
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import torch
+
+from sal.emissions.base import Domain
 
 
 def log_simplex(free: torch.Tensor) -> torch.Tensor:
@@ -134,3 +141,97 @@ def free_from_probability(values: torch.Tensor) -> torch.Tensor:
         Unconstrained parameters satisfying ``probability(free) == values``.
     """
     return torch.log(values) - torch.log1p(-values)
+
+
+def real(free: torch.Tensor) -> torch.Tensor:
+    """Map unconstrained reals to the reals: the identity, so ``REAL`` names a map like every other domain.
+
+    Parameters
+    ----------
+    free : torch.Tensor
+        Unconstrained parameters, any shape.
+
+    Returns
+    -------
+    torch.Tensor
+        ``free`` itself.
+    """
+    return free
+
+
+def free_from_real(values: torch.Tensor) -> torch.Tensor:
+    """Invert :func:`real`.
+
+    Parameters
+    ----------
+    values : torch.Tensor
+        Real values, any shape.
+
+    Returns
+    -------
+    torch.Tensor
+        ``values`` itself.
+    """
+    return values
+
+
+type _Map = Callable[[torch.Tensor], torch.Tensor]
+
+#: Each domain's map from the free coordinates and its inverse.
+_MAPS: dict[Domain, tuple[_Map, _Map]] = {
+    Domain.REAL: (real, free_from_real),
+    Domain.POSITIVE: (positive, free_from_positive),
+    Domain.PROBABILITY: (probability, free_from_probability),
+    Domain.LOG_SIMPLEX: (log_simplex, free_from_log_simplex),
+}
+
+
+def constrained(domain: Domain, free: torch.Tensor) -> torch.Tensor:
+    """Map ``free`` onto ``domain`` by the map it names.
+
+    Parameters
+    ----------
+    domain : Domain
+        The set the result lives in.
+    free : torch.Tensor
+        Unconstrained parameters, shaped as :func:`free_shape` states.
+
+    Returns
+    -------
+    torch.Tensor
+    """
+    return _MAPS[domain][0](free)
+
+
+def free_from(domain: Domain, values: torch.Tensor) -> torch.Tensor:
+    """Invert :func:`constrained`.
+
+    Parameters
+    ----------
+    domain : Domain
+        The set ``values`` lives in.
+    values : torch.Tensor
+        Values in ``domain``.
+
+    Returns
+    -------
+    torch.Tensor
+        Unconstrained parameters satisfying ``constrained(domain, free) == values``
+        to rounding.
+    """
+    return _MAPS[domain][1](values)
+
+
+def free_shape(domain: Domain, shape: tuple[int, ...]) -> tuple[int, ...]:
+    """The shape of the free coordinates of a value of ``shape`` in ``domain``.
+
+    ``shape`` for every domain but :attr:`~Domain.LOG_SIMPLEX`, which pins
+    one logit per normalized row and so has one entry fewer on the last axis.
+
+    Returns
+    -------
+    tuple[int, ...]
+    """
+    if domain is Domain.LOG_SIMPLEX:
+        return (*shape[:-1], shape[-1] - 1)
+    return shape

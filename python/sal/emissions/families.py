@@ -14,12 +14,14 @@ import torch
 from numpy.typing import ArrayLike
 
 from sal.emissions.base import (
+    Domain,
     EmissionFamily,
     ParameterDomainError,
     Reestimate,
     Values,
     as_tensor,
     refuse_covariate,
+    require_parameter_names,
 )
 from sal.numerics import sample_rows
 
@@ -175,6 +177,25 @@ class CategoricalEmission(EmissionFamily):
     def named_parameters(self) -> Mapping[str, torch.Tensor]:
         """``log_emission``, the form the forward recursion consumes."""
         return {"log_emission": self._log_matrix}
+
+    def parameter_domains(self) -> Mapping[str, Domain]:
+        """``log_emission`` is a row of log-probabilities per state."""
+        return {"log_emission": Domain.LOG_SIMPLEX}
+
+    def with_parameters(self, named: Mapping[str, torch.Tensor]) -> CategoricalEmission:
+        """The family at ``log_emission``, built by :meth:`from_log`.
+
+        Handed this family's own log matrix, it keeps the probabilities stored
+        beside it, so a draw is the original's bit for bit; ``exp`` of the log
+        matrix moves the last bits a draw at a cell boundary reads.
+        """
+        require_parameter_names(self, named, ("log_emission",))
+        log_matrix = named["log_emission"]
+        if log_matrix is self._log_matrix:
+            family = CategoricalEmission.__new__(CategoricalEmission)
+            family._log_matrix, family._matrix = self._log_matrix, self._matrix
+            return family
+        return CategoricalEmission.from_log(log_matrix)
 
 
 class GaussianEmission(EmissionFamily):
@@ -440,6 +461,15 @@ class GaussianEmission(EmissionFamily):
     def named_parameters(self) -> Mapping[str, torch.Tensor]:
         """``mean`` and ``scale``, the parameters the model is stated in."""
         return {"mean": self._mean, "scale": self._scale}
+
+    def parameter_domains(self) -> Mapping[str, Domain]:
+        """``mean`` is real and ``scale`` positive."""
+        return {"mean": Domain.REAL, "scale": Domain.POSITIVE}
+
+    def with_parameters(self, named: Mapping[str, torch.Tensor]) -> GaussianEmission:
+        """The family at ``mean`` and ``scale``, its variance floor kept."""
+        require_parameter_names(self, named, ("mean", "scale"))
+        return GaussianEmission(named["mean"], named["scale"], self._variance_floor)
 
 
 def refuse_collapsed(variance: torch.Tensor, floor: float) -> None:

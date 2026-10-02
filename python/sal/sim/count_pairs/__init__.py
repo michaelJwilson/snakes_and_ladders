@@ -44,9 +44,11 @@ from sal import param_tree
 from sal.backend import Backend, twin
 from sal.emissions import (
     BetaBinomialEmission,
+    Domain,
     EmissionFamily,
     NegativeBinomialEmission,
     Reestimate,
+    require_parameter_names,
 )
 
 # The channel split moved to `emissions.base` so `emissions.CountPairEmission`
@@ -262,6 +264,33 @@ class IndependentCountPair(EmissionFamily):
             }
         )
 
+    def parameter_domains(self) -> Mapping[str, Domain]:
+        """Both channels' domains, named as :meth:`named_parameters` names them."""
+        return param_tree.named(
+            {
+                "total": dict(self._total.parameter_domains()),
+                "successes": dict(self._successes.parameter_domains()),
+            }
+        )
+
+    def with_parameters(
+        self, named: Mapping[str, torch.Tensor]
+    ) -> IndependentCountPair:
+        """Each channel rebuilt from its prefixed parameters, its constants kept."""
+        require_parameter_names(self, named, self.named_parameters())
+
+        def channel(prefix: str) -> dict[str, torch.Tensor]:
+            return {
+                name.removeprefix(prefix): value
+                for name, value in named.items()
+                if name.startswith(prefix)
+            }
+
+        return IndependentCountPair(
+            self._total.with_parameters(channel("total.")),
+            self._successes.with_parameters(channel("successes.")),
+        )
+
 
 type Reflectable = BetaBinomialEmission | IndependentCountPair
 
@@ -415,6 +444,14 @@ class ReflectedEmission(EmissionFamily):
     def named_parameters(self) -> Mapping[str, torch.Tensor]:
         """The base family's: the reflection adds no parameter."""
         return self._base.named_parameters()
+
+    def parameter_domains(self) -> Mapping[str, Domain]:
+        """The base family's."""
+        return self._base.parameter_domains()
+
+    def with_parameters(self, named: Mapping[str, torch.Tensor]) -> ReflectedEmission:
+        """The reflection of the base family rebuilt at ``named``."""
+        return ReflectedEmission(self._base.with_parameters(named))
 
 
 def _unfolded(base: Reflectable) -> Reflectable:
