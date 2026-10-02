@@ -126,6 +126,7 @@ def baum_welch_rectangular(
     iterations, converged = 0, False
     log_likelihood = previous
     at_boundary = False
+    frozen: set[int] = set()
     for iterations in range(1, config.max_iterations + 1):  # noqa: B007
         # --- E step: forward and backward messages in log space ----------
         emit = components.log_density(data, covariate=exposure)
@@ -180,6 +181,7 @@ def baum_welch_rectangular(
             raise ValueError(msg)
         components = step.emissions
         at_boundary = at_boundary or step.at_boundary
+        frozen.update(step.frozen)
 
         if abs(log_likelihood - previous) <= config.tolerance * abs(log_likelihood):
             converged = True
@@ -193,4 +195,6 @@ def baum_welch_rectangular(
         log_likelihood=log_likelihood,
         at_boundary=at_boundary,
         termination=Termination.after(iterations, converged=converged),
+        spent=iterations,
+        frozen=tuple(sorted(frozen)),
     )
