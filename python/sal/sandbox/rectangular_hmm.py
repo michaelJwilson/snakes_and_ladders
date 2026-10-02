@@ -87,9 +87,8 @@ def baum_welch_rectangular(
     ------
     ValueError
         If the family refuses its own re-estimate. A Gaussian family does so
-        when a state's variance reaches its floor, which is an approach to a
-        degenerate optimum rather than a convergence, and is reported as such
-        rather than clamped away.
+        when a state collapses only under ``on_collapse=Collapse.REFUSE``
+        (issue #1160).
     """
     data = torch.as_tensor(observations, dtype=components.observation_dtype)
     # The leading two axes are the sequence and the position. What follows them

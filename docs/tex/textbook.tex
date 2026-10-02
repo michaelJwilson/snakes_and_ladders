@@ -3369,8 +3369,10 @@ gradient fit at the same optimum, and its iterates monotone; the seeding cost
 against the exact dynamic programme, with the mean over seedings held to
 Equation~\ref{eq:kmeanspp-bound}; and recovery of the generating parameters
 up to the permutation of components, with the alignment part of the test. A
-component whose variance reaches the floor of Section~\ref{sec:properties}
-is a refusal, in either algorithm.
+component whose variance reaches the floor of Section~\ref{sec:properties},
+or whose posterior mass empties, is held at its last parameters and named in
+the fit, in either algorithm; a caller may ask for a clamp to the floor or a
+refusal instead.
 
 \paragraph{Split and merge.}
 A converged alternation can hold one component across two generating ones and
@@ -5367,8 +5369,9 @@ An \emph{unbounded} likelihood has no maximum to find: put a Gaussian
 component's mean on a single observation and let its variance go to zero and
 the density there diverges. A fit that converges there was stopped by its
 starting point or by a floor, and which one must be knowable---so the bound is
-explicit, derived from the data rather than chosen, and reaching it is a
-refusal rather than a clamp.
+explicit, derived from the data rather than chosen, and a component that
+reaches it is held at its last parameters and named in the result, never
+returned as though the fit were a clean optimum.
 
 A \emph{flat} likelihood has a maximum that runs to the boundary: an
 overdispersed count model approaches its Poisson limit as the dispersion grows,

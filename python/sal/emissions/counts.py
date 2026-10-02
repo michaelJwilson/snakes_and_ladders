@@ -17,6 +17,7 @@ from numpy.typing import ArrayLike
 from sal.backend import Backend
 from sal.emissions import mstep
 from sal.emissions.base import (
+    COLLAPSED_MASS,
     CountEmissionFamily,
     Domain,
     EmissionFamily,
@@ -26,10 +27,12 @@ from sal.emissions.base import (
     as_array,
     as_tensor,
     exposure,
+    marked_states,
     refuse_covariate,
     require_parameter_names,
     split_covariate,
     trial_count,
+    union_frozen,
     validated_exposure,
     validated_trials,
 )
@@ -55,22 +58,6 @@ from sal.emissions.rising import (
     scaled_rising,
     tracked,
 )
-
-#: Posterior mass, in effective observations, below which a state's M step has
-#: nothing to estimate from: the state keeps its parameters and is reported as
-#: frozen (issue #1136). An E step that empties a component leaves it about
-#: ``1e-13`` here, or exactly zero once the responsibilities underflow.
-COLLAPSED_MASS = 1e-8
-
-
-def _indices(mask: torch.Tensor) -> tuple[int, ...]:
-    """The states ``mask`` marks, in order."""
-    return tuple(int(i) for i in torch.nonzero(mask).reshape(-1).tolist())
-
-
-def _union(*frozen: tuple[int, ...]) -> tuple[int, ...]:
-    """The states any channel held, in order: a pair's state is held if either channel's was."""
-    return tuple(sorted(set().union(*frozen)))
 
 
 def _check_tied(tied: bool, name: str, values: torch.Tensor, rtol: float = 0.0) -> None:
@@ -443,7 +430,7 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
         # A state the E step has emptied, or that holds only zero counts, has
         # no mean or dispersion to estimate and its solve would refuse; it
         # keeps its parameters and is reported (issue #1136).
-        frozen = _indices(~live)
+        frozen = marked_states(~live)
         if not bool(live.any()):
             return Reestimate(self, frozen=frozen)
         part = NegativeBinomialEmission(
@@ -1144,7 +1131,7 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
         # An emptied state, or one whose posterior-weighted trial count is
         # below two, where a beta-binomial is a Bernoulli and no
         # concentration is identified, keeps its parameters (issue #1136).
-        frozen = _indices(~live)
+        frozen = marked_states(~live)
         if not bool(live.any()):
             return Reestimate(self, frozen=frozen)
         part = BetaBinomialEmission(
@@ -1633,7 +1620,7 @@ class CountPairEmission(EmissionFamily, CountEmissionFamily):
                 at_boundary=depth.at_boundary or rate.at_boundary,
                 iterations=max(depth.iterations, rate.iterations),
                 residual=max(depth.residual, rate.residual),
-                frozen=_union(depth.frozen, rate.frozen),
+                frozen=union_frozen(depth.frozen, rate.frozen),
             )
 
         # The joint form's trials are the totals, so the success channel's
@@ -1690,7 +1677,7 @@ class CountPairEmission(EmissionFamily, CountEmissionFamily):
             at_boundary=boundary,
             iterations=iterations,
             residual=residual,
-            frozen=_union(depth.frozen, _indices(~live)),
+            frozen=union_frozen(depth.frozen, marked_states(~live)),
         )
 
     def alignment_key(self) -> torch.Tensor:

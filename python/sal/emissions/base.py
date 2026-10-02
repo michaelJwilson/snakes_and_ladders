@@ -24,6 +24,24 @@ from numpy.typing import ArrayLike
 type Values = np.ndarray | torch.Tensor | Sequence[float] | Sequence[int]
 
 
+#: Posterior mass, in effective observations, below which a state's M step has
+#: nothing to estimate from: the state keeps its parameters and is reported as
+#: frozen (issue #1136). An E step that empties a component leaves it about
+#: ``1e-13`` here, or exactly zero once the responsibilities underflow. Shared
+#: by the count families and the Gaussian (issue #1160).
+COLLAPSED_MASS = 1e-8
+
+
+def marked_states(mask: torch.Tensor) -> tuple[int, ...]:
+    """The states ``mask`` marks, in order: the ``frozen`` a :class:`Reestimate` reports."""
+    return tuple(int(i) for i in torch.nonzero(mask).reshape(-1).tolist())
+
+
+def union_frozen(*frozen: tuple[int, ...]) -> tuple[int, ...]:
+    """The states any part held, in order: a state is held if any channel's was."""
+    return tuple(sorted(set().union(*frozen)))
+
+
 #: The family a re-estimate returns, so a caller of a concrete family's M step
 #: keeps that family's own parameters rather than the protocol's. Covariance is
 #: sound because the record is frozen: nothing can write the narrower field

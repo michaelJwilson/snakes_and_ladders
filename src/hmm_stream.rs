@@ -465,6 +465,9 @@ pub struct FamilyStep {
     pub mean: Vec<f64>,
     /// The variances.
     pub variance: Vec<f64>,
+    /// Each state's posterior mass, `sum gamma`: below `COLLAPSED_MASS` the
+    /// state has nothing to estimate from (issue #1160).
+    pub mass: Vec<f64>,
     pub log_likelihood: f64,
 }
 
@@ -541,18 +544,20 @@ pub fn gaussian_step(
         24 * m,
     )?;
     let (log_initial, log_transition) = chain_m_step(&counts, observations.len() / length);
-    let (mut new_mean, mut variance) = (vec![0.0; m], vec![0.0; m]);
+    let (mut new_mean, mut variance, mut mass) = (vec![0.0; m], vec![0.0; m], vec![0.0; m]);
     for state in 0..m {
         let s = &moments.sums[3 * state..][..3];
         let shift = s[1] / s[0];
         new_mean[state] = mean[state] + shift;
         variance[state] = s[2] / s[0] - shift * shift;
+        mass[state] = s[0];
     }
     Ok(FamilyStep {
         log_initial,
         log_transition,
         mean: new_mean,
         variance,
+        mass,
         log_likelihood: counts.log_likelihood,
     })
 }
@@ -1035,12 +1040,15 @@ type FamilyOut<'py> = (
     Bound<'py, PyArray1<f64>>,
     Bound<'py, PyArray1<f64>>,
     Bound<'py, PyArray1<f64>>,
+    Bound<'py, PyArray1<f64>>,
     f64,
 );
 
 /// One Gaussian Baum--Welch step; see `gaussian_step`.
 ///
-/// Returns `(log_initial, log_transition, mean, variance, log_likelihood)`.
+/// Returns `(log_initial, log_transition, mean, variance, mass,
+/// log_likelihood)`; `mass` is each state's posterior mass, which the caller
+/// reads to find a state the E step emptied (issue #1160).
 #[pyfunction]
 #[pyo3(signature = (observations, log_initial, log_transition, mean, scale))]
 pub fn gaussian_em_step<'py>(
@@ -1076,6 +1084,7 @@ pub fn gaussian_em_step<'py>(
         PyArray1::from_vec(py, step.log_transition),
         PyArray1::from_vec(py, step.mean),
         PyArray1::from_vec(py, step.variance),
+        PyArray1::from_vec(py, step.mass),
         step.log_likelihood,
     ))
 }
