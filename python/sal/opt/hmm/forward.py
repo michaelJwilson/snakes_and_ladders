@@ -2,7 +2,9 @@
 
 :func:`forward_messages` is the scaled forward pass on per-position
 emission densities over a padded batch, and
-:func:`forward_log_likelihood_from_density` its differentiable total; :func:`align_by_key` and its two wrappers
+:func:`forward_log_likelihood_from_density` its differentiable total;
+:func:`forward_log_likelihood_ragged` is the same total over segments of
+unequal length (issue #1167); :func:`align_by_key` and its two wrappers
 resolve the label switching the package docstring states.
 :class:`Posteriors` is the ragged E step's result: it is defined here, where
 ``opt`` can name it, and :mod:`sal.likelihood.ragged` re-exports it, since
@@ -12,7 +14,7 @@ submodule of :mod:`sal.opt.hmm`.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from itertools import permutations
 
@@ -272,16 +274,16 @@ def forward_messages(
     as the recursion :func:`forward_log_likelihood_from_density` carried before
     the per-step form was admitted (issue #653) --- the result is unchanged
     bitwise. Each step is the same elementwise sum and the same ``logsumexp``
-    whichever caller asks, and keeping the table copies each column after it is
-    computed, so the evidence on equal lengths is the same bitwise with or
+    whichever caller asks, and keeping the table stacks the columns after they
+    are computed, so the evidence on equal lengths is the same bitwise with or
     without ``final`` (``tests/regression/opt/test_opt_hmm_forward_messages.py``).
     """
     n, length = log_density.shape[0], log_density.shape[1]
     alpha = log_initial.unsqueeze(0) + log_density[:, 0]
-    table: torch.Tensor | None = None
-    if final is not None:
-        table = torch.empty((n, length, alpha.shape[1]), dtype=alpha.dtype)
-        table[:, 0] = alpha
+    # The columns are collected and stacked once rather than written into a
+    # preallocated table: a slice assignment is one autograd node per step
+    # whose backward copies the whole table, quadratic in `length` (#1167).
+    columns: list[torch.Tensor] | None = [alpha] if final is not None else None
     # Hoisted: the one-kernel form broadcasts the same `(1, m, m)` view at
     # every step.
     constant = kernels.unsqueeze(0) if kernels.ndim == 2 else None
@@ -293,8 +295,110 @@ def forward_messages(
         else:
             step = kernels[:, t - 1]
         alpha = torch.logsumexp(alpha.unsqueeze(2) + step, dim=1) + log_density[:, t]
-        if table is not None:
-            table[:, t] = alpha
-    if table is None or final is None:
+        if columns is not None:
+            columns.append(alpha)
+    if columns is None or final is None:
         return torch.logsumexp(alpha, dim=1), None
+    table = torch.stack(columns, dim=1)
     return torch.logsumexp(table[torch.arange(n), final], dim=1), table
+
+
+def forward_log_likelihood_ragged(
+    log_density: torch.Tensor,
+    lengths: Sequence[int],
+    log_initial: torch.Tensor,
+    log_transition: torch.Tensor,
+) -> torch.Tensor:
+    """Total log-likelihood over segments of unequal length, differentiable.
+
+    :func:`forward_log_likelihood_from_density` for a batch whose chains do
+    not share a length (issue #1167). Each segment restarts at
+    ``log_initial``, and no transition spans a boundary.
+
+    Parameters
+    ----------
+    log_density : torch.Tensor
+        Emission scores, shape ``(total, m)``: the segments end to end, in
+        :attr:`sal.ragged.Ragged.values` layout. A tensor rather than a
+        :class:`~sal.ragged.Ragged`, whose ``values`` is typed NumPy: a
+        tensor-holding ``Ragged`` would be a second reading of that type.
+    lengths : Sequence[int]
+        One length per segment, summing to ``total``, as
+        :func:`sal.oxisal.ragged_posteriors` takes them. Each is at least one:
+        the recursion admits a segment of one position, whose evidence is
+        ``logsumexp(log_initial + log_density[t])``.
+        :class:`~sal.ragged.Ragged` refuses fewer than
+        :data:`sal.ragged.MINIMUM_LENGTH`, so a caller building from one
+        never passes it.
+    log_initial : torch.Tensor
+        Log initial distribution, shape ``(m,)``.
+    log_transition : torch.Tensor
+        Log transition matrix, shape ``(m, m)``, one kernel for every step of
+        every segment.
+
+    Returns
+    -------
+    torch.Tensor
+        Scalar: the summed log evidence over segments, differentiable with
+        respect to all three tensors. Its gradient with respect to
+        ``log_density`` is the posterior marginal at every position (the
+        Fisher identity), in the same ``(total, m)`` layout.
+
+    Raises
+    ------
+    ValueError
+        If ``lengths`` is empty, holds a length below one or does not sum to
+        ``total``, or a tensor's shape disagrees with ``m``.
+
+    Notes
+    -----
+    The recursion is :func:`forward_messages`'s. The segments are scattered
+    into an ``(n, longest, m)`` block that scores log one at every padded
+    position, as the Baum--Welch E step masks it, and each segment's evidence
+    is gathered at its own last position through ``final``. Where every
+    length is equal the block is a reshape and ``final`` is not passed, so no
+    table is written and the result is
+    :func:`forward_log_likelihood_from_density`'s, bitwise.
+
+    The parameters after ``log_transition`` are reserved for the switched
+    step of :func:`sal.likelihood.ragged.posteriors`: ``switch`` and
+    ``switch_kind`` will be keyword-only when the switched recursion is
+    differentiated. Neither is implemented, so neither is accepted.
+    """
+    if log_density.ndim != 2:
+        msg = f"log_density {tuple(log_density.shape)} must be (total, m)"
+        raise ValueError(msg)
+    total, n_states = log_density.shape[0], log_density.shape[1]
+    sizes = [int(length) for length in lengths]
+    if not sizes or min(sizes) < 1 or sum(sizes) != total:
+        msg = (
+            f"lengths {sizes} must be at least one segment, each of at least "
+            f"one position, summing to the {total} rows of log_density"
+        )
+        raise ValueError(msg)
+    if tuple(log_transition.shape) != (n_states, n_states):
+        msg = (
+            f"log_transition {tuple(log_transition.shape)} must be "
+            f"({n_states}, {n_states})"
+        )
+        raise ValueError(msg)
+    if tuple(log_initial.shape) != (n_states,):
+        msg = f"log_initial {tuple(log_initial.shape)} must be ({n_states},)"
+        raise ValueError(msg)
+    n, longest = len(sizes), max(sizes)
+    if min(sizes) == longest:
+        block = log_density.reshape(n, longest, n_states)
+        evidence, _ = forward_messages(block, log_initial, log_transition)
+        return evidence.sum()
+    counts = torch.as_tensor(sizes, dtype=torch.long)
+    segment = torch.repeat_interleave(torch.arange(n), counts)
+    starts = torch.cumsum(counts, dim=0) - counts
+    position = torch.arange(total) - starts[segment]
+    # Log one at every padded position, so it adds nothing wherever the
+    # recursion reaches it; the scatter is out of place, so the gradient
+    # flows back to the live rows alone.
+    block = log_density.new_zeros((n, longest, n_states)).index_put(
+        (segment, position), log_density
+    )
+    evidence, _ = forward_messages(block, log_initial, log_transition, final=counts - 1)
+    return evidence.sum()
