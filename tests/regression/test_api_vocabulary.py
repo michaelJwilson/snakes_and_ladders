@@ -18,13 +18,23 @@ PACKAGE = Path(__file__).resolve().parents[2] / "python" / "sal"
 #: A key is read three ways: ``name`` is any public parameter or field;
 #: ``function(name)`` is one function's parameter, where ``name`` keeps another
 #: meaning elsewhere; ``.name`` is a method of any class, public or not.
-#: ``emissions`` stays a package and a parameters field (issue #1163).
+#: ``emissions`` stays a package and a parameters field (issue #1163). A
+#: ``__call__`` is public, as ``__init__`` is: a protocol's call is its
+#: signature (issue #1176).
 RETIRED = {
     "k": "n_states",
     "baum_welch_family(emissions)": "components",
     "baum_welch_rectangular(emissions)": "components",
     ".emissions": "components",
+    "viterbi(emissions)": "components",
+    "hmm_log_likelihood(emissions)": "components",
+    "compiled_family(emissions)": "components",
+    "normalizer(emissions)": "components",
+    "__call__(emissions)": "components",
 }
+
+#: The dunder methods a caller writes the parameters of.
+_PUBLIC_DUNDERS = ("__init__", "__call__")
 
 
 def _public_names(source: str) -> list[tuple[int, str]]:
@@ -32,7 +42,7 @@ def _public_names(source: str) -> list[tuple[int, str]]:
     found: list[tuple[int, str]] = []
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-            if node.name.startswith("_") and node.name != "__init__":
+            if node.name.startswith("_") and node.name not in _PUBLIC_DUNDERS:
                 continue
             arguments = node.args
             for argument in (
@@ -80,15 +90,19 @@ class _HmmObjective:
     def emissions(self, theta): ...
 class HmmParams:
     emissions: object
+class CovariateUpdate:
+    def __call__(self, emissions, posterior, covariate): ...
 """
     caught = sorted(
         (line, name) for line, name in _public_names(source) if name in RETIRED
     )
 
     # The function-scoped argument, the bare name and the method are caught;
-    # `simulate(emissions)` and the `emissions` field are the other meaning.
+    # `simulate(emissions)` and the `emissions` field are the other meaning;
+    # a protocol's `__call__` is public (issue #1176).
     assert caught == [
         (2, "baum_welch_family(emissions)"),
         (3, "k"),
         (5, ".emissions"),
+        (9, "__call__(emissions)"),
     ]
