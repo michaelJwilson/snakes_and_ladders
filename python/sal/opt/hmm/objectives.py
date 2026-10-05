@@ -1,9 +1,11 @@
 """The gradient-fit objectives: one ``Objective`` per emission family, its constraint map and starting point, and the metrics a tracked fit records.
 
-Each scores through
+Each per-family objective scores through
 :func:`~sal.opt.hmm.forward.forward_log_likelihood_from_density`
-and differentiates on the backend it is given. Imports
-:mod:`~sal.opt.hmm.forward` alone.
+and differentiates on the backend it is given;
+:class:`EmissionHmmObjective` serves any family on segments through
+:func:`~sal.opt.hmm.forward.forward_log_likelihood_ragged`. Imports
+:mod:`~sal.opt.hmm.forward` alone of this package.
 """
 
 from __future__ import annotations
@@ -30,6 +32,7 @@ from sal.emissions import (
     pooled_variance_floor,
 )
 from sal.opt.constrain import (
+    domain_blocks,
     free_from_log_simplex,
     free_from_positive,
     free_from_probability,
@@ -37,9 +40,13 @@ from sal.opt.constrain import (
     positive,
     probability,
 )
-from sal.opt.hmm.forward import forward_log_likelihood_from_density
+from sal.opt.hmm.forward import (
+    forward_log_likelihood_from_density,
+    forward_log_likelihood_ragged,
+)
 from sal.opt.initialize import quantile_locations
 from sal.opt.objective import Objective, autograd_value_and_gradient
+from sal.ragged import Ragged
 
 # How far apart the emission rows start, in unconstrained units. Large
 # enough to leave the stationary point, small enough not to preselect an
@@ -1012,6 +1019,247 @@ class NegativeBinomialHmmObjective(_HmmObjective):
                     }
                 ),
             ]
+        )
+
+
+class EmissionHmmObjective(Objective):
+    """Negative log-likelihood of an HMM over any emission family, on segments (issue #1169).
+
+    :class:`~sal.opt.emission_mixture.EmissionMixtureObjective` with the
+    weights replaced by a Markov chain: ``theta`` is the ``K - 1`` free
+    initial logits, then ``K`` rows of ``K - 1`` free transition logits, each
+    through :func:`~sal.opt.constrain.log_simplex` as the per-family
+    objectives map them, then each parameter the family names, through the
+    map its :meth:`~sal.emissions.EmissionFamily.parameter_domains` declares.
+    The family rebuilds itself from the named parameters
+    (:meth:`~sal.emissions.EmissionFamily.with_parameters`), so a joint count
+    pair is as reachable as a Gaussian. Each segment restarts at the initial
+    distribution, and no transition spans a boundary
+    (:func:`~sal.opt.hmm.forward.forward_log_likelihood_ragged`).
+
+    No parameter is held fixed here: :class:`~sal.opt.objective.Restricted`
+    over :attr:`blocks` does that (issue #1168).
+
+    Parameters
+    ----------
+    observations : Ragged | np.ndarray
+        The segments end to end with their lengths, or a rectangular
+        ``(n_sequences, length, ...)`` batch, read as equal-length segments
+        (:meth:`~sal.ragged.Ragged.from_rectangular`). Trailing axes are the
+        family's own: a count pair carries a channel axis of two.
+    start : EmissionFamily
+        The family :meth:`initial` starts at, with uniform initial and
+        transition probabilities; its
+        :meth:`~sal.emissions.EmissionFamily.named_parameters` name the
+        emission blocks of ``theta``, and its constants (a trial count, the
+        joint form, a variance floor) are every iterate's. A start whose
+        states are exchangeable is a stationary point (``opt/CLAUDE.md``),
+        so the caller breaks the symmetry, as a quantile start does.
+    covariate : np.ndarray | torch.Tensor | None
+        Per-observation covariate in the layout the family's ``log_density``
+        documents, aligned with ``observations``: ``(total, ...)`` beside a
+        :class:`~sal.ragged.Ragged`, ``(n_sequences, length, ...)`` beside a
+        rectangular batch. ``None`` scores without one.
+
+    Raises
+    ------
+    ValueError
+        If ``start`` has fewer than two states, a parameter lies outside its
+        domain, or the covariate does not align with the observations.
+    """
+
+    def __init__(
+        self,
+        observations: Ragged | np.ndarray,
+        start: EmissionFamily,
+        *,
+        covariate: np.ndarray | torch.Tensor | None = None,
+    ) -> None:
+        if start.n_states < 2:
+            msg = f"an HMM has at least two states, got {start.n_states}"
+            raise ValueError(msg)
+        leading = 1
+        if not isinstance(observations, Ragged):
+            observations = Ragged.from_rectangular(np.asarray(observations))
+            leading = 2
+        k = start.n_states
+        named = {
+            name: torch.as_tensor(value, dtype=torch.float64)
+            for name, value in start.named_parameters().items()
+        }
+        self._blocks_at = domain_blocks(named, start.parameter_domains(), k * k - 1)
+        self._n_parameters = max(
+            (block.stop for block in self._blocks_at.values()), default=k * k - 1
+        )
+        self._k = k
+        self._start = named
+        self._build = start.with_parameters
+        self._lengths = observations.lengths
+        self._lengths_array = np.asarray(self._lengths, dtype=np.int64)
+        self._first = torch.as_tensor(observations.offsets[:-1], dtype=torch.long)
+        self._observations = torch.as_tensor(
+            observations.values, dtype=start.observation_dtype
+        )
+        total = self._observations.shape[0]
+        self._covariate: torch.Tensor | None = None
+        if covariate is not None:
+            values = torch.as_tensor(covariate, dtype=torch.float64)
+            if values.dim() < leading or values.shape[:leading].numel() != total:
+                msg = (
+                    f"covariate {tuple(values.shape)} does not align with "
+                    f"{total} observations"
+                )
+                raise ValueError(msg)
+            self._covariate = values.reshape(total, *values.shape[leading:])
+
+    @property
+    def observations(self) -> torch.Tensor:
+        """The segments end to end, ``(total, ...)``, in the family's dtype."""
+        return self._observations
+
+    @property
+    def lengths(self) -> tuple[int, ...]:
+        """One length per segment."""
+        return self._lengths
+
+    @property
+    def covariate(self) -> torch.Tensor | None:
+        """The per-observation covariate, ``(total, ...)``, or ``None``."""
+        return self._covariate
+
+    @property
+    def n_states(self) -> int:
+        """``K``."""
+        return self._k
+
+    @property
+    def n_parameters(self) -> int:
+        """Length of ``theta``: ``K^2 - 1`` free chain values and each named parameter's free coordinates."""
+        return self._n_parameters
+
+    @property
+    def blocks(self) -> Mapping[str, slice]:
+        """Each named parameter's coordinates in ``theta`` (:class:`~sal.opt.objective.DeclaredBlocks`).
+
+        Keyed as :meth:`constrain` returns: the initial distribution, the
+        transition matrix, then each parameter the family names.
+        """
+        k = self._k
+        return {
+            "log_initial": slice(0, k - 1),
+            "log_transition": slice(k - 1, k * k - 1),
+            **{
+                name: slice(block.offset, block.stop)
+                for name, block in self._blocks_at.items()
+            },
+        }
+
+    def _chain(self, theta: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Log initial distribution and log transition matrix, from ``theta``."""
+        k = self._k
+        return (
+            log_simplex(theta[: k - 1]),
+            log_simplex(theta[k - 1 : k * k - 1].reshape(k, k - 1)),
+        )
+
+    def components(self, theta: torch.Tensor) -> EmissionFamily:
+        """The family ``theta`` encodes, differentiable in ``theta``."""
+        return self._build(
+            {name: block.read(theta) for name, block in self._blocks_at.items()}
+        )
+
+    def initial(self) -> torch.Tensor:
+        """Uniform initial and transition probabilities at ``start``'s parameters."""
+        k = self._k
+        uniform = -math.log(k)
+        return self.theta_from(
+            {
+                "log_initial": torch.full((k,), uniform, dtype=torch.float64),
+                "log_transition": torch.full((k, k), uniform, dtype=torch.float64),
+                **self._start,
+            }
+        )
+
+    def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
+        """The log initial distribution, the log transitions and every named parameter."""
+        log_initial, log_transition = self._chain(theta)
+        return {
+            "log_initial": log_initial,
+            "log_transition": log_transition,
+            **self.components(theta).named_parameters(),
+        }
+
+    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        """The unconstrained vector whose :meth:`constrain` is ``named``."""
+        parts = [
+            free_from_log_simplex(torch.as_tensor(named["log_initial"])),
+            free_from_log_simplex(torch.as_tensor(named["log_transition"])).reshape(-1),
+        ]
+        parts.extend(
+            block.free_of(named[name]) for name, block in self._blocks_at.items()
+        )
+        return torch.cat([part.to(torch.float64) for part in parts])
+
+    def _log_density(self, theta: torch.Tensor) -> torch.Tensor:
+        """Every observation scored under every state, ``(total, K)``."""
+        return self.components(theta).log_density(
+            self._observations, covariate=self._covariate
+        )
+
+    def __call__(self, theta: torch.Tensor) -> torch.Tensor:
+        """The negative log-likelihood summed over segments, by the differentiable forward recursion."""
+        log_initial, log_transition = self._chain(theta)
+        return -forward_log_likelihood_ragged(
+            self._log_density(theta), self._lengths, log_initial, log_transition
+        )
+
+    def value_and_gradient(
+        self, theta: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """``(U(theta), dU/dtheta)``, detached: the compiled E step, then one backward pass (issue #1169).
+
+        ``oxisal.ragged_posteriors`` returns the log marginals ``gamma``, the
+        log transition counts ``xi`` summed over segments and each segment's
+        log evidence, with no graph. By Fisher's identity the score of the
+        log-likelihood is the posterior expectation of the complete-data
+        score, so with ``gamma``, ``xi`` and the first-position marginals
+        ``gamma_0`` held at their values at ``theta``,
+
+        ``d log L / d theta = d/d theta [sum gamma log p(x | z)
+        + sum xi log A + sum gamma_0 log pi]``,
+
+        one autograd pass through the emission and the two simplex maps,
+        none through the recursion. The value is the summed log evidence,
+        negated. Autograd through :meth:`__call__` is the oracle this is
+        pinned to.
+        """
+        point = theta.detach().clone().requires_grad_(True)
+        log_initial, log_transition = self._chain(point)
+        log_density = self._log_density(point)
+        m = self._k
+        values = np.ascontiguousarray(log_density.detach().numpy(), dtype=np.float64)
+        gamma = np.empty_like(values)
+        counts = np.empty((m, m), dtype=np.float64)
+        evidence = np.empty(len(self._lengths), dtype=np.float64)
+        oxisal.ragged_posteriors(
+            values,
+            self._lengths_array,
+            np.ascontiguousarray(log_initial.detach().numpy(), dtype=np.float64),
+            np.ascontiguousarray(log_transition.detach().numpy(), dtype=np.float64),
+            gamma,
+            counts,
+            evidence,
+        )
+        posterior = torch.from_numpy(np.exp(gamma))
+        surrogate = (
+            (posterior * log_density).sum()
+            + (torch.from_numpy(np.exp(counts)) * log_transition).sum()
+            + (posterior[self._first].sum(dim=0) * log_initial).sum()
+        )
+        (derivative,) = torch.autograd.grad(surrogate, point)
+        return (
+            torch.tensor(-float(evidence.sum()), dtype=torch.float64),
+            -derivative,
         )
 
 
