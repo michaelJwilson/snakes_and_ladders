@@ -11,12 +11,20 @@
 //! distribution, `beta` at one --- and the pair spanning a boundary is not
 //! counted as a transition, because the model never took it.
 //!
+//! The segments are independent given the parameters, so they run in
+//! parallel over `rayon` (issue #1191), cut into blocks by their lengths
+//! alone; the transition counts are summed within a block and then across
+//! blocks in order, so the result is the same, bitwise, at every thread count.
+//!
 //! Plain Rust with no PyO3 types in `ragged_posteriors_into`, so `cargo test`
 //! can link it, per `src/pruning.rs`'s module docs.
 
 use numpy::{PyReadonlyArray1, PyReadonlyArray2, PyReadwriteArray1, PyReadwriteArray2};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use rayon::prelude::*;
+
+use crate::maxflow::on_pool;
 
 /// `ln(exp(a) + exp(b))`, stable and with the `-inf` case exact.
 #[inline]
@@ -311,6 +319,209 @@ pub(crate) fn check_inputs(
     Ok(())
 }
 
+/// Blocks of consecutive segments the work is cut into (issue #1191).
+///
+/// A constant, so the cut, and with it the order the transition counts are
+/// summed in, is a function of the lengths alone and never of the thread count.
+pub const BLOCKS: usize = 64;
+
+/// The segment ranges of the blocks: consecutive, in segment order, each
+/// closed once it holds `ceil(total / BLOCKS)` positions, so at most
+/// [`BLOCKS`] of them and each about as long as the next.
+fn cut_blocks(lengths: &[usize]) -> Vec<std::ops::Range<usize>> {
+    let total: usize = lengths.iter().sum();
+    let target = total.div_ceil(BLOCKS).max(1);
+    let mut ranges = Vec::with_capacity(BLOCKS.min(lengths.len()));
+    let (mut first, mut held) = (0_usize, 0_usize);
+    for (segment, &length) in lengths.iter().enumerate() {
+        held += length;
+        if held >= target {
+            ranges.push(first..segment + 1);
+            (first, held) = (segment + 1, 0);
+        }
+    }
+    if first < lengths.len() {
+        ranges.push(first..lengths.len());
+    }
+    ranges
+}
+
+/// One thread's buffers, reused across the blocks it runs.
+struct Workspace {
+    alpha: Vec<f64>,
+    previous: Vec<f64>,
+    forward: Vec<f64>,
+    beta: Vec<f64>,
+    ahead: Vec<f64>,
+    switched: Vec<f64>,
+    scratch: Vec<f64>,
+}
+
+impl Workspace {
+    fn new(n_states: usize, switched: bool, kronecker: bool) -> Self {
+        Self {
+            alpha: vec![0.0; n_states],
+            previous: vec![0.0; n_states],
+            forward: Vec::new(),
+            beta: vec![0.0; n_states],
+            ahead: vec![0.0; n_states],
+            switched: vec![0.0; if switched { n_states * n_states } else { 0 }],
+            scratch: vec![0.0; if kronecker { n_states } else { 0 }],
+        }
+    }
+}
+
+/// The inputs every block reads and none writes.
+struct Shared<'a> {
+    log_density: &'a [f64],
+    n_states: usize,
+    log_initial: &'a [f64],
+    log_transition: &'a [f64],
+    probability: &'a [f64],
+    switch: &'a [f64],
+    kind: SwitchKind,
+}
+
+/// One block's segments, in order: the serial recursion, with the counts
+/// summed into the block's own `counts` from `-inf`.
+///
+/// `first` is the block's first position; `gamma` and `evidence` are the
+/// block's own slices.
+fn posteriors_block(
+    shared: &Shared<'_>,
+    lengths: &[usize],
+    first: usize,
+    gamma: &mut [f64],
+    counts: &mut [f64],
+    evidence: &mut [f64],
+    work: &mut Workspace,
+) {
+    let Shared {
+        log_density,
+        n_states,
+        log_initial,
+        log_transition,
+        probability,
+        switch,
+        kind,
+    } = *shared;
+    let kronecker = kind != SwitchKind::StayOrMove;
+    let slow = n_states / 2;
+    let step_at = |position: usize| {
+        KroneckerStep::at(
+            log_transition,
+            slow,
+            kind == SwitchKind::KroneckerDiagonal,
+            switch[position],
+        )
+    };
+    let Workspace {
+        alpha,
+        previous,
+        forward,
+        beta,
+        ahead,
+        switched,
+        scratch,
+    } = work;
+
+    counts.fill(f64::NEG_INFINITY);
+    let mut start = first;
+    for (segment, &length) in lengths.iter().enumerate() {
+        let base = start * n_states;
+        let local = (start - first) * n_states;
+        forward.clear();
+        forward.resize(length * n_states, 0.0);
+
+        // Forward: the chain restarts here, at the prior and not at a kernel.
+        for state in 0..n_states {
+            alpha[state] = log_initial[state] + log_density[base + state];
+            forward[state] = alpha[state];
+        }
+        for step in 1..length {
+            previous.copy_from_slice(alpha);
+            if kronecker {
+                step_at(start + step).forward(previous, scratch, alpha);
+                for state in 0..n_states {
+                    alpha[state] += log_density[base + step * n_states + state];
+                    forward[step * n_states + state] = alpha[state];
+                }
+                continue;
+            }
+            let kernel = step_kernel(
+                log_transition,
+                probability,
+                switch,
+                start + step,
+                n_states,
+                switched,
+            );
+            for state in 0..n_states {
+                let mut carried = f64::NEG_INFINITY;
+                for from in 0..n_states {
+                    carried = log_add(carried, previous[from] + kernel[from * n_states + state]);
+                }
+                alpha[state] = carried + log_density[base + step * n_states + state];
+                forward[step * n_states + state] = alpha[state];
+            }
+        }
+        let total_evidence = log_sum(alpha);
+        evidence[segment] = total_evidence;
+
+        // Backward, and the pair counts as it goes. `beta` is one at the last
+        // position: the chain ends, it does not continue into the next segment.
+        beta.fill(0.0);
+        for state in 0..n_states {
+            gamma[local + (length - 1) * n_states + state] =
+                forward[(length - 1) * n_states + state] - total_evidence;
+        }
+        for step in (0..length - 1).rev() {
+            let next = base + (step + 1) * n_states;
+            for state in 0..n_states {
+                ahead[state] = log_density[next + state] + beta[state];
+            }
+            if kronecker {
+                let factors = step_at(start + step + 1);
+                factors.backward(ahead, scratch, beta);
+                for from in 0..n_states {
+                    let row = from * n_states;
+                    for to in 0..n_states {
+                        let pair =
+                            forward[step * n_states + from] + factors.entry(from, to) + ahead[to]
+                                - total_evidence;
+                        counts[row + to] = log_add(counts[row + to], pair);
+                    }
+                    gamma[local + step * n_states + from] =
+                        forward[step * n_states + from] + beta[from] - total_evidence;
+                }
+                continue;
+            }
+            let kernel = step_kernel(
+                log_transition,
+                probability,
+                switch,
+                start + step + 1,
+                n_states,
+                switched,
+            );
+            for from in 0..n_states {
+                let row = from * n_states;
+                let mut carried = f64::NEG_INFINITY;
+                for to in 0..n_states {
+                    let pair = forward[step * n_states + from] + kernel[row + to] + ahead[to]
+                        - total_evidence;
+                    counts[row + to] = log_add(counts[row + to], pair);
+                    carried = log_add(carried, kernel[row + to] + ahead[to]);
+                }
+                beta[from] = carried;
+                gamma[local + step * n_states + from] =
+                    forward[step * n_states + from] + carried - total_evidence;
+            }
+        }
+        start += length;
+    }
+}
+
 /// Posterior marginals, transition counts and evidence, segment by segment.
 ///
 /// # Parameters
@@ -331,6 +542,18 @@ pub(crate) fn check_inputs(
 ///   `log_transition` is the slow chain's `K x K`, and `switch` is required;
 ///   the step is taken in its factors, and `counts` are over the `2 K`
 ///   states, the matrix's own.
+///
+/// # Threads
+/// Segments are independent given the parameters, so the blocks
+/// [`cut_blocks`] makes run over `rayon`'s current pool, each writing its own
+/// slices of `gamma` and `evidence` and its own partial counts (issue #1191).
+/// Within a block the counts are summed position by position, segment by
+/// segment, as the serial kernel sums them; the block partials are then
+/// summed in block order. The cut depends on `lengths` alone, so every output
+/// is the same, bitwise, at every thread count. Against the kernel before
+/// #1191, which summed every pair into one accumulator, `gamma` and
+/// `evidence` are unchanged bitwise and `counts` move by the rounding of the
+/// regrouped sum; with one segment, one block, they too are unchanged.
 ///
 /// # Returns
 /// `Ok(())`, or `Err` naming the first violated precondition.
@@ -359,132 +582,57 @@ pub fn ragged_posteriors_into(
     if gamma.len() != log_density.len() || evidence.len() != lengths.len() {
         return Err("gamma and evidence must match the segments they describe".to_string());
     }
+    if counts.len() != n_states * n_states {
+        return Err(format!(
+            "counts has {} entries for {} states",
+            counts.len(),
+            n_states
+        ));
+    }
     let kronecker = kind != SwitchKind::StayOrMove;
-    let slow = n_states / 2;
+    let switched = !switch.is_empty() && !kronecker;
     // The transition in probability space, read by every switched step; the
     // unswitched path reads `log_transition` itself and is unchanged.
-    let probability: Vec<f64> = if switch.is_empty() || kronecker {
-        Vec::new()
-    } else {
+    let probability: Vec<f64> = if switched {
         log_transition.iter().map(|&one| one.exp()).collect()
+    } else {
+        Vec::new()
     };
-    let mut switched = vec![
-        0.0_f64;
-        if switch.is_empty() || kronecker {
-            0
-        } else {
-            n_states * n_states
-        }
-    ];
-    let mut scratch = vec![0.0_f64; if kronecker { n_states } else { 0 }];
-    let step_at = |position: usize| {
-        KroneckerStep::at(
-            log_transition,
-            slow,
-            kind == SwitchKind::KroneckerDiagonal,
-            switch[position],
-        )
+    let shared = Shared {
+        log_density,
+        n_states,
+        log_initial,
+        log_transition,
+        probability: &probability,
+        switch,
+        kind,
     };
 
+    // Each block's disjoint slices of `gamma` and `evidence`, and its partial counts.
+    let ranges = cut_blocks(lengths);
+    let square = n_states * n_states;
+    let mut partials = vec![f64::NEG_INFINITY; ranges.len() * square];
+    let mut blocks = Vec::with_capacity(ranges.len());
+    let (mut rest_gamma, mut rest_evidence, mut first) = (gamma, evidence, 0_usize);
+    for (range, partial) in ranges.iter().zip(partials.chunks_mut(square)) {
+        let held: usize = lengths[range.clone()].iter().sum();
+        let (head, tail) = rest_gamma.split_at_mut(held * n_states);
+        let (ev_head, ev_tail) = rest_evidence.split_at_mut(range.len());
+        blocks.push((&lengths[range.clone()], first, head, partial, ev_head));
+        (rest_gamma, rest_evidence, first) = (tail, ev_tail, first + held);
+    }
+    blocks.into_par_iter().for_each_init(
+        || Workspace::new(n_states, switched, kronecker),
+        |work, (widths, first, gamma, partial, evidence)| {
+            posteriors_block(&shared, widths, first, gamma, partial, evidence, work);
+        },
+    );
+    // The partials in block order: the first is copied, as `log_add(-inf, x)` is `x`.
     counts.fill(f64::NEG_INFINITY);
-    let mut alpha = vec![0.0_f64; n_states];
-    let mut previous = vec![0.0_f64; n_states];
-    let mut forward = Vec::<f64>::new();
-    let mut beta = vec![0.0_f64; n_states];
-    let mut ahead = vec![0.0_f64; n_states];
-
-    let mut start = 0_usize;
-    for (segment, &length) in lengths.iter().enumerate() {
-        let base = start * n_states;
-        forward.clear();
-        forward.resize(length * n_states, 0.0);
-
-        // Forward: the chain restarts here, at the prior and not at a kernel.
-        for state in 0..n_states {
-            alpha[state] = log_initial[state] + log_density[base + state];
-            forward[state] = alpha[state];
+    for partial in partials.chunks(square) {
+        for (total, &one) in counts.iter_mut().zip(partial) {
+            *total = log_add(*total, one);
         }
-        for step in 1..length {
-            previous.copy_from_slice(&alpha);
-            if kronecker {
-                step_at(start + step).forward(&previous, &mut scratch, &mut alpha);
-                for state in 0..n_states {
-                    alpha[state] += log_density[base + step * n_states + state];
-                    forward[step * n_states + state] = alpha[state];
-                }
-                continue;
-            }
-            let kernel = step_kernel(
-                log_transition,
-                &probability,
-                switch,
-                start + step,
-                n_states,
-                &mut switched,
-            );
-            for state in 0..n_states {
-                let mut carried = f64::NEG_INFINITY;
-                for from in 0..n_states {
-                    carried = log_add(carried, previous[from] + kernel[from * n_states + state]);
-                }
-                alpha[state] = carried + log_density[base + step * n_states + state];
-                forward[step * n_states + state] = alpha[state];
-            }
-        }
-        let total_evidence = log_sum(&alpha);
-        evidence[segment] = total_evidence;
-
-        // Backward, and the pair counts as it goes. `beta` is one at the last
-        // position: the chain ends, it does not continue into the next segment.
-        beta.fill(0.0);
-        for state in 0..n_states {
-            gamma[base + (length - 1) * n_states + state] =
-                forward[(length - 1) * n_states + state] - total_evidence;
-        }
-        for step in (0..length - 1).rev() {
-            let next = base + (step + 1) * n_states;
-            for state in 0..n_states {
-                ahead[state] = log_density[next + state] + beta[state];
-            }
-            if kronecker {
-                let factors = step_at(start + step + 1);
-                factors.backward(&ahead, &mut scratch, &mut beta);
-                for from in 0..n_states {
-                    let row = from * n_states;
-                    for to in 0..n_states {
-                        let pair =
-                            forward[step * n_states + from] + factors.entry(from, to) + ahead[to]
-                                - total_evidence;
-                        counts[row + to] = log_add(counts[row + to], pair);
-                    }
-                    gamma[base + step * n_states + from] =
-                        forward[step * n_states + from] + beta[from] - total_evidence;
-                }
-                continue;
-            }
-            let kernel = step_kernel(
-                log_transition,
-                &probability,
-                switch,
-                start + step + 1,
-                n_states,
-                &mut switched,
-            );
-            for from in 0..n_states {
-                let row = from * n_states;
-                let mut carried = f64::NEG_INFINITY;
-                for to in 0..n_states {
-                    let pair = forward[step * n_states + from] + kernel[row + to] + ahead[to]
-                        - total_evidence;
-                    counts[row + to] = log_add(counts[row + to], pair);
-                    carried = log_add(carried, kernel[row + to] + ahead[to]);
-                }
-                beta[from] = carried;
-                gamma[base + step * n_states + from] =
-                    forward[step * n_states + from] + carried - total_evidence;
-            }
-        }
-        start += length;
     }
     Ok(())
 }
@@ -492,11 +640,13 @@ pub fn ragged_posteriors_into(
 /// PyO3 wrapper over [`ragged_posteriors_into`]; converts `Err` to `ValueError`.
 ///
 /// The recursion touches no Python object, so it runs with the GIL released
-/// and a thread pool runs segments' batches at once (#604, #1059).
+/// and a thread pool runs segments' batches at once (#604, #1059). Its blocks
+/// run on `rayon`'s global pool, or on a pool of `threads` when given, as
+/// `ising_ground_states` takes it; the result is the same at every count (#1191).
 #[allow(clippy::too_many_arguments)]
 #[pyfunction]
 #[pyo3(name = "ragged_posteriors")]
-#[pyo3(signature = (log_density, lengths, log_initial, log_transition, gamma, counts, evidence, switch = None, switch_kind = "stay_or_move"))]
+#[pyo3(signature = (log_density, lengths, log_initial, log_transition, gamma, counts, evidence, switch = None, switch_kind = "stay_or_move", threads = None))]
 pub fn ragged_posteriors(
     py: Python<'_>,
     log_density: PyReadonlyArray2<f64>,
@@ -508,6 +658,7 @@ pub fn ragged_posteriors(
     mut evidence: PyReadwriteArray1<f64>,
     switch: Option<PyReadonlyArray1<f64>>,
     switch_kind: &str,
+    threads: Option<usize>,
 ) -> PyResult<()> {
     let kind = SwitchKind::parse(switch_kind).map_err(PyValueError::new_err)?;
     let density = log_density.as_slice()?;
@@ -528,9 +679,12 @@ pub fn ragged_posteriors(
         None => &[],
     };
     py.detach(|| {
-        ragged_posteriors_into(
-            density, n_states, &widths, initial, transition, gamma, counts, evidence, switch, kind,
-        )
+        on_pool(threads, || {
+            ragged_posteriors_into(
+                density, n_states, &widths, initial, transition, gamma, counts, evidence, switch,
+                kind,
+            )
+        })
     })
     .map_err(PyValueError::new_err)
 }
@@ -569,6 +723,74 @@ mod tests {
         }
         for one in &gamma {
             assert!((one - (0.5_f64).ln()).abs() < 1e-12, "gamma {one}");
+        }
+    }
+
+    /// The blocks cover the segments in order, at most [`BLOCKS`] of them.
+    #[test]
+    fn the_blocks_cover_the_segments_in_order() {
+        let lengths: Vec<usize> = (0..700).map(|one| 2 + (one * 37) % 400).collect();
+        let ranges = cut_blocks(&lengths);
+        assert!(ranges.len() <= BLOCKS, "{}", ranges.len());
+        assert_eq!(ranges[0].start, 0);
+        assert_eq!(ranges[ranges.len() - 1].end, lengths.len());
+        for pair in ranges.windows(2) {
+            assert_eq!(pair[0].end, pair[1].start);
+        }
+        assert_eq!(cut_blocks(&[5]), vec![0..1]);
+    }
+
+    /// Every output is the same, bitwise, on pools of one to eight threads.
+    #[test]
+    fn every_thread_count_returns_the_same_bits() {
+        let lengths: Vec<usize> = (0..300).map(|one| 2 + (one * 53) % 90).collect();
+        let total: usize = lengths.iter().sum();
+        let n = 4;
+        let density: Vec<f64> = (0..total * n)
+            .map(|one| -(((one * 7919) % 101) as f64) / 37.0)
+            .collect();
+        let initial = vec![(0.25_f64).ln(); n];
+        let transition: Vec<f64> = (0..n * n)
+            .map(|one| ((1 + one % 5) as f64 / 15.0).ln())
+            .collect();
+        let run = |threads: usize| {
+            let (mut gamma, mut counts) = (vec![0.0; total * n], vec![0.0; n * n]);
+            let mut evidence = vec![0.0; lengths.len()];
+            on_pool(Some(threads), || {
+                ragged_posteriors_into(
+                    &density,
+                    n,
+                    &lengths,
+                    &initial,
+                    &transition,
+                    &mut gamma,
+                    &mut counts,
+                    &mut evidence,
+                    &[],
+                    SwitchKind::StayOrMove,
+                )
+            })
+            .unwrap();
+            (gamma, counts, evidence)
+        };
+        let one = run(1);
+        for threads in [2, 4, 8] {
+            let other = run(threads);
+            assert!(one
+                .0
+                .iter()
+                .zip(&other.0)
+                .all(|(a, b)| a.to_bits() == b.to_bits()));
+            assert!(one
+                .1
+                .iter()
+                .zip(&other.1)
+                .all(|(a, b)| a.to_bits() == b.to_bits()));
+            assert!(one
+                .2
+                .iter()
+                .zip(&other.2)
+                .all(|(a, b)| a.to_bits() == b.to_bits()));
         }
     }
 
