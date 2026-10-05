@@ -498,6 +498,9 @@ whether or not it has members yet.
 .. automodule:: sal.search.potts_starts
    :members:
 
+.. automodule:: sal.search.hmm_starts
+   :members:
+
 .. automodule:: sal.search.ground_state
    :members:
 
