@@ -133,12 +133,12 @@ def test_the_kernel_takes_a_trial_count_per_component() -> None:
 def test_the_m_step_backend_selects_the_route(monkeypatch: pytest.MonkeyPatch) -> None:
     values, posterior, truth = _mixture("ci")
     assert emissions.M_STEP_BACKEND is Backend.RUST
-    compiled = truth.reestimate(values, posterior).emissions
+    compiled = truth.reestimate(values, posterior).components
     monkeypatch.setattr(emissions, "M_STEP_BACKEND", Backend.PYTHON)
     # The package forwards the setting to the module that reads it (#1010);
     # a copy would leave the solves compiled and compare them to themselves.
     assert mstep.M_STEP_BACKEND is Backend.PYTHON
-    batched = truth.reestimate(values, posterior).emissions
+    batched = truth.reestimate(values, posterior).components
     for name, tensor in compiled.named_parameters().items():
         reference = batched.named_parameters()[name]
         assert float(((tensor - reference).abs() / reference.abs()).max()) < FLOOR

@@ -192,7 +192,11 @@ def annealed_expectation_maximization(
             )
             raise ValueError(msg)
         boundary = boundary or reestimated.at_boundary
-        return (posterior.mean(dim=0), reestimated.emissions, posterior), log_likelihood
+        return (
+            posterior.mean(dim=0),
+            reestimated.components,
+            posterior,
+        ), log_likelihood
 
     start = (
         weights,

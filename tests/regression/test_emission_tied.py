@@ -119,7 +119,7 @@ def test_the_tied_dispersion_maximizes_the_likelihood() -> None:
         counts, posterior = data["counts"], data["posterior"]
         assert counts is not None
         assert posterior is not None
-        fitted = _nb_start().reestimate(counts, posterior, data["exposure"]).emissions
+        fitted = _nb_start().reestimate(counts, posterior, data["exposure"]).components
         assert fitted.tied
         assert bool((fitted.dispersion == fitted.dispersion[0]).all())
 
@@ -147,7 +147,7 @@ def test_the_tied_concentration_maximizes_the_likelihood() -> None:
     # maximized through `log_density` by L-BFGS-B.
     data = _successes(1)
     successes, posterior = data["successes"], data["posterior"]
-    fitted = _bb_start().reestimate(successes, posterior).emissions
+    fitted = _bb_start().reestimate(successes, posterior).components
     assert fitted.tied
 
     def negative(point: np.ndarray) -> float:
@@ -190,13 +190,15 @@ def test_a_planted_shared_dispersion_and_concentration_are_recovered() -> None:
     assert counts is not None
     assert posterior is not None
     dispersion = (
-        _nb_start().reestimate(counts, posterior, data["exposure"]).emissions.dispersion
+        _nb_start()
+        .reestimate(counts, posterior, data["exposure"])
+        .components.dispersion
     )
     assert abs(float(dispersion[0]) - 3.0) / 3.0 < 0.1
     beta_binomial = _successes(2)
     planted = beta_binomial["posterior"]
     planted = (planted == planted.max(dim=1, keepdim=True).values).double()
-    fitted = _bb_start().reestimate(beta_binomial["successes"], planted).emissions
+    fitted = _bb_start().reestimate(beta_binomial["successes"], planted).components
     assert abs(float((fitted.alpha + fitted.beta)[0]) - 12.0) / 12.0 < 0.1
 
 
@@ -210,10 +212,10 @@ def test_the_tie_is_carried_by_the_pair_and_refused_when_broken() -> None:
     observations = torch.stack(
         [counts, torch.minimum(counts, torch.tensor(40.0))], dim=-1
     )
-    fitted = pair.reestimate(observations, posterior).emissions
+    fitted = pair.reestimate(observations, posterior).components
     assert fitted.total.tied
     assert fitted.successes.tied
-    assert not _nb_start(tied=False).reestimate(counts, posterior).emissions.tied
+    assert not _nb_start(tied=False).reestimate(counts, posterior).components.tied
     with pytest.raises(ValueError, match="tied dispersion"):
         NegativeBinomialEmission([1.0, 2.0], [1.0, 1.0], tied=True)
     with pytest.raises(ValueError, match="tied concentration"):
@@ -233,7 +235,7 @@ def test_the_untied_dispersion_under_a_varying_exposure_maximizes_the_likelihood
     assert counts is not None
     assert posterior is not None
     fitted = (
-        _nb_start(tied=False).reestimate(counts, posterior, data["exposure"]).emissions
+        _nb_start(tied=False).reestimate(counts, posterior, data["exposure"]).components
     )
     for state in range(3):
 

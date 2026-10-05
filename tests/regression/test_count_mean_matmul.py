@@ -49,7 +49,7 @@ def test_the_binomial_rate_is_the_elementwise_one_to_the_declared_tolerance(
     trials = torch.full((N_STATES,), 20.0, dtype=torch.float64)
     family = BinomialEmission(trials, torch.full((N_STATES,), 0.4, dtype=torch.float64))
 
-    fitted = family.reestimate(counts, posterior).emissions
+    fitted = family.reestimate(counts, posterior).components
 
     assert torch.allclose(
         fitted.mean,
@@ -70,7 +70,7 @@ def test_the_difference_is_inside_the_floor_and_not_merely_under_it(
     family = PoissonEmission(torch.full((N_STATES,), 4.0, dtype=torch.float64))
     reference = _elementwise_mean(counts, posterior)
 
-    fitted = family.reestimate(counts, posterior).emissions
+    fitted = family.reestimate(counts, posterior).components
     moved = float(((fitted.mean - reference).abs() / reference.abs()).max())
 
     assert moved < 0.001 * CROSS_DEVICE_RTOL_FLOAT64, (

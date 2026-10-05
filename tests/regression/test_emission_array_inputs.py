@@ -116,7 +116,7 @@ def _bytes(step: Reestimate[EmissionFamily]) -> dict[str, bytes]:
     """Every returned parameter and record field, as the bytes compared."""
     named = {
         name: value.detach().numpy().tobytes()
-        for name, value in step.emissions.named_parameters().items()
+        for name, value in step.components.named_parameters().items()
     }
     named["record"] = np.array(
         [step.converged, step.at_boundary, step.iterations, step.residual]

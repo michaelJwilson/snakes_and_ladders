@@ -75,9 +75,9 @@ def test_the_m_step_routes_through_the_kernel_and_falls_back_past_the_cap(
     family = NegativeBinomialEmission([3.0] * 4, [1.0, 2.0, 4.0, 8.0])
     values, weights, offsets = _draw(2_000, 50.0, 1)
     covariate = offsets.unsqueeze(-1)
-    compiled = family.reestimate(values, weights, covariate).emissions
+    compiled = family.reestimate(values, weights, covariate).components
     monkeypatch.setattr(emissions, "M_STEP_BACKEND", Backend.PYTHON)
-    oracle = family.reestimate(values, weights, covariate).emissions
+    oracle = family.reestimate(values, weights, covariate).components
     assert torch.equal(compiled.mean, oracle.mean)
     moved = float(
         ((compiled.dispersion - oracle.dispersion).abs() / oracle.dispersion).max()
@@ -93,7 +93,9 @@ def test_the_m_step_routes_through_the_kernel_and_falls_back_past_the_cap(
         )
     fallback = family.reestimate(
         wide, wide_weights, wide_offsets.unsqueeze(-1)
-    ).emissions
+    ).components
     monkeypatch.setattr(emissions, "M_STEP_BACKEND", Backend.RUST)
-    routed = family.reestimate(wide, wide_weights, wide_offsets.unsqueeze(-1)).emissions
+    routed = family.reestimate(
+        wide, wide_weights, wide_offsets.unsqueeze(-1)
+    ).components
     assert torch.equal(routed.dispersion, fallback.dispersion)

@@ -259,7 +259,7 @@ def expectation_maximization(
             raise ValueError(msg)
         boundary = boundary or reestimated.at_boundary
         frozen.update(reestimated.frozen)
-        advanced = (posterior.mean(dim=0), reestimated.emissions, posterior)
+        advanced = (posterior.mean(dim=0), reestimated.components, posterior)
         return advanced, log_likelihood
 
     # The responsibilities of the last E step are carried out of the loop, so
@@ -369,7 +369,7 @@ def partial_expectation_maximization(
                 f"{iteration}"
             )
             raise ValueError(msg)
-        family = reestimated.emissions
+        family = reestimated.components
         weights = moved.mean(dim=0)
         if iteration == iterations:
             break
@@ -453,7 +453,7 @@ def _cell_expectation_maximization(
             raise ValueError(msg)
         boundary = boundary or reestimated.at_boundary
         frozen.update(reestimated.frozen)
-        return (weighted.sum(dim=0) / n_samples, reestimated.emissions, posterior), (
+        return (weighted.sum(dim=0) / n_samples, reestimated.components, posterior), (
             log_likelihood
         )
 

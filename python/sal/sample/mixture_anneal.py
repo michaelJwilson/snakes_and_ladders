@@ -164,7 +164,7 @@ def anneal_assignments(
         if not reestimated.converged:
             msg = f"a component's M step did not settle at sweep {step}"
             raise ValueError(msg)
-        components = reestimated.emissions
+        components = reestimated.components
         weights = posterior.sum(dim=0) / posterior.sum()
         joint = torch.log(weights) + component_log_density(
             components, values, conditioned
