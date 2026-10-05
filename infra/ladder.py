@@ -675,6 +675,15 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "hmm",
+        "segmented path sampling",
+        "likelihood.ragged.sample_paths",
+        "path enumeration",
+        T + "likelihood/test_ragged_sample_paths.py"
+        "::test_sampled_paths_follow_the_enumerated_posterior",
+        cost=Cost.PASS,
+    ),
+    Rung(
+        "hmm",
         "forward via sum-product",
         "likelihood.message_passing.sum_product",
         "forward / forward-backward",

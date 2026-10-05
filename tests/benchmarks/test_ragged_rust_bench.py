@@ -89,3 +89,42 @@ def test_ragged_viterbi_bench(
         rounds=3,
         iterations=1,
     )
+
+
+@pytest.mark.benchmark(group="ragged-sample-paths")
+@pytest.mark.parametrize("route", ["rust", "numpy"])
+@pytest.mark.parametrize("case", ["plain", "switched", "kronecker"])
+def test_ragged_sample_paths_bench(
+    benchmark: BenchmarkFixture, case: str, route: str
+) -> None:
+    """The compiled forward-filter backward-sample against its NumPy oracle (issue #1170).
+
+    The Viterbi bench's stress size and cases: 200 segments of 1,000
+    positions at ten states. Each round draws its uniforms from one seed, so
+    every round draws the same paths.
+    """
+    from sal.backend import Backend
+    from sal.likelihood.ragged import SwitchKind, sample_paths
+
+    n_states, lengths = 10, (1000,) * 200
+    rng = np.random.default_rng(1170)
+    density = Ragged(np.log(rng.random((sum(lengths), n_states))), lengths)
+    slow = n_states // 2 if case == "kronecker" else n_states
+    initial = np.log(np.full(n_states, 1.0 / n_states))
+    transition = np.log(rng.dirichlet(np.ones(slow), slow))
+    switch = None if case == "plain" else rng.uniform(size=sum(lengths))
+    kind = SwitchKind.KRONECKER if case == "kronecker" else SwitchKind.STAY_OR_MOVE
+    backend = Backend.RUST if route == "rust" else Backend.PYTHON
+
+    def draw() -> object:
+        return sample_paths(
+            density,
+            initial,
+            transition,
+            np.random.default_rng(0),
+            switch=switch,
+            switch_kind=kind,
+            backend=backend,
+        )
+
+    benchmark.pedantic(draw, rounds=3, iterations=1)  # type: ignore[no-untyped-call]

@@ -357,6 +357,18 @@ def ragged_viterbi(
     switch: np.ndarray | None = None,
     switch_kind: str = "stay_or_move",
 ) -> None: ...
+def ragged_sample_paths(
+    log_density: np.ndarray,
+    lengths: np.ndarray,
+    log_initial: np.ndarray,
+    log_transition: np.ndarray,
+    uniforms: np.ndarray,
+    path: np.ndarray,
+    log_joint: np.ndarray,
+    log_evidence: np.ndarray,
+    switch: np.ndarray | None = None,
+    switch_kind: str = "stay_or_move",
+) -> None: ...
 
 class MetropolisWalk:
     def __init__(
