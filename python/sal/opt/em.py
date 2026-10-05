@@ -137,6 +137,49 @@ def em_loop[State](
     return state, log_likelihood, Termination.after(iterations, converged=converged)
 
 
+class Staged(Protocol):
+    """An EM result that reports its stages: :class:`~sal.opt.hmm.EmFit` and the mixture's fit (issue #1171)."""
+
+    @property
+    def termination(self) -> Termination:
+        """How the last stage ended."""
+        ...
+
+    @property
+    def spent(self) -> int:
+        """Iterations over every stage."""
+        ...
+
+    @property
+    def stages(self) -> tuple[Termination, ...]:
+        """How each stage ended, in order."""
+        ...
+
+
+def check_stages(fit: Staged) -> None:
+    """Fill an omitted ``stages`` with ``(termination,)`` and refuse one that disagrees (issue #1171).
+
+    Called from a frozen result's ``__post_init__``: a fit of one stage, every
+    fit outside :mod:`sal.sandbox.annealed_em`, states its termination once
+    and its stages follow from it.
+
+    Raises
+    ------
+    ValueError
+        If ``stages`` does not end in ``termination``, or its iterations do
+        not total ``spent``.
+    """
+    stages = fit.stages or (fit.termination,)
+    if stages[-1] != fit.termination:
+        msg = f"the last stage {stages[-1]} is not the termination {fit.termination}"
+        raise ValueError(msg)
+    total = sum(stage.iterations for stage in stages)
+    if total != fit.spent:
+        msg = f"the stages total {total} iterations and the fit spent {fit.spent}"
+        raise ValueError(msg)
+    object.__setattr__(fit, "stages", stages)
+
+
 class InnerSolve(Protocol):
     """What an M step reports of its own loop: :class:`sal.emissions.Reestimate` among others.
 

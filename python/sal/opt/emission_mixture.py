@@ -56,7 +56,8 @@ from sal.opt.constrain import (
     free_from_log_simplex,
     log_simplex,
 )
-from sal.opt.em import EMISSION_MIXTURE_EM, EmConfig, em_loop
+from sal.opt.em import EMISSION_MIXTURE_EM, EmConfig, check_stages, em_loop
+from sal.opt.m_step import MStep
 from sal.opt.mixture import (
     e_step,
     emission_mixture_plus_plus,
@@ -113,6 +114,17 @@ class EmissionMixtureFit:
         What the fit cost, in ``unit``: the EM iterations run (issue #1165).
     unit : Cost
         The unit ``spent`` is counted in, :attr:`~sal.cost.Cost.ITERATIONS`.
+    stages : tuple[Termination, ...]
+        How each stage of the fit ended, in order (issue #1171), as
+        :attr:`sal.opt.hmm.EmFit.stages` reports them: ``(termination,)``
+        here, and one per temperature before it in
+        :mod:`sal.sandbox.annealed_em`. Omitted, it is ``(termination,)``.
+
+    Raises
+    ------
+    ValueError
+        If ``stages`` does not end in ``termination`` or its iterations do
+        not total ``spent``.
     """
 
     weights: torch.Tensor
@@ -124,6 +136,10 @@ class EmissionMixtureFit:
     frozen: tuple[int, ...] = dataclass_field(default=(), kw_only=True)
     spent: int = dataclass_field(kw_only=True)
     unit: Cost = dataclass_field(default=Cost.ITERATIONS, kw_only=True)
+    stages: tuple[Termination, ...] = dataclass_field(default=(), kw_only=True)
+
+    def __post_init__(self) -> None:
+        check_stages(self)
 
 
 def expectation_maximization(
@@ -133,6 +149,7 @@ def expectation_maximization(
     config: EmConfig = EMISSION_MIXTURE_EM,
     *,
     covariate: np.ndarray | torch.Tensor | None = None,
+    m_step: MStep | None = None,
 ) -> EmissionMixtureFit:
     """Fit a mixture of count emissions by EM.
 
@@ -164,6 +181,13 @@ def expectation_maximization(
         Per-observation covariate, scored in the E step and conditioned on in
         the M step alike (issue #933): an exposure, a trial count, or one of
         each per channel for a pair. ``None`` fits as before, bitwise.
+    m_step : MStep | None
+        The component M step, replacing the family's ``reestimate``
+        (issue #1171), as :func:`sal.opt.hmm.baum_welch_family` takes it:
+        handed the family, the observations, the responsibilities and the
+        covariate. It is handed every observation, so it takes the
+        per-observation route below. ``None``, the default, is the family's
+        own, bitwise.
 
     Returns
     -------
@@ -192,7 +216,9 @@ def expectation_maximization(
     is the oracle.
     """
     weights = torch.as_tensor(weights)
-    distinct = _distinct_counts(observations, components)
+    distinct = (
+        None if m_step is not None else _distinct_counts(observations, components)
+    )
     if distinct is not None:
         return _cell_expectation_maximization(
             *distinct,
@@ -218,11 +244,12 @@ def expectation_maximization(
         log_weight = torch.log(current)
         evidence, posterior = e_step(values, log_weight, family, covariate=conditioned)
         log_likelihood = float(evidence)
-        reestimated = (
-            family.reestimate(values, posterior)
-            if conditioned is None
-            else family.reestimate(values, posterior, conditioned)
-        )
+        if m_step is not None:
+            reestimated = m_step(family, values, posterior, conditioned)
+        elif conditioned is None:
+            reestimated = family.reestimate(values, posterior)
+        else:
+            reestimated = family.reestimate(values, posterior, conditioned)
         if not reestimated.converged:
             msg = (
                 f"a component's M step did not settle at EM iteration "

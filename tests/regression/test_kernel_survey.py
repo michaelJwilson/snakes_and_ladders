@@ -68,7 +68,7 @@ def test_the_gateway_beside_the_twin_is_a_referee(
     # `opt.hmm` calls the kernel too (#933, R5), and its torch recursion is its
     # oracle, so the adapter `opt.hmm.estimation` (#1010) is itself a referee;
     # `opt.hmm.forward` (#1167) and `opt.hmm.objectives` (#1169) are on the
-    # same terms.
+    # same terms. `sandbox.annealed_em` referees the staged EM path (#1171).
     assert "likelihood.ragged" in ragged.referees
     assert ragged.referees == (
         "likelihood.message_passing_reference",
@@ -76,6 +76,7 @@ def test_the_gateway_beside_the_twin_is_a_referee(
         "opt.hmm.estimation",
         "opt.hmm.forward",
         "opt.hmm.objectives",
+        "sandbox.annealed_em",
         "sandbox.rectangular_hmm",
     )
 
