@@ -15,7 +15,7 @@ import torch
 from pytest_benchmark.fixture import BenchmarkFixture
 from sal.emissions import GaussianEmission
 from sal.fixtures import load_params
-from sal.opt.hmm import GaussianHmmObjective
+from sal.opt.hmm import EmissionHmmObjective, family_start
 from sal.sim.hmm import HmmParams, simulate_sequences
 
 from tests._fixtures import FIXTURES_DIR
@@ -23,7 +23,7 @@ from tests._fixtures import FIXTURES_DIR
 FIXTURE = FIXTURES_DIR / "hmm/ci.yaml"
 
 
-def _objective() -> tuple[GaussianHmmObjective, torch.Tensor]:
+def _objective() -> tuple[EmissionHmmObjective, torch.Tensor]:
     """The Gaussian instance at the categorical fixture's shape, and a truth point."""
     categorical = load_params(FIXTURE, HmmParams)
     mean = np.linspace(-3.0, 3.0, categorical.n_states)
@@ -37,11 +37,12 @@ def _objective() -> tuple[GaussianHmmObjective, torch.Tensor]:
         seed=categorical.seed,
         tolerance=categorical.tolerance,
     )
-    objective = GaussianHmmObjective(
-        simulate_sequences(params).observations, params.n_states
+    observations = simulate_sequences(params).observations
+    objective = EmissionHmmObjective(
+        observations, family_start(GaussianEmission, observations, params.n_states)
     )
     return objective, objective.theta_from_truth(
-        params.initial, params.transition, mean, scale
+        params.initial, params.transition, mean=mean, scale=scale
     )
 
 

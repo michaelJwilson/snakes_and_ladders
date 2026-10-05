@@ -20,6 +20,7 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
+from sal.emissions import CategoricalEmission
 from sal.fixtures import load_params
 from sal.opt.fit import (
     constrained_standard_errors,
@@ -28,7 +29,12 @@ from sal.opt.fit import (
     observed_information,
     parameter_covariance,
 )
-from sal.opt.hmm import HmmObjective, align_states, baum_welch
+from sal.opt.hmm import (
+    EmissionHmmObjective,
+    align_states,
+    baum_welch,
+    family_start,
+)
 from sal.opt.potts import PottsObjective
 from sal.sim.hmm import HmmParams, simulate_sequences
 from sal.sim.potts_chain import PottsParams, simulate_chains
@@ -56,14 +62,25 @@ def _potts_objective(seed_offset: int = 0) -> tuple[PottsObjective, torch.Tensor
     return objective, truth
 
 
-def _hmm_objective(seed_offset: int = 0) -> tuple[HmmObjective, torch.Tensor]:
+def _hmm_objective(
+    seed_offset: int = 0,
+) -> tuple[EmissionHmmObjective, torch.Tensor]:
     base = load_params(HMM_FIXTURE, HmmParams)
     params = replace(base, seed=base.seed + seed_offset)
-    objective = HmmObjective(
-        simulate_sequences(params).observations, params.n_states, params.n_symbols
+    observations = simulate_sequences(params).observations
+    objective = EmissionHmmObjective(
+        observations,
+        family_start(
+            CategoricalEmission,
+            observations,
+            params.n_states,
+            n_symbols=params.n_symbols,
+        ),
     )
     truth = objective.theta_from_truth(
-        params.initial, params.transition, params.emission
+        params.initial,
+        params.transition,
+        log_emission=np.log(params.emission),
     )
     return objective, truth
 
@@ -197,8 +214,15 @@ def test_hmm_interval_coverage_approaches_nominal_with_sample_size() -> None:
         params = replace(
             base, seed=base.seed + 7919 * replicate, lengths=base.lengths * 4
         )
-        objective = HmmObjective(
-            simulate_sequences(params).observations, params.n_states, params.n_symbols
+        observations = simulate_sequences(params).observations
+        objective = EmissionHmmObjective(
+            observations,
+            family_start(
+                CategoricalEmission,
+                observations,
+                params.n_states,
+                n_symbols=params.n_symbols,
+            ),
         )
         result = fit(objective)
         assert result.converged
@@ -231,7 +255,15 @@ def test_the_gradient_fit_agrees_with_baum_welch() -> None:
     # optimum is evidence neither of them alone provides.
     params = load_params(HMM_FIXTURE, HmmParams)
     observations = simulate_sequences(params).observations
-    objective = HmmObjective(observations, params.n_states, params.n_symbols)
+    objective = EmissionHmmObjective(
+        observations,
+        family_start(
+            CategoricalEmission,
+            observations,
+            params.n_states,
+            n_symbols=params.n_symbols,
+        ),
+    )
 
     gradient_result = fit(objective)
     estimate = objective.constrain(gradient_result.theta)
@@ -285,8 +317,15 @@ def test_an_estimate_on_the_boundary_has_no_interval() -> None:
     # conditioning is checked.
     base = load_params(HMM_FIXTURE, HmmParams)
     params = replace(base, lengths=(5,) * 30)
-    objective = HmmObjective(
-        simulate_sequences(params).observations, params.n_states, params.n_symbols
+    observations = simulate_sequences(params).observations
+    objective = EmissionHmmObjective(
+        observations,
+        family_start(
+            CategoricalEmission,
+            observations,
+            params.n_states,
+            n_symbols=params.n_symbols,
+        ),
     )
     result = fit(objective)
     fitted = torch.exp(objective.constrain(result.theta)["log_emission"])

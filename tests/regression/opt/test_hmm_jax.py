@@ -1,8 +1,8 @@
-"""The HMM objectives' JAX gradient, their default, against PyTorch's autograd (issue #1000).
+"""`EmissionHmmObjective`'s JAX twin against PyTorch's autograd (issues #1000, #1189).
 
 Referee: each objective's value and its autograd gradient through
 ``__call__``, at three points away from the start, within 1e-10 relative:
-every HMM objective the package defines, with the covariates it takes.
+every family the twin covers, with the covariates it takes.
 """
 
 from __future__ import annotations
@@ -11,42 +11,80 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from sal.opt.hmm import (
-    BetaBinomialHmmObjective,
-    BinomialHmmObjective,
-    GaussianHmmObjective,
-    HmmObjective,
-    NegativeBinomialHmmObjective,
-    PoissonHmmObjective,
+from sal.backend import Backend
+from sal.emissions import (
+    BetaBinomialEmission,
+    BinomialEmission,
+    CategoricalEmission,
+    CountPairEmission,
+    GaussianEmission,
+    NegativeBinomialEmission,
+    PoissonEmission,
 )
+from sal.opt.hmm import EmissionHmmObjective, family_start
 from sal.opt.hmm import jax as hmm_jax
+from sal.ragged import Ragged
 
 from tests._rows import every_value
 
 
-def _objectives() -> list[hmm_jax.Twinned]:
+def _hmm(
+    kind: type,
+    data: np.ndarray,
+    covariate: np.ndarray | None = None,
+    backend: Backend = Backend.JAX,
+    **constants: object,
+) -> EmissionHmmObjective:
+    """Three states at :func:`family_start`, the covariate one value per position."""
+    return EmissionHmmObjective(
+        data,
+        family_start(kind, data, 3, **constants),  # type: ignore[arg-type]
+        covariate=None if covariate is None else covariate[..., None],
+        backend=backend,
+    )
+
+
+def _objectives(backend: Backend = Backend.JAX) -> list[EmissionHmmObjective]:
     rng = np.random.default_rng(1000)
     counts = rng.poisson(6.0, size=(8, 25))
+    trials = np.full(3, 20.0)
     return [
-        HmmObjective(rng.integers(0, 4, size=(8, 25)), 3, 4),
-        GaussianHmmObjective(rng.normal(size=(8, 25)), 3),
-        PoissonHmmObjective(counts, 3),
-        NegativeBinomialHmmObjective(counts, 3),
-        BetaBinomialHmmObjective(
-            rng.binomial(20, 0.4, size=(8, 25)), 3, np.full(3, 20.0)
+        _hmm(
+            CategoricalEmission,
+            rng.integers(0, 4, size=(8, 25)),
+            backend=backend,
+            n_symbols=4,
         ),
-        BinomialHmmObjective(rng.binomial(20, 0.4, size=(8, 25)), 3, np.full(3, 20.0)),
+        _hmm(GaussianEmission, rng.normal(size=(8, 25)), backend=backend),
+        _hmm(PoissonEmission, counts, backend=backend),
+        _hmm(NegativeBinomialEmission, counts, backend=backend),
+        _hmm(
+            BetaBinomialEmission,
+            rng.binomial(20, 0.4, size=(8, 25)),
+            backend=backend,
+            trials=trials,
+        ),
+        _hmm(
+            BinomialEmission,
+            rng.binomial(20, 0.4, size=(8, 25)),
+            backend=backend,
+            trials=trials,
+        ),
         # The package's covariates: an exposure per observation for the
         # negative binomial, a trial count per observation for the
         # beta-binomial.
-        NegativeBinomialHmmObjective(
-            counts, 3, covariate=rng.uniform(0.5, 2.0, size=(8, 25))
+        _hmm(
+            NegativeBinomialEmission,
+            counts,
+            rng.uniform(0.5, 2.0, size=(8, 25)),
+            backend=backend,
         ),
-        BetaBinomialHmmObjective(
+        _hmm(
+            BetaBinomialEmission,
             rng.binomial(15, 0.4, size=(8, 25)),
-            3,
-            np.full(3, 20.0),
-            covariate=rng.integers(15, 30, size=(8, 25)),
+            rng.integers(15, 30, size=(8, 25)).astype(np.float64),
+            backend=backend,
+            trials=trials,
         ),
     ]
 
@@ -98,7 +136,11 @@ def test_one_structure_compiles_once() -> None:
     # is padded to a power of two, so a table of another length does too.
     rng = np.random.default_rng(1)
     first, second = (
-        BetaBinomialHmmObjective(rng.binomial(20, p, size=(8, 25)), 3, np.full(3, 20.0))
+        _hmm(
+            BetaBinomialEmission,
+            rng.binomial(20, p, size=(8, 25)),
+            trials=np.full(3, 20.0),
+        )
         for p in (0.3, 0.6)
     )
     shapes = [hmm_jax._prepared(o)[1]["y"].shape for o in (first, second)]
@@ -111,17 +153,17 @@ def test_one_structure_compiles_once() -> None:
 
 
 @pytest.mark.oracle
-def test_the_default_gradient_is_the_torch_backend() -> None:
+def test_the_jax_backend_s_gradient_is_the_torch_backend_s() -> None:
     # Referee: the same objective built with Backend.TORCH, autograd.
     def check(index: int) -> None:
-        from sal.backend import Backend
         from sal.opt.objective import value_and_gradient
 
         objective = _objectives()[index]
         theta = objective.initial() + 0.1
         value, gradient = value_and_gradient(objective, theta)
-        objective._backend = Backend.TORCH
-        torch_value, torch_gradient = value_and_gradient(objective, theta)
+        torch_value, torch_gradient = value_and_gradient(
+            _objectives(Backend.TORCH)[index], theta
+        )
         assert_allclose(float(value), float(torch_value), rtol=1e-10)
         assert_allclose(
             gradient.numpy(),
@@ -136,13 +178,17 @@ def test_the_default_gradient_is_the_torch_backend() -> None:
 @pytest.mark.oracle
 def test_a_fit_under_either_backend_reaches_one_optimum() -> None:
     # Referee: the L-BFGS fit under Backend.TORCH from the same start.
-    from sal.backend import Backend
     from sal.opt.fit import fit
 
     rng = np.random.default_rng(3)
     counts = rng.poisson(np.repeat([2.0, 9.0], 50), size=(4, 100))
     fits = [
-        fit(PoissonHmmObjective(counts, 2, backend=backend), max_iterations=200)
+        fit(
+            EmissionHmmObjective(
+                counts, family_start(PoissonEmission, counts, 2), backend=backend
+            ),
+            max_iterations=200,
+        )
         for backend in (Backend.JAX, Backend.TORCH)
     ]
     assert all(f.converged for f in fits)
@@ -166,3 +212,43 @@ def test_the_rising_factorial_holds_where_the_difference_cancels() -> None:
     )
     got = np.asarray(hmm_jax._rising(counts, x, jax))
     assert_allclose(got, expected, rtol=1e-12, atol=1e-8)
+
+
+@pytest.mark.oracle
+def test_the_twin_reads_the_family_from_the_start() -> None:
+    # Issue #1189: the JAX route is keyed on `EmissionHmmObjective`'s start
+    # family. Referee: the objective's own autograd value, for a twinned
+    # family; and `twinned` refuses what no twin covers --- a count
+    # pair, and segments of unequal length --- so neither declares a JAX
+    # energy nor admits Backend.JAX.
+    rng = np.random.default_rng(1189)
+    counts = rng.poisson(6.0, size=48)
+    pair = CountPairEmission(
+        [5.0, 12.0], [6.0, 30.0], [2.0, 4.0], [3.0, 2.0], [20, 20], joint=False
+    )
+    ragged = EmissionHmmObjective(
+        Ragged(counts.astype(np.float64), (20, 28)),
+        family_start(PoissonEmission, counts, 3),
+    )
+    joint = EmissionHmmObjective(
+        Ragged(
+            np.asarray(pair.sample(rng.integers(0, 2, 40), rng), dtype=np.float64),
+            (20, 20),
+        ),
+        pair,
+    )
+    for untwinned in (ragged, joint):
+        assert not hmm_jax.twinned(untwinned)
+        assert untwinned.jax_energy() is None
+    with pytest.raises(ValueError, match="no JAX twin"):
+        EmissionHmmObjective(
+            Ragged(counts.astype(np.float64), (20, 28)),
+            family_start(PoissonEmission, counts, 3),
+            backend=Backend.JAX,
+        )
+    square = _objectives()[2]
+    theta = square.initial() + 0.1
+    energy, data = square.jax_energy()  # type: ignore[misc]
+    assert_allclose(
+        float(energy(theta.numpy(), data)), float(square(theta)), rtol=1e-12
+    )

@@ -22,22 +22,14 @@ from sal.emissions import (
     PoissonEmission,
 )
 from sal.opt.hmm import (
-    BetaBinomialHmmObjective,
-    BinomialHmmObjective,
-    NegativeBinomialHmmObjective,
-    PoissonHmmObjective,
+    EmissionHmmObjective,
+    family_start,
 )
 from sal.sim import fixtures
 from sal.sim.hmm import simulate_sequences
 
 CountEmission = (
     PoissonEmission | BinomialEmission | NegativeBinomialEmission | BetaBinomialEmission
-)
-CountObjective = (
-    PoissonHmmObjective
-    | BinomialHmmObjective
-    | NegativeBinomialHmmObjective
-    | BetaBinomialHmmObjective
 )
 
 #: The declared three-state instance (`hmm/ci.yaml`), read rather than
@@ -67,22 +59,18 @@ def _truth(name: str) -> CountEmission:
     return families[name]
 
 
-def _objective(name: str) -> tuple[CountObjective, torch.Tensor]:
+def _objective(name: str) -> tuple[EmissionHmmObjective, torch.Tensor]:
     """The objective and a truth point, at 600 sequences of length 15."""
     truth = _truth(name)
     params = replace(PARAMS, emissions=truth)
     observations = simulate_sequences(params).observations
-    objective: CountObjective
-    if name == "poisson":
-        objective = PoissonHmmObjective(observations, 3)
-    elif name == "binomial":
-        objective = BinomialHmmObjective(observations, 3, TRIALS)
-    elif name == "negative_binomial":
-        objective = NegativeBinomialHmmObjective(observations, 3)
-    else:
-        objective = BetaBinomialHmmObjective(observations, 3, TRIALS)
-    values = [value.numpy() for value in truth.named_parameters().values()]
-    return objective, objective.theta_from_truth(INITIAL, TRANSITION, *values)
+    trials = TRIALS if name in ("binomial", "beta_binomial") else None
+    objective = EmissionHmmObjective(
+        observations, family_start(type(truth), observations, 3, trials=trials)
+    )
+    return objective, objective.theta_from_truth(
+        INITIAL, TRANSITION, **truth.named_parameters()
+    )
 
 
 FAMILIES = ("poisson", "binomial", "negative_binomial", "beta_binomial")

@@ -15,15 +15,19 @@ import numpy as np
 import pytest
 import torch
 from sal.backend import Backend
-from sal.emissions import CountPairEmission
+from sal.emissions import (
+    BetaBinomialEmission,
+    BinomialEmission,
+    CategoricalEmission,
+    CountPairEmission,
+    GaussianEmission,
+    NegativeBinomialEmission,
+    PoissonEmission,
+)
 from sal.opt.emission_mixture import EmissionMixtureObjective
 from sal.opt.hmm import (
-    BetaBinomialHmmObjective,
-    BinomialHmmObjective,
-    GaussianHmmObjective,
-    HmmObjective,
-    NegativeBinomialHmmObjective,
-    PoissonHmmObjective,
+    EmissionHmmObjective,
+    family_start,
 )
 from sal.opt.objective import (
     DeclaredBlocks,
@@ -51,17 +55,33 @@ def _hmms(backend: Backend) -> dict[str, Objective]:
     counts = rng.poisson(4.0, size=(2, 30))
     trials = np.array([12, 12])
     successes = rng.binomial(12, 0.3, size=(2, 30))
+    symbols = rng.integers(0, 3, size=(2, 30))
+    reals = rng.normal(size=(2, 30))
     return {
-        "categorical": HmmObjective(
-            rng.integers(0, 3, size=(2, 30)), 2, 3, backend=backend
+        "categorical": EmissionHmmObjective(
+            symbols,
+            family_start(CategoricalEmission, symbols, 2, n_symbols=3),
+            backend=backend,
         ),
-        "gaussian": GaussianHmmObjective(rng.normal(size=(2, 30)), 2, backend=backend),
-        "poisson": PoissonHmmObjective(counts, 2, backend=backend),
-        "binomial": BinomialHmmObjective(successes, 2, trials, backend=backend),
-        "beta_binomial": BetaBinomialHmmObjective(
-            successes, 2, trials, backend=backend
+        "gaussian": EmissionHmmObjective(
+            reals, family_start(GaussianEmission, reals, 2), backend=backend
         ),
-        "negative_binomial": NegativeBinomialHmmObjective(counts, 2, backend=backend),
+        "poisson": EmissionHmmObjective(
+            counts, family_start(PoissonEmission, counts, 2), backend=backend
+        ),
+        "binomial": EmissionHmmObjective(
+            successes,
+            family_start(BinomialEmission, successes, 2, trials=trials),
+            backend=backend,
+        ),
+        "beta_binomial": EmissionHmmObjective(
+            successes,
+            family_start(BetaBinomialEmission, successes, 2, trials=trials),
+            backend=backend,
+        ),
+        "negative_binomial": EmissionHmmObjective(
+            counts, family_start(NegativeBinomialEmission, counts, 2), backend=backend
+        ),
     }
 
 
@@ -207,8 +227,9 @@ def test_a_compiled_gradient_stays_compiled_inside_the_restriction(
 def test_no_full_dimensional_declaration_reaches_a_compiling_consumer() -> None:
     # `sample.declared` compiles an energy from these by attribute; on the
     # restriction it would be the full objective's, of the wrong dimension.
-    objective = GaussianHmmObjective(
-        np.random.default_rng([1168, 2]).normal(size=(2, 30)), 2
+    observations = np.random.default_rng([1168, 2]).normal(size=(2, 30))
+    objective = EmissionHmmObjective(
+        observations, family_start(GaussianEmission, observations, 2)
     )
     assert declared_jax_energy(objective) is not None
     restricted = Restricted(

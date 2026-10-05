@@ -434,9 +434,13 @@ def _declared_target(inputs: Mapping[str, np.ndarray]) -> object:
     from sal.validation.gaussian import GaussianTarget
 
     if int(inputs["target"]) == 3:
-        from sal.opt.hmm import GaussianHmmObjective
+        from sal.emissions import GaussianEmission
+        from sal.opt.hmm import EmissionHmmObjective, family_start
 
-        return GaussianHmmObjective(inputs["values"], int(inputs["n_states"]))
+        return EmissionHmmObjective(
+            inputs["values"],
+            family_start(GaussianEmission, inputs["values"], int(inputs["n_states"])),
+        )
     if int(inputs["target"]) == 2:
         from sal.opt.mixture import GaussianMixtureObjective
 
@@ -535,9 +539,15 @@ def _gradient(inputs: Mapping[str, np.ndarray]) -> Callable[[], Outputs]:
         target: object = GaussianTarget(inputs["precision"])
         precision = torch.as_tensor(inputs["precision"])
     elif "n_states" in inputs:
-        from sal.opt.hmm import GaussianHmmObjective
+        from sal.emissions import GaussianEmission
+        from sal.opt.hmm import EmissionHmmObjective, family_start
 
-        target = GaussianHmmObjective(inputs["observations"], int(inputs["n_states"]))
+        target = EmissionHmmObjective(
+            inputs["observations"],
+            family_start(
+                GaussianEmission, inputs["observations"], int(inputs["n_states"])
+            ),
+        )
         precision = None
     else:
         target = GaussianMixtureObjective(

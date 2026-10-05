@@ -27,7 +27,7 @@ coordinate), ``n_draws`` transitions keyed from ``key``; outputs as mode 1
 ``(a, b)`` in place of the Gaussian: ``log p = -U``; ``target`` 2 is a
 Gaussian mixture's log-likelihood of ``values`` at ``n_components``, in
 ``GaussianMixtureObjective``'s ``theta``; ``target`` 3 a Gaussian HMM's of
-the sequences ``values`` at ``n_states``, in ``GaussianHmmObjective``'s,
+the sequences ``values`` at ``n_states``, in a Gaussian ``EmissionHmmObjective``'s,
 by the textbook log-space forward recursion (issue #1008).
 
 ``mode`` 4 replays: ``blackjax``'s ``build_rmh`` kernel with the increments
@@ -85,7 +85,7 @@ def main() -> None:
         m = int(inputs["n_states"])
 
         def logdensity(x: Any) -> Any:
-            # `GaussianHmmObjective`'s theta: m - 1 free initial, m (m - 1)
+            # A Gaussian `EmissionHmmObjective`'s theta: m - 1 free initial, m (m - 1)
             # free transition rows, m means, m log scales; the textbook
             # forward recursion in log space, one sequence per row.
             def simplex(free: Any) -> Any:

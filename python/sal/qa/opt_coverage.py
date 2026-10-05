@@ -24,8 +24,9 @@ import numpy as np
 import torch
 from matplotlib.figure import Figure
 
+from sal.emissions import CategoricalEmission
 from sal.opt.fit import constrained_standard_errors, covers, fit
-from sal.opt.hmm import HmmObjective, align_states
+from sal.opt.hmm import EmissionHmmObjective, align_states, family_start
 from sal.opt.potts import PottsObjective
 from sal.qa.figure import QAFigure
 from sal.qa.runner import figure_main, fixture_params
@@ -139,8 +140,15 @@ def hmm_coverage(
             seed=params.seed + 7919 * replicate,
             lengths=(params.sequence_length,) * n_sequences,
         )
-        objective = HmmObjective(
-            simulate_sequences(drawn).observations, drawn.n_states, drawn.n_symbols
+        observations = simulate_sequences(drawn).observations
+        objective = EmissionHmmObjective(
+            observations,
+            family_start(
+                CategoricalEmission,
+                observations,
+                drawn.n_states,
+                n_symbols=drawn.n_symbols,
+            ),
         )
         result = fit(objective)
         estimate = objective.constrain(result.theta)

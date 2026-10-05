@@ -37,17 +37,22 @@ from pathlib import Path
 import numpy as np, torch
 
 family, n_sequences, backend, repeats = sys.argv[1], int(sys.argv[2]), sys.argv[3], int(sys.argv[4])
-from sal.opt.hmm import (BetaBinomialHmmObjective, BinomialHmmObjective, GaussianHmmObjective,
-    HmmObjective, NegativeBinomialHmmObjective, PoissonHmmObjective)
+from sal.emissions import (BetaBinomialEmission, BinomialEmission, CategoricalEmission,
+    GaussianEmission, NegativeBinomialEmission, PoissonEmission)
+from sal.opt.hmm import EmissionHmmObjective, family_start
 rng = np.random.default_rng(1000)
 shape = (n_sequences, 100)
+
+def hmm(kind, data, **constants):
+    return EmissionHmmObjective(data, family_start(kind, data, 3, **constants))
+
 objective = {
-    "categorical": lambda: HmmObjective(rng.integers(0, 4, size=shape), 3, 4),
-    "gaussian": lambda: GaussianHmmObjective(rng.normal(size=shape), 3),
-    "poisson": lambda: PoissonHmmObjective(rng.poisson(6.0, size=shape), 3),
-    "binomial": lambda: BinomialHmmObjective(rng.binomial(20, 0.4, size=shape), 3, np.full(3, 20.0)),
-    "negative_binomial": lambda: NegativeBinomialHmmObjective(rng.poisson(6.0, size=shape), 3),
-    "beta_binomial": lambda: BetaBinomialHmmObjective(rng.binomial(20, 0.4, size=shape), 3, np.full(3, 20.0)),
+    "categorical": lambda: hmm(CategoricalEmission, rng.integers(0, 4, size=shape), n_symbols=4),
+    "gaussian": lambda: hmm(GaussianEmission, rng.normal(size=shape)),
+    "poisson": lambda: hmm(PoissonEmission, rng.poisson(6.0, size=shape)),
+    "binomial": lambda: hmm(BinomialEmission, rng.binomial(20, 0.4, size=shape), trials=np.full(3, 20.0)),
+    "negative_binomial": lambda: hmm(NegativeBinomialEmission, rng.poisson(6.0, size=shape)),
+    "beta_binomial": lambda: hmm(BetaBinomialEmission, rng.binomial(20, 0.4, size=shape), trials=np.full(3, 20.0)),
 }[family]()
 theta = objective.initial()
 if backend == "jax":

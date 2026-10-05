@@ -18,7 +18,7 @@ import pytest
 import torch
 from numpy.testing import assert_allclose
 from sal.backend import Backend
-from sal.emissions import Collapse, GaussianEmission
+from sal.emissions import Collapse, GaussianEmission, pooled_variance_floor
 from sal.likelihood.hmm_paths import enumerate_hidden_paths
 from sal.opt.fit import (
     constrained_standard_errors,
@@ -26,9 +26,10 @@ from sal.opt.fit import (
     fit,
 )
 from sal.opt.hmm import (
-    GaussianHmmObjective,
+    EmissionHmmObjective,
     align_families,
     baum_welch_family,
+    family_start,
     forward_log_likelihood_from_density,
 )
 from sal.sim.hmm import HmmParams, simulate_sequences
@@ -83,7 +84,9 @@ def _coverage(separation: float, replicates: int) -> tuple[int, int, int]:
         observations = simulate_sequences(
             _params(truth, seed=20260905 + 7919 * replicate)
         ).observations
-        objective = GaussianHmmObjective(observations, 2)
+        objective = EmissionHmmObjective(
+            observations, family_start(GaussianEmission, observations, 2)
+        )
         result = fit(objective)
         estimate = objective.constrain(result.theta)
         try:
@@ -161,7 +164,9 @@ def test_the_evidence_of_a_continuous_emission_can_exceed_one() -> None:
 @pytest.mark.analytic
 def test_the_gradient_matches_central_differences() -> None:
     observations = simulate_sequences(_params(_truth(), seed=21)).observations
-    objective = GaussianHmmObjective(observations, 2)
+    objective = EmissionHmmObjective(
+        observations, family_start(GaussianEmission, observations, 2)
+    )
 
     realized = assert_gradient_matches_finite_differences(
         objective, objective.initial(), step=1e-5, rtol=1e-6
@@ -178,7 +183,9 @@ def test_the_gradient_fit_and_baum_welch_reach_the_same_optimum() -> None:
     # algorithm agreeing with itself would not be.
     truth = _truth()
     observations = simulate_sequences(_params(truth, seed=22)).observations
-    objective = GaussianHmmObjective(observations, 2)
+    objective = EmissionHmmObjective(
+        observations, family_start(GaussianEmission, observations, 2)
+    )
 
     result = fit(objective)
     estimate = objective.constrain(result.theta)
@@ -189,7 +196,7 @@ def test_the_gradient_fit_and_baum_welch_reach_the_same_optimum() -> None:
         GaussianEmission(
             np.array([-1.0, 1.0]),
             UNIT_SCALE,
-            GaussianHmmObjective(observations, 2).variance_floor,
+            pooled_variance_floor(observations),
         ),
     )
 
@@ -220,7 +227,9 @@ def test_the_start_places_the_means_on_the_data_and_breaks_the_symmetry() -> Non
     # A shared mean makes the states exchangeable (`opt/CLAUDE.md`); a distant
     # one underflows and silently drops a state.
     observations = simulate_sequences(_params(_truth(), seed=23)).observations
-    objective = GaussianHmmObjective(observations, 2)
+    objective = EmissionHmmObjective(
+        observations, family_start(GaussianEmission, observations, 2)
+    )
 
     start = objective.constrain(objective.initial())
 
@@ -235,11 +244,13 @@ def test_the_start_places_the_means_on_the_data_and_breaks_the_symmetry() -> Non
 def test_a_known_truth_round_trips_through_the_unconstrained_coordinates() -> None:
     truth = _truth()
     observations = simulate_sequences(_params(truth, seed=24)).observations
-    objective = GaussianHmmObjective(observations, 2)
+    objective = EmissionHmmObjective(
+        observations, family_start(GaussianEmission, observations, 2)
+    )
 
     estimate = objective.constrain(
         objective.theta_from_truth(
-            INITIAL, TRANSITION, truth.mean.numpy(), truth.scale.numpy()
+            INITIAL, TRANSITION, mean=truth.mean, scale=truth.scale
         )
     )
 
@@ -259,7 +270,7 @@ def test_a_collapsing_fit_is_refused_under_refuse(backend: Backend) -> None:
     # `Collapse.REFUSE` the fit raises, #122's behaviour; the default holds
     # the state instead (#1160), pinned in `test_opt_gaussian_collapse.py`.
     observations = simulate_sequences(_params(_truth(), seed=25)).observations
-    floor = GaussianHmmObjective(observations, 2).variance_floor
+    floor = pooled_variance_floor(observations)
 
     with pytest.raises(ValueError, match="unbounded as a variance goes to zero"):
         baum_welch_family(

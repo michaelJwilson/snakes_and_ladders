@@ -27,30 +27,21 @@ from sal.emissions import (
 from sal.likelihood.hmm_paths import enumerate_hidden_paths
 from sal.opt.fit import constrained_standard_errors, covers, fit
 from sal.opt.hmm import (
-    BetaBinomialHmmObjective,
-    BinomialHmmObjective,
-    NegativeBinomialHmmObjective,
-    PoissonHmmObjective,
+    EmissionHmmObjective,
     align_families,
     baum_welch_family,
+    family_start,
     forward_log_likelihood_from_density,
 )
 from sal.sim.hmm import HmmParams, simulate_sequences
 
 from tests._objective_checks import assert_gradient_matches_finite_differences
 
-#: The four count families, and the four objectives that fit them. Named as
-#: unions rather than as the protocol, so a test may read a moment: the
-#: protocol deliberately does not promise one, since a categorical emission has
-#: no mean.
+#: The four count families. Named as a union rather than as the protocol, so
+#: a test may read a moment: the protocol deliberately does not promise one,
+#: since a categorical emission has no mean.
 CountEmission = (
     PoissonEmission | BinomialEmission | NegativeBinomialEmission | BetaBinomialEmission
-)
-CountObjective = (
-    PoissonHmmObjective
-    | BinomialHmmObjective
-    | NegativeBinomialHmmObjective
-    | BetaBinomialHmmObjective
 )
 
 INITIAL = np.array([0.5, 0.5])
@@ -88,15 +79,23 @@ def _start(name: str) -> CountEmission:
     return starts[name]
 
 
-def _objective(name: str, observations: np.ndarray) -> CountObjective:
+def _objective(name: str, observations: np.ndarray) -> EmissionHmmObjective:
     """The fitting objective for one count family."""
     if name == "poisson":
-        return PoissonHmmObjective(observations, 2)
+        return EmissionHmmObjective(
+            observations, family_start(PoissonEmission, observations, 2)
+        )
     if name == "binomial":
-        return BinomialHmmObjective(observations, 2, TRIALS)
+        return EmissionHmmObjective(
+            observations, family_start(BinomialEmission, observations, 2, trials=TRIALS)
+        )
     if name == "negative_binomial":
-        return NegativeBinomialHmmObjective(observations, 2)
-    return BetaBinomialHmmObjective(observations, 2, TRIALS)
+        return EmissionHmmObjective(
+            observations, family_start(NegativeBinomialEmission, observations, 2)
+        )
+    return EmissionHmmObjective(
+        observations, family_start(BetaBinomialEmission, observations, 2, trials=TRIALS)
+    )
 
 
 def _params(
@@ -201,9 +200,7 @@ def test_a_known_truth_round_trips_through_the_unconstrained_coordinates(
     objective = _objective(name, observations)
     parameters = truth.named_parameters()
 
-    theta = objective.theta_from_truth(
-        INITIAL, TRANSITION, *[value.numpy() for value in parameters.values()]
-    )
+    theta = objective.theta_from_truth(INITIAL, TRANSITION, **parameters)
 
     estimate = objective.constrain(theta)
     assert_allclose(torch.exp(estimate["log_initial"]).numpy(), INITIAL, rtol=1e-13)
@@ -223,6 +220,7 @@ def test_the_start_places_each_state_on_the_data_and_breaks_the_symmetry(
     objective = _objective(name, observations)
 
     start = objective.components(objective.initial())
+    assert isinstance(start, CountEmission)
 
     means = start.mean.numpy()
     assert means[0] != means[1]
@@ -302,7 +300,9 @@ def _dispersion_coverage(dispersion: float, replicates: int) -> tuple[int, int, 
         observations = simulate_sequences(
             _params(truth, seed=20260905 + 7919 * replicate, n_sequences=40, length=12)
         ).observations
-        objective = NegativeBinomialHmmObjective(observations, 2)
+        objective = EmissionHmmObjective(
+            observations, family_start(NegativeBinomialEmission, observations, 2)
+        )
         result = fit(objective)
         estimate = objective.constrain(result.theta)
         try:

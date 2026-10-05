@@ -13,9 +13,10 @@ from __future__ import annotations
 import math
 
 from pytest_benchmark.fixture import BenchmarkFixture
+from sal.emissions import CategoricalEmission
 from sal.fixtures import load_params
 from sal.opt.fit import constrained_standard_errors, fit
-from sal.opt.hmm import HmmObjective
+from sal.opt.hmm import EmissionHmmObjective, family_start
 from sal.opt.potts import PottsObjective
 from sal.sim.hmm import HmmParams, simulate_sequences
 from sal.sim.potts_chain import PottsParams, simulate_chains
@@ -40,8 +41,15 @@ def test_potts_fit_benchmark(benchmark: BenchmarkFixture) -> None:
 
 def test_hmm_fit_benchmark(benchmark: BenchmarkFixture) -> None:
     params = load_params(HMM_FIXTURE, HmmParams)
-    objective = HmmObjective(
-        simulate_sequences(params).observations, params.n_states, params.n_symbols
+    observations = simulate_sequences(params).observations
+    objective = EmissionHmmObjective(
+        observations,
+        family_start(
+            CategoricalEmission,
+            observations,
+            params.n_states,
+            n_symbols=params.n_symbols,
+        ),
     )
 
     result = benchmark(fit, objective)
@@ -52,8 +60,15 @@ def test_hmm_fit_benchmark(benchmark: BenchmarkFixture) -> None:
 
 def test_hmm_interval_benchmark(benchmark: BenchmarkFixture) -> None:
     params = load_params(HMM_FIXTURE, HmmParams)
-    objective = HmmObjective(
-        simulate_sequences(params).observations, params.n_states, params.n_symbols
+    observations = simulate_sequences(params).observations
+    objective = EmissionHmmObjective(
+        observations,
+        family_start(
+            CategoricalEmission,
+            observations,
+            params.n_states,
+            n_symbols=params.n_symbols,
+        ),
     )
     theta = fit(objective).theta
 

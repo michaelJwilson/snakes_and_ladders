@@ -93,10 +93,11 @@ class Backend(StrEnum):
 
     JAX = "jax"
     """A ``jax`` route: an objective's value and gradient under
-    ``jit(value_and_grad)``. The HMM objectives' default gradient since issue
-    #1000 measured it at 0.07x--0.18x PyTorch autograd's runtime at
-    10^4--10^5 positions; ``TORCH`` there is the autograd oracle it is pinned
-    to."""
+    ``jit(value_and_grad)``. Issue #1000 measured the HMM twin at
+    0.07x--0.18x PyTorch autograd's runtime at 10^4--10^5 positions;
+    ``EmissionHmmObjective`` takes it on request, beside its compiled
+    ``RUST`` default (issue #1189), and ``TORCH`` there is the autograd
+    oracle both are pinned to."""
 
 
 def refuse_backend(name: str, backend: Backend, allowed: tuple[Backend, ...]) -> None:
