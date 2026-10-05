@@ -54,6 +54,7 @@ from sal.opt.hmm.estimation import (
 )
 from sal.opt.hmm.forward import (
     Posteriors,
+    SwitchKind,
     align_by_key,
     align_families,
     align_states,
@@ -94,6 +95,7 @@ __all__ = [
     "NegativeBinomialHmmObjective",
     "PoissonHmmObjective",
     "Posteriors",
+    "SwitchKind",
     "align_by_key",
     "align_families",
     "align_states",

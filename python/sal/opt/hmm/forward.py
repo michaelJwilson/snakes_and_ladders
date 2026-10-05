@@ -6,9 +6,10 @@ emission densities over a padded batch, and
 :func:`forward_log_likelihood_ragged` is the same total over segments of
 unequal length (issue #1167); :func:`align_by_key` and its two wrappers
 resolve the label switching the package docstring states.
-:class:`Posteriors` is the ragged E step's result: it is defined here, where
-``opt`` can name it, and :mod:`sal.likelihood.ragged` re-exports it, since
-``opt`` may not import ``likelihood`` (issue #1166). Imports no other
+:class:`Posteriors` is the ragged E step's result and :class:`SwitchKind` the
+form of its switched step: both are defined here, where ``opt`` can name
+them, and :mod:`sal.likelihood.ragged` re-exports them, since ``opt`` may not
+import ``likelihood`` (issues #1166, #1186). Imports no other
 submodule of :mod:`sal.opt.hmm`.
 """
 
@@ -16,6 +17,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
+from enum import StrEnum
 from itertools import permutations
 
 import numpy as np
@@ -50,6 +52,35 @@ class Posteriors:
     def __iter__(self) -> Iterator[np.ndarray]:
         """``(log_posterior, log_counts, log_evidence)``: the order callers unpack."""
         yield from (self.log_posterior, self.log_counts, self.log_evidence)
+
+
+class SwitchKind(StrEnum):
+    """How a per-position switch probability ``s_t`` enters the step into ``t``.
+
+    ``STAY_OR_MOVE`` is ``(1 - s_t) I + s_t A`` (issue #1082). The other two
+    are a slow chain ``A`` over ``K`` states coupled to a fast binary layer,
+    ``2 K`` states with ``(i, a)`` at ``2 i + a`` as ``np.kron`` lays them
+    out (issue #1133):
+
+    - ``KRONECKER``: ``A ⊗ S_t``, ``S_t = [[1 - s_t, s_t], [s_t, 1 - s_t]]``.
+      No ``A'`` makes it ``(1 - s) I + s A'`` unless ``A = I``, since both of
+      ``(1 - s)(A ⊗ I) + s (A ⊗ J)`` carry ``A``.
+    - ``KRONECKER_DIAGONAL``: ``S_t`` on ``A``'s diagonal blocks alone, the
+      layer switching only where the slow chain stays; an off-diagonal move
+      lands on either layer with probability one half.
+
+    The order is state-major (``2 i + a``), as ``np.kron(A, S)``;
+    :func:`sal.likelihood.ragged.kronecker_order` maps a layer-major
+    (``a K + i``) array onto it.
+
+    Defined here, where ``opt`` can name it, for
+    :func:`forward_log_likelihood_ragged`; :mod:`sal.likelihood.ragged`
+    re-exports it, as it does :class:`Posteriors` (issue #1186).
+    """
+
+    STAY_OR_MOVE = "stay_or_move"
+    KRONECKER = "kronecker"
+    KRONECKER_DIAGONAL = "kronecker_diagonal"
 
 
 def forward_log_likelihood(
@@ -308,6 +339,9 @@ def forward_log_likelihood_ragged(
     lengths: Sequence[int],
     log_initial: torch.Tensor,
     log_transition: torch.Tensor,
+    *,
+    switch: torch.Tensor | None = None,
+    switch_kind: SwitchKind = SwitchKind.STAY_OR_MOVE,
 ) -> torch.Tensor:
     """Total log-likelihood over segments of unequal length, differentiable.
 
@@ -334,13 +368,25 @@ def forward_log_likelihood_ragged(
         Log initial distribution, shape ``(m,)``.
     log_transition : torch.Tensor
         Log transition matrix, shape ``(m, m)``, one kernel for every step of
-        every segment.
+        every segment; under either Kronecker kind, the slow chain's
+        ``(m / 2, m / 2)``.
+    switch : torch.Tensor | None
+        One probability ``s`` in ``[0, 1]`` per position, shape ``(total,)``,
+        or ``None`` for ``log_transition`` at every step; as
+        :func:`sal.likelihood.ragged.posteriors` takes it (issue #1186). The
+        step into position ``t`` is built from ``s[t]`` and the one
+        transition, and a segment's first entry is never read, so its
+        gradient there is zero.
+    switch_kind : SwitchKind
+        How ``switch`` enters; see :class:`SwitchKind`. Under either
+        Kronecker kind ``log_density`` and ``log_initial`` are over the
+        ``m = 2 K`` states, and ``switch`` is required.
 
     Returns
     -------
     torch.Tensor
         Scalar: the summed log evidence over segments, differentiable with
-        respect to all three tensors. Its gradient with respect to
+        respect to every tensor argument. Its gradient with respect to
         ``log_density`` is the posterior marginal at every position (the
         Fisher identity), in the same ``(total, m)`` layout.
 
@@ -348,7 +394,10 @@ def forward_log_likelihood_ragged(
     ------
     ValueError
         If ``lengths`` is empty, holds a length below one or does not sum to
-        ``total``, or a tensor's shape disagrees with ``m``.
+        ``total``, or a tensor's shape disagrees with ``m``; or, as
+        :func:`sal.likelihood.ragged.posteriors` refuses them, a Kronecker
+        kind is given no ``switch`` or an odd ``m``, or ``switch`` is not one
+        probability per position.
 
     Notes
     -----
@@ -360,10 +409,11 @@ def forward_log_likelihood_ragged(
     table is written and the result is
     :func:`forward_log_likelihood_from_density`'s, bitwise.
 
-    The parameters after ``log_transition`` are reserved for the switched
-    step of :func:`sal.likelihood.ragged.posteriors`: ``switch`` and
-    ``switch_kind`` will be keyword-only when the switched recursion is
-    differentiated. Neither is implemented, so neither is accepted.
+    With ``switch`` the recursion is ``_switched_evidence``'s, on the
+    same padded block and the same ``final``: each step is taken in its
+    factors (``_switched_step``) rather than as a materialized
+    ``(m, m)`` matrix per position, and ``switch=None`` under
+    ``STAY_OR_MOVE`` runs the unswitched path above, unchanged.
     """
     if log_density.ndim != 2:
         msg = f"log_density {tuple(log_density.shape)} must be (total, m)"
@@ -376,29 +426,135 @@ def forward_log_likelihood_ragged(
             f"one position, summing to the {total} rows of log_density"
         )
         raise ValueError(msg)
-    if tuple(log_transition.shape) != (n_states, n_states):
+    switch_kind = SwitchKind(switch_kind)
+    kronecker = switch_kind is not SwitchKind.STAY_OR_MOVE
+    if kronecker and (switch is None or n_states % 2):
         msg = (
-            f"log_transition {tuple(log_transition.shape)} must be "
-            f"({n_states}, {n_states})"
+            f"a {switch_kind} switch takes 2 K states and a switch per "
+            f"position; got {n_states} states and switch={switch is not None}"
         )
+        raise ValueError(msg)
+    width = n_states // 2 if kronecker else n_states
+    if tuple(log_transition.shape) != (width, width):
+        msg = f"log_transition {tuple(log_transition.shape)} must be ({width}, {width})"
         raise ValueError(msg)
     if tuple(log_initial.shape) != (n_states,):
         msg = f"log_initial {tuple(log_initial.shape)} must be ({n_states},)"
         raise ValueError(msg)
+    if switch is not None and (
+        tuple(switch.shape) != (total,)
+        or not bool(((switch >= 0.0) & (switch <= 1.0)).all())
+    ):
+        msg = (
+            f"switch {tuple(switch.shape)} must be ({total},), one probability "
+            "in [0, 1] per position"
+        )
+        raise ValueError(msg)
     n, longest = len(sizes), max(sizes)
-    if min(sizes) == longest:
+    equal = min(sizes) == longest
+    if switch is None and equal:
         block = log_density.reshape(n, longest, n_states)
         evidence, _ = forward_messages(block, log_initial, log_transition)
         return evidence.sum()
     counts = torch.as_tensor(sizes, dtype=torch.long)
-    segment = torch.repeat_interleave(torch.arange(n), counts)
-    starts = torch.cumsum(counts, dim=0) - counts
-    position = torch.arange(total) - starts[segment]
-    # Log one at every padded position, so it adds nothing wherever the
-    # recursion reaches it; the scatter is out of place, so the gradient
-    # flows back to the live rows alone.
-    block = log_density.new_zeros((n, longest, n_states)).index_put(
-        (segment, position), log_density
-    )
-    evidence, _ = forward_messages(block, log_initial, log_transition, final=counts - 1)
-    return evidence.sum()
+    if equal:
+        final = None
+        block = log_density.reshape(n, longest, n_states)
+        steps = None if switch is None else switch.reshape(n, longest)
+    else:
+        final = counts - 1
+        segment = torch.repeat_interleave(torch.arange(n), counts)
+        starts = torch.cumsum(counts, dim=0) - counts
+        position = torch.arange(total) - starts[segment]
+        # Log one at every padded position, so it adds nothing wherever the
+        # recursion reaches it; the scatter is out of place, so the gradient
+        # flows back to the live rows alone.
+        block = log_density.new_zeros((n, longest, n_states)).index_put(
+            (segment, position), log_density
+        )
+        # A padded step reads a switch of zero; it lies past `final` and is
+        # never gathered.
+        steps = (
+            None
+            if switch is None
+            else switch.new_zeros((n, longest)).index_put((segment, position), switch)
+        )
+    if steps is None:
+        evidence, _ = forward_messages(block, log_initial, log_transition, final=final)
+        return evidence.sum()
+    return _switched_evidence(
+        block, log_initial, log_transition, steps, switch_kind, final
+    ).sum()
+
+
+def _switched_step(
+    probability: torch.Tensor,
+    step: torch.Tensor,
+    moved: torch.Tensor,
+    switch_kind: SwitchKind,
+) -> torch.Tensor:
+    """One switched step in its factors: ``probability`` times the step's matrix.
+
+    ``probability`` is ``(n, m)``, ``step`` the ``(n, 1)`` switch of the step
+    and ``moved`` the transition in probability space. The matrix
+    :func:`sal.likelihood.ragged.step_transitions` materializes is never
+    built: ``STAY_OR_MOVE`` is ``(1 - s) p + s p A``, ``m^2 + 2 m`` terms;
+    ``KRONECKER`` applies ``S_t`` to the layer axis, ``4 K`` terms, then
+    ``A`` to the slow axis, ``2 K^2``; ``KRONECKER_DIAGONAL`` takes ``A``'s
+    off-diagonal part on the layer sums, ``K^2``, and ``S_t`` on the
+    diagonal, ``4 K``. Against ``4 K^2`` per row for the explicit ``2 K``
+    matrix.
+    """
+    if switch_kind is SwitchKind.STAY_OR_MOVE:
+        return (1.0 - step) * probability + step * (probability @ moved)
+    n = probability.shape[0]
+    # `(n, K, 2)`: state `(i, a)` at `2 i + a`, as `np.kron(A, S)` lays it.
+    pair = probability.reshape(n, -1, 2)
+    layer = step.unsqueeze(2)
+    # `sum_a p[i, a] S[a, b]`: stay on the layer with `1 - s`, flip with `s`.
+    layered = (1.0 - layer) * pair + layer * pair.flip(2)
+    if switch_kind is SwitchKind.KRONECKER:
+        # `sum_i layered[i, b] A[i, j]`, the slow axis last for the matmul.
+        return (layered.transpose(1, 2) @ moved).transpose(1, 2).reshape(n, -1)
+    kept = torch.diagonal(moved)
+    # A move off the diagonal lands on either layer with probability 1/2.
+    spread = 0.5 * (pair.sum(2) @ (moved - torch.diag(kept)))
+    return (spread.unsqueeze(2) + kept.unsqueeze(1) * layered).reshape(n, -1)
+
+
+def _switched_evidence(
+    log_density: torch.Tensor,
+    log_initial: torch.Tensor,
+    log_transition: torch.Tensor,
+    switch: torch.Tensor,
+    switch_kind: SwitchKind,
+    final: torch.Tensor | None,
+) -> torch.Tensor:
+    """Each chain's log evidence under the switched step, over a padded batch.
+
+    :func:`forward_messages` with the step :func:`_switched_step` takes:
+    ``log_density`` is ``(n, length, m)``, padded positions scoring zero,
+    ``switch`` ``(n, length)`` and ``final`` as there. Each step rescales the
+    message by its row maximum, multiplies in probability space and returns
+    to logs; the maximum is detached, since the result does not depend on it,
+    so the gradient is the one through the product alone.
+    """
+    n = log_density.shape[0]
+    moved = torch.exp(log_transition)
+    # Split once: a slice per step is one autograd node whose backward writes
+    # a zero block the size of the whole input, quadratic in `length`; the
+    # backward of `unbind` stacks the per-step gradients once.
+    scores = log_density.unbind(dim=1)
+    steps = switch.unsqueeze(2).unbind(dim=1)
+    alpha = log_initial.unsqueeze(0) + scores[0]
+    columns: list[torch.Tensor] | None = [alpha] if final is not None else None
+    for score, step in zip(scores[1:], steps[1:], strict=True):
+        shift = alpha.max(dim=1, keepdim=True).values.detach()
+        product = _switched_step(torch.exp(alpha - shift), step, moved, switch_kind)
+        alpha = shift + torch.log(product) + score
+        if columns is not None:
+            columns.append(alpha)
+    if columns is None or final is None:
+        return torch.logsumexp(alpha, dim=1)
+    table = torch.stack(columns, dim=1)
+    return torch.logsumexp(table[torch.arange(n), final], dim=1)
