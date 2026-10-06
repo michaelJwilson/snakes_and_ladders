@@ -53,8 +53,11 @@ def _enumerated(
 ) -> dict[str, np.ndarray]:
     """Every path of every segment scored: marginals, counts, evidence, best path."""
     n_states = log_initial.shape[0]
-    gamma, counts = [], np.zeros((n_states, n_states))
-    evidence, best, best_joint = [], [], []
+    counts = np.zeros((n_states, n_states))
+    gamma: list[np.ndarray] = []
+    evidence: list[float] = []
+    best: list[int] = []
+    best_joint: list[float] = []
     for segment in scores.segments():
         paths = list(product(range(n_states), repeat=len(segment)))
         joint = np.array(
