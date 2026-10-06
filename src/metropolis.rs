@@ -86,6 +86,24 @@ impl Kernel for RandomWalk {
     fn set_scale(&mut self, scale: Vec<f64>) {
         self.scale = scale;
     }
+
+    fn set_temperature(&mut self, temperature: f64) {
+        self.temperature = temperature;
+        self.root = temperature.sqrt();
+    }
+
+    fn value(&self) -> f64 {
+        self.current
+    }
+
+    fn gradient(&self) -> &[f64] {
+        &[]
+    }
+
+    fn set_state(&mut self, position: &[f64], value: f64, _gradient: &[f64]) {
+        self.position.copy_from_slice(position);
+        self.current = value;
+    }
 }
 
 /// `Walk::new` for the random walk from `theta0`, targeting `exp(-U / temperature)`.

@@ -145,6 +145,17 @@ pub trait Kernel {
     fn position(&self) -> &[f64];
     /// The metric's scale per coordinate, `M^(-1/2)`: the warm-up's standard deviation.
     fn set_scale(&mut self, scale: Vec<f64>);
+    /// The temperature the next steps target `exp(-U / T)` at, checked by the caller.
+    fn set_temperature(&mut self, temperature: f64);
+    /// `U` at [`Kernel::position`], carried from the step that reached it.
+    fn value(&self) -> f64;
+    /// `grad U` there, carried likewise; empty for a kernel that takes none.
+    fn gradient(&self) -> &[f64];
+    /// Move to `position`, whose `U` and `grad U` the caller holds: an
+    /// exchange hands a rung another's state with what it carried (issue
+    /// #1249). `gradient` is ignored by a kernel that takes none; lengths are
+    /// checked by the caller.
+    fn set_state(&mut self, position: &[f64], value: f64, gradient: &[f64]);
 }
 
 /// `min(1, exp(log_ratio))` and the accept against `uniform`, as `metropolis._decide`.
@@ -368,6 +379,53 @@ impl<K: Kernel> Walk<K> {
     }
 }
 
+impl<K: Kernel> Walk<K> {
+    /// Where the chain is, and the `U` and `grad U` it carries there.
+    pub fn state(&self) -> (&[f64], f64, &[f64]) {
+        (
+            self.kernel.position(),
+            self.kernel.value(),
+            self.kernel.gradient(),
+        )
+    }
+
+    /// Hand the chain `position` with the `U` and `grad U` carried there (issue #1249).
+    ///
+    /// # Errors
+    /// A position of another dimension, or a gradient that is neither of
+    /// it nor empty for a kernel that takes none.
+    pub fn set_state(
+        &mut self,
+        position: &[f64],
+        value: f64,
+        gradient: &[f64],
+    ) -> Result<(), String> {
+        let d = self.kernel.position().len();
+        let wanted = self.kernel.gradient().len();
+        if position.len() != d || gradient.len() != wanted {
+            return Err(format!(
+                "state of dimension {} with a gradient of {} given to a walk of {d} carrying {wanted}",
+                position.len(),
+                gradient.len()
+            ));
+        }
+        self.kernel.set_state(position, value, gradient);
+        Ok(())
+    }
+
+    /// `n` transitions at `temperature`, which the walk keeps until the next
+    /// call: one schedule step or one rung's round (issue #1249). Returns the
+    /// count accepted; stores no draw and feeds no filter.
+    ///
+    /// # Errors
+    /// A temperature that is not finite and positive.
+    pub fn advance_at(&mut self, n: usize, temperature: f64) -> Result<usize, String> {
+        check_temperature(temperature)?;
+        self.kernel.set_temperature(temperature);
+        Ok(self.advance(n, false, false).accepted)
+    }
+}
+
 /// The Python class every compiled walk is: a constructor that runs the
 /// warm-up, `advance`, the filters' statistics and what the warm-up settled
 /// on (issues #1006, #1008). `$make` builds the [`Walk`] from the shared
@@ -448,6 +506,62 @@ macro_rules! walk_class {
                     block.accepted,
                     PyArray1::from_vec(py, block.energy_error),
                 )
+            }
+
+            /// Where the chain is, `U` there and `grad U` there (empty for
+            /// a kernel that takes none).
+            #[allow(clippy::type_complexity)]
+            fn state<'py>(
+                &self,
+                py: Python<'py>,
+            ) -> (Bound<'py, PyArray1<f64>>, f64, Bound<'py, PyArray1<f64>>) {
+                let (position, value, gradient) = self.walk.state();
+                (
+                    PyArray1::from_slice(py, position),
+                    value,
+                    PyArray1::from_slice(py, gradient),
+                )
+            }
+
+            /// Move the chain to `position`, carrying `value` and `gradient`
+            /// there rather than evaluating them (issue #1249).
+            fn set_state(
+                &mut self,
+                position: PyReadonlyArray1<'_, f64>,
+                value: f64,
+                gradient: PyReadonlyArray1<'_, f64>,
+            ) -> PyResult<()> {
+                self.walk
+                    .set_state(position.as_slice()?, value, gradient.as_slice()?)
+                    .map_err(PyValueError::new_err)
+            }
+
+            /// `n` transitions at `temperature`, kept until the next call;
+            /// returns `state()` after them and the count accepted. Releases
+            /// the GIL.
+            #[allow(clippy::type_complexity)]
+            fn advance_at<'py>(
+                &mut self,
+                py: Python<'py>,
+                n: usize,
+                temperature: f64,
+            ) -> PyResult<(
+                Bound<'py, PyArray1<f64>>,
+                f64,
+                Bound<'py, PyArray1<f64>>,
+                usize,
+            )> {
+                let walk = &mut self.walk;
+                let accepted = py
+                    .detach(|| walk.advance_at(n, temperature))
+                    .map_err(PyValueError::new_err)?;
+                let (position, value, gradient) = self.walk.state();
+                Ok((
+                    PyArray1::from_slice(py, position),
+                    value,
+                    PyArray1::from_slice(py, gradient),
+                    accepted,
+                ))
             }
 
             /// Operator `index`'s filter statistics: `n`, then the sums of

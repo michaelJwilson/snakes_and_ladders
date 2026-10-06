@@ -31,6 +31,7 @@ from enum import StrEnum
 import numpy as np
 import torch
 
+from sal.backend import Backend
 from sal.cost import Cost
 from sal.opt.budget import Budget
 from sal.opt.initialize import Initializer
@@ -177,6 +178,9 @@ class FromAnnealing(Initializer):
         The step's re-tuning along the schedule,
         :func:`~sal.sample.hmc.anneal`'s heuristic (issue #1208); ``None``
         runs ``step_size`` throughout, bitwise as before it existed.
+    backend : Backend
+        :func:`~sal.sample.hmc.anneal`'s: the compiled walk where the
+        objective supports a kernel, or the torch route (issue #1249).
     """
 
     def __init__(
@@ -186,12 +190,14 @@ class FromAnnealing(Initializer):
         generator: torch.Generator,
         n_steps: int = hmc.DEFAULT_STEPS,
         adaptation: hmc.Adaptation | None = None,
+        backend: Backend = Backend.RUST,
     ) -> None:
         self.schedule = schedule
         self.step_size = step_size
         self.generator = generator
         self.n_steps = n_steps
         self.adaptation = adaptation
+        self.backend = backend
 
     def run(self, objective: Objective) -> hmc.AnnealedTheta:
         """The annealing run: its best point, the acceptance rate and its cost.
@@ -207,6 +213,7 @@ class FromAnnealing(Initializer):
             step_size=self.step_size,
             n_steps=self.n_steps,
             adaptation=self.adaptation,
+            backend=self.backend,
         )
 
     def starts(self, objective: Objective) -> list[torch.Tensor]:
@@ -277,6 +284,10 @@ class FromTempering(Initializer):
         calibration's measurements run without it. Its gradients are in
         :attr:`TemperingSpend.force_evaluations`. ``None`` runs every rung at
         ``step_size``, bitwise as before it existed.
+    backend : Backend
+        :func:`~sal.sample.hmc.parallel_tempering`'s: a compiled walk per
+        rung where the objective supports a kernel, or the torch route
+        (issue #1249).
 
     Raises
     ------
@@ -293,6 +304,7 @@ class FromTempering(Initializer):
         n_steps: int = hmc.DEFAULT_STEPS,
         calibration: LadderCalibration | None = None,
         adaptation: hmc.Adaptation | None = None,
+        backend: Backend = Backend.RUST,
     ) -> None:
         if isinstance(n_rounds, Budget) and n_rounds.unit is not Cost.SECONDS:
             msg = (
@@ -307,6 +319,7 @@ class FromTempering(Initializer):
         self.n_steps = n_steps
         self.calibration = calibration
         self.adaptation = adaptation
+        self.backend = backend
         #: What the last :meth:`run` spent and, with a calibration, settled on;
         #: ``None`` before the first.
         self.spent: TemperingSpend | None = None
@@ -364,6 +377,7 @@ class FromTempering(Initializer):
             start=theta0,
             adaptation=self.adaptation,
             deadline=deadline,
+            backend=self.backend,
         )
         run_rounds = int(tempered.positions.shape[0])
         self.spent = TemperingSpend(

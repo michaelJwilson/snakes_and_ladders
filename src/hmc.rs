@@ -147,6 +147,25 @@ impl Kernel for Hamiltonian {
     fn set_scale(&mut self, scale: Vec<f64>) {
         self.scale = scale;
     }
+
+    fn set_temperature(&mut self, temperature: f64) {
+        self.temperature = temperature;
+        self.root = temperature.sqrt();
+    }
+
+    fn value(&self) -> f64 {
+        self.current
+    }
+
+    fn gradient(&self) -> &[f64] {
+        &self.held
+    }
+
+    fn set_state(&mut self, position: &[f64], value: f64, gradient: &[f64]) {
+        self.position.copy_from_slice(position);
+        self.current = value;
+        self.held.copy_from_slice(gradient);
+    }
 }
 
 /// `Walk::new` for Hamiltonian dynamics of `n_steps` leapfrog steps from
@@ -255,6 +274,48 @@ mod tests {
                 (variance * precision[i] - 1.0).abs() < 0.1,
                 "variance {variance} at {i}"
             );
+        }
+    }
+
+    #[test]
+    fn an_injected_state_is_the_chain_started_there_bitwise() {
+        // Issue #1249: a walk handed `(x, U(x), grad U(x))` draws what a
+        // walk started at `x` on the same seed draws, step for step, at
+        // any temperature it is handed per call.
+        let precision = vec![1.0, 2.0, 0.5];
+        let gaussian =
+            || -> Box<dyn Energy> { Box::new(Gaussian::new(precision.clone(), 3).unwrap()) };
+        let x = [0.4, -0.3, 1.1];
+        let mut started = walk(gaussian(), &x, 0.3, 1249, None, &[], 2.0, 5).unwrap();
+        let mut moved = walk(gaussian(), &[2.0, 2.0, 2.0], 0.3, 1249, None, &[], 2.0, 5).unwrap();
+        let (_, value, gradient) = started.state();
+        let gradient = gradient.to_vec();
+        moved.set_state(&x, value, &gradient).unwrap();
+        for temperature in [3.0, 1.0, 0.25] {
+            assert_eq!(
+                started.advance_at(7, temperature).unwrap(),
+                moved.advance_at(7, temperature).unwrap()
+            );
+            let (a, b) = (started.state(), moved.state());
+            assert_eq!(a.0, b.0);
+            assert_eq!(a.1.to_bits(), b.1.to_bits());
+            assert_eq!(a.2, b.2);
+        }
+        assert!(moved.set_state(&x[..2], value, &gradient).is_err());
+        assert!(moved.advance_at(1, 0.0).is_err());
+    }
+
+    #[test]
+    fn one_call_per_step_is_one_block_bitwise() {
+        // `anneal` calls once per schedule step: at a constant temperature
+        // that is `advance` over the same count, draw for draw.
+        let gaussian = || -> Box<dyn Energy> { Box::new(Rosenbrock { a: 1.0, b: 1.0 }) };
+        let mut block = walk(gaussian(), &[-1.2, 1.0], 0.05, 7, None, &[], 1.5, 10).unwrap();
+        let mut stepped = walk(gaussian(), &[-1.2, 1.0], 0.05, 7, None, &[], 1.0, 10).unwrap();
+        let draws = block.advance(50, true, false).draws;
+        for row in draws.chunks_exact(2) {
+            stepped.advance_at(1, 1.5).unwrap();
+            assert_eq!(stepped.state().0, row);
         }
     }
 
