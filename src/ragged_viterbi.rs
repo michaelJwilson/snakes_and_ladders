@@ -354,12 +354,12 @@ mod tests {
     }
 
     #[test]
-    fn a_one_position_segment_is_refused() {
-        let (mut path, mut joint) = (vec![0_i64; 3], vec![0.0; 2]);
+    fn an_empty_segment_is_refused() {
+        let (mut path, mut joint) = (vec![0_i64; 2], vec![0.0; 2]);
         let error = ragged_viterbi_into(
-            &[0.0; 3],
+            &[0.0; 2],
             1,
-            &[2, 1],
+            &[2, 0],
             &[0.0],
             &[0.0],
             &[],
@@ -368,6 +368,6 @@ mod tests {
             &mut joint,
         )
         .unwrap_err();
-        assert!(error.contains("at least 2 positions"), "{error}");
+        assert!(error.contains("at least 1 position"), "{error}");
     }
 }

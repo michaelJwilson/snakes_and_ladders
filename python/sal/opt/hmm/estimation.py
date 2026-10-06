@@ -29,7 +29,7 @@ from sal.emissions import (
     PoissonEmission,
     settle_collapse,
 )
-from sal.opt.em import EM, EmConfig, check_stages, em_loop
+from sal.opt.em import EM, Degenerate, EmConfig, Unsettled, check_stages, em_loop
 from sal.opt.hmm.forward import Posteriors, forward_messages
 from sal.opt.m_step import MStep
 from sal.opt.termination import Termination
@@ -60,8 +60,10 @@ class EmFit:
         data identifies it over.
     termination : Termination | None
         Whether the outer loop met its relative tolerance and after how many
-        EM iterations (issue #860). An unconverged emission M step is refused
-        rather than reported, and still is: this answers for the outer loop.
+        EM iterations (issue #860). An emission M step that did not settle
+        ends the fit with :attr:`~sal.opt.termination.Stop.DEGENERATE`, the
+        parameters and log-likelihood those iterations less one returned,
+        and the inner solve's report in ``unsettled`` (issue #1235).
     spent : int
         What the fit cost, in ``unit``: the EM iterations run, each one E
         step and one M step (issue #1165).
@@ -79,6 +81,9 @@ class EmFit:
         :mod:`sal.sandbox.annealed_em` conserves. ``termination`` is the
         last stage's and ``spent`` their total; omitted, it is
         ``(termination,)``.
+    unsettled : Unsettled | None
+        The emission M step that ended a degenerate fit, its inner iterations
+        and residual (issue #1235); ``None`` for every other fit.
 
     Raises
     ------
@@ -97,6 +102,7 @@ class EmFit:
     unit: Cost = dataclass_field(default=Cost.ITERATIONS, kw_only=True)
     frozen: tuple[int, ...] = dataclass_field(default=(), kw_only=True)
     stages: tuple[Termination, ...] = dataclass_field(default=(), kw_only=True)
+    unsettled: Unsettled | None = dataclass_field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
         check_stages(self)
@@ -529,6 +535,7 @@ def _streamed_family(
     m = components.n_states
     at_boundary = False
     frozen: set[int] = set()
+    unsettled: Unsettled | None = None
 
     def flat(tensor: torch.Tensor) -> np.ndarray:
         return np.ascontiguousarray(tensor.detach().numpy(), dtype=np.float64).reshape(
@@ -591,7 +598,7 @@ def _streamed_family(
         def tabled(
             state: tuple[np.ndarray, np.ndarray, EmissionFamily],
         ) -> tuple[tuple[np.ndarray, np.ndarray, EmissionFamily], float]:
-            nonlocal at_boundary
+            nonlocal at_boundary, unsettled
             initial, previous, family = state
             initial, transition, histogram, log_likelihood = oxisal.count_em_step(
                 counts,
@@ -611,12 +618,13 @@ def _streamed_family(
                 support, torch.from_numpy(histogram.reshape(-1, m)), covariate=exposure
             )
             if not reestimate.converged:
+                unsettled = Unsettled(reestimate.iterations, reestimate.residual)
                 msg = (
                     f"the emission M step did not settle after "
                     f"{reestimate.iterations} iterations, at a relative change "
                     f"of {reestimate.residual:.3e}"
                 )
-                raise ValueError(msg)
+                raise Degenerate(msg, unsettled)
             at_boundary = at_boundary or reestimate.at_boundary
             frozen.update(reestimate.frozen)
             return (initial, transition, reestimate.components), log_likelihood
@@ -637,6 +645,7 @@ def _streamed_family(
         termination=termination,
         spent=termination.iterations,
         frozen=tuple(sorted(frozen)),
+        unsettled=unsettled,
     )
 
 
@@ -798,7 +807,10 @@ def baum_welch_family(
     EmFit
         The fitted parameters, the final log-likelihood, whether any M step
         reported a parameter at the edge of what the data identifies, the
-        iterations spent, and the states any M step froze.
+        iterations spent, and the states any M step froze. An emission M step
+        that does not settle ends the fit with
+        :attr:`~sal.opt.termination.Stop.DEGENERATE` on the previous
+        iteration's parameters, its report in ``unsettled`` (issue #1235).
 
     Raises
     ------
@@ -920,6 +932,7 @@ def baum_welch_family(
 
     at_boundary = False
     frozen: set[int] = set()
+    unsettled: Unsettled | None = None
 
     def iterate(
         state: tuple[torch.Tensor, torch.Tensor, torch.Tensor, EmissionFamily],
@@ -930,7 +943,7 @@ def baum_welch_family(
         per-step kernels it is expanded to and the emission family --- every
         parameter the recursion below reads and the M step rewrites.
         """
-        nonlocal at_boundary, previous
+        nonlocal at_boundary, previous, unsettled
         log_initial, log_transition, kernels, components = state
         scored = (
             exposure
@@ -1049,6 +1062,7 @@ def baum_welch_family(
             else m_step(components, data, previous, scored)
         )
         if not step.converged:
+            unsettled = Unsettled(step.iterations, step.residual)
             msg = (
                 f"the emission M step did not settle after {step.iterations} "
                 f"iterations, at a relative change of {step.residual:.3e}: a "
@@ -1056,7 +1070,7 @@ def baum_welch_family(
                 f"estimate, and a monotone outer likelihood would not have "
                 f"shown it"
             )
-            raise ValueError(msg)
+            raise Degenerate(msg, unsettled)
         at_boundary = at_boundary or step.at_boundary
         frozen.update(step.frozen)
         return (log_initial, log_transition, kernels, step.components), log_likelihood
@@ -1075,4 +1089,5 @@ def baum_welch_family(
         termination=termination,
         spent=termination.iterations,
         frozen=tuple(sorted(frozen)),
+        unsettled=unsettled,
     )

@@ -23,7 +23,7 @@ from sal.likelihood.mixture_assignments import (
     enumerate_mixture_assignments,
 )
 from sal.opt.budget import Budget, Outcome, compare
-from sal.opt.em import EM, EmConfig
+from sal.opt.em import EM, EmConfig, Unsettled
 from sal.opt.fit import fit
 from sal.opt.hmm import align_by_key
 from sal.opt.initialize import Initializer
@@ -40,6 +40,7 @@ from sal.opt.mixture import (
     uniform_seeds,
 )
 from sal.opt.potts import PottsObjective
+from sal.opt.termination import Stop
 from sal.sim.mixture import MixtureParams, simulate_mixture
 from sal.sim.potts_chain import PottsParams, simulate_chains
 
@@ -659,18 +660,25 @@ class _ReportingGaussian(GaussianEmission):
 
 @pytest.mark.smoke
 @pytest.mark.bug
-def test_an_unconverged_component_m_step_is_refused() -> None:
+def test_an_unconverged_component_m_step_is_not_returned() -> None:
     # The loop read `.emissions` off the report and dropped the rest, so a
     # number from an inner solve that never settled reached the outer
-    # likelihood -- what `likelihood/CLAUDE.md` forbids and what the sibling
-    # `opt.emission_mixture.expectation_maximization` refuses (issue #856).
+    # likelihood -- what `likelihood/CLAUDE.md` forbids (issue #856). The fit
+    # ends degenerate on the start, the step that read it discarded, as the
+    # sibling `opt.emission_mixture.expectation_maximization` ends (#1235).
     observations = _dataset(n_samples=100)
     components = _ReportingGaussian(MEAN, SCALE, 1e-9, converged=False)
+    weights = torch.as_tensor(WEIGHTS, dtype=torch.float64)
 
-    with pytest.raises(ValueError, match="did not settle at EM iteration 1"):
-        expectation_maximization(
-            observations, torch.as_tensor(WEIGHTS, dtype=torch.float64), components
-        )
+    fit = expectation_maximization(
+        observations, weights, components, backend=Backend.PYTHON
+    )
+
+    assert fit.termination.reason is Stop.DEGENERATE
+    assert fit.termination.iterations == 1
+    assert fit.unsettled == Unsettled(iterations=3, residual=0.25)
+    assert fit.components is components
+    assert fit.weights is weights
 
 
 @pytest.mark.smoke

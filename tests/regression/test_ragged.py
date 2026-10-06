@@ -9,7 +9,7 @@ import math
 
 import numpy as np
 import pytest
-from sal.ragged import MINIMUM_LENGTH, Ragged
+from sal.ragged import MINIMUM_LENGTH, Ragged, floor_lengths
 
 
 @pytest.mark.critical
@@ -31,14 +31,21 @@ def test_the_segments_tile_the_array_and_are_views() -> None:
 
 @pytest.mark.critical
 @pytest.mark.smoke
-def test_a_one_position_segment_is_refused() -> None:
-    """All initial distribution and no transition, so the shape is refused.
+def test_one_position_is_admitted_and_an_empty_segment_is_refused() -> None:
+    """A segment of one position is a batch; a segment of none is not.
 
-    The ruling on #666: a padded, masked recursion goes wrong here first.
+    Issue #1233 lifts the refusal of length one that #666 ruled; what one
+    position computes is refereed in ``test_ragged_length_one.py``.
     """
-    with pytest.raises(ValueError, match="at least 2 positions"):
-        Ragged(np.zeros(3), (1, 2))
-    assert MINIMUM_LENGTH == 2
+    batch = Ragged(np.arange(4.0), (1, 2, 1))
+    assert [segment.tolist() for segment in batch.segments()] == [
+        [0.0],
+        [1.0, 2.0],
+        [3.0],
+    ]
+    with pytest.raises(ValueError, match="at least 1 position"):
+        Ragged(np.zeros(3), (0, 3))
+    assert MINIMUM_LENGTH == 1
 
 
 @pytest.mark.critical
@@ -227,6 +234,17 @@ def test_floored_equals_the_greedy_rule_written_out(seed: int) -> None:
     )
     assert parent.tolist() == expected
     assert merged.values is batch.values, "values is shared, not copied"
+    # Issue #1233: the rule on lengths alone is the method's, bitwise.
+    alone, index = floor_lengths(
+        batch.lengths,
+        min_length,
+        weight=weight,
+        min_weight=min_weight,
+        groups=groups,
+        extent=extent,
+    )
+    assert alone == merged.lengths
+    np.testing.assert_array_equal(index, parent)
     assert merged.lengths == tuple(
         int(np.sum(np.asarray(lengths)[parent == label]))
         for label in range(merged.n_segments)
@@ -283,6 +301,9 @@ def test_floored_by_hand() -> None:
     assert parent.tolist() == [0, 0, 0, 1, 1, 2, 2]
     merged, parent = batch.floored(100)
     assert merged.lengths == (20,), "a group that never closes stands alone"
+    lengths, index = floor_lengths(batch.lengths, 5, groups=[0, 0, 0, 1, 1, 1, 1])
+    assert lengths == (7, 6, 7), "the lengths alone give the same merge"
+    assert index.tolist() == [0, 0, 0, 1, 1, 2, 2]
 
 
 @pytest.mark.critical
@@ -296,3 +317,5 @@ def test_floored_refuses_arrays_not_one_per_segment() -> None:
         batch.floored(3, groups=[0])
     with pytest.raises(ValueError, match=r"expected \(2, 2\)"):
         batch.floored(3, extent=np.zeros((2, 3)))
+    with pytest.raises(ValueError, match="one per segment"):
+        floor_lengths((2, 3), 3, weight=np.ones(3))
