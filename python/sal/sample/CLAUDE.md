@@ -41,6 +41,13 @@ draws reach it without the module importing their type.
   by either column alone. Report each in the unit it spends, name the unit,
   and settle the ranking on what all of them spend.
 
+- **An annealer or a tempering is a `Step` on the shared loop.** `loop.anneal`
+  walks a schedule and `loop.temper` runs the exchange (#1218); an entry
+  point builds its step and reads the result. A step carries what it scored
+  so no loop re-scores a point, and charges its move in its own unit. A loop
+  that does not fold --- a move between rungs, a walker along the ladder, a
+  re-estimated state --- is named in `loop`'s docstring with the reason.
+
 - **A sampler is validated by the distribution it converges to, never by
   inspection.**
 

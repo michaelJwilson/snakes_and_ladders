@@ -55,7 +55,6 @@ import numpy as np
 from sal.backend import Backend, refuse_backend
 from sal.cost import Cost
 from sal.numerics import logsumexp
-from sal.opt.termination import Termination
 from sal.sample.accept import accept
 from sal.sample.balanced import (
     draw_change,
@@ -64,6 +63,7 @@ from sal.sample.balanced import (
     log_normalizer,
     log_ratios,
 )
+from sal.sample.loop import Moved, anneal
 from sal.sample.schedule import Annealed, TempSchedule
 from sal.search.infer import score_topology
 from sal.sim.factor_graph import Factor, FactorGraph
@@ -755,24 +755,55 @@ def anneal_factor_graph(
     """
     indexed = Indexed(graph)
     state = indexed.start(rng, start)
-    best_state = state.copy()
-    best = indexed.log_density(state, backend)
-    trajectory = [best]
-    for step in range(schedule.n_steps):
-        gibbs_sweep(indexed, state, rng, beta=1.0 / schedule(step), backend=backend)
-        value = indexed.log_density(state, backend)
-        trajectory.append(value)
-        if value > best:
-            best, best_state = value, state.copy()
-    return AnnealedLabelling(
-        best=best_state,
-        log_density=best,
-        final=state,
-        trace=np.array(trajectory),
-        spent=schedule.n_steps,
-        unit=Cost.SWEEPS,
-        termination=Termination.after(schedule.n_steps, converged=False),
+    walked = anneal(
+        HeatBath(indexed, backend),
+        schedule,
+        Moved(state, -indexed.log_density(state, backend), None, 0),
+        rng,
     )
+    return AnnealedLabelling(
+        best=walked.best,
+        log_density=-walked.energy,
+        final=walked.final,
+        trace=-np.array(walked.energies),
+        spent=walked.spent,
+        unit=walked.unit,
+        termination=walked.termination,
+    )
+
+
+@dataclass(frozen=True)
+class HeatBath:
+    """One heat-bath sweep over a factor graph as a :class:`~sal.sample.loop.Step`, charged one sweep.
+
+    The state is moved in place by :func:`gibbs_sweep` at ``beta = 1 / T``
+    and scored by :meth:`Indexed.log_density`, its energy being the
+    negated log-density; :func:`anneal_factor_graph` and
+    :func:`~sal.sample.tempered.tempered_factor_graph` run it.
+    """
+
+    indexed: Indexed
+    backend: Backend = Backend.NUMBA
+    unit: Cost = Cost.SWEEPS
+
+    def __call__(
+        self,
+        state: np.ndarray,
+        _energy: float,
+        _carried: None,
+        temperature: float,
+        rng: np.random.Generator,
+        /,
+    ) -> Moved[np.ndarray, None]:
+        """One sweep at ``temperature``."""
+        gibbs_sweep(
+            self.indexed, state, rng, beta=1.0 / temperature, backend=self.backend
+        )
+        return Moved(state, -self.indexed.log_density(state, self.backend), None, 1)
+
+    def keep(self, state: np.ndarray) -> np.ndarray:
+        """A copy: the sweep moves the state in place."""
+        return state.copy()
 
 
 def chain_block_sweep(
@@ -910,29 +941,61 @@ def anneal_topology(
     cache = {} if scores is None else scores
     fitted_before = len(cache)
     score = cached_topology_score(alignment, n_states, cache, model=model)
-    current, value = start, score(start)
-    best, best_value = current, value
-    trajectory = [value]
-    accepted = 0
-    for step in range(schedule.n_steps):
-        taken = topology_step(current, value, schedule(step), rng, score, moves=moves)
-        current, value = taken.topology, taken.log_likelihood
-        if taken.moved:
-            accepted += 1
-            if value > best_value:
-                best, best_value = current, value
-        trajectory.append(value)
+    value = score(start)
+    walk = TopologyWalk(score, cache, moves)
+    walked = anneal(walk, schedule, Moved(start, -value, None, 0), rng)
     return AnnealedTopology(
-        best=best,
-        log_likelihood=best_value,
-        final=current,
-        trace=np.array(trajectory),
-        acceptance=accepted / schedule.n_steps,
+        best=walked.best,
+        log_likelihood=-walked.energy,
+        final=walked.final,
+        trace=-np.array(walked.energies),
+        acceptance=walk.accepted / schedule.n_steps,
         scores=cache,
         spent=len(cache) - fitted_before,
-        unit=Cost.FITS,
-        termination=Termination.after(schedule.n_steps, converged=False),
+        unit=walked.unit,
+        termination=walked.termination,
     )
+
+
+@dataclass
+class TopologyWalk:
+    """One :func:`topology_step` as a :class:`~sal.sample.loop.Step`, charged the topologies it fitted.
+
+    The energy is the negated fitted log-likelihood. A cache hit is free, so
+    a step that proposes a topology already in ``cache`` charges nothing;
+    :func:`anneal_topology` and
+    :func:`~sal.sample.tempered.tempered_topologies` run it.
+    """
+
+    score: Callable[[Topology], float]
+    cache: Mapping[frozenset[frozenset[str]], float]
+    moves: MoveSet = MoveSet.NNI
+    unit: Cost = Cost.FITS
+    #: Proposals accepted so far, summed into an acceptance rate.
+    accepted: int = 0
+
+    def __call__(
+        self,
+        state: Topology,
+        energy: float,
+        _carried: None,
+        temperature: float,
+        rng: np.random.Generator,
+        /,
+    ) -> Moved[Topology, None]:
+        """One proposal at ``temperature``."""
+        fitted = len(self.cache)
+        taken = topology_step(
+            state, -energy, temperature, rng, self.score, moves=self.moves
+        )
+        self.accepted += taken.moved
+        return Moved(
+            taken.topology, -taken.log_likelihood, None, len(self.cache) - fitted
+        )
+
+    def keep(self, state: Topology) -> Topology:
+        """The state itself: a step builds a new topology rather than moving one."""
+        return state
 
 
 def cached_topology_score(

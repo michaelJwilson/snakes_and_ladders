@@ -68,10 +68,12 @@ POLISH_RESERVE = POLISH_STEPS * 27 + 2
 STEP_SIZE = 0.02
 N_STEPS = 10
 LADDER = (1.0, 2.0, 4.0, 8.0)
-#: Objective calls per Hamiltonian proposal: two Hamiltonians, the trajectory,
-#: and the value where the chain landed. Pinned by
-#: `test_tempering_costs_what_its_accounting_says_and_is_reproducible`.
-PER_PROPOSAL = leapfrog.force_evaluations(N_STEPS) + 3
+#: Objective calls per Hamiltonian proposal: the trajectory's gradients, each
+#: carrying its value, the first carried from the transition before (issues
+#: #1217, #1222). A chain adds ``U`` and ``grad U`` at its start, two calls,
+#: and a tempering one ``U`` at its shared start and a ``grad U`` per replica:
+#: the run's ``spent`` plus the one ``U``.
+PER_PROPOSAL = leapfrog.force_evaluations(N_STEPS, carried=True)
 
 #: Reaching the optimum: within this of the referee, relative to it.
 TOLERANCE = 1e-6
@@ -170,7 +172,7 @@ def _anneal(fixture: Fixture, budget: Budget, rng: np.random.Generator) -> Outco
     """One chain from a random start, hot to cold, then the polish from its best point."""
     theta = _random_start(fixture, rng)
     counted = Counted(fixture.objective)
-    n_proposals = (budget.size - POLISH_RESERVE - 1) // PER_PROPOSAL
+    n_proposals = (budget.size - POLISH_RESERVE - 2) // PER_PROPOSAL
     run = anneal(
         counted,
         ExponentialTempSchedule(LADDER[-1], LADDER[0], n_proposals),
@@ -187,7 +189,9 @@ def _tempering(fixture: Fixture, budget: Budget, rng: np.random.Generator) -> Ou
     """Four replicas from one random start, exchanging, then the polish from the best."""
     theta = _random_start(fixture, rng)
     counted = Counted(fixture.objective)
-    n_rounds = (budget.size - POLISH_RESERVE - 1) // (PER_PROPOSAL * len(LADDER))
+    n_rounds = (budget.size - POLISH_RESERVE - 1 - len(LADDER)) // (
+        PER_PROPOSAL * len(LADDER)
+    )
     run = parallel_tempering(
         counted,
         LADDER,

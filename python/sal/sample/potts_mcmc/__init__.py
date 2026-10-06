@@ -108,6 +108,7 @@ this one: a name re-exported here is a copy.
 
 from __future__ import annotations
 
+from sal.sample.loop import swap_log_ratio
 from sal.sample.potts_mcmc.chains import (
     AnnealedPotts,
     ClusterTempered,
@@ -126,7 +127,6 @@ from sal.sample.potts_mcmc.chains import (
     rung_moves,
     sample_potts,
     sample_potts_pair,
-    swap_log_ratio,
     sweep_for,
     tempered,
 )

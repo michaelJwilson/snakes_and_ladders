@@ -77,6 +77,7 @@ from sal.opt.objective import (
     value_and_gradient,
 )
 from sal.opt.termination import Termination
+from sal.sample import loop
 from sal.sample.accept import (
     accept_ratio,
     accept_with,
@@ -109,6 +110,7 @@ from sal.sample.declared import (
     declared_jax_energy,
 )
 from sal.sample.hmc.jax import JaxWalk
+from sal.sample.loop import Exchanging, Moved, temper
 from sal.sample.schedule import (
     Annealed,
     Monotone,
@@ -117,7 +119,7 @@ from sal.sample.schedule import (
     ladder,
 )
 from sal.sample.schedule import Tempered as TemperedRun
-from sal.sample.tempered import exchange
+from sal.sample.tempered import ExchangeSeries
 
 # `current` is aliased: `_coefficients` already binds that name to a
 # sub-step length, and one of the two has to give.
@@ -685,66 +687,107 @@ def anneal(
     generator = torch_stream(rng)
     _check_trajectory(step_size, n_steps)
     position = start_point(objective, start)
-
-    best, best_value = position.clone(), float(objective(position))
-    # `U` and `grad U` at `position`, carried from one transition to the
-    # next rather than evaluated again by each (issues #1217, #1222).
-    value = best_value
-    force: torch.Tensor | None = None
-    accepted = 0
-    # `energy` is the best value so far, which is what `AnnealedTheta.value`
-    # returns: the series ends at the field rather than at the last visited
-    # point, which the result does not report. `best` is the state passed,
-    # for the same reason.
-    tracked: TrackedOptimization = current_tracked()
-    averaging = (
-        None
+    step = _Annealing(
+        objective,
+        integrator,
+        n_steps,
+        step_size,
+        schedule.n_steps,
+        adaptation,
+        averaging=None
         if adaptation is None
-        else DualAveraging(step_size, adaptation.target_acceptance)
+        else DualAveraging(step_size, adaptation.target_acceptance),
     )
-    step_sizes: list[float] = []
-    for step in range(schedule.n_steps):
-        temperature = schedule(step)
-        taken, value, force = _transition(
-            objective,
+    # `U` at the start; `grad U` is the first trajectory's, charged there,
+    # and both are carried from one transition to the next rather than
+    # evaluated again by each (issues #1217, #1222).
+    origin: Moved[torch.Tensor, torch.Tensor | None] = Moved(
+        position, float(objective(position)), None, 0
+    )
+    walked = loop.anneal(step, schedule, origin, generator)
+    return AnnealedTheta(
+        best=walked.best,
+        value=walked.energy,
+        final=walked.final,
+        acceptance_rate=step.accepted / schedule.n_steps,
+        spent=walked.spent,
+        unit=walked.unit,
+        termination=walked.termination,
+        step_sizes=None if adaptation is None else tuple(step.step_sizes),
+    )
+
+
+@dataclass
+class _Annealing:
+    """:func:`anneal`'s transition as a :class:`~sal.sample.loop.Step`, charged in gradients.
+
+    It carries ``grad U`` beside the position, so a trajectory costs
+    ``integrator.force_evaluations(n_steps, carried=True)`` once the first
+    has evaluated it at the start (issue #1222). With an ``adaptation`` the
+    step is re-tuned along the schedule, window by window, as :func:`anneal`
+    states.
+    """
+
+    objective: Objective
+    integrator: Integrator
+    n_steps: int
+    step_size: float
+    n_total: int
+    adaptation: Adaptation | None
+    averaging: DualAveraging | None
+    unit: Cost = Cost.GRADIENTS
+    accepted: int = 0
+    steps: int = 0
+    step_sizes: list[float] = field(default_factory=list)
+
+    def __call__(
+        self,
+        position: torch.Tensor,
+        potential: float,
+        force: torch.Tensor | None,
+        temperature: float,
+        generator: torch.Generator,
+        /,
+    ) -> Moved[torch.Tensor, torch.Tensor | None]:
+        """One transition at ``temperature``."""
+        adaptation = self.adaptation
+        taken, value, landed = _transition(
+            self.objective,
             position,
             temperature,
             generator,
-            step_size
+            self.step_size
             if adaptation is None
-            else jittered(step_size, adaptation.step_jitter, generator),
-            n_steps,
-            integrator,
-            potential=value,
+            else jittered(self.step_size, adaptation.step_jitter, generator),
+            self.n_steps,
+            self.integrator,
+            potential=potential,
             force=force,
         )
-        if averaging is not None and adaptation is not None:
+        if self.averaging is not None and adaptation is not None:
             # The iterate drives the next proposal; at a window's end the
             # averaged step is kept and the averaging restarts from it,
             # since the temperature it was tuned at has moved on.
-            step_size = averaging.update(taken.probability)
-            if (step + 1) % adaptation.warmup == 0 or step + 1 == schedule.n_steps:
-                step_size = averaging.averaged
-                step_sizes.append(step_size)
-                averaging = DualAveraging(step_size, adaptation.target_acceptance)
-        position = taken.position
-        accepted += taken.accepted
-        if value < best_value:
-            best, best_value = position.clone(), value
-        tracked.record(step, state=best, temperature=temperature, energy=best_value)
-    tracked.record_cost(max(schedule.n_steps - 1, 0), best.nbytes)
-    return AnnealedTheta(
-        best=best,
-        value=best_value,
-        final=position,
-        acceptance_rate=accepted / schedule.n_steps,
-        # `grad U` at the start once, then each trajectory's own (#1222).
-        spent=1
-        + schedule.n_steps * integrator.force_evaluations(n_steps, carried=True),
-        unit=Cost.GRADIENTS,
-        termination=Termination.after(schedule.n_steps, converged=False),
-        step_sizes=None if adaptation is None else tuple(step_sizes),
-    )
+            self.step_size = self.averaging.update(taken.probability)
+            done = self.steps + 1
+            if done % adaptation.warmup == 0 or done == self.n_total:
+                self.step_size = self.averaging.averaged
+                self.step_sizes.append(self.step_size)
+                self.averaging = DualAveraging(
+                    self.step_size, adaptation.target_acceptance
+                )
+        self.steps += 1
+        self.accepted += taken.accepted
+        return Moved(
+            taken.position,
+            value,
+            landed,
+            self.integrator.force_evaluations(self.n_steps, carried=force is not None),
+        )
+
+    def keep(self, position: torch.Tensor) -> torch.Tensor:
+        """A clone, so the best point is not the tensor the chain moves on."""
+        return position.clone()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -815,9 +858,10 @@ def parallel_tempering(
     down the ladder (Swendsen & Wang, 1986; Geyer, 1991; Earl & Deem, 2005).
 
     **The exchange is one loop, and this is one of its instantiations**:
-    :func:`sal.sample.tempered.exchange` runs the rounds,
-    the swaps and the walker trace, and what is supplied here is the step
-    --- one Hamiltonian transition per replica --- and the draw the swap
+    :func:`sal.sample.loop.temper` runs the rounds,
+    the swaps and the walker trace (issue #1218), and what is supplied here is
+    the step --- one Hamiltonian transition per rung, carrying ``grad U`` ---
+    and the draw the swap
     uniform comes from, which is this module's torch stream (issue #861).
     The discrete counterpart,
     :func:`sal.sample.potts_mcmc.parallel_tempering`, stays
@@ -907,12 +951,6 @@ def parallel_tempering(
         for child in torch.randint(0, 2**31 - 1, (n_replicas,), generator=parent)
     ]
     origins = _rung_starts(objective, start, n_replicas)
-    # Unadapted, a replica's `grad U` is carried beside its position, so a
-    # trajectory costs its own gradients alone after the replica's first
-    # (issue #1222). On a metric it is not: an accepted point returns to
-    # `theta` through `* scale`, and the next round's `/ scale` may differ
-    # from the point the gradient was taken at in the last place.
-    per_proposal = integrator.force_evaluations(n_steps, carried=adaptation is None)
     adapted: tuple[Adapted, ...] | None = None
     if adaptation is not None:
         kernel = _HamiltonianKernel(n_steps=n_steps, integrator=integrator)
@@ -933,11 +971,22 @@ def parallel_tempering(
             )
             reports.append(report)
         adapted = tuple(reports)
+    accepted = torch.zeros(n_replicas, dtype=torch.float64)
     # Each rung's metric is a change of coordinates (`Scaled`): a replica's
     # position is kept in `theta`, which is what an exchange swaps.
-    scales = [] if adapted is None else [r.mass_diagonal.rsqrt() for r in adapted]
-    metrics = [Scaled(objective, scale) for scale in scales]
-    jitter = 0.0 if adaptation is None else adaptation.step_jitter
+    steps = [
+        _Rung(
+            objective,
+            integrator,
+            n_steps,
+            step_size,
+            accepted,
+            index,
+            jitter=0.0 if adaptation is None else adaptation.step_jitter,
+            adapted=None if adapted is None else adapted[index],
+        )
+        for index in range(n_replicas)
+    ]
     positions = [origin.clone() for origin in origins]
     # One evaluation where every replica starts at one point, as before
     # per-rung starts existed: a counted objective sees the same calls.
@@ -947,127 +996,148 @@ def parallel_tempering(
         if shared
         else [float(objective(origin)) for origin in origins]
     )
-    lowest_start = min(range(n_replicas), key=values.__getitem__)
-    best, best_value = origins[lowest_start].clone(), values[lowest_start]
-    accepted = torch.zeros(n_replicas, dtype=torch.float64)
     # A list rather than a tensor sized to `n_rounds`: under a deadline that
     # count is a ceiling, and the stacked rounds are the same values.
     recorded: list[torch.Tensor] = []
-    # The ladder is strictly increasing, so a replica's temperature names it:
-    # the loop hands the step a temperature and a generator, not an index.
-    rung = {temperature: index for index, temperature in enumerate(temperatures)}
-    # `grad U` per position, keyed on the tensor's identity: an exchange
-    # swaps the tensors themselves between rungs, and `U` does not depend on
-    # the temperature, so the gradient moves with the position (issue #1222).
-    forces: dict[int, tuple[torch.Tensor, torch.Tensor | None]] = {}
-    round_index = 0
     # `energy` is the best value so far, which is `Tempered.value`; the rest
-    # of the series is the exchange loop's, recorded where it runs. A
-    # per-replica energy series is not recorded because the result reports
-    # the minimum over replicas.
+    # of the series is the exchange's (`ExchangeSeries`). A per-replica
+    # energy series is not recorded because the result reports the minimum
+    # over replicas.
     tracked: TrackedOptimization = current_tracked()
+    series = ExchangeSeries()
 
-    def transition(
-        position: torch.Tensor,
-        density: float,
-        temperature: float,
-        child: torch.Generator,
-    ) -> tuple[torch.Tensor, float]:
-        """One Hamiltonian transition, and the log-density where it landed.
-
-        ``density`` is ``-U(position)``, which the exchange carries beside
-        the position, so neither end of the step is evaluated twice (issue
-        #1217).
-        """
-        index = rung[temperature]
-        if adapted is None:
-            held = forces.pop(id(position), None)
-            step, landed_at, force = _transition(
-                objective,
-                position,
-                temperature,
-                child,
-                step_size,
-                n_steps,
-                integrator,
-                potential=-density,
-                force=held[1] if held is not None and held[0] is position else None,
-            )
-            forces[id(step.position)] = (step.position, force)
-            accepted[index] += step.accepted
-            return step.position, -landed_at
-        scale = scales[index]
-        # The metric's `U` at `position / scale` is evaluated afresh: it is
-        # `objective` at the round trip, which may differ from `density`'s
-        # point in the last place.
-        step, landed_at, _ = _transition(
-            metrics[index],
-            position / scale,
-            temperature,
-            child,
-            jittered(adapted[index].step_size, jitter, child),
-            n_steps,
-            integrator,
-        )
-        accepted[index] += step.accepted
-        # A rejection keeps `position` itself rather than its round trip
-        # through the metric, which may differ in the last place.
-        # Accepted, the metric's `U` was taken at `step.position * scale`,
-        # the product `landed` is, so it is `objective`'s value there.
-        if step.accepted:
-            return step.position * scale, -landed_at
-        return position, density
-
-    def observe(states: Sequence[torch.Tensor], densities: Sequence[float]) -> None:
-        """The round the exchange closed: the positions it left, and the best point seen."""
-        nonlocal best, best_value, round_index
+    def record(states: Sequence[torch.Tensor]) -> None:
         recorded.append(torch.stack(list(states)))
-        lowest = max(range(n_replicas), key=densities.__getitem__)
-        if -densities[lowest] < best_value:
-            best, best_value = states[lowest].clone(), -densities[lowest]
-        tracked.record(round_index, energy=best_value)
-        round_index += 1
+
+    def observe(sweep: int, run: Exchanging[torch.Tensor, Any]) -> None:
+        tracked.record(sweep, energy=run.energy)
+        series(sweep, run)
 
     def swap(log_ratio: float) -> bool:
         """The exchange's accept step on this module's stream: one torch uniform, always drawn."""
         return accept_with(log_ratio, float(torch.rand(1, generator=parent)))
 
-    ensemble = exchange(
-        transition,
-        None,
-        positions,
-        [-value for value in values],
+    exchanged = temper(
+        steps,
         temperatures,
+        [
+            Moved(position, value, None, 0)
+            for position, value in zip(positions, values, strict=True)
+        ],
         children,
         swap,
         n_rounds,
-        0,
-        1,
-        observe,
-        None if deadline is None else _before(deadline),
+        record=record,
+        observe=observe,
+        stop=None if deadline is None else _before(deadline),
     )
+    series.close(exchanged)
     rounds = torch.stack(recorded)
     # The loop records the ensemble it built; the tempering records the
     # positions it returns, which is the state its result holds.
-    tracked.record_cost(max(round_index - 1, 0), rounds.nbytes)
+    tracked.record_cost(max(exchanged.rounds - 1, 0), rounds.nbytes)
 
     return Tempered(
-        best=best,
-        value=best_value,
+        best=exchanged.best,
+        value=exchanged.energy,
         positions=rounds,
-        acceptance_rate=accepted / round_index,
+        acceptance_rate=accepted / exchanged.rounds,
         temperatures=tuple(temperatures),
-        swap_acceptance=np.asarray(ensemble.swap_acceptance, dtype=np.float64),
-        # Unadapted, each replica's first trajectory also evaluates `grad U`
-        # at its start (issue #1222).
-        spent=round_index * n_replicas * per_proposal
-        + (n_replicas if adapted is None else 0)
+        swap_acceptance=np.asarray(exchanged.swap_acceptance, dtype=np.float64),
+        # Each rung's step charges its own trajectories, the first at a start
+        # included (issue #1222); the warm-ups are charged beside them.
+        spent=exchanged.spent
         + sum(report.force_evaluations for report in adapted or ()),
-        unit=Cost.GRADIENTS,
-        termination=Termination.after(round_index, converged=False),
-        walkers=ensemble.walkers,
+        unit=exchanged.unit,
+        termination=Termination.after(exchanged.rounds, converged=False),
+        walkers=exchanged.walkers,
         adapted=adapted,
     )
+
+
+@dataclass
+class _Rung:
+    """One rung's Hamiltonian transition as a :class:`~sal.sample.loop.Step`, charged in gradients.
+
+    Unadapted, ``grad U`` is carried beside the position, so a trajectory
+    costs its own gradients alone after the replica's first (issue #1222).
+    On a metric it is not: an accepted point returns to ``theta`` through
+    ``* scale``, and the next round's ``/ scale`` may differ from the point
+    the gradient was taken at in the last place, so the metric's ``U`` and
+    ``grad U`` are evaluated afresh at ``position / scale``.
+    """
+
+    objective: Objective
+    integrator: Integrator
+    n_steps: int
+    step_size: float
+    accepted: torch.Tensor
+    index: int
+    jitter: float
+    adapted: Adapted | None
+    unit: Cost = Cost.GRADIENTS
+    scale: torch.Tensor | None = field(init=False)
+    metric: Scaled | None = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.scale = (
+            None if self.adapted is None else self.adapted.mass_diagonal.rsqrt()
+        )
+        self.metric = None if self.scale is None else Scaled(self.objective, self.scale)
+
+    def __call__(
+        self,
+        position: torch.Tensor,
+        potential: float,
+        force: torch.Tensor | None,
+        temperature: float,
+        child: torch.Generator,
+        /,
+    ) -> Moved[torch.Tensor, torch.Tensor | None]:
+        """One transition at this rung's ``temperature``."""
+        if self.adapted is None or self.metric is None or self.scale is None:
+            step, landed_at, landed = _transition(
+                self.objective,
+                position,
+                temperature,
+                child,
+                self.step_size,
+                self.n_steps,
+                self.integrator,
+                potential=potential,
+                force=force,
+            )
+            self.accepted[self.index] += step.accepted
+            return Moved(
+                step.position,
+                landed_at,
+                landed,
+                self.integrator.force_evaluations(
+                    self.n_steps, carried=force is not None
+                ),
+            )
+        step, landed_at, _ = _transition(
+            self.metric,
+            position / self.scale,
+            temperature,
+            child,
+            jittered(self.adapted.step_size, self.jitter, child),
+            self.n_steps,
+            self.integrator,
+        )
+        self.accepted[self.index] += step.accepted
+        per_proposal = self.integrator.force_evaluations(self.n_steps)
+        # A rejection keeps `position` itself rather than its round trip
+        # through the metric, which may differ in the last place. Accepted,
+        # the metric's `U` was taken at `step.position * scale`, the product
+        # `landed` is, so it is `objective`'s value there.
+        if step.accepted:
+            return Moved(step.position * self.scale, landed_at, None, per_proposal)
+        return Moved(position, potential, None, per_proposal)
+
+    def keep(self, position: torch.Tensor) -> torch.Tensor:
+        """A clone, so the best point is not a tensor an exchange hands on."""
+        return position.clone()
 
 
 def _rung_starts(

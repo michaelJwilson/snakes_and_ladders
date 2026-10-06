@@ -402,6 +402,9 @@ whether or not it has members yet.
 .. automodule:: sal.sample.potts_keyed
    :members:
 
+.. automodule:: sal.sample.loop
+   :members:
+
 .. automodule:: sal.sample.tempered
    :members:
 

@@ -86,9 +86,10 @@ N_STEPS = 10
 #: the refereed rung: 0.05 accepted 0.25 and 0.03 diverged to a worse point,
 #: measured over the step decades in `docs/experiments/010`.
 STEP_SIZE = 0.01
-#: Objective calls per Hamiltonian proposal: two Hamiltonians, the trajectory,
-#: and the value where the chain landed.
-PER_PROPOSAL = leapfrog.force_evaluations(N_STEPS) + 3
+#: Objective calls per Hamiltonian proposal: the trajectory's gradients, each
+#: carrying its value, the first carried from the transition before (issues
+#: #1217, #1222).
+PER_PROPOSAL = leapfrog.force_evaluations(N_STEPS, carried=True)
 
 #: How each seeding's cost is charged, in :data:`BUDGET`'s unit. One
 #: *component pass* scores every observation under one component, so
