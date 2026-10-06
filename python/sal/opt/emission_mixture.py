@@ -34,6 +34,7 @@ from typing import NamedTuple, cast
 
 import numpy as np
 import torch
+from scipy.special import expit
 
 from sal import oxisal
 from sal.cost import Cost
@@ -44,6 +45,8 @@ from sal.emissions import (
     EmissionFamily,
     NegativeBinomialEmission,
     PoissonEmission,
+    RateConcentrationBetaBinomialEmission,
+    RateConcentrationCountPairEmission,
 )
 from sal.emissions.rising import (
     DistinctCache,
@@ -963,7 +966,11 @@ class EmissionMixtureObjective(Objective):
         2.4 ms call at the stress mixture: each block is ``exp`` of its
         entries, so ``dU/dtheta = (dU/dp) p``; the weights are a softmax of
         ``(0, f)``, so ``dU/df_j = g_{j+1} - w_{j+1} sum_k g_k`` with ``g =
-        dU/d log w``.
+        dU/d log w``. A success channel read by rate and concentration
+        (issue #1205) enters the kernel as ``a = tau p``, ``b = tau (1 - p)``,
+        with ``p`` the logistic of its block and ``tau`` the exponential, so
+        ``dU/dp = tau (g_a - g_b)`` and ``dU/dtau = p g_a + (1 - p) g_b``,
+        times ``p (1 - p)`` and ``tau`` for the free coordinates.
         """
         route = self._route
         if route is None:
@@ -976,7 +983,12 @@ class EmissionMixtureObjective(Objective):
         with np.errstate(over="ignore", under="ignore"):
             for slot, name in route.names.items():
                 offset = self._blocks_at[name].offset
-                natural[slot] = np.exp(theta[offset : offset + k])
+                free = theta[offset : offset + k]
+                natural[slot] = expit(free) if slot == "rate" else np.exp(free)
+            reading = "rate" in natural
+            if reading:
+                natural["alpha"] = natural["concentration"] * natural["rate"]
+                natural["beta"] = natural["concentration"] * (1.0 - natural["rate"])
         if not all(
             bool(np.isfinite(values).all() and (values > 0.0).all())
             for values in natural.values()
@@ -984,7 +996,8 @@ class EmissionMixtureObjective(Objective):
             # A trajectory that has run a parameter to overflow or underflow
             # is the chain's to reject; autograd scores it as it always did.
             return None
-        gradient = {slot: np.empty(k) for slot in ("log_weight", *route.names)}
+        kernel = [slot for slot in natural if slot not in ("rate", "concentration")]
+        gradient = {slot: np.empty(k) for slot in ("log_weight", *kernel)}
         log_likelihood = oxisal.count_mixture_value_and_gradient(
             log_weight,
             gradient["log_weight"],
@@ -1004,9 +1017,20 @@ class EmissionMixtureObjective(Objective):
         weights = np.exp(log_weight)
         held = gradient["log_weight"]
         out[: k - 1] = -(held[1:] - weights[1:] * held.sum())
+        if reading:
+            rate, tau = natural["rate"], natural["concentration"]
+            gradient["rate"] = tau * (gradient["alpha"] - gradient["beta"])
+            gradient["concentration"] = (
+                rate * gradient["alpha"] + (1.0 - rate) * gradient["beta"]
+            )
         for slot, name in route.names.items():
             offset = self._blocks_at[name].offset
-            out[offset : offset + k] = -gradient[slot] * natural[slot]
+            jacobian = (
+                natural[slot] * (1.0 - natural[slot])
+                if slot == "rate"
+                else natural[slot]
+            )
+            out[offset : offset + k] = -gradient[slot] * jacobian
         return -log_likelihood, out
 
 
@@ -1023,8 +1047,9 @@ class _CountRoute:
         The success channel's trial count per state; ``None`` for the joint
         pair, whose trials are the totals.
     names : dict[str, str]
-        Each kernel slot (``dispersion``, ``mean``, ``alpha``, ``beta``) to
-        the family's own parameter name.
+        Each slot (``dispersion``, ``mean``, then ``alpha`` and ``beta``, or
+        ``rate`` and ``concentration`` for a success channel read by them)
+        to the family's own parameter name.
     """
 
     totals: np.ndarray | None
@@ -1043,6 +1068,16 @@ def _as_counts(values: np.ndarray) -> np.ndarray | None:
     ):
         return None
     return np.ascontiguousarray(values, dtype=np.uint32)
+
+
+def _success_names(channel: EmissionFamily, prefix: str = "") -> dict[str, str]:
+    """The success channel's slots: ``rate`` and ``concentration`` in that reading (issue #1205), ``alpha`` and ``beta`` otherwise."""
+    if isinstance(
+        channel,
+        RateConcentrationBetaBinomialEmission | RateConcentrationCountPairEmission,
+    ):
+        return {"rate": f"{prefix}rate", "concentration": f"{prefix}concentration"}
+    return {"alpha": f"{prefix}alpha", "beta": f"{prefix}beta"}
 
 
 def _count_route(
@@ -1073,7 +1108,7 @@ def _count_route(
             None,
             successes,
             np.ascontiguousarray(start.trials.numpy()),
-            {"alpha": "alpha", "beta": "beta"},
+            _success_names(start),
         )
     if values.ndim != 2 or values.shape[1] != 2:
         return None
@@ -1086,12 +1121,7 @@ def _count_route(
             totals,
             successes,
             None if trials is None else np.ascontiguousarray(trials.numpy()),
-            {
-                "dispersion": "dispersion",
-                "mean": "mean",
-                "alpha": "alpha",
-                "beta": "beta",
-            },
+            {"dispersion": "dispersion", "mean": "mean", **_success_names(start)},
         )
     total = getattr(start, "total", None)
     channel = getattr(start, "successes", None)
@@ -1108,8 +1138,7 @@ def _count_route(
             {
                 "dispersion": "total.dispersion",
                 "mean": "total.mean",
-                "alpha": "successes.alpha",
-                "beta": "successes.beta",
+                **_success_names(channel, "successes."),
             },
         )
     return None

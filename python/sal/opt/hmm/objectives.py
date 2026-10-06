@@ -106,13 +106,20 @@ class EmissionHmmObjective(Objective):
         :data:`~sal.backend.Backend.RUST`, the default, is the compiled E
         step and one backward pass; :data:`~sal.backend.Backend.JAX` the
         twin of :mod:`sal.opt.hmm.jax`, the retired per-family objectives'
-        default, for a family it covers (:func:`sal.opt.hmm.jax.twinned`);
-        :data:`~sal.backend.Backend.TORCH` autograd through :meth:`__call__`,
-        the oracle both are pinned to, and which declares no JAX energy.
-        Measured at 10^6 positions, three states, the JAX twin against the
-        compiled route: 0.54x for a Gaussian, 0.60x Poisson, 0.65x
-        categorical, 1.34x beta-binomial, 1.89x negative binomial with
-        exposure (issue #1189).
+        default, for a family it covers on segments of any length
+        (:func:`sal.opt.hmm.jax.twinned`), count pairs included (issue
+        #1206); :data:`~sal.backend.Backend.TORCH` autograd through
+        :meth:`__call__`, the oracle both are pinned to, and which declares
+        no JAX energy. Measured at 10^6 positions, three states, the JAX
+        twin's runtime against the compiled route's: 0.54x for a Gaussian,
+        0.60x Poisson, 0.65x categorical (issue #1189); 0.39x beta-binomial,
+        0.58x negative binomial with exposure since the twin takes each
+        rising factorial once per distinct count (issue #1206, 4-core host,
+        where the twin before it measured 1.61x and 2.57x); on the count
+        pair of ``tests/benchmarks/test_hmm_jax_count_pair_bench.py``, 7,644
+        rows in 88 unequal segments, K = 7, 0.24x--0.32x. The default stays
+        ``RUST``: JAX is an optional dependency, so a default of JAX would
+        make the route depend on the environment.
 
     Raises
     ------
@@ -285,8 +292,8 @@ class EmissionHmmObjective(Objective):
 
         What a compiled HMC chain runs inside its own loop
         (:class:`~sal.sample.declared.DeclaredJaxEnergy`), where
-        :mod:`sal.opt.hmm.jax` has a twin of the start's family and the
-        segments share one length, and the backend is not ``TORCH``;
+        :mod:`sal.opt.hmm.jax` has a twin of the start's family, on segments
+        of any length (issue #1206), and the backend is not ``TORCH``;
         ``None`` otherwise.
         """
         from sal.opt.hmm.jax import jax_energy, twinned
