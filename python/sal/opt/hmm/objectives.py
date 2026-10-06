@@ -227,23 +227,20 @@ class EmissionHmmObjective(Objective):
         """``oxisal``'s Gaussian HMM kernel on the sequences (:class:`~sal.sample.declared.SupportedGradient`, issues #1008, #1189, #1220).
 
         Supported where the kernel is this objective: a
-        :class:`~sal.emissions.GaussianEmission` of scalar observations on
-        segments of one length, sequences as rows, and no covariate. ``None``
-        otherwise.
+        :class:`~sal.emissions.GaussianEmission` of scalar observations and
+        no covariate, on segments of any length, handed over end to end
+        beside their lengths (issue #1254). ``None`` otherwise.
         """
-        shape = self.rectangular()
         if (
             type(self._start_family) is not GaussianEmission
             or self._covariate is not None
             or self._observations.dim() != 1
-            or shape is None
         ):
             return None
         return "gaussian_hmm", {
             "m": self._k,
-            "observations": np.ascontiguousarray(
-                self._observations.numpy().reshape(shape)
-            ),
+            "observations": np.ascontiguousarray(self._observations.numpy()),
+            "lengths": np.asarray(self._lengths, dtype=np.int64),
         }
 
     def gradient(self, theta: torch.Tensor) -> torch.Tensor:
@@ -439,7 +436,8 @@ class EmissionHmmObjective(Objective):
         Where :meth:`supported_gradient` holds and ``backend`` is
         ``RUST``, the value and gradient are :meth:`gradient`'s kernel's,
         one call: 0.58 ms against 11.9 ms by the route above, on a four-state
-        Gaussian HMM of 200 sequences of 60 (issue #1248).
+        Gaussian HMM of 200 sequences of 60 (issue #1248), on segments of any
+        length since issue #1254.
         """
         if self._backend is Backend.TORCH:
             return autograd_value_and_gradient(self, theta)
