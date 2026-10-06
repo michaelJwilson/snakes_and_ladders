@@ -106,6 +106,7 @@ class GaussianMixtureObjective(Objective):
         self._n_components = n_components
         self._dtype = dtype
         self._variance_floor = pooled_variance_floor(np.asarray(observations))
+        self._kernel: oxisal.SupportedEnergy | None = None
 
     @property
     def n_components(self) -> int:
@@ -230,33 +231,37 @@ class GaussianMixtureObjective(Objective):
             **self.components(theta).named_parameters(),
         }
 
-    @property
-    def gaussian_mixture_declaration(self) -> tuple[int, np.ndarray] | None:
-        """``(k, observations)`` for a compiled chain, one-channel ``float64`` only (issue #1008).
+    def supported_gradient(self) -> tuple[str, dict[str, object]] | None:
+        """``oxisal``'s Gaussian mixture kernel on the observations, one-channel ``float64`` only (issues #1008, #1220).
 
-        What :meth:`gradient` streams through ``oxisal`` is what a compiled
-        HMC chain evaluates itself (:mod:`sal.sample.declared`).
+        What :meth:`gradient` evaluates is what a compiled chain runs
+        (:class:`~sal.sample.declared.SupportedGradient`); ``None`` for any
+        other mixture.
         """
         if self._n_channels != 1 or self._dtype != torch.float64:
             return None
-        return self._n_components, self._observations.numpy().reshape(-1)
+        return "gaussian_mixture", {
+            "k": self._n_components,
+            "observations": np.ascontiguousarray(self._observations.numpy()).reshape(
+                -1
+            ),
+        }
 
     def gradient(self, theta: torch.Tensor) -> torch.Tensor:
         """``d/dtheta`` of :meth:`__call__`, which ``hmc.gradient_at`` reads (issue #986).
 
         One-channel ``float64`` mixtures stream every draw's responsibilities
-        into the three per-component sums the gradient needs in
-        ``oxisal.gaussian_mixture_gradient``, pinned to
-        autograd; any other takes autograd through :meth:`__call__`.
+        into the three per-component sums the gradient needs, through the
+        kernel :meth:`supported_gradient` names (``oxisal.SupportedEnergy``),
+        pinned to autograd; any other takes autograd through :meth:`__call__`.
         """
-        if self._n_channels != 1 or self._dtype != torch.float64:
+        supported = self.supported_gradient()
+        if supported is None:
             return autograd_value_and_gradient(self, theta)[1]
-        padded = np.concatenate(([0.0], theta[self._weight_slice].detach().numpy()))
-        _, gradient = oxisal.gaussian_mixture_gradient(
-            np.ascontiguousarray(self._observations.numpy()).reshape(-1),
-            padded - np.logaddexp.reduce(padded),
-            np.ascontiguousarray(theta[self._mean_slice()].detach().numpy()),
-            np.exp(theta[self._log_scale_slice()].detach().numpy()),
+        if self._kernel is None:
+            self._kernel = oxisal.SupportedEnergy(*supported, self.n_parameters)
+        _, gradient = self._kernel.value_and_gradient(
+            np.ascontiguousarray(theta.detach().numpy(), dtype=np.float64)
         )
         return torch.from_numpy(gradient)
 

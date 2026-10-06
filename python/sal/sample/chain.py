@@ -494,18 +494,15 @@ def run_chain(
     )
 
 
-def compiled_route(backend: Backend, temperature: float) -> bool:
-    """Whether a chain may take a compiled walk: the Rust backend, unit temperature, no tracked run (issue #1010).
+def compiled_route(backend: Backend) -> bool:
+    """Whether a chain may take a compiled walk: the Rust backend and no tracked run (issues #1010, #1220).
 
     What every sampler's compiled route asks before its own conditions
-    (HMC's integrator, MALA's correction, the declared energy); a tracked
-    run records per draw, which only :func:`run_chain`'s loop does.
+    (HMC's integrator, MALA's correction, the supported kernel); a tracked
+    run records per draw, which only :func:`run_chain`'s loop does. Any
+    positive temperature compiles: the walks take it (issue #1220).
     """
-    return (
-        backend is Backend.RUST
-        and temperature == 1.0
-        and current_tracked() is UNTRACKED
-    )
+    return backend is Backend.RUST and current_tracked() is UNTRACKED
 
 
 #: Draws a compiled chain hands back per block when operators observe it:
@@ -526,11 +523,12 @@ def run_compiled(
     step_size: float,
     start: torch.Tensor,
     burn_in: int,
+    temperature: float,
     adaptation: Adaptation | None,
     store_chain: bool,
     operators: Mapping[str, Callable[[torch.Tensor], torch.Tensor]] | None,
 ) -> Chain:
-    """A chain on a declared family, the warm-up included, compiled (issues #1006, #1008).
+    """A chain on a supported kernel, the warm-up included, compiled (issues #1006, #1008, #1220).
 
     ``walk_class`` is ``oxisal.MetropolisWalk`` or ``oxisal.HmcWalk``, built
     with its own arguments ``extra`` after the shared ones; ``per_proposal``
@@ -540,7 +538,10 @@ def run_compiled(
     metric included (``src/hmc.rs``), so it is charged once, to the warm-up
     where there is one. The warm-up,
     the burn-in, the draws and the filters are ``src/chain.rs``'s, one loop
-    for both kernels as :func:`run_chain` is one for the torch ones.
+    for both kernels as :func:`run_chain` is one for the torch ones. The
+    walk targets ``exp(-U / temperature)`` as :func:`run_chain`'s kernels
+    do: the momentum's variance or the proposal's scale is ``temperature``,
+    and the acceptance ratio divides by it (issue #1220).
 
     A :class:`~sal.sample.declared.Power` operator is
     evaluated and Kalman-filtered in the compiled loop, and only its six
@@ -549,7 +550,10 @@ def run_compiled(
     and each block is filtered here and dropped unless ``store_chain`` keeps
     it (issues #988, #1006).
     """
-    family, parameters = declared
+    if not temperature > 0.0:
+        msg = f"temperature must be positive, got {temperature}"
+        raise ValueError(msg)
+    kernel, data = declared
     dimension = int(start.shape[0])
     seed = _seed(generator)
     declared_operators = {
@@ -558,8 +562,8 @@ def run_compiled(
         if isinstance(operator, Power)
     }
     walk = walk_class(
-        family,
-        parameters,
+        kernel,
+        data,
         np.ascontiguousarray(start.numpy(), dtype=np.float64),
         step_size,
         seed,
@@ -568,6 +572,7 @@ def run_compiled(
         0.0 if adaptation is None else adaptation.step_jitter,
         (DUAL_AVERAGING_GAMMA, DUAL_AVERAGING_T0, DUAL_AVERAGING_KAPPA),
         [operator.exponent for operator in declared_operators.values()],
+        temperature,
         *extra,
     )
     walk.advance(burn_in, False, False)

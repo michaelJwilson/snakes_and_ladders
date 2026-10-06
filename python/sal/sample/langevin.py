@@ -176,9 +176,10 @@ def mala(
         :data:`~sal.backend.Backend.RUST`, the default since
         issue #997, runs the whole chain in ``oxisal.HmcWalk`` at one
         leapfrog step --- the identity this module keeps --- when the
-        objective declares an energy
+        objective supports a kernel
         (:func:`~sal.sample.declared.declared_energy`) and the
-        chain is the corrected one at unit temperature in no tracked run;
+        chain is the corrected one, at any temperature (issue #1220), in no
+        tracked run;
         the warm-up runs there too (issue #1008). Its draws are its own ChaCha8 stream seeded by one draw
         from ``generator``, so it is pinned to the torch route in
         distribution, as :func:`~sal.sample.hmc.sample`'s is.
@@ -201,7 +202,7 @@ def mala(
         raise ValueError(msg)
     refuse_backend("mala", backend, (Backend.PYTHON, Backend.RUST))
     declared = declared_energy(objective)
-    if compiled_route(backend, temperature) and corrected and declared is not None:
+    if compiled_route(backend) and corrected and declared is not None:
         # MALA is one leapfrog step (the identity this module keeps), so the
         # compiled Hamiltonian walk at one step is this chain, warm-up included.
         chain = run_compiled(
@@ -216,6 +217,7 @@ def mala(
             step_size=step_size,
             start=start_point(objective, start),
             burn_in=burn_in,
+            temperature=temperature,
             adaptation=adaptation,
             store_chain=store_chain,
             operators=operators,

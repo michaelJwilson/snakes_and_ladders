@@ -1,108 +1,64 @@
-"""The energy families a compiled chain runs, and how an objective declares one (issues #986, #1006).
+"""The kernels a compiled chain runs, and how an objective opts in to one (issues #986, #1006, #1220).
 
-A torch closure cannot cross the FFI boundary, so a compiled chain runs a
-*declared family* rather than an arbitrary objective: an objective opts in by
-stating its parameters, never by being recognized. :func:`declared_energy`
-is the one place a sampler reads that declaration, and returns the family's
-code and parameters as ``oxisal``'s energy kernels take them (``src/energy.rs``).
+A torch closure cannot cross the FFI boundary, so a compiled chain runs one
+of the package's own value+gradient kernels, behind ``src/energy.rs``'s
+``Energy`` trait. An objective opts in through
+:meth:`SupportedGradient.supported_gradient`, naming the kernel and handing
+over its data; it does not restate a family. :func:`declared_energy` is the
+one place a sampler reads that, and ``oxisal.SupportedEnergy`` is the one an
+objective's own gradient calls, so a chain and a fit evaluate one arithmetic.
 
-* :class:`DeclaredGaussian` --- ``U(x) = x' P x / 2``, ``P`` diagonal
-  ``(d,)`` or dense ``(d, d)`` symmetric (issue #986).
-* :class:`DeclaredMixture` --- a one-channel Gaussian mixture's negative
-  log-likelihood of its observations, in ``theta = (k - 1 free weights, k
-  means, k log scales)`` (issue #1008).
-* :class:`DeclaredGaussianHmm` --- a Gaussian HMM's negative log-likelihood of
-  equal-length sequences, its gradient Fisher's identity over the streamed
-  statistics (issue #1008).
+* :data:`GAUSSIAN` --- ``U(x) = x' P x / 2``, data ``precision``: ``P``
+  diagonal ``(d,)`` or dense ``(d, d)`` symmetric (issue #986).
+* :data:`ROSENBROCK` --- ``U(x) = sum_i b (x_{i+1} - x_i^2)^2 + (a - x_i)^2``
+  (``eq:rosenbrock``), data ``a`` and ``b`` (issue #1006).
+* :data:`GAUSSIAN_MIXTURE` --- a one-channel Gaussian mixture's negative
+  log-likelihood in ``theta = (k - 1 free weights, k means, k log scales)``,
+  data ``k`` and ``observations``; ``oxisal.gaussian_mixture_gradient``'s
+  kernel (issue #1008).
+* :data:`GAUSSIAN_HMM` --- a Gaussian HMM's negative log-likelihood of
+  equal-length sequences, data ``m`` and ``observations`` with sequences as
+  rows; ``oxisal.gaussian_hmm_statistics`` and Fisher's identity (issue #1008).
+* :data:`COUNT_MIXTURE` --- a negative binomial, beta-binomial or count-pair
+  mixture's negative log-likelihood, data ``k``, ``totals``, ``successes``,
+  ``trials`` and ``slots``; ``oxisal.count_mixture_value_and_gradient``'s
+  kernel (issue #1136).
 * :class:`Power` --- an *operator* ``f(x) = x ** k`` elementwise, whose
   :class:`~sal.sample.expectation.KalmanMean` a compiled
   chain keeps itself rather than handing its draws back (issue #1006).
-* :class:`DeclaredRosenbrock` --- ``U(x) = sum_i b (x_{i+1} - x_i^2)^2 +
-  (a - x_i)^2`` (``eq:rosenbrock``), the curved valley the non-Gaussian goals
-  are set on (issue #1006).
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol, Self, TypeVar, runtime_checkable
 
-import numpy as np
-from numpy.typing import ArrayLike
+#: The kernel names ``src/energy.rs`` builds.
+GAUSSIAN = "gaussian"
+ROSENBROCK = "rosenbrock"
+GAUSSIAN_MIXTURE = "gaussian_mixture"
+GAUSSIAN_HMM = "gaussian_hmm"
+COUNT_MIXTURE = "count_mixture"
 
-#: The family codes ``oxisal``'s energy kernels read.
-GAUSSIAN, ROSENBROCK, MIXTURE, GAUSSIAN_HMM = 0, 1, 2, 3
-
-
-@runtime_checkable
-class DeclaredGaussian(Protocol):
-    """An objective that declares itself ``U(x) = x' P x / 2``, a zero-mean Gaussian.
-
-    What :func:`~sal.sample.hmc.sample` compiles (issue #986).
-    ``P`` is ``(d,)`` for a diagonal or ``(d, d)`` symmetric.
-    """
-
-    @property
-    def gaussian_precision(self) -> ArrayLike:
-        """``P``, a constant: an array or a tensor that tracks no gradient."""
-        ...
+#: What :meth:`SupportedGradient.supported_gradient` returns: a kernel name
+#: and its data, arrays and numbers by name.
+Supported = tuple[str, Mapping[str, Any]]
 
 
 @runtime_checkable
-class DeclaredRosenbrock(Protocol):
-    """An objective that declares itself Rosenbrock's function with constants ``(a, b)``."""
+class SupportedGradient(Protocol):
+    """An objective whose value and gradient one of ``oxisal``'s kernels computes (issue #1220)."""
 
-    @property
-    def rosenbrock_constants(self) -> tuple[float, float]:
-        """``(a, b)``."""
+    def supported_gradient(self) -> Supported | None:
+        """``(kernel, data)``, or ``None`` where no kernel is this objective."""
         ...
 
 
-@runtime_checkable
-class DeclaredMixture(Protocol):
-    """An objective that declares itself a one-channel Gaussian mixture's negative log-likelihood."""
-
-    @property
-    def gaussian_mixture_declaration(self) -> tuple[int, np.ndarray] | None:
-        """``(k, observations)``, or ``None`` where the objective is not that family."""
-        ...
-
-
-@runtime_checkable
-class DeclaredGaussianHmm(Protocol):
-    """An objective that declares itself a Gaussian HMM's negative log-likelihood."""
-
-    @property
-    def gaussian_hmm_declaration(self) -> tuple[int, np.ndarray] | None:
-        """``(m, observations)``, sequences as rows, or ``None`` where the objective is not that family."""
-        ...
-
-
-def declared_energy(objective: object) -> tuple[int, np.ndarray] | None:
-    """The family code and its flat ``float64`` parameters, or ``None`` if none is declared."""
-    if isinstance(objective, DeclaredGaussianHmm):
-        hmm = objective.gaussian_hmm_declaration
-        if hmm is not None:
-            m, sequences = hmm
-            return GAUSSIAN_HMM, np.concatenate(
-                (
-                    [float(m), float(sequences.shape[1])],
-                    np.asarray(sequences, float).ravel(),
-                )
-            )
-    if isinstance(objective, DeclaredMixture):
-        declared = objective.gaussian_mixture_declaration
-        if declared is not None:
-            k, values = declared
-            return MIXTURE, np.concatenate(
-                ([float(k)], np.asarray(values, float).ravel())
-            )
-    if isinstance(objective, DeclaredGaussian):
-        precision = np.ascontiguousarray(objective.gaussian_precision, dtype=np.float64)
-        return GAUSSIAN, precision.reshape(-1)
-    if isinstance(objective, DeclaredRosenbrock):
-        return ROSENBROCK, np.asarray(objective.rosenbrock_constants, dtype=np.float64)
+def declared_energy(objective: object) -> Supported | None:
+    """The objective's ``(kernel, data)``, or ``None`` if it supports none."""
+    if isinstance(objective, SupportedGradient):
+        return objective.supported_gradient()
     return None
 
 

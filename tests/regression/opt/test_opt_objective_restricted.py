@@ -193,18 +193,22 @@ def test_a_compiled_gradient_stays_compiled_inside_the_restriction(
     from sal import oxisal
 
     calls = 0
-    kernel = oxisal.count_mixture_value_and_gradient
+    kernel = oxisal.SupportedEnergy
 
-    def counted(*args: Any, **kwargs: Any) -> Any:
-        nonlocal calls
-        calls += 1
-        return kernel(*args, **kwargs)
+    class Counted:
+        def __init__(self, *args: Any) -> None:
+            self._inner = kernel(*args)
+
+        def value_and_gradient(self, theta: Any) -> Any:
+            nonlocal calls
+            calls += 1
+            return self._inner.value_and_gradient(theta)
 
     def refused(*_args: object, **_kwargs: object) -> object:
         msg = "autograd was taken where the kernel applies"
         raise AssertionError(msg)
 
-    monkeypatch.setattr(oxisal, "count_mixture_value_and_gradient", counted)
+    monkeypatch.setattr(oxisal, "SupportedEnergy", Counted)
     monkeypatch.setattr(module, "autograd_value_and_gradient", refused)
     objective = EmissionMixtureObjective(_pairs(), PAIRS)
     at = _point(objective)
@@ -237,7 +241,7 @@ def test_no_full_dimensional_declaration_reaches_a_compiling_consumer() -> None:
     )
     assert declared_jax_energy(restricted) is None
     assert declared_energy(restricted) is None
-    assert not hasattr(restricted, "gaussian_hmm_declaration")
+    assert not hasattr(restricted, "supported_gradient")
 
 
 @pytest.mark.smoke

@@ -89,10 +89,9 @@ class Rosenbrock(Objective):
         head, tail = x[:-1], x[1:]
         return float((self.b * (tail - head**2) ** 2 + (self.a - head) ** 2).sum())
 
-    @property
-    def rosenbrock_constants(self) -> tuple[float, float]:
-        """``(a, b)``: declares this a compiled chain's family (issue #1006)."""
-        return (self.a, self.b)
+    def supported_gradient(self) -> tuple[str, dict[str, float]]:
+        """``oxisal``'s Rosenbrock kernel at ``(a, b)``, which a compiled chain runs (issues #1006, #1220)."""
+        return "rosenbrock", {"a": self.a, "b": self.b}
 
     def minimizer(self) -> torch.Tensor:
         """The analytic minimizer, ``(a, ..., a)``, where the value is 0."""

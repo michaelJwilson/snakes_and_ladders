@@ -3,8 +3,9 @@
 ``hmc.compiled_trajectory`` (``oxisal.leapfrog_trajectory``) is
 ``hmc.leapfrog`` on the same position and momentum, diagonal and dense, within
 1e-12 (the streams differ). At d = 200 every mean is within 4.5 standard errors
-of 0 and variance of ``1 / p`` (``KalmanMean``). Reproducible from the
-generator; an operator or temperature takes the torch route.
+of 0 and variance of ``T / p`` (``KalmanMean``), at ``T = 1`` and, since the
+walks take a temperature (issue #1220), at ``T = 4``. Reproducible from the
+generator; a non-leapfrog integrator or ULA takes the torch route.
 """
 
 from __future__ import annotations
@@ -58,7 +59,10 @@ def test_the_compiled_trajectory_is_the_torch_leapfrog(dense: bool) -> None:
 
 
 @pytest.mark.end2end
-def test_the_compiled_chain_recovers_the_gaussian_moments() -> None:
+@pytest.mark.parametrize("temperature", [1.0, 4.0])
+def test_the_compiled_chain_recovers_the_gaussian_moments(temperature: float) -> None:
+    # At T = 4 the momentum's variance is T and the step is unchanged
+    # (`sample.hmc`'s module note), so the acceptance is T = 1's.
     dimension = 200
     precision = diagonal_precision(dimension)
     chain = hmc.sample(
@@ -68,10 +72,13 @@ def test_the_compiled_chain_recovers_the_gaussian_moments() -> None:
         step_size=0.9 / (2.0 * dimension**0.25),
         n_steps=10,
         burn_in=200,
+        temperature=temperature,
     )
     assert chain.draws.shape == (4_000, dimension)
     assert chain.acceptance_rate > 0.8
-    assert_gaussian_moments(*draw_moments(chain.draws), precision)
+    assert_gaussian_moments(
+        *draw_moments(chain.draws), precision, temperature=temperature
+    )
 
 
 @pytest.mark.smoke
@@ -89,11 +96,17 @@ def test_the_compiled_chain_is_reproducible_and_routes_what_it_cannot_run() -> N
         )
 
     assert torch.equal(run().draws, run().draws)
-    # A temperature is the torch route's alone: the compiled and torch
-    # streams differ, so the tempered chain matches the explicit torch one.
+    # A temperature compiles (issue #1220): the tempered chain is the
+    # compiled stream, reproducible and not the torch route's.
     tempered = run(temperature=2.0)
-    assert torch.equal(
+    assert torch.equal(tempered.draws, run(temperature=2.0).draws)
+    assert not torch.equal(
         tempered.draws, run(temperature=2.0, backend=Backend.PYTHON).draws
+    )
+    # Another integrator is the torch route's alone.
+    assert torch.equal(
+        run(integrator=hmc.yoshida).draws,
+        run(integrator=hmc.yoshida, backend=Backend.PYTHON).draws,
     )
     assert not torch.equal(run().draws, run(backend=Backend.PYTHON).draws)
 
@@ -116,10 +129,13 @@ def test_a_declared_gradient_is_autograd_s(dense: bool) -> None:
 
 
 @pytest.mark.end2end
-def test_the_compiled_mala_chain_recovers_the_gaussian_moments() -> None:
-    # Issue #997: MALA on a declared Gaussian runs the compiled chain at one
+@pytest.mark.parametrize("temperature", [1.0, 4.0])
+def test_the_compiled_mala_chain_recovers_the_gaussian_moments(
+    temperature: float,
+) -> None:
+    # Issue #997: MALA on a supported Gaussian runs the compiled chain at one
     # leapfrog step, the identity `sample.langevin` keeps; judged against the
-    # target's moments as the HMC chain is.
+    # target's moments as the HMC chain is, at T = 4 too (issue #1220).
     dimension = 50
     precision = diagonal_precision(dimension)
     chain = langevin.mala(
@@ -128,11 +144,14 @@ def test_the_compiled_mala_chain_recovers_the_gaussian_moments() -> None:
         20_000,
         step_size=0.9 / (2.0 * dimension**0.25),
         burn_in=500,
+        temperature=temperature,
     )
     assert chain.draws.shape == (20_000, dimension)
     assert chain.corrected
     assert chain.acceptance_rate > 0.8
-    assert_gaussian_moments(*draw_moments(chain.draws), precision)
+    assert_gaussian_moments(
+        *draw_moments(chain.draws), precision, temperature=temperature
+    )
 
 
 @pytest.mark.smoke
@@ -149,11 +168,15 @@ def test_the_compiled_mala_chain_routes_what_it_cannot_run() -> None:
         )
 
     assert torch.equal(run().draws, run().draws)
-    # ULA and a temperature are the torch route's alone.
-    for options in ({"corrected": False}, {"temperature": 2.0}):
-        assert torch.equal(
-            run(**options).draws, run(**options, backend=Backend.PYTHON).draws
-        )
+    # ULA is the torch route's alone; a temperature compiles (issue #1220).
+    assert torch.equal(
+        run(corrected=False).draws,
+        run(corrected=False, backend=Backend.PYTHON).draws,
+    )
+    assert not torch.equal(
+        run(temperature=2.0).draws,
+        run(temperature=2.0, backend=Backend.PYTHON).draws,
+    )
     assert not torch.equal(run().draws, run(backend=Backend.PYTHON).draws)
 
 
@@ -420,10 +443,14 @@ def test_the_compiled_hmm_trajectory_is_the_torch_leapfrog() -> None:
 
 @pytest.mark.oracle
 @pytest.mark.backend
+@pytest.mark.parametrize("temperature", [1.0, 4.0])
 @pytest.mark.parametrize("family", ["gaussian-rust", "poisson-jax"])
-def test_both_routes_sample_the_hmm_posterior_alike(family: str) -> None:
+def test_both_routes_sample_the_hmm_posterior_alike(
+    family: str, temperature: float
+) -> None:
     # The Gaussian HMM runs the Rust walk, the Poisson HMM the JAX one
-    # (`sample.hmc.jax`), each against the torch route in distribution.
+    # (`sample.hmc.jax`), each against the torch route in distribution, at
+    # T = 4 too: both walks take the temperature (issue #1220).
     if family == "gaussian-rust":
         observations = _sequences(10, 50)
         objective: Any = EmissionHmmObjective(
@@ -451,6 +478,7 @@ def test_both_routes_sample_the_hmm_posterior_alike(family: str) -> None:
             burn_in=100,
             store_chain=False,
             operators={"x": Power(1)},
+            temperature=temperature,
             backend=backend,
         ).expectations["x"]
         for backend in (Backend.RUST, Backend.PYTHON)

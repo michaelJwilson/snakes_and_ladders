@@ -35,7 +35,6 @@ from typing import NamedTuple, cast
 
 import numpy as np
 import torch
-from scipy.special import expit
 
 from sal import oxisal
 from sal.cost import Cost
@@ -885,6 +884,7 @@ class EmissionMixtureObjective(Objective):
         )
         self._on_distinct = gradient_on_distinct
         self._route = _count_route(start, self._observations, self._covariate)
+        self._kernel: oxisal.SupportedEnergy | None = None
         # The distinct counts of the observations, found once and reused by
         # every evaluation: the observations do not change between them.
         self._distinct: DistinctCache = {}
@@ -977,9 +977,8 @@ class EmissionMixtureObjective(Objective):
 
         For a negative binomial, a beta-binomial with a trial count per
         state, or their pair (joint or independent), with no covariate and
-        integer counts, ``oxisal.count_mixture_value_and_gradient`` returns
-        the log-likelihood and its gradient in the weights and the natural
-        parameters in one pass, every ``lgamma`` and ``digamma`` difference
+        integer counts, the kernel :meth:`supported_gradient` names returns
+        the log-likelihood and its gradient in ``theta`` in one pass, every ``lgamma`` and ``digamma`` difference
         a prefix sum over integers (:meth:`_compiled`). Any other family, a
         covariate, or a point that overflows a parameter takes autograd
         through :meth:`__call__`, which this is pinned to.
@@ -998,80 +997,52 @@ class EmissionMixtureObjective(Objective):
                 return float(self(torch.as_tensor(x, dtype=torch.float64)))
         return compiled[0]
 
-    def _compiled(self, theta: np.ndarray) -> tuple[float, np.ndarray] | None:
-        """``(U, dU/dtheta)`` through the kernel, or ``None`` where it does not apply.
+    def supported_gradient(self) -> tuple[str, dict[str, object]] | None:
+        """``oxisal``'s count mixture kernel on the counts (:class:`~sal.sample.declared.SupportedGradient`, issues #1136, #1220).
 
-        The map from ``theta`` is two closed forms, written out in NumPy
-        rather than replayed by autograd, whose bookkeeping was 0.8 ms of a
-        2.4 ms call at the stress mixture: each block is ``exp`` of its
-        entries, so ``dU/dtheta = (dU/dp) p``; the weights are a softmax of
-        ``(0, f)``, so ``dU/df_j = g_{j+1} - w_{j+1} sum_k g_k`` with ``g =
-        dU/d log w``. A success channel read by rate and concentration
-        (issue #1205) enters the kernel as ``a = tau p``, ``b = tau (1 - p)``,
-        with ``p`` the logistic of its block and ``tau`` the exponential, so
-        ``dU/dp = tau (g_a - g_b)`` and ``dU/dtau = p g_a + (1 - p) g_b``,
-        times ``p (1 - p)`` and ``tau`` for the free coordinates.
+        Supported for a negative binomial, a beta-binomial with a trial count
+        per state, or their pair (joint or independent), with no covariate
+        and integer counts: what :meth:`value_and_gradient` evaluates is what
+        a compiled chain runs. ``None`` for any other family.
         """
         route = self._route
         if route is None:
             return None
-        k = self._k
-        logits = np.concatenate([[0.0], theta[: k - 1]])
-        top = float(logits.max())
-        log_weight = logits - (top + math.log(float(np.exp(logits - top).sum())))
-        natural: dict[str, np.ndarray] = {}
-        with np.errstate(over="ignore", under="ignore"):
-            for slot, name in route.names.items():
-                offset = self._blocks_at[name].offset
-                free = theta[offset : offset + k]
-                natural[slot] = expit(free) if slot == "rate" else np.exp(free)
-            reading = "rate" in natural
-            if reading:
-                natural["alpha"] = natural["concentration"] * natural["rate"]
-                natural["beta"] = natural["concentration"] * (1.0 - natural["rate"])
-        if not all(
-            bool(np.isfinite(values).all() and (values > 0.0).all())
-            for values in natural.values()
-        ):
+        return "count_mixture", {
+            "k": self._k,
+            "totals": route.totals,
+            "successes": route.successes,
+            "trials": route.trials,
+            "slots": [
+                (slot, self._blocks_at[name].offset)
+                for slot, name in route.names.items()
+            ],
+        }
+
+    def _compiled(self, theta: np.ndarray) -> tuple[float, np.ndarray] | None:
+        """``(U, dU/dtheta)`` through the kernel, or ``None`` where it does not apply.
+
+        The kernel (``oxisal.SupportedEnergy`` on :meth:`supported_gradient`,
+        ``src/count_mixture.rs``'s ``CountMixture``) maps ``theta`` to the
+        weights and natural parameters, evaluates the log-likelihood and its
+        gradient in them, and applies the chain rule back to ``theta``: the
+        closed forms autograd's bookkeeping cost 0.8 ms of a 2.4 ms call to
+        replay at the stress mixture. A point at which a natural parameter is
+        not finite and positive comes back nan, and is autograd's.
+        """
+        supported = self.supported_gradient()
+        if supported is None:
+            return None
+        if self._kernel is None:
+            self._kernel = oxisal.SupportedEnergy(*supported, self.n_parameters)
+        value, gradient = self._kernel.value_and_gradient(
+            np.ascontiguousarray(theta, dtype=np.float64)
+        )
+        if math.isnan(value):
             # A trajectory that has run a parameter to overflow or underflow
             # is the chain's to reject; autograd scores it as it always did.
             return None
-        kernel = [slot for slot in natural if slot not in ("rate", "concentration")]
-        gradient = {slot: np.empty(k) for slot in ("log_weight", *kernel)}
-        log_likelihood = oxisal.count_mixture_value_and_gradient(
-            log_weight,
-            gradient["log_weight"],
-            totals=route.totals,
-            dispersion=natural.get("dispersion"),
-            mean=natural.get("mean"),
-            grad_dispersion=gradient.get("dispersion"),
-            grad_mean=gradient.get("mean"),
-            successes=route.successes,
-            alpha=natural.get("alpha"),
-            beta=natural.get("beta"),
-            trials=route.trials,
-            grad_alpha=gradient.get("alpha"),
-            grad_beta=gradient.get("beta"),
-        )
-        out = np.empty_like(theta)
-        weights = np.exp(log_weight)
-        held = gradient["log_weight"]
-        out[: k - 1] = -(held[1:] - weights[1:] * held.sum())
-        if reading:
-            rate, tau = natural["rate"], natural["concentration"]
-            gradient["rate"] = tau * (gradient["alpha"] - gradient["beta"])
-            gradient["concentration"] = (
-                rate * gradient["alpha"] + (1.0 - rate) * gradient["beta"]
-            )
-        for slot, name in route.names.items():
-            offset = self._blocks_at[name].offset
-            jacobian = (
-                natural[slot] * (1.0 - natural[slot])
-                if slot == "rate"
-                else natural[slot]
-            )
-            out[offset : offset + k] = -gradient[slot] * jacobian
-        return -log_likelihood, out
+        return value, gradient
 
 
 @dataclass(frozen=True)

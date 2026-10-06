@@ -11,7 +11,7 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use rand_distr::{Distribution, StandardUniform};
 
-use crate::energy::{energy_of, Energy};
+use crate::energy::Energy;
 
 /// `hmc.Adaptation`'s fields and `hmc`'s dual-averaging constants.
 pub struct Warmup {
@@ -137,7 +137,7 @@ pub trait Kernel {
     /// probability `min(1, exp(-dH))` (zero where `dH` is nan) and `|dH|`.
     fn step(
         &mut self,
-        energy: &Energy<'_>,
+        energy: &dyn Energy,
         rng: &mut ChaCha8Rng,
         step_size: f64,
     ) -> (bool, f64, f64);
@@ -160,6 +160,20 @@ pub fn decide(log_ratio: f64, uniform: f64) -> (bool, f64) {
     };
     let probability = if ratio.is_nan() { 0.0 } else { ratio.min(1.0) };
     (uniform < ratio, probability)
+}
+
+/// A temperature a chain can target `exp(-U / T)` at: finite and positive.
+///
+/// # Errors
+/// Any other.
+pub fn check_temperature(temperature: f64) -> Result<(), String> {
+    if temperature.is_finite() && temperature > 0.0 {
+        Ok(())
+    } else {
+        Err(format!(
+            "temperature must be finite and positive, got {temperature}"
+        ))
+    }
 }
 
 /// `chain._jittered`: no draw at zero jitter.
@@ -211,7 +225,7 @@ pub fn regularized(m2: &[f64], count: f64) -> Result<(Vec<f64>, Vec<usize>), Str
 /// acceptance probability and the coordinates the first window left flat.
 fn warm_up<K: Kernel>(
     kernel: &mut K,
-    energy: &Energy<'_>,
+    energy: &dyn Energy,
     rng: &mut ChaCha8Rng,
     mut step_size: f64,
     warmup: &Warmup,
@@ -253,8 +267,7 @@ fn warm_up<K: Kernel>(
 
 /// A chain that can be advanced in blocks: the warm-up runs once, on construction.
 pub struct Walk<K: Kernel> {
-    family: u8,
-    parameters: Vec<f64>,
+    energy: Box<dyn Energy>,
     rng: ChaCha8Rng,
     kernel: K,
     /// The step the chain runs at, the warm-up's when there was one.
@@ -277,14 +290,13 @@ pub struct Block {
 }
 
 impl<K: Kernel> Walk<K> {
-    /// A chain on the family `family`, from the kernel `make` builds on its
-    /// energy, after the warm-up if one is given.
+    /// A chain on `energy`, from the kernel `make` builds on it, after the
+    /// warm-up if one is given.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        family: u8,
-        parameters: Vec<f64>,
+        energy: Box<dyn Energy>,
         dimension: usize,
-        make: impl FnOnce(&Energy<'_>) -> K,
+        make: impl FnOnce(&dyn Energy) -> K,
         step_size: f64,
         seed: u64,
         warmup: Option<&Warmup>,
@@ -301,20 +313,18 @@ impl<K: Kernel> Walk<K> {
                 ));
             }
         }
-        let energy = energy_of(family, &parameters, dimension)?;
-        let mut kernel = make(&energy);
+        let mut kernel = make(&*energy);
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         let (step_size, mass_diagonal, warmup_acceptance, jitter, flat) = match warmup {
             Some(w) => {
                 let (step, mass, acceptance, flat) =
-                    warm_up(&mut kernel, &energy, &mut rng, step_size, w)?;
+                    warm_up(&mut kernel, &*energy, &mut rng, step_size, w)?;
                 (step, mass, acceptance, w.jitter, flat)
             }
             None => (step_size, Vec::new(), 0.0, 0.0, Vec::new()),
         };
         Ok(Self {
-            family,
-            parameters,
+            energy,
             rng,
             kernel,
             step_size,
@@ -333,14 +343,12 @@ impl<K: Kernel> Walk<K> {
     /// feeding the filters when `observe` is.
     pub fn advance(&mut self, n: usize, store: bool, observe: bool) -> Block {
         let d = self.kernel.position().len();
-        // Checked in `new`, so it cannot fail here.
-        let energy = energy_of(self.family, &self.parameters, d).expect("checked in new");
         let mut draws = Vec::with_capacity(if store { n * d } else { 0 });
         let mut energy_error = Vec::with_capacity(n);
         let mut accepted = 0;
         for _ in 0..n {
             let step = jittered(&mut self.rng, self.step_size, self.jitter);
-            let (take, _, error) = self.kernel.step(&energy, &mut self.rng, step);
+            let (take, _, error) = self.kernel.step(&*self.energy, &mut self.rng, step);
             accepted += usize::from(take);
             energy_error.push(error);
             if store {
@@ -367,11 +375,12 @@ impl<K: Kernel> Walk<K> {
 #[macro_export]
 macro_rules! walk_class {
     ($name:ident, $kernel:ty, $make:path $(, $extra:ident : $ty:ty)*) => {
-        /// A chain on a declared family, advanced in blocks; see the module docs.
+        /// A chain on a supported kernel, advanced in blocks; see the module docs.
         ///
-        /// `family` and `parameters` are `sample.declared.declared_energy`'s;
+        /// `kernel` and `data` are `sample.declared.declared_energy`'s;
         /// `warmup` proposals of zero run no warm-up, and any other number
-        /// runs it on construction. `advance` releases the GIL.
+        /// runs it on construction; the chain targets `exp(-U / temperature)`.
+        /// `advance` releases the GIL.
         #[pyclass(module = "sal.oxisal")]
         pub struct $name {
             walk: $crate::chain::Walk<$kernel>,
@@ -383,8 +392,8 @@ macro_rules! walk_class {
             #[allow(clippy::too_many_arguments)]
             fn new(
                 py: Python<'_>,
-                family: u8,
-                parameters: PyReadonlyArray1<'_, f64>,
+                kernel: &str,
+                data: &Bound<'_, pyo3::types::PyDict>,
                 theta0: PyReadonlyArray1<'_, f64>,
                 step_size: f64,
                 seed: u64,
@@ -393,9 +402,11 @@ macro_rules! walk_class {
                 step_jitter: f64,
                 constants: (f64, f64, f64),
                 powers: Vec<i32>,
+                temperature: f64,
                 $($extra: $ty),*
             ) -> PyResult<Self> {
-                let (parameters, theta0) = (parameters.as_slice()?.to_vec(), theta0.as_slice()?);
+                let theta0 = theta0.as_slice()?;
+                let energy = $crate::energy::build(kernel, data, theta0.len())?;
                 let adaptation = $crate::chain::Warmup::from_python(
                     warmup,
                     target_acceptance,
@@ -405,13 +416,13 @@ macro_rules! walk_class {
                 let walk = py
                     .detach(|| {
                         $make(
-                            family,
-                            parameters,
+                            energy,
                             theta0,
                             step_size,
                             seed,
                             adaptation.as_ref(),
                             &powers,
+                            temperature,
                             $($extra),*
                         )
                     })
