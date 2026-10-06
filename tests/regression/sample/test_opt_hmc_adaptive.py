@@ -230,22 +230,28 @@ class _Wall:
         return 1e300 * (theta - self.start).abs().sum()
 
 
-@pytest.mark.smoke
-def test_a_warm_up_whose_chain_did_not_move_is_refused() -> None:
-    # A coordinate with zero warm-up variance would get an infinite mass
-    # and a chain that never moves there while every diagnostic reads
-    # healthy; the refusal names the coordinates.
+@pytest.mark.oracle
+def test_a_warm_up_whose_chain_did_not_move_reports_it_flat() -> None:
+    # Issue #1207: a coordinate with zero warm-up variance was refused; it is
+    # now reported on `flat` and given Stan's floor, whose closed form over
+    # the 10 recorded draws of a 40-proposal warm-up is 1e-3 * 5 / 15.
     wall = _Wall(torch.tensor([0.5, -0.5], dtype=torch.float64))
 
-    with pytest.raises(ValueError, match=r"zero on coordinate\(s\) \[0, 1\]"):
-        sample(
-            wall,
-            rng=torch.Generator().manual_seed(1),
-            n_samples=10,
-            step_size=0.1,
-            n_steps=3,
-            adaptation=Adaptation(warmup=40, target_acceptance=0.65, step_jitter=0.0),
-        )
+    chain = sample(
+        wall,
+        rng=torch.Generator().manual_seed(1),
+        n_samples=10,
+        step_size=0.1,
+        n_steps=3,
+        adaptation=Adaptation(warmup=40, target_acceptance=0.65, step_jitter=0.0),
+    )
+
+    assert chain.adapted is not None
+    assert chain.adapted.flat == (0, 1)
+    floor = 1e-3 * (5.0 / 15.0)
+    assert torch.equal(
+        chain.adapted.mass_diagonal, torch.full((2,), 1.0 / floor, dtype=torch.float64)
+    )
 
 
 # --- the fixed-parameter path ------------------------------------------------

@@ -162,7 +162,9 @@ def random_walk(
         As :func:`sal.sample.hmc.sample`.
     adaptation : Adaptation | None
         The two-window warm-up :func:`~sal.sample.hmc.sample`
-        runs: dual averaging on the step, the variance for the metric. Its
+        runs: dual averaging on the step, the regularized variance for the
+        metric, with a coordinate that did not move reported on
+        ``adapted.flat``. Its
         ``target_acceptance`` belongs near :data:`RWM_TARGET_ACCEPTANCE`.
     backend : Backend
         :data:`~sal.backend.Backend.RUST`, the default, runs

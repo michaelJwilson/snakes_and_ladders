@@ -36,7 +36,8 @@ acceptance ratio to temper, which is why ``fit`` takes no schedule.
 
 **Adaptation is a warm-up, and the chain is drawn after it.**
 :class:`Adaptation` asks :func:`sample` for a warm-up that sets the mass
-diagonal from the warm-up sample variance and the step size by dual averaging
+diagonal from the warm-up sample variance, regularized as Stan does
+(:func:`~sal.sample.chain.regularized_variance`; issue #1207), and the step size by dual averaging
 toward a stated acceptance (Hoffman & Gelman, 2014, §3.2;
 ``eq:dual-averaging``), then draws the chain at those *fixed* values, so the
 draws are a Markov chain with the target as its stationary distribution.

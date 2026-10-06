@@ -14,7 +14,7 @@ The arithmetic is ``src/hmc.rs``'s and ``src/chain.rs``'s: the gradient at
 the current point carried from the trajectory that reached it, drifts of
 ``s * p`` and kicks of ``s * grad U`` on the metric of scale ``s``, the two
 dual-averaging windows of ``chain._warm_up`` (Welford over the first window's
-second half), and ``KalmanMean``'s six statistics per operator. The stream is
+second half, regularized by ``chain.regularized_variance``), and ``KalmanMean``'s six statistics per operator. The stream is
 JAX's, keyed by one draw from the caller's generator, so the torch route is
 matched in distribution.
 """
@@ -26,6 +26,8 @@ from collections.abc import Callable
 from typing import Any
 
 import numpy as np
+
+from sal.sample.chain import regularized_variance
 
 
 def _jax() -> Any:
@@ -205,6 +207,7 @@ class JaxWalk:
         self._scale = jnp.ones(d)
         self._jitter = step_jitter
         self.mass_diagonal = np.empty(0)
+        self.flat: tuple[int, ...] = ()
         self.warmup_acceptance = 0.0
         self.step_size = step_size
         if warmup:
@@ -245,15 +248,9 @@ class JaxWalk:
             length=first,
             record_from=first // 2,
         )
-        variance = np.asarray(m2 / (count - 1.0))
-        if not bool((variance > 0.0).all()):
-            stuck = np.flatnonzero(~(variance > 0.0)).tolist()
-            msg = (
-                f"warm-up variance is zero on coordinate(s) {stuck}: the chain did "
-                "not move there, so no mass can be estimated; lengthen the warm-up "
-                "or start the step size smaller"
-            )
-            raise ValueError(msg)
+        variance, self.flat = regularized_variance(
+            np.asarray(m2 / (count - 1.0)), int(count)
+        )
         self._scale = jnp.sqrt(jnp.asarray(variance))
         averaged = float(np.exp(dual[3]))
         # `chain._warm_up`: window two restarts dual averaging from window
