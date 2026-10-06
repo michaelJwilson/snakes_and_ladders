@@ -119,8 +119,9 @@ validation-torchrl = ["torchrl>=0.6"]
 validation-torch-geometric = ["torch_geometric>=2.5"]
 #
 # JAX itself: Apache-2.0, far above the 1,000-star bar, approved on #991 for
-# validation and benchmarking in a subprocess only; autodiff in the package
-# stays PyTorch. Already resolved beneath BlackJAX, now its own extra.
+# validation and benchmarking in a subprocess. Since #1000 JAX is also a
+# core dependency (`jax>=0.7.2` above); this extra raises the floor the
+# validation subprocess runs at.
 validation-jax = ["jax>=0.11.2"]
 # The run store behind `sal.track` (issue #778). An extra
 # rather than a core dependency: `track.Run` is a Protocol written with
