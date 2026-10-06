@@ -523,9 +523,9 @@ def sample(
     backend : Backend
         :data:`~sal.backend.Backend.RUST`, the default since
         issue #986, runs the whole chain in ``oxisal.HmcWalk`` (issue #1008)
-        when the objective declares an energy
+        when the objective supports a kernel
         (:func:`~sal.sample.declared.declared_energy`) and the
-        chain is leapfrog at unit temperature in no enclosing
+        chain is leapfrog, at any temperature (issue #1220), in no enclosing
         :func:`sal.track.track`; the warm-up and ``Power``
         operators' filters run there too, and other operators as
         :func:`run_compiled` states. Its momenta and uniforms come
@@ -555,7 +555,7 @@ def sample(
     declared = declared_energy(objective)
     traced = None if declared is not None else declared_jax_energy(objective)
     if (
-        compiled_route(backend, temperature)
+        compiled_route(backend)
         and integrator is leapfrog
         and (declared is not None or traced is not None)
         and (
@@ -575,6 +575,7 @@ def sample(
             step_size=step_size,
             start=start_point(objective, start),
             burn_in=burn_in,
+            temperature=temperature,
             adaptation=adaptation,
             store_chain=store_chain,
             operators=operators,
@@ -1250,7 +1251,7 @@ def compiled_trajectory(
     step_size: float,
     n_steps: int,
 ) -> PhaseSpace:
-    """:func:`leapfrog` on a declared energy, in ``oxisal`` at unit mass (issues #986, #1008).
+    """:func:`leapfrog` on a supported kernel, in ``oxisal`` at unit mass (issues #986, #1008, #1220).
 
     The trajectory is the one arithmetic the compiled chain and the torch
     route share, so it is what pins ``src/hmc.rs`` to :func:`leapfrog` step
@@ -1259,12 +1260,12 @@ def compiled_trajectory(
     Raises
     ------
     TypeError
-        If the objective declares no energy
+        If the objective supports no kernel
         (:func:`~sal.sample.declared.declared_energy`).
     """
     declared = declared_energy(objective)
     if declared is None:
-        msg = f"{type(objective).__name__} declares no energy a compiled trajectory can run"
+        msg = f"{type(objective).__name__} supports no kernel a compiled trajectory can run"
         raise TypeError(msg)
     end, velocity = oxisal.leapfrog_trajectory(
         declared[0],

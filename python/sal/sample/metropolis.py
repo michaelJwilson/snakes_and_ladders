@@ -21,7 +21,7 @@ NumPy :meth:`~sal.opt.objective.DeclaredEnergy.energy` is
 evaluated without the tensor type, and any other through ``__call__``.
 
 The compiled route (``oxisal.metropolis``, ``src/metropolis.rs``) runs the
-whole chain, the warm-up included, on a declared family
+whole chain, the warm-up included, at any temperature, on a supported kernel
 (:mod:`sal.sample.declared`), from its own ChaCha8 stream.
 :func:`replay` is the chain on randomness the caller supplies: the step
 BlackJAX's ``rmh`` is pinned to draw for draw.
@@ -169,8 +169,9 @@ def random_walk(
     backend : Backend
         :data:`~sal.backend.Backend.RUST`, the default, runs
         the chain and its warm-up in ``oxisal.metropolis`` when the objective
-        declares a family (:func:`~sal.sample.declared.declared_energy`)
-        and the chain is at unit temperature in no tracked run; its
+        supports a kernel (:func:`~sal.sample.declared.declared_energy`)
+        and the chain is in no tracked run, at any temperature (issue
+        #1220); its
         ``operators`` observe the draws as :func:`~sal.sample.hmc.run_compiled`
         states, so a
         chain with ``store_chain=False`` holds that many draws at most. Its stream is ChaCha8 seeded by one draw from
@@ -194,7 +195,7 @@ def random_walk(
         raise ValueError(msg)
     refuse_backend("random_walk", backend, (Backend.PYTHON, Backend.RUST))
     declared = declared_energy(objective)
-    if compiled_route(backend, temperature) and declared is not None:
+    if compiled_route(backend) and declared is not None:
         return run_compiled(
             oxisal.MetropolisWalk,
             declared,
@@ -208,6 +209,7 @@ def random_walk(
             step_size=step_size,
             start=start_point(objective, start),
             burn_in=burn_in,
+            temperature=temperature,
             adaptation=adaptation,
             store_chain=store_chain,
             operators=operators,

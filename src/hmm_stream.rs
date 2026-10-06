@@ -28,6 +28,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use rayon::prelude::*;
 
+use crate::energy::{pinned_simplex, Energy};
 use crate::special::{ln_gamma, ln_gamma_approx, STIRLING_FROM};
 
 /// New log parameters and the log-likelihood at the parameters given.
@@ -617,6 +618,98 @@ pub fn gaussian_statistics(
         moments.sums,
         counts.log_likelihood,
     ))
+}
+
+/// A Gaussian HMM's negative log-likelihood of equal-length sequences,
+/// row-major, in `theta = (m - 1 free initial, m (m - 1) free transition,
+/// m means, m log scales)`, as `opt.hmm.EmissionHmmObjective` states it on a
+/// Gaussian start: [`gaussian_statistics`] and Fisher's identity behind
+/// [`Energy`], the one assembly the objective's `gradient` and a compiled
+/// chain both run (issues #997, #1008, #1220).
+pub struct GaussianHmm {
+    observations: Vec<f64>,
+    length: usize,
+    m: usize,
+}
+
+impl GaussianHmm {
+    /// # Errors
+    /// Fewer than two states, an empty or ragged sequence, or `dimension`
+    /// other than `m^2 + 2m - 1`.
+    pub fn new(
+        observations: Vec<f64>,
+        length: usize,
+        m: usize,
+        dimension: usize,
+    ) -> Result<Self, String> {
+        if m < 2
+            || length == 0
+            || !observations.len().is_multiple_of(length)
+            || dimension != m * m + 2 * m - 1
+        {
+            return Err(format!(
+                "a Gaussian HMM takes m >= 2 states on sequences of one length with d = m^2 + 2m - 1, \
+                 got m = {m}, length {length} and d = {dimension}"
+            ));
+        }
+        Ok(Self {
+            observations,
+            length,
+            m,
+        })
+    }
+}
+
+impl Energy for GaussianHmm {
+    /// The negative log-likelihood, and the negative score: with `gamma` and
+    /// `xi` the posteriors of a state and of a pair, `pi` and `A` the chain
+    /// and `N` sequences, the score is `sum gamma_1(k) - N pi_k` for an
+    /// initial logit `k >= 1`, `sum xi(i, j) - sum_j' xi(i, j') A_ij` for a
+    /// transition logit `(i, j >= 1)`, `S1 / s^2` for a mean and
+    /// `S2 / s^2 - S0` for a log scale.
+    fn value_and_gradient(&self, theta: &[f64], out: &mut [f64]) -> f64 {
+        let (m, length) = (self.m, self.length);
+        let log_initial = pinned_simplex(&theta[..m - 1]);
+        let log_transition: Vec<f64> = theta[m - 1..m * m - 1]
+            .chunks_exact(m - 1)
+            .flat_map(pinned_simplex)
+            .collect();
+        let mean = &theta[m * m - 1..m * m - 1 + m];
+        let scale: Vec<f64> = theta[m * m - 1 + m..].iter().map(|v| v.exp()).collect();
+        let Ok((first, pairs, moments, log_likelihood)) = gaussian_statistics(
+            &self.observations,
+            length,
+            &log_initial,
+            &log_transition,
+            mean,
+            &scale,
+        ) else {
+            out.iter_mut().for_each(|o| *o = f64::NAN);
+            return f64::NAN;
+        };
+        let n_sequences = (self.observations.len() / length) as f64;
+        let mut index = 0;
+        for k in 1..m {
+            out[index] = -(first[k] - n_sequences * log_initial[k].exp());
+            index += 1;
+        }
+        for i in 0..m {
+            let row: f64 = pairs[i * m..(i + 1) * m].iter().sum();
+            for j in 1..m {
+                out[index] = -(pairs[i * m + j] - row * log_transition[i * m + j].exp());
+                index += 1;
+            }
+        }
+        for s in 0..m {
+            out[index] = -(moments[3 * s + 1] / (scale[s] * scale[s]));
+            index += 1;
+        }
+        for s in 0..m {
+            out[index] = -(moments[3 * s + 2] / (scale[s] * scale[s]) - moments[3 * s]);
+            index += 1;
+        }
+        -log_likelihood
+    }
 }
 
 /// A Gaussian HMM's expected statistics; see `gaussian_statistics`.

@@ -1,6 +1,6 @@
 """HMC on an objective with a traceable JAX energy, the chain under ``jit`` (issue #1008).
 
-The compiled Rust walks run declared families; an objective whose energy is a
+The compiled Rust walks run supported kernels; an objective whose energy is a
 JAX function (:class:`~sal.sample.declared.DeclaredJaxEnergy`,
 the HMM objectives under ``Backend.JAX``) cannot cross into Rust, but its
 whole chain can be traced: the leapfrog under ``fori_loop``, the transitions
@@ -39,9 +39,14 @@ def _jax() -> Any:
 
 @functools.cache
 def _programs(
-    energy: Callable[[Any, Any], Any], n_steps: int, jitter: bool
+    energy: Callable[[Any, Any], Any], n_steps: int, jitter: bool, temperature: float
 ) -> tuple[Any, Any, Any]:
-    """The warm-up window, the block of transitions and the first gradient, compiled per energy."""
+    """The warm-up window, the block of transitions and the first gradient, compiled per energy.
+
+    At ``temperature`` other than 1 the momentum is scaled by its root and
+    the log ratio divided by it (issue #1220); at 1 neither operation is
+    traced, so the program is the one compiled before the temperature was.
+    """
     jax = _jax()
     jnp = jax.numpy
     value_and_grad = jax.value_and_grad(energy)
@@ -58,6 +63,8 @@ def _programs(
         else:
             step = step[0]
         p = jax.random.normal(momentum_key, x.shape)
+        if temperature != 1.0:
+            p = p * jnp.sqrt(temperature)
         current = u + 0.5 * jnp.dot(p, p)
         p1 = p - 0.5 * step * scale * g
 
@@ -73,6 +80,8 @@ def _programs(
         y, q, gradient, value = jax.lax.fori_loop(0, n_steps, body, (x, p1, g, u))
         proposed = value + 0.5 * jnp.dot(q, q)
         log_ratio = current - proposed
+        if temperature != 1.0:
+            log_ratio = log_ratio / temperature
         ratio = jnp.exp(log_ratio)
         probability = jnp.where(jnp.isnan(ratio), 0.0, jnp.minimum(ratio, 1.0))
         take = jax.random.uniform(uniform_key) < ratio
@@ -188,6 +197,7 @@ class JaxWalk:
         step_jitter: float,
         constants: tuple[float, float, float],
         powers: list[int],
+        temperature: float,
         n_steps: int,
     ) -> None:
         if n_steps < 1:
@@ -196,7 +206,9 @@ class JaxWalk:
         jax = _jax()
         jnp = jax.numpy
         self._jnp = jnp
-        self._window, self._block, start = _programs(energy, n_steps, step_jitter > 0.0)
+        self._window, self._block, start = _programs(
+            energy, n_steps, step_jitter > 0.0, float(temperature)
+        )
         self._data = data
         self._key = jax.random.key(seed % 2**63)
         self._powers = tuple(powers)

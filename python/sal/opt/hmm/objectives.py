@@ -144,6 +144,7 @@ class EmissionHmmObjective(Objective):
         )
         self._backend = backend
         self._jax: Callable[[np.ndarray], tuple[float, np.ndarray]] | None = None
+        self._kernel: oxisal.SupportedEnergy | None = None
         if start.n_states < 2:
             msg = f"an HMM has at least two states, got {start.n_states}"
             raise ValueError(msg)
@@ -219,11 +220,10 @@ class EmissionHmmObjective(Objective):
             return None
         return len(self._lengths), self._lengths[0]
 
-    @property
-    def gaussian_hmm_declaration(self) -> tuple[int, np.ndarray] | None:
-        """``(K, observations)`` for a compiled chain (:mod:`sal.sample.declared`, issues #1008, #1189).
+    def supported_gradient(self) -> tuple[str, dict[str, object]] | None:
+        """``oxisal``'s Gaussian HMM kernel on the sequences (:class:`~sal.sample.declared.SupportedGradient`, issues #1008, #1189, #1220).
 
-        Declared where ``oxisal``'s Gaussian HMM energy is this objective: a
+        Supported where the kernel is this objective: a
         :class:`~sal.emissions.GaussianEmission` of scalar observations on
         segments of one length, sequences as rows, and no covariate. ``None``
         otherwise.
@@ -236,15 +236,21 @@ class EmissionHmmObjective(Objective):
             or shape is None
         ):
             return None
-        return self._k, self._observations.numpy().reshape(shape)
+        return "gaussian_hmm", {
+            "m": self._k,
+            "observations": np.ascontiguousarray(
+                self._observations.numpy().reshape(shape)
+            ),
+        }
 
     def gradient(self, theta: torch.Tensor) -> torch.Tensor:
-        """``dU/dtheta``, detached: streamed for a declared Gaussian HMM, :meth:`value_and_gradient`'s otherwise (issues #997, #1189).
+        """``dU/dtheta``, detached: streamed where :meth:`supported_gradient` holds, :meth:`value_and_gradient`'s otherwise (issues #997, #1189, #1220).
 
-        Where :attr:`gaussian_hmm_declaration` holds, Fisher's identity over
-        the statistics ``oxisal.gaussian_hmm_statistics`` sums in one
-        streamed pass, with ``gamma`` and ``xi`` the posteriors of a state and
-        of a pair, ``pi`` and ``A`` the chain, and ``N`` sequences:
+        The kernel (``oxisal.SupportedEnergy``) sums the statistics
+        ``oxisal.gaussian_hmm_statistics`` returns in one streamed pass and
+        assembles Fisher's identity from them, with ``gamma`` and ``xi`` the
+        posteriors of a state and of a pair, ``pi`` and ``A`` the chain, and
+        ``N`` sequences:
 
         - an initial logit ``k >= 1``: ``sum gamma_1(k) - N pi_k``;
         - a transition logit ``(i, j >= 1)``: ``sum xi(i, j) - sum_j' xi(i, j') A_ij``;
@@ -252,40 +258,19 @@ class EmissionHmmObjective(Objective):
         - a log scale: ``sum_t gamma_t(s) ((x_t - mu_s)^2 / s_s^2 - 1)``;
 
         negated for the negative log-likelihood. What ``hmc.gradient_at``
-        reads; 5.6x faster than :meth:`value_and_gradient` at 10^6
-        positions. Autograd through :meth:`__call__` is the oracle.
+        reads, and the arithmetic a compiled chain runs; 5.6x faster than
+        :meth:`value_and_gradient` at 10^6 positions. Autograd through
+        :meth:`__call__` is the oracle.
         """
-        declared = self.gaussian_hmm_declaration
-        if declared is None or self._backend is Backend.TORCH:
+        supported = self.supported_gradient()
+        if supported is None or self._backend is Backend.TORCH:
             return self.value_and_gradient(theta)[1]
-        m, sequences = declared
-        blocks = self.blocks
-        free = theta.detach()
-        log_initial, log_transition = self._chain(free)
-        mean = free[blocks["mean"]].numpy()
-        scale = np.exp(free[blocks["scale"]].numpy())
-        first, pairs, moments, _ = oxisal.gaussian_hmm_statistics(
-            np.ascontiguousarray(sequences),
-            np.ascontiguousarray(log_initial.numpy()),
-            np.ascontiguousarray(log_transition.numpy()).reshape(-1),
-            np.ascontiguousarray(mean),
-            np.ascontiguousarray(scale),
+        if self._kernel is None:
+            self._kernel = oxisal.SupportedEnergy(*supported, self.n_parameters)
+        _, gradient = self._kernel.value_and_gradient(
+            np.ascontiguousarray(theta.detach().numpy(), dtype=np.float64)
         )
-        pairs = pairs.reshape(m, m)
-        initial = np.exp(log_initial.numpy())
-        transition = np.exp(log_transition.numpy())
-        s0, s1, s2 = moments.reshape(m, 3).T
-        score = np.concatenate(
-            [
-                (first - sequences.shape[0] * initial)[1:],
-                (pairs - pairs.sum(axis=1, keepdims=True) * transition)[:, 1:].reshape(
-                    -1
-                ),
-                s1 / scale**2,
-                s2 / scale**2 - s0,
-            ]
-        )
-        return torch.from_numpy(-score)
+        return torch.from_numpy(gradient)
 
     def jax_energy(self) -> tuple[Callable[[Any, Any], Any], dict[str, Any]] | None:
         """The negative log-likelihood as a traceable JAX ``(theta, data)`` function and its data, or ``None`` (issues #1008, #1189).

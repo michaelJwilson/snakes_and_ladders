@@ -133,6 +133,7 @@ fn oxisal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<hmc::HmcWalk>()?;
     m.add_function(wrap_pyfunction!(bond_roots, m)?)?;
     m.add_class::<metropolis::MetropolisWalk>()?;
+    m.add_class::<energy::SupportedEnergy>()?;
     Ok(())
 }
 

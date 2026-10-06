@@ -20,6 +20,8 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use rayon::prelude::*;
 
+use crate::energy::{pinned_simplex, Energy};
+
 /// Draws per parallel chunk of [`gaussian_gradient`]: the partial sums are
 /// reduced in chunk order, so the result does not depend on the pool.
 const CHUNK: usize = 4096;
@@ -204,6 +206,64 @@ pub fn gaussian_mixture_gradient<'py>(
         .detach(|| gaussian_gradient(values, log_weight, mean, scale, true))
         .map_err(PyValueError::new_err)?;
     Ok((value, PyArray1::from_vec(py, gradient)))
+}
+
+/// A one-channel Gaussian mixture's negative log-likelihood of its
+/// observations in `theta = (k - 1 free weights, k means, k log scales)`, as
+/// `opt.mixture.GaussianMixtureObjective` states it: [`gaussian_gradient`]
+/// behind [`Energy`] (issues #1008, #1220).
+pub struct GaussianMixture {
+    values: Vec<f64>,
+    k: usize,
+}
+
+impl GaussianMixture {
+    /// # Errors
+    /// `dimension` other than `3k - 1`.
+    pub fn new(values: Vec<f64>, k: usize, dimension: usize) -> Result<Self, String> {
+        if k == 0 || dimension != 3 * k - 1 {
+            return Err(format!(
+                "a mixture of k = {k} takes d = 3k - 1, got d = {dimension}"
+            ));
+        }
+        Ok(Self { values, k })
+    }
+
+    /// `theta`'s weights, means and scales, then [`gaussian_gradient`].
+    fn evaluate(&self, theta: &[f64], out: &mut [f64], with_value: bool) -> f64 {
+        let k = self.k;
+        let log_weight = pinned_simplex(&theta[..k - 1]);
+        let scale: Vec<f64> = theta[2 * k - 1..3 * k - 1]
+            .iter()
+            .map(|v| v.exp())
+            .collect();
+        match gaussian_gradient(
+            &self.values,
+            &log_weight,
+            &theta[k - 1..2 * k - 1],
+            &scale,
+            with_value,
+        ) {
+            Ok((value, gradient)) => {
+                out.copy_from_slice(&gradient);
+                value
+            }
+            Err(_) => {
+                out.iter_mut().for_each(|o| *o = f64::NAN);
+                f64::NAN
+            }
+        }
+    }
+}
+
+impl Energy for GaussianMixture {
+    fn value_and_gradient(&self, x: &[f64], out: &mut [f64]) -> f64 {
+        self.evaluate(x, out, true)
+    }
+
+    fn gradient(&self, x: &[f64], out: &mut [f64]) {
+        self.evaluate(x, out, false);
+    }
 }
 
 /// One Gaussian mixture EM step; see the module docs.

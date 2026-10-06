@@ -66,16 +66,22 @@ def test_the_python_kernel_is_the_replay_on_its_own_draws() -> None:
 
 
 @pytest.mark.end2end
+@pytest.mark.parametrize("temperature", [1.0, 4.0])
 @pytest.mark.parametrize("backend", [Backend.RUST, Backend.PYTHON], ids=str)
-def test_each_route_recovers_the_gaussian_moments(backend: Backend) -> None:
+def test_each_route_recovers_the_gaussian_moments(
+    backend: Backend, temperature: float
+) -> None:
+    # The proposal scales with sqrt(T), so the acceptance is T = 1's; the
+    # Rust route compiles at T = 4 too (issue #1220).
     chain = _chain(
         backend,
+        temperature=temperature,
         store_chain=False,
         operators={"x": Power(1), "x2": Power(2)},
     )
     assert chain.draws.shape == (0, DIMENSION)
     assert 0.2 < chain.acceptance_rate < 0.5
-    _assert_moments(chain)
+    _assert_moments(chain, temperature=temperature)
 
 
 @pytest.mark.analytic

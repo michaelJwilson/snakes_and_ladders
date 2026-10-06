@@ -964,7 +964,7 @@ def _hmc_inputs(name: str, *, warmup: int, store_chain: bool) -> dict[str, np.nd
 
 #: HMC on a mixture's NLL (#1008): 10^5 draws, weights (0.3, 0.3, 0.4), means
 #: (-4, 0, 5), scales (1, 1.5, 1), seed 1008, 100 x 10 steps at 0.001; JAX
-#: twin in `scripts/blackjax.py`, ours `src/energy.rs`.
+#: twin in `scripts/blackjax.py`, ours `src/mixture_stream.rs`'s `GaussianMixture`.
 def _mixture_hmc_inputs(*, warmup: int, store_chain: bool) -> dict[str, np.ndarray]:
     rng = np.random.default_rng(1008)
     labels = rng.choice(3, size=100_000, p=[0.3, 0.3, 0.4])
@@ -1051,7 +1051,7 @@ def _hmm_hmc_inputs(*, warmup: int, store_chain: bool) -> dict[str, np.ndarray]:
 _HMM_MEASURED = "2026-09-24, 4-core reference host at a 1-minute load of 1.1-1.4, #1008"
 
 #: 300 transitions of ten steps after 100 warm-up; BlackJAX's `vmap`ped log
-#: forward recursion, second call; ours `src/energy.rs`, Fisher's identity.
+#: forward recursion, second call; ours `src/hmm_stream.rs`'s `GaussianHmm`, Fisher's identity.
 BLACKJAX_HMC_HMM = {
     "plain": Goal(
         "blackjax", "300 HMC transitions, Gaussian HMM of 10^4", 3.085, _HMM_MEASURED
