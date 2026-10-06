@@ -25,7 +25,9 @@ objective onto the metric's coordinates and moves the position with it, so a
 gradient cached across transitions would have two invalidation points and no
 owner. The cost is therefore two gradients a proposal, which is
 ``leapfrog.force_evaluations(1)`` exactly, and what makes the two routes
-comparable at equal evaluations rather than at equal draws.
+comparable at equal evaluations rather than at equal draws. The two values
+the ratio reads are not a further cost: each is taken beside its gradient by
+:func:`~sal.opt.objective.value_and_gradient` (issue #1217).
 
 **Unadjusted Langevin is a flag, and it costs what MALA costs.** Dropping the
 Metropolis correction leaves a chain whose stationary distribution is not the
@@ -53,14 +55,13 @@ import torch
 from sal import oxisal
 from sal.backend import Backend, refuse_backend
 from sal.cost import Cost
-from sal.opt.objective import Objective
+from sal.opt.objective import Objective, value_and_gradient
 from sal.sample.accept import accept_ratio, acceptance_probability
 from sal.sample.chain import (
     Adaptation,
     Chain,
     Transition,
     compiled_route,
-    gradient_at,
     run_chain,
     run_compiled,
     start_point,
@@ -293,16 +294,16 @@ class _LangevinKernel:
         generator: torch.Generator,
         step_size: float,
     ) -> Transition:
-        gradient = gradient_at(objective, position)
+        # The value comes with each gradient (issue #1217): the ratio reads
+        # `U` at both points, and neither is evaluated a second time for it.
+        here, gradient = value_and_gradient(objective, position)
         noise = torch.randn(
             position.shape, generator=generator, dtype=torch.float64
         ) * math.sqrt(temperature)
         proposal = position - 0.5 * step_size * step_size * gradient + step_size * noise
-        proposed_gradient = gradient_at(objective, proposal)
+        there, proposed_gradient = value_and_gradient(objective, proposal)
 
-        log_ratio = (
-            float(objective(position.detach())) - float(objective(proposal.detach()))
-        ) / temperature
+        log_ratio = (float(here) - float(there)) / temperature
         log_ratio += _log_proposal_density(
             position, proposal, proposed_gradient, step_size, temperature
         )
