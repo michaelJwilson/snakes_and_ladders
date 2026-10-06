@@ -249,6 +249,7 @@ def test_a_rung_that_drops_its_second_move_is_refuted() -> None:
     assert failed
 
 
+@pytest.mark.smoke
 @pytest.mark.snapshot
 @pytest.mark.parametrize("move", [S, H, PottsMove.WOLFF], ids=str)
 def test_one_move_per_rung_spelled_out_is_the_single_move_bitwise(
