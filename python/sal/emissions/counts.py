@@ -1242,6 +1242,113 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
             self._trials, named["alpha"], named["beta"], tied=self._tied
         )
 
+    def rate_concentration(self) -> RateConcentrationBetaBinomialEmission:
+        """This family read by its rate ``a / (a + b)`` and concentration ``a + b`` (issue #1205)."""
+        total = self.concentration
+        return RateConcentrationBetaBinomialEmission(
+            self._trials, self._alpha / total, total, tied=self._tied
+        )
+
+
+class RateConcentrationBetaBinomialEmission(BetaBinomialEmission):
+    """The beta-binomial read by its rate ``p = a / (a + b)`` and concentration ``tau = a + b`` (issue #1205).
+
+    The same distribution as :class:`BetaBinomialEmission` at
+    ``a = tau p`` and ``b = tau (1 - p)``, and scored by it, so the
+    large-shape path of :mod:`sal.emissions.rising` is unchanged. What
+    differs is what a fit varies: :meth:`named_parameters` names ``rate``
+    (:attr:`~sal.emissions.base.Domain.PROBABILITY`) and ``concentration``
+    (:attr:`~sal.emissions.base.Domain.POSITIVE`), so
+    :class:`~sal.opt.objective.Restricted` can hold ``tau`` fixed with ``p``
+    free, which neither ``a`` nor ``b`` is. Two readings are two types (root
+    ``CLAUDE.md``, API Conventions).
+
+    ``rate`` and not ``mean``: :attr:`mean` is ``n p``, in observation units,
+    and :class:`CountPairEmission` names its total's mean ``mean``;
+    :attr:`CountPairEmission.rate` already names ``a / (a + b)``.
+
+    Parameters
+    ----------
+    trials : Values
+        Per-state ``n``, shape ``(n_states,)``, positive integers.
+    rate : Values
+        Per-state ``p``, shape ``(n_states,)``, in ``(0, 1)``.
+    concentration : Values
+        Per-state ``tau``, shape ``(n_states,)``, strictly positive.
+    tied : bool
+        One concentration shared by every state, as
+        :class:`BetaBinomialEmission` ties it. Keyword-only, off by default.
+
+    Raises
+    ------
+    ValueError
+        If the shapes disagree or a parameter is out of range.
+    """
+
+    def __init__(
+        self,
+        trials: Values,
+        rate: Values,
+        concentration: Values,
+        *,
+        tied: bool = False,
+    ) -> None:
+        self._rate, self._tau, alpha, beta = _rate_concentration(rate, concentration)
+        super().__init__(trials, alpha, beta, tied=tied)
+
+    @property
+    def rate(self) -> torch.Tensor:
+        """Per-state ``p``, shape ``(n_states,)``, as given."""
+        return self._rate
+
+    def rate_concentration(self) -> RateConcentrationBetaBinomialEmission:
+        """This family: it is already the rate--concentration reading."""
+        return self
+
+    def reestimate(
+        self,
+        observations: ArrayLike,
+        posterior: ArrayLike,
+        covariate: ArrayLike | None = None,
+    ) -> Reestimate[RateConcentrationBetaBinomialEmission]:
+        """:meth:`BetaBinomialEmission.reestimate`, the result read by rate and concentration.
+
+        A state whose ``(a, b)`` the step left bitwise unchanged keeps its
+        ``(p, tau)`` bitwise, so a frozen state is held exactly.
+        """
+        step = super().reestimate(observations, posterior, covariate)
+        fitted = step.components
+        rate, concentration = _held_reading(
+            fitted.alpha, fitted.beta, self._alpha, self._beta, self._rate, self._tau
+        )
+        return Reestimate(
+            RateConcentrationBetaBinomialEmission(
+                self._trials, rate, concentration, tied=self._tied
+            ),
+            converged=step.converged,
+            at_boundary=step.at_boundary,
+            iterations=step.iterations,
+            residual=step.residual,
+            frozen=step.frozen,
+        )
+
+    def named_parameters(self) -> Mapping[str, torch.Tensor]:
+        """``rate`` and ``concentration``, as given. The trial count is conditioned on, never fitted."""
+        return {"rate": self._rate, "concentration": self._tau}
+
+    def parameter_domains(self) -> Mapping[str, Domain]:
+        """``rate`` a probability, ``concentration`` positive."""
+        return {"rate": Domain.PROBABILITY, "concentration": Domain.POSITIVE}
+
+    def with_parameters(
+        self, named: Mapping[str, torch.Tensor]
+    ) -> RateConcentrationBetaBinomialEmission:
+        """The family at ``rate`` and ``concentration``, its trial counts and tie kept."""
+        require_parameter_names(self, named, ("rate", "concentration"))
+        return RateConcentrationBetaBinomialEmission(
+            self._trials, named["rate"], named["concentration"], tied=self._tied
+        )
+
 
 class CountPairEmission(EmissionFamily, CountEmissionFamily):
     """A total count and the successes within it, as one observation.
@@ -1718,6 +1825,196 @@ class CountPairEmission(EmissionFamily, CountEmissionFamily):
             self.trials,
             joint=self._joint,
         )
+
+    def rate_concentration(self) -> RateConcentrationCountPairEmission:
+        """This pair with its success channel read by rate and concentration (issue #1205)."""
+        return RateConcentrationCountPairEmission(
+            self._total.dispersion,
+            self._total.mean,
+            self.rate,
+            self.concentration,
+            self.trials,
+            joint=self._joint,
+        )
+
+
+class RateConcentrationCountPairEmission(CountPairEmission):
+    """:class:`CountPairEmission` with its success channel read by rate and concentration (issue #1205).
+
+    Scored as the pair at ``alpha = concentration * rate`` and
+    ``beta = concentration * (1 - rate)``, in either form;
+    :meth:`named_parameters` names ``dispersion``, ``mean``, ``rate`` and
+    ``concentration``, so an objective lays ``theta`` out in that order and
+    :class:`~sal.opt.objective.Restricted` can hold the concentration fixed.
+    :class:`RateConcentrationBetaBinomialEmission` says why ``rate``.
+
+    Parameters
+    ----------
+    dispersion, mean : Values
+        The total channel's negative-binomial ``r`` and ``mu``, shape
+        ``(n_states,)``.
+    rate : Values
+        The success channel's ``a / (a + b)``, shape ``(n_states,)``, in
+        ``(0, 1)``.
+    concentration : Values
+        The success channel's ``a + b``, shape ``(n_states,)``, positive.
+    trials : Values | None
+        As :class:`CountPairEmission` takes it.
+    joint : bool
+        As :class:`CountPairEmission` takes it.
+
+    Raises
+    ------
+    ValueError
+        As :class:`CountPairEmission` raises, or if a rate or a
+        concentration is out of range.
+    """
+
+    def __init__(
+        self,
+        dispersion: Values,
+        mean: Values,
+        rate: Values,
+        concentration: Values,
+        trials: Values | None = None,
+        *,
+        joint: bool,
+    ) -> None:
+        self._rate, self._tau, alpha, beta = _rate_concentration(rate, concentration)
+        super().__init__(dispersion, mean, alpha, beta, trials, joint=joint)
+        # The success channel in this reading, so `successes` and the
+        # independent form's M step return it.
+        self._success = RateConcentrationBetaBinomialEmission(
+            self._success.trials, self._rate, self._tau
+        )
+
+    @property
+    def rate(self) -> torch.Tensor:
+        """The success channel's ``a / (a + b)``, as given."""
+        return self._rate
+
+    def rate_concentration(self) -> RateConcentrationCountPairEmission:
+        """This pair: it is already the rate--concentration reading."""
+        return self
+
+    def reestimate(
+        self,
+        observations: ArrayLike,
+        posterior: ArrayLike,
+        covariate: ArrayLike | None = None,
+    ) -> Reestimate[RateConcentrationCountPairEmission]:
+        """:meth:`CountPairEmission.reestimate`, the result read by rate and concentration.
+
+        A state whose ``(a, b)`` the step left bitwise unchanged keeps its
+        ``(p, tau)`` bitwise.
+        """
+        step = super().reestimate(observations, posterior, covariate)
+        fitted = step.components
+        rate, concentration = _held_reading(
+            fitted.alpha, fitted.beta, self._alpha, self._beta, self._rate, self._tau
+        )
+        return Reestimate(
+            RateConcentrationCountPairEmission(
+                fitted.total.dispersion,
+                fitted.total.mean,
+                rate,
+                concentration,
+                self.trials,
+                joint=self._joint,
+            ),
+            converged=step.converged,
+            at_boundary=step.at_boundary,
+            iterations=step.iterations,
+            residual=step.residual,
+            frozen=step.frozen,
+        )
+
+    def named_parameters(self) -> Mapping[str, torch.Tensor]:
+        """``dispersion``, ``mean``, ``rate`` and ``concentration``, the last two as given."""
+        return {
+            "dispersion": self._total.dispersion,
+            "mean": self._total.mean,
+            "rate": self._rate,
+            "concentration": self._tau,
+        }
+
+    def parameter_domains(self) -> Mapping[str, Domain]:
+        """``rate`` a probability; the other three positive."""
+        return {
+            "dispersion": Domain.POSITIVE,
+            "mean": Domain.POSITIVE,
+            "rate": Domain.PROBABILITY,
+            "concentration": Domain.POSITIVE,
+        }
+
+    def with_parameters(
+        self, named: Mapping[str, torch.Tensor]
+    ) -> RateConcentrationCountPairEmission:
+        """The pair at the four parameters, its form and trial count kept."""
+        require_parameter_names(
+            self, named, ("dispersion", "mean", "rate", "concentration")
+        )
+        return RateConcentrationCountPairEmission(
+            named["dispersion"],
+            named["mean"],
+            named["rate"],
+            named["concentration"],
+            self.trials,
+            joint=self._joint,
+        )
+
+
+def _rate_concentration(
+    rate: Values, concentration: Values
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """``(p, tau, a, b)`` with ``a = tau p`` and ``b = tau (1 - p)``: the one conversion both readings share (issue #1205).
+
+    Differentiable in ``p`` and ``tau``, so an objective's gradient in the
+    rate--concentration coordinates is the chain rule through ``(a, b)``.
+
+    Raises
+    ------
+    ValueError
+        If the shapes disagree.
+    ParameterDomainError
+        If a rate is outside ``(0, 1)`` or a concentration is not positive.
+    """
+    p = torch.as_tensor(rate, dtype=torch.float64).reshape(-1)
+    tau = torch.as_tensor(concentration, dtype=torch.float64).reshape(-1)
+    if p.shape != tau.shape:
+        msg = (
+            f"rate and concentration must have the same shape, got "
+            f"{tuple(p.shape)} and {tuple(tau.shape)}"
+        )
+        raise ValueError(msg)
+    if bool(((p <= 0.0) | (p >= 1.0)).any()):
+        msg = f"every rate must lie in (0, 1), got {p.tolist()}"
+        raise ParameterDomainError(msg)
+    if bool((tau <= 0.0).any()):
+        msg = f"every concentration must be positive, got {tau.tolist()}"
+        raise ParameterDomainError(msg)
+    return p, tau, tau * p, tau * (1.0 - p)
+
+
+def _held_reading(
+    alpha: torch.Tensor,
+    beta: torch.Tensor,
+    alpha_was: torch.Tensor,
+    beta_was: torch.Tensor,
+    rate_was: torch.Tensor,
+    tau_was: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """``(p, tau)`` of a re-estimated ``(a, b)``, the given reading kept where ``(a, b)`` is bitwise unchanged.
+
+    ``a / (a + b)`` of ``tau p`` and ``tau (1 - p)`` need not return ``p``
+    bitwise, so a state the M step held would otherwise drift by rounding.
+    """
+    held = (alpha == alpha_was) & (beta == beta_was)
+    total = alpha + beta
+    return (
+        torch.where(held, rate_was, alpha / total),
+        torch.where(held, tau_was, total),
+    )
 
 
 def _beta_binomial_log_density(
