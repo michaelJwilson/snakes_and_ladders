@@ -57,3 +57,30 @@ def long_double_posteriors(
         evidence.append(np.log(scale).sum() + high.sum())
         start += n
     return posterior, pairs, np.array(evidence)
+
+
+def long_double_filter(
+    density: np.ndarray,
+    initial: np.ndarray,
+    transition: np.ndarray,
+) -> np.ndarray:
+    """One segment's forward filter ``p(z_t | y_1..t)`` in `np.longdouble`, rows summing to one.
+
+    Issue #1266: the referee of the forward-filter backward-sample draws.
+    The recursion of :func:`long_double_posteriors`, scaled at every step;
+    `transition` is one log matrix or a `(T, n, n)` stack, as there.
+    """
+    wide = np.longdouble
+    length, n_states = density.shape
+    stack = np.exp(transition.astype(wide))
+    if stack.ndim == 2:
+        stack = np.broadcast_to(stack, (length, n_states, n_states))
+    x = density.astype(wide)
+    b = np.exp(x - x.max(axis=1, keepdims=True))
+    alpha = np.empty((length, n_states), dtype=wide)
+    step = np.exp(initial.astype(wide)) * b[0]
+    alpha[0] = step / step.sum()
+    for t in range(1, length):
+        step = (alpha[t - 1] @ stack[t]) * b[t]
+        alpha[t] = step / step.sum()
+    return alpha

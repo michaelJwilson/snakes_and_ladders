@@ -121,15 +121,34 @@ def step_kernels(log_transition: np.ndarray, length: int, n_states: int) -> Step
     )
 
 
+def _shift(row: np.ndarray) -> float:
+    """Subtract a row's maximum from it in place and return the maximum, or ``0`` where it is not finite.
+
+    So a row of ``-inf`` stays one (issues #1262, #1266); ``src/ragged.rs``'
+    ``shift`` is the compiled twin.
+    """
+    high = float(row.max())
+    if not np.isfinite(high):
+        return 0.0
+    row -= high
+    return high
+
+
 def _forward(
     log_density: np.ndarray, log_initial: np.ndarray, log_transition: np.ndarray
-) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
-    """The forward pass, checked, with the kernels the caller reads after it.
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray | None]:
+    """The forward pass, checked, each row held less its maximum, with the kernels the caller reads after it.
 
     One recursion for both the evaluator and the block sampler (issue #857).
     The two carried a copy each, and the copy checked no shape: a
     ``log_initial`` of the wrong length broadcast into the sampler and
     returned a path.
+
+    **Each row is shifted** (issue #1266): the log forward variable grows
+    with the position, by about 1.4 a step on a random fixture, and a value
+    of -4,000 carries an ulp of 9e-13, so the unshifted recursion's rounding
+    grew with the chain's length, to 3.5e-11 on the marginals at 3,000
+    positions. Row ``t`` is ``log alpha_t`` less ``offset[: t + 1].sum()``.
 
     Parameters
     ----------
@@ -138,9 +157,10 @@ def _forward(
 
     Returns
     -------
-    tuple[np.ndarray, np.ndarray, np.ndarray | None]
-        ``alpha``, shape ``(T, K)``; the per-step kernels; and the one matrix
-        to read instead where the chain carries one --- :func:`step_kernels`'
+    tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray | None]
+        The shifted ``alpha``, shape ``(T, K)``, each row's maximum zero; the
+        offsets, shape ``(T,)``; the per-step kernels; and the one matrix to
+        read instead where the chain carries one --- :func:`step_kernels`'
         pair, hoisted out of the recursion for its reason.
 
     Raises
@@ -161,7 +181,9 @@ def _forward(
     steps = step_kernels(log_transition, length, n_states)
     kernels, constant = steps.kernels, steps.constant
     alpha = np.empty((length, n_states))
+    offset = np.empty(length)
     alpha[0] = log_initial + log_density[0]
+    offset[0] = _shift(alpha[0])
     for t in range(1, length):
         alpha[t] = (
             logsumexp(
@@ -171,7 +193,8 @@ def _forward(
             )
             + log_density[t]
         )
-    return alpha, kernels, constant
+        offset[t] = _shift(alpha[t])
+    return alpha, offset, kernels, constant
 
 
 def forward_backward(
@@ -198,26 +221,33 @@ def forward_backward(
     log_density = np.asarray(log_density, dtype=float)
     log_initial = np.asarray(log_initial, dtype=float)
     log_transition = np.asarray(log_transition, dtype=float)
-    alpha, kernels, constant = _forward(log_density, log_initial, log_transition)
+    alpha, offset, kernels, constant = _forward(
+        log_density, log_initial, log_transition
+    )
     length, n_states = alpha.shape
 
+    # `beta[t]` is held less the offsets after `t`, the next one taken here,
+    # so `alpha + beta` is the joint less every offset (issue #1266).
     beta = np.zeros((length, n_states))
     for t in range(length - 2, -1, -1):
         beta[t] = logsumexp(
             (kernels[t] if constant is None else constant)
-            + (log_density[t + 1] + beta[t + 1])[None, :],
+            + (log_density[t + 1] + beta[t + 1] - offset[t + 1])[None, :],
             axis=1,
         )
-    log_evidence = float(logsumexp(alpha[-1], axis=0))
-    posterior = np.exp(alpha + beta - log_evidence)
+    # The evidence less the offsets' sum: every quantity below is a
+    # difference of shifted rows, near zero.
+    shifted_evidence = float(logsumexp(alpha[-1], axis=0))
+    posterior = np.exp(alpha + beta - shifted_evidence)
     pairwise = np.empty((max(length - 1, 0), n_states, n_states))
     for t in range(1, length):
         pairwise[t - 1] = np.exp(
             alpha[t - 1][:, None]
             + (kernels[t - 1] if constant is None else constant)
-            + (log_density[t] + beta[t])[None, :]
-            - log_evidence
+            + (log_density[t] + beta[t] - offset[t])[None, :]
+            - shifted_evidence
         )
+    log_evidence = float(offset.sum()) + shifted_evidence
     return ForwardBackward(log_evidence, posterior, pairwise)
 
 
@@ -305,7 +335,9 @@ def draw_path(
     log_density = np.asarray(log_density, dtype=float)
     log_initial = np.asarray(log_initial, dtype=float)
     log_transition = np.asarray(log_transition, dtype=float)
-    alpha, kernels, constant = _forward(log_density, log_initial, log_transition)
+    alpha, offset, kernels, constant = _forward(
+        log_density, log_initial, log_transition
+    )
     length = alpha.shape[0]
     uniforms = np.asarray(uniforms, dtype=float).reshape(-1)
     if uniforms.shape != (length,):
@@ -323,7 +355,10 @@ def draw_path(
     for t in range(1, length):
         step = kernels[t - 1] if constant is None else constant
         log_joint += float(step[path[t - 1], path[t]] + log_density[t, path[t]])
-    return SampledPath(path, log_joint, float(logsumexp(alpha[-1], axis=0)))
+    # `alpha` is held less `offset`'s running sum, which the draws, shifted
+    # by their maximum, never read (issue #1266).
+    log_evidence = float(offset.sum()) + float(logsumexp(alpha[-1], axis=0))
+    return SampledPath(path, log_joint, log_evidence)
 
 
 def sample_path(

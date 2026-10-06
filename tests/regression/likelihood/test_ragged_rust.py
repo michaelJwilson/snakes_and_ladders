@@ -2,9 +2,10 @@
 
 Issue #666. The oracle is `forward_backward` run one segment at a time, so what
 is checked is the segmentation and not a second batched recursion. On a
-segment of 400 that oracle is itself 4.2e-11 off an 80-bit recursion on the
-log marginals, outside the 1e-11 it is compared at, so there the 80-bit
-recursion referees instead (issue #1262).
+segment of 400 that oracle was 4.2e-11 off an 80-bit recursion on the log
+marginals, outside the 1e-11 it is compared at, so there the 80-bit recursion
+refereed instead (issue #1262); with its rows shifted (issue #1266) the oracle
+holds that layout again, and the 80-bit recursion referees both.
 """
 
 from __future__ import annotations
@@ -62,15 +63,15 @@ def test_the_compiled_kernel_matches_the_oracle() -> None:
         np.testing.assert_allclose(gamma, want_gamma, rtol=tolerance)
         np.testing.assert_allclose(counts, want_counts, rtol=tolerance)
 
-    every_value([(5, 11, 3, 40), (2, 2), (17,) * 6], check)
+    every_value([(5, 11, 3, 40), (2, 2), (400, 2, 7), (17,) * 6], check)
 
 
 @pytest.mark.critical
 @pytest.mark.oracle
 def test_a_long_segment_matches_a_long_double_recursion() -> None:
-    # Issue #1262: the 400-position layout the oracle above held until the
-    # kernel's rows were shifted per step; the kernel is 3.2e-14 off this
-    # referee on the log marginals, the float64 oracle 4.2e-11.
+    # Issue #1262: the 400-position layout, against the referee of the
+    # oracle above; the kernel is 3.2e-14 off it on the log marginals, the
+    # float64 oracle 4.2e-11 until its rows were shifted too (#1266).
     lengths = (400, 2, 7)
     density, initial, transition = _instance(lengths, seed=4)
     gamma, counts, evidence = ragged_rust.posteriors(density, initial, transition)

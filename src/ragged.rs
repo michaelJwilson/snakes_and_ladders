@@ -323,7 +323,7 @@ pub(crate) fn check_inputs(
 /// Subtract a row's maximum from it and return the maximum, or `0` where
 /// it is not finite, so a row of `-inf` stays one (issue #1262).
 #[inline]
-fn shift(row: &mut [f64]) -> f64 {
+pub(crate) fn shift(row: &mut [f64]) -> f64 {
     let high = row
         .iter()
         .fold(f64::NEG_INFINITY, |high, &one| high.max(one));

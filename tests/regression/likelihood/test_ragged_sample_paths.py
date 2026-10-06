@@ -5,7 +5,8 @@ sampled frequencies within 4 sigma of the enumerated posterior under every
 `SwitchKind`, and `hmm_paths`' enumeration on a categorical chain; the NumPy
 oracle, which the compiled kernel matches path for path from the same
 uniforms; and `forward_backward.sample_path`, which a batch reproduces segment
-by segment from the same generator.
+by segment from the same generator. On a segment too long to enumerate, an
+80-bit filter places every uniform just inside a CDF step (issue #1266).
 """
 
 from __future__ import annotations
@@ -30,8 +31,10 @@ from sal.likelihood.ragged import (
     sampled_posteriors,
     step_transitions,
 )
+from sal.likelihood.ragged import rust as ragged_rust
 from sal.ragged import Ragged
 
+from tests._long_double import long_double_filter
 from tests.regression.likelihood.conftest import random_hmm
 
 #: Rust against NumPy on the log-joint and the evidence: the kernel sums
@@ -53,6 +56,12 @@ CELL_FLOOR = 25.0
 DRAWS = 3000
 
 KINDS = list(SwitchKind)
+
+#: How far inside a CDF step of the 80-bit law each uniform is placed, in
+#: probability. With each filter row shifted by its maximum (issue #1266) no
+#: draw of 3,000 lands on the wrong side at 1e-14 under any kind or backend;
+#: unshifted, 19 to 47 did at this margin and 532 to 728 at 1e-14.
+STRADDLE = 1e-13
 
 
 def _case(
@@ -227,6 +236,58 @@ def test_the_compiled_kernel_matches_the_oracle(kind: SwitchKind) -> None:
         np.testing.assert_allclose(
             ours.log_evidence, theirs.log_evidence, rtol=KERNEL_RTOL
         )
+
+
+def _straddled(
+    segment: np.ndarray, initial: np.ndarray, steps: np.ndarray, seed: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """Uniforms each `STRADDLE` inside a CDF step of the 80-bit law, and the path they select.
+
+    `steps` is `(T, n, n)` in log space, row `t` the step into position `t`.
+    The draws run last to first, as `sample_paths` reads the uniforms: each
+    targets a random state of the 80-bit weights given the state after it,
+    from just above or just below, so a filter off by more than `STRADDLE`
+    there selects a neighbour.
+    """
+    rng = np.random.default_rng(seed)
+    length = segment.shape[0]
+    alpha = long_double_filter(segment, initial, steps)
+    kernels = np.exp(steps.astype(np.longdouble))
+    uniforms, path = np.empty(length), np.empty(length, dtype=np.int64)
+    for k in range(length):
+        t = length - 1 - k
+        weights = alpha[t] if k == 0 else alpha[t] * kernels[t + 1][:, path[t + 1]]
+        upper = np.cumsum(weights / weights.sum())
+        lower = np.concatenate([[0.0], upper[:-1]])
+        state = int(rng.choice(np.flatnonzero(upper - lower > 4 * STRADDLE)))
+        below = rng.random() < 0.5
+        uniforms[k] = float(
+            upper[state] - STRADDLE if below else lower[state] + STRADDLE
+        )
+        path[t] = state
+    return uniforms, path
+
+
+@pytest.mark.critical
+@pytest.mark.oracle
+@pytest.mark.parametrize("kind", KINDS)
+@pytest.mark.parametrize("backend", [Backend.RUST, Backend.PYTHON])
+def test_a_long_segment_draws_on_the_80_bit_side_of_every_step(
+    kind: SwitchKind, backend: Backend
+) -> None:
+    """3,000 positions: every draw selects the state the 80-bit filter puts its uniform in."""
+    length = 3000
+    density, initial, transition, switch = _case(kind, (length,), seed=1266)
+    steps = step_transitions(transition, switch[1:], kind)
+    stack = np.concatenate([np.zeros((1, *steps.shape[1:])), steps])
+    uniforms, want = _straddled(density.values, initial, stack, seed=3)
+    if backend is Backend.RUST:
+        got = ragged_rust.sample_paths(
+            density, initial, transition, uniforms, switch, kind
+        )
+    else:
+        got = sample_paths_oracle(density, initial, transition, uniforms, switch, kind)
+    np.testing.assert_array_equal(got.path, want)
 
 
 @pytest.mark.critical
