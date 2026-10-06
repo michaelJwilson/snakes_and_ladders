@@ -6,6 +6,9 @@ posteriors and pair counts as probabilities. It is pinned to the NumPy oracle
 to an 80-bit long-double forward-backward on segments of thousands, where the
 log-space recursions' own rounding reaches 4e-11 and the NumPy oracle stops
 being the finer referee.
+
+The same 80-bit referee pins the log-space `oxisal.ragged_posteriors`, with
+and without a switch, on a segment of 3,000 (issue #1262).
 """
 
 from __future__ import annotations
@@ -14,7 +17,7 @@ import numpy as np
 import pytest
 from sal import oxisal
 from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from sal.likelihood.ragged import posteriors_oracle
+from sal.likelihood.ragged import SwitchKind, posteriors_oracle, step_transitions
 from sal.ragged import Ragged
 
 from tests._rows import every_value
@@ -28,6 +31,14 @@ LONG_TOLERANCE = 1e-13
 
 #: Three segments of thousands of positions.
 LONG = (3000, 2500, 1200)
+
+#: The log-space kernel against the long-double reference, the declared
+#: `CROSS_DEVICE_RTOL_FLOAT64` (issue #1262): absolute on the marginals,
+#: relative on counts and evidence.
+LOG_SPACE_TOLERANCE = CROSS_DEVICE_RTOL_FLOAT64
+
+#: One position, a short segment and a long one (issue #1262).
+MIXED = (1, 60, 3000)
 
 
 def _instance(
@@ -77,33 +88,41 @@ def _long_double(
     initial: np.ndarray,
     transition: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Scaled forward-backward in `np.longdouble`, one segment at a time, written independently of the kernel."""
+    """Scaled forward-backward in `np.longdouble`, one segment at a time, written independently of the kernel.
+
+    `transition` is one log matrix, or a `(total, n, n)` stack whose row `t`
+    is the step into position `t`, as `step_transitions` writes it.
+    """
     wide = np.longdouble
-    a = np.exp(transition.astype(wide))
+    n_states = density.shape[1]
+    stack = np.exp(transition.astype(wide))
+    if stack.ndim == 2:
+        stack = np.broadcast_to(stack, (density.shape[0], n_states, n_states))
     prior = np.exp(initial.astype(wide))
     posterior = np.empty(density.shape, dtype=wide)
-    pairs = np.zeros(a.shape, dtype=wide)
+    pairs = np.zeros((n_states, n_states), dtype=wide)
     evidence = []
     start = 0
     for n in lengths:
         x = density[start : start + n].astype(wide)
+        steps = stack[start : start + n]
         high = x.max(axis=1, keepdims=True)
         b = np.exp(x - high)
-        alpha = np.empty((n, STATES), dtype=wide)
+        alpha = np.empty((n, n_states), dtype=wide)
         scale = np.empty(n, dtype=wide)
         step = prior * b[0]
         scale[0] = step.sum()
         alpha[0] = step / scale[0]
         for t in range(1, n):
-            step = (alpha[t - 1] @ a) * b[t]
+            step = (alpha[t - 1] @ steps[t]) * b[t]
             scale[t] = step.sum()
             alpha[t] = step / scale[t]
-        beta = np.ones(STATES, dtype=wide)
+        beta = np.ones(n_states, dtype=wide)
         posterior[start + n - 1] = alpha[n - 1]
         for t in range(n - 1, 0, -1):
             onward = b[t] * beta / scale[t]
-            pairs += alpha[t - 1][:, None] * a * onward[None, :]
-            beta = a @ onward
+            pairs += alpha[t - 1][:, None] * steps[t] * onward[None, :]
+            beta = steps[t] @ onward
             posterior[start + t - 1] = alpha[t - 1] * beta
         evidence.append(np.log(scale).sum() + high.sum())
         start += n
@@ -138,10 +157,70 @@ def test_long_segments_match_a_long_double_recursion() -> None:
     posterior, pairs, evidence = _long_double(density, LONG, initial, transition)
 
     np.testing.assert_allclose(
-        got[0], posterior.astype(np.float64), atol=LONG_TOLERANCE
+        got[0], posterior.astype(np.float64), rtol=0, atol=LONG_TOLERANCE
     )
     np.testing.assert_allclose(got[1], pairs.astype(np.float64), rtol=LONG_TOLERANCE)
     np.testing.assert_allclose(got[2], evidence.astype(np.float64), rtol=LONG_TOLERANCE)
+
+
+def _switched(
+    kind: SwitchKind | None, seed: int
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray | None, np.ndarray]:
+    """`MIXED` under `kind`: density, initial, transition, switch and the step stack.
+
+    The Kronecker kinds read the `STATES / 2` slow chain and a binary layer.
+    """
+    density, initial, transition = _instance(MIXED, seed=seed)
+    if kind is None:
+        return density, initial, transition, None, transition
+    rng = np.random.default_rng(seed + 1)
+    switch = rng.uniform(size=density.shape[0])
+    if kind is not SwitchKind.STAY_OR_MOVE:
+        transition = np.log(rng.dirichlet(3.0 * np.ones(STATES // 2), size=STATES // 2))
+    return (
+        density,
+        initial,
+        transition,
+        switch,
+        step_transitions(transition, switch, kind),
+    )
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize(
+    "kind", [None, *SwitchKind], ids=lambda kind: str(kind or "unswitched")
+)
+def test_the_log_space_kernel_matches_a_long_double_recursion(
+    kind: SwitchKind | None,
+) -> None:
+    # Issue #1262: at 3,000 positions the log-space kernel read 3.7e-11 on
+    # the marginals against this referee, outside the declared 1e-11.
+    density, initial, transition, switch, steps = _switched(kind, seed=1262)
+    gamma = np.empty_like(density)
+    counts = np.empty((STATES, STATES))
+    evidence = np.empty(len(MIXED))
+    oxisal.ragged_posteriors(
+        density,
+        np.asarray(MIXED, dtype=np.int64),
+        initial,
+        transition,
+        gamma,
+        counts,
+        evidence,
+        switch,
+        str(kind or SwitchKind.STAY_OR_MOVE),
+    )
+    posterior, pairs, want = _long_double(density, MIXED, initial, steps)
+
+    np.testing.assert_allclose(
+        np.exp(gamma), posterior.astype(np.float64), rtol=0, atol=LOG_SPACE_TOLERANCE
+    )
+    np.testing.assert_allclose(
+        np.exp(counts), pairs.astype(np.float64), rtol=LOG_SPACE_TOLERANCE
+    )
+    np.testing.assert_allclose(
+        evidence, want.astype(np.float64), rtol=LOG_SPACE_TOLERANCE
+    )
 
 
 @pytest.mark.oracle
