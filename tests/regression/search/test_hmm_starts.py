@@ -188,6 +188,9 @@ def test_each_sampler_records_the_gradients_its_charge_declares() -> None:
         "chain_adapted",
         "annealed_adapted",
         "tempered_adapted",
+        "chain_tuned",
+        "annealed_tuned",
+        "tempered_tuned",
     ):
         (trial,) = result.trials(name)
         assert trial.diagnostics["gradients"] + 1 == CHARGES[name], name
@@ -259,7 +262,7 @@ def test_every_start_at_equal_passes_reaches_the_truths_basin_as_measured(
     objective, reference = _instance(n_states)
     began = time.perf_counter()
     runs = at_equal_evaluations(
-        objective, tuple(STARTS), EVALUATIONS, SEEDS, reference=[reference]
+        objective, tuple(MEASURED[n_states]), EVALUATIONS, SEEDS, reference=[reference]
     )
     seconds = time.perf_counter() - began
     rows = []
@@ -293,3 +296,27 @@ def test_every_start_at_equal_passes_reaches_the_truths_basin_as_measured(
         assert counts[f"{sampler}_adapted"] < counts[sampler], sampler
     for _, _, _, _, passes, _ in rows:
         assert passes <= EVALUATIONS
+
+
+#: The tuned entries' success counts of ten seeds on four states (issue
+#: #1219), one pass on the development host: the pilot chose 3e-2 for the
+#: chain and the cold rung in every seed. Five states is unmeasured.
+TUNED = {"chain_tuned": 3, "annealed_tuned": 3, "tempered_tuned": 5}
+
+
+@pytest.mark.release
+@pytest.mark.experiment
+def test_a_tuned_step_reaches_the_truths_basin_in_fewer_seeds_than_the_grid() -> None:
+    objective, reference = _instance(N_STATES)
+    runs = at_equal_evaluations(
+        objective, tuple(TUNED), EVALUATIONS, SEEDS, reference=[reference]
+    )
+    counts = {
+        name: sum(trial.value - reference <= TOLERANCE for trial in run.trials(name))
+        for name, run in runs.items()
+    }
+    assert counts == TUNED
+    # The decision of #1219: the grid's steps stay while a tuned sampler
+    # reaches fewer than the issue's bar of 9 of 10.
+    for sampler in ("chain", "annealed", "tempered"):
+        assert counts[f"{sampler}_tuned"] < 9 <= MEASURED[N_STATES][sampler], sampler

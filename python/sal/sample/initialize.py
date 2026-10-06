@@ -47,6 +47,7 @@ from sal.sample.schedule import (
     check_ladder,
 )
 from sal.sample.tempered import up_fraction
+from sal.sample.tune import AUTO, StepSize, StepTuning
 
 #: The warm-up :class:`FromChain` runs unless told otherwise (issue #898): 300
 #: proposals driving the acceptance to 0.65 with the step jittered by 0.4.
@@ -91,8 +92,10 @@ class FromChain(Initializer):
     ----------
     n_samples : int
         Draws kept, at least 1. The last is the start.
-    step_size : float
-        Leapfrog step, positive.
+    step_size : float | Literal["auto"]
+        Leapfrog step, positive; ``"auto"`` is chosen by ``tuning``'s pilot
+        before the burn-in (issue #1219), as :func:`~sal.sample.hmc.sample`
+        states.
     generator : torch.Generator
         The stream, passed in rather than seeded here (issue #337).
     n_steps : int
@@ -101,7 +104,9 @@ class FromChain(Initializer):
         Proposals discarded before the kept draws.
     adaptation : hmc.Adaptation | None
         The warm-up run before the burn-in, :data:`CHAIN_ADAPTATION` by
-        default; ``None`` runs no warm-up.
+        default; ``None`` runs no warm-up, and ``"auto"`` requires it.
+    tuning : StepTuning | None
+        The pilot that chooses ``step_size="auto"``.
 
     Raises
     ------
@@ -112,11 +117,12 @@ class FromChain(Initializer):
     def __init__(
         self,
         n_samples: int,
-        step_size: float,
+        step_size: StepSize,
         generator: torch.Generator,
         n_steps: int = hmc.DEFAULT_STEPS,
         burn_in: int = 0,
         adaptation: hmc.Adaptation | None = CHAIN_ADAPTATION,
+        tuning: StepTuning | None = None,
     ) -> None:
         if n_samples < 1:
             msg = f"n_samples must be at least 1, got {n_samples}"
@@ -127,6 +133,7 @@ class FromChain(Initializer):
         self.n_steps = n_steps
         self.burn_in = burn_in
         self.adaptation = adaptation
+        self.tuning = tuning
 
     def chain(self, objective: Objective) -> hmc.HmcChain:
         """The chain itself: the draws, the acceptance rate, what it cost and what the warm-up set.
@@ -143,6 +150,7 @@ class FromChain(Initializer):
             n_steps=self.n_steps,
             burn_in=self.burn_in,
             adaptation=self.adaptation,
+            tuning=self.tuning,
         )
 
     def starts(self, objective: Objective) -> list[torch.Tensor]:
@@ -167,8 +175,9 @@ class FromAnnealing(Initializer):
     ----------
     schedule : TempSchedule
         Temperature per proposal; its length is the budget in proposals.
-    step_size : float
-        Leapfrog step, positive.
+    step_size : float | Literal["auto"]
+        Leapfrog step, positive; ``"auto"`` is chosen by ``tuning``'s pilot
+        (issue #1219), as :func:`~sal.sample.hmc.anneal` states.
     generator : torch.Generator
         The stream, passed in.
     n_steps : int
@@ -177,21 +186,25 @@ class FromAnnealing(Initializer):
         The step's re-tuning along the schedule,
         :func:`~sal.sample.hmc.anneal`'s heuristic (issue #1208); ``None``
         runs ``step_size`` throughout, bitwise as before it existed.
+    tuning : StepTuning | None
+        The pilot that chooses ``step_size="auto"``.
     """
 
     def __init__(
         self,
         schedule: TempSchedule,
-        step_size: float,
+        step_size: StepSize,
         generator: torch.Generator,
         n_steps: int = hmc.DEFAULT_STEPS,
         adaptation: hmc.Adaptation | None = None,
+        tuning: StepTuning | None = None,
     ) -> None:
         self.schedule = schedule
         self.step_size = step_size
         self.generator = generator
         self.n_steps = n_steps
         self.adaptation = adaptation
+        self.tuning = tuning
 
     def run(self, objective: Objective) -> hmc.AnnealedTheta:
         """The annealing run: its best point, the acceptance rate and its cost.
@@ -207,6 +220,7 @@ class FromAnnealing(Initializer):
             step_size=self.step_size,
             n_steps=self.n_steps,
             adaptation=self.adaptation,
+            tuning=self.tuning,
         )
 
     def starts(self, objective: Objective) -> list[torch.Tensor]:
@@ -262,8 +276,10 @@ class FromTempering(Initializer):
     n_rounds : int | Budget
         Transitions per replica, at least one; or a budget in
         :attr:`~sal.cost.Cost.SECONDS` the rounds run inside.
-    step_size : float
-        Leapfrog step, positive.
+    step_size : float | Literal["auto"]
+        Leapfrog step, positive; ``"auto"`` is chosen per rung by
+        ``tuning``'s pilots (issue #1219), as
+        :func:`~sal.sample.hmc.parallel_tempering` states.
     generator : torch.Generator
         The parent stream, passed in.
     n_steps : int
@@ -277,27 +293,39 @@ class FromTempering(Initializer):
         calibration's measurements run without it. Its gradients are in
         :attr:`TemperingSpend.force_evaluations`. ``None`` runs every rung at
         ``step_size``, bitwise as before it existed.
+    tuning : StepTuning | None
+        The pilots that choose ``step_size="auto"``; their gradients are in
+        :attr:`TemperingSpend.force_evaluations`.
 
     Raises
     ------
     ValueError
-        If ``n_rounds`` is a budget in any unit but seconds.
+        If ``n_rounds`` is a budget in any unit but seconds, or
+        ``step_size="auto"`` comes with a calibration, whose measurements
+        run at one given step.
     """
 
     def __init__(
         self,
         temperatures: tuple[float, ...],
         n_rounds: int | Budget,
-        step_size: float,
+        step_size: StepSize,
         generator: torch.Generator,
         n_steps: int = hmc.DEFAULT_STEPS,
         calibration: LadderCalibration | None = None,
         adaptation: hmc.Adaptation | None = None,
+        tuning: StepTuning | None = None,
     ) -> None:
         if isinstance(n_rounds, Budget) and n_rounds.unit is not Cost.SECONDS:
             msg = (
                 f"a tempering start's budget is in {Cost.SECONDS.value!r}, got "
                 f"{n_rounds.unit.value!r}: its rounds stop on the wall clock"
+            )
+            raise ValueError(msg)
+        if step_size == AUTO and calibration is not None:
+            msg = (
+                "a calibrated ladder is measured at one given step, and "
+                "step_size='auto' chooses one per rung after it"
             )
             raise ValueError(msg)
         self.temperatures = temperatures
@@ -307,6 +335,7 @@ class FromTempering(Initializer):
         self.n_steps = n_steps
         self.calibration = calibration
         self.adaptation = adaptation
+        self.tuning = tuning
         #: What the last :meth:`run` spent and, with a calibration, settled on;
         #: ``None`` before the first.
         self.spent: TemperingSpend | None = None
@@ -336,7 +365,7 @@ class FromTempering(Initializer):
                 temperatures,
                 self.calibration,
                 self.generator,
-                step_size=self.step_size,
+                step_size=float(self.step_size),
                 n_steps=self.n_steps,
             )
             temperatures = calibrated.ladder
@@ -363,6 +392,7 @@ class FromTempering(Initializer):
             n_steps=self.n_steps,
             start=theta0,
             adaptation=self.adaptation,
+            tuning=self.tuning,
             deadline=deadline,
         )
         run_rounds = int(tempered.positions.shape[0])
