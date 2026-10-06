@@ -167,7 +167,9 @@ def test_value_and_gradient_equal_the_rectangular_recursion_s(name: str) -> None
 def test_the_declared_gradient_is_autograd_s_through_the_value(name: str) -> None:
     # Fisher's identity: the compiled posteriors, then one backward pass of
     # the complete-data surrogate. Measured: value 2.1e-16 relative at worst,
-    # gradient 3.8e-12 absolute at worst, on gradients up to 1.0e2.
+    # gradient 3.8e-12 absolute at worst, on gradients up to 1.0e2. The
+    # Gaussian case runs its supported kernel since #1248: value 4.4e-16
+    # relative, gradient 9.9e-14 absolute on gradients up to 23.
     *_, objective = _overlaps()[name]
     theta = _off_start(objective)
 
