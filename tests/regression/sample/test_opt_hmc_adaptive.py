@@ -141,9 +141,7 @@ def test_a_diagonal_mass_matrix_is_a_change_of_coordinates() -> None:
     momentum = torch.tensor([-0.3, 1.1], dtype=torch.float64)
 
     reference = _mass_matrix_leapfrog(GAUSSIAN, theta, momentum, inverse_mass, 0.1, 25)
-    phi, q = leapfrog(
-        Scaled(GAUSSIAN, scale), theta / scale, momentum * scale, 0.1, 25
-    )
+    phi, q = leapfrog(Scaled(GAUSSIAN, scale), theta / scale, momentum * scale, 0.1, 25)
 
     assert float((phi * scale - reference[0]).abs().max()) < 1e-12
     assert float((q / scale - reference[1]).abs().max()) < 1e-12

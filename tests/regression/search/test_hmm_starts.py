@@ -181,7 +181,14 @@ def test_each_sampler_records_the_gradients_its_charge_declares() -> None:
         seeds=(0,),
         workers=1,
     ).run()
-    for name in ("chain", "annealed", "tempered"):
+    for name in (
+        "chain",
+        "annealed",
+        "tempered",
+        "chain_adapted",
+        "annealed_adapted",
+        "tempered_adapted",
+    ):
         (trial,) = result.trials(name)
         assert trial.diagnostics["gradients"] + 1 == CHARGES[name], name
     (restart,) = result.trials("restart")
@@ -217,6 +224,8 @@ def test_the_quantile_start_reaches_the_truths_basin_more_often_than_restarts() 
 #: sampler starts at the quantile point and reaches the truth's basin by
 #: staying near it: its median start is 2 to 51 nats below the quantile
 #: point's, against 192 to 305 at 3e-2.
+#: The adapted entries are each sampler's own warm-up from 3e-2 at equal
+#: passes (#1208), and reach fewer seeds than the grid's steps on both.
 MEASURED = {
     N_STATES: {
         "quantile": 10,
@@ -224,8 +233,20 @@ MEASURED = {
         "chain": 10,
         "annealed": 10,
         "tempered": 10,
+        "chain_adapted": 3,
+        "annealed_adapted": 0,
+        "tempered_adapted": 3,
     },
-    HARDER: {"quantile": 10, "restart": 0, "chain": 8, "annealed": 8, "tempered": 7},
+    HARDER: {
+        "quantile": 10,
+        "restart": 0,
+        "chain": 8,
+        "annealed": 8,
+        "tempered": 7,
+        "chain_adapted": 2,
+        "annealed_adapted": 0,
+        "tempered_adapted": 3,
+    },
 }
 
 
@@ -257,13 +278,18 @@ def test_every_start_at_equal_passes_reaches_the_truths_basin_as_measured(
         )
     print(
         f"\n{n_states} states\n"
-        f"{'start':<10}{'reached':>8}{'start gap':>11}{'gap':>8}{'passes':>8}{'s':>7}"
+        f"{'start':<17}{'reached':>8}{'start gap':>11}{'gap':>8}{'passes':>8}{'s':>7}"
     )
     for name, reached, start_gap, gap, passes, wall in rows:
         print(
-            f"{name:<10}{reached:>8}{start_gap:>11.1f}{gap:>8.2f}{passes:>8}{wall:>7.2f}"
+            f"{name:<17}{reached:>8}{start_gap:>11.1f}{gap:>8.2f}{passes:>8}{wall:>7.2f}"
         )
     print(f"total {seconds:.1f} s")
-    assert {name: reached for name, reached, *_ in rows} == MEASURED[n_states]
+    counts = {name: count for name, count, *_ in rows}
+    assert counts == MEASURED[n_states]
+    # The decision of #1208: the grid's steps stay while an adapted sampler
+    # reaches fewer seeds than its hand-tuned twin.
+    for sampler in ("chain", "annealed", "tempered"):
+        assert counts[f"{sampler}_adapted"] < counts[sampler], sampler
     for _, _, _, _, passes, _ in rows:
         assert passes <= EVALUATIONS

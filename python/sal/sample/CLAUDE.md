@@ -31,7 +31,9 @@ draws reach it without the module importing their type.
   step too large biases a posterior's *spread* downward while its mean and
   acceptance look right, so a sampler reports the energy error too. A step or
   mass adapted toward a target is set in a discarded warm-up, opted into and
-  reported on the result; the draws are a fixed-parameter chain.
+  reported on the result; the draws are a fixed-parameter chain. An annealing
+  run is not a stationary chain, so a step re-tuned along it is a heuristic
+  and says so.
 
 - **A cost unit belongs to a sampler, not to the comparison.** A gradient is
   an objective evaluation and a backward pass through the same tape, so a

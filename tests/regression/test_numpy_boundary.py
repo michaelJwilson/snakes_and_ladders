@@ -33,6 +33,8 @@ EXEMPT = {
     "sample/chain.py:start_point",
     "sample/chain.py:on_buffer",
     "sample/chain.py:gradient_at",
+    # The warm-up a chain and each rung of a ladder run (#1208).
+    "sample/chain.py:warm_up",
     # The HMC position a calibrated ladder hands its sampler.
     "sample/initialize.py:calibrate_ladder",
 }

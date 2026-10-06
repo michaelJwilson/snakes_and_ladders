@@ -44,7 +44,10 @@ draws are a Markov chain with the target as its stationary distribution.
 Opt-in and reported on the result (:class:`Adapted`), because a chain whose
 parameters are not stated cannot be reproduced. Without an
 :class:`Adaptation` every draw is the one the same seed gave before,
-bitwise.
+bitwise. :func:`parallel_tempering` runs the same warm-up once per rung
+before its rounds; :func:`anneal` re-tunes the step along its schedule,
+which is a heuristic, since an annealing run has no stationary law to adapt
+to (issue #1208).
 
 See Neal (2011), "MCMC using Hamiltonian dynamics"; Yoshida (1990) for the
 fourth-order composition and Suzuki (1991) for why its middle coefficient
@@ -86,14 +89,18 @@ from sal.sample.chain import (
     Adaptation,
     Adapted,
     Chain,
+    DualAveraging,
     Kernel,
+    Scaled,
     Transition,
     compiled_route,
     gradient_at,
+    jittered,
     run_chain,
     run_compiled,
     start_point,
     torch_stream,
+    warm_up,
 )
 from sal.sample.declared import (
     Power,
@@ -568,10 +575,15 @@ class AnnealedTheta(Annealed[torch.Tensor]):
     acceptance_rate : float
         Over the whole schedule. Near zero at the cold end is the symptom of
         a step too large for the final temperature.
+    step_sizes : tuple[float, ...] | None
+        With an ``adaptation``, the averaged step each window of
+        ``adaptation.warmup`` proposals ended on, in schedule order; ``None``
+        for a fixed step.
     """
 
     value: float
     acceptance_rate: float
+    step_sizes: tuple[float, ...] | None = None
 
 
 def anneal(
@@ -583,6 +595,7 @@ def anneal(
     n_steps: int = DEFAULT_STEPS,
     start: torch.Tensor | None = None,
     integrator: Integrator = leapfrog,
+    adaptation: Adaptation | None = None,
 ) -> AnnealedTheta:
     """Simulated annealing with Hamiltonian proposals: :func:`sample` on a schedule.
 
@@ -607,6 +620,17 @@ def anneal(
         As :func:`sample`. The step needs no rescaling with temperature ---
         see the module note --- but a step that is stable at the hot end can
         still reject at the cold end, which the acceptance rate reports.
+    adaptation : Adaptation | None
+        Re-tunes the step along the schedule (issue #1208): dual averaging
+        toward ``adaptation.target_acceptance`` runs over each window of
+        ``adaptation.warmup`` proposals, restarted at every window from the
+        averaged step the last one ended on, and every proposal's step is
+        jittered by ``adaptation.step_jitter``. The mass stays unit, and
+        ``step_size`` is the first window's starting point. **This is a
+        heuristic, not a warm-up**: annealing is not a stationary chain, so
+        no window's step is the one a fixed temperature would settle on, and
+        the windows spend the schedule's proposals rather than discarded
+        ones. ``None`` runs the fixed step, bitwise as before it existed.
 
     Returns
     -------
@@ -623,6 +647,12 @@ def anneal(
     # point, which the result does not report. `best` is the state passed,
     # for the same reason.
     tracked: TrackedOptimization = current_tracked()
+    averaging = (
+        None
+        if adaptation is None
+        else DualAveraging(step_size, adaptation.target_acceptance)
+    )
+    step_sizes: list[float] = []
     for step in range(schedule.n_steps):
         temperature = schedule(step)
         taken = _transition(
@@ -630,10 +660,21 @@ def anneal(
             position,
             temperature,
             generator,
-            step_size,
+            step_size
+            if adaptation is None
+            else jittered(step_size, adaptation.step_jitter, generator),
             n_steps,
             integrator,
         )
+        if averaging is not None and adaptation is not None:
+            # The iterate drives the next proposal; at a window's end the
+            # averaged step is kept and the averaging restarts from it,
+            # since the temperature it was tuned at has moved on.
+            step_size = averaging.update(taken.probability)
+            if (step + 1) % adaptation.warmup == 0 or step + 1 == schedule.n_steps:
+                step_size = averaging.averaged
+                step_sizes.append(step_size)
+                averaging = DualAveraging(step_size, adaptation.target_acceptance)
         position = taken.position
         accepted += taken.accepted
         value = float(objective(position))
@@ -649,6 +690,7 @@ def anneal(
         spent=schedule.n_steps * integrator.force_evaluations(n_steps),
         unit=Cost.GRADIENTS,
         termination=Termination.after(schedule.n_steps, converged=False),
+        step_sizes=None if adaptation is None else tuple(step_sizes),
     )
 
 
@@ -686,12 +728,16 @@ class Tempered(TemperedRun[torch.Tensor]):
         they read the trace the discrete temperings carry --- an integer
         trace rather than a tensor, because it is bookkeeping and nothing
         differentiates it (issue #861).
+    adapted : tuple[Adapted, ...] | None
+        What each rung's warm-up settled on, in the ladder's order, or
+        ``None`` without an ``adaptation`` (issue #1208).
     """
 
     value: float
     positions: torch.Tensor
     acceptance_rate: torch.Tensor
     walkers: np.ndarray
+    adapted: tuple[Adapted, ...] | None = None
 
 
 def parallel_tempering(
@@ -702,8 +748,9 @@ def parallel_tempering(
     *,
     step_size: float,
     n_steps: int = DEFAULT_STEPS,
-    start: torch.Tensor | None = None,
+    start: torch.Tensor | Sequence[torch.Tensor] | None = None,
     integrator: Integrator = leapfrog,
+    adaptation: Adaptation | None = None,
     deadline: float | None = None,
 ) -> Tempered:
     """Replicas at fixed temperatures, exchanging positions by Metropolis.
@@ -747,8 +794,26 @@ def parallel_tempering(
         Transitions per replica, at least one. The budget in proposals is
         ``n_rounds * len(temperatures)``; ``spent`` on the result
         is the budget in gradients.
-    step_size, n_steps, start, integrator
-        As :func:`sample`; every replica starts at ``start``.
+    step_size, n_steps, integrator
+        As :func:`sample`. With an ``adaptation``, ``step_size`` is every
+        rung's warm-up starting point.
+    start : torch.Tensor | Sequence[torch.Tensor] | None
+        A tensor is the point every replica starts at; a sequence is one
+        point per rung, in the ladder's order, as the Potts
+        :func:`~sal.sample.potts_mcmc.parallel_tempering` takes one labelling
+        per rung (issue #1157); ``None`` is ``objective.initial()`` for all.
+    adaptation : Adaptation | None
+        A warm-up per rung before the rounds (issue #1208): each replica runs
+        :class:`Adaptation`'s two windows at its own temperature on its own
+        stream, setting its own step and mass diagonal, and the rounds then
+        run every rung at the values it settled on, each proposal's step
+        jittered as the warm-up's was. No step is scaled with temperature:
+        the step at which a chain's acceptance falls to 0.65 was measured
+        flat to falling over ``T`` = 1 to 64 (#1195), so each rung adapts on
+        its own. The warm-up stops before the first exchange, so the rounds
+        are a fixed-parameter chain on the product law; its positions are
+        discarded and its gradients are in ``spent``. ``None`` runs every rung
+        at ``step_size`` and unit mass, bitwise as before it existed.
     deadline : float | None
         A :func:`time.perf_counter` reading. A round after the first starts
         only if the longest round so far would end by it, so ``n_rounds`` is
@@ -768,7 +833,8 @@ def parallel_tempering(
     ValueError
         If fewer than two temperatures are given --- a ladder of one has
         nothing to exchange and is :func:`sample` --- if any is not positive
-        or the ladder is not increasing, or if ``n_rounds`` is below one.
+        or the ladder is not increasing, if ``n_rounds`` is below one, or if
+        a sequence ``start`` does not give one point per rung.
     """
     generator = torch_stream(rng)
     _check_trajectory(step_size, n_steps)
@@ -787,10 +853,43 @@ def parallel_tempering(
         torch.Generator().manual_seed(int(child))
         for child in torch.randint(0, 2**31 - 1, (n_replicas,), generator=parent)
     ]
-    origin = start_point(objective, start)
-    positions = [origin.clone() for _ in range(n_replicas)]
-    value = float(objective(origin))
-    best, best_value = origin.clone(), value
+    origins = _rung_starts(objective, start, n_replicas)
+    per_proposal = integrator.force_evaluations(n_steps)
+    adapted: tuple[Adapted, ...] | None = None
+    if adaptation is not None:
+        kernel = _HamiltonianKernel(n_steps=n_steps, integrator=integrator)
+        reports = []
+        for index, (temperature, child) in enumerate(
+            zip(temperatures, children, strict=True)
+        ):
+            report, origins[index] = warm_up(
+                kernel,
+                per_proposal,
+                objective,
+                origins[index],
+                temperature,
+                child,
+                step_size,
+                adaptation,
+            )
+            reports.append(report)
+        adapted = tuple(reports)
+    # Each rung's metric is a change of coordinates (`Scaled`): a replica's
+    # position is kept in `theta`, which is what an exchange swaps.
+    scales = [] if adapted is None else [r.mass_diagonal.rsqrt() for r in adapted]
+    metrics = [Scaled(objective, scale) for scale in scales]
+    jitter = 0.0 if adaptation is None else adaptation.step_jitter
+    positions = [origin.clone() for origin in origins]
+    # One evaluation where every replica starts at one point, as before
+    # per-rung starts existed: a counted objective sees the same calls.
+    shared = adapted is None and (start is None or isinstance(start, torch.Tensor))
+    values = (
+        [float(objective(origins[0]))] * n_replicas
+        if shared
+        else [float(objective(origin)) for origin in origins]
+    )
+    lowest_start = min(range(n_replicas), key=values.__getitem__)
+    best, best_value = origins[lowest_start].clone(), values[lowest_start]
     accepted = torch.zeros(n_replicas, dtype=torch.float64)
     # A list rather than a tensor sized to `n_rounds`: under a deadline that
     # count is a ceiling, and the stacked rounds are the same values.
@@ -812,11 +911,28 @@ def parallel_tempering(
         child: torch.Generator,
     ) -> tuple[torch.Tensor, float]:
         """One Hamiltonian transition, and the log-density where it landed."""
+        index = rung[temperature]
+        if adapted is None:
+            step = _transition(
+                objective, position, temperature, child, step_size, n_steps, integrator
+            )
+            accepted[index] += step.accepted
+            return step.position, -float(objective(step.position))
+        scale = scales[index]
         step = _transition(
-            objective, position, temperature, child, step_size, n_steps, integrator
+            metrics[index],
+            position / scale,
+            temperature,
+            child,
+            jittered(adapted[index].step_size, jitter, child),
+            n_steps,
+            integrator,
         )
-        accepted[rung[temperature]] += step.accepted
-        return step.position, -float(objective(step.position))
+        accepted[index] += step.accepted
+        # A rejection keeps `position` itself rather than its round trip
+        # through the metric, which may differ in the last place.
+        landed = step.position * scale if step.accepted else position
+        return landed, -float(objective(landed))
 
     def observe(states: Sequence[torch.Tensor], densities: Sequence[float]) -> None:
         """The round the exchange closed: the positions it left, and the best point seen."""
@@ -836,7 +952,7 @@ def parallel_tempering(
         transition,
         None,
         positions,
-        [-value] * n_replicas,
+        [-value for value in values],
         temperatures,
         children,
         swap,
@@ -858,11 +974,28 @@ def parallel_tempering(
         acceptance_rate=accepted / round_index,
         temperatures=tuple(temperatures),
         swap_acceptance=np.asarray(ensemble.swap_acceptance, dtype=np.float64),
-        spent=round_index * n_replicas * integrator.force_evaluations(n_steps),
+        spent=round_index * n_replicas * per_proposal
+        + sum(report.force_evaluations for report in adapted or ()),
         unit=Cost.GRADIENTS,
         termination=Termination.after(round_index, converged=False),
         walkers=ensemble.walkers,
+        adapted=adapted,
     )
+
+
+def _rung_starts(
+    objective: Objective,
+    start: torch.Tensor | Sequence[torch.Tensor] | None,
+    n_replicas: int,
+) -> list[torch.Tensor]:
+    """One starting point per rung: ``start`` for each, or the sequence's own."""
+    if start is None or isinstance(start, torch.Tensor):
+        origin = start_point(objective, start)
+        return [origin.clone() for _ in range(n_replicas)]
+    if len(start) != n_replicas:
+        msg = f"start gives {len(start)} points for a ladder of {n_replicas} rungs"
+        raise ValueError(msg)
+    return [start_point(objective, point) for point in start]
 
 
 def _before(deadline: float) -> Callable[[], bool]:
