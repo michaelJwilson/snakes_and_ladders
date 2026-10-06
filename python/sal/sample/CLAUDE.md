@@ -45,8 +45,8 @@ draws reach it without the module importing their type.
   walks a schedule and `loop.temper` runs the exchange (#1218); an entry
   point builds its step and reads the result. A step carries what it scored
   so no loop re-scores a point, and charges its move in its own unit. A loop
-  that does not fold --- a move between rungs, a walker along the ladder, a
-  re-estimated state --- is named in `loop`'s docstring with the reason.
+  that does not fold --- a walker along the ladder, a re-estimated state ---
+  is named in `loop`'s docstring with the reason.
 
 - **A sampler is validated by the distribution it converges to, never by
   inspection.**
