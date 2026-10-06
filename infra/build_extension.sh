@@ -25,6 +25,17 @@ fi
 suffix="$("$interpreter" -c 'import sysconfig; print(sysconfig.get_config_var("EXT_SUFFIX"))')"
 target="python/sal/oxisal${suffix}"
 
-cargo build --release --locked "$@"
-cp "target/release/liboxisal.so" "$target"
-echo "built $target"
+# `--iter` builds `[profile.iter]` (issue #1224): no LTO, 16 codegen units,
+# incremental, so one edit in `src/` rebuilds in about 5 s against the release
+# profile's 19. The release profile's fat LTO is what a benchmark quotes, so
+# rebuild without the flag before reading one. `CARGO_TARGET_DIR`, when set,
+# is where the library is found, so one cached target serves every worktree.
+profile="release"
+if [ "${1:-}" = "--iter" ]; then
+  profile="iter"
+  shift
+fi
+
+cargo build --profile "$profile" --locked "$@"
+cp "${CARGO_TARGET_DIR:-target}/$profile/liboxisal.so" "$target"
+echo "built $target ($profile)"
