@@ -173,6 +173,10 @@ class FromAnnealing(Initializer):
         The stream, passed in.
     n_steps : int
         Leapfrog steps per proposal.
+    adaptation : hmc.Adaptation | None
+        The step's re-tuning along the schedule,
+        :func:`~sal.sample.hmc.anneal`'s heuristic (issue #1208); ``None``
+        runs ``step_size`` throughout, bitwise as before it existed.
     """
 
     def __init__(
@@ -181,11 +185,13 @@ class FromAnnealing(Initializer):
         step_size: float,
         generator: torch.Generator,
         n_steps: int = hmc.DEFAULT_STEPS,
+        adaptation: hmc.Adaptation | None = None,
     ) -> None:
         self.schedule = schedule
         self.step_size = step_size
         self.generator = generator
         self.n_steps = n_steps
+        self.adaptation = adaptation
 
     def run(self, objective: Objective) -> hmc.AnnealedTheta:
         """The annealing run: its best point, the acceptance rate and its cost.
@@ -200,6 +206,7 @@ class FromAnnealing(Initializer):
             self.generator,
             step_size=self.step_size,
             n_steps=self.n_steps,
+            adaptation=self.adaptation,
         )
 
     def starts(self, objective: Objective) -> list[torch.Tensor]:
@@ -264,6 +271,12 @@ class FromTempering(Initializer):
     calibration : LadderCalibration | None
         The ladder's warm-up. ``None`` runs ``temperatures`` as given, every
         start bitwise what it was before the warm-up existed.
+    adaptation : hmc.Adaptation | None
+        Each rung's step and mass warm-up before the run's rounds,
+        :func:`~sal.sample.hmc.parallel_tempering`'s (issue #1208); the
+        calibration's measurements run without it. Its gradients are in
+        :attr:`TemperingSpend.force_evaluations`. ``None`` runs every rung at
+        ``step_size``, bitwise as before it existed.
 
     Raises
     ------
@@ -279,6 +292,7 @@ class FromTempering(Initializer):
         generator: torch.Generator,
         n_steps: int = hmc.DEFAULT_STEPS,
         calibration: LadderCalibration | None = None,
+        adaptation: hmc.Adaptation | None = None,
     ) -> None:
         if isinstance(n_rounds, Budget) and n_rounds.unit is not Cost.SECONDS:
             msg = (
@@ -292,6 +306,7 @@ class FromTempering(Initializer):
         self.generator = generator
         self.n_steps = n_steps
         self.calibration = calibration
+        self.adaptation = adaptation
         #: What the last :meth:`run` spent and, with a calibration, settled on;
         #: ``None`` before the first.
         self.spent: TemperingSpend | None = None
@@ -347,6 +362,7 @@ class FromTempering(Initializer):
             step_size=self.step_size,
             n_steps=self.n_steps,
             start=theta0,
+            adaptation=self.adaptation,
             deadline=deadline,
         )
         run_rounds = int(tempered.positions.shape[0])
@@ -517,7 +533,7 @@ class TemperingSpend:
         The run's transitions, ``rounds`` times the settled ladder's length;
         the warm-up's are :attr:`CalibratedLadder.transitions`.
     force_evaluations : int
-        The run's gradients.
+        The run's gradients, each rung's warm-up included where there was one.
     seconds : float
         Wall clock from the start's first transition to the run's end, the
         warm-up included.

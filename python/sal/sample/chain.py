@@ -409,7 +409,7 @@ def run_chain(
     target: Objective = objective
     scale: torch.Tensor | None = None
     if adaptation is not None:
-        adapted, position = _warm_up(
+        adapted, position = warm_up(
             kernel,
             per_proposal,
             objective,
@@ -421,7 +421,7 @@ def run_chain(
         )
         step_size = adapted.step_size
         scale = adapted.mass_diagonal.rsqrt()
-        target = _Scaled(objective, scale)
+        target = Scaled(objective, scale)
         position = position / scale
 
     draws = torch.empty(
@@ -446,7 +446,7 @@ def run_chain(
             position,
             temperature,
             generator,
-            _jittered(step_size, jitter, generator),
+            jittered(step_size, jitter, generator),
         )
         position, error = step.position, step.energy_error
         errors[index] = error
@@ -645,7 +645,7 @@ def gradient_at(objective: Objective, theta: torch.Tensor) -> torch.Tensor:
 
 
 @dataclass(frozen=True)
-class _Scaled(Objective):
+class Scaled(Objective):
     """``objective`` in the coordinates ``phi = theta / scale``.
 
     Hamiltonian dynamics with a diagonal mass ``M`` on ``theta`` is the
@@ -694,7 +694,7 @@ class _Scaled(Objective):
         return gradient_at(self.objective, theta * self.scale) * self.scale
 
 
-class _DualAveraging:
+class DualAveraging:
     """Hoffman & Gelman's (2014, §3.2) step-size iteration, ``eq:dual-averaging``.
 
     ``update`` takes the acceptance probability of the proposal just made
@@ -725,7 +725,7 @@ class _DualAveraging:
         return math.exp(self.log_averaged)
 
 
-def _warm_up(
+def warm_up(
     kernel: Kernel[Stream],
     per_proposal: int,
     objective: Objective,
@@ -740,7 +740,7 @@ def _warm_up(
     second = adaptation.warmup - first
 
     # Window one: the step at unit mass, recording the second half.
-    averaging = _DualAveraging(step_size, adaptation.target_acceptance)
+    averaging = DualAveraging(step_size, adaptation.target_acceptance)
     recorded = []
     jitter = adaptation.step_jitter
     for index in range(first):
@@ -749,7 +749,7 @@ def _warm_up(
             position,
             temperature,
             generator,
-            _jittered(step_size, jitter, generator),
+            jittered(step_size, jitter, generator),
         )
         position = step.position
         step_size = averaging.update(step.probability)
@@ -763,9 +763,9 @@ def _warm_up(
     scale = variance.sqrt()
 
     # Window two: the step again, on the metric, from where window one ended.
-    scaled = _Scaled(objective, scale)
+    scaled = Scaled(objective, scale)
     position = position / scale
-    averaging = _DualAveraging(averaging.averaged, adaptation.target_acceptance)
+    averaging = DualAveraging(averaging.averaged, adaptation.target_acceptance)
     step_size = averaging.averaged
     total = 0.0
     for _ in range(second):
@@ -774,7 +774,7 @@ def _warm_up(
             position,
             temperature,
             generator,
-            _jittered(step_size, jitter, generator),
+            jittered(step_size, jitter, generator),
         )
         position = step.position
         step_size = averaging.update(step.probability)
@@ -822,7 +822,7 @@ def regularized_variance(
     return weight * variance + floor, flat
 
 
-def _jittered(
+def jittered(
     step_size: float, jitter: float, generator: torch.Generator | np.random.Generator
 ) -> float:
     """A step drawn uniformly from ``step_size * (1 +/- jitter)``.

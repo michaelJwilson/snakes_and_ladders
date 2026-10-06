@@ -42,6 +42,19 @@ largest step whose median polished gap is within 1 nat of the grid's best on
 both: :data:`STEP` 5e-3 for the chain and the ladder, :data:`ANNEALING_STEP`
 1e-3. Both were fit at 669 positions; another data size is unmeasured.
 
+**An adapted sampler does not replace the grid (issue #1208).** Each
+sampler's own warm-up at equal passes ---
+:data:`ADAPTATION` from :data:`ADAPTED_STEP`, #1172's untuned step: the
+chain's 8 proposals before a burn-in of 16, annealing's step re-tuned every 8
+proposals along its schedule, tempering's 8 per rung before 2 rounds ---
+reaches the truth's basin in 3, 0 and 3 of 10 seeds on four states and 2, 0
+and 3 on five, against the grid's 10, 10, 10 and 8, 8, 7. From the grid's own
+step of 5e-3 it reaches 3, 0, 2 and 0, 1, 0, and at a target of 0.95 2, 1, 5
+and 1, 0, 0. Dual averaging drives the step to the acceptance target, which
+here is the distance that carries a start out of the basin, so :data:`STEP`
+and :data:`ANNEALING_STEP` stay. The adapted entries are in :data:`STARTS` so
+the release experiment holds these counts.
+
 **The step is not scaled with temperature.** The fixed step at which a
 chain's acceptance falls to 0.65 is 0.063, 0.063, 0.057 and 0.046 at
 ``T`` = 1, 4, 16 and 64 on four states, 0.074 to 0.041 on five: flat to
@@ -79,7 +92,7 @@ from sal.opt.initialize import FromObjective, Initializer, RandomRestart
 from sal.opt.initialize import quantile_locations as _quantile_locations
 from sal.opt.objective import Objective
 from sal.opt.starts import SolverComparison, StartsBenchmark, polish_by_baum_welch
-from sal.sample.chain import torch_stream
+from sal.sample.chain import Adaptation, torch_stream
 from sal.sample.initialize import FromAnnealing, FromChain, FromTempering
 from sal.sample.schedule import ExponentialTempSchedule
 from sal.track import current
@@ -109,6 +122,19 @@ TEMPERATURES = (1.0, 4.0, 16.0, 64.0)
 #: Rounds of the ladder: ``TEMPERING_ROUNDS * len(TEMPERATURES)`` proposals,
 #: the annealing run's count.
 TEMPERING_ROUNDS = 6
+
+#: The adapted samplers' warm-up (issue #1208): 8 proposals per window,
+#: the least :class:`~sal.sample.hmc.Adaptation` takes, at
+#: :data:`~sal.sample.initialize.CHAIN_ADAPTATION`'s target and jitter.
+ADAPTATION = Adaptation(warmup=8, target_acceptance=0.65, step_jitter=0.4)
+
+#: Where the adapted samplers' dual averaging starts: #1172's untuned step,
+#: so no entry using it reads the grid.
+ADAPTED_STEP = 3.0e-2
+
+#: Rounds of the adapted ladder after its warm-up of
+#: ``ADAPTATION.warmup`` proposals per rung.
+ADAPTED_TEMPERING_ROUNDS = 2
 
 #: Points :class:`~sal.opt.initialize.RandomRestart` draws, the nominal one
 #: excluded, and their spread in unconstrained coordinates.
@@ -216,6 +242,62 @@ def tempered_start(rng: np.random.Generator) -> SampledStart:
     )
 
 
+def adapted_chain_start(rng: np.random.Generator) -> SampledStart:
+    """``FromChain`` with :data:`ADAPTATION`'s warm-up from :data:`ADAPTED_STEP`, at :func:`chain_start`'s proposals.
+
+    Returns
+    -------
+    SampledStart
+    """
+    return SampledStart(
+        FromChain(
+            1,
+            ADAPTED_STEP,
+            torch_stream(rng),
+            n_steps=TRAJECTORY,
+            burn_in=CHAIN_BURN_IN - ADAPTATION.warmup,
+            adaptation=ADAPTATION,
+        )
+    )
+
+
+def adapted_annealed_start(rng: np.random.Generator) -> SampledStart:
+    """``FromAnnealing`` from :data:`ADAPTED_STEP`, its step re-tuned every ``ADAPTATION.warmup`` proposals.
+
+    Returns
+    -------
+    SampledStart
+    """
+    return SampledStart(
+        FromAnnealing(
+            ExponentialTempSchedule(TEMPERATURES[-1], 1.0, ANNEAL_STEPS),
+            ADAPTED_STEP,
+            torch_stream(rng),
+            n_steps=TRAJECTORY,
+            adaptation=ADAPTATION,
+        )
+    )
+
+
+def adapted_tempered_start(rng: np.random.Generator) -> SampledStart:
+    """``FromTempering`` with a warm-up per rung from :data:`ADAPTED_STEP`, then :data:`ADAPTED_TEMPERING_ROUNDS` rounds.
+
+    Returns
+    -------
+    SampledStart
+    """
+    return SampledStart(
+        FromTempering(
+            TEMPERATURES,
+            ADAPTED_TEMPERING_ROUNDS,
+            ADAPTED_STEP,
+            torch_stream(rng),
+            n_steps=TRAJECTORY,
+            adaptation=ADAPTATION,
+        )
+    )
+
+
 def restart_start(rng: np.random.Generator) -> RandomRestart:
     """``RandomRestart``: :data:`RESTARTS` points at :data:`RESTART_SCALE` around the objective's start, which is not one of them.
 
@@ -243,6 +325,9 @@ STARTS: dict[str, Callable[[np.random.Generator], Initializer]] = {
     "chain": chain_start,
     "annealed": annealed_start,
     "tempered": tempered_start,
+    "chain_adapted": adapted_chain_start,
+    "annealed_adapted": adapted_annealed_start,
+    "tempered_adapted": adapted_tempered_start,
 }
 
 #: Passes over the data each start spends before its polish: a sampler's
@@ -255,6 +340,12 @@ CHARGES: dict[str, int] = {
     "chain": (CHAIN_BURN_IN + 1) * (TRAJECTORY + 1) + 1,
     "annealed": ANNEAL_STEPS * (TRAJECTORY + 1) + 1,
     "tempered": TEMPERING_ROUNDS * len(TEMPERATURES) * (TRAJECTORY + 1) + 1,
+    "chain_adapted": (CHAIN_BURN_IN + 1) * (TRAJECTORY + 1) + 1,
+    "annealed_adapted": ANNEAL_STEPS * (TRAJECTORY + 1) + 1,
+    "tempered_adapted": (ADAPTATION.warmup + ADAPTED_TEMPERING_ROUNDS)
+    * len(TEMPERATURES)
+    * (TRAJECTORY + 1)
+    + 1,
 }
 
 
@@ -325,6 +416,9 @@ def at_equal_evaluations(
 
 
 __all__ = [
+    "ADAPTATION",
+    "ADAPTED_STEP",
+    "ADAPTED_TEMPERING_ROUNDS",
     "ANNEALING_STEP",
     "ANNEAL_STEPS",
     "CHAIN_BURN_IN",
@@ -337,6 +431,9 @@ __all__ = [
     "TEMPERING_ROUNDS",
     "TRAJECTORY",
     "SampledStart",
+    "adapted_annealed_start",
+    "adapted_chain_start",
+    "adapted_tempered_start",
     "annealed_start",
     "at_equal_evaluations",
     "chain_start",

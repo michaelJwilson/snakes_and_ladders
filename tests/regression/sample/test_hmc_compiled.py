@@ -176,7 +176,7 @@ def test_the_compiled_trajectory_is_the_torch_leapfrog_on_rosenbrock() -> None:
 @pytest.mark.oracle
 @pytest.mark.backend
 def test_the_compiled_warm_up_settles_where_the_torch_one_does() -> None:
-    # Issue #1008: `Adaptation` on the compiled chain is `hmc._warm_up`'s
+    # Issue #1008: `Adaptation` on the compiled chain is `chain.warm_up`'s
     # arithmetic on its own stream, so the two routes agree in distribution:
     # the acceptance each reaches, and the mass diagonal's estimate of the
     # precision.

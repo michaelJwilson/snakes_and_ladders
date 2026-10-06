@@ -3,7 +3,7 @@
 A declared :meth:`energy` is ``__call__`` on the same point: bitwise for up to
 three terms and no matrix product, else within ``rtol = 1e-15`` (measured
 6.1e-16 over 500 points per size, ``d`` 2 to 1000, Rosenbrock and Gaussians).
-Undeclared, it is ``float(__call__)`` bitwise. ``_Scaled``'s is the inner one
+Undeclared, it is ``float(__call__)`` bitwise. ``Scaled``'s is the inner one
 at ``x * scale``, bitwise.
 """
 
@@ -16,7 +16,7 @@ import pytest
 import torch
 from sal.opt.objective import DeclaredEnergy, Objective, energy_of
 from sal.opt.testfunctions import Rastrigin, Rosenbrock
-from sal.sample.chain import _Scaled
+from sal.sample.chain import Scaled
 from sal.validation.gaussian import (
     GaussianTarget,
     dense_precision,
@@ -75,6 +75,6 @@ def test_the_scaled_energy_is_the_inner_one_at_the_scaled_point(
     inner: Objective,
 ) -> None:
     scale = torch.as_tensor(np.linspace(0.5, 2.0, 10))
-    scaled = _Scaled(inner, scale)
+    scaled = Scaled(inner, scale)
     for x in _points(10):
         assert energy_of(scaled, x) == energy_of(inner, x * scale.numpy())
