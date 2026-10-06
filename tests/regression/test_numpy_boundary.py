@@ -37,6 +37,8 @@ EXEMPT = {
     "sample/chain.py:warm_up",
     # The HMC position a calibrated ladder hands its sampler.
     "sample/initialize.py:calibrate_ladder",
+    # The Hamiltonian step a step's pilot runs, on HMC positions (#1219).
+    "sample/hmc/__init__.py:hamiltonian_pilot",
 }
 
 

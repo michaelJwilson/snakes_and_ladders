@@ -6,7 +6,7 @@ from `opt/` (continuous: `hmc`, `langevin`, `slice`, `schedule`) and `search/`
 (discrete: `potts_mcmc`, `gibbs`, `balanced`, `potts_keyed`; tempering and
 annealing: `tempered`, `annealed`; diagnostics: `statistics`), where the rules
 for one kind of sampler were stated in one file and the rules for the other in
-the other. `metropolis` (#1006) joined the continuous samplers, `declared` reads the
+the other. `metropolis` (#1006) joined the continuous samplers, `tune` chooses a step from a pilot over a grid (#1219), `declared` reads the
 kernel an objective names through `supported_gradient` and the operators a compiled chain runs (#1220), and `sample.hmc.jax` runs a
 chain on an objective whose energy is a JAX function (#1008). An optimizer is judged by the optimum it reaches and a sampler by
 the distribution it converges to, which is why the two directories are two.
@@ -47,6 +47,13 @@ draws reach it without the module importing their type.
   so no loop re-scores a point, and charges its move in its own unit. A loop
   that does not fold --- a walker along the ladder, a re-estimated state ---
   is named in `loop`'s docstring with the reason.
+
+- **A tuned step is chosen by a named criterion, and the criterion is not
+  the outcome.** `tune_step` ranks a pilot's candidates by the ESJD per
+  gradient or by the lowest energy reached; on #1195's HMM starts both
+  ranked the largest step first, which carried the starts out of the
+  truth's basin (#1219). A tuned step is judged against the outcome it
+  serves before it replaces a measured one.
 
 - **A sampler is validated by the distribution it converges to, never by
   inspection.**

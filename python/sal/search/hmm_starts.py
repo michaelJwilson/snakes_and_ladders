@@ -55,6 +55,18 @@ here is the distance that carries a start out of the basin, so :data:`STEP`
 and :data:`ANNEALING_STEP` stay. The adapted entries are in :data:`STARTS` so
 the release experiment holds these counts.
 
+**A tuned step does not replace the grid either (issue #1219).** Each
+sampler at ``step_size="auto"`` --- :data:`TUNING`'s pilot over
+:data:`TUNING_GRID`, ranked by the lowest energy reached, then half the
+fixed-step run --- reaches the truth's basin in 3, 3 and 5 of 10 seeds on
+four states at 300 passes, against the grid's 10, 10, 10. The pilot chooses
+3e-2 for the chain and the cold rung in 10 of 10 seeds and for annealing in
+7: the largest step descends furthest in a short pilot, into another basin,
+and the ESJD per gradient ranks it first too (3 and 2 of 10). Neither
+criterion reads what the grid read, the polished gap, so :data:`STEP` and
+:data:`ANNEALING_STEP` stay; the tuned entries are in :data:`STARTS` so the
+release experiment holds these counts.
+
 **The step is not scaled with temperature.** The fixed step at which a
 chain's acceptance falls to 0.65 is 0.063, 0.063, 0.057 and 0.046 at
 ``T`` = 1, 4, 16 and 64 on four states, 0.074 to 0.041 on five: flat to
@@ -95,6 +107,7 @@ from sal.opt.starts import SolverComparison, StartsBenchmark, polish_by_baum_wel
 from sal.sample.chain import Adaptation, torch_stream
 from sal.sample.initialize import FromAnnealing, FromChain, FromTempering
 from sal.sample.schedule import ExponentialTempSchedule
+from sal.sample.tune import AUTO, Criterion, StepTuning, TunedStep
 from sal.track import current
 
 #: Leapfrog step of the chain and tempering starts, in unconstrained
@@ -136,6 +149,41 @@ ADAPTED_STEP = 3.0e-2
 #: ``ADAPTATION.warmup`` proposals per rung.
 ADAPTED_TEMPERING_ROUNDS = 2
 
+#: The candidate steps of the tuned samplers (issue #1219): 1e-3 to 3e-2 at
+#: half a decade, the range of #1195's grid.
+TUNING_GRID = (1.0e-3, 3.0e-3, 1.0e-2, 3.0e-2)
+
+#: Proposals the chain's and the annealing run's pilots give each candidate
+#: step, and the ladder's pilots each rung's: the least
+#: :func:`~sal.sample.tune.tune_step` takes is two.
+PILOT_PROPOSALS = 3
+RUNG_PILOT_PROPOSALS = 2
+
+#: The chain's and the annealing run's pilot: the start's gradient and
+#: :data:`PILOT_PROPOSALS` per candidate, ranked by the lowest energy reached.
+TUNING = StepTuning(
+    Budget(Cost.GRADIENTS, 1 + len(TUNING_GRID) * PILOT_PROPOSALS * TRAJECTORY),
+    Criterion.LOWEST_ENERGY,
+    TUNING_GRID,
+)
+
+#: The ladder's pilots, split evenly over :data:`TEMPERATURES`.
+TEMPERING_TUNING = StepTuning(
+    Budget(
+        Cost.GRADIENTS,
+        len(TEMPERATURES) * (1 + len(TUNING_GRID) * RUNG_PILOT_PROPOSALS * TRAJECTORY),
+    ),
+    Criterion.LOWEST_ENERGY,
+    TUNING_GRID,
+)
+
+#: The tuned runs after their pilots: half the fixed-step runs' proposals,
+#: so the chain's and the annealing run's charges are within one pass of
+#: their fixed-step twins'.
+TUNED_BURN_IN = CHAIN_BURN_IN // 2
+TUNED_ANNEAL_STEPS = ANNEAL_STEPS // 2
+TUNED_TEMPERING_ROUNDS = 2
+
 #: Points :class:`~sal.opt.initialize.RandomRestart` draws, the nominal one
 #: excluded, and their spread in unconstrained coordinates.
 RESTARTS = 4
@@ -172,8 +220,11 @@ class SampledStart:
         if isinstance(sampler, FromChain):
             chain = sampler.chain(objective)
             tracked.record(
-                0, gradients=float(chain.spent), acceptance=chain.acceptance_rate
+                0,
+                gradients=float(chain.spent),
+                acceptance=chain.acceptance_rate,
             )
+            _record(chain.tuned)
             return [chain.draws[-1]]
         if isinstance(sampler, FromAnnealing):
             annealed = sampler.run(objective)
@@ -182,6 +233,7 @@ class SampledStart:
                 gradients=float(annealed.spent),
                 acceptance=annealed.acceptance_rate,
             )
+            _record(annealed.tuned)
             return [annealed.best]
         tempered = sampler.run(objective)
         tracked.record(
@@ -189,7 +241,16 @@ class SampledStart:
             gradients=float(tempered.spent),
             acceptance=float(tempered.acceptance_rate[0]),
         )
+        _record(None if tempered.tuned is None else tempered.tuned[0])
         return [tempered.best]
+
+
+def _record(tuned: TunedStep[torch.Tensor] | None) -> None:
+    """A tuned sampler's chosen step and its pilot's gradients, at step 0; nothing for a given step."""
+    if tuned is not None:
+        current().record(
+            0, step_size=tuned.step_size, pilot_gradients=float(tuned.spent)
+        )
 
 
 def chain_start(rng: np.random.Generator) -> SampledStart:
@@ -298,6 +359,63 @@ def adapted_tempered_start(rng: np.random.Generator) -> SampledStart:
     )
 
 
+def tuned_chain_start(rng: np.random.Generator) -> SampledStart:
+    """``FromChain`` at ``step_size="auto"``: :data:`TUNING`'s pilot, then :data:`TUNED_BURN_IN` proposals.
+
+    Returns
+    -------
+    SampledStart
+    """
+    return SampledStart(
+        FromChain(
+            1,
+            AUTO,
+            torch_stream(rng),
+            n_steps=TRAJECTORY,
+            burn_in=TUNED_BURN_IN,
+            adaptation=None,
+            tuning=TUNING,
+        )
+    )
+
+
+def tuned_annealed_start(rng: np.random.Generator) -> SampledStart:
+    """``FromAnnealing`` at ``step_size="auto"``: :data:`TUNING`'s pilot, then :data:`TUNED_ANNEAL_STEPS` proposals.
+
+    Returns
+    -------
+    SampledStart
+    """
+    return SampledStart(
+        FromAnnealing(
+            ExponentialTempSchedule(TEMPERATURES[-1], 1.0, TUNED_ANNEAL_STEPS),
+            AUTO,
+            torch_stream(rng),
+            n_steps=TRAJECTORY,
+            tuning=TUNING,
+        )
+    )
+
+
+def tuned_tempered_start(rng: np.random.Generator) -> SampledStart:
+    """``FromTempering`` at ``step_size="auto"``: :data:`TEMPERING_TUNING`'s pilots, then :data:`TUNED_TEMPERING_ROUNDS` rounds.
+
+    Returns
+    -------
+    SampledStart
+    """
+    return SampledStart(
+        FromTempering(
+            TEMPERATURES,
+            TUNED_TEMPERING_ROUNDS,
+            AUTO,
+            torch_stream(rng),
+            n_steps=TRAJECTORY,
+            tuning=TEMPERING_TUNING,
+        )
+    )
+
+
 def restart_start(rng: np.random.Generator) -> RandomRestart:
     """``RandomRestart``: :data:`RESTARTS` points at :data:`RESTART_SCALE` around the objective's start, which is not one of them.
 
@@ -328,6 +446,9 @@ STARTS: dict[str, Callable[[np.random.Generator], Initializer]] = {
     "chain_adapted": adapted_chain_start,
     "annealed_adapted": adapted_annealed_start,
     "tempered_adapted": adapted_tempered_start,
+    "chain_tuned": tuned_chain_start,
+    "annealed_tuned": tuned_annealed_start,
+    "tempered_tuned": tuned_tempered_start,
 }
 
 #: Passes over the data each start spends before its polish: a sampler's
@@ -337,7 +458,8 @@ STARTS: dict[str, Callable[[np.random.Generator], Initializer]] = {
 #: annealing run, one per replica for the ladder, three for an adapted chain
 #: (the warm-up's two windows and the chain's) and two per rung for the
 #: adapted ladder's warm-up, whose rounds on the metric carry nothing ---
-#: and the points the seam scores, one each.
+#: a tuned sampler's pilot, its budget exactly (issue #1219), and the points
+#: the seam scores, one each.
 CHARGES: dict[str, int] = {
     "quantile": 1,
     "restart": RESTARTS,
@@ -348,6 +470,11 @@ CHARGES: dict[str, int] = {
     "annealed_adapted": 1 + ANNEAL_STEPS * TRAJECTORY + 1,
     "tempered_adapted": len(TEMPERATURES)
     * (2 + ADAPTATION.warmup * TRAJECTORY + ADAPTED_TEMPERING_ROUNDS * (TRAJECTORY + 1))
+    + 1,
+    "chain_tuned": TUNING.budget.size + 1 + (TUNED_BURN_IN + 1) * TRAJECTORY + 1,
+    "annealed_tuned": TUNING.budget.size + 1 + TUNED_ANNEAL_STEPS * TRAJECTORY + 1,
+    "tempered_tuned": TEMPERING_TUNING.budget.size
+    + len(TEMPERATURES) * (1 + TUNED_TEMPERING_ROUNDS * TRAJECTORY)
     + 1,
 }
 
@@ -426,13 +553,21 @@ __all__ = [
     "ANNEAL_STEPS",
     "CHAIN_BURN_IN",
     "CHARGES",
+    "PILOT_PROPOSALS",
     "RESTARTS",
     "RESTART_SCALE",
+    "RUNG_PILOT_PROPOSALS",
     "STARTS",
     "STEP",
     "TEMPERATURES",
     "TEMPERING_ROUNDS",
+    "TEMPERING_TUNING",
     "TRAJECTORY",
+    "TUNED_ANNEAL_STEPS",
+    "TUNED_BURN_IN",
+    "TUNED_TEMPERING_ROUNDS",
+    "TUNING",
+    "TUNING_GRID",
     "SampledStart",
     "adapted_annealed_start",
     "adapted_chain_start",
@@ -444,4 +579,7 @@ __all__ = [
     "quantile_start",
     "restart_start",
     "tempered_start",
+    "tuned_annealed_start",
+    "tuned_chain_start",
+    "tuned_tempered_start",
 ]

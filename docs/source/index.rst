@@ -408,6 +408,9 @@ whether or not it has members yet.
 .. automodule:: sal.sample.tempered
    :members:
 
+.. automodule:: sal.sample.tune
+   :members:
+
 .. automodule:: sal.sample.annealed
    :members:
 
