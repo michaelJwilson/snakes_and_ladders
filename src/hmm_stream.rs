@@ -23,12 +23,16 @@
 //! normal `f64` added, as `CategoricalEmission.reestimate` adds
 //! `torch.finfo(float64).tiny`. The Python route is the oracle that pins it.
 
-use numpy::{PyArray1, PyReadonlyArray1, PyReadonlyArray2, PyUntypedArrayMethods};
+use numpy::{
+    PyArray1, PyReadonlyArray1, PyReadonlyArray2, PyReadwriteArray1, PyReadwriteArray2,
+    PyUntypedArrayMethods,
+};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use rayon::prelude::*;
 
 use crate::energy::{pinned_simplex, Energy};
+use crate::maxflow::on_pool;
 use crate::special::{ln_gamma, ln_gamma_approx, STIRLING_FROM};
 
 /// New log parameters and the log-likelihood at the parameters given.
@@ -234,6 +238,10 @@ pub fn categorical_em_step<'py>(
 pub trait Statistics: Send {
     fn add(&mut self, index: usize, posterior: &[f64]);
     fn merge(&mut self, other: Self);
+    /// The log evidence of the block's `segment`-th segment, once its
+    /// forward pass is done; ignored unless a statistic keeps it (#1253).
+    #[inline]
+    fn evidence(&mut self, _segment: usize, _log_evidence: f64) {}
 }
 
 /// Expected chain counts from one streamed E step.
@@ -396,8 +404,9 @@ fn stream_block<S: Statistics>(
     let mut last_key = usize::MAX;
     let mut log_likelihood = 0.0;
 
-    for &length in lengths {
+    for (segment, &length) in lengths.iter().enumerate() {
         let scale = &mut scale[..length];
+        let mut shifts = 0.0;
         // Densities, shifted per position, and the shifts into the evidence.
         for t in 0..length {
             let b = &mut emitted[t * m..][..m];
@@ -414,6 +423,7 @@ fn stream_block<S: Statistics>(
                 *value = (*value - high).exp();
             }
             log_likelihood += high;
+            shifts += high;
         }
         // Forward, each position normalized to sum to one.
         let mut total = 0.0;
@@ -444,7 +454,9 @@ fn stream_block<S: Statistics>(
                 *value /= total;
             }
         }
-        log_likelihood += scale.iter().map(|c| c.ln()).sum::<f64>();
+        let scaled = scale.iter().map(|c| c.ln()).sum::<f64>();
+        log_likelihood += scaled;
+        statistics.evidence(segment, shifts + scaled);
 
         // Backward, handing each posterior over and adding each pair's.
         beta.fill(1.0);
@@ -483,6 +495,168 @@ fn stream_block<S: Statistics>(
         pairs,
         log_likelihood,
     }
+}
+
+/// Each position's posterior and each segment's log evidence, written to
+/// one block's own slices (issue #1253).
+struct Marginals<'a> {
+    /// The block's rows of the posterior, `m` per position.
+    posterior: &'a mut [f64],
+    /// The block's segments' log evidence.
+    evidence: &'a mut [f64],
+    /// The flat position of the block's first row.
+    offset: usize,
+}
+
+impl Statistics for Marginals<'_> {
+    #[inline]
+    fn add(&mut self, index: usize, posterior: &[f64]) {
+        let m = posterior.len();
+        self.posterior[(index - self.offset) * m..][..m].copy_from_slice(posterior);
+    }
+
+    /// The blocks write disjoint slices, so there is nothing to merge.
+    fn merge(&mut self, _other: Self) {}
+
+    #[inline]
+    fn evidence(&mut self, segment: usize, log_evidence: f64) {
+        self.evidence[segment] = log_evidence;
+    }
+}
+
+/// The E step [`crate::ragged::ragged_posteriors_into`] takes, in the
+/// streamed core's scaled probability space rather than in logs (issue #1253).
+///
+/// Writes the posterior marginals `posterior` (`total * m`, row-major),
+/// the expected transition counts `pairs` (`m * m`, summed over segments,
+/// no pair spanning a boundary) and each segment's log evidence, all three
+/// as probabilities or counts and not their logs: what a Fisher-identity
+/// gradient multiplies by. [`stream_block`] does the work, so a position
+/// costs `m` exponentials and one logarithm where the log-space kernel takes
+/// `3 m^2` `log_add`s. Blocks are cut by [`block_starts`] on the lengths
+/// alone and each writes its own slices, the pair counts merged in block
+/// order, so every output is the same at every thread count.
+///
+/// # Errors
+/// Shapes that disagree, or a segment of length 0.
+#[allow(clippy::too_many_arguments)]
+pub fn posterior_probabilities_into(
+    log_density: &[f64],
+    lengths: &[usize],
+    log_initial: &[f64],
+    log_transition: &[f64],
+    posterior: &mut [f64],
+    pairs: &mut [f64],
+    evidence: &mut [f64],
+) -> Result<(), String> {
+    let m = log_initial.len();
+    if m == 0 || log_transition.len() != m * m || !log_density.len().is_multiple_of(m) {
+        return Err(format!(
+            "{m} states need a {m}x{m} transition and {m} densities a position, got {} and {} entries",
+            log_transition.len(),
+            log_density.len()
+        ));
+    }
+    let longest = segment_lengths(log_density.len() / m, lengths)?;
+    if posterior.len() != log_density.len()
+        || pairs.len() != m * m
+        || evidence.len() != lengths.len()
+    {
+        return Err(format!(
+            "posterior, pairs and evidence take {}, {} and {} entries, got {}, {} and {}",
+            log_density.len(),
+            m * m,
+            lengths.len(),
+            posterior.len(),
+            pairs.len(),
+            evidence.len()
+        ));
+    }
+    let initial: Vec<f64> = log_initial.iter().map(|v| v.exp()).collect();
+    let transition: Vec<f64> = log_transition.iter().map(|v| v.exp()).collect();
+    let starts = block_starts(lengths, BLOCKS.min(lengths.len()).max(1));
+    // Each block's disjoint rows of `posterior` and entries of `evidence`.
+    let mut blocks = Vec::with_capacity(starts.len() - 1);
+    let (mut rest, mut rest_evidence, mut offset) = (posterior, evidence, 0_usize);
+    for bounds in starts.windows(2) {
+        let held: usize = lengths[bounds[0]..bounds[1]].iter().sum();
+        let (head, tail) = rest.split_at_mut(held * m);
+        let (ev_head, ev_tail) = rest_evidence.split_at_mut(bounds[1] - bounds[0]);
+        blocks.push((bounds[0]..bounds[1], offset, head, ev_head));
+        (rest, rest_evidence, offset) = (tail, ev_tail, offset + held);
+    }
+    let density = |index: usize, out: &mut [f64]| {
+        out.copy_from_slice(&log_density[index * m..][..m]);
+    };
+    let parts: Vec<Counts> = blocks
+        .into_par_iter()
+        .map(|(range, offset, posterior, evidence)| {
+            let mut marginals = Marginals {
+                posterior,
+                evidence,
+                offset,
+            };
+            stream_block(
+                &lengths[range],
+                offset,
+                longest,
+                &initial,
+                &transition,
+                &density,
+                &|_| usize::MAX,
+                &mut marginals,
+            )
+        })
+        .collect();
+    pairs.fill(0.0);
+    for part in parts {
+        for (total, one) in pairs.iter_mut().zip(part.pairs) {
+            *total += one;
+        }
+    }
+    Ok(())
+}
+
+/// PyO3 wrapper over [`posterior_probabilities_into`], the GIL released;
+/// its blocks run on `rayon`'s global pool, or on a pool of `threads`, as
+/// `ragged_posteriors` takes it. `ValueError` on any precondition.
+#[allow(clippy::too_many_arguments)]
+#[pyfunction]
+#[pyo3(signature = (log_density, lengths, log_initial, log_transition, posterior, pairs, evidence, threads = None))]
+pub fn ragged_posterior_probabilities(
+    py: Python<'_>,
+    log_density: PyReadonlyArray2<f64>,
+    lengths: PyReadonlyArray1<i64>,
+    log_initial: PyReadonlyArray1<f64>,
+    log_transition: PyReadonlyArray2<f64>,
+    mut posterior: PyReadwriteArray2<f64>,
+    mut pairs: PyReadwriteArray2<f64>,
+    mut evidence: PyReadwriteArray1<f64>,
+    threads: Option<usize>,
+) -> PyResult<()> {
+    let widths: Vec<usize> = lengths
+        .as_slice()?
+        .iter()
+        .map(|&one| usize::try_from(one).unwrap_or(0))
+        .collect();
+    let (density, initial, transition) = (
+        log_density.as_slice()?,
+        log_initial.as_slice()?,
+        log_transition.as_slice()?,
+    );
+    let (posterior, pairs, evidence) = (
+        posterior.as_slice_mut()?,
+        pairs.as_slice_mut()?,
+        evidence.as_slice_mut()?,
+    );
+    py.detach(|| {
+        on_pool(threads, || {
+            posterior_probabilities_into(
+                density, &widths, initial, transition, posterior, pairs, evidence,
+            )
+        })
+    })
+    .map_err(PyValueError::new_err)
 }
 
 /// The initial and transition M step from expected counts: the mean first
@@ -1663,5 +1837,67 @@ mod tests {
                 assert!((fitted - by_symbol.log_emission[s * 3 + u]).abs() < 1e-12);
             }
         }
+    }
+
+    /// The scaled E step against the log-space kernel on ragged segments, at
+    /// 1e-12 (#1253); the two reductions differ, so not bitwise.
+    #[test]
+    fn the_probabilities_are_the_log_space_posteriors_exponentiated() {
+        let (m, lengths) = (3usize, [1usize, 2, 7, 33]);
+        let total: usize = lengths.iter().sum();
+        let density: Vec<f64> = (0..total * m)
+            .map(|i| -((i * 7919 % 13) as f64) / 3.0)
+            .collect();
+        let initial = [0.5f64.ln(), 0.3f64.ln(), 0.2f64.ln()];
+        let transition: Vec<f64> = [0.8, 0.15, 0.05, 0.1, 0.7, 0.2, 0.3, 0.3, 0.4]
+            .iter()
+            .map(|p: &f64| p.ln())
+            .collect();
+        let (mut gamma, mut counts, mut evidence) =
+            (vec![0.0; total * m], vec![0.0; m * m], vec![0.0; 4]);
+        crate::ragged::ragged_posteriors_into(
+            &density,
+            m,
+            &lengths,
+            &initial,
+            &transition,
+            &mut gamma,
+            &mut counts,
+            &mut evidence,
+            &[],
+            crate::ragged::SwitchKind::StayOrMove,
+        )
+        .unwrap();
+        let (mut posterior, mut pairs, mut scaled) =
+            (vec![0.0; total * m], vec![0.0; m * m], vec![0.0; 4]);
+        posterior_probabilities_into(
+            &density,
+            &lengths,
+            &initial,
+            &transition,
+            &mut posterior,
+            &mut pairs,
+            &mut scaled,
+        )
+        .unwrap();
+        for (p, g) in posterior.iter().zip(&gamma) {
+            assert!((p - g.exp()).abs() < 1e-12);
+        }
+        for (p, c) in pairs.iter().zip(&counts) {
+            assert!((p / c.exp() - 1.0).abs() < 1e-12);
+        }
+        for (e, want) in scaled.iter().zip(&evidence) {
+            assert!((e / want - 1.0).abs() < 1e-12);
+        }
+        let error = posterior_probabilities_into(
+            &density,
+            &[1, 2, 7, 32],
+            &initial,
+            &transition,
+            &mut posterior,
+            &mut pairs,
+            &mut scaled,
+        );
+        assert!(error.is_err());
     }
 }

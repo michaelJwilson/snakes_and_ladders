@@ -58,6 +58,7 @@ pub use hmc::leapfrog_trajectory;
 pub use hmm_decode::{hmm_score, hmm_viterbi};
 pub use hmm_stream::{
     categorical_em_step, count_cells, count_em_step, gaussian_em_step, gaussian_hmm_statistics,
+    posterior_probabilities_into, ragged_posterior_probabilities,
 };
 pub use lattice_cut::LatticeCut;
 pub use maxflow::{ising_ground_state, ising_ground_states, max_flow};
@@ -123,6 +124,7 @@ fn oxisal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(gaussian_em_step, m)?)?;
     m.add_function(wrap_pyfunction!(count_cells, m)?)?;
     m.add_function(wrap_pyfunction!(gaussian_hmm_statistics, m)?)?;
+    m.add_function(wrap_pyfunction!(ragged_posterior_probabilities, m)?)?;
     m.add_function(wrap_pyfunction!(hmm_viterbi, m)?)?;
     m.add_function(wrap_pyfunction!(bifurcation_integrate, m)?)?;
     m.add_function(wrap_pyfunction!(hmm_score, m)?)?;

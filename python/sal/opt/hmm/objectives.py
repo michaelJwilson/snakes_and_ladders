@@ -418,9 +418,11 @@ class EmissionHmmObjective(Objective):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """``(U(theta), dU/dtheta)``, detached: the compiled E step, then one backward pass (issue #1169).
 
-        ``oxisal.ragged_posteriors`` returns the log marginals ``gamma``, the
-        log transition counts ``xi`` summed over segments and each segment's
-        log evidence, with no graph. By Fisher's identity the score of the
+        ``oxisal.ragged_posterior_probabilities`` returns the marginals
+        ``gamma``, the transition counts ``xi`` summed over segments and each
+        segment's log evidence, with no graph: the streamed core's scaled
+        recursion, 14.3 ms against 72.5 ms for the log-space
+        ``oxisal.ragged_posteriors`` over 317,033 positions (issue #1253). By Fisher's identity the score of the
         log-likelihood is the posterior expectation of the complete-data
         score, so with ``gamma``, ``xi`` and the first-position marginals
         ``gamma_0`` held at their values at ``theta``,
@@ -465,7 +467,7 @@ class EmissionHmmObjective(Objective):
         gamma = np.empty_like(values)
         counts = np.empty((m, m), dtype=np.float64)
         evidence = np.empty(len(self._lengths), dtype=np.float64)
-        oxisal.ragged_posteriors(
+        oxisal.ragged_posterior_probabilities(
             values,
             self._lengths_array,
             np.ascontiguousarray(log_initial.detach().numpy(), dtype=np.float64),
@@ -474,10 +476,10 @@ class EmissionHmmObjective(Objective):
             counts,
             evidence,
         )
-        posterior = torch.from_numpy(np.exp(gamma))
+        posterior = torch.from_numpy(gamma)
         surrogate = (
             (posterior * log_density).sum()
-            + (torch.from_numpy(np.exp(counts)) * log_transition).sum()
+            + (torch.from_numpy(counts) * log_transition).sum()
             + (posterior[self._first].sum(dim=0) * log_initial).sum()
         )
         (derivative,) = torch.autograd.grad(surrogate, point)
