@@ -628,15 +628,21 @@ class CountPairSeeding:
         )
 
 
-def _seed_scores(
+def seed_scores(
     observations: np.ndarray, at: ComponentsAt
-) -> Callable[..., np.ndarray]:
-    """``(index, indices) -> D_phi(y, the component seeded at that index)``.
+) -> Callable[[float, np.ndarray], np.ndarray]:
+    """The score :func:`plus_plus_start` draws its seeds by (issues #306, #1236).
 
-    :func:`sal.opt.mixture.emission_mixture_plus_plus` draws its
-    seeds from the array it is given, so the array here is of *indices*: an
-    observation is a pair, and a draw from a flattened array of pairs would
-    seed a component on half of one.
+    A score is ``D_phi(y, at(seed))``: the family's Bregman divergence of each
+    candidate observation ``y`` from the component ``at`` places on the seed's
+    observation. :func:`sal.opt.mixture.emission_mixture_plus_plus` draws the
+    seeds, under the caller's generator, proportionally to the smallest score
+    so far; this function draws nothing. That draw is over the array it is given,
+    so the array here is of *indices*: an observation is a pair, and a draw
+    from a flattened array of pairs would seed a component on half of one.
+    ``emission_mixture_plus_plus(np.arange(n_samples, dtype=np.float64),
+    n_components, seed_scores(observations, at), rng)`` returns the indices
+    :func:`plus_plus_start` seeds on from the same ``rng``, bitwise.
 
     **The score is the family's Bregman divergence, not its negative log
     density** (issue #560). The two differ by ``log b_phi(y)``, the log density
@@ -650,6 +656,20 @@ def _seed_scores(
     **4.3470** (``tests/regression/opt/test_opt_mixture_seeding.py``,
     ``docs/experiments/010``). The divergence is non-negative, as the sampling
     rule needs, and zero at the seed's own observation.
+
+    Parameters
+    ----------
+    observations : np.ndarray
+        Observations, shape ``(n_samples,)`` or ``(n_samples, channels)``.
+    at : ComponentsAt
+        Builds a family from the chosen observations.
+
+    Returns
+    -------
+    Callable[[float, np.ndarray], np.ndarray]
+        ``(index, indices) -> scores``: ``index`` a float naming the seed's
+        row, ``indices`` float row indices of shape ``(m,)``, the scores of
+        shape ``(m,)``.
     """
     rows = np.asarray(observations, dtype=np.float64)
 
@@ -690,7 +710,7 @@ def plus_plus_start(
     rows = np.asarray(observations, dtype=np.float64)
     indices = np.arange(rows.shape[0], dtype=np.float64)
     chosen = emission_mixture_plus_plus(
-        indices, n_components, _seed_scores(rows, at), rng
+        indices, n_components, seed_scores(rows, at), rng
     )
     return at(rows[chosen.astype(np.int64)])
 
