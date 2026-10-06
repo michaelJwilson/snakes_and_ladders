@@ -116,6 +116,8 @@ from sal.emissions.counts import (
     CountPairEmission,
     NegativeBinomialEmission,
     PoissonEmission,
+    RateConcentrationBetaBinomialEmission,
+    RateConcentrationCountPairEmission,
 )
 from sal.emissions.families import (
     COLLAPSE_EXPONENT,
@@ -177,6 +179,8 @@ __all__ = [
     "NegativeBinomialEmission",
     "ParameterDomainError",
     "PoissonEmission",
+    "RateConcentrationBetaBinomialEmission",
+    "RateConcentrationCountPairEmission",
     "Reestimate",
     "Values",
     "exposure",
