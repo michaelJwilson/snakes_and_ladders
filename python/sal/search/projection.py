@@ -40,7 +40,6 @@ import numpy as np
 import torch
 from scipy.optimize import linear_sum_assignment
 
-from sal.backend import Backend
 from sal.emissions import (
     BetaBinomialEmission,
     EmissionFamily,
@@ -672,17 +671,15 @@ def tempered_seeding(
         lowest swap acceptance on the ladder: a pair the ladder never crosses
         makes the replicas independent chains and the run a restart set.
     """
-    # The torch route, on which the CI-size recovery was measured. At eight
-    # seeds the compiled route leaves a mean error above 0.15 at two (0.21,
-    # the CI seed's, and 0.30) and the torch route at one (0.30): one stream
-    # against another at two rounds, not a bias (issue #1249).
+    # The default compiled route. At the CI size the recovery bound holds on
+    # 6 of 8 seeds on this route and on the torch route alike, so the claim is
+    # the seeds' majority and not one seed's (issue #1259).
     run = FromTempering(
         TEMPERATURES,
         TEMPERING_ROUNDS,
         CHAIN_STEP,
         torch_stream(rng),
         n_steps=CHAIN_TRAJECTORY,
-        backend=Backend.PYTHON,
     ).run(surrogate(instance))
     return Seeding(
         _from_theta(instance, run.best, at),
