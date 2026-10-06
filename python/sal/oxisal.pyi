@@ -351,6 +351,16 @@ def ragged_posteriors(
     switch_kind: str = "stay_or_move",
     threads: int | None = None,
 ) -> None: ...
+def ragged_posterior_probabilities(
+    log_density: np.ndarray,
+    lengths: np.ndarray,
+    log_initial: np.ndarray,
+    log_transition: np.ndarray,
+    posterior: np.ndarray,
+    pairs: np.ndarray,
+    evidence: np.ndarray,
+    threads: int | None = None,
+) -> None: ...
 def ragged_viterbi(
     log_density: np.ndarray,
     lengths: np.ndarray,

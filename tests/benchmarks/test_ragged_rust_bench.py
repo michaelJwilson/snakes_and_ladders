@@ -36,6 +36,51 @@ def test_ragged_posteriors_bench(
     benchmark(posteriors, density, initial, transition)
 
 
+def _e_step_inputs(
+    lengths: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Log-densities over `lengths` and a sticky chain's parameters, seeded."""
+    rng = np.random.default_rng(1253)
+    density = np.ascontiguousarray(np.log(rng.random((int(lengths.sum()), STATES))))
+    initial = np.log(np.full(STATES, 1.0 / STATES))
+    transition = np.log(np.full((STATES, STATES), 0.01) + 0.96 * np.eye(STATES))
+    return density, lengths.astype(np.int64), initial, transition
+
+
+#: The two sizes of #1253: 200 segments of 60, and 200 of 100-3,000
+#: (317,033 positions), the stress size the ratio is read at.
+E_STEP_SIZES = {
+    "200x60": np.full(200, 60),
+    "stress": np.random.default_rng(1254).integers(100, 3000, 200),
+}
+
+
+@pytest.mark.benchmark(group="ragged-e-step")
+@pytest.mark.parametrize("size", list(E_STEP_SIZES))
+@pytest.mark.parametrize("route", ["log", "scaled"])
+def test_ragged_e_step_bench(
+    benchmark: BenchmarkFixture, route: str, size: str
+) -> None:
+    """`ragged_posteriors` in logs against `ragged_posterior_probabilities` scaled (issue #1253)."""
+    from sal import oxisal
+
+    density, lengths, initial, transition = _e_step_inputs(E_STEP_SIZES[size])
+    gamma = np.empty_like(density)
+    counts = np.empty((STATES, STATES))
+    evidence = np.empty(lengths.shape[0])
+    kernel = (
+        oxisal.ragged_posteriors
+        if route == "log"
+        else oxisal.ragged_posterior_probabilities
+    )
+    benchmark.pedantic(  # type: ignore[no-untyped-call]
+        kernel,
+        args=(density, lengths, initial, transition, gamma, counts, evidence),
+        rounds=3,
+        iterations=1,
+    )
+
+
 @pytest.mark.benchmark(group="ragged-switched")
 @pytest.mark.parametrize("route", ["switch", "stack"])
 def test_switched_transition_bench(benchmark: BenchmarkFixture, route: str) -> None:
