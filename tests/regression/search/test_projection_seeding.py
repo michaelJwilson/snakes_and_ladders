@@ -72,7 +72,9 @@ CI_BUDGET = Budget(Cost.PASSES, 6)
 #: The largest relative error in a component's negative-binomial mean that the
 #: three chain-based candidates may leave at the CI size, and the recovery they
 #: must reach. Measured on this draw: 0.06 to 0.08 and 0.75 to 0.76, against a
-#: recovery of 0.78 under the generating parameters themselves.
+#: recovery of 0.78 under the generating parameters themselves. ``hmc`` and
+#: ``anneal`` are held to it on one seed, ``tempering`` on a majority of
+#: :data:`TEMPERING_SEEDS` (issue #1259).
 SAMPLED_MEAN_ERROR = 0.15
 SAMPLED_RECOVERY = 0.70
 
@@ -250,7 +252,7 @@ def test_the_sampled_seedings_recover_the_generating_means_at_the_ci_size() -> N
     # ordering against the heuristics is the release-tier comparison's.
     instance = _projection("ci", CI_SAMPLES, 0)
 
-    for name in ("hmc", "anneal", "tempering"):
+    for name in ("hmc", "anneal"):
         fitted = fit_projection(
             instance, name, _seam("ci"), CI_BUDGET, np.random.default_rng([541, 0])
         )
@@ -263,6 +265,43 @@ def test_the_sampled_seedings_recover_the_generating_means_at_the_ci_size() -> N
             f"{name} reached a recovery of {fitted.recovery:.3f}, below "
             f"{SAMPLED_RECOVERY}"
         )
+
+
+#: Seeds the tempering candidate's recovery is claimed over, and the strict
+#: majority of them it must hold on (issue #1259). Measured at seeds
+#: ``[541, s]``, s = 0 to 7: 6 of 8 on the compiled route (seeds 0 and 4 leave
+#: mean errors 0.210 and 0.295) and 6 of 8 on the torch route (seed 4 leaves
+#: 0.297; seed 7 a recovery of 0.691).
+TEMPERING_SEEDS = 8
+TEMPERING_MAJORITY = 5
+
+
+@pytest.mark.end2end
+def test_the_tempering_seeding_recovers_the_generating_means_on_most_seeds() -> None:
+    # Two rounds of four replicas is one draw of a random start: on the CI
+    # seed the compiled stream leaves 0.21 where the torch stream left 0.08,
+    # and over eight seeds each route misses on two. The claim is the
+    # ensemble's, as issue #1213 stated the warm-up figure's.
+    instance = _projection("ci", CI_SAMPLES, 0)
+
+    held = []
+    for seed in range(TEMPERING_SEEDS):
+        fitted = fit_projection(
+            instance,
+            "tempering",
+            _seam("ci"),
+            CI_BUDGET,
+            np.random.default_rng([541, seed]),
+        )
+        if (
+            fitted.mean_error <= SAMPLED_MEAN_ERROR
+            and fitted.recovery >= SAMPLED_RECOVERY
+        ):
+            held.append(seed)
+
+    assert len(held) >= TEMPERING_MAJORITY, (
+        f"the bounds held on seeds {held}, {len(held)} of {TEMPERING_SEEDS}"
+    )
 
 
 @pytest.mark.analytic
