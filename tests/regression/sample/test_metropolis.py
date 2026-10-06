@@ -94,11 +94,14 @@ def test_the_tempered_chain_samples_the_tempered_target() -> None:
 def test_both_warm_ups_settle_on_the_target_acceptance() -> None:
     adaptation = hmc.Adaptation(2_000, metropolis.RWM_TARGET_ACCEPTANCE, 0.0)
     rates = []
-    for backend in (Backend.RUST, Backend.PYTHON):
+    # The start's energy is charged where it is evaluated (issue #1218): once
+    # by the compiled walk, to its warm-up, and by the NumPy kernel once at
+    # each of the warm-up's two windows and once at the chain's start.
+    for backend, warm_starts, starts in ((Backend.RUST, 1, 1), (Backend.PYTHON, 2, 3)):
         chain = _chain(backend, n=4_000, adaptation=adaptation, store_chain=False)
         assert chain.adapted is not None
-        assert chain.adapted.force_evaluations == 2_000
-        assert chain.spent == 6_000
+        assert chain.adapted.force_evaluations == 2_000 + warm_starts
+        assert chain.spent == 6_000 + starts
         rates.append(chain.acceptance_rate)
     assert abs(rates[0] - metropolis.RWM_TARGET_ACCEPTANCE) < 0.05
     assert abs(rates[0] - rates[1]) < 0.03
