@@ -139,8 +139,10 @@ def test_the_calibrated_ladder_exchanges_inside_the_band_where_the_fixed_one_doe
     assert calibrated.placement.rounds == 2
     assert calibrated.rounds_run == 2 * 150
     assert calibrated.transitions == 150 * (2 + 3) == 750
-    assert calibrated.force_evaluations == 750 * hmc.leapfrog.force_evaluations(
-        TRAJECTORY
+    # The first kick's gradient is carried, and each replica of each run pays
+    # one at its start: 2 + 3 replicas (issue #1222).
+    assert calibrated.force_evaluations == 5 + 750 * hmc.leapfrog.force_evaluations(
+        TRAJECTORY, carried=True
     )
     assert start.spent.transitions == ROUNDS * 3
     assert start.spent.total_transitions == 750 + ROUNDS * 3
@@ -232,8 +234,8 @@ def test_a_budget_in_seconds_stops_inside_it_and_another_unit_is_refused() -> No
     assert alone.spent.budget == Budget(Cost.SECONDS, 1)
     assert 1 < alone.spent.rounds == run.positions.shape[0]
     assert alone.spent.seconds <= 1.0, alone.spent.seconds
-    assert run.spent == alone.spent.rounds * 3 * (
-        hmc.leapfrog.force_evaluations(TRAJECTORY)
+    assert run.spent == 3 + alone.spent.rounds * 3 * (
+        hmc.leapfrog.force_evaluations(TRAJECTORY, carried=True)
     )
 
     calibration = LadderCalibration(
@@ -247,7 +249,8 @@ def test_a_budget_in_seconds_stops_inside_it_and_another_unit_is_refused() -> No
 
     with pytest.raises(ValueError, match="'seconds'"):
         _start(0, None, FIXED, Budget(Cost.GRADIENTS, 100))
-    # Two transitions of nine calls each at 60 ms: over 1 s before a round.
+    # The start's value and two first transitions of six calls each (#1222):
+    # 13 calls at 100 ms, 1.3 s before a round. At 60 ms, 0.78 s since #1217.
     slow = _start(
         0,
         LadderCalibration(
@@ -257,7 +260,7 @@ def test_a_budget_in_seconds_stops_inside_it_and_another_unit_is_refused() -> No
         Budget(Cost.SECONDS, 1),
     )
     with pytest.raises(ValueError, match="leaving no round of the run"):
-        slow.run(_Slow(target, 0.06))
+        slow.run(_Slow(target, 0.1))
 
 
 @pytest.mark.smoke

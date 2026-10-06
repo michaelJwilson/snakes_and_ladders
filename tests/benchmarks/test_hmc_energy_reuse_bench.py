@@ -1,10 +1,12 @@
-"""Torch-route HMC and MALA on a Gaussian HMM, where ``U`` costs a forward recursion (issue #1217).
+"""Torch-route HMC and MALA on a Gaussian HMM, where ``U`` costs a forward recursion (issues #1217, #1222).
 
-A proposal reads ``U`` at both ends. Both are carried from force evaluations
-the proposal already made, so its wall time is its gradients' alone; this
-times one chain at the CI size and at the stress size, where the forward and
-the compiled E step are both linear in the positions. Correctness is pinned
-in `tests/regression/sample/test_hmc_carried_energy.py`.
+A proposal reads ``(U, grad U)`` at both ends. Both pairs are carried from
+force evaluations the chain already made, so its wall time is its
+trajectory's gradients after the first kick: 4 of 5 for HMC at ``n_steps =
+4``, 1 of 2 for MALA, beside one gradient at the chain's start. This times
+one chain at the CI size and at the stress size, where the forward and the
+compiled E step are both linear in the positions. Correctness is pinned in
+`tests/regression/sample/test_hmc_carried_energy.py`.
 """
 
 from __future__ import annotations

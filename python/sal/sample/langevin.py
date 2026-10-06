@@ -1,9 +1,9 @@
 """The Metropolis-adjusted Langevin algorithm: HMC at one leapfrog step.
 
 The baseline every Hamiltonian number in this package is read against.
-:func:`~sal.sample.hmc.sample` costs ``n_steps + 1`` gradients a
+:func:`~sal.sample.hmc.sample` costs ``n_steps`` gradients a
 proposal and buys a trajectory with them; MALA (Roberts & Tweedie, 1996) costs
-two and buys one gradient-informed step, so a comparison at equal *gradients*
+one and buys one gradient-informed step, so a comparison at equal *gradients*
 is the one that says whether the trajectory was worth it. Reported as
 effective samples per gradient, never per draw.
 
@@ -17,16 +17,19 @@ between two implementations rather than a transcription of one;
 ``tests/regression/opt/test_opt_langevin.py`` reads the difference against
 ``sample(n_steps=1)`` on one generator state.
 
-**Recompute rather than store, and the reason is the warm-up.** A proposal
-evaluates the gradient at the current point and at the proposal, and the
-second could be carried into the next transition when the proposal is
-accepted --- halving the cost. It is not, because the warm-up rebases the
-objective onto the metric's coordinates and moves the position with it, so a
-gradient cached across transitions would have two invalidation points and no
-owner. The cost is therefore two gradients a proposal, which is
-``leapfrog.force_evaluations(1)`` exactly, and what makes the two routes
-comparable at equal evaluations rather than at equal draws. The two values
-the ratio reads are not a further cost: each is taken beside its gradient by
+**Store rather than recompute, keyed on what invalidates it.** A proposal
+reads the gradient at the current point and at the proposal. The kernel
+keeps ``(U, grad U)`` beside the tensor and the objective it was taken on
+and hands it to the next transition while the chain has not left either, as
+the Hamiltonian kernel does (issue #1222): an accepted proposal's pair is
+the one its ratio took, a rejected one keeps the current point's. The
+warm-up's change of coordinates is a new objective and a new tensor, so it
+is evaluated afresh rather than invalidated by hand. The cost is therefore
+one gradient a proposal, ``leapfrog.force_evaluations(1, carried=True)``
+exactly, plus one at each start --- the same accounting the Hamiltonian
+chain keeps, which is what makes the two routes comparable at equal
+evaluations rather than at equal draws. The values the ratio reads are not a
+further cost: each is taken beside its gradient by
 :func:`~sal.opt.objective.value_and_gradient` (issue #1217).
 
 **Unadjusted Langevin is a flag, and it costs what MALA costs.** Dropping the
@@ -47,7 +50,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 import torch
@@ -83,9 +86,9 @@ MALA_TARGET_ACCEPTANCE = 0.574
 #: to keep; the gradients it costs are ``leapfrog.force_evaluations(1)``.
 LANGEVIN_STEPS = 1
 
-#: Gradients one proposal spends: at the current point and at the proposal.
-#: See the module note on why the second is not carried forward.
-GRADIENTS_PER_PROPOSAL = 2
+#: Gradients one proposal spends: at the proposal; the current point's is
+#: carried (issue #1222). A chain spends one more at each start.
+GRADIENTS_PER_PROPOSAL = 1
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -93,7 +96,7 @@ class LangevinChain(Chain):
     """A Langevin chain, what it cost, and whether it was corrected (issue #1090).
 
     A :class:`~sal.sample.chain.Chain`, ``spent`` in gradients at
-    :data:`GRADIENTS_PER_PROPOSAL` a proposal, plus the flag, because an
+    :data:`GRADIENTS_PER_PROPOSAL` a proposal and one a start, plus the flag, because an
     uncorrected chain's acceptance rate is 1 by construction and reading
     the two alike would read that 1 as a diagnostic: read ``energy_error``
     instead, which for an uncorrected chain is the correction not applied,
@@ -208,6 +211,7 @@ def mala(
             GRADIENTS_PER_PROPOSAL,
             generator,
             n_samples,
+            per_start=1,
             unit=Cost.GRADIENTS,
             step_size=step_size,
             start=start_point(objective, start),
@@ -233,6 +237,7 @@ def mala(
         objective,
         generator,
         n_samples,
+        per_start=1,
         unit=Cost.GRADIENTS,
         step_size=step_size,
         start=start,
@@ -273,7 +278,7 @@ def _log_proposal_density(
     )
 
 
-@dataclass(frozen=True)
+@dataclass
 class _LangevinKernel:
     """One Langevin proposal and its Metropolis test: :func:`mala`'s kernel.
 
@@ -285,6 +290,11 @@ class _LangevinKernel:
     """
 
     corrected: bool
+    #: ``(objective, position, U, grad U)`` where the last transition left
+    #: the chain, keyed on the identity of both (issue #1222).
+    _at: tuple[Objective, torch.Tensor, torch.Tensor, torch.Tensor] | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
 
     def __call__(
         self,
@@ -296,7 +306,14 @@ class _LangevinKernel:
     ) -> Transition:
         # The value comes with each gradient (issue #1217): the ratio reads
         # `U` at both points, and neither is evaluated a second time for it.
-        here, gradient = value_and_gradient(objective, position)
+        if (
+            self._at is not None
+            and self._at[0] is objective
+            and self._at[1] is position
+        ):
+            here, gradient = self._at[2], self._at[3]
+        else:
+            here, gradient = value_and_gradient(objective, position)
         noise = torch.randn(
             position.shape, generator=generator, dtype=torch.float64
         ) * math.sqrt(temperature)
@@ -317,21 +334,17 @@ class _LangevinKernel:
         error = abs(temperature * log_ratio)
         ratio = float(torch.exp(torch.tensor(log_ratio)))
         probability = acceptance_probability(ratio)
-        if not self.corrected:
+        if not self.corrected or accept_ratio(
+            ratio, float(torch.rand(1, generator=generator))
+        ):
+            self._at = (objective, proposal, there, proposed_gradient)
             return Transition(
                 position=proposal,
                 energy_error=error,
                 accepted=1,
                 probability=probability,
             )
-        uniform = float(torch.rand(1, generator=generator))
-        if accept_ratio(ratio, uniform):
-            return Transition(
-                position=proposal,
-                energy_error=error,
-                accepted=1,
-                probability=probability,
-            )
+        self._at = (objective, position, here, gradient)
         return Transition(
             position=position, energy_error=error, accepted=0, probability=probability
         )

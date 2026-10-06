@@ -202,6 +202,9 @@ def random_walk(
             EVALUATIONS_PER_PROPOSAL,
             rng,
             n_samples,
+            # The start's energy is not charged, as before #1222; a ticket
+            # follows to count it as the Hamiltonian chains count theirs.
+            per_start=0,
             unit=Cost.EVALUATIONS,
             step_size=step_size,
             start=start_point(objective, start),
@@ -216,6 +219,7 @@ def random_walk(
         objective,
         rng,
         n_samples,
+        per_start=0,
         unit=Cost.EVALUATIONS,
         step_size=step_size,
         start=start,

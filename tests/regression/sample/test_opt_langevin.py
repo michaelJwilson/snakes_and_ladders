@@ -16,6 +16,7 @@ import torch
 from sal.sample.hmc import (
     Adaptation,
     effective_sample_size,
+    leapfrog,
     sample,
 )
 from sal.sample.langevin import (
@@ -94,7 +95,9 @@ def test_one_langevin_step_is_the_hamiltonian_transition() -> None:
         # have to land inside a uniform's last bits to move one.
         assert langevin_route.acceptance_rate == hamiltonian_route.acceptance_rate, step
         assert langevin_route.spent == hamiltonian_route.spent, step
-        assert langevin_route.spent == 400 * GRADIENTS_PER_PROPOSAL
+        # One gradient at the start, then the proposal's alone (issue #1222).
+        assert langevin_route.spent == 1 + 400 * GRADIENTS_PER_PROPOSAL
+        assert leapfrog.force_evaluations(1, carried=True) == GRADIENTS_PER_PROPOSAL
 
 
 @pytest.mark.oracle
@@ -235,7 +238,9 @@ def test_the_warm_up_adapts_the_step_to_the_langevin_acceptance() -> None:
         assert bool((chain.adapted.mass_diagonal > 0.0).all())
         # The warm-up's gradients are in the bill, so a cost per effective
         # sample is the whole cost and not the recorded part of it.
-        assert chain.spent == (2000 + 200 + 300) * GRADIENTS_PER_PROPOSAL
+        # One gradient at each of three starts: the warm-up's two windows and
+        # the chain's (issue #1222).
+        assert chain.spent == 3 + (2000 + 200 + 300) * GRADIENTS_PER_PROPOSAL
         accepted.append(chain.acceptance_rate)
 
     assert abs(float(np.mean(accepted)) - MALA_TARGET_ACCEPTANCE) < 0.1, accepted

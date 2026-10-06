@@ -301,9 +301,11 @@ def test_a_seeding_charges_what_its_rule_spends() -> None:
     assert charged["kmeans++"] == 1.0
     assert charged["emission++"] == 1.0
     assert 0.0 < charged["burn-in"] < 1.0
-    for name in ("hmc", "anneal", "tempering"):
-        assert charged[name] == PASSES_PER_GRADIENT * 72, (
-            f"{name} charged {charged[name]} passes for 72 gradients"
+    # 64 trajectory gradients each, the first kick's carried, and one at each
+    # start: one chain, one annealing run, four replicas (issue #1222).
+    for name, gradients in (("hmc", 65), ("anneal", 65), ("tempering", 68)):
+        assert charged[name] == PASSES_PER_GRADIENT * gradients, (
+            f"{name} charged {charged[name]} passes for {gradients} gradients"
         )
 
 
