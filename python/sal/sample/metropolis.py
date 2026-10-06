@@ -64,11 +64,6 @@ RWM_TARGET_ACCEPTANCE = 0.234
 #: Energy evaluations per proposal: the proposal's; the current point's is carried.
 EVALUATIONS_PER_PROPOSAL = 1
 
-#: Energy evaluations per start: the current point's, once, which every
-#: proposal after it carries (issue #1218). A warm-up's two windows each start
-#: one more on the Python route, as :func:`~sal.sample.chain.warm_up` charges.
-EVALUATIONS_PER_START = 1
-
 
 def _decide(
     current: float, proposed: float, temperature: float, uniform: float
@@ -208,7 +203,7 @@ def random_walk(
             rng,
             n_samples,
             # The start's energy, evaluated once and carried (issue #1218).
-            per_start=EVALUATIONS_PER_START,
+            per_start=1,
             unit=Cost.EVALUATIONS,
             step_size=step_size,
             start=start_point(objective, start),
@@ -223,7 +218,8 @@ def random_walk(
         objective,
         rng,
         n_samples,
-        per_start=EVALUATIONS_PER_START,
+        # The start's energy, once per chain and per warm-up window (#1218).
+        per_start=1,
         unit=Cost.EVALUATIONS,
         step_size=step_size,
         start=start,
