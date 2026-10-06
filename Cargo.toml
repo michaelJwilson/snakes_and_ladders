@@ -53,6 +53,15 @@ criterion = "0.5"
 lto = "fat"
 codegen-units = 1
 
+# Iteration only (issue #1224): `infra/build_extension.sh --iter`. One edit in
+# `src/` rebuilds in 4.7-7.6 s against the release profile's 18.5-19.1 s; the
+# release profile's fat LTO stays what the wheel ships and a benchmark quotes.
+[profile.iter]
+inherits = "release"
+lto = false
+codegen-units = 16
+incremental = true
+
 [[bench]]
 name = "oxisal_bench"
 harness = false
