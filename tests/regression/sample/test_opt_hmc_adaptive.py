@@ -21,7 +21,7 @@ import torch
 from sal.likelihood.objective import BranchLengthObjective
 from sal.opt.fit import fit, standard_errors_at
 from sal.opt.objective import Objective
-from sal.sample.chain import _DualAveraging, _Scaled
+from sal.sample.chain import DualAveraging, Scaled
 from sal.sample.hmc import (
     DUAL_AVERAGING_GAMMA,
     DUAL_AVERAGING_KAPPA,
@@ -75,7 +75,7 @@ def test_the_dual_averaging_iteration_is_hoffman_and_gelmans() -> None:
     step0, target = 0.1, 0.65
     mu = math.log(10.0 * step0)
     h_bar, log_step_bar = 0.0, 0.0
-    averaging = _DualAveraging(step0, target)
+    averaging = DualAveraging(step0, target)
     for m, alpha in enumerate((0.2, 0.9, 1.0, 0.5), start=1):
         h_bar = (1.0 - 1.0 / (m + DUAL_AVERAGING_T0)) * h_bar + (target - alpha) / (
             m + DUAL_AVERAGING_T0
@@ -97,9 +97,9 @@ def test_dual_averaging_moves_the_step_against_the_acceptance() -> None:
     # flip while every magnitude stayed plausible: proposals accepted more
     # often than the target grow the step, less often shrink it, and a
     # statistic exactly at the target leaves the iterate at `mu`.
-    grows = _DualAveraging(0.1, 0.65)
-    shrinks = _DualAveraging(0.1, 0.65)
-    holds = _DualAveraging(0.1, 0.65)
+    grows = DualAveraging(0.1, 0.65)
+    shrinks = DualAveraging(0.1, 0.65)
+    holds = DualAveraging(0.1, 0.65)
     for _ in range(20):
         up = grows.update(1.0)
         down = shrinks.update(0.0)
@@ -131,7 +131,7 @@ def _mass_matrix_leapfrog(
 
 @pytest.mark.analytic
 def test_a_diagonal_mass_matrix_is_a_change_of_coordinates() -> None:
-    # `_Scaled` is the whole implementation of the mass matrix: the unit-mass
+    # `Scaled` is the whole implementation of the mass matrix: the unit-mass
     # leapfrog on the scaled objective, mapped back, equals the mass-matrix
     # leapfrog on the original to round-off, and the Hamiltonian is the same
     # number in both coordinate systems.
@@ -142,7 +142,7 @@ def test_a_diagonal_mass_matrix_is_a_change_of_coordinates() -> None:
 
     reference = _mass_matrix_leapfrog(GAUSSIAN, theta, momentum, inverse_mass, 0.1, 25)
     phi, q = leapfrog(
-        _Scaled(GAUSSIAN, scale), theta / scale, momentum * scale, 0.1, 25
+        Scaled(GAUSSIAN, scale), theta / scale, momentum * scale, 0.1, 25
     )
 
     assert float((phi * scale - reference[0]).abs().max()) < 1e-12
@@ -155,7 +155,7 @@ def test_a_diagonal_mass_matrix_is_a_change_of_coordinates() -> None:
 @pytest.mark.smoke
 def test_the_scaled_objective_inverts_its_own_map() -> None:
     scale = torch.tensor([2.5, 0.4], dtype=torch.float64)
-    scaled = _Scaled(GAUSSIAN, scale)
+    scaled = Scaled(GAUSSIAN, scale)
     point = torch.tensor([0.3, -1.1], dtype=torch.float64)
 
     assert torch.equal(scaled.theta_from(scaled.constrain(point)), point)

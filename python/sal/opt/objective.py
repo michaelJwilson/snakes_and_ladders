@@ -327,7 +327,7 @@ class Restricted(Objective):
     ``value_and_gradient``, ``gradient`` and ``energy`` are taken through the
     inner objective's own routes (:func:`value_and_gradient`,
     :func:`energy_of`), so a compiled gradient stays compiled inside the
-    restriction, as :class:`~sal.sample.chain._Scaled` keeps it. A
+    restriction, as :class:`~sal.sample.chain.Scaled` keeps it. A
     declaration a consumer compiles a full-dimensional energy from ---
     ``jax_energy``, ``gaussian_hmm_declaration`` --- is not forwarded: it
     would describe ``objective``, not this restriction of it.
