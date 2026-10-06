@@ -104,7 +104,8 @@ class EmissionHmmObjective(Objective):
     backend : Backend
         Where :meth:`value_and_gradient` runs.
         :data:`~sal.backend.Backend.RUST`, the default, is the compiled E
-        step and one backward pass; :data:`~sal.backend.Backend.JAX` the
+        step and one backward pass, or the kernel
+        :meth:`supported_gradient` names where it holds (issue #1248); :data:`~sal.backend.Backend.JAX` the
         twin of :mod:`sal.opt.hmm.jax`, the retired per-family objectives'
         default, for a family it covers on segments of any length
         (:func:`sal.opt.hmm.jax.twinned`), count pairs included (issue
@@ -145,6 +146,7 @@ class EmissionHmmObjective(Objective):
         self._backend = backend
         self._jax: Callable[[np.ndarray], tuple[float, np.ndarray]] | None = None
         self._kernel: oxisal.SupportedEnergy | None = None
+        self._kernel_read = False
         if start.n_states < 2:
             msg = f"an HMM has at least two states, got {start.n_states}"
             raise ValueError(msg)
@@ -258,19 +260,27 @@ class EmissionHmmObjective(Objective):
         - a log scale: ``sum_t gamma_t(s) ((x_t - mu_s)^2 / s_s^2 - 1)``;
 
         negated for the negative log-likelihood. What ``hmc.gradient_at``
-        reads, and the arithmetic a compiled chain runs; 5.6x faster than
-        :meth:`value_and_gradient` at 10^6 positions. Autograd through
+        reads, and the arithmetic a compiled chain runs; the same call as
+        :meth:`value_and_gradient` there, 5.6x faster than its compiled E
+        step and backward pass at 10^6 positions. Autograd through
         :meth:`__call__` is the oracle.
         """
-        supported = self.supported_gradient()
-        if supported is None or self._backend is Backend.TORCH:
+        kernel = self._supported_kernel()
+        if kernel is None:
             return self.value_and_gradient(theta)[1]
-        if self._kernel is None:
-            self._kernel = oxisal.SupportedEnergy(*supported, self.n_parameters)
-        _, gradient = self._kernel.value_and_gradient(
+        _, gradient = kernel.value_and_gradient(
             np.ascontiguousarray(theta.detach().numpy(), dtype=np.float64)
         )
         return torch.from_numpy(gradient)
+
+    def _supported_kernel(self) -> oxisal.SupportedEnergy | None:
+        """``oxisal.SupportedEnergy`` on :meth:`supported_gradient`, built on first use; ``None`` where it does not hold or ``backend`` is ``TORCH``."""
+        if not self._kernel_read:
+            self._kernel_read = True
+            supported = self.supported_gradient()
+            if supported is not None and self._backend is not Backend.TORCH:
+                self._kernel = oxisal.SupportedEnergy(*supported, self.n_parameters)
+        return self._kernel
 
     def jax_energy(self) -> tuple[Callable[[Any, Any], Any], dict[str, Any]] | None:
         """The negative log-likelihood as a traceable JAX ``(theta, data)`` function and its data, or ``None`` (issues #1008, #1189).
@@ -424,6 +434,11 @@ class EmissionHmmObjective(Objective):
         none through the recursion. The value is the summed log evidence,
         negated. Autograd through :meth:`__call__` is the oracle this is
         pinned to. ``backend`` routes it (the class's Parameters).
+
+        Where :meth:`supported_gradient` holds and ``backend`` is
+        ``RUST``, the value and gradient are :meth:`gradient`'s kernel's,
+        one call: 0.58 ms against 11.9 ms by the route above, on a four-state
+        Gaussian HMM of 200 sequences of 60 (issue #1248).
         """
         if self._backend is Backend.TORCH:
             return autograd_value_and_gradient(self, theta)
@@ -437,6 +452,12 @@ class EmissionHmmObjective(Objective):
                 torch.tensor(value_, dtype=theta.dtype),
                 torch.as_tensor(np.array(gradient_), dtype=theta.dtype),
             )
+        kernel = self._supported_kernel()
+        if kernel is not None:
+            value, gradient = kernel.value_and_gradient(
+                np.ascontiguousarray(theta.detach().numpy(), dtype=np.float64)
+            )
+            return torch.tensor(value, dtype=torch.float64), torch.from_numpy(gradient)
         point = theta.detach().clone().requires_grad_(True)
         log_initial, log_transition = self._chain(point)
         log_density = self._log_density(point)

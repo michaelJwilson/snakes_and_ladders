@@ -69,7 +69,8 @@ on four states and reach 7 or 8 of 10 on five, polishing for 174 to 179
 iterations against its 299.
 
 **A unit of every budget here is one pass over the data.** A gradient is
-one compiled E step and one backward pass
+one compiled E step and one backward pass, or one streamed pass where a
+kernel is supported
 (:meth:`~sal.opt.hmm.EmissionHmmObjective.value_and_gradient`), a Baum-Welch
 iteration one E step and one M step, and a scored start one forward
 recursion; :data:`CHARGES` states each start's passes before the polish, so a

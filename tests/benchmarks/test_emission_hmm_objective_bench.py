@@ -7,7 +7,9 @@ pins the two at 1e-10; this measures the ratio. Four-state sticky
 negative-binomial chains, the fixture of `test_hmm_ragged_estep_bench.py`.
 The ratio is read at the stress size, 200 chains of 100-3,000 positions,
 marked ``release``; the gate size times the same two routes per PR and
-decides nothing (root ``CLAUDE.md``, Measurement).
+decides nothing (root ``CLAUDE.md``, Measurement). A four-state Gaussian HMM
+of 200 sequences of 60, the fixture of issue #1248, times the supported
+kernel's route against autograd's.
 """
 
 from __future__ import annotations
@@ -18,8 +20,8 @@ from collections.abc import Callable
 import numpy as np
 import pytest
 import torch
-from sal.emissions import NegativeBinomialEmission
-from sal.opt.hmm import EmissionHmmObjective
+from sal.emissions import GaussianEmission, NegativeBinomialEmission
+from sal.opt.hmm import EmissionHmmObjective, family_start
 from sal.opt.objective import autograd_value_and_gradient
 from sal.ragged import Ragged
 
@@ -77,5 +79,33 @@ def test_value_and_gradient_at_stress_size(benchmark: object, route: str) -> Non
     objective, theta = _objective(200, 100, 3000)
     value, _ = benchmark.pedantic(  # type: ignore[attr-defined]
         lambda: ROUTES[route](objective, theta), rounds=5, iterations=1
+    )
+    assert math.isfinite(float(value))
+
+
+def _gaussian() -> tuple[EmissionHmmObjective, torch.Tensor]:
+    """Four sticky Gaussian states, 200 sequences of 60, seeded, and a point off the start."""
+    rng = np.random.default_rng(1248)
+    states = np.zeros((200, 60), dtype=np.int64)
+    for t in range(1, 60):
+        stay = rng.random(200) < 0.9
+        states[:, t] = np.where(stay, states[:, t - 1], rng.integers(0, 4, 200))
+    observations = np.array([-3.0, -1.0, 1.0, 3.0])[states] + 0.5 * rng.normal(
+        size=states.shape
+    )
+    objective = EmissionHmmObjective(
+        observations, family_start(GaussianEmission, observations, 4)
+    )
+    theta = objective.initial()
+    return objective, theta + 0.01 * torch.arange(theta.numel(), dtype=torch.float64)
+
+
+@pytest.mark.benchmark
+@pytest.mark.parametrize("route", list(ROUTES))
+def test_supported_gaussian_value_and_gradient(benchmark: object, route: str) -> None:
+    # Issue #1248: "compiled" is the supported kernel's one call here.
+    objective, theta = _gaussian()
+    value, _ = benchmark.pedantic(  # type: ignore[attr-defined]
+        lambda: ROUTES[route](objective, theta), rounds=3, iterations=5
     )
     assert math.isfinite(float(value))
