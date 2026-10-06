@@ -8,6 +8,7 @@ kernel.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -929,7 +930,6 @@ def parallel_tempering(
     steps = [
         _RungMoves(
             graph,
-            rows,
             [
                 (
                     sweep_for(
@@ -993,6 +993,8 @@ def parallel_tempering(
         observe=observe,
         # Read from this module, where a test replaces it.
         ratio=swap_log_ratio,
+        # Every rung's labelling in one block, as one call to `energies`.
+        score=lambda rungs: energies(graph, rows, np.stack(rungs)).tolist(),
     )
     tracked.record_cost(max(n_sweeps * thin - 1, 0), states.nbytes)
     return TemperedChains(
@@ -1015,11 +1017,13 @@ class _RungMoves:
 
     Each entry is a :func:`sweep_for` closure, its move, and its fixed
     charge or ``-1`` for a single cluster, charged by its size as
-    :func:`anneal_potts` charges it (issue #1156).
+    :func:`anneal_potts` charges it (issue #1156). The step scores nothing
+    and returns ``nan``: :func:`parallel_tempering` scores every rung's
+    labelling in one block through :func:`~sal.sample.loop.temper`'s
+    ``score``.
     """
 
     graph: PottsGraph
-    rows: np.ndarray
     sweeps: list[
         tuple[Callable[[np.ndarray, np.random.Generator, float], int], PottsMove, int]
     ]
@@ -1040,8 +1044,7 @@ class _RungMoves:
         for sweep, each, per_step in self.sweeps:
             size = sweep(state, rng, beta)
             visits += step_visits(each, self.graph, size) if per_step < 0 else per_step
-        energy = float(energies(self.graph, self.rows, state[None])[0])
-        return Moved(state, energy, None, visits)
+        return Moved(state, math.nan, None, visits)
 
     def keep(self, state: np.ndarray) -> np.ndarray:
         """A copy: every move changes the state in place."""

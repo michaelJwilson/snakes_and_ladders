@@ -280,6 +280,7 @@ def temper[S, C, R](
     observe: Callable[[int, Exchanging[S, C]], None] | None = None,
     stop: Callable[[], bool] | None = None,
     ratio: Callable[[float, float, float, float], float] = swap_log_ratio,
+    score: Callable[[Sequence[S]], list[float]] | None = None,
 ) -> Exchanged[S]:
     """Replica exchange: one step per rung per round, then an exchange proposal on every adjacent pair.
 
@@ -296,6 +297,12 @@ def temper[S, C, R](
     uniform every time are the same loop on their own streams (issue #861).
     ``ratio`` is :func:`swap_log_ratio` unless a caller reads it from its own
     module, where a test replaces it.
+
+    ``score``, where given, scores every rung's state in one call after the
+    round's moves and replaces the energies the steps returned, so a step run
+    under it need not score its own: one block of Potts labellings costs 57 ms
+    over 100 rounds of six rungs at ``spatio_tiling/release`` where a call per
+    rung costs 92 ms (issue #1218).
 
     Rounds ``burn_in`` onward are recorded at every ``thin``-th, starting with
     the first. ``record`` is called with the states at each recorded round,
@@ -345,6 +352,8 @@ def temper[S, C, R](
             )
             states[replica], energies[replica], carried[replica] = moved[:3]
             run.spent += moved.spent
+        if score is not None:
+            energies[:] = score(states)
         for pair in range(n_replicas - 1):
             log_ratio = ratio(
                 betas[pair], betas[pair + 1], energies[pair], energies[pair + 1]
