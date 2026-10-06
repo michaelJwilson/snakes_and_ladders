@@ -67,6 +67,20 @@ criterion reads what the grid read, the polished gap, so :data:`STEP` and
 :data:`ANNEALING_STEP` stay; the tuned entries are in :data:`STARTS` so the
 release experiment holds these counts.
 
+**A step ranked by the polished gap replaces the grid on two of three
+samplers (issue #1251).** :data:`POLISHED_TUNING` ranks each candidate by the
+objective its best point reaches after :data:`PILOT_POLISH` iterations of
+Baum-Welch, the outcome the grid read. At 300 passes on four states, the
+pilot and its polishes charged, the chain, annealing and tempering starts
+reach the truth's basin in 10, 9 and 5 of 10 seeds. The pilot is 193 of the
+chain's 215 passes before the polish and of annealing's 227, and 196 of the
+ladder's 233; the ladder splits it over four rungs, 2 proposals and 4
+iterations a candidate, too short to see 3e-2 leave the basin, and its cold
+rung chose 3e-2 in 10 of 10 seeds. A pilot of :data:`PILOT_PROPOSALS` is too
+short for the same reason, so the polished pilot walks
+:data:`POLISHED_PILOT_PROPOSALS`. The bar was 9 of 10 on all three, so
+:data:`STEP` and :data:`ANNEALING_STEP` stay.
+
 **The step is not scaled with temperature.** The fixed step at which a
 chain's acceptance falls to 0.65 is 0.063, 0.063, 0.057 and 0.046 at
 ``T`` = 1, 4, 16 and 64 on four states, 0.074 to 0.041 on five: flat to
@@ -179,6 +193,53 @@ TEMPERING_TUNING = StepTuning(
     TUNING_GRID,
 )
 
+#: Proposals the polished-gap pilot gives each candidate step (issue #1251),
+#: and Baum-Welch iterations it polishes each candidate's best point for, one
+#: pass each, charged at the cap; a ladder splits both over its rungs. A
+#: pilot of :data:`PILOT_PROPOSALS` ends in the basin at 3e-2 too, so it
+#: cannot see the step leave: at 8 proposals and 16 iterations the chain's
+#: pilot chose a step whose best point polishes into the truth's basin in
+#: 10 of 10 seeds.
+POLISHED_PILOT_PROPOSALS = 8
+PILOT_POLISH = 16
+
+#: The polished-gap pilots: :data:`POLISHED_PILOT_PROPOSALS` per candidate,
+#: ranked by the objective each candidate's best point reaches after
+#: :data:`PILOT_POLISH` iterations of Baum-Welch, the criterion #1195's grid
+#: read, run per start. The ladder's splits both over :data:`TEMPERATURES`.
+POLISHED_TUNING = StepTuning(
+    Budget(
+        Cost.GRADIENTS,
+        1 + len(TUNING_GRID) * POLISHED_PILOT_PROPOSALS * TRAJECTORY,
+    ),
+    Criterion.POLISHED_GAP,
+    TUNING_GRID,
+    polish_by_baum_welch,
+    Budget(Cost.ITERATIONS, PILOT_POLISH),
+)
+POLISHED_TEMPERING_TUNING = StepTuning(
+    Budget(
+        Cost.GRADIENTS,
+        len(TEMPERATURES)
+        * (
+            1
+            + len(TUNING_GRID)
+            * (POLISHED_PILOT_PROPOSALS // len(TEMPERATURES))
+            * TRAJECTORY
+        ),
+    ),
+    Criterion.POLISHED_GAP,
+    TUNING_GRID,
+    polish_by_baum_welch,
+    Budget(Cost.ITERATIONS, PILOT_POLISH),
+)
+
+#: The polished-gap runs after their pilots: the chain continues from its
+#: chosen candidate for :data:`POLISHED_BURN_IN` proposals; the annealing
+#: run starts over, at its pilot's length, so the pilot saw where it goes.
+POLISHED_BURN_IN = 4
+POLISHED_ANNEAL_STEPS = POLISHED_PILOT_PROPOSALS
+
 #: The tuned runs after their pilots: half the fixed-step runs' proposals,
 #: so the chain's and the annealing run's charges are within one pass of
 #: their fixed-step twins'.
@@ -243,16 +304,26 @@ class SampledStart:
             gradients=float(tempered.spent),
             acceptance=float(tempered.acceptance_rate[0]),
         )
-        _record(None if tempered.tuned is None else tempered.tuned[0])
+        _record(tempered.tuned)
         return [tempered.best]
 
 
-def _record(tuned: TunedStep[torch.Tensor] | None) -> None:
-    """A tuned sampler's chosen step and its pilot's gradients, at step 0; nothing for a given step."""
-    if tuned is not None:
-        current().record(
-            0, step_size=tuned.step_size, pilot_gradients=float(tuned.spent)
-        )
+def _record(
+    tuned: TunedStep[torch.Tensor] | tuple[TunedStep[torch.Tensor], ...] | None,
+) -> None:
+    """A tuned sampler's step and its pilots' gradients and polish iterations, at step 0; nothing for a given step.
+
+    A ladder's step is its cold rung's; its pilots' costs are every rung's.
+    """
+    if tuned is None:
+        return
+    pilots = tuned if isinstance(tuned, tuple) else (tuned,)
+    current().record(
+        0,
+        step_size=pilots[0].step_size,
+        pilot_gradients=float(sum(pilot.spent for pilot in pilots)),
+        pilot_iterations=float(sum(pilot.polish_iterations for pilot in pilots)),
+    )
 
 
 def chain_start(rng: np.random.Generator) -> SampledStart:
@@ -418,6 +489,63 @@ def tuned_tempered_start(rng: np.random.Generator) -> SampledStart:
     )
 
 
+def polished_chain_start(rng: np.random.Generator) -> SampledStart:
+    """``FromChain`` at ``step_size="auto"``: :data:`POLISHED_TUNING`'s pilot, then :data:`POLISHED_BURN_IN` proposals.
+
+    Returns
+    -------
+    SampledStart
+    """
+    return SampledStart(
+        FromChain(
+            1,
+            AUTO,
+            torch_stream(rng),
+            n_steps=TRAJECTORY,
+            burn_in=POLISHED_BURN_IN,
+            adaptation=None,
+            tuning=POLISHED_TUNING,
+        )
+    )
+
+
+def polished_annealed_start(rng: np.random.Generator) -> SampledStart:
+    """``FromAnnealing`` at ``step_size="auto"``: :data:`POLISHED_TUNING`'s pilot, then :data:`POLISHED_ANNEAL_STEPS` proposals.
+
+    Returns
+    -------
+    SampledStart
+    """
+    return SampledStart(
+        FromAnnealing(
+            ExponentialTempSchedule(TEMPERATURES[-1], 1.0, POLISHED_ANNEAL_STEPS),
+            AUTO,
+            torch_stream(rng),
+            n_steps=TRAJECTORY,
+            tuning=POLISHED_TUNING,
+        )
+    )
+
+
+def polished_tempered_start(rng: np.random.Generator) -> SampledStart:
+    """:func:`tuned_tempered_start` with :data:`POLISHED_TEMPERING_TUNING`'s pilots.
+
+    Returns
+    -------
+    SampledStart
+    """
+    return SampledStart(
+        FromTempering(
+            TEMPERATURES,
+            TUNED_TEMPERING_ROUNDS,
+            AUTO,
+            torch_stream(rng),
+            n_steps=TRAJECTORY,
+            tuning=POLISHED_TEMPERING_TUNING,
+        )
+    )
+
+
 def restart_start(rng: np.random.Generator) -> RandomRestart:
     """``RandomRestart``: :data:`RESTARTS` points at :data:`RESTART_SCALE` around the objective's start, which is not one of them.
 
@@ -451,6 +579,9 @@ STARTS: dict[str, Callable[[np.random.Generator], Initializer]] = {
     "chain_tuned": tuned_chain_start,
     "annealed_tuned": tuned_annealed_start,
     "tempered_tuned": tuned_tempered_start,
+    "chain_polished": polished_chain_start,
+    "annealed_polished": polished_annealed_start,
+    "tempered_polished": polished_tempered_start,
 }
 
 #: Passes over the data each start spends before its polish: a sampler's
@@ -476,6 +607,20 @@ CHARGES: dict[str, int] = {
     "chain_tuned": TUNING.budget.size + 1 + (TUNED_BURN_IN + 1) * TRAJECTORY + 1,
     "annealed_tuned": TUNING.budget.size + 1 + TUNED_ANNEAL_STEPS * TRAJECTORY + 1,
     "tempered_tuned": TEMPERING_TUNING.budget.size
+    + len(TEMPERATURES) * (1 + TUNED_TEMPERING_ROUNDS * TRAJECTORY)
+    + 1,
+    "chain_polished": POLISHED_TUNING.budget.size
+    + len(TUNING_GRID) * PILOT_POLISH
+    + 1
+    + (POLISHED_BURN_IN + 1) * TRAJECTORY
+    + 1,
+    "annealed_polished": POLISHED_TUNING.budget.size
+    + len(TUNING_GRID) * PILOT_POLISH
+    + 1
+    + POLISHED_ANNEAL_STEPS * TRAJECTORY
+    + 1,
+    "tempered_polished": POLISHED_TEMPERING_TUNING.budget.size
+    + len(TUNING_GRID) * PILOT_POLISH
     + len(TEMPERATURES) * (1 + TUNED_TEMPERING_ROUNDS * TRAJECTORY)
     + 1,
 }
@@ -568,7 +713,13 @@ __all__ = [
     "ANNEAL_STEPS",
     "CHAIN_BURN_IN",
     "CHARGES",
+    "PILOT_POLISH",
     "PILOT_PROPOSALS",
+    "POLISHED_ANNEAL_STEPS",
+    "POLISHED_BURN_IN",
+    "POLISHED_PILOT_PROPOSALS",
+    "POLISHED_TEMPERING_TUNING",
+    "POLISHED_TUNING",
     "RESTARTS",
     "RESTART_SCALE",
     "RUNG_PILOT_PROPOSALS",
@@ -591,6 +742,9 @@ __all__ = [
     "at_equal_evaluations",
     "chain_start",
     "gaussian_quantile_start",
+    "polished_annealed_start",
+    "polished_chain_start",
+    "polished_tempered_start",
     "quantile_start",
     "restart_start",
     "tempered_start",

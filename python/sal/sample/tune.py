@@ -22,20 +22,26 @@ behind the loop is tuned by the same function. The walk records nothing
 into the enclosing ``track`` run: its series would interleave with the run
 it tunes.
 
-**The two criteria answer two questions.** A stationary chain is judged by
+**The criteria answer three questions.** A stationary chain is judged by
 the expected squared jump distance per unit spent (ESJD per gradient for a
 Hamiltonian step): a rejection jumps zero, so the criterion penalizes a step
 too large through its acceptance and a step too small through its distance.
 A start or an annealing run is judged by the lowest energy it reached, ties
-broken by the ESJD, then by the smaller step.
+broken by the ESJD, then by the smaller step. A start handed to a polisher
+is judged by what the polish reaches (issue #1251): each candidate's best
+point is polished at a short budget and ranked by the polished objective,
+ties broken as the lowest energy's are. That is #1195's grid, run per start:
+a step that carries a start out of its basin descends furthest in a short
+pilot and polishes into the other basin, so the lowest energy ranks it first
+and the polished gap ranks it last.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from sal.cost import Cost
 from sal.opt.budget import Budget
@@ -44,6 +50,9 @@ from sal.sample import loop
 from sal.sample.loop import Moved, Step
 from sal.sample.schedule import LadderTempSchedule, TempSchedule
 from sal.track import NULL_RUN, track
+
+if TYPE_CHECKING:
+    from sal.opt.starts import Polished, Polisher
 
 #: The candidate steps unless a caller names its own: nine from 1e-4 to 1 at
 #: half a decade, the range #1195's HMM grid (1e-3 to 3e-2) and a unit
@@ -68,6 +77,10 @@ class Criterion(StrEnum):
     LOWEST_ENERGY = "lowest energy reached"
     """A start's or an annealing run's: the lowest energy the pilot visited,
     its start included."""
+    POLISHED_GAP = "objective after a short polish"
+    """A start's that a polisher takes over (issue #1251): the value the
+    polish reaches from the pilot's best point, which is the gap to any
+    reference up to a constant."""
 
 
 @dataclass(frozen=True)
@@ -87,18 +100,49 @@ class StepTuning:
         What ranks the candidates.
     grid : tuple[float, ...]
         The candidate steps, :data:`GRID` unless named.
+    polish : Polisher | None
+        What :attr:`Criterion.POLISHED_GAP` polishes each candidate's best
+        point with, required with it and refused without it.
+    polish_budget : Budget | None
+        Each candidate's polish, in :attr:`~sal.cost.Cost.ITERATIONS`, as
+        ``polish`` counts: a cap, so a pilot of ``g`` candidates polishes for
+        at most ``g * polish_budget.size`` iterations beside ``budget``. A
+        ladder splits it over its rungs as it splits ``budget``.
+
+    Raises
+    ------
+    ValueError
+        If ``polish`` and ``polish_budget`` are not both given with
+        :attr:`Criterion.POLISHED_GAP` and both absent otherwise.
     """
 
     budget: Budget
     criterion: Criterion
     grid: tuple[float, ...] = field(default=GRID)
+    polish: Polisher | None = None
+    polish_budget: Budget | None = None
+
+    def __post_init__(self) -> None:
+        polishes = self.criterion is Criterion.POLISHED_GAP
+        given = (self.polish is not None, self.polish_budget is not None)
+        if given != (polishes, polishes):
+            msg = (
+                f"a polish and its budget come with {Criterion.POLISHED_GAP.name} "
+                f"and only with it; the criterion is {self.criterion.name}"
+            )
+            raise ValueError(msg)
 
     def split(self, parts: int) -> StepTuning:
-        """The same tuning at ``budget.size // parts``, one pilot of ``parts``."""
+        """The same tuning at ``budget.size // parts`` and ``polish_budget.size // parts``, one pilot of ``parts``."""
+        polish_budget = self.polish_budget
+        if polish_budget is not None:
+            polish_budget = Budget(polish_budget.unit, polish_budget.size // parts)
         return StepTuning(
             Budget(self.budget.unit, self.budget.size // parts),
             self.criterion,
             self.grid,
+            self.polish,
+            polish_budget,
         )
 
 
@@ -156,7 +200,9 @@ class Candidate[S]:
     """One candidate step's pilot: what it measured, where it ended, what it cost.
 
     ``moved`` is the fraction of proposals that changed the state, which for
-    a continuous Metropolis step is its acceptance rate.
+    a continuous Metropolis step is its acceptance rate. ``polished`` is the
+    value a polish reached from ``best`` and ``polish_iterations`` what it
+    spent, under :attr:`Criterion.POLISHED_GAP`; ``None`` and 0 otherwise.
     """
 
     step_size: float
@@ -166,6 +212,8 @@ class Candidate[S]:
     spent: int
     best: S
     final: S
+    polished: float | None = None
+    polish_iterations: int = 0
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -173,8 +221,10 @@ class TunedStep[S]:
     """The chosen step, the criterion that chose it, and every candidate's evidence.
 
     ``proposals`` is each pilot's length; ``spent`` sums the candidates' in
-    ``unit``. The termination is the grid's length, never converged: the
-    pilot runs every candidate.
+    ``unit``, and ``polish_iterations`` their polishes' in
+    :attr:`~sal.cost.Cost.ITERATIONS`, 0 unless the criterion polishes. The
+    termination is the grid's length, never converged: the pilot runs every
+    candidate.
     """
 
     step_size: float
@@ -184,6 +234,7 @@ class TunedStep[S]:
     spent: int
     unit: Cost
     termination: Termination
+    polish_iterations: int = 0
 
     @property
     def chosen(self) -> Candidate[S]:
@@ -192,10 +243,15 @@ class TunedStep[S]:
 
     def table(self) -> str:
         """The evidence, one row per candidate, the chosen one marked."""
-        rows = [f"{'step':>10}{'esjd':>12}{'lowest':>14}{'moved':>7}{'spent':>7}"]
+        rows = [
+            f"{'step':>10}{'esjd':>12}{'lowest':>14}{'polished':>14}"
+            f"{'moved':>7}{'spent':>7}"
+        ]
         rows.extend(
             f"{c.step_size:>10.2e}{c.esjd:>12.3e}{c.lowest_energy:>14.4f}"
-            f"{c.moved:>7.2f}{c.spent:>7}" + (" *" if c is self.chosen else "")
+            + (f"{'-':>14}" if c.polished is None else f"{c.polished:>14.4f}")
+            + f"{c.moved:>7.2f}{c.spent:>7}"
+            + (" *" if c is self.chosen else "")
             for c in self.candidates
         )
         return "\n".join(rows)
@@ -208,6 +264,7 @@ def tune_step[S, C, R](
     criterion: Criterion,
     rng: R,
     grid: Sequence[float] = GRID,
+    polish: Callable[[S], Polished] | None = None,
 ) -> TunedStep[S]:
     """The step of ``grid`` that ``criterion`` ranks first, from one pilot per step on ``rng``.
 
@@ -215,6 +272,8 @@ def tune_step[S, C, R](
     per_proposal`` proposals from ``sampler.start``, in grid order, every one
     drawing from ``rng`` in sequence so one seed reproduces the pilot. The
     start's charge is paid once, since it carries what every candidate reads.
+    Under :attr:`Criterion.POLISHED_GAP`, ``polish`` takes each candidate's
+    best point after its walk, in grid order, and draws nothing from ``rng``.
 
     Returns
     -------
@@ -227,12 +286,19 @@ def tune_step[S, C, R](
         If the budget is in another unit than the sampler's, the grid is
         empty or holds a step that is not positive, or the budget leaves a
         candidate fewer than two proposals: one proposal's jump is a single
-        accept-or-reject draw, not a rate.
+        accept-or-reject draw, not a rate; or if ``polish`` is not given with
+        :attr:`Criterion.POLISHED_GAP` and only with it.
     """
     if budget.unit is not sampler.unit:
         msg = (
             f"the pilot spends {sampler.unit.value!r}, and the budget is in "
             f"{budget.unit.value!r}"
+        )
+        raise ValueError(msg)
+    if (polish is not None) != (criterion is Criterion.POLISHED_GAP):
+        msg = (
+            f"a polish comes with {Criterion.POLISHED_GAP.name} and only with "
+            f"it; the criterion is {criterion.name}"
         )
         raise ValueError(msg)
     steps = tuple(float(step) for step in grid)
@@ -251,7 +317,15 @@ def tune_step[S, C, R](
     candidates = []
     with track(NULL_RUN):
         for size in steps:
-            candidates.append(_pilot(sampler, size, proposals, rng))
+            candidate = _pilot(sampler, size, proposals, rng)
+            if polish is not None:
+                polished = polish(candidate.best)
+                candidate = replace(
+                    candidate,
+                    polished=polished.value,
+                    polish_iterations=polished.iterations,
+                )
+            candidates.append(candidate)
     ranked = sorted(
         enumerate(candidates),
         key=lambda pair: _rank(criterion, pair[1], pair[0]),
@@ -265,15 +339,19 @@ def tune_step[S, C, R](
         spent=sampler.start.spent + sum(candidate.spent for candidate in candidates),
         unit=sampler.unit,
         termination=Termination.after(len(steps), converged=False),
+        polish_iterations=sum(c.polish_iterations for c in candidates),
     )
 
 
 def _rank(
     criterion: Criterion, candidate: Candidate[object], index: int
 ) -> tuple[float, ...]:
-    """The sort key: the criterion first, then the ESJD, then grid order."""
+    """The sort key: the criterion first, then the lowest energy and the ESJD, then grid order."""
     if criterion is Criterion.ESJD:
         return (-candidate.esjd, index)
+    if criterion is Criterion.POLISHED_GAP:
+        assert candidate.polished is not None
+        return (candidate.polished, candidate.lowest_energy, -candidate.esjd, index)
     return (candidate.lowest_energy, -candidate.esjd, index)
 
 
