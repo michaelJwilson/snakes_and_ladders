@@ -845,7 +845,8 @@ class _Lattice:
 
         # The adjacency as lists, once for every cluster the closure grows (#919);
         # the ghost couplings, fixed by the field, once (#1041).
-        lists = adjacency_lists(offsets, neighbours, couplings)
+        one = move in _SINGLE_CLUSTER_MOVES
+        lists = adjacency_lists(offsets, neighbours, couplings) if one else None
         # Read from `sweeps`, where a test replaces it.
         ghost = sweeps.ghost_couplings(rows) if move is PottsMove.GHOST_SPIN else None
         # A single cluster's growth, one signature for the three.
@@ -860,7 +861,7 @@ class _Lattice:
         )
         arrays = (rows, offsets, neighbours, couplings)
         keeps = trace is not None and (
-            move in _SINGLE_CLUSTER_MOVES
+            one
             or (move is PottsMove.SWENDSEN_WANG and cluster_backend is Backend.PYTHON)
         )
         # The label-directed target cycles through the labels, one per call.
