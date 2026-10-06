@@ -172,17 +172,50 @@ fn jittered(rng: &mut ChaCha8Rng, step_size: f64, jitter: f64) -> f64 {
     step_size * (1.0 + jitter * (2.0 * uniform - 1.0))
 }
 
+/// The proposals the variance is shrunk by: `chain.SHRINKAGE_PROPOSALS`.
+pub const SHRINKAGE_PROPOSALS: f64 = 5.0;
+/// The variance it is shrunk toward: `chain.SHRINKAGE_VARIANCE`.
+pub const SHRINKAGE_VARIANCE: f64 = 1e-3;
+
+/// `chain.regularized_variance`: the Welford sums `m2` over `count` draws as
+/// Stan's regularized variance, `(n / (n + 5)) var + 1e-3 (5 / (n + 5))`,
+/// and the coordinates whose sample variance was exactly zero.
+///
+/// # Errors
+/// A sample variance that is not finite: the chain reached a non-finite
+/// position, which no shrinkage repairs.
+pub fn regularized(m2: &[f64], count: f64) -> Result<(Vec<f64>, Vec<usize>), String> {
+    let weight = count / (count + SHRINKAGE_PROPOSALS);
+    let floor = SHRINKAGE_VARIANCE * (SHRINKAGE_PROPOSALS / (count + SHRINKAGE_PROPOSALS));
+    let mut flat = Vec::new();
+    let mut variance = Vec::with_capacity(m2.len());
+    for (i, s) in m2.iter().enumerate() {
+        let sample = s / (count - 1.0);
+        if !sample.is_finite() {
+            return Err(format!(
+                "warm-up variance is not finite on coordinate {i}: the chain reached a \
+                 non-finite position"
+            ));
+        }
+        if sample == 0.0 {
+            flat.push(i);
+        }
+        variance.push(weight * sample + floor);
+    }
+    Ok((variance, flat))
+}
+
 /// The two windows of `chain._warm_up`; leaves the kernel on the metric.
 ///
-/// Returns the adapted step, the mass diagonal and the second window's mean
-/// acceptance probability.
+/// Returns the adapted step, the mass diagonal, the second window's mean
+/// acceptance probability and the coordinates the first window left flat.
 fn warm_up<K: Kernel>(
     kernel: &mut K,
     energy: &Energy<'_>,
     rng: &mut ChaCha8Rng,
     mut step_size: f64,
     warmup: &Warmup,
-) -> Result<(f64, Vec<f64>, f64), String> {
+) -> Result<(f64, Vec<f64>, f64, Vec<usize>), String> {
     let first = warmup.proposals / 2;
     let second = warmup.proposals - first;
     let d = kernel.position().len();
@@ -202,17 +235,7 @@ fn warm_up<K: Kernel>(
             }
         }
     }
-    let variance: Vec<f64> = m2.iter().map(|s| s / (count - 1.0)).collect();
-    let stuck: Vec<usize> = (0..d)
-        .filter(|&i| variance[i].partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater))
-        .collect();
-    if !stuck.is_empty() {
-        return Err(format!(
-            "warm-up variance is zero on coordinate(s) {stuck:?} over the {count} recorded \
-             proposals: the chain did not move there, so no mass can be estimated; \
-             lengthen the warm-up or start the step size smaller"
-        ));
-    }
+    let (variance, flat) = regularized(&m2, count)?;
     kernel.set_scale(variance.iter().map(|v| v.sqrt()).collect());
 
     let mut averaging = DualAveraging::new(averaging.averaged(), warmup);
@@ -225,7 +248,7 @@ fn warm_up<K: Kernel>(
         total += probability;
     }
     let mass = variance.iter().map(|v| 1.0 / v).collect();
-    Ok((averaging.averaged(), mass, total / second as f64))
+    Ok((averaging.averaged(), mass, total / second as f64, flat))
 }
 
 /// A chain that can be advanced in blocks: the warm-up runs once, on construction.
@@ -239,6 +262,8 @@ pub struct Walk<K: Kernel> {
     jitter: f64,
     /// `1 / variance` per coordinate; empty without a warm-up.
     pub mass_diagonal: Vec<f64>,
+    /// Coordinates whose warm-up sample variance was exactly zero.
+    pub flat: Vec<usize>,
     pub warmup_acceptance: f64,
     /// One filter per declared operator, fed every observed draw.
     pub filters: Vec<KalmanStats>,
@@ -279,13 +304,13 @@ impl<K: Kernel> Walk<K> {
         let energy = energy_of(family, &parameters, dimension)?;
         let mut kernel = make(&energy);
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
-        let (step_size, mass_diagonal, warmup_acceptance, jitter) = match warmup {
+        let (step_size, mass_diagonal, warmup_acceptance, jitter, flat) = match warmup {
             Some(w) => {
-                let (step, mass, acceptance) =
+                let (step, mass, acceptance, flat) =
                     warm_up(&mut kernel, &energy, &mut rng, step_size, w)?;
-                (step, mass, acceptance, w.jitter)
+                (step, mass, acceptance, w.jitter, flat)
             }
-            None => (step_size, Vec::new(), 0.0, 0.0),
+            None => (step_size, Vec::new(), 0.0, 0.0, Vec::new()),
         };
         Ok(Self {
             family,
@@ -295,6 +320,7 @@ impl<K: Kernel> Walk<K> {
             step_size,
             jitter,
             mass_diagonal,
+            flat,
             warmup_acceptance,
             filters: powers
                 .iter()
@@ -443,6 +469,12 @@ macro_rules! walk_class {
             #[getter]
             fn mass_diagonal<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
                 PyArray1::from_vec(py, self.walk.mass_diagonal.clone())
+            }
+
+            /// Coordinates whose warm-up sample variance was exactly zero; empty without one.
+            #[getter]
+            fn flat(&self) -> Vec<usize> {
+                self.walk.flat.clone()
             }
 
             /// The warm-up's second-window mean acceptance probability; zero without one.

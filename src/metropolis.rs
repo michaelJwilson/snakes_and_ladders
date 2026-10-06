@@ -216,6 +216,12 @@ mod tests {
     fn a_short_warm_up_and_a_bad_step_are_refused() {
         assert!(walk(GAUSSIAN, vec![1.0], &[0.0], 0.0, 0, None, &[]).is_err());
         assert!(walk(GAUSSIAN, vec![1.0], &[0.0], 0.1, 0, Some(&warmup(4)), &[]).is_err());
+        // A step of 1e4 on a unit Gaussian rejects every warm-up proposal, so
+        // the coordinate is flat over its 2 recorded draws (issue #1207): the
+        // warm-up adapts on the shrinkage floor, 1e-3 * 5 / 7, and reports it.
+        let flat = walk(GAUSSIAN, vec![1.0], &[0.0], 1e4, 0, Some(&warmup(8)), &[]).unwrap();
+        assert_eq!(flat.flat, vec![0]);
+        assert_eq!(flat.mass_diagonal, vec![1.0 / (1e-3 * (5.0 / 7.0))]);
         assert!(walk(
             GAUSSIAN,
             vec![1.0, 2.0, 3.0],

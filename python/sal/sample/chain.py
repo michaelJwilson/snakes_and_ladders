@@ -68,6 +68,18 @@ DUAL_AVERAGING_T0 = 10.0
 
 DUAL_AVERAGING_KAPPA = 0.75
 
+#: Stan's regularization of the warm-up variance (Stan Development Team,
+#: *Stan Reference Manual*, "HMC algorithm parameters", automatic parameter
+#: tuning; issue #1207): over ``n`` recorded draws the sample variance is
+#: shrunk as ``(n / (n + 5)) var + 1e-3 (5 / (n + 5))``, a weight of five
+#: draws at a variance of ``1e-3``. A coordinate the window did not move then
+#: gets a finite mass, and the shrinkage vanishes as the window grows. Both
+#: are Stan's values; ``src/chain.rs`` declares the same pair.
+SHRINKAGE_PROPOSALS = 5.0
+
+
+SHRINKAGE_VARIANCE = 1e-3
+
 #: The stream a chain draws from: torch's for a kernel that differentiates,
 #: NumPy's for one that reads values alone (root ``CLAUDE.md``, "No autodiff
 #: package where no derivative is taken"; issue #1011). The loop draws from
@@ -168,8 +180,10 @@ class Adaptation:
 
     The warm-up runs ``warmup`` proposals in two windows of equal length.
     The first adapts the step size at unit mass and records the positions of
-    its second half; their per-coordinate variance is the inverse mass
-    diagonal. The second adapts the step size again on that metric, which has
+    its second half; their per-coordinate variance, regularized as Stan does
+    (:func:`regularized_variance`), is the inverse mass diagonal. A
+    coordinate the window did not move is reported on :attr:`Adapted.flat`
+    and given the regularization's floor, never refused (issue #1207). The second adapts the step size again on that metric, which has
     changed the coordinates' scale and so the step right for them. Both adapt
     by dual averaging (Hoffman & Gelman, 2014, §3.2; ``eq:dual-averaging``):
     the running estimate ``h`` of ``target_acceptance - alpha`` is driven to
@@ -201,7 +215,8 @@ class Adaptation:
     ----------
     warmup : int
         Proposals spent adapting, at least 8 so the variance is over more
-        than one draw. Discarded.
+        than one draw. Discarded. At 8 the variance is over 2 draws and its
+        regularization weighs them 2 against 5.
     target_acceptance : float
         The Metropolis acceptance probability the step size is driven to,
         strictly between 0 and 1.
@@ -256,21 +271,27 @@ class Adapted:
         jitter band each proposal draws from.
     mass_diagonal : torch.Tensor
         The diagonal of the mass matrix, ``1 / variance`` of the first
-        window's second half, shape ``(dimension,)``. Every entry is finite
-        and positive, because a coordinate the warm-up did not move is
-        refused rather than given an infinite mass.
+        window's second half after :func:`regularized_variance`, shape
+        ``(dimension,)``. Every entry is finite and positive: the
+        regularization's floor bounds it by ``(n + 5) / 5e-3`` over ``n``
+        recorded draws.
     warmup_acceptance : float
         Mean Metropolis acceptance probability over the second window ---
         the statistic dual averaging drives to the target, so its distance
         from the target is the warm-up's residual.
     force_evaluations : int
         Gradients the warm-up spent.
+    flat : tuple[int, ...]
+        Coordinates whose sample variance over the recorded draws was
+        exactly zero: the warm-up did not move them, so their mass is the
+        regularization's floor rather than an estimate (issue #1207).
     """
 
     step_size: float
     mass_diagonal: torch.Tensor
     warmup_acceptance: float
     force_evaluations: int
+    flat: tuple[int, ...]
 
 
 @dataclass(frozen=True)
@@ -583,6 +604,7 @@ def run_compiled(
             mass_diagonal=torch.from_numpy(walk.mass_diagonal),
             warmup_acceptance=walk.warmup_acceptance,
             force_evaluations=warmup_evaluations,
+            flat=tuple(walk.flat),
         ),
         expectations={name: filters[name].estimate() for name in (operators or {})},
     )
@@ -733,16 +755,11 @@ def _warm_up(
         step_size = averaging.update(step.probability)
         if index >= first // 2:
             recorded.append(position)
-    variance = torch.stack(recorded).var(dim=0, unbiased=True)
-    if not bool((variance > 0.0).all()):
-        stuck = torch.nonzero(~(variance > 0.0)).flatten().tolist()
-        msg = (
-            f"warm-up variance is zero on coordinate(s) {stuck} over the "
-            f"{len(recorded)} recorded proposals: the chain did not move there, "
-            "so no mass can be estimated; lengthen the warm-up or start the "
-            "step size smaller"
-        )
-        raise ValueError(msg)
+    regularized, flat = regularized_variance(
+        torch.stack(recorded).var(dim=0, unbiased=True).detach().numpy(),
+        len(recorded),
+    )
+    variance = torch.from_numpy(regularized)
     scale = variance.sqrt()
 
     # Window two: the step again, on the metric, from where window one ended.
@@ -768,8 +785,41 @@ def _warm_up(
         mass_diagonal=1.0 / variance,
         warmup_acceptance=total / second,
         force_evaluations=adaptation.warmup * per_proposal,
+        flat=flat,
     )
     return report, position * scale
+
+
+def regularized_variance(
+    variance: np.ndarray, n: int
+) -> tuple[np.ndarray, tuple[int, ...]]:
+    """The warm-up's sample ``variance`` over ``n`` draws, regularized, and its flat coordinates.
+
+    Stan's estimate (Stan Development Team, *Stan Reference Manual*, "HMC
+    algorithm parameters"): ``(n / (n + 5)) var + 1e-3 (5 / (n + 5))``, so
+    every entry is at least ``1e-3 * 5 / (n + 5)`` and the mass it defines is
+    finite. The second value names the coordinates whose sample variance was
+    exactly zero --- the window did not move them --- a diagnostic, not a
+    refusal (issue #1207). The torch, JAX and Rust warm-ups all call this
+    rule, in this order of operations, so they agree on the scale.
+
+    Raises
+    ------
+    ValueError
+        If a sample variance is not finite: the chain reached a non-finite
+        position, which no shrinkage repairs.
+    """
+    if not bool(np.isfinite(variance).all()):
+        bad = np.flatnonzero(~np.isfinite(variance)).tolist()
+        msg = (
+            f"warm-up variance is not finite on coordinate(s) {bad}: the chain "
+            "reached a non-finite position"
+        )
+        raise ValueError(msg)
+    weight = n / (n + SHRINKAGE_PROPOSALS)
+    floor = SHRINKAGE_VARIANCE * (SHRINKAGE_PROPOSALS / (n + SHRINKAGE_PROPOSALS))
+    flat = tuple(int(i) for i in np.flatnonzero(variance == 0.0))
+    return weight * variance + floor, flat
 
 
 def _jittered(
