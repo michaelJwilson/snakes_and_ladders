@@ -20,6 +20,7 @@ success count, gaps, passes and seconds are measured at release
 
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import replace
 
@@ -27,7 +28,11 @@ import numpy as np
 import pytest
 import torch
 from sal.cost import Cost
-from sal.emissions import GaussianEmission, NegativeBinomialEmission
+from sal.emissions import (
+    ZERO_SPREAD_FLOOR,
+    GaussianEmission,
+    NegativeBinomialEmission,
+)
 from sal.opt.budget import Budget
 from sal.opt.em import EM
 from sal.opt.hmm import (
@@ -196,6 +201,33 @@ def test_each_sampler_records_the_gradients_its_charge_declares() -> None:
         assert trial.diagnostics["gradients"] + 1 == CHARGES[name], name
     (restart,) = result.trials("restart")
     assert restart.handover + 1 == CHARGES["restart"]
+
+
+@pytest.mark.analytic
+@pytest.mark.parametrize("constant", [0.0, 0.25, -40.0])
+def test_the_quantile_start_on_constant_data_sits_at_the_zero_spread_floor(
+    constant: float,
+) -> None:
+    # Constant data have no spread (issue #1242): every mean is the constant,
+    # every scale `sqrt(ZERO_SPREAD_FLOOR * max(1, |c|)**2)` from
+    # `pooled_variance_floor`, not the zero standard deviation, and the
+    # channel is named flat.
+    start = gaussian_quantile_start(np.full(50, constant), N_STATES, 1e-6)
+    assert torch.equal(start.mean, torch.full((N_STATES,), constant))
+    expected = math.sqrt(ZERO_SPREAD_FLOOR * max(1.0, abs(constant)) ** 2)
+    assert torch.equal(start.scale, torch.full((N_STATES,), expected))
+    assert start.flat == (0,)
+
+
+@pytest.mark.analytic
+def test_the_quantile_start_on_data_with_spread_is_the_pooled_deviation() -> None:
+    # Data with spread take the unfloored path bitwise: scale is the pooled
+    # standard deviation and nothing is flat.
+    values = np.random.default_rng(SEED).normal(size=200)
+    start = gaussian_quantile_start(values, N_STATES, 1e-6)
+    pooled = float(torch.as_tensor(values).std())
+    assert torch.equal(start.scale, torch.full((N_STATES,), pooled))
+    assert start.flat == ()
 
 
 @pytest.mark.end2end

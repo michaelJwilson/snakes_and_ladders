@@ -30,6 +30,7 @@ from sal.opt.initialize import Initializer
 from sal.opt.mixture import (
     GaussianMixtureObjective,
     KMeansPlusPlus,
+    MixtureFit,
     clustering_cost,
     expectation_maximization,
     kmeans_plus_plus,
@@ -39,6 +40,7 @@ from sal.opt.mixture import (
     seeding_guarantee,
     uniform_seeds,
 )
+from sal.opt.objective import autograd_value_and_gradient
 from sal.opt.potts import PottsObjective
 from sal.opt.termination import Stop
 from sal.sim.mixture import MixtureParams, simulate_mixture
@@ -127,6 +129,65 @@ def test_the_fit_recovers_the_generating_mixture_up_to_the_label_permutation() -
     assert_allclose(
         torch.exp(estimate["log_weight"]).numpy()[order], WEIGHTS, atol=0.05
     )
+
+
+@pytest.mark.analytic
+def test_constant_data_seed_every_mean_at_the_constant_and_the_scale_at_the_floor() -> (
+    None
+):
+    # Issue #1234: this raised "zero spread". The floor is the stated one,
+    # the channel is named, and the objective, its compiled gradient and
+    # autograd's are finite at the start.
+    objective = GaussianMixtureObjective(np.full(50, 3.0), 2)
+    theta = objective.initial()
+    named = objective.constrain(theta)
+
+    assert objective.flat == (0,)
+    assert objective.variance_floor == 1e-3 * 9.0
+    assert torch.equal(named["mean"], torch.full((2,), 3.0, dtype=torch.float64))
+    assert_allclose(named["scale"].numpy(), np.sqrt(9e-3), rtol=1e-15)
+    gradient = objective.gradient(theta)
+    _, autograd = autograd_value_and_gradient(objective, theta)
+    assert np.isfinite(float(objective(theta)))
+    assert bool(torch.isfinite(gradient).all())
+    assert_allclose(gradient.numpy(), autograd.numpy(), rtol=1e-12, atol=1e-12)
+
+
+@pytest.mark.end2end
+@pytest.mark.parametrize("backend", [Backend.PYTHON, Backend.RUST])
+def test_a_constant_channel_leaves_the_other_channel_s_fit_unchanged(
+    backend: Backend,
+) -> None:
+    # Issue #1234: a second channel constant at 7 is named flat, and EM on the
+    # pair recovers the planted means of the first as EM on the first alone
+    # does --- the constant channel adds the same density to every component.
+    observations = _dataset()
+    paired = np.column_stack([observations, np.full(observations.size, 7.0)])
+
+    def fitted(values: np.ndarray) -> MixtureFit:
+        objective = GaussianMixtureObjective(values, 2)
+        theta = objective.initial()
+        return expectation_maximization(
+            values,
+            torch.exp(objective.constrain(theta)["log_weight"]).detach(),
+            objective.components(theta),
+            backend=backend,
+        )
+
+    alone, pair = fitted(observations), fitted(paired)
+
+    assert GaussianMixtureObjective(paired, 2).flat == (1,)
+    assert (pair.flat, pair.frozen, alone.flat) == ((1,), (), ())
+    assert pair.termination.converged
+    assert_allclose(pair.components.mean[:, 1].numpy(), 7.0, rtol=1e-15)
+    assert_allclose(
+        pair.components.mean[:, 0].numpy(), alone.components.mean.numpy(), atol=1e-12
+    )
+    assert_allclose(pair.weights.numpy(), alone.weights.numpy(), atol=1e-12)
+    order = list(
+        align_by_key(pair.components.mean[:, :1], torch.as_tensor(MEAN).reshape(-1, 1))
+    )
+    assert_allclose(pair.components.mean[:, 0].numpy()[order], MEAN, atol=0.15)
 
 
 @pytest.mark.oracle

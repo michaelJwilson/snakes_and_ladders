@@ -28,6 +28,7 @@ from sal.emissions import (
     GaussianEmission,
     NegativeBinomialEmission,
     PoissonEmission,
+    flat_channels,
     identifiable_dispersion_bound,
     pooled_variance_floor,
 )
@@ -512,7 +513,9 @@ def family_start(
       (:func:`~sal.opt.initialize.quantile_locations`), every scale the
       pooled standard deviation --- too *narrow* is the direction the
       likelihood is unbounded in --- and the floor
-      :func:`~sal.emissions.pooled_variance_floor` derives.
+      :func:`~sal.emissions.pooled_variance_floor` derives. Values all equal
+      are :attr:`~sal.emissions.GaussianEmission.flat`, every scale
+      ``sqrt`` of that floor (issue #1234).
     * :class:`~sal.emissions.PoissonEmission`: the rates at the quantiles,
       at least half a count, since ``log 0`` is not a start.
     * :class:`~sal.emissions.BinomialEmission`: the success rates at the
@@ -561,10 +564,16 @@ def family_start(
     values = torch.as_tensor(observations, dtype=torch.float64).reshape(-1)
     locations = quantile_locations(values, n_states)
     if family is GaussianEmission:
+        floor = pooled_variance_floor(np.asarray(observations))
+        flat = flat_channels(values.numpy())
+        spread = values.std()
+        if flat:
+            spread = torch.tensor(math.sqrt(floor), dtype=torch.float64)
         return GaussianEmission(
             locations,
-            positive(free_from_positive(values.std()).expand(n_states)),
-            pooled_variance_floor(np.asarray(observations)),
+            positive(free_from_positive(spread).expand(n_states)),
+            floor,
+            flat=flat,
         )
     if family is PoissonEmission:
         return PoissonEmission(

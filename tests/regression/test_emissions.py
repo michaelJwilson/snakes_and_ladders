@@ -18,6 +18,7 @@ import pytest
 import torch
 from numpy.testing import assert_allclose
 from sal.emissions import (
+    ZERO_SPREAD_FLOOR,
     BetaBinomialEmission,
     BinomialEmission,
     CategoricalEmission,
@@ -26,6 +27,7 @@ from sal.emissions import (
     GaussianEmission,
     NegativeBinomialEmission,
     PoissonEmission,
+    flat_channels,
     identifiable_concentration_bound,
     identifiable_dispersion_bound,
     pooled_variance_floor,
@@ -253,11 +255,63 @@ def test_the_variance_floor_is_derived_from_the_data_and_scales_with_it() -> Non
 
 
 @pytest.mark.infra
-def test_a_floor_cannot_be_derived_without_a_scale_to_derive_it_from() -> None:
+def test_a_floor_cannot_be_derived_without_a_sample_to_derive_it_from() -> None:
     with pytest.raises(ValueError, match="at least 2 observations"):
         pooled_variance_floor(np.array([1.0]))
-    with pytest.raises(ValueError, match="zero spread"):
-        pooled_variance_floor(np.full(10, 2.5))
+
+
+@pytest.mark.analytic
+@pytest.mark.parametrize(
+    ("constant", "expected"), [(2.5, 1e-3 * 6.25), (0.0, 1e-3), (-0.25, 1e-3)]
+)
+def test_zero_spread_takes_the_stated_floor_and_names_the_flat_channel(
+    constant: float, expected: float
+) -> None:
+    # Issue #1234: all-equal values have no spread to derive `s**2 / n**2`
+    # from, so the floor is `ZERO_SPREAD_FLOOR * max(1, |c|)**2`, and the
+    # channel is named rather than refused, as the warm-up names a flat
+    # coordinate (#1207).
+    assert ZERO_SPREAD_FLOOR == 1e-3
+    assert pooled_variance_floor(np.full(10, constant)) == expected
+    assert flat_channels(np.full(10, constant)) == (0,)
+    assert flat_channels(np.array([1.0, 1.0 + 2.0**-52])) == ()
+    rows = np.column_stack([np.arange(6.0), np.full(6, constant), np.arange(6.0)])
+    assert flat_channels(rows) == (1,)
+
+
+@pytest.mark.analytic
+@pytest.mark.parametrize("on_collapse", list(Collapse))
+def test_a_flat_channel_settles_at_the_floor_and_is_not_a_collapse(
+    on_collapse: Collapse,
+) -> None:
+    # Two channels, the second constant at 4: every state's variance there is
+    # zero, which the family is told is the data, not a collapse. The first
+    # channel's moments are untouched, so the re-estimate is the one the
+    # first channel alone gives.
+    rng = np.random.default_rng(1234)
+    first = rng.normal(size=200)
+    rows = np.column_stack([first, np.full(200, 4.0)])
+    posterior = torch.as_tensor(rng.dirichlet([1.0, 1.0], size=200))
+    family = GaussianEmission(
+        np.array([[-1.0, 4.0], [1.0, 4.0]]),
+        np.array([[1.0, 0.1], [1.0, 0.1]]),
+        1e-4,
+        on_collapse=on_collapse,
+        flat=(1,),
+    )
+    alone = GaussianEmission([-1.0, 1.0], [1.0, 1.0], 1e-4).reestimate(first, posterior)
+
+    settled = family.reestimate(rows, posterior)
+
+    assert settled.frozen == ()
+    assert settled.components.flat == (1,)
+    assert_allclose(settled.components.mean[:, 1].numpy(), 4.0, rtol=1e-15)
+    assert torch.equal(
+        settled.components.scale[:, 1],
+        torch.full((2,), math.sqrt(1e-4), dtype=torch.float64),
+    )
+    assert torch.equal(settled.components.mean[:, 0], alone.components.mean)
+    assert torch.equal(settled.components.scale[:, 0], alone.components.scale)
 
 
 @pytest.mark.smoke

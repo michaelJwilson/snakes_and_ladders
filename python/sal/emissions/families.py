@@ -38,6 +38,16 @@ from sal.numerics import sample_rows
 #: fixed, so it transfers across fixture sizes.
 COLLAPSE_EXPONENT = 2
 
+#: The variance floor, relative to ``max(1, |mean|)**2``, that
+#: :func:`pooled_variance_floor` returns where the observations have zero
+#: spread and ``s**2 / n**2`` would be zero (issue #1234). Such data carry no
+#: scale, so the floor takes the location's: a scale of ``3.2%`` of the value,
+#: or of one unit near zero, the ``1e-3`` the warm-up's regularized variance
+#: adds for a flat coordinate (issue #1207). Positive, so the density at the
+#: constant is finite, and wide against ``float64``'s relative spacing of
+#: ``2.2e-16``, so a mean that rounds off the constant does not move it.
+ZERO_SPREAD_FLOOR = 1e-3
+
 
 class Collapse(StrEnum):
     """What a Gaussian re-estimate does with a collapsed state (issue #1160).
@@ -259,12 +269,18 @@ class GaussianEmission(EmissionFamily):
         because every EM driver calls ``reestimate`` through the
         :class:`~sal.emissions.base.EmissionFamily` protocol, and the compiled
         steps read it from the family they are handed.
+    flat : tuple[int, ...]
+        Channels whose observations have zero spread, as
+        :func:`flat_channels` names them (issue #1234). Every state's variance
+        there is zero, which is the data rather than a collapse: a re-estimate
+        puts the scale at the floor and does not count the channel towards
+        ``frozen``. Empty by default, which leaves every value unchanged.
 
     Raises
     ------
     ValueError
         If the shapes disagree, either is neither 1- nor 2-D, a scale is not
-        positive, or the floor is not positive.
+        positive, the floor is not positive, or a flat channel is out of range.
     """
 
     def __init__(
@@ -274,6 +290,7 @@ class GaussianEmission(EmissionFamily):
         variance_floor: float,
         *,
         on_collapse: Collapse = Collapse.HOLD,
+        flat: tuple[int, ...] = (),
     ) -> None:
         self._mean = _one_axis_at_least(torch.as_tensor(mean, dtype=torch.float64))
         self._scale = _one_axis_at_least(torch.as_tensor(scale, dtype=torch.float64))
@@ -297,6 +314,10 @@ class GaussianEmission(EmissionFamily):
             raise ValueError(msg)
         self._variance_floor = variance_floor
         self._on_collapse = Collapse(on_collapse)
+        self._flat = tuple(int(channel) for channel in flat)
+        if any(not 0 <= channel < self.n_channels for channel in self._flat):
+            msg = f"flat channels {self._flat} out of range for {self.n_channels} channel(s)"
+            raise ValueError(msg)
 
     @property
     def n_states(self) -> int:
@@ -337,6 +358,11 @@ class GaussianEmission(EmissionFamily):
     def on_collapse(self) -> Collapse:
         """What :meth:`reestimate` does with a collapsed state."""
         return self._on_collapse
+
+    @property
+    def flat(self) -> tuple[int, ...]:
+        """Channels whose observations have zero spread, settled at the floor."""
+        return self._flat
 
     def sample(
         self,
@@ -509,13 +535,14 @@ class GaussianEmission(EmissionFamily):
         return {"mean": Domain.REAL, "scale": Domain.POSITIVE}
 
     def with_parameters(self, named: Mapping[str, torch.Tensor]) -> GaussianEmission:
-        """The family at ``mean`` and ``scale``, its variance floor and :attr:`on_collapse` kept."""
+        """The family at ``mean`` and ``scale``, its variance floor, :attr:`on_collapse` and :attr:`flat` kept."""
         require_parameter_names(self, named, ("mean", "scale"))
         return GaussianEmission(
             named["mean"],
             named["scale"],
             self._variance_floor,
             on_collapse=self._on_collapse,
+            flat=self._flat,
         )
 
 
@@ -542,6 +569,10 @@ def settle_collapse(
     mean, variance : torch.Tensor
         The posterior-weighted moments, of ``family.mean``'s shape.
 
+    A channel in ``family.flat`` is not a collapse: its variance is put at
+    the floor and the rest of the rule runs on the other channels (issue
+    #1234).
+
     Returns
     -------
     Reestimate[GaussianEmission]
@@ -554,16 +585,26 @@ def settle_collapse(
         Under :attr:`Collapse.REFUSE`, if a state collapsed.
     """
     floor = family.variance_floor
+    if family.flat:
+        variance = _floored_flat(variance, family.flat, floor)
     narrow = variance <= floor
+    if family.flat:
+        narrow = _floored_flat(narrow, family.flat, False)
     emptied = mass < COLLAPSED_MASS
     collapsed = emptied | narrow.reshape(family.n_states, -1).any(dim=1)
     rebuilt = {"on_collapse": family.on_collapse}
     if not bool(collapsed.any()):
         return Reestimate(
-            GaussianEmission(mean, torch.sqrt(variance), floor, **rebuilt)
+            GaussianEmission(
+                mean, torch.sqrt(variance), floor, **rebuilt, flat=family.flat
+            )
         )
     if family.on_collapse is Collapse.REFUSE:
-        refuse_collapsed(variance, floor, emptied=emptied)
+        refuse_collapsed(
+            torch.where(narrow, variance, torch.inf) if family.flat else variance,
+            floor,
+            emptied=emptied,
+        )
     row = collapsed if mean.ndim == 1 else collapsed.unsqueeze(-1)
     if family.on_collapse is Collapse.HOLD:
         held_mean = torch.where(row, family.mean, mean)
@@ -578,9 +619,21 @@ def settle_collapse(
             torch.sqrt(variance),
         )
     return Reestimate(
-        GaussianEmission(held_mean, held_scale, floor, **rebuilt),
+        GaussianEmission(held_mean, held_scale, floor, **rebuilt, flat=family.flat),
         frozen=marked_states(collapsed),
     )
+
+
+def _floored_flat(
+    values: torch.Tensor, flat: tuple[int, ...], fill: float | bool
+) -> torch.Tensor:
+    """``values`` with the ``flat`` channels' entries set to ``fill``; one channel is the last axis or none."""
+    filled = values.clone()
+    if filled.ndim == 1:
+        filled[:] = fill
+    else:
+        filled[:, list(flat)] = fill
+    return filled
 
 
 def refuse_collapsed(
@@ -683,18 +736,52 @@ def pooled_variance_floor(observations: np.ndarray) -> float:
     float
         The floor, strictly positive.
 
+    Observations that are all equal have no spread to derive it from, and the
+    floor is :data:`ZERO_SPREAD_FLOOR` ``* max(1, |mean|)**2`` instead (issue
+    #1234): reported through :func:`flat_channels` rather than refused, as
+    the warm-up reports a flat coordinate (issue #1207).
+
     Raises
     ------
     ValueError
-        If fewer than two observations are supplied, or they are all equal ---
-        in both cases there is no scale to derive a floor from.
+        If fewer than two observations are supplied: there is no sample to
+        derive a floor from.
     """
     values = np.asarray(observations, dtype=np.float64).reshape(-1)
     if values.size < 2:
         msg = f"need at least 2 observations to derive a floor, got {values.size}"
         raise ValueError(msg)
     pooled = float(values.var(ddof=1))
-    if pooled <= 0.0:
-        msg = "observations have zero spread, so no variance floor follows"
-        raise ValueError(msg)
+    # Equal values by comparison, not by the variance: a mean that rounds off
+    # the constant leaves a variance of order 1e-31 that is not a spread.
+    if pooled <= 0.0 or values.max() == values.min():
+        return ZERO_SPREAD_FLOOR * max(1.0, abs(float(values[0]))) ** 2
     return pooled / float(values.size) ** COLLAPSE_EXPONENT
+
+
+def flat_channels(observations: np.ndarray) -> tuple[int, ...]:
+    """The channels whose observations are all equal (issue #1234).
+
+    A Gaussian fit's variance there is zero whatever the parameters, so a
+    family is told them (:attr:`GaussianEmission.flat`) and settles them at
+    the floor rather than calling them collapsed.
+
+    Parameters
+    ----------
+    observations : np.ndarray
+        Shape ``(n_samples,)``, one channel, or ``(n_samples, n_channels)``.
+
+    Returns
+    -------
+    tuple[int, ...]
+        Indices into the channel axis, ascending; ``(0,)`` or ``()`` for one
+        channel.
+    """
+    values = np.asarray(observations, dtype=np.float64)
+    columns = values.reshape(values.shape[0] if values.ndim else 1, -1)
+    if columns.shape[0] == 0:
+        return ()
+    return tuple(
+        int(channel)
+        for channel in np.flatnonzero(columns.max(axis=0) == columns.min(axis=0))
+    )

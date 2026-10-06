@@ -121,9 +121,11 @@ from sal.emissions.counts import (
 )
 from sal.emissions.families import (
     COLLAPSE_EXPONENT,
+    ZERO_SPREAD_FLOOR,
     CategoricalEmission,
     Collapse,
     GaussianEmission,
+    flat_channels,
     pooled_variance_floor,
     refuse_collapsed,
     settle_collapse,
@@ -165,6 +167,7 @@ __all__ = [
     "COLLAPSE_EXPONENT",
     "EXPOSED_TAIL_RATIO",
     "M_STEP_BACKEND",
+    "ZERO_SPREAD_FLOOR",
     "BetaBinomialEmission",
     "BinomialEmission",
     "CategoricalEmission",
@@ -184,6 +187,7 @@ __all__ = [
     "Reestimate",
     "Values",
     "exposure",
+    "flat_channels",
     "identifiable_concentration_bound",
     "identifiable_dispersion_bound",
     "pooled_variance_floor",
