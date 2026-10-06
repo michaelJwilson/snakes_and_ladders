@@ -36,6 +36,15 @@ if [ "${1:-}" = "--iter" ]; then
   shift
 fi
 
+# A shared `CARGO_TARGET_DIR` holds one fingerprint for the crate whatever the
+# worktree, and cargo reads a worktree whose sources are older than the last
+# build as fresh: it would copy another worktree's library (issue #1268).
+# Touching one source marks the crate dirty, so it recompiles from these
+# sources; the dependencies stay cached.
+if [ -n "${CARGO_TARGET_DIR:-}" ]; then
+  touch src/lib.rs
+fi
+
 cargo build --profile "$profile" --locked "$@"
 cp "${CARGO_TARGET_DIR:-target}/$profile/liboxisal.so" "$target"
 echo "built $target ($profile)"
