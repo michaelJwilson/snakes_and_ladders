@@ -5,6 +5,8 @@ against `opt.hmm`'s forward algorithm, which shares no code with it
 (`test_message_passing.py::test_every_chain_evaluator_is_the_path_enumeration`,
 #982), and here against hand-worked quantities. It also referees
 `forward_backward.sample_path`, which has no module of its own (issue #734).
+On chains too long to enumerate, an 80-bit recursion referees
+`forward_backward` instead (issue #1266).
 """
 
 from __future__ import annotations
@@ -25,8 +27,17 @@ from sal.sample.statistics import chi_square_p_value
 from sal.sim.canonical import AMBIGUOUS_OBSERVATIONS, ambiguous_hmm
 from sal.sim.hmm import HmmParams
 
-from tests._rows import every_row
+from tests._long_double import long_double_posteriors
+from tests._rows import every_row, every_value
 from tests.regression.likelihood.conftest import CHAIN_CASES, random_hmm
+
+#: `forward_backward` against the 80-bit recursion at 3,000 positions:
+#: absolute on the log marginals and relative on the summed pairwise
+#: posteriors, the measure #1262's `LONG_TOLERANCE` takes. Measured 1.7e-14
+#: and 1.0e-14 with each forward row shifted by its maximum (issue #1266);
+#: the unshifted recursion read 3.7e-11 and 2.3e-11. Relative on the log
+#: marginals is not the measure: a marginal near one has a log near zero.
+LONG_TOLERANCE = 1e-13
 
 #: Declared significance, as in `search/test_potts_mcmc.py`. Over 18 runs (three
 #: instances x six seeds) the smallest p was 0.0077 joint, 0.0053 marginal.
@@ -163,6 +174,36 @@ def test_the_sampled_paths_are_drawn_from_the_enumerated_path_posterior() -> Non
             )
 
     every_row(CHAIN_CASES[:3], check)
+
+
+@pytest.mark.oracle
+@pytest.mark.critical
+def test_forward_backward_matches_a_long_double_recursion() -> None:
+    # Issue #1266: chains of 1, 60, 400 and 3,000 positions, three states.
+    # The oracle the compiled kernels are pinned against, itself pinned to
+    # the 80-bit scaled recursion; the evidence to 1e-14 relative, measured
+    # at most 1.8e-16.
+    def check(length: int) -> None:
+        rng = np.random.default_rng(1266)
+        log_density = np.log(rng.random((length, 3)))
+        log_initial = np.log(rng.dirichlet(np.ones(3)))
+        log_transition = np.log(rng.dirichlet(np.ones(3), size=3))
+        run = forward_backward(log_density, log_initial, log_transition)
+        posterior, pairs, evidence = (
+            one.astype(np.float64)
+            for one in long_double_posteriors(
+                log_density, (length,), log_initial, log_transition
+            )
+        )
+        np.testing.assert_allclose(
+            np.log(run.posterior), np.log(posterior), rtol=0, atol=LONG_TOLERANCE
+        )
+        np.testing.assert_allclose(
+            run.pairwise.sum(axis=0), pairs, rtol=LONG_TOLERANCE, atol=0
+        )
+        np.testing.assert_allclose(run.log_evidence, evidence[0], rtol=1e-14)
+
+    every_value([1, 60, 400, 3000], check)
 
 
 @pytest.mark.oracle

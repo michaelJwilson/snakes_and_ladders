@@ -244,11 +244,12 @@ def test_the_jax_twin_equals_enumeration() -> None:
 @pytest.mark.critical
 @pytest.mark.analytic
 def test_a_one_position_posterior_is_the_prior_times_the_emission() -> None:
-    """``start * emission / sum``, bitwise on the NumPy oracle.
+    """``start * emission / sum``, to one ``eps`` relative on the NumPy oracle.
 
     The oracle normalises in log space with `sal.numerics.logsumexp` and
     exponentiates, as `forward_backward` does; written that way the identity
-    is exact. Against SciPy's normaliser in probability space it holds within
+    was exact until the forward row was shifted by its maximum first (issue
+    #1266), which backs it off from bitwise to one ``eps``, measured 1.2e-16. Against SciPy's normaliser in probability space it holds within
     1e-15 relative: the two log-sum-exps differ in the last bit.
     """
     scores, log_initial, log_transition = _model(0)
@@ -256,7 +257,9 @@ def test_a_one_position_posterior_is_the_prior_times_the_emission() -> None:
     for start in np.asarray(scores.offsets[:-1])[np.asarray(LENGTHS) == 1]:
         joint = log_initial + scores.values[start]
         expected = np.log(np.exp(joint - float(normaliser(joint, axis=0))))
-        np.testing.assert_array_equal(got.log_posterior[start], expected)
+        np.testing.assert_allclose(
+            got.log_posterior[start], expected, rtol=np.finfo(float).eps, atol=0.0
+        )
         product_ = np.exp(log_initial) * np.exp(scores.values[start])
         np.testing.assert_allclose(
             np.exp(got.log_posterior[start]),

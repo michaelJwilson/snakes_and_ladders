@@ -30,7 +30,9 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use rayon::prelude::*;
 
-use crate::ragged::{check_inputs, log_add, log_sum, step_kernel, KroneckerStep, SwitchKind};
+use crate::ragged::{
+    check_inputs, log_add, log_sum, shift, step_kernel, KroneckerStep, SwitchKind,
+};
 
 /// The state `uniform` selects from unnormalized log weights.
 ///
@@ -155,6 +157,11 @@ fn draw_segment(
     for state in 0..n {
         alpha[state] = log_initial[state] + density[state];
     }
+    // Each row is held less its maximum, as `ragged_posteriors_into` holds
+    // it (issues #1262, #1266): the unshifted log filter grows with the
+    // position, and its rounding with it. The draws shift by the maximum
+    // anyway, so only the evidence reads the offsets, as their sum.
+    let mut offsets = shift(&mut alpha[..n]);
     // Forward: the filter `ragged_posteriors_into` runs, kept whole for the draw.
     for t in 1..length {
         let (done, rest) = alpha.split_at_mut(t * n);
@@ -181,8 +188,9 @@ fn draw_segment(
         for state in 0..n {
             current[state] += density[t * n + state];
         }
+        offsets += shift(current);
     }
-    let evidence = log_sum(&alpha[(length - 1) * n..]);
+    let evidence = offsets + log_sum(&alpha[(length - 1) * n..]);
     // Backward: the `k`-th draw, at position `length - 1 - k`, reads `uniforms[k]`.
     let mut next = inverse_cdf(&alpha[(length - 1) * n..], uniforms[0], cumulative);
     path[length - 1] = next as i64;
