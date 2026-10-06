@@ -1,4 +1,4 @@
-"""The torch loop against the compiled loop, per HMC proposal, on a cheap energy and on an HMM (issue #1220).
+"""The torch loop against the compiled loop, per HMC proposal, on a cheap energy and on an HMM (issues #1220, #1249).
 
 The case for running a chain in ``oxisal`` is the Python loop's share of a
 proposal. On ``GaussianTarget(diagonal_precision(10))`` the energy is a
@@ -6,9 +6,11 @@ ten-term product, so the loop is most of the proposal; on a 4-state Gaussian
 HMM (``d = 23``) of equal-length segments, the case the compiled route runs,
 the gradient's forward-backward pass is. Each row times ``PROPOSALS[family]``
 proposals of four leapfrog steps on one backend; the per-proposal figure is
-the mean over that count. Correctness is pinned in
-``tests/regression/sample/test_supported_gradient.py`` and
-``test_hmc_compiled.py``.
+the mean over that count. The tempering rows run ``ROUNDS[family]`` rounds of
+a four-rung ladder, so a proposal there includes the per-call step and the
+exchange (issue #1249). Correctness is pinned in
+``tests/regression/sample/test_supported_gradient.py``,
+``test_hmc_compiled.py`` and ``test_hmc_compiled_tempering.py``.
 """
 
 from __future__ import annotations
@@ -21,7 +23,7 @@ from sal.backend import Backend
 from sal.emissions import GaussianEmission
 from sal.opt.hmm import EmissionHmmObjective
 from sal.opt.objective import Objective
-from sal.sample.hmc import sample
+from sal.sample.hmc import parallel_tempering, sample
 from sal.search.hmm_starts import gaussian_quantile_start
 from sal.sim.hmm import HmmParams, simulate_sequences
 from sal.validation.gaussian import GaussianTarget, diagonal_precision
@@ -36,6 +38,12 @@ LENGTH = 60
 
 #: Proposals per timed chain.
 PROPOSALS = {"gaussian": 2_000, "hmm": 20}
+
+#: Rounds per timed tempering run, over :data:`LADDER`.
+ROUNDS = {"gaussian": 500, "hmm": 5}
+
+#: The tempering ladder: four rungs.
+LADDER = (1.0, 2.0, 4.0, 8.0)
 
 
 def _hmm(n_segments: int) -> EmissionHmmObjective:
@@ -85,3 +93,31 @@ def test_a_proposal_on_each_loop_benchmark(
 
     assert torch.isfinite(chain.draws).all()
     assert chain.acceptance_rate > 0.0
+
+
+@at_scale("n_segments", 12, 200)
+@pytest.mark.parametrize("backend", [Backend.PYTHON, Backend.RUST], ids=str)
+@pytest.mark.parametrize("family", ["gaussian", "hmm"])
+def test_a_tempering_round_on_each_loop_benchmark(
+    benchmark: BenchmarkFixture, family: str, backend: Backend, n_segments: int
+) -> None:
+    objective: Objective = (
+        GaussianTarget(diagonal_precision(10))
+        if family == "gaussian"
+        else _hmm(n_segments)
+    )
+    step = 0.3 if family == "gaussian" else float(5e-3 / np.sqrt(n_segments / 12))
+
+    run = benchmark(
+        parallel_tempering,
+        objective,
+        LADDER,
+        torch.Generator().manual_seed(0),
+        ROUNDS[family],
+        step_size=step,
+        n_steps=4,
+        backend=backend,
+    )
+
+    assert torch.isfinite(run.positions).all()
+    assert bool((run.acceptance_rate > 0.0).all())

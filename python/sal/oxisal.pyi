@@ -392,6 +392,13 @@ class MetropolisWalk:
     def advance(
         self, n: int, store: bool, observe: bool
     ) -> tuple[np.ndarray, int, np.ndarray]: ...
+    def state(self) -> tuple[np.ndarray, float, np.ndarray]: ...
+    def set_state(
+        self, position: np.ndarray, value: float, gradient: np.ndarray
+    ) -> None: ...
+    def advance_at(
+        self, n: int, temperature: float
+    ) -> tuple[np.ndarray, float, np.ndarray, int]: ...
     def statistics(
         self, index: int
     ) -> tuple[
@@ -425,6 +432,13 @@ class HmcWalk:
     def advance(
         self, n: int, store: bool, observe: bool
     ) -> tuple[np.ndarray, int, np.ndarray]: ...
+    def state(self) -> tuple[np.ndarray, float, np.ndarray]: ...
+    def set_state(
+        self, position: np.ndarray, value: float, gradient: np.ndarray
+    ) -> None: ...
+    def advance_at(
+        self, n: int, temperature: float
+    ) -> tuple[np.ndarray, float, np.ndarray, int]: ...
     def statistics(
         self, index: int
     ) -> tuple[

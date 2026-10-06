@@ -550,30 +550,22 @@ def run_compiled(
     and each block is filtered here and dropped unless ``store_chain`` keeps
     it (issues #988, #1006).
     """
-    if not temperature > 0.0:
-        msg = f"temperature must be positive, got {temperature}"
-        raise ValueError(msg)
-    kernel, data = declared
     dimension = int(start.shape[0])
-    seed = _seed(generator)
     declared_operators = {
         name: operator
         for name, operator in (operators or {}).items()
         if isinstance(operator, Power)
     }
-    walk = walk_class(
-        kernel,
-        data,
-        np.ascontiguousarray(start.numpy(), dtype=np.float64),
-        step_size,
-        seed,
-        0 if adaptation is None else adaptation.warmup,
-        0.5 if adaptation is None else adaptation.target_acceptance,
-        0.0 if adaptation is None else adaptation.step_jitter,
-        (DUAL_AVERAGING_GAMMA, DUAL_AVERAGING_T0, DUAL_AVERAGING_KAPPA),
-        [operator.exponent for operator in declared_operators.values()],
-        temperature,
-        *extra,
+    walk = compiled_walk(
+        walk_class,
+        declared,
+        extra,
+        generator,
+        step_size=step_size,
+        start=start.numpy(),
+        temperature=temperature,
+        adaptation=adaptation,
+        powers=[operator.exponent for operator in declared_operators.values()],
     )
     walk.advance(burn_in, False, False)
     filters = {
@@ -631,6 +623,47 @@ def run_compiled(
             flat=tuple(walk.flat),
         ),
         expectations={name: filters[name].estimate() for name in (operators or {})},
+    )
+
+
+def compiled_walk(
+    walk_class: Callable[..., Any],
+    declared: tuple[Any, Any],
+    extra: tuple[Any, ...],
+    generator: Stream,
+    *,
+    step_size: float,
+    start: np.ndarray,
+    temperature: float,
+    adaptation: Adaptation | None,
+    powers: list[int] | None = None,
+) -> Any:
+    """An ``oxisal`` walk on ``declared`` from ``start``, its warm-up run, seeded by one draw of ``generator``.
+
+    What :func:`run_compiled` advances in blocks, and what
+    :func:`sal.sample.hmc.anneal` and :func:`~sal.sample.hmc.parallel_tempering`
+    advance one transition at a time through ``advance_at``, handing it a
+    temperature per call and, after an exchange, another rung's state through
+    ``set_state`` (issue #1249). The walk evaluates ``U`` and ``grad U`` at
+    ``start`` once and carries them from there.
+    """
+    if not temperature > 0.0:
+        msg = f"temperature must be positive, got {temperature}"
+        raise ValueError(msg)
+    kernel, data = declared
+    return walk_class(
+        kernel,
+        data,
+        np.ascontiguousarray(start, dtype=np.float64),
+        step_size,
+        _seed(generator),
+        0 if adaptation is None else adaptation.warmup,
+        0.5 if adaptation is None else adaptation.target_acceptance,
+        0.0 if adaptation is None else adaptation.step_jitter,
+        (DUAL_AVERAGING_GAMMA, DUAL_AVERAGING_T0, DUAL_AVERAGING_KAPPA),
+        powers or [],
+        temperature,
+        *extra,
     )
 
 

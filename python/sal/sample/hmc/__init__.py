@@ -49,6 +49,16 @@ before its rounds; :func:`anneal` re-tunes the step along its schedule,
 which is a heuristic, since an annealing run has no stationary law to adapt
 to (issue #1208).
 
+**A supported objective anneals and tempers in ``oxisal``.** Where the
+objective has :meth:`~sal.sample.declared.SupportedGradient.supported_gradient`
+and the integrator is leapfrog, :func:`anneal` and :func:`parallel_tempering`
+run :func:`sal.sample.loop.anneal` and :func:`~sal.sample.loop.temper` over a
+step that advances an ``oxisal.HmcWalk`` one transition at the temperature it
+is handed, and hands it another rung's position and carried ``(U, grad U)``
+after an exchange (issue #1249). The loops are shared; the draws come from
+the walk's ChaCha8 stream, so the torch route is matched in distribution,
+as :func:`sample`'s compiled route is.
+
 See Neal (2011), "MCMC using Hamiltonian dynamics"; Yoshida (1990) for the
 fourth-order composition and Suzuki (1991) for why its middle coefficient
 must be negative; Nocedal & Wright for the symplectic structure; Kirkpatrick,
@@ -97,6 +107,7 @@ from sal.sample.chain import (
     Scaled,
     Transition,
     compiled_route,
+    compiled_walk,
     gradient_at,
     jittered,
     run_chain,
@@ -689,6 +700,7 @@ def anneal(
     integrator: Integrator = leapfrog,
     adaptation: Adaptation | None = None,
     tuning: StepTuning | None = None,
+    backend: Backend = Backend.RUST,
 ) -> AnnealedTheta:
     """Simulated annealing with Hamiltonian proposals: :func:`sample` on a schedule.
 
@@ -731,6 +743,13 @@ def anneal(
         (:func:`~sal.sample.tune.compress`), from ``start``. The run then
         starts at ``start``, not where a pilot ended, since it begins hot.
         Its gradients are in ``spent``.
+    backend : Backend
+        ``Backend.RUST``, the default, runs the schedule on an
+        ``oxisal.HmcWalk`` where the objective supports a kernel, the
+        integrator is leapfrog, ``adaptation`` is ``None`` and no run is
+        tracked (issue #1249); otherwise, and always under
+        ``Backend.PYTHON``, the torch transition runs it. The compiled walk
+        draws from its own ChaCha8 stream, seeded by one draw of ``rng``.
 
     Returns
     -------
@@ -750,7 +769,35 @@ def anneal(
     )
     step_size = _step(step_size, tuned)
     _check_trajectory(step_size, n_steps)
+    refuse_backend("hmc.anneal", backend, (Backend.PYTHON, Backend.RUST))
     position = start_point(objective, start)
+    declared = _compiled(objective, integrator, backend)
+    if declared is not None and adaptation is None:
+        compiled = _CompiledHamiltonian(
+            compiled_walk(
+                oxisal.HmcWalk,
+                declared,
+                (n_steps,),
+                generator,
+                step_size=step_size,
+                start=position.numpy(),
+                temperature=1.0,
+                adaptation=None,
+            ),
+            integrator.force_evaluations(n_steps, carried=True),
+        )
+        # The walk evaluated `(U, grad U)` at the start: one gradient.
+        ran = loop.anneal(compiled, schedule, compiled.start(1), generator, np.copy)
+        return AnnealedTheta(
+            best=torch.from_numpy(ran.best),
+            value=ran.energy,
+            final=torch.from_numpy(ran.final),
+            acceptance_rate=compiled.accepted / schedule.n_steps,
+            spent=ran.spent + (0 if tuned is None else tuned.spent),
+            unit=Cost.GRADIENTS,
+            termination=ran.termination,
+            tuned=tuned,
+        )
     step = _Hamiltonian(
         objective,
         integrator,
@@ -932,6 +979,7 @@ def parallel_tempering(
     adaptation: Adaptation | None = None,
     tuning: StepTuning | None = None,
     deadline: float | None = None,
+    backend: Backend = Backend.RUST,
 ) -> Tempered:
     """Replicas at fixed temperatures, exchanging positions by Metropolis.
 
@@ -1012,6 +1060,16 @@ def parallel_tempering(
         A wall clock reads no replica's state, which is what makes it a stop
         a sweep may take. ``None`` runs ``n_rounds``, bitwise as before it
         existed.
+    backend : Backend
+        ``Backend.RUST``, the default, runs every rung on its own
+        ``oxisal.HmcWalk`` where the objective supports a kernel, the
+        integrator is leapfrog and no run is tracked (issue #1249): an
+        exchange hands each walk the other's position and carried ``(U,
+        grad U)``, and a rung's warm-up is the walk's own, at its temperature.
+        A warmed-up rung then carries ``grad U`` across its metric, so its
+        rounds cost ``n_steps`` gradients where the torch route's cost
+        ``n_steps + 1``. Otherwise, and always under ``Backend.PYTHON``, the
+        torch transition runs every rung.
 
     Returns
     -------
@@ -1036,6 +1094,7 @@ def parallel_tempering(
     if n_rounds < 1:
         msg = f"n_rounds must be at least 1, got {n_rounds}"
         raise ValueError(msg)
+    refuse_backend("hmc.parallel_tempering", backend, (Backend.PYTHON, Backend.RUST))
 
     parent = generator
     n_replicas = len(temperatures)
@@ -1068,6 +1127,21 @@ def parallel_tempering(
             sizes[index], origins[index] = pilot.step_size, pilot.chosen.final
 
         tuned = tuple(pilots)
+    declared = _compiled(objective, integrator, backend)
+    if declared is not None:
+        return _tempered_compiled(
+            declared,
+            temperatures,
+            parent,
+            children,
+            origins,
+            n_rounds,
+            sizes=[_step(size, None) for size in sizes],
+            n_steps=n_steps,
+            adaptation=adaptation,
+            tuned=tuned,
+            deadline=deadline,
+        )
     adapted: tuple[Adapted, ...] | None = None
     if adaptation is not None:
         kernel = _HamiltonianKernel(n_steps=n_steps, integrator=integrator)
@@ -1239,6 +1313,156 @@ def _tuned(
         criterion=tuning.criterion,
         rng=generator,
         grid=tuning.grid,
+    )
+
+
+def _compiled(
+    objective: Objective, integrator: Integrator, backend: Backend
+) -> tuple[str, Mapping[str, Any]] | None:
+    """The supported kernel an anneal or a tempering runs compiled, or ``None`` for the torch route."""
+    if compiled_route(backend) and integrator is leapfrog:
+        return declared_energy(objective)
+    return None
+
+
+@dataclass
+class _CompiledHamiltonian:
+    """One ``oxisal.HmcWalk`` transition as a :data:`~sal.sample.loop.Step` (issue #1249).
+
+    The walk keeps where it is and the ``(U, grad U)`` it carries there; a
+    state the step did not hand back last --- another rung's, after an
+    exchange --- is handed to the walk with what it carries, so nothing is
+    evaluated afresh. The stream argument is unread: the walk draws from its own
+    stream. Charged ``per_proposal`` gradients, the carried trajectory's.
+    """
+
+    walk: Any
+    per_proposal: int
+    accepted: int = 0
+    _at: np.ndarray | None = field(default=None, init=False, repr=False)
+
+    def start(self, spent: int) -> Moved[np.ndarray, np.ndarray]:
+        """Where the walk is and what it carries, charged ``spent``."""
+        position, value, gradient = self.walk.state()
+        self._at = position
+        return Moved(position, value, gradient, spent)
+
+    def __call__(
+        self,
+        position: np.ndarray,
+        potential: float,
+        force: np.ndarray,
+        temperature: float,
+        _generator: torch.Generator,
+        /,
+    ) -> Moved[np.ndarray, np.ndarray]:
+        """One transition at ``temperature`` from ``position``."""
+        if position is not self._at:
+            self.walk.set_state(position, potential, force)
+        landed, value, gradient, taken = self.walk.advance_at(1, temperature)
+        self._at = landed
+        self.accepted += taken
+        return Moved(landed, value, gradient, self.per_proposal)
+
+
+def _tempered_compiled(
+    declared: tuple[str, Mapping[str, Any]],
+    temperatures: Sequence[float],
+    parent: torch.Generator,
+    children: Sequence[torch.Generator],
+    origins: Sequence[torch.Tensor],
+    n_rounds: int,
+    *,
+    sizes: Sequence[float],
+    n_steps: int,
+    adaptation: Adaptation | None,
+    tuned: tuple[TunedStep[torch.Tensor], ...] | None,
+    deadline: float | None,
+) -> Tempered:
+    """:func:`parallel_tempering` on one ``oxisal.HmcWalk`` per rung, over :func:`~sal.sample.loop.temper` (issue #1249).
+
+    Rung ``r`` starts at ``sizes[r]``, a pilot's where ``tuned`` holds one.
+    Each rung's walk is seeded by one draw of its child stream and runs its
+    warm-up, where there is one, at its own temperature on construction;
+    the exchange uniforms are drawn from ``parent`` as the torch route draws
+    them. A walk evaluates ``(U, grad U)`` at its start once, charged to its
+    warm-up where there is one, as :func:`~sal.sample.chain.run_compiled`
+    charges it.
+    """
+    per_proposal = leapfrog.force_evaluations(n_steps, carried=True)
+    steps = [
+        _CompiledHamiltonian(
+            compiled_walk(
+                oxisal.HmcWalk,
+                declared,
+                (n_steps,),
+                child,
+                step_size=size,
+                start=origin.numpy(),
+                temperature=temperature,
+                adaptation=adaptation,
+            ),
+            per_proposal,
+        )
+        for origin, temperature, child, size in zip(
+            origins, temperatures, children, sizes, strict=True
+        )
+    ]
+    warmup = 0 if adaptation is None else adaptation.warmup * per_proposal + 1
+    adapted = (
+        None
+        if adaptation is None
+        else tuple(
+            Adapted(
+                step_size=step.walk.step_size,
+                mass_diagonal=torch.from_numpy(step.walk.mass_diagonal),
+                warmup_acceptance=step.walk.warmup_acceptance,
+                force_evaluations=warmup,
+                flat=tuple(step.walk.flat),
+            )
+            for step in steps
+        )
+    )
+    starts = [step.start(1 if adaptation is None else 0) for step in steps]
+    tracked: TrackedOptimization = current_tracked()
+    series = ExchangeSeries()
+    recorded: list[np.ndarray] = []
+
+    def observe(sweep: int, run: Exchanging[np.ndarray]) -> None:
+        tracked.record(sweep, energy=run.energy)
+        series(sweep, run)
+
+    run = temper(
+        steps,
+        temperatures,
+        starts,
+        children,
+        lambda ratio: accept_with(ratio, float(torch.rand(1, generator=parent))),
+        n_rounds,
+        keep=np.copy,
+        record=lambda states, _: recorded.append(np.stack(states)),
+        observe=observe,
+        stop=None if deadline is None else _before(deadline),
+    )
+    series.close(run)
+    accepted = torch.tensor([float(s.accepted) for s in steps], dtype=torch.float64)
+    rounds = torch.from_numpy(np.stack(recorded))
+    tracked.record_cost(max(run.rounds - 1, 0), rounds.nbytes)
+    return Tempered(
+        best=torch.from_numpy(run.best),
+        value=run.energy,
+        positions=rounds,
+        acceptance_rate=accepted / run.rounds,
+        temperatures=tuple(temperatures),
+        swap_acceptance=run.swap_acceptance,
+        spent=run.spent
+        + warmup * len(steps)
+        + sum(pilot.spent for pilot in tuned or ()),
+        unit=Cost.GRADIENTS,
+        termination=Termination.after(run.rounds, converged=False),
+        walkers=run.walkers,
+        adapted=adapted,
+        tuned=tuned,
     )
 
 
