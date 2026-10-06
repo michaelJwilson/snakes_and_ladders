@@ -321,16 +321,27 @@ def test_the_compiled_hmm_gradient_is_autograds(kind: str) -> None:
     )
 
 
-@pytest.mark.smoke
-def test_the_jax_twin_refuses_the_reading_rather_than_mis_map_it() -> None:
-    # The twin is written for the alpha, beta family by exact type; the
-    # reading has none, and says so.
+@pytest.mark.oracle
+def test_the_jax_twin_reads_rate_and_concentration() -> None:
+    # Issue #1206: the twin maps `rate` by the logistic and `concentration`
+    # by `exp`, and scores at `a = tau p`, `b = tau (1 - p)`. Referee: the
+    # same objective under Backend.RUST, value and gradient.
     start = RateConcentrationBetaBinomialEmission([40, 40], [0.2, 0.7], [10.0, 12.0])
     data = np.random.default_rng(SEED).integers(0, 41, (3, 40))
-
-    with pytest.raises(ValueError, match="no JAX twin"):
-        EmissionHmmObjective(data, start, backend=Backend.JAX)
-    assert EmissionHmmObjective(data, start).jax_energy() is None
+    twin, oracle = (
+        EmissionHmmObjective(data, start, backend=backend)
+        for backend in (Backend.JAX, Backend.RUST)
+    )
+    theta = twin.initial() + 0.1
+    value, gradient = twin.value_and_gradient(theta)
+    want_value, want_gradient = oracle.value_and_gradient(theta)
+    np.testing.assert_allclose(float(value), float(want_value), rtol=1e-12)
+    np.testing.assert_allclose(
+        gradient.numpy(),
+        want_gradient.numpy(),
+        rtol=1e-12,
+        atol=1e-12 * float(want_gradient.abs().max()),
+    )
 
 
 #: The recovery fixture: twenty segments of 50-249 positions, two states.

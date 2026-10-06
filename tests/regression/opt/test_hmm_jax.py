@@ -218,37 +218,37 @@ def test_the_rising_factorial_holds_where_the_difference_cancels() -> None:
 def test_the_twin_reads_the_family_from_the_start() -> None:
     # Issue #1189: the JAX route is keyed on `EmissionHmmObjective`'s start
     # family. Referee: the objective's own autograd value, for a twinned
-    # family; and `twinned` refuses what no twin covers --- a count
-    # pair, and segments of unequal length --- so neither declares a JAX
-    # energy nor admits Backend.JAX.
+    # family --- on segments of one length, on segments of two (issue #1206),
+    # and for a count pair --- and `twinned` refuses what no twin covers, a
+    # joint pair given a covariate its family refuses, so it neither declares
+    # a JAX energy nor admits Backend.JAX.
     rng = np.random.default_rng(1189)
     counts = rng.poisson(6.0, size=48)
     pair = CountPairEmission(
-        [5.0, 12.0], [6.0, 30.0], [2.0, 4.0], [3.0, 2.0], [20, 20], joint=False
+        [5.0, 12.0], [6.0, 30.0], [2.0, 4.0], [3.0, 2.0], None, joint=True
     )
     ragged = EmissionHmmObjective(
         Ragged(counts.astype(np.float64), (20, 28)),
         family_start(PoissonEmission, counts, 3),
     )
-    joint = EmissionHmmObjective(
-        Ragged(
-            np.asarray(pair.sample(rng.integers(0, 2, 40), rng), dtype=np.float64),
-            (20, 20),
-        ),
-        pair,
+    values = np.asarray(pair.sample(rng.integers(0, 2, 40), rng), dtype=np.float64)
+    joint = EmissionHmmObjective(Ragged(values, (20, 20)), pair)
+    covaried = EmissionHmmObjective(
+        Ragged(values, (20, 20)), pair, covariate=np.ones((40, 2))
     )
-    for untwinned in (ragged, joint):
-        assert not hmm_jax.twinned(untwinned)
-        assert untwinned.jax_energy() is None
+    assert not hmm_jax.twinned(covaried)
+    assert covaried.jax_energy() is None
     with pytest.raises(ValueError, match="no JAX twin"):
         EmissionHmmObjective(
-            Ragged(counts.astype(np.float64), (20, 28)),
-            family_start(PoissonEmission, counts, 3),
+            Ragged(values, (20, 20)),
+            pair,
+            covariate=np.ones((40, 2)),
             backend=Backend.JAX,
         )
-    square = _objectives()[2]
-    theta = square.initial() + 0.1
-    energy, data = square.jax_energy()  # type: ignore[misc]
-    assert_allclose(
-        float(energy(theta.numpy(), data)), float(square(theta)), rtol=1e-12
-    )
+    for twinned in (_objectives()[2], ragged, joint):
+        assert hmm_jax.twinned(twinned)
+        theta = twinned.initial() + 0.1
+        energy, data = twinned.jax_energy()  # type: ignore[misc]
+        assert_allclose(
+            float(energy(theta.numpy(), data)), float(twinned(theta)), rtol=1e-12
+        )
