@@ -70,6 +70,8 @@ TEMPERED_EXEMPT = {
     "TemperedSupport": "search/support.py",
     # An input: the model a tempering runs on.
     "TemperedModel": "sample/potts_mcmc/chains.py",
+    # An input: the E step a tempered EM runs.
+    "TemperedEStep": "sandbox/annealed_em.py",
 }
 
 

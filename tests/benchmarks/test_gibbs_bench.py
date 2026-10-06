@@ -100,4 +100,4 @@ def test_potts_single_site_sweep_benchmark(
         np.random.default_rng(1),
         backend=backend,
     )
-    assert annealed.labelling.shape == (graph.n_nodes,)
+    assert annealed.best.shape == (graph.n_nodes,)
