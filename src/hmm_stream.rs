@@ -245,10 +245,10 @@ pub trait Statistics: Send {
 }
 
 /// Expected chain counts from one streamed E step.
-struct Counts {
-    first: Vec<f64>,
-    pairs: Vec<f64>,
-    log_likelihood: f64,
+pub(crate) struct Counts {
+    pub(crate) first: Vec<f64>,
+    pub(crate) pairs: Vec<f64>,
+    pub(crate) log_likelihood: f64,
 }
 
 impl Counts {
@@ -273,7 +273,7 @@ const BLOCK_BYTES: usize = 4 << 20;
 /// The longest of `lengths`, once each is at least one and they sum to
 /// `n_positions`: the segments laid end to end, as `src/ragged.rs` takes them.
 /// A segment of one position is admitted (issue #1240).
-fn segment_lengths(n_positions: usize, lengths: &[usize]) -> Result<usize, String> {
+pub(crate) fn segment_lengths(n_positions: usize, lengths: &[usize]) -> Result<usize, String> {
     if let Some(index) = lengths.iter().position(|&one| one == 0) {
         return Err(format!("segment {index} has length 0"));
     }
@@ -326,7 +326,7 @@ fn block_starts(lengths: &[usize], blocks: usize) -> Vec<usize> {
 /// merged in order; `statistics_bytes` is one block's `S`, which sets how
 /// many blocks the memory allows.
 #[allow(clippy::too_many_arguments)]
-fn stream_counts<S: Statistics>(
+pub(crate) fn stream_counts<S: Statistics>(
     n_positions: usize,
     lengths: &[usize],
     log_initial: &[f64],

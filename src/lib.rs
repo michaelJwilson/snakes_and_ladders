@@ -19,6 +19,7 @@ pub mod bcjr;
 pub mod bifurcation;
 pub mod bk;
 pub mod chain;
+pub mod count_hmm;
 pub mod count_mixture;
 pub mod count_mstep;
 pub mod count_pairs;
