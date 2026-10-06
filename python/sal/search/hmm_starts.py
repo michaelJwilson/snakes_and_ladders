@@ -79,6 +79,7 @@ remainder.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
@@ -86,7 +87,7 @@ import numpy as np
 import torch
 
 from sal.cost import Cost
-from sal.emissions import GaussianEmission
+from sal.emissions import GaussianEmission, flat_channels, pooled_variance_floor
 from sal.opt.budget import Budget
 from sal.opt.initialize import FromObjective, Initializer, RandomRestart
 from sal.opt.initialize import quantile_locations as _quantile_locations
@@ -357,15 +358,28 @@ def gaussian_quantile_start(
 ) -> GaussianEmission:
     """A Gaussian family at ``n_states`` evenly spaced quantiles of ``values``, each at the pooled standard deviation.
 
+    Values all equal have no spread: every scale is then
+    ``sqrt(pooled_variance_floor(values))`` and the channel is
+    :attr:`~sal.emissions.GaussianEmission.flat`, as
+    :meth:`~sal.opt.mixture.GaussianMixtureObjective.initial` seeds it
+    (issue #1242). Values with spread are unchanged.
+
     Returns
     -------
     GaussianEmission
     """
     pooled = torch.as_tensor(values, dtype=torch.float64).reshape(-1)
+    flat = flat_channels(pooled.numpy())
+    scale = (
+        math.sqrt(pooled_variance_floor(pooled.numpy()))
+        if flat
+        else float(pooled.std())
+    )
     return GaussianEmission(
         _quantile_locations(pooled, n_states),
-        torch.full((n_states,), float(pooled.std())),
+        torch.full((n_states,), scale),
         variance_floor,
+        flat=flat,
     )
 
 
