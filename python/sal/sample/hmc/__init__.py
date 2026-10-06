@@ -62,7 +62,7 @@ import itertools
 import math
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
@@ -74,6 +74,7 @@ from sal.cost import Cost
 from sal.emissions import ParameterDomainError
 from sal.opt.objective import (
     Objective,
+    value_and_gradient,
 )
 from sal.opt.termination import Termination
 from sal.sample.accept import (
@@ -360,15 +361,37 @@ class Integrator:
         PhaseSpace
             Position and momentum after ``n_steps``.
         """
+        return self._scored(objective, theta, momentum, step_size, n_steps)[0]
+
+    def _scored(
+        self,
+        objective: Objective,
+        theta: torch.Tensor,
+        momentum: torch.Tensor,
+        step_size: float,
+        n_steps: int,
+    ) -> tuple[PhaseSpace, float]:
+        """:meth:`__call__`, and ``U`` at the end point from its last force evaluation (issue #1217).
+
+        The last kick takes the value beside the gradient through
+        :func:`~sal.opt.objective.value_and_gradient`, so the acceptance
+        test does not evaluate the end point a second time. The gradient is
+        :func:`gradient_at`'s wherever that reads ``value_and_gradient``'s
+        or a declared gradient alone, which is every objective but one that
+        declares both by different arithmetic.
+        """
         position = theta.detach().clone()
         velocity = momentum.detach().clone()
         kicks, drifts = _coefficients(self.weights, n_steps)
 
         velocity = velocity - kicks[0] * step_size * gradient_at(objective, position)
-        for drift, kick in zip(drifts, kicks[1:], strict=True):
+        for drift, kick in zip(drifts[:-1], kicks[1:-1], strict=True):
             position = position + drift * step_size * velocity
             velocity = velocity - kick * step_size * gradient_at(objective, position)
-        return PhaseSpace(position=position, momentum=velocity)
+        position = position + drifts[-1] * step_size * velocity
+        potential, force = value_and_gradient(objective, position)
+        velocity = velocity - kicks[-1] * step_size * force
+        return PhaseSpace(position=position, momentum=velocity), float(potential)
 
 
 def _coefficients(
@@ -406,9 +429,17 @@ def hamiltonian(
     objective: Objective, theta: torch.Tensor, momentum: torch.Tensor
 ) -> float:
     """``U(theta) + K(momentum)``, the quantity the integrator conserves."""
-    potential = float(objective(theta.detach()))
-    kinetic = 0.5 * float((momentum * momentum).sum())
-    return potential + kinetic
+    return _potential(objective, theta) + _kinetic(momentum)
+
+
+def _potential(objective: Objective, theta: torch.Tensor) -> float:
+    """``U(theta)``, by the objective's forward: :func:`hamiltonian`'s first term."""
+    return float(objective(theta.detach()))
+
+
+def _kinetic(momentum: torch.Tensor) -> float:
+    """``K(p) = p'p / 2`` at unit mass: :func:`hamiltonian`'s second term."""
+    return 0.5 * float((momentum * momentum).sum())
 
 
 def sample(
@@ -641,6 +672,9 @@ def anneal(
     position = start_point(objective, start)
 
     best, best_value = position.clone(), float(objective(position))
+    # `U` at `position`, carried from one transition to the next rather
+    # than evaluated again by each (issue #1217).
+    value = best_value
     accepted = 0
     # `energy` is the best value so far, which is what `AnnealedTheta.value`
     # returns: the series ends at the field rather than at the last visited
@@ -655,7 +689,7 @@ def anneal(
     step_sizes: list[float] = []
     for step in range(schedule.n_steps):
         temperature = schedule(step)
-        taken = _transition(
+        taken, value = _transition(
             objective,
             position,
             temperature,
@@ -665,6 +699,7 @@ def anneal(
             else jittered(step_size, adaptation.step_jitter, generator),
             n_steps,
             integrator,
+            potential=value,
         )
         if averaging is not None and adaptation is not None:
             # The iterate drives the next proposal; at a window's end the
@@ -677,7 +712,6 @@ def anneal(
                 averaging = DualAveraging(step_size, adaptation.target_acceptance)
         position = taken.position
         accepted += taken.accepted
-        value = float(objective(position))
         if value < best_value:
             best, best_value = position.clone(), value
         tracked.record(step, state=best, temperature=temperature, energy=best_value)
@@ -906,20 +940,35 @@ def parallel_tempering(
 
     def transition(
         position: torch.Tensor,
-        _: float,
+        density: float,
         temperature: float,
         child: torch.Generator,
     ) -> tuple[torch.Tensor, float]:
-        """One Hamiltonian transition, and the log-density where it landed."""
+        """One Hamiltonian transition, and the log-density where it landed.
+
+        ``density`` is ``-U(position)``, which the exchange carries beside
+        the position, so neither end of the step is evaluated twice (issue
+        #1217).
+        """
         index = rung[temperature]
         if adapted is None:
-            step = _transition(
-                objective, position, temperature, child, step_size, n_steps, integrator
+            step, landed_at = _transition(
+                objective,
+                position,
+                temperature,
+                child,
+                step_size,
+                n_steps,
+                integrator,
+                potential=-density,
             )
             accepted[index] += step.accepted
-            return step.position, -float(objective(step.position))
+            return step.position, -landed_at
         scale = scales[index]
-        step = _transition(
+        # The metric's `U` at `position / scale` is evaluated afresh: it is
+        # `objective` at the round trip, which may differ from `density`'s
+        # point in the last place.
+        step, landed_at = _transition(
             metrics[index],
             position / scale,
             temperature,
@@ -931,8 +980,11 @@ def parallel_tempering(
         accepted[index] += step.accepted
         # A rejection keeps `position` itself rather than its round trip
         # through the metric, which may differ in the last place.
-        landed = step.position * scale if step.accepted else position
-        return landed, -float(objective(landed))
+        # Accepted, the metric's `U` was taken at `step.position * scale`,
+        # the product `landed` is, so it is `objective`'s value there.
+        if step.accepted:
+            return step.position * scale, -landed_at
+        return position, density
 
     def observe(states: Sequence[torch.Tensor], densities: Sequence[float]) -> None:
         """The round the exchange closed: the positions it left, and the best point seen."""
@@ -1031,12 +1083,22 @@ def _check_trajectory(step_size: float, n_steps: int) -> None:
         raise ValueError(msg)
 
 
-@dataclass(frozen=True)
+@dataclass
 class _HamiltonianKernel:
-    """:func:`_transition` with its trajectory bound: :func:`sample`'s :class:`Kernel`."""
+    """:func:`_transition` with its trajectory bound: :func:`sample`'s :class:`Kernel`.
+
+    The current point's ``U`` is kept beside the tensor it was taken at and
+    handed to the next transition while the chain has not left it, as
+    :class:`~sal.sample.metropolis` keeps its energy: the identity of the
+    objective and of the tensor is the key, so the warm-up's change of
+    coordinates, or a new position, is evaluated afresh (issue #1217).
+    """
 
     n_steps: int
     integrator: Integrator
+    _at: tuple[Objective, torch.Tensor, float] | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
 
     def __call__(
         self,
@@ -1046,7 +1108,14 @@ class _HamiltonianKernel:
         generator: torch.Generator,
         step_size: float,
     ) -> Transition:
-        return _transition(
+        carried = (
+            self._at[2]
+            if self._at is not None
+            and self._at[0] is objective
+            and self._at[1] is position
+            else None
+        )
+        step, potential = _transition(
             objective,
             position,
             temperature,
@@ -1054,7 +1123,10 @@ class _HamiltonianKernel:
             step_size,
             self.n_steps,
             self.integrator,
+            potential=carried,
         )
+        self._at = (objective, step.position, potential)
+        return step
 
 
 def _transition(
@@ -1065,7 +1137,9 @@ def _transition(
     step_size: float,
     n_steps: int,
     integrator: Integrator,
-) -> Transition:
+    *,
+    potential: float | None = None,
+) -> tuple[Transition, float]:
     """One Metropolis step with a Hamiltonian proposal at ``temperature``.
 
     Momentum is drawn with variance ``temperature`` and the acceptance ratio
@@ -1073,29 +1147,44 @@ def _transition(
     At ``temperature = 1.0`` both are the identity bitwise, so this *is* the
     untempered transition and not an approximation of it.
 
+    ``U`` is evaluated nowhere the step has already evaluated it (issue
+    #1217): at the current point it is ``potential`` where the caller
+    carries one, and at the proposal it is the integrator's last force
+    evaluation's.
+
+    Parameters
+    ----------
+    potential : float | None
+        ``U(position)`` where the caller holds it, from the transition that
+        landed there; ``None`` evaluates it.
+
     Returns
     -------
-    Transition
+    tuple[Transition, float]
         The new position, the absolute energy error of the proposal, 1 if
         it was accepted, and the Metropolis acceptance probability
         ``min(1, exp(-dH / T))`` --- the statistic dual averaging drives,
         which has less variance than the accept/reject outcome. A proposal
         whose energy is not finite has probability 0, and so does one whose
         trajectory left the objective's domain
-        (:class:`~sal.emissions.ParameterDomainError`).
+        (:class:`~sal.emissions.ParameterDomainError`). Beside it, ``U`` at
+        the new position, for the caller to carry into the next step.
     """
     momentum = torch.randn(
         position.shape, generator=generator, dtype=torch.float64
     ) * math.sqrt(temperature)
-    current = hamiltonian(objective, position, momentum)
+    here = _potential(objective, position) if potential is None else potential
+    current = here + _kinetic(momentum)
 
     try:
-        trajectory = integrator(objective, position, momentum, step_size, n_steps)
+        trajectory, there = integrator._scored(
+            objective, position, momentum, step_size, n_steps
+        )
         proposal = trajectory.position
         # Negating the momentum makes the proposal symmetric, which is what
         # leaves the acceptance ratio as the energy difference alone. It has
         # no effect on the next iteration, where the momentum is redrawn.
-        proposed = hamiltonian(objective, proposal, -trajectory.momentum)
+        proposed = there + _kinetic(-trajectory.momentum)
     except ParameterDomainError:
         # A divergent trajectory: it drove a parameter out of the family's
         # domain, where the energy does not exist. Rejected as a proposal of
@@ -1103,7 +1192,7 @@ def _transition(
         torch.rand(1, generator=generator)
         return Transition(
             position=position, energy_error=math.inf, accepted=0, probability=0.0
-        )
+        ), here
 
     error = abs(proposed - current)
     uniform = float(torch.rand(1, generator=generator))
@@ -1112,10 +1201,10 @@ def _transition(
     if accept_ratio(ratio, uniform):
         return Transition(
             position=proposal, energy_error=error, accepted=1, probability=probability
-        )
+        ), there
     return Transition(
         position=position, energy_error=error, accepted=0, probability=probability
-    )
+    ), here
 
 
 def compiled_trajectory(

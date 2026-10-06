@@ -630,9 +630,10 @@ def test_each_tempering_replica_samples_the_gaussian_at_its_own_temperature() ->
 
 @pytest.mark.smoke
 def test_tempering_costs_what_its_accounting_says_and_is_reproducible() -> None:
-    # One value at the start; then per replica per round one Hamiltonian at
-    # the current point, the trajectory's gradients, one at the proposal and
-    # the value where the replica landed. Counted, for the reason
+    # One value at the start; then per replica per round the trajectory's
+    # gradients alone: the current point's value is carried from the round
+    # before and the proposal's is the last force evaluation's (issue #1217),
+    # where three further values a proposal were taken before. Counted, for the reason
     # `test_force_evaluations_counts_what_a_trajectory_actually_costs` gives.
     counted = Counted(GAUSSIAN)
     ladder = (1.0, 2.0, 4.0, 8.0)
@@ -647,7 +648,7 @@ def test_tempering_costs_what_its_accounting_says_and_is_reproducible() -> None:
     )
 
     assert run.spent == 25 * 4 * leapfrog.force_evaluations(6)
-    assert counted.calls == 1 + 25 * 4 * (leapfrog.force_evaluations(6) + 3)
+    assert counted.calls == 1 + 25 * 4 * leapfrog.force_evaluations(6)
     again = parallel_tempering(
         GAUSSIAN,
         ladder,
