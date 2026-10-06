@@ -371,10 +371,8 @@ def forward_log_likelihood_ragged(
         One length per segment, summing to ``total``, as
         :func:`sal.oxisal.ragged_posteriors` takes them. Each is at least one:
         the recursion admits a segment of one position, whose evidence is
-        ``logsumexp(log_initial + log_density[t])``.
-        :class:`~sal.ragged.Ragged` refuses fewer than
-        :data:`sal.ragged.MINIMUM_LENGTH`, so a caller building from one
-        never passes it.
+        ``logsumexp(log_initial + log_density[t])``, as
+        :class:`~sal.ragged.Ragged` admits it (issue #1233).
     log_initial : torch.Tensor
         Log initial distribution, shape ``(m,)``.
     log_transition : torch.Tensor

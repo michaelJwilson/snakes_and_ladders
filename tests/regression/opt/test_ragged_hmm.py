@@ -150,11 +150,32 @@ def test_the_planted_rates_are_recovered_from_ragged_segments() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.smoke
-def test_a_segment_of_one_position_never_reaches_the_fit() -> None:
-    """Refused at the carrier, which is where the shape is declared."""
-    with pytest.raises(ValueError, match="at least 2 positions"):
-        Ragged(_draw((2, 1), seed=1)[:3], (2, 1))
+@pytest.mark.analytic
+@pytest.mark.parametrize("backend", [Backend.RUST, Backend.PYTHON], ids=str)
+def test_a_one_position_segment_adds_nothing_to_the_transitions(
+    backend: Backend,
+) -> None:
+    """One M step with segments of one position is the M step without them.
+
+    Issue #1233. A segment of one position reads no transition, so the
+    expected counts, and the transition normalised from them, are the batch's
+    without it. Bitwise on ``RUST``; on ``PYTHON`` the padded torch recursion
+    sums the counts over a larger block, 4.4e-16 apart, so 1e-15 absolute.
+    """
+    lengths, kept = (1, 30, 1, 45, 1), (30, 45)
+    drawn = _draw(lengths, seed=5)
+    live = np.concatenate([np.full(length, length > 1) for length in lengths])
+    one_step = replace(EM, max_iterations=1)
+    with_ones, without = (
+        baum_welch_family(
+            Ragged(values, shape), *_model(), one_step, backend=backend
+        ).log_transition
+        for values, shape in ((drawn, lengths), (drawn[live], kept))
+    )
+    if backend is Backend.RUST:
+        assert torch.equal(with_ones, without)
+    else:
+        torch.testing.assert_close(with_ones, without, rtol=0.0, atol=1e-15)
 
 
 @pytest.mark.critical

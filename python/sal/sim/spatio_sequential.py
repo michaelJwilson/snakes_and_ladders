@@ -201,8 +201,7 @@ class SpatioSequentialParams:
                 index, length = short[0]
                 msg = (
                     f"segment {index} has length {length}; a segment carries at "
-                    f"least {MINIMUM_LENGTH} positions, since one position is an "
-                    "initial distribution and no transition (issue #666)"
+                    f"least {MINIMUM_LENGTH} position"
                 )
                 raise ValueError(msg)
             if sum(self.segments) != self.n_positions:
