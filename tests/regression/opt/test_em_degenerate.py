@@ -8,7 +8,7 @@
   observation, the Gaussian mixture's tensor route and the annealed mixture.
 - **The end2end check:** a best-of over restarts in which one restart seeds a
   component on a lone outlier, whose M step then cannot settle on the one
-  observation it holds, still returns the planted means from the others.
+  observation it holds, still returns the labelled means from the others.
 """
 
 from __future__ import annotations
@@ -268,7 +268,7 @@ OUTLIER = 1000.0
 
 @pytest.mark.end2end
 @pytest.mark.mixture
-def test_a_best_of_with_one_degenerate_restart_recovers_the_planted_means() -> None:
+def test_a_best_of_with_one_degenerate_restart_recovers_the_labelled_means() -> None:
     rng = np.random.default_rng(12350)
     labels = rng.integers(0, 2, 600)
     observations = np.append(rng.poisson(np.asarray(MEANS)[labels]), OUTLIER).astype(
@@ -311,5 +311,7 @@ def test_a_best_of_with_one_degenerate_restart_recovers_the_planted_means() -> N
         np.append(counts[labels == 1], OUTLIER).mean(),
     )
     fitted = np.sort(best.components.named_parameters()["mean"].detach().numpy())
-    np.testing.assert_allclose(fitted, labelled, rtol=0.02)
-    np.testing.assert_allclose(fitted, MEANS, rtol=0.1)
+    # Realized 8.3e-6: the few counts whose label the two components'
+    # overlap swaps. The planted means themselves sit 9.8% off in the upper
+    # component, which holds the outlier, so they are not the referee.
+    np.testing.assert_allclose(fitted, labelled, rtol=1e-3)
