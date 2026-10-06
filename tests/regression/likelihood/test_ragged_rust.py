@@ -1,7 +1,10 @@
 """The compiled ragged forward-backward against its NumPy oracle.
 
 Issue #666. The oracle is `forward_backward` run one segment at a time, so what
-is checked is the segmentation and not a second batched recursion.
+is checked is the segmentation and not a second batched recursion. On a
+segment of 400 that oracle is itself 4.2e-11 off an 80-bit recursion on the
+log marginals, outside the 1e-11 it is compared at, so there the 80-bit
+recursion referees instead (issue #1262).
 """
 
 from __future__ import annotations
@@ -24,6 +27,7 @@ from sal.likelihood.ragged import (
 from sal.likelihood.ragged import rust as ragged_rust
 from sal.ragged import Ragged
 
+from tests._long_double import long_double_posteriors
 from tests._rows import every_value
 
 STATES = 3
@@ -58,7 +62,26 @@ def test_the_compiled_kernel_matches_the_oracle() -> None:
         np.testing.assert_allclose(gamma, want_gamma, rtol=tolerance)
         np.testing.assert_allclose(counts, want_counts, rtol=tolerance)
 
-    every_value([(5, 11, 3, 40), (2, 2), (400, 2, 7), (17,) * 6], check)
+    every_value([(5, 11, 3, 40), (2, 2), (17,) * 6], check)
+
+
+@pytest.mark.critical
+@pytest.mark.oracle
+def test_a_long_segment_matches_a_long_double_recursion() -> None:
+    # Issue #1262: the 400-position layout the oracle above held until the
+    # kernel's rows were shifted per step; the kernel is 3.2e-14 off this
+    # referee on the log marginals, the float64 oracle 4.2e-11.
+    lengths = (400, 2, 7)
+    density, initial, transition = _instance(lengths, seed=4)
+    gamma, counts, evidence = ragged_rust.posteriors(density, initial, transition)
+    want_gamma, want_counts, want_evidence = (
+        one.astype(np.float64)
+        for one in long_double_posteriors(density.values, lengths, initial, transition)
+    )
+    tolerance = CROSS_DEVICE_RTOL_FLOAT64
+    np.testing.assert_allclose(evidence, want_evidence, rtol=tolerance)
+    np.testing.assert_allclose(gamma, np.log(want_gamma), rtol=tolerance)
+    np.testing.assert_allclose(counts, np.log(want_counts), rtol=tolerance)
 
 
 @pytest.mark.critical
