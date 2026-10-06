@@ -17,8 +17,10 @@ objective's own gradient calls, so a chain and a fit evaluate one arithmetic.
   data ``k`` and ``observations``; ``oxisal.gaussian_mixture_gradient``'s
   kernel (issue #1008).
 * :data:`GAUSSIAN_HMM` --- a Gaussian HMM's negative log-likelihood of
-  equal-length sequences, data ``m`` and ``observations`` with sequences as
-  rows; ``oxisal.gaussian_hmm_statistics`` and Fisher's identity (issue #1008).
+  segments, data ``m``, ``observations`` end to end and ``lengths``, one per
+  segment (issue #1254), or ``observations`` alone with equal-length
+  sequences as rows; ``oxisal.gaussian_hmm_statistics``'s streamed pass and
+  Fisher's identity (issue #1008).
 * :data:`COUNT_MIXTURE` --- a negative binomial, beta-binomial or count-pair
   mixture's negative log-likelihood, data ``k``, ``totals``, ``successes``,
   ``trials`` and ``slots``; ``oxisal.count_mixture_value_and_gradient``'s

@@ -39,13 +39,14 @@ pub struct Step {
     pub log_likelihood: f64,
 }
 
-/// One E step and one M step over `n_sequences` rows of `length` symbols.
+/// One E step and one M step over segments of `lengths` symbols, end to end.
 ///
-/// `observations` is row-major `n_sequences * length`; `log_transition` is
-/// `m * m` and `log_emission` `m * n_symbols`, both row-major.
+/// `observations` holds the segments end to end, `lengths` one per segment;
+/// `log_transition` is `m * m` and `log_emission` `m * n_symbols`, both
+/// row-major.
 pub fn categorical_step(
     observations: &[i64],
-    length: usize,
+    lengths: &[usize],
     log_initial: &[f64],
     log_transition: &[f64],
     log_emission: &[f64],
@@ -59,12 +60,7 @@ pub fn categorical_step(
         ));
     }
     let n_symbols = log_emission.len() / m;
-    if length == 0 || !observations.len().is_multiple_of(length) {
-        return Err(format!(
-            "{} observations are not rows of {length}",
-            observations.len()
-        ));
-    }
+    let longest = segment_lengths(observations.len(), lengths)?;
     if let Some(&bad) = observations
         .iter()
         .find(|&&o| o < 0 || o as usize >= n_symbols)
@@ -84,13 +80,17 @@ pub fn categorical_step(
     let mut first = vec![0.0; m];
     let mut pairs = vec![0.0; m * m];
     let mut symbols = vec![0.0; m * n_symbols];
-    let mut alpha = vec![0.0; length * m];
-    let mut scale = vec![0.0; length];
+    let mut alpha = vec![0.0; longest * m];
+    let mut scale = vec![0.0; longest];
     let mut beta = vec![1.0; m];
     let mut onward = vec![0.0; m];
     let mut log_likelihood = 0.0;
 
-    for row in observations.chunks_exact(length) {
+    let mut start = 0;
+    for &length in lengths {
+        let row = &observations[start..start + length];
+        start += length;
+        let scale = &mut scale[..length];
         // Forward, each position normalized to sum to one.
         let b0 = &emission[row[0] as usize * m..][..m];
         let mut total = 0.0;
@@ -156,7 +156,7 @@ pub fn categorical_step(
         }
     }
 
-    let n_sequences = (observations.len() / length) as f64;
+    let n_sequences = lengths.len() as f64;
     let log_initial = first.iter().map(|&g| g.ln() - n_sequences.ln()).collect();
     let normalized = |counts: &[f64], width: usize, floor: f64| -> Vec<f64> {
         counts
@@ -201,7 +201,7 @@ pub fn categorical_em_step<'py>(
     Bound<'py, PyArray1<f64>>,
     f64,
 )> {
-    let length = observations.shape()[1];
+    let lengths = rows_of(observations.shape());
     let observations = observations.as_slice()?;
     let (log_initial, log_transition, log_emission) = (
         log_initial.as_slice()?,
@@ -212,7 +212,7 @@ pub fn categorical_em_step<'py>(
         .detach(|| {
             categorical_step(
                 observations,
-                length,
+                &lengths,
                 log_initial,
                 log_transition,
                 log_emission,
@@ -262,6 +262,47 @@ const BLOCKS: usize = 16;
 /// The bytes the blocks' statistics may take together before fewer are used.
 const BLOCK_BYTES: usize = 4 << 20;
 
+/// The longest of `lengths`, once each is at least one and they sum to
+/// `n_positions`: the segments laid end to end, as `src/ragged.rs` takes them.
+/// A segment of one position is admitted (issue #1240).
+fn segment_lengths(n_positions: usize, lengths: &[usize]) -> Result<usize, String> {
+    if let Some(index) = lengths.iter().position(|&one| one == 0) {
+        return Err(format!("segment {index} has length 0"));
+    }
+    let total: usize = lengths.iter().sum();
+    if total != n_positions {
+        return Err(format!(
+            "the lengths sum to {total}, the observations number {n_positions}"
+        ));
+    }
+    Ok(lengths.iter().copied().max().unwrap_or(0))
+}
+
+/// A row-major `(n_sequences, length)` batch as `n_sequences` segments of
+/// `length`: the equal-length case of `lengths`.
+fn rows_of(shape: &[usize]) -> Vec<usize> {
+    vec![shape[1]; shape[0]]
+}
+
+/// The first segment of each of `blocks` blocks, and the end: block `b`
+/// starts at the first segment ending past `b / blocks` of the positions.
+///
+/// A function of the lengths alone, so every sum is the same at every
+/// thread count. On equal lengths it is `b * n / blocks`, the cut by count,
+/// bitwise.
+fn block_starts(lengths: &[usize], blocks: usize) -> Vec<usize> {
+    let total: usize = lengths.iter().sum();
+    let mut ends = Vec::with_capacity(lengths.len());
+    let mut end = 0;
+    for &length in lengths {
+        end += length;
+        ends.push(end);
+    }
+    (0..=blocks)
+        .map(|b| ends.partition_point(|&end| end * blocks <= b * total))
+        .collect()
+}
+
 /// One streamed E step over any per-position density, over sequence blocks.
 ///
 /// `log_density(index, out)` writes the `m` log-densities of the observation
@@ -279,7 +320,7 @@ const BLOCK_BYTES: usize = 4 << 20;
 #[allow(clippy::too_many_arguments)]
 fn stream_counts<S: Statistics>(
     n_positions: usize,
-    length: usize,
+    lengths: &[usize],
     log_initial: &[f64],
     log_transition: &[f64],
     log_density: impl Fn(usize, &mut [f64]) + Sync,
@@ -294,24 +335,23 @@ fn stream_counts<S: Statistics>(
             log_transition.len()
         ));
     }
-    if length == 0 || !n_positions.is_multiple_of(length) {
-        return Err(format!(
-            "{n_positions} observations are not rows of {length}"
-        ));
-    }
-    let n_sequences = n_positions / length;
+    let longest = segment_lengths(n_positions, lengths)?;
+    let n_sequences = lengths.len();
     let blocks = BLOCKS
         .min(n_sequences)
         .min((BLOCK_BYTES / statistics_bytes.max(1)).max(1))
         .max(1);
     let initial: Vec<f64> = log_initial.iter().map(|v| v.exp()).collect();
     let transition: Vec<f64> = log_transition.iter().map(|v| v.exp()).collect();
+    let starts = block_starts(lengths, blocks);
     let block = |b: usize| -> (Counts, S) {
-        let sequences = (b * n_sequences / blocks)..((b + 1) * n_sequences / blocks);
+        let (first, last) = (starts[b], starts[b + 1]);
+        let start: usize = lengths[..first].iter().sum();
         let mut statistics = fresh();
         let counts = stream_block(
-            sequences,
-            length,
+            &lengths[first..last],
+            start,
+            longest,
             &initial,
             &transition,
             &log_density,
@@ -329,10 +369,14 @@ fn stream_counts<S: Statistics>(
     Ok((counts, statistics))
 }
 
-/// The forward--backward pass over a range of sequences, in order.
+/// The forward--backward pass over consecutive segments of `lengths`, the
+/// first at flat position `start`, in order; each restarts `alpha` at the
+/// initial distribution and `beta` at one, and no pair spans a boundary.
+#[allow(clippy::too_many_arguments)]
 fn stream_block<S: Statistics>(
-    sequences: std::ops::Range<usize>,
-    length: usize,
+    lengths: &[usize],
+    mut start: usize,
+    longest: usize,
     initial: &[f64],
     transition: &[f64],
     log_density: &impl Fn(usize, &mut [f64]),
@@ -342,9 +386,9 @@ fn stream_block<S: Statistics>(
     let m = initial.len();
     let mut first = vec![0.0; m];
     let mut pairs = vec![0.0; m * m];
-    let mut alpha = vec![0.0; length * m];
-    let mut emitted = vec![0.0; length * m];
-    let mut scale = vec![0.0; length];
+    let mut alpha = vec![0.0; longest * m];
+    let mut emitted = vec![0.0; longest * m];
+    let mut scale = vec![0.0; longest];
     let mut beta = vec![1.0; m];
     let mut onward = vec![0.0; m];
     let mut posterior = vec![0.0; m];
@@ -352,8 +396,8 @@ fn stream_block<S: Statistics>(
     let mut last_key = usize::MAX;
     let mut log_likelihood = 0.0;
 
-    for sequence in sequences {
-        let start = sequence * length;
+    for &length in lengths {
+        let scale = &mut scale[..length];
         // Densities, shifted per position, and the shifts into the evidence.
         for t in 0..length {
             let b = &mut emitted[t * m..][..m];
@@ -432,6 +476,7 @@ fn stream_block<S: Statistics>(
                 beta[state] = back;
             }
         }
+        start += length;
     }
     Counts {
         first,
@@ -506,7 +551,7 @@ impl Statistics for Moments<'_> {
 /// `var = S2 / S0 - (S1 / S0)^2`. The floor is the caller's to apply.
 pub fn gaussian_step(
     observations: &[f64],
-    length: usize,
+    lengths: &[usize],
     log_initial: &[f64],
     log_transition: &[f64],
     mean: &[f64],
@@ -526,7 +571,7 @@ pub fn gaussian_step(
         .collect();
     let (counts, moments) = stream_counts(
         observations.len(),
-        length,
+        lengths,
         log_initial,
         log_transition,
         |index, out| {
@@ -544,7 +589,7 @@ pub fn gaussian_step(
         },
         24 * m,
     )?;
-    let (log_initial, log_transition) = chain_m_step(&counts, observations.len() / length);
+    let (log_initial, log_transition) = chain_m_step(&counts, lengths.len());
     let (mut new_mean, mut variance, mut mass) = (vec![0.0; m], vec![0.0; m], vec![0.0; m]);
     for state in 0..m {
         let s = &moments.sums[3 * state..][..3];
@@ -574,7 +619,7 @@ pub fn gaussian_step(
 #[allow(clippy::type_complexity)]
 pub fn gaussian_statistics(
     observations: &[f64],
-    length: usize,
+    lengths: &[usize],
     log_initial: &[f64],
     log_transition: &[f64],
     mean: &[f64],
@@ -594,7 +639,7 @@ pub fn gaussian_statistics(
         .collect();
     let (counts, moments) = stream_counts(
         observations.len(),
-        length,
+        lengths,
         log_initial,
         log_transition,
         |index, out| {
@@ -620,41 +665,40 @@ pub fn gaussian_statistics(
     ))
 }
 
-/// A Gaussian HMM's negative log-likelihood of equal-length sequences,
-/// row-major, in `theta = (m - 1 free initial, m (m - 1) free transition,
+/// A Gaussian HMM's negative log-likelihood of segments laid end to end,
+/// `lengths` one per segment (issue #1254), in `theta = (m - 1 free initial, m (m - 1) free transition,
 /// m means, m log scales)`, as `opt.hmm.EmissionHmmObjective` states it on a
 /// Gaussian start: [`gaussian_statistics`] and Fisher's identity behind
 /// [`Energy`], the one assembly the objective's `gradient` and a compiled
 /// chain both run (issues #997, #1008, #1220).
 pub struct GaussianHmm {
     observations: Vec<f64>,
-    length: usize,
+    lengths: Vec<usize>,
     m: usize,
 }
 
 impl GaussianHmm {
     /// # Errors
-    /// Fewer than two states, an empty or ragged sequence, or `dimension`
-    /// other than `m^2 + 2m - 1`.
+    /// Fewer than two states, no segment, a segment of length 0, lengths
+    /// that do not sum to the observations, or `dimension` other than
+    /// `m^2 + 2m - 1`.
     pub fn new(
         observations: Vec<f64>,
-        length: usize,
+        lengths: Vec<usize>,
         m: usize,
         dimension: usize,
     ) -> Result<Self, String> {
-        if m < 2
-            || length == 0
-            || !observations.len().is_multiple_of(length)
-            || dimension != m * m + 2 * m - 1
-        {
+        if m < 2 || lengths.is_empty() || dimension != m * m + 2 * m - 1 {
             return Err(format!(
-                "a Gaussian HMM takes m >= 2 states on sequences of one length with d = m^2 + 2m - 1, \
-                 got m = {m}, length {length} and d = {dimension}"
+                "a Gaussian HMM takes m >= 2 states on at least one segment with d = m^2 + 2m - 1, \
+                 got m = {m}, {} segments and d = {dimension}",
+                lengths.len()
             ));
         }
+        segment_lengths(observations.len(), &lengths)?;
         Ok(Self {
             observations,
-            length,
+            lengths,
             m,
         })
     }
@@ -668,7 +712,7 @@ impl Energy for GaussianHmm {
     /// transition logit `(i, j >= 1)`, `S1 / s^2` for a mean and
     /// `S2 / s^2 - S0` for a log scale.
     fn value_and_gradient(&self, theta: &[f64], out: &mut [f64]) -> f64 {
-        let (m, length) = (self.m, self.length);
+        let m = self.m;
         let log_initial = pinned_simplex(&theta[..m - 1]);
         let log_transition: Vec<f64> = theta[m - 1..m * m - 1]
             .chunks_exact(m - 1)
@@ -678,7 +722,7 @@ impl Energy for GaussianHmm {
         let scale: Vec<f64> = theta[m * m - 1 + m..].iter().map(|v| v.exp()).collect();
         let Ok((first, pairs, moments, log_likelihood)) = gaussian_statistics(
             &self.observations,
-            length,
+            &self.lengths,
             &log_initial,
             &log_transition,
             mean,
@@ -687,7 +731,7 @@ impl Energy for GaussianHmm {
             out.iter_mut().for_each(|o| *o = f64::NAN);
             return f64::NAN;
         };
-        let n_sequences = (self.observations.len() / length) as f64;
+        let n_sequences = self.lengths.len() as f64;
         let mut index = 0;
         for k in 1..m {
             out[index] = -(first[k] - n_sequences * log_initial[k].exp());
@@ -732,7 +776,7 @@ pub fn gaussian_hmm_statistics<'py>(
     Bound<'py, PyArray1<f64>>,
     f64,
 )> {
-    let length = observations.shape()[1];
+    let lengths = rows_of(observations.shape());
     let (observations, log_initial, log_transition, mean, scale) = (
         observations.as_slice()?,
         log_initial.as_slice()?,
@@ -744,7 +788,7 @@ pub fn gaussian_hmm_statistics<'py>(
         .detach(|| {
             gaussian_statistics(
                 observations,
-                length,
+                &lengths,
                 log_initial,
                 log_transition,
                 mean,
@@ -1058,7 +1102,7 @@ pub struct Scoring<'a> {
 /// stands, which pays where counts do not.
 pub fn count_step(
     observations: &[i64],
-    length: usize,
+    lengths: &[usize],
     log_initial: &[f64],
     log_transition: &[f64],
     cells: &Cells<'_>,
@@ -1088,7 +1132,7 @@ pub fn count_step(
     }
     let (counts, histogram) = stream_counts(
         observations.len(),
-        length,
+        lengths,
         log_initial,
         log_transition,
         |index, out| {
@@ -1111,7 +1155,7 @@ pub fn count_step(
         },
         8 * n_rows * m,
     )?;
-    let (log_initial, log_transition) = chain_m_step(&counts, observations.len() / length);
+    let (log_initial, log_transition) = chain_m_step(&counts, lengths.len());
     Ok(TableStep {
         log_initial,
         log_transition,
@@ -1152,7 +1196,7 @@ pub fn gaussian_em_step<'py>(
     mean: PyReadonlyArray1<'py, f64>,
     scale: PyReadonlyArray1<'py, f64>,
 ) -> PyResult<FamilyOut<'py>> {
-    let length = observations.shape()[1];
+    let lengths = rows_of(observations.shape());
     let (observations, log_initial, log_transition, mean, scale) = (
         observations.as_slice()?,
         log_initial.as_slice()?,
@@ -1164,7 +1208,7 @@ pub fn gaussian_em_step<'py>(
         .detach(|| {
             gaussian_step(
                 observations,
-                length,
+                &lengths,
                 log_initial,
                 log_transition,
                 mean,
@@ -1280,7 +1324,7 @@ pub fn count_em_step<'py>(
     Bound<'py, PyArray1<f64>>,
     f64,
 )> {
-    let length = observations.shape()[1];
+    let lengths = rows_of(observations.shape());
     let (observations, occupied, rows, log_initial, log_transition, parameters) = (
         observations.as_slice()?,
         cells.as_slice()?,
@@ -1308,7 +1352,7 @@ pub fn count_em_step<'py>(
             };
             count_step(
                 observations,
-                length,
+                &lengths,
                 log_initial,
                 log_transition,
                 &cells,
@@ -1340,7 +1384,7 @@ mod tests {
         let ln = |v: &[f64]| v.iter().map(|x| x.ln()).collect::<Vec<_>>();
         let step = categorical_step(
             &observations,
-            length,
+            &[length; 2],
             &ln(&initial),
             &ln(&transition),
             &ln(&emission),
@@ -1396,7 +1440,7 @@ mod tests {
     #[test]
     fn a_symbol_outside_the_alphabet_is_refused() {
         let ln2 = 0.5f64.ln();
-        assert!(categorical_step(&[0, 3], 2, &[ln2, ln2], &[ln2; 4], &[ln2; 4]).is_err());
+        assert!(categorical_step(&[0, 3], &[2], &[ln2, ln2], &[ln2; 4], &[ln2; 4]).is_err());
     }
 
     /// The Gaussian step's log-likelihood and means by path enumeration.
@@ -1409,7 +1453,7 @@ mod tests {
         let ln = |v: &[f64]| v.iter().map(|x| x.ln()).collect::<Vec<_>>();
         let step = gaussian_step(
             &observations,
-            length,
+            &[length; 2],
             &ln(&initial),
             &ln(&transition),
             &mean,
@@ -1451,6 +1495,107 @@ mod tests {
         }
     }
 
+    /// Ragged segments, one of length 1, by path enumeration per segment
+    /// (issue #1254): each restarts at the initial distribution and no pair
+    /// spans a boundary.
+    #[test]
+    fn ragged_gaussian_statistics_are_the_enumerated_expectation() {
+        let m = 2usize;
+        let lengths = [1usize, 3, 4, 2];
+        let observations = [0.3f64, -1.2, 2.5, 0.8, 1.9, -0.4, 0.1, 3.0, -0.7, 1.1];
+        let (initial, transition) = ([0.6f64, 0.4], [0.7f64, 0.3, 0.2, 0.8]);
+        let (mean, scale) = ([0.0f64, 2.0], [1.0f64, 0.7]);
+        let ln = |v: &[f64]| v.iter().map(|x| x.ln()).collect::<Vec<_>>();
+        let (first, pairs, moments, log_likelihood) = gaussian_statistics(
+            &observations,
+            &lengths,
+            &ln(&initial),
+            &ln(&transition),
+            &mean,
+            &scale,
+        )
+        .unwrap();
+        let density = |x: f64, s: usize| {
+            let z = (x - mean[s]) / scale[s];
+            (-0.5 * z * z).exp() / (scale[s] * (2.0 * std::f64::consts::PI).sqrt())
+        };
+        let (mut ll, mut g0, mut xi, mut s0) = (0.0, [0.0; 2], [0.0; 4], [0.0; 2]);
+        let mut start = 0;
+        for &length in &lengths {
+            let row = &observations[start..start + length];
+            start += length;
+            let mut weighted = Vec::new();
+            let mut evidence = 0.0;
+            for path in 0..m.pow(length as u32) {
+                let states: Vec<usize> = (0..length).map(|t| (path >> t) & 1).collect();
+                let mut p = initial[states[0]] * density(row[0], states[0]);
+                for t in 1..length {
+                    p *= transition[states[t - 1] * m + states[t]] * density(row[t], states[t]);
+                }
+                evidence += p;
+                weighted.push((states, p));
+            }
+            ll += evidence.ln();
+            for (states, p) in weighted {
+                let w = p / evidence;
+                g0[states[0]] += w;
+                for t in 0..length {
+                    s0[states[t]] += w;
+                    if t > 0 {
+                        xi[states[t - 1] * m + states[t]] += w;
+                    }
+                }
+            }
+        }
+        assert!((log_likelihood - ll).abs() < 1e-12);
+        for s in 0..m {
+            assert!((first[s] - g0[s]).abs() < 1e-12);
+            assert!((moments[3 * s] - s0[s]).abs() < 1e-12);
+        }
+        for (a, b) in pairs.iter().zip(xi) {
+            assert!((a - b).abs() < 1e-12);
+        }
+    }
+
+    /// On equal lengths the cut by positions is the cut by count, so the
+    /// equal-length sums are those before #1254, bitwise.
+    #[test]
+    fn the_cut_on_equal_lengths_is_the_cut_by_count() {
+        for n in [1usize, 5, 16, 17, 200, 1001] {
+            let blocks = BLOCKS.min(n);
+            for length in [1usize, 3, 60] {
+                let starts = block_starts(&vec![length; n], blocks);
+                let by_count: Vec<usize> = (0..=blocks).map(|b| b * n / blocks).collect();
+                assert_eq!(starts, by_count);
+            }
+        }
+        // Uneven: the blocks cover every segment once, in order.
+        let lengths: Vec<usize> = (0..300).map(|i| 1 + (i * 37) % 90).collect();
+        let starts = block_starts(&lengths, BLOCKS);
+        assert_eq!((starts[0], starts[BLOCKS]), (0, lengths.len()));
+        assert!(starts.windows(2).all(|w| w[0] <= w[1]));
+    }
+
+    #[test]
+    fn a_zero_length_or_a_short_sum_is_refused() {
+        let ln2 = 0.5f64.ln();
+        let call = |lengths: &[usize]| {
+            gaussian_statistics(
+                &[0.1, 0.2, 0.3],
+                lengths,
+                &[ln2, ln2],
+                &[ln2; 4],
+                &[0.0, 1.0],
+                &[1.0, 1.0],
+            )
+        };
+        assert!(call(&[1, 0, 2]).is_err());
+        assert!(call(&[1, 1]).is_err());
+        assert!(call(&[1, 2]).is_ok());
+        assert!(GaussianHmm::new(vec![0.1, 0.2, 0.3], vec![2, 2], 2, 7).is_err());
+        assert!(GaussianHmm::new(vec![0.1, 0.2, 0.3], vec![], 2, 7).is_err());
+    }
+
     /// A table is a categorical emission read by column: the two steps agree.
     #[test]
     fn the_table_step_is_the_categorical_step() {
@@ -1483,7 +1628,7 @@ mod tests {
         );
         let by_table = count_step(
             &observations,
-            length,
+            &[length; 2],
             &initial,
             &transition,
             &cells,
@@ -1495,8 +1640,14 @@ mod tests {
             },
         )
         .unwrap();
-        let by_symbol =
-            categorical_step(&observations, length, &initial, &transition, &emission).unwrap();
+        let by_symbol = categorical_step(
+            &observations,
+            &[length; 2],
+            &initial,
+            &transition,
+            &emission,
+        )
+        .unwrap();
         assert!((by_table.log_likelihood - by_symbol.log_likelihood).abs() < 1e-12);
         for (a, b) in by_table
             .log_transition

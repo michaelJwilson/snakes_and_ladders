@@ -9,7 +9,8 @@ The ratio is read at the stress size, 200 chains of 100-3,000 positions,
 marked ``release``; the gate size times the same two routes per PR and
 decides nothing (root ``CLAUDE.md``, Measurement). A four-state Gaussian HMM
 of 200 sequences of 60, the fixture of issue #1248, times the supported
-kernel's route against autograd's.
+kernel's route against autograd's; on ragged segments (issue #1254) at the
+gate size per PR and at the stress size for a release.
 """
 
 from __future__ import annotations
@@ -107,5 +108,45 @@ def test_supported_gaussian_value_and_gradient(benchmark: object, route: str) ->
     objective, theta = _gaussian()
     value, _ = benchmark.pedantic(  # type: ignore[attr-defined]
         lambda: ROUTES[route](objective, theta), rounds=3, iterations=5
+    )
+    assert math.isfinite(float(value))
+
+
+def _ragged_gaussian(
+    n_chains: int, shortest: int, longest: int
+) -> tuple[EmissionHmmObjective, torch.Tensor]:
+    """Four sticky Gaussian states on ragged segments, seeded, and a point off the start."""
+    rng = np.random.default_rng(1254)
+    lengths = rng.integers(shortest, longest, n_chains)
+    chains = []
+    for length in lengths:
+        states = np.zeros(length, dtype=np.int64)
+        for t in range(1, length):
+            states[t] = states[t - 1] if rng.random() < 0.9 else rng.integers(0, 4)
+        chains.append(np.array([-3.0, -1.0, 1.0, 3.0])[states])
+    values = np.concatenate(chains) + 0.5 * rng.normal(size=int(lengths.sum()))
+    batch = Ragged(values, tuple(int(x) for x in lengths))
+    objective = EmissionHmmObjective(batch, family_start(GaussianEmission, values, 4))
+    theta = objective.initial()
+    return objective, theta + 0.01 * torch.arange(theta.numel(), dtype=torch.float64)
+
+
+@pytest.mark.benchmark
+@pytest.mark.parametrize("route", list(ROUTES))
+def test_ragged_gaussian_at_gate_size(benchmark: object, route: str) -> None:
+    # Issue #1254: thirty segments of 40-300; "compiled" is the kernel's call.
+    objective, theta = _ragged_gaussian(30, 40, 300)
+    value, _ = benchmark(lambda: ROUTES[route](objective, theta))  # type: ignore[operator]
+    assert math.isfinite(float(value))
+
+
+@pytest.mark.benchmark
+@pytest.mark.release
+@pytest.mark.parametrize("route", list(ROUTES))
+def test_ragged_gaussian_at_stress_size(benchmark: object, route: str) -> None:
+    # Issue #1254: 200 segments of 100-3,000, the stress size above.
+    objective, theta = _ragged_gaussian(200, 100, 3000)
+    value, _ = benchmark.pedantic(  # type: ignore[attr-defined]
+        lambda: ROUTES[route](objective, theta), rounds=3, iterations=1
     )
     assert math.isfinite(float(value))

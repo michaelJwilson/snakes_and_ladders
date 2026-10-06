@@ -181,14 +181,29 @@ pub fn build(
             let observations: PyReadonlyArrayDyn<'_, f64> =
                 item(data, "observations")?.extract()?;
             let shape = observations.shape().to_vec();
-            if shape.len() != 2 {
-                return Err(PyValueError::new_err(
-                    "a Gaussian HMM's observations are (n_sequences, length)",
-                ));
-            }
+            // Segments end to end beside their `lengths` (issue #1254), or a
+            // `(n_sequences, length)` batch, the equal-length case.
+            let lengths: Vec<usize> = match (data.get_item("lengths")?, shape.len()) {
+                (Some(given), 1) if !given.is_none() => {
+                    let given: PyReadonlyArray1<'_, i64> = given.extract()?;
+                    given
+                        .as_array()
+                        .iter()
+                        .map(|&one| usize::try_from(one))
+                        .collect::<Result<_, _>>()
+                        .map_err(|_| PyValueError::new_err("a segment length is negative"))?
+                }
+                (None, 2) => vec![shape[1]; shape[0]],
+                _ => {
+                    return Err(PyValueError::new_err(
+                        "a Gaussian HMM's observations are (total,) beside lengths, \
+                         or (n_sequences, length)",
+                    ))
+                }
+            };
             GaussianHmm::new(
                 observations.as_array().iter().copied().collect(),
-                shape[1],
+                lengths,
                 item(data, "m")?.extract()?,
                 dimension,
             )

@@ -33,7 +33,7 @@ from tests._scale import at_scale
 #: Hidden states, as the HMM-starts instance the issue was measured on.
 N_STATES = 4
 
-#: Positions per segment: one length, which the compiled HMM kernel requires.
+#: Positions per segment: one length, as the instance the issue was measured on.
 LENGTH = 60
 
 #: Proposals per timed chain.
