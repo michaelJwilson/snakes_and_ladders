@@ -15,6 +15,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
+use crate::count_hmm::CountHmm;
 use crate::count_mixture::{CountMixture, Slot};
 use crate::hmm_stream::GaussianHmm;
 use crate::mixture_stream::GaussianMixture;
@@ -130,6 +131,7 @@ pub const ROSENBROCK: &str = "rosenbrock";
 pub const GAUSSIAN_MIXTURE: &str = "gaussian_mixture";
 pub const GAUSSIAN_HMM: &str = "gaussian_hmm";
 pub const COUNT_MIXTURE: &str = "count_mixture";
+pub const COUNT_HMM: &str = "count_hmm";
 
 fn item<'py>(data: &Bound<'py, PyDict>, key: &str) -> PyResult<Bound<'py, PyAny>> {
     data.get_item(key)?
@@ -228,6 +230,42 @@ pub fn build(
                 counts(data, "totals")?,
                 counts(data, "successes")?,
                 trials,
+                slots,
+                dimension,
+            )
+            .map(|e| Box::new(e) as Box<dyn Energy>)
+        }
+        COUNT_HMM => {
+            let named: Vec<(String, usize)> = item(data, "slots")?.extract()?;
+            let slots = named
+                .iter()
+                .map(|(name, offset)| Slot::named(name).map(|slot| (slot, *offset)))
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(PyValueError::new_err)?;
+            let lengths: PyReadonlyArray1<'_, i64> = item(data, "lengths")?.extract()?;
+            let lengths = lengths
+                .as_array()
+                .iter()
+                .map(|&one| usize::try_from(one))
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|_| PyValueError::new_err("a segment length is negative"))?;
+            let optional = |key: &str| -> PyResult<Option<Vec<f64>>> {
+                match data.get_item(key)? {
+                    Some(value) if !value.is_none() => {
+                        let array: PyReadonlyArray1<'_, f64> = value.extract()?;
+                        Ok(Some(array.as_array().to_vec()))
+                    }
+                    _ => Ok(None),
+                }
+            };
+            CountHmm::new(
+                item(data, "k")?.extract()?,
+                lengths,
+                counts(data, "totals")?,
+                counts(data, "successes")?,
+                optional("trials")?.unwrap_or_default(),
+                optional("exposure")?,
+                item(data, "poisson")?.extract()?,
                 slots,
                 dimension,
             )

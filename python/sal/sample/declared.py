@@ -25,6 +25,11 @@ objective's own gradient calls, so a chain and a fit evaluate one arithmetic.
   mixture's negative log-likelihood, data ``k``, ``totals``, ``successes``,
   ``trials`` and ``slots``; ``oxisal.count_mixture_value_and_gradient``'s
   kernel (issue #1136).
+* :data:`COUNT_HMM` --- a count HMM's negative log-likelihood of segments:
+  Poisson, negative binomial with or without an exposure, beta-binomial or
+  count pair, data ``k``, ``lengths``, ``totals``, ``successes``, ``trials``,
+  ``exposure``, ``poisson`` and ``slots``; ``src/count_hmm.rs``'s streamed
+  pass, the posterior folded into a histogram over the counts (issue #1255).
 * :class:`Power` --- an *operator* ``f(x) = x ** k`` elementwise, whose
   :class:`~sal.sample.expectation.KalmanMean` a compiled
   chain keeps itself rather than handing its draws back (issue #1006).
@@ -42,6 +47,7 @@ ROSENBROCK = "rosenbrock"
 GAUSSIAN_MIXTURE = "gaussian_mixture"
 GAUSSIAN_HMM = "gaussian_hmm"
 COUNT_MIXTURE = "count_mixture"
+COUNT_HMM = "count_hmm"
 
 #: What :meth:`SupportedGradient.supported_gradient` returns: a kernel name
 #: and its data, arrays and numbers by name.

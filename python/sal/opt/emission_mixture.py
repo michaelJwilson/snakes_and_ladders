@@ -883,7 +883,7 @@ class EmissionMixtureObjective(Objective):
             else torch.as_tensor(covariate, dtype=torch.float64)
         )
         self._on_distinct = gradient_on_distinct
-        self._route = _count_route(start, self._observations, self._covariate)
+        self._route = count_route(start, self._observations, self._covariate)
         self._kernel: oxisal.SupportedEnergy | None = None
         # The distinct counts of the observations, found once and reused by
         # every evaluation: the observations do not change between them.
@@ -1046,7 +1046,7 @@ class EmissionMixtureObjective(Objective):
 
 
 @dataclass(frozen=True)
-class _CountRoute:
+class CountRoute:
     """What the compiled gradient reads for one objective, fixed when the objective is built.
 
     Parameters
@@ -1069,7 +1069,7 @@ class _CountRoute:
     names: dict[str, str]
 
 
-def _as_counts(values: np.ndarray) -> np.ndarray | None:
+def as_counts(values: np.ndarray) -> np.ndarray | None:
     """``values`` as contiguous ``uint32``, or ``None`` unless every one is a non-negative integer."""
     if not (
         bool(np.isfinite(values).all())
@@ -1091,12 +1091,13 @@ def _success_names(channel: EmissionFamily, prefix: str = "") -> dict[str, str]:
     return {"alpha": f"{prefix}alpha", "beta": f"{prefix}beta"}
 
 
-def _count_route(
+def count_route(
     start: EmissionFamily, observations: torch.Tensor, covariate: torch.Tensor | None
-) -> _CountRoute | None:
+) -> CountRoute | None:
     """The compiled gradient's inputs for ``start``'s family, or ``None`` where it does not apply.
 
-    It applies to an untied negative binomial, an untied beta-binomial, the
+    Shared by :class:`EmissionMixtureObjective` and, for the same families,
+    :class:`~sal.opt.hmm.EmissionHmmObjective` (issue #1255). It applies to an untied negative binomial, an untied beta-binomial, the
     count pair in either form, and a two-channel family of an untied
     negative binomial ``total`` and beta-binomial ``successes``, with no
     covariate and integer counts.
@@ -1105,17 +1106,17 @@ def _count_route(
         return None
     values = observations.detach().numpy().astype(np.float64)
     if isinstance(start, NegativeBinomialEmission):
-        totals = None if start.tied else _as_counts(values.reshape(-1))
+        totals = None if start.tied else as_counts(values.reshape(-1))
         if totals is None:
             return None
-        return _CountRoute(
+        return CountRoute(
             totals, None, None, {"dispersion": "dispersion", "mean": "mean"}
         )
     if isinstance(start, BetaBinomialEmission):
-        successes = None if start.tied else _as_counts(values.reshape(-1))
+        successes = None if start.tied else as_counts(values.reshape(-1))
         if successes is None:
             return None
-        return _CountRoute(
+        return CountRoute(
             None,
             successes,
             np.ascontiguousarray(start.trials.numpy()),
@@ -1123,12 +1124,12 @@ def _count_route(
         )
     if values.ndim != 2 or values.shape[1] != 2:
         return None
-    totals, successes = _as_counts(values[:, 0]), _as_counts(values[:, 1])
+    totals, successes = as_counts(values[:, 0]), as_counts(values[:, 1])
     if totals is None or successes is None:
         return None
     if isinstance(start, CountPairEmission):
         trials = start.trials
-        return _CountRoute(
+        return CountRoute(
             totals,
             successes,
             None if trials is None else np.ascontiguousarray(trials.numpy()),
@@ -1142,7 +1143,7 @@ def _count_route(
         and not total.tied
         and not channel.tied
     ):
-        return _CountRoute(
+        return CountRoute(
             totals,
             successes,
             np.ascontiguousarray(channel.trials.numpy()),

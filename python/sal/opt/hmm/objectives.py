@@ -41,6 +41,7 @@ from sal.opt.constrain import (
     positive,
     probability,
 )
+from sal.opt.emission_mixture import as_counts, count_route
 from sal.opt.hmm.forward import forward_log_likelihood_ragged
 from sal.opt.initialize import quantile_locations
 from sal.opt.objective import Objective, autograd_value_and_gradient
@@ -148,6 +149,8 @@ class EmissionHmmObjective(Objective):
         self._jax: Callable[[np.ndarray], tuple[float, np.ndarray]] | None = None
         self._kernel: oxisal.SupportedEnergy | None = None
         self._kernel_read = False
+        self._supported: tuple[str, dict[str, object]] | None = None
+        self._supported_read = False
         if start.n_states < 2:
             msg = f"an HMM has at least two states, got {start.n_states}"
             raise ValueError(msg)
@@ -224,24 +227,81 @@ class EmissionHmmObjective(Objective):
         return len(self._lengths), self._lengths[0]
 
     def supported_gradient(self) -> tuple[str, dict[str, object]] | None:
-        """``oxisal``'s Gaussian HMM kernel on the sequences (:class:`~sal.sample.declared.SupportedGradient`, issues #1008, #1189, #1220).
+        """``oxisal``'s Gaussian or count HMM kernel on the segments (:class:`~sal.sample.declared.SupportedGradient`, issues #1008, #1189, #1220, #1255).
 
-        Supported where the kernel is this objective: a
-        :class:`~sal.emissions.GaussianEmission` of scalar observations and
-        no covariate, on segments of any length, handed over end to end
-        beside their lengths (issue #1254). ``None`` otherwise.
+        Supported where the kernel is this objective, on segments of any
+        length handed over end to end beside their lengths (issue #1254):
+
+        - ``gaussian_hmm``: a :class:`~sal.emissions.GaussianEmission` of
+          scalar observations and no covariate;
+        - ``count_hmm`` (issue #1255): a :class:`~sal.emissions.PoissonEmission`;
+          an untied :class:`~sal.emissions.NegativeBinomialEmission`, with or
+          without an exposure per observation; and with no covariate an untied
+          :class:`~sal.emissions.BetaBinomialEmission` with a trial count per
+          state, or a count pair in either form and either reading
+          (:func:`~sal.opt.emission_mixture.count_route`), on integer counts.
+
+        ``None`` otherwise.
         """
-        if (
-            type(self._start_family) is not GaussianEmission
-            or self._covariate is not None
-            or self._observations.dim() != 1
-        ):
-            return None
-        return "gaussian_hmm", {
-            "m": self._k,
-            "observations": np.ascontiguousarray(self._observations.numpy()),
+        if not self._supported_read:
+            self._supported_read = True
+            self._supported = self._supported_kernel_data()
+        return self._supported
+
+    def _supported_kernel_data(self) -> tuple[str, dict[str, object]] | None:
+        """:meth:`supported_gradient`'s answer, formed once."""
+        start = self._start_family
+        if type(start) is GaussianEmission:
+            if self._covariate is not None or self._observations.dim() != 1:
+                return None
+            return "gaussian_hmm", {
+                "m": self._k,
+                "observations": np.ascontiguousarray(self._observations.numpy()),
+                "lengths": np.asarray(self._lengths, dtype=np.int64),
+            }
+        data: dict[str, object] = {
+            "k": self._k,
             "lengths": np.asarray(self._lengths, dtype=np.int64),
+            "totals": None,
+            "successes": None,
+            "trials": None,
+            "exposure": None,
+            "poisson": False,
         }
+        values = self._observations.detach().numpy().astype(np.float64)
+        if type(start) is PoissonEmission:
+            totals = as_counts(values.reshape(-1))
+            if totals is None or self._covariate is not None:
+                return None
+            data.update(totals=totals, poisson=True)
+            data["slots"] = [("mean", self._blocks_at["mean"].offset)]
+            return "count_hmm", data
+        covariate = self._covariate
+        if covariate is not None:
+            exposure = covariate.detach().numpy().astype(np.float64)
+            if (
+                type(start) is not NegativeBinomialEmission
+                or start.tied
+                or exposure.shape != (values.shape[0], 1)
+                or not bool(np.isfinite(exposure).all() and (exposure >= 0.0).all())
+            ):
+                return None
+            totals = as_counts(values.reshape(-1))
+            if totals is None:
+                return None
+            data.update(totals=totals, exposure=np.ascontiguousarray(exposure[:, 0]))
+            data["slots"] = [
+                (slot, self._blocks_at[slot].offset) for slot in ("dispersion", "mean")
+            ]
+            return "count_hmm", data
+        route = count_route(start, self._observations, None)
+        if route is None:
+            return None
+        data.update(totals=route.totals, successes=route.successes, trials=route.trials)
+        data["slots"] = [
+            (slot, self._blocks_at[name].offset) for slot, name in route.names.items()
+        ]
+        return "count_hmm", data
 
     def gradient(self, theta: torch.Tensor) -> torch.Tensor:
         """``dU/dtheta``, detached: streamed where :meth:`supported_gradient` holds, :meth:`value_and_gradient`'s otherwise (issues #997, #1189, #1220).
@@ -260,15 +320,22 @@ class EmissionHmmObjective(Objective):
         negated for the negative log-likelihood. What ``hmc.gradient_at``
         reads, and the arithmetic a compiled chain runs; the same call as
         :meth:`value_and_gradient` there, 5.6x faster than its compiled E
-        step and backward pass at 10^6 positions. Autograd through
-        :meth:`__call__` is the oracle.
+        step and backward pass at 10^6 positions. A count family's kernel
+        (``src/count_hmm.rs``, issue #1255) folds ``gamma`` into a histogram
+        over the counts as it streams and forms each emission score from it,
+        every ``lgamma`` and ``digamma`` difference a prefix sum over integers
+        (issue #1136). Where the kernel's value is nan --- a parameter
+        overflowed --- the route is :meth:`value_and_gradient`'s E step and
+        backward pass. Autograd through :meth:`__call__` is the oracle.
         """
         kernel = self._supported_kernel()
         if kernel is None:
             return self.value_and_gradient(theta)[1]
-        _, gradient = kernel.value_and_gradient(
+        value, gradient = kernel.value_and_gradient(
             np.ascontiguousarray(theta.detach().numpy(), dtype=np.float64)
         )
+        if math.isnan(value):
+            return self._e_step_route(theta)[1]
         return torch.from_numpy(gradient)
 
     def _supported_kernel(self) -> oxisal.SupportedEnergy | None:
@@ -439,7 +506,11 @@ class EmissionHmmObjective(Objective):
         ``RUST``, the value and gradient are :meth:`gradient`'s kernel's,
         one call: 0.58 ms against 11.9 ms by the route above, on a four-state
         Gaussian HMM of 200 sequences of 60 (issue #1248), on segments of any
-        length since issue #1254.
+        length since issue #1254, and for each count family since issue #1255,
+        where the kernel's value is not nan: at 200 segments of 100--3,000
+        (291,142 positions), four states, fat LTO, min of 3, 11.6 ms against
+        40.7 ms by the route above for a negative binomial and 13.2 ms against
+        117.7 ms for the joint count pair.
         """
         if self._backend is Backend.TORCH:
             return autograd_value_and_gradient(self, theta)
@@ -458,7 +529,14 @@ class EmissionHmmObjective(Objective):
             value, gradient = kernel.value_and_gradient(
                 np.ascontiguousarray(theta.detach().numpy(), dtype=np.float64)
             )
-            return torch.tensor(value, dtype=torch.float64), torch.from_numpy(gradient)
+            if not math.isnan(value):
+                return torch.tensor(value, dtype=torch.float64), torch.from_numpy(
+                    gradient
+                )
+        return self._e_step_route(theta)
+
+    def _e_step_route(self, theta: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """The compiled E step and one backward pass: :meth:`value_and_gradient`'s route where no kernel holds, or where the kernel's value is nan (issue #1255)."""
         point = theta.detach().clone().requires_grad_(True)
         log_initial, log_transition = self._chain(point)
         log_density = self._log_density(point)
