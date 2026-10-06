@@ -144,29 +144,33 @@ def target() -> CorrelatedGaussian:
     )
 
 
-def chains(seed: int = SEED) -> tuple[HmcChain, HmcChain]:
+def chains(rng: torch.Generator | None = None) -> tuple[HmcChain, HmcChain]:
     """Draw the adapted chain and the fixed-parameter chain.
 
     Both start at ``objective.initial()`` and record ``N_SAMPLES`` draws at
     ``N_STEPS`` leapfrog steps, so a proposal costs the same in each. Each
-    takes its own generator seeded identically, so the difference between the
-    two is adaptation and not the random stream.
+    takes its own generator cloned from ``rng``'s state, so the difference
+    between the two is adaptation and not the random stream.
 
     Parameters
     ----------
-    seed : int
-        Both generators' seed; the figure's is ``SEED``, and other seeds
-        replicate it (issue #1207).
+    rng : torch.Generator, optional
+        The state both chains' generators are cloned from; the figure's is
+        ``torch.Generator().manual_seed(SEED)``, the default, and other states
+        replicate it (issues #1207, #1257).
 
     Returns
     -------
     tuple[HmcChain, HmcChain]
         The adapted chain, then the fixed-parameter chain.
     """
+    if rng is None:
+        rng = torch.Generator().manual_seed(SEED)
+    state = rng.get_state()
     objective = target()
     adapted = sample(
         objective,
-        torch.Generator().manual_seed(seed),
+        torch.Generator().set_state(state),
         N_SAMPLES,
         step_size=STEP_SIZE,
         n_steps=N_STEPS,
@@ -174,7 +178,7 @@ def chains(seed: int = SEED) -> tuple[HmcChain, HmcChain]:
     )
     fixed = sample(
         objective,
-        torch.Generator().manual_seed(seed),
+        torch.Generator().set_state(state),
         N_SAMPLES,
         step_size=STEP_SIZE,
         n_steps=N_STEPS,

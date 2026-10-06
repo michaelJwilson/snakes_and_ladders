@@ -123,7 +123,7 @@ def test_the_adapted_chain_settles_first_on_most_seeds() -> None:
     exact_sd = float(torch.sqrt(gaussian.covariance[TRACKED, TRACKED]))
     first = 0
     for seed in range(20):
-        adapted, fixed = chains(seed)
+        adapted, fixed = chains(torch.Generator().manual_seed(seed))
         adapted_draw = settling_draw(
             running_mean(adapted, TRACKED), exact_mean, exact_sd
         )
