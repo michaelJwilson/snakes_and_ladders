@@ -18,8 +18,15 @@
 //!   `d/dr = D_r[y] - ln(1 + m / r) + (m - y) / (r + m)`, `d/dmu = y / mu - e (y + r) / (r + m)`.
 //!   A zero exposure marks the count unobserved: it scores 0 under every state and adds
 //!   nothing to the gradient (issue #933);
-//! - beta-binomial over `n` trials (a constant per state, or the observed total of the joint
-//!   pair): `count_mixture`'s, `d/da = D_a[z] - D_tau[n]`, `d/db = D_b[n - z] - D_tau[n]`.
+//! - beta-binomial over `n` trials (a constant per state, a count per position, or the observed
+//!   total of the joint pair): `count_mixture`'s, `d/da = D_a[z] - D_tau[n]`,
+//!   `d/db = D_b[n - z] - D_tau[n]`. A trial count per position (issue #1265) is an integer,
+//!   so it folds into histograms over `z`, `n - z` and `n` as the joint pair's observed total
+//!   does; a zero trial count marks the successes unobserved (issue #933).
+//!
+//! The independent pair takes one covariate per channel (issue #1265): an exposure on the
+//! total, accumulated per position since it is continuous, and a trial count on the successes,
+//! folded into histograms. A zero exposure leaves the success channel scored.
 //!
 //! The streaming, the block cut and the merge order are `hmm_stream::stream_counts`', so the
 //! result is the same at every thread count.
@@ -37,8 +44,8 @@ use crate::special::ln_gamma;
 ///
 /// A total channel (`totals`) is Poisson where `poisson` is set and a negative binomial
 /// otherwise, with an optional exposure per observation; a success channel (`successes`) is a
-/// beta-binomial over `trials`, one per state, or over the totals where `trials` is empty
-/// (the joint pair). A point at which a natural parameter is not finite and positive, or at
+/// beta-binomial over `trial_counts`, one per position, where given, over `trials`, one per
+/// state, or over the totals where both are empty (the joint pair). A point at which a natural parameter is not finite and positive, or at
 /// which an observation has zero density under every state, has value and gradient nan: a
 /// chain rejects it, and the objective takes the E step and backward pass there.
 pub struct CountHmm {
@@ -47,6 +54,8 @@ pub struct CountHmm {
     totals: Option<Vec<u32>>,
     successes: Option<Vec<u32>>,
     trials: Vec<f64>,
+    trial_counts: Option<Vec<u32>>,
+    joint: bool,
     exposure: Option<Vec<f64>>,
     log_exposure: Vec<f64>,
     poisson: bool,
@@ -62,8 +71,10 @@ impl CountHmm {
     /// # Errors
     /// Fewer than two states, segments that do not cover the observations, channels of
     /// different lengths, slots that do not match the channels, a trial count that is not a
-    /// non-negative integer, an exposure without a negative-binomial total channel or one
-    /// that is negative or not finite, or `dimension` other than `K^2 - 1 + K` per slot.
+    /// non-negative integer, trial counts per position beside trials per state or without a
+    /// success channel, an exposure without a negative-binomial total channel, beside the joint
+    /// pair, or one that is negative or not finite, or `dimension` other than `K^2 - 1 + K` per
+    /// slot.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         k: usize,
@@ -71,6 +82,7 @@ impl CountHmm {
         totals: Option<Vec<u32>>,
         successes: Option<Vec<u32>>,
         trials: Vec<f64>,
+        trial_counts: Option<Vec<u32>>,
         exposure: Option<Vec<f64>>,
         poisson: bool,
         slots: Vec<(Slot, usize)>,
@@ -101,12 +113,33 @@ impl CountHmm {
             .map_or(0, std::vec::Vec::len);
         if successes.as_ref().is_some_and(|s| s.len() != n)
             || exposure.as_ref().is_some_and(|e| e.len() != n)
+            || trial_counts.as_ref().is_some_and(|t| t.len() != n)
         {
-            return Err("every channel and the exposure hold one value per position".to_string());
+            return Err("every channel and each covariate hold one value per position".to_string());
         }
         segment_lengths(n, &lengths)?;
+        if trial_counts.is_some() && (successes.is_none() || !trials.is_empty()) {
+            return Err(
+                "trial counts per position replace trials per state on a success channel"
+                    .to_string(),
+            );
+        }
+        let joint = successes.is_some() && trials.is_empty() && trial_counts.is_none();
+        // A zero trial count marks the successes unobserved: scored at zero successes, they
+        // score log 1 under every state and add nothing to the gradient (issue #933).
+        let successes = match (successes, &trial_counts) {
+            (Some(mut z), Some(t)) => {
+                for (z, &t) in z.iter_mut().zip(t) {
+                    if t == 0 {
+                        *z = 0;
+                    }
+                }
+                Some(z)
+            }
+            (z, _) => z,
+        };
         if successes.is_some() {
-            if trials.is_empty() && totals.is_none() {
+            if joint && totals.is_none() {
                 return Err("the joint pair's trials are the totals, which are absent".to_string());
             }
             if !trials.is_empty()
@@ -119,8 +152,11 @@ impl CountHmm {
             }
         }
         if let Some(e) = &exposure {
-            if totals.is_none() || poisson || successes.is_some() {
-                return Err("an exposure scales a negative binomial's mean alone".to_string());
+            if totals.is_none() || poisson || joint {
+                return Err(
+                    "an exposure scales a negative binomial's mean, outside the joint pair"
+                        .to_string(),
+                );
             }
             if e.iter().any(|&v| !(v >= 0.0 && v.is_finite())) {
                 return Err("every exposure is finite and non-negative".to_string());
@@ -132,20 +168,26 @@ impl CountHmm {
         };
         let largest_total = largest(&totals);
         let largest_success = largest(&successes);
-        let largest_trials = if trials.is_empty() {
+        let largest_trials = if let Some(t) = &trial_counts {
+            t.iter().copied().max().unwrap_or(0) as usize
+        } else if trials.is_empty() {
             largest_total
         } else {
             trials.iter().fold(0.0_f64, |a, &b| a.max(b)) as usize
         };
-        // The largest `n - z` any table is read at: over the observations for the joint
-        // pair, `max n` otherwise, since `z` may be 0 under any state.
-        let largest_rest = match (&totals, &successes) {
-            (Some(t), Some(s)) if trials.is_empty() => t
-                .iter()
+        // The largest `n - z` any table is read at: over the observations where `n` is one per
+        // position (the joint pair's total or a trial count), `max n` otherwise, since `z` may
+        // be 0 under any state.
+        let rest_of = |n: &[u32], s: &[u32]| {
+            n.iter()
                 .zip(s)
                 .map(|(&n, &z)| n.saturating_sub(z) as usize)
                 .max()
-                .unwrap_or(0),
+                .unwrap_or(0)
+        };
+        let largest_rest = match (&totals, &successes, &trial_counts) {
+            (_, Some(s), Some(t)) => rest_of(t, s),
+            (Some(t), Some(s), None) if joint => rest_of(t, s),
             _ => largest_trials,
         };
         let extent = largest_total
@@ -162,6 +204,8 @@ impl CountHmm {
             totals,
             successes,
             trials,
+            trial_counts,
+            joint,
             exposure,
             log_exposure,
             poisson,
@@ -213,8 +257,11 @@ struct Tallies<'a> {
     total: Vec<f64>,
     /// `(largest_success + 1) * K`: the weight on each success count.
     success: Vec<f64>,
-    /// `(largest_rest + 1) * K`: the weight on each `n - z`, for the joint pair alone.
+    /// `(largest_rest + 1) * K`: the weight on each `n - z`, where `n` is one per position.
     rest: Vec<f64>,
+    /// `(largest_trials + 1) * K`: the weight on each trial count, under trial counts per
+    /// position alone (the joint pair's are `total`).
+    depth: Vec<f64>,
     /// Under an exposure, per state: `sum gamma (-ln(1 + m / r) + (m - y) / (r + m))`.
     dispersion: Vec<f64>,
     /// Under an exposure, per state: `sum gamma (y / mu - e (y + r) / (r + m))`.
@@ -225,12 +272,15 @@ impl Statistics for Tallies<'_> {
     #[inline]
     fn add(&mut self, index: usize, posterior: &[f64]) {
         let k = self.hmm.k;
-        if let Some(totals) = &self.hmm.totals {
+        'total: {
+            let Some(totals) = &self.hmm.totals else {
+                break 'total;
+            };
             let y = totals[index] as usize;
             if let (Some(exposure), Some(t)) = (&self.hmm.exposure, self.tables) {
                 let e = exposure[index];
                 if e == 0.0 {
-                    return;
+                    break 'total;
                 }
                 let yf = y as f64;
                 let share = &t.log_share[index * k..][..k];
@@ -245,7 +295,7 @@ impl Statistics for Tallies<'_> {
             for (h, &w) in self.total[y * k..][..k].iter_mut().zip(posterior) {
                 *h += w;
             }
-            if let (Some(successes), true) = (&self.hmm.successes, self.hmm.trials.is_empty()) {
+            if let (Some(successes), true) = (&self.hmm.successes, self.hmm.joint) {
                 let rest = y - successes[index].min(totals[index]) as usize;
                 for (h, &w) in self.rest[rest * k..][..k].iter_mut().zip(posterior) {
                     *h += w;
@@ -257,6 +307,18 @@ impl Statistics for Tallies<'_> {
             for (h, &w) in self.success[z * k..][..k].iter_mut().zip(posterior) {
                 *h += w;
             }
+            if let Some(trials) = &self.hmm.trial_counts {
+                let n = trials[index] as usize;
+                for (h, &w) in self.rest[n.saturating_sub(z) * k..][..k]
+                    .iter_mut()
+                    .zip(posterior)
+                {
+                    *h += w;
+                }
+                for (h, &w) in self.depth[n * k..][..k].iter_mut().zip(posterior) {
+                    *h += w;
+                }
+            }
         }
     }
 
@@ -265,6 +327,7 @@ impl Statistics for Tallies<'_> {
             (&mut self.total, &other.total),
             (&mut self.success, &other.success),
             (&mut self.rest, &other.rest),
+            (&mut self.depth, &other.depth),
             (&mut self.dispersion, &other.dispersion),
             (&mut self.mean, &other.mean),
         ] {
@@ -305,27 +368,30 @@ impl CountHmm {
                     }
                 }
                 (Some(exposure), Some(rising)) => {
-                    if exposure[index] == 0.0 {
-                        return;
-                    }
-                    let share = &t.log_share[index * k..][..k];
-                    let log_e = self.log_exposure[index];
-                    for (state, o) in out.iter_mut().enumerate() {
-                        let r = t.dispersion[state];
-                        *o = rising.log[y * k + state] - self.log_factorial[y] - r * share[state]
-                            + yf * (log_e + t.log_mean[state] - share[state]);
+                    // A zero exposure leaves the total unobserved: it scores 0 (issue #933).
+                    if exposure[index] != 0.0 {
+                        let share = &t.log_share[index * k..][..k];
+                        let log_e = self.log_exposure[index];
+                        for (state, o) in out.iter_mut().enumerate() {
+                            let r = t.dispersion[state];
+                            *o = rising.log[y * k + state]
+                                - self.log_factorial[y]
+                                - r * share[state]
+                                + yf * (log_e + t.log_mean[state] - share[state]);
+                        }
                     }
                 }
             }
         }
         if let (Some(counts), Some(s)) = (&self.successes, successes) {
             let z = counts[index] as usize;
+            let per_position = match &self.trial_counts {
+                Some(t) => Some(t[index] as usize),
+                None if self.joint => Some(n_observed.unwrap_or(0)),
+                None => None,
+            };
             for (state, o) in out.iter_mut().enumerate() {
-                let n_trials = if self.trials.is_empty() {
-                    n_observed.unwrap_or(0)
-                } else {
-                    self.trials[state] as usize
-                };
+                let n_trials = per_position.unwrap_or_else(|| self.trials[state] as usize);
                 if z > n_trials {
                     *o = f64::NEG_INFINITY;
                     continue;
@@ -343,11 +409,11 @@ impl CountHmm {
         }
     }
 
-    /// What position `index`'s density depends on, or `usize::MAX` where an exposure makes
+    /// What position `index`'s density depends on, or `usize::MAX` where a covariate makes
     /// every position its own: a run of one count is scored once.
     #[inline]
     fn key(&self, index: usize) -> usize {
-        if self.exposure.is_some() {
+        if self.exposure.is_some() || self.trial_counts.is_some() {
             return usize::MAX;
         }
         match (&self.totals, &self.successes) {
@@ -406,8 +472,14 @@ impl CountHmm {
             }
         }
         if let Some(s) = successes {
-            if self.trials.is_empty() {
-                // The joint pair: `n` is the total, so each term is a sum over its own count.
+            if self.joint || self.trial_counts.is_some() {
+                // `n` is one per position, the joint pair's total or a trial count, so each
+                // term is a sum over its own count.
+                let (depth, largest_depth) = if self.joint {
+                    (&tallies.total, self.largest_total)
+                } else {
+                    (&tallies.depth, self.largest_trials)
+                };
                 for z in 0..=self.largest_success {
                     for state in 0..k {
                         let w = tallies.success[z * k + state];
@@ -424,9 +496,9 @@ impl CountHmm {
                         }
                     }
                 }
-                for n in 0..=self.largest_total {
+                for n in 0..=largest_depth {
                     for state in 0..k {
-                        let w = tallies.total[n * k + state];
+                        let w = depth[n * k + state];
                         if w != 0.0 {
                             let shared = w * s.total.reciprocal[n * k + state];
                             gradient.alpha[state] -= shared;
@@ -544,13 +616,14 @@ impl Energy for CountHmm {
             }
         });
         let (totals, successes) = (total_tables.as_ref(), success_tables.as_ref());
-        let joint = self.successes.is_some() && self.trials.is_empty();
+        let per_position = self.trial_counts.is_some();
         let tally_size = |on: bool, extent: usize| if on { (extent + 1) * k } else { 0 };
         let sizes = (
             tally_size(self.totals.is_some(), self.largest_total),
             tally_size(self.successes.is_some(), self.largest_success),
-            tally_size(joint, self.largest_rest),
+            tally_size(self.joint || per_position, self.largest_rest),
             if self.exposure.is_some() { k } else { 0 },
+            tally_size(per_position, self.largest_trials),
         );
         let streamed = stream_counts(
             n,
@@ -565,10 +638,11 @@ impl Energy for CountHmm {
                 total: vec![0.0; sizes.0],
                 success: vec![0.0; sizes.1],
                 rest: vec![0.0; sizes.2],
+                depth: vec![0.0; sizes.4],
                 dispersion: vec![0.0; sizes.3],
                 mean: vec![0.0; sizes.3],
             },
-            8 * (sizes.0 + sizes.1 + sizes.2 + 2 * sizes.3),
+            8 * (sizes.0 + sizes.1 + sizes.2 + 2 * sizes.3 + sizes.4),
         );
         let Ok((counts, tallies)) = streamed else {
             return fail(out);
@@ -613,6 +687,7 @@ mod tests {
             None,
             Vec::new(),
             None,
+            None,
             true,
             vec![(Slot::Mean, 3)],
             5,
@@ -651,6 +726,54 @@ mod tests {
         }
     }
 
+    /// A trial count per position that is one constant is the trial count per state at that
+    /// constant (issue #1265): the same value, and the gradient to rounding, since the
+    /// per-position counts fold into a histogram over `n` and sum in another order.
+    #[test]
+    fn a_constant_count_trial_per_position_is_the_trial_per_state() {
+        let successes = vec![0_u32, 3, 7, 2, 9, 10];
+        let slots = vec![(Slot::Alpha, 3), (Slot::Beta, 5)];
+        let made = |trials: Vec<f64>, trial_counts: Option<Vec<u32>>| {
+            CountHmm::new(
+                2,
+                vec![2, 4],
+                None,
+                Some(successes.clone()),
+                trials,
+                trial_counts,
+                None,
+                false,
+                slots.clone(),
+                7,
+            )
+            .unwrap()
+        };
+        let per_state = made(vec![10.0, 10.0], None);
+        let per_position = made(Vec::new(), Some(vec![10; 6]));
+        let theta = [0.3, -0.4, 0.2, 0.5, 1.7, 0.9, -0.2];
+        let (mut want, mut got) = ([0.0; 7], [0.0; 7]);
+        let want_value = per_state.value_and_gradient(&theta, &mut want);
+        let value = per_position.value_and_gradient(&theta, &mut got);
+        assert_eq!(value, want_value);
+        let scale = want.iter().fold(0.0_f64, |a, b| a.max(b.abs()));
+        for (g, w) in got.iter().zip(&want) {
+            assert!((g - w).abs() <= 1e-13 * scale);
+        }
+        let refused = CountHmm::new(
+            2,
+            vec![6],
+            None,
+            Some(successes.clone()),
+            vec![10.0, 10.0],
+            Some(vec![10; 6]),
+            None,
+            false,
+            slots,
+            7,
+        );
+        assert!(refused.is_err());
+    }
+
     #[test]
     fn slots_that_do_not_match_the_channels_are_refused() {
         let made = CountHmm::new(
@@ -659,6 +782,7 @@ mod tests {
             Some(vec![1, 2]),
             None,
             Vec::new(),
+            None,
             None,
             false,
             vec![(Slot::Mean, 3)],
