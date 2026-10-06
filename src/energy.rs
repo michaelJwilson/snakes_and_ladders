@@ -264,6 +264,7 @@ pub fn build(
                 counts(data, "totals")?,
                 counts(data, "successes")?,
                 optional("trials")?.unwrap_or_default(),
+                counts(data, "trial_counts")?,
                 optional("exposure")?,
                 item(data, "poisson")?.extract()?,
                 slots,

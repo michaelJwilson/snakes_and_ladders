@@ -236,10 +236,12 @@ class EmissionHmmObjective(Objective):
           scalar observations and no covariate;
         - ``count_hmm`` (issue #1255): a :class:`~sal.emissions.PoissonEmission`;
           an untied :class:`~sal.emissions.NegativeBinomialEmission`, with or
-          without an exposure per observation; and with no covariate an untied
+          without an exposure per observation; with no covariate an untied
           :class:`~sal.emissions.BetaBinomialEmission` with a trial count per
           state, or a count pair in either form and either reading
-          (:func:`~sal.opt.emission_mixture.count_route`), on integer counts.
+          (:func:`~sal.opt.emission_mixture.count_route`); and the independent
+          pair with a covariate per channel, an exposure on the total and an
+          integer trial count on the successes (issue #1265); on integer counts.
 
         ``None`` otherwise.
         """
@@ -277,6 +279,8 @@ class EmissionHmmObjective(Objective):
             data["slots"] = [("mean", self._blocks_at["mean"].offset)]
             return "count_hmm", data
         covariate = self._covariate
+        if covariate is not None and covariate.dim() == 2 and covariate.shape[1] == 2:
+            return self._covaried_pair_data(data)
         if covariate is not None:
             exposure = covariate.detach().numpy().astype(np.float64)
             if (
@@ -298,6 +302,37 @@ class EmissionHmmObjective(Objective):
         if route is None:
             return None
         data.update(totals=route.totals, successes=route.successes, trials=route.trials)
+        data["slots"] = [
+            (slot, self._blocks_at[name].offset) for slot, name in route.names.items()
+        ]
+        return "count_hmm", data
+
+    def _covaried_pair_data(
+        self, data: dict[str, object]
+    ) -> tuple[str, dict[str, object]] | None:
+        """The independent pair with a covariate per channel (issue #1265): ``count_hmm`` with an exposure on the total and a trial count per position on the successes, or ``None``.
+
+        :func:`~sal.emissions.base.split_covariate`'s layout: channel ``0``
+        the exposure, finite and non-negative; channel ``1`` the trial count,
+        a non-negative integer, which replaces the declared ``trials``.
+        """
+        assert self._covariate is not None
+        route = count_route(self._start_family, self._observations, None)
+        if route is None or route.trials is None or route.totals is None:
+            return None
+        covariate = self._covariate.detach().numpy().astype(np.float64)
+        exposure = np.ascontiguousarray(covariate[:, 0])
+        trial_counts = as_counts(covariate[:, 1])
+        if trial_counts is None or not bool(
+            np.isfinite(exposure).all() and (exposure >= 0.0).all()
+        ):
+            return None
+        data.update(
+            totals=route.totals,
+            successes=route.successes,
+            trial_counts=trial_counts,
+            exposure=exposure,
+        )
         data["slots"] = [
             (slot, self._blocks_at[name].offset) for slot, name in route.names.items()
         ]
@@ -510,7 +545,8 @@ class EmissionHmmObjective(Objective):
         where the kernel's value is not nan: at 200 segments of 100--3,000
         (291,142 positions), four states, fat LTO, min of 3, 11.6 ms against
         40.7 ms by the route above for a negative binomial and 13.2 ms against
-        117.7 ms for the joint count pair.
+        117.7 ms for the joint count pair; for the independent pair with a
+        covariate per channel since issue #1265, 19.7 ms against 111.2 ms.
         """
         if self._backend is Backend.TORCH:
             return autograd_value_and_gradient(self, theta)

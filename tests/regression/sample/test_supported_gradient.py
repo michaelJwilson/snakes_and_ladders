@@ -1,4 +1,4 @@
-"""Each kernel an objective's ``supported_gradient`` names, against autograd through the objective (issues #1220, #1248, #1254, #1255).
+"""Each kernel an objective's ``supported_gradient`` names, against autograd through the objective (issues #1220, #1248, #1254, #1255, #1265).
 
 A compiled chain runs ``oxisal.SupportedEnergy`` on ``(kernel, data)``, and so
 does the objective's own gradient; autograd through ``__call__`` is the
@@ -7,7 +7,9 @@ within 1e-10 of autograd's, relative, and the gradient within 1e-10 of its
 largest coordinate. Measured: 3.7e-15 in the value and 9.4e-14 in the
 gradient at most (the negative binomial mixture), over the seven objectives;
 4.4e-15 and 1.7e-13 over the seven count HMMs of issue #1255, and 1.7e-15
-and 1.1e-13 at a dispersion up to 1e15 and a concentration up to 1e12.
+and 1.1e-13 at a dispersion up to 1e15 and a concentration up to 1e12; over
+the independent pair with a covariate per channel (issue #1265), 2.3e-15 and
+1.0e-13, and 5.1e-16 and 4.3e-14 at those shapes.
 A Gaussian or count HMM's ``value_and_gradient`` is its kernel's call where the kernel
 is supported, on segments of any length since #1254, and the E step and
 backward pass, unchanged, where it is not.
@@ -94,12 +96,16 @@ def _count_hmm(
     start: EmissionFamily,
     *,
     exposure: bool = False,
+    pair_covariate: bool = False,
     backend: Backend = Backend.RUST,
 ) -> EmissionHmmObjective:
     """Draws of ``truth`` on the segments :data:`RAGGED` and three more, fitted from ``start``.
 
     With ``exposure``, one per position in ``[0.5, 2)`` and one of zero, the
-    unobserved count of issue #933.
+    unobserved count of issue #933. With ``pair_covariate`` (issue #1265),
+    one per channel: that exposure on the total, and a trial count per
+    position in ``[20, 60]`` on the successes, one of them zero beside seven
+    successes, the unobserved channel of issue #933.
     """
     rng = np.random.default_rng([SEED, 1255])
     lengths = (*RAGGED, 30, 45, 90)
@@ -111,9 +117,21 @@ def _count_hmm(
     if exposure:
         covariate = rng.uniform(0.5, 2.0, (states.size, 1))
         covariate[3] = 0.0
+    if pair_covariate:
+        covariate = np.stack(
+            [
+                rng.uniform(0.5, 2.0, states.size),
+                rng.integers(20, 61, states.size).astype(float),
+            ],
+            axis=1,
+        )
+        covariate[3, 0] = 0.0
+        covariate[5, 1] = 0.0
     observations = np.asarray(
         truth.sample(states, rng, covariate=covariate), dtype=np.float64
     )
+    if pair_covariate:
+        observations[5, 1] = 7.0
     return EmissionHmmObjective(
         Ragged(observations, lengths), start, covariate=covariate, backend=backend
     )
@@ -124,58 +142,83 @@ def _beta_binomial(alpha: list[float], beta: list[float]) -> BetaBinomialEmissio
 
 
 def _pair(
-    dispersion: list[float], alpha: list[float], beta: list[float]
+    dispersion: list[float],
+    alpha: list[float],
+    beta: list[float],
+    *,
+    joint: bool = True,
 ) -> CountPairEmission:
     mean = 2.0 * COUNT_MEANS[: len(alpha)]
-    return CountPairEmission(dispersion, mean, alpha, beta, joint=True)
+    trials = None if joint else [40.0] * len(alpha)
+    return CountPairEmission(dispersion, mean, alpha, beta, trials, joint=joint)
 
 
 #: Each count family the ``count_hmm`` kernel takes: the truth drawn from,
-#: the start fitted from, and whether an exposure scales the mean.
-COUNT_HMMS: dict[str, tuple[EmissionFamily, EmissionFamily, bool]] = {
+#: the start fitted from, and its covariate: ``"exposure"`` scaling the mean,
+#: ``"pair"`` one per channel of the independent pair (issue #1265), or
+#: ``""``.
+COUNT_HMMS: dict[str, tuple[EmissionFamily, EmissionFamily, str]] = {
     "poisson": (
         PoissonEmission(COUNT_MEANS),
         PoissonEmission(1.3 * COUNT_MEANS),
-        False,
+        "",
     ),
     "negative-binomial": (
         NegativeBinomialEmission([8.0] * 4, COUNT_MEANS),
         NegativeBinomialEmission([3.0] * 4, 1.3 * COUNT_MEANS),
-        False,
+        "",
     ),
     "negative-binomial-exposure": (
         NegativeBinomialEmission([8.0] * 4, COUNT_MEANS),
         NegativeBinomialEmission([3.0] * 4, 1.3 * COUNT_MEANS),
-        True,
+        "exposure",
     ),
     "beta-binomial": (
         _beta_binomial([1.0, 3.0, 6.0, 9.0], [9.0, 6.0, 3.0, 1.0]),
         _beta_binomial([1.5, 3.0, 5.0, 8.0], [8.0, 5.0, 3.0, 1.5]),
-        False,
+        "",
     ),
     "beta-binomial-rate": (
         _beta_binomial([1.0, 3.0, 6.0, 9.0], [9.0, 6.0, 3.0, 1.0]),
         _beta_binomial([1.5, 3.0, 5.0, 8.0], [8.0, 5.0, 3.0, 1.5]).rate_concentration(),
-        False,
+        "",
     ),
     "pair": (
         _pair([8.0] * 4, [1.0, 3.0, 6.0, 9.0], [9.0, 6.0, 3.0, 1.0]),
         _pair([3.0] * 4, [1.5, 3.0, 5.0, 8.0], [8.0, 5.0, 3.0, 1.5]),
-        False,
+        "",
     ),
     "pair-rate": (
         _pair([8.0] * 4, [1.0, 3.0, 6.0, 9.0], [9.0, 6.0, 3.0, 1.0]),
         _pair(
             [3.0] * 4, [1.5, 3.0, 5.0, 8.0], [8.0, 5.0, 3.0, 1.5]
         ).rate_concentration(),
-        False,
+        "",
+    ),
+    "pair-covariate": (
+        _pair([8.0] * 4, [1.0, 3.0, 6.0, 9.0], [9.0, 6.0, 3.0, 1.0], joint=False),
+        _pair([3.0] * 4, [1.5, 3.0, 5.0, 8.0], [8.0, 5.0, 3.0, 1.5], joint=False),
+        "pair",
+    ),
+    "pair-covariate-rate": (
+        _pair([8.0] * 4, [1.0, 3.0, 6.0, 9.0], [9.0, 6.0, 3.0, 1.0], joint=False),
+        _pair(
+            [3.0] * 4, [1.5, 3.0, 5.0, 8.0], [8.0, 5.0, 3.0, 1.5], joint=False
+        ).rate_concentration(),
+        "pair",
     ),
 }
 
 
 def _count(name: str, backend: Backend = Backend.RUST) -> EmissionHmmObjective:
-    truth, start, exposure = COUNT_HMMS[name]
-    return _count_hmm(truth, start, exposure=exposure, backend=backend)
+    truth, start, covariate = COUNT_HMMS[name]
+    return _count_hmm(
+        truth,
+        start,
+        exposure=covariate == "exposure",
+        pair_covariate=covariate == "pair",
+        backend=backend,
+    )
 
 
 OBJECTIVES: dict[str, Callable[[], Objective]] = {
@@ -363,22 +406,31 @@ def _large_shape(family: str, reading: str, shape: float) -> EmissionHmmObjectiv
             [4.0, 1e5, shape], [3.5, 9.0, 28.0]
         )
     else:
-        dispersion = [5.0, 1e6, shape]
+        # The covaried pair (issue #1265) holds its last dispersion at 1e15,
+        # the negative binomial's Poisson limit, at every concentration.
+        covaried = family == "pair-covariate"
+        dispersion = [5.0, 1e6, 1e15 if covaried else shape]
         truth_ab = ([2.0, 5e5, 3e11], [6.0, 5e5, 7e11])
         start_ab = ([2.0, 4e5, 0.3 * shape], [6.0, 6e5, 0.7 * shape])
+        trials = [40.0] * 3 if covaried else None
         if family == "beta-binomial":
             truth = BetaBinomialEmission([40.0] * 3, *truth_ab)
             start = BetaBinomialEmission([40.0] * 3, *start_ab)
         else:
             truth = CountPairEmission(
-                dispersion, [20.0, 40.0, 60.0], *truth_ab, joint=True
+                dispersion, [20.0, 40.0, 60.0], *truth_ab, trials, joint=not covaried
             )
             start = CountPairEmission(
-                dispersion, [20.0, 40.0, 60.0], *start_ab, joint=True
+                dispersion, [20.0, 40.0, 60.0], *start_ab, trials, joint=not covaried
             )
         if reading == "rate":
             start = start.rate_concentration()
-    return _count_hmm(truth, start, exposure=family == "exposure")
+    return _count_hmm(
+        truth,
+        start,
+        exposure=family == "exposure",
+        pair_covariate=family == "pair-covariate",
+    )
 
 
 @pytest.mark.oracle
@@ -392,7 +444,7 @@ def _large_shape(family: str, reading: str, shape: float) -> EmissionHmmObjectiv
         ),
         *(
             (f, reading, tau)
-            for f in ("beta-binomial", "pair")
+            for f in ("beta-binomial", "pair", "pair-covariate")
             for reading in ("natural", "rate")
             for tau in (1e6, 1e9, 1e12)
         ),
@@ -407,7 +459,8 @@ def test_the_count_kernel_holds_at_large_shapes(
     # directly. The kernel's are prefix sums over integers (#1136); autograd
     # through `__call__` takes the large-shape series of `sal.emissions.rising`.
     # Measured: 1.7e-15 in the value and 1.1e-13 of the largest coordinate in
-    # the gradient, at most.
+    # the gradient, at most. The pair with a covariate per channel (issue
+    # #1265) holds a dispersion of 1e15 at each concentration.
     objective = _large_shape(family, reading, shape)
     assert objective.supported_gradient() is not None
     theta = objective.initial()
@@ -421,10 +474,12 @@ def test_the_count_kernel_holds_at_large_shapes(
 
 @pytest.mark.oracle
 @pytest.mark.patch
-def test_a_count_hmm_s_torch_backend_is_autograd_bitwise() -> None:
+@pytest.mark.parametrize("name", ["pair", "pair-covariate"])
+def test_a_count_hmm_s_torch_backend_is_autograd_bitwise(name: str) -> None:
     # Issue #1255: the TORCH backend names no kernel and is autograd through
-    # `__call__`, bitwise, for a family the kernel takes on the default.
-    objective = _count("pair", Backend.TORCH)
+    # `__call__`, bitwise, for a family the kernel takes on the default; the
+    # covaried pair too since #1265.
+    objective = _count(name, Backend.TORCH)
     assert objective._supported_kernel() is None
     theta = objective.initial() + 0.05
     value, gradient = objective.value_and_gradient(theta)
