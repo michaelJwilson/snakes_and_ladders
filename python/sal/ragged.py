@@ -13,11 +13,13 @@ array convert rather than branch. Two implementations of one recursion is the
 drift this avoids; the conserved rectangular route lives in `sandbox` and
 referees the equal-length case bit for bit.
 
-**A segment shorter than two steps is refused.** One position is all initial
-distribution and no transition --- a degenerate case that a padded, masked
-implementation gets wrong before it gets anything else wrong --- so it is
-refused here, where the shape is declared, rather than left to produce a number
-a caller would have to distrust.
+**A segment of one position is admitted** (issue #1233). It reads no
+transition: its posterior is ``initial * emission`` normalised, its Viterbi
+state that product's arg max, and its log evidence the log-sum-exp of the
+same, and it adds nothing to the transition counts. Every recursion over a
+`Ragged` --- forward, backward, Viterbi, sampling, in NumPy, Rust, torch and
+JAX --- is pinned to brute-force enumeration on lengths 1, 2 and 7. Only an
+empty segment is refused.
 
 The layout is the compressed-row form this package already uses wherever it
 stores a relation: one array, and offsets into it.
@@ -27,7 +29,9 @@ is ``ufunc.reduceat`` on the segment starts, which every caller otherwise
 restates; `Ragged.floored` merges adjacent segments greedily until each reaches
 a floor on extent and on summed weight, never across a change of group. Both
 leave `values` as it is: segments are contiguous, so a merge is a relabelling of
-the lengths and nothing is copied.
+the lengths and nothing is copied. The rule reads lengths, weights, groups and
+extents and never `values`, so it is :func:`floor_lengths`, which a caller
+holding only lengths calls directly (issue #1233).
 """
 
 from __future__ import annotations
@@ -39,8 +43,9 @@ from itertools import accumulate
 import numpy as np
 from numpy.typing import ArrayLike
 
-#: The shortest segment that carries a transition, and so the shortest allowed.
-MINIMUM_LENGTH = 2
+#: The shortest segment allowed: one position, an initial distribution times an
+#: emission and no transition (issue #1233).
+MINIMUM_LENGTH = 1
 
 
 @dataclass(frozen=True)
@@ -53,8 +58,8 @@ class Ragged:
         The segments end to end, shape ``(total, ...)``. Whatever trailing axes
         an observation carries are its own and are not read here.
     lengths : tuple[int, ...]
-        One length per segment, each at least `MINIMUM_LENGTH`, summing to
-        ``values.shape[0]``.
+        One length per segment, each at least `MINIMUM_LENGTH` (one), summing
+        to ``values.shape[0]``.
     """
 
     values: np.ndarray
@@ -73,8 +78,7 @@ class Ragged:
             index, length = short[0]
             msg = (
                 f"segment {index} has length {length}; a segment carries at "
-                f"least {MINIMUM_LENGTH} positions, since one position is an "
-                "initial distribution and no transition (issue #666)"
+                f"least {MINIMUM_LENGTH} position"
             )
             raise ValueError(msg)
         total = int(sum(self.lengths))
@@ -244,34 +248,77 @@ class Ragged:
         ValueError
             If `weight`, `groups` or `extent` does not have one entry per segment.
         """
-        n = self.n_segments
-        edges = self._edges()
-        if extent is None:
-            starts = edges[:-1].astype(np.float64)
-            ends = edges[1:].astype(np.float64)
-        else:
-            span = np.asarray(extent, dtype=np.float64)
-            if span.shape != (n, 2):
-                msg = f"extent has shape {span.shape}; expected ({n}, 2)"
-                raise ValueError(msg)
-            starts, ends = span[:, 0], span[:, 1]
-        mass = _per_segment(weight, n, "weight").astype(np.float64)
-        labels = _per_segment(groups, n, "groups")
-        opens = np.ones(n, dtype=bool)
-        opens[1:] = labels[1:] != labels[:-1]
-        parent = _greedy_floor(
-            starts.tolist(),
-            ends.tolist(),
-            mass.tolist(),
-            opens.tolist(),
-            float(min_length),
-            float(min_weight),
+        lengths, parent = floor_lengths(
+            self.lengths,
+            min_length,
+            weight=weight,
+            min_weight=min_weight,
+            groups=groups,
+            extent=extent,
         )
-        merged = np.add.reduceat(
-            np.diff(edges), np.flatnonzero(np.diff(parent, prepend=-1))
-        )
-        lengths = tuple(int(length) for length in merged)
         return Ragged(values=self.values, lengths=lengths), parent
+
+
+def floor_lengths(
+    lengths: tuple[int, ...],
+    min_length: float,
+    *,
+    weight: ArrayLike | None = None,
+    min_weight: float = 0.0,
+    groups: ArrayLike | None = None,
+    extent: ArrayLike | None = None,
+) -> tuple[tuple[int, ...], np.ndarray]:
+    """The rule of `Ragged.floored` on lengths alone (issue #1233).
+
+    `Ragged.floored` calls this and wraps the merged lengths around its own
+    `values`; a caller holding lengths and no array calls it directly.
+
+    Parameters
+    ----------
+    lengths : tuple[int, ...]
+        One length per segment, as `Ragged.lengths`.
+    min_length, weight, min_weight, groups, extent
+        As `Ragged.floored`.
+
+    Returns
+    -------
+    tuple[tuple[int, ...], np.ndarray]
+        The merged lengths, summing to ``sum(lengths)``, and the index of the
+        merged segment for each old one, shape ``(len(lengths),)``.
+
+    Raises
+    ------
+    ValueError
+        If `weight`, `groups` or `extent` does not have one entry per segment.
+    """
+    n = len(lengths)
+    edges = np.zeros(n + 1, dtype=np.int64)
+    np.cumsum(np.fromiter(lengths, dtype=np.int64, count=n), out=edges[1:])
+    if extent is None:
+        starts = edges[:-1].astype(np.float64)
+        ends = edges[1:].astype(np.float64)
+    else:
+        span = np.asarray(extent, dtype=np.float64)
+        if span.shape != (n, 2):
+            msg = f"extent has shape {span.shape}; expected ({n}, 2)"
+            raise ValueError(msg)
+        starts, ends = span[:, 0], span[:, 1]
+    mass = _per_segment(weight, n, "weight").astype(np.float64)
+    labels = _per_segment(groups, n, "groups")
+    opens = np.ones(n, dtype=bool)
+    opens[1:] = labels[1:] != labels[:-1]
+    parent = _greedy_floor(
+        starts.tolist(),
+        ends.tolist(),
+        mass.tolist(),
+        opens.tolist(),
+        float(min_length),
+        float(min_weight),
+    )
+    merged = np.add.reduceat(
+        np.diff(edges), np.flatnonzero(np.diff(parent, prepend=-1))
+    )
+    return tuple(int(length) for length in merged), parent
 
 
 def _per_segment(array: ArrayLike | None, n: int, name: str) -> np.ndarray:

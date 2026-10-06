@@ -4805,8 +4805,9 @@ readings still share no code.
 A batch of chains is not one long chain. The recursions restart at each
 boundary, so the number of boundaries is part of the problem rather than of its
 size, and `sal.ragged.Ragged` carries the segments end to end
-with their lengths. A segment of one position is refused: it is all initial
-distribution and no transition.
+with their lengths. A segment of one position was refused here, as all initial
+distribution and no transition; #1233 admits it, refereed against enumeration on
+every route.
 
 **There is one recursion, not two.** `baum_welch_family` takes either shape and
 the rectangular form converts; the route it replaced is conserved in

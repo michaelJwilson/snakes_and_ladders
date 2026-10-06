@@ -981,8 +981,9 @@ therefore part of the model and not a detail of its storage: at a fixed total
 $T$, a single chain and twenty short ones assign different probabilities to the
 same observations, because a state change \emph{across} a boundary is free
 where the same change one position earlier costs $\log A_{ij}$. A segment of
-one position carries an initial distribution and no transition, and is excluded
-as degenerate.
+one position carries an initial distribution and no transition: its posterior
+is $\pi_i\, p(y_1 \mid z_1 = i)$ normalised over $i$, its evidence the sum
+of that product, and it adds nothing to the transition counts.
 The evidence marginalizes $k^T$ paths.
 
 \paragraph{Supported sizes.}

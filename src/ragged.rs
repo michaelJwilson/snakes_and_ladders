@@ -287,10 +287,11 @@ pub(crate) fn check_inputs(
             width
         ));
     }
-    if let Some(index) = lengths.iter().position(|&one| one < 2) {
+    // A segment of one position reads no transition: its forward value is
+    // the prior plus the emission and its counts are empty (issue #1233).
+    if let Some(index) = lengths.iter().position(|&one| one < 1) {
         return Err(format!(
-            "segment {} has length {}; a segment carries at least 2 positions, \
-             since one position is an initial distribution and no transition",
+            "segment {} has length {}; a segment carries at least 1 position",
             index, lengths[index]
         ));
     }
@@ -526,7 +527,7 @@ fn posteriors_block(
 ///
 /// # Parameters
 /// - `log_density`: row-major `total * n_states`, the segments end to end.
-/// - `lengths`: one per segment, each at least 2, summing to `total`.
+/// - `lengths`: one per segment, each at least 1, summing to `total`.
 /// - `log_initial`: `n_states`, the distribution each segment restarts at.
 /// - `log_transition`: row-major `n_states * n_states`.
 /// - `gamma`: written, `total * n_states`, each row a log posterior.
@@ -795,14 +796,14 @@ mod tests {
     }
 
     #[test]
-    fn a_one_position_segment_is_refused() {
-        let mut gamma = vec![0.0; 3];
+    fn an_empty_segment_is_refused() {
+        let mut gamma = vec![0.0; 2];
         let mut counts = vec![0.0; 1];
         let mut evidence = vec![0.0; 2];
         let error = ragged_posteriors_into(
-            &[0.0; 3],
+            &[0.0; 2],
             1,
-            &[2, 1],
+            &[2, 0],
             &[0.0],
             &[0.0],
             &mut gamma,
@@ -812,6 +813,36 @@ mod tests {
             SwitchKind::StayOrMove,
         )
         .unwrap_err();
-        assert!(error.contains("at least 2 positions"), "{error}");
+        assert!(error.contains("at least 1 position"), "{error}");
+    }
+
+    #[test]
+    fn a_one_position_segment_is_the_prior_times_the_emission() {
+        // Issue #1233: no transition is read, so the counts stay `-inf` and
+        // the posterior is `initial + density` less its log-sum-exp.
+        let (initial, density) = ([0.2_f64.ln(), 0.8_f64.ln()], [0.5, -1.5]);
+        let mut gamma = vec![0.0; 2];
+        let mut counts = vec![0.0; 4];
+        let mut evidence = vec![0.0; 1];
+        ragged_posteriors_into(
+            &density,
+            2,
+            &[1],
+            &initial,
+            &[0.0; 4],
+            &mut gamma,
+            &mut counts,
+            &mut evidence,
+            &[],
+            SwitchKind::StayOrMove,
+        )
+        .unwrap();
+        let joint = [initial[0] + density[0], initial[1] + density[1]];
+        let total = log_sum(&joint);
+        assert_eq!(evidence[0].to_bits(), total.to_bits());
+        for state in 0..2 {
+            assert_eq!(gamma[state].to_bits(), (joint[state] - total).to_bits());
+        }
+        assert!(counts.iter().all(|&count| count == f64::NEG_INFINITY));
     }
 }
