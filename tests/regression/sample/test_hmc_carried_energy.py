@@ -72,22 +72,11 @@ def _mixture() -> GaussianMixtureObjective:
     )
 
 
-#: ``(objective, step size, relative tolerance)``: 0 is bitwise.
-CASES: dict[str, tuple[Callable[[], Objective], float, float]] = {
-    "gaussian": (lambda: GAUSSIAN, 1.0, 0.0),
-    "rosenbrock": (lambda: Rosenbrock(2), 0.04, 0.0),
-    "mixture": (_mixture, 0.05, 0.0),
-    "hmm": (_hmm, 0.08, ROUND_OFF),
-}
+def _assert_carried(objective: Objective, step_size: float, tolerance: float) -> None:
+    """The value handed from one transition to the next is ``U`` where it lands.
 
-
-@pytest.mark.analytic
-@pytest.mark.parametrize("name", sorted(CASES))
-def test_the_carried_energy_is_the_objective_where_the_step_landed(name: str) -> None:
-    # The value handed from one transition to the next is `U` at the
-    # position it hands over, accepted or not, against the forward there.
-    build, step_size, tolerance = CASES[name]
-    objective = build()
+    Accepted or not, against the forward there: bitwise at ``tolerance`` 0.
+    """
     generator = torch.Generator().manual_seed(3)
     position = objective.initial()
     potential = None
@@ -113,6 +102,32 @@ def test_the_carried_energy_is_the_objective_where_the_step_landed(name: str) ->
     # Both branches of the carry are exercised: an accepted end point, and a
     # rejected one that keeps the current point's value.
     assert 0 < accepted < TRANSITIONS
+
+
+@pytest.mark.analytic
+@pytest.mark.parametrize(
+    ("build", "step_size"),
+    [(lambda: GAUSSIAN, 1.0), (lambda: Rosenbrock(2), 0.04)],
+    ids=["gaussian", "rosenbrock"],
+)
+def test_the_carried_energy_is_the_objective_bitwise_on_one_arithmetic(
+    build: Callable[[], Objective], step_size: float
+) -> None:
+    _assert_carried(build(), step_size, 0.0)
+
+
+@pytest.mark.analytic
+@pytest.mark.mixture
+def test_the_carried_energy_is_the_mixture_objective_bitwise() -> None:
+    # No declared gradient: value and gradient come from one autograd pass.
+    _assert_carried(_mixture(), 0.05, 0.0)
+
+
+@pytest.mark.analytic
+@pytest.mark.hmm
+def test_the_carried_energy_is_the_hmm_objective_at_round_off() -> None:
+    # The compiled E step's evidence against the torch forward recursion.
+    _assert_carried(_hmm(), 0.08, ROUND_OFF)
 
 
 @pytest.mark.smoke
