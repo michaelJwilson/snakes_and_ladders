@@ -44,12 +44,12 @@ import torch
 
 from sal.emissions import EmissionFamily
 from sal.likelihood.ragged import posteriors
-from sal.opt.em import EM, EMISSION_MIXTURE_EM, EmConfig, em_loop
+from sal.opt.em import EM, EMISSION_MIXTURE_EM, Degenerate, EmConfig, Unsettled, em_loop
 from sal.opt.emission_mixture import EmissionMixtureFit
 from sal.opt.hmm import EmFit, Posteriors, baum_welch_family
 from sal.opt.m_step import MStep
 from sal.opt.mixture import mixture_log_likelihood, responsibilities_torch
-from sal.opt.termination import Termination
+from sal.opt.termination import Stop, Termination
 from sal.ragged import Ragged
 from sal.sample.schedule import TempSchedule, ladder
 from sal.track import current
@@ -90,7 +90,8 @@ class AnnealedFit[FitT]:
         The tempered steps' temperatures, in order.
     log_tempered_evidences : tuple[float, ...]
         :func:`log_tempered_evidence` at each step's temperature, at the state
-        that step was handed.
+        that step was handed: one per tempered step completed, fewer than
+        ``temperatures`` where a degenerate step ended the fit (issue #1235).
     """
 
     fit: FitT
@@ -150,14 +151,19 @@ def annealed_expectation_maximization(
     Raises
     ------
     ValueError
-        If a temperature is not positive and finite, there are more of them
-        than ``config.max_iterations``, or a component's M step did not converge.
+        If a temperature is not positive and finite, or there are more of
+        them than ``config.max_iterations``. A component M step that does not
+        converge, tempered or not, ends the fit with
+        :attr:`~sal.opt.termination.Stop.DEGENERATE` on the state the step
+        before it returned, ``stages`` and ``spent`` counting that step
+        (issue #1235).
     """
     schedule = _schedule(temperatures, config)
     values = torch.as_tensor(observations, dtype=torch.float64)
     boundary = False
     attempt = 0
     evidences: list[float] = []
+    unsettled: Unsettled | None = None
 
     def step(
         state: tuple[torch.Tensor, EmissionFamily, torch.Tensor],
@@ -168,7 +174,7 @@ def annealed_expectation_maximization(
         At one it is `opt.emission_mixture.expectation_maximization`'s step,
         term for term.
         """
-        nonlocal boundary, attempt
+        nonlocal boundary, attempt, unsettled
         attempt += 1
         present, family, _ = state
         log_weight = torch.log(present)
@@ -185,12 +191,13 @@ def annealed_expectation_maximization(
             else m_step(family, values, posterior, None)
         )
         if not reestimated.converged:
+            unsettled = Unsettled(reestimated.iterations, reestimated.residual)
             msg = (
                 f"a component's M step did not settle at EM iteration "
                 f"{attempt}: residual {reestimated.residual:.3e} after "
                 f"{reestimated.iterations} inner iterations"
             )
-            raise ValueError(msg)
+            raise Degenerate(msg, unsettled)
         boundary = boundary or reestimated.at_boundary
         return (
             posterior.mean(dim=0),
@@ -206,7 +213,25 @@ def annealed_expectation_maximization(
     tracked = current()
     previous = -float("inf")
     for index, temperature in enumerate(schedule):
-        start, previous = step(start, temperature)
+        try:
+            start, previous = step(start, temperature)
+        except Degenerate:
+            # A tempered step that does not settle ends the fit as `em_loop`
+            # ends one: on the state the step before it returned (#1235).
+            stopped = Termination(converged=False, iterations=1, reason=Stop.DEGENERATE)
+            weights, components, posterior = start
+            fit = EmissionMixtureFit(
+                weights=weights,
+                components=components,
+                responsibilities=posterior,
+                log_likelihood=previous,
+                at_boundary=boundary,
+                termination=stopped,
+                spent=index + 1,
+                stages=(*(_TEMPERED for _ in range(index)), stopped),
+                unsettled=unsettled,
+            )
+            return AnnealedFit(fit, schedule, tuple(evidences[:index]))
         if temperature == 1.0:
             # At one the tempered evidence is the log-likelihood, the same sum.
             evidences.append(previous)
@@ -231,6 +256,7 @@ def annealed_expectation_maximization(
         termination=termination,
         spent=len(schedule) + termination.iterations,
         stages=(*(_TEMPERED for _ in schedule), termination),
+        unsettled=unsettled,
     )
     return AnnealedFit(fit, schedule, tuple(evidences))
 
@@ -303,8 +329,10 @@ def annealed_baum_welch(
     Raises
     ------
     ValueError
-        If a temperature is not positive and finite, there are more of them
-        than ``config.max_iterations``, or an M step did not converge.
+        If a temperature is not positive and finite, or there are more of
+        them than ``config.max_iterations``. An M step that does not converge
+        ends the fit as :func:`annealed_expectation_maximization` ends it
+        (issue #1235).
     """
     schedule = _schedule(temperatures, config)
     one = replace(config, max_iterations=1)
@@ -324,6 +352,16 @@ def annealed_baum_welch(
             e_step=TemperedEStep(temperature),
             m_step=m_step,
         )
+        if stepped.termination.reason is Stop.DEGENERATE:
+            # The fit ends on the state the step before it returned (#1235).
+            fit = replace(
+                stepped,
+                at_boundary=boundary,
+                frozen=tuple(sorted(frozen)),
+                spent=index + 1,
+                stages=(*(_TEMPERED for _ in range(index)), stepped.termination),
+            )
+            return AnnealedFit(fit, schedule, tuple(evidences))
         # The hook's summed evidence is log Z_T at the state the step was handed.
         evidences.append(temperature * stepped.log_likelihood)
         tracked.record(

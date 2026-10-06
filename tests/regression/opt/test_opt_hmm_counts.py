@@ -25,6 +25,7 @@ from sal.emissions import (
     Reestimate,
 )
 from sal.likelihood.hmm_paths import enumerate_hidden_paths
+from sal.opt.em import Unsettled
 from sal.opt.fit import constrained_standard_errors, covers, fit
 from sal.opt.hmm import (
     EmissionHmmObjective,
@@ -33,6 +34,7 @@ from sal.opt.hmm import (
     family_start,
     forward_log_likelihood_from_density,
 )
+from sal.opt.termination import Stop
 from sal.sim.hmm import HmmParams, simulate_sequences
 
 from tests._objective_checks import assert_gradient_matches_finite_differences
@@ -259,11 +261,12 @@ def test_a_symmetric_start_collapses_the_states_and_the_asymmetric_one_does_not(
 
 
 @pytest.mark.smoke
-def test_an_m_step_that_did_not_settle_is_refused_rather_than_returned() -> None:
+def test_an_m_step_that_did_not_settle_is_not_returned() -> None:
     # `likelihood/CLAUDE.md`: a number read off iterations that never settled
     # is not an estimate, and a caller cannot tell it from one that is. The
     # guard is exercised by starving the solve of iterations, since with its
-    # real budget it settles in single digits.
+    # real budget it settles in single digits. The fit ends degenerate on the
+    # start it was handed, and names the report (#1235).
     observations = simulate_sequences(
         _params(_truth("beta_binomial"), seed=108)
     ).observations
@@ -281,15 +284,18 @@ def test_an_m_step_that_did_not_settle_is_refused_rather_than_returned() -> None
     original = BetaBinomialEmission.reestimate
     BetaBinomialEmission.reestimate = _one_step  # type: ignore[method-assign, assignment]
     try:
-        with pytest.raises(ValueError, match="did not settle"):
-            baum_welch_family(
-                observations,
-                torch.log(torch.as_tensor(INITIAL)),
-                torch.log(torch.as_tensor(TRANSITION)),
-                starved,
-            )
+        fit = baum_welch_family(
+            observations,
+            torch.log(torch.as_tensor(INITIAL)),
+            torch.log(torch.as_tensor(TRANSITION)),
+            starved,
+        )
     finally:
         BetaBinomialEmission.reestimate = original  # type: ignore[method-assign]
+    assert fit.termination.reason is Stop.DEGENERATE
+    assert fit.termination.iterations == fit.spent == 1
+    assert fit.unsettled == Unsettled(iterations=1, residual=0.5)
+    assert fit.components is starved
 
 
 def _dispersion_coverage(dispersion: float, replicates: int) -> tuple[int, int, int]:

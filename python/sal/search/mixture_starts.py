@@ -408,7 +408,9 @@ def burn_in_seeding(
     )
     tracked = current()
     path: list[tuple[int, EmissionFamily]] = []
+    ran = 0
     for iteration in range(BURN_IN_ITERATIONS):
+        ran += 1
         fitted = expectation_maximization(
             subsample,
             weights,
@@ -416,13 +418,17 @@ def burn_in_seeding(
             covariate=covariate,
             config=EmConfig(max_iterations=1, tolerance=0.0),
         )
+        if fitted.termination.reason is Stop.DEGENERATE:
+            # Its M step did not settle and EM handed back the fit it was
+            # given (#1235): the burn-in ends on that fit.
+            break
         weights, components = fitted.weights, fitted.components
         tracked.record(iteration, subsample_log_likelihood=fitted.log_likelihood)
         path.append((iteration, components))
     return Seeding(
         components,
-        BURN_IN_ITERATIONS * size / instance.n_samples,
-        f"{size} pairs, {BURN_IN_ITERATIONS} iterations",
+        ran * size / instance.n_samples,
+        f"{size} pairs, {ran} iterations",
         tuple(path),
     )
 
@@ -1057,8 +1063,10 @@ class MixturePolished(Polished):
 
     ``value`` is the negative log-likelihood where the polish stopped and
     ``termination`` how: at its tolerance (:attr:`~sal.opt.termination.Stop.CONVERGED`),
-    at an emptied component (:attr:`~sal.opt.termination.Stop.REFUSED`)
-    or at its budget.
+    at an emptied component (:attr:`~sal.opt.termination.Stop.REFUSED`),
+    at an M step that did not settle
+    (:attr:`~sal.opt.termination.Stop.DEGENERATE`, issue #1235) or at its
+    budget.
 
     Parameters
     ----------
@@ -1094,11 +1102,18 @@ class MixturePolished(Polished):
         *,
         converged: bool = False,
         emptied: bool = False,
+        degenerate: bool = False,
         frozen: tuple[int, ...] = (),
     ) -> MixturePolished:
-        """The fit at the trace's last value, its termination read off the two flags."""
+        """The fit at the trace's last value, its termination read off the three flags."""
         reason = (
-            Stop.CONVERGED if converged else Stop.REFUSED if emptied else Stop.BUDGET
+            Stop.CONVERGED
+            if converged
+            else Stop.REFUSED
+            if emptied
+            else Stop.DEGENERATE
+            if degenerate
+            else Stop.BUDGET
         )
         return cls(
             value=-float(log_likelihoods[-1]),
@@ -1145,6 +1160,14 @@ def polish(
     at seed 0 one dips under one pair's share by iteration 18 and recovers,
     and EM converges 9.7 nats past the generating parameters.
 
+    **An M step that does not settle stops the polish** under either stop
+    (issue #1235). EM ends that step with
+    :attr:`~sal.opt.termination.Stop.DEGENERATE` on the fit it was handed,
+    and the polish hands that fit over, ``emptied`` under the rule above
+    and :attr:`~sal.opt.termination.Stop.DEGENERATE` otherwise. A
+    :class:`BestOf` ranks it by the log-likelihood at that fit, as it ranks
+    every other polish; it was a skipped seeding while EM raised.
+
     Each iteration is one call of
     :func:`~sal.opt.emission_mixture.expectation_maximization`,
     recorded into the enclosing run as ``log_likelihood`` at step ``i``: the
@@ -1174,6 +1197,7 @@ def polish(
     longest = 0.0
     converged = False
     emptied = False
+    degenerate = False
     frozen: set[int] = set()
     iteration = 0
     while True:
@@ -1195,15 +1219,16 @@ def polish(
         except ValueError:
             # The one refusal this stop reads: a component the E step leaves
             # no responsibility on, whose M step has nothing to solve on.
-            owned = responsibilities_torch(
-                values,
-                torch.log(weights),
-                components,
-                covariate=instance.conditioned,
-            ).sum(dim=0)
-            if seconds is None or float(owned.min()) > 0.0:
+            if not _emptied(instance, values, weights, components, seconds):
                 raise
             emptied = True
+            break
+        if step.termination.reason is Stop.DEGENERATE:
+            # The step's M step did not settle, and EM handed back the fit
+            # it was given (#1235): the polish ends there, emptied under the
+            # rule above and degenerate otherwise, and ranks by that fit.
+            emptied = _emptied(instance, values, weights, components, seconds)
+            degenerate = not emptied
             break
         longest = max(longest, time.perf_counter() - began)
         frozen.update(step.frozen)
@@ -1235,8 +1260,28 @@ def polish(
         np.asarray(trace),
         converged=converged,
         emptied=emptied,
+        degenerate=degenerate,
         frozen=tuple(sorted(frozen)),
     )
+
+
+def _emptied(
+    instance: MixtureInstance,
+    values: torch.Tensor,
+    weights: torch.Tensor,
+    components: EmissionFamily,
+    seconds: float | None,
+) -> bool:
+    """Whether a timed polish stops as emptied: the E step at the fit leaves a component no responsibility."""
+    if seconds is None:
+        return False
+    owned = responsibilities_torch(
+        values,
+        torch.log(weights),
+        components,
+        covariate=instance.conditioned,
+    ).sum(dim=0)
+    return float(owned.min()) <= 0.0
 
 
 @dataclass(frozen=True)
