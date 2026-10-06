@@ -8,18 +8,21 @@ kernel.
 
 from __future__ import annotations
 
+import functools
 import math
-from collections.abc import Callable, Iterator, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Callable, Iterable, Iterator, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+from numpy.random import Generator
 
 from sal.backend import Backend
 from sal.cost import Cost
 from sal.opt.termination import Termination
 from sal.sample.accept import accept
-from sal.sample.loop import Exchanging, Moved, anneal, swap_log_ratio, temper
+from sal.sample.loop import Exchanging, Moved, Step, anneal, swap_log_ratio, temper
+from sal.sample.potts_mcmc import sweeps
 from sal.sample.potts_mcmc.moves import (
     PottsMove,
     refuse_negative_coupling,
@@ -28,7 +31,6 @@ from sal.sample.potts_mcmc.sweeps import (
     ClusterCounter,
     adjacency_lists,
     balanced_sweep_at,
-    ghost_couplings,
     ghost_spin_sweep,
     houdayer_move,
     label_directed_sweep,
@@ -571,192 +573,22 @@ def anneal_potts(
         else check_labelling(start, graph.n_nodes, int(rows.shape[1]))
     )
     state = np.ascontiguousarray(drawn, dtype=np.int64)
-    offsets, neighbours, couplings = graph.compressed_adjacency()
-    lists = adjacency_lists(offsets, neighbours, couplings)
-
-    step = _Annealing(
-        move=move,
-        graph=graph,
-        rows=rows,
-        offsets=offsets,
-        neighbours=neighbours,
-        couplings=couplings,
-        lists=lists,
-        cluster_backend=cluster_backend,
-        sweep=balanced_sweep_at(rows, offsets, neighbours, couplings, move)
-        if move in _BALANCED_MOVES
-        else sweep_at(rows, offsets, neighbours, couplings, backend),
-        # Every step but a single cluster's costs the same visits (#551).
-        per_step=step_visits(move, graph),
-        # The ghost couplings are fixed by the field, so stored once (#1041).
-        ghost=ghost_couplings(rows) if move is PottsMove.GHOST_SPIN else None,
+    trace: list[ClusterCounter] = []
+    lattice = _Lattice(
+        graph, rows, graph.compressed_adjacency(), backend, cluster_backend
     )
-    walked = anneal(step, schedule, Moved(state, step.energy_of(state), None, 0), rng)
+    origin = Moved(state, lattice.energy(state), None, 0)
+    walked = anneal(lattice.rung((move,), trace), schedule, origin, rng, np.copy)
     return AnnealedPotts(
         best=walked.best,
         energy=walked.energy,
         final=walked.final,
         n_sweeps=schedule.n_steps,
         spent=walked.spent,
-        unit=walked.unit,
+        unit=Cost.SITE_VISITS,
         termination=walked.termination,
-        trace=tuple(step.trace),
+        trace=tuple(trace),
     )
-
-
-@dataclass
-class _Annealing:
-    """:func:`anneal_potts`' move as a :class:`~sal.sample.loop.Step`, charged in site visits.
-
-    Each call is one sweep of ``move`` at ``beta = 1 / T``, in place, and
-    the energy where it landed. A cluster move that keeps a
-    :class:`ClusterCounter` appends it to :attr:`trace`, one per step; the
-    label-directed pass cycles its target label with the step.
-    """
-
-    move: PottsMove
-    graph: PottsGraph
-    rows: np.ndarray
-    offsets: np.ndarray
-    neighbours: np.ndarray
-    couplings: np.ndarray
-    lists: Any
-    cluster_backend: Backend
-    sweep: Callable[[np.ndarray, np.random.Generator, float], None]
-    per_step: int
-    ghost: np.ndarray | None
-    unit: Cost = Cost.SITE_VISITS
-    trace: list[ClusterCounter] = field(default_factory=list)
-    steps: int = 0
-
-    def energy_of(self, state: np.ndarray) -> float:
-        """``state``'s energy, in :func:`energies`' convention."""
-        return float(energies(self.graph, self.rows, state[None])[0])
-
-    def keep(self, state: np.ndarray) -> np.ndarray:
-        """A copy: every sweep moves the state in place."""
-        return state.copy()
-
-    def __call__(
-        self,
-        state: np.ndarray,
-        _energy: float,
-        _carried: None,
-        temperature: float,
-        rng: np.random.Generator,
-        /,
-    ) -> Moved[np.ndarray, None]:
-        """One sweep at ``temperature``."""
-        move, graph, rows = self.move, self.graph, self.rows
-        step = self.steps
-        self.steps += 1
-        if move is PottsMove.SINGLE_SITE or move in _BALANCED_MOVES:
-            self.sweep(state, rng, 1.0 / temperature)
-            return Moved(state, self.energy_of(state), None, self.per_step)
-        counter = ClusterCounter()
-        kept = True
-        visits = self.per_step
-        beta = 1.0 / temperature
-        if move is PottsMove.SWENDSEN_WANG:
-            # The compiled pass reads no cluster's members, so it keeps no
-            # counter, and its step is not in the trace (issue #923).
-            compiled = self.cluster_backend is Backend.RUST
-            swendsen_wang_sweep(
-                state,
-                graph,
-                rows,
-                rng,
-                None if compiled else counter,
-                beta,
-                backend=self.cluster_backend,
-            )
-            kept = not compiled
-        elif move is PottsMove.GHOST_SPIN:
-            # No counter: the pass builds its clusters as roots, and a ghost
-            # bond read per site is charged beside the edges.
-            ghost_spin_sweep(
-                state,
-                graph,
-                rows,
-                rng,
-                beta,
-                backend=self.cluster_backend,
-                ghost=self.ghost,
-            )
-            kept = False
-        elif move is PottsMove.LABEL_DIRECTED:
-            # The target label cycles with the step, so every label is
-            # proposed once per `n_states` steps.
-            label_directed_sweep(
-                state,
-                graph,
-                rows,
-                rng,
-                step % int(rows.shape[1]),
-                beta,
-                backend=self.cluster_backend,
-            )
-            kept = False
-        elif move is PottsMove.SWENDSEN_WANG_HEAT_BATH:
-            # No counter, as the ghost-spin pass keeps none: the clusters are
-            # roots, and the heat bath rejects nothing (#1142).
-            swendsen_wang_heat_bath_sweep(
-                state, graph, rows, rng, beta, backend=self.cluster_backend
-            )
-            kept = False
-        else:
-            offsets, neighbours, couplings = (
-                self.offsets,
-                self.neighbours,
-                self.couplings,
-            )
-            if move is PottsMove.NIEDERMAYER:
-                niedermayer_sweep(
-                    state,
-                    rows,
-                    offsets,
-                    neighbours,
-                    couplings,
-                    rng,
-                    counter,
-                    graph,
-                    beta,
-                    niedermayer_threshold(couplings),
-                    lists=self.lists,
-                )
-            elif move is PottsMove.WOLFF_HEAT_BATH:
-                wolff_heat_bath_sweep(
-                    state,
-                    rows,
-                    offsets,
-                    neighbours,
-                    couplings,
-                    rng,
-                    counter,
-                    graph,
-                    beta,
-                    lists=self.lists,
-                )
-            else:
-                wolff_sweep(
-                    state,
-                    rows,
-                    offsets,
-                    neighbours,
-                    couplings,
-                    rng,
-                    counter,
-                    graph,
-                    beta,
-                    lists=self.lists,
-                )
-            # A single-cluster step reads each member's neighbours and writes
-            # the members; a heat-bath sweep is charged the same way, so one
-            # budget covers both.
-            visits = step_visits(move, graph, sum(counter.sizes))
-        if kept:
-            self.trace.append(counter)
-        return Moved(state, self.energy_of(state), None, visits)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -919,136 +751,233 @@ def parallel_tempering(
             raise ValueError(msg)
         drawn = [check_labelling(row, graph.n_nodes, n_states) for row in start]
     states = np.ascontiguousarray(np.stack(drawn), dtype=np.int64)
-    offsets, neighbours, couplings = graph.compressed_adjacency()
-
-    recorded = np.empty((n_sweeps, n_replicas, graph.n_nodes), dtype=np.int64)
-    current = energies(graph, rows, states)
+    lattice = _Lattice(
+        graph, rows, graph.compressed_adjacency(), backend, cluster_backend
+    )
     # One sweep per rung and position: the label-directed pass keeps a call
-    # counter, and a rung's counter is its own. Building a closure draws
-    # nothing. Each carries its move's fixed charge, or -1 for a single
-    # cluster, charged by its size.
-    steps = [
-        _RungMoves(
-            graph,
-            [
-                (
-                    sweep_for(
-                        each,
-                        graph,
-                        rows,
-                        offsets,
-                        neighbours,
-                        couplings,
-                        backend,
-                        cluster_backend,
-                    ),
-                    each,
-                    -1 if each in _SINGLE_CLUSTER_MOVES else step_visits(each, graph),
-                )
-                for each in rung
-            ],
-        )
-        for rung in per_rung
-    ]
-    # `burn_in` and `n_sweeps` count recorded steps, `thin` steps apiece, and
-    # a step is recorded at the end of its block: the loop's burn-in is every
-    # step before the first such end.
-    burned = burn_in * thin
-    n_steps = (burn_in + n_sweeps) * thin
-    kept = 0
-
-    def record(rungs: Sequence[np.ndarray]) -> None:
-        nonlocal kept
-        recorded[kept] = rungs
-        kept += 1
-
+    # counter, and a rung's counter is its own.
+    steps = [lattice.rung(rung, scored=False) for rung in per_rung]
     # `swap_acceptance` is the mean over adjacent pairs of the fraction
-    # accepted so far -- the mean of the vector `TemperedChains` returns, and
-    # so equal to it at the last sweep. Round trips and rung occupation are
-    # not recorded: neither is a number this run computes, and a hook does
-    # not define a metric (issue #778).
+    # accepted so far, recorded from the first step after burn-in. Round
+    # trips and rung occupation are not: neither is a number this run
+    # computes, and a hook does not define a metric (issue #778).
     tracked: TrackedOptimization = current_tracked()
+    burned = burn_in * thin
 
-    def observe(sweep: int, run: Exchanging[np.ndarray, None]) -> None:
+    def observe(sweep: int, run: Exchanging[np.ndarray]) -> None:
         if sweep >= burned:
             tracked.record(
                 sweep - burned,
                 state=run.best,
-                swap_acceptance=float(np.mean(run.accepted / run.proposed)),
+                swap_acceptance=float(np.mean(run.swap_acceptance)),
             )
 
-    exchanged = temper(
+    run, recorded = lattice.temper(
         steps,
         temperatures,
-        [
-            Moved(state, float(energy), None, 0)
-            for state, energy in zip(states, current, strict=True)
-        ],
+        states,
         children,
-        lambda log_ratio: accept(log_ratio, rng),
-        n_steps - (burned + thin - 1),
-        burned + thin - 1,
-        thin,
-        record=record,
+        rng,
+        (n_sweeps, burn_in, thin),
+        kept=n_sweeps,
         observe=observe,
-        # Read from this module, where a test replaces it.
-        ratio=swap_log_ratio,
-        # Every rung's labelling in one block, as one call to `energies`.
-        score=lambda rungs: energies(graph, rows, np.stack(rungs)).tolist(),
     )
     tracked.record_cost(max(n_sweeps * thin - 1, 0), states.nbytes)
     return TemperedChains(
         states=recorded,
         temperatures=tuple(temperatures),
-        swap_acceptance=exchanged.swap_acceptance,
-        best=exchanged.best,
-        energy=exchanged.energy,
+        swap_acceptance=run.swap_acceptance,
+        best=run.best,
+        energy=run.energy,
         n_sweeps=n_sweeps,
-        walkers=exchanged.walkers,
-        spent=exchanged.spent,
-        unit=exchanged.unit,
-        termination=Termination.after(n_steps, converged=False),
+        walkers=run.walkers,
+        spent=run.spent,
+        unit=Cost.SITE_VISITS,
+        termination=Termination.after((burn_in + n_sweeps) * thin, converged=False),
     )
 
 
 @dataclass(frozen=True)
-class _RungMoves:
-    """One rung's moves as a :class:`~sal.sample.loop.Step`: each in order, charged in site visits.
-
-    Each entry is a :func:`sweep_for` closure, its move, and its fixed
-    charge or ``-1`` for a single cluster, charged by its size as
-    :func:`anneal_potts` charges it (issue #1156). The step scores nothing
-    and returns ``nan``: :func:`parallel_tempering` scores every rung's
-    labelling in one block through :func:`~sal.sample.loop.temper`'s
-    ``score``.
-    """
+class _Lattice:
+    """A Potts instance as its moves and loops read it: the field rows and the two backends."""
 
     graph: PottsGraph
-    sweeps: list[
-        tuple[Callable[[np.ndarray, np.random.Generator, float], int], PottsMove, int]
-    ]
-    unit: Cost = Cost.SITE_VISITS
+    rows: np.ndarray
+    adjacency: Iterable[np.ndarray]
+    backend: Backend
+    cluster_backend: Backend
 
-    def __call__(
+    def energy(self, state: np.ndarray) -> float:
+        """``state``'s energy, in :func:`energies`' convention."""
+        return float(energies(self.graph, self.rows, state[None])[0])
+
+    def sweep(
+        self, move: PottsMove, trace: list[ClusterCounter] | None = None
+    ) -> Callable[[np.ndarray, np.random.Generator, float], int]:
+        """:func:`sweep_for`, appending a cluster move's :class:`ClusterCounter` to ``trace`` per call.
+
+        Only the moves whose pass reads a cluster's members keep a counter: the
+        compiled Swendsen-Wang pass, the ghost-spin, label-directed and heat-bath
+        Swendsen-Wang passes build their clusters as roots (issues #923, #1041,
+        #1142).
+        """
+        graph, rows, backend, cluster_backend = (
+            self.graph,
+            self.rows,
+            self.backend,
+            self.cluster_backend,
+        )
+        offsets, neighbours, couplings = self.adjacency
+        if move is PottsMove.SINGLE_SITE or move in _BALANCED_MOVES:
+            single = (
+                sweep_at(rows, offsets, neighbours, couplings, backend)
+                if move is PottsMove.SINGLE_SITE
+                else balanced_sweep_at(rows, offsets, neighbours, couplings, move)
+            )
+
+            def sweep(
+                state: np.ndarray, rng: np.random.Generator, beta: float = 1.0
+            ) -> int:
+                single(state, rng, beta)
+                return 0
+
+            return sweep
+
+        # The adjacency as lists, once for every cluster the closure grows (#919);
+        # the ghost couplings, fixed by the field, once (#1041).
+        one = move in _SINGLE_CLUSTER_MOVES
+        lists = adjacency_lists(offsets, neighbours, couplings) if one else None
+        # Read from `sweeps`, where a test replaces it.
+        ghost = sweeps.ghost_couplings(rows) if move is PottsMove.GHOST_SPIN else None
+        # A single cluster's growth, one signature for the three.
+        grow: Callable[..., int] = (
+            functools.partial(
+                niedermayer_sweep, threshold=niedermayer_threshold(couplings)
+            )
+            if move is PottsMove.NIEDERMAYER
+            else wolff_heat_bath_sweep
+            if move is PottsMove.WOLFF_HEAT_BATH
+            else wolff_sweep
+        )
+        arrays = (rows, offsets, neighbours, couplings)
+        keeps = trace is not None and (
+            one
+            or (move is PottsMove.SWENDSEN_WANG and cluster_backend is Backend.PYTHON)
+        )
+        # The label-directed target cycles through the labels, one per call.
+        calls = [0]
+
+        def cluster_pass(
+            state: np.ndarray, rng: np.random.Generator, beta: float = 1.0
+        ) -> int:
+            counter = ClusterCounter() if keeps else None
+            size = 0
+            if move is PottsMove.SWENDSEN_WANG:
+                swendsen_wang_sweep(
+                    state, graph, rows, rng, counter, beta, backend=cluster_backend
+                )
+            elif move is PottsMove.GHOST_SPIN:
+                ghost_spin_sweep(
+                    state, graph, rows, rng, beta, backend=cluster_backend, ghost=ghost
+                )
+            elif move is PottsMove.LABEL_DIRECTED:
+                target = calls[0] % int(rows.shape[1])
+                calls[0] += 1
+                label_directed_sweep(
+                    state, graph, rows, rng, target, beta, backend=cluster_backend
+                )
+            elif move is PottsMove.SWENDSEN_WANG_HEAT_BATH:
+                swendsen_wang_heat_bath_sweep(
+                    state, graph, rows, rng, beta, backend=cluster_backend
+                )
+            else:
+                size = grow(state, *arrays, rng, counter, graph, beta=beta, lists=lists)
+            if counter is not None and trace is not None:
+                trace.append(counter)
+            return size
+
+        return cluster_pass
+
+    def rung(
         self,
-        state: np.ndarray,
-        _energy: float,
-        _carried: None,
-        temperature: float,
-        rng: np.random.Generator,
-        /,
-    ) -> Moved[np.ndarray, None]:
-        """Every move of the rung once, in order, at ``temperature``."""
-        beta = 1.0 / temperature
-        visits = 0
-        for sweep, each, per_step in self.sweeps:
-            size = sweep(state, rng, beta)
-            visits += step_visits(each, self.graph, size) if per_step < 0 else per_step
-        return Moved(state, math.nan, None, visits)
+        moves: Sequence[PottsMove],
+        trace: list[ClusterCounter] | None = None,
+        *,
+        scored: bool = True,
+    ) -> Step[np.ndarray, None, np.random.Generator]:
+        """``moves`` in order as one step, charged in site visits as :func:`step_visits` states.
 
-    def keep(self, state: np.ndarray) -> np.ndarray:
-        """A copy: every move changes the state in place."""
-        return state.copy()
+        One :func:`sweep_for` closure per move, built here and drawing
+        nothing. Unscored, the step returns ``nan`` for a loop that scores
+        every rung in one block.
+        """
+        graph = self.graph
+        sweeps = [(each, self.sweep(each, trace)) for each in moves]
+
+        def step(
+            state: np.ndarray, _: float, __: None, temperature: float, rng: Generator
+        ) -> Moved[np.ndarray, None]:
+            beta = 1.0 / temperature
+            visits = sum(
+                step_visits(each, graph, sweep(state, rng, beta))
+                for each, sweep in sweeps
+            )
+            energy = self.energy(state) if scored else math.nan
+            return Moved(state, energy, None, visits)
+
+        return step
+
+    def temper(
+        self,
+        steps: Sequence[Step[np.ndarray, None, np.random.Generator]],
+        temperatures: Sequence[float],
+        states: np.ndarray,
+        children: Sequence[np.random.Generator],
+        rng: np.random.Generator,
+        budget: tuple[int, int, int],
+        *,
+        kept: int,
+        observe: Callable[[int, Exchanging[np.ndarray]], None] | None = None,
+        between: Callable[[Exchanging[np.ndarray]], None] | None = None,
+    ) -> tuple[Exchanging[np.ndarray], np.ndarray]:
+        """:func:`~sal.sample.loop.temper` on labellings, and the first ``kept`` recorded rounds.
+
+        ``budget`` is ``(n_sweeps, burn_in, thin)``, the first two counting
+        blocks of ``thin`` steps, each recorded at its end. Every rung is
+        scored in one block per round, and ``rng`` draws the exchange
+        uniforms after any draws ``between`` makes.
+        """
+        n_sweeps, burn_in, thin = budget
+        recorded = np.empty((kept, len(steps), self.graph.n_nodes), dtype=np.int64)
+        written = [0]
+
+        def record(rungs: Sequence[np.ndarray], _: Sequence[float]) -> None:
+            if written[0] < kept:
+                recorded[written[0]] = rungs
+            written[0] += 1
+
+        burned = burn_in * thin + thin - 1
+        current = energies(self.graph, self.rows, states).tolist()
+        run = temper(
+            steps,
+            temperatures,
+            [Moved(row, e, None, 0) for row, e in zip(states, current, strict=True)],
+            children,
+            lambda log_ratio: accept(log_ratio, rng),
+            (burn_in + n_sweeps) * thin - burned,
+            burned,
+            thin,
+            keep=np.copy,
+            record=record,
+            observe=observe,
+            between=between,
+            # Read from this module, where a test replaces it.
+            ratio=swap_log_ratio,
+            score=lambda rungs: energies(
+                self.graph, self.rows, np.stack(rungs)
+            ).tolist(),
+        )
+        return run, recorded
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1168,34 +1097,20 @@ def cluster_tempering(
         ),
         dtype=np.int64,
     )
-    offsets, neighbours, _ = graph.compressed_adjacency()
+    adjacency = graph.compressed_adjacency()
     per_sweep = graph.n_nodes + 2 * len(graph.edges)
-    kept = n_sweeps if record else 0
-    recorded = np.empty((kept, n_replicas, graph.n_nodes), dtype=np.int64)
-    swaps = np.zeros((2, n_replicas - 1))
     houdayer = np.zeros((2, houdayer_pairs))
     sizes: list[int] = []
-    current = energies(graph, rows, states)
-    lowest = int(np.argmin(current))
-    best, best_energy = states[lowest].copy(), float(current[lowest])
-    visits = 0
-    for step in range(-burn_in * thin, n_sweeps * thin):
-        for replica in range(n_replicas):
-            swendsen_wang_sweep(
-                states[replica],
-                graph,
-                rows,
-                children[replica],
-                None,
-                betas[replica],
-                backend=cluster_backend,
-            )
-        visits += n_replicas * per_sweep
-        current = energies(graph, rows, states)
+
+    def houdayer_moves(run: Exchanging[np.ndarray]) -> None:
+        """Houdayer's move on each of the coldest pairs, accepted across their two temperatures."""
+        labels, current = run.states, run.energies
         for pair in range(houdayer_pairs):
-            first, second = states[pair].copy(), states[pair + 1].copy()
-            size = houdayer_move(first, second, offsets, neighbours, rng)
-            visits += per_sweep
+            first, second = labels[pair].copy(), labels[pair + 1].copy()
+            size = houdayer_move(
+                first, second, adjacency.offsets, adjacency.neighbours, rng
+            )
+            run.spent += per_sweep
             if size == 0:
                 continue
             sizes.append(size)
@@ -1204,33 +1119,32 @@ def cluster_tempering(
             log_ratio = -(betas[pair] - betas[pair + 1]) * (moved[0] - current[pair])
             if accept(float(log_ratio), rng):
                 houdayer[1, pair] += 1
-                states[pair], states[pair + 1] = first, second
-                current[pair], current[pair + 1] = moved[0], moved[1]
-        for pair in range(n_replicas - 1):
-            log_ratio = swap_log_ratio(
-                betas[pair], betas[pair + 1], current[pair], current[pair + 1]
-            )
-            swaps[0, pair] += 1
-            if accept(log_ratio, rng):
-                swaps[1, pair] += 1
-                states[[pair, pair + 1]] = states[[pair + 1, pair]]
-                current[[pair, pair + 1]] = current[[pair + 1, pair]]
-        lowest = int(np.argmin(current))
-        if current[lowest] < best_energy:
-            best, best_energy = states[lowest].copy(), float(current[lowest])
-        if record and step >= 0 and (step + 1) % thin == 0:
-            recorded[step // thin] = states
+                labels[pair], labels[pair + 1] = first, second
+                current[pair], current[pair + 1] = float(moved[0]), float(moved[1])
+
+    lattice = _Lattice(graph, rows, adjacency, Backend.RUST, cluster_backend)
+    step = lattice.rung((PottsMove.SWENDSEN_WANG,), scored=False)
+    run, recorded = lattice.temper(
+        [step] * n_replicas,
+        temperatures,
+        states,
+        children,
+        rng,
+        (n_sweeps, burn_in, thin),
+        kept=n_sweeps if record else 0,
+        between=houdayer_moves,
+    )
     return ClusterTempered(
-        states=recorded[: n_sweeps if record else 0],
+        states=recorded,
         temperatures=tuple(temperatures),
-        swap_acceptance=swaps[1] / np.maximum(swaps[0], 1),
+        swap_acceptance=run.accepted / np.maximum(run.proposed, 1),
         houdayer_acceptance=houdayer[1] / np.maximum(houdayer[0], 1),
         houdayer_sizes=tuple(sizes),
         houdayer_accepts=int(houdayer[1].sum()),
-        best=best,
-        energy=best_energy,
+        best=run.best,
+        energy=run.energy,
         n_sweeps=n_sweeps,
-        spent=visits,
+        spent=run.spent,
         unit=Cost.SITE_VISITS,
         termination=Termination.after((burn_in + n_sweeps) * thin, converged=False),
     )
@@ -1315,113 +1229,8 @@ def sweep_for(
         the move set builds none --- which is what
         :attr:`PottsChain.mean_cluster_size` averages.
     """
-    if move is PottsMove.SINGLE_SITE or move in _BALANCED_MOVES:
-        single = (
-            sweep_at(rows, offsets, neighbours, couplings, backend)
-            if move is PottsMove.SINGLE_SITE
-            else balanced_sweep_at(rows, offsets, neighbours, couplings, move)
-        )
-
-        def sweep(
-            state: np.ndarray, rng: np.random.Generator, beta: float = 1.0
-        ) -> int:
-            single(state, rng, beta)
-            return 0
-
-        return sweep
-
-    if move is PottsMove.SWENDSEN_WANG:
-
-        def bond_pass(
-            state: np.ndarray, rng: np.random.Generator, beta: float = 1.0
-        ) -> int:
-            swendsen_wang_sweep(
-                state, graph, rows, rng, None, beta, backend=cluster_backend
-            )
-            return 0
-
-        return bond_pass
-
-    if move is PottsMove.GHOST_SPIN:
-
-        def ghost_pass(
-            state: np.ndarray, rng: np.random.Generator, beta: float = 1.0
-        ) -> int:
-            ghost_spin_sweep(state, graph, rows, rng, beta, backend=cluster_backend)
-            return 0
-
-        return ghost_pass
-
-    if move is PottsMove.SWENDSEN_WANG_HEAT_BATH:
-
-        def heat_bath_pass(
-            state: np.ndarray, rng: np.random.Generator, beta: float = 1.0
-        ) -> int:
-            swendsen_wang_heat_bath_sweep(
-                state, graph, rows, rng, beta, backend=cluster_backend
-            )
-            return 0
-
-        return heat_bath_pass
-
-    if move is PottsMove.LABEL_DIRECTED:
-        # The target cycles through the labels, one per call, as
-        # `anneal_potts` cycles it by step.
-        calls = [0]
-
-        def directed_pass(
-            state: np.ndarray, rng: np.random.Generator, beta: float = 1.0
-        ) -> int:
-            target = calls[0] % int(rows.shape[1])
-            calls[0] += 1
-            label_directed_sweep(
-                state, graph, rows, rng, target, beta, backend=cluster_backend
-            )
-            return 0
-
-        return directed_pass
-
-    # The adjacency as lists, once for every cluster the closure grows (#919).
-    lists = adjacency_lists(offsets, neighbours, couplings)
-    if move is PottsMove.NIEDERMAYER:
-        threshold = niedermayer_threshold(couplings)
-
-        def generalized(
-            state: np.ndarray, rng: np.random.Generator, beta: float = 1.0
-        ) -> int:
-            return niedermayer_sweep(
-                state,
-                rows,
-                offsets,
-                neighbours,
-                couplings,
-                rng,
-                beta=beta,
-                threshold=threshold,
-                lists=lists,
-            )
-
-        return generalized
-
-    if move is PottsMove.WOLFF_HEAT_BATH:
-
-        def one_heat_bath_cluster(
-            state: np.ndarray, rng: np.random.Generator, beta: float = 1.0
-        ) -> int:
-            return wolff_heat_bath_sweep(
-                state, rows, offsets, neighbours, couplings, rng, beta=beta, lists=lists
-            )
-
-        return one_heat_bath_cluster
-
-    def one_cluster(
-        state: np.ndarray, rng: np.random.Generator, beta: float = 1.0
-    ) -> int:
-        return wolff_sweep(
-            state, rows, offsets, neighbours, couplings, rng, beta=beta, lists=lists
-        )
-
-    return one_cluster
+    adjacency = (offsets, neighbours, couplings)
+    return _Lattice(graph, rows, adjacency, backend, cluster_backend).sweep(move)
 
 
 @dataclass(frozen=True)

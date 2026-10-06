@@ -51,6 +51,7 @@ from enum import StrEnum
 from typing import Any
 
 import numpy as np
+from numpy.random import Generator
 
 from sal.backend import Backend, refuse_backend
 from sal.cost import Cost
@@ -63,7 +64,7 @@ from sal.sample.balanced import (
     log_normalizer,
     log_ratios,
 )
-from sal.sample.loop import Moved, anneal
+from sal.sample.loop import Moved, Step, anneal
 from sal.sample.schedule import Annealed, TempSchedule
 from sal.search.infer import score_topology
 from sal.sim.factor_graph import Factor, FactorGraph
@@ -756,10 +757,11 @@ def anneal_factor_graph(
     indexed = Indexed(graph)
     state = indexed.start(rng, start)
     walked = anneal(
-        HeatBath(indexed, backend),
+        heat_bath(indexed, backend),
         schedule,
         Moved(state, -indexed.log_density(state, backend), None, 0),
         rng,
+        np.copy,
     )
     return AnnealedLabelling(
         best=walked.best,
@@ -767,43 +769,23 @@ def anneal_factor_graph(
         final=walked.final,
         trace=-np.array(walked.energies),
         spent=walked.spent,
-        unit=walked.unit,
+        unit=Cost.SWEEPS,
         termination=walked.termination,
     )
 
 
-@dataclass(frozen=True)
-class HeatBath:
-    """One heat-bath sweep over a factor graph as a :class:`~sal.sample.loop.Step`, charged one sweep.
+def heat_bath(
+    indexed: Indexed, backend: Backend = Backend.NUMBA
+) -> Step[np.ndarray, None, np.random.Generator]:
+    """:func:`gibbs_sweep` at ``beta = 1 / T`` in place, as a step charged one sweep; the energy is the negated log-density."""
 
-    The state is moved in place by :func:`gibbs_sweep` at ``beta = 1 / T``
-    and scored by :meth:`Indexed.log_density`, its energy being the
-    negated log-density; :func:`anneal_factor_graph` and
-    :func:`~sal.sample.tempered.tempered_factor_graph` run it.
-    """
-
-    indexed: Indexed
-    backend: Backend = Backend.NUMBA
-    unit: Cost = Cost.SWEEPS
-
-    def __call__(
-        self,
-        state: np.ndarray,
-        _energy: float,
-        _carried: None,
-        temperature: float,
-        rng: np.random.Generator,
-        /,
+    def step(
+        state: np.ndarray, _: float, __: None, temperature: float, rng: Generator
     ) -> Moved[np.ndarray, None]:
-        """One sweep at ``temperature``."""
-        gibbs_sweep(
-            self.indexed, state, rng, beta=1.0 / temperature, backend=self.backend
-        )
-        return Moved(state, -self.indexed.log_density(state, self.backend), None, 1)
+        gibbs_sweep(indexed, state, rng, beta=1.0 / temperature, backend=backend)
+        return Moved(state, -indexed.log_density(state, backend), None, 1)
 
-    def keep(self, state: np.ndarray) -> np.ndarray:
-        """A copy: the sweep moves the state in place."""
-        return state.copy()
+    return step
 
 
 def chain_block_sweep(
@@ -942,60 +924,43 @@ def anneal_topology(
     fitted_before = len(cache)
     score = cached_topology_score(alignment, n_states, cache, model=model)
     value = score(start)
-    walk = TopologyWalk(score, cache, moves)
-    walked = anneal(walk, schedule, Moved(start, -value, None, 0), rng)
+    moved: list[bool] = []
+    walk = topology_walk(score, cache, moves, moved)
+    walked = anneal(walk, schedule, Moved(start, -value, None, 0), rng, lambda t: t)
     return AnnealedTopology(
         best=walked.best,
         log_likelihood=-walked.energy,
         final=walked.final,
         trace=-np.array(walked.energies),
-        acceptance=walk.accepted / schedule.n_steps,
+        acceptance=sum(moved) / schedule.n_steps,
         scores=cache,
         spent=len(cache) - fitted_before,
-        unit=walked.unit,
+        unit=Cost.FITS,
         termination=walked.termination,
     )
 
 
-@dataclass
-class TopologyWalk:
-    """One :func:`topology_step` as a :class:`~sal.sample.loop.Step`, charged the topologies it fitted.
+def topology_walk(
+    score: Callable[[Topology], float],
+    cache: Mapping[frozenset[frozenset[str]], float],
+    moves: MoveSet,
+    moved: list[bool],
+) -> Step[Topology, None, np.random.Generator]:
+    """:func:`topology_step` as a step charged the topologies it fitted, a cache hit being free.
 
-    The energy is the negated fitted log-likelihood. A cache hit is free, so
-    a step that proposes a topology already in ``cache`` charges nothing;
-    :func:`anneal_topology` and
-    :func:`~sal.sample.tempered.tempered_topologies` run it.
+    The energy is the negated fitted log-likelihood; whether each proposal
+    was accepted is appended to ``moved``.
     """
 
-    score: Callable[[Topology], float]
-    cache: Mapping[frozenset[frozenset[str]], float]
-    moves: MoveSet = MoveSet.NNI
-    unit: Cost = Cost.FITS
-    #: Proposals accepted so far, summed into an acceptance rate.
-    accepted: int = 0
-
-    def __call__(
-        self,
-        state: Topology,
-        energy: float,
-        _carried: None,
-        temperature: float,
-        rng: np.random.Generator,
-        /,
+    def step(
+        state: Topology, energy: float, _: None, temperature: float, rng: Generator
     ) -> Moved[Topology, None]:
-        """One proposal at ``temperature``."""
-        fitted = len(self.cache)
-        taken = topology_step(
-            state, -energy, temperature, rng, self.score, moves=self.moves
-        )
-        self.accepted += taken.moved
-        return Moved(
-            taken.topology, -taken.log_likelihood, None, len(self.cache) - fitted
-        )
+        fitted = len(cache)
+        taken = topology_step(state, -energy, temperature, rng, score, moves=moves)
+        moved.append(taken.moved)
+        return Moved(taken.topology, -taken.log_likelihood, None, len(cache) - fitted)
 
-    def keep(self, state: Topology) -> Topology:
-        """The state itself: a step builds a new topology rather than moving one."""
-        return state
+    return step
 
 
 def cached_topology_score(
