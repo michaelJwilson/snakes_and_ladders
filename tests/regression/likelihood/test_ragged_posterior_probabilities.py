@@ -20,13 +20,15 @@ from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
 from sal.likelihood.ragged import SwitchKind, posteriors_oracle, step_transitions
 from sal.ragged import Ragged
 
+from tests._long_double import long_double_posteriors
 from tests._rows import every_value
 
 STATES = 4
 
 #: Long-double reference against the kernel, measured at 4.6e-15 (marginals,
 #: absolute), 2.8e-15 (counts, relative) and 4.6e-16 (evidence, relative) on
-#: `LONG`; the log-space kernel there reads 3.7e-11, 1.1e-11 and 8.8e-15.
+#: `LONG`; the log-space kernel there read 3.7e-11, 1.1e-11 and 8.8e-15
+#: until #1262 shifted its rows, and reads 1.1e-14, 8.1e-15 and 1.8e-15.
 LONG_TOLERANCE = 1e-13
 
 #: Three segments of thousands of positions.
@@ -82,53 +84,6 @@ def _kernel(
     return posterior, pairs, evidence
 
 
-def _long_double(
-    density: np.ndarray,
-    lengths: tuple[int, ...],
-    initial: np.ndarray,
-    transition: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Scaled forward-backward in `np.longdouble`, one segment at a time, written independently of the kernel.
-
-    `transition` is one log matrix, or a `(total, n, n)` stack whose row `t`
-    is the step into position `t`, as `step_transitions` writes it.
-    """
-    wide = np.longdouble
-    n_states = density.shape[1]
-    stack = np.exp(transition.astype(wide))
-    if stack.ndim == 2:
-        stack = np.broadcast_to(stack, (density.shape[0], n_states, n_states))
-    prior = np.exp(initial.astype(wide))
-    posterior = np.empty(density.shape, dtype=wide)
-    pairs = np.zeros((n_states, n_states), dtype=wide)
-    evidence = []
-    start = 0
-    for n in lengths:
-        x = density[start : start + n].astype(wide)
-        steps = stack[start : start + n]
-        high = x.max(axis=1, keepdims=True)
-        b = np.exp(x - high)
-        alpha = np.empty((n, n_states), dtype=wide)
-        scale = np.empty(n, dtype=wide)
-        step = prior * b[0]
-        scale[0] = step.sum()
-        alpha[0] = step / scale[0]
-        for t in range(1, n):
-            step = (alpha[t - 1] @ steps[t]) * b[t]
-            scale[t] = step.sum()
-            alpha[t] = step / scale[t]
-        beta = np.ones(n_states, dtype=wide)
-        posterior[start + n - 1] = alpha[n - 1]
-        for t in range(n - 1, 0, -1):
-            onward = b[t] * beta / scale[t]
-            pairs += alpha[t - 1][:, None] * steps[t] * onward[None, :]
-            beta = steps[t] @ onward
-            posterior[start + t - 1] = alpha[t - 1] * beta
-        evidence.append(np.log(scale).sum() + high.sum())
-        start += n
-    return posterior, pairs, np.array(evidence)
-
-
 @pytest.mark.critical
 @pytest.mark.oracle
 def test_the_scaled_kernel_matches_the_log_space_oracle() -> None:
@@ -154,7 +109,9 @@ def test_long_segments_match_a_long_double_recursion() -> None:
     # same recursion in 80-bit arithmetic.
     density, initial, transition = _instance(LONG, seed=1253)
     got = _kernel(density, LONG, initial, transition)
-    posterior, pairs, evidence = _long_double(density, LONG, initial, transition)
+    posterior, pairs, evidence = long_double_posteriors(
+        density, LONG, initial, transition
+    )
 
     np.testing.assert_allclose(
         got[0], posterior.astype(np.float64), rtol=0, atol=LONG_TOLERANCE
@@ -174,7 +131,7 @@ def _switched(
     if kind is None:
         return density, initial, transition, None, transition
     rng = np.random.default_rng(seed + 1)
-    switch = rng.uniform(size=density.shape[0])
+    switch = np.asarray(rng.uniform(size=density.shape[0]))
     if kind is not SwitchKind.STAY_OR_MOVE:
         transition = np.log(rng.dirichlet(3.0 * np.ones(STATES // 2), size=STATES // 2))
     return (
@@ -210,7 +167,7 @@ def test_the_log_space_kernel_matches_a_long_double_recursion(
         switch,
         str(kind or SwitchKind.STAY_OR_MOVE),
     )
-    posterior, pairs, want = _long_double(density, MIXED, initial, steps)
+    posterior, pairs, want = long_double_posteriors(density, MIXED, initial, steps)
 
     np.testing.assert_allclose(
         np.exp(gamma), posterior.astype(np.float64), rtol=0, atol=LOG_SPACE_TOLERANCE
