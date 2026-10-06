@@ -21,7 +21,10 @@ does not know rather than guessing what the parameter vector means.
 derived in :func:`sal.emissions.pooled_variance_floor`
 transfers unchanged, and a component that reaches it is settled as the
 family's ``on_collapse`` says --- held by default --- and named in
-:attr:`MixtureFit.frozen` (issue #1160).
+:attr:`MixtureFit.frozen` (issue #1160). A channel whose observations are all
+equal is not refused: it is named in :attr:`GaussianMixtureObjective.flat`,
+its scale sits at the floor, and its zero variance is not a collapse (issue
+#1234).
 
 Ground truth and data generation live in
 :mod:`sal.sim.mixture`; this module holds the fitting
@@ -45,6 +48,7 @@ from sal.emissions import (
     COLLAPSED_MASS,
     EmissionFamily,
     GaussianEmission,
+    flat_channels,
     pooled_variance_floor,
     settle_collapse,
 )
@@ -106,6 +110,7 @@ class GaussianMixtureObjective(Objective):
         self._n_components = n_components
         self._dtype = dtype
         self._variance_floor = pooled_variance_floor(np.asarray(observations))
+        self._flat = flat_channels(np.asarray(observations))
 
     @property
     def n_components(self) -> int:
@@ -126,6 +131,11 @@ class GaussianMixtureObjective(Objective):
     def variance_floor(self) -> float:
         """The floor the EM oracle refuses at, derived from these observations."""
         return self._variance_floor
+
+    @property
+    def flat(self) -> tuple[int, ...]:
+        """Channels whose observations are all equal, their scale seeded and settled at the floor (issue #1234)."""
+        return self._flat
 
     @property
     def n_parameters(self) -> int:
@@ -160,7 +170,16 @@ class GaussianMixtureObjective(Objective):
             self._per_component(theta[self._mean_slice()]),
             positive(self._per_component(theta[self._log_scale_slice()])),
             self._variance_floor,
+            flat=self._flat,
         )
+
+    def _seed_scale(self, spread: torch.Tensor) -> torch.Tensor:
+        """``spread``, each :attr:`flat` channel's at ``sqrt(variance_floor)`` instead."""
+        if not self._flat:
+            return spread
+        seeded = spread.clone().reshape(-1)
+        seeded[list(self._flat)] = math.sqrt(self._variance_floor)
+        return seeded.reshape(spread.shape)
 
     def initial(self) -> torch.Tensor:
         """Uniform weights, means at quantiles of the data, pooled scales.
@@ -169,7 +188,9 @@ class GaussianMixtureObjective(Objective):
         leave the components exchangeable and the gradient in that block
         exactly zero, and a mean far from every observation contributes a
         density that underflows, so the fit silently becomes one with fewer
-        components.
+        components. A :attr:`flat` channel's quantiles are its constant and
+        its scale is ``sqrt(variance_floor)``: the zero spread would be a
+        log-scale of ``-inf`` (issue #1234).
         """
         theta = torch.zeros(self.n_parameters, dtype=self._dtype)
         if self._n_channels == 1:
@@ -177,7 +198,7 @@ class GaussianMixtureObjective(Objective):
                 self._observations, self._n_components
             )
             theta[self._log_scale_slice()] = free_from_positive(
-                self._observations.std()
+                self._seed_scale(self._observations.std())
             )
             return theta
         # Per channel, since a quantile of the two channels pooled is a
@@ -186,7 +207,7 @@ class GaussianMixtureObjective(Objective):
             self._observations, self._n_components, dim=0
         ).reshape(-1)
         theta[self._log_scale_slice()] = free_from_positive(
-            self._observations.std(dim=0)
+            self._seed_scale(self._observations.std(dim=0))
         ).repeat(self._n_components)
         return theta
 
@@ -554,6 +575,10 @@ class MixtureFit:
         :attr:`sal.opt.emission_mixture.EmissionMixtureFit.frozen` reports
         emptied ones. Non-empty means the fit is not a clean optimum, whatever
         ``termination`` says of the loop.
+    flat : tuple[int, ...]
+        Channels whose observations are all equal, as the starting
+        components' :attr:`~sal.emissions.GaussianEmission.flat` names them:
+        their scale is the floor rather than an estimate (issue #1234).
     """
 
     weights: torch.Tensor
@@ -564,6 +589,7 @@ class MixtureFit:
     spent: int = dataclass_field(kw_only=True)
     unit: Cost = dataclass_field(default=Cost.ITERATIONS, kw_only=True)
     frozen: tuple[int, ...] = dataclass_field(default=(), kw_only=True)
+    flat: tuple[int, ...] = dataclass_field(default=(), kw_only=True)
 
 
 def expectation_maximization(
@@ -586,7 +612,8 @@ def expectation_maximization(
     Parameters
     ----------
     observations : np.ndarray
-        Observations, shape ``(n_samples,)``.
+        Observations, shape ``(n_samples,)``, or ``(n_samples, n_channels)``
+        for components with a channel axis.
     weights : torch.Tensor
         Starting mixing weights.
     components : GaussianEmission
@@ -638,7 +665,11 @@ def expectation_maximization(
             components,
             config=config,
         )
-    values = torch.as_tensor(observations, dtype=torch.float64).reshape(-1)
+    # A channel axis is kept for channelled components, so the E step scores
+    # a row per draw; one-channel values are flattened exactly as before.
+    values = torch.as_tensor(observations, dtype=torch.float64).reshape(
+        -1, *components.mean.shape[1:]
+    )
     boundary = False
     attempt = 0
     frozen: set[int] = set()
@@ -680,6 +711,7 @@ def expectation_maximization(
         termination=termination,
         spent=termination.iterations,
         frozen=tuple(sorted(frozen)),
+        flat=components.flat,
     )
 
 
@@ -698,6 +730,7 @@ def _streamed_expectation_maximization(
     values = np.ascontiguousarray(observations, dtype=np.float64).reshape(-1)
     floor = components.variance_floor
     on_collapse = components.on_collapse
+    flat = components.flat
     frozen: set[int] = set()
 
     def step(
@@ -717,7 +750,9 @@ def _streamed_expectation_maximization(
         mass = new_weight * values.size
         if bool(((variance <= floor) | (mass < COLLAPSED_MASS)).any()):
             settled = settle_collapse(
-                GaussianEmission(mean, scale, floor, on_collapse=on_collapse),
+                GaussianEmission(
+                    mean, scale, floor, on_collapse=on_collapse, flat=flat
+                ),
                 torch.from_numpy(mass),
                 torch.from_numpy(new_mean),
                 torch.from_numpy(variance),
@@ -730,24 +765,29 @@ def _streamed_expectation_maximization(
             ), log_likelihood
         return (new_weight, new_mean, np.sqrt(variance)), log_likelihood
 
-    def flat(tensor: torch.Tensor) -> np.ndarray:
+    def contiguous(tensor: torch.Tensor) -> np.ndarray:
         return np.ascontiguousarray(tensor.detach().numpy(), dtype=np.float64).reshape(
             -1
         )
 
     (weight, mean, scale), log_likelihood, termination = em_loop(
         step,
-        (flat(weights), flat(components.mean), flat(components.scale)),
+        (
+            contiguous(weights),
+            contiguous(components.mean),
+            contiguous(components.scale),
+        ),
         config=config,
     )
     return MixtureFit(
         torch.from_numpy(weight),
-        GaussianEmission(mean, scale, floor, on_collapse=on_collapse),
+        GaussianEmission(mean, scale, floor, on_collapse=on_collapse, flat=flat),
         log_likelihood,
         False,
         termination=termination,
         spent=termination.iterations,
         frozen=tuple(sorted(frozen)),
+        flat=components.flat,
     )
 
 

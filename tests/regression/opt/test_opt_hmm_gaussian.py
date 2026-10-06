@@ -329,3 +329,20 @@ def test_coverage_against_the_separation_of_the_emitting_states() -> None:
     assert sweep[1.0][2] >= 4
     for separation in (3.0, 4.0, 6.0):
         assert sweep[separation][2] == 0
+
+
+@pytest.mark.analytic
+def test_a_constant_sequence_starts_flat_at_the_floor() -> None:
+    # Issue #1234: the per-family start on all-equal values raised through
+    # `pooled_variance_floor`; it now seeds every mean at the constant and
+    # every scale at `sqrt` of the stated floor, and names the channel flat.
+    observations = np.full((2, 30), -2.0)
+
+    start = family_start(GaussianEmission, observations, 3)
+
+    assert isinstance(start, GaussianEmission)
+    assert start.flat == (0,)
+    assert start.variance_floor == 1e-3 * 4.0
+    assert torch.equal(start.mean, torch.full((3,), -2.0, dtype=torch.float64))
+    assert_allclose(start.scale.numpy(), np.sqrt(4e-3), rtol=1e-15)
+    assert bool(torch.isfinite(start.log_density(torch.as_tensor(observations))).all())
