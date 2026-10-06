@@ -109,18 +109,31 @@ def test_the_warm_up_repays_its_discarded_draws() -> None:
     assert _ess_per_gradient(ADAPTED) > _ess_per_gradient(FIXED)
 
 
-@pytest.mark.analytic
-def test_the_adapted_chain_settles_first() -> None:
+@pytest.mark.experiment
+@pytest.mark.release
+def test_the_adapted_chain_settles_first_on_most_seeds() -> None:
+    # Which chain's running mean settles first is one draw of a random
+    # quantity: on the figure's seed it was draw 211 against 323 before issue
+    # #1207 and is 520 against 323 after, where the shrinkage weight 100/105
+    # over 100 recorded draws raised the mass diagonal by 5%. The claim is the ensemble's: over seeds 0 to 19 the adapted
+    # chain settled first on 16 before and 18 after, so it is asserted on a
+    # majority of the 20.
     gaussian = target()
     exact_mean = float(gaussian.mean[TRACKED])
     exact_sd = float(torch.sqrt(gaussian.covariance[TRACKED, TRACKED]))
+    first = 0
+    for seed in range(20):
+        adapted, fixed = chains(seed)
+        adapted_draw = settling_draw(
+            running_mean(adapted, TRACKED), exact_mean, exact_sd
+        )
+        fixed_draw = settling_draw(running_mean(fixed, TRACKED), exact_mean, exact_sd)
+        if adapted_draw is not None and (
+            fixed_draw is None or adapted_draw < fixed_draw
+        ):
+            first += 1
 
-    adapted_draw = settling_draw(running_mean(ADAPTED, TRACKED), exact_mean, exact_sd)
-    fixed_draw = settling_draw(running_mean(FIXED, TRACKED), exact_mean, exact_sd)
-
-    assert adapted_draw is not None
-    assert fixed_draw is not None
-    assert adapted_draw < fixed_draw
+    assert first > 10, first
 
 
 @pytest.mark.smoke

@@ -5529,7 +5529,12 @@ The step $\varepsilon$ right for one posterior is wrong for the next, and the
 coordinates' scales $\sigma_i$ are the posterior's. Both are set in a warm-up
 whose draws are discarded, after which the chain runs at fixed values and has
 the target as its stationary distribution; a chain that kept adapting would
-not. The scales are the sample standard deviations of a warm-up window. The
+not. The scales are the standard deviations of a warm-up window, regularized
+as Stan's are \citep{stan_reference}: over $n$ recorded draws of sample
+variance $s_i^2$ the variance used is
+$\frac{n}{n+5}\,s_i^2 + 10^{-3}\,\frac{5}{n+5}$, so a coordinate the window
+did not move gets a finite mass and is reported as flat rather than refused.
+The
 step is driven to a target acceptance $\delta$ by dual averaging
 \citep[Sec.~3.2]{hoffman2014}: after proposal $m$ with acceptance probability
 $\alpha_m$,
@@ -5574,11 +5579,13 @@ Gaussian, from the same start and at the same starting step. That Gaussian's
 two directions differ in width by a factor of 534, so at unit mass one step
 size must serve both and no value serves either well: above the narrow
 direction's stability limit the chain diverges, and below it the wide
-direction is crossed by a random walk. The adapted chain's running mean
-reaches the last tenth of a standard deviation at draw 211 and the fixed
-chain's at 323, and the separation that matters is the cost of a draw ---
-$2.08 \times 10^{-2}$ effective draws per gradient against
-$5.85 \times 10^{-3}$, a factor of 3.6, with the warm-up's own gradients
+direction is crossed by a random walk. Which running mean reaches the last
+tenth of a standard deviation first is one draw of a random quantity: on the
+figure's seed the adapted chain's arrives at draw 520 and the fixed chain's at
+323, and over 20 seeds the adapted chain's arrives first on 18. The separation
+that matters is the cost of a draw ---
+$1.92 \times 10^{-2}$ effective draws per gradient against
+$5.85 \times 10^{-3}$, a factor of 3.3, with the warm-up's own gradients
 charged to the chain that spent them. Both chains are correct: each is a
 kernel with the right stationary distribution, and each recovers the exact
 mean inside four standard errors at its own effective sample size. So what

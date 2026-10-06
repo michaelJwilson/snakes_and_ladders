@@ -485,3 +485,23 @@ macro_rules! walk_class {
         }
     };
 }
+
+#[cfg(test)]
+mod tests {
+    use super::regularized;
+
+    #[test]
+    fn the_regularized_variance_is_stans_closed_form() {
+        // `test_the_regularized_variance_is_stans_closed_form`'s values, so
+        // the Rust and Python rules are pinned to one closed form: Welford
+        // sums [0, 4, 1] over n = 3 are sample variances [0, 2, 0.5].
+        let (variance, flat) = regularized(&[0.0, 4.0, 1.0], 3.0).unwrap();
+        let floor = 1e-3 * 5.0 / 8.0;
+        let expected = [floor, 0.75 + floor, 0.1875 + floor];
+        for (v, e) in variance.iter().zip(expected) {
+            assert!((v - e).abs() <= 1e-15 * e, "{v} against {e}");
+        }
+        assert_eq!(flat, vec![0]);
+        assert!(regularized(&[1.0, f64::NAN], 4.0).is_err());
+    }
+}
