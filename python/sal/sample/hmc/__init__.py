@@ -74,7 +74,7 @@ import math
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import torch
@@ -147,6 +147,9 @@ from sal.sample.tune import (
 # sub-step length, and one of the two has to give.
 from sal.track import TrackedOptimization
 from sal.track import current as current_tracked
+
+if TYPE_CHECKING:
+    from sal.opt.starts import Polished
 
 #: The public surface, and the names #1010 moved to
 #: :mod:`sal.sample.chain`, exported from here for one release.
@@ -1313,7 +1316,18 @@ def _tuned(
         criterion=tuning.criterion,
         rng=generator,
         grid=tuning.grid,
+        polish=_polish(objective, tuning),
     )
+
+
+def _polish(
+    objective: Objective, tuning: StepTuning
+) -> Callable[[torch.Tensor], Polished] | None:
+    """``tuning``'s polish of a point of ``objective`` at its budget, or ``None`` where it names none."""
+    polish, budget = tuning.polish, tuning.polish_budget
+    if polish is None or budget is None:
+        return None
+    return lambda point: polish(objective, point, budget)
 
 
 def _compiled(

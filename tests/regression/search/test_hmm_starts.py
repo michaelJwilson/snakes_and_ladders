@@ -44,7 +44,9 @@ from sal.opt.starts import StartsBenchmark, polish_by_baum_welch
 from sal.ragged import Ragged
 from sal.search.hmm_starts import (
     CHARGES,
+    PILOT_POLISH,
     STARTS,
+    TUNING_GRID,
     at_equal_evaluations,
     gaussian_quantile_start,
 )
@@ -175,7 +177,9 @@ def test_a_rectangular_batch_polishes_as_baum_welch_on_the_rectangle_does() -> N
 def test_each_sampler_records_the_gradients_its_charge_declares() -> None:
     # One cell per start on the instance at a two-iteration polish: the
     # gradients each sampler recorded, plus the one point the seam scores,
-    # are `CHARGES`, and a restart's charge is the points it offered.
+    # are `CHARGES`, and a restart's charge is the points it offered. A
+    # polished-gap pilot's polishes are charged at their cap, which bounds
+    # the iterations they recorded.
     objective, _ = _instance()
     result = StartsBenchmark(
         objective,
@@ -196,9 +200,14 @@ def test_each_sampler_records_the_gradients_its_charge_declares() -> None:
         "chain_tuned",
         "annealed_tuned",
         "tempered_tuned",
+        "chain_polished",
+        "annealed_polished",
+        "tempered_polished",
     ):
         (trial,) = result.trials(name)
-        assert trial.diagnostics["gradients"] + 1 == CHARGES[name], name
+        cap = len(TUNING_GRID) * PILOT_POLISH if name.endswith("_polished") else 0
+        assert trial.diagnostics["gradients"] + cap + 1 == CHARGES[name], name
+        assert trial.diagnostics.get("pilot_iterations", 0.0) <= cap, name
     (restart,) = result.trials("restart")
     assert restart.handover + 1 == CHARGES["restart"]
 
@@ -352,3 +361,29 @@ def test_a_tuned_step_reaches_the_truths_basin_in_fewer_seeds_than_the_grid() ->
     # reaches fewer than the issue's bar of 9 of 10.
     for sampler in ("chain", "annealed", "tempered"):
         assert counts[f"{sampler}_tuned"] < 9 <= MEASURED[N_STATES][sampler], sampler
+
+
+#: The polished-gap entries' success counts of ten seeds on four states
+#: (issue #1251), one pass on the development host at 300 passes, the pilot
+#: and its polishes charged: the chain and annealing reach the bar of 9, the
+#: ladder, whose rungs split the pilot to 2 proposals and 4 iterations per
+#: candidate, chose 3e-2 for its cold rung in every seed. Five states is
+#: unmeasured.
+POLISHED = {"chain_polished": 10, "annealed_polished": 9, "tempered_polished": 5}
+
+
+@pytest.mark.release
+@pytest.mark.experiment
+def test_a_polished_gap_step_reaches_the_bar_on_two_of_three_samplers() -> None:
+    objective, reference = _instance(N_STATES)
+    runs = at_equal_evaluations(
+        objective, tuple(POLISHED), EVALUATIONS, SEEDS, reference=[reference]
+    )
+    counts = {
+        name: sum(trial.value - reference <= TOLERANCE for trial in run.trials(name))
+        for name, run in runs.items()
+    }
+    assert counts == POLISHED
+    # The decision of #1251: the grid's steps stay while any sampler reaches
+    # fewer than the issue's bar of 9 of 10.
+    assert min(counts.values()) < 9

@@ -50,10 +50,11 @@ draws reach it without the module importing their type.
 
 - **A tuned step is chosen by a named criterion, and the criterion is not
   the outcome.** `tune_step` ranks a pilot's candidates by the ESJD per
-  gradient or by the lowest energy reached; on #1195's HMM starts both
-  ranked the largest step first, which carried the starts out of the
-  truth's basin (#1219). A tuned step is judged against the outcome it
-  serves before it replaces a measured one.
+  gradient, the lowest energy reached or the polished gap; on #1195's HMM
+  starts the first two ranked the largest step first, which carried the
+  starts out of the truth's basin (#1219). A tuned step is judged against
+  the outcome it serves before it replaces a measured one, and a pilot
+  shorter than the run cannot see where the run goes (#1251).
 
 - **A sampler is validated by the distribution it converges to, never by
   inspection.**
