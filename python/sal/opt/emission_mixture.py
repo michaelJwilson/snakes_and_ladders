@@ -10,7 +10,8 @@ family's is an optimization rather than a formula
 (:class:`sal.emissions.CountPairEmission` solves for a
 dispersion and for a beta-binomial's two shape parameters) and reports whether
 it settled. This loop propagates that report: an unconverged inner solve
-reaching an outer likelihood is the fault ``likelihood/CLAUDE.md`` forbids.
+reaching an outer likelihood is the fault ``likelihood/CLAUDE.md`` forbids,
+so the fit ends on the iteration before it (issue #1235).
 
 **And it is where ``Emission_Mixture++`` finally has a model.** Issue #306
 built the seeding rule --- k-means++ with a family's own Bregman divergence as
@@ -59,7 +60,14 @@ from sal.opt.constrain import (
     free_from_log_simplex,
     log_simplex,
 )
-from sal.opt.em import EMISSION_MIXTURE_EM, EmConfig, check_stages, em_loop
+from sal.opt.em import (
+    EMISSION_MIXTURE_EM,
+    Degenerate,
+    EmConfig,
+    Unsettled,
+    check_stages,
+    em_loop,
+)
 from sal.opt.m_step import MStep
 from sal.opt.mixture import (
     e_step,
@@ -106,7 +114,11 @@ class EmissionMixtureFit:
     termination : Termination | None
         Whether the loop met its relative tolerance or ran out of iterations,
         in the form every result states it in (issue #860); its
-        ``iterations`` are the EM iterations run (issue #1090).
+        ``iterations`` are the EM iterations run (issue #1090). A component M
+        step that did not settle ends the fit with
+        :attr:`~sal.opt.termination.Stop.DEGENERATE` on the parameters,
+        responsibilities and log-likelihood of the iteration before it
+        (issue #1235).
     frozen : tuple[int, ...]
         Components an M step held at their parameters because the E step
         left them no data (issue #1136), at any iteration. A collapsed
@@ -122,6 +134,11 @@ class EmissionMixtureFit:
         :attr:`sal.opt.hmm.EmFit.stages` reports them: ``(termination,)``
         here, and one per temperature before it in
         :mod:`sal.sandbox.annealed_em`. Omitted, it is ``(termination,)``.
+    unsettled : Unsettled | None
+        The component M step that ended a degenerate fit, its inner
+        iterations and residual (issue #1235), as
+        :attr:`sal.opt.hmm.EmFit.unsettled` reports it; ``None`` for every
+        other fit.
 
     Raises
     ------
@@ -140,6 +157,7 @@ class EmissionMixtureFit:
     spent: int = dataclass_field(kw_only=True)
     unit: Cost = dataclass_field(default=Cost.ITERATIONS, kw_only=True)
     stages: tuple[Termination, ...] = dataclass_field(default=(), kw_only=True)
+    unsettled: Unsettled | None = dataclass_field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
         check_stages(self)
@@ -196,14 +214,10 @@ def expectation_maximization(
     -------
     EmissionMixtureFit
         The fitted parameters, the responsibilities at them, and the
-        log-likelihood.
-
-    Raises
-    ------
-    ValueError
-        If a component's M step did not converge. A number read off an inner
-        solve that never settled is not an estimate, and returning it here
-        would surface several iterations later as a non-monotone likelihood.
+        log-likelihood. A component M step that does not converge ends the
+        fit with :attr:`~sal.opt.termination.Stop.DEGENERATE` on the
+        iteration before it (issue #1235): a number read off an inner solve
+        that never settled is not an estimate, and is not returned.
 
     Notes
     -----
@@ -236,12 +250,13 @@ def expectation_maximization(
     boundary = False
     attempt = 0
     frozen: set[int] = set()
+    unsettled: Unsettled | None = None
 
     def step(
         state: tuple[torch.Tensor, EmissionFamily, torch.Tensor],
     ) -> tuple[tuple[torch.Tensor, EmissionFamily, torch.Tensor], float]:
         """One E step, one M step, and the log-likelihood at the state given."""
-        nonlocal boundary, attempt
+        nonlocal boundary, attempt, unsettled
         attempt += 1
         current, family, _ = state
         log_weight = torch.log(current)
@@ -254,12 +269,13 @@ def expectation_maximization(
         else:
             reestimated = family.reestimate(values, posterior, conditioned)
         if not reestimated.converged:
+            unsettled = Unsettled(reestimated.iterations, reestimated.residual)
             msg = (
                 f"a component's M step did not settle at EM iteration "
                 f"{attempt}: residual {reestimated.residual:.3e} after "
                 f"{reestimated.iterations} inner iterations"
             )
-            raise ValueError(msg)
+            raise Degenerate(msg, unsettled)
         boundary = boundary or reestimated.at_boundary
         frozen.update(reestimated.frozen)
         advanced = (posterior.mean(dim=0), reestimated.components, posterior)
@@ -287,6 +303,7 @@ def expectation_maximization(
         termination=termination,
         frozen=tuple(sorted(frozen)),
         spent=termination.iterations,
+        unsettled=unsettled,
     )
 
 
@@ -434,11 +451,12 @@ def _cell_expectation_maximization(
     boundary = False
     attempt = 0
     frozen: set[int] = set()
+    unsettled: Unsettled | None = None
 
     def step(
         state: tuple[torch.Tensor, EmissionFamily, torch.Tensor],
     ) -> tuple[tuple[torch.Tensor, EmissionFamily, torch.Tensor], float]:
-        nonlocal boundary, attempt
+        nonlocal boundary, attempt, unsettled
         attempt += 1
         current, family, _ = state
         joint = torch.log(current) + family.log_density(support)
@@ -448,12 +466,13 @@ def _cell_expectation_maximization(
         weighted = posterior * held[:, None]
         reestimated = family.reestimate(support, weighted)
         if not reestimated.converged:
+            unsettled = Unsettled(reestimated.iterations, reestimated.residual)
             msg = (
                 f"a component's M step did not settle at EM iteration "
                 f"{attempt}: residual {reestimated.residual:.3e} after "
                 f"{reestimated.iterations} inner iterations"
             )
-            raise ValueError(msg)
+            raise Degenerate(msg, unsettled)
         boundary = boundary or reestimated.at_boundary
         frozen.update(reestimated.frozen)
         return (weighted.sum(dim=0) / n_samples, reestimated.components, posterior), (
@@ -484,6 +503,7 @@ def _cell_expectation_maximization(
         termination=termination,
         frozen=tuple(sorted(frozen)),
         spent=termination.iterations,
+        unsettled=unsettled,
     )
 
 

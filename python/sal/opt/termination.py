@@ -19,6 +19,11 @@ unconverged number it still refuses (`likelihood/CLAUDE.md`);
 :attr:`Stop.REFUSED` is for a result that exists *because* a refusal was
 caught, which is what `search.ground_state.run_max_product` does with the
 flooding schedule's `ConvergenceError`.
+
+A fit-time degeneracy is not a refusal of the caller's input. An EM step
+whose emission M step does not settle ends the run with
+:attr:`Stop.DEGENERATE` and the parameters of the iteration before it
+(issue #1235); a malformed input still raises.
 """
 
 from __future__ import annotations
@@ -41,6 +46,9 @@ class Stop(StrEnum):
 
     INFEASIBLE = "infeasible"
     """A constraint the run enforces cannot be met where the field allows: a floor no allowed label reaches (issue #1139)."""
+
+    DEGENERATE = "degenerate"
+    """An inner solve did not settle, and the run ended on the parameters of its last completed iteration (issue #1235)."""
 
 
 @dataclass(frozen=True)

@@ -30,6 +30,16 @@ non-finite objective; no :class:`~sal.opt.termination.Stop` is added, since a
 refusal is a raise and :attr:`~sal.opt.termination.Stop.REFUSED` names a
 refusal a caller caught. Non-finite parameters surface here one step later,
 as the log-likelihood evaluated at them.
+
+**A degenerate step ends the fit; it does not end the caller** (issue #1235).
+An emission M step that does not settle is a property of the fit, not of
+the input: a component handed one observation has no dispersion to solve
+for. The step raises :class:`Degenerate`, and the loop returns the state
+and log-likelihood the iteration before it returned, with
+:attr:`~sal.opt.termination.Stop.DEGENERATE`. That pair is what a run
+capped one iteration earlier returns, bitwise, so no number read off the
+unsettled solve reaches the result. A fit that settles never raises it, and
+its result is unchanged.
 """
 
 from __future__ import annotations
@@ -39,7 +49,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from sal.opt.termination import Termination
+from sal.opt.termination import Stop, Termination
 
 
 @dataclass(frozen=True)
@@ -67,6 +77,37 @@ EM = EmConfig()
 #: returned before `EmConfig` existed (issue #1059, open question Q4b on
 #: whether they move to `EM`).
 EMISSION_MIXTURE_EM = EmConfig(max_iterations=200, tolerance=1e-10)
+
+
+@dataclass(frozen=True)
+class Unsettled:
+    """The emission M step that ended a degenerate fit, as its inner solve reported it (issue #1235).
+
+    Carried on an EM result beside ``frozen`` and ``at_boundary``; the outer
+    iteration it ended is the result's ``termination.iterations``.
+
+    Parameters
+    ----------
+    iterations : int
+        Iterations the inner solve took before it stopped.
+    residual : float
+        Its residual where it stopped, in the solve's own relative units.
+    """
+
+    iterations: int
+    residual: float
+
+
+class Degenerate(ValueError):
+    """An EM step whose emission M step did not settle: :func:`em_loop` ends the fit on it (issue #1235).
+
+    A ``ValueError``, so a step called outside :func:`em_loop` refuses as it
+    did before. ``unsettled`` is the inner solve's report.
+    """
+
+    def __init__(self, message: str, unsettled: Unsettled) -> None:
+        super().__init__(message)
+        self.unsettled = unsettled
 
 
 def em_loop[State](
@@ -105,7 +146,10 @@ def em_loop[State](
         iterations run, and :attr:`Stop.CONVERGED` when the relative test
         stopped it or :attr:`Stop.BUDGET` when ``config.max_iterations`` did (issue
         #860). The caller builds its own result type from them and reports
-        whatever its M steps said along the way.
+        whatever its M steps said along the way. A step that raises
+        :class:`Degenerate` ends the loop with :attr:`Stop.DEGENERATE` after
+        the iterations run, that one included, and the state and
+        log-likelihood the step before it returned (issue #1235).
 
     Raises
     ------
@@ -119,7 +163,16 @@ def em_loop[State](
     converged = False
     while iterations < config.max_iterations:
         iterations += 1
-        state, log_likelihood = step(state)
+        try:
+            state, log_likelihood = step(state)
+        except Degenerate:
+            return (
+                state,
+                log_likelihood,
+                Termination(
+                    converged=False, iterations=iterations, reason=Stop.DEGENERATE
+                ),
+            )
         if not math.isfinite(log_likelihood):
             msg = (
                 f"EM log-likelihood is {log_likelihood} at iteration {iterations}, "
