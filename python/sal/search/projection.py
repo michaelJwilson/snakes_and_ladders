@@ -78,7 +78,7 @@ from sal.opt.mixture import (
 )
 from sal.opt.objective import Objective
 from sal.opt.starts import PolishedPoint, Trial
-from sal.opt.termination import Termination
+from sal.opt.termination import Stop, Termination
 from sal.sample.chain import torch_stream
 from sal.sample.initialize import FromAnnealing, FromChain, FromTempering
 from sal.sample.schedule import ExponentialTempSchedule
@@ -980,6 +980,7 @@ def _projected_em(
     trace: list[float] = []
     iterations = 0
     converged = False
+    degenerate = False
     tracked = current()
     for _ in range(budget.size):
         step = expectation_maximization(
@@ -988,6 +989,11 @@ def _projected_em(
             components,
             config=EmConfig(max_iterations=1, tolerance=0.0),
         )
+        if step.termination.reason is Stop.DEGENERATE:
+            # Its M step did not settle and EM handed back the fit it was
+            # given (#1235): the run ends on that fit, the step uncounted.
+            degenerate = True
+            break
         trace.append(step.log_likelihood)
         tracked.record(
             len(trace) - 1,
@@ -1014,9 +1020,12 @@ def _projected_em(
         log_likelihood=final_log_likelihood,
     )
     tracked.record_cost(len(trace) - 1, state_bytes(weights, components))
-    return _ProjectedRun(
-        trace, weights, components, Termination.after(iterations, converged=converged)
+    ended = (
+        Termination(converged=False, iterations=iterations, reason=Stop.DEGENERATE)
+        if degenerate
+        else Termination.after(iterations, converged=converged)
     )
+    return _ProjectedRun(trace, weights, components, ended)
 
 
 def _scored(

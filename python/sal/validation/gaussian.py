@@ -22,10 +22,9 @@ class GaussianTarget(Objective):
     def __init__(self, precision: np.ndarray) -> None:
         self.precision = torch.as_tensor(precision, dtype=torch.float64)
 
-    @property
-    def gaussian_precision(self) -> torch.Tensor:
-        """``P``, which declares this a :class:`~sal.sample.declared.DeclaredGaussian`."""
-        return self.precision
+    def supported_gradient(self) -> tuple[str, dict[str, np.ndarray]]:
+        """``oxisal``'s Gaussian kernel on ``P`` (:class:`~sal.sample.declared.SupportedGradient`, issue #1220)."""
+        return "gaussian", {"precision": np.ascontiguousarray(self.precision.numpy())}
 
     @property
     def dimension(self) -> int:

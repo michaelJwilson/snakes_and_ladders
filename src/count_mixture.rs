@@ -4,7 +4,8 @@
 //! A Hamiltonian chain on `EmissionMixtureObjective` spent its time in torch's per-operation
 //! dispatch and autograd's backward pass over `N x K` (7.4 s of 19 s at the stress mixture),
 //! not in arithmetic. Here the value and the gradient in the natural parameters come out of
-//! one crossing; the map from `theta` to them stays in torch, `K`-sized.
+//! one crossing; the map from `theta` to them and back is [`CountMixture`]'s, which a compiled
+//! chain runs too (issue #1220).
 //!
 //! **Every special function is a sum over integers.** With `R_x[m] = sum_{j < m} ln(1 + j/x)`
 //! and `D_x[m] = sum_{j < m} 1 / (x + j)`,
@@ -384,6 +385,185 @@ pub fn value_and_gradient(
         gradient.add(part);
     }
     Ok((log_likelihood, gradient))
+}
+
+/// One block of a count mixture's `theta` and the natural parameter it holds.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Slot {
+    /// `r = exp(theta)`.
+    Dispersion,
+    /// `mu = exp(theta)`.
+    Mean,
+    /// `a = exp(theta)`.
+    Alpha,
+    /// `b = exp(theta)`.
+    Beta,
+    /// `p = logistic(theta)`, with `a = tau p`, `b = tau (1 - p)` (issue #1205).
+    Rate,
+    /// `tau = exp(theta)`.
+    Concentration,
+}
+
+impl Slot {
+    /// The slot `EmissionMixtureObjective`'s route names `name`.
+    ///
+    /// # Errors
+    /// A name that is none of the six.
+    pub fn named(name: &str) -> Result<Self, String> {
+        Ok(match name {
+            "dispersion" => Self::Dispersion,
+            "mean" => Self::Mean,
+            "alpha" => Self::Alpha,
+            "beta" => Self::Beta,
+            "rate" => Self::Rate,
+            "concentration" => Self::Concentration,
+            _ => return Err(format!("no count mixture slot {name:?}")),
+        })
+    }
+}
+
+/// A count mixture's negative log-likelihood in `theta = (k - 1 free
+/// weights, then each slot's k free values at its offset)`: the map from
+/// `theta` to the natural parameters, then [`value_and_gradient`], then the
+/// chain rule back to `theta`, behind [`Energy`] (issues #1136, #1205, #1220).
+///
+/// Each block is `exp` of its entries, so `dU/dtheta = (dU/dp) p`; the weights
+/// are a softmax of `(0, f)`, so `dU/df_j = g_{j+1} - w_{j+1} sum_k g_k` with
+/// `g = dU/d log w`. A success channel read by rate and concentration has
+/// `dU/dp = tau (g_a - g_b)` and `dU/dtau = p g_a + (1 - p) g_b`, times
+/// `p (1 - p)` and `tau` for the free coordinates. A point at which a
+/// natural parameter is not finite and positive has value and gradient nan:
+/// a chain rejects it, and the objective takes autograd there.
+pub struct CountMixture {
+    k: usize,
+    totals: Option<Vec<u32>>,
+    successes: Option<Vec<u32>>,
+    trials: Vec<f64>,
+    slots: Vec<(Slot, usize)>,
+}
+
+impl CountMixture {
+    /// # Errors
+    /// A slot whose block leaves `theta`, a channel without its slots, or
+    /// `dimension` other than `k - 1` plus `k` per slot.
+    pub fn new(
+        k: usize,
+        totals: Option<Vec<u32>>,
+        successes: Option<Vec<u32>>,
+        trials: Vec<f64>,
+        slots: Vec<(Slot, usize)>,
+        dimension: usize,
+    ) -> Result<Self, String> {
+        let has = |slot| slots.iter().any(|(s, _)| *s == slot);
+        let total_slots = has(Slot::Dispersion) && has(Slot::Mean);
+        let success_slots =
+            (has(Slot::Alpha) && has(Slot::Beta)) || (has(Slot::Rate) && has(Slot::Concentration));
+        if k == 0
+            || dimension != k - 1 + k * slots.len()
+            || slots.iter().any(|(_, offset)| offset + k > dimension)
+            || totals.is_some() != total_slots
+            || successes.is_some() != success_slots
+        {
+            return Err(format!(
+                "a count mixture of k = {k} with {} slots does not fit d = {dimension}",
+                slots.len()
+            ));
+        }
+        Ok(Self {
+            k,
+            totals,
+            successes,
+            trials,
+            slots,
+        })
+    }
+
+    fn natural(&self, theta: &[f64], slot: Slot) -> Option<Vec<f64>> {
+        let (_, offset) = self.slots.iter().find(|(s, _)| *s == slot)?;
+        let free = &theta[*offset..offset + self.k];
+        Some(if slot == Slot::Rate {
+            free.iter().map(|v| 1.0 / (1.0 + (-v).exp())).collect()
+        } else {
+            free.iter().map(|v| v.exp()).collect()
+        })
+    }
+}
+
+impl crate::energy::Energy for CountMixture {
+    fn value_and_gradient(&self, theta: &[f64], out: &mut [f64]) -> f64 {
+        let k = self.k;
+        let log_weight = crate::energy::pinned_simplex(&theta[..k - 1]);
+        let dispersion = self.natural(theta, Slot::Dispersion);
+        let mean = self.natural(theta, Slot::Mean);
+        let rate = self.natural(theta, Slot::Rate);
+        let concentration = self.natural(theta, Slot::Concentration);
+        let (alpha, beta) = match (&rate, &concentration) {
+            (Some(p), Some(tau)) => (
+                Some(tau.iter().zip(p).map(|(t, p)| t * p).collect::<Vec<_>>()),
+                Some(tau.iter().zip(p).map(|(t, p)| t * (1.0 - p)).collect()),
+            ),
+            _ => (
+                self.natural(theta, Slot::Alpha),
+                self.natural(theta, Slot::Beta),
+            ),
+        };
+        let admissible = [&dispersion, &mean, &rate, &concentration, &alpha, &beta]
+            .iter()
+            .filter_map(|v| v.as_ref())
+            .flatten()
+            .all(|v| v.is_finite() && *v > 0.0);
+        let totals = self.totals.as_deref().map(|counts| Totals {
+            counts,
+            dispersion: dispersion.as_deref().unwrap_or(&[]),
+            mean: mean.as_deref().unwrap_or(&[]),
+        });
+        let successes = self.successes.as_deref().map(|counts| Successes {
+            counts,
+            alpha: alpha.as_deref().unwrap_or(&[]),
+            beta: beta.as_deref().unwrap_or(&[]),
+            trials: &self.trials,
+        });
+        let evaluated = admissible
+            .then(|| value_and_gradient(&log_weight, totals.as_ref(), successes.as_ref()).ok())
+            .flatten();
+        let Some((log_likelihood, gradient)) = evaluated else {
+            out.iter_mut().for_each(|o| *o = f64::NAN);
+            return f64::NAN;
+        };
+        let held = &gradient.log_weight;
+        let sum: f64 = held.iter().sum();
+        for j in 1..k {
+            out[j - 1] = -(held[j] - log_weight[j].exp() * sum);
+        }
+        for &(slot, offset) in &self.slots {
+            let block = &mut out[offset..offset + k];
+            for c in 0..k {
+                block[c] = match slot {
+                    Slot::Dispersion => {
+                        -gradient.dispersion[c] * dispersion.as_ref().map_or(0.0, |v| v[c])
+                    }
+                    Slot::Mean => -gradient.mean[c] * mean.as_ref().map_or(0.0, |v| v[c]),
+                    Slot::Alpha => -gradient.alpha[c] * alpha.as_ref().map_or(0.0, |v| v[c]),
+                    Slot::Beta => -gradient.beta[c] * beta.as_ref().map_or(0.0, |v| v[c]),
+                    Slot::Rate => {
+                        let (p, tau) = (
+                            rate.as_ref().map_or(0.0, |v| v[c]),
+                            concentration.as_ref().map_or(0.0, |v| v[c]),
+                        );
+                        -(tau * (gradient.alpha[c] - gradient.beta[c])) * (p * (1.0 - p))
+                    }
+                    Slot::Concentration => {
+                        let (p, tau) = (
+                            rate.as_ref().map_or(0.0, |v| v[c]),
+                            concentration.as_ref().map_or(0.0, |v| v[c]),
+                        );
+                        -(p * gradient.alpha[c] + (1.0 - p) * gradient.beta[c]) * tau
+                    }
+                };
+            }
+        }
+        -log_likelihood
+    }
 }
 
 fn slice<'a>(array: &'a PyReadonlyArray1<'_, f64>, name: &str) -> PyResult<&'a [f64]> {

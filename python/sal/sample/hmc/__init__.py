@@ -58,6 +58,7 @@ averaging; Geyer (1992) for the effective sample size.
 
 from __future__ import annotations
 
+import functools
 import itertools
 import math
 import time
@@ -113,6 +114,7 @@ from sal.sample.hmc.jax import JaxWalk
 from sal.sample.loop import Exchanging, Moved, temper
 from sal.sample.schedule import (
     Annealed,
+    ConstantTempSchedule,
     Monotone,
     TempSchedule,
     check_ladder,
@@ -120,6 +122,15 @@ from sal.sample.schedule import (
 )
 from sal.sample.schedule import Tempered as TemperedRun
 from sal.sample.tempered import ExchangeSeries
+from sal.sample.tune import (
+    AUTO,
+    Pilot,
+    StepSize,
+    StepTuning,
+    TunedStep,
+    compress,
+    tune_step,
+)
 
 # `current` is aliased: `_coefficients` already binds that name to a
 # sub-step length, and one of the two has to give.
@@ -152,6 +163,7 @@ __all__ = [
     "effective_sample_size",
     "gradient_at",
     "hamiltonian",
+    "hamiltonian_pilot",
     "leapfrog",
     "parallel_tempering",
     "run_chain",
@@ -221,7 +233,12 @@ class HmcChain(Chain):
     integrator is diverging rather than that the target is hard. The
     energy error is the diagnostic that tells a step too large from a bug:
     the first grows smoothly with the step, the second does not.
+
+    ``tuned`` is the pilot that chose the step under ``step_size="auto"``
+    (issue #1219), its gradients in ``spent``; ``None`` for a given step.
     """
+
+    tuned: TunedStep[torch.Tensor] | None = None
 
 
 #: The cube root that Yoshida's fourth-order composition is built from.
@@ -462,13 +479,14 @@ def sample(
     rng: np.random.Generator | torch.Generator,
     n_samples: int,
     *,
-    step_size: float,
+    step_size: StepSize,
     n_steps: int = DEFAULT_STEPS,
     start: torch.Tensor | None = None,
     burn_in: int = 0,
     integrator: Integrator = leapfrog,
     temperature: float = 1.0,
     adaptation: Adaptation | None = None,
+    tuning: StepTuning | None = None,
     store_chain: bool = True,
     operators: Mapping[str, Callable[[torch.Tensor], torch.Tensor]] | None = None,
     backend: Backend = Backend.RUST,
@@ -486,10 +504,13 @@ def sample(
         chains drawn from one generator are two chains.
     n_samples : int
         Draws recorded after burn-in.
-    step_size : float
+    step_size : float | Literal["auto"]
         Leapfrog step. Required rather than defaulted: its right value depends
         on the target's scale, so a default would be wrong silently. With an
-        ``adaptation`` it is the warm-up's starting point.
+        ``adaptation`` it is the warm-up's starting point. ``"auto"`` chooses
+        it by ``tuning``'s pilot (issue #1219): a chain at ``temperature`` per
+        candidate step, from ``start``, and the chain then starts where the
+        chosen candidate's pilot ended, as it would after a warm-up.
     n_steps : int
         Leapfrog steps per proposal.
     start : torch.Tensor | None
@@ -510,6 +531,9 @@ def sample(
         ``burn_in`` and the draws, both of which then run at fixed values.
         ``None`` runs the fixed-parameter chain at unit mass, bitwise what it
         was before adaptation existed.
+    tuning : StepTuning | None
+        The pilot that chooses ``step_size="auto"``, required with it and
+        refused without it; its gradients are in ``spent``.
     store_chain : bool
         Keep the draws (issue #988). ``False`` keeps none --- ``draws`` has
         zero rows --- and the chain holds memory of the order of one draw
@@ -523,9 +547,9 @@ def sample(
     backend : Backend
         :data:`~sal.backend.Backend.RUST`, the default since
         issue #986, runs the whole chain in ``oxisal.HmcWalk`` (issue #1008)
-        when the objective declares an energy
+        when the objective supports a kernel
         (:func:`~sal.sample.declared.declared_energy`) and the
-        chain is leapfrog at unit temperature in no enclosing
+        chain is leapfrog, at any temperature (issue #1220), in no enclosing
         :func:`sal.track.track`; the warm-up and ``Power``
         operators' filters run there too, and other operators as
         :func:`run_compiled` states. Its momenta and uniforms come
@@ -547,15 +571,29 @@ def sample(
         If ``step_size`` or ``temperature`` is not positive, or ``n_steps``
         is below 1. A zero-length trajectory proposes the current point every
         time: it accepts at rate 1 and samples nothing, looking healthy by
-        every diagnostic.
+        every diagnostic. As :func:`_tuned` refuses a tuning.
     """
     generator = torch_stream(rng)
+    tuned = _tuned(
+        objective,
+        step_size,
+        tuning,
+        adaptation,
+        generator,
+        lambda n: ConstantTempSchedule(temperature, n),
+        start=start,
+        n_steps=n_steps,
+        integrator=integrator,
+    )
+    if tuned is not None:
+        start = tuned.chosen.final
+    step_size = _step(step_size, tuned)
     _check_trajectory(step_size, n_steps)
     refuse_backend("hmc.sample", backend, (Backend.PYTHON, Backend.RUST))
     declared = declared_energy(objective)
     traced = None if declared is not None else declared_jax_energy(objective)
     if (
-        compiled_route(backend, temperature)
+        compiled_route(backend)
         and integrator is leapfrog
         and (declared is not None or traced is not None)
         and (
@@ -575,6 +613,7 @@ def sample(
             step_size=step_size,
             start=start_point(objective, start),
             burn_in=burn_in,
+            temperature=temperature,
             adaptation=adaptation,
             store_chain=store_chain,
             operators=operators,
@@ -600,10 +639,11 @@ def sample(
         draws=chain.draws,
         acceptance_rate=chain.acceptance_rate,
         energy_error=chain.energy_error,
-        spent=chain.spent,
+        spent=chain.spent + (0 if tuned is None else tuned.spent),
         unit=chain.unit,
         adapted=chain.adapted,
         expectations=chain.expectations,
+        tuned=tuned,
     )
 
 
@@ -627,11 +667,15 @@ class AnnealedTheta(Annealed[torch.Tensor]):
         With an ``adaptation``, the averaged step each window of
         ``adaptation.warmup`` proposals ended on, in schedule order; ``None``
         for a fixed step.
+    tuned : TunedStep[torch.Tensor] | None
+        The pilot that chose the step under ``step_size="auto"`` (issue
+        #1219), its gradients in ``spent``; ``None`` for a given step.
     """
 
     value: float
     acceptance_rate: float
     step_sizes: tuple[float, ...] | None = None
+    tuned: TunedStep[torch.Tensor] | None = None
 
 
 def anneal(
@@ -639,11 +683,12 @@ def anneal(
     schedule: TempSchedule,
     rng: np.random.Generator | torch.Generator,
     *,
-    step_size: float,
+    step_size: StepSize,
     n_steps: int = DEFAULT_STEPS,
     start: torch.Tensor | None = None,
     integrator: Integrator = leapfrog,
     adaptation: Adaptation | None = None,
+    tuning: StepTuning | None = None,
 ) -> AnnealedTheta:
     """Simulated annealing with Hamiltonian proposals: :func:`sample` on a schedule.
 
@@ -679,66 +724,98 @@ def anneal(
         no window's step is the one a fixed temperature would settle on, and
         the windows spend the schedule's proposals rather than discarded
         ones. ``None`` runs the fixed step, bitwise as before it existed.
+    tuning : StepTuning | None
+        The pilot that chooses ``step_size="auto"`` (issue #1219), required
+        with it and refused without it: per candidate step an annealing run
+        on ``schedule`` compressed to the pilot's length
+        (:func:`~sal.sample.tune.compress`), from ``start``. The run then
+        starts at ``start``, not where a pilot ended, since it begins hot.
+        Its gradients are in ``spent``.
 
     Returns
     -------
     AnnealedTheta
     """
     generator = torch_stream(rng)
+    tuned = _tuned(
+        objective,
+        step_size,
+        tuning,
+        adaptation,
+        generator,
+        lambda n: compress(schedule, n),
+        start=start,
+        n_steps=n_steps,
+        integrator=integrator,
+    )
+    step_size = _step(step_size, tuned)
     _check_trajectory(step_size, n_steps)
     position = start_point(objective, start)
-    step = _Annealing(
+    step = _Hamiltonian(
         objective,
         integrator,
         n_steps,
         step_size,
-        schedule.n_steps,
-        adaptation,
-        averaging=None
-        if adaptation is None
-        else DualAveraging(step_size, adaptation.target_acceptance),
+        jitter=None if adaptation is None else adaptation.step_jitter,
+        tuning=adaptation,
+        n_total=schedule.n_steps,
     )
-    # `U` at the start; `grad U` is the first trajectory's, charged there,
-    # and both are carried from one transition to the next rather than
-    # evaluated again by each (issues #1217, #1222).
+    # `U` at the start; `grad U` is the first trajectory's, charged there.
     origin: Moved[torch.Tensor, torch.Tensor | None] = Moved(
         position, float(objective(position)), None, 0
     )
-    walked = loop.anneal(step, schedule, origin, generator)
+    walked = loop.anneal(step, schedule, origin, generator, torch.Tensor.clone)
     return AnnealedTheta(
         best=walked.best,
         value=walked.energy,
         final=walked.final,
         acceptance_rate=step.accepted / schedule.n_steps,
-        spent=walked.spent,
-        unit=walked.unit,
+        spent=walked.spent + (0 if tuned is None else tuned.spent),
+        unit=Cost.GRADIENTS,
         termination=walked.termination,
         step_sizes=None if adaptation is None else tuple(step.step_sizes),
+        tuned=tuned,
     )
 
 
 @dataclass
-class _Annealing:
-    """:func:`anneal`'s transition as a :class:`~sal.sample.loop.Step`, charged in gradients.
+class _Hamiltonian:
+    """One Hamiltonian transition as a :data:`~sal.sample.loop.Step`, charged in gradients.
 
-    It carries ``grad U`` beside the position, so a trajectory costs
-    ``integrator.force_evaluations(n_steps, carried=True)`` once the first
-    has evaluated it at the start (issue #1222). With an ``adaptation`` the
-    step is re-tuned along the schedule, window by window, as :func:`anneal`
-    states.
+    Unadapted it carries ``grad U`` beside the position, so a trajectory
+    costs ``integrator.force_evaluations(n_steps, carried=True)`` after the
+    first (issue #1222). With an ``adapted`` warm-up it runs at that step on
+    the metric ``Scaled(objective, scale)`` and evaluates ``U`` and ``grad U`` afresh at
+    ``position / scale``, which may differ from the carried point in the last
+    place; a rejection keeps ``position`` itself. A ``jitter`` draws every
+    step; a ``tuning`` re-tunes it by dual averaging per window of
+    ``tuning.warmup`` steps, as :func:`anneal` states.
     """
 
     objective: Objective
     integrator: Integrator
     n_steps: int
     step_size: float
-    n_total: int
-    adaptation: Adaptation | None
-    averaging: DualAveraging | None
-    unit: Cost = Cost.GRADIENTS
+    jitter: float | None = None
+    adapted: Adapted | None = None
+    tuning: Adaptation | None = None
+    n_total: int = 0
     accepted: int = 0
     steps: int = 0
     step_sizes: list[float] = field(default_factory=list)
+    scale: torch.Tensor | None = field(init=False, default=None)
+    metric: Scaled | None = field(init=False, default=None)
+
+    def __post_init__(self) -> None:
+        if self.adapted is not None:
+            self.step_size = self.adapted.step_size
+            self.scale = self.adapted.mass_diagonal.rsqrt()
+            self.metric = Scaled(self.objective, self.scale)
+        self.averaging = (
+            None
+            if self.tuning is None
+            else DualAveraging(self.step_size, self.tuning.target_acceptance)
+        )
 
     def __call__(
         self,
@@ -750,44 +827,45 @@ class _Annealing:
         /,
     ) -> Moved[torch.Tensor, torch.Tensor | None]:
         """One transition at ``temperature``."""
-        adaptation = self.adaptation
+        size = (
+            self.step_size
+            if self.jitter is None
+            else jittered(self.step_size, self.jitter, generator)
+        )
+        scale = self.scale
+        # `force` is `None` on a metric: its steps carry nothing.
         taken, value, landed = _transition(
-            self.objective,
-            position,
+            self.objective if self.metric is None else self.metric,
+            position if scale is None else position / scale,
             temperature,
             generator,
-            self.step_size
-            if adaptation is None
-            else jittered(self.step_size, adaptation.step_jitter, generator),
+            size,
             self.n_steps,
             self.integrator,
-            potential=potential,
+            potential=potential if scale is None else None,
             force=force,
         )
-        if self.averaging is not None and adaptation is not None:
-            # The iterate drives the next proposal; at a window's end the
-            # averaged step is kept and the averaging restarts from it,
-            # since the temperature it was tuned at has moved on.
+        spent = self.integrator.force_evaluations(
+            self.n_steps, carried=force is not None
+        )
+        moved = Moved(taken.position, value, landed, spent)
+        if scale is not None:
+            moved = Moved(position, potential, None, spent)
+            if taken.accepted:
+                moved = Moved(taken.position * scale, value, None, spent)
+        self.accepted += taken.accepted
+        self.steps += 1
+        if self.averaging is not None and self.tuning is not None:
+            # At a window's end the averaged step is kept and the averaging
+            # restarts from it, the temperature it was tuned at having moved.
             self.step_size = self.averaging.update(taken.probability)
-            done = self.steps + 1
-            if done % adaptation.warmup == 0 or done == self.n_total:
+            if self.steps % self.tuning.warmup == 0 or self.steps == self.n_total:
                 self.step_size = self.averaging.averaged
                 self.step_sizes.append(self.step_size)
                 self.averaging = DualAveraging(
-                    self.step_size, adaptation.target_acceptance
+                    self.step_size, self.tuning.target_acceptance
                 )
-        self.steps += 1
-        self.accepted += taken.accepted
-        return Moved(
-            taken.position,
-            value,
-            landed,
-            self.integrator.force_evaluations(self.n_steps, carried=force is not None),
-        )
-
-    def keep(self, position: torch.Tensor) -> torch.Tensor:
-        """A clone, so the best point is not the tensor the chain moves on."""
-        return position.clone()
+        return moved
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -827,6 +905,10 @@ class Tempered(TemperedRun[torch.Tensor]):
     adapted : tuple[Adapted, ...] | None
         What each rung's warm-up settled on, in the ladder's order, or
         ``None`` without an ``adaptation`` (issue #1208).
+    tuned : tuple[TunedStep[torch.Tensor], ...] | None
+        Each rung's pilot under ``step_size="auto"``, in the ladder's order
+        (issue #1219), their gradients in ``spent``; ``None`` for a given
+        step.
     """
 
     value: float
@@ -834,6 +916,7 @@ class Tempered(TemperedRun[torch.Tensor]):
     acceptance_rate: torch.Tensor
     walkers: np.ndarray
     adapted: tuple[Adapted, ...] | None = None
+    tuned: tuple[TunedStep[torch.Tensor], ...] | None = None
 
 
 def parallel_tempering(
@@ -842,11 +925,12 @@ def parallel_tempering(
     rng: np.random.Generator | torch.Generator,
     n_rounds: int,
     *,
-    step_size: float,
+    step_size: StepSize,
     n_steps: int = DEFAULT_STEPS,
     start: torch.Tensor | Sequence[torch.Tensor] | None = None,
     integrator: Integrator = leapfrog,
     adaptation: Adaptation | None = None,
+    tuning: StepTuning | None = None,
     deadline: float | None = None,
 ) -> Tempered:
     """Replicas at fixed temperatures, exchanging positions by Metropolis.
@@ -911,6 +995,14 @@ def parallel_tempering(
         are a fixed-parameter chain on the product law; its positions are
         discarded and its gradients are in ``spent``. ``None`` runs every rung
         at ``step_size`` and unit mass, bitwise as before it existed.
+    tuning : StepTuning | None
+        The pilots that choose ``step_size="auto"`` (issue #1219), required
+        with it and refused without it: one per rung, at the rung's
+        temperature on the rung's stream, each on an equal share of
+        ``tuning.budget``, since #1195 measured no ``sqrt(T)`` relation that
+        would carry one rung's step to another. Each rung then starts where
+        its chosen candidate's pilot ended, as after a warm-up. Their
+        gradients are in ``spent``.
     deadline : float | None
         A :func:`time.perf_counter` reading. A round after the first starts
         only if the longest round so far would end by it, so ``n_rounds`` is
@@ -934,7 +1026,8 @@ def parallel_tempering(
         a sequence ``start`` does not give one point per rung.
     """
     generator = torch_stream(rng)
-    _check_trajectory(step_size, n_steps)
+    if step_size != AUTO:
+        _check_trajectory(step_size, n_steps)
     temperatures = check_ladder(
         ladder(temperatures),
         needed_by="parallel tempering",
@@ -951,6 +1044,30 @@ def parallel_tempering(
         for child in torch.randint(0, 2**31 - 1, (n_replicas,), generator=parent)
     ]
     origins = _rung_starts(objective, start, n_replicas)
+    sizes: list[StepSize] = [step_size] * n_replicas
+    tuned: tuple[TunedStep[torch.Tensor], ...] | None = None
+    if step_size == AUTO or tuning is not None:
+        share = None if tuning is None else tuning.split(n_replicas)
+        pilots = []
+        for index, (temperature, child) in enumerate(
+            zip(temperatures, children, strict=True)
+        ):
+            pilot = _tuned(
+                objective,
+                step_size,
+                share,
+                adaptation,
+                child,
+                functools.partial(ConstantTempSchedule, temperature),
+                start=origins[index],
+                n_steps=n_steps,
+                integrator=integrator,
+            )
+            assert pilot is not None
+            pilots.append(pilot)
+            sizes[index], origins[index] = pilot.step_size, pilot.chosen.final
+
+        tuned = tuple(pilots)
     adapted: tuple[Adapted, ...] | None = None
     if adaptation is not None:
         kernel = _HamiltonianKernel(n_steps=n_steps, integrator=integrator)
@@ -966,178 +1083,163 @@ def parallel_tempering(
                 origins[index],
                 temperature,
                 child,
-                step_size,
+                _step(step_size, None),
                 adaptation,
             )
             reports.append(report)
         adapted = tuple(reports)
-    accepted = torch.zeros(n_replicas, dtype=torch.float64)
     # Each rung's metric is a change of coordinates (`Scaled`): a replica's
     # position is kept in `theta`, which is what an exchange swaps.
+    jitter = None if adaptation is None else adaptation.step_jitter
     steps = [
-        _Rung(
-            objective,
-            integrator,
-            n_steps,
-            step_size,
-            accepted,
-            index,
-            jitter=0.0 if adaptation is None else adaptation.step_jitter,
-            adapted=None if adapted is None else adapted[index],
-        )
-        for index in range(n_replicas)
+        _Hamiltonian(objective, integrator, n_steps, _step(size, None), jitter, report)
+        for size, report in zip(sizes, adapted or [None] * n_replicas, strict=True)
     ]
-    positions = [origin.clone() for origin in origins]
     # One evaluation where every replica starts at one point, as before
     # per-rung starts existed: a counted objective sees the same calls.
-    shared = adapted is None and (start is None or isinstance(start, torch.Tensor))
-    values = (
-        [float(objective(origins[0]))] * n_replicas
-        if shared
-        else [float(objective(origin)) for origin in origins]
+    shared = (
+        adapted is None
+        and tuned is None
+        and (start is None or isinstance(start, torch.Tensor))
     )
-    # A list rather than a tensor sized to `n_rounds`: under a deadline that
-    # count is a ceiling, and the stacked rounds are the same values.
-    recorded: list[torch.Tensor] = []
+    first = float(objective(origins[0])) if shared else math.nan
+    starts: list[Moved[torch.Tensor, torch.Tensor | None]] = [
+        Moved(origin.clone(), first if shared else float(objective(origin)), None, 0)
+        for origin in origins
+    ]
     # `energy` is the best value so far, which is `Tempered.value`; the rest
-    # of the series is the exchange's (`ExchangeSeries`). A per-replica
-    # energy series is not recorded because the result reports the minimum
-    # over replicas.
+    # of the series is the exchange's (`ExchangeSeries`).
     tracked: TrackedOptimization = current_tracked()
     series = ExchangeSeries()
+    recorded: list[torch.Tensor] = []
 
-    def record(states: Sequence[torch.Tensor]) -> None:
-        recorded.append(torch.stack(list(states)))
-
-    def observe(sweep: int, run: Exchanging[torch.Tensor, Any]) -> None:
+    def observe(sweep: int, run: Exchanging[torch.Tensor]) -> None:
         tracked.record(sweep, energy=run.energy)
         series(sweep, run)
 
-    def swap(log_ratio: float) -> bool:
-        """The exchange's accept step on this module's stream: one torch uniform, always drawn."""
-        return accept_with(log_ratio, float(torch.rand(1, generator=parent)))
-
-    exchanged = temper(
+    run = temper(
         steps,
         temperatures,
-        [
-            Moved(position, value, None, 0)
-            for position, value in zip(positions, values, strict=True)
-        ],
+        starts,
         children,
-        swap,
+        # One torch uniform per proposal, always drawn, on this module's stream.
+        lambda ratio: accept_with(ratio, float(torch.rand(1, generator=parent))),
         n_rounds,
-        record=record,
+        keep=torch.Tensor.clone,
+        record=lambda states, _: recorded.append(torch.stack(list(states))),
         observe=observe,
         stop=None if deadline is None else _before(deadline),
     )
-    series.close(exchanged)
+    series.close(run)
+    accepted = torch.tensor([float(s.accepted) for s in steps], dtype=torch.float64)
     rounds = torch.stack(recorded)
-    # The loop records the ensemble it built; the tempering records the
-    # positions it returns, which is the state its result holds.
-    tracked.record_cost(max(exchanged.rounds - 1, 0), rounds.nbytes)
-
+    tracked.record_cost(max(run.rounds - 1, 0), rounds.nbytes)
     return Tempered(
-        best=exchanged.best,
-        value=exchanged.energy,
+        best=run.best,
+        value=run.energy,
         positions=rounds,
-        acceptance_rate=accepted / exchanged.rounds,
+        acceptance_rate=accepted / run.rounds,
         temperatures=tuple(temperatures),
-        swap_acceptance=np.asarray(exchanged.swap_acceptance, dtype=np.float64),
-        # Each rung's step charges its own trajectories, the first at a start
-        # included (issue #1222); the warm-ups are charged beside them.
-        spent=exchanged.spent
-        + sum(report.force_evaluations for report in adapted or ()),
-        unit=exchanged.unit,
-        termination=Termination.after(exchanged.rounds, converged=False),
-        walkers=exchanged.walkers,
+        swap_acceptance=run.swap_acceptance,
+        # The warm-ups and pilots are charged beside the rungs' own trajectories.
+        spent=run.spent
+        + sum(report.force_evaluations for report in adapted or ())
+        + sum(pilot.spent for pilot in tuned or ()),
+        unit=Cost.GRADIENTS,
+        termination=Termination.after(run.rounds, converged=False),
+        walkers=run.walkers,
         adapted=adapted,
+        tuned=tuned,
     )
 
 
-@dataclass
-class _Rung:
-    """One rung's Hamiltonian transition as a :class:`~sal.sample.loop.Step`, charged in gradients.
+def hamiltonian_pilot(
+    objective: Objective,
+    schedule: Callable[[int], TempSchedule],
+    *,
+    start: torch.Tensor | None = None,
+    n_steps: int = DEFAULT_STEPS,
+    integrator: Integrator = leapfrog,
+) -> Pilot[torch.Tensor, torch.Tensor | None, torch.Generator]:
+    """The Hamiltonian transition as a :class:`~sal.sample.tune.Pilot`, from ``start``.
 
-    Unadapted, ``grad U`` is carried beside the position, so a trajectory
-    costs its own gradients alone after the replica's first (issue #1222).
-    On a metric it is not: an accepted point returns to ``theta`` through
-    ``* scale``, and the next round's ``/ scale`` may differ from the point
-    the gradient was taken at in the last place, so the metric's ``U`` and
-    ``grad U`` are evaluated afresh at ``position / scale``.
+    ``U`` and ``grad U`` at the start are evaluated once and carried into
+    every candidate, which is the start's one gradient; each proposal then
+    costs ``integrator.force_evaluations(n_steps, carried=True)``. The step
+    is :func:`anneal`'s, so a constant schedule is a chain at its
+    temperature and a falling one an annealing run.
     """
+    position = start_point(objective, start)
+    potential, force = value_and_gradient(objective, position)
+    return Pilot(
+        step=lambda size: _Hamiltonian(objective, integrator, n_steps, size),
+        start=Moved(position, float(potential), force.detach(), 1),
+        schedule=schedule,
+        per_proposal=integrator.force_evaluations(n_steps, carried=True),
+        unit=Cost.GRADIENTS,
+        keep=torch.Tensor.clone,
+        squared_jump=lambda here, there: float(((there - here) ** 2).sum()),
+    )
 
-    objective: Objective
-    integrator: Integrator
-    n_steps: int
-    step_size: float
-    accepted: torch.Tensor
-    index: int
-    jitter: float
-    adapted: Adapted | None
-    unit: Cost = Cost.GRADIENTS
-    scale: torch.Tensor | None = field(init=False)
-    metric: Scaled | None = field(init=False)
 
-    def __post_init__(self) -> None:
-        self.scale = (
-            None if self.adapted is None else self.adapted.mass_diagonal.rsqrt()
-        )
-        self.metric = None if self.scale is None else Scaled(self.objective, self.scale)
+def _step(step_size: StepSize, tuned: TunedStep[torch.Tensor] | None) -> float:
+    """The step a run takes: the pilot's where one chose it, else the one given."""
+    return float(step_size) if tuned is None else tuned.step_size
 
-    def __call__(
-        self,
-        position: torch.Tensor,
-        potential: float,
-        force: torch.Tensor | None,
-        temperature: float,
-        child: torch.Generator,
-        /,
-    ) -> Moved[torch.Tensor, torch.Tensor | None]:
-        """One transition at this rung's ``temperature``."""
-        if self.adapted is None or self.metric is None or self.scale is None:
-            step, landed_at, landed = _transition(
-                self.objective,
-                position,
-                temperature,
-                child,
-                self.step_size,
-                self.n_steps,
-                self.integrator,
-                potential=potential,
-                force=force,
+
+def _tuned(
+    objective: Objective,
+    step_size: StepSize,
+    tuning: StepTuning | None,
+    adaptation: Adaptation | None,
+    generator: torch.Generator,
+    schedule: Callable[[int], TempSchedule],
+    *,
+    start: torch.Tensor | None,
+    n_steps: int,
+    integrator: Integrator,
+) -> TunedStep[torch.Tensor] | None:
+    """The pilot ``step_size="auto"`` asks for, or ``None`` for a given step.
+
+    Raises
+    ------
+    ValueError
+        If ``"auto"`` comes without a ``tuning`` or with an ``adaptation`` ---
+        a pilot and a warm-up are two answers to one question --- or a
+        ``tuning`` comes with a given step, which it would not change.
+    """
+    if step_size != AUTO:
+        if tuning is not None:
+            msg = (
+                f"a tuning chooses step_size='auto', and the step is given as "
+                f"{step_size}"
             )
-            self.accepted[self.index] += step.accepted
-            return Moved(
-                step.position,
-                landed_at,
-                landed,
-                self.integrator.force_evaluations(
-                    self.n_steps, carried=force is not None
-                ),
-            )
-        step, landed_at, _ = _transition(
-            self.metric,
-            position / self.scale,
-            temperature,
-            child,
-            jittered(self.adapted.step_size, self.jitter, child),
-            self.n_steps,
-            self.integrator,
+            raise ValueError(msg)
+        return None
+    if tuning is None:
+        msg = "step_size='auto' needs a StepTuning: the pilot's budget and criterion"
+        raise ValueError(msg)
+    if adaptation is not None:
+        msg = (
+            "step_size='auto' and an adaptation both set the step; a pilot "
+            "chooses it from a grid and a warm-up drives it to an acceptance"
         )
-        self.accepted[self.index] += step.accepted
-        per_proposal = self.integrator.force_evaluations(self.n_steps)
-        # A rejection keeps `position` itself rather than its round trip
-        # through the metric, which may differ in the last place. Accepted,
-        # the metric's `U` was taken at `step.position * scale`, the product
-        # `landed` is, so it is `objective`'s value there.
-        if step.accepted:
-            return Moved(step.position * self.scale, landed_at, None, per_proposal)
-        return Moved(position, potential, None, per_proposal)
-
-    def keep(self, position: torch.Tensor) -> torch.Tensor:
-        """A clone, so the best point is not a tensor an exchange hands on."""
-        return position.clone()
+        raise ValueError(msg)
+    if n_steps < 1:
+        _check_trajectory(1.0, n_steps)
+    return tune_step(
+        hamiltonian_pilot(
+            objective,
+            schedule,
+            start=start,
+            n_steps=n_steps,
+            integrator=integrator,
+        ),
+        budget=tuning.budget,
+        criterion=tuning.criterion,
+        rng=generator,
+        grid=tuning.grid,
+    )
 
 
 def _rung_starts(
@@ -1348,7 +1450,7 @@ def compiled_trajectory(
     step_size: float,
     n_steps: int,
 ) -> PhaseSpace:
-    """:func:`leapfrog` on a declared energy, in ``oxisal`` at unit mass (issues #986, #1008).
+    """:func:`leapfrog` on a supported kernel, in ``oxisal`` at unit mass (issues #986, #1008, #1220).
 
     The trajectory is the one arithmetic the compiled chain and the torch
     route share, so it is what pins ``src/hmc.rs`` to :func:`leapfrog` step
@@ -1357,12 +1459,12 @@ def compiled_trajectory(
     Raises
     ------
     TypeError
-        If the objective declares no energy
+        If the objective supports no kernel
         (:func:`~sal.sample.declared.declared_energy`).
     """
     declared = declared_energy(objective)
     if declared is None:
-        msg = f"{type(objective).__name__} declares no energy a compiled trajectory can run"
+        msg = f"{type(objective).__name__} supports no kernel a compiled trajectory can run"
         raise TypeError(msg)
     end, velocity = oxisal.leapfrog_trajectory(
         declared[0],

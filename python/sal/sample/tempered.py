@@ -45,15 +45,14 @@ from typing import Any
 import numpy as np
 
 from sal.backend import Backend
-from sal.cost import Cost
 from sal.sample.accept import accept
 from sal.sample.gibbs import (
-    HeatBath,
     Indexed,
-    TopologyWalk,
     cached_topology_score,
+    heat_bath,
+    topology_walk,
 )
-from sal.sample.loop import Exchanged, Exchanging, Moved, Step, temper
+from sal.sample.loop import Exchanging, Moved, Step, temper
 from sal.sample.potts_mcmc import (
     PottsMove,
     energies,
@@ -270,11 +269,6 @@ def up_fraction(walkers: np.ndarray) -> np.ndarray:
         return np.where(total > 0.0, up / total, np.nan)
 
 
-def _swap_drawn(rng: np.random.Generator) -> Callable[[float], bool]:
-    """The exchange's accept step on a NumPy stream: one uniform, and only where the ratio is negative."""
-    return lambda log_ratio: accept(log_ratio, rng)
-
-
 def _check_budget(n_sweeps: int, thin: int, burn_in: int) -> None:
     """What a run is asked for, beside what its ladder is."""
     if n_sweeps < 1 or thin < 1 or burn_in < 0:
@@ -301,7 +295,7 @@ class ExchangeSeries:
         self.tracked: TrackedOptimization = current()
         self.started = time.perf_counter()
 
-    def __call__(self, sweep: int, run: Exchanging[Any, Any]) -> None:
+    def __call__(self, sweep: int, run: Exchanging[Any]) -> None:
         """Record round ``sweep``."""
         if self.tracked.is_null:
             return
@@ -310,7 +304,7 @@ class ExchangeSeries:
         self.tracked.record(
             sweep,
             state=run.states[0],
-            swap_acceptance=float(np.mean(run.accepted / run.proposed)),
+            swap_acceptance=float(np.mean(run.swap_acceptance)),
             log_density=-run.energies[0],
             round_trips=float(round_trips(so_far).sum()) if len(run.trace) else 0.0,
             up_fraction=float(np.nanmean(up_fraction(so_far)))
@@ -320,80 +314,53 @@ class ExchangeSeries:
             wall_s=wall,
         )
 
-    def close(self, exchanged: Exchanged[Any]) -> None:
-        """Record what the run cost, at its last round."""
-        self.tracked.record_cost(
-            max(exchanged.rounds - 1, 0),
-            exchanged.walkers.nbytes + exchanged.energies.nbytes,
-        )
-
-
-def _ensemble(
-    exchanged: Exchanged[Any], temperatures: Sequence[float]
-) -> TemperedEnsemble:
-    """The ensemble a tempering over structures returns, in log-densities at temperature one."""
-    return TemperedEnsemble(
-        temperatures=tuple(temperatures),
-        keys=exchanged.keys,
-        log_densities=-exchanged.energies,
-        swap_acceptance=exchanged.swap_acceptance,
-        scores={name: -energy for name, energy in exchanged.scores.items()},
-        walkers=exchanged.walkers,
-    )
+    def close(self, run: Exchanging[Any]) -> None:
+        """Record what the run cost, at its last round: the trace and the log-densities beside it."""
+        self.tracked.record_cost(max(run.rounds - 1, 0), 2 * run.walkers.nbytes)
 
 
 def _exchange[S](
-    steps: Sequence[Step[S, None, np.random.Generator]],
+    step: Step[S, None, np.random.Generator],
     key: Callable[[S], Hashable],
+    keep: Callable[[S], S],
     starts: Sequence[Moved[S, None]],
     temperatures: Sequence[float],
     children: Sequence[np.random.Generator],
     rng: np.random.Generator,
-    n_sweeps: int,
-    burn_in: int,
-    thin: int,
+    budget: tuple[int, int, int],
 ) -> TemperedEnsemble:
-    """:func:`~sal.sample.loop.temper` on a NumPy stream, read into a :class:`TemperedEnsemble`."""
+    """:func:`~sal.sample.loop.temper` on a NumPy stream, keyed and read into a :class:`TemperedEnsemble`."""
+    keys: list[list[Hashable]] = [[] for _ in temperatures]
+    densities: list[list[float]] = []
+    scores: dict[Hashable, float] = {}
+
+    def record(states: Sequence[S], energies: Sequence[float]) -> None:
+        for names, state, energy in zip(keys, states, energies, strict=True):
+            names.append(key(state))
+            scores[names[-1]] = -energy
+        densities.append([-energy for energy in energies])
+
     series = ExchangeSeries()
-    exchanged = temper(
-        steps,
+    run = temper(
+        [step] * len(temperatures),
         temperatures,
         starts,
         children,
-        _swap_drawn(rng),
-        n_sweeps,
-        burn_in,
-        thin,
-        key=key,
+        lambda log_ratio: accept(log_ratio, rng),
+        *budget,
+        keep=keep,
+        record=record,
         observe=series,
     )
-    series.close(exchanged)
-    return _ensemble(exchanged, temperatures)
-
-
-@dataclass(frozen=True)
-class _Swept[S]:
-    """A step that moves a state in place by ``move`` and scores it by ``score``, charged one sweep."""
-
-    move: Callable[[S, float, np.random.Generator], None]
-    score: Callable[[S], float]
-    copy: Callable[[S], S]
-    unit: Cost = Cost.SWEEPS
-
-    def __call__(
-        self,
-        state: S,
-        _energy: float,
-        _carried: None,
-        temperature: float,
-        rng: np.random.Generator,
-        /,
-    ) -> Moved[S, None]:
-        self.move(state, temperature, rng)
-        return Moved(state, -self.score(state), None, 1)
-
-    def keep(self, state: S) -> S:
-        return self.copy(state)
+    series.close(run)
+    return TemperedEnsemble(
+        temperatures=tuple(temperatures),
+        keys=tuple(tuple(names) for names in keys),
+        log_densities=np.array(densities),
+        swap_acceptance=run.swap_acceptance,
+        scores=scores,
+        walkers=run.walkers,
+    )
 
 
 def tempered_factor_graph(
@@ -442,18 +409,20 @@ def tempered_factor_graph(
     indexed = Indexed(graph)
     children = rng.spawn(len(temperatures))
     states = [indexed.start(child, start) for child in children]
-    step = HeatBath(indexed)
     return _exchange(
-        [step] * len(temperatures),
+        heat_bath(indexed),
         lambda state: tuple(int(value) for value in state),
+        np.copy,
         [Moved(state, -indexed.log_density(state), None, 0) for state in states],
         temperatures,
         children,
         rng,
-        n_sweeps,
-        burn_in,
-        thin,
+        (n_sweeps, burn_in, thin),
     )
+
+
+#: Two labellings at one rung, Houdayer's pair.
+Pair = tuple[np.ndarray, np.ndarray]
 
 
 def tempered_potts_pair(
@@ -559,32 +528,27 @@ def tempered_potts_pair(
             ),
         )
 
-    def density(pair: tuple[np.ndarray, np.ndarray]) -> float:
-        return -float(energies(graph, rows, np.stack(pair)).sum())
+    def energy(pair: Pair) -> float:
+        return float(energies(graph, rows, np.stack(pair)).sum())
 
-    def sweep_pair(
-        pair: tuple[np.ndarray, np.ndarray],
-        temperature: float,
-        child: np.random.Generator,
-    ) -> None:
-        beta = 1.0 / temperature
+    def step(
+        pair: Pair, _: float, __: None, temperature: float, child: np.random.Generator
+    ) -> Moved[Pair, None]:
         for replica in pair:
-            advance(replica, child, beta)
+            advance(replica, child, 1.0 / temperature)
         if houdayer:
             houdayer_move(pair[0], pair[1], offsets, neighbours, child)
+        return Moved(pair, energy(pair), None, 1)
 
-    states = [start(child) for child in children]
-    step = _Swept(sweep_pair, density, lambda pair: (pair[0].copy(), pair[1].copy()))
     return _exchange(
-        [step] * len(temperatures),
+        step,
         lambda pair: tuple(int(value) for value in np.concatenate(pair)),
-        [Moved(pair, -density(pair), None, 0) for pair in states],
+        lambda pair: (pair[0].copy(), pair[1].copy()),
+        [Moved(pair, energy(pair), None, 0) for pair in map(start, children)],
         temperatures,
         children,
         rng,
-        n_sweeps,
-        burn_in,
-        thin,
+        (n_sweeps, burn_in, thin),
     )
 
 
@@ -627,17 +591,15 @@ def tempered_topologies(
     score = cached_topology_score(alignment, n_states, cache, model=model)
     children = rng.spawn(len(temperatures))
     value = score(start)
-    walk = TopologyWalk(score, cache, moves)
     return _exchange(
-        [walk] * len(temperatures),
+        topology_walk(score, cache, moves, []),
         leaf_bipartitions,
+        lambda topology: topology,
         [Moved(start, -value, None, 0)] * len(temperatures),
         temperatures,
         children,
         rng,
-        n_sweeps,
-        burn_in,
-        thin,
+        (n_sweeps, burn_in, thin),
     )
 
 

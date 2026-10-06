@@ -10,7 +10,8 @@ family's is an optimization rather than a formula
 (:class:`sal.emissions.CountPairEmission` solves for a
 dispersion and for a beta-binomial's two shape parameters) and reports whether
 it settled. This loop propagates that report: an unconverged inner solve
-reaching an outer likelihood is the fault ``likelihood/CLAUDE.md`` forbids.
+reaching an outer likelihood is the fault ``likelihood/CLAUDE.md`` forbids,
+so the fit ends on the iteration before it (issue #1235).
 
 **And it is where ``Emission_Mixture++`` finally has a model.** Issue #306
 built the seeding rule --- k-means++ with a family's own Bregman divergence as
@@ -34,7 +35,6 @@ from typing import NamedTuple, cast
 
 import numpy as np
 import torch
-from scipy.special import expit
 
 from sal import oxisal
 from sal.cost import Cost
@@ -59,7 +59,14 @@ from sal.opt.constrain import (
     free_from_log_simplex,
     log_simplex,
 )
-from sal.opt.em import EMISSION_MIXTURE_EM, EmConfig, check_stages, em_loop
+from sal.opt.em import (
+    EMISSION_MIXTURE_EM,
+    Degenerate,
+    EmConfig,
+    Unsettled,
+    check_stages,
+    em_loop,
+)
 from sal.opt.m_step import MStep
 from sal.opt.mixture import (
     e_step,
@@ -106,7 +113,11 @@ class EmissionMixtureFit:
     termination : Termination | None
         Whether the loop met its relative tolerance or ran out of iterations,
         in the form every result states it in (issue #860); its
-        ``iterations`` are the EM iterations run (issue #1090).
+        ``iterations`` are the EM iterations run (issue #1090). A component M
+        step that did not settle ends the fit with
+        :attr:`~sal.opt.termination.Stop.DEGENERATE` on the parameters,
+        responsibilities and log-likelihood of the iteration before it
+        (issue #1235).
     frozen : tuple[int, ...]
         Components an M step held at their parameters because the E step
         left them no data (issue #1136), at any iteration. A collapsed
@@ -122,6 +133,11 @@ class EmissionMixtureFit:
         :attr:`sal.opt.hmm.EmFit.stages` reports them: ``(termination,)``
         here, and one per temperature before it in
         :mod:`sal.sandbox.annealed_em`. Omitted, it is ``(termination,)``.
+    unsettled : Unsettled | None
+        The component M step that ended a degenerate fit, its inner
+        iterations and residual (issue #1235), as
+        :attr:`sal.opt.hmm.EmFit.unsettled` reports it; ``None`` for every
+        other fit.
 
     Raises
     ------
@@ -140,6 +156,7 @@ class EmissionMixtureFit:
     spent: int = dataclass_field(kw_only=True)
     unit: Cost = dataclass_field(default=Cost.ITERATIONS, kw_only=True)
     stages: tuple[Termination, ...] = dataclass_field(default=(), kw_only=True)
+    unsettled: Unsettled | None = dataclass_field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
         check_stages(self)
@@ -196,14 +213,10 @@ def expectation_maximization(
     -------
     EmissionMixtureFit
         The fitted parameters, the responsibilities at them, and the
-        log-likelihood.
-
-    Raises
-    ------
-    ValueError
-        If a component's M step did not converge. A number read off an inner
-        solve that never settled is not an estimate, and returning it here
-        would surface several iterations later as a non-monotone likelihood.
+        log-likelihood. A component M step that does not converge ends the
+        fit with :attr:`~sal.opt.termination.Stop.DEGENERATE` on the
+        iteration before it (issue #1235): a number read off an inner solve
+        that never settled is not an estimate, and is not returned.
 
     Notes
     -----
@@ -236,12 +249,13 @@ def expectation_maximization(
     boundary = False
     attempt = 0
     frozen: set[int] = set()
+    unsettled: Unsettled | None = None
 
     def step(
         state: tuple[torch.Tensor, EmissionFamily, torch.Tensor],
     ) -> tuple[tuple[torch.Tensor, EmissionFamily, torch.Tensor], float]:
         """One E step, one M step, and the log-likelihood at the state given."""
-        nonlocal boundary, attempt
+        nonlocal boundary, attempt, unsettled
         attempt += 1
         current, family, _ = state
         log_weight = torch.log(current)
@@ -254,12 +268,13 @@ def expectation_maximization(
         else:
             reestimated = family.reestimate(values, posterior, conditioned)
         if not reestimated.converged:
+            unsettled = Unsettled(reestimated.iterations, reestimated.residual)
             msg = (
                 f"a component's M step did not settle at EM iteration "
                 f"{attempt}: residual {reestimated.residual:.3e} after "
                 f"{reestimated.iterations} inner iterations"
             )
-            raise ValueError(msg)
+            raise Degenerate(msg, unsettled)
         boundary = boundary or reestimated.at_boundary
         frozen.update(reestimated.frozen)
         advanced = (posterior.mean(dim=0), reestimated.components, posterior)
@@ -287,6 +302,7 @@ def expectation_maximization(
         termination=termination,
         frozen=tuple(sorted(frozen)),
         spent=termination.iterations,
+        unsettled=unsettled,
     )
 
 
@@ -434,11 +450,12 @@ def _cell_expectation_maximization(
     boundary = False
     attempt = 0
     frozen: set[int] = set()
+    unsettled: Unsettled | None = None
 
     def step(
         state: tuple[torch.Tensor, EmissionFamily, torch.Tensor],
     ) -> tuple[tuple[torch.Tensor, EmissionFamily, torch.Tensor], float]:
-        nonlocal boundary, attempt
+        nonlocal boundary, attempt, unsettled
         attempt += 1
         current, family, _ = state
         joint = torch.log(current) + family.log_density(support)
@@ -448,12 +465,13 @@ def _cell_expectation_maximization(
         weighted = posterior * held[:, None]
         reestimated = family.reestimate(support, weighted)
         if not reestimated.converged:
+            unsettled = Unsettled(reestimated.iterations, reestimated.residual)
             msg = (
                 f"a component's M step did not settle at EM iteration "
                 f"{attempt}: residual {reestimated.residual:.3e} after "
                 f"{reestimated.iterations} inner iterations"
             )
-            raise ValueError(msg)
+            raise Degenerate(msg, unsettled)
         boundary = boundary or reestimated.at_boundary
         frozen.update(reestimated.frozen)
         return (weighted.sum(dim=0) / n_samples, reestimated.components, posterior), (
@@ -484,6 +502,7 @@ def _cell_expectation_maximization(
         termination=termination,
         frozen=tuple(sorted(frozen)),
         spent=termination.iterations,
+        unsettled=unsettled,
     )
 
 
@@ -628,15 +647,21 @@ class CountPairSeeding:
         )
 
 
-def _seed_scores(
+def seed_scores(
     observations: np.ndarray, at: ComponentsAt
-) -> Callable[..., np.ndarray]:
-    """``(index, indices) -> D_phi(y, the component seeded at that index)``.
+) -> Callable[[float, np.ndarray], np.ndarray]:
+    """The score :func:`plus_plus_start` draws its seeds by (issues #306, #1236).
 
-    :func:`sal.opt.mixture.emission_mixture_plus_plus` draws its
-    seeds from the array it is given, so the array here is of *indices*: an
-    observation is a pair, and a draw from a flattened array of pairs would
-    seed a component on half of one.
+    A score is ``D_phi(y, at(seed))``: the family's Bregman divergence of each
+    candidate observation ``y`` from the component ``at`` places on the seed's
+    observation. :func:`sal.opt.mixture.emission_mixture_plus_plus` draws the
+    seeds, under the caller's generator, proportionally to the smallest score
+    so far; this function draws nothing. That draw is over the array it is given,
+    so the array here is of *indices*: an observation is a pair, and a draw
+    from a flattened array of pairs would seed a component on half of one.
+    ``emission_mixture_plus_plus(np.arange(n_samples, dtype=np.float64),
+    n_components, seed_scores(observations, at), rng)`` returns the indices
+    :func:`plus_plus_start` seeds on from the same ``rng``, bitwise.
 
     **The score is the family's Bregman divergence, not its negative log
     density** (issue #560). The two differ by ``log b_phi(y)``, the log density
@@ -650,6 +675,20 @@ def _seed_scores(
     **4.3470** (``tests/regression/opt/test_opt_mixture_seeding.py``,
     ``docs/experiments/010``). The divergence is non-negative, as the sampling
     rule needs, and zero at the seed's own observation.
+
+    Parameters
+    ----------
+    observations : np.ndarray
+        Observations, shape ``(n_samples,)`` or ``(n_samples, channels)``.
+    at : ComponentsAt
+        Builds a family from the chosen observations.
+
+    Returns
+    -------
+    Callable[[float, np.ndarray], np.ndarray]
+        ``(index, indices) -> scores``: ``index`` a float naming the seed's
+        row, ``indices`` float row indices of shape ``(m,)``, the scores of
+        shape ``(m,)``.
     """
     rows = np.asarray(observations, dtype=np.float64)
 
@@ -690,7 +729,7 @@ def plus_plus_start(
     rows = np.asarray(observations, dtype=np.float64)
     indices = np.arange(rows.shape[0], dtype=np.float64)
     chosen = emission_mixture_plus_plus(
-        indices, n_components, _seed_scores(rows, at), rng
+        indices, n_components, seed_scores(rows, at), rng
     )
     return at(rows[chosen.astype(np.int64)])
 
@@ -845,6 +884,7 @@ class EmissionMixtureObjective(Objective):
         )
         self._on_distinct = gradient_on_distinct
         self._route = _count_route(start, self._observations, self._covariate)
+        self._kernel: oxisal.SupportedEnergy | None = None
         # The distinct counts of the observations, found once and reused by
         # every evaluation: the observations do not change between them.
         self._distinct: DistinctCache = {}
@@ -937,9 +977,8 @@ class EmissionMixtureObjective(Objective):
 
         For a negative binomial, a beta-binomial with a trial count per
         state, or their pair (joint or independent), with no covariate and
-        integer counts, ``oxisal.count_mixture_value_and_gradient`` returns
-        the log-likelihood and its gradient in the weights and the natural
-        parameters in one pass, every ``lgamma`` and ``digamma`` difference
+        integer counts, the kernel :meth:`supported_gradient` names returns
+        the log-likelihood and its gradient in ``theta`` in one pass, every ``lgamma`` and ``digamma`` difference
         a prefix sum over integers (:meth:`_compiled`). Any other family, a
         covariate, or a point that overflows a parameter takes autograd
         through :meth:`__call__`, which this is pinned to.
@@ -958,80 +997,52 @@ class EmissionMixtureObjective(Objective):
                 return float(self(torch.as_tensor(x, dtype=torch.float64)))
         return compiled[0]
 
-    def _compiled(self, theta: np.ndarray) -> tuple[float, np.ndarray] | None:
-        """``(U, dU/dtheta)`` through the kernel, or ``None`` where it does not apply.
+    def supported_gradient(self) -> tuple[str, dict[str, object]] | None:
+        """``oxisal``'s count mixture kernel on the counts (:class:`~sal.sample.declared.SupportedGradient`, issues #1136, #1220).
 
-        The map from ``theta`` is two closed forms, written out in NumPy
-        rather than replayed by autograd, whose bookkeeping was 0.8 ms of a
-        2.4 ms call at the stress mixture: each block is ``exp`` of its
-        entries, so ``dU/dtheta = (dU/dp) p``; the weights are a softmax of
-        ``(0, f)``, so ``dU/df_j = g_{j+1} - w_{j+1} sum_k g_k`` with ``g =
-        dU/d log w``. A success channel read by rate and concentration
-        (issue #1205) enters the kernel as ``a = tau p``, ``b = tau (1 - p)``,
-        with ``p`` the logistic of its block and ``tau`` the exponential, so
-        ``dU/dp = tau (g_a - g_b)`` and ``dU/dtau = p g_a + (1 - p) g_b``,
-        times ``p (1 - p)`` and ``tau`` for the free coordinates.
+        Supported for a negative binomial, a beta-binomial with a trial count
+        per state, or their pair (joint or independent), with no covariate
+        and integer counts: what :meth:`value_and_gradient` evaluates is what
+        a compiled chain runs. ``None`` for any other family.
         """
         route = self._route
         if route is None:
             return None
-        k = self._k
-        logits = np.concatenate([[0.0], theta[: k - 1]])
-        top = float(logits.max())
-        log_weight = logits - (top + math.log(float(np.exp(logits - top).sum())))
-        natural: dict[str, np.ndarray] = {}
-        with np.errstate(over="ignore", under="ignore"):
-            for slot, name in route.names.items():
-                offset = self._blocks_at[name].offset
-                free = theta[offset : offset + k]
-                natural[slot] = expit(free) if slot == "rate" else np.exp(free)
-            reading = "rate" in natural
-            if reading:
-                natural["alpha"] = natural["concentration"] * natural["rate"]
-                natural["beta"] = natural["concentration"] * (1.0 - natural["rate"])
-        if not all(
-            bool(np.isfinite(values).all() and (values > 0.0).all())
-            for values in natural.values()
-        ):
+        return "count_mixture", {
+            "k": self._k,
+            "totals": route.totals,
+            "successes": route.successes,
+            "trials": route.trials,
+            "slots": [
+                (slot, self._blocks_at[name].offset)
+                for slot, name in route.names.items()
+            ],
+        }
+
+    def _compiled(self, theta: np.ndarray) -> tuple[float, np.ndarray] | None:
+        """``(U, dU/dtheta)`` through the kernel, or ``None`` where it does not apply.
+
+        The kernel (``oxisal.SupportedEnergy`` on :meth:`supported_gradient`,
+        ``src/count_mixture.rs``'s ``CountMixture``) maps ``theta`` to the
+        weights and natural parameters, evaluates the log-likelihood and its
+        gradient in them, and applies the chain rule back to ``theta``: the
+        closed forms autograd's bookkeeping cost 0.8 ms of a 2.4 ms call to
+        replay at the stress mixture. A point at which a natural parameter is
+        not finite and positive comes back nan, and is autograd's.
+        """
+        supported = self.supported_gradient()
+        if supported is None:
+            return None
+        if self._kernel is None:
+            self._kernel = oxisal.SupportedEnergy(*supported, self.n_parameters)
+        value, gradient = self._kernel.value_and_gradient(
+            np.ascontiguousarray(theta, dtype=np.float64)
+        )
+        if math.isnan(value):
             # A trajectory that has run a parameter to overflow or underflow
             # is the chain's to reject; autograd scores it as it always did.
             return None
-        kernel = [slot for slot in natural if slot not in ("rate", "concentration")]
-        gradient = {slot: np.empty(k) for slot in ("log_weight", *kernel)}
-        log_likelihood = oxisal.count_mixture_value_and_gradient(
-            log_weight,
-            gradient["log_weight"],
-            totals=route.totals,
-            dispersion=natural.get("dispersion"),
-            mean=natural.get("mean"),
-            grad_dispersion=gradient.get("dispersion"),
-            grad_mean=gradient.get("mean"),
-            successes=route.successes,
-            alpha=natural.get("alpha"),
-            beta=natural.get("beta"),
-            trials=route.trials,
-            grad_alpha=gradient.get("alpha"),
-            grad_beta=gradient.get("beta"),
-        )
-        out = np.empty_like(theta)
-        weights = np.exp(log_weight)
-        held = gradient["log_weight"]
-        out[: k - 1] = -(held[1:] - weights[1:] * held.sum())
-        if reading:
-            rate, tau = natural["rate"], natural["concentration"]
-            gradient["rate"] = tau * (gradient["alpha"] - gradient["beta"])
-            gradient["concentration"] = (
-                rate * gradient["alpha"] + (1.0 - rate) * gradient["beta"]
-            )
-        for slot, name in route.names.items():
-            offset = self._blocks_at[name].offset
-            jacobian = (
-                natural[slot] * (1.0 - natural[slot])
-                if slot == "rate"
-                else natural[slot]
-            )
-            out[offset : offset + k] = -gradient[slot] * jacobian
-        return -log_likelihood, out
+        return value, gradient
 
 
 @dataclass(frozen=True)

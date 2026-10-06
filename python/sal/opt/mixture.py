@@ -58,7 +58,7 @@ from sal.opt.constrain import (
     log_simplex,
     positive,
 )
-from sal.opt.em import EM, EmConfig, em_loop
+from sal.opt.em import EM, Degenerate, EmConfig, Unsettled, em_loop
 from sal.opt.initialize import Initializer, quantile_locations
 from sal.opt.objective import Objective, autograd_value_and_gradient
 from sal.opt.termination import Termination
@@ -111,6 +111,7 @@ class GaussianMixtureObjective(Objective):
         self._dtype = dtype
         self._variance_floor = pooled_variance_floor(np.asarray(observations))
         self._flat = flat_channels(np.asarray(observations))
+        self._kernel: oxisal.SupportedEnergy | None = None
 
     @property
     def n_components(self) -> int:
@@ -251,33 +252,37 @@ class GaussianMixtureObjective(Objective):
             **self.components(theta).named_parameters(),
         }
 
-    @property
-    def gaussian_mixture_declaration(self) -> tuple[int, np.ndarray] | None:
-        """``(k, observations)`` for a compiled chain, one-channel ``float64`` only (issue #1008).
+    def supported_gradient(self) -> tuple[str, dict[str, object]] | None:
+        """``oxisal``'s Gaussian mixture kernel on the observations, one-channel ``float64`` only (issues #1008, #1220).
 
-        What :meth:`gradient` streams through ``oxisal`` is what a compiled
-        HMC chain evaluates itself (:mod:`sal.sample.declared`).
+        What :meth:`gradient` evaluates is what a compiled chain runs
+        (:class:`~sal.sample.declared.SupportedGradient`); ``None`` for any
+        other mixture.
         """
         if self._n_channels != 1 or self._dtype != torch.float64:
             return None
-        return self._n_components, self._observations.numpy().reshape(-1)
+        return "gaussian_mixture", {
+            "k": self._n_components,
+            "observations": np.ascontiguousarray(self._observations.numpy()).reshape(
+                -1
+            ),
+        }
 
     def gradient(self, theta: torch.Tensor) -> torch.Tensor:
         """``d/dtheta`` of :meth:`__call__`, which ``hmc.gradient_at`` reads (issue #986).
 
         One-channel ``float64`` mixtures stream every draw's responsibilities
-        into the three per-component sums the gradient needs in
-        ``oxisal.gaussian_mixture_gradient``, pinned to
-        autograd; any other takes autograd through :meth:`__call__`.
+        into the three per-component sums the gradient needs, through the
+        kernel :meth:`supported_gradient` names (``oxisal.SupportedEnergy``),
+        pinned to autograd; any other takes autograd through :meth:`__call__`.
         """
-        if self._n_channels != 1 or self._dtype != torch.float64:
+        supported = self.supported_gradient()
+        if supported is None:
             return autograd_value_and_gradient(self, theta)[1]
-        padded = np.concatenate(([0.0], theta[self._weight_slice].detach().numpy()))
-        _, gradient = oxisal.gaussian_mixture_gradient(
-            np.ascontiguousarray(self._observations.numpy()).reshape(-1),
-            padded - np.logaddexp.reduce(padded),
-            np.ascontiguousarray(theta[self._mean_slice()].detach().numpy()),
-            np.exp(theta[self._log_scale_slice()].detach().numpy()),
+        if self._kernel is None:
+            self._kernel = oxisal.SupportedEnergy(*supported, self.n_parameters)
+        _, gradient = self._kernel.value_and_gradient(
+            np.ascontiguousarray(theta.detach().numpy(), dtype=np.float64)
         )
         return torch.from_numpy(gradient)
 
@@ -579,6 +584,11 @@ class MixtureFit:
         Channels whose observations are all equal, as the starting
         components' :attr:`~sal.emissions.GaussianEmission.flat` names them:
         their scale is the floor rather than an estimate (issue #1234).
+    unsettled : Unsettled | None
+        The component M step that ended a degenerate fit, as
+        :attr:`sal.opt.emission_mixture.EmissionMixtureFit.unsettled`
+        reports it (issue #1235); ``None`` for every other fit, and for
+        every fit of the closed-form Gaussian step.
     """
 
     weights: torch.Tensor
@@ -590,6 +600,7 @@ class MixtureFit:
     unit: Cost = dataclass_field(default=Cost.ITERATIONS, kw_only=True)
     frozen: tuple[int, ...] = dataclass_field(default=(), kw_only=True)
     flat: tuple[int, ...] = dataclass_field(default=(), kw_only=True)
+    unsettled: Unsettled | None = dataclass_field(default=None, kw_only=True)
 
 
 def expectation_maximization(
@@ -637,7 +648,12 @@ def expectation_maximization(
     -------
     MixtureFit
         The fitted parameters, the final log-likelihood, whether an M step
-        reached a boundary, and the components settled as collapsed.
+        reached a boundary, and the components settled as collapsed. A
+        component M step that did not converge ends the fit with
+        :attr:`~sal.opt.termination.Stop.DEGENERATE` on the iteration before
+        it, as its sibling
+        :func:`sal.opt.emission_mixture.expectation_maximization` ends
+        (issues #856, #1235).
 
     Raises
     ------
@@ -645,11 +661,7 @@ def expectation_maximization(
         Under ``components.on_collapse == Collapse.REFUSE``, if a component
         collapses: the mixture likelihood is unbounded in that direction
         exactly as a Gaussian HMM's is (issue #122); by default the component
-        is held and named in ``frozen`` (issue #1160). Or if a component's M
-        step did not converge: the loop
-        reads the report its sibling
-        :func:`sal.opt.emission_mixture.expectation_maximization`
-        reads, on the terms ``likelihood/CLAUDE.md`` states (issue #856).
+        is held and named in ``frozen`` (issue #1160).
     """
     refuse_backend("expectation_maximization", backend, (Backend.PYTHON, Backend.RUST))
     # The exact class only: a subclass may carry its own M step, which the
@@ -673,12 +685,13 @@ def expectation_maximization(
     boundary = False
     attempt = 0
     frozen: set[int] = set()
+    unsettled: Unsettled | None = None
 
     def step(
         state: tuple[torch.Tensor, GaussianEmission],
     ) -> tuple[tuple[torch.Tensor, GaussianEmission], float]:
         """One E step, one M step, and the log-likelihood at the state given."""
-        nonlocal boundary, attempt
+        nonlocal boundary, attempt, unsettled
         attempt += 1
         current, family = state
         log_weight = torch.log(current)
@@ -688,12 +701,13 @@ def expectation_maximization(
             values.reshape(1, -1), posterior.reshape(1, *posterior.shape)
         )
         if not reestimated.converged:
+            unsettled = Unsettled(reestimated.iterations, reestimated.residual)
             msg = (
                 f"a component's M step did not settle at EM iteration "
                 f"{attempt}: residual {reestimated.residual:.3e} after "
                 f"{reestimated.iterations} inner iterations"
             )
-            raise ValueError(msg)
+            raise Degenerate(msg, unsettled)
         boundary = boundary or reestimated.at_boundary
         frozen.update(reestimated.frozen)
         return (posterior.mean(dim=0), reestimated.components), log_likelihood
@@ -712,6 +726,7 @@ def expectation_maximization(
         spent=termination.iterations,
         frozen=tuple(sorted(frozen)),
         flat=components.flat,
+        unsettled=unsettled,
     )
 
 

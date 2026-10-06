@@ -225,10 +225,14 @@ def step_transitions(
     """Each step's transition, materialized: ``(len(steps), n, n)`` in log space.
 
     The storage the kernel avoids, built here for the oracle. ``steps`` are
-    the switch probabilities of the steps taken.
+    the switch probabilities of the steps taken; none, for a segment of one
+    position, is an empty stack (issue #1233).
     """
     moved = np.exp(np.asarray(log_transition, dtype=float))
     s = np.asarray(steps, dtype=float)[:, None, None]
+    if s.shape[0] == 0:
+        width = moved.shape[0] * (1 if switch_kind is SwitchKind.STAY_OR_MOVE else 2)
+        return np.empty((0, width, width))
     if switch_kind is SwitchKind.STAY_OR_MOVE:
         matrices = (1.0 - s) * np.eye(moved.shape[0]) + s * moved
     else:

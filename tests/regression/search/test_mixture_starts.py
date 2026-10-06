@@ -12,6 +12,8 @@ them, with the start's path before the handover.
 from __future__ import annotations
 
 import math
+from dataclasses import replace
+from typing import Any
 
 import numpy as np
 import pytest
@@ -176,6 +178,41 @@ def test_the_one_budget_polishes_to_the_tolerance_and_charges_the_whole_cell() -
         assert bool((change[:-1] > POLISH_TOLERANCE).all()), name
         assert bool((np.diff(trial.polished.log_likelihoods) >= 0.0).all()), name
         assert outcome.spent == math.ceil(trial.seconds) <= CEILING.size, name
+
+
+@pytest.mark.analytic
+def test_a_polish_ends_degenerate_on_the_fit_before_an_unsettled_m_step(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # EM ends a step whose M step does not settle with `Stop.DEGENERATE` on
+    # the fit it was handed (#1235), where it raised and the seeding was
+    # skipped. The polish stops there: two passes completed of four, and the
+    # fit, its trace and its value are two passes' bitwise.
+    instance = _instance()
+    seeded = STARTS["data"](instance, np.random.default_rng(0)).components
+    two = polish(instance, seeded, passes=2)
+    family = type(seeded)
+    original = family.reestimate
+    calls = 0
+
+    def reestimate(self: Any, *args: Any, **kwargs: Any) -> Any:
+        nonlocal calls
+        calls += 1
+        step = original(self, *args, **kwargs)
+        return replace(step, converged=False) if calls == 3 else step
+
+    monkeypatch.setattr(family, "reestimate", reestimate)
+
+    stopped = polish(instance, seeded, passes=4)
+
+    assert stopped.termination.reason is Stop.DEGENERATE
+    assert stopped.iterations == 2
+    assert not stopped.emptied
+    np.testing.assert_array_equal(stopped.log_likelihoods, two.log_likelihoods)
+    assert stopped.value == two.value
+    assert torch.equal(stopped.weights, two.weights)
+    for name, value in two.components.named_parameters().items():
+        assert torch.equal(stopped.components.named_parameters()[name], value)
 
 
 @pytest.mark.smoke

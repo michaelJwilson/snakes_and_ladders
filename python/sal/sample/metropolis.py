@@ -21,7 +21,7 @@ NumPy :meth:`~sal.opt.objective.DeclaredEnergy.energy` is
 evaluated without the tensor type, and any other through ``__call__``.
 
 The compiled route (``oxisal.metropolis``, ``src/metropolis.rs``) runs the
-whole chain, the warm-up included, on a declared family
+whole chain, the warm-up included, at any temperature, on a supported kernel
 (:mod:`sal.sample.declared`), from its own ChaCha8 stream.
 :func:`replay` is the chain on randomness the caller supplies: the step
 BlackJAX's ``rmh`` is pinned to draw for draw.
@@ -63,11 +63,6 @@ RWM_TARGET_ACCEPTANCE = 0.234
 
 #: Energy evaluations per proposal: the proposal's; the current point's is carried.
 EVALUATIONS_PER_PROPOSAL = 1
-
-#: Energy evaluations per start: the current point's, once, which every
-#: proposal after it carries (issue #1218). A warm-up's two windows each start
-#: one more on the Python route, as :func:`~sal.sample.chain.warm_up` charges.
-EVALUATIONS_PER_START = 1
 
 
 def _decide(
@@ -174,8 +169,9 @@ def random_walk(
     backend : Backend
         :data:`~sal.backend.Backend.RUST`, the default, runs
         the chain and its warm-up in ``oxisal.metropolis`` when the objective
-        declares a family (:func:`~sal.sample.declared.declared_energy`)
-        and the chain is at unit temperature in no tracked run; its
+        supports a kernel (:func:`~sal.sample.declared.declared_energy`)
+        and the chain is in no tracked run, at any temperature (issue
+        #1220); its
         ``operators`` observe the draws as :func:`~sal.sample.hmc.run_compiled`
         states, so a
         chain with ``store_chain=False`` holds that many draws at most. Its stream is ChaCha8 seeded by one draw from
@@ -199,7 +195,7 @@ def random_walk(
         raise ValueError(msg)
     refuse_backend("random_walk", backend, (Backend.PYTHON, Backend.RUST))
     declared = declared_energy(objective)
-    if compiled_route(backend, temperature) and declared is not None:
+    if compiled_route(backend) and declared is not None:
         return run_compiled(
             oxisal.MetropolisWalk,
             declared,
@@ -208,11 +204,12 @@ def random_walk(
             rng,
             n_samples,
             # The start's energy, evaluated once and carried (issue #1218).
-            per_start=EVALUATIONS_PER_START,
+            per_start=1,
             unit=Cost.EVALUATIONS,
             step_size=step_size,
             start=start_point(objective, start),
             burn_in=burn_in,
+            temperature=temperature,
             adaptation=adaptation,
             store_chain=store_chain,
             operators=operators,
@@ -223,7 +220,8 @@ def random_walk(
         objective,
         rng,
         n_samples,
-        per_start=EVALUATIONS_PER_START,
+        # The start's energy, once per chain and per warm-up window (#1218).
+        per_start=1,
         unit=Cost.EVALUATIONS,
         step_size=step_size,
         start=start,

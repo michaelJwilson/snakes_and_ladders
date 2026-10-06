@@ -9,6 +9,9 @@ is caught by a check rather than by whoever notices; until then,
 a caller uses, which is how `sample_rows` was caught.
 """
 
+from collections.abc import Mapping
+from typing import Any
+
 import numpy as np
 
 def double(x: int) -> int: ...
@@ -374,8 +377,8 @@ def ragged_sample_paths(
 class MetropolisWalk:
     def __init__(
         self,
-        family: int,
-        parameters: np.ndarray,
+        kernel: str,
+        data: Mapping[str, Any],
         theta0: np.ndarray,
         step_size: float,
         seed: int,
@@ -384,6 +387,7 @@ class MetropolisWalk:
         step_jitter: float,
         constants: tuple[float, float, float],
         powers: list[int],
+        temperature: float,
     ) -> None: ...
     def advance(
         self, n: int, store: bool, observe: bool
@@ -405,8 +409,8 @@ class MetropolisWalk:
 class HmcWalk:
     def __init__(
         self,
-        family: int,
-        parameters: np.ndarray,
+        kernel: str,
+        data: Mapping[str, Any],
         theta0: np.ndarray,
         step_size: float,
         seed: int,
@@ -415,6 +419,7 @@ class HmcWalk:
         step_jitter: float,
         constants: tuple[float, float, float],
         powers: list[int],
+        temperature: float,
         n_steps: int,
     ) -> None: ...
     def advance(
@@ -435,13 +440,20 @@ class HmcWalk:
     def warmup_acceptance(self) -> float: ...
 
 def leapfrog_trajectory(
-    family: int,
-    parameters: np.ndarray,
+    kernel: str,
+    data: Mapping[str, Any],
     theta: np.ndarray,
     momentum: np.ndarray,
     step_size: float,
     n_steps: int,
 ) -> tuple[np.ndarray, np.ndarray]: ...
+
+class SupportedEnergy:
+    def __init__(
+        self, kernel: str, data: Mapping[str, Any], dimension: int
+    ) -> None: ...
+    def value_and_gradient(self, theta: np.ndarray) -> tuple[float, np.ndarray]: ...
+
 def dense_log_emission(
     n_states: int,
     family_order: bool,
