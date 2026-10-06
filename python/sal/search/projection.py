@@ -590,10 +590,11 @@ def _count_pair(family: object) -> IndependentCountPair:
 
 
 #: Draws a chain keeps, and the proposals it discards first. The three
-#: chain-based candidates are set to spend the same 72 gradients --- 8
-#: proposals of :data:`CHAIN_TRAJECTORY` steps, and one more per proposal for
-#: the value at it --- so what separates them is where the proposals go and
-#: not how many there are.
+#: chain-based candidates are set to the same 8 proposals of
+#: :data:`CHAIN_TRAJECTORY` steps, 64 gradients, so what separates them is
+#: where the proposals go and not how many there are. Beside them each start
+#: pays one gradient, the first kick's thereafter carried (issue #1222): 65
+#: for the chain and the annealing control, 68 for the four replicas.
 CHAIN_DRAWS = 4
 CHAIN_BURN_IN = 4
 
@@ -616,9 +617,9 @@ def chain_seeding(
         because a seed drawn from a chain that has not mixed is a random
         restart with a longer bill.
     """
-    # No warm-up: the three chain candidates are matched at 72 gradients, and
-    # FromChain's default 300-proposal warm-up would add 2,700 to this one
-    # alone (issue #898).
+    # No warm-up: the three chain candidates are matched at 64 trajectory
+    # gradients, and FromChain's default 300-proposal warm-up would add 2,402
+    # to this one alone (issues #898, #1222).
     initializer = FromChain(
         CHAIN_DRAWS,
         CHAIN_STEP,

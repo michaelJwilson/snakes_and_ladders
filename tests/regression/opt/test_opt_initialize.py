@@ -336,7 +336,7 @@ def _lowest(objective: Rastrigin, points: list[torch.Tensor]) -> float:
 def _chain_start(seed: int) -> FromChain:
     """Six draws of a short chain, at the step the surface accepts.
 
-    ``adaptation=None``: the default warm-up (#898) would add 300 x 11 gradients.
+    ``adaptation=None``: the default warm-up (#898) would add 300 x 10 + 2 gradients.
     """
     return FromChain(
         6,
@@ -358,7 +358,8 @@ def test_a_chain_start_warms_up_by_default_and_none_is_the_chain_it_drew_before(
     # `test_opt_hmc_adaptive.py`'s ADAPTATION.
     objective = AnalyticGaussian([1.0, -2.0], [[2.0, 0.6], [0.6, 0.5]])
     draws, step, steps, burn_in = 4, 0.1, 5, 3
-    per_proposal = hmc.leapfrog.force_evaluations(steps)
+    # The first kick's gradient is carried; one is paid at each start (#1222).
+    per_proposal = hmc.leapfrog.force_evaluations(steps, carried=True)
 
     def chain(adaptation: hmc.Adaptation | None) -> hmc.HmcChain:
         return hmc.sample(
@@ -376,18 +377,20 @@ def test_a_chain_start_warms_up_by_default_and_none_is_the_chain_it_drew_before(
     ).chain(objective)
     assert torch.equal(warmed.draws, chain(CHAIN_ADAPTATION).draws)
     assert warmed.adapted is not None
-    assert warmed.spent == (CHAIN_ADAPTATION.warmup + burn_in + draws) * per_proposal
+    assert (
+        warmed.spent == 3 + (CHAIN_ADAPTATION.warmup + burn_in + draws) * per_proposal
+    )
 
     fixed = FromChain(
         draws, step, torch.Generator().manual_seed(898), steps, burn_in, None
     ).chain(objective)
     assert torch.equal(fixed.draws, chain(None).draws)
     assert fixed.adapted is None
-    assert fixed.spent == (burn_in + draws) * per_proposal
+    assert fixed.spent == 1 + (burn_in + draws) * per_proposal
 
 
 def _annealed_start(seed: int) -> FromAnnealing:
-    """A falling temperature over 120 proposals: 1,320 gradients."""
+    """A falling temperature over 120 proposals: 1,201 gradients (#1222)."""
     return FromAnnealing(
         ExponentialTempSchedule(20.0, 0.05, 120),
         0.05,
@@ -397,7 +400,7 @@ def _annealed_start(seed: int) -> FromAnnealing:
 
 
 def _tempered_start(seed: int) -> FromTempering:
-    """Four replicas over 30 rounds: the same 1,320 gradients as annealing."""
+    """Four replicas over 30 rounds: the 1,200 trajectory gradients annealing spends, 1,204 with the starts."""
     return FromTempering(
         (1.0, 3.0, 9.0, 27.0), 30, 0.05, torch.Generator().manual_seed(seed), n_steps=10
     )
@@ -415,8 +418,8 @@ def test_the_sampled_starts_are_their_runs_own_records_and_leave_the_cell_descen
     # three sampled starts land below on all eight: <= 7.9597 (chain,
     # tempering), 25.8687 (annealing), on the lattice to 0.0253 (0.03). The
     # tempered best is the coldest replica's on 7 of 8. None reaches the
-    # optimum in 24 runs: escape, not solution; 1,320 annealing gradients buy
-    # three times the 286-gradient chain's ceiling.
+    # optimum in 24 runs: escape, not solution; 1,201 annealing gradients buy
+    # three times the 261-gradient chain's ceiling.
     objective = Rastrigin()
 
     drawn = _chain_start(0).starts(objective)

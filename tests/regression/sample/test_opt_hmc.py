@@ -569,7 +569,9 @@ def test_a_constant_schedule_at_one_is_the_sampler_draw_for_draw() -> None:
     )
 
     assert torch.equal(annealed.final, chain.draws[-1])
-    assert annealed.spent == 200 * leapfrog.force_evaluations(10)
+    # `grad U` at the start once, then each trajectory's own (issue #1222).
+    assert annealed.spent == 1 + 200 * leapfrog.force_evaluations(10, carried=True)
+    assert annealed.spent == chain.spent
 
 
 @pytest.mark.smoke
@@ -647,8 +649,10 @@ def test_tempering_costs_what_its_accounting_says_and_is_reproducible() -> None:
         n_steps=6,
     )
 
-    assert run.spent == 25 * 4 * leapfrog.force_evaluations(6)
-    assert counted.calls == 1 + 25 * 4 * leapfrog.force_evaluations(6)
+    # Each replica's first trajectory evaluates `grad U` at its start; every
+    # later one reads it from the round before (issue #1222).
+    assert run.spent == 4 + 25 * 4 * leapfrog.force_evaluations(6, carried=True)
+    assert counted.calls == 1 + run.spent
     again = parallel_tempering(
         GAUSSIAN,
         ladder,

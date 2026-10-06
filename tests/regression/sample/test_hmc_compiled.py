@@ -195,12 +195,18 @@ def test_the_compiled_warm_up_settles_where_the_torch_one_does() -> None:
         )
         for backend in (Backend.RUST, Backend.PYTHON)
     ]
-    for chain in chains:
+    # Both routes carry `grad U` across transitions (issue #1222); the
+    # compiled walk evaluates it once at its start, the torch kernel once at
+    # each of the warm-up's two windows and the chain's start.
+    for chain, starts in zip(chains, (1, 3), strict=True):
         assert chain.adapted is not None
         ratio = chain.adapted.mass_diagonal.numpy() / precision
         assert ratio.min() > 0.5
         assert ratio.max() < 2.0
-        assert chain.spent == 3_000 * hmc.leapfrog.force_evaluations(10)
+        assert (
+            chain.spent
+            == 3_000 * hmc.leapfrog.force_evaluations(10, carried=True) + starts
+        )
     assert abs(chains[0].acceptance_rate - chains[1].acceptance_rate) < 0.05
 
 

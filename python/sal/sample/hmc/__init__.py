@@ -321,14 +321,17 @@ class Integrator:
             msg = f"{self.name}: weights must be a palindrome to be reversible"
             raise ValueError(msg)
 
-    def force_evaluations(self, n_steps: int) -> int:
+    def force_evaluations(self, n_steps: int, *, carried: bool = False) -> int:
         """Gradient evaluations one trajectory of ``n_steps`` costs.
 
         ``len(weights) * n_steps + 1``: the kicks at the join between two
         sub-steps merge into one, so a composition of ``s`` sub-steps costs
-        ``s`` gradients per step rather than ``2 s``.
+        ``s`` gradients per step rather than ``2 s``. ``carried`` is a
+        trajectory whose first kick reads ``grad U`` at its start from the
+        transition that landed there, and costs ``len(weights) * n_steps``
+        (issue #1222).
         """
-        return len(self.weights) * n_steps + 1
+        return len(self.weights) * n_steps + (0 if carried else 1)
 
     def __call__(
         self,
@@ -361,7 +364,15 @@ class Integrator:
         PhaseSpace
             Position and momentum after ``n_steps``.
         """
-        return self._scored(objective, theta, momentum, step_size, n_steps)[0]
+        position = theta.detach()
+        return self._scored(
+            objective,
+            position,
+            momentum,
+            step_size,
+            n_steps,
+            gradient_at(objective, position),
+        )[0]
 
     def _scored(
         self,
@@ -370,28 +381,30 @@ class Integrator:
         momentum: torch.Tensor,
         step_size: float,
         n_steps: int,
-    ) -> tuple[PhaseSpace, float]:
-        """:meth:`__call__`, and ``U`` at the end point from its last force evaluation (issue #1217).
+        force: torch.Tensor,
+    ) -> tuple[PhaseSpace, float, torch.Tensor]:
+        """:meth:`__call__` from ``force``, ``grad U`` at ``theta``; and ``(U, grad U)`` at the end point.
 
         The last kick takes the value beside the gradient through
         :func:`~sal.opt.objective.value_and_gradient`, so the acceptance
-        test does not evaluate the end point a second time. The gradient is
-        :func:`gradient_at`'s wherever that reads ``value_and_gradient``'s
-        or a declared gradient alone, which is every objective but one that
-        declares both by different arithmetic.
+        test does not evaluate the end point a second time (issue #1217),
+        and both are returned for the next transition to carry (issue
+        #1222). The gradient is :func:`gradient_at`'s wherever that reads
+        ``value_and_gradient``'s or a declared gradient alone, which is
+        every objective but one that declares both by different arithmetic.
         """
         position = theta.detach().clone()
         velocity = momentum.detach().clone()
         kicks, drifts = _coefficients(self.weights, n_steps)
 
-        velocity = velocity - kicks[0] * step_size * gradient_at(objective, position)
+        velocity = velocity - kicks[0] * step_size * force
         for drift, kick in zip(drifts[:-1], kicks[1:-1], strict=True):
             position = position + drift * step_size * velocity
             velocity = velocity - kick * step_size * gradient_at(objective, position)
         position = position + drifts[-1] * step_size * velocity
         potential, force = value_and_gradient(objective, position)
         velocity = velocity - kicks[-1] * step_size * force
-        return PhaseSpace(position=position, momentum=velocity), float(potential)
+        return PhaseSpace(position=position, momentum=velocity), float(potential), force
 
 
 def _coefficients(
@@ -552,9 +565,10 @@ def sample(
             oxisal.HmcWalk if declared is not None else JaxWalk,
             declared if declared is not None else traced,  # type: ignore[arg-type]
             (n_steps,),
-            integrator.force_evaluations(n_steps),
+            integrator.force_evaluations(n_steps, carried=True),
             generator,
             n_samples,
+            per_start=1,
             unit=Cost.GRADIENTS,
             step_size=step_size,
             start=start_point(objective, start),
@@ -566,10 +580,11 @@ def sample(
     else:
         chain = run_chain(
             _HamiltonianKernel(n_steps=n_steps, integrator=integrator),
-            integrator.force_evaluations(n_steps),
+            integrator.force_evaluations(n_steps, carried=True),
             objective,
             generator,
             n_samples,
+            per_start=1,
             unit=Cost.GRADIENTS,
             step_size=step_size,
             start=start,
@@ -672,9 +687,10 @@ def anneal(
     position = start_point(objective, start)
 
     best, best_value = position.clone(), float(objective(position))
-    # `U` at `position`, carried from one transition to the next rather
-    # than evaluated again by each (issue #1217).
+    # `U` and `grad U` at `position`, carried from one transition to the
+    # next rather than evaluated again by each (issues #1217, #1222).
     value = best_value
+    force: torch.Tensor | None = None
     accepted = 0
     # `energy` is the best value so far, which is what `AnnealedTheta.value`
     # returns: the series ends at the field rather than at the last visited
@@ -689,7 +705,7 @@ def anneal(
     step_sizes: list[float] = []
     for step in range(schedule.n_steps):
         temperature = schedule(step)
-        taken, value = _transition(
+        taken, value, force = _transition(
             objective,
             position,
             temperature,
@@ -700,6 +716,7 @@ def anneal(
             n_steps,
             integrator,
             potential=value,
+            force=force,
         )
         if averaging is not None and adaptation is not None:
             # The iterate drives the next proposal; at a window's end the
@@ -721,7 +738,9 @@ def anneal(
         value=best_value,
         final=position,
         acceptance_rate=accepted / schedule.n_steps,
-        spent=schedule.n_steps * integrator.force_evaluations(n_steps),
+        # `grad U` at the start once, then each trajectory's own (#1222).
+        spent=1
+        + schedule.n_steps * integrator.force_evaluations(n_steps, carried=True),
         unit=Cost.GRADIENTS,
         termination=Termination.after(schedule.n_steps, converged=False),
         step_sizes=None if adaptation is None else tuple(step_sizes),
@@ -888,7 +907,12 @@ def parallel_tempering(
         for child in torch.randint(0, 2**31 - 1, (n_replicas,), generator=parent)
     ]
     origins = _rung_starts(objective, start, n_replicas)
-    per_proposal = integrator.force_evaluations(n_steps)
+    # Unadapted, a replica's `grad U` is carried beside its position, so a
+    # trajectory costs its own gradients alone after the replica's first
+    # (issue #1222). On a metric it is not: an accepted point returns to
+    # `theta` through `* scale`, and the next round's `/ scale` may differ
+    # from the point the gradient was taken at in the last place.
+    per_proposal = integrator.force_evaluations(n_steps, carried=adaptation is None)
     adapted: tuple[Adapted, ...] | None = None
     if adaptation is not None:
         kernel = _HamiltonianKernel(n_steps=n_steps, integrator=integrator)
@@ -898,7 +922,8 @@ def parallel_tempering(
         ):
             report, origins[index] = warm_up(
                 kernel,
-                per_proposal,
+                integrator.force_evaluations(n_steps, carried=True),
+                1,
                 objective,
                 origins[index],
                 temperature,
@@ -931,6 +956,10 @@ def parallel_tempering(
     # The ladder is strictly increasing, so a replica's temperature names it:
     # the loop hands the step a temperature and a generator, not an index.
     rung = {temperature: index for index, temperature in enumerate(temperatures)}
+    # `grad U` per position, keyed on the tensor's identity: an exchange
+    # swaps the tensors themselves between rungs, and `U` does not depend on
+    # the temperature, so the gradient moves with the position (issue #1222).
+    forces: dict[int, tuple[torch.Tensor, torch.Tensor | None]] = {}
     round_index = 0
     # `energy` is the best value so far, which is `Tempered.value`; the rest
     # of the series is the exchange loop's, recorded where it runs. A
@@ -952,7 +981,8 @@ def parallel_tempering(
         """
         index = rung[temperature]
         if adapted is None:
-            step, landed_at = _transition(
+            held = forces.pop(id(position), None)
+            step, landed_at, force = _transition(
                 objective,
                 position,
                 temperature,
@@ -961,14 +991,16 @@ def parallel_tempering(
                 n_steps,
                 integrator,
                 potential=-density,
+                force=held[1] if held is not None and held[0] is position else None,
             )
+            forces[id(step.position)] = (step.position, force)
             accepted[index] += step.accepted
             return step.position, -landed_at
         scale = scales[index]
         # The metric's `U` at `position / scale` is evaluated afresh: it is
         # `objective` at the round trip, which may differ from `density`'s
         # point in the last place.
-        step, landed_at = _transition(
+        step, landed_at, _ = _transition(
             metrics[index],
             position / scale,
             temperature,
@@ -1026,7 +1058,10 @@ def parallel_tempering(
         acceptance_rate=accepted / round_index,
         temperatures=tuple(temperatures),
         swap_acceptance=np.asarray(ensemble.swap_acceptance, dtype=np.float64),
+        # Unadapted, each replica's first trajectory also evaluates `grad U`
+        # at its start (issue #1222).
         spent=round_index * n_replicas * per_proposal
+        + (n_replicas if adapted is None else 0)
         + sum(report.force_evaluations for report in adapted or ()),
         unit=Cost.GRADIENTS,
         termination=Termination.after(round_index, converged=False),
@@ -1087,16 +1122,19 @@ def _check_trajectory(step_size: float, n_steps: int) -> None:
 class _HamiltonianKernel:
     """:func:`_transition` with its trajectory bound: :func:`sample`'s :class:`Kernel`.
 
-    The current point's ``U`` is kept beside the tensor it was taken at and
-    handed to the next transition while the chain has not left it, as
-    :class:`~sal.sample.metropolis` keeps its energy: the identity of the
-    objective and of the tensor is the key, so the warm-up's change of
-    coordinates, or a new position, is evaluated afresh (issue #1217).
+    The current point's ``(U, grad U)`` is kept beside the tensor it was
+    taken at and handed to the next transition while the chain has not left
+    it, as :class:`~sal.sample.metropolis` keeps its energy: the identity of
+    the objective and of the tensor is the key, so the warm-up's change of
+    coordinates, or a new position, is evaluated afresh (issues #1217,
+    #1222). A chain therefore evaluates ``grad U`` at a start once per
+    objective it is handed --- once unadapted, three times with a warm-up
+    --- which :func:`~sal.sample.chain.run_chain`'s ``per_start`` charges.
     """
 
     n_steps: int
     integrator: Integrator
-    _at: tuple[Objective, torch.Tensor, float] | None = field(
+    _at: tuple[Objective, torch.Tensor, float, torch.Tensor | None] | None = field(
         default=None, init=False, repr=False, compare=False
     )
 
@@ -1108,14 +1146,14 @@ class _HamiltonianKernel:
         generator: torch.Generator,
         step_size: float,
     ) -> Transition:
-        carried = (
-            self._at[2]
+        held = (
+            self._at
             if self._at is not None
             and self._at[0] is objective
             and self._at[1] is position
             else None
         )
-        step, potential = _transition(
+        step, potential, force = _transition(
             objective,
             position,
             temperature,
@@ -1123,9 +1161,10 @@ class _HamiltonianKernel:
             step_size,
             self.n_steps,
             self.integrator,
-            potential=carried,
+            potential=None if held is None else held[2],
+            force=None if held is None else held[3],
         )
-        self._at = (objective, step.position, potential)
+        self._at = (objective, step.position, potential, force)
         return step
 
 
@@ -1139,7 +1178,8 @@ def _transition(
     integrator: Integrator,
     *,
     potential: float | None = None,
-) -> tuple[Transition, float]:
+    force: torch.Tensor | None = None,
+) -> tuple[Transition, float, torch.Tensor | None]:
     """One Metropolis step with a Hamiltonian proposal at ``temperature``.
 
     Momentum is drawn with variance ``temperature`` and the acceptance ratio
@@ -1147,28 +1187,34 @@ def _transition(
     At ``temperature = 1.0`` both are the identity bitwise, so this *is* the
     untempered transition and not an approximation of it.
 
-    ``U`` is evaluated nowhere the step has already evaluated it (issue
-    #1217): at the current point it is ``potential`` where the caller
-    carries one, and at the proposal it is the integrator's last force
-    evaluation's.
+    ``U`` and ``grad U`` are evaluated nowhere the chain has already
+    evaluated them (issues #1217, #1222): at the current point they are
+    ``potential`` and ``force`` where the caller carries them, and at the
+    proposal they are the integrator's last force evaluation's. A carried
+    ``force`` spares the trajectory's first gradient, so the step costs
+    ``integrator.force_evaluations(n_steps, carried=True)``.
 
     Parameters
     ----------
     potential : float | None
         ``U(position)`` where the caller holds it, from the transition that
         landed there; ``None`` evaluates it.
+    force : torch.Tensor | None
+        ``grad U(position)`` on the same terms; ``None`` evaluates it.
 
     Returns
     -------
-    tuple[Transition, float]
+    tuple[Transition, float, torch.Tensor | None]
         The new position, the absolute energy error of the proposal, 1 if
         it was accepted, and the Metropolis acceptance probability
         ``min(1, exp(-dH / T))`` --- the statistic dual averaging drives,
         which has less variance than the accept/reject outcome. A proposal
         whose energy is not finite has probability 0, and so does one whose
         trajectory left the objective's domain
-        (:class:`~sal.emissions.ParameterDomainError`). Beside it, ``U`` at
-        the new position, for the caller to carry into the next step.
+        (:class:`~sal.emissions.ParameterDomainError`). Beside it, ``U`` and
+        ``grad U`` at the new position, for the caller to carry into the
+        next step; the gradient is ``None`` only where the current point's
+        own raised :class:`~sal.emissions.ParameterDomainError`.
     """
     momentum = torch.randn(
         position.shape, generator=generator, dtype=torch.float64
@@ -1176,9 +1222,12 @@ def _transition(
     here = _potential(objective, position) if potential is None else potential
     current = here + _kinetic(momentum)
 
+    start = force
     try:
-        trajectory, there = integrator._scored(
-            objective, position, momentum, step_size, n_steps
+        if start is None:
+            start = gradient_at(objective, position.detach())
+        trajectory, there, landed = integrator._scored(
+            objective, position, momentum, step_size, n_steps, start
         )
         proposal = trajectory.position
         # Negating the momentum makes the proposal symmetric, which is what
@@ -1190,21 +1239,36 @@ def _transition(
         # domain, where the energy does not exist. Rejected as a proposal of
         # infinite energy is, the uniform drawn as that path draws it (#912).
         torch.rand(1, generator=generator)
-        return Transition(
-            position=position, energy_error=math.inf, accepted=0, probability=0.0
-        ), here
+        return (
+            Transition(
+                position=position, energy_error=math.inf, accepted=0, probability=0.0
+            ),
+            here,
+            start,
+        )
 
     error = abs(proposed - current)
     uniform = float(torch.rand(1, generator=generator))
     ratio = float(torch.exp(torch.tensor((current - proposed) / temperature)))
     probability = acceptance_probability(ratio)
     if accept_ratio(ratio, uniform):
-        return Transition(
-            position=proposal, energy_error=error, accepted=1, probability=probability
-        ), there
-    return Transition(
-        position=position, energy_error=error, accepted=0, probability=probability
-    ), here
+        return (
+            Transition(
+                position=proposal,
+                energy_error=error,
+                accepted=1,
+                probability=probability,
+            ),
+            there,
+            landed,
+        )
+    return (
+        Transition(
+            position=position, energy_error=error, accepted=0, probability=probability
+        ),
+        here,
+        start,
+    )
 
 
 def compiled_trajectory(

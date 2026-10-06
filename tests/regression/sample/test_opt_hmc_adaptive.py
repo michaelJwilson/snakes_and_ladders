@@ -260,7 +260,8 @@ def test_a_chain_without_adaptation_reports_no_warm_up_and_counts_its_gradients(
     None
 ):
     # The fixed path is the oracle for the adapted one, so it must be what it
-    # was: no report, and the cost the trajectory count times one trajectory.
+    # was: no report, and the cost the trajectory count times one trajectory,
+    # whose first gradient is carried, and one gradient at the start (#1222).
     chain = sample(
         GAUSSIAN,
         torch.Generator().manual_seed(3),
@@ -271,7 +272,7 @@ def test_a_chain_without_adaptation_reports_no_warm_up_and_counts_its_gradients(
     )
 
     assert chain.adapted is None
-    assert chain.spent == 50 * leapfrog.force_evaluations(6)
+    assert chain.spent == 1 + 50 * leapfrog.force_evaluations(6, carried=True)
 
 
 # --- the statistics ----------------------------------------------------------
@@ -490,7 +491,10 @@ def test_the_adapted_chains_marginals_are_the_exact_gaussians_within_three_error
     assert bool((mean_errors < 3.0).all()), mean_errors
     assert bool((variance_errors < 3.0).all()), variance_errors
     assert abs(adapted.warmup_acceptance - 0.80) < 0.05
-    assert adapted.force_evaluations == 300 * leapfrog.force_evaluations(5)
+    # One gradient at each window's start, the rest carried (issue #1222).
+    assert adapted.force_evaluations == 2 + 300 * leapfrog.force_evaluations(
+        5, carried=True
+    )
     # The stiffer coordinate gets the larger mass: the warm-up recovers the
     # order of 1 / (2.0, 0.5), which is what the metric is for.
     assert float(adapted.mass_diagonal[1]) > float(adapted.mass_diagonal[0])

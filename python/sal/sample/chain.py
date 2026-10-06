@@ -356,6 +356,7 @@ def run_chain(
     generator: Stream,
     n_samples: int,
     *,
+    per_start: int,
     unit: Cost,
     step_size: float,
     start: torch.Tensor | np.ndarray | None,
@@ -382,6 +383,12 @@ def run_chain(
         Evaluations one proposal costs, in the unit the sampler is compared
         on: gradients for :func:`sample` and
         :func:`sal.sample.langevin.mala`.
+    per_start : int
+        Evaluations the kernel spends once each time it is handed a new
+        objective or a position it did not return: ``grad U`` at the start,
+        which a kernel carrying it (issue #1222) evaluates there and nowhere
+        after. Charged once for the chain, and twice more by a warm-up, whose
+        two windows each start one.
     objective, generator, n_samples, step_size, start, burn_in, temperature, adaptation
         As :func:`sample`.
     store_chain, operators
@@ -412,6 +419,7 @@ def run_chain(
         adapted, position = warm_up(
             kernel,
             per_proposal,
+            per_start,
             objective,
             position,
             temperature,
@@ -466,7 +474,9 @@ def run_chain(
                 state=position,
                 acceptance_so_far=accepted / (drawn + 1),
                 energy_error=float(error),
-                force_evaluations=(index + 1) * per_proposal + warmup_evaluations,
+                force_evaluations=per_start
+                + (index + 1) * per_proposal
+                + warmup_evaluations,
                 wall_s=time.perf_counter() - started,
             )
 
@@ -477,7 +487,7 @@ def run_chain(
         draws=draws,
         acceptance_rate=accepted / n_samples if n_samples else 0.0,
         energy_error=errors[burn_in:],
-        spent=(n_samples + burn_in) * per_proposal + warmup_evaluations,
+        spent=per_start + (n_samples + burn_in) * per_proposal + warmup_evaluations,
         unit=unit,
         adapted=adapted,
         expectations={name: kalman.estimate() for name, kalman in filters.items()},
@@ -511,6 +521,7 @@ def run_compiled(
     generator: Stream,
     n_samples: int,
     *,
+    per_start: int,
     unit: Cost,
     step_size: float,
     start: torch.Tensor,
@@ -523,7 +534,11 @@ def run_compiled(
 
     ``walk_class`` is ``oxisal.MetropolisWalk`` or ``oxisal.HmcWalk``, built
     with its own arguments ``extra`` after the shared ones; ``per_proposal``
-    is what one proposal costs, as :func:`run_chain` takes it. The warm-up,
+    is what one proposal costs, as :func:`run_chain` takes it, and
+    ``per_start`` what the walk's construction costs once: the compiled
+    kernels evaluate at ``start`` and carry from there, the change of
+    metric included (``src/hmc.rs``), so it is charged once, to the warm-up
+    where there is one. The warm-up,
     the burn-in, the draws and the filters are ``src/chain.rs``'s, one loop
     for both kernels as :func:`run_chain` is one for the torch ones.
 
@@ -585,7 +600,9 @@ def run_compiled(
         remaining -= size
     for index, name in enumerate(declared_operators):
         filters[name] = KalmanMean.from_statistics(*walk.statistics(index))
-    warmup_evaluations = 0 if adaptation is None else adaptation.warmup * per_proposal
+    warmup_evaluations = (
+        0 if adaptation is None else adaptation.warmup * per_proposal + per_start
+    )
     return Chain(
         # One block is the chain as Rust built it; `cat` would copy it.
         draws=blocks[0]
@@ -595,7 +612,9 @@ def run_compiled(
         else torch.empty((0, dimension)),
         acceptance_rate=accepted / n_samples if n_samples else 0.0,
         energy_error=torch.from_numpy(np.concatenate(errors)),
-        spent=(n_samples + burn_in) * per_proposal + warmup_evaluations,
+        spent=(n_samples + burn_in) * per_proposal
+        + warmup_evaluations
+        + (per_start if adaptation is None else 0),
         unit=unit,
         adapted=None
         if adaptation is None
@@ -728,6 +747,7 @@ class DualAveraging:
 def warm_up(
     kernel: Kernel[Stream],
     per_proposal: int,
+    per_start: int,
     objective: Objective,
     position: torch.Tensor,
     temperature: float,
@@ -735,7 +755,12 @@ def warm_up(
     step_size: float,
     adaptation: Adaptation,
 ) -> tuple[Adapted, torch.Tensor]:
-    """The two windows :class:`Adaptation` describes; returns the report and where the chain is."""
+    """The two windows :class:`Adaptation` describes; returns the report and where the chain is.
+
+    Each window starts the kernel afresh --- the first at ``position``, the
+    second on the metric's coordinates --- so the report charges
+    ``per_start`` twice beside ``per_proposal`` a proposal (issue #1222).
+    """
     first = adaptation.warmup // 2
     second = adaptation.warmup - first
 
@@ -784,7 +809,7 @@ def warm_up(
         step_size=averaging.averaged,
         mass_diagonal=1.0 / variance,
         warmup_acceptance=total / second,
-        force_evaluations=adaptation.warmup * per_proposal,
+        force_evaluations=adaptation.warmup * per_proposal + 2 * per_start,
         flat=flat,
     )
     return report, position * scale

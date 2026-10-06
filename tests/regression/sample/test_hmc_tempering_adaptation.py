@@ -130,10 +130,13 @@ def test_the_ladder_charges_every_rungs_warm_up() -> None:
         n_steps=5,
         adaptation=adaptation,
     )
-    per_proposal = leapfrog.force_evaluations(5)
+    # The warm-up's kernel carries `grad U`, paying it once at each window's
+    # start; the rounds on the metric do not carry it (issue #1222).
+    per_round = leapfrog.force_evaluations(5)
+    per_warmup = 2 + 16 * leapfrog.force_evaluations(5, carried=True)
     assert run.adapted is not None
-    assert run.spent == (10 + 16) * len(LADDER) * per_proposal
-    assert all(report.force_evaluations == 16 * per_proposal for report in run.adapted)
+    assert run.spent == len(LADDER) * (10 * per_round + per_warmup)
+    assert all(report.force_evaluations == per_warmup for report in run.adapted)
     assert len({report.step_size for report in run.adapted}) == len(LADDER)
 
 

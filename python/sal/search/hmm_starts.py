@@ -331,20 +331,23 @@ STARTS: dict[str, Callable[[np.random.Generator], Initializer]] = {
 }
 
 #: Passes over the data each start spends before its polish: a sampler's
-#: gradients, ``TRAJECTORY + 1`` per proposal as
-#: :func:`~sal.sample.hmc.sample` and its siblings count them, and the points
-#: the seam scores, one each.
+#: gradients as :func:`~sal.sample.hmc.sample` and its siblings count them
+#: --- ``TRAJECTORY`` per proposal, the first kick's gradient carried, and one
+#: at each start of a kernel (issue #1222): one for the chain and the
+#: annealing run, one per replica for the ladder, three for an adapted chain
+#: (the warm-up's two windows and the chain's) and two per rung for the
+#: adapted ladder's warm-up, whose rounds on the metric carry nothing ---
+#: and the points the seam scores, one each.
 CHARGES: dict[str, int] = {
     "quantile": 1,
     "restart": RESTARTS,
-    "chain": (CHAIN_BURN_IN + 1) * (TRAJECTORY + 1) + 1,
-    "annealed": ANNEAL_STEPS * (TRAJECTORY + 1) + 1,
-    "tempered": TEMPERING_ROUNDS * len(TEMPERATURES) * (TRAJECTORY + 1) + 1,
-    "chain_adapted": (CHAIN_BURN_IN + 1) * (TRAJECTORY + 1) + 1,
-    "annealed_adapted": ANNEAL_STEPS * (TRAJECTORY + 1) + 1,
-    "tempered_adapted": (ADAPTATION.warmup + ADAPTED_TEMPERING_ROUNDS)
-    * len(TEMPERATURES)
-    * (TRAJECTORY + 1)
+    "chain": 1 + (CHAIN_BURN_IN + 1) * TRAJECTORY + 1,
+    "annealed": 1 + ANNEAL_STEPS * TRAJECTORY + 1,
+    "tempered": len(TEMPERATURES) * (1 + TEMPERING_ROUNDS * TRAJECTORY) + 1,
+    "chain_adapted": 3 + (CHAIN_BURN_IN + 1) * TRAJECTORY + 1,
+    "annealed_adapted": 1 + ANNEAL_STEPS * TRAJECTORY + 1,
+    "tempered_adapted": len(TEMPERATURES)
+    * (2 + ADAPTATION.warmup * TRAJECTORY + ADAPTED_TEMPERING_ROUNDS * (TRAJECTORY + 1))
     + 1,
 }
 

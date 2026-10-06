@@ -1,8 +1,8 @@
 """What a draw costs, in the unit each sampler spends, on one target at a time.
 
-Effective samples per evaluation (`opt/CLAUDE.md`): HMC buys ``n_steps + 1``
-gradients per trajectory, MALA two per step, slice sampling objective
-evaluations only. The units differ, so wall clock is recorded beside them
+Effective samples per evaluation (`opt/CLAUDE.md`): HMC buys ``n_steps``
+gradients per trajectory, MALA one per step, each with one more at every
+start (issue #1222), slice sampling objective evaluations only. The units differ, so wall clock is recorded beside them
 (experiment 024). The ordering is asserted over both targets, sizes and seeds;
 the numbers are in comments and `STATUS.md`.
 """
@@ -50,6 +50,9 @@ def test_one_gradient_buys_more_from_a_langevin_step_than_from_a_trajectory(
     #   mixture,  3,200   38.8 / 30.2  196.2 / 235.0  125.2 / 115.1 15.1 / 3.8 / 2.5 s
     #
     # MALA: 1.7x-2.6x HMC per gradient (Gaussian), 5.1x-7.8x (mixture).
+    # Measured before #1222 carried the gradient: HMC's columns now read
+    # about (n_steps + 1) / n_steps higher, MALA's about 2x, and both
+    # orderings held at both sizes when re-run on #1222's branch.
     gaussian_draws, mixture_draws = draws
     target, _, _ = weight_posterior()
 
