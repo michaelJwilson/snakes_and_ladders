@@ -10,6 +10,8 @@ binomial tail sums small enough to write out.
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pytest
 from sal.sample.statistics import (
@@ -70,19 +72,19 @@ def test_a_zero_expected_count_is_refused() -> None:
 
 @pytest.mark.analytic
 def test_independent_draws_have_the_autocorrelation_time_of_independence() -> None:
-    # 0.5 is the value for a series with no correlation, in the convention
-    # `tau = 0.5 + sum_t rho(t)`.
+    # 1 is the value for a series with no correlation, in the convention
+    # `tau = 1 + 2 sum_t rho(t)` that `n / tau` reads as effective draws.
     rng = np.random.default_rng(0)
 
     realized = integrated_autocorrelation_time(rng.normal(size=200_000))
 
-    assert realized == pytest.approx(0.5, abs=0.02)
+    assert realized == pytest.approx(1.0, abs=0.04)
 
 
 @pytest.mark.oracle
 def test_an_ar1_process_matches_its_closed_form() -> None:
     # For `x_t = rho x_{t-1} + noise`, `rho(t) = rho**t` exactly, so
-    # `tau = 0.5 + sum_{t>=1} rho**t = 0.5 + rho / (1 - rho)`. An estimator
+    # `tau = 1 + 2 sum_{t>=1} rho**t = (1 + rho) / (1 - rho)`. An estimator
     # that failed to truncate its sum would drift above this with the series
     # length rather than converge to it.
     correlation = 0.8
@@ -93,14 +95,45 @@ def test_an_ar1_process_matches_its_closed_form() -> None:
 
     realized = integrated_autocorrelation_time(series)
 
-    assert realized == pytest.approx(0.5 + correlation / (1.0 - correlation), rel=0.02)
+    assert realized == pytest.approx(
+        (1.0 + correlation) / (1.0 - correlation), rel=0.02
+    )
+
+
+#: Sigmas of Sokal's estimator error the AR(1) referee admits.
+AR1_SIGMAS = 4.0
+AR1_LENGTH = 100_000
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("coefficient", [0.0, 0.5, 0.9])
+def test_ar1_autocorrelation_time_is_held_to_sokals_error(coefficient: float) -> None:
+    # Closed form `tau = (1 + phi) / (1 - phi)` (issue #1319). The tolerance
+    # is derived, not fitted: Sokal (1997, sec. 3) gives the windowed
+    # estimator's variance `var(tau_S) ~ 2 (2M + 1) / n tau_S**2`, with
+    # `tau_S = tau / 2` and the window `M = c tau_S`, c = 5; the truncation
+    # bias `2 phi**(M + 1) / (1 - phi)` is added, under 0.06 at phi = 0.9.
+    exact = (1.0 + coefficient) / (1.0 - coefficient)
+    window = math.ceil(5.0 * exact / 2.0)
+    relative = AR1_SIGMAS * math.sqrt(2.0 * (2 * window + 1) / AR1_LENGTH)
+    bias = 2.0 * coefficient ** (window + 1) / (1.0 - coefficient)
+    rng = np.random.default_rng([1319, round(10 * coefficient)])
+    noise = rng.normal(size=AR1_LENGTH)
+    series = np.empty(AR1_LENGTH)
+    series[0] = noise[0] / math.sqrt(1.0 - coefficient**2)
+    for step in range(1, AR1_LENGTH):
+        series[step] = coefficient * series[step - 1] + noise[step]
+
+    realized = integrated_autocorrelation_time(series)
+
+    assert abs(realized - exact) <= relative * exact + bias, (coefficient, realized)
 
 
 @pytest.mark.smoke
 def test_a_series_that_never_moved_reports_the_floor() -> None:
     # A constant chain has no correlation to measure, and is a sampler that
     # never moved rather than a fast one; the caller's own test sees it.
-    assert integrated_autocorrelation_time(np.ones(1_000)) == 0.5
+    assert integrated_autocorrelation_time(np.ones(1_000)) == 1.0
 
 
 @pytest.mark.smoke

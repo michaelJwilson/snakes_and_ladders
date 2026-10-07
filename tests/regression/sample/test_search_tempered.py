@@ -77,9 +77,10 @@ MEAN_TOLERANCE = 0.01
 #: What "mixed" means here: no adjacent pair exchanges less than half the
 #: time or more than 95 percent of it, and no indicator series is correlated
 #: past one recorded sweep. Realized: acceptance 0.56 to 0.93 across the
-#: instances, autocorrelation times 0.50 to 0.76 recorded sweeps.
+#: instances, autocorrelation times 1.00 to 1.52 recorded sweeps in the
+#: convention `tau = 1 + 2 sum rho` (#1319; 0.50 to 0.76 in Sokal's half of it).
 ACCEPTANCE = (0.5, 0.95)
-AUTOCORRELATION = 1.0
+AUTOCORRELATION = 2.0
 
 
 def _four_taxa() -> tuple[dict[str, np.ndarray], int]:
