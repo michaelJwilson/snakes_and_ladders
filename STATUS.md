@@ -3507,6 +3507,19 @@ probabilities back through `np.log` (sal's distance 1.665e-15 to 1.721e-15 and
 Gaussian and Poisson fit, Viterbi and `score` (117 lines). The adapters the
 benchmarks, `sandbox` and a key-seeded chain still call stay (PR #1293).
 
+**Explicit algorithm calls beside the generic ones ([#1305](https://github.com/michaelJwilson/snakes_and_ladders/issues/1305)).**
+`search.ground_state`, `opt.emission_mixture.seed` and
+`sample.relabel.relabel` are each a `match` on `method` onto one explicit
+call per algorithm: the 14 `METHODS` entries (`ground_state.icm`,
+`.alpha_expansion`, ...), from which `METHODS`, `FLOORED` and the annealed
+names are now read; `seed.uniform`, `.plus_plus`, `.kmeans`; and the 7
+`RelabelMethod` members (`relabel.stephens`, ...). Generic and explicit
+return equal results, every field but the seconds bitwise, for each of the
+24 algorithms on one seeded fixture
+(`tests/regression/search/test_ground_state_explicit.py`,
+`tests/regression/opt/test_opt_seed.py`,
+`tests/regression/sample/test_relabel.py`).
+
 ## Milestone 3.1 — Model Surrogates & Bounds for Supported Problems
 
 **Modules.** The surrogates and the bounds they claim: `likelihood.surrogate`, `learn.surrogate` and `learn.ranking`, the examples and targets joining the two halves (`search.surrogate` until #779).

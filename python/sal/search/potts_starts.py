@@ -139,7 +139,7 @@ class TilingRung(Rung):
     Every solver reads the lattice, the field and the state count, so this is
     a ``Rung`` to all of them. The field has no class ladder and no size
     covariate: ``alpha`` is zero and ``sizes`` one, as
-    :func:`~sal.search.ground_state.ground_state` builds its
+    :data:`~sal.search.ground_state.ground_state` builds its
     rung, and the structural referee that reads them does not apply. What
     referees a labelling here is the planted truth below, through
     :func:`recovery` and :func:`recovery_bound`.
