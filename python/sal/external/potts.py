@@ -2,9 +2,10 @@
 
 ``sal.external`` is namespaced by problem family, as the package is: this
 module holds the Potts calls, and the root only the infrastructure they run
-on. :func:`ground_state` (gco, PyMaxflow) mirrors
-:func:`sal.search.ground_state.ground_state`; :func:`lower_bound` (HiGHS)
-mirrors :func:`sal.search.trws.trws`.
+on. :func:`ground_state` (gco, PyMaxflow, OpenGM's ICM, loopy BP, A*,
+expansion and swap) mirrors :func:`sal.search.ground_state.ground_state`;
+:func:`lower_bound` (HiGHS, OpenGM's TRW-S and dual decomposition) mirrors
+:func:`sal.search.trws.trws`.
 
 **Ground states.** :func:`ground_state` takes :func:`sal.search.ground_state.ground_state`'s
 arguments in its order, with a :class:`~sal.external.solvers.Solver` where
@@ -32,7 +33,17 @@ checked to hold no forbidden pair
 read under the field as given. PyMaxflow does not declare
 :attr:`~sal.external.solvers.Capability.FORBIDDEN_LABELS` and refuses one.
 
-**Cost.** Neither framework reports site visits, the sibling's unit, nor a
+**OpenGM (#1279).** The script loads ``libsal_opengm.so``, which
+``infra/build_opengm.sh`` compiles from OpenGM's headers; the bytes are
+posed by :func:`~sal.external.potts_inputs.opengm_inputs`: the unary
+``-field``, each edge ``-J [a == b]``, so OpenGM's value is the package's
+energy with no constant restored. A forbidden label is
+:func:`~sal.external.potts_inputs.stand_in`, as for gco. Each algorithm runs
+its own loop to :data:`OPENGM_STEPS`, OpenGM's own defaults: one call, one
+unit. Expansion and swap need a metric pairwise term, so a negative
+coupling is refused before the subprocess; loopy BP and A* take no start.
+
+**Cost.** No framework reports site visits, the sibling's unit, nor a
 count of its own loop: gco runs its moves to convergence inside one call
 and PyMaxflow cuts once. Each solver spends one call in the unit
 :data:`UNITS` declares, and a budget in another unit is refused.
@@ -82,10 +93,12 @@ import numpy as np
 
 from sal.cost import Cost
 from sal.external.potts_inputs import (
+    INTEGRALITY,
     OPTIMAL,
     allowed_by,
     expansion_inputs,
     ising_inputs,
+    opengm_inputs,
     polytope_inputs,
     stand_in,
 )
@@ -103,9 +116,11 @@ from sal.external.solvers import (
     require,
 )
 from sal.opt.budget import Budget
-from sal.opt.termination import Termination
+from sal.opt.termination import Termination, check_cap
 from sal.search.alpha_expansion import BoundedLabelling
 from sal.search.ground_state import MethodRun
+from sal.search.trws import MAX_ITERATIONS as TRWS_ITERATIONS
+from sal.search.trws import TOLERANCE as TRWS_TOLERANCE
 from sal.sim.graph import PottsGraph
 from sal.sim.potts import (
     SiteField,
@@ -121,7 +136,37 @@ UNITS: Mapping[Solver, Cost] = {
     Solver.GCO_EXPANSION: Cost.FITS,
     Solver.GCO_SWAP: Cost.FITS,
     Solver.PYMAXFLOW_EXACT: Cost.PASS,
+    Solver.OPENGM_ICM: Cost.FITS,
+    Solver.OPENGM_LBP: Cost.FITS,
+    Solver.OPENGM_ASTAR: Cost.FITS,
+    Solver.OPENGM_EXPANSION: Cost.FITS,
+    Solver.OPENGM_SWAP: Cost.FITS,
 }
+
+#: The iteration cap each OpenGM ground-state algorithm runs to: OpenGM's
+#: own default for loopy BP (100), expansion and swap (1000 each); ICM and
+#: A* run to their own end and read none.
+OPENGM_STEPS: Mapping[Solver, int] = {
+    Solver.OPENGM_ICM: 1,
+    Solver.OPENGM_LBP: 100,
+    Solver.OPENGM_ASTAR: 1,
+    Solver.OPENGM_EXPANSION: 1000,
+    Solver.OPENGM_SWAP: 1000,
+}
+
+#: The solvers OpenGM's metric moves run, which refuse a negative coupling.
+_METRIC = frozenset({Solver.OPENGM_EXPANSION, Solver.OPENGM_SWAP})
+#: The OpenGM solvers that take a start: ICM, expansion and swap.
+_STARTED = frozenset({Solver.OPENGM_ICM, Solver.OPENGM_EXPANSION, Solver.OPENGM_SWAP})
+
+
+def _opengm(solver: Solver) -> bool:
+    return solver.framework.name == "opengm"
+
+
+def _algorithm(solver: Solver) -> str:
+    """The key of :data:`~sal.external.potts_inputs.OPENGM_ALGORITHMS` ``solver`` runs."""
+    return str(solver).removeprefix("opengm_")
 
 
 @dataclass(frozen=True)
@@ -203,8 +248,10 @@ def ground_state(
     rng : np.random.Generator
         Not drawn from.
     start : np.ndarray | None
-        gco's initial labelling, shape ``(n_nodes,)``; gco's own default is
-        label 0 everywhere. PyMaxflow's cut has none and refuses one.
+        The initial labelling, shape ``(n_nodes,)``, of gco and of OpenGM's
+        ICM, expansion and swap; each one's own default is label 0
+        everywhere. PyMaxflow's cut, OpenGM's loopy BP and A* have none and
+        refuse one.
     session : Session | None
         A worker :func:`sal.external.session` opened on ``solver``, which
         serves the call in place of a fresh subprocess.
@@ -223,12 +270,13 @@ def ground_state(
         If the problem needs what ``solver`` does not declare: more than two
         states, or a forbidden label.
     ExternalUnavailable
-        If the framework is not installed.
+        If the framework is not installed, or not built.
     ValueError
         If ``field`` is not one row per node, holds ``nan`` or ``+inf``, or
         a site allows no label; the budget is in another unit; ``start`` is
-        out of range, or given to PyMaxflow; ``session`` serves another
-        solver.
+        out of range, or given to PyMaxflow, OpenGM's loopy BP or A*; a
+        coupling is negative for OpenGM's expansion or swap; ``session``
+        serves another solver.
     ScriptError
         If the framework fails, or returns a forbidden label.
     """
@@ -249,12 +297,28 @@ def ground_state(
         if solver is Solver.PYMAXFLOW_EXACT:
             msg = f"{solver} cuts once from no labelling, so takes no start"
             raise ValueError(msg)
+        if _opengm(solver) and solver not in _STARTED:
+            msg = f"{solver} starts from no labelling, so takes no start"
+            raise ValueError(msg)
         start = check_labelling(start, graph.n_nodes, n_states)
+    if solver in _METRIC and (graph.edge_coupling < 0).any():
+        msg = f"{solver} needs a metric pairwise term: every coupling >= 0"
+        raise ValueError(msg)
     if session is None and not available(solver):
         raise ExternalUnavailable(solver)
 
+    steps = OPENGM_STEPS.get(solver, 1)
     if solver is Solver.PYMAXFLOW_EXACT:
         inputs = ising_inputs(graph, values)
+    elif _opengm(solver):
+        inputs = opengm_inputs(
+            graph,
+            values if allowed.all() else stand_in(graph, values, allowed),
+            _algorithm(solver),
+            max_iterations=steps,
+            tolerance=0.0,
+            start=start,
+        )
     else:
         sent = values if allowed.all() else stand_in(graph, values, allowed)
         inputs = expansion_inputs(
@@ -275,14 +339,27 @@ def ground_state(
         spent=1,
         seconds=result.seconds,
         # One call, run by the framework to its own criterion: gco's cycle
-        # that lowers nothing, or the cut's maximum flow.
-        termination=Termination.after(1, converged=True),
+        # that lowers nothing, or the cut's maximum flow. Loopy BP alone may
+        # reach its cap first, which its trace's length says.
+        termination=Termination.after(
+            1,
+            converged=solver is not Solver.OPENGM_LBP
+            or result.outputs["trace"].shape[0] < steps,
+        ),
         provenance=provenance(solver),
     )
 
 
-#: The unit :func:`lower_bound` is charged in: one run of HiGHS to its own criterion.
+#: The unit :func:`lower_bound` is charged in: one run of a solver to its own criterion.
 BOUND_UNIT = Cost.FITS
+
+#: The iterations each OpenGM bound runs at most where ``max_iterations`` is
+#: not given: TRW-S's :func:`sal.search.trws.trws` default, and OpenGM's own
+#: default for its dual decomposition.
+BOUND_ITERATIONS: Mapping[Solver, int] = {
+    Solver.OPENGM_TRWS: TRWS_ITERATIONS,
+    Solver.OPENGM_DD: 100,
+}
 
 #: HiGHS's status where an iteration or time limit stopped it.
 LIMIT = 1
@@ -310,6 +387,8 @@ def lower_bound(
     solver: Solver,
     *,
     integral: bool = False,
+    max_iterations: int | None = None,
+    tolerance: float = TRWS_TOLERANCE,
     timeout: float = 600.0,
     session: Session | None = None,
 ) -> ExternalBound:
@@ -333,6 +412,15 @@ def lower_bound(
     integral : bool
         Solve the ILP in place of the LP; needs
         :attr:`~sal.external.solvers.Capability.EXACT`.
+    max_iterations : int | None
+        OpenGM's iterations at most; :data:`BOUND_ITERATIONS` where
+        ``None``. HiGHS has no counterpart and refuses one.
+    tolerance : float
+        OpenGM's TRW-S stops once the bound rises by at most ``tolerance |bound|``
+        in an iteration or the gap closes to that, as
+        :func:`sal.search.trws.trws` reads its own with ``max(1, |bound|)``;
+        its dual decomposition once the relative gap closes to it. HiGHS
+        reads none.
     timeout : float
         Seconds the subprocess may take; HiGHS stops itself at 0.9 of it.
     session : Session | None
@@ -356,7 +444,8 @@ def lower_bound(
         If the framework is not installed.
     ValueError
         If ``field`` has neither shape, holds ``nan`` or ``+inf``, or a site
-        allows no label; ``session`` serves another solver.
+        allows no label; ``session`` serves another solver;
+        ``max_iterations`` is given to HiGHS or is below 1.
     ScriptError
         If HiGHS reports neither an optimum nor a limit, or returns a
         forbidden label.
@@ -369,10 +458,29 @@ def lower_bound(
     if integral:
         needs.add(Capability.EXACT)
     require(solver, needs)
+    if max_iterations is not None and not _opengm(solver):
+        msg = f"{solver} runs to its own criterion and takes no max_iterations"
+        raise ValueError(msg)
+    steps = check_cap(
+        "max_iterations",
+        BOUND_ITERATIONS.get(solver, 1) if max_iterations is None else max_iterations,
+    )
     served_by(session, solver)
     if session is None and not available(solver):
         raise ExternalUnavailable(solver)
 
+    if _opengm(solver):
+        return _opengm_bound(
+            graph,
+            values,
+            allowed,
+            solver,
+            needs,
+            steps=steps,
+            tolerance=tolerance,
+            timeout=timeout,
+            session=session,
+        )
     inputs = polytope_inputs(
         graph,
         values if allowed.all() else stand_in(graph, values, allowed),
@@ -404,6 +512,51 @@ def lower_bound(
         termination=Termination.after(int(outputs["iterations"]), converged=solved),
         spent=1,
         integral=solved and is_integral(marginals),
+        seconds=result.seconds,
+        provenance=provenance(solver),
+    )
+
+
+def _opengm_bound(
+    graph: PottsGraph,
+    values: np.ndarray,
+    allowed: np.ndarray,
+    solver: Solver,
+    needs: set[Capability],
+    *,
+    steps: int,
+    tolerance: float,
+    timeout: float,
+    session: Session | None,
+) -> ExternalBound:
+    """OpenGM's TRW-S or dual decomposition bound, checked as :func:`lower_bound` checks HiGHS's."""
+    inputs = opengm_inputs(
+        graph,
+        values if allowed.all() else stand_in(graph, values, allowed),
+        _algorithm(solver),
+        max_iterations=steps,
+        tolerance=tolerance,
+    )
+    result = (
+        invoke(solver, needs, inputs, timeout=timeout)
+        if session is None
+        else session.invoke(needs, inputs, timeout=timeout)
+    )
+    labelling = result.outputs["labels"]
+    if not allowed_by(allowed, labelling):
+        msg = f"{solver} returned a forbidden label"
+        raise ScriptError(msg)
+    bound = float(result.outputs["bound"])
+    found = energy(graph, values, labelling)
+    taken = int(result.outputs["trace"].shape[0])
+    return ExternalBound(
+        labelling=labelling,
+        energy=found,
+        bound=bound,
+        termination=Termination.after(taken, converged=taken < steps),
+        spent=1,
+        # The labelling attains the bound: the relaxation is tight on it.
+        integral=bool(found - bound <= INTEGRALITY * max(1.0, abs(bound))),
         seconds=result.seconds,
         provenance=provenance(solver),
     )

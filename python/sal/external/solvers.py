@@ -7,11 +7,13 @@ alpha-beta swap are two members of one framework. Each declares the
 refuses a call that asks for a capability the solver lacks, naming what is
 missing; :func:`invoke` asks it before anything else, so a refused call
 starts no subprocess. An absent framework raises :class:`ExternalUnavailable`
-naming its extra, and never falls back to the package's own solver.
+naming its extra, or the script that builds it, and never falls back to the
+package's own solver.
 
 :func:`provenance` reads the framework, its installed version, its licence
 and whether that licence is OSI-approved; the version comes from the
-distribution's metadata, so the framework is not imported to read it.
+distribution's metadata, so the framework is not imported to read it, or
+for a source build from the commit the build recorded (#1279).
 
 This module is step 1 of #1282. The calls that pose a problem in sal's types
 and return sal's result types reach their framework through :func:`invoke`:
@@ -30,7 +32,7 @@ from enum import StrEnum
 
 import numpy as np
 
-from sal.external.frameworks import FRAMEWORKS, Framework
+from sal.external.frameworks import FRAMEWORKS, Framework, built, built_version
 from sal.external.runner import Run, installed, run
 
 
@@ -104,6 +106,13 @@ class Solver(StrEnum):
     HIGHS_LP = "highs_lp"
     HMMLEARN = "hmmlearn"
     BLACKJAX_HMC = "blackjax_hmc"
+    OPENGM_ICM = "opengm_icm"
+    OPENGM_LBP = "opengm_lbp"
+    OPENGM_ASTAR = "opengm_astar"
+    OPENGM_TRWS = "opengm_trws"
+    OPENGM_DD = "opengm_dd"
+    OPENGM_EXPANSION = "opengm_expansion"
+    OPENGM_SWAP = "opengm_swap"
 
     @property
     def framework(self) -> Framework:
@@ -127,6 +136,9 @@ class Declaration:
 _POTTS_MOVES = frozenset(
     {Capability.GROUND_STATE, Capability.MULTI_LABEL, Capability.FORBIDDEN_LABELS}
 )
+_POTTS_BOUND = frozenset(
+    {Capability.LOWER_BOUND, Capability.MULTI_LABEL, Capability.FORBIDDEN_LABELS}
+)
 
 #: Every solver's declaration. PyMaxflow's cut is exact at q = 2 alone, so it
 #: lacks :attr:`Capability.MULTI_LABEL`; HiGHS solves the local-polytope LP,
@@ -135,7 +147,9 @@ _POTTS_MOVES = frozenset(
 #: adapter writes (#975, #997), and declares none of the other families'
 #: capabilities, so :mod:`sal.external.hmm` refuses them; BlackJAX samples
 #: the targets its script rebuilds in JAX, and adapts without a jittered
-#: step, so :mod:`sal.external.hmc` refuses the rest.
+#: step, so :mod:`sal.external.hmc` refuses the rest. OpenGM's A* is exact,
+#: its ICM, loopy BP and moves local; its TRW-S and dual decomposition bound
+#: the minimum, and neither is exact (#1279).
 DECLARED: Mapping[Solver, Declaration] = {
     Solver.GCO_EXPANSION: Declaration("gco", _POTTS_MOVES),
     Solver.GCO_SWAP: Declaration("gco", _POTTS_MOVES),
@@ -179,6 +193,13 @@ DECLARED: Mapping[Solver, Declaration] = {
             }
         ),
     ),
+    Solver.OPENGM_ICM: Declaration("opengm", _POTTS_MOVES),
+    Solver.OPENGM_LBP: Declaration("opengm", _POTTS_MOVES),
+    Solver.OPENGM_ASTAR: Declaration("opengm", _POTTS_MOVES | {Capability.EXACT}),
+    Solver.OPENGM_TRWS: Declaration("opengm", _POTTS_BOUND),
+    Solver.OPENGM_DD: Declaration("opengm", _POTTS_BOUND),
+    Solver.OPENGM_EXPANSION: Declaration("opengm", _POTTS_MOVES),
+    Solver.OPENGM_SWAP: Declaration("opengm", _POTTS_MOVES),
 }
 
 
@@ -188,7 +209,8 @@ class Provenance:
 
     #: The framework's registered name, a key of :data:`FRAMEWORKS`.
     framework: str
-    #: The installed distribution's version, as its metadata states it.
+    #: The installed distribution's version, as its metadata states it, or
+    #: the commit a source build pinned.
     version: str
     #: The licence, as the distribution declares it.
     licence: str
@@ -197,7 +219,7 @@ class Provenance:
 
 
 class ExternalUnavailable(ImportError):
-    """A solver's framework is not installed; the message names its extra."""
+    """A solver's framework is not installed; the message names its extra, or its build."""
 
     def __init__(self, solver: Solver) -> None:
         framework = solver.framework
@@ -205,7 +227,7 @@ class ExternalUnavailable(ImportError):
         self.extra = framework.extra
         message = (
             f"{solver} needs {framework.distribution}, which is not installed: "
-            f"install the `{self.extra}` extra"
+            f"{framework.remedy}"
         )
         super().__init__(message)
 
@@ -221,8 +243,11 @@ class CapabilityRefused(ValueError):
 
 
 def available(solver: Solver) -> bool:
-    """Whether ``solver``'s framework is installed, found without being imported."""
-    return installed(solver.framework.module)
+    """Whether ``solver``'s framework is installed, found without being imported or loaded."""
+    framework = solver.framework
+    if framework.build is not None:
+        return built(framework) is not None
+    return installed(framework.module)
 
 
 def provenance(solver: Solver) -> Provenance:
@@ -235,7 +260,11 @@ def provenance(solver: Solver) -> Provenance:
     framework = solver.framework
     return Provenance(
         framework=framework.name,
-        version=importlib.metadata.version(framework.distribution),
+        version=(
+            built_version(framework)
+            if framework.build is not None
+            else importlib.metadata.version(framework.distribution)
+        ),
         licence=framework.licence,
         osi=framework.osi,
     )

@@ -3,7 +3,8 @@
 `sandbox` keeps the package's own replaced implementations as referees; this
 package drives other people's. Each framework the package is checked or timed
 against has one adapter module here, one script under ``scripts/`` and one
-``validation-<framework>`` extra in ``pyproject.toml``. The adapter writes a
+``validation-<framework>`` extra in ``pyproject.toml``, or for a framework on
+no package index a build script (OpenGM's ``infra/build_opengm.sh``, #1279). The adapter writes a
 problem to an ``.npz``, runs the script under the same interpreter
 (:func:`sal.external.runner.run`), and reads the answer back
 with the wall time the script measured around the framework's own call.

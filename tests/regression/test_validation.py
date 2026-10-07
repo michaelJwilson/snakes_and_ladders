@@ -120,12 +120,17 @@ def test_only_the_scripts_import_a_framework() -> None:
 @pytest.mark.infra
 def test_every_validation_extra_is_one_registered_framework_with_a_test() -> None:
     # A framework a core dependency carries needs no extra: HiGHS is SciPy's
-    # `linprog(method="highs")` (#1063). Every other one has its extra.
+    # `linprog(method="highs")` (#1063). Nor does a source build, which names
+    # the script that builds it (OpenGM, #1279). Every other one has its extra.
     extras = _declared_extras()
     registered = {framework.extra: framework for framework in FRAMEWORKS.values()}
     core = _core_distributions()
     assert set(extras) <= set(registered)
     for extra, framework in registered.items():
+        if framework.build is not None:
+            assert extra not in extras, extra
+            assert (REPO_ROOT / framework.build).is_file(), framework.build
+            continue
         assert extra in extras or framework.distribution.lower() in core, extra
     for extra, requirements in extras.items():
         framework = registered[extra]

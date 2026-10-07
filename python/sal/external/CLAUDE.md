@@ -1,7 +1,7 @@
 # external/
 
-The package's one path to external solvers: gco, PyMaxflow, HiGHS, hmmlearn
-and BlackJAX, each posed in sal's types (#1282). `validation/` drives the same
+The package's one path to external solvers: gco, PyMaxflow, HiGHS, hmmlearn,
+BlackJAX and OpenGM, each posed in sal's types (#1282, #1279). `validation/` drives the same
 frameworks as referees for the suite and imports its runner and registry from
 here.
 
@@ -21,7 +21,9 @@ never restated. What follows is local.
   terms, a native library and its threads stay out of the package process.
 - **A refusal comes before the subprocess.** A call states the `Capability`
   set it needs; `require` refuses what the `Solver` does not declare, naming
-  it, and an absent framework raises `ExternalUnavailable` naming its extra.
+  it, and an absent framework raises `ExternalUnavailable` naming its extra,
+  or for a source build the script that builds it (OpenGM's
+  `infra/build_opengm.sh`, #1279).
   Both are read in this process, before `runner.run`. An absent framework is
   never a fallback to the package's own solver.
 - **One solver, one framework, one declaration.** A `Solver` member is one
@@ -58,8 +60,9 @@ never restated. What follows is local.
   `Solver` for the method, and returns its `MethodRun` as `ExternalRun`,
   which adds the `Provenance`; the guard is
   `tests/regression/test_external_ground_state.py`. `potts.lower_bound` is
-  `search.trws.trws`'s `graph` and `field` with a `Solver` after them, and
-  returns its `BoundedLabelling` as `ExternalBound`
+  `search.trws.trws`'s `graph` and `field` with a `Solver` after them, then
+  its `max_iterations` and `tolerance`, which OpenGM reads and HiGHS
+  refuses, and returns its `BoundedLabelling` as `ExternalBound`
   (`tests/regression/test_external_lower_bound.py`). A problem's bytes are
   posed once, in `potts_inputs.py`, for this call and the adapters alike, so
   the answers are bitwise (`tests/validation/test_gco.py`,

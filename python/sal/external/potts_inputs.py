@@ -1,4 +1,4 @@
-"""The bytes gco, PyMaxflow and HiGHS receive for a Potts model (issue #1282, steps 3 and 4).
+"""The bytes gco, PyMaxflow, HiGHS and OpenGM receive for a Potts model (issues #1282, #1279).
 
 One construction per framework, read by :func:`sal.external.potts.ground_state`
 and :func:`sal.external.potts.lower_bound`, and by the adapters
@@ -20,6 +20,19 @@ from sal.sim.potts import site_field
 
 #: HiGHS's status, from `linprog` and `milp` alike, for an optimal solution.
 OPTIMAL = 0
+
+#: The index ``infra/opengm/sal_opengm.cxx`` reads for each OpenGM algorithm,
+#: by the name its :class:`~sal.external.solvers.Solver` carries after
+#: ``opengm_`` (#1279).
+OPENGM_ALGORITHMS = {
+    "icm": 0,
+    "lbp": 1,
+    "astar": 2,
+    "trws": 3,
+    "dd": 4,
+    "expansion": 5,
+    "swap": 6,
+}
 
 #: Distance from 0 or 1 within which a node marginal reads as integral:
 #: HiGHS's default primal feasibility tolerance, 1e-7.
@@ -147,3 +160,36 @@ def polytope_inputs(
 def integral(marginals: np.ndarray) -> bool:
     """Whether every node marginal is within :data:`INTEGRALITY` of 0 or 1."""
     return bool(np.all(np.minimum(marginals, 1.0 - marginals) <= INTEGRALITY))
+
+
+def opengm_inputs(
+    graph: PottsGraph,
+    field: np.ndarray,
+    algorithm: str,
+    *,
+    max_iterations: int,
+    tolerance: float,
+    start: np.ndarray | None = None,
+) -> dict[str, np.ndarray]:
+    """OpenGM's script inputs for ``field``, finite, shape ``(n_nodes, n_states)`` (#1279).
+
+    The unary is ``-field`` and each edge ``-J [a == b]``, so OpenGM's value
+    is :func:`sal.sim.potts.energy` with no constant restored; the ends are
+    ascending within each pair, as OpenGM requires of a factor's variables,
+    and the edges in the graph's order. ``algorithm`` is a key of
+    :data:`OPENGM_ALGORITHMS`; ``max_iterations`` and ``tolerance`` set its
+    own loop.
+    """
+    edges = np.sort(graph.edge_index, axis=1)
+    inputs = {
+        "unary": np.ascontiguousarray(-field, dtype=np.float64),
+        "first": np.ascontiguousarray(edges[:, 0], dtype=np.int64),
+        "second": np.ascontiguousarray(edges[:, 1], dtype=np.int64),
+        "coupling": np.ascontiguousarray(graph.edge_coupling, dtype=np.float64),
+        "algorithm": np.asarray(OPENGM_ALGORITHMS[algorithm], dtype=np.int64),
+        "max_iterations": np.asarray(max_iterations, dtype=np.int64),
+        "tolerance": np.asarray(tolerance, dtype=np.float64),
+    }
+    if start is not None:
+        inputs["start"] = np.ascontiguousarray(start, dtype=np.int64)
+    return inputs

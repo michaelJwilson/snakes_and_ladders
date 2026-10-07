@@ -34,7 +34,10 @@ module. It is referenced here, never restated. What follows is local.
   `tests/validation/test_<name>.py`. The extra is added by the framework's
   own ticket, with the permission root `CLAUDE.md` requires. A framework a
   core dependency already carries takes no extra: HiGHS is SciPy's
-  `linprog(method="highs")` (#1063).
+  `linprog(method="highs")` (#1063). A framework on no package index takes
+  none either: its entry names the script that builds it, its script loads
+  the library that build wrote, and its tests skip naming the script
+  (OpenGM, `infra/build_opengm.sh`, #1279).
 - **A framework's runtime sets a goal.** Where a benchmark pair times the
   framework on a declared fixture, its runtime there is hardcoded as a `Goal` in
   `tests/validation/test_goals.py`, with when and where it was measured. The
@@ -49,6 +52,10 @@ module. It is referenced here, never restated. What follows is local.
   given in place of a generator. An adapter function nothing calls is
   removed (#1282, step 7).
 - **Only `tests/` imports from here.**
+- **A referee's defect is pinned, not worked around.** Where a framework's
+  own algorithm is wrong, the test pins the measured shortfall as a `bug`
+  and the oracles keep to the cases it gets right: OpenGM's expansion and
+  swap (#1279).
 - **A test here skips where its framework is absent** and carries the
   `validation` marker beside its kind. CI's `validation` job installs every
   `validation-*` extra and runs `-m validation`.

@@ -69,6 +69,18 @@ with `uv sync --locked --extra test $(python3 infra/validation_extras.py)`,
 then run `uv run pytest -m validation tests/validation`. Without its extra a
 test there skips.
 
+OpenGM (issue #1279) is on no package index and has no extra: it is built
+from source, with the host's `g++` and `git` and nothing else installed.
+`infra/build_opengm.sh` fetches the pinned commit's headers, compiles
+`infra/opengm/sal_opengm.cxx` against them into `libsal_opengm.so` and
+records the commit and the licence terms beside it, in
+`${XDG_CACHE_HOME:-~/.cache}/sal/opengm` (or `$SAL_OPENGM_HOME`). It takes
+16 s and 29 MB on the reference host, needs no Boost, HDF5 or Python
+binding, and fetches none of the research-only externals OpenGM's CMake
+downloads. A second run with nothing changed returns at once. Without the
+build, `tests/validation/test_opengm.py` skips, and a call to an OpenGM
+solver raises `ExternalUnavailable` naming the script.
+
 `track` is the one extra with an advisory against it, and the one to sync
 deliberately. It installs `aim`, the optional store behind
 `sal.track.Run` (issue #778). Nothing in the package imports

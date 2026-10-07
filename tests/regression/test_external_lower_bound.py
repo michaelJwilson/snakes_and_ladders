@@ -61,15 +61,18 @@ def test_the_signature_is_the_siblings_and_the_result_its_type() -> None:
     ours = list(inspect.signature(potts.lower_bound).parameters.values())
     theirs = inspect.signature(search.trws).parameters
     # `trws`'s `graph` and `field`, in its order and kind, then the solver;
-    # its keywords set its own loop and HiGHS has none of them.
+    # its two loop keywords, which OpenGM reads and HiGHS refuses (#1279).
     assert [p.name for p in ours] == [
         "graph",
         "field",
         "solver",
         "integral",
+        "max_iterations",
+        "tolerance",
         "timeout",
         "session",
     ]
+    assert ours[5].default == theirs["tolerance"].default
     for parameter in ours[:2]:
         assert parameter.kind is theirs[parameter.name].kind
     assert ours[2].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
@@ -207,3 +210,16 @@ def test_a_forbidden_label_is_never_chosen_and_the_ilp_is_the_allowed_minimum() 
     assert lp.bound <= ilp.bound + scale
     assert abs(ilp.bound - optimum) <= scale, (ilp.bound, optimum)
     assert abs(ilp.energy - optimum) <= scale
+
+
+@pytest.mark.analytic
+def test_a_loop_cap_is_refused_for_highs_before_any_subprocess(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # HiGHS runs its simplex to its own criterion: a cap would be ignored.
+    started = _spawns(monkeypatch)
+    with pytest.raises(ValueError, match="takes no max_iterations"):
+        potts.lower_bound(GRAPH, FIELD, Solver.HIGHS_LP, max_iterations=10)
+    with pytest.raises(ValueError, match="at least 1"):
+        potts.lower_bound(GRAPH, FIELD, Solver.OPENGM_TRWS, max_iterations=0)
+    assert started == []

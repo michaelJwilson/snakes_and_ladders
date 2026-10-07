@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import ast
 import importlib.metadata
+import re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -33,7 +34,7 @@ from sal.external import (
     runner,
     solvers,
 )
-from sal.external.frameworks import FRAMEWORKS
+from sal.external.frameworks import FRAMEWORKS, built_version
 
 PACKAGE = Path(sal.__file__).parent
 
@@ -91,21 +92,27 @@ def test_every_solver_has_a_framework_and_a_provenance() -> None:
             found = provenance(solver)
             assert found == Provenance(
                 framework=framework.name,
-                version=importlib.metadata.version(framework.distribution),
+                version=(
+                    built_version(framework)
+                    if framework.build is not None
+                    else importlib.metadata.version(framework.distribution)
+                ),
                 licence=framework.licence,
                 osi=framework.osi,
             )
         else:
-            with pytest.raises(ExternalUnavailable, match=framework.extra):
+            with pytest.raises(ExternalUnavailable, match=re.escape(framework.remedy)):
                 provenance(solver)
 
 
 @pytest.mark.infra
 def test_the_licence_flags_are_the_registered_terms() -> None:
     # gco-v3.0 is research-use only, the one non-OSI term (#974); GPL-3.0 is
-    # OSI-approved, and is why PyMaxflow stays in its subprocess.
+    # OSI-approved, and is why PyMaxflow stays in its subprocess. OpenGM is
+    # MIT, built without its research-only externals (#1279).
     assert {name for name, f in FRAMEWORKS.items() if not f.osi} == {"gco"}
     assert Solver.PYMAXFLOW_EXACT.framework.licence == "GPL-3.0"
+    assert Solver.OPENGM_TRWS.framework.licence == "MIT"
     # HiGHS ships in SciPy, a core dependency: always available, and its
     # version is SciPy's.
     assert available(Solver.HIGHS_LP)
@@ -144,7 +151,7 @@ def test_a_refusal_names_the_capability_and_starts_no_subprocess(
 
 @pytest.mark.analytic
 def test_an_absent_framework_names_its_extra_and_starts_no_subprocess(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     started = _spawns(monkeypatch)
 
@@ -153,13 +160,17 @@ def test_an_absent_framework_names_its_extra_and_starts_no_subprocess(
         return False
 
     monkeypatch.setattr(solvers, "installed", absent)
+    # A source build is absent where its build directory holds no library.
+    monkeypatch.setenv("SAL_OPENGM_HOME", str(tmp_path))
     for solver in Solver:
         assert not available(solver)
         with pytest.raises(
-            ExternalUnavailable, match=f"`{solver.framework.extra}` extra"
+            ExternalUnavailable, match=re.escape(solver.framework.remedy)
         ):
             invoke(solver, set(), {"values": np.zeros(2)})
     assert started == []
+    remedy = ExternalUnavailable(Solver.OPENGM_TRWS).args[0]
+    assert remedy.endswith("run `infra/build_opengm.sh`")
 
 
 @pytest.mark.infra

@@ -48,6 +48,7 @@ Sources: METADATA, `licenses/` and `Cargo.toml` `license` fields in the shared d
 | PyMaxflow 1.3.2 | validation | "GPL" (METADATA; version unstated) | yes | **copyleft; subprocess only, optional extra; flag: under 1,000 stars** |
 | gco-wrapper 3.0.9 | validation | MIT (METADATA, no licence file); wraps gco-v3.0 research-use | wrapper yes, **gco-v3.0 no** | **conflicts with root rule "OSI-approved"; approved on #974 as subprocess-only; flag: under 1,000 stars** |
 | hmmlearn 0.3.3 | validation | BSD (classifier) | yes | — |
+| OpenGM decdacf4 (2019, unmaintained) | validation, source build (#1279) | MIT (`Licence-OpenGM.txt`) | yes | built header-only by `infra/build_opengm.sh`, no Boost or HDF5; its CMake externals are not fetched: Kolmogorov's TRW-S v1.3 and MRF-LIB 2.1 (Microsoft, research-only), maxflow v3.02 and QPBO v1.3 (`pub.ist.ac.at`, research-only or GPL), gco-v3.0 (research-only), IBFS (`cs.tau.ac.il`); every one of those hosts returned 403 through the proxy, GitHub did not. Stars not fetched (403) |
 | scikit-learn 1.9.1 (joblib, threadpoolctl, narwhals) | validation | BSD-3-Clause (BSD-3, BSD-3, MIT) | yes | — |
 | blackjax 1.6.2 (optax 0.2.8, absl-py) | validation | Apache-2.0 | yes | **flag: about 1,000 stars** (#938) |
 | rustworkx 0.18.1 | validation | Apache-2.0 | yes | **flag: near 1,000 stars** (#322) |
