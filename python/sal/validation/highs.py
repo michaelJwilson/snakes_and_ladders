@@ -67,30 +67,23 @@ class LocalPolytope:
 
 
 def local_polytope(
-    graph: PottsGraph,
-    field: SiteField | np.ndarray,
-    *,
-    timeout: float = 600.0,
-    integral: bool = False,
+    graph: PottsGraph, field: SiteField | np.ndarray, *, timeout: float = 600.0
 ) -> LocalPolytope:
     """The local-polytope LP of ``min_x E(x)``, solved by HiGHS.
 
     ``field`` is a log-weight, ``(n_states,)`` or ``(n_nodes, n_states)``, or
     a :class:`~sal.sim.potts.SiteField`, read as :func:`sal.search.trws.trws`
-    reads it. ``timeout`` bounds the subprocess, in seconds. With
-    ``integral`` the node marginals are integer and HiGHS's ``milp`` solves
-    the ILP to a zero gap (issue #1274), HiGHS stopping itself at 0.9 of
-    ``timeout`` so the status reaches the caller: its optimal value is the
-    minimum energy, and ``iterations`` is its node count. The inputs are
+    reads it. ``timeout`` bounds the subprocess, in seconds. The inputs are
     :func:`~sal.external.potts_inputs.polytope_inputs`, which
-    :func:`sal.external.potts.lower_bound` sends too (#1282, step 4).
+    :func:`sal.external.potts.lower_bound` sends too (#1282, step 4); the ILP
+    (#1274) is ``lower_bound``'s ``integral``, not this adapter's.
     """
     values = site_field(
         np.asarray(log_weight_of(field), dtype=np.float64), graph.n_nodes
     )
     result = run(
         SCRIPT,
-        polytope_inputs(graph, values, integral=integral, time_limit=0.9 * timeout),
+        polytope_inputs(graph, values, time_limit=0.9 * timeout),
         timeout=timeout,
     )
     outputs = result.outputs
