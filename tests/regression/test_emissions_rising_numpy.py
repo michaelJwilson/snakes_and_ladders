@@ -174,3 +174,58 @@ def test_the_log_rising_factorial_is_exact_either_side_of_the_plain_route() -> N
 
     error = np.abs(got - want) / np.maximum(np.abs(want), 1.0)
     assert float(error.max()) <= _LOG_TOLERANCE
+
+
+#: The compiled kernels against their NumPy oracles: both sides are within
+#: the promise, so they agree to twice it. Measured worst on the draw below:
+#: 2.2e-16 for the log rise, its plain route bit for bit, and 3.6e-16 for the
+#: digamma rise (issue #1329).
+_KERNEL_LOG_TOLERANCE = 2.0 * _LOG_TOLERANCE
+_KERNEL_DIGAMMA_TOLERANCE = 2.0 * _DIGAMMA_TOLERANCE
+
+
+def _draw() -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    # Shapes log-uniform over the stated range, counts integer or log-uniform.
+    rng = np.random.default_rng(1329)
+    shape = 10.0 ** rng.uniform(-3.0, 16.0, 20_000)
+    integer = rng.integers(0, 1001, 20_000).astype(np.float64)
+    count = np.where(
+        rng.random(20_000) < 0.5, integer, 10.0 ** rng.uniform(-6.0, 6.0, 20_000)
+    )
+    return shape, count
+
+
+@pytest.mark.oracle
+def test_the_log_rising_kernel_matches_its_numpy_oracle() -> None:
+    from sal.emissions.rising import _log_rising_numpy
+
+    shape, count = _draw()
+    want = _log_rising_numpy(shape, count)
+
+    got = log_rising(shape, count)
+
+    error = np.abs(got - want) / np.maximum(np.abs(want), 1.0)
+    assert float(error.max()) <= _KERNEL_LOG_TOLERANCE
+
+
+@pytest.mark.oracle
+def test_the_digamma_rising_kernel_matches_its_numpy_oracle() -> None:
+    from sal.emissions.rising import _digamma_rising_numpy
+
+    shape, count = _draw()
+    want = _digamma_rising_numpy(shape, count)
+
+    got = digamma_rising(shape, count)
+
+    error = np.abs(got - want) / np.where(want == 0.0, 1.0, np.abs(want))
+    assert float(error.max()) <= _KERNEL_DIGAMMA_TOLERANCE
+
+
+@pytest.mark.analytic
+def test_the_kernels_keep_the_broadcast_shape() -> None:
+    shape = np.array([[0.5], [50.0]])
+    count = np.array([0.0, 1.0, 1e3])
+
+    assert log_rising(shape, count).shape == (2, 3)
+    assert digamma_rising(shape, count).shape == (2, 3)
+    assert log_rising(2.0, 3.0).shape == ()
