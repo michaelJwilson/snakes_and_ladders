@@ -31,15 +31,20 @@ from sal.search.mixture_starts import (
     BEST_OF_STARTS,
     DETERMINISTIC,
     POLISH_TOLERANCE,
+    SINGLE_STARTS,
     STARTS,
+    BestOf,
     MixtureInstance,
+    MixtureStart,
     MixtureTrial,
     Selection,
+    SingleStart,
     StartRow,
     TimedStart,
     best_of,
     gap_band,
     instance_from,
+    lookup,
     polish,
 )
 from sal.sim.emission_mixture import simulate_emission_mixture
@@ -494,3 +499,70 @@ def test_a_mixture_polish_and_trial_are_the_shared_types() -> None:
     assert isinstance(trial, Trial)
     assert isinstance(trial, MixtureTrial)
     assert isinstance(trial.polished, Polished)
+
+
+#: Every name `lookup` answers, the hmc best-ofs at 8.4 and 8.8 s each over
+#: the per-PR cap and run for a release; the other 34 take 7.6 s together.
+LOOKED_UP = [
+    pytest.param(name, marks=pytest.mark.release) if name.startswith("hmcx") else name
+    for name in (*SINGLE_STARTS, *BEST_OF_STARTS, *BEST_OF_EM_STARTS)
+]
+
+
+@pytest.fixture(scope="module")
+def ci_instance() -> MixtureInstance:
+    """The ci draw, built once for the per-start cases."""
+    return _instance()
+
+
+@pytest.mark.smoke
+def test_every_start_lookup_returns_declares_whether_it_polishes() -> None:
+    # Issue #1301: the seam's implementers are its declared subclasses, and
+    # `polishes` is true exactly for the best-ofs that polish every seeding.
+    assert set(MixtureStart.__subclasses__()) == {SingleStart, BestOf}
+    names = (*SINGLE_STARTS, *BEST_OF_STARTS, *BEST_OF_EM_STARTS)
+    assert all(type(lookup(name)) in MixtureStart.__subclasses__() for name in names)
+    assert {name for name in names if lookup(name).polishes} == set(BEST_OF_EM_STARTS)
+    assert list(SINGLE_STARTS) == list(STARTS)
+
+
+@pytest.mark.analytic
+@pytest.mark.parametrize("name", LOOKED_UP)
+def test_a_polished_start_ends_no_lower_than_its_seeding(
+    name: str, ci_instance: MixtureInstance
+) -> None:
+    # Issue #1301: EM does not decrease the log-likelihood, so every start's
+    # polished fit ends at or above its seeding scored at equal weights, the
+    # value the polish begins from. Bitwise: no tolerance is declared.
+    seeded, fit = lookup(name).polished(
+        ci_instance, np.random.default_rng(0), passes=PASSES.size
+    )
+    values = torch.as_tensor(ci_instance.observations, dtype=torch.float64)
+    uniform = torch.full(
+        (ci_instance.n_components,),
+        -math.log(ci_instance.n_components),
+        dtype=torch.float64,
+    )
+    scored = float(mixture_log_likelihood(values, uniform, seeded.components))
+    assert float(fit.log_likelihoods[-1]) >= scored
+
+
+@pytest.mark.analytic
+def test_a_start_that_does_not_polish_itself_seeds_then_polishes_once() -> None:
+    # Issue #1301: `polished` on a plain start and on a seeded best-of is its
+    # seeding, bitwise, and the polish of that seeding, bitwise.
+    instance = _instance()
+    for start in (lookup("emission++"), lookup(f"emission++x{BEST_OF}")):
+        assert not start.polishes
+        seeded = start(instance, np.random.default_rng(5))
+        alone = polish(instance, seeded.components, passes=PASSES.size)
+        told, fit = start.polished(
+            instance, np.random.default_rng(5), passes=PASSES.size
+        )
+        assert _equal(told.components, seeded.components)
+        assert told.passes == seeded.passes
+        assert np.array_equal(fit.log_likelihoods, alone.log_likelihoods)
+    with pytest.raises(ValueError, match="exactly one"):
+        lookup("data").polished(instance, np.random.default_rng(0))
+    with pytest.raises(ValueError, match="not a start"):
+        SingleStart("nothing")

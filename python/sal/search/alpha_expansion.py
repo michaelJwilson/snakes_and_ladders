@@ -214,7 +214,7 @@ class _CutMove(NamedTuple):
 
 def _python_source_side(arcs: _Arcs, source: int, sink: int) -> np.ndarray:
     """The Python solver's source side on ``arcs``: the oracle route."""
-    return max_flow(arcs.network(), source, sink).source_side
+    return max_flow(arcs.network(), source, sink, backend=Backend.PYTHON).source_side
 
 
 def _check_cut_backend(backend: Backend, move: str) -> None:
