@@ -53,7 +53,7 @@ pub use count_mstep::{
     beta_binomial_parameters, negative_binomial_dispersions, negative_binomial_dispersions_exposed,
 };
 pub use count_pairs::simulate_count_pairs;
-pub use coupled::{class_posteriors, external_field, factorize};
+pub use coupled::{class_posteriors, coupled_log_prior, external_field, factorize};
 pub use dense_emission::dense_log_emission;
 pub use hmc::leapfrog_trajectory;
 pub use hmm_decode::{hmm_score, hmm_viterbi};
@@ -115,6 +115,7 @@ fn oxisal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(count_mixture_value_and_gradient, m)?)?;
     m.add_function(wrap_pyfunction!(dense_log_emission, m)?)?;
     m.add_function(wrap_pyfunction!(factorize, m)?)?;
+    m.add_function(wrap_pyfunction!(coupled_log_prior, m)?)?;
     m.add_function(wrap_pyfunction!(simulate_count_pairs, m)?)?;
     m.add_function(wrap_pyfunction!(negative_binomial_dispersions, m)?)?;
     m.add_function(wrap_pyfunction!(negative_binomial_dispersions_exposed, m)?)?;

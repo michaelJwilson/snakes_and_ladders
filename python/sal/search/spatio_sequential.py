@@ -356,7 +356,7 @@ def fit_spatio_sequential(
     labels: np.ndarray | None = None,
     fit_parameters: bool = True,
     wolff_schedule: TempSchedule | None = None,
-    backend: Backend = Backend.PYTHON,
+    backend: Backend = Backend.RUST,
     min_label_sites: int = 0,
     covariate_rows: CovariateRows = "range",
 ) -> SpatioSequentialFit:
@@ -394,7 +394,11 @@ def fit_spatio_sequential(
         and :data:`~sal.backend.Backend.RUST` the tabulated
         kernel of :mod:`sal.likelihood.spatio_sequential.rust`,
         chosen inside :mod:`sal.likelihood.spatio_sequential`
-        so the three cannot be mixed (#828).
+        so the three cannot be mixed (#828). ``RUST`` is the default (issue
+        #1308): at the stress instance of ``spatio_sequential``, min of 3, it
+        is 2.08x to 2.70x the NumPy fit over the categorical, Gaussian,
+        negative-binomial and beta-binomial classes, with and without a
+        covariate; the numbers are in ``changelog.d/1308.changed.md``.
     min_label_sites : int
         At the start of every block, the sites of a class holding fewer than
         this many are relabelled uniformly from the other classes
