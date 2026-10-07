@@ -12,6 +12,7 @@ import tracemalloc
 
 import numpy as np
 import pytest
+from sal.backend import Backend
 from sal.learn.tree import with_uniform_branch_lengths
 from sal.likelihood import pruning
 from sal.qa.likelihood_footprint import (
@@ -116,7 +117,7 @@ def test_a_balanced_topology_costs_strictly_less_than_the_caterpillar() -> None:
             ).alignment
         )
         tracemalloc.start()
-        pruning.log_likelihood(tau, 4, pi, alignment)
+        pruning.log_likelihood(tau, 4, pi, alignment, backend=Backend.PYTHON)
         _, peak = tracemalloc.get_traced_memory()
         tracemalloc.stop()
         peaks.append(float(peak))

@@ -36,7 +36,9 @@ def test_relative_tolerance_transfers_to_fixture_scale() -> None:
     """
     params, alignment = simulated_alignment(FOUR_TAXA)
 
-    numpy_ll = pruning.log_likelihood(params.tau, params.n_states, params.pi, alignment)
+    numpy_ll = pruning.log_likelihood(
+        params.tau, params.n_states, params.pi, alignment, backend=Backend.PYTHON
+    )
     rust_ll = pruning_rust.log_likelihood(
         params.tau, params.n_states, params.pi, alignment
     )

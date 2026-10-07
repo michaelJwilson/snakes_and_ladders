@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import itertools
 import math
+from functools import partial
 
 import numpy as np
 import pytest
@@ -153,9 +154,17 @@ ABLATION_SWEEPS = 2_000
 KERNEL_TRIALS = 12_500
 
 
-def _goodness_of_fit(move: PottsMove, field: np.ndarray, seed: int = SEED) -> float:
+def _goodness_of_fit(
+    move: PottsMove,
+    field: np.ndarray,
+    seed: int = SEED,
+    cluster_backend: Backend | None = None,
+) -> float:
+    """The chi-square p-value of one chain; ``None`` runs the package's default pass."""
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
-    return _chi_square_against(graph, field, move, seed)
+    return _chi_square_against(
+        graph, field, move, seed, cluster_backend=cluster_backend
+    )
 
 
 def _chi_square_against(
@@ -164,12 +173,14 @@ def _chi_square_against(
     move: PottsMove,
     seed: int,
     sweeps: int | None = None,
+    *,
+    cluster_backend: Backend | None = None,
 ) -> float:
     """One chain's realized frequencies against the enumerated Boltzmann law."""
     index, probability = enumerated_law(graph, field)
     sweeps = SWEEPS_BY_MOVE[move] if sweeps is None else sweeps
-
-    chain = sample_potts(
+    run = partial(
+        sample_potts,
         graph,
         field,
         move,
@@ -178,6 +189,7 @@ def _chi_square_against(
         burn_in=sweeps // 10,
         thin=THINNING[move],
     )
+    chain = run() if cluster_backend is None else run(cluster_backend=cluster_backend)
 
     return fit_p_value(index, probability, chain.states, sweeps)
 
@@ -201,6 +213,20 @@ def test_the_chain_is_still_exact_in_an_external_field(
     # does not. The per-site field is the one whose accept step sums over the
     # cluster's own sites rather than scaling one shared difference (#919).
     assert _goodness_of_fit(move, FIELDS[field]) > SIGNIFICANCE
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("field", list(FIELDS))
+def test_the_python_swendsen_wang_pass_is_exact_in_an_external_field(
+    field: str,
+) -> None:
+    # The two tests above run the default pass, compiled since #1283; this
+    # holds the oracle's own pass to the same law.
+    p_value = _goodness_of_fit(
+        PottsMove.SWENDSEN_WANG, FIELDS[field], cluster_backend=Backend.PYTHON
+    )
+
+    assert p_value > SIGNIFICANCE
 
 
 @pytest.mark.smoke
@@ -231,7 +257,10 @@ def test_dropping_the_field_accept_step_is_caught(
     called: list[None] = []
     monkeypatch.setattr(sweeps, "_recolour", unconditional)
 
-    assert _goodness_of_fit(move, FIELDS[field]) < SIGNIFICANCE
+    # The stub replaces the oracle's recolouring, so the oracle's pass runs;
+    # the compiled pass's power is `test_potts_mcmc_cluster_rust.py`'s.
+    p_value = _goodness_of_fit(move, FIELDS[field], cluster_backend=Backend.PYTHON)
+    assert p_value < SIGNIFICANCE
     assert called, "the stub never ran: the patch missed the sweep"
 
 
@@ -957,6 +986,8 @@ def _autocorrelation_in_site_updates(move: PottsMove, graph: PottsGraph) -> floa
     field = CRITICAL.field
     factor = WOLFF_SWEEPS if move is PottsMove.WOLFF else 1
 
+    # The pinned values are the oracle stream's (docs/experiments/001), so
+    # the oracle's cluster pass runs; the compiled one draws another (#1283).
     chain: PottsChain = sample_potts(
         graph,
         field,
@@ -964,6 +995,7 @@ def _autocorrelation_in_site_updates(move: PottsMove, graph: PottsGraph) -> floa
         np.random.default_rng(CRITICAL.seed),
         CRITICAL.n_samples * factor,
         burn_in=CRITICAL.burn_in * factor,
+        cluster_backend=Backend.PYTHON,
     )
     tau = integrated_autocorrelation_time(energies(graph, field, chain.states))
     return tau * chain.mean_cluster_size / graph.n_nodes

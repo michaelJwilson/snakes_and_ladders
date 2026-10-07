@@ -13,6 +13,7 @@ from collections import Counter
 import numpy as np
 import pytest
 import torch
+from sal.backend import Backend
 from sal.likelihood import pruning
 from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
 from sal.likelihood.patterns import SitePatterns, check_weights, compress
@@ -88,9 +89,16 @@ def test_the_compressed_log_likelihood_equals_the_uncompressed() -> None:
         compressed = patterns.alignment
         pi = np.asarray(params.pi)
 
-        full = pruning.log_likelihood(params.tau, params.n_states, pi, alignment)
+        full = pruning.log_likelihood(
+            params.tau, params.n_states, pi, alignment, backend=Backend.PYTHON
+        )
         assert pruning.log_likelihood(
-            params.tau, params.n_states, pi, compressed, weights=patterns.weights
+            params.tau,
+            params.n_states,
+            pi,
+            compressed,
+            weights=patterns.weights,
+            backend=Backend.PYTHON,
         ) == pytest.approx(full, rel=CROSS_DEVICE_RTOL_FLOAT64)
 
         lengths = branch_lengths_from_tree(params.tau)
@@ -182,9 +190,16 @@ def test_an_uncompressible_alignment_compresses_to_itself() -> None:
     assert np.array_equal(patterns.weights, np.ones(n_sites, dtype=np.int64))
     pi = np.asarray(params.pi)
     assert pruning.log_likelihood(
-        params.tau, params.n_states, pi, patterns.alignment, weights=patterns.weights
+        params.tau,
+        params.n_states,
+        pi,
+        patterns.alignment,
+        weights=patterns.weights,
+        backend=Backend.PYTHON,
     ) == pytest.approx(
-        pruning.log_likelihood(params.tau, params.n_states, pi, alignment),
+        pruning.log_likelihood(
+            params.tau, params.n_states, pi, alignment, backend=Backend.PYTHON
+        ),
         rel=CROSS_DEVICE_RTOL_FLOAT64,
     )
 
@@ -195,7 +210,12 @@ def test_a_malformed_weight_or_alignment_is_refused() -> None:
     pi = np.asarray(params.pi)
     with pytest.raises(ValueError, match="one per column"):
         pruning.log_likelihood(
-            params.tau, params.n_states, pi, alignment, weights=np.ones(3)
+            params.tau,
+            params.n_states,
+            pi,
+            alignment,
+            weights=np.ones(3),
+            backend=Backend.PYTHON,
         )
     with pytest.raises(ValueError, match="non-negative"):
         check_weights(-np.ones(4), 4)

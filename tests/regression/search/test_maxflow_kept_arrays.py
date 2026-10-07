@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from sal.backend import Backend
 from sal.search.maxflow import FlowNetwork, max_flow
 
 
@@ -56,7 +57,7 @@ def test_every_writer_drops_the_kept_form() -> None:
 
     solved = _network()
     before = solved.as_arrays().capacity.copy()
-    max_flow(solved, 0, 1)
+    max_flow(solved, 0, 1, backend=Backend.PYTHON)
     after = solved.as_arrays().capacity
     # The residual capacities are what a second call sees, which is only true
     # if the solve dropped the form built from the originals.
