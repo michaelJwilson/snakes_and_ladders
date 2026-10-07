@@ -3181,6 +3181,16 @@ its serial run bitwise, and `"auto"` equals the chosen schedule given explicitly
 bitwise. `potts_keyed.cluster_moves` takes `move` and `recolour`. Pinned in
 `tests/regression/sample/test_potts_schedule_tuning.py`.
 
+**The Potts caller's gaps** ([#1324](https://github.com/michaelJwilson/snakes_and_ladders/issues/1324)).
+`merge_small_labels(policy=FloorPolicy.SMALLEST_FIRST_BEST_FIELD)` floors with no
+draws, its numba kernel bitwise its Python oracle on six instances, three with
+forbidden labels. Every `ground_state` entry, backend and start on four small
+graphs with forbidden labels returns an allowed labelling except bifurcation,
+which rounded onto one at 2x4, q = 4 and now leaves it. `ScheduleParams.warm`
+holds `t_start` before the ramp, `warm = 0` bitwise; `from_directed_csr(scale=)`
+is bitwise the hand-scaled graph. Pinned in `test_merge_small_labels.py`,
+`test_forbidden_labels.py`, `test_schedule_params.py` and `test_graph_csr.py`.
+
 ## Milestone 2.0 — RL Definition
 
 **Landed as `app:rl` in the textbook**
