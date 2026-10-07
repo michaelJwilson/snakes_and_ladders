@@ -23,7 +23,7 @@ per ``likelihood/CLAUDE.md``.
 ``log_likelihood`` takes a ``backend``, which is a **door and not a rung**
 (issue #860): ``Backend.RUST`` calls ``likelihood.pruning.rust``'s own entry point with
 the arguments it was given and returns what it returns, and the recursion
-below is reached on ``Backend.PYTHON``, the default. No arithmetic moved and
+below is reached on ``Backend.PYTHON``; ``RUST`` is the default (#1283). No arithmetic moved and
 no rung merged --- ``likelihood.pruning.rust`` keeps its entry point and its bitwise
 pin, and this oracle gained no code from the route it referees.
 """
@@ -48,7 +48,7 @@ def log_likelihood(
     *,
     weights: np.ndarray | None = None,
     rescale: bool = True,
-    backend: Backend = Backend.PYTHON,
+    backend: Backend = Backend.RUST,
 ) -> float:
     """Total log-likelihood of an alignment under the k-state Jukes-Cantor model.
 
@@ -77,12 +77,12 @@ def log_likelihood(
         so tests can check the two paths agree on small problems where both
         run.
     backend : Backend
-        Which implementation runs it. ``PYTHON`` is this module's own
-        recursion, the oracle, and is the default: a caller who does not ask
-        gets the reference (issue #860). ``RUST`` is
-        ``sal.likelihood.pruning.rust``'s call, the one the
-        caller made by importing that module, reached through the enum every
-        other twin is reached through. ``TORCH`` is
+        Which implementation runs it. ``RUST``, the default since #1283, is
+        ``sal.likelihood.pruning.rust``'s call, reached through the enum every
+        other twin is reached through: 15.5x the oracle on
+        ``tree_jc/stress.yaml`` and within ``CROSS_DEVICE_RTOL_FLOAT64`` of
+        it, not bitwise. ``PYTHON`` is this module's own recursion, the
+        oracle, and was the default before (issue #860). ``TORCH`` is
         ``sal.likelihood.pruning.torch`` at the branch lengths ``tau``
         carries, its tape detached: the value alone, for a caller comparing
         backends (issue #1059); a caller that differentiates takes the tensor

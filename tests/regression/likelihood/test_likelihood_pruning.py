@@ -16,6 +16,7 @@ from dataclasses import replace
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
+from sal.backend import Backend
 from sal.likelihood.brute_force import brute_force_log_likelihood
 from sal.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
 from sal.likelihood.pruning import log_likelihood
@@ -144,7 +145,7 @@ def test_pulley_principle_is_invariant_to_root_position() -> None:
     assert right.branch_length is not None
     total = left.branch_length + right.branch_length
 
-    baseline = log_likelihood(tau, k, pi, dataset.alignment)
+    baseline = log_likelihood(tau, k, pi, dataset.alignment, backend=Backend.PYTHON)
 
     for t1 in (0.01, total / 4, total / 2, total * 3 / 4, total - 0.01):
         slid = replace(
@@ -155,7 +156,7 @@ def test_pulley_principle_is_invariant_to_root_position() -> None:
             ),
         )
         assert_allclose(
-            log_likelihood(slid, k, pi, dataset.alignment),
+            log_likelihood(slid, k, pi, dataset.alignment, backend=Backend.PYTHON),
             baseline,
             rtol=CROSS_DEVICE_RTOL_FLOAT64,
         )
@@ -166,7 +167,7 @@ def test_generating_topology_outscores_random_wrong_topologies() -> None:
     params, alignment = simulated_alignment("tree_jc/release.yaml")
 
     true_log_likelihood = log_likelihood(
-        params.tau, params.n_states, params.pi, alignment
+        params.tau, params.n_states, params.pi, alignment, backend=Backend.PYTHON
     )
 
     leaf_names = [node.name for node in preorder(params.tau) if node.is_leaf]
@@ -181,7 +182,9 @@ def test_generating_topology_outscores_random_wrong_topologies() -> None:
         mapping = dict(zip(leaf_names, permuted, strict=True))
         wrong_tau = _relabel_leaves(params.tau, mapping)
         wrong_log_likelihoods.append(
-            log_likelihood(wrong_tau, params.n_states, params.pi, alignment)
+            log_likelihood(
+                wrong_tau, params.n_states, params.pi, alignment, backend=Backend.PYTHON
+            )
         )
 
     assert true_log_likelihood > max(wrong_log_likelihoods)

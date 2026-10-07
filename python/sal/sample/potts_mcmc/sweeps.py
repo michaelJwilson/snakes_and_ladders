@@ -590,7 +590,7 @@ def swendsen_wang_sweep(
     rng: np.random.Generator,
     counter: ClusterCounter | None = None,
     beta: float = 1.0,
-    backend: Backend = Backend.PYTHON,
+    backend: Backend = Backend.RUST,
 ) -> None:
     """Activate bonds, find clusters, recolour each one.
 
@@ -607,10 +607,11 @@ def swendsen_wang_sweep(
     rebuilding the graph per schedule step. At 1.0 it is the identity.
 
     ``backend`` names which implementation runs the pass.
-    :data:`~sal.backend.Backend.PYTHON` is this one, the
-    oracle, and is the default for the reason :func:`_cluster_pass_rust`
-    states: the two draw the same uniforms in a different order, so the Rust
-    pass is a chain of the same law and not the same chain. A ``counter`` is
+    :data:`~sal.backend.Backend.PYTHON` is this one, the oracle. The two draw
+    the same uniforms in a different order, so the Rust pass is a chain of
+    the same law and not the same chain (:func:`_cluster_pass_rust`);
+    :data:`~sal.backend.Backend.RUST` is the default all the same, at 47.2x
+    the oracle per pass on a 64x64 lattice (#1283). A ``counter`` is
     refused on the Rust route rather than silently ignored --- the
     instrumentation reads each cluster's members, which is the gather the
     port removes.
@@ -695,8 +696,7 @@ def _cluster_pass_rust(
     colour and one uniform per cluster in bulk, each independent and
     identically distributed as the oracle's own: the chain is of the same law
     and is not the same chain, which is why
-    :data:`~sal.backend.Backend.PYTHON` stays the default and
-    why the pin is the enumerated law rather than the oracle's stream
+    the pin is the enumerated law rather than the oracle's stream
     (`tests/regression/search/test_potts_mcmc_cluster_rust.py`).
 
     **Given the same draws it is the oracle bitwise, by construction.** The

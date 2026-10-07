@@ -213,7 +213,7 @@ def strip_log_partition_target() -> LatticeTarget:
 
 
 def ground_state_target(
-    n_states: int, *, backend: Backend = Backend.PYTHON
+    n_states: int, *, backend: Backend = Backend.RUST
 ) -> LatticeTarget:
     """The energy alpha-expansion reaches from the per-site data optimum: one discrete solve per call.
 
@@ -227,7 +227,8 @@ def ground_state_target(
     ``backend`` reaches :func:`~sal.search.alpha_expansion.expand`'s
     minimum cut and nothing else. Both settle on the same labelling, the cut
     being deterministic, and on ``spatio_only/release.yaml`` both return
-    ``-10454.156290057308``.
+    ``-10454.156290057308``; ``RUST``, the default since #1283, takes 152 ms
+    there against the oracle's 21.0 s.
     """
 
     def target(graph: PottsGraph, field: np.ndarray) -> float:
