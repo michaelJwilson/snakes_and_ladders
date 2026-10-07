@@ -91,3 +91,12 @@ draws reach it without the module importing their type.
   together, which `STATUS.md` records under #756. A placement reports the
   warm-up it was read from, and a criterion is compared against another
   criterion at equal rungs and equal warm-up or not at all.
+
+## Measured mixing limits
+
+A move whose law enumeration pins and whose chain still does not mix on an
+instance, as measured; a row is not a defect and the move stays.
+
+| Move | Instance | Measured | Issue |
+| --- | --- | --- | --- |
+| Niedermayer | 64 x 64 periodic, q = 3, field N(0, 1) per (site, label), 1.5 beta_c, from the ordered start | the cluster holds 4,070 to 4,084 of 4,096 sites, so the transposition moves a field sum of order sigma sqrt(N); 0.0% to 0.3% of 320 moves accepted over three seeds, occupancy (0, 0, 1) against Glauber's (0.299, 0.313, 0.388). From a Glauber-equilibrated start: clusters of 485 to 503 sites, 0.3% to 3.0% accepted. The 2 x 3 law passes (p = 0.133) | #1314 |
