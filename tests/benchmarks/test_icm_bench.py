@@ -112,3 +112,25 @@ def test_merge_labels_benchmark(benchmark: BenchmarkFixture) -> None:
     merged = benchmark(merge_labels, rung.graph, rung.field, start)
 
     assert merged.termination.converged
+
+
+@pytest.mark.parametrize("backend", [Backend.NUMBA, Backend.PYTHON], ids=str)
+def test_smallest_first_floor_benchmark(
+    benchmark: BenchmarkFixture, backend: Backend
+) -> None:
+    # The deterministic floor alone (#1324), at release size: 5,041 sites, ten
+    # states of Dirichlet(0.5) sizes, so several sit below the 1% floor.
+    from sal.search.icm import _floor_smallest_first
+    from sal.search.icm.numba import floor_smallest_first
+
+    rng = np.random.default_rng(1324)
+    values = rng.normal(0.0, 1.0, (5041, 10))
+    labels = rng.choice(10, 5041, p=rng.dirichlet(np.full(10, 0.5))).astype(np.int64)
+    floor = floor_smallest_first if backend is Backend.NUMBA else _floor_smallest_first
+    moved = benchmark.pedantic(  # type: ignore[no-untyped-call]
+        lambda: floor(labels.copy(), values, MIN_SITES),
+        rounds=5,
+        iterations=1,
+        warmup_rounds=1,
+    )
+    assert moved >= 0
