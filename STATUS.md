@@ -3169,6 +3169,17 @@ at zero coupling to 1.7e-16, keeps `pi` to 2.1e-17 and, composed, is
 irreducible; at `beta = 1e12` the Gibbs sweep is ICM's on all 486 allowed
 starts. Pinned in `tests/regression/sample/test_potts_recolour.py`.
 
+**Cluster-move defaults: heat bath, composed with Gibbs**
+([#1323](https://github.com/michaelJwilson/snakes_and_ladders/issues/1323)).
+`recolour` defaults to `Recolour.PER_MOVE` (heat bath for Wolff and
+Swendsen-Wang, uniform for the moves without that form), and a bare `WOLFF` or
+`SWENDSEN_WANG` runs with a Gibbs sweep per step. On #1322's 2 x 3 fixture the
+defaults fit the enumerated law at p = 0.083 (Wolff) and p = 0.618
+(Swendsen-Wang), declared 1e-3, with no visit off the support; the composed
+Wolff heat-bath kernel is irreducible. `search.ground_state`'s arms keep the
+uniform move alone, so their recorded schedules and energies hold bitwise.
+Pinned in `tests/regression/sample/test_potts_recolour.py`.
+
 **A tuned schedule on every annealed Potts entry point**
 ([#1317](https://github.com/michaelJwilson/snakes_and_ladders/issues/1317), stage 2
 of 2; the default flips are #1323). `schedule="auto"` on `anneal_potts` and `betas="auto"` on

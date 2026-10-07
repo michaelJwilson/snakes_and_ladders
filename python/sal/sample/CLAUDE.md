@@ -101,12 +101,26 @@ draws reach it without the module importing their type.
   each pair of calls to bitwise-equal relabellings.
 
 **One field behaviour on every Potts entry point (#1317).** Every entry point
-takes `move` as a move set applied in order, a single `PottsMove` being its
-one-element set bitwise, and `recolour`: a cluster's label is drawn by
-`Recolour.HEAT_BATH` or proposed by `Recolour.UNIFORM`, resolved once by
-`move_set`. A move with no heat-bath form refuses `HEAT_BATH` by name rather
-than ignoring it. A new entry point without both fails
-`tests/regression/sample/test_potts_recolour.py`.
+takes `move` as a move set applied in order and `recolour`: a cluster's
+label is drawn by `Recolour.HEAT_BATH` or proposed by `Recolour.UNIFORM`,
+resolved once by `move_set`. A move with no heat-bath form refuses
+`HEAT_BATH` by name rather than ignoring it. A new entry point without both
+fails `tests/regression/sample/test_potts_recolour.py`.
+
+**The defaults are the law-preserving move, not the old one (#1323).** The
+default `recolour=Recolour.PER_MOVE` is `HEAT_BATH` for Wolff and
+Swendsen-Wang and `UNIFORM` for Niedermayer, ghost-spin and label-directed,
+which have no heat-bath form. Composition is read from the type: a bare
+`WOLFF` or `SWENDSEN_WANG` runs with a single-site Gibbs sweep per step
+(`moves.composed`), a sequence runs exactly as given. Why: the uniform
+proposal freezes under a per-site field (#1314: 1 of 320 accepted), and a
+cluster move alone is not ergodic under a forbidden label. The move before
+#1323 is `move=[PottsMove.WOLFF], recolour=Recolour.UNIFORM`. `step_visits`
+sums over the set, so a composed step is charged both sweeps.
+`potts_keyed.cluster_moves` keeps keyed Wolff uniform under `PER_MOVE` (its
+action names the label) and composes nothing (an arm applies one move). A
+caller whose pins record a measured result (`search.ground_state`'s arms)
+passes the old move explicitly.
 
 **A schedule is given or tuned, never defaulted (#1317).** Every annealed
 Potts entry point takes its schedule (`schedule`, or `betas` for a ladder of

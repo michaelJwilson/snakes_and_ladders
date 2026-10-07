@@ -19,7 +19,7 @@ import itertools
 import numpy as np
 import pytest
 from sal.backend import Backend
-from sal.sample.potts_mcmc import PottsMove, chains, parallel_tempering
+from sal.sample.potts_mcmc import PottsMove, Recolour, chains, parallel_tempering
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from sal.sim.potts import energy
 
@@ -161,7 +161,9 @@ def _empirical_row(move: PottsMove, rows: np.ndarray, draws: int) -> np.ndarray:
             TEMPERATURES,
             rng,
             1,
-            move=move,
+            # The move alone and uniform, the kernel the row is built from (#1323).
+            move=[(move,)] * len(TEMPERATURES),
+            recolour=Recolour.UNIFORM,
             cluster_backend=Backend.PYTHON,
             start=start,
         )
@@ -301,7 +303,7 @@ def test_spent_charges_each_move_as_annealing_does() -> None:
     per_sweep = graph.n_nodes + 2 * len(graph.edges)
     per_site = 1 + 2 * len(graph.edges) // graph.n_nodes
 
-    def spent(move: PottsMove) -> int:
+    def spent(move: object) -> int:
         return parallel_tempering(
             graph,
             np.zeros(3),
@@ -309,14 +311,19 @@ def test_spent_charges_each_move_as_annealing_does() -> None:
             np.random.default_rng(0),
             steps - 5,
             burn_in=5,
-            move=move,
+            move=move,  # type: ignore[arg-type]
         ).spent
 
-    assert spent(PottsMove.SINGLE_SITE) == steps * replicas * per_sweep
-    assert spent(PottsMove.SWENDSEN_WANG) == steps * replicas * per_sweep
-    wolff = spent(PottsMove.WOLFF)
+    # A bare cluster move runs with a Gibbs sweep (#1323) and is charged
+    # both: step visits sum over the set, so budgets stay matched.
+    gibbs = steps * replicas * per_sweep
+    assert spent(PottsMove.SINGLE_SITE) == gibbs
+    assert spent([(PottsMove.SWENDSEN_WANG,)] * replicas) == gibbs
+    assert spent(PottsMove.SWENDSEN_WANG) == 2 * gibbs
+    wolff = spent([(PottsMove.WOLFF,)] * replicas)
     assert wolff % per_site == 0
-    assert steps * replicas * per_site <= wolff <= steps * replicas * per_sweep
+    assert steps * replicas * per_site <= wolff <= gibbs
+    assert spent(PottsMove.WOLFF) - gibbs in range(steps * replicas, gibbs + 1)
 
 
 @pytest.mark.smoke

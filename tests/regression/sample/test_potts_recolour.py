@@ -84,13 +84,18 @@ CHAINS = [
     for recolour in (Recolour.HEAT_BATH, Recolour.UNIFORM)
     for cluster in (PottsMove.WOLFF, PottsMove.SWENDSEN_WANG)
     for moves in ((cluster,), (cluster, PottsMove.SINGLE_SITE))
+] + [
+    # Issue #1323: the defaults, a bare move under ``PER_MOVE``, which
+    # resolves to the heat-bath move composed with a Gibbs sweep.
+    (cluster, Recolour.PER_MOVE)
+    for cluster in (PottsMove.WOLFF, PottsMove.SWENDSEN_WANG)
 ]
 
 
 @pytest.mark.oracle
 @pytest.mark.parametrize(("moves", "recolour"), CHAINS)
 def test_each_recolour_and_move_set_leaves_the_boltzmann_law_invariant(
-    moves: tuple[PottsMove, ...], recolour: Recolour
+    moves: PottsMove | tuple[PottsMove, ...], recolour: Recolour
 ) -> None:
     """Chi-square of the thinned chain against the enumerated law, with no visit off its support."""
     graph = _graph()
@@ -246,7 +251,7 @@ def test_the_wolff_heat_bath_code_matches_its_matrix_at_zero_coupling() -> None:
     offsets, neighbours, couplings = graph.compressed_adjacency()
     rows = np.ascontiguousarray(FIELD)
     step = potts_mcmc.sweep_for(
-        PottsMove.WOLFF,
+        [PottsMove.WOLFF],
         graph,
         rows,
         offsets,
@@ -315,7 +320,7 @@ def test_the_deprecated_members_are_the_move_with_heat_bath_bitwise(
     run: Callable[..., np.ndarray] = lambda m, **kw: sample_potts(  # noqa: E731
         graph, FIELD, m, np.random.default_rng(SEED), 200, **kw
     ).states
-    np.testing.assert_array_equal(run(alias), run(move, recolour=Recolour.HEAT_BATH))
+    np.testing.assert_array_equal(run(alias), run([move], recolour=Recolour.HEAT_BATH))
     assert move_set(alias, Recolour.UNIFORM) == (alias,)
 
 
@@ -323,10 +328,11 @@ def test_the_deprecated_members_are_the_move_with_heat_bath_bitwise(
 @pytest.mark.parametrize(
     "move", [PottsMove.SINGLE_SITE, PottsMove.WOLFF, PottsMove.SWENDSEN_WANG]
 )
-def test_a_single_move_is_its_one_element_move_set_bitwise(move: PottsMove) -> None:
+def test_a_single_move_is_its_resolved_move_set_bitwise(move: PottsMove) -> None:
+    """A bare move runs bitwise as the sequence :func:`move_set` resolves it to (#1323)."""
     graph = _graph()
     one = sample_potts(graph, FIELD, move, np.random.default_rng(SEED), 200)
-    seq = sample_potts(graph, FIELD, [move], np.random.default_rng(SEED), 200)
+    seq = sample_potts(graph, FIELD, move_set(move), np.random.default_rng(SEED), 200)
     np.testing.assert_array_equal(one.states, seq.states)
     assert one.mean_cluster_size == seq.mean_cluster_size
 
@@ -382,9 +388,51 @@ def test_every_potts_entry_point_takes_a_move_set_and_recolour(
 ) -> None:
     parameters = inspect.signature(entry).parameters
     assert "recolour" in parameters
-    assert parameters["recolour"].default is Recolour.UNIFORM
+    assert parameters["recolour"].default is Recolour.PER_MOVE
     annotation = str(parameters["move"].annotation)
     assert annotation in {"PottsMoves", "RungMoves"}, annotation
+
+
+#: Each cluster move's default: what a bare move resolves to under the
+#: entry points' default ``recolour`` (issue #1323). Wolff and Swendsen-Wang
+#: take the heat bath and a Gibbs sweep; the moves with no heat-bath form keep
+#: the uniform proposal and run alone.
+DEFAULTS = {
+    PottsMove.WOLFF: (PottsMove.WOLFF_HEAT_BATH, PottsMove.SINGLE_SITE),
+    PottsMove.SWENDSEN_WANG: (
+        PottsMove.SWENDSEN_WANG_HEAT_BATH,
+        PottsMove.SINGLE_SITE,
+    ),
+    PottsMove.NIEDERMAYER: (PottsMove.NIEDERMAYER,),
+    PottsMove.GHOST_SPIN: (PottsMove.GHOST_SPIN,),
+    PottsMove.LABEL_DIRECTED: (PottsMove.LABEL_DIRECTED,),
+}
+
+
+@pytest.mark.analytic
+@pytest.mark.parametrize(("move", "resolved"), DEFAULTS.items(), ids=str)
+def test_each_cluster_move_has_its_stated_default_recolour_and_composition(
+    move: PottsMove, resolved: tuple[PottsMove, ...]
+) -> None:
+    """The default per move, and the move before #1323 one flag away."""
+    default = inspect.signature(move_set).parameters["recolour"].default
+    assert default is Recolour.PER_MOVE
+    assert move_set(move) == resolved
+    assert move_set([move], Recolour.UNIFORM) == (move,)
+
+
+@pytest.mark.analytic
+def test_the_keyed_defaults_keep_wolff_uniform_and_heat_bath_swendsen_wang() -> None:
+    """A keyed Wolff action names its label, so ``PER_MOVE`` keeps it uniform (#1323)."""
+    built = potts_keyed.cluster_moves(_graph(), FIELD)
+    uniform = potts_keyed.cluster_moves(_graph(), FIELD, recolour=Recolour.UNIFORM)
+    for moves, recolour in ((built, Recolour.HEAT_BATH), (uniform, Recolour.UNIFORM)):
+        swendsen_wang = moves[potts_mcmc.MoveKind.SWENDSEN_WANG]
+        assert isinstance(swendsen_wang, potts_keyed.SwendsenWangMove)
+        assert swendsen_wang._recolour is recolour
+    assert set(built) == set(uniform)
+    with pytest.raises(ValueError, match="names the label"):
+        potts_keyed.cluster_moves(_graph(), FIELD, recolour=Recolour.HEAT_BATH)
 
 
 @pytest.mark.smoke

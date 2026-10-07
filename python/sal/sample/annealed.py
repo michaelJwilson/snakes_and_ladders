@@ -253,7 +253,7 @@ def _population(
     move: PottsMoves,
     backend: Backend,
     cluster_backend: Backend,
-    recolour: Recolour = Recolour.UNIFORM,
+    recolour: Recolour = Recolour.PER_MOVE,
 ) -> tuple[
     np.ndarray,
     list[np.random.Generator],
@@ -289,7 +289,15 @@ def _population(
     )
     offsets, neighbours, couplings = graph.compressed_adjacency()
     advance = sweep_for(
-        move, graph, rows, offsets, neighbours, couplings, backend, cluster_backend
+        move,
+        graph,
+        rows,
+        offsets,
+        neighbours,
+        couplings,
+        backend,
+        cluster_backend,
+        recolour=recolour,
     )
     return states, children, advance, rows
 
@@ -314,7 +322,7 @@ def annealed_importance_sampling(
     n_replicas: int,
     *,
     move: PottsMoves = PottsMove.SINGLE_SITE,
-    recolour: Recolour = Recolour.UNIFORM,
+    recolour: Recolour = Recolour.PER_MOVE,
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.RUST,
     tuning: ScheduleTuning | None = None,
@@ -461,7 +469,7 @@ def population_annealing(
     n_replicas: int,
     *,
     move: PottsMoves = PottsMove.SINGLE_SITE,
-    recolour: Recolour = Recolour.UNIFORM,
+    recolour: Recolour = Recolour.PER_MOVE,
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.RUST,
     tuning: ScheduleTuning | None = None,
@@ -636,7 +644,7 @@ def simulated_tempering(
     thin: int = 1,
     *,
     move: PottsMoves = PottsMove.SINGLE_SITE,
-    recolour: Recolour = Recolour.UNIFORM,
+    recolour: Recolour = Recolour.PER_MOVE,
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.RUST,
     tuning: ScheduleTuning | None = None,
@@ -717,7 +725,15 @@ def simulated_tempering(
     move = move_set(move, recolour)
     refuse_negative_coupling(move, graph)
     advance = sweep_for(
-        move, graph, rows, offsets, neighbours, couplings, backend, cluster_backend
+        move,
+        graph,
+        rows,
+        offsets,
+        neighbours,
+        couplings,
+        backend,
+        cluster_backend,
+        recolour=recolour,
     )
 
     rung = 0

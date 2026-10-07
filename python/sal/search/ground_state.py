@@ -87,6 +87,7 @@ from sal.opt.termination import Stop, Termination
 from sal.sample.potts_mcmc import (
     ClusterCounter,
     PottsMove,
+    Recolour,
     RungMoves,
     anneal_potts,
     moves_per_rung,
@@ -662,7 +663,10 @@ def run_annealed(
         problem.field,
         schedule.build(count),
         rng,
-        move=move,
+        # The arm is the move alone under the uniform recolouring, the run its
+        # recorded schedules and energies were measured on (issue #1323).
+        move=(move,),
+        recolour=Recolour.UNIFORM,
         cluster_backend=Backend.RUST if move in _COMPILED_CLUSTERS else Backend.PYTHON,
         start=start,
     )
@@ -1062,7 +1066,12 @@ def run_tempering(
     """
     _refuse_start("tempering", start, "its ladder draws one labelling per replica")
     problem = _problem(problem)
-    per_rung = moves_per_rung(move, N_REPLICAS)
+    # Each bare move alone, as recorded: a sequence is taken as given (#1323).
+    entries = [move] * N_REPLICAS if isinstance(move, PottsMove) else list(move)
+    per_rung = moves_per_rung(
+        [(each,) if isinstance(each, PottsMove) else each for each in entries],
+        N_REPLICAS,
+    )
     per_step = sum(step_cost(problem, each) for rung in per_rung for each in rung)
     per_replica = max(1, budget.size // per_step)
     ladder = tempering_ladder()
@@ -1075,6 +1084,8 @@ def run_tempering(
         rng,
         per_replica,
         move=per_rung,
+        # As the annealed arm: the recorded results' recolouring (#1323).
+        recolour=Recolour.UNIFORM,
         cluster_backend=Backend.RUST if compiled else Backend.PYTHON,
     )
     return MethodRun(

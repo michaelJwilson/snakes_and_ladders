@@ -33,6 +33,7 @@ from sal.sample.potts_mcmc import (
     ClusterCounter,
     PottsChain,
     PottsMove,
+    Recolour,
     TemperedChains,
     adapt_ladder_potts,
     anneal_potts,
@@ -183,11 +184,14 @@ def _chi_square_against(
         sample_potts,
         graph,
         field,
-        move,
+        [move],
         np.random.default_rng(seed),
         sweeps,
         burn_in=sweeps // 10,
         thin=THINNING[move],
+        # Each move's own kernel, alone and uniform; the defaults (#1323)
+        # are held to the 2x3 oracle in test_potts_recolour.
+        recolour=Recolour.UNIFORM,
     )
     chain = run() if cluster_backend is None else run(cluster_backend=cluster_backend)
 
@@ -1042,11 +1046,12 @@ def _autocorrelation_in_site_updates(move: PottsMove, graph: PottsGraph) -> floa
     chain: PottsChain = sample_potts(
         graph,
         field,
-        move,
+        [move],
         np.random.default_rng(CRITICAL.seed),
         CRITICAL.n_samples * factor,
         burn_in=CRITICAL.burn_in * factor,
         cluster_backend=Backend.PYTHON,
+        recolour=Recolour.UNIFORM,  # the recorded study's move (#1323)
     )
     tau = integrated_autocorrelation_time(energies(graph, field, chain.states))
     return tau * chain.mean_cluster_size / graph.n_nodes
@@ -1084,7 +1089,13 @@ def test_the_cluster_advantage_is_absent_at_the_registry_instance() -> None:
     times: dict[PottsMove, float] = {}
     for move in (PottsMove.SINGLE_SITE, PottsMove.SWENDSEN_WANG, PottsMove.WOLFF):
         chain = sample_potts(
-            graph, field, move, np.random.default_rng(7), sweeps, burn_in=sweeps // 5
+            graph,
+            field,
+            [move],
+            np.random.default_rng(7),
+            sweeps,
+            burn_in=sweeps // 5,
+            recolour=Recolour.UNIFORM,  # the recorded study's move (#1323)
         )
         tau = integrated_autocorrelation_time(energies(graph, field, chain.states))
         times[move] = tau * chain.mean_cluster_size / graph.n_nodes
@@ -1153,12 +1164,13 @@ def test_a_tempered_chain_is_drawn_from_the_tempered_boltzmann_distribution(
     chain = sample_potts(
         graph,
         WITH_FIELD,
-        move,
+        [move],
         np.random.default_rng(SEED),
         sweeps,
         burn_in=sweeps // 10,
         thin=THINNING[move],
         temperature=temperature,
+        recolour=Recolour.UNIFORM,  # each move's own kernel, alone (#1323)
     )
     observed = np.zeros(len(probability))
     for row in chain.states:
