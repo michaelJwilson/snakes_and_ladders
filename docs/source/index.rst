@@ -611,6 +611,15 @@ whether or not it has members yet.
 .. automodule:: sal.external.runner
    :members:
 
+.. automodule:: sal.external.sessions
+   :members:
+
+.. automodule:: sal.external.transport
+   :members:
+
+.. automodule:: sal.external.worker
+   :members:
+
 .. automodule:: sal.external.protocol
    :members:
 

@@ -13,8 +13,9 @@ never restated. What follows is local.
 
 ## Local rules
 
-- **Every framework runs in a subprocess.** `runner.run` is the one spawner in
-  the package; `tests/regression/test_duplication_guards.py` counts a second
+- **Every framework runs in a subprocess.** `runner` is the one spawner in
+  the package, of a one-shot script (`run`) and of a session's worker
+  (`worker`); `tests/regression/test_duplication_guards.py` counts a second
   one. No file here imports a framework: the script under
   `validation/scripts/` is the only one that does, so GPL and research-only
   terms, a native library and its threads stay out of the package process.
@@ -34,3 +35,19 @@ never restated. What follows is local.
 - **The import runs one way.** `validation/` imports from here; nothing here
   imports `validation/`. No hot-path package (`sim`, `likelihood`, `opt`,
   `search`, `learn`) imports from here.
+- **A session is the one-shot call, served by one worker.** The worker runs
+  the script a one-shot call runs, so a call's outputs are bitwise those of
+  `invoke` under every `Transport`; `tests/regression/test_external_session.py`
+  pins each. The worker is shut down when the `with` block exits, normally or
+  by an exception, and a worker that dies is a `ScriptError` carrying its
+  standard error; the session is closed from then on.
+- **The parent owns every block.** The parent creates and unlinks each
+  shared-memory block and memory-mapped file, inputs and outputs alike; the
+  worker attaches and never unlinks, so a killed worker leaves no orphan, a
+  count the kill tests hold at 0.
+- **A session sends C-contiguous `float64`, `int64` or `bool` arrays.**
+  Anything else is refused before the call, under every transport, so the
+  inputs do not depend on the transport chosen.
+- **A transport is kept on a measurement.** `NPZ` is the default. `SHARED`
+  and `MMAP` each cut the per-call overhead against it at 10 and 128 MB
+  (#1282, PR #1288); one that stops doing so goes.
