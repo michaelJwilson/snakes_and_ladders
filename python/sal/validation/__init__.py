@@ -20,9 +20,10 @@ Only ``tests/`` imports from here, never ``sim``, ``likelihood``, ``opt``,
 ``CLAUDE.md`` in this directory states the rules and
 ``tests/regression/test_validation.py`` asserts them.
 
-:data:`FRAMEWORKS` is the registry, one :class:`Framework` per framework;
-both live in :mod:`sal.external.frameworks` since #1282 and are re-exported
-here. The runner and the file protocol moved to :mod:`sal.external` with
+:data:`FRAMEWORKS` is the registry, one :class:`Registration` per
+:class:`Framework`; all three live in :mod:`sal.external.frameworks` since
+#1282 (#1304 named the entry :class:`Registration` and the key
+:class:`Framework`) and are re-exported here. The runner and the file protocol moved to :mod:`sal.external` with
 them; ``sal.validation.runner`` and ``sal.validation.protocol`` re-export
 them for one release.
 """
@@ -30,8 +31,8 @@ them for one release.
 from __future__ import annotations
 
 from sal import _submodules
-from sal.external.frameworks import FRAMEWORKS, Framework
+from sal.external.frameworks import FRAMEWORKS, Framework, Registration
 
 __getattr__ = _submodules(__name__)
 
-__all__ = ["FRAMEWORKS", "Framework"]
+__all__ = ["FRAMEWORKS", "Framework", "Registration"]

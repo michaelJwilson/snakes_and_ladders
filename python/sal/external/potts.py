@@ -2,12 +2,12 @@
 
 ``sal.external`` is namespaced by problem family, as the package is: this
 module holds the Potts calls, and the root only the infrastructure they run
-on. :func:`ground_state` (gco, PyMaxflow, OpenGM's ICM, loopy BP, A*,
+on. :data:`ground_state` (gco, PyMaxflow, OpenGM's ICM, loopy BP, A*,
 expansion and swap) mirrors :func:`sal.search.ground_state.ground_state`;
-:func:`lower_bound` (HiGHS, OpenGM's TRW-S and dual decomposition) mirrors
+:data:`lower_bound` (HiGHS, OpenGM's TRW-S and dual decomposition) mirrors
 :func:`sal.search.trws.trws`.
 
-**Ground states.** :func:`ground_state` takes :func:`sal.search.ground_state.ground_state`'s
+**Ground states.** :data:`ground_state` takes :func:`sal.search.ground_state.ground_state`'s
 arguments in its order, with a :class:`~sal.external.solvers.Solver` where
 the sibling takes a method name, and returns its
 :class:`~sal.search.ground_state.MethodRun`, as :class:`ExternalRun`: the
@@ -48,7 +48,7 @@ count of its own loop: gco runs its moves to convergence inside one call
 and PyMaxflow cuts once. Each solver spends one call in the unit
 :data:`UNITS` declares, and a budget in another unit is refused.
 
-**Bounds.** :func:`lower_bound` takes :func:`sal.search.trws.trws`'s ``graph`` and
+**Bounds.** :data:`lower_bound` takes :func:`sal.search.trws.trws`'s ``graph`` and
 ``field``, in its order, with a :class:`~sal.external.solvers.Solver` after
 them, and returns its :class:`~sal.search.alpha_expansion.BoundedLabelling`,
 as :class:`ExternalBound`: the same fields, with the cost spent, the
@@ -603,7 +603,7 @@ def _sink_side(result: Run) -> np.ndarray:
 ground_state = GroundState()
 
 
-#: The unit :func:`lower_bound` is charged in: one run of a solver to its own criterion.
+#: The unit :data:`lower_bound` is charged in: one run of a solver to its own criterion.
 BOUND_UNIT = Cost.FITS
 
 #: The iterations OpenGM's dual decomposition runs at most by default,

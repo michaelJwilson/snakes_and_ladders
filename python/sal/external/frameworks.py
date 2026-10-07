@@ -118,7 +118,8 @@ def built_version(framework: Registration) -> str:
 
 #: Every framework the package is validated or benchmarked against, by name;
 #: a registration whose name is no :class:`Framework` fails here, at import.
-FRAMEWORKS: Mapping[Framework, Registration] = {
+#: Each key is a :class:`Framework`, a ``str``, so its name finds it too.
+FRAMEWORKS: Mapping[str, Registration] = {
     Framework(framework.name): framework
     for framework in (
         Registration(

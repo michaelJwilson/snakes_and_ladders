@@ -1,4 +1,4 @@
-"""OpenGM's bound trace: what :func:`sal.external.potts.lower_bound` does not carry (issue #1279).
+"""OpenGM's bound trace: what :data:`sal.external.potts.lower_bound` does not carry (issue #1279).
 
 OpenGM (Andres, Beier and Kappes, MIT) is built from source by
 ``infra/build_opengm.sh`` and runs only in ``scripts/opengm.py``, in a
@@ -36,7 +36,7 @@ def bound_trace(
     ``field`` is a finite log-weight, ``(n_states,)`` or
     ``(n_nodes, n_states)``; the bytes are
     :func:`~sal.external.potts_inputs.opengm_inputs`', as
-    :func:`sal.external.potts.lower_bound` sends them.
+    :data:`sal.external.potts.lower_bound` sends them.
     """
     values = site_field(np.asarray(field, dtype=np.float64), graph.n_nodes)
     inputs = opengm_inputs(

@@ -5,7 +5,7 @@ calls, each through hmmlearn (:attr:`~sal.external.solvers.Solver.HMMLEARN`)
 in a subprocess, and each taking its sibling's arguments in its order with a
 :class:`~sal.external.solvers.Solver` after them.
 
-- :func:`fit` is :func:`sal.opt.hmm.baum_welch_family`'s Baum-Welch, and
+- :data:`fit` is :func:`sal.opt.hmm.baum_welch_family`'s Baum-Welch, and
   returns its :class:`~sal.opt.hmm.EmFit` as :class:`ExternalFit`.
 - :func:`viterbi` is :func:`sal.likelihood.hmm.viterbi`'s most probable path;
   the sibling's ``(states, log_probability)`` pair is :class:`ExternalPaths`,
@@ -24,7 +24,7 @@ and the answer's :class:`~sal.external.solvers.Provenance`.
 needs a :class:`~sal.external.solvers.Capability` hmmlearn does not declare
 (:func:`family_capability`), and is refused before any subprocess starts.
 
-**Ragged segments.** As the siblings take them: :func:`fit` and
+**Ragged segments.** As the siblings take them: :data:`fit` and
 :func:`viterbi` a :class:`~sal.ragged.Ragged` batch, as
 :func:`~sal.opt.hmm.baum_welch_family` and
 :func:`sal.likelihood.ragged.viterbi` do; :func:`forward_log_likelihood`
@@ -49,7 +49,7 @@ it. hmmlearn applies no variance floor and no prior: a Gaussian state whose
 variance it drives to zero is a :class:`~sal.emissions.ParameterDomainError`
 on the returned family.
 
-**Cost.** :func:`fit` spends its EM iterations, in
+**Cost.** :data:`fit` spends its EM iterations, in
 :attr:`~sal.cost.Cost.ITERATIONS`, as its sibling does; :func:`viterbi` and
 :func:`forward_log_likelihood` one pass each, :data:`PASS_UNIT`.
 """
