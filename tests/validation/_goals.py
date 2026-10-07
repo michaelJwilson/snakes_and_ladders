@@ -6,7 +6,7 @@ package alone: :func:`median_seconds` times the package and
 :func:`assert_meets` fails above the goal times :data:`GOAL_RATIO`, 0.55. The
 benchmark pair in `tests/benchmarks/` re-measures it. A :class:`MemoryGoal`
 bounds the peak added resident memory (issue #987), read in a fresh
-interpreter by :func:`sal.validation.runner.package`
+interpreter by :func:`sal.external.runner.package`
 (:func:`assert_fits`). Goal tests carry `goal` and run in CI's `validation`
 job without blocking; the ratio moves with the hardware.
 """
@@ -18,7 +18,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 import numpy as np
-from sal.validation.runner import package
+from sal.external.runner import package
 
 #: Runs whose median the package's figure is.
 REPEATS = 5

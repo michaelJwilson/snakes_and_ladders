@@ -22,7 +22,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from sal.validation.runner import run
+from sal.external.runner import run
 
 #: The script this adapter runs.
 SCRIPT = "blackjax"

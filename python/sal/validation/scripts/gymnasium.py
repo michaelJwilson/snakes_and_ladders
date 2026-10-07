@@ -52,10 +52,10 @@ from typing import Any
 import numpy as np
 import torch
 
+from sal.external.protocol import dump, received, timed
 from sal.learn.environment import Environment
 from sal.learn.policy import LinearPolicy
 from sal.validation.gymnasium import Spec, build, encode
-from sal.validation.protocol import dump, received, timed
 
 Observation = np.ndarray[Any, np.dtype[np.float64]]
 

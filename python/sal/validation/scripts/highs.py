@@ -20,7 +20,7 @@ from typing import Any
 
 import numpy as np
 
-from sal.validation.protocol import dump, peaked, received, timed
+from sal.external.protocol import dump, peaked, received, timed
 
 
 def polytope(

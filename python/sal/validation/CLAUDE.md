@@ -2,7 +2,9 @@
 
 The home of external frameworks the package is checked or timed against.
 `sandbox/` conserves the package's own replaced implementations; this drives
-other people's.
+other people's. The runner, the file protocol and the `FRAMEWORKS` registry
+live in `external/` since #1282; this home imports them, and
+`validation.runner` and `validation.protocol` re-export them for one release.
 
 Root `CLAUDE.md` holds the repository-wide rules, and its **Writing Style**
 section binds this file and every docstring, comment and commit message in this
@@ -11,7 +13,7 @@ module. It is referenced here, never restated. What follows is local.
 ## Local rules
 
 - **Every framework runs in a subprocess.** An adapter writes an `.npz`, runs
-  its script under `sys.executable` through `runner.run`, and reads an `.npz`
+  its script under `sys.executable` through `external.runner.run`, and reads an `.npz`
   back. The script is the only file that imports the framework, whatever its
   licence: GPL and research-only terms stay out of the package process, and
   so do a framework's native library, threads and second autodiff stack.

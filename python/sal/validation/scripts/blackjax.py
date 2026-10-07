@@ -57,7 +57,7 @@ from typing import Any
 
 import numpy as np
 
-from sal.validation.protocol import dump, peaked, received
+from sal.external.protocol import dump, peaked, received
 
 #: What ``mode`` selects.
 INTEGRATE, SAMPLE, LANGEVIN, RANDOM_WALK, REPLAY, ADAPTED = 0, 1, 2, 3, 4, 5

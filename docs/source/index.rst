@@ -599,6 +599,21 @@ whether or not it has members yet.
 .. automodule:: sal.sandbox.potts_mip
    :members:
 
+.. automodule:: sal.external
+   :members:
+
+.. automodule:: sal.external.solvers
+   :members:
+
+.. automodule:: sal.external.frameworks
+   :members:
+
+.. automodule:: sal.external.runner
+   :members:
+
+.. automodule:: sal.external.protocol
+   :members:
+
 .. automodule:: sal.validation
    :members:
 

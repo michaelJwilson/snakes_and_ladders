@@ -3447,6 +3447,18 @@ out of scope by rule (`docs/external_tools.md`), and #126 carries what would
 replace it. Recorded **not started** on the milestone's own terms, with the
 machinery it will use already built and refereed.
 
+**`sal.external`, step 1 of
+[#1282](https://github.com/michaelJwilson/snakes_and_ladders/issues/1282).**
+The comparison against external solvers on the package's own problems has one
+path: `external.runner`, moved from `validation/` with the file protocol and
+the `FRAMEWORKS` registry, is the one spawner in the package, counted by
+`test_duplication_guards.py`. `external.Solver` declares six methods over five
+frameworks --- gco expansion and swap, PyMaxflow's exact cut, HiGHS's LP,
+hmmlearn and BlackJAX HMC --- each with its `Capability` set and the
+`Provenance` its answer carries; a call outside the set is refused before any
+subprocess starts (`tests/regression/test_external.py`). The calls in sal's
+types are steps 2--7 and are not started.
+
 ## Milestone 3.1 — Model Surrogates & Bounds for Supported Problems
 
 **Modules.** The surrogates and the bounds they claim: `likelihood.surrogate`, `learn.surrogate` and `learn.ranking`, the examples and targets joining the two halves (`search.surrogate` until #779).

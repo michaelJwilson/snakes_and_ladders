@@ -17,7 +17,7 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 
-from sal.validation.runner import run
+from sal.external.runner import run
 
 #: The script this adapter runs.
 SCRIPT = "torch_geometric"

@@ -22,7 +22,7 @@ from typing import Any
 
 import numpy as np
 
-from sal.validation.protocol import dump, measured, received
+from sal.external.protocol import dump, measured, received
 
 
 def _model(inputs: dict[str, np.ndarray], family: str) -> Any:

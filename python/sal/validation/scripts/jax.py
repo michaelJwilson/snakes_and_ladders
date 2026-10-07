@@ -33,7 +33,7 @@ from typing import Any
 
 import numpy as np
 
-from sal.validation.protocol import dump, peaked, received
+from sal.external.protocol import dump, peaked, received
 
 
 def _per_point(call: Any, points: Any, jax: Any) -> float:

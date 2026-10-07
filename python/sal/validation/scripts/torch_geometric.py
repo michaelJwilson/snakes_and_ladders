@@ -23,8 +23,8 @@ from typing import Any
 import numpy as np
 import torch
 
+from sal.external.protocol import dump, received, timed
 from sal.learn.surrogate import GraphSurrogate, SetSurrogate
-from sal.validation.protocol import dump, received, timed
 
 
 class _Twin(torch.nn.Module):

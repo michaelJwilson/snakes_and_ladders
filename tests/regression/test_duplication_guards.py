@@ -139,7 +139,23 @@ FOREIGN_SPARSE = re.compile(r"\b(?:csr|csc|coo)_(?:matrix|array)\s*\(")
 HAND_MEDIAN = re.compile(r"np\.median\(\s*\[\s*package\(")
 HAND_SKIP = re.compile(r"skipif\(\s*not available\(")
 HAND_MEASURE = re.compile(r"peaked\(\s*lambda: timed\(")
-MEASURE_OWNER = "validation/protocol.py"
+MEASURE_OWNER = "external/protocol.py"
+#: A process started from the package (#1282). `external/runner.py` is the
+#: one path to an external framework; a second spawner is a second protocol,
+#: timing and licence boundary. `ProcessPoolExecutor` in `parallel.py` runs
+#: the package's own bodies and is not matched.
+SPAWN = re.compile(
+    r"\bsubprocess\.(?:run|Popen|call|check_call|check_output)\(|\bPopen\("
+)
+SPAWN_OWNER = "external/runner.py"
+#: Package modules that start a process for something other than a
+#: framework, each against its reason.
+SPAWNERS: dict[str, str] = {
+    "qa/build.py": (
+        "renders each figure in its own interpreter so none inherits "
+        "matplotlib state; it runs the package's own scripts, no framework"
+    ),
+}
 #: A fixture's alignment built field by field: its tree, states and root
 #: handed to `simulate_alignment` one by one rather than the fixture to
 #: `sim.simulator.simulate_tree`, which 104 sites spelled out (issue #1010).
@@ -333,6 +349,20 @@ def test_logsumexp_has_one_implementation() -> None:
     # The declaration is an edge and not a wish: the admitted inline is
     # there, so a fold that removes it takes this entry with it.
     assert sorted(found) == sorted(f"python/sal/{p}" for p in LOGSUMEXP_INLINES)
+
+
+@pytest.mark.critical
+@pytest.mark.infra
+def test_one_module_spawns_an_external_process() -> None:
+    # Issue #1282: every framework call goes through `sal.external.runner`,
+    # so a refusal, a timeout and the licence boundary are written once.
+    found = _offenders(SPAWN, SPAWN_OWNER)
+
+    assert [path for path in found if not _admitted(path, set(SPAWNERS))] == []
+    # Each exception is a spawner still, so one that stops spawning takes
+    # its reason with it; and the owner is what the guard is about.
+    assert sorted(found) == sorted(f"python/sal/{p}" for p in SPAWNERS)
+    assert SPAWN.search((PACKAGE / SPAWN_OWNER).read_text())
 
 
 #: The suffixes and roots the rows below search.
@@ -539,6 +569,8 @@ def test_each_guard_fails_on_violating_source() -> None:
         TWIN_IMPORT: "        from sal.likelihood.pruning import rust\n",
         # Unsplit: anchored at a line start, and this literal is indented.
         ICM_DEFINITION: "def iterated_conditional_modes(\n    graph,\n",
+        # Split for the same reason: this module is inside the search.
+        SPAWN: "done = subprocess" + ".run([sys.executable, script])\n",
     }
     clean = {
         PRIVATE_LOGSUMEXP: "from sal.numerics import logsumexp\n",
@@ -566,6 +598,7 @@ def test_each_guard_fails_on_violating_source() -> None:
         FIXTURE_ALIGNMENT: "data = simulate_tree(params, rng, n_sites=9)\n",
         TWIN_IMPORT: "    if (rust := twin(name, backend, __name__)) is not None:\n",
         ICM_DEFINITION: "from sal.search.icm import iterated_conditional_modes\n",
+        SPAWN: 'result = run("gco", inputs, timeout=timeout)\n',
     }
 
     assert [p for p, text in violating.items() if not p.search(text)] == []
