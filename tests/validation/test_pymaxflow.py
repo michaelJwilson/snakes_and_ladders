@@ -76,7 +76,7 @@ def test_a_directed_network_cuts_to_the_same_value_and_side() -> None:
         network = _network(seed, 60, 400)
         theirs = pymaxflow.min_cut(network, 0, 1)
         rust = maxflow_rust.min_cut(network, 0, 1)
-        dinic = maxflow.max_flow(_network(seed, 60, 400), 0, 1)
+        dinic = maxflow.max_flow(_network(seed, 60, 400), 0, 1, backend=Backend.PYTHON)
         for ours in (rust, dinic):
             assert ours.value == pytest.approx(theirs.value, rel=FLOW_RTOL)
             assert np.array_equal(ours.source_side, theirs.source_side)
