@@ -26,13 +26,21 @@ and return sal's result types reach their framework through :func:`invoke`:
 from __future__ import annotations
 
 import importlib.metadata
-from collections.abc import Iterable, Mapping
+import inspect
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Any, NoReturn
 
 import numpy as np
 
-from sal.external.frameworks import FRAMEWORKS, Framework, built, built_version
+from sal.external.frameworks import (
+    FRAMEWORKS,
+    Framework,
+    Registration,
+    built,
+    built_version,
+)
 from sal.external.runner import Run, installed, run
 
 
@@ -115,7 +123,7 @@ class Solver(StrEnum):
     OPENGM_SWAP = "opengm_swap"
 
     @property
-    def framework(self) -> Framework:
+    def framework(self) -> Registration:
         """The registered framework this solver runs."""
         return FRAMEWORKS[DECLARED[self].framework]
 
@@ -129,7 +137,7 @@ class Solver(StrEnum):
 class Declaration:
     """A solver's framework, by its :data:`FRAMEWORKS` name, and its capabilities."""
 
-    framework: str
+    framework: Framework
     capabilities: frozenset[Capability]
 
 
@@ -151,13 +159,13 @@ _POTTS_BOUND = frozenset(
 #: its ICM, loopy BP and moves local; its TRW-S and dual decomposition bound
 #: the minimum, and neither is exact (#1279).
 DECLARED: Mapping[Solver, Declaration] = {
-    Solver.GCO_EXPANSION: Declaration("gco", _POTTS_MOVES),
-    Solver.GCO_SWAP: Declaration("gco", _POTTS_MOVES),
+    Solver.GCO_EXPANSION: Declaration(Framework.GCO, _POTTS_MOVES),
+    Solver.GCO_SWAP: Declaration(Framework.GCO, _POTTS_MOVES),
     Solver.PYMAXFLOW_EXACT: Declaration(
-        "pymaxflow", frozenset({Capability.GROUND_STATE, Capability.EXACT})
+        Framework.PYMAXFLOW, frozenset({Capability.GROUND_STATE, Capability.EXACT})
     ),
     Solver.HIGHS_LP: Declaration(
-        "highs",
+        Framework.HIGHS,
         frozenset(
             {
                 Capability.LOWER_BOUND,
@@ -168,7 +176,7 @@ DECLARED: Mapping[Solver, Declaration] = {
         ),
     ),
     Solver.HMMLEARN: Declaration(
-        "hmmlearn",
+        Framework.HMMLEARN,
         frozenset(
             {
                 Capability.HMM_FIT,
@@ -181,7 +189,7 @@ DECLARED: Mapping[Solver, Declaration] = {
         ),
     ),
     Solver.BLACKJAX_HMC: Declaration(
-        "blackjax",
+        Framework.BLACKJAX,
         frozenset(
             {
                 Capability.HMC_SAMPLE,
@@ -193,13 +201,15 @@ DECLARED: Mapping[Solver, Declaration] = {
             }
         ),
     ),
-    Solver.OPENGM_ICM: Declaration("opengm", _POTTS_MOVES),
-    Solver.OPENGM_LBP: Declaration("opengm", _POTTS_MOVES),
-    Solver.OPENGM_ASTAR: Declaration("opengm", _POTTS_MOVES | {Capability.EXACT}),
-    Solver.OPENGM_TRWS: Declaration("opengm", _POTTS_BOUND),
-    Solver.OPENGM_DD: Declaration("opengm", _POTTS_BOUND),
-    Solver.OPENGM_EXPANSION: Declaration("opengm", _POTTS_MOVES),
-    Solver.OPENGM_SWAP: Declaration("opengm", _POTTS_MOVES),
+    Solver.OPENGM_ICM: Declaration(Framework.OPENGM, _POTTS_MOVES),
+    Solver.OPENGM_LBP: Declaration(Framework.OPENGM, _POTTS_MOVES),
+    Solver.OPENGM_ASTAR: Declaration(
+        Framework.OPENGM, _POTTS_MOVES | {Capability.EXACT}
+    ),
+    Solver.OPENGM_TRWS: Declaration(Framework.OPENGM, _POTTS_BOUND),
+    Solver.OPENGM_DD: Declaration(Framework.OPENGM, _POTTS_BOUND),
+    Solver.OPENGM_EXPANSION: Declaration(Framework.OPENGM, _POTTS_MOVES),
+    Solver.OPENGM_SWAP: Declaration(Framework.OPENGM, _POTTS_MOVES),
 }
 
 
@@ -297,3 +307,50 @@ def invoke(
     if not available(solver):
         raise ExternalUnavailable(solver)
     return run(solver.framework.name, inputs, timeout=timeout)
+
+
+def unmatched(solver: Solver, task: Capability) -> NoReturn:
+    """The final ``case _`` of a solver-keyed call's ``match`` (#1304): refuse ``solver``, naming it.
+
+    A solver without ``task`` raises :class:`CapabilityRefused`, as
+    :func:`require` words it. One that declares ``task`` but has no case is
+    a missing case, and raises :class:`ValueError` naming the solver;
+    ``tests/regression/test_external_explicit.py`` holds every member to a case.
+    """
+    require(solver, {task})
+    msg = f"{solver} offers {task} but no call runs it"
+    raise ValueError(msg)
+
+
+def passed(
+    solver: Solver,
+    call: Callable[..., object],
+    given: Mapping[str, tuple[object, object]],
+) -> dict[str, Any]:
+    """The keywords a solver-keyed call hands ``call``, its explicit call (#1304).
+
+    ``given`` maps each keyword of the solver-keyed call to its value and
+    its default. A keyword left at its default is not passed, so ``call``'s
+    own default applies; one set to another value is passed where ``call``
+    takes it, and refused with :class:`ValueError` naming it where it does
+    not, before any subprocess starts.
+    """
+    accepted = inspect.signature(call).parameters
+    kept: dict[str, Any] = {}
+    for name, (value, default) in given.items():
+        if value is default or (type(value) is type(default) and value == default):
+            continue
+        if name not in accepted:
+            msg = f"{solver} runs {call.__name__}, which takes no {name}"
+            raise ValueError(msg)
+        kept[name] = value
+    return kept
+
+
+def refuse_framework(
+    call: str, by: Framework, offered: Iterable[Framework]
+) -> NoReturn:
+    """Refuse ``by`` for ``call``, which only the ``offered`` frameworks run, with :class:`ValueError`."""
+    named = " or ".join(str(framework) for framework in offered)
+    msg = f"{call} is run by {named}, not {by}"
+    raise ValueError(msg)

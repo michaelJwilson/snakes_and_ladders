@@ -75,7 +75,7 @@ def local_polytope(
     a :class:`~sal.sim.potts.SiteField`, read as :func:`sal.search.trws.trws`
     reads it. ``timeout`` bounds the subprocess, in seconds. The inputs are
     :func:`~sal.external.potts_inputs.polytope_inputs`, which
-    :func:`sal.external.potts.lower_bound` sends too (#1282, step 4); the ILP
+    :data:`sal.external.potts.lower_bound` sends too (#1282, step 4); the ILP
     (#1274) is ``lower_bound``'s ``integral``, not this adapter's.
     """
     values = site_field(

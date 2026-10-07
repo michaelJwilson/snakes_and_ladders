@@ -10,7 +10,7 @@ with its two terminals, folds each terminal arc into a terminal capacity,
 since PyMaxflow holds the terminals implicitly, and returns the flow value
 and the source side over the network's own node numbering. Both build
 their inputs with :mod:`sal.external.potts_inputs`, which a session and
-:func:`sal.external.potts.ground_state` send as well (#1282).
+:data:`sal.external.potts.ground_state` send as well (#1282).
 :func:`ising_ground_state` is the two-state ferromagnet the package reduces
 to a cut, built with the capacities
 :func:`sal.search.maxflow.ising_ground_state` builds.

@@ -29,8 +29,8 @@ module. It is referenced here, never restated. What follows is local.
   figure. The package's side of a pair is read the same way, in a fresh
   interpreter, by `scripts/package.py`.
 - **One framework, one extra, one module, one test file.** A framework arrives
-  as a `validation-<name>` extra in `pyproject.toml`, a `Framework` entry in
-  `FRAMEWORKS`, an adapter `<name>.py` here, a script `scripts/<name>.py` and
+  as a `validation-<name>` extra in `pyproject.toml`, a `Framework` member and
+  its `Registration` in `FRAMEWORKS`, an adapter `<name>.py` here, a script `scripts/<name>.py` and
   `tests/validation/test_<name>.py`. The extra is added by the framework's
   own ticket, with the permission root `CLAUDE.md` requires. A framework a
   core dependency already carries takes no extra: HiGHS is SciPy's
