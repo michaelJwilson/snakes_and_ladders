@@ -113,7 +113,9 @@ def test_the_graph_cut_is_the_enumerated_ground_state_at_two_states() -> None:
     _, exact = _enumerated(rung)
     minimizers = _enumerated_minimizers(rung, exact)
 
-    python_state, python_energy = ising_ground_state(rung.graph, rung.field)
+    python_state, python_energy = ising_ground_state(
+        rung.graph, rung.field, backend=Backend.PYTHON
+    )
     rust_state, rust_energy = rust_ground_state(rung.graph, rung.field)
 
     assert python_energy == pytest.approx(exact, abs=_EXACT)
@@ -345,7 +347,9 @@ def test_the_exact_ground_state_at_five_thousand_sites() -> None:
     # being a combinatorial minimum rather than a tolerance.
     rung = _rung(RELEASE, 2)
 
-    python_state, python_energy = ising_ground_state(rung.graph, rung.field)
+    python_state, python_energy = ising_ground_state(
+        rung.graph, rung.field, backend=Backend.PYTHON
+    )
     rust_state, rust_energy = rust_ground_state(rung.graph, rung.field)
 
     assert python_energy == pytest.approx(RELEASE_Q2_ENERGY, abs=1e-6)

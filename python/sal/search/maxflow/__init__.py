@@ -326,21 +326,25 @@ def max_flow(
     source: int,
     sink: int,
     *,
-    backend: Backend = Backend.PYTHON,
+    backend: Backend = Backend.RUST,
 ) -> MinCut:
     """Dinic's algorithm: repeated level graphs and blocking flows.
 
     Parameters
     ----------
     network : FlowNetwork
-        Mutated in place --- its capacities become residual capacities. The
-        Rust route leaves it unchanged.
+        Unchanged on the ``RUST`` route, the default. On ``PYTHON`` it is
+        mutated in place --- its capacities become residual capacities --- so
+        a caller that reads them back names ``PYTHON``.
     source, sink : int
         Terminals.
     backend : Backend
-        ``PYTHON``, this function's Dinic and the default; ``RUST``,
-        :func:`sal.search.maxflow.rust.min_cut`, reached through this
-        gateway rather than imported by a caller (issue #1070).
+        ``RUST``, the default, :func:`sal.search.maxflow.rust.min_cut`,
+        reached through this gateway rather than imported by a caller (issue
+        #1070); ``PYTHON``, this function's Dinic, the oracle. The two return
+        the same minimal minimum cut bitwise; the default is the faster
+        route, 217 ms against 28.4 s on an open 512² lattice's network
+        (issue #1283).
 
     Returns
     -------
@@ -475,7 +479,7 @@ def ising_ground_state(
     graph: PottsGraph,
     field: SiteField | np.ndarray,
     *,
-    backend: Backend = Backend.PYTHON,
+    backend: Backend = Backend.RUST,
 ) -> GroundState:
     """The exact minimum-energy configuration of a two-state ferromagnet.
 
@@ -505,11 +509,12 @@ def ising_ground_state(
         shape alpha expansion (issue #207) needs. More than two states is
         refused: a cut solves ``k = 2`` and alpha expansion covers the rest.
     backend : Backend
-        :data:`~sal.backend.Backend.PYTHON` is the push-relabel
-        cut here, the oracle; :data:`~sal.backend.Backend.RUST`
-        is :mod:`sal.search.maxflow.rust`, pinned to it bitwise.
-        Chosen here so a caller names the kernel rather than the module, as
-        ``bcjr`` and ``sum_product`` already ask (#813).
+        :data:`~sal.backend.Backend.RUST`, the default, is
+        :mod:`sal.search.maxflow.rust`, pinned bitwise to
+        :data:`~sal.backend.Backend.PYTHON`, the Dinic cut here and the
+        oracle; on an open 512² lattice the default takes 92 ms against
+        29.0 s, min of 3 (issue #1283). Chosen here so a caller names the kernel rather
+        than the module, as ``bcjr`` and ``sum_product`` already ask (#813).
 
     Returns
     -------
@@ -524,14 +529,15 @@ def ising_ground_state(
         returns nothing rather than a lattice-shaped wrong answer.
     """
     field = log_weight_of(field)
-    if (rust := twin("ising_ground_state", backend, __name__)) is not None:
-        return cast("GroundState", rust.ising_ground_state(graph, field))
-    values = site_field(np.asarray(field, dtype=float), graph.n_nodes, n_states=2)
+    # Ahead of the dispatch, so both routes refuse with the one reason.
     check_non_negative_couplings(
         graph,
         "a negative coupling makes the energy non-submodular, the ground "
         "state NP-hard, and this construction inapplicable rather than slow",
     )
+    if (rust := twin("ising_ground_state", backend, __name__)) is not None:
+        return cast("GroundState", rust.ising_ground_state(graph, field))
+    values = site_field(np.asarray(field, dtype=float), graph.n_nodes, n_states=2)
 
     source, sink = graph.n_nodes, graph.n_nodes + 1
     network = FlowNetwork(n_nodes=graph.n_nodes + 2)
@@ -545,7 +551,8 @@ def ising_ground_state(
     for (first, second), coupling in graph.weighted_edges():
         network.add_edge(first, second, coupling, reverse=coupling)
 
-    cut = max_flow(network, source, sink)
+    # The oracle route stays Python end to end, so it still referees RUST.
+    cut = max_flow(network, source, sink, backend=Backend.PYTHON)
     configuration = (~cut.source_side[: graph.n_nodes]).astype(np.int64)
     return GroundState(configuration, energy(graph, values, configuration))
 
