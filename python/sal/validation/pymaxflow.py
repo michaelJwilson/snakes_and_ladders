@@ -28,7 +28,7 @@ import numpy as np
 
 from sal.external.runner import run
 from sal.search.maxflow import FlowNetwork, GroundState
-from sal.sim.graph import PottsGraph
+from sal.sim.graph import BoundaryCondition, PottsGraph
 from sal.sim.potts import energy, site_field
 
 #: The script this adapter runs.
@@ -173,3 +173,62 @@ def ising_ground_state(graph: PottsGraph, field: np.ndarray) -> tuple[GroundStat
     configuration = sink_side.astype(np.int64)
     state = GroundState(configuration, energy(graph, values, configuration))
     return state, Cut(value, ~sink_side, seconds, build_seconds, peak_bytes)
+
+
+@dataclass(frozen=True)
+class Expansion:
+    """PyMaxflow's grid expansion: its labelling, re-scored, and its times."""
+
+    labelling: np.ndarray
+    #: The labelling's energy under :func:`sal.sim.potts.energy`.
+    energy: float
+    #: Wall seconds of ``aexpansion_grid`` alone.
+    seconds: float
+    #: Peak resident bytes the expansion added.
+    peak_bytes: int
+
+
+def alpha_expansion(
+    graph: PottsGraph,
+    field: np.ndarray,
+    n_states: int,
+    *,
+    start: np.ndarray | None = None,
+) -> Expansion:
+    """PyMaxflow's ``aexpansion_grid`` to convergence on the package's Potts model (issue #1274).
+
+    PyMaxflow's expansion is Boykov, Veksler and Zabih's on a grid with
+    one pair cost for every neighbour pair, so ``graph`` must be an open
+    lattice from :func:`~sal.sim.graph.lattice_graph` with one non-negative
+    coupling ``J``. The model is :mod:`sal.validation.gco`'s: data cost
+    ``-h_i(a)`` shifted by its row minimum and pair cost ``J [a != b]``. Its
+    default start is each site's cheapest label, the package's own;
+    ``field`` must be finite, so a forbidden label arrives as a finite
+    penalty the caller chose.
+    """
+    shape, boundary = graph.shape, graph.boundary
+    coupling = np.unique(graph.edge_coupling)
+    if shape is None or boundary is not BoundaryCondition.OPEN or coupling.size > 1:
+        msg = "PyMaxflow's grid expansion needs an open lattice with one coupling"
+        raise ValueError(msg)
+    values = site_field(np.asarray(field, dtype=float), graph.n_nodes)
+    if values.shape[1] != n_states or not np.isfinite(values).all():
+        msg = f"the field must be finite with {n_states} states"
+        raise ValueError(msg)
+    cost = -values
+    unary = (cost - cost.min(axis=1, keepdims=True)).reshape(*shape, n_states)
+    weight = float(coupling[0]) if coupling.size else 0.0
+    inputs = {
+        "unary": np.ascontiguousarray(unary),
+        "binary": weight * (1.0 - np.eye(n_states)),
+    }
+    if start is not None:
+        inputs["start"] = np.ascontiguousarray(np.reshape(start, shape), np.int64)
+    result = run(SCRIPT, inputs)
+    labelling = result.outputs["labels"]
+    return Expansion(
+        labelling=labelling,
+        energy=energy(graph, values, labelling),
+        seconds=result.seconds,
+        peak_bytes=result.peak_bytes,
+    )

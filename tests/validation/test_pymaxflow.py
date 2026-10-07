@@ -5,11 +5,17 @@ Kolmogorov's Boykov--Kolmogorov code, sharing none with Dinic or
 configuration from both backends, so the same energy bitwise. Directed
 asymmetric networks: flow within 1e-12 relative, source side node for node.
 Control: doubled capacities double the value; dropped back arcs match the
-Rust kernel. A session (#1282) returns the one-shot call's bytes under
-every transport. Runtime goal: `test_goals.py`.
+Rust kernel. With labels forbidden (#1139, #1274), PyMaxflow's own grid
+expansion, `aexpansion_grid`, on the finite stand-in `_forbidden.stand_in`
+states: neither expansion holds a forbidden label, PyMaxflow's labelling is a
+fixed point of the package's move, and on 13 enumerable instances both reach
+the constrained minimum within 1e-12. A session (#1282) returns the one-shot
+call's bytes under every transport. Runtime goal: `test_goals.py`.
 """
 
 from __future__ import annotations
+
+from functools import partial
 
 import numpy as np
 import pytest
@@ -18,11 +24,13 @@ from sal.external import Capability, Solver, Transport, invoke, session
 from sal.search import maxflow
 from sal.search.ground_state import lattice_rung
 from sal.search.maxflow import rust as maxflow_rust
+from sal.sim.graph import PottsGraph
 from sal.sim.potts import energy, site_field
 from sal.validation import pymaxflow
 
 from tests._frameworks import requires
-from tests._rows import every_value
+from tests._rows import every_row, every_value
+from tests.validation._forbidden import check_expansion, enumerable, lattices
 
 pytestmark = [
     pytest.mark.validation,
@@ -100,7 +108,7 @@ def test_a_directed_network_cuts_to_the_same_value_and_side() -> None:
         network = _network(seed, 60, 400)
         theirs = pymaxflow.min_cut(network, 0, 1)
         rust = maxflow_rust.min_cut(network, 0, 1)
-        dinic = maxflow.max_flow(_network(seed, 60, 400), 0, 1)
+        dinic = maxflow.max_flow(_network(seed, 60, 400), 0, 1, backend=Backend.PYTHON)
         for ours in (rust, dinic):
             assert ours.value == pytest.approx(theirs.value, rel=FLOW_RTOL)
             assert np.array_equal(ours.source_side, theirs.source_side)
@@ -138,3 +146,24 @@ def test_the_adapter_reads_the_capacities_it_is_given() -> None:
         maxflow_rust.min_cut(one_way, 0, 1).value, rel=FLOW_RTOL
     )
     assert theirs < before
+
+
+def _pymaxflow(graph: PottsGraph, field: np.ndarray, n_states: int) -> np.ndarray:
+    return pymaxflow.alpha_expansion(graph, field, n_states).labelling
+
+
+@pytest.mark.oracle
+def test_with_forbidden_labels_both_expansions_reach_the_constrained_minimum() -> None:
+    # Issue #1274, on #1139's forbidden labels. Measured 2026-10-06: all 13
+    # instances reach the enumerated minimum, both, with the same labelling.
+    every_row(enumerable(), partial(check_expansion, theirs=_pymaxflow, exact=True))
+
+
+@pytest.mark.experiment
+def test_with_forbidden_labels_pymaxflows_labelling_is_a_fixed_point_of_the_package_move() -> (
+    None
+):
+    # Same start, the per-site cheapest label, and the same label order. Measured
+    # 2026-10-06: the labelling is the package's at 16², and at 71² its energy
+    # is 0.03% (q = 3) and 0.13% (q = 10) above the package's.
+    every_row(lattices(), partial(check_expansion, theirs=_pymaxflow, exact=False))

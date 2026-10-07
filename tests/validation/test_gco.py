@@ -6,11 +6,16 @@ at a local minimum. Checked: gco's labelling is a fixed point of our move
 q = 3 both are within Boykov, Veksler and Zabih's factor 2 of the minimum over
 3^16 = 43,046,721 labellings (non-negative terms), and both reach it within
 1e-12; at 71² the energies agree within 1% (#938 measured 0.13% at q = 10).
+With labels forbidden (#1139, #1274), on the finite stand-in
+`_forbidden.stand_in` states: neither expansion holds a forbidden label,
+gco's labelling is a fixed point of the package's move, and on 13 enumerable
+instances both reach the constrained minimum within 1e-12.
 Runtime goal: `test_goals.py`.
 """
 
 from __future__ import annotations
 
+from functools import partial
 from itertools import product
 
 import numpy as np
@@ -24,6 +29,7 @@ from sal.validation import gco
 
 from tests._frameworks import requires
 from tests._rows import every_row, every_value
+from tests.validation._forbidden import check_expansion, enumerable, lattices
 
 pytestmark = [
     pytest.mark.validation,
@@ -95,3 +101,24 @@ def test_the_two_energies_agree_within_one_per_cent_at_71() -> None:
         assert theirs.energy == pytest.approx(ours.energy, rel=1e-2)
 
     every_value([3, 10], check)
+
+
+def _gco(graph: PottsGraph, field: np.ndarray, n_states: int) -> np.ndarray:
+    return gco.alpha_expansion(graph, field, n_states=n_states).labelling
+
+
+@pytest.mark.oracle
+def test_with_forbidden_labels_both_expansions_reach_the_constrained_minimum() -> None:
+    # Issue #1274, on #1139's forbidden labels: gco cuts the finite stand-in
+    # `_forbidden.stand_in` states, the package the `-inf` field. Measured
+    # 2026-10-06: all 13 instances reach the enumerated minimum, both.
+    every_row(enumerable(), partial(check_expansion, theirs=_gco, exact=True))
+
+
+@pytest.mark.experiment
+def test_with_forbidden_labels_gcos_labelling_is_a_fixed_point_of_the_package_move() -> (
+    None
+):
+    # 16² and 71² at 3 and 10 states. Measured 2026-10-06: gco's energy from
+    # 0.82% below the package's (16², q = 10) to 0.27% above (71², q = 10).
+    every_row(lattices(), partial(check_expansion, theirs=_gco, exact=False))

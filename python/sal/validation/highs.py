@@ -71,13 +71,21 @@ class LocalPolytope:
 
 
 def local_polytope(
-    graph: PottsGraph, field: SiteField | np.ndarray, *, timeout: float = 600.0
+    graph: PottsGraph,
+    field: SiteField | np.ndarray,
+    *,
+    timeout: float = 600.0,
+    integral: bool = False,
 ) -> LocalPolytope:
     """The local-polytope LP of ``min_x E(x)``, solved by HiGHS.
 
     ``field`` is a log-weight, ``(n_states,)`` or ``(n_nodes, n_states)``, or
     a :class:`~sal.sim.potts.SiteField`, read as :func:`sal.search.trws.trws`
-    reads it. ``timeout`` bounds the subprocess, in seconds.
+    reads it. ``timeout`` bounds the subprocess, in seconds. With
+    ``integral`` the node marginals are integer and HiGHS's ``milp`` solves
+    the ILP to a zero gap (issue #1274), HiGHS stopping itself at 0.9 of
+    ``timeout`` so the status reaches the caller: its optimal value is the
+    minimum energy, and ``iterations`` is its node count.
     """
     values = site_field(
         np.asarray(log_weight_of(field), dtype=np.float64), graph.n_nodes
@@ -90,6 +98,8 @@ def local_polytope(
             "first": np.ascontiguousarray(edges[:, 0], dtype=np.int64),
             "second": np.ascontiguousarray(edges[:, 1], dtype=np.int64),
             "coupling": np.ascontiguousarray(graph.edge_coupling, dtype=np.float64),
+            "integral": np.asarray(integral),
+            "time_limit": np.asarray(0.9 * timeout, dtype=np.float64),
         },
         timeout=timeout,
     )
