@@ -10,20 +10,20 @@ q = 3 both are within Boykov, Veksler and Zabih's factor 2 of the minimum over
 bitwise, expansion and swap, from gco's start and a given one, one-shot and
 in a session; with forbidden labels (#1139) it holds none, is the adapter's
 labelling on #1274's stand-in bitwise, and on the enumerable instances
-reaches the constrained minimum within 1e-12.
-With labels forbidden (#1139, #1274), on the finite stand-in
-`_forbidden.stand_in` states: neither expansion holds a forbidden label,
-gco's labelling is a fixed point of the package's move, and on 13 enumerable
-instances both reach the constrained minimum within 1e-12. Every other call of
-gco here is `external.potts.ground_state`, served by one session per module
-(step 7); the adapter stays for the bitwise pins and for
+reaches the constrained minimum within 1e-12. Every other call of gco here is
+`external.potts.ground_state`, served by one session per module (step 7); the
+adapter stays for the bitwise pins and for
 `tests/benchmarks/test_alpha_expansion_gco_bench.py`, which reads its build
-seconds and peak bytes. Runtime goal: `test_goals.py`.
+seconds and peak bytes. With labels forbidden (#1274), on the finite stand-in
+`potts_inputs.stand_in` states: neither expansion holds a forbidden label,
+gco's labelling is a fixed point of the package's move, and on 13 enumerable
+instances both reach the constrained minimum within 1e-12.
+Runtime goal: `test_goals.py`.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from functools import partial
 from itertools import product
 
@@ -275,22 +275,33 @@ def test_a_session_serves_the_one_shot_ground_state(solver: Solver) -> None:
             assert served.energy == once.energy
 
 
-def _gco(graph: PottsGraph, field: np.ndarray, n_states: int) -> np.ndarray:
-    return gco.alpha_expansion(graph, field, n_states=n_states).labelling
+def _theirs(
+    session: Session,
+) -> Callable[[PottsGraph, np.ndarray, int], np.ndarray]:
+    """gco's expansion through ``session``, as `_forbidden.check_expansion` calls a framework."""
+
+    def labelling(graph: PottsGraph, field: np.ndarray, _n_states: int) -> np.ndarray:
+        return _expansion(graph, field, session).labelling
+
+    return labelling
 
 
 @pytest.mark.oracle
-def test_with_forbidden_labels_both_expansions_reach_the_constrained_minimum() -> None:
+def test_with_forbidden_labels_both_expansions_reach_the_constrained_minimum(
+    expansion: Session,
+) -> None:
     # Issue #1274, on #1139's forbidden labels: gco cuts the finite stand-in
-    # `_forbidden.stand_in` states, the package the `-inf` field. Measured
+    # `potts_inputs.stand_in` states, the package the `-inf` field. Measured
     # 2026-10-06: all 13 instances reach the enumerated minimum, both.
-    every_row(enumerable(), partial(check_expansion, theirs=_gco, exact=True))
+    check = partial(check_expansion, theirs=_theirs(expansion), exact=True)
+    every_row(enumerable(), check)
 
 
 @pytest.mark.experiment
-def test_with_forbidden_labels_gcos_labelling_is_a_fixed_point_of_the_package_move() -> (
-    None
-):
+def test_with_forbidden_labels_gcos_labelling_is_a_fixed_point_of_the_package_move(
+    expansion: Session,
+) -> None:
     # 16² and 71² at 3 and 10 states. Measured 2026-10-06: gco's energy from
     # 0.82% below the package's (16², q = 10) to 0.27% above (71², q = 10).
-    every_row(lattices(), partial(check_expansion, theirs=_gco, exact=False))
+    check = partial(check_expansion, theirs=_theirs(expansion), exact=False)
+    every_row(lattices(), check)

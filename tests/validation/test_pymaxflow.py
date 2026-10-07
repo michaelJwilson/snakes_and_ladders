@@ -5,14 +5,16 @@ Kolmogorov's Boykov--Kolmogorov code, sharing none with Dinic or
 configuration from both backends, so the same energy bitwise. Directed
 asymmetric networks: flow within 1e-12 relative, source side node for node.
 Control: doubled capacities double the value; dropped back arcs match the
-Rust kernel. With labels forbidden (#1139, #1274), PyMaxflow's own grid
-expansion, `aexpansion_grid`, on the finite stand-in `_forbidden.stand_in`
-states: neither expansion holds a forbidden label, PyMaxflow's labelling is a
-fixed point of the package's move, and on 13 enumerable instances both reach
-the constrained minimum within 1e-12. A session (#1282) returns the one-shot
-call's bytes under every transport. `external.potts.ground_state` (#1282, step 3)
-is the adapter's ground state and the package's, bitwise, one-shot and in a
-session. Runtime goal: `test_goals.py`.
+Rust kernel. A session (#1282) returns the one-shot call's bytes under
+every transport. `external.potts.ground_state` (#1282, step 3) is the adapter's
+ground state and the package's, bitwise, one-shot and in a session. With
+labels forbidden (#1139, #1274), PyMaxflow's own grid expansion,
+`aexpansion_grid`, which `sal.external` does not offer, through
+`validation.pymaxflow.alpha_expansion`, on the finite stand-in
+`potts_inputs.stand_in` states: neither expansion holds a forbidden label,
+PyMaxflow's labelling is a fixed point of the package's move, and on 13
+enumerable instances both reach the constrained minimum within 1e-12.
+Runtime goal: `test_goals.py`.
 """
 
 from __future__ import annotations
@@ -114,7 +116,7 @@ def test_a_directed_network_cuts_to_the_same_value_and_side() -> None:
         network = _network(seed, 60, 400)
         theirs = pymaxflow.min_cut(network, 0, 1)
         rust = maxflow_rust.min_cut(network, 0, 1)
-        dinic = maxflow.max_flow(_network(seed, 60, 400), 0, 1, backend=Backend.PYTHON)
+        dinic = maxflow.max_flow(_network(seed, 60, 400), 0, 1)
         for ours in (rust, dinic):
             assert ours.value == pytest.approx(theirs.value, rel=FLOW_RTOL)
             assert np.array_equal(ours.source_side, theirs.source_side)

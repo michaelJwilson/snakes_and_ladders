@@ -10,15 +10,16 @@ frustrated triangular lattice, `potts_lattice/{ci,stress,release}`,
 lattices both ascents stop below the LP, which is pinned. The primal's node
 marginals are integral on every instance but the three frustrated ones, and
 there the LP value is the labelling's energy and, where enumeration reaches,
-the minimum. With integer node marginals HiGHS's ``milp`` solves the ILP
-(#1274): TRW-S's bound is at most the LP value, which is at most the ILP
-optimum, the enumerated minimum where enumeration reaches; TRW-S's labelling
-scores at least that optimum, and above it only on two frustrated lattices.
-`external.potts.lower_bound` (#1282, step 4) returns the
+the minimum. `external.potts.lower_bound` (#1282, step 4) returns the
 adapter's value as its bound and the adapter's labelling, bitwise, on every
 instance here but `potts_lattice/release`; every other solve here is
 `external.potts.lower_bound`, served by one session per module (step 7). The
 adapter stays for that pin and for `tests/regression/sandbox/test_potts_mip.py`.
+With integer node marginals, `lower_bound(..., integral=True)` solves the ILP
+with HiGHS's `milp` (#1274): TRW-S's bound is at most the LP value, which is
+at most the ILP optimum, the enumerated minimum where enumeration reaches;
+TRW-S's labelling scores at least that optimum, and above it only on two
+frustrated lattices.
 """
 
 from __future__ import annotations
@@ -271,14 +272,15 @@ def test_the_bound_the_lp_and_the_ilp_are_ordered_and_the_labelling_is_above(
     gapped = []
 
     def check(name: str, graph: PottsGraph, field: np.ndarray, n_states: int) -> None:
-        relaxed = _solved(graph, field, lp)
+        # `_solved` refuses any run HiGHS did not report optimal.
+        relaxed = _solved(graph, field, lp).bound
         ilp = _solved(graph, field, lp, integral=True)
         result = trws(graph, field)
         decoded = float(energies(graph, field, result.labelling[None])[0])
         scale = ENERGY_AGREEMENT * max(1.0, abs(ilp.bound))
 
-        assert result.bound <= relaxed.bound + LP_AGREEMENT * abs(relaxed.bound), name
-        assert relaxed.bound <= ilp.bound + scale, (name, relaxed.bound, ilp.bound)
+        assert result.bound <= relaxed + LP_AGREEMENT * abs(relaxed), name
+        assert relaxed <= ilp.bound + scale, (name, relaxed, ilp.bound)
         assert abs(energy(graph, field, ilp.labelling) - ilp.bound) <= scale, name
         if n_states**graph.n_nodes <= ENUMERABLE:
             optimum = _optimum(graph, field, n_states)

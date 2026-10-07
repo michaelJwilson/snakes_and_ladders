@@ -2,10 +2,9 @@
 
 A forbidden pair is ``-inf`` in the package's field (:func:`sal.sim.potts.forbid`,
 issue #1139). Neither framework carries ``-inf``, so each receives
-:func:`stand_in`: every forbidden entry of site ``i`` at its lowest allowed
-log-weight less ``1 + sum_{e at i} |J_e|``. Moving ``i`` to any allowed label
-then lowers the energy by more than ``i``'s couplings can raise it, so no
-optimum and no expansion fixed point holds a forbidden label.
+:func:`sal.external.potts_inputs.stand_in`, the rule ``sal.external`` applies
+itself (#1282); it and :func:`~sal.external.potts_inputs.allowed_by` are
+imported from there, not copied.
 """
 
 from __future__ import annotations
@@ -16,6 +15,7 @@ from collections.abc import Callable
 import numpy as np
 import pytest
 from sal.backend import Backend
+from sal.external.potts_inputs import allowed_by, stand_in
 from sal.search.alpha_expansion import alpha_expansion
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from sal.sim.potts import critical_coupling, energies, energy, forbid
@@ -36,21 +36,6 @@ ENERGY_AGREEMENT = 1e-12
 EXPANSION_AGREEMENT = 1e-2
 
 Row = tuple[str, PottsGraph, np.ndarray, np.ndarray]
-
-
-def stand_in(graph: PottsGraph, finite: np.ndarray, allowed: np.ndarray) -> np.ndarray:
-    """``finite`` with each forbidden entry at its site's penalty, as the docstring states."""
-    incident = np.zeros(graph.n_nodes)
-    edges, coupling = graph.edge_index, np.abs(graph.edge_coupling)
-    np.add.at(incident, edges[:, 0], coupling)
-    np.add.at(incident, edges[:, 1], coupling)
-    floor = np.where(allowed, finite, np.inf).min(axis=1) - (1.0 + incident)
-    return np.where(allowed, finite, floor[:, None])
-
-
-def allowed_by(allowed: np.ndarray, labelling: np.ndarray) -> bool:
-    """Whether every site of ``labelling`` holds an allowed label."""
-    return bool(allowed[np.arange(allowed.shape[0]), labelling].all())
 
 
 def constrained_minimum(
@@ -102,7 +87,7 @@ def check_expansion(
     *,
     exact: bool,
 ) -> None:
-    """Row ``name``: the package's expansion on ``-inf`` beside a framework's on :func:`stand_in`.
+    """Row ``name``: the package's expansion on ``-inf`` beside a framework's on :func:`~sal.external.potts_inputs.stand_in`.
 
     Neither holds a forbidden label; the framework's labelling is a fixed
     point of the package's move, energy bitwise; the two energies agree
