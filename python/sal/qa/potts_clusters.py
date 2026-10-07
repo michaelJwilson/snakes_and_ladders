@@ -59,6 +59,7 @@ from typing import Any
 
 import numpy as np
 
+from sal.backend import Backend
 from sal.cost import Cost
 from sal.opt.budget import Budget
 from sal.opt.starts import StartsBenchmark
@@ -235,7 +236,9 @@ def diagnose(task: tuple[str, int]) -> dict[str, Any]:
         counter = DiagnosedClusters(state=state, preferred=preferred)
         if name == "swendsen-wang":
             # The oracle's pass: the compiled one reads no cluster's members.
-            swendsen_wang_sweep(state, rung.graph, rows, rng, counter, beta)
+            swendsen_wang_sweep(
+                state, rung.graph, rows, rng, counter, beta, backend=Backend.PYTHON
+            )
             visits = rung.n_nodes + 2 * edges
         else:
             wolff_sweep(

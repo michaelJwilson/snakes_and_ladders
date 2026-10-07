@@ -160,7 +160,7 @@ def sample_potts(
     *,
     temperature: float = 1.0,
     backend: Backend = Backend.RUST,
-    cluster_backend: Backend = Backend.PYTHON,
+    cluster_backend: Backend = Backend.RUST,
 ) -> PottsChain:
     """Run one chain and return the configuration after every sweep.
 
@@ -205,11 +205,13 @@ def sample_potts(
     cluster_backend : Backend
         Which implementation runs the **Swendsen-Wang** pass; the Wolff move
         has one and ignores it. A separate argument rather than the one
-        above because the two are not the same decision:
-        :data:`~sal.backend.Backend.PYTHON` is the default
-        here, where it is not there, because the Rust pass draws the same
-        uniforms in a different order and so returns a chain of the same law
-        rather than the same chain (:func:`_cluster_pass_rust`, issue #754).
+        above because the two are not the same decision: the Rust pass draws
+        the same uniforms in a different order and so returns a chain of the
+        same law rather than the same chain (:func:`_cluster_pass_rust`,
+        issue #754). :data:`~sal.backend.Backend.RUST` is the default
+        nonetheless, 35.6x the oracle on ten sweeps of a 64x64 lattice;
+        :data:`~sal.backend.Backend.PYTHON` replays the oracle's stream, which
+        was the default before #1283.
 
     Returns
     -------
@@ -490,7 +492,7 @@ def anneal_potts(
     *,
     move: PottsMove = PottsMove.SINGLE_SITE,
     backend: Backend = Backend.RUST,
-    cluster_backend: Backend = Backend.PYTHON,
+    cluster_backend: Backend = Backend.RUST,
     start: np.ndarray | None = None,
 ) -> AnnealedPotts:
     """Simulated annealing by heat-bath sweeps on a temperature schedule.
@@ -539,11 +541,11 @@ def anneal_potts(
         on the same uniforms in the same order (:func:`sweep_at`).
     cluster_backend : Backend
         Which implementation runs the Swendsen-Wang pass.
-        :data:`~sal.backend.Backend.PYTHON`, the default,
-        records every cluster's accept step in ``trace``;
-        :data:`~sal.backend.Backend.RUST` is a chain of the
-        same law on another order of draws (:func:`_cluster_pass_rust`) and
-        keeps no counter, so its steps leave ``trace`` empty (issue #923).
+        :data:`~sal.backend.Backend.RUST`, the default since #1283, is a chain
+        of the same law as the oracle on another order of draws
+        (:func:`_cluster_pass_rust`) and keeps no counter, so its steps leave
+        ``trace`` empty (issue #923); :data:`~sal.backend.Backend.PYTHON`
+        records every cluster's accept step in ``trace``.
         For the ghost-spin, label-directed and heat-bath Swendsen-Wang
         passes it merges the bonds (:func:`bond_roots`), on the same roots
         either way, and none keeps a counter (issues #1041, #1142).
@@ -641,7 +643,7 @@ def parallel_tempering(
     *,
     move: RungMoves = PottsMove.SINGLE_SITE,
     backend: Backend = Backend.RUST,
-    cluster_backend: Backend = Backend.PYTHON,
+    cluster_backend: Backend = Backend.RUST,
     start: np.ndarray | None = None,
 ) -> TemperedChains:
     """Replicas at fixed temperatures, exchanging configurations by Metropolis.
@@ -1210,7 +1212,7 @@ def sweep_for(
     neighbours: np.ndarray,
     couplings: np.ndarray,
     backend: Backend,
-    cluster_backend: Backend = Backend.PYTHON,
+    cluster_backend: Backend = Backend.RUST,
 ) -> Callable[[np.ndarray, np.random.Generator, float], int]:
     """One sweep of ``move``, as a call taking a state, a generator and ``beta``.
 
@@ -1220,7 +1222,8 @@ def sweep_for(
     with the same arguments in the same order, so every existing chain is
     bitwise what it was. ``backend`` runs the heat-bath sweep and
     ``cluster_backend`` the Swendsen-Wang pass: two arguments because they are
-    two decisions with two defaults (:func:`sample_potts`, issue #754).
+    two decisions, one keeping the oracle's stream and one not
+    (:func:`sample_potts`, issues #754, #1283).
 
     Returns
     -------
@@ -1269,7 +1272,7 @@ def sample_potts_pair(
     temperature: float = 1.0,
     houdayer: bool = True,
     backend: Backend = Backend.RUST,
-    cluster_backend: Backend = Backend.PYTHON,
+    cluster_backend: Backend = Backend.RUST,
 ) -> PottsPair:
     """Two replicas at one temperature, joined by Houdayer's isoenergetic move.
 
