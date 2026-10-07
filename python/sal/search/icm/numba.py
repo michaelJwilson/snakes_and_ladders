@@ -310,9 +310,12 @@ def floor_smallest_first(labels: np.ndarray, values: np.ndarray, min_sites: int)
         smallest = -1
         for state in range(n_states):
             count = counts[state]
-            if 0 < count < min_sites and not stuck[state]:
-                if smallest < 0 or count < counts[smallest]:
-                    smallest = state
+            if (
+                0 < count < min_sites
+                and not stuck[state]
+                and (smallest < 0 or count < counts[smallest])
+            ):
+                smallest = state
         if smallest < 0:
             return moved
         alive = counts > 0
@@ -324,9 +327,12 @@ def floor_smallest_first(labels: np.ndarray, values: np.ndarray, min_sites: int)
                 continue
             best = -1
             for state in range(n_states):
-                if alive[state] and values[node, state] > -np.inf:
-                    if best < 0 or values[node, state] > values[node, best]:
-                        best = state
+                if (
+                    alive[state]
+                    and values[node, state] > -np.inf
+                    and (best < 0 or values[node, state] > values[node, best])
+                ):
+                    best = state
             if best >= 0:
                 labels[node] = best
                 counts[smallest] -= 1

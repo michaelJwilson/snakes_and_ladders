@@ -1869,7 +1869,7 @@ _STAGE = re.compile(r"^\s*([A-Za-z0-9_\-]+)\s*(?:\((.*)\))?\s*$")
 
 #: The fields of an annealed stage's schedule an argument sets; the others
 #: are :data:`ANNEAL_SCHEDULE`'s.
-SCHEDULE_FIELDS = ("shape", "t_start", "t_end", "hold")
+SCHEDULE_FIELDS = ("shape", "t_start", "t_end", "hold", "warm")
 
 #: Every argument a stage can take, and how a value, typed or text, is read.
 ARGUMENTS: dict[str, Callable[[Any], Any]] = {
@@ -1877,6 +1877,7 @@ ARGUMENTS: dict[str, Callable[[Any], Any]] = {
     "t_start": float,
     "t_end": float,
     "hold": float,
+    "warm": float,
     "steps": int,
     "backend": Backend,
     "min_sites": int,
@@ -1945,7 +1946,13 @@ class SolverStage:
         if "schedule" in arguments:
             schedule = arguments.pop("schedule")
             arguments = {
-                **{key: getattr(schedule, key) for key in SCHEDULE_FIELDS},
+                # A warm of zero is left unset, so a stage's text reads as it
+                # did before #1324.
+                **{
+                    key: getattr(schedule, key)
+                    for key in SCHEDULE_FIELDS
+                    if key != "warm" or schedule.warm
+                },
                 **arguments,
             }
         if not arguments:

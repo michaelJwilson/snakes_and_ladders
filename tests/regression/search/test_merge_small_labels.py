@@ -14,11 +14,11 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from sal.backend import Backend
 from sal.cost import Cost
 from sal.opt.budget import Budget
 from sal.search.alpha_expansion import alpha_expansion
 from sal.search.ground_state import ground_state
-from sal.backend import Backend
 from sal.search.icm import (
     FloorPolicy,
     _floor_smallest_first,
