@@ -3464,8 +3464,15 @@ is 5.0 ms against the one-shot call's 148 ms. `Transport.SHARED` and
 `Transport.MMAP` cut it against the default `NPZ` at 10 and 128 MB (echo, 128
 MB, 100 calls: 857, 615 and 362 ms). Every transport returns the one-shot
 call's bytes, and the kill tests count 0 orphaned blocks
-(`tests/regression/test_external_session.py`, PR #1288). The calls in sal's
-types are steps 3--7 and are not started.
+(`tests/regression/test_external_session.py`, PR #1288).
+
+**Steps 3 and 4, the calls in sal's types.** `external.potts.ground_state` returns
+gco's and PyMaxflow's labellings as `search.ground_state`'s `MethodRun` (PR
+#1289); `external.potts.lower_bound` returns HiGHS's local-polytope LP, or its ILP,
+as `search.trws`'s `BoundedLabelling`, its bound the adapter's value bitwise
+and ordered TRW-S <= LP <= ILP = enumerated minimum
+(`tests/regression/test_external_lower_bound.py`, PR #1290). Steps 5--7 are
+not started.
 
 ## Milestone 3.1 — Model Surrogates & Bounds for Supported Problems
 

@@ -6,7 +6,7 @@ at a local minimum. Checked: gco's labelling is a fixed point of our move
 q = 3 both are within Boykov, Veksler and Zabih's factor 2 of the minimum over
 3^16 = 43,046,721 labellings (non-negative terms), and both reach it within
 1e-12; at 71² the energies agree within 1% (#938 measured 0.13% at q = 10).
-`external.ground_state` (#1282, step 3) returns the adapter's labelling
+`external.potts.ground_state` (#1282, step 3) returns the adapter's labelling
 bitwise, expansion and swap, from gco's start and a given one, one-shot and
 in a session; with forbidden labels (#1139) it holds none, is the adapter's
 labelling on #1274's stand-in bitwise, and on the enumerable instances
@@ -23,7 +23,7 @@ from sal import external
 from sal.backend import Backend
 from sal.cost import Cost
 from sal.enumeration import configurations
-from sal.external import Solver
+from sal.external import Solver, potts
 from sal.external.potts_inputs import stand_in
 from sal.opt.budget import Budget
 from sal.search.alpha_expansion import alpha_expansion
@@ -142,7 +142,7 @@ def test_external_ground_state_is_the_adapters_labelling(solver: Solver) -> None
         theirs = gco.alpha_expansion(
             graph, field, n_states, start=start, move=_moves(solver)
         )
-        ours = external.ground_state(
+        ours = potts.ground_state(
             graph, field, solver, ONE_CALL, np.random.default_rng(0), start=start
         )
         assert np.array_equal(ours.labelling, theirs.labelling)
@@ -166,7 +166,7 @@ def test_forbidden_labels_reach_gco_as_the_stand_in_and_none_is_returned(
     def check(graph: PottsGraph, finite: np.ndarray, allowed: np.ndarray) -> None:
         n_states = finite.shape[1]
         field = forbid(finite, allowed)
-        ours = external.ground_state(
+        ours = potts.ground_state(
             graph, field, solver, ONE_CALL, np.random.default_rng(0)
         )
         theirs = gco.alpha_expansion(
@@ -193,7 +193,7 @@ def test_forbidden_expansion_reaches_the_enumerated_constrained_minimum() -> Non
     # The 3x3 q = 3 instance and the 2x4 ones at q = 2 and 3, as #1274 pinned.
     def check(graph: PottsGraph, finite: np.ndarray, allowed: np.ndarray) -> None:
         n_states = finite.shape[1]
-        ours = external.ground_state(
+        ours = potts.ground_state(
             graph,
             forbid(finite, allowed),
             Solver.GCO_EXPANSION,
@@ -223,9 +223,9 @@ def test_a_session_serves_the_one_shot_ground_state(solver: Solver) -> None:
     rng = np.random.default_rng(0)
     with external.session(solver) as opened:
         for graph, field in problems:
-            served = external.ground_state(
+            served = potts.ground_state(
                 graph, field, solver, ONE_CALL, rng, session=opened
             )
-            once = external.ground_state(graph, field, solver, ONE_CALL, rng)
+            once = potts.ground_state(graph, field, solver, ONE_CALL, rng)
             assert np.array_equal(served.labelling, once.labelling)
             assert served.energy == once.energy

@@ -22,6 +22,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from sal.external.potts_inputs import INTEGRALITY, OPTIMAL, polytope_inputs
+from sal.external.potts_inputs import integral as is_integral
 from sal.external.runner import run
 from sal.sim.graph import PottsGraph
 from sal.sim.potts import SiteField, log_weight_of, site_field
@@ -29,12 +31,7 @@ from sal.sim.potts import SiteField, log_weight_of, site_field
 #: The script this adapter runs.
 SCRIPT = "highs"
 
-#: `linprog`'s status for an optimal solution.
-OPTIMAL = 0
-
-#: Distance from 0 or 1 within which a node marginal reads as integral:
-#: HiGHS's default primal feasibility tolerance, 1e-7.
-INTEGRALITY = 1e-7
+__all__ = ["INTEGRALITY", "OPTIMAL", "SCRIPT", "LocalPolytope", "local_polytope"]
 
 
 @dataclass(frozen=True)
@@ -61,8 +58,7 @@ class LocalPolytope:
     @property
     def integral(self) -> bool:
         """Whether every node marginal is within :data:`INTEGRALITY` of 0 or 1."""
-        marginals = self.node_marginals
-        return bool(np.all(np.minimum(marginals, 1.0 - marginals) <= INTEGRALITY))
+        return is_integral(self.node_marginals)
 
     @property
     def labelling(self) -> np.ndarray:
@@ -71,26 +67,30 @@ class LocalPolytope:
 
 
 def local_polytope(
-    graph: PottsGraph, field: SiteField | np.ndarray, *, timeout: float = 600.0
+    graph: PottsGraph,
+    field: SiteField | np.ndarray,
+    *,
+    timeout: float = 600.0,
+    integral: bool = False,
 ) -> LocalPolytope:
     """The local-polytope LP of ``min_x E(x)``, solved by HiGHS.
 
     ``field`` is a log-weight, ``(n_states,)`` or ``(n_nodes, n_states)``, or
     a :class:`~sal.sim.potts.SiteField`, read as :func:`sal.search.trws.trws`
-    reads it. ``timeout`` bounds the subprocess, in seconds.
+    reads it. ``timeout`` bounds the subprocess, in seconds. With
+    ``integral`` the node marginals are integer and HiGHS's ``milp`` solves
+    the ILP to a zero gap (issue #1274), HiGHS stopping itself at 0.9 of
+    ``timeout`` so the status reaches the caller: its optimal value is the
+    minimum energy, and ``iterations`` is its node count. The inputs are
+    :func:`~sal.external.potts_inputs.polytope_inputs`, which
+    :func:`sal.external.potts.lower_bound` sends too (#1282, step 4).
     """
     values = site_field(
         np.asarray(log_weight_of(field), dtype=np.float64), graph.n_nodes
     )
-    edges = graph.edge_index
     result = run(
         SCRIPT,
-        {
-            "unary": np.ascontiguousarray(-values),
-            "first": np.ascontiguousarray(edges[:, 0], dtype=np.int64),
-            "second": np.ascontiguousarray(edges[:, 1], dtype=np.int64),
-            "coupling": np.ascontiguousarray(graph.edge_coupling, dtype=np.float64),
-        },
+        polytope_inputs(graph, values, integral=integral, time_limit=0.9 * timeout),
         timeout=timeout,
     )
     outputs = result.outputs

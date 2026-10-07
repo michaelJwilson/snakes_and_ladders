@@ -6,7 +6,7 @@ configuration from both backends, so the same energy bitwise. Directed
 asymmetric networks: flow within 1e-12 relative, source side node for node.
 Control: doubled capacities double the value; dropped back arcs match the
 Rust kernel. A session (#1282) returns the one-shot call's bytes under
-every transport. `external.ground_state` (#1282, step 3) is the adapter's
+every transport. `external.potts.ground_state` (#1282, step 3) is the adapter's
 ground state and the package's, bitwise, one-shot and in a session.
 Runtime goal: `test_goals.py`.
 """
@@ -18,7 +18,7 @@ import pytest
 from sal import external
 from sal.backend import Backend
 from sal.cost import Cost
-from sal.external import Capability, Solver, Transport, invoke, session
+from sal.external import Capability, Solver, Transport, invoke, potts, session
 from sal.external.potts_inputs import ising_inputs
 from sal.opt.budget import Budget
 from sal.search import maxflow
@@ -155,7 +155,7 @@ def test_external_ground_state_is_the_adapters_and_the_packages() -> None:
     def check(side: int) -> None:
         rung = lattice_rung(side, 2, seed=973)
         theirs, _ = pymaxflow.ising_ground_state(rung.graph, rung.field)
-        run = external.ground_state(
+        run = potts.ground_state(
             rung.graph,
             rung.field,
             Solver.PYMAXFLOW_EXACT,
@@ -170,7 +170,7 @@ def test_external_ground_state_is_the_adapters_and_the_packages() -> None:
         assert (run.spent, run.termination.converged) == (1, True)
         assert run.provenance == external.provenance(Solver.PYMAXFLOW_EXACT)
         with external.session(Solver.PYMAXFLOW_EXACT) as opened:
-            served = external.ground_state(
+            served = potts.ground_state(
                 rung.graph,
                 rung.field,
                 Solver.PYMAXFLOW_EXACT,

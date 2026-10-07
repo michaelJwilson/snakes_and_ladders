@@ -1,9 +1,10 @@
-"""The bytes gco and PyMaxflow receive for a Potts model (issue #1282, step 3).
+"""The bytes gco, PyMaxflow and HiGHS receive for a Potts model (issue #1282, steps 3 and 4).
 
 One construction per framework, read by :func:`sal.external.potts.ground_state`
-and by the adapters :mod:`sal.validation.gco` and
-:mod:`sal.validation.pymaxflow`, so a labelling from either path is the
-other's bitwise. Apart from :mod:`sal.external.potts` so an adapter imports
+and :func:`sal.external.potts.lower_bound`, and by the adapters
+:mod:`sal.validation.gco`, :mod:`sal.validation.pymaxflow` and
+:mod:`sal.validation.highs`, so an answer from either path is the other's
+bitwise. Apart from :mod:`sal.external.potts` so an adapter imports
 NumPy and ``sim`` alone, not the ground-state ladder ``MethodRun`` lives in.
 
 :func:`stand_in` and :func:`allowed_by` are #1274's forbidden-label rule
@@ -16,6 +17,13 @@ import numpy as np
 
 from sal.sim.graph import PottsGraph
 from sal.sim.potts import site_field
+
+#: HiGHS's status, from `linprog` and `milp` alike, for an optimal solution.
+OPTIMAL = 0
+
+#: Distance from 0 or 1 within which a node marginal reads as integral:
+#: HiGHS's default primal feasibility tolerance, 1e-7.
+INTEGRALITY = 1e-7
 
 
 def stand_in(graph: PottsGraph, finite: np.ndarray, allowed: np.ndarray) -> np.ndarray:
@@ -110,3 +118,32 @@ def ising_inputs(graph: PottsGraph, field: np.ndarray) -> dict[str, np.ndarray]:
         cost[:, 1] - offsets,
         cost[:, 0] - offsets,
     )
+
+
+def polytope_inputs(
+    graph: PottsGraph,
+    field: np.ndarray,
+    *,
+    integral: bool = False,
+    time_limit: float = np.inf,
+) -> dict[str, np.ndarray]:
+    """HiGHS's script inputs for the local-polytope LP of ``field``, shape ``(n_nodes, n_states)``.
+
+    The unary is ``-field``, the edges as the graph lists them. ``integral``
+    makes the node marginals integer, the ILP (#1274), and ``time_limit`` is
+    HiGHS's own limit on it, in seconds; the LP reads neither.
+    """
+    edges = graph.edge_index
+    return {
+        "unary": np.ascontiguousarray(-field, dtype=np.float64),
+        "first": np.ascontiguousarray(edges[:, 0], dtype=np.int64),
+        "second": np.ascontiguousarray(edges[:, 1], dtype=np.int64),
+        "coupling": np.ascontiguousarray(graph.edge_coupling, dtype=np.float64),
+        "integral": np.asarray(integral),
+        "time_limit": np.asarray(time_limit, dtype=np.float64),
+    }
+
+
+def integral(marginals: np.ndarray) -> bool:
+    """Whether every node marginal is within :data:`INTEGRALITY` of 0 or 1."""
+    return bool(np.all(np.minimum(marginals, 1.0 - marginals) <= INTEGRALITY))
