@@ -42,8 +42,6 @@ INPUTS = {
     "scalar": np.asarray(3, dtype=np.int64),
 }
 
-SHM = Path("/dev/shm")
-
 
 def _same(ours: runner.Run, reference: runner.Run) -> None:
     """Every output equal in bytes, dtype and shape, the scripts' clocks aside."""
@@ -57,10 +55,9 @@ def _same(ours: runner.Run, reference: runner.Run) -> None:
 
 
 def _orphans(opened: Session) -> list[str]:
-    """Blocks and files of ``opened`` still on disk, inputs and outputs alike."""
-    blocks = [p.name for p in SHM.glob(f"{opened.prefix}*")] if SHM.is_dir() else []
+    """Files of ``opened`` still on disk, inputs and outputs alike."""
     files = [p.name for p in Path(opened._directory.name).iterdir()]
-    return blocks + [f for f in files if f != "stderr"]
+    return [f for f in files if f != "stderr"]
 
 
 @pytest.fixture(params=list(Transport), ids=str)
@@ -176,7 +173,7 @@ def test_a_worker_killed_between_calls_leaves_no_block(echo: Session) -> None:
 
 @pytest.mark.critical
 @pytest.mark.infra
-@pytest.mark.parametrize("transport", [Transport.SHARED, Transport.MMAP], ids=str)
+@pytest.mark.parametrize("transport", [Transport.MMAP], ids=str)
 def test_a_worker_killed_mid_call_leaves_no_block(
     transport: Transport, monkeypatch: pytest.MonkeyPatch
 ) -> None:

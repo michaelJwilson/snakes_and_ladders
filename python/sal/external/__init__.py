@@ -16,8 +16,8 @@ raises :class:`ExternalUnavailable` naming its extra.
 
 :func:`session` keeps one worker per solver for many calls, so a call pays
 interpreter and import start-up once (:mod:`sal.external.sessions`); its
-:class:`Transport` moves arrays as ``.npz`` files, shared-memory blocks or
-memory-mapped files, with the same bytes reaching the framework each way.
+:class:`Transport` moves arrays as memory-mapped files (the default) or
+``.npz`` files, with the same bytes reaching the framework each way.
 
 :func:`ground_state` returns a Potts ground state from gco or PyMaxflow as
 :func:`sal.search.ground_state.ground_state` returns one
