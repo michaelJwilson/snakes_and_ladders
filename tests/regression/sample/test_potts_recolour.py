@@ -25,7 +25,7 @@ from collections.abc import Callable
 import numpy as np
 import pytest
 from sal.backend import Backend
-from sal.sample import annealed, potts_mcmc, tempered
+from sal.sample import annealed, potts_keyed, potts_mcmc, tempered
 from sal.sample.potts_mcmc import (
     PottsMove,
     Recolour,
@@ -361,6 +361,17 @@ ENTRY_POINTS = [
     annealed.population_annealing,
     annealed.simulated_tempering,
     tempered.tempered_potts_pair,
+    potts_keyed.cluster_moves,
+]
+
+#: The annealed Potts entry points and the name of their schedule argument:
+#: ``schedule`` where it is temperatures, ``betas`` where the ladder is
+#: inverse temperatures (issue #1317, stage 2).
+ANNEALED_ENTRY_POINTS = [
+    (potts_mcmc.anneal_potts, "schedule"),
+    (annealed.annealed_importance_sampling, "betas"),
+    (annealed.population_annealing, "betas"),
+    (annealed.simulated_tempering, "betas"),
 ]
 
 
@@ -387,3 +398,19 @@ def test_the_guard_lists_every_exported_entry_point_that_takes_a_move() -> None:
                 continue
             if "graph" in inspect.signature(value).parameters:
                 assert name in listed, name
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize(
+    ("entry", "name"), ANNEALED_ENTRY_POINTS, ids=lambda f: getattr(f, "__name__", f)
+)
+def test_every_annealed_entry_point_takes_an_auto_schedule_and_its_tuning(
+    entry: Callable[..., object], name: str
+) -> None:
+    parameters = inspect.signature(entry).parameters
+    assert (
+        "auto" in str(parameters[name].annotation)
+        or str(parameters[name].annotation) == "Schedule"
+    ), parameters[name].annotation
+    assert parameters["tuning"].default is None
+    assert str(parameters["tuning"].annotation) == "ScheduleTuning | None"

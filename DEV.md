@@ -465,6 +465,7 @@ The names root `CLAUDE.md`'s API conventions refer to. An entry point uses these
 | Why a loop ended | `termination` | `Termination`, required | #1085, #1090 |
 | Potts move | `move` | `PottsMoves`: one `PottsMove` or a sequence applied in order as one step, `RungMoves`' per-step form; step visits sum over the set | #1317 |
 | Cluster label draw | `recolour` | `Recolour`, keyword-only: `HEAT_BATH` draws `exp(beta sum_C h)` over the allowed labels, `UNIFORM` accepts a uniform proposal on the field; `HEAT_BATH` on a move with no heat-bath form is refused by name | #1317 |
+| Annealing schedule | `schedule` (`betas` for a ladder) | `TempSchedule` or `"auto"`; `"auto"` requires `tuning: ScheduleTuning` (budget in site visits, `Criterion.LOWEST_ENERGY`, `n_steps`, grid of `ScheduleParams`) and is refused without it; a tuning beside a given schedule is refused | #1317 |
 | Moves taken | `acceptance` | `float`, accepted over proposed; an exchange names its own, `swap_acceptance` and `houdayer_acceptance`; a chain that stays put ends `Stop.NOT_MIXING` with its draws kept | #1316 |
 | Coupled-layer state order | state-major (`2i + a`), as `np.kron(A, S)` | slow state `i`, layer `a`, under `SwitchKind.KRONECKER*`; `kronecker_order(n_states, layer_major=True)` takes a layer-major `aK + i` array onto it | #1144 |
 | Returned arrays | — | NumPy and `float`; a tensor only from a `torch.py` twin or a `*_torch` name | #1092 |

@@ -108,6 +108,14 @@ one-element set bitwise, and `recolour`: a cluster's label is drawn by
 than ignoring it. A new entry point without both fails
 `tests/regression/sample/test_potts_recolour.py`.
 
+**A schedule is given or tuned, never defaulted (#1317).** Every annealed
+Potts entry point takes its schedule (`schedule`, or `betas` for a ladder of
+inverse temperatures) as a `TempSchedule` or `"auto"`; `"auto"` requires a
+`ScheduleTuning` beside it and is refused without one before any draw, as
+`step_size="auto"` requires `StepTuning`. `tune.tune_schedule` is the one
+search: one pilot per candidate through `sal.parallel`, each on its own
+spawned generator, so a thread pool returns the serial result bitwise.
+
 ## Measured mixing limits
 
 A move whose law enumeration pins and whose chain still does not mix on an

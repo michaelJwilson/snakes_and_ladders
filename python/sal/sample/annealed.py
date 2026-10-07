@@ -41,6 +41,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Literal
 
 import numpy as np
 
@@ -66,6 +67,7 @@ from sal.sample.schedule import (
     check_ladder,
     temperatures,
 )
+from sal.sample.tune import ScheduleTuning, resolve_schedule
 from sal.sim.graph import PottsGraph
 from sal.sim.potts import SiteField, log_weight_of, site_field
 from sal.track import TrackedOptimization, current
@@ -182,6 +184,49 @@ def geometric_betas(
     )
 
 
+def _auto_betas(
+    betas: TempSchedule | InverseTemperatures | Literal["auto"],
+    tuning: ScheduleTuning | None,
+    graph: PottsGraph,
+    field: np.ndarray,
+    move: PottsMoves,
+    recolour: Recolour,
+    rng: np.random.Generator,
+    *,
+    from_zero: bool,
+) -> TempSchedule | InverseTemperatures:
+    """``betas`` as given, or under ``"auto"`` the ladder ``tuning``'s pilots choose (issue #1317).
+
+    The tuned :class:`~sal.sample.schedule.TempSchedule` is built at
+    ``tuning.n_steps`` temperatures and inverted rung by rung; a ladder
+    anchored at zero gains the ``beta = 0`` rung in front, so it holds
+    ``n_steps + 1``. The pilots draw from generators spawned from ``rng``
+    before the population's own, which a given ladder leaves unspawned, so
+    a given ladder's run is bitwise the run before #1317.
+
+    Raises
+    ------
+    ValueError
+        As :func:`~sal.sample.tune.resolve_schedule`.
+    """
+    if not isinstance(betas, str):
+        if tuning is not None:
+            msg = f"a tuning chooses betas='auto', and the ladder is given as {betas!r}"
+            raise ValueError(msg)
+        return betas
+    schedule, _ = resolve_schedule(
+        betas,
+        tuning,
+        graph=graph,
+        field=field,
+        move=move,
+        recolour=recolour,
+        rng=rng,
+    )
+    inverted = tuple(1.0 / t for t in temperatures(schedule))
+    return InverseTemperatures((0.0, *inverted) if from_zero else inverted)
+
+
 def _check_rungs(
     betas: TempSchedule | InverseTemperatures, *, from_zero: bool
 ) -> tuple[float, ...]:
@@ -264,7 +309,7 @@ def _entropy(labels: np.ndarray, n_replicas: int) -> float:
 def annealed_importance_sampling(
     graph: PottsGraph,
     field: SiteField | np.ndarray,
-    betas: TempSchedule | InverseTemperatures,
+    betas: TempSchedule | InverseTemperatures | Literal["auto"],
     rng: np.random.Generator,
     n_replicas: int,
     *,
@@ -272,6 +317,7 @@ def annealed_importance_sampling(
     recolour: Recolour = Recolour.UNIFORM,
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.RUST,
+    tuning: ScheduleTuning | None = None,
 ) -> LogPartition:
     """``log Z`` from independent annealing runs, weighted by what each one cost (Neal 2001).
 
@@ -301,6 +347,8 @@ def annealed_importance_sampling(
         :class:`~sal.sample.schedule.TempSchedule` is read as
         temperatures and inverted, so it carries no ``beta = 0`` rung and is
         refused on the anchor (issue #861).
+        ``"auto"`` builds the ladder from the schedule ``tuning``'s pilots
+        choose, with the ``beta = 0`` rung in front (issue #1317).
     rng : np.random.Generator
         The parent: one child per replica, and nothing else drawn from it
         here.
@@ -308,6 +356,9 @@ def annealed_importance_sampling(
         Independent runs, at least 2.
     move : PottsMove
         The move set each rung's sweep uses.
+    tuning : ScheduleTuning | None
+        The pilots that choose ``betas="auto"``, required with it and refused
+        without it (issue #1317).
     backend : Backend
         As :func:`~sal.sample.potts_mcmc.sample_potts`.
     cluster_backend : Backend
@@ -332,6 +383,9 @@ def annealed_importance_sampling(
         Fortuin-Kasteleyn cluster move on a negative coupling.
     """
     field = log_weight_of(field)
+    betas = _auto_betas(
+        betas, tuning, graph, field, move, recolour, rng, from_zero=True
+    )
     ladder = _check_rungs(betas, from_zero=True)
     states, children, advance, rows = _population(
         graph, field, rng, n_replicas, move, backend, cluster_backend, recolour
@@ -402,7 +456,7 @@ def _resampled(
 def population_annealing(
     graph: PottsGraph,
     field: SiteField | np.ndarray,
-    betas: TempSchedule | InverseTemperatures,
+    betas: TempSchedule | InverseTemperatures | Literal["auto"],
     rng: np.random.Generator,
     n_replicas: int,
     *,
@@ -410,6 +464,7 @@ def population_annealing(
     recolour: Recolour = Recolour.UNIFORM,
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.RUST,
+    tuning: ScheduleTuning | None = None,
     resample: Resampling = Resampling.SYSTEMATIC,
 ) -> LogPartition:
     """``log Z`` from a population resampled at every rung (Hukushima & Iba 2003; Machta 2010).
@@ -451,6 +506,9 @@ def population_annealing(
         As :func:`annealed_importance_sampling`.
     """
     field = log_weight_of(field)
+    betas = _auto_betas(
+        betas, tuning, graph, field, move, recolour, rng, from_zero=True
+    )
     ladder = _check_rungs(betas, from_zero=True)
     states, children, advance, rows = _population(
         graph, field, rng, n_replicas, move, backend, cluster_backend, recolour
@@ -570,7 +628,7 @@ def rung_weights(estimate: LogPartition) -> np.ndarray:
 def simulated_tempering(
     graph: PottsGraph,
     field: SiteField | np.ndarray,
-    betas: TempSchedule | InverseTemperatures,
+    betas: TempSchedule | InverseTemperatures | Literal["auto"],
     weights: np.ndarray,
     rng: np.random.Generator,
     n_sweeps: int,
@@ -581,6 +639,7 @@ def simulated_tempering(
     recolour: Recolour = Recolour.UNIFORM,
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.RUST,
+    tuning: ScheduleTuning | None = None,
 ) -> SimulatedTempered:
     """One walker over the ladder, with the rung as a sampled variable (Marinari & Parisi 1992).
 
@@ -610,7 +669,8 @@ def simulated_tempering(
         inverse temperatures given.
         The ladder, at least two rungs, non-negative and strictly increasing.
         It need not start at zero: nothing here is anchored on an exact
-        normalizer.
+        normalizer. ``"auto"`` as :func:`annealed_importance_sampling`, with
+        no rung added, so ``weights`` carries ``tuning.n_steps`` entries.
     weights : np.ndarray
         The rung weights ``g_k``, shape ``(n_rungs,)``. Required rather than
         defaulted to zero: a run at ``g = 0`` samples the rungs in proportion
@@ -635,6 +695,9 @@ def simulated_tempering(
         rung, or ``n_sweeps`` or ``thin`` is below 1 or ``burn_in`` below 0.
     """
     field = log_weight_of(field)
+    betas = _auto_betas(
+        betas, tuning, graph, field, move, recolour, rng, from_zero=False
+    )
     ladder = _check_rungs(betas, from_zero=False)
     g = np.asarray(weights, dtype=float)
     if g.shape != (len(ladder),):

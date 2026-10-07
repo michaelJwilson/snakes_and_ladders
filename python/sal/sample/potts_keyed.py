@@ -37,11 +37,16 @@ import numpy as np
 from sal.backend import Backend
 from sal.sample.potts_mcmc import (
     MoveKind,
+    PottsMove,
+    PottsMoves,
+    Recolour,
     adjacency_lists,
     cluster_members,
     find_root,
+    move_set,
     niedermayer_sweep,
     niedermayer_threshold,
+    swendsen_wang_heat_bath_sweep,
     swendsen_wang_sweep,
     union_roots,
     wolff_sweep,
@@ -336,6 +341,7 @@ class SwendsenWangMove:
         graph: PottsGraph,
         field: np.ndarray,
         backend: Backend = Backend.RUST,
+        recolour: Recolour = Recolour.UNIFORM,
     ) -> None:
         field = np.asarray(field, dtype=np.float64)
         if field.shape[0] != graph.n_nodes:
@@ -348,6 +354,7 @@ class SwendsenWangMove:
         self._graph = graph
         self._field = field
         self._backend = backend
+        self._recolour = recolour
         offsets, neighbours, _ = graph.compressed_adjacency()
         self._offsets = offsets
         self._neighbours = neighbours
@@ -394,6 +401,15 @@ class SwendsenWangMove:
                 members = order[bounds[cluster] : bounds[cluster + 1]]
                 proposed = int(rng.integers(self.n_states))
                 _recolour_at_zero(labels, members, self._field, proposed)
+        elif self._recolour is Recolour.HEAT_BATH:
+            swendsen_wang_heat_bath_sweep(
+                labels,
+                self._graph,
+                self._field,
+                rng,
+                1.0 / temperature,
+                self._backend,
+            )
         else:
             swendsen_wang_sweep(
                 labels,
@@ -407,16 +423,38 @@ class SwendsenWangMove:
         return labels, self._visits
 
 
+#: The keyed cluster moves, the default of :func:`cluster_moves`' ``move``.
+KEYED_MOVES: tuple[PottsMove, ...] = (
+    PottsMove.WOLFF,
+    PottsMove.SWENDSEN_WANG,
+    PottsMove.NIEDERMAYER,
+)
+
+_KIND_OF = {
+    PottsMove.WOLFF: MoveKind.WOLFF,
+    PottsMove.SWENDSEN_WANG: MoveKind.SWENDSEN_WANG,
+    PottsMove.SWENDSEN_WANG_HEAT_BATH: MoveKind.SWENDSEN_WANG,
+    PottsMove.NIEDERMAYER: MoveKind.NIEDERMAYER,
+}
+
+
 def cluster_moves(
     graph: PottsGraph,
     field: SiteField | np.ndarray,
     backend: Backend = Backend.RUST,
+    *,
+    move: PottsMoves = KEYED_MOVES,
+    recolour: Recolour = Recolour.UNIFORM,
 ) -> dict[MoveKind, WolffMove | SwendsenWangMove | NiedermayerMove]:
-    """Every cluster move on one lattice, keyed as the environment expects them.
+    """Every cluster move of ``move`` on one lattice, keyed as the environment expects them.
 
     One call rather than three, so an arm cannot be built with a Wolff move on
     one field and a Swendsen-Wang move on another. ``backend`` reaches the
     Swendsen-Wang pass alone, which is the one with two implementations.
+    ``move`` and ``recolour`` are every Potts entry point's (issue #1317):
+    the default builds all three, bitwise as before, and
+    ``recolour=Recolour.HEAT_BATH`` draws each Swendsen-Wang cluster's label
+    from its field weight at ``T > 0``.
 
     Houdayer's move is not here and cannot be: it acts on a *pair* of replicas
     and an arm's action carries one labelling to one labelling, so there is no
@@ -424,10 +462,37 @@ def cluster_moves(
     :func:`~sal.sample.potts_mcmc.sample_potts_pair` and
     :func:`~sal.sample.tempered.tempered_potts_pair` are where
     it is offered (issue #756).
+
+    Raises
+    ------
+    ValueError
+        As :func:`~sal.sample.potts_mcmc.move_set`; or if ``move`` names a
+        move with no keyed form, or Wolff under a heat-bath recolouring: a
+        keyed Wolff action names the label, which a heat bath would draw.
     """
     field = log_weight_of(field)
-    return {
-        MoveKind.WOLFF: WolffMove(graph, field),
-        MoveKind.SWENDSEN_WANG: SwendsenWangMove(graph, field, backend),
-        MoveKind.NIEDERMAYER: NiedermayerMove(graph, field),
-    }
+    built: dict[MoveKind, WolffMove | SwendsenWangMove | NiedermayerMove] = {}
+    for each in move_set(move, recolour):
+        if each is PottsMove.WOLFF_HEAT_BATH:
+            msg = (
+                "a keyed Wolff action names the label a heat bath would draw: "
+                "pass recolour=Recolour.UNIFORM for wolff"
+            )
+            raise ValueError(msg)
+        kind = _KIND_OF.get(each)
+        if kind is None:
+            msg = f"{each} has no keyed move; the keyed moves are {list(KEYED_MOVES)}"
+            raise ValueError(msg)
+        if kind is MoveKind.WOLFF:
+            built[kind] = WolffMove(graph, field)
+        elif kind is MoveKind.SWENDSEN_WANG:
+            heat_bath = each is PottsMove.SWENDSEN_WANG_HEAT_BATH
+            built[kind] = SwendsenWangMove(
+                graph,
+                field,
+                backend,
+                Recolour.HEAT_BATH if heat_bath else Recolour.UNIFORM,
+            )
+        else:
+            built[kind] = NiedermayerMove(graph, field)
+    return built

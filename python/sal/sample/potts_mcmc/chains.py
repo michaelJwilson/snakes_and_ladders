@@ -57,6 +57,12 @@ from sal.sample.schedule import (
     ladder,
 )
 from sal.sample.statistics import integrated_autocorrelation_time, split_rhat
+from sal.sample.tune import (
+    Schedule,
+    ScheduleTuning,
+    TunedSchedule,
+    resolve_schedule,
+)
 from sal.sim.graph import PottsGraph
 from sal.sim.potts import (
     SiteField,
@@ -589,17 +595,21 @@ class AnnealedPotts(Annealed[np.ndarray]):
         One counter per schedule step for a cluster move set, empty for
         single-site. Kept per step because the quantity issue #551 predicts
         is a function of temperature and the schedule is what varies it.
+    tuned : TunedSchedule | None
+        The pilots that chose the schedule under ``schedule="auto"`` (issue
+        #1317), ``None`` for a given schedule; their spend is not in ``spent``.
     """
 
     energy: float
     n_sweeps: int
     trace: tuple[ClusterCounter, ...] = ()
+    tuned: TunedSchedule | None = None
 
 
 def anneal_potts(
     graph: PottsGraph,
     field: SiteField | np.ndarray,
-    schedule: TempSchedule,
+    schedule: Schedule,
     rng: np.random.Generator,
     *,
     move: PottsMoves = PottsMove.SINGLE_SITE,
@@ -607,6 +617,7 @@ def anneal_potts(
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.RUST,
     start: np.ndarray | None = None,
+    tuning: ScheduleTuning | None = None,
 ) -> AnnealedPotts:
     """Simulated annealing by heat-bath sweeps on a temperature schedule.
 
@@ -640,8 +651,12 @@ def anneal_potts(
         The instance. Couplings of either sign.
     field : SiteField | np.ndarray
         External field, shape ``(n_states,)``.
-    schedule : TempSchedule
-        Temperature per sweep. Its length is the budget.
+    schedule : TempSchedule | Literal["auto"]
+        Temperature per sweep. Its length is the budget. ``"auto"`` chooses
+        it by :func:`~sal.sample.tune.tune_schedule`'s pilots, which
+        ``tuning`` describes and which draw from generators spawned from
+        ``rng`` (issue #1317); their site visits are ``tuned.spent``, not
+        the run's.
     rng : np.random.Generator
         Source of every draw, the start included. Passed in rather than
         seeded here, for the reason :func:`sample_potts` gives.
@@ -668,6 +683,9 @@ def anneal_potts(
         ``None`` draws it uniformly from ``rng``, as before the parameter
         existed. A given start draws nothing, so the chain's first draw is
         the generator's next (issue #1038).
+    tuning : ScheduleTuning | None
+        The pilots that choose ``schedule="auto"``, required with it and
+        refused without it (issue #1317).
 
     Returns
     -------
@@ -676,11 +694,22 @@ def anneal_potts(
     Raises
     ------
     ValueError
-        If ``start`` is not one integer state in range per node.
+        If ``start`` is not one integer state in range per node, or as
+        :func:`~sal.sample.tune.resolve_schedule` refuses.
     """
     field = log_weight_of(field)
+    given = move
     move = move_set(move, recolour)
     refuse_negative_coupling(move, graph)
+    schedule, tuned = resolve_schedule(
+        schedule,
+        tuning,
+        graph=graph,
+        field=field,
+        move=given,
+        recolour=recolour,
+        rng=rng,
+    )
 
     rows = site_field(np.asarray(field, dtype=float), graph.n_nodes)
     drawn = (
@@ -704,6 +733,7 @@ def anneal_potts(
         unit=Cost.SITE_VISITS,
         termination=walked.termination,
         trace=tuple(trace),
+        tuned=tuned,
     )
 
 
