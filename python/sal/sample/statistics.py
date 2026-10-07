@@ -104,8 +104,12 @@ def sign_test_p_value(differences: np.ndarray) -> float:
 def integrated_autocorrelation_time(series: np.ndarray, *, window: int = 5) -> float:
     """Sweeps a chain must run to buy one independent sample of ``series``.
 
-    ``tau = 1 + 2 * sum_t rho(t)``, truncated by Sokal's automatic window: the
-    sum is cut at the first ``t`` with ``t >= window * tau``. Truncation is not
+    ``tau = 1 + 2 * sum_t rho(t)``, so ``n / tau`` is the effective sample
+    size of ``n`` sweeps and ``std * sqrt(tau / n)`` the standard error of
+    their mean. The sum is truncated by Sokal's automatic window, stated in
+    Sokal's own convention ``tau_S = 1/2 + sum_t rho(t) = tau / 2``: it is cut
+    at the first ``t`` with ``t >= window * tau_S`` (Sokal, *Monte Carlo
+    Methods in Statistical Mechanics*, 1997, sec. 3). Truncation is not
     optional --- the estimator of ``rho(t)`` has roughly constant variance in
     ``t`` while the signal decays, so summing the whole series adds noise
     without adding signal and the result grows with the chain length instead
@@ -121,8 +125,8 @@ def integrated_autocorrelation_time(series: np.ndarray, *, window: int = 5) -> f
     Returns
     -------
     float
-        ``tau``, in sweeps. Never below 0.5, which is the value for a series
-        of independent draws.
+        ``tau``, in sweeps. Never below 1, which is the value for a series
+        of independent draws (issue #1319).
 
     Raises
     ------
@@ -141,7 +145,7 @@ def integrated_autocorrelation_time(series: np.ndarray, *, window: int = 5) -> f
         # A constant chain has no correlation to measure. It is also a chain
         # that never moved, which is a sampler failure rather than a fast one,
         # so this returns the floor and lets the caller's own test see it.
-        return 0.5
+        return 1.0
 
     length = centred.shape[0]
     padded = int(2 ** math.ceil(math.log2(2 * length)))
@@ -152,10 +156,12 @@ def integrated_autocorrelation_time(series: np.ndarray, *, window: int = 5) -> f
     total = 0.0
     for lag in range(1, length):
         total += float(correlation[lag])
-        tau = 0.5 + total
-        if lag >= window * tau:
+        # Sokal's window reads his `tau_S = 1/2 + sum`, half the returned
+        # `tau`; the doubling below is exact, so the truncation lag is the one
+        # the `tau_S` convention chose before #1319.
+        if lag >= window * (0.5 + total):
             break
-    return max(0.5 + total, 0.5)
+    return max(2.0 * (0.5 + total), 1.0)
 
 
 def split_rhat(chains: np.ndarray) -> float:

@@ -1055,16 +1055,18 @@ def _autocorrelation_in_site_updates(move: PottsMove, graph: PottsGraph) -> floa
 @pytest.mark.analytic
 def test_cluster_updates_decorrelate_faster_at_the_transition() -> None:
     # The ordering is claimed, seeded values pinned; the ratio widens with
-    # extent (docs/experiments/001-potts-cluster-autocorrelation.md).
+    # extent (docs/experiments/001-potts-cluster-autocorrelation.md). The
+    # pins are twice that record's, which reads Sokal's `1/2 + sum rho`; the
+    # estimator returns `1 + 2 sum rho` since #1319, the doubling exact.
     graph = _critical_lattice()
 
     single = _autocorrelation_in_site_updates(PottsMove.SINGLE_SITE, graph)
     swendsen_wang = _autocorrelation_in_site_updates(PottsMove.SWENDSEN_WANG, graph)
     wolff = _autocorrelation_in_site_updates(PottsMove.WOLFF, graph)
 
-    assert single == pytest.approx(6.70, rel=CRITICAL.tolerance)
-    assert swendsen_wang == pytest.approx(4.17, rel=CRITICAL.tolerance)
-    assert wolff == pytest.approx(2.34, rel=CRITICAL.tolerance)
+    assert single == pytest.approx(13.40, rel=CRITICAL.tolerance)
+    assert swendsen_wang == pytest.approx(8.34, rel=CRITICAL.tolerance)
+    assert wolff == pytest.approx(4.68, rel=CRITICAL.tolerance)
     assert swendsen_wang < single
     assert wolff < single
 
@@ -1073,6 +1075,7 @@ def test_cluster_updates_decorrelate_faster_at_the_transition() -> None:
 def test_the_cluster_advantage_is_absent_at_the_registry_instance() -> None:
     # The registry lattice is 9 sites at J = 0.6, below J_c = 1.005: no
     # critical slowing, clusters buy nothing (`docs/nb/potts_chain.ipynb`).
+    # Pins in `tau = 1 + 2 sum rho`, twice the notebook's Sokal values (#1319).
     instance = fixture("potts_lattice", "ci").params
     graph = lattice_graph(instance.shape, instance.boundary, instance.coupling)
     field = instance.field - math.log(float(np.exp(instance.field).sum()))
@@ -1086,9 +1089,9 @@ def test_the_cluster_advantage_is_absent_at_the_registry_instance() -> None:
         tau = integrated_autocorrelation_time(energies(graph, field, chain.states))
         times[move] = tau * chain.mean_cluster_size / graph.n_nodes
 
-    assert times[PottsMove.SINGLE_SITE] == pytest.approx(1.00, rel=0.1)
-    assert times[PottsMove.SWENDSEN_WANG] == pytest.approx(1.71, rel=0.1)
-    assert times[PottsMove.WOLFF] == pytest.approx(1.59, rel=0.1)
+    assert times[PottsMove.SINGLE_SITE] == pytest.approx(2.00, rel=0.1)
+    assert times[PottsMove.SWENDSEN_WANG] == pytest.approx(3.42, rel=0.1)
+    assert times[PottsMove.WOLFF] == pytest.approx(3.18, rel=0.1)
     assert times[PottsMove.SINGLE_SITE] < min(
         times[PottsMove.SWENDSEN_WANG], times[PottsMove.WOLFF]
     )
