@@ -437,7 +437,7 @@ def tempered_potts_pair(
     move: PottsMove = PottsMove.SINGLE_SITE,
     houdayer: bool = True,
     backend: Backend = Backend.RUST,
-    cluster_backend: Backend = Backend.PYTHON,
+    cluster_backend: Backend = Backend.RUST,
 ) -> TemperedEnsemble:
     """A replica pair per rung, exchanging along the ladder, joined by Houdayer's move.
 
@@ -479,8 +479,9 @@ def tempered_potts_pair(
     cluster_backend : Backend
         Which implementation runs a cluster move's pass, as
         :func:`~sal.sample.potts_mcmc.sample_potts` takes it;
-        :data:`~sal.backend.Backend.PYTHON`, the default, is the chain before
-        #1059 threaded it here, bitwise.
+        :data:`~sal.backend.Backend.RUST` is the default since #1283, and
+        :data:`~sal.backend.Backend.PYTHON` is the chain before #1059
+        threaded it here, bitwise.
 
     Returns
     -------

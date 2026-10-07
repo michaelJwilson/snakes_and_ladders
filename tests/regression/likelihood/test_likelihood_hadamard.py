@@ -16,6 +16,7 @@ import itertools
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
+from sal.backend import Backend
 from sal.likelihood.hadamard import (
     MAX_TAXA,
     binary_recoding,
@@ -59,7 +60,9 @@ def _exact_spectrum(tau: Node, names: list[str], k: int) -> np.ndarray:
             for bit, name in enumerate(names[:-1])
             if recoded[name][0] != recoded[names[-1]][0]
         )
-        spectrum[index] += np.exp(log_likelihood(tau, k, pi, pattern))
+        spectrum[index] += np.exp(
+            log_likelihood(tau, k, pi, pattern, backend=Backend.PYTHON)
+        )
     return spectrum
 
 

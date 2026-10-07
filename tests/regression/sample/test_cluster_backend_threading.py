@@ -2,9 +2,9 @@
 
 `sweep_for` took `cluster_backend` and five samplers never handed it one, so
 their cluster moves ran the Python pass whatever a caller wanted. Each now
-takes it with the default it had: named `PYTHON` the run is the default run
-bitwise, and named `RUST` it is another run of the same law, drawn in another
-order (`_cluster_pass_rust`), which is what shows the argument arrived.
+takes it, defaulting to `RUST` since #1283: named `RUST` the run is the default
+run bitwise, and named `PYTHON` it is another run of the same law, drawn in
+another order (`_cluster_pass_rust`), which is what shows the argument arrived.
 """
 
 from __future__ import annotations
@@ -71,9 +71,9 @@ NAMES = [
 @pytest.mark.backend
 @pytest.mark.smoke
 @pytest.mark.parametrize("name", NAMES)
-def test_the_cluster_backend_reaches_the_pass_and_the_default_is_unchanged(
+def test_the_cluster_backend_reaches_the_pass_and_the_default_is_rust(
     name: str,
 ) -> None:
     default = pickle.dumps(_run(name, None))
-    assert pickle.dumps(_run(name, Backend.PYTHON)) == default
-    assert pickle.dumps(_run(name, Backend.RUST)) != default
+    assert pickle.dumps(_run(name, Backend.RUST)) == default
+    assert pickle.dumps(_run(name, Backend.PYTHON)) != default

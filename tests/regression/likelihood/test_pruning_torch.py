@@ -98,7 +98,9 @@ def test_gradient_matches_finite_differences_of_numpy_oracle() -> None:
         tau_perturbed = _with_branch_lengths(
             tau, dict(zip(order, lengths, strict=True))
         )
-        return pruning.log_likelihood(tau_perturbed, k, pi, dataset.alignment)
+        return pruning.log_likelihood(
+            tau_perturbed, k, pi, dataset.alignment, backend=Backend.PYTHON
+        )
 
     finite_diff_grad = np.empty_like(lengths0)
     for i in range(len(lengths0)):
@@ -157,5 +159,7 @@ def test_the_gateways_torch_door_is_the_taped_value_at_the_oracles_tolerance() -
     )
     assert through == float(taped)
     assert_allclose(
-        through, pruning.log_likelihood(tau, k, pi, alignment), rtol=_RTOL_ORACLE
+        through,
+        pruning.log_likelihood(tau, k, pi, alignment, backend=Backend.PYTHON),
+        rtol=_RTOL_ORACLE,
     )

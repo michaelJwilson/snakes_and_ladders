@@ -33,6 +33,7 @@ import tracemalloc
 
 import numpy as np
 
+from sal.backend import Backend
 from sal.learn.tree import with_uniform_branch_lengths
 from sal.likelihood import pruning
 from sal.qa.figure import QATable, booktabs_tabular, latex_integer
@@ -137,7 +138,9 @@ def measure(n_taxa: int, n_sites: int, n_states: int) -> tuple[float, float]:
 
     alignment = dict(dataset.alignment)
     tracemalloc.start()
-    pruning.log_likelihood(tau, n_states, pi, alignment)
+    # The oracle's peak: `tracemalloc` counts NumPy's buffers, not the
+    # extension's, so the Rust default would measure nothing (#1283).
+    pruning.log_likelihood(tau, n_states, pi, alignment, backend=Backend.PYTHON)
     _, evaluate_peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
 
