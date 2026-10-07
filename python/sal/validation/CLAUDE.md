@@ -41,6 +41,13 @@ module. It is referenced here, never restated. What follows is local.
   goal test times the package alone, so it needs no framework, and fails
   until the package meets the figure. It runs in a non-blocking step of the
   `validation` job.
+- **A call `external` covers is made through `external`.** A test in
+  `tests/validation` calls `sal.external` wherever it returns what the test
+  asserts, through one session per module. An adapter keeps what `external`
+  does not cover: a framework with no `external` namespace, an output its
+  result does not carry (a build time, peak bytes, a cut's value), a key
+  given in place of a generator. An adapter function nothing calls is
+  removed (#1282, step 7).
 - **Only `tests/` imports from here.**
 - **A test here skips where its framework is absent** and carries the
   `validation` marker beside its kind. CI's `validation` job installs every

@@ -16,14 +16,19 @@ optimum, the enumerated minimum where enumeration reaches; TRW-S's labelling
 scores at least that optimum, and above it only on two frustrated lattices.
 `external.potts.lower_bound` (#1282, step 4) returns the
 adapter's value as its bound and the adapter's labelling, bitwise, on every
-instance here but `potts_lattice/release`.
+instance here but `potts_lattice/release`; every other solve here is
+`external.potts.lower_bound`, served by one session per module (step 7). The
+adapter stays for that pin and for `tests/regression/sandbox/test_potts_mip.py`.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 import numpy as np
 import pytest
-from sal.external import Solver, potts, session
+from sal.external import Session, Solver, potts, session
+from sal.external.potts import ExternalBound
 from sal.search.potts_starts import rung_of, spatio_rung, tiling_rung
 from sal.search.tightening import dual_bound
 from sal.search.trws import trws
@@ -78,15 +83,41 @@ def _fixtures() -> list[Row]:
     return rows
 
 
-def _solved(graph: PottsGraph, field: np.ndarray) -> highs.LocalPolytope:
-    """HiGHS's optimum, refused unless `linprog` reports one."""
-    result = highs.local_polytope(graph, field)
-    assert result.status == highs.OPTIMAL, result.message
+@pytest.fixture(scope="module")
+def lp() -> Iterator[Session]:
+    """One HiGHS worker for the module's solves, so each skips interpreter and import start-up."""
+    with session(Solver.HIGHS_LP) as opened:
+        yield opened
+
+
+def _solved(
+    graph: PottsGraph,
+    field: np.ndarray,
+    served: Session,
+    *,
+    integral: bool = False,
+    timeout: float = 600.0,
+) -> ExternalBound:
+    """HiGHS's optimum through ``served``, refused unless HiGHS reports one.
+
+    ``bound`` is the LP's value and ``labelling`` each site's largest node
+    marginal; with ``integral`` the ILP's (#1274).
+    """
+    result = potts.lower_bound(
+        graph,
+        field,
+        Solver.HIGHS_LP,
+        integral=integral,
+        timeout=timeout,
+        session=served,
+    )
+    # A run HiGHS stopped short of its optimum is a termination on its limit.
+    assert result.termination.converged, result.termination
     return result
 
 
 @pytest.mark.oracle
-def test_external_lower_bound_is_the_adapters_value_bitwise() -> None:
+def test_external_lower_bound_is_the_adapters_value_bitwise(lp: Session) -> None:
     # #1282, step 4: both pose the LP through `polytope_inputs`, so HiGHS
     # receives one set of bytes; `potts_lattice/release` is left to the
     # release-sized tests below.
@@ -94,31 +125,28 @@ def test_external_lower_bound_is_the_adapters_value_bitwise() -> None:
         row for row in _fixtures() if row[0] != "potts_lattice/release"
     ]
 
-    with session(Solver.HIGHS_LP) as opened:
+    def check(name: str, graph: PottsGraph, field: np.ndarray, _n_states: int) -> None:
+        adapter = highs.local_polytope(graph, field)
+        assert adapter.status == highs.OPTIMAL, adapter.message
+        ours = _solved(graph, field, lp)
 
-        def check(
-            name: str, graph: PottsGraph, field: np.ndarray, _n_states: int
-        ) -> None:
-            adapter = _solved(graph, field)
-            ours = potts.lower_bound(graph, field, Solver.HIGHS_LP, session=opened)
+        assert ours.bound == adapter.value, (name, ours.bound, adapter.value)
+        assert np.array_equal(ours.labelling, adapter.labelling), name
+        assert ours.integral is adapter.integral, name
+        assert ours.termination.iterations == adapter.iterations, name
 
-            assert ours.bound == adapter.value, (name, ours.bound, adapter.value)
-            assert np.array_equal(ours.labelling, adapter.labelling), name
-            assert ours.integral is adapter.integral, name
-            assert ours.termination.iterations == adapter.iterations, name
-
-        every_row(rows, check)
+    every_row(rows, check)
 
 
 @pytest.mark.oracle
-def test_where_trws_converges_its_bound_is_the_lp_value() -> None:
+def test_where_trws_converges_its_bound_is_the_lp_value(lp: Session) -> None:
     # Two routes to one number: a primal simplex on the explicit LP and a
     # dual coordinate ascent. `dual_bound` is a third, skipped at
     # `potts_lattice/release`, where 5,000 sweeps take 215 s.
     rows = [row for row in _instances() if row[0] not in STALLED] + _fixtures()
 
     def check(name: str, graph: PottsGraph, field: np.ndarray, _n_states: int) -> None:
-        value = _solved(graph, field).value
+        value = _solved(graph, field, lp).bound
         result = trws(graph, field)
         scale = LP_AGREEMENT * abs(value)
 
@@ -133,12 +161,12 @@ def test_where_trws_converges_its_bound_is_the_lp_value() -> None:
 
 @pytest.mark.oracle
 @pytest.mark.warning
-def test_where_trws_stalls_both_ascents_are_below_the_lp() -> None:
+def test_where_trws_stalls_both_ascents_are_below_the_lp(lp: Session) -> None:
     # Coordinate ascent stops where no block move raises the dual, which need
     # not be its maximum (Kolmogorov 2006, weak tree agreement). The LP
     # value is pinned, and it is at most the enumerated minimum.
     def check(name: str, graph: PottsGraph, field: np.ndarray, n_states: int) -> None:
-        value = _solved(graph, field).value
+        value = _solved(graph, field, lp).bound
         result = trws(graph, field)
         pairwise = dual_bound(graph, field, max_iterations=5000, plaquettes=())
 
@@ -151,7 +179,7 @@ def test_where_trws_stalls_both_ascents_are_below_the_lp() -> None:
 
 
 @pytest.mark.oracle
-def test_where_the_primal_is_integral_the_lp_is_the_minimum() -> None:
+def test_where_the_primal_is_integral_the_lp_is_the_minimum(lp: Session) -> None:
     # Integral node marginals fix every edge table, so the LP value is the
     # energy of the labelling they select; the LP bounds the minimum from
     # below, so that labelling is optimal. Enumeration checks it where it
@@ -160,20 +188,20 @@ def test_where_the_primal_is_integral_the_lp_is_the_minimum() -> None:
     fractional = []
 
     def check(name: str, graph: PottsGraph, field: np.ndarray, n_states: int) -> None:
-        solved = _solved(graph, field)
-        scale = ENERGY_AGREEMENT * max(1.0, abs(solved.value))
+        solved = _solved(graph, field, lp)
+        scale = ENERGY_AGREEMENT * max(1.0, abs(solved.bound))
         enumerable = n_states**graph.n_nodes <= ENUMERABLE
         optimum = _optimum(graph, field, n_states) if enumerable else None
         if not solved.integral:
             fractional.append(name)
             assert optimum is not None, name
-            assert solved.value < optimum - 1e-3, name
+            assert solved.bound < optimum - 1e-3, name
             return
         attained = energy(graph, field, solved.labelling)
 
-        assert abs(attained - solved.value) <= scale, (name, attained, solved.value)
+        assert abs(attained - solved.bound) <= scale, (name, attained, solved.bound)
         if optimum is not None:
-            assert abs(optimum - solved.value) <= scale, (name, optimum, solved.value)
+            assert abs(optimum - solved.bound) <= scale, (name, optimum, solved.bound)
 
     every_row(_instances() + _fixtures(), check)
 
@@ -191,9 +219,9 @@ TILING_LP = -17022.934121437305
 
 @pytest.mark.release
 @pytest.mark.oracle
-def test_at_release_size_the_lp_certifies_one_optimum_and_places_the_tiling_gap() -> (
-    None
-):
+def test_at_release_size_the_lp_certifies_one_optimum_and_places_the_tiling_gap(
+    lp: Session,
+) -> None:
     # 5,041 sites at ten states: 50,410 node and 1,484,000 edge columns,
     # 344 s and 268 s on the reference host, 2.1 GB peak each. On
     # `spatio_only/release` the primal is integral and meets the graph cut's
@@ -201,28 +229,26 @@ def test_at_release_size_the_lp_certifies_one_optimum_and_places_the_tiling_gap(
     # fractional, so of the 0.81 between TRW-S's bound and the best labelling
     # (#1061) 0.05 is TRW-S stopping short and the rest is the relaxation.
     spatio = spatio_rung(fixture("spatio_only", "release").params, "release")
-    solved = highs.local_polytope(spatio.graph, spatio.field, timeout=1800.0)
+    solved = _solved(spatio.graph, spatio.field, lp, timeout=1800.0)
     scale = LP_AGREEMENT * abs(SPATIO_OPTIMUM)
 
-    assert solved.status == highs.OPTIMAL, solved.message
     assert solved.integral
-    assert abs(solved.value - SPATIO_OPTIMUM) <= scale
+    assert abs(solved.bound - SPATIO_OPTIMUM) <= scale
     assert (
         abs(energy(spatio.graph, spatio.field, solved.labelling) - SPATIO_OPTIMUM)
         <= scale
     )
-    assert abs(trws(spatio.graph, spatio.field).bound - solved.value) <= scale
+    assert abs(trws(spatio.graph, spatio.field).bound - solved.bound) <= scale
 
     tiling = tiling_rung(fixture("spatio_tiling", "release").params, "release")
-    loose = highs.local_polytope(tiling.graph, tiling.field, timeout=1800.0)
+    loose = _solved(tiling.graph, tiling.field, lp, timeout=1800.0)
     result = trws(tiling.graph, tiling.field)
 
-    assert loose.status == highs.OPTIMAL, loose.message
     assert not loose.integral
-    assert loose.value == pytest.approx(TILING_LP, rel=LP_AGREEMENT)
+    assert loose.bound == pytest.approx(TILING_LP, rel=LP_AGREEMENT)
     assert result.termination.converged
-    assert result.bound < loose.value - 0.04
-    assert loose.value < result.energy
+    assert result.bound < loose.bound - 0.04
+    assert loose.bound < result.energy
 
 
 #: The lattices where TRW-S's labelling scores above the ILP optimum,
@@ -231,7 +257,9 @@ GAPPED = ("triangular-0", "triangular-1")
 
 
 @pytest.mark.oracle
-def test_the_bound_the_lp_and_the_ilp_are_ordered_and_the_labelling_is_above() -> None:
+def test_the_bound_the_lp_and_the_ilp_are_ordered_and_the_labelling_is_above(
+    lp: Session,
+) -> None:
     # Issue #1274 (a)-(c): bound <= LP <= ILP = enumerated minimum, and the
     # labelling TRW-S decodes, rescored by `energies`, at least the ILP
     # optimum. Rows: `test_trws.py`'s nine and `potts_lattice/stress`, 144
@@ -243,21 +271,20 @@ def test_the_bound_the_lp_and_the_ilp_are_ordered_and_the_labelling_is_above() -
     gapped = []
 
     def check(name: str, graph: PottsGraph, field: np.ndarray, n_states: int) -> None:
-        lp = _solved(graph, field)
-        ilp = highs.local_polytope(graph, field, integral=True)
+        relaxed = _solved(graph, field, lp)
+        ilp = _solved(graph, field, lp, integral=True)
         result = trws(graph, field)
         decoded = float(energies(graph, field, result.labelling[None])[0])
-        scale = ENERGY_AGREEMENT * max(1.0, abs(ilp.value))
+        scale = ENERGY_AGREEMENT * max(1.0, abs(ilp.bound))
 
-        assert ilp.status == highs.OPTIMAL, (name, ilp.message)
-        assert result.bound <= lp.value + LP_AGREEMENT * abs(lp.value), name
-        assert lp.value <= ilp.value + scale, (name, lp.value, ilp.value)
-        assert abs(energy(graph, field, ilp.labelling) - ilp.value) <= scale, name
+        assert result.bound <= relaxed.bound + LP_AGREEMENT * abs(relaxed.bound), name
+        assert relaxed.bound <= ilp.bound + scale, (name, relaxed.bound, ilp.bound)
+        assert abs(energy(graph, field, ilp.labelling) - ilp.bound) <= scale, name
         if n_states**graph.n_nodes <= ENUMERABLE:
             optimum = _optimum(graph, field, n_states)
-            assert abs(ilp.value - optimum) <= scale, (name, ilp.value, optimum)
-        assert decoded >= ilp.value - scale, (name, decoded, ilp.value)
-        if decoded > ilp.value + scale:
+            assert abs(ilp.bound - optimum) <= scale, (name, ilp.bound, optimum)
+        assert decoded >= ilp.bound - scale, (name, decoded, ilp.bound)
+        if decoded > ilp.bound + scale:
             gapped.append(name)
 
     every_row(rows, check)

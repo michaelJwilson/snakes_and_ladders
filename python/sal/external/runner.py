@@ -36,8 +36,9 @@ import numpy as np
 from sal.external.protocol import PEAK_BYTES, SECONDS, load, save
 
 #: Where the scripts live, as a module path. They stay under
-#: ``sal.validation`` until the adapters shrink to them (#1282, step 7); the
-#: path is a string the subprocess imports, not an import of this process.
+#: ``sal.validation``, beside the adapters the benchmarks still run
+#: (#1282, step 7); the path is a string the subprocess imports, not an
+#: import of this process.
 SCRIPTS = "sal.validation.scripts"
 
 

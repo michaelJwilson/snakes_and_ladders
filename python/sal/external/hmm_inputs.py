@@ -2,9 +2,9 @@
 
 One construction, read by :func:`sal.external.hmm.fit`,
 :func:`~sal.external.hmm.viterbi` and
-:func:`~sal.external.hmm.forward_log_likelihood`, and by the adapter
-:mod:`sal.validation.hmmlearn`, so an answer from either path is the other's
-bitwise. NumPy alone, so the adapter and the script import no torch through
+:func:`~sal.external.hmm.forward_log_likelihood`, and by the adapter's
+:func:`sal.validation.hmmlearn.baum_welch`, so a categorical fit from either
+path is the other's bitwise. NumPy alone, so the adapter and the script import no torch through
 it.
 
 The family and the call travel as ``int64`` codes, an index into

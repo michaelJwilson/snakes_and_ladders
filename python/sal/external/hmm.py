@@ -35,9 +35,9 @@ transition matrix of zero rows for it; that fit is refused.
 
 **The bytes.** The parameters are sent as probabilities,
 :func:`probabilities` of the log tensors, posed with
-:func:`~sal.external.hmm_inputs.hmm_inputs`, which the adapter
-:mod:`sal.validation.hmmlearn` sends too, so each answer is the adapter's
-bitwise (``tests/validation/test_hmmlearn.py``). A fitted probability is read
+:func:`~sal.external.hmm_inputs.hmm_inputs`, which the adapter's
+:func:`sal.validation.hmmlearn.baum_welch` sends too, so a categorical fit is
+the adapter's bitwise (``tests/validation/test_hmmlearn.py``). A fitted probability is read
 back through ``np.log``, a Gaussian variance through ``np.sqrt``.
 
 **The fit's loop.** ``config`` is :class:`~sal.opt.em.EmConfig`: at most
