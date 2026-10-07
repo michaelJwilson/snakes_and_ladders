@@ -242,7 +242,7 @@ def test_dropping_the_field_accept_step_is_caught(
         rows: np.ndarray,
         rng: np.random.Generator,
         proposed: int | None = None,
-    ) -> potts_mcmc.Recolour:
+    ) -> potts_mcmc.RecolourOutcome:
         # `rows` is the field widened to one row per site (issue #551), so the
         # colour count is its column count. `proposed` is the colour issue
         # #706's Wolff action names; unused here, since the point of this stub
@@ -250,7 +250,7 @@ def test_dropping_the_field_accept_step_is_caught(
         del proposed
         called.append(None)
         state[members] = int(rng.integers(rows.shape[1]))
-        return potts_mcmc.Recolour(proposed=True, accepted=True)
+        return potts_mcmc.RecolourOutcome(proposed=True, accepted=True)
 
     # The sweeps read `_recolour` from `sweeps`' globals; the package's copy
     # of a name is not the one they call (issue #1010).

@@ -26,6 +26,9 @@ from sal.sample.loop import Exchanging, Moved, Step, anneal, swap_log_ratio, tem
 from sal.sample.potts_mcmc import sweeps
 from sal.sample.potts_mcmc.moves import (
     PottsMove,
+    PottsMoves,
+    Recolour,
+    move_set,
     refuse_negative_coupling,
 )
 from sal.sample.potts_mcmc.sweeps import (
@@ -231,13 +234,14 @@ def tempered(graph: PottsGraph, field: np.ndarray, temperature: float) -> Temper
 def sample_potts(
     graph: PottsGraph,
     field: SiteField | np.ndarray,
-    move: PottsMove,
+    move: PottsMoves,
     rng: np.random.Generator,
     n_sweeps: int,
     burn_in: int = 0,
     thin: int = 1,
     *,
     temperature: float = 1.0,
+    recolour: Recolour = Recolour.UNIFORM,
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.RUST,
     start: np.ndarray | None = None,
@@ -250,9 +254,10 @@ def sample_potts(
         The lattice. Couplings may vary per edge.
     field : SiteField | np.ndarray
         External field ``h``, shape ``(n_states,)``.
-    move : PottsMove
-        The move set. Every one leaves the same Boltzmann distribution
-        invariant, which is what
+    move : PottsMoves
+        The move set, or a sequence of them applied in order as one step
+        (issue #1317); a single move is its one-element set, bitwise. Every
+        one leaves the same Boltzmann distribution invariant, which is what
         `tests/regression/search/test_potts_mcmc.py` asserts.
     rng : np.random.Generator
         Passed in rather than seeded here: seeding inside a call makes every
@@ -292,6 +297,10 @@ def sample_potts(
         nonetheless, 35.6x the oracle on ten sweeps of a 64x64 lattice;
         :data:`~sal.backend.Backend.PYTHON` replays the oracle's stream, which
         was the default before #1283.
+    recolour : Recolour
+        How each cluster move in ``move`` draws a cluster's label
+        (:func:`~sal.sample.potts_mcmc.moves.move_set`). ``UNIFORM``, the
+        default, is each move's behaviour before #1317.
     start : np.ndarray | None
         The starting labelling. ``None``, the default, draws one uniformly
         from ``rng`` as before; a given start draws nothing, so
@@ -311,6 +320,7 @@ def sample_potts(
         antiferromagnet has no like-spin clusters to flip.
     """
     field = log_weight_of(field)
+    move = move_set(move, recolour)
     refuse_negative_coupling(move, graph)
 
     model = tempered(graph, field, temperature)
@@ -592,7 +602,8 @@ def anneal_potts(
     schedule: TempSchedule,
     rng: np.random.Generator,
     *,
-    move: PottsMove = PottsMove.SINGLE_SITE,
+    move: PottsMoves = PottsMove.SINGLE_SITE,
+    recolour: Recolour = Recolour.UNIFORM,
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.RUST,
     start: np.ndarray | None = None,
@@ -668,6 +679,7 @@ def anneal_potts(
         If ``start`` is not one integer state in range per node.
     """
     field = log_weight_of(field)
+    move = move_set(move, recolour)
     refuse_negative_coupling(move, graph)
 
     rows = site_field(np.asarray(field, dtype=float), graph.n_nodes)
@@ -682,7 +694,7 @@ def anneal_potts(
         graph, rows, graph.compressed_adjacency(), backend, cluster_backend
     )
     origin = Moved(state, lattice.energy(state), None, 0)
-    walked = anneal(lattice.rung((move,), trace), schedule, origin, rng, np.copy)
+    walked = anneal(lattice.rung(move_set(move), trace), schedule, origin, rng, np.copy)
     return AnnealedPotts(
         best=walked.best,
         energy=walked.energy,
@@ -744,6 +756,7 @@ def parallel_tempering(
     thin: int = 1,
     *,
     move: RungMoves = PottsMove.SINGLE_SITE,
+    recolour: Recolour = Recolour.UNIFORM,
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.RUST,
     start: np.ndarray | None = None,
@@ -834,7 +847,9 @@ def parallel_tempering(
     """
     field = log_weight_of(field)
     temperatures = check_ladder(ladder(temperatures), needed_by="parallel tempering")
-    per_rung = moves_per_rung(move, len(temperatures))
+    per_rung = tuple(
+        move_set(rung, recolour) for rung in moves_per_rung(move, len(temperatures))
+    )
     for each in dict.fromkeys(m for rung in per_rung for m in rung):
         refuse_negative_coupling(each, graph)
 
@@ -1307,7 +1322,7 @@ def adapt_ladder_potts(
 
 
 def sweep_for(
-    move: PottsMove,
+    move: PottsMoves,
     graph: PottsGraph,
     rows: np.ndarray,
     offsets: np.ndarray,
@@ -1315,6 +1330,8 @@ def sweep_for(
     couplings: np.ndarray,
     backend: Backend,
     cluster_backend: Backend = Backend.RUST,
+    *,
+    recolour: Recolour = Recolour.UNIFORM,
 ) -> Callable[[np.ndarray, np.random.Generator, float], int]:
     """One sweep of ``move``, as a call taking a state, a generator and ``beta``.
 
@@ -1335,7 +1352,16 @@ def sweep_for(
         :attr:`PottsChain.mean_cluster_size` averages.
     """
     adjacency = (offsets, neighbours, couplings)
-    return _Lattice(graph, rows, adjacency, backend, cluster_backend).sweep(move)
+    lattice = _Lattice(graph, rows, adjacency, backend, cluster_backend)
+    moves = move_set(move, recolour)
+    if len(moves) == 1:
+        return lattice.sweep(moves[0])
+    parts = [lattice.sweep(each) for each in moves]
+
+    def composed(state: np.ndarray, rng: np.random.Generator, beta: float = 1.0) -> int:
+        return sum(part(state, rng, beta) for part in parts)
+
+    return composed
 
 
 @dataclass(frozen=True)
@@ -1365,7 +1391,7 @@ class PottsPair:
 def sample_potts_pair(
     graph: PottsGraph,
     field: SiteField | np.ndarray,
-    move: PottsMove,
+    move: PottsMoves,
     rng: np.random.Generator,
     n_sweeps: int,
     burn_in: int = 0,
@@ -1373,6 +1399,7 @@ def sample_potts_pair(
     *,
     temperature: float = 1.0,
     houdayer: bool = True,
+    recolour: Recolour = Recolour.UNIFORM,
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.RUST,
 ) -> PottsPair:
@@ -1426,6 +1453,7 @@ def sample_potts_pair(
         :func:`sample_potts` refuses it.
     """
     field = log_weight_of(field)
+    move = move_set(move, recolour)
     refuse_negative_coupling(move, graph)
 
     model = tempered(graph, field, temperature)
@@ -1526,7 +1554,7 @@ def _chain_from(
     *,
     graph: PottsGraph,
     field: np.ndarray,
-    move: PottsMove,
+    move: PottsMoves,
     n_sweeps: int,
     burn_in: int,
     thin: int,
@@ -1574,13 +1602,14 @@ def _chain_from(
 def sample_potts_starts(
     graph: PottsGraph,
     field: SiteField | np.ndarray,
-    move: PottsMove,
+    move: PottsMoves,
     rng: np.random.Generator,
     n_sweeps: int,
     burn_in: int = 0,
     thin: int = 1,
     *,
     temperature: float = 1.0,
+    recolour: Recolour = Recolour.UNIFORM,
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.RUST,
     equilibration_sweeps: int = 100,
@@ -1619,6 +1648,7 @@ def sample_potts_starts(
         If ``n_sweeps`` is below 4, where a split half holds fewer than two
         draws, or ``equilibration_sweeps`` is below 1.
     """
+    move = move_set(move, recolour)
     if n_sweeps < 4:
         msg = f"split R-hat needs at least 4 recorded sweeps, got {n_sweeps}"
         raise ValueError(msg)
