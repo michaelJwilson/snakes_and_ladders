@@ -3479,8 +3479,15 @@ and ordered TRW-S <= LP <= ILP = enumerated minimum
 `opt.hmm`'s `EmFit`, `likelihood.hmm.viterbi`'s pair and
 `opt.hmm.forward_log_likelihood`'s scalar, each the adapter's answer bitwise
 on its fixtures and the score sal's forward recursion within 1e-11, ragged
-included (`tests/validation/test_hmmlearn.py`, PR #1291). Steps 6 and 7 are
-not started.
+included (`tests/validation/test_hmmlearn.py`, PR #1291).
+
+**Step 6, the Hamiltonian chain.** `external.hmc.sample` returns BlackJAX's
+HMC as `sample.hmc`'s `HmcChain`, on the four declared kernels its script
+rebuilds in JAX (Gaussian, Rosenbrock, Gaussian mixture, equal-length Gaussian
+HMM; each -log p the objective's within 1.6e-15 relative): the adapter's draws
+bitwise, fixed-step and after `window_adaptation`, and a dense 10-D Gaussian's
+mean and covariance within 2.0 and 1.7 standard errors at the chain's ESS of
+1,881 (`tests/validation/test_blackjax.py`, PR #1292). Step 7 is not started.
 
 ## Milestone 3.1 — Model Surrogates & Bounds for Supported Problems
 
