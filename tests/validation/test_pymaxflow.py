@@ -10,7 +10,9 @@ expansion, `aexpansion_grid`, on the finite stand-in `_forbidden.stand_in`
 states: neither expansion holds a forbidden label, PyMaxflow's labelling is a
 fixed point of the package's move, and on 13 enumerable instances both reach
 the constrained minimum within 1e-12. A session (#1282) returns the one-shot
-call's bytes under every transport. Runtime goal: `test_goals.py`.
+call's bytes under every transport. `external.ground_state` (#1282, step 3)
+is the adapter's ground state and the package's, bitwise, one-shot and in a
+session. Runtime goal: `test_goals.py`.
 """
 
 from __future__ import annotations
@@ -19,8 +21,12 @@ from functools import partial
 
 import numpy as np
 import pytest
+from sal import external
 from sal.backend import Backend
+from sal.cost import Cost
 from sal.external import Capability, Solver, Transport, invoke, session
+from sal.external.potts_inputs import ising_inputs
+from sal.opt.budget import Budget
 from sal.search import maxflow
 from sal.search.ground_state import lattice_rung
 from sal.search.maxflow import rust as maxflow_rust
@@ -86,7 +92,7 @@ def test_a_session_cuts_the_one_shot_bytes_and_the_ground_state(
     rungs = [lattice_rung(24, 2, seed=seed) for seed in (973, 974, 975)]
     with session(Solver.PYMAXFLOW_EXACT, transport=transport) as opened:
         for rung in rungs:
-            inputs = pymaxflow.ising_inputs(rung.graph, rung.field)
+            inputs = ising_inputs(rung.graph, rung.field)
             served = opened.invoke(needs, inputs)
             once = invoke(Solver.PYMAXFLOW_EXACT, needs, inputs)
             assert served.outputs.keys() == once.outputs.keys()
@@ -146,6 +152,44 @@ def test_the_adapter_reads_the_capacities_it_is_given() -> None:
         maxflow_rust.min_cut(one_way, 0, 1).value, rel=FLOW_RTOL
     )
     assert theirs < before
+
+
+@pytest.mark.oracle
+def test_external_ground_state_is_the_adapters_and_the_packages() -> None:
+    # #1282, step 3: the adapter's bytes, so its configuration bitwise; and
+    # the package's own cut's, as the first test here pins the adapter.
+    budget = Budget(Cost.PASS, 1)
+
+    def check(side: int) -> None:
+        rung = lattice_rung(side, 2, seed=973)
+        theirs, _ = pymaxflow.ising_ground_state(rung.graph, rung.field)
+        run = external.ground_state(
+            rung.graph,
+            rung.field,
+            Solver.PYMAXFLOW_EXACT,
+            budget,
+            np.random.default_rng(0),
+        )
+        ours = maxflow.ising_ground_state(rung.graph, rung.field, backend=Backend.RUST)
+        assert np.array_equal(run.labelling, theirs.configuration)
+        assert run.labelling.dtype == theirs.configuration.dtype
+        assert run.energy == theirs.energy == ours.energy
+        assert np.array_equal(run.labelling, ours.configuration)
+        assert (run.spent, run.termination.converged) == (1, True)
+        assert run.provenance == external.provenance(Solver.PYMAXFLOW_EXACT)
+        with external.session(Solver.PYMAXFLOW_EXACT) as opened:
+            served = external.ground_state(
+                rung.graph,
+                rung.field,
+                Solver.PYMAXFLOW_EXACT,
+                budget,
+                np.random.default_rng(0),
+                session=opened,
+            )
+        assert np.array_equal(served.labelling, run.labelling)
+        assert served.energy == run.energy
+
+    every_value([10, 71], check)
 
 
 def _pymaxflow(graph: PottsGraph, field: np.ndarray, n_states: int) -> np.ndarray:

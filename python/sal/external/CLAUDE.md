@@ -48,6 +48,14 @@ never restated. What follows is local.
 - **A session sends C-contiguous `float64`, `int64` or `bool` arrays.**
   Anything else is refused before the call, under every transport, so the
   inputs do not depend on the transport chosen.
+- **A call takes its sibling's signature and returns its result type.**
+  `ground_state` is `search.ground_state.ground_state`'s arguments with a
+  `Solver` for the method, and returns its `MethodRun` as `ExternalRun`,
+  which adds the `Provenance`; the guard is
+  `tests/regression/test_external_ground_state.py`. A problem's bytes are
+  posed once, in `potts_inputs.py`, for this call and the adapters alike, so
+  the labellings are bitwise (`tests/validation/test_gco.py`,
+  `test_pymaxflow.py`).
 - **A transport is kept on a measurement.** `MMAP` is the default: it beat
   `NPZ` in 13 of 15 cells of #1288's grid and trailed it in none by more than
   the host's run-to-run spread (0.4 ms at 0.2 MB, 4 ms of 198 at 10 MB, N = 1).

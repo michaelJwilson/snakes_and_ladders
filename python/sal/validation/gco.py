@@ -24,6 +24,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from sal.external.potts_inputs import expansion_inputs
 from sal.external.runner import run
 from sal.sim.graph import PottsGraph
 from sal.sim.potts import energy, site_field
@@ -60,25 +61,14 @@ def alpha_expansion(
     """gco's expansion to convergence on the package's Potts model.
 
     ``move="swap"`` runs gco's alpha-beta swap to convergence instead
-    (issue #997).
+    (issue #997). The inputs are :func:`sal.external.potts_inputs.expansion_inputs`,
+    the bytes :func:`sal.external.potts.ground_state` sends (#1282).
     """
     values = site_field(np.asarray(field, dtype=float), graph.n_nodes)
     if values.shape[1] != n_states:
         msg = f"the field has {values.shape[1]} states, not {n_states}"
         raise ValueError(msg)
-    cost = -values
-    unary = cost - cost.min(axis=1, keepdims=True)
-    edges = np.sort(graph.edge_index, axis=1)
-    inputs = {
-        "unary": np.ascontiguousarray(unary, dtype=np.float64),
-        "first": np.ascontiguousarray(edges[:, 0], dtype=np.int64),
-        "second": np.ascontiguousarray(edges[:, 1], dtype=np.int64),
-        "weight": np.ascontiguousarray(graph.edge_coupling, dtype=np.float64),
-    }
-    if start is not None:
-        inputs["start"] = np.ascontiguousarray(start, dtype=np.int64)
-    if move != "expansion":
-        inputs["move"] = np.asarray(move)
+    inputs = expansion_inputs(graph, values, start=start, swap=move == "swap")
     result = run(SCRIPT, inputs)
     labelling = result.outputs["labels"]
     return Expansion(

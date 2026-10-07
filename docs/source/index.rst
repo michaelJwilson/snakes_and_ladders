@@ -605,6 +605,12 @@ whether or not it has members yet.
 .. automodule:: sal.external.solvers
    :members:
 
+.. automodule:: sal.external.potts
+   :members:
+
+.. automodule:: sal.external.potts_inputs
+   :members:
+
 .. automodule:: sal.external.frameworks
    :members:
 

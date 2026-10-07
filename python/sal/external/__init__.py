@@ -19,6 +19,11 @@ interpreter and import start-up once (:mod:`sal.external.sessions`); its
 :class:`Transport` moves arrays as memory-mapped files (the default) or
 ``.npz`` files, with the same bytes reaching the framework each way.
 
+:func:`ground_state` returns a Potts ground state from gco or PyMaxflow as
+:func:`sal.search.ground_state.ground_state` returns one
+(:mod:`sal.external.potts`). It is imported on first use, so a worker that
+imports this package does not pay for the search ladder.
+
 ``sal.validation`` drives the same frameworks as referees for the test suite
 and imports its runner and registry from here; nothing here imports
 ``sal.validation``. ``CLAUDE.md`` in this directory states the rules and
@@ -26,6 +31,9 @@ and imports its runner and registry from here; nothing here imports
 """
 
 from __future__ import annotations
+
+import importlib
+from typing import TYPE_CHECKING, Any
 
 from sal import _submodules
 from sal.external.runner import ScriptError
@@ -43,11 +51,28 @@ from sal.external.solvers import (
 )
 from sal.external.transport import Transport
 
-__getattr__ = _submodules(__name__)
+if TYPE_CHECKING:
+    from sal.external.potts import ExternalRun, ground_state
+
+#: Names imported on first use, and the module each comes from.
+_LAZY = {"ExternalRun": "sal.external.potts", "ground_state": "sal.external.potts"}
+
+_submodule = _submodules(__name__)
+
+
+def __getattr__(name: str) -> Any:
+    """Resolve a :data:`_LAZY` name or a submodule on first use, then cache it."""
+    if name not in _LAZY:
+        return _submodule(name)
+    value = getattr(importlib.import_module(_LAZY[name]), name)
+    globals()[name] = value
+    return value
+
 
 __all__ = [
     "Capability",
     "CapabilityRefused",
+    "ExternalRun",
     "ExternalUnavailable",
     "Provenance",
     "ScriptError",
@@ -55,6 +80,7 @@ __all__ = [
     "Solver",
     "Transport",
     "available",
+    "ground_state",
     "invoke",
     "provenance",
     "require",
