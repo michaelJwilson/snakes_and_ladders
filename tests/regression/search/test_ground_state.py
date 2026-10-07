@@ -113,7 +113,9 @@ def test_the_graph_cut_is_the_enumerated_ground_state_at_two_states() -> None:
     _, exact = _enumerated(rung)
     minimizers = _enumerated_minimizers(rung, exact)
 
-    python_state, python_energy = ising_ground_state(rung.graph, rung.field)
+    python_state, python_energy = ising_ground_state(
+        rung.graph, rung.field, backend=Backend.PYTHON
+    )
     rust_state, rust_energy = rust_ground_state(rung.graph, rung.field)
 
     assert python_energy == pytest.approx(exact, abs=_EXACT)
@@ -220,6 +222,9 @@ def test_the_field_accept_step_rejects(move: PottsMove) -> None:
         ExponentialTempSchedule(2.0, 0.05, 40),
         np.random.default_rng(551),
         move=move,
+        # The oracle's pass, the one that records its accept steps; the
+        # compiled default keeps no counter (#923, #1283).
+        cluster_backend=Backend.PYTHON,
     )
 
     proposals = sum(counter.proposals for counter in run.trace)
@@ -345,7 +350,9 @@ def test_the_exact_ground_state_at_five_thousand_sites() -> None:
     # being a combinatorial minimum rather than a tolerance.
     rung = _rung(RELEASE, 2)
 
-    python_state, python_energy = ising_ground_state(rung.graph, rung.field)
+    python_state, python_energy = ising_ground_state(
+        rung.graph, rung.field, backend=Backend.PYTHON
+    )
     rust_state, rust_energy = rust_ground_state(rung.graph, rung.field)
 
     assert python_energy == pytest.approx(RELEASE_Q2_ENERGY, abs=1e-6)
@@ -561,6 +568,7 @@ def test_the_compiled_swendsen_wang_anneal_keeps_no_counter() -> None:
         schedule,
         np.random.default_rng(923),
         move=PottsMove.SWENDSEN_WANG,
+        cluster_backend=Backend.PYTHON,
     )
     assert compiled.trace == ()
     assert len(oracle.trace) == schedule.n_steps

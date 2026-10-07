@@ -10,7 +10,11 @@ frustrated triangular lattice, `potts_lattice/{ci,stress,release}`,
 lattices both ascents stop below the LP, which is pinned. The primal's node
 marginals are integral on every instance but the three frustrated ones, and
 there the LP value is the labelling's energy and, where enumeration reaches,
-the minimum. `external.potts.lower_bound` (#1282, step 4) returns the
+the minimum. With integer node marginals HiGHS's ``milp`` solves the ILP
+(#1274): TRW-S's bound is at most the LP value, which is at most the ILP
+optimum, the enumerated minimum where enumeration reaches; TRW-S's labelling
+scores at least that optimum, and above it only on two frustrated lattices.
+`external.potts.lower_bound` (#1282, step 4) returns the
 adapter's value as its bound and the adapter's labelling, bitwise, on every
 instance here but `potts_lattice/release`; every other solve here is
 `external.potts.lower_bound`, served by one session per module (step 7). The
@@ -30,7 +34,7 @@ from sal.search.tightening import dual_bound
 from sal.search.trws import trws
 from sal.sim.fixtures import fixture
 from sal.sim.graph import PottsGraph, lattice_graph
-from sal.sim.potts import energy
+from sal.sim.potts import energies, energy
 from sal.validation import highs
 
 from tests._rows import every_row
@@ -245,3 +249,44 @@ def test_at_release_size_the_lp_certifies_one_optimum_and_places_the_tiling_gap(
     assert result.termination.converged
     assert result.bound < loose.bound - 0.04
     assert loose.bound < result.energy
+
+
+#: The lattices where TRW-S's labelling scores above the ILP optimum,
+#: 2026-10-06: by 1.4732 and 0.0388. On every other instance it is optimal.
+GAPPED = ("triangular-0", "triangular-1")
+
+
+@pytest.mark.oracle
+def test_the_bound_the_lp_and_the_ilp_are_ordered_and_the_labelling_is_above(
+    lp: Session,
+) -> None:
+    # Issue #1274 (a)-(c): bound <= LP <= ILP = enumerated minimum, and the
+    # labelling TRW-S decodes, rescored by `energies`, at least the ILP
+    # optimum. Rows: `test_trws.py`'s nine and `potts_lattice/stress`, 144
+    # sites, the largest under the per-PR cap. `potts_lattice/release`, 2,500
+    # sites, closes at the root node in 2.0 s with the labelling optimal.
+    rows = _instances() + [
+        row for row in _fixtures() if row[0] == "potts_lattice/stress"
+    ]
+    gapped = []
+
+    def check(name: str, graph: PottsGraph, field: np.ndarray, n_states: int) -> None:
+        relaxed = _solved(graph, field, lp)
+        ilp = _solved(graph, field, lp, integral=True)
+        result = trws(graph, field)
+        decoded = float(energies(graph, field, result.labelling[None])[0])
+        scale = ENERGY_AGREEMENT * max(1.0, abs(ilp.bound))
+
+        assert result.bound <= relaxed.bound + LP_AGREEMENT * abs(relaxed.bound), name
+        assert relaxed.bound <= ilp.bound + scale, (name, relaxed.bound, ilp.bound)
+        assert abs(energy(graph, field, ilp.labelling) - ilp.bound) <= scale, name
+        if n_states**graph.n_nodes <= ENUMERABLE:
+            optimum = _optimum(graph, field, n_states)
+            assert abs(ilp.bound - optimum) <= scale, (name, ilp.bound, optimum)
+        assert decoded >= ilp.bound - scale, (name, decoded, ilp.bound)
+        if decoded > ilp.bound + scale:
+            gapped.append(name)
+
+    every_row(rows, check)
+
+    assert sorted(gapped) == sorted(GAPPED)

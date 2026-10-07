@@ -17,6 +17,7 @@ from itertools import product
 
 import numpy as np
 import pytest
+from sal.backend import Backend
 from sal.search.maxflow import (
     FlowNetwork,
     ising_ground_state,
@@ -55,7 +56,9 @@ def _oracle_and_kernel(
     graph = lattice_graph((extent, extent), BoundaryCondition.OPEN, 0.6)
     field_values = rng.normal(size=(graph.n_nodes, 2))
 
-    expected_state, expected = ising_ground_state(graph, field_values)
+    expected_state, expected = ising_ground_state(
+        graph, field_values, backend=Backend.PYTHON
+    )
     realized_state, realized = maxflow_rust.ising_ground_state(graph, field_values)
     return expected_state, expected, realized_state, realized
 
@@ -178,6 +181,46 @@ def test_the_rust_kernel_reproduces_the_python_oracle_exactly() -> None:
 
 
 @pytest.mark.oracle
+def test_the_default_route_returns_the_python_labelling_and_cut_bitwise() -> None:
+    # #1283: both gateways default to RUST. The minimal minimum cut is unique,
+    # so the labelling, its energy and the source side are equal, not close.
+    # The flow value sums in another order, so it is held to 1e-12 relative.
+    def check(extent: int) -> None:
+        rng = np.random.default_rng(extent)
+        graph = lattice_graph((extent, extent), BoundaryCondition.OPEN, 0.6)
+        field_values = rng.normal(size=(graph.n_nodes, 2))
+
+        oracle = ising_ground_state(graph, field_values, backend=Backend.PYTHON)
+        default = ising_ground_state(graph, field_values)
+        assert np.array_equal(default.configuration, oracle.configuration)
+        assert default.energy == oracle.energy
+
+        networks = [_ising_network(graph, field_values) for _ in range(2)]
+        expected = max_flow(*networks[0], backend=Backend.PYTHON)
+        realized = max_flow(*networks[1])
+        assert np.array_equal(realized.source_side, expected.source_side)
+        assert realized.value == pytest.approx(expected.value, rel=1e-12)
+
+    every_value([4, 8, 12, 32], check)
+
+
+def _ising_network(
+    graph: PottsGraph, field_values: np.ndarray
+) -> tuple[FlowNetwork, int, int]:
+    """The network :func:`ising_ground_state` cuts, with its terminals."""
+    source, sink = graph.n_nodes, graph.n_nodes + 1
+    network = FlowNetwork(n_nodes=graph.n_nodes + 2)
+    cost = -field_values
+    offsets = cost.min(axis=1)
+    for node in range(graph.n_nodes):
+        network.add_edge(source, node, float(cost[node, 1] - offsets[node]))
+        network.add_edge(node, sink, float(cost[node, 0] - offsets[node]))
+    for (first, second), coupling in graph.weighted_edges():
+        network.add_edge(first, second, coupling, reverse=coupling)
+    return network, source, sink
+
+
+@pytest.mark.oracle
 def test_the_rust_min_cut_reproduces_a_hand_computed_value_and_cut() -> None:
     # Two disjoint paths carry 2 each; the cross edge carries a third unit a
     # greedy first path would have blocked. The minimum cut is the two arcs
@@ -214,7 +257,7 @@ def test_the_rust_min_cut_returns_the_python_cut_on_seeded_networks() -> None:
                 if tail != head:
                     network.add_edge(int(tail), int(head), float(capacity), float(back))
 
-        expected = max_flow(networks[0], 0, n_nodes - 1)
+        expected = max_flow(networks[0], 0, n_nodes - 1, backend=Backend.PYTHON)
         realized = maxflow_rust.min_cut(networks[1], 0, n_nodes - 1)
 
         assert realized.value == pytest.approx(expected.value, rel=1e-12)

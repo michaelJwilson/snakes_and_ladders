@@ -117,3 +117,140 @@ Doc disagreements found:
 - `DEV.md:143` says the goal is "a ratio of 1"; `_goals.py:29` sets `GOAL_RATIO = 0.55`.
 - `pyproject.toml:120-123` says "autodiff in the package stays PyTorch", against #1000.
 - #938 counts ldpc and dwave-samplers as adopted.
+
+## Rerun 2026-10-06 at `2112482f` (#1274 §1)
+
+**TL;DR:** 73 of 73 referee tests pass: 70 per-PR, plus 3 release. Of the 131 goals, 106 are met and 25 unmet: 8 runtime and 17 memory. The BlackJAX mixture goal is now met at 0.49× and 0.52×; it was unmet at 0.56–0.58× before #1220. Five new per-PR `validation` tests are clean: TRW-S against the HiGHS ILP, and forbidden-label expansion against gco and PyMaxflow.
+
+Host: the 4-core reference host, `OMP/OPENBLAS/MKL_NUM_THREADS=1`. The extension was built with `infra/build_extension.sh` (release profile, fat LTO) from `2112482f`. The runs used a clean detached worktree at that commit, which `sal.__file__` confirms. Load average was 1.1–1.6. The per-PR tier shared the host with the scratch drivers below for part of its run; the goals and the release tests did not. Framework versions are the audit's (a).
+
+### Per-PR tier
+
+The command is `-m "(validation or infra) and not goal and not release" tests/validation tests/regression/test_validation.py`, as in CI. It took 208 s in pytest (258 s wall), against 107 s on CI on 2026-09-24. Nothing skipped.
+
+| Framework | Passed / run |
+|---|---|
+| BlackJAX | 10 / 10 |
+| hmmlearn | 8 / 8 |
+| scikit-learn | 3 / 3 |
+| gco | 2 / 2 |
+| PyMaxflow | 3 / 3 |
+| HiGHS | 3 / 3 |
+| rustworkx | 13 / 13 |
+| JAX | 5 / 5 |
+| Gymnasium | 7 / 7 |
+| TorchRL | 3 / 3 |
+| PyTorch Geometric | 3 / 3 |
+| infra (`test_validation.py`) | 10 / 10 |
+
+Slowest: the BlackJAX leapfrog integrator at 26.2 s, the AST import guard at 16.4 s, the JAX torch routes at 15.1 s and the HiGHS converged-bound test at 14.2 s. All four exceed the 10 s cap without carrying `release`. The cap is not enforced in this job.
+
+### Release-only tests
+
+`-m "validation and release"`: 3 of 3 pass, 476 s in total. Free memory was 15 GB before the run.
+
+| Test | Seconds, this run | Recorded before |
+|---|---|---|
+| HiGHS release LP (`spatio_only` + `spatio_tiling` release) | 442.6 | ~611 (#1076) |
+| gco factor-two bound, 4x4 q = 3 | 24.4 | 22.6 (#1088) |
+| JAX mixture likelihood gradient | 8.1 | 10.8 (#1088) |
+
+This run did not re-measure the HiGHS peak memory, recorded at 2.1 GB.
+
+### Goals
+
+The command is `-m goal tests/validation`: 131 goals in 650 s. Each goal compares the package's figure with the framework's, at `GOAL_RATIO` 0.55. The framework figures are the hardcoded measurements from 2026-09-23..25 and were not re-measured; the constants are unchanged. The package figures were logged by a scratch plugin wrapping `assert_meets`/`assert_fits`, which left both assertions in force.
+
+| Framework | Runtime met / total | Memory met / total |
+|---|---|---|
+| BlackJAX | 28 / 28 | 17 / 28 |
+| hmmlearn | 14 / 14 | 12 / 14 |
+| scikit-learn | 4 / 4 | 3 / 3 |
+| JAX | 6 / 6 | 6 / 6 |
+| rustworkx | 4 / 4 | 2 / 2 |
+| HiGHS | 2 / 2 | — |
+| gco | 2 / 4 | 0 / 4 |
+| PyMaxflow | 0 / 2 | 2 / 2 |
+| TorchRL | 2 / 4 | — |
+| PyTorch Geometric | 2 / 4 | — |
+| **All** | **64 / 72** | **42 / 59** |
+
+The unmet goals, as package figure against framework figure:
+
+| Framework | Goal | Package | Framework | Ratio |
+|---|---|---|---|---|
+| PyMaxflow | Rust cut, `lattice_rung(142, 2)` / `(284, 2)` | 12.4 / 46.2 ms | 15.5 / 68.7 ms | 0.80 / 0.67 |
+| TorchRL | `ppo_loss` + gradient / `surrogate_loss` + gradient, 10^5 decisions | 50.3 / 64.2 ms | 14.7 / 18.0 ms | 3.43 / 3.57 |
+| PyTorch Geometric | `GraphSurrogate` forward, 142² / 284² | 3.74 / 22.8 ms | 5.85 / 18.9 ms | 0.64 / 1.21 |
+| gco | alpha-beta swap, 71² / 142², q = 10 | 139 / 643 ms | 96.4 / 556 ms | 1.45 / 1.16 |
+| gco (memory) | expansion 71² / 142²; swap 71² / 142², q = 10 | 3.51 / 12.2; 2.65 / 6.64 MB | 2.69 / 9.76; 2.57 / 9.57 MB | 1.31 / 1.25; 1.03 / 0.69 |
+| hmmlearn (memory) | ten Baum-Welch iterations, 10^5 / 10^6 positions | 0.668 / 0.705 MB | 0.373 / 1.20 MB | 1.79 / 0.59 |
+| BlackJAX (memory) | HMC, d = 100 / 1,000 / 10,000 | 0.786 / 7.89 / 80.5 MB | 0.799 / 8.09 / 80.0 MB | 0.98 / 0.98 / 1.01 |
+| BlackJAX (memory) | MALA, chain stored, d = 100 / 1,000 / 10,000 | 0.582 / 7.86 / 80.4 MB | 0.815 / 8.07 / 80.5 MB | 0.71 / 0.97 / 1.00 |
+| BlackJAX (memory) | random walk, chain stored: gaussian-100 / 1000 / 10000 | 1.09 / 8.11 / 80.6 MB | 0.823 / 8.05 / 80.3 MB | 1.32 / 1.01 / 1.00 |
+| BlackJAX (memory) | random walk, chain stored: rosenbrock-10 / 100 | 0.438 / 1.15 MB | 0.090 / 0.815 MB | 4.86 / 1.41 |
+
+Eight of the 17 unmet memory goals (MALA and random walk) store the chain (1,000 × d float64) on both sides, so both figures are about the chain's own size. At 0.55 these goals cannot be met while the package returns the chain. No earlier package-side outcome is recorded (audit TL;DR 2), so a regression cannot be told from a goal that was never met. All 131 rows are in the scratch log `goals.jsonl` and are not committed.
+
+The BlackJAX goals the audit flagged:
+
+| Goal | Package | Framework | Ratio |
+|---|---|---|---|
+| 100 HMC transitions, mixture of 10^5 | 1.05 s | 2.14 s | 0.49, met |
+| 100 warm-up + 100 HMC, mixture of 10^5 | 2.17 s | 4.18 s | 0.52, met |
+| 300 HMC transitions, Gaussian HMM of 10^4 | 1.14 s | 3.08 s | 0.37, met |
+| 100 warm-up + 300 HMC, Gaussian HMM of 10^4 | 1.52 s | 4.14 s | 0.37, met |
+
+### Targeted check 1: TRW-S bound and labelling against the HiGHS LP and ILP
+
+`highs.local_polytope(..., integral=True)` gives the ILP: the same constraint matrix as the LP, with integer node marginals, solved by `milp` with `mip_rel_gap = 0` in the script's subprocess. The labelling energy is recomputed with `sim.potts.energies`. Tolerances: bound ≤ LP within `LP_AGREEMENT` = 1e-8 relative; every other comparison within `ENERGY_AGREEMENT` = 1e-12 × max(1, |value|).
+
+| Instance | Sites | TRW-S bound | LP | ILP (= enumerated where enumerable) | TRW-S labelling | Gap to ILP |
+|---|---|---|---|---|---|---|
+| square-0..2, strip-0..2 (`test_trws.py`) | 8–9 | = LP within 2e-15 | integral | = LP within 2e-15 | = ILP within 1.8e-15 | 0 |
+| triangular-0 | 9 | −1.16508 | −1.14911 | −0.96500 | 0.50821 | **1.4732** |
+| triangular-1 | 9 | −2.05912 | −2.05912 | −2.03840 | −1.99960 | **0.0388** |
+| triangular-2 | 9 | −1.42732 | −1.40024 | −0.86925 | −0.86925 | 1e-16 |
+| potts_lattice/ci, spatio_only/ci, spatio_tiling/ci | 9–12 | = LP | integral | = enumerated | optimal | ≤ 7e-15 |
+| potts_lattice/stress | 144 | −265.333870 | −265.333870 | −265.333870 (1 node, 0.06 s) | optimal | −6e-14 |
+| spatio_only/stress | 72 | −84.141992 | −84.141992 | −84.141992 (0.03 s) | optimal | 1e-14 |
+| potts_lattice/release | 2,500 | −4997.927073 | −4997.927073 | −4997.927073 (1 node, 1.96 s, 186 MB) | optimal | −9e-13 |
+| triangular AF 6², J = −1, seed 1274 | 36 | −4.3755 | −4.2310 | −2.0361 (3 nodes, 1.3 s) | 8.4694 | **10.51** |
+| triangular AF 9² | 81 | −9.1564 | −8.9121 | −2.7953 (1,115 nodes, 34.6 s) | 20.9562 | **23.75** |
+| triangular AF 12² | 144 | −16.7285 | −16.0675 | −2.9889 (2,212 nodes, 131 s) | 30.5839 | **33.57** |
+| triangular AF 18² | 324 | −40.0462 | −38.7043 | not proven: time limit at 540 s, incumbent 51.37 | 49.0958 | — |
+
+(a) bound ≤ LP ≤ ILP holds on every row; the ILP equals the enumerated minimum on all 12 enumerable rows. (b) and (c): TRW-S's labelling is optimal wherever the LP is integral. On the frustrated triangular antiferromagnets the bound stays within 0.15–1.34 of the LP, but the decoded labelling lies 10.5–33.6 above the ILP optimum, and the gap grows with size. That points to the decoding, not the bound. It is a finding for `search.trws`; see the follow-up below.
+
+### Targeted check 2: alpha expansion with forbidden labels against gco and PyMaxflow
+
+Forbidden pairs are `-inf` for the package (`sim.potts.forbid`, #1139). Neither framework takes `-inf`, so each receives a finite stand-in. Each forbidden entry of site *i* becomes its lowest allowed log-weight less 1 + Σ_{e∋i}|J_e|, a penalty of at most 4.2 (3x3), 3.1 (2x4), 5.02 (q = 3 lattices) and 6.70 (q = 10 lattices). Moving *i* to any allowed label then lowers the energy, so no optimum and no expansion fixed point uses a forbidden pair.
+
+gco runs `expansion()`. PyMaxflow runs its own grid expansion `aexpansion_grid`, from the same per-site cheapest start as the package; this is new in `scripts/pymaxflow.py`. Each runs in its subprocess.
+
+| Instances | Forbidden used | Fixed point of the package's move, energy bitwise | Energy against the package | Against the enumerated constrained minimum |
+|---|---|---|---|---|
+| 13 enumerable (3x3 q = 3; 2x4 q = 2, 3, seeds 0–5) | none, all three | gco 13/13, PyMaxflow 13/13 | equal | all three reach it, 0 difference |
+| 16², q = 3 | none | yes / yes | gco +0.078%, PyMaxflow 0 (same labelling) | — |
+| 16², q = 10 | none | yes / yes | gco −0.82%, PyMaxflow 0 (same labelling) | — |
+| 71², q = 3 | none | yes / yes | gco +0.008%, PyMaxflow +0.029% | — |
+| 71², q = 10 | none | yes / yes | gco +0.27%, PyMaxflow +0.13% | — |
+
+All rows fall within the sibling's declared 1% agreement (`test_gco.py`). At 71², q = 10, the times were: package 77 ms, gco 62 ms, PyMaxflow 91 ms.
+
+**`fuse`:** no external equivalent. gco exposes `expansion`, `expansion_on_alpha`, `swap` and `alpha_beta_swap` only. PyMaxflow exposes `aexpansion_grid` and `abswap_grid`, with no QPBO.
+
+### Tests added
+
+Both checks were clean and ran under the 10 s cap (idle host), so they were added as per-PR `validation` tests beside their siblings:
+
+- `test_highs.py::test_the_bound_the_lp_and_the_ilp_are_ordered_and_the_labelling_is_above` (`oracle`, 8.9 s): it runs the nine `test_trws.py` instances plus `potts_lattice/stress`, and pins the gapped set to triangular-0 and triangular-1.
+- In both `test_gco.py` and `test_pymaxflow.py`: `test_with_forbidden_labels_both_expansions_reach_the_constrained_minimum` (`oracle`, 1.4 s and 1.3 s), and a fixed-point test at 16² and 71² (`experiment`, 0.8 s).
+
+The adapters gained two opt-in modes, with the default paths unchanged: `highs.local_polytope(integral=True)` and `pymaxflow.alpha_expansion`. The shared instances are in `tests/validation/_forbidden.py`.
+
+### Follow-ups
+
+- TRW-S's decoded labelling on the triangular antiferromagnet is 10.5–33.6 above the ILP optimum at 36–144 sites; the optimum is a near three-colouring.
+- Five per-PR referee tests exceed the 10 s cap: four in this run's tier (BlackJAX integrator 26.2 s, the import guard 16.4 s, JAX torch routes 15.1 s, HiGHS converged 14.2 s) and the new HiGHS test in its own run (8.9 s idle; it may exceed 10 s under load).
+- The eight chain-stored memory goals cannot be met at 0.55; see Goals.

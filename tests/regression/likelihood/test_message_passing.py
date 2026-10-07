@@ -289,7 +289,9 @@ def test_sum_product_per_site_sums_to_pruning(
         assert result.guarantee is guarantee
         total += result.log_partition
 
-    reference = log_likelihood(params.tau, params.n_states, params.pi, alignment)
+    reference = log_likelihood(
+        params.tau, params.n_states, params.pi, alignment, backend=Backend.PYTHON
+    )
     assert math.isclose(total, reference, rel_tol=1e-13)
 
 
