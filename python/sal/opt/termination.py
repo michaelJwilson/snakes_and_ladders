@@ -50,6 +50,9 @@ class Stop(StrEnum):
     DEGENERATE = "degenerate"
     """An inner solve did not settle, and the run ended on the parameters of its last completed iteration (issue #1235)."""
 
+    NOT_MIXING = "not_mixing"
+    """A chain ran its sweeps and an observable's effective sample size fell under the declared floor, or chains from distinct starts disagreed; the draws are kept (issue #1316)."""
+
 
 @dataclass(frozen=True)
 class Termination:

@@ -3150,6 +3150,14 @@ backwards and costs stability rather than buying it. The order is a property of
 the method; the cost is a property of this problem, and only the second decides
 adoption.
 
+**A frozen Potts chain ends `NOT_MIXING`**
+([#1316](https://github.com/michaelJwilson/snakes_and_ladders/issues/1316), Part
+A). On #1314's 64 x 64 instance the ordered Niedermayer chain accepts 1 of 320
+moves, its largest cluster covers 4,092 of 4,096 sites, and split R-hat over
+the three starts is 30.4 (energy) to 95.9 (an occupancy) against a declared 1.01;
+a 2 x 3 heat-bath chain ends `CONVERGED` with R-hat at most 1.0014. Pinned in
+`tests/regression/sample/test_potts_mixing.py`. The move rule of Part B is open.
+
 ## Milestone 2.0 — RL Definition
 
 **Landed as `app:rl` in the textbook**

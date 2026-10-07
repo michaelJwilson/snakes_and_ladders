@@ -19,7 +19,8 @@ from numpy.random import Generator
 
 from sal.backend import Backend
 from sal.cost import Cost
-from sal.opt.termination import Termination
+from sal.opt.termination import Stop, Termination
+from sal.parallel import Pool, map_tasks
 from sal.sample.accept import accept
 from sal.sample.loop import Exchanging, Moved, Step, anneal, swap_log_ratio, temper
 from sal.sample.potts_mcmc import sweeps
@@ -52,6 +53,7 @@ from sal.sample.schedule import (
     check_ladder,
     ladder,
 )
+from sal.sample.statistics import integrated_autocorrelation_time, split_rhat
 from sal.sim.graph import PottsGraph
 from sal.sim.potts import (
     SiteField,
@@ -91,10 +93,87 @@ class PottsChain:
         cluster while the other two touch every site, so an autocorrelation
         time in sweeps is not comparable across the three without it. For the
         move sets that build no clusters it is ``n_nodes``.
+    acceptance : float
+        Steps that changed the labelling over steps run, burn-in included.
+        For a cluster move it is accepted over proposed; a step that redraws
+        every label it touches to its own value counts as refused, since it
+        moved the chain nowhere. Read from the state before and after each
+        step, so it draws no random number (issue #1316).
+    largest_cluster_share : float
+        The largest cluster a step built, over ``n_nodes``: ``1.0`` is a
+        spanning cluster, whose move is a global relabelling. ``1.0`` for the
+        move sets that build no clusters, as ``mean_cluster_size`` is
+        ``n_nodes`` for them.
+    ess : np.ndarray
+        Effective draws per observable, ``n_records / tau`` with ``tau`` from
+        :func:`~sal.sample.statistics.integrated_autocorrelation_time`: entry
+        0 the energy, entry ``1 + k`` the occupancy of label ``k``
+        (:func:`observables`). A constant energy series is ``0``: a chain
+        whose energy never moved has no sample to count. A constant
+        occupancy is ``inf`` and decides nothing, since a label no draw holds
+        is constant in a mixed chain too.
+    termination : Termination
+        :attr:`~sal.opt.termination.Stop.CONVERGED` where every entry of
+        ``ess`` is at least :data:`ESS_FLOOR`, else
+        :attr:`~sal.opt.termination.Stop.NOT_MIXING`; ``iterations`` counts
+        every step run. The draws are kept either way.
     """
 
     states: np.ndarray
     mean_cluster_size: float
+    acceptance: float
+    largest_cluster_share: float
+    ess: np.ndarray
+    termination: Termination
+
+
+#: Effective draws under which a chain is reported as not mixing: the floor
+#: `tests/regression/sample/test_exact_lattice_referees.py` declares (#1276),
+#: with the same estimator ``n_records / tau``.
+ESS_FLOOR = 50.0
+
+#: Split R-hat above which chains from distinct starts are reported as not
+#: mixing: Vehtari et al. (2021), *Rank-normalization, folding, and
+#: localization*, Bayesian Analysis 16(2), recommend 1.01, against 1.1 in
+#: Gelman et al., *Bayesian Data Analysis*, 3rd ed.; the stricter is declared.
+RHAT_THRESHOLD = 1.01
+
+
+def observables(graph: PottsGraph, field: np.ndarray, states: np.ndarray) -> np.ndarray:
+    """The energy and each label's occupancy per recorded state, shape ``(1 + q, n_records)``.
+
+    The scalar series :attr:`PottsChain.ess` and :attr:`PottsStarts.rhat`
+    are read on, in that order.
+    """
+    rows = site_field(field, graph.n_nodes)
+    n_states = int(rows.shape[1])
+    energy = energies(graph, rows, states)
+    occupancy = np.stack([(states == label).mean(axis=1) for label in range(n_states)])
+    return np.concatenate([energy[None, :], occupancy], axis=0)
+
+
+def effective_draws(series: np.ndarray) -> np.ndarray:
+    """:attr:`PottsChain.ess` from :func:`observables`' rows."""
+    n_records = series.shape[1]
+    ess = np.empty(series.shape[0])
+    for index, row in enumerate(series):
+        if n_records < 2:
+            ess[index] = float(n_records)
+        elif np.ptp(row) == 0.0:
+            ess[index] = 0.0 if index == 0 else np.inf
+        else:
+            ess[index] = n_records / integrated_autocorrelation_time(row)
+    return ess
+
+
+def _mixing(ess: np.ndarray, steps: int) -> Termination:
+    """``CONVERGED`` where every observable clears :data:`ESS_FLOOR`, else ``NOT_MIXING``."""
+    mixed = bool(np.all(ess >= ESS_FLOOR))
+    return Termination(
+        converged=mixed,
+        iterations=steps,
+        reason=Stop.CONVERGED if mixed else Stop.NOT_MIXING,
+    )
 
 
 @dataclass(frozen=True)
@@ -161,6 +240,7 @@ def sample_potts(
     temperature: float = 1.0,
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.RUST,
+    start: np.ndarray | None = None,
 ) -> PottsChain:
     """Run one chain and return the configuration after every sweep.
 
@@ -212,12 +292,16 @@ def sample_potts(
         nonetheless, 35.6x the oracle on ten sweeps of a 64x64 lattice;
         :data:`~sal.backend.Backend.PYTHON` replays the oracle's stream, which
         was the default before #1283.
+    start : np.ndarray | None
+        The starting labelling. ``None``, the default, draws one uniformly
+        from ``rng`` as before; a given start draws nothing, so
+        :func:`sample_potts_starts` can run the ordered start (issue #1316).
 
     Returns
     -------
     PottsChain
-        The recorded configurations, and the mean cluster size where the move
-        set builds clusters.
+        The recorded configurations, the mean cluster size where the move
+        set builds clusters, and the mixing diagnostics of issue #1316.
 
     Raises
     ------
@@ -236,27 +320,45 @@ def sample_potts(
     # Contiguous `int64` because the kernel borrows this buffer rather than
     # copying it; `integers` already returns one here, so this asserts the
     # layout rather than paying for it.
-    state = np.ascontiguousarray(
-        rng.integers(0, n_states, size=graph.n_nodes), dtype=np.int64
-    )
+    if start is None:
+        state = np.ascontiguousarray(
+            rng.integers(0, n_states, size=graph.n_nodes), dtype=np.int64
+        )
+    else:
+        state = np.ascontiguousarray(
+            check_labelling(start, graph.n_nodes, n_states), dtype=np.int64
+        )
     offsets, neighbours, couplings = graph.compressed_adjacency()
     advance = sweep_for(
         move, graph, rows, offsets, neighbours, couplings, backend, cluster_backend
     )
 
     recorded = np.empty((n_sweeps, graph.n_nodes), dtype=np.int64)
-    cluster_total, cluster_count = 0, 0
+    before = np.empty_like(state)
+    cluster_total, cluster_count, largest, accepted = 0, 0, 0, 0
     for step in range(-burn_in * thin, n_sweeps * thin):
+        before[:] = state
         size = advance(state, rng, 1.0)
+        accepted += not np.array_equal(before, state)
         if size:
             cluster_total += size
             cluster_count += 1
+            largest = max(largest, size)
         if step >= 0 and (step + 1) % thin == 0:
             recorded[step // thin] = state
+    steps = (burn_in + n_sweeps) * thin
     mean_cluster = (
         cluster_total / cluster_count if cluster_count else float(graph.n_nodes)
     )
-    return PottsChain(states=recorded, mean_cluster_size=mean_cluster)
+    ess = effective_draws(observables(graph, rows, recorded))
+    return PottsChain(
+        states=recorded,
+        mean_cluster_size=mean_cluster,
+        acceptance=accepted / steps if steps else 0.0,
+        largest_cluster_share=largest / graph.n_nodes if cluster_count else 1.0,
+        ess=ess,
+        termination=_mixing(ess, steps),
+    )
 
 
 def step_visits(move: PottsMove, graph: PottsGraph, cluster_sites: int = 0) -> int:
@@ -1351,18 +1453,24 @@ def sample_potts_pair(
     )
 
     recorded = [np.empty((n_sweeps, graph.n_nodes), dtype=np.int64) for _ in range(2)]
-    totals, counts = [0, 0], [0, 0]
+    totals, counts, largest, accepted = [0, 0], [0, 0], [0, 0], [0, 0]
+    before = np.empty_like(states[0])
     for step in range(-burn_in * thin, n_sweeps * thin):
         for replica in range(2):
+            before[:] = states[replica]
             size = advance(states[replica], children[replica], 1.0)
+            accepted[replica] += not np.array_equal(before, states[replica])
             if size:
                 totals[replica] += size
                 counts[replica] += 1
+                largest[replica] = max(largest[replica], size)
         if houdayer:
             houdayer_move(states[0], states[1], offsets, neighbours, rng)
         if step >= 0 and (step + 1) % thin == 0:
             for replica in range(2):
                 recorded[replica][step // thin] = states[replica]
+    steps = (burn_in + n_sweeps) * thin
+    ess = [effective_draws(observables(graph, rows, recorded[r])) for r in range(2)]
     first, second = (
         PottsChain(
             states=recorded[replica],
@@ -1371,7 +1479,178 @@ def sample_potts_pair(
                 if counts[replica]
                 else float(graph.n_nodes)
             ),
+            acceptance=accepted[replica] / steps if steps else 0.0,
+            largest_cluster_share=(
+                largest[replica] / graph.n_nodes if counts[replica] else 1.0
+            ),
+            ess=ess[replica],
+            termination=_mixing(ess[replica], steps),
         )
         for replica in range(2)
     )
     return PottsPair(first=first, second=second)
+
+
+#: The starts :func:`sample_potts_starts` runs one chain from, in order: every
+#: site on label 0, a uniform draw, and a uniform draw after single-site sweeps.
+STARTS = ("ordered", "drawn", "equilibrated")
+
+
+@dataclass(frozen=True)
+class PottsStarts:
+    """Chains of one move from :data:`STARTS`, and whether they agree (issue #1316).
+
+    Parameters
+    ----------
+    chains : tuple[PottsChain, ...]
+        One per entry of :data:`STARTS`, in that order.
+    rhat : np.ndarray
+        :func:`~sal.sample.statistics.split_rhat` over the chains, per
+        observable in :func:`observables`' order: energy, then each label's
+        occupancy.
+    termination : Termination
+        :attr:`~sal.opt.termination.Stop.NOT_MIXING` where any entry of
+        ``rhat`` exceeds :data:`RHAT_THRESHOLD` or any chain ended
+        ``NOT_MIXING``, else :attr:`~sal.opt.termination.Stop.CONVERGED`;
+        ``iterations`` sums the chains' steps.
+    """
+
+    chains: tuple[PottsChain, ...]
+    rhat: np.ndarray
+    termination: Termination
+
+
+def _chain_from(
+    origin: str,
+    generator: np.random.Generator,
+    *,
+    graph: PottsGraph,
+    field: np.ndarray,
+    move: PottsMove,
+    n_sweeps: int,
+    burn_in: int,
+    thin: int,
+    temperature: float,
+    equilibration_sweeps: int,
+    backend: Backend,
+    cluster_backend: Backend,
+) -> PottsChain:
+    """One :func:`sample_potts_starts` body: its start, then its chain, on its own generator.
+
+    Thread-safe: it draws from ``generator`` alone and writes only arrays it
+    allocates, so a thread pool returns the serial run bitwise.
+    """
+    start: np.ndarray | None
+    if origin == "ordered":
+        start = np.zeros(graph.n_nodes, dtype=np.int64)
+    elif origin == "drawn":
+        start = None
+    else:
+        start = sample_potts(
+            graph,
+            field,
+            PottsMove.SINGLE_SITE,
+            generator,
+            n_sweeps=1,
+            burn_in=equilibration_sweeps - 1,
+            temperature=temperature,
+            backend=backend,
+        ).states[-1]
+    return sample_potts(
+        graph,
+        field,
+        move,
+        generator,
+        n_sweeps,
+        burn_in,
+        thin,
+        temperature=temperature,
+        backend=backend,
+        cluster_backend=cluster_backend,
+        start=start,
+    )
+
+
+def sample_potts_starts(
+    graph: PottsGraph,
+    field: SiteField | np.ndarray,
+    move: PottsMove,
+    rng: np.random.Generator,
+    n_sweeps: int,
+    burn_in: int = 0,
+    thin: int = 1,
+    *,
+    temperature: float = 1.0,
+    backend: Backend = Backend.RUST,
+    cluster_backend: Backend = Backend.RUST,
+    equilibration_sweeps: int = 100,
+    workers: int = 1,
+    pool: Pool = "serial",
+) -> PottsStarts:
+    """:func:`sample_potts` from each of :data:`STARTS`, and the split R-hat across them.
+
+    A chain stuck where it started reports a mean, and a single chain cannot
+    say the mean is its start's: the ordered start on #1314's instance
+    reported occupancy (0, 0, 1) against (0.31, 0.33, 0.36) from an
+    equilibrated one. Chains from distinct starts that disagree can.
+
+    Parameters
+    ----------
+    graph, field, move, n_sweeps, burn_in, thin, temperature, backend, cluster_backend
+        As :func:`sample_potts`, for every chain.
+    rng : np.random.Generator
+        Spawns one child per start through :func:`sal.parallel.map_tasks`;
+        each chain draws from its child alone.
+    equilibration_sweeps : int
+        Single-site sweeps run from a uniform draw to make the
+        ``"equilibrated"`` start, at least 1.
+    workers, pool
+        As :func:`sal.parallel.map_tasks`. Every body is thread-safe, so
+        ``pool="threads"`` returns the serial result bitwise.
+
+    Returns
+    -------
+    PottsStarts
+        The chains, ``rhat`` per observable, and the termination.
+
+    Raises
+    ------
+    ValueError
+        If ``n_sweeps`` is below 4, where a split half holds fewer than two
+        draws, or ``equilibration_sweeps`` is below 1.
+    """
+    if n_sweeps < 4:
+        msg = f"split R-hat needs at least 4 recorded sweeps, got {n_sweeps}"
+        raise ValueError(msg)
+    if equilibration_sweeps < 1:
+        msg = f"equilibration_sweeps must be at least 1, got {equilibration_sweeps}"
+        raise ValueError(msg)
+    field = log_weight_of(field)
+    body = functools.partial(
+        _chain_from,
+        graph=graph,
+        field=field,
+        move=move,
+        n_sweeps=n_sweeps,
+        burn_in=burn_in,
+        thin=thin,
+        temperature=temperature,
+        equilibration_sweeps=equilibration_sweeps,
+        backend=backend,
+        cluster_backend=cluster_backend,
+    )
+    chains = tuple(map_tasks(body, STARTS, workers=workers, pool=pool, generator=rng))
+    series = np.stack([observables(graph, field, chain.states) for chain in chains])
+    rhat = np.array([split_rhat(series[:, k]) for k in range(series.shape[1])])
+    mixed = bool(np.all(rhat <= RHAT_THRESHOLD)) and all(
+        chain.termination.converged for chain in chains
+    )
+    return PottsStarts(
+        chains=chains,
+        rhat=rhat,
+        termination=Termination(
+            converged=mixed,
+            iterations=sum(chain.termination.iterations for chain in chains),
+            reason=Stop.CONVERGED if mixed else Stop.NOT_MIXING,
+        ),
+    )
