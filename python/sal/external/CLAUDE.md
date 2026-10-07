@@ -69,7 +69,7 @@ never restated. What follows is local.
   arguments with a `Solver` after them, and return `EmFit` as `ExternalFit`,
   `ExternalPaths` and `ExternalLogLikelihood`
   (`tests/regression/test_external_hmm.py`); their bytes are posed in
-  `hmm_inputs.py`, which `validation.hmmlearn` sends too
+  `hmm_inputs.py`, which `validation.hmmlearn.baum_welch` sends too
   (`tests/validation/test_hmmlearn.py`). A family hmmlearn has no model for
   needs a `Capability` it does not declare, and is refused. `hmc.sample`
   takes `sample.hmc.sample`'s three positional arguments with a `Solver`

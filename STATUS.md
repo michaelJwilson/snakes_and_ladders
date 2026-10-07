@@ -3487,7 +3487,16 @@ rebuilds in JAX (Gaussian, Rosenbrock, Gaussian mixture, equal-length Gaussian
 HMM; each -log p the objective's within 1.6e-15 relative): the adapter's draws
 bitwise, fixed-step and after `window_adaptation`, and a dense 10-D Gaussian's
 mean and covariance within 2.0 and 1.7 standard errors at the chain's ESS of
-1,881 (`tests/validation/test_blackjax.py`, PR #1292). Step 7 is not started.
+1,881 (`tests/validation/test_blackjax.py`, PR #1292).
+
+**Step 7, validation through `external`.** `tests/validation` calls
+`external.potts` and `external.hmm` wherever they return what a test asserts,
+one session per module: gco's, HiGHS's and hmmlearn's modules take 44 s
+against 94 s, their asserted values bitwise except two fits that read hmmlearn's
+probabilities back through `np.log` (sal's distance 1.665e-15 to 1.721e-15 and
+2.14e-13 to 2.06e-13, at 1e-11 and 1e-9). `validation.hmmlearn` loses its
+Gaussian and Poisson fit, Viterbi and `score` (117 lines). The adapters the
+benchmarks, `sandbox` and a key-seeded chain still call stay (PR #1293).
 
 ## Milestone 3.1 — Model Surrogates & Bounds for Supported Problems
 

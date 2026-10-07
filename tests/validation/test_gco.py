@@ -10,11 +10,16 @@ q = 3 both are within Boykov, Veksler and Zabih's factor 2 of the minimum over
 bitwise, expansion and swap, from gco's start and a given one, one-shot and
 in a session; with forbidden labels (#1139) it holds none, is the adapter's
 labelling on #1274's stand-in bitwise, and on the enumerable instances
-reaches the constrained minimum within 1e-12. Runtime goal: `test_goals.py`.
+reaches the constrained minimum within 1e-12. Every other call of gco here is
+`external.potts.ground_state`, served by one session per module (step 7); the
+adapter stays for the bitwise pins and for
+`tests/benchmarks/test_alpha_expansion_gco_bench.py`, which reads its build
+seconds and peak bytes. Runtime goal: `test_goals.py`.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from itertools import product
 
 import numpy as np
@@ -23,7 +28,8 @@ from sal import external
 from sal.backend import Backend
 from sal.cost import Cost
 from sal.enumeration import configurations
-from sal.external import Solver, potts
+from sal.external import Session, Solver, potts
+from sal.external.potts import ExternalRun
 from sal.external.potts_inputs import stand_in
 from sal.opt.budget import Budget
 from sal.search.alpha_expansion import alpha_expansion
@@ -61,11 +67,44 @@ def _non_negative(graph: PottsGraph, field: np.ndarray, value: float) -> float:
     return value + float(graph.edge_coupling.sum()) + float(field.max(axis=1).sum())
 
 
+#: One call of gco, the unit `external.potts.UNITS` charges it in.
+ONE_CALL = Budget(Cost.FITS, 1)
+
+
+@pytest.fixture(scope="module")
+def expansion() -> Iterator[Session]:
+    """One gco worker for the module's expansions, so each call skips interpreter and import start-up."""
+    with external.session(Solver.GCO_EXPANSION) as opened:
+        yield opened
+
+
+def _expansion(
+    graph: PottsGraph,
+    field: np.ndarray,
+    session: Session,
+    *,
+    start: np.ndarray | None = None,
+) -> ExternalRun:
+    """gco's expansion to convergence, through ``session``: the call every test here makes of gco."""
+    # gco is deterministic: the generator is the sibling's argument, never drawn.
+    return potts.ground_state(
+        graph,
+        field,
+        Solver.GCO_EXPANSION,
+        ONE_CALL,
+        np.random.default_rng(0),
+        start=start,
+        session=session,
+    )
+
+
 @pytest.mark.experiment
-def test_gcos_labelling_is_a_fixed_point_of_the_package_move() -> None:
+def test_gcos_labelling_is_a_fixed_point_of_the_package_move(
+    expansion: Session,
+) -> None:
     def check(n_states: int, side: int) -> None:
         graph, field = _potts(side, n_states, 974)
-        theirs = gco.alpha_expansion(graph, field, n_states=n_states)
+        theirs = _expansion(graph, field, expansion)
         from_theirs = alpha_expansion(
             graph,
             field,
@@ -82,7 +121,9 @@ def test_gcos_labelling_is_a_fixed_point_of_the_package_move() -> None:
 
 @pytest.mark.oracle
 @pytest.mark.release  # 22.6 s in the tier, over the 10 s cap (#1088)
-def test_both_expansions_are_within_the_factor_two_bound_of_the_optimum() -> None:
+def test_both_expansions_are_within_the_factor_two_bound_of_the_optimum(
+    expansion: Session,
+) -> None:
     graph, field = _potts(4, 3, 974)
     # 3^16 in 81 blocks of 3^12, each block's tail enumerated once.
     rest = configurations(3, 12, limit=3**12)
@@ -92,7 +133,7 @@ def test_both_expansions_are_within_the_factor_two_bound_of_the_optimum() -> Non
         best = min(best, float(energies(graph, field, block).min()))
     optimum = _non_negative(graph, field, best)
     ours = alpha_expansion(graph, field, backend=Backend.RUST, n_states=3)
-    theirs = gco.alpha_expansion(graph, field, n_states=3)
+    theirs = _expansion(graph, field, expansion)
     for found in (ours.energy, theirs.energy):
         shifted = _non_negative(graph, field, found)
         assert optimum <= shifted * (1.0 + 1e-12) <= 2.0 * optimum
@@ -103,18 +144,15 @@ def test_both_expansions_are_within_the_factor_two_bound_of_the_optimum() -> Non
 
 
 @pytest.mark.experiment
-def test_the_two_energies_agree_within_one_per_cent_at_71() -> None:
+def test_the_two_energies_agree_within_one_per_cent_at_71(expansion: Session) -> None:
     def check(n_states: int) -> None:
         graph, field = _potts(71, n_states, 974)
         ours = alpha_expansion(graph, field, backend=Backend.RUST, n_states=n_states)
-        theirs = gco.alpha_expansion(graph, field, n_states=n_states)
+        theirs = _expansion(graph, field, expansion)
         assert theirs.energy == pytest.approx(ours.energy, rel=1e-2)
 
     every_value([3, 10], check)
 
-
-#: One call of gco, the unit `external.potts.UNITS` charges it in.
-ONE_CALL = Budget(Cost.FITS, 1)
 
 #: Agreement of an expansion's energy with the enumerated constrained
 #: minimum: sums over the same terms in other orders (#1274).
