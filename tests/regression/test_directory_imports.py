@@ -56,6 +56,17 @@ ADMITTED: dict[tuple[str, str], str] = {
         "likelihood.objective implements opt.objective.Objective and constrains through opt.constrain: the seam; "
         "hmm, spatio_sequential and ragged read opt.hmm's forward recursion and E-step result"
     ),
+    ("external", "opt"): (
+        "external/CLAUDE.md: a call takes its sibling's signature and returns its "
+        "result type; ground_state is charged in an opt.budget and ends in a Termination"
+    ),
+    ("external", "search"): (
+        "external/CLAUDE.md: a call takes its sibling's signature and returns its "
+        "result type; ground_state returns search.ground_state's MethodRun"
+    ),
+    ("external", "sim"): (
+        "external/CLAUDE.md: a problem's bytes are posed once, from the model sim/ declares"
+    ),
     ("likelihood", "sim"): "an evaluator reads the model sim/ declares",
     ("qa", "learn"): "qa renders what every directory computes",
     ("qa", "likelihood"): "qa renders what every directory computes",

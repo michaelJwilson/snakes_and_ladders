@@ -14,9 +14,9 @@ and whether that licence is OSI-approved; the version comes from the
 distribution's metadata, so the framework is not imported to read it.
 
 This module is step 1 of #1282. The calls that pose a problem in sal's types
-and return sal's result types (``ground_state``, ``lower_bound``,
-``hmm_fit``, ``viterbi``, ``hmc_sample``) and the persistent session are
-later steps; each reaches its framework through :func:`invoke`.
+and return sal's result types reach their framework through :func:`invoke`:
+``ground_state`` (:mod:`sal.external.potts`, step 3); ``lower_bound``,
+``hmm_fit``, ``viterbi`` and ``hmc_sample`` are later steps.
 """
 
 from __future__ import annotations

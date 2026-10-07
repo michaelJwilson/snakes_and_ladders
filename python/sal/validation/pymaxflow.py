@@ -8,7 +8,9 @@ is GPL-3.0 and runs only in ``scripts/pymaxflow.py``, in a subprocess.
 :func:`min_cut` takes any :class:`~sal.search.maxflow.FlowNetwork`
 with its two terminals, folds each terminal arc into a terminal capacity,
 since PyMaxflow holds the terminals implicitly, and returns the flow value
-and the source side over the network's own node numbering.
+and the source side over the network's own node numbering. Both build
+their inputs with :mod:`sal.external.potts_inputs`, which a session and
+:func:`sal.external.potts.ground_state` send as well (#1282).
 :func:`ising_ground_state` is the two-state ferromagnet the package reduces
 to a cut, built with the capacities
 :func:`sal.search.maxflow.ising_ground_state` builds.
@@ -26,6 +28,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from sal.external.potts_inputs import cut_inputs, ising_inputs
 from sal.external.runner import run
 from sal.search.maxflow import FlowNetwork, GroundState
 from sal.sim.graph import PottsGraph
@@ -49,31 +52,6 @@ class Cut:
     build_seconds: float
     #: Peak resident bytes the build and the cut added.
     peak_bytes: int
-
-
-def cut_inputs(
-    n_nodes: int,
-    tail: np.ndarray,
-    head: np.ndarray,
-    capacity: np.ndarray,
-    reverse: np.ndarray,
-    source: np.ndarray,
-    sink: np.ndarray,
-) -> dict[str, np.ndarray]:
-    """The script's inputs for non-terminal nodes ``0 .. n_nodes - 1``.
-
-    A session (#1282) sends the same arrays, so a caller reusing one worker
-    poses the network as :func:`min_cut` and :func:`ising_ground_state` do.
-    """
-    return {
-        "n_nodes": np.asarray(n_nodes, dtype=np.int64),
-        "tail": np.ascontiguousarray(tail, dtype=np.int64),
-        "head": np.ascontiguousarray(head, dtype=np.int64),
-        "capacity": np.ascontiguousarray(capacity, dtype=np.float64),
-        "reverse": np.ascontiguousarray(reverse, dtype=np.float64),
-        "source": np.ascontiguousarray(source, dtype=np.float64),
-        "sink": np.ascontiguousarray(sink, dtype=np.float64),
-    }
 
 
 def _cut(inputs: dict[str, np.ndarray]) -> tuple[float, np.ndarray, float, float, int]:
@@ -138,23 +116,6 @@ def min_cut(network: FlowNetwork, source: int, sink: int) -> Cut:
     side[inner] = ~sink_side
     side[source] = True
     return Cut(value + direct, side, seconds, build_seconds, peak_bytes)
-
-
-def ising_inputs(graph: PottsGraph, field: np.ndarray) -> dict[str, np.ndarray]:
-    """The two-state ferromagnet's :func:`cut_inputs`, as :func:`ising_ground_state` cuts it."""
-    values = site_field(np.asarray(field, dtype=float), graph.n_nodes, n_states=2)
-    cost = -values
-    offsets = cost.min(axis=1)
-    edges = graph.edge_index
-    return cut_inputs(
-        graph.n_nodes,
-        edges[:, 0],
-        edges[:, 1],
-        graph.edge_coupling,
-        graph.edge_coupling,
-        cost[:, 1] - offsets,
-        cost[:, 0] - offsets,
-    )
 
 
 def ising_ground_state(graph: PottsGraph, field: np.ndarray) -> tuple[GroundState, Cut]:

@@ -7,8 +7,8 @@ The smooth cost is Potts, ``[a != b]``. gco's float mode scales each term to
 an integer and truncates it; the adapter re-scores the labelling in the
 package's own energy. Outputs: ``labels``; ``gco_energy``, gco's own figure;
 ``build_seconds``. The measured seconds are ``expansion()`` alone; the peak
-resident memory is the build and the expansion together. With ``move`` set
-to ``swap`` (issue #997) the move is gco's alpha-beta ``swap()`` to
+resident memory is the build and the expansion together. With ``swap``
+set, a ``bool`` (issues #997, #1282), the move is gco's alpha-beta ``swap()`` to
 convergence instead, measured the same way.
 """
 
@@ -40,8 +40,8 @@ def main() -> None:
 
     def build_and_expand() -> tuple[object, float, float]:
         graph, build_seconds = timed(build)
-        move = str(inputs.get("move", np.asarray("expansion")))
-        run = graph.swap if move == "swap" else graph.expansion  # type: ignore[attr-defined]
+        swap = bool(inputs["swap"]) if "swap" in inputs else False
+        run = graph.swap if swap else graph.expansion  # type: ignore[attr-defined]
         _, seconds = timed(lambda: run(-1))
         return graph, seconds, build_seconds
 
