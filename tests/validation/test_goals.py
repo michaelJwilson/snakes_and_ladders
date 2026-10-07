@@ -22,6 +22,7 @@ import torch
 from sal import oxisal
 from sal.backend import Backend
 from sal.emissions import GaussianEmission
+from sal.enumeration import configurations
 from sal.fixtures import load_params
 from sal.learn.policy import LinearPolicy
 from sal.learn.ppo import generalized_advantages
@@ -41,14 +42,15 @@ from sal.opt.hmm import (
 from sal.opt.mixture import expectation_maximization
 from sal.sample import hmc, metropolis
 from sal.sample.potts_mcmc import bond_probability
-from sal.search.alpha_expansion import alpha_expansion
+from sal.search.alpha_expansion import alpha_beta_swap, alpha_expansion
 from sal.search.ground_state import lattice_rung
+from sal.search.icm import iterated_conditional_modes
 from sal.search.potts_starts import spatio_rung, tiling_rung
 from sal.search.trws import trws
 from sal.sim.fixtures import fixture
 from sal.sim.graph import BoundaryCondition, lattice_graph
 from sal.sim.hmm import HmmParams, simulate_sequences
-from sal.sim.potts import critical_coupling, site_field
+from sal.sim.potts import critical_coupling, energies, site_field
 from sal.validation.gaussian import GaussianTarget, diagonal_precision
 
 from tests._fixtures import FIXTURES_DIR
@@ -369,6 +371,58 @@ GCO_SWAP_MEMORY = {
 def _swap_inputs(side: int) -> dict[str, np.ndarray]:
     """The expansion goals' instance, run as a swap."""
     return {**_expansion_inputs(side), "move": np.asarray("swap")}
+
+
+#: OpenGM's inference alone, by the library's clock, on gco's expansion
+#: instance at 71x71 (q = 10, `critical_coupling(10)`, seed 974), A* on a 3x3
+#: lattice at q = 3; medians of three calls through one session, at OpenGM's
+#: own caps: loopy BP 100 iterations, TRW-S 5,000 (reached), dual
+#: decomposition 100 (#1279). The package's figure is its counterpart's:
+#: `iterated_conditional_modes` from label 0, `alpha_expansion`,
+#: `alpha_beta_swap`, `trws` for the three message-passing bounds and
+#: decoders, and enumeration for A*. Measured with the package at 1.2 ms,
+#: 7.19 s, 61 ms, 132 ms, 7.19 s, 7.19 s and 7.2 ms: every goal but dual
+#: decomposition's and A*'s is met.
+OPENGM = {
+    algorithm: Goal(
+        "opengm",
+        what,
+        seconds,
+        "2026-10-07, 4-core reference host at a 1-minute load of 0.2 to 0.5, #1279",
+    )
+    for algorithm, what, seconds in (
+        ("icm", "ICM from label 0, 71x71, q = 10", 0.035272),
+        ("lbp", "loopy BP against TRW-S, 71x71, q = 10", 46.932),
+        ("expansion", "alpha expansion, 71x71, q = 10", 1.3269),
+        ("swap", "alpha-beta swap, 71x71, q = 10", 0.73687),
+        ("trws", "TRW-S, 71x71, q = 10", 18.243),
+        ("dd", "dual decomposition against TRW-S, 71x71, q = 10", 5.6016),
+        ("astar", "A* against enumeration, 3x3, q = 3", 4.9642e-5),
+    )
+}
+
+
+def _opengm_seconds(algorithm: str) -> float:
+    """The package's counterpart to OpenGM's ``algorithm`` on its goal's instance."""
+    if algorithm == "astar":
+        graph = lattice_graph((3, 3), BoundaryCondition.OPEN, critical_coupling(3))
+        field = np.random.default_rng(974).normal(size=(graph.n_nodes, 3))
+        return median_seconds(
+            lambda: energies(graph, field, configurations(3, graph.n_nodes)).min()
+        )
+    graph = lattice_graph((71, 71), BoundaryCondition.OPEN, critical_coupling(10))
+    field = np.random.default_rng(974).normal(size=(graph.n_nodes, 10))
+    start = np.zeros(graph.n_nodes, dtype=np.int64)
+    calls: dict[str, Callable[[], object]] = {
+        "icm": lambda: iterated_conditional_modes(
+            graph, field, np.random.default_rng(0), n_states=10, start=start
+        ),
+        "expansion": lambda: alpha_expansion(graph, field, n_states=10),
+        "swap": lambda: alpha_beta_swap(graph, field, n_states=10),
+    }
+    call = calls.get(algorithm, lambda: trws(graph, field))
+    call()
+    return median_seconds(call, repeats=3)
 
 
 #: BlackJAX's compiled HMC chain, compilation excluded: 1,000 transitions of
@@ -1438,6 +1492,7 @@ RUNTIME_GOALS = [
     ),
     *_goals(GCO_EXPANSION, _expansion_seconds),
     *_goals(HIGHS_LOCAL_POLYTOPE, _trws_seconds),
+    *_goals(OPENGM, _opengm_seconds),
     *_goals(HMMLEARN_BAUM_WELCH, _baum_welch_seconds),
     *_goals(SCIKIT_LEARN_EM, _mixture_em_seconds),
     *_goals(BLACKJAX_HMC, _hmc_seconds),

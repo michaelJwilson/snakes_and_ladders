@@ -10,12 +10,20 @@ PyMaxflow imports as ``maxflow``. #1282 moved the registry here from
 ``sal.validation``, which re-exports it, so a solver's
 :class:`~sal.external.solvers.Provenance` reads it without importing the
 validation home.
+
+**A source build (#1279).** OpenGM is on no package index: its entry names
+the script that builds it (:attr:`Framework.build`) and the shared library
+the build writes, and has no extra. :func:`built` finds that library under
+:func:`built_home`, and :func:`built_version` reads the commit the build
+pinned, so neither loads the library.
 """
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -39,11 +47,48 @@ class Framework:
     source: str
     #: The ticket that approved it.
     ticket: int
+    #: The script that builds it, where no package index carries it: then
+    #: :attr:`module` is the shared library the build writes, without its
+    #: ``lib`` prefix and suffix, and no extra installs it (#1279).
+    build: str | None = None
 
     @property
     def extra(self) -> str:
         """The ``pyproject.toml`` extra that installs it, hyphenated as PEP 685 spells it."""
         return f"validation-{self.name.replace('_', '-')}"
+
+    @property
+    def remedy(self) -> str:
+        """What makes it available: its extra installed, or its build run."""
+        if self.build is not None:
+            return f"run `{self.build}`"
+        return f"install the `{self.extra}` extra"
+
+
+def built_home(framework: Framework) -> Path:
+    """The directory ``framework``'s build writes, as its build script resolves it.
+
+    ``$SAL_<NAME>_HOME`` where set, else ``<cache>/sal/<name>`` with
+    ``<cache>`` ``$XDG_CACHE_HOME`` or ``~/.cache``.
+    """
+    variable = f"SAL_{framework.name.upper()}_HOME"
+    if variable in os.environ:
+        return Path(os.environ[variable])
+    cache = os.environ.get("XDG_CACHE_HOME") or str(Path.home() / ".cache")
+    return Path(cache) / "sal" / framework.name
+
+
+def built(framework: Framework) -> Path | None:
+    """The shared library ``framework``'s build wrote, or ``None`` where it has not run."""
+    if framework.build is None:
+        return None
+    library = built_home(framework) / f"lib{framework.module}.so"
+    return library if library.is_file() else None
+
+
+def built_version(framework: Framework) -> str:
+    """The commit ``framework``'s build pinned, as it recorded it beside the library."""
+    return (built_home(framework) / "COMMIT").read_text().strip()
 
 
 #: Every framework the package is validated or benchmarked against, by name.
@@ -150,6 +195,19 @@ FRAMEWORKS: Mapping[str, Framework] = {
             osi=True,
             source="https://github.com/ERGO-Code/HiGHS",
             ticket=1063,
+        ),
+        # A source build: the header-only inference, compiled with sal's own
+        # entry point, `infra/opengm/sal_opengm.cxx`; none of the research-only
+        # externals OpenGM's CMake downloads is fetched (#1279).
+        Framework(
+            name="opengm",
+            distribution="OpenGM",
+            module="sal_opengm",
+            licence="MIT",
+            osi=True,
+            source="https://github.com/opengm/opengm",
+            ticket=1279,
+            build="infra/build_opengm.sh",
         ),
     )
 }

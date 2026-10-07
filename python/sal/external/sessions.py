@@ -278,9 +278,10 @@ def session(
     if not available(solver):
         raise ExternalUnavailable(solver)
     framework = solver.framework
+    # A source build is a library its script loads, not a module to import.
     opened = Session(
         framework.name,
-        framework=framework.module,
+        framework=framework.module if framework.build is None else None,
         solver=solver,
         transport=transport,
         timeout=timeout,

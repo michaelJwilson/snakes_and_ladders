@@ -671,6 +671,12 @@ whether or not it has members yet.
 .. automodule:: sal.validation.scripts.gco
    :members:
 
+.. automodule:: sal.validation.opengm
+   :members:
+
+.. automodule:: sal.validation.scripts.opengm
+   :members:
+
 .. automodule:: sal.validation.hmmlearn
    :members:
 

@@ -103,8 +103,19 @@ def test_pymaxflow_refuses_what_it_does_not_declare(
         (Solver.GCO_SWAP, np.where(THREE > 0, np.inf, THREE), {}, "finite or -inf"),
         (Solver.GCO_SWAP, np.full_like(THREE, -np.inf), {}, "allows no label"),
         (Solver.GCO_EXPANSION, THREE, {"start": np.full(9, 3)}, "start"),
+        (Solver.OPENGM_ASTAR, THREE, {"start": np.zeros(9, dtype=np.int64)}, "start"),
+        (Solver.OPENGM_LBP, THREE, {"budget": Budget(Cost.PASS, 1)}, "fits"),
     ],
-    ids=["unit", "cut-start", "rows", "+inf", "no-label", "range"],
+    ids=[
+        "unit",
+        "cut-start",
+        "rows",
+        "+inf",
+        "no-label",
+        "range",
+        "astar-start",
+        "lbp-unit",
+    ],
 )
 def test_a_malformed_call_is_refused_before_any_subprocess(
     monkeypatch: pytest.MonkeyPatch,
@@ -117,6 +128,21 @@ def test_a_malformed_call_is_refused_before_any_subprocess(
     budget = keywords.pop("budget", Budget(UNITS[solver], 1))
     with pytest.raises(ValueError, match=message):
         potts.ground_state(GRAPH, field, solver, budget, RNG, **keywords)
+    assert started == []
+
+
+@pytest.mark.analytic
+@pytest.mark.parametrize(
+    "solver", [Solver.OPENGM_EXPANSION, Solver.OPENGM_SWAP], ids=str
+)
+def test_opengms_moves_refuse_a_negative_coupling_before_any_subprocess(
+    monkeypatch: pytest.MonkeyPatch, solver: Solver
+) -> None:
+    # Their auxiliary construction needs a metric pairwise term (#1279).
+    started = _spawns(monkeypatch)
+    graph = lattice_graph((3, 3), BoundaryCondition.OPEN, -0.5)
+    with pytest.raises(ValueError, match="metric"):
+        potts.ground_state(graph, THREE, solver, Budget(UNITS[solver], 1), RNG)
     assert started == []
 
 
