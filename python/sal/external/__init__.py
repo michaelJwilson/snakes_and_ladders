@@ -16,8 +16,8 @@ raises :class:`ExternalUnavailable` naming its extra.
 
 :func:`session` keeps one worker per solver for many calls, so a call pays
 interpreter and import start-up once (:mod:`sal.external.sessions`); its
-:class:`Transport` moves arrays as ``.npz`` files, shared-memory blocks or
-memory-mapped files, with the same bytes reaching the framework each way.
+:class:`Transport` moves arrays as memory-mapped files (the default) or
+``.npz`` files, with the same bytes reaching the framework each way.
 
 The problems are namespaced by family, as the package is, and the root
 holds only the infrastructure above: :mod:`sal.external.potts` carries the

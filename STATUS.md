@@ -3460,10 +3460,11 @@ subprocess starts (`tests/regression/test_external.py`).
 
 **Steps 2 and 2b, the session.** `external.session` keeps one worker
 (`external.worker`) per solver: at 0.2 MB and 100 calls the per-call overhead
-is 5.0 ms against the one-shot call's 148 ms. `Transport.SHARED` and
-`Transport.MMAP` cut it against the default `NPZ` at 10 and 128 MB (echo, 128
-MB, 100 calls: 857, 615 and 362 ms). Every transport returns the one-shot
-call's bytes, and the kill tests count 0 orphaned blocks
+is 5.0 ms against the one-shot call's 148 ms. `Transport.MMAP`, the
+default, cuts it against `NPZ` at 10 and 128 MB (echo, 128 MB, 100 calls: 857
+against 362 ms) and trails it in none of 15 cells by more than the host's spread;
+a shared-memory transport (615 ms in that cell) was measured and dropped. Both
+transports return the one-shot call's bytes, and the kill tests count 0 orphaned blocks
 (`tests/regression/test_external_session.py`, PR #1288).
 
 **Steps 3 and 4, the calls in sal's types.** `external.potts.ground_state` returns

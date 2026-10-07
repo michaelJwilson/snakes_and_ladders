@@ -16,7 +16,7 @@ runs, so a call's protocol is unchanged and its outputs are bitwise those of
 cross (:class:`~sal.external.transport.Transport`); every choice returns the
 same bytes.
 
-The parent owns every file and shared-memory block a call uses: it creates
+The parent owns every file a call uses: it creates
 each, and releases each when the call returns or fails. The worker is shut
 down when the ``with`` block exits, normally or by an exception; a worker
 that dies surfaces as :class:`~sal.external.runner.ScriptError` carrying its
@@ -62,14 +62,14 @@ class Session:
         *,
         framework: str | None = None,
         solver: Solver | None = None,
-        transport: Transport = Transport.NPZ,
+        transport: Transport = Transport.MMAP,
         timeout: float = 600.0,
     ) -> None:
         self.script = script
         self.solver = solver
         self.transport = Transport(transport)
         self._directory = tempfile.TemporaryDirectory(prefix="sal-session-")
-        #: The prefix of every shared-memory block this session creates.
+        #: The prefix of every block file this session creates.
         self.prefix = f"sal{os.getpid()}{secrets.token_hex(3)}_"
         self._count = 0
         self._mark = 0
@@ -148,12 +148,9 @@ class Session:
                     pipe.close()
 
     def _handle(self) -> str:
-        """A fresh block name: a shared-memory name, or a file in the session's directory."""
+        """A fresh block file in the session's directory."""
         self._count += 1
-        name = f"{self.prefix}{self._count}"
-        if self.transport is Transport.MMAP:
-            return str(Path(self._directory.name) / name)
-        return name
+        return str(Path(self._directory.name) / f"{self.prefix}{self._count}")
 
     def _run_npz(self, inputs: Mapping[str, np.ndarray], timeout: float) -> Run:
         self._count += 1
@@ -258,7 +255,7 @@ class Session:
 def session(
     solver: Solver,
     *,
-    transport: Transport = Transport.NPZ,
+    transport: Transport = Transport.MMAP,
     timeout: float = 600.0,
 ) -> Iterator[Session]:
     """A worker for ``solver``, alive for the ``with`` block and shut down on its exit.
