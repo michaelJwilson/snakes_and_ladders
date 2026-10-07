@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from sal.backend import Backend
 from sal.emissions import CategoricalEmission
 from sal.likelihood.spatio_sequential import (
     enumerate_spatio_sequential,
@@ -407,3 +408,26 @@ def test_the_fit_redraws_small_classes_ahead_of_each_block() -> None:
 
     assert np.array_equal(fit(None), fit(0))
     assert np.array_equal(fit(4), fit(4))
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("tier", ["ci", "stress"])
+def test_the_rust_fit_is_the_python_fit_on_the_categorical_model(tier: str) -> None:
+    # Issue #1298: the fit's default model on the Rust route raised
+    # `TypeError`. It now reaches the labels the NumPy oracle's fit reaches,
+    # from one generator, and the same joint at every block; measured, the
+    # joints differ by at most 1.6e-15 relative.
+    params = fixture("spatio_sequential", tier).params
+    data = simulate_spatio_sequential(params, np.random.default_rng(0))
+
+    fits = [
+        fit_spatio_sequential(
+            params, data.observations, np.random.default_rng(1), backend=backend
+        )
+        for backend in (Backend.PYTHON, Backend.RUST)
+    ]
+
+    np.testing.assert_array_equal(fits[1].labels, fits[0].labels)
+    np.testing.assert_allclose(
+        fits[1].log_likelihoods, fits[0].log_likelihoods, rtol=1e-12
+    )

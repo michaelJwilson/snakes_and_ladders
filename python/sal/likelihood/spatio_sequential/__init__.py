@@ -86,7 +86,7 @@ class ChannelRows:
 
 @dataclass(frozen=True)
 class ObservationRows:
-    """Both channels' rows, built once per fit and reused by every E step (issue #1064).
+    """Every channel's rows, built once per fit and reused by every E step (issue #1064).
 
     A row depends on the observations and the covariate and on no parameter,
     so an E step handed these builds only the tables. They are interpretable
@@ -102,16 +102,17 @@ class ObservationRows:
     covariate : np.ndarray | None
         The covariate, likewise.
     total : ChannelRows
-        The first channel's.
-    successes : ChannelRows
-        The second channel's.
+        The first channel's, or the symbols of the categorical model.
+    successes : ChannelRows | None
+        The second channel's; ``None`` for the categorical model, which has
+        one (issue #1298).
     """
 
     layout: CovariateRows
     observations: np.ndarray
     covariate: np.ndarray | None
     total: ChannelRows
-    successes: ChannelRows
+    successes: ChannelRows | None
 
 
 def observation_rows(
@@ -120,7 +121,7 @@ def observation_rows(
     *,
     covariate_rows: CovariateRows = "range",
 ) -> ObservationRows:
-    """Every observation's table row in both channels, built once per fit (issue #1064).
+    """Every observation's table row in every channel, built once per fit (issue #1064).
 
     The Rust twin's :func:`~sal.likelihood.spatio_sequential.rust.observation_rows`,
     reached through this gateway: the rows are an input only the
