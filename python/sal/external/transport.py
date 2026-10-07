@@ -1,10 +1,11 @@
 """How a session's arrays reach its worker and come back (issue #1282, step 2b).
 
 :class:`Transport` names the three ways. ``NPZ`` is the one-shot protocol: an
-``.npz`` file per call each way. ``SHARED`` places each array in one named
-``multiprocessing.shared_memory`` block, and ``MMAP`` in one file mapped by
-``np.memmap`` in the session's temporary directory; the worker maps either as
-``np.ndarray(buffer=...)`` and copies nothing on the way in.
+``.npz`` file per call each way. ``MMAP``, the default, places each array in
+one file mapped by ``np.memmap`` in the session's temporary directory; the
+worker maps it as ``np.ndarray(buffer=...)`` and copies nothing on the way in.
+A ``multiprocessing.shared_memory`` transport was measured and dropped: ``MMAP``
+beat it in 10 of 12 cells at 10 and 128 MB (#1288).
 
 A :class:`Block` is one array's bytes. :func:`create` is the parent's side:
 the parent creates every block, inputs and outputs alike, and
@@ -21,12 +22,8 @@ call's inputs do not depend on the transport chosen.
 
 from __future__ import annotations
 
-import sys
 from collections.abc import Mapping
-from contextlib import suppress
 from enum import StrEnum
-from multiprocessing import resource_tracker
-from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 from typing import Any
 
@@ -36,11 +33,11 @@ import numpy as np
 class Transport(StrEnum):
     """How a session moves arrays between the parent and its worker."""
 
-    #: An ``.npz`` file each way, the one-shot protocol; the default.
+    #: An ``.npz`` file each way, the one-shot protocol.
     NPZ = "npz"
-    #: One ``multiprocessing.shared_memory`` block per array.
-    SHARED = "shared"
-    #: One ``np.memmap`` file per array, in the session's temporary directory.
+    #: One ``np.memmap`` file per array, in the session's temporary directory;
+    #: the default, faster than ``NPZ`` in 13 of 15 measured cells and behind
+    #: it in none by more than the host's run-to-run spread (#1288).
     MMAP = "mmap"
 
 
@@ -68,13 +65,13 @@ def admit(inputs: Mapping[str, Any]) -> None:
 
 
 class Block:
-    """One array's bytes in a shared medium, and the view over them."""
+    """One array's bytes in a mapped file, and the view over them."""
 
     def __init__(
         self,
         spec: dict[str, Any],
         array: np.ndarray,
-        medium: SharedMemory | np.memmap | None,
+        medium: np.memmap | None,
         *,
         owner: bool,
     ) -> None:
@@ -89,26 +86,19 @@ class Block:
         """Drop the view and unmap the medium; the parent also unlinks it."""
         self.array = None
         medium, self._medium = self._medium, None
-        if isinstance(medium, SharedMemory):
-            # A script that kept a view keeps the mapping until it exits.
-            with suppress(BufferError):
-                medium.close()
-            if self._owner:
-                medium.unlink()
-        elif medium is not None:
+        if medium is not None:
             del medium
             if self._owner:
                 Path(self.spec["handle"]).unlink(missing_ok=True)
 
 
 def _view(
-    medium: SharedMemory | np.memmap | None, dtype: np.dtype, shape: tuple[int, ...]
+    medium: np.memmap | None, dtype: np.dtype, shape: tuple[int, ...]
 ) -> np.ndarray:
     """``dtype`` and ``shape`` over the medium's bytes, copying none."""
     if medium is None:
         return np.empty(shape, dtype=dtype)
-    buffer = medium.buf if isinstance(medium, SharedMemory) else medium
-    return np.ndarray(shape, dtype=dtype, buffer=buffer)
+    return np.ndarray(shape, dtype=dtype, buffer=medium)
 
 
 def create(
@@ -119,14 +109,12 @@ def create(
 ) -> Block:
     """Create, as the parent and owner, a block for one array.
 
-    ``handle`` is the shared-memory name under ``SHARED`` and the file path
-    under ``MMAP``. An empty array needs no medium and crosses as its spec.
+    ``handle`` is the file path. An empty array needs no medium and crosses as
+    its spec.
     """
     nbytes = int(np.prod(shape, dtype=np.int64)) * dtype.itemsize
-    medium: SharedMemory | np.memmap | None = None
-    if nbytes and transport is Transport.SHARED:
-        medium = SharedMemory(name=handle, create=True, size=nbytes)
-    elif nbytes and transport is Transport.MMAP:
+    medium: np.memmap | None = None
+    if nbytes and transport is Transport.MMAP:
         medium = np.memmap(handle, dtype=np.uint8, mode="w+", shape=(nbytes,))
     elif nbytes:
         message = f"{transport} moves no arrays through blocks"
@@ -140,33 +128,13 @@ def create(
     return Block(spec, _view(medium, dtype, shape), medium, owner=True)
 
 
-def _attached(name: str) -> SharedMemory:
-    """Map an existing block without registering it for removal at exit.
-
-    Python 3.12 registers an attached block with the attaching process's
-    resource tracker, which unlinks it when that process exits; the parent
-    owns the block, so the worker's registration is suppressed (3.13 names
-    this ``track=False``).
-    """
-    if sys.version_info >= (3, 13):
-        return SharedMemory(name=name, track=False)  # type: ignore[call-arg,unused-ignore]
-    register = resource_tracker.register
-    resource_tracker.register = lambda *_: None
-    try:
-        return SharedMemory(name=name)
-    finally:
-        resource_tracker.register = register
-
-
 def attach(spec: Mapping[str, Any]) -> Block:
     """Map, as the worker, the block ``spec`` names; it is never unlinked from here."""
     dtype = np.dtype(spec["dtype"])
     shape = tuple(int(n) for n in spec["shape"])
     handle = spec["handle"]
-    medium: SharedMemory | np.memmap | None = None
-    if handle is not None and spec["transport"] == Transport.SHARED:
-        medium = _attached(handle)
-    elif handle is not None:
+    medium: np.memmap | None = None
+    if handle is not None:
         size = Path(handle).stat().st_size
         medium = np.memmap(handle, dtype=np.uint8, mode="r+", shape=(size,))
     return Block(dict(spec), _view(medium, dtype, shape), medium, owner=False)

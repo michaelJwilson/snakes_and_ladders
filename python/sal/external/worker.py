@@ -10,7 +10,7 @@ worker chooses what those two read and write.
 
 - ``NPZ``: a request names the ``.npz`` pair; the script reads and writes
   the files, and the worker replies ``{"done": true}``.
-- ``SHARED`` and ``MMAP``: a request carries each input's block spec. The
+- ``MMAP``: a request carries each input's block spec. The
   worker maps the blocks, runs the script on views over them, and replies
   each output's dtype and shape; the parent creates a block per output and
   names them; the worker copies each output into its block, unmaps every

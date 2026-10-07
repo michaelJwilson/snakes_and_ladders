@@ -42,12 +42,15 @@ never restated. What follows is local.
   by an exception, and a worker that dies is a `ScriptError` carrying its
   standard error; the session is closed from then on.
 - **The parent owns every block.** The parent creates and unlinks each
-  shared-memory block and memory-mapped file, inputs and outputs alike; the
+  memory-mapped file, inputs and outputs alike; the
   worker attaches and never unlinks, so a killed worker leaves no orphan, a
   count the kill tests hold at 0.
 - **A session sends C-contiguous `float64`, `int64` or `bool` arrays.**
   Anything else is refused before the call, under every transport, so the
   inputs do not depend on the transport chosen.
-- **A transport is kept on a measurement.** `NPZ` is the default. `SHARED`
-  and `MMAP` each cut the per-call overhead against it at 10 and 128 MB
-  (#1282, PR #1288); one that stops doing so goes.
+- **A transport is kept on a measurement.** `MMAP` is the default: it beat
+  `NPZ` in 13 of 15 cells of #1288's grid and trailed it in none by more than
+  the host's run-to-run spread (0.4 ms at 0.2 MB, 4 ms of 198 at 10 MB, N = 1).
+  `SHARED` (`multiprocessing.shared_memory`) was dropped, `MMAP` beating it in
+  10 of 12 cells at 10 and 128 MB. A transport that stops earning its place
+  goes.
