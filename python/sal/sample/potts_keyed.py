@@ -318,8 +318,9 @@ class SwendsenWangMove:
     backend : Backend
         Which implementation runs the ``T > 0`` pass, as
         ``potts_mcmc.swendsen_wang_sweep`` takes it.
-        :data:`~sal.backend.Backend.PYTHON` is the oracle and
-        the default: the Rust pass draws the same uniforms in a different
+        :data:`~sal.backend.Backend.PYTHON` is the oracle;
+        :data:`~sal.backend.Backend.RUST`, the default since #1283 at 45.9x
+        the oracle per 64x64 pass, draws the same uniforms in a different
         order, so it is a chain of the same law and not the same chain
         (#754). The ``T = 0`` limit has one implementation, which no backend
         selects: it draws no bond uniforms at all.
@@ -334,7 +335,7 @@ class SwendsenWangMove:
         self,
         graph: PottsGraph,
         field: np.ndarray,
-        backend: Backend = Backend.PYTHON,
+        backend: Backend = Backend.RUST,
     ) -> None:
         field = np.asarray(field, dtype=np.float64)
         if field.shape[0] != graph.n_nodes:
@@ -409,7 +410,7 @@ class SwendsenWangMove:
 def cluster_moves(
     graph: PottsGraph,
     field: SiteField | np.ndarray,
-    backend: Backend = Backend.PYTHON,
+    backend: Backend = Backend.RUST,
 ) -> dict[MoveKind, WolffMove | SwendsenWangMove | NiedermayerMove]:
     """Every cluster move on one lattice, keyed as the environment expects them.
 

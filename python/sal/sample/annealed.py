@@ -265,7 +265,7 @@ def annealed_importance_sampling(
     *,
     move: PottsMove = PottsMove.SINGLE_SITE,
     backend: Backend = Backend.RUST,
-    cluster_backend: Backend = Backend.PYTHON,
+    cluster_backend: Backend = Backend.RUST,
 ) -> LogPartition:
     """``log Z`` from independent annealing runs, weighted by what each one cost (Neal 2001).
 
@@ -307,8 +307,9 @@ def annealed_importance_sampling(
     cluster_backend : Backend
         Which implementation runs a cluster move's pass, as
         :func:`~sal.sample.potts_mcmc.sample_potts` takes it;
-        :data:`~sal.backend.Backend.PYTHON`, the default, is the chain before
-        #1059 threaded it here, bitwise.
+        :data:`~sal.backend.Backend.RUST` is the default since #1283, and
+        :data:`~sal.backend.Backend.PYTHON` is the chain before #1059
+        threaded it here, bitwise.
 
     Returns
     -------
@@ -401,7 +402,7 @@ def population_annealing(
     *,
     move: PottsMove = PottsMove.SINGLE_SITE,
     backend: Backend = Backend.RUST,
-    cluster_backend: Backend = Backend.PYTHON,
+    cluster_backend: Backend = Backend.RUST,
     resample: Resampling = Resampling.SYSTEMATIC,
 ) -> LogPartition:
     """``log Z`` from a population resampled at every rung (Hukushima & Iba 2003; Machta 2010).
@@ -571,7 +572,7 @@ def simulated_tempering(
     *,
     move: PottsMove = PottsMove.SINGLE_SITE,
     backend: Backend = Backend.RUST,
-    cluster_backend: Backend = Backend.PYTHON,
+    cluster_backend: Backend = Backend.RUST,
 ) -> SimulatedTempered:
     """One walker over the ladder, with the rung as a sampled variable (Marinari & Parisi 1992).
 

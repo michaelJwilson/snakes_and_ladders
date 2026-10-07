@@ -154,7 +154,13 @@ def test_the_rust_pass_is_the_oracles_pass_bitwise_on_the_same_draws() -> None:
         theirs = state.copy()
         scripted = _ScriptedDraws(bond, colours, accepts)
         swendsen_wang_sweep(
-            theirs, graph, rows, cast(np.random.Generator, scripted), None, beta
+            theirs,
+            graph,
+            rows,
+            cast(np.random.Generator, scripted),
+            None,
+            beta,
+            Backend.PYTHON,
         )
 
         # The partition, then what it did with it: a pass that agreed on the
@@ -228,7 +234,13 @@ def test_a_guard_that_hands_every_cluster_back_changes_no_recolouring() -> None:
     bond, colours, accepts = draws
     scripted = _ScriptedDraws(bond, colours, accepts)
     swendsen_wang_sweep(
-        rebuilt, graph, rows, cast(np.random.Generator, scripted), None, beta
+        rebuilt,
+        graph,
+        rows,
+        cast(np.random.Generator, scripted),
+        None,
+        beta,
+        Backend.PYTHON,
     )
     assert np.array_equal(decided, rebuilt)
 
