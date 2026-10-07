@@ -14,12 +14,16 @@ the minimum. With integer node marginals HiGHS's ``milp`` solves the ILP
 (#1274): TRW-S's bound is at most the LP value, which is at most the ILP
 optimum, the enumerated minimum where enumeration reaches; TRW-S's labelling
 scores at least that optimum, and above it only on two frustrated lattices.
+`external.potts.lower_bound` (#1282, step 4) returns the
+adapter's value as its bound and the adapter's labelling, bitwise, on every
+instance here but `potts_lattice/release`.
 """
 
 from __future__ import annotations
 
 import numpy as np
 import pytest
+from sal.external import Solver, potts, session
 from sal.search.potts_starts import rung_of, spatio_rung, tiling_rung
 from sal.search.tightening import dual_bound
 from sal.search.trws import trws
@@ -79,6 +83,31 @@ def _solved(graph: PottsGraph, field: np.ndarray) -> highs.LocalPolytope:
     result = highs.local_polytope(graph, field)
     assert result.status == highs.OPTIMAL, result.message
     return result
+
+
+@pytest.mark.oracle
+def test_external_lower_bound_is_the_adapters_value_bitwise() -> None:
+    # #1282, step 4: both pose the LP through `polytope_inputs`, so HiGHS
+    # receives one set of bytes; `potts_lattice/release` is left to the
+    # release-sized tests below.
+    rows = _instances() + [
+        row for row in _fixtures() if row[0] != "potts_lattice/release"
+    ]
+
+    with session(Solver.HIGHS_LP) as opened:
+
+        def check(
+            name: str, graph: PottsGraph, field: np.ndarray, _n_states: int
+        ) -> None:
+            adapter = _solved(graph, field)
+            ours = potts.lower_bound(graph, field, Solver.HIGHS_LP, session=opened)
+
+            assert ours.bound == adapter.value, (name, ours.bound, adapter.value)
+            assert np.array_equal(ours.labelling, adapter.labelling), name
+            assert ours.integral is adapter.integral, name
+            assert ours.termination.iterations == adapter.iterations, name
+
+        every_row(rows, check)
 
 
 @pytest.mark.oracle

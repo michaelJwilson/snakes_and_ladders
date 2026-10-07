@@ -19,9 +19,11 @@ interpreter and import start-up once (:mod:`sal.external.sessions`); its
 :class:`Transport` moves arrays as memory-mapped files (the default) or
 ``.npz`` files, with the same bytes reaching the framework each way.
 
-:func:`ground_state` returns a Potts ground state from gco or PyMaxflow as
-:func:`sal.search.ground_state.ground_state` returns one
-(:mod:`sal.external.potts`). It is imported on first use, so a worker that
+The problems are namespaced by family, as the package is, and the root
+holds only the infrastructure above: :mod:`sal.external.potts` carries the
+Potts model's ``ground_state`` and ``lower_bound``, each in its ``search``
+sibling's terms, and later families take a submodule of their own beside it
+(``hmm``, ``hmc``). A submodule is imported on first use, so a worker that
 imports this package does not pay for the search ladder.
 
 ``sal.validation`` drives the same frameworks as referees for the test suite
@@ -32,8 +34,7 @@ and imports its runner and registry from here; nothing here imports
 
 from __future__ import annotations
 
-import importlib
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from sal import _submodules
 from sal.external.runner import ScriptError
@@ -51,28 +52,17 @@ from sal.external.solvers import (
 )
 from sal.external.transport import Transport
 
-if TYPE_CHECKING:
-    from sal.external.potts import ExternalRun, ground_state
-
-#: Names imported on first use, and the module each comes from.
-_LAZY = {"ExternalRun": "sal.external.potts", "ground_state": "sal.external.potts"}
-
 _submodule = _submodules(__name__)
 
 
 def __getattr__(name: str) -> Any:
-    """Resolve a :data:`_LAZY` name or a submodule on first use, then cache it."""
-    if name not in _LAZY:
-        return _submodule(name)
-    value = getattr(importlib.import_module(_LAZY[name]), name)
-    globals()[name] = value
-    return value
+    """Resolve a submodule, such as :mod:`sal.external.potts`, on first use."""
+    return _submodule(name)
 
 
 __all__ = [
     "Capability",
     "CapabilityRefused",
-    "ExternalRun",
     "ExternalUnavailable",
     "Provenance",
     "ScriptError",
@@ -80,7 +70,6 @@ __all__ = [
     "Solver",
     "Transport",
     "available",
-    "ground_state",
     "invoke",
     "provenance",
     "require",

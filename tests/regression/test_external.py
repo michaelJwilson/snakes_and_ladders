@@ -222,3 +222,29 @@ def test_the_home_states_its_rules_where_its_docstring_says() -> None:
     assert "A refusal comes before the subprocess" in rules
     assert external.__doc__ is not None
     assert "test_external.py" in external.__doc__
+
+
+#: The modules the root re-exports from: the infrastructure, no problem family.
+INFRASTRUCTURE = frozenset(
+    {
+        "sal.external.runner",
+        "sal.external.sessions",
+        "sal.external.solvers",
+        "sal.external.transport",
+    }
+)
+
+
+@pytest.mark.critical
+@pytest.mark.infra
+def test_the_root_exports_no_problem_specific_function() -> None:
+    # `sal.external` is namespaced by problem family, as `sal` is: the Potts
+    # calls are `external.potts.*`, and a bare `external.ground_state` would
+    # not say which problem it solves. Every root export is infrastructure,
+    # and no task's name resolves on the root.
+    for name in external.__all__:
+        assert getattr(external, name).__module__ in INFRASTRUCTURE, name
+    for task in [*TASKS, "fit", "score", "sample"]:
+        assert not hasattr(external, task), task
+    assert external.potts.ground_state.__module__ == "sal.external.potts"
+    assert external.potts.lower_bound.__module__ == "sal.external.potts"

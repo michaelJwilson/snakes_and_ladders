@@ -1,4 +1,4 @@
-"""`external.ground_state` takes `search.ground_state`'s arguments and refuses before it spawns (issue #1282, step 3).
+"""`external.potts.ground_state` takes `search.ground_state`'s arguments and refuses before it spawns (issue #1282, step 3).
 
 Read against the sibling's signature and `Capability` declarations: a
 problem with more than two states, or a forbidden label, is refused for
@@ -18,8 +18,8 @@ import numpy as np
 import pytest
 from sal import external
 from sal.cost import Cost
-from sal.external import CapabilityRefused, ExternalRun, Solver
-from sal.external.potts import UNITS
+from sal.external import CapabilityRefused, Solver, potts
+from sal.external.potts import UNITS, ExternalRun
 from sal.external.potts_inputs import allowed_by, stand_in
 from sal.opt.budget import Budget
 from sal.search import ground_state as search
@@ -50,7 +50,7 @@ def _spawns(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
 @pytest.mark.critical
 @pytest.mark.smoke
 def test_the_signature_is_the_siblings_and_the_result_its_type() -> None:
-    ours = list(inspect.signature(external.ground_state).parameters.values())
+    ours = list(inspect.signature(potts.ground_state).parameters.values())
     theirs = inspect.signature(search.ground_state).parameters
     # The sibling's method is a solver here; every other name, order and
     # kind is the sibling's, and `session` is the one addition.
@@ -86,7 +86,7 @@ def test_pymaxflow_refuses_what_it_does_not_declare(
 ) -> None:
     started = _spawns(monkeypatch)
     with pytest.raises(CapabilityRefused, match=f"does not offer: {missing}$") as no:
-        external.ground_state(
+        potts.ground_state(
             GRAPH, field, Solver.PYMAXFLOW_EXACT, Budget(Cost.PASS, 1), RNG
         )
     assert no.value.missing == frozenset({external.Capability(missing)})
@@ -116,7 +116,7 @@ def test_a_malformed_call_is_refused_before_any_subprocess(
     started = _spawns(monkeypatch)
     budget = keywords.pop("budget", Budget(UNITS[solver], 1))
     with pytest.raises(ValueError, match=message):
-        external.ground_state(GRAPH, field, solver, budget, RNG, **keywords)
+        potts.ground_state(GRAPH, field, solver, budget, RNG, **keywords)
     assert started == []
 
 

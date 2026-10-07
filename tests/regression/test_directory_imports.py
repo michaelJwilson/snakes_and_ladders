@@ -58,11 +58,13 @@ ADMITTED: dict[tuple[str, str], str] = {
     ),
     ("external", "opt"): (
         "external/CLAUDE.md: a call takes its sibling's signature and returns its "
-        "result type; ground_state is charged in an opt.budget and ends in a Termination"
+        "result type; ground_state is charged in an opt.budget, and it and "
+        "lower_bound end in a Termination"
     ),
     ("external", "search"): (
         "external/CLAUDE.md: a call takes its sibling's signature and returns its "
-        "result type; ground_state returns search.ground_state's MethodRun"
+        "result type; ground_state returns search.ground_state's MethodRun, "
+        "lower_bound search.trws's BoundedLabelling"
     ),
     ("external", "sim"): (
         "external/CLAUDE.md: a problem's bytes are posed once, from the model sim/ declares"

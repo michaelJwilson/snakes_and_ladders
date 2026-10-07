@@ -15,8 +15,8 @@ distribution's metadata, so the framework is not imported to read it.
 
 This module is step 1 of #1282. The calls that pose a problem in sal's types
 and return sal's result types reach their framework through :func:`invoke`:
-``ground_state`` (:mod:`sal.external.potts`, step 3); ``lower_bound``,
-``hmm_fit``, ``viterbi`` and ``hmc_sample`` are later steps.
+:mod:`sal.external.potts`'s ``ground_state`` (step 3) and ``lower_bound``
+(step 4); ``hmm_fit``, ``viterbi`` and ``hmc_sample`` are later steps.
 """
 
 from __future__ import annotations
@@ -96,7 +96,8 @@ _POTTS_MOVES = frozenset(
 
 #: Every solver's declaration. PyMaxflow's cut is exact at q = 2 alone, so it
 #: lacks :attr:`Capability.MULTI_LABEL`; HiGHS solves the local-polytope LP,
-#: a bound and no labelling (#1063); hmmlearn fits the three families its
+#: a bound (#1063), and its ILP, the minimum (#1274), so it is exact and
+#: no ground-state solver; hmmlearn fits the three families its
 #: adapter writes (#975, #997).
 DECLARED: Mapping[Solver, Declaration] = {
     Solver.GCO_EXPANSION: Declaration("gco", _POTTS_MOVES),
@@ -105,7 +106,15 @@ DECLARED: Mapping[Solver, Declaration] = {
         "pymaxflow", frozenset({Capability.GROUND_STATE, Capability.EXACT})
     ),
     Solver.HIGHS_LP: Declaration(
-        "highs", frozenset({Capability.LOWER_BOUND, Capability.MULTI_LABEL})
+        "highs",
+        frozenset(
+            {
+                Capability.LOWER_BOUND,
+                Capability.MULTI_LABEL,
+                Capability.FORBIDDEN_LABELS,
+                Capability.EXACT,
+            }
+        ),
     ),
     Solver.HMMLEARN: Declaration(
         "hmmlearn",
