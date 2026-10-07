@@ -83,6 +83,18 @@ never restated. What follows is local.
   in `hmc_inputs.py`, which `validation.blackjax` sends too
   (`tests/validation/test_blackjax.py`). A warm-up the framework cannot
   honour as asked is refused, never approximated in silence.
+- **An algorithm has one home: its explicit call (#1304).**
+  `potts.ground_state`, `potts.lower_bound` and `hmm.fit` are callable
+  namespaces: called with a `Solver`, each is a `match` onto one explicit
+  call, `ground_state.expansion` or `lower_bound.lp`, which holds the
+  algorithm and its keywords. The `match` maps a `Solver` to a call and its
+  `by` and holds no other logic, so the two cannot drift; its `case _`
+  refuses a solver without the task by name. A keyword the explicit call
+  does not take is refused before any subprocess starts. `by: Framework`
+  sits only where several frameworks run one algorithm. A name is not
+  repeated across levels: `lower_bound.lp`, not `lower_bound.lp_bound`.
+  `tests/regression/test_external_explicit.py` holds every `Solver` member
+  to one case and each pair of calls to equal results.
 - **A transport is kept on a measurement.** `MMAP` is the default: it beat
   `NPZ` in 13 of 15 cells of #1288's grid and trailed it in none by more than
   the host's run-to-run spread (0.4 ms at 0.2 MB, 4 ms of 198 at 10 MB, N = 1).

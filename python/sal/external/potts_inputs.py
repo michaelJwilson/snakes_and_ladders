@@ -1,7 +1,7 @@
 """The bytes gco, PyMaxflow, HiGHS and OpenGM receive for a Potts model (issues #1282, #1279).
 
-One construction per framework, read by :func:`sal.external.potts.ground_state`
-and :func:`sal.external.potts.lower_bound`, and by the adapters
+One construction per framework, read by :data:`sal.external.potts.ground_state`
+and :data:`sal.external.potts.lower_bound`, and by the adapters
 :mod:`sal.validation.gco`, :mod:`sal.validation.pymaxflow` and
 :mod:`sal.validation.highs`, so an answer from either path is the other's
 bitwise. Apart from :mod:`sal.external.potts` so an adapter imports

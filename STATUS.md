@@ -3474,6 +3474,15 @@ as `search.trws`'s `BoundedLabelling`, its bound the adapter's value bitwise
 and ordered TRW-S <= LP <= ILP = enumerated minimum
 (`tests/regression/test_external_lower_bound.py`, PR #1290).
 
+**Explicit algorithm calls ([#1304](https://github.com/michaelJwilson/snakes_and_ladders/issues/1304)).**
+Beside each solver-keyed call sits one call per algorithm, which holds it:
+`ground_state.expansion`, `.swap` (`by=Framework.GCO` or `OPENGM`),
+`.min_cut`, `.icm`, `.loopy_bp`, `.astar`; `lower_bound.lp`, `.trws`,
+`.dual_decomposition`; `hmm.fit.baum_welch`. The solver-keyed call is a
+`match` onto them, and for each of the 12 solvers it covers the two return
+equal results, every field but the measured seconds bitwise, on one fixture
+(`tests/regression/test_external_explicit.py`).
+
 **Step 5, the HMM.** `external.hmm.fit`, `viterbi` and
 `forward_log_likelihood` return hmmlearn's Baum-Welch, Viterbi and `score` as
 `opt.hmm`'s `EmFit`, `likelihood.hmm.viterbi`'s pair and

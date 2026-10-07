@@ -62,7 +62,7 @@ def alpha_expansion(
 
     ``move="swap"`` runs gco's alpha-beta swap to convergence instead
     (issue #997). The inputs are :func:`sal.external.potts_inputs.expansion_inputs`,
-    the bytes :func:`sal.external.potts.ground_state` sends (#1282).
+    the bytes :data:`sal.external.potts.ground_state` sends (#1282).
     """
     values = site_field(np.asarray(field, dtype=float), graph.n_nodes)
     if values.shape[1] != n_states:

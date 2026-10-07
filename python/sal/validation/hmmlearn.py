@@ -7,7 +7,7 @@ fixed number of iterations from a given start, and returns the seconds and
 peak bytes of hmmlearn's ``fit``, which
 ``tests/benchmarks/test_opt_external_em_bench.py`` reads. Its inputs are
 :func:`sal.external.hmm_inputs.hmm_inputs`'s, the bytes
-:func:`sal.external.hmm.fit` sends, so the two agree bitwise (issue #1282).
+:data:`sal.external.hmm.fit` sends, so the two agree bitwise (issue #1282).
 The Gaussian and Poisson fits, Viterbi and ``score`` are
 :mod:`sal.external.hmm`'s calls alone since #1282, step 7.
 """

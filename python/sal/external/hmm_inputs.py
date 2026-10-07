@@ -1,6 +1,6 @@
 """The bytes hmmlearn receives for an HMM (issue #1282, step 5).
 
-One construction, read by :func:`sal.external.hmm.fit`,
+One construction, read by :data:`sal.external.hmm.fit`,
 :func:`~sal.external.hmm.viterbi` and
 :func:`~sal.external.hmm.forward_log_likelihood`, and by the adapter's
 :func:`sal.validation.hmmlearn.baum_welch`, so a categorical fit from either

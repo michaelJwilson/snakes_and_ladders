@@ -5,7 +5,7 @@ calls, each through hmmlearn (:attr:`~sal.external.solvers.Solver.HMMLEARN`)
 in a subprocess, and each taking its sibling's arguments in its order with a
 :class:`~sal.external.solvers.Solver` after them.
 
-- :func:`fit` is :func:`sal.opt.hmm.baum_welch_family`'s Baum-Welch, and
+- :data:`fit` is :func:`sal.opt.hmm.baum_welch_family`'s Baum-Welch, and
   returns its :class:`~sal.opt.hmm.EmFit` as :class:`ExternalFit`.
 - :func:`viterbi` is :func:`sal.likelihood.hmm.viterbi`'s most probable path;
   the sibling's ``(states, log_probability)`` pair is :class:`ExternalPaths`,
@@ -24,7 +24,7 @@ and the answer's :class:`~sal.external.solvers.Provenance`.
 needs a :class:`~sal.external.solvers.Capability` hmmlearn does not declare
 (:func:`family_capability`), and is refused before any subprocess starts.
 
-**Ragged segments.** As the siblings take them: :func:`fit` and
+**Ragged segments.** As the siblings take them: :data:`fit` and
 :func:`viterbi` a :class:`~sal.ragged.Ragged` batch, as
 :func:`~sal.opt.hmm.baum_welch_family` and
 :func:`sal.likelihood.ragged.viterbi` do; :func:`forward_log_likelihood`
@@ -49,14 +49,14 @@ it. hmmlearn applies no variance floor and no prior: a Gaussian state whose
 variance it drives to zero is a :class:`~sal.emissions.ParameterDomainError`
 on the returned family.
 
-**Cost.** :func:`fit` spends its EM iterations, in
+**Cost.** :data:`fit` spends its EM iterations, in
 :attr:`~sal.cost.Cost.ITERATIONS`, as its sibling does; :func:`viterbi` and
 :func:`forward_log_likelihood` one pass each, :data:`PASS_UNIT`.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from typing import Any
@@ -85,8 +85,10 @@ from sal.external.solvers import (
     Solver,
     available,
     invoke,
+    passed,
     provenance,
     require,
+    unmatched,
 )
 from sal.opt.em import EM, EmConfig
 from sal.opt.hmm import EmFit
@@ -253,104 +255,156 @@ class ExternalFit(EmFit):
     provenance: Provenance = dataclass_field(kw_only=True)
 
 
-def fit(
-    observations: np.ndarray | Ragged,
-    log_initial: torch.Tensor,
-    log_transition: torch.Tensor,
-    components: EmissionFamily,
-    solver: Solver,
-    config: EmConfig = EM,
-    *,
-    timeout: float = 600.0,
-    session: Session | None = None,
-) -> ExternalFit:
-    """``solver``'s Baum-Welch fit, as :func:`sal.opt.hmm.baum_welch_family` returns one.
+class Fit:
+    """:data:`fit`: the solver-keyed call, and its explicit call :meth:`baum_welch` (#1304).
 
-    The sibling's first five arguments in its order, with the solver after
-    the family; its keywords --- a covariate, a held transition, a backend,
-    an E or M step --- set its own route, and hmmlearn has none of them.
-
-    Parameters
-    ----------
-    observations : np.ndarray | Ragged
-        ``(n_sequences, length)``, or a :class:`~sal.ragged.Ragged` batch of
-        scalars: symbols, real values or counts, as ``components`` scores them.
-    log_initial, log_transition : torch.Tensor
-        The start, as log-probabilities: ``(m,)`` and one ``(m, m)`` kernel.
-    components : EmissionFamily
-        The starting family: categorical, one-channel Gaussian or Poisson.
-    solver : Solver
-        One that declares :attr:`~sal.external.solvers.Capability.HMM_FIT`
-        and the family's capability.
-    config : EmConfig
-        At most ``max_iterations`` iterations, at least one, and the relative
-        tolerance; :data:`~sal.opt.em.EM` by default, as the sibling's.
-    timeout : float
-        Seconds the subprocess may take.
-    session : Session | None
-        A worker :func:`sal.external.session` opened on ``solver``.
-
-    Returns
-    -------
-    ExternalFit
-        The fitted parameters, the last E step's log-likelihood, the
-        :class:`~sal.opt.termination.Termination` after hmmlearn's count of
-        iterations, ``spent`` that count, hmmlearn's ``fit`` seconds and the
-        :class:`~sal.external.solvers.Provenance`.
-
-    Raises
-    ------
-    CapabilityRefused
-        If ``components`` is a family ``solver`` does not declare, or
-        ``solver`` does not fit.
-    ExternalUnavailable
-        If the framework is not installed.
-    ValueError
-        If the kernel is not one ``(m, m)`` matrix, ``config`` allows no
-        iteration, every segment has one position, the observations are
-        neither shape, or ``session`` serves another solver.
-    ScriptError
-        If hmmlearn fails.
+    ``fit(observations, log_initial, log_transition, components, solver,
+    config, ...)`` is a ``match`` on ``solver`` onto the explicit call that
+    holds the algorithm; hmmlearn is the one framework that runs it, so the
+    call takes no ``by``.
     """
-    needs = {Capability.HMM_FIT, family_capability(components)}
-    require(solver, needs)
-    _kernel(log_initial, log_transition)
-    if config.max_iterations < 1:
-        msg = "hmmlearn reports a log-likelihood only after an iteration; got none"
-        raise ValueError(msg)
-    values, lengths = _segments(observations)
-    if (lengths is not None and max(lengths) == 1) or (
-        lengths is None and values.shape[1] == 1
-    ):
-        msg = (
-            "every segment has one position, so no transition is observed and "
-            "hmmlearn's re-estimate of the kernel is a matrix of zero rows"
+
+    @staticmethod
+    def baum_welch(
+        observations: np.ndarray | Ragged,
+        log_initial: torch.Tensor,
+        log_transition: torch.Tensor,
+        components: EmissionFamily,
+        config: EmConfig = EM,
+        *,
+        timeout: float = 600.0,
+        session: Session | None = None,
+    ) -> ExternalFit:
+        """hmmlearn's Baum-Welch fit, as :func:`sal.opt.hmm.baum_welch_family` returns one.
+
+        The sibling's first five arguments in its order; its keywords --- a
+        covariate, a held transition, a backend, an E or M step --- set its own
+        route, and hmmlearn has none of them.
+
+        Parameters
+        ----------
+        observations : np.ndarray | Ragged
+            ``(n_sequences, length)``, or a :class:`~sal.ragged.Ragged` batch of
+            scalars: symbols, real values or counts, as ``components`` scores them.
+        log_initial, log_transition : torch.Tensor
+            The start, as log-probabilities: ``(m,)`` and one ``(m, m)`` kernel.
+        components : EmissionFamily
+            The starting family: categorical, one-channel Gaussian or Poisson.
+        config : EmConfig
+            At most ``max_iterations`` iterations, at least one, and the relative
+            tolerance; :data:`~sal.opt.em.EM` by default, as the sibling's.
+        timeout : float
+            Seconds the subprocess may take.
+        session : Session | None
+            A worker :func:`sal.external.session` opened on
+            :attr:`~sal.external.solvers.Solver.HMMLEARN`.
+
+        Returns
+        -------
+        ExternalFit
+            The fitted parameters, the last E step's log-likelihood, the
+            :class:`~sal.opt.termination.Termination` after hmmlearn's count of
+            iterations, ``spent`` that count, hmmlearn's ``fit`` seconds and the
+            :class:`~sal.external.solvers.Provenance`.
+
+        Raises
+        ------
+        CapabilityRefused
+            If ``components`` is a family hmmlearn does not declare.
+        ExternalUnavailable
+            If the framework is not installed.
+        ValueError
+            If the kernel is not one ``(m, m)`` matrix, ``config`` allows no
+            iteration, every segment has one position, the observations are
+            neither shape, or ``session`` serves another solver.
+        ScriptError
+            If hmmlearn fails.
+        """
+        solver = Solver.HMMLEARN
+        needs = {Capability.HMM_FIT, family_capability(components)}
+        require(solver, needs)
+        _kernel(log_initial, log_transition)
+        if config.max_iterations < 1:
+            msg = "hmmlearn reports a log-likelihood only after an iteration; got none"
+            raise ValueError(msg)
+        values, lengths = _segments(observations)
+        if (lengths is not None and max(lengths) == 1) or (
+            lengths is None and values.shape[1] == 1
+        ):
+            msg = (
+                "every segment has one position, so no transition is observed and "
+                "hmmlearn's re-estimate of the kernel is a matrix of zero rows"
+            )
+            raise ValueError(msg)
+        _checked(solver, session)
+        inputs = hmm_inputs(
+            values,
+            probabilities(log_initial),
+            probabilities(log_transition),
+            emission_parameters(components),
+            call="fit",
+            n_iter=config.max_iterations,
+            tolerance=config.tolerance,
+            lengths=lengths,
         )
-        raise ValueError(msg)
-    _checked(solver, session)
-    inputs = hmm_inputs(
-        values,
-        probabilities(log_initial),
-        probabilities(log_transition),
-        emission_parameters(components),
-        call="fit",
-        n_iter=config.max_iterations,
-        tolerance=config.tolerance,
-        lengths=lengths,
-    )
-    result = _call(solver, needs, session, inputs, timeout)
-    outputs = result.outputs
-    iterations = int(outputs["iterations"])
-    return ExternalFit(
-        torch.from_numpy(np.log(outputs["initial"])),
-        torch.from_numpy(np.log(outputs["transition"])),
-        _fitted(components, outputs),
-        float(outputs["log_likelihood"]),
-        termination=Termination.after(iterations, converged=bool(outputs["settled"])),
-        spent=iterations,
-        seconds=result.seconds,
-        provenance=provenance(solver),
-    )
+        result = _call(solver, needs, session, inputs, timeout)
+        outputs = result.outputs
+        iterations = int(outputs["iterations"])
+        return ExternalFit(
+            torch.from_numpy(np.log(outputs["initial"])),
+            torch.from_numpy(np.log(outputs["transition"])),
+            _fitted(components, outputs),
+            float(outputs["log_likelihood"]),
+            termination=Termination.after(
+                iterations, converged=bool(outputs["settled"])
+            ),
+            spent=iterations,
+            seconds=result.seconds,
+            provenance=provenance(solver),
+        )
+
+    def __call__(
+        self,
+        observations: np.ndarray | Ragged,
+        log_initial: torch.Tensor,
+        log_transition: torch.Tensor,
+        components: EmissionFamily,
+        solver: Solver,
+        config: EmConfig = EM,
+        *,
+        timeout: float = 600.0,
+        session: Session | None = None,
+    ) -> ExternalFit:
+        """``solver``'s Baum-Welch fit, as :func:`sal.opt.hmm.baum_welch_family` returns one.
+
+        The sibling's first five arguments in its order, with the solver
+        after the family; a ``match`` on ``solver`` onto its explicit call,
+        which returns the result unchanged. A solver that does not fit is
+        refused with :class:`~sal.external.solvers.CapabilityRefused`, before
+        any subprocess starts.
+        """
+        call: Callable[..., ExternalFit]
+        match solver:
+            case Solver.HMMLEARN:
+                call = self.baum_welch
+            case _:
+                unmatched(solver, Capability.HMM_FIT)
+        keywords = passed(
+            solver,
+            call,
+            {
+                "config": (config, EM),
+                "timeout": (timeout, 600.0),
+                "session": (session, None),
+            },
+        )
+        return call(observations, log_initial, log_transition, components, **keywords)
+
+
+#: ``fit(observations, log_initial, log_transition, components, solver,
+#: config, *, timeout, session)``, the solver-keyed call, and its explicit
+#: call ``fit.baum_welch`` (:class:`Fit`).
+fit = Fit()
 
 
 @dataclass(frozen=True, kw_only=True)
