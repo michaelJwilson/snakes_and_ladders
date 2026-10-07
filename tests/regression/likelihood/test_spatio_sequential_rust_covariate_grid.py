@@ -301,6 +301,7 @@ def test_first_appearance_codes_are_the_sorted_codes_bitwise() -> None:
     covariate = params.covariate
     assert covariate is not None
     hashed = rust.observation_rows(observations, covariate, covariate_rows="distinct")
+    assert hashed.successes is not None
     trials = covariate[..., SUCCESSES]
     distinct, codes = np.unique(trials.reshape(-1), return_inverse=True)
     successes = observations[..., SUCCESSES]

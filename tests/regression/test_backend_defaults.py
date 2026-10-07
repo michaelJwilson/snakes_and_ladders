@@ -23,17 +23,23 @@ _NO_RUST = "no Rust route"
 _GIBBS = "no Rust route; NUMBA is the compiled route"
 _RETIRED_HMM = "no Rust route on the retired objective (#1189); deprecated"
 _GRADIENT = "differentiates; JAX and TORCH are the routes it admits"
-_COUNTS_ONLY = (
-    "the Rust route takes the two-channel count emission alone and raises "
-    "on the categorical model the default serves"
+_TABULATED = (
+    "the Rust route tabulates the categorical and the two-channel count "
+    "emissions (#1298) and refuses the Gaussian, negative-binomial and "
+    "beta-binomial classes the default serves; categorical at "
+    "spatio_sequential/stress: "
 )
 EXCEPTIONS = {
     "likelihood/objective.py::BranchLengthObjective.__init__(backend)": _GRADIENT,
     "likelihood/objective.py::SubstitutionModelObjective.__init__(backend)": _GRADIENT,
-    "likelihood/spatio_sequential/__init__.py::class_posteriors(backend)": _COUNTS_ONLY,
-    "likelihood/spatio_sequential/__init__.py::external_field(backend)": _COUNTS_ONLY,
+    "likelihood/spatio_sequential/__init__.py::class_posteriors(backend)": (
+        _TABULATED + "5.4x"
+    ),
+    "likelihood/spatio_sequential/__init__.py::external_field(backend)": (
+        _TABULATED + "4.4x"
+    ),
     "likelihood/spatio_sequential/__init__.py::labelled_log_likelihood(backend)": (
-        _COUNTS_ONLY
+        _TABULATED + "1.42x"
     ),
     "opt/hmm/objectives.py::HmmObjective.__init__(backend)": _RETIRED_HMM,
     "opt/hmm/objectives.py::GaussianHmmObjective.__init__(backend)": _RETIRED_HMM,
@@ -53,7 +59,9 @@ EXCEPTIONS = {
     "search/icm/__init__.py::iterated_conditional_modes(backend)": _GIBBS,
     "search/icm/__init__.py::merge_small_labels(backend)": _GIBBS,
     "search/trws/__init__.py::trws(backend)": _GIBBS,
-    "search/spatio_sequential.py::fit_spatio_sequential(backend)": _COUNTS_ONLY,
+    "search/spatio_sequential.py::fit_spatio_sequential(backend)": (
+        _TABULATED + "1.41x"
+    ),
     "sim/count_pairs/__init__.py::simulate_count_pairs(backend)": (
         "<2x at stress: 1.05x (30.7 s against 29.1 s, "
         "spatio_sequential_counts/stress.yaml)"

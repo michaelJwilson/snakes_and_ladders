@@ -52,6 +52,15 @@ density is then a function of the count *and* the exposure or trial count.
   call, and its tables the smallest. The numbers are in
   ``changelog.d/1064.added.md``.
 
+**The categorical emission is one channel** (issue #1298), the default
+model of :func:`~sal.search.spatio_sequential.fit_spatio_sequential`. Its
+density ``log B_m[k, x]`` is a function of the symbol alone, so its table is
+the family's own log emission matrix, transposed to ``[x, M, K]``, and the
+kernel reads one row per score with no second channel to add. Every class
+carries a :class:`~sal.emissions.CategoricalEmission` over one alphabet, or
+every class an :class:`~sal.sim.count_pairs.IndependentCountPair`; a mixture
+of the two, or any other family, is refused before the kernel is reached.
+
 A covariate grid, for a continuous covariate on a family that does not
 factor, serves neither family and is conserved in
 :mod:`sal.sandbox.covariate_grid`.
@@ -73,7 +82,12 @@ from dataclasses import dataclass
 import numpy as np
 
 from sal import oxisal
-from sal.emissions import BetaBinomialEmission, EmissionFamily, validated_trials
+from sal.emissions import (
+    BetaBinomialEmission,
+    CategoricalEmission,
+    EmissionFamily,
+    validated_trials,
+)
 from sal.emissions.bb import log_factorial, trial_tables
 from sal.emissions.nb import exposure_table
 from sal.likelihood.spatio_sequential import (
@@ -93,6 +107,39 @@ from sal.sim.count_pairs import (
 from sal.sim.spatio_sequential import SpatioSequentialParams
 
 
+def _categorical(params: SpatioSequentialParams) -> list[CategoricalEmission] | None:
+    """Every class's categorical family, or ``None`` where class 0 carries none (issue #1298).
+
+    Raises
+    ------
+    TypeError
+        If class 0 carries a categorical family and another class does not.
+    ValueError
+        If the classes' alphabets differ: one table serves every class, and a
+        symbol past one class's alphabet has no density under it.
+    """
+    if not isinstance(params.emissions[0], CategoricalEmission):
+        return None
+    families = []
+    for m, family in enumerate(params.emissions):
+        if not isinstance(family, CategoricalEmission):
+            msg = (
+                f"class {m} carries a {type(family).__name__} and class 0 a "
+                f"CategoricalEmission; the Rust E step takes one emission type "
+                f"in every class"
+            )
+            raise TypeError(msg)
+        families.append(family)
+    alphabets = {family.n_symbols for family in families}
+    if len(alphabets) > 1:
+        msg = (
+            f"the classes' alphabets are {sorted(alphabets)} symbols; the Rust "
+            f"E step tabulates one alphabet for every class"
+        )
+        raise ValueError(msg)
+    return families
+
+
 def _families(params: SpatioSequentialParams) -> list[IndependentCountPair]:
     """The two-channel families of every class, at their own type.
 
@@ -100,15 +147,16 @@ def _families(params: SpatioSequentialParams) -> list[IndependentCountPair]:
     ------
     TypeError
         If a class does not carry one. The kernel tabulates two channels by
-        their integer counts, and a family that is not a pair of count
-        families has nothing to tabulate.
+        their integer counts, or one symbol (:func:`_categorical`), and a
+        family that is neither has nothing to tabulate.
     """
     families = []
     for m, family in enumerate(params.emissions):
         if not isinstance(family, IndependentCountPair):
             msg = (
                 f"class {m} carries a {type(family).__name__}; the Rust E step "
-                f"is over the two-channel count emission"
+                f"is over the two-channel count emission or the categorical "
+                f"emission, one of them in every class"
             )
             raise TypeError(msg)
         families.append(family)
@@ -282,8 +330,10 @@ def observation_rows(
     *,
     covariate_rows: CovariateRows = "range",
 ) -> ObservationRows:
-    """Every observation's table row in both channels, for ``covariate_rows``.
+    """Every observation's table row in every channel, for ``covariate_rows``.
 
+    ``(S, n_nodes)`` observations are the categorical model's symbols, one
+    channel whose row is the symbol (issue #1298); they take no covariate.
     Without a covariate the row **is** the count, in both channels, and the
     layout does not enter. With one, the total's row is the count and its
     exposure is carried for the kernel; the successes' row is the count and
@@ -295,7 +345,8 @@ def observation_rows(
     Parameters
     ----------
     observations : np.ndarray
-        Shape ``(S, n_nodes, 2)``, integer counts.
+        Shape ``(S, n_nodes, 2)``, integer counts, or ``(S, n_nodes)``,
+        non-negative integer symbols.
     covariate : np.ndarray | None
         Shape ``(S, n_nodes, 2)``: the exposure, then the trial count.
     covariate_rows : CovariateRows
@@ -311,11 +362,14 @@ def observation_rows(
     ValueError
         If ``covariate_rows`` is not a :data:`CovariateRows`, an exposure is
         negative or not finite, a trial count is not a non-negative integer,
-        or a row overflows a ``uint32`` index.
+        a symbol is negative or carries a covariate, or a row overflows a
+        ``uint32`` index.
     """
     if covariate_rows not in COVARIATE_ROWS:
         msg = f"covariate_rows must be one of {COVARIATE_ROWS}, got {covariate_rows!r}"
         raise ValueError(msg)
+    if observations.ndim == 2:
+        return _symbol_rows(observations, covariate, covariate_rows)
     totals, successes = observations[..., TOTAL], observations[..., SUCCESSES]
     total = ChannelRows(_uint32(totals, "the totals"), int(totals.max()) + 1)
     plain = ChannelRows(_uint32(successes, "the successes"), int(successes.max()) + 1)
@@ -333,6 +387,22 @@ def observation_rows(
         total,
         _trial_rows(successes, covariate[..., SUCCESSES], covariate_rows),
     )
+
+
+def _symbol_rows(
+    observations: np.ndarray, covariate: np.ndarray | None, layout: CovariateRows
+) -> ObservationRows:
+    """The categorical model's one channel: each symbol is its own row (issue #1298)."""
+    if covariate is not None:
+        msg = "the categorical model's symbols take no covariate"
+        raise ValueError(msg)
+    if observations.size and int(observations.min()) < 0:
+        msg = f"every symbol must be non-negative, got {int(observations.min())}"
+        raise ValueError(msg)
+    symbols = ChannelRows(
+        _uint32(observations, "the symbols"), int(observations.max()) + 1
+    )
+    return ObservationRows(layout, observations, None, symbols, None)
 
 
 def _trial_rows(
@@ -611,6 +681,12 @@ def emission_rows(
     """
     families = _families(params)
     rows = _rows_for(params, observations, covariate_rows)
+    if rows.successes is None:
+        msg = (
+            "the two-channel count emission takes (S, n_nodes, 2) observations; "
+            f"these are {observations.shape}"
+        )
+        raise ValueError(msg)
     total_table, exposure = _total_table(families, params, rows.total)
     success_table, trials = _success_table(families, params, rows.successes)
     return EmissionRows(
@@ -620,6 +696,120 @@ def emission_rows(
         np.ascontiguousarray(success_table),
         exposure,
         trials,
+    )
+
+
+@dataclass(frozen=True)
+class SymbolTable:
+    """The categorical model's one channel: the symbols and their table (issue #1298).
+
+    Its own type rather than :class:`EmissionRows` with the second channel
+    absent: the two are different inputs to the kernel, and a reader of
+    either should not have to ask which it holds.
+
+    Parameters
+    ----------
+    symbols : np.ndarray
+        ``(S, n_nodes)`` contiguous ``uint32``, each observation's symbol and
+        so its table row.
+    table : np.ndarray
+        ``table[x, m, k] = log B_m[k, x]``, ``(n_symbols, M, K)`` contiguous
+        ``float64``.
+    """
+
+    symbols: np.ndarray
+    table: np.ndarray
+
+
+def symbol_table(
+    params: SpatioSequentialParams,
+    observations: np.ndarray,
+    *,
+    covariate_rows: CovariateRows | ObservationRows = "range",
+) -> SymbolTable:
+    """The categorical model's symbols and table, the kernel's one-channel input.
+
+    The table is each family's stored log emission matrix, transposed, so
+    every score is its ``log_density`` bit for bit.
+
+    Parameters
+    ----------
+    params : SpatioSequentialParams
+        Every class a :class:`~sal.emissions.CategoricalEmission` over one
+        alphabet.
+    observations : np.ndarray
+        Shape ``(S, n_nodes)``, symbols.
+    covariate_rows : CovariateRows | ObservationRows
+        As :func:`emission_rows` takes it; the layout does not enter one
+        channel by symbol, and rows already built are reused.
+
+    Returns
+    -------
+    SymbolTable
+
+    Raises
+    ------
+    TypeError
+        If class 0 carries no categorical family, or another class does not.
+    ValueError
+        If the alphabets differ, the observations carry two channels, or a
+        symbol lies outside the alphabet, as the family's ``validate``
+        refuses it.
+    """
+    families = _categorical(params)
+    if families is None:
+        msg = (
+            f"class 0 carries a {type(params.emissions[0]).__name__}; a symbol "
+            f"table is over the categorical emission"
+        )
+        raise TypeError(msg)
+    rows = _rows_for(params, observations, covariate_rows)
+    if rows.successes is not None:
+        msg = (
+            "the categorical model takes (S, n_nodes) symbols; these observations "
+            "carry two channels"
+        )
+        raise ValueError(msg)
+    families[0].validate(observations)
+    table = np.empty((families[0].n_symbols, params.n_classes, params.n_states))
+    for m, family in enumerate(families):
+        table[:, m, :] = family.log_matrix.t().numpy()
+    return SymbolTable(rows.total.rows, table)
+
+
+@dataclass(frozen=True)
+class _KernelInputs:
+    """What both kernels take: the rows, the tables and the factored terms."""
+
+    totals: np.ndarray
+    successes: np.ndarray | None
+    total_table: np.ndarray
+    success_table: np.ndarray | None
+    terms: dict[str, np.ndarray]
+
+
+def _kernel_inputs(
+    params: SpatioSequentialParams,
+    observations: np.ndarray,
+    covariate_rows: CovariateRows | ObservationRows,
+) -> _KernelInputs:
+    """The kernels' arrays, flat: one channel by symbol, or two by count.
+
+    ``successes`` and ``success_table`` are ``None`` for the categorical
+    model, which is how the kernel is told it has one channel.
+    """
+    if _categorical(params) is not None:
+        one = symbol_table(params, observations, covariate_rows=covariate_rows)
+        return _KernelInputs(
+            one.symbols.reshape(-1), None, one.table.reshape(-1), None, {}
+        )
+    rows = emission_rows(params, observations, covariate_rows=covariate_rows)
+    return _KernelInputs(
+        rows.total_rows.reshape(-1),
+        rows.success_rows.reshape(-1),
+        rows.total_table.reshape(-1),
+        rows.success_table.reshape(-1),
+        rows.kernel_arguments(),
     )
 
 
@@ -653,7 +843,7 @@ def class_posteriors(
         The posterior ``(M, S, K)``, the pairwise ``(M, S - 1, K, K)`` and the
         per-class log evidence ``(M,)``.
     """
-    rows = emission_rows(params, observations, covariate_rows=covariate_rows)
+    inputs = _kernel_inputs(params, observations, covariate_rows)
     n_positions, n_nodes = observations.shape[:2]
     posterior = np.empty((params.n_classes, n_positions, params.n_states))
     pairwise = np.empty(
@@ -672,11 +862,11 @@ def class_posteriors(
         )
     )
     oxisal.class_posteriors(
-        rows.total_rows.reshape(-1),
-        rows.success_rows.reshape(-1),
+        inputs.totals,
+        inputs.successes,
         np.ascontiguousarray(labels, dtype=np.int64),
-        rows.total_table.reshape(-1),
-        rows.success_table.reshape(-1),
+        inputs.total_table,
+        inputs.success_table,
         np.ascontiguousarray(np.log(params.initial)).reshape(-1),
         log_transition.reshape(-1),
         n_positions,
@@ -686,7 +876,7 @@ def class_posteriors(
         posterior.reshape(-1),
         pairwise.reshape(-1),
         log_evidence,
-        **rows.kernel_arguments(),
+        **inputs.terms,
     )
     return ClassPosteriors(posterior, pairwise, log_evidence)
 
@@ -716,24 +906,24 @@ def external_field(
         posterior = class_posteriors(
             params, observations, labels, covariate_rows=built
         ).posterior
-    rows = emission_rows(params, observations, covariate_rows=built)
+    inputs = _kernel_inputs(params, observations, built)
     n_positions, n_nodes = observations.shape[:2]
     field = np.empty((n_nodes, params.n_classes))
     # (M, S, K) to (S, M, K): the kernel wants one position's weights
     # contiguous beside the tables' rows, which are count-major.
     weights = np.ascontiguousarray(np.moveaxis(posterior, 0, 1))
     oxisal.external_field(
-        rows.total_rows.reshape(-1),
-        rows.success_rows.reshape(-1),
-        rows.total_table.reshape(-1),
-        rows.success_table.reshape(-1),
+        inputs.totals,
+        inputs.successes,
+        inputs.total_table,
+        inputs.success_table,
         weights.reshape(-1),
         n_positions,
         n_nodes,
         params.n_classes,
         params.n_states,
         field.reshape(-1),
-        **rows.kernel_arguments(),
+        **inputs.terms,
     )
     return field
 

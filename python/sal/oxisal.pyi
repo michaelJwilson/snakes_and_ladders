@@ -210,10 +210,10 @@ def swendsen_wang_sweep(
 ) -> tuple[int, int]: ...
 def class_posteriors(
     totals: np.ndarray,
-    successes: np.ndarray,
+    successes: np.ndarray | None,
     labels: np.ndarray,
     total_table: np.ndarray,
-    success_table: np.ndarray,
+    success_table: np.ndarray | None,
     log_initial: np.ndarray,
     log_transition: np.ndarray,
     n_positions: int,
@@ -234,9 +234,9 @@ def class_posteriors(
 ) -> None: ...
 def external_field(
     totals: np.ndarray,
-    successes: np.ndarray,
+    successes: np.ndarray | None,
     total_table: np.ndarray,
-    success_table: np.ndarray,
+    success_table: np.ndarray | None,
     weights: np.ndarray,
     n_positions: int,
     n_nodes: int,

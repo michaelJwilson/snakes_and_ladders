@@ -16,7 +16,7 @@ import pytest
 import torch
 from sal import oxisal
 from sal.backend import Backend
-from sal.emissions import CategoricalEmission
+from sal.emissions import CategoricalEmission, GaussianEmission
 from sal.likelihood import spatio_sequential
 from sal.likelihood.spatio_sequential import (
     class_posteriors,
@@ -29,6 +29,10 @@ from sal.sim.count_pairs import (
 )
 from sal.sim.count_pairs.rust import binned_instance, fine_instance
 from sal.sim.fixtures import fixture
+from sal.sim.spatio_sequential import (
+    SpatioSequentialParams,
+    simulate_spatio_sequential,
+)
 
 from tests._scale import stress_only
 
@@ -186,21 +190,97 @@ def test_a_count_past_the_table_is_refused_rather_than_clamped() -> None:
         oxisal.class_posteriors(*arguments)
 
 
-@pytest.mark.smoke
-def test_a_family_that_is_not_a_count_pair_is_refused() -> None:
-    # The kernel tabulates two channels by their integer counts. A categorical
-    # family has no channels to tabulate, and the refusal names the class
-    # rather than failing later on a shape.
-    instance = _ci()
-    params = replace(
-        instance.params,
-        emissions=tuple(
-            CategoricalEmission(np.full((instance.params.n_states, 3), 1.0 / 3.0))
-            for _ in range(instance.params.n_classes)
+def _categorical(tier: str) -> tuple[SpatioSequentialParams, np.ndarray, np.ndarray]:
+    """The categorical model at ``tier``, one draw: the default model of the fit."""
+    params = fixture("spatio_sequential", tier).params
+    data = simulate_spatio_sequential(params, np.random.default_rng(0))
+    return params, data.observations, data.labels
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("tier", ["ci", "stress"])
+def test_the_rust_route_matches_the_oracle_on_the_categorical_model(tier: str) -> None:
+    # Issue #1298: the categorical model is one channel by symbol, and the
+    # three entry points the fit routes through agree with the NumPy oracle
+    # at the count model's tolerances. Measured: 9.6e-15 on the posterior,
+    # 1.7e-14 on the pairwise, 4.2e-15 relative on the field, the evidence
+    # bitwise at stress.
+    params, observations, labels = _categorical(tier)
+    expected = class_posteriors(params, observations, labels)
+    actual = class_posteriors(params, observations, labels, backend=Backend.RUST)
+
+    np.testing.assert_allclose(
+        actual.log_evidence, expected.log_evidence, rtol=LOG_TOLERANCE
+    )
+    np.testing.assert_allclose(
+        actual.posterior, expected.posterior, atol=POSTERIOR_TOLERANCE
+    )
+    np.testing.assert_allclose(
+        actual.pairwise, expected.pairwise, atol=POSTERIOR_TOLERANCE
+    )
+    np.testing.assert_allclose(
+        external_field(params, observations, labels, backend=Backend.RUST),
+        external_field(params, observations, labels),
+        rtol=LOG_TOLERANCE,
+    )
+    np.testing.assert_allclose(
+        spatio_sequential.labelled_log_likelihood(
+            params, observations, labels, backend=Backend.RUST
         ),
+        spatio_sequential.labelled_log_likelihood(params, observations, labels),
+        rtol=LOG_TOLERANCE,
     )
 
-    with pytest.raises(TypeError, match="two-channel count emission"):
+
+@pytest.mark.oracle
+@pytest.mark.backend
+def test_the_categorical_table_is_the_family_s_own_log_density() -> None:
+    # The table is the stored log emission matrix, transposed, so each score
+    # is the family's `log_density` bit for bit: the kernel adds nothing.
+    params, observations, _ = _categorical("ci")
+    table = rust.symbol_table(params, observations).table
+
+    for m, family in enumerate(params.emissions):
+        symbols = torch.arange(table.shape[0])
+        np.testing.assert_array_equal(
+            table[:, m, :], family.log_density(symbols).numpy()
+        )
+
+
+@pytest.mark.smoke
+def test_a_family_the_kernel_does_not_tabulate_is_refused() -> None:
+    # The kernel tabulates two count channels or one symbol. Any other family,
+    # a mixture of the two, two alphabets, or a symbol past the alphabet is
+    # refused before the kernel is reached, and the refusal says which.
+    params, observations, labels = _categorical("ci")
+    gaussian = GaussianEmission(
+        np.zeros(params.n_states), np.ones(params.n_states), 1e-6
+    )
+    pair = _ci().params.emissions[0]
+    wider = CategoricalEmission(np.full((params.n_states, 4), 0.25))
+
+    with pytest.raises(TypeError, match="or the categorical emission"):
+        rust.class_posteriors(
+            replace(params, emissions=(gaussian, gaussian)), observations, labels
+        )
+    with pytest.raises(TypeError, match="one emission type in every class"):
+        rust.class_posteriors(
+            replace(params, emissions=(params.emissions[0], pair)),
+            observations,
+            labels,
+        )
+    with pytest.raises(ValueError, match="one alphabet"):
+        rust.class_posteriors(
+            replace(params, emissions=(params.emissions[0], wider)),
+            observations,
+            labels,
+        )
+    past = observations.copy()
+    past[0, 0] = 3
+    with pytest.raises(ValueError, match=r"must lie in \[0, 3\)"):
+        rust.class_posteriors(params, past, labels)
+    instance = _ci()
+    with pytest.raises(ValueError, match="carry two channels"):
         rust.class_posteriors(params, instance.observations, instance.labels)
 
 
