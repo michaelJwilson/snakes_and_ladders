@@ -22,8 +22,9 @@ interpreter and import start-up once (:mod:`sal.external.sessions`); its
 The problems are namespaced by family, as the package is, and the root
 holds only the infrastructure above: :mod:`sal.external.potts` carries the
 Potts model's ``ground_state`` and ``lower_bound``, each in its ``search``
-sibling's terms, and later families take a submodule of their own beside it
-(``hmm``, ``hmc``). A submodule is imported on first use, so a worker that
+sibling's terms, :mod:`sal.external.hmm` the HMM's ``fit``, ``viterbi`` and
+``forward_log_likelihood`` in ``opt.hmm``'s, and ``hmc`` will take a
+submodule of its own beside them. A submodule is imported on first use, so a worker that
 imports this package does not pay for the search ladder.
 
 ``sal.validation`` drives the same frameworks as referees for the test suite

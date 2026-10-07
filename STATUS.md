@@ -3472,7 +3472,14 @@ gco's and PyMaxflow's labellings as `search.ground_state`'s `MethodRun` (PR
 #1289); `external.potts.lower_bound` returns HiGHS's local-polytope LP, or its ILP,
 as `search.trws`'s `BoundedLabelling`, its bound the adapter's value bitwise
 and ordered TRW-S <= LP <= ILP = enumerated minimum
-(`tests/regression/test_external_lower_bound.py`, PR #1290). Steps 5--7 are
+(`tests/regression/test_external_lower_bound.py`, PR #1290).
+
+**Step 5, the HMM.** `external.hmm.fit`, `viterbi` and
+`forward_log_likelihood` return hmmlearn's Baum-Welch, Viterbi and `score` as
+`opt.hmm`'s `EmFit`, `likelihood.hmm.viterbi`'s pair and
+`opt.hmm.forward_log_likelihood`'s scalar, each the adapter's answer bitwise
+on its fixtures and the score sal's forward recursion within 1e-11, ragged
+included (`tests/validation/test_hmmlearn.py`, PR #1291). Steps 6 and 7 are
 not started.
 
 ## Milestone 3.1 — Model Surrogates & Bounds for Supported Problems

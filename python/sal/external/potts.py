@@ -91,7 +91,7 @@ from sal.external.potts_inputs import (
 )
 from sal.external.potts_inputs import integral as is_integral
 from sal.external.runner import Run, ScriptError
-from sal.external.sessions import Session
+from sal.external.sessions import Session, served_by
 from sal.external.solvers import (
     Capability,
     ExternalUnavailable,
@@ -172,13 +172,6 @@ def _posed(
     return values, allowed, needs
 
 
-def _served_by(session: Session | None, solver: Solver) -> None:
-    """Refuse a ``session`` opened on another solver than ``solver``."""
-    if session is not None and session.solver is not solver:
-        msg = f"the session serves {session.solver}, not {solver}"
-        raise ValueError(msg)
-
-
 def ground_state(
     graph: PottsGraph,
     field: SiteField | np.ndarray,
@@ -251,7 +244,7 @@ def ground_state(
     if budget.unit is not UNITS[solver]:
         msg = f"{solver} is charged in {UNITS[solver]}, not {budget.unit}"
         raise ValueError(msg)
-    _served_by(session, solver)
+    served_by(session, solver)
     if start is not None:
         if solver is Solver.PYMAXFLOW_EXACT:
             msg = f"{solver} cuts once from no labelling, so takes no start"
@@ -376,7 +369,7 @@ def lower_bound(
     if integral:
         needs.add(Capability.EXACT)
     require(solver, needs)
-    _served_by(session, solver)
+    served_by(session, solver)
     if session is None and not available(solver):
         raise ExternalUnavailable(solver)
 
