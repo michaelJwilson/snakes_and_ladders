@@ -174,6 +174,12 @@ TWIN_IMPORT = re.compile(
     re.MULTILINE,
 )
 TWIN_OWNER = "backend.py"
+#: A caller asking whether a mixture start is a best-of (issue #1301): every
+#: start `search.mixture_starts.lookup` returns declares `polishes` and
+#: answers `polished`, so a branch on its type outside the module that
+#: declares it is a question the seam answers.
+ASKED_BEST_OF = re.compile(r"isinstance\(\s*[^,()]+,\s*BestOf\b")
+BEST_OF_OWNER = "search/mixture_starts.py"
 
 #: Where a caller of the transition may live: the package, the suite and the
 #: notebooks. Wider than the package alone, because both copies this guard
@@ -411,6 +417,8 @@ ABSENT: dict[str, tuple[re.Pattern[str], str, tuple[Path, ...], tuple[str, ...]]
     # Issue #1010: `backend.twin(name, backend, __name__)` refuses and
     # imports; eight sites in six modules spelled both out.
     "twin by hand": (TWIN_IMPORT, TWIN_OWNER, (PACKAGE,), _PY),
+    # Issue #1301: a start says whether it polishes; no caller asks its type.
+    "best-of asked": (ASKED_BEST_OF, BEST_OF_OWNER, SEARCHED, _PY_NB),
 }
 
 
@@ -555,6 +563,8 @@ def test_each_guard_fails_on_violating_source() -> None:
         PIPE_SPLIT: "cells = line.split(" + '"|")\n',
         # Unsplit: the guard reads the package, not this suite.
         TABULAR_LITERAL: '            r"\\begin{tabular}{lrrrr}",\n',
+        # Split so this module, which the guard reads, is not its offender.
+        ASKED_BEST_OF: "if isinstance(start, " + "BestOf) and every:\n",
         HELD_BAND: (
             '        index = np.searchsorted(times, grid, side="right") - 1\n'
             "        known = index >= 0\n"
