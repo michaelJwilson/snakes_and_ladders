@@ -11,7 +11,10 @@ table, row-major. Outputs: ``value``, the LP's optimal value;
 ``node_marginals``; ``status`` and ``message``, `linprog`'s; ``iterations``;
 ``build_seconds``, the constraint matrix's assembly. The measured seconds are
 ``linprog`` alone; the peak resident memory is the assembly and the solve
-together.
+together. With ``integral`` set (issue #1274) the node marginals are integer
+and ``milp`` solves the ILP to a zero relative gap instead, its optimum the
+minimum energy; ``iterations`` is then its branch-and-bound node count, and
+``time_limit``, when given, is HiGHS's own, in seconds.
 """
 
 from __future__ import annotations
@@ -72,12 +75,33 @@ def polytope(
     return cost, matrix, right
 
 
+def _integer(
+    cost: np.ndarray, matrix: Any, right: np.ndarray, n_integer: int, limit: float
+) -> Any:
+    """``milp`` on the LP with its first ``n_integer`` columns integer."""
+    from scipy.optimize import Bounds, LinearConstraint, milp  # HiGHS
+
+    integrality = np.zeros(cost.shape[0], dtype=np.int64)
+    integrality[:n_integer] = 1
+    result = milp(
+        cost,
+        integrality=integrality,
+        bounds=Bounds(0.0, np.inf),
+        constraints=LinearConstraint(matrix, right, right),
+        options={"time_limit": limit, "mip_rel_gap": 0.0},
+    )
+    result.nit = int(getattr(result, "mip_node_count", 0))
+    return result
+
+
 def main() -> None:
     """Assemble the LP, solve it under the timer, and write the value back."""
     from scipy.optimize import linprog  # HiGHS, imported only in this interpreter
 
     inputs, returned = received()
     unary = inputs["unary"]
+    integral = bool(inputs.get("integral", np.asarray(False)))
+    limit = float(inputs.get("time_limit", np.asarray(np.inf)))
 
     def build_and_solve() -> tuple[Any, float, float]:
         (cost, matrix, right), build_seconds = timed(
@@ -85,11 +109,16 @@ def main() -> None:
                 unary, inputs["first"], inputs["second"], inputs["coupling"]
             )
         )
-        result, seconds = timed(
-            lambda: linprog(
-                cost, A_eq=matrix, b_eq=right, bounds=(0.0, None), method="highs"
+        if integral:
+            result, seconds = timed(
+                lambda: _integer(cost, matrix, right, unary.size, limit)
             )
-        )
+        else:
+            result, seconds = timed(
+                lambda: linprog(
+                    cost, A_eq=matrix, b_eq=right, bounds=(0.0, None), method="highs"
+                )
+            )
         return result, seconds, build_seconds
 
     (result, seconds, build_seconds), peak_bytes = peaked(build_and_solve)
