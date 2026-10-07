@@ -61,6 +61,11 @@ ADMITTED: dict[tuple[str, str], str] = {
         "result type; ground_state is charged in an opt.budget, and it and "
         "lower_bound end in a Termination"
     ),
+    ("external", "sample"): (
+        "external/CLAUDE.md: a call takes its sibling's signature and returns its "
+        "result type; hmc.sample returns sample.hmc's HmcChain, its warm-up an "
+        "Adaptation and its target a declared kernel"
+    ),
     ("external", "search"): (
         "external/CLAUDE.md: a call takes its sibling's signature and returns its "
         "result type; ground_state returns search.ground_state's MethodRun, "

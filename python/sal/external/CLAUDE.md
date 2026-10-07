@@ -51,7 +51,7 @@ never restated. What follows is local.
 - **A problem family is a submodule; the root is infrastructure.** The
   root exports `Solver`, `Capability`, `Provenance`, `session`, `Transport`
   and the runner, and no call that solves a problem; the Potts calls are
-  `potts`, the HMM's `hmm`, and a later family takes its own module (`hmc`).
+  `potts`, the HMM's `hmm`, and the Hamiltonian chain's `hmc`.
   `tests/regression/test_external.py` holds the root to it.
 - **A call takes its sibling's signature and returns its result type.**
   `potts.ground_state` is `search.ground_state.ground_state`'s arguments with a
@@ -71,7 +71,15 @@ never restated. What follows is local.
   (`tests/regression/test_external_hmm.py`); their bytes are posed in
   `hmm_inputs.py`, which `validation.hmmlearn` sends too
   (`tests/validation/test_hmmlearn.py`). A family hmmlearn has no model for
-  needs a `Capability` it does not declare, and is refused.
+  needs a `Capability` it does not declare, and is refused. `hmc.sample`
+  takes `sample.hmc.sample`'s three positional arguments with a `Solver`
+  after them, and returns `HmcChain` as `ExternalChain`
+  (`tests/regression/test_external_hmc.py`); its target is the kernel the
+  objective declares (`supported_gradient`), rebuilt in JAX by the script,
+  since a closure cannot cross the process boundary, and its bytes are posed
+  in `hmc_inputs.py`, which `validation.blackjax` sends too
+  (`tests/validation/test_blackjax.py`). A warm-up the framework cannot
+  honour as asked is refused, never approximated in silence.
 - **A transport is kept on a measurement.** `MMAP` is the default: it beat
   `NPZ` in 13 of 15 cells of #1288's grid and trailed it in none by more than
   the host's run-to-run spread (0.4 ms at 0.2 MB, 4 ms of 198 at 10 MB, N = 1).

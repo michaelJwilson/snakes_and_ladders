@@ -16,8 +16,9 @@ distribution's metadata, so the framework is not imported to read it.
 This module is step 1 of #1282. The calls that pose a problem in sal's types
 and return sal's result types reach their framework through :func:`invoke`:
 :mod:`sal.external.potts`'s ``ground_state`` (step 3) and ``lower_bound``
-(step 4), and :mod:`sal.external.hmm`'s ``fit``, ``viterbi`` and
-``forward_log_likelihood`` (step 5); ``hmc`` is a later step.
+(step 4), :mod:`sal.external.hmm`'s ``fit``, ``viterbi`` and
+``forward_log_likelihood`` (step 5), and :mod:`sal.external.hmc`'s
+``sample`` (step 6).
 """
 
 from __future__ import annotations
@@ -72,6 +73,26 @@ class Capability(StrEnum):
     UNNAMED_EMISSIONS = "unnamed_emissions"
     #: Draws a Hamiltonian Monte Carlo chain from a log-density.
     HMC_SAMPLE = "hmc_sample"
+    #: Adapts the step size and a diagonal mass in a warm-up before the draws.
+    WINDOW_ADAPTATION = "window_adaptation"
+    #: Draws each proposal's step from a band about the adapted one.
+    STEP_JITTER = "step_jitter"
+    #: Samples the zero-mean Gaussian of a precision, dense or diagonal.
+    GAUSSIAN_TARGET = "gaussian_target"
+    #: Samples ``exp(-U)`` for Rosenbrock's function ``U``.
+    ROSENBROCK_TARGET = "rosenbrock_target"
+    #: Samples a one-channel Gaussian mixture's likelihood in its ``theta``.
+    GAUSSIAN_MIXTURE_TARGET = "gaussian_mixture_target"
+    #: Samples a Gaussian HMM's likelihood of equal-length segments in its ``theta``.
+    GAUSSIAN_HMM_TARGET = "gaussian_hmm_target"
+    #: Samples an HMM's likelihood of segments of unequal lengths.
+    RAGGED_SEGMENTS = "ragged_segments"
+    #: Samples a count mixture's likelihood.
+    COUNT_MIXTURE_TARGET = "count_mixture_target"
+    #: Samples a count HMM's likelihood.
+    COUNT_HMM_TARGET = "count_hmm_target"
+    #: Samples an objective that declares no kernel, a Python closure.
+    UNDECLARED_TARGET = "undeclared_target"
 
 
 class Solver(StrEnum):
@@ -112,7 +133,9 @@ _POTTS_MOVES = frozenset(
 #: a bound (#1063), and its ILP, the minimum (#1274), so it is exact and
 #: no ground-state solver; hmmlearn fits the three families its
 #: adapter writes (#975, #997), and declares none of the other families'
-#: capabilities, so :mod:`sal.external.hmm` refuses them.
+#: capabilities, so :mod:`sal.external.hmm` refuses them; BlackJAX samples
+#: the targets its script rebuilds in JAX, and adapts without a jittered
+#: step, so :mod:`sal.external.hmc` refuses the rest.
 DECLARED: Mapping[Solver, Declaration] = {
     Solver.GCO_EXPANSION: Declaration("gco", _POTTS_MOVES),
     Solver.GCO_SWAP: Declaration("gco", _POTTS_MOVES),
@@ -143,7 +166,19 @@ DECLARED: Mapping[Solver, Declaration] = {
             }
         ),
     ),
-    Solver.BLACKJAX_HMC: Declaration("blackjax", frozenset({Capability.HMC_SAMPLE})),
+    Solver.BLACKJAX_HMC: Declaration(
+        "blackjax",
+        frozenset(
+            {
+                Capability.HMC_SAMPLE,
+                Capability.WINDOW_ADAPTATION,
+                Capability.GAUSSIAN_TARGET,
+                Capability.ROSENBROCK_TARGET,
+                Capability.GAUSSIAN_MIXTURE_TARGET,
+                Capability.GAUSSIAN_HMM_TARGET,
+            }
+        ),
+    ),
 }
 
 

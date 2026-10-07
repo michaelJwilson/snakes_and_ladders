@@ -13,7 +13,10 @@ the next, and so on. The package merges the half-kicks between steps and
 BlackJAX does not, so the two agree to rounding rather than bitwise.
 :func:`sample` runs ``blackjax.hmc`` at unit mass.
 
-The target is a zero-mean Gaussian given by its precision, dense or diagonal.
+The target is a zero-mean Gaussian given by its precision, dense or diagonal,
+or another of :data:`~sal.external.hmc_inputs.TARGETS`. A chain's bytes are
+:mod:`sal.external.hmc_inputs`'s, which :func:`sal.external.hmc.sample` sends
+too, so its chain is this adapter's bitwise on one key (issue #1282).
 """
 
 from __future__ import annotations
@@ -22,6 +25,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from sal.external.hmc_inputs import chain_inputs, target_inputs
 from sal.external.runner import run
 
 #: The script this adapter runs.
@@ -83,7 +87,7 @@ def integrate(
         SCRIPT,
         {
             "mode": np.asarray(0, dtype=np.int64),
-            **_target(precision, rosenbrock),
+            **target_inputs(precision, rosenbrock),
             "position": np.ascontiguousarray(position, dtype=np.float64),
             "momentum": np.ascontiguousarray(momentum, dtype=np.float64),
             "step_size": np.asarray(step_size, dtype=np.float64),
@@ -118,16 +122,15 @@ def sample(
     """
     result = run(
         SCRIPT,
-        {
-            "mode": np.asarray(1, dtype=np.int64),
-            **_target(precision, rosenbrock, mixture, hmm),
-            "position": np.ascontiguousarray(position, dtype=np.float64),
-            "step_size": np.asarray(step_size, dtype=np.float64),
-            "n_steps": np.asarray(n_steps, dtype=np.int64),
-            "n_draws": np.asarray(n_draws, dtype=np.int64),
-            "key": np.asarray(key, dtype=np.int64),
-            "store_chain": np.asarray(store_chain),
-        },
+        chain_inputs(
+            target_inputs(precision, rosenbrock, mixture, hmm),
+            position,
+            step_size,
+            n_steps,
+            n_draws,
+            key,
+            store_chain=store_chain,
+        ),
     )
     out = result.outputs
     return Chain(
@@ -181,36 +184,6 @@ def mala(
     )
 
 
-def _target(
-    precision: np.ndarray | None,
-    rosenbrock: tuple[float, float] | None,
-    mixture: tuple[int, np.ndarray] | None = None,
-    hmm: tuple[int, np.ndarray] | None = None,
-) -> dict[str, np.ndarray]:
-    """The script's target inputs: a Gaussian's precision, Rosenbrock's ``(a, b)``, a mixture's ``(k, values)`` or a Gaussian HMM's ``(m, sequences)``."""
-    if hmm is not None:
-        return {
-            "target": np.asarray(3, dtype=np.int64),
-            "n_states": np.asarray(hmm[0], dtype=np.int64),
-            "values": np.ascontiguousarray(hmm[1], dtype=np.float64),
-        }
-    if mixture is not None:
-        return {
-            "target": np.asarray(2, dtype=np.int64),
-            "n_components": np.asarray(mixture[0], dtype=np.int64),
-            "values": np.ascontiguousarray(mixture[1], dtype=np.float64),
-        }
-    if rosenbrock is not None:
-        return {
-            "target": np.asarray(1, dtype=np.int64),
-            "constants": np.asarray(rosenbrock, dtype=np.float64),
-        }
-    return {
-        "target": np.asarray(0, dtype=np.int64),
-        "precision": np.ascontiguousarray(precision, dtype=np.float64),
-    }
-
-
 def random_walk(
     position: np.ndarray,
     step_size: float | np.ndarray,
@@ -232,7 +205,7 @@ def random_walk(
         SCRIPT,
         {
             "mode": np.asarray(3, dtype=np.int64),
-            **_target(precision, rosenbrock),
+            **target_inputs(precision, rosenbrock),
             "position": np.ascontiguousarray(position, dtype=np.float64),
             "step_size": np.asarray(step_size, dtype=np.float64),
             "n_steps": np.asarray(1, dtype=np.int64),
@@ -276,7 +249,7 @@ def replay(
         SCRIPT,
         {
             "mode": np.asarray(4, dtype=np.int64),
-            **_target(precision, rosenbrock),
+            **target_inputs(precision, rosenbrock),
             "position": np.ascontiguousarray(position, dtype=np.float64),
             "increments": np.ascontiguousarray(increments, dtype=np.float64),
             "step_size": np.asarray(1.0),
@@ -319,18 +292,17 @@ def adapted_sample(
     """
     result = run(
         SCRIPT,
-        {
-            "mode": np.asarray(5, dtype=np.int64),
-            **_target(precision, rosenbrock, mixture, hmm),
-            "position": np.ascontiguousarray(position, dtype=np.float64),
-            "step_size": np.asarray(step_size, dtype=np.float64),
-            "n_steps": np.asarray(n_steps, dtype=np.int64),
-            "warmup": np.asarray(warmup, dtype=np.int64),
-            "n_draws": np.asarray(n_draws, dtype=np.int64),
-            "key": np.asarray(key, dtype=np.int64),
-            "target_acceptance": np.asarray(target_acceptance, dtype=np.float64),
-            "store_chain": np.asarray(store_chain),
-        },
+        chain_inputs(
+            target_inputs(precision, rosenbrock, mixture, hmm),
+            position,
+            step_size,
+            n_steps,
+            n_draws,
+            key,
+            store_chain=store_chain,
+            warmup=warmup,
+            target_acceptance=target_acceptance,
+        ),
     )
     out = result.outputs
     return AdaptedChain(

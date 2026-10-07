@@ -10,9 +10,12 @@ momentum and position updates, palindromic), built by
 
 ``mode`` 1 samples: ``blackjax.hmc`` from ``position`` with ``step_size`` and
 ``n_steps`` leapfrog steps, ``n_draws`` transitions keyed from ``key``.
-Outputs ``draws`` and ``acceptance``, the mean acceptance probability. With
-``store_chain`` false the scan carries the state and emits only each
-transition's acceptance, so no draw is stacked and ``draws`` is empty
+Outputs ``draws`` and ``acceptance``, the mean acceptance probability; and
+for :mod:`sal.external.hmc` (issue #1282) ``accepted``, the fraction
+accepted, ``energy_error``, ``|H(proposal) - H(current)|`` per transition, and
+``potential``, ``-log p`` at each draw. With ``store_chain`` false the scan
+carries the state and emits only each transition's acceptance and energy
+error, so no draw is stacked and ``draws`` and ``potential`` are empty
 (issue #997).
 
 ``mode`` 2 samples by ``blackjax.mala`` at ``step_size``, which is BlackJAX's
@@ -41,7 +44,10 @@ runs the same chain on the same randomness (issue #1006).
 steps from ``position`` at ``target_acceptance``, the adapted step and
 inverse mass then fixed for the draws; the warm-up and the draws run in one
 compiled call. Outputs as mode 1, and ``step_size`` and
-``inverse_mass_matrix``, the adapted values (issue #1008).
+``inverse_mass_matrix``, the adapted values (issue #1008). The warm-up starts
+at ``initial_step_size`` where it is sent, and at BlackJAX's default, 1,
+where it is not; ``warmup_acceptance``, ``flat`` and ``window`` are
+:func:`warmup_outputs`'s (issue #1282).
 
 Each mode is compiled on one call first; the measured seconds are the second
 call, to ``block_until_ready``, so compilation is not charged. It is reported
@@ -57,13 +63,59 @@ from typing import Any
 
 import numpy as np
 
+from sal.external.hmc_inputs import MODES, TARGETS
 from sal.external.protocol import dump, peaked, received
 
-#: What ``mode`` selects.
-INTEGRATE, SAMPLE, LANGEVIN, RANDOM_WALK, REPLAY, ADAPTED = 0, 1, 2, 3, 4, 5
+#: What ``mode`` selects, by :data:`~sal.external.hmc_inputs.MODES`'s codes.
+INTEGRATE, SAMPLE, LANGEVIN, RANDOM_WALK, REPLAY, ADAPTED = range(len(MODES))
 
-#: What ``target`` selects.
-GAUSSIAN, ROSENBROCK, MIXTURE, GAUSSIAN_HMM = 0, 1, 2, 3
+#: What ``target`` selects, by :data:`~sal.external.hmc_inputs.TARGETS`'s codes.
+GAUSSIAN, ROSENBROCK, MIXTURE, GAUSSIAN_HMM = range(len(TARGETS))
+
+
+def chain_outputs(
+    positions: Any, acceptance: Any, accepted: Any, energy_error: Any, potential: Any
+) -> dict[str, np.ndarray]:
+    """A recorded chain's outputs: draws, mean acceptance probability and the rest per transition."""
+    return {
+        "draws": np.asarray(positions),
+        "acceptance": np.asarray(np.mean(np.asarray(acceptance))),
+        "accepted": np.asarray(np.mean(np.asarray(accepted, dtype=np.float64))),
+        "energy_error": np.asarray(energy_error, dtype=np.float64),
+        "potential": np.asarray(potential, dtype=np.float64),
+    }
+
+
+def warmup_outputs(
+    n_warmup: int, acceptance: np.ndarray, positions: np.ndarray
+) -> dict[str, np.ndarray]:
+    """What the window adaptation's schedule says of its own warm-up.
+
+    ``warmup_acceptance`` is the mean acceptance probability over the final
+    fast window, the step size's last; ``flat`` the coordinates that did not
+    move over the last slow window, the one the inverse mass is estimated
+    from. Without a slow window (fewer than 20 steps) every step is fast and
+    ``flat`` is empty.
+    """
+    from blackjax.adaptation.window_adaptation import build_schedule
+
+    schedule = np.asarray(build_schedule(n_warmup))
+    slow = np.flatnonzero(schedule[:, 0] == 1)
+    if slow.size == 0:
+        return {
+            "warmup_acceptance": np.asarray(np.mean(acceptance)),
+            "flat": np.zeros(0, dtype=np.int64),
+            "window": np.asarray(0, dtype=np.int64),
+        }
+    ends = np.flatnonzero(schedule[:, 1])
+    first = int(ends[-2]) + 1 if ends.size > 1 else int(slow[0])
+    window = positions[first : int(ends[-1]) + 1]
+    moved = np.ptp(window.reshape(window.shape[0], -1), axis=0)
+    return {
+        "warmup_acceptance": np.asarray(np.mean(acceptance[int(ends[-1]) + 1 :])),
+        "flat": np.flatnonzero(moved == 0.0).astype(np.int64),
+        "window": np.asarray(window.shape[0], dtype=np.int64),
+    }
 
 
 def main() -> None:
@@ -145,6 +197,35 @@ def main() -> None:
     n_steps = int(inputs["n_steps"])
     unit = jnp.ones(dimension)
 
+    store_chain = bool(inputs.get("store_chain", np.asarray(True)))
+
+    def recorded(kernel: Any, metric: Any) -> Any:
+        # One HMC transition, and what `sal.external.hmc` reads off it: the
+        # position, the acceptance probability, whether it was accepted,
+        # |H(proposal) - H(current)| at the momentum drawn, and the
+        # potential -log p at the position, which a caller checks its own
+        # energy against.
+        def transition(state: Any, key: Any) -> tuple[Any, Any]:
+            new, info = kernel.step(key, state)
+            current = -state.logdensity + metric.kinetic_energy(info.momentum)
+            kept = (
+                (new.position, -new.logdensity)
+                if store_chain
+                else (
+                    jnp.zeros((0,)),
+                    jnp.zeros(()),
+                )
+            )
+            return new, (
+                kept[0],
+                info.acceptance_rate,
+                info.is_accepted,
+                jnp.abs(info.energy - current),
+                kept[1],
+            )
+
+        return transition
+
     if mode == INTEGRATE:
         metric = metrics.default_metric(unit)
         one_step = integrators.generate_euclidean_integrator(
@@ -190,31 +271,40 @@ def main() -> None:
             (keys, jnp.asarray(inputs["increments"])),
         )
     elif mode == ADAPTED:
+        initial = (
+            {"initial_step_size": float(inputs["initial_step_size"])}
+            if "initial_step_size" in inputs
+            else {}
+        )
         warmup = blackjax.window_adaptation(
             blackjax.hmc,
             logdensity,
             num_integration_steps=n_steps,
             target_acceptance_rate=float(inputs["target_acceptance"]),
+            **initial,
         )
         n_warmup, n_draws = int(inputs["warmup"]), int(inputs["n_draws"])
-        store_chain = bool(inputs.get("store_chain", np.asarray(True)))
 
         @jax.jit
         def run(position: Any, key: Any) -> Any:
             warm_key, draw_key = jax.random.split(key)
-            (state, parameters), _ = warmup.run(warm_key, position, num_steps=n_warmup)
+            (state, parameters), adapting = warmup.run(
+                warm_key, position, num_steps=n_warmup
+            )
             kernel = blackjax.hmc(logdensity, **parameters)
-
-            def transition(state: Any, key: Any) -> tuple[Any, Any]:
-                state, info = kernel.step(key, state)
-                if store_chain:
-                    return state, (state.position, info.acceptance_rate)
-                return state, (jnp.zeros((0,)), info.acceptance_rate)
-
+            transition = recorded(
+                kernel, metrics.default_metric(parameters["inverse_mass_matrix"])
+            )
             draws = jax.lax.scan(
                 transition, state, jax.random.split(draw_key, n_draws)
             )[1]
-            return draws, parameters["step_size"], parameters["inverse_mass_matrix"]
+            return (
+                draws,
+                parameters["step_size"],
+                parameters["inverse_mass_matrix"],
+                adapting.info.acceptance_rate,
+                adapting.state.position,
+            )
 
         arguments = (
             jnp.asarray(inputs["position"]),
@@ -243,15 +333,17 @@ def main() -> None:
             jax.random.key(int(inputs["key"])), int(inputs["n_draws"])
         )
 
-        store_chain = bool(inputs.get("store_chain", np.asarray(True)))
-
         @jax.jit
         def run(position: Any, keys: Any) -> Any:
-            def transition(state: Any, key: Any) -> tuple[Any, Any]:
-                state, info = kernel.step(key, state)
-                if store_chain:
-                    return state, (state.position, info.acceptance_rate)
-                return state, (jnp.zeros((0,)), info.acceptance_rate)
+            if mode == SAMPLE:
+                transition = recorded(kernel, metrics.default_metric(unit))
+            else:
+
+                def transition(state: Any, key: Any) -> tuple[Any, Any]:
+                    state, info = kernel.step(key, state)
+                    if store_chain:
+                        return state, (state.position, info.acceptance_rate)
+                    return state, (jnp.zeros((0,)), info.acceptance_rate)
 
             return jax.lax.scan(transition, kernel.init(position), keys)[1]
 
@@ -274,13 +366,19 @@ def main() -> None:
             "momentum": np.asarray(result.momentum),
         }
     elif mode == ADAPTED:
-        (draws, acceptance), adapted_step, inverse_mass = result
+        draws, adapted_step, inverse_mass, warm_acceptance, warm_positions = result
         outputs = {
-            "draws": np.asarray(draws),
-            "acceptance": np.asarray(np.mean(np.asarray(acceptance))),
+            **chain_outputs(*draws),
             "step_size": np.asarray(adapted_step),
             "inverse_mass_matrix": np.asarray(inverse_mass),
+            **warmup_outputs(
+                int(inputs["warmup"]),
+                np.asarray(warm_acceptance),
+                np.asarray(warm_positions),
+            ),
         }
+    elif mode == SAMPLE:
+        outputs = chain_outputs(*result)
     elif mode == REPLAY:
         draws, uniforms = result
         outputs = {"draws": np.asarray(draws), "uniforms": np.asarray(uniforms)}
