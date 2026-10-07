@@ -52,9 +52,10 @@ def test_the_frozen_niedermayer_chain_ends_not_mixing_and_its_starts_disagree() 
     ordered = starts.chains[0]
 
     assert ordered.termination.reason is Stop.NOT_MIXING
-    # #1314 measured 0.0% to 0.3% over three seeds; this seed accepts 1 of
-    # 320 (0.31%), so the bound is 1%, a tenth of the drawn start's rate.
-    assert ordered.acceptance <= 0.01, ordered.acceptance
+    # Acceptance is not a declared claim here: a bound read off #1314's three
+    # seeds (0.0% to 0.3%) failed at this seed's 0.31%, and a bound widened
+    # to admit it would be fitted. The seed is fixed, so the count is pinned.
+    assert ordered.acceptance == 1 / 320, ordered.acceptance
     assert ordered.largest_cluster_share > 0.99, ordered.largest_cluster_share
     assert starts.termination.reason is Stop.NOT_MIXING
     assert np.all(starts.rhat > RHAT_THRESHOLD), starts.rhat
