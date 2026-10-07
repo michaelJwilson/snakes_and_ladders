@@ -152,7 +152,7 @@ def test_split_rhat_matches_its_formula_by_hand() -> None:
     assert split_rhat(np.array([[0.0] * 4, [1.0] * 4])) == math.inf
 
 
-@pytest.mark.patch
+@pytest.mark.oracle
 def test_recording_the_diagnostics_draws_no_random_number() -> None:
     # The chain is the bare kernel loop bitwise: the uniform start, then one
     # sweep per step on the same generator, with nothing drawn between.
@@ -180,7 +180,8 @@ def test_recording_the_diagnostics_draws_no_random_number() -> None:
 POOLS: tuple[tuple[int, Pool], ...] = ((1, "serial"), (3, "threads"))
 
 
-@pytest.mark.patch
+@pytest.mark.oracle
+@pytest.mark.backend
 def test_thread_pool_starts_are_the_serial_run_bitwise() -> None:
     graph = lattice_graph((4, 4), BoundaryCondition.PERIODIC, 1.0)
     field = np.random.default_rng(1314).normal(0.0, 1.0, (16, 3))
