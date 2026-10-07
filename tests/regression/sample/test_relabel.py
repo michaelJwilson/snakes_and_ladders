@@ -12,14 +12,17 @@ from __future__ import annotations
 import itertools
 import subprocess
 import sys
+from typing import Any
 
 import numpy as np
 import pytest
 import torch
 from sal.emissions import GaussianEmission
 from sal.opt.mixture import responsibilities_torch
+from sal.sample import relabel as relabel_module
 from sal.sample.relabel import (
     MAX_SJW_COMPONENTS,
+    Relabel,
     RelabelMethod,
     aic,
     all_permutations,
@@ -289,3 +292,119 @@ def test_the_module_imports_no_torch() -> None:
         [sys.executable, "-c", code], capture_output=True, text=True, check=True
     )
     assert result.stdout.strip() == "False"
+
+
+#: Each member's explicit call: its value, ``_`` for ``-``.
+EXPLICIT = {member: member.value.replace("-", "_") for member in RelabelMethod}
+
+
+def _relabel_calls() -> list[str]:
+    return [
+        name for name, value in vars(Relabel).items() if isinstance(value, staticmethod)
+    ]
+
+
+def _offered(data: dict[str, np.ndarray], method: RelabelMethod) -> dict[str, Any]:
+    """Every input any method reads, as the notebook offers them to each."""
+
+    def scores(estimate: np.ndarray) -> np.ndarray:
+        family = GaussianEmission(estimate[:, 0], np.ones(K), 1e-12)
+        density = family.log_density(torch.as_tensor(data["observations"])).numpy()
+        return np.asarray(density + np.log(np.clip(estimate[:, 1], 1e-12, None)))
+
+    return {
+        "probabilities": data["probabilities"],
+        "allocations": data["allocations"],
+        "parameters": data["parameters"],
+        "pivot": (
+            data["allocations"][0]
+            if method is RelabelMethod.ECR
+            else data["parameters"][0]
+        ),
+        "scores": scores,
+    }
+
+
+@pytest.mark.critical
+@pytest.mark.analytic
+def test_the_explicit_calls_are_the_members_one_each_and_the_module_functions() -> None:
+    assert _relabel_calls() == list(EXPLICIT.values())
+    for name in _relabel_calls():
+        assert getattr(relabel, name) is getattr(relabel_module, name), name
+
+
+@pytest.mark.critical
+@pytest.mark.analytic
+@pytest.mark.parametrize("method", list(RelabelMethod))
+def test_the_match_reaches_each_members_explicit_call_once(
+    monkeypatch: pytest.MonkeyPatch, method: RelabelMethod
+) -> None:
+    reached: list[str] = []
+    sentinel: Any = object()
+    for name in _relabel_calls():
+
+        def record(*_args: Any, _name: str = name, **_kwargs: Any) -> Any:
+            reached.append(_name)
+            return sentinel
+
+        monkeypatch.setattr(Relabel, name, staticmethod(record))
+    assert relabel(method, **_offered(_draws(5), method)) is sentinel
+    assert reached == [EXPLICIT[method]]
+
+
+@pytest.mark.analytic
+@pytest.mark.parametrize("method", list(RelabelMethod))
+def test_a_generic_relabelling_is_its_explicit_calls_bitwise(
+    method: RelabelMethod,
+) -> None:
+    data = _draws(5)
+    offered = _offered(data, method)
+    # A cap of two passes, so the control is seen to reach the explicit call.
+    iterating = method not in {RelabelMethod.ECR, RelabelMethod.PRA, RelabelMethod.AIC}
+    controls: dict[str, Any] = {"max_iterations": 2} if iterating else {}
+    ours = relabel(method, **offered, **controls)
+    call = getattr(relabel, EXPLICIT[method])
+    arguments: dict[RelabelMethod, tuple[Any, ...]] = {
+        RelabelMethod.STEPHENS: (data["probabilities"],),
+        RelabelMethod.ECR: (data["allocations"], offered["pivot"], K),
+        RelabelMethod.ECR_ITERATIVE_1: (data["allocations"], K),
+        RelabelMethod.ECR_ITERATIVE_2: (data["allocations"], data["probabilities"]),
+        RelabelMethod.PRA: (data["parameters"], offered["pivot"]),
+        RelabelMethod.SJW: (data["parameters"], data["allocations"], offered["scores"]),
+        RelabelMethod.AIC: (data["parameters"],),
+    }
+    theirs = call(*arguments[method], **controls)
+    assert np.array_equal(ours.permutations, theirs.permutations)
+    assert ours.method is theirs.method is method
+    assert (ours.iterations, ours.converged) == (theirs.iterations, theirs.converged)
+    assert ours.objective == theirs.objective
+    if ours.weights is None:
+        assert theirs.weights is None
+    else:
+        assert np.array_equal(ours.weights, theirs.weights)
+
+
+@pytest.mark.analytic
+@pytest.mark.parametrize(
+    ("method", "control", "value"),
+    [
+        (RelabelMethod.PRA, "max_iterations", 5),
+        (RelabelMethod.ECR_ITERATIVE_1, "threshold", 1e-3),
+        (RelabelMethod.AIC, "threshold", 1e-3),
+    ],
+)
+def test_a_loop_control_the_explicit_call_lacks_is_refused(
+    method: RelabelMethod, control: str, value: float
+) -> None:
+    offered = _offered(_draws(5), method)
+    offered[control] = value
+    with pytest.raises(
+        ValueError, match=f"runs {EXPLICIT[method]}, which takes no {control}"
+    ):
+        relabel(method, **offered)
+
+
+@pytest.mark.analytic
+def test_an_unknown_method_is_refused_by_name() -> None:
+    with pytest.raises(ValueError, match="no relabelling method 'kl'"):
+        relabel("kl", probabilities=np.zeros((2, 3, 2)))  # type: ignore[arg-type]

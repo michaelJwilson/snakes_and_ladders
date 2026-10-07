@@ -1157,7 +1157,7 @@ def count_route(
 
 
 class SeedMethod(StrEnum):
-    """How :func:`seed` places the components (issue #1085).
+    """How :data:`seed` places the components (issue #1085).
 
     Each reads the observations alone, so data with no known truth seeds.
     """
@@ -1189,48 +1189,127 @@ class Start(NamedTuple):
     components: EmissionFamily
 
 
-def seed(
-    observations: np.ndarray,
-    n_components: int,
-    at: ComponentsAt,
-    *,
-    method: SeedMethod | str,
-    rng: np.random.Generator,
-    rows: np.ndarray | None = None,
-) -> Start:
-    """A :class:`Start` from the observations alone: the seeding a caller with no truth can run (issue #1085).
+def _read(observations: np.ndarray, rows: np.ndarray | None) -> np.ndarray:
+    """The rows a seeding rule reads: ``rows`` where given, else ``observations``, as ``float64``."""
+    return np.asarray(observations if rows is None else rows, dtype=np.float64)
 
-    The seeding rules of `search.mixture_starts` read a simulated instance,
-    whose truth they used only for its component count, so data with no known
-    truth could not be seeded. These are the rules that read the data alone,
-    in one place, with uniform weights; `search.mixture_starts` calls them.
 
-    Parameters
-    ----------
-    observations : np.ndarray
-        Observations, shape ``(n_samples,)`` or ``(n_samples, channels)``.
-    n_components : int
-        Components to seed.
-    at : ComponentsAt
-        Builds the family from the rows chosen.
-    method : SeedMethod | str
-        Which rule places them.
-    rng : np.random.Generator
-        Generator, passed in.
-    rows : np.ndarray | None
-        Where the rule reads from, when that is not ``observations``: under a
-        covariate, the rows in rate space (issue #933).
+def _uniform_weights(n_components: int) -> np.ndarray:
+    """Every seeding's mixing weights: ``1 / n_components`` each."""
+    return np.full(n_components, 1.0 / n_components)
 
-    Returns
-    -------
-    Start
+
+class Seed:
+    """:data:`seed`: the generic call, and one explicit call per :class:`SeedMethod` (#1305).
+
+    ``seed(observations, n_components, at, *, method, rng, rows)`` is a
+    ``match`` on ``method`` onto the explicit call that holds the rule,
+    ``seed.uniform``, ``seed.plus_plus`` or ``seed.kmeans``, each taking the
+    generic call's arguments less ``method``. Each reads the observations
+    alone, so data with no known truth seeds, with uniform weights.
     """
-    read = np.asarray(observations if rows is None else rows, dtype=np.float64)
-    chosen = SeedMethod(method)
-    if chosen is SeedMethod.UNIFORM:
-        components = uniform_start(read, n_components, at, rng)
-    elif chosen is SeedMethod.PLUS_PLUS:
-        components = plus_plus_start(read, n_components, at, rng)
-    else:
-        components = at(kmeans_plus_plus(read, n_components, rng))
-    return Start(np.full(n_components, 1.0 / n_components), components)
+
+    @staticmethod
+    def uniform(
+        observations: np.ndarray,
+        n_components: int,
+        at: ComponentsAt,
+        *,
+        rng: np.random.Generator,
+        rows: np.ndarray | None = None,
+    ) -> Start:
+        """:func:`uniform_start`: observations drawn uniformly, without replacement."""
+        components = uniform_start(_read(observations, rows), n_components, at, rng)
+        return Start(_uniform_weights(n_components), components)
+
+    @staticmethod
+    def plus_plus(
+        observations: np.ndarray,
+        n_components: int,
+        at: ComponentsAt,
+        *,
+        rng: np.random.Generator,
+        rows: np.ndarray | None = None,
+    ) -> Start:
+        """:func:`plus_plus_start`: D-squared sampling under the family's Bregman divergence."""
+        components = plus_plus_start(_read(observations, rows), n_components, at, rng)
+        return Start(_uniform_weights(n_components), components)
+
+    @staticmethod
+    def kmeans(
+        observations: np.ndarray,
+        n_components: int,
+        at: ComponentsAt,
+        *,
+        rng: np.random.Generator,
+        rows: np.ndarray | None = None,
+    ) -> Start:
+        """:func:`~sal.opt.mixture.kmeans_plus_plus` on the raw rows, the centres handed to ``at``."""
+        components = at(kmeans_plus_plus(_read(observations, rows), n_components, rng))
+        return Start(_uniform_weights(n_components), components)
+
+    def __call__(
+        self,
+        observations: np.ndarray,
+        n_components: int,
+        at: ComponentsAt,
+        *,
+        method: SeedMethod | str,
+        rng: np.random.Generator,
+        rows: np.ndarray | None = None,
+    ) -> Start:
+        """A :class:`Start` from the observations alone: the seeding a caller with no truth can run (issue #1085).
+
+        The seeding rules of `search.mixture_starts` read a simulated instance,
+        whose truth they used only for its component count, so data with no known
+        truth could not be seeded. These are the rules that read the data alone,
+        in one place, with uniform weights; `search.mixture_starts` calls them.
+        A ``match`` on ``method`` onto its explicit call, which returns the
+        start unchanged (#1305).
+
+        Parameters
+        ----------
+        observations : np.ndarray
+            Observations, shape ``(n_samples,)`` or ``(n_samples, channels)``.
+        n_components : int
+            Components to seed.
+        at : ComponentsAt
+            Builds the family from the rows chosen.
+        method : SeedMethod | str
+            Which rule places them.
+        rng : np.random.Generator
+            Generator, passed in.
+        rows : np.ndarray | None
+            Where the rule reads from, when that is not ``observations``: under a
+            covariate, the rows in rate space (issue #933).
+
+        Returns
+        -------
+        Start
+
+        Raises
+        ------
+        ValueError
+            If ``method`` names no :class:`SeedMethod`.
+        """
+        call: Callable[..., Start]
+        match method:
+            case SeedMethod.UNIFORM:
+                call = self.uniform
+            case SeedMethod.PLUS_PLUS:
+                call = self.plus_plus
+            case SeedMethod.KMEANS:
+                call = self.kmeans
+            case _:
+                msg = (
+                    f"no seeding rule {method!r}; the rules are "
+                    f"{[str(member) for member in SeedMethod]}"
+                )
+                raise ValueError(msg)
+        return call(observations, n_components, at, rng=rng, rows=rows)
+
+
+#: ``seed(observations, n_components, at, *, method, rng, rows)``, the
+#: generic call, and its explicit calls ``seed.uniform``, ``seed.plus_plus``
+#: and ``seed.kmeans`` (:class:`Seed`).
+seed = Seed()

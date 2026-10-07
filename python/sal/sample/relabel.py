@@ -61,12 +61,13 @@ torch already.
 
 from __future__ import annotations
 
+import inspect
 import itertools
 import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from numpy.typing import ArrayLike, DTypeLike
@@ -87,7 +88,7 @@ STEPHENS_FLOOR = 1e-6
 
 
 class RelabelMethod(StrEnum):
-    """The relabelling algorithm :func:`relabel` runs."""
+    """The relabelling algorithm :data:`relabel` runs."""
 
     STEPHENS = "stephens"
     ECR = "ecr"
@@ -695,97 +696,161 @@ def sjw(
     )
 
 
-def relabel(
-    method: RelabelMethod = RelabelMethod.STEPHENS,
-    *,
-    probabilities: ArrayLike | None = None,
-    allocations: ArrayLike | None = None,
-    parameters: ArrayLike | None = None,
-    pivot: ArrayLike | None = None,
-    scores: Callable[[np.ndarray], ArrayLike] | None = None,
-    max_iterations: int = 100,
-    threshold: float = 1e-6,
-) -> Relabelling:
-    """Relabel a mixture's draws by ``method``; STEPHENS by default.
+class Relabel:
+    """:data:`relabel`: the generic call, and one explicit call per :class:`RelabelMethod` (#1305).
 
-    STEPHENS is the default because it reads only the allocation
-    probabilities, which :func:`allocation_draws` gives for any family,
-    needs no pivot, and minimizes a stated objective monotonically. Each
-    method refuses a call missing what it reads.
-
-    Parameters
-    ----------
-    method : RelabelMethod
-        The algorithm.
-    probabilities : ArrayLike | None
-        ``(m, n, K)``: STEPHENS, ECR-ITERATIVE-2.
-    allocations : ArrayLike | None
-        ``(m, n)``: ECR, ECR-ITERATIVE-1, ECR-ITERATIVE-2, SJW.
-    parameters : ArrayLike | None
-        ``(m, K, J)``: PRA, SJW, AIC.
-    pivot : ArrayLike | None
-        ECR's pivot allocation ``(n,)`` or PRA's pivot parameters ``(K, J)``.
-    scores : Callable | None
-        SJW's complete-data scores, as :func:`sjw` states them.
-    max_iterations, threshold
-        For the iterative methods.
-
-    Returns
-    -------
-    Relabelling
+    ``relabel(method, *, probabilities, allocations, ...)`` is a ``match`` on
+    ``method`` onto the explicit call that holds the algorithm:
+    ``relabel.stephens``, ``.ecr``, ``.ecr_iterative_1``, ``.ecr_iterative_2``,
+    ``.pra``, ``.sjw`` and ``.aic``, the module's functions of those names,
+    each named by its member's value with ``_`` for ``-``. The generic call
+    takes every input any method reads and hands each only what it reads.
     """
 
-    def needs(value: ArrayLike | None, what: str) -> np.ndarray:
-        if value is None:
-            msg = f"{method} needs {what}"
-            raise ValueError(msg)
-        return _array(value)
+    stephens = staticmethod(stephens)
+    ecr = staticmethod(ecr)
+    ecr_iterative_1 = staticmethod(ecr_iterative_1)
+    ecr_iterative_2 = staticmethod(ecr_iterative_2)
+    pra = staticmethod(pra)
+    sjw = staticmethod(sjw)
+    aic = staticmethod(aic)
 
-    match method:
-        case RelabelMethod.STEPHENS:
-            return stephens(
-                needs(probabilities, "probabilities"),
-                max_iterations=max_iterations,
-                threshold=threshold,
-            )
-        case RelabelMethod.ECR:
-            labels = needs(allocations, "allocations")
-            centre = needs(pivot, "a pivot allocation")
-            n_components = (
-                int(_array(probabilities).shape[2])
-                if probabilities is not None
-                else int(max(labels.max(), centre.max())) + 1
-            )
-            return ecr(labels, centre, n_components)
-        case RelabelMethod.ECR_ITERATIVE_1:
-            labels = needs(allocations, "allocations")
-            n_components = (
-                int(_array(probabilities).shape[2])
-                if probabilities is not None
-                else int(labels.max()) + 1
-            )
-            return ecr_iterative_1(labels, n_components, max_iterations=max_iterations)
-        case RelabelMethod.ECR_ITERATIVE_2:
-            return ecr_iterative_2(
-                needs(allocations, "allocations"),
-                needs(probabilities, "probabilities"),
-                max_iterations=max_iterations,
-                threshold=threshold,
-            )
-        case RelabelMethod.PRA:
-            return pra(needs(parameters, "parameters"), needs(pivot, "a pivot draw"))
-        case RelabelMethod.SJW:
-            if scores is None:
-                msg = f"{method} needs complete-data scores"
+    def __call__(
+        self,
+        method: RelabelMethod = RelabelMethod.STEPHENS,
+        *,
+        probabilities: ArrayLike | None = None,
+        allocations: ArrayLike | None = None,
+        parameters: ArrayLike | None = None,
+        pivot: ArrayLike | None = None,
+        scores: Callable[[np.ndarray], ArrayLike] | None = None,
+        max_iterations: int = 100,
+        threshold: float = 1e-6,
+    ) -> Relabelling:
+        """Relabel a mixture's draws by ``method``; STEPHENS by default.
+
+        STEPHENS is the default because it reads only the allocation
+        probabilities, which :func:`allocation_draws` gives for any family,
+        needs no pivot, and minimizes a stated objective monotonically. Each
+        method refuses a call missing what it reads, and reads only what it
+        needs, so one call can offer every array to every method. A ``match`` on
+        ``method`` onto its explicit call, which returns the relabelling
+        unchanged; ``max_iterations`` or ``threshold`` set for a method that does
+        not iterate on it is refused (#1305).
+
+        Parameters
+        ----------
+        method : RelabelMethod
+            The algorithm.
+        probabilities : ArrayLike | None
+            ``(m, n, K)``: STEPHENS, ECR-ITERATIVE-2.
+        allocations : ArrayLike | None
+            ``(m, n)``: ECR, ECR-ITERATIVE-1, ECR-ITERATIVE-2, SJW.
+        parameters : ArrayLike | None
+            ``(m, K, J)``: PRA, SJW, AIC.
+        pivot : ArrayLike | None
+            ECR's pivot allocation ``(n,)`` or PRA's pivot parameters ``(K, J)``.
+        scores : Callable | None
+            SJW's complete-data scores, as :func:`sjw` states them.
+        max_iterations, threshold
+            For the iterative methods.
+
+        Returns
+        -------
+        Relabelling
+
+        Raises
+        ------
+        ValueError
+            If ``method`` lacks an input it reads, or is handed ``max_iterations``
+            or ``threshold`` and does not take it.
+        """
+
+        def needs(value: ArrayLike | None, what: str) -> np.ndarray:
+            if value is None:
+                msg = f"{method} needs {what}"
                 raise ValueError(msg)
-            return sjw(
-                needs(parameters, "parameters"),
-                needs(allocations, "allocations"),
-                scores,
-                max_iterations=max_iterations,
-                threshold=threshold,
-            )
-        case RelabelMethod.AIC:
-            return aic(needs(parameters, "parameters"))
-    msg = f"unknown method {method!r}"  # pragma: no cover
-    raise ValueError(msg)  # pragma: no cover
+            return _array(value)
+
+        call: Callable[..., Relabelling]
+        arguments: tuple[object, ...]
+        match method:
+            case RelabelMethod.STEPHENS:
+                call = self.stephens
+                arguments = (needs(probabilities, "probabilities"),)
+            case RelabelMethod.ECR:
+                labels = needs(allocations, "allocations")
+                centre = needs(pivot, "a pivot allocation")
+                n_components = (
+                    int(_array(probabilities).shape[2])
+                    if probabilities is not None
+                    else int(max(labels.max(), centre.max())) + 1
+                )
+                call, arguments = self.ecr, (labels, centre, n_components)
+            case RelabelMethod.ECR_ITERATIVE_1:
+                labels = needs(allocations, "allocations")
+                n_components = (
+                    int(_array(probabilities).shape[2])
+                    if probabilities is not None
+                    else int(labels.max()) + 1
+                )
+                call, arguments = self.ecr_iterative_1, (labels, n_components)
+            case RelabelMethod.ECR_ITERATIVE_2:
+                call = self.ecr_iterative_2
+                arguments = (
+                    needs(allocations, "allocations"),
+                    needs(probabilities, "probabilities"),
+                )
+            case RelabelMethod.PRA:
+                call = self.pra
+                arguments = (
+                    needs(parameters, "parameters"),
+                    needs(pivot, "a pivot draw"),
+                )
+            case RelabelMethod.SJW:
+                if scores is None:
+                    msg = f"{method} needs complete-data scores"
+                    raise ValueError(msg)
+                call = self.sjw
+                arguments = (
+                    needs(parameters, "parameters"),
+                    needs(allocations, "allocations"),
+                    scores,
+                )
+            case RelabelMethod.AIC:
+                call, arguments = self.aic, (needs(parameters, "parameters"),)
+            case _:
+                msg = (
+                    f"no relabelling method {method!r}; the methods are "
+                    f"{[str(member) for member in RelabelMethod]}"
+                )
+                raise ValueError(msg)
+        return call(*arguments, **_controls(method, call, max_iterations, threshold))
+
+
+def _controls(
+    method: RelabelMethod,
+    call: Callable[..., Relabelling],
+    max_iterations: int,
+    threshold: float,
+) -> dict[str, Any]:
+    """The loop controls :data:`relabel` hands ``call``: each it takes, and a set one it does not refused."""
+    accepted = inspect.signature(call).parameters
+    kept: dict[str, Any] = {}
+    for name, value, default in (
+        ("max_iterations", max_iterations, 100),
+        ("threshold", threshold, 1e-6),
+    ):
+        if name in accepted:
+            kept[name] = value
+        elif value != default:
+            msg = f"{method} runs {call.__name__}, which takes no {name}"
+            raise ValueError(msg)
+    return kept
+
+
+#: ``relabel(method, *, probabilities, allocations, parameters, pivot,
+#: scores, max_iterations, threshold)``, the generic call, and its explicit
+#: calls ``relabel.stephens`` and one per :class:`RelabelMethod` member
+#: (:class:`Relabel`).
+relabel = Relabel()
