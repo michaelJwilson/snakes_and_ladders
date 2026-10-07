@@ -9,7 +9,8 @@ Rust kernel. With labels forbidden (#1139, #1274), PyMaxflow's own grid
 expansion, `aexpansion_grid`, on the finite stand-in `_forbidden.stand_in`
 states: neither expansion holds a forbidden label, PyMaxflow's labelling is a
 fixed point of the package's move, and on 13 enumerable instances both reach
-the constrained minimum within 1e-12. Runtime goal: `test_goals.py`.
+the constrained minimum within 1e-12. A session (#1282) returns the one-shot
+call's bytes under every transport. Runtime goal: `test_goals.py`.
 """
 
 from __future__ import annotations
@@ -19,10 +20,12 @@ from functools import partial
 import numpy as np
 import pytest
 from sal.backend import Backend
+from sal.external import Capability, Solver, Transport, invoke, session
 from sal.search import maxflow
 from sal.search.ground_state import lattice_rung
 from sal.search.maxflow import rust as maxflow_rust
 from sal.sim.graph import PottsGraph
+from sal.sim.potts import energy, site_field
 from sal.validation import pymaxflow
 
 from tests._frameworks import requires
@@ -68,6 +71,35 @@ def test_the_ground_state_is_pymaxflows_node_for_node() -> None:
         assert reduced == pytest.approx(theirs.energy, rel=FLOW_RTOL)
 
     every_value([10, 71, 142], check)
+
+
+@pytest.mark.oracle
+@pytest.mark.patch
+@pytest.mark.parametrize("transport", list(Transport), ids=str)
+def test_a_session_cuts_the_one_shot_bytes_and_the_ground_state(
+    transport: Transport,
+) -> None:
+    # Issue #1282, steps 2 and 2b: one worker, three lattices; every output
+    # but the script's clocks is the one-shot `invoke`'s bytes, and the
+    # labelling is the package's ground state.
+    needs = {Capability.GROUND_STATE}
+    rungs = [lattice_rung(24, 2, seed=seed) for seed in (973, 974, 975)]
+    with session(Solver.PYMAXFLOW_EXACT, transport=transport) as opened:
+        for rung in rungs:
+            inputs = pymaxflow.ising_inputs(rung.graph, rung.field)
+            served = opened.invoke(needs, inputs)
+            once = invoke(Solver.PYMAXFLOW_EXACT, needs, inputs)
+            assert served.outputs.keys() == once.outputs.keys()
+            for name, array in once.outputs.items():
+                if name.endswith("seconds"):
+                    continue
+                got = served.outputs[name]
+                assert (got.dtype, got.shape) == (array.dtype, array.shape), name
+                assert got.tobytes() == array.tobytes(), name
+            labels = served.outputs["sink_side"].astype(np.int64)
+            values = site_field(rung.field, rung.graph.n_nodes, n_states=2)
+            ours = maxflow.ising_ground_state(rung.graph, rung.field)
+            assert energy(rung.graph, values, labels) == ours.energy
 
 
 @pytest.mark.oracle

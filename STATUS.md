@@ -3456,8 +3456,17 @@ the `FRAMEWORKS` registry, is the one spawner in the package, counted by
 frameworks --- gco expansion and swap, PyMaxflow's exact cut, HiGHS's LP,
 hmmlearn and BlackJAX HMC --- each with its `Capability` set and the
 `Provenance` its answer carries; a call outside the set is refused before any
-subprocess starts (`tests/regression/test_external.py`). The calls in sal's
-types are steps 2--7 and are not started.
+subprocess starts (`tests/regression/test_external.py`).
+
+**Steps 2 and 2b, the session.** `external.session` keeps one worker
+(`external.worker`) per solver: at 0.2 MB and 100 calls the per-call overhead
+is 5.0 ms against the one-shot call's 148 ms. `Transport.MMAP`, the
+default, cuts it against `NPZ` at 10 and 128 MB (echo, 128 MB, 100 calls: 857
+against 362 ms) and trails it in none of 15 cells by more than the host's spread;
+a shared-memory transport (615 ms in that cell) was measured and dropped. Both
+transports return the one-shot call's bytes, and the kill tests count 0 orphaned blocks
+(`tests/regression/test_external_session.py`, PR #1288). The calls in sal's
+types are steps 3--7 and are not started.
 
 ## Milestone 3.1 — Model Surrogates & Bounds for Supported Problems
 

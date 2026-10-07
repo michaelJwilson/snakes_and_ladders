@@ -13,13 +13,20 @@ dependency, so the protocol costs a script nothing it would not import anyway.
 Rust's and a framework's alike, where ``tracemalloc`` sees Python's heap
 alone; the reading is Linux-only, which is where the reference host and CI
 run. :func:`dump` records it under :data:`PEAK_BYTES` when given.
+
+:func:`received` and :func:`dump` read and write through a :class:`Codec`,
+the ``.npz`` pair by default. A session's worker (#1282, step 2b) serves a
+script under :func:`through`, so the script hands its arrays to the worker's
+transport and is the same script a one-shot call runs.
 """
 
 from __future__ import annotations
 
 import sys
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -61,7 +68,7 @@ def dump(
     measures = {SECONDS: np.asarray(seconds, dtype=np.float64)}
     if peak_bytes is not None:
         measures[PEAK_BYTES] = np.asarray(peak_bytes, dtype=np.int64)
-    save(path, {**outputs, **measures})
+    _codec.write(path, {**outputs, **measures})
 
 
 def timed(call: Callable[[], T]) -> tuple[T, float]:
@@ -105,7 +112,34 @@ def measured(call: Callable[[], T]) -> tuple[T, float, int]:
 def received(argv: list[str] | None = None) -> tuple[dict[str, np.ndarray], Path]:
     """A script's inputs, loaded, and the path its outputs go to (issue #1010)."""
     given, returned = paths(argv)
-    return load(given), returned
+    return _codec.read(given), returned
+
+
+@dataclass(frozen=True)
+class Codec:
+    """How :func:`received` reads a script's inputs and :func:`dump` writes its outputs."""
+
+    #: The inputs, from the path the script was given.
+    read: Callable[[str | Path], dict[str, np.ndarray]]
+    #: The outputs and measures, to the path the script was given.
+    write: Callable[[str | Path, Mapping[str, np.ndarray]], None]
+
+
+#: The ``.npz`` file pair, what a one-shot call and a session's ``NPZ`` transport use.
+NPZ = Codec(read=load, write=save)
+
+_codec = NPZ
+
+
+@contextmanager
+def through(codec: Codec) -> Iterator[None]:
+    """Serve :func:`received` and :func:`dump` through ``codec`` for the block's duration."""
+    global _codec  # noqa: PLW0603 -- the worker's one switch, restored on exit
+    previous, _codec = _codec, codec
+    try:
+        yield
+    finally:
+        _codec = previous
 
 
 def paths(argv: list[str] | None = None) -> tuple[Path, Path]:

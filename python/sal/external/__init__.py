@@ -14,6 +14,11 @@ framework method, the :class:`Capability` set each declares, and the
 capabilities is refused before any subprocess starts; an absent framework
 raises :class:`ExternalUnavailable` naming its extra.
 
+:func:`session` keeps one worker per solver for many calls, so a call pays
+interpreter and import start-up once (:mod:`sal.external.sessions`); its
+:class:`Transport` moves arrays as memory-mapped files (the default) or
+``.npz`` files, with the same bytes reaching the framework each way.
+
 ``sal.validation`` drives the same frameworks as referees for the test suite
 and imports its runner and registry from here; nothing here imports
 ``sal.validation``. ``CLAUDE.md`` in this directory states the rules and
@@ -23,6 +28,8 @@ and imports its runner and registry from here; nothing here imports
 from __future__ import annotations
 
 from sal import _submodules
+from sal.external.runner import ScriptError
+from sal.external.sessions import Session, session
 from sal.external.solvers import (
     Capability,
     CapabilityRefused,
@@ -34,6 +41,7 @@ from sal.external.solvers import (
     provenance,
     require,
 )
+from sal.external.transport import Transport
 
 __getattr__ = _submodules(__name__)
 
@@ -42,9 +50,13 @@ __all__ = [
     "CapabilityRefused",
     "ExternalUnavailable",
     "Provenance",
+    "ScriptError",
+    "Session",
     "Solver",
+    "Transport",
     "available",
     "invoke",
     "provenance",
     "require",
+    "session",
 ]

@@ -51,7 +51,7 @@ class Cut:
     peak_bytes: int
 
 
-def _cut(
+def cut_inputs(
     n_nodes: int,
     tail: np.ndarray,
     head: np.ndarray,
@@ -59,20 +59,26 @@ def _cut(
     reverse: np.ndarray,
     source: np.ndarray,
     sink: np.ndarray,
-) -> tuple[float, np.ndarray, float, float, int]:
-    """Run the script on non-terminal nodes ``0 .. n_nodes - 1``."""
-    result = run(
-        SCRIPT,
-        {
-            "n_nodes": np.asarray(n_nodes, dtype=np.int64),
-            "tail": np.ascontiguousarray(tail, dtype=np.int64),
-            "head": np.ascontiguousarray(head, dtype=np.int64),
-            "capacity": np.ascontiguousarray(capacity, dtype=np.float64),
-            "reverse": np.ascontiguousarray(reverse, dtype=np.float64),
-            "source": np.ascontiguousarray(source, dtype=np.float64),
-            "sink": np.ascontiguousarray(sink, dtype=np.float64),
-        },
-    )
+) -> dict[str, np.ndarray]:
+    """The script's inputs for non-terminal nodes ``0 .. n_nodes - 1``.
+
+    A session (#1282) sends the same arrays, so a caller reusing one worker
+    poses the network as :func:`min_cut` and :func:`ising_ground_state` do.
+    """
+    return {
+        "n_nodes": np.asarray(n_nodes, dtype=np.int64),
+        "tail": np.ascontiguousarray(tail, dtype=np.int64),
+        "head": np.ascontiguousarray(head, dtype=np.int64),
+        "capacity": np.ascontiguousarray(capacity, dtype=np.float64),
+        "reverse": np.ascontiguousarray(reverse, dtype=np.float64),
+        "source": np.ascontiguousarray(source, dtype=np.float64),
+        "sink": np.ascontiguousarray(sink, dtype=np.float64),
+    }
+
+
+def _cut(inputs: dict[str, np.ndarray]) -> tuple[float, np.ndarray, float, float, int]:
+    """Run the script on :func:`cut_inputs`."""
+    result = run(SCRIPT, inputs)
     return (
         float(result.outputs["value"]),
         result.outputs["sink_side"].astype(bool),
@@ -118,18 +124,37 @@ def min_cut(network: FlowNetwork, source: int, sink: int) -> Cut:
         direct += float(capacity[(first == source) & (second == sink)].sum())
     internal = (position[tails] >= 0) & (position[heads] >= 0)
     value, sink_side, seconds, build_seconds, peak_bytes = _cut(
-        int(inner.size),
-        position[tails[internal]],
-        position[heads[internal]],
-        forward[internal],
-        backward[internal],
-        to_source,
-        to_sink,
+        cut_inputs(
+            int(inner.size),
+            position[tails[internal]],
+            position[heads[internal]],
+            forward[internal],
+            backward[internal],
+            to_source,
+            to_sink,
+        )
     )
     side = np.zeros(network.n_nodes, dtype=bool)
     side[inner] = ~sink_side
     side[source] = True
     return Cut(value + direct, side, seconds, build_seconds, peak_bytes)
+
+
+def ising_inputs(graph: PottsGraph, field: np.ndarray) -> dict[str, np.ndarray]:
+    """The two-state ferromagnet's :func:`cut_inputs`, as :func:`ising_ground_state` cuts it."""
+    values = site_field(np.asarray(field, dtype=float), graph.n_nodes, n_states=2)
+    cost = -values
+    offsets = cost.min(axis=1)
+    edges = graph.edge_index
+    return cut_inputs(
+        graph.n_nodes,
+        edges[:, 0],
+        edges[:, 1],
+        graph.edge_coupling,
+        graph.edge_coupling,
+        cost[:, 1] - offsets,
+        cost[:, 0] - offsets,
+    )
 
 
 def ising_ground_state(graph: PottsGraph, field: np.ndarray) -> tuple[GroundState, Cut]:
@@ -142,17 +167,8 @@ def ising_ground_state(graph: PottsGraph, field: np.ndarray) -> tuple[GroundStat
     the lattice's nodes alone.
     """
     values = site_field(np.asarray(field, dtype=float), graph.n_nodes, n_states=2)
-    cost = -values
-    offsets = cost.min(axis=1)
-    edges = graph.edge_index
     value, sink_side, seconds, build_seconds, peak_bytes = _cut(
-        graph.n_nodes,
-        edges[:, 0],
-        edges[:, 1],
-        graph.edge_coupling,
-        graph.edge_coupling,
-        cost[:, 1] - offsets,
-        cost[:, 0] - offsets,
+        ising_inputs(graph, field)
     )
     configuration = sink_side.astype(np.int64)
     state = GroundState(configuration, energy(graph, values, configuration))

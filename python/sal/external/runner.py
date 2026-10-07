@@ -10,6 +10,11 @@ sees, and reads the outputs and the seconds the script measured around the
 framework's own call. Interpreter start-up and the file round trip are not
 in that figure, which is what a benchmark pairs against the package's time.
 
+:func:`worker` starts the other kind of process: ``python -m
+sal.external.worker``, which imports a script and its framework once and
+serves :class:`sal.external.sessions.Session`'s calls over pipes (#1282, step
+2). It is here so this module stays the one spawner.
+
 :func:`installed` answers whether a framework is installed without importing
 it: ``importlib.util.find_spec`` locates a module and executes nothing, so
 the package process stays free of the framework even while asking.
@@ -24,6 +29,7 @@ import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import IO
 
 import numpy as np
 
@@ -86,13 +92,39 @@ def run(
                 f"{script} exited {completed.returncode}:\n{completed.stderr.strip()}"
             )
             raise ScriptError(message)
-        outputs = load(returned)
+        return as_run(load(returned))
+
+
+def as_run(outputs: dict[str, np.ndarray]) -> Run:
+    """A script's outputs as a :class:`Run`, its measures taken out of ``outputs``."""
     seconds = float(outputs.pop(SECONDS))
     peak = outputs.pop(PEAK_BYTES, None)
     return Run(
         outputs=outputs,
         seconds=seconds,
         peak_bytes=0 if peak is None else int(peak),
+    )
+
+
+def worker(
+    script: str, framework: str | None, stderr: IO[bytes]
+) -> subprocess.Popen[str]:
+    """Start a worker serving ``scripts/<script>.py``, with ``framework`` imported up front.
+
+    The worker's requests and replies are lines on its standard input and
+    output; its standard error goes to ``stderr``, a file, so a long-lived
+    process cannot fill a pipe nobody reads.
+    """
+    command = [sys.executable, "-m", "sal.external.worker", f"{SCRIPTS}.{script}"]
+    if framework is not None:
+        command.append(framework)
+    return subprocess.Popen(
+        command,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=stderr,
+        text=True,
+        bufsize=1,
     )
 
 
