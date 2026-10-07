@@ -158,6 +158,50 @@ def integrated_autocorrelation_time(series: np.ndarray, *, window: int = 5) -> f
     return max(0.5 + total, 0.5)
 
 
+def split_rhat(chains: np.ndarray) -> float:
+    """Split potential scale reduction of one scalar observable over several chains.
+
+    Each chain is cut into its first and second half, and ``R = sqrt(var+ / W)``
+    is read over the halves, ``W`` the mean within-half variance and
+    ``var+ = (n - 1) / n W + B / n`` with ``B / n`` the variance of the half
+    means (Gelman et al., *Bayesian Data Analysis*, 3rd ed., sec. 11.4). A
+    chain that drifts disagrees with itself across the split, and chains
+    from distinct starts that have not met disagree with one another; both
+    raise ``R`` above 1.
+
+    Parameters
+    ----------
+    chains : np.ndarray
+        Shape ``(n_chains, n_draws)``, ``n_draws >= 4``.
+
+    Returns
+    -------
+    float
+        ``R``. ``1.0`` where every half is the same constant, and ``inf``
+        where every half is constant and two constants differ: chains that
+        never moved and never met.
+
+    Raises
+    ------
+    ValueError
+        If fewer than four draws per chain are given, or ``chains`` is not 2-D.
+    """
+    if chains.ndim != 2 or chains.shape[1] < 4:
+        msg = f"split R-hat needs shape (n_chains, n_draws >= 4), got {chains.shape}"
+        raise ValueError(msg)
+    half = chains.shape[1] // 2
+    halves = np.concatenate(
+        [chains[:, :half], chains[:, chains.shape[1] - half :]], axis=0
+    ).astype(np.float64)
+    means = halves.mean(axis=1)
+    within = float(halves.var(axis=1, ddof=1).mean())
+    between = float(means.var(ddof=1)) * half
+    if within == 0.0:
+        return 1.0 if between == 0.0 else math.inf
+    pooled = (half - 1) / half * within + between / half
+    return math.sqrt(pooled / within)
+
+
 def _regularized_upper_gamma(shape: float, value: float) -> float:
     """``Q(a, x)``, the regularized upper incomplete gamma function."""
     if value <= 0.0:

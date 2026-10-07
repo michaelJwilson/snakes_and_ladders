@@ -105,6 +105,13 @@ draws reach it without the module importing their type.
 A move whose law enumeration pins and whose chain still does not mix on an
 instance, as measured; a row is not a defect and the move stays.
 
+A chain reports the limit on its own result (#1316): `PottsChain` carries
+`acceptance`, `largest_cluster_share` and `ess` per observable (energy, then
+each label's occupancy), and ends `Stop.NOT_MIXING` under `ESS_FLOOR`.
+`sample_potts_starts` runs the ordered, drawn and equilibrated starts and
+reads split R-hat against `RHAT_THRESHOLD`. On the row below's instance the
+ordered chain accepts 1 of 320 moves and every R-hat is 30.4 to 95.9.
+
 | Move | Instance | Measured | Issue |
 | --- | --- | --- | --- |
 | Niedermayer | 64 x 64 periodic, q = 3, field N(0, 1) per (site, label), 1.5 beta_c, from the ordered start | the cluster holds 4,070 to 4,084 of 4,096 sites, so the transposition moves a field sum of order sigma sqrt(N); 0.0% to 0.3% of 320 moves accepted over three seeds, occupancy (0, 0, 1) against Glauber's (0.299, 0.313, 0.388). From a Glauber-equilibrated start: clusters of 485 to 503 sites, 0.3% to 3.0% accepted. The 2 x 3 law passes (p = 0.133) | #1314 |
