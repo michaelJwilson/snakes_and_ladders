@@ -19,9 +19,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 import sal
+from sal.external.protocol import SECONDS
+from sal.external.runner import ScriptError, installed, package, run
 from sal.validation import FRAMEWORKS
-from sal.validation.protocol import SECONDS
-from sal.validation.runner import ScriptError, available, package, run
 from validation_extras import PREFIX, validation_extras
 
 from tests._paths import REPO_ROOT
@@ -179,9 +179,9 @@ def test_a_failing_script_raises_with_its_standard_error() -> None:
 
 @pytest.mark.infra
 def test_availability_is_read_without_importing() -> None:
-    assert available("numpy")
-    assert not available("snakes_and_ladders_no_such_framework")
-    assert not available("snakes_and_ladders_no_such_framework.sub")
+    assert installed("numpy")
+    assert not installed("snakes_and_ladders_no_such_framework")
+    assert not installed("snakes_and_ladders_no_such_framework.sub")
 
 
 @pytest.mark.infra

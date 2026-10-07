@@ -16,11 +16,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
+from sal.external.runner import package
 from sal.sample.potts_mcmc import bond_probability
 from sal.sim.graph import BoundaryCondition, lattice_graph
 from sal.sim.potts import critical_coupling
 from sal.validation import rustworkx
-from sal.validation.runner import package
 
 from tests._frameworks import requires
 

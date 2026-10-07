@@ -24,9 +24,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from sal.external.runner import run
 from sal.sim.graph import PottsGraph
 from sal.sim.potts import energy, site_field
-from sal.validation.runner import run
 
 #: The script this adapter runs.
 SCRIPT = "gco"

@@ -16,6 +16,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
+from sal.external.runner import package
 from sal.opt.mixture import GaussianMixtureObjective
 from sal.sample.hmc import gradient_at
 from sal.validation import jax
@@ -24,7 +25,6 @@ from sal.validation.gaussian import (
     dense_precision,
     diagonal_precision,
 )
-from sal.validation.runner import package
 
 from tests._frameworks import requires
 

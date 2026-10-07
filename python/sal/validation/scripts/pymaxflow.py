@@ -20,7 +20,7 @@ from pathlib import Path
 
 import numpy as np
 
-from sal.validation.protocol import dump, peaked, received, timed
+from sal.external.protocol import dump, peaked, received, timed
 
 
 def _expand(inputs: dict[str, np.ndarray], returned: Path) -> None:

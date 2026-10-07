@@ -5,8 +5,8 @@ fresh interpreter; this script reads the package's the same way, so the two
 figures come from one method in two interpreters of the same kind and the
 process under test carries no measurement. ``call`` names an entry of
 :data:`CALLS`, which builds the call from the inputs outside the measured
-region; the call itself runs under :func:`~sal.validation.protocol.timed`
-inside :func:`~sal.validation.protocol.peaked`.
+region; the call itself runs under :func:`~sal.external.protocol.timed`
+inside :func:`~sal.external.protocol.peaked`.
 
 ``allocate`` is the measure's own referee: it fills ``n`` float64 values,
 ``8 n`` bytes the peak must read back.
@@ -18,8 +18,8 @@ from collections.abc import Callable, Mapping
 
 import numpy as np
 
+from sal.external.protocol import dump, measured, received
 from sal.opt.em import EmConfig
-from sal.validation.protocol import dump, measured, received
 
 #: One output mapping from one measured call.
 Outputs = dict[str, np.ndarray]

@@ -22,8 +22,8 @@ from typing import Any
 
 import numpy as np
 
+from sal.external.runner import run
 from sal.sim.simulator import simulate_tree
-from sal.validation.runner import run
 
 #: The script this adapter runs.
 SCRIPT = "gymnasium"

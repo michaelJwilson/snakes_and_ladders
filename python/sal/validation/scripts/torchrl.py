@@ -29,7 +29,7 @@ from typing import Any
 import numpy as np
 import torch
 
-from sal.validation.protocol import dump, received, timed
+from sal.external.protocol import dump, received, timed
 
 
 def _actor(weights: torch.Tensor) -> Any:

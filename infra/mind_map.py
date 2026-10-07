@@ -232,7 +232,9 @@ SAMPLE = 5
 #: infrastructure --- a fifth of the budget on the part a newcomer reads last
 #: --- and `validation` is 28 more, the external frameworks' adapters and
 #: scripts, collapsed when #1008's modules took the page past its cap.
-COLLAPSED = ("qa", "validation")
+#: `sandbox`, 11 modules of conserved replaced implementations, followed when
+#: `external` (#1282) took it to 205 nodes against the cap.
+COLLAPSED = ("qa", "validation", "sandbox")
 
 
 def sampled(carried: tuple[Module, ...], take: int = SAMPLE) -> tuple[Module, ...]:

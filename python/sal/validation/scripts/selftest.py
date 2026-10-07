@@ -11,7 +11,7 @@ import sys
 
 import numpy as np
 
-from sal.validation.protocol import dump, measured, received
+from sal.external.protocol import dump, measured, received
 
 
 def main() -> None:

@@ -26,10 +26,10 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from sal.external.runner import run
 from sal.search.maxflow import FlowNetwork, GroundState
 from sal.sim.graph import BoundaryCondition, PottsGraph
 from sal.sim.potts import energy, site_field
-from sal.validation.runner import run
 
 #: The script this adapter runs.
 SCRIPT = "pymaxflow"

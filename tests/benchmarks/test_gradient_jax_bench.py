@@ -17,9 +17,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
+from sal.external.runner import package
 from sal.validation import jax
 from sal.validation.gaussian import dense_precision, diagonal_precision
-from sal.validation.runner import package
 
 from tests._frameworks import requires
 
