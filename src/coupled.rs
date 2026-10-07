@@ -67,10 +67,15 @@
 //! row per score where this adds six terms, and the field was 14% faster for it
 //! at stress.
 //!
-//! **The categorical emission is one channel** (issue #1298). Its density is
-//! `log B_m[k, x]`, a function of the symbol alone, so the table *is* the
-//! emission matrix, transposed to `[x][m][k]`, and nothing is added to it: the
-//! `categorical_*` kernels walk the same loops with the second channel absent.
+//! **A one-channel model reads one table** (issues #1298, #1308). The
+//! categorical emission's density is `log B_m[k, x]`, a function of the symbol
+//! alone, so its table *is* the emission matrix, transposed to `[x][m][k]`. A
+//! negative binomial or beta-binomial is tabulated by count, or by
+//! `(count, trial count)` pair; a Gaussian, or any family under a covariate no
+//! table keys, by site, row `s * V + v`. The caller chooses the row and builds
+//! the table through the family's own `log_density`; the `table_*` kernels
+//! walk the same loops with the second channel absent and add nothing, so no
+//! arithmetic here is any family's.
 //!
 //! The implementations are plain Rust with no PyO3 types so `cargo test` and
 //! `benches/` can link them, per `src/pruning.rs`'s module docs.
@@ -639,27 +644,27 @@ pub fn class_posteriors_into(
     Ok(())
 }
 
-/// The coupled E step over one channel tabulated by symbol (issue #1298).
+/// The coupled E step over one channel read from a table (issues #1298, #1308).
 ///
-/// The categorical emission's density under state `k` of class `m` is
-/// `log B_m[k, x]`, a function of the symbol alone, so
-/// `table[(x * M + m) * K + k]` is the whole score and there is no second
-/// channel to add. The same
+/// `table[(r * M + m) * K + k]` is the whole score of an observation in row
+/// `r` under state `k` of class `m`, and there is no second channel to add:
+/// the row is a symbol, a count, a `(count, trial count)` pair or a site, as
+/// the caller tabulated it. The same
 /// forward--backward as [`class_posteriors_into`] follows; each class's
 /// density is the sum of its members' rows, in vertex order.
 ///
 /// # Parameters
-/// - `table`: `n_symbols * M * K`, the log emission matrices transposed.
-/// - `symbols`: `S * V` table rows, position-major.
+/// - `table`: `n_rows * M * K`, row-major.
+/// - `rows`: `S * V` table rows, position-major.
 /// - the rest as [`class_posteriors_into`] takes them.
 ///
 /// # Returns
 /// `Ok(())`, or `Err` naming the first violated precondition.
 #[allow(clippy::too_many_arguments)]
-pub fn categorical_class_posteriors_into(
+pub fn table_class_posteriors_into(
     shape: CoupledShape,
     table: &[f64],
-    symbols: &[u32],
+    rows: &[u32],
     labels: &[i64],
     log_initial: &[f64],
     log_transition: &[f64],
@@ -667,8 +672,8 @@ pub fn categorical_class_posteriors_into(
     pairwise: &mut [f64],
     log_evidence: &mut [f64],
 ) -> Result<(), String> {
-    check_shape(&shape, symbols, labels)?;
-    check_table(&shape, "symbol", table, symbols)?;
+    check_shape(&shape, rows, labels)?;
+    check_table(&shape, "row", table, rows)?;
     let mut density = density_buffer(&shape, posterior, pairwise, log_evidence)?;
     let (n_positions, n_nodes, n_states) = (shape.n_positions, shape.n_nodes, shape.n_states);
     let block = shape.block();
@@ -676,7 +681,7 @@ pub fn categorical_class_posteriors_into(
         let row = s * n_nodes;
         for v in 0..n_nodes {
             let m = labels[v] as usize;
-            let scores = &table[row_index(symbols[row + v]) * block + m * n_states..][..n_states];
+            let scores = &table[row_index(rows[row + v]) * block + m * n_states..][..n_states];
             let into = &mut density[(m * n_positions + s) * n_states..][..n_states];
             for (cell, &score) in into.iter_mut().zip(scores) {
                 *cell += score;
@@ -874,27 +879,27 @@ pub fn external_field_into(
     Ok(())
 }
 
-/// The external field over one channel tabulated by symbol (issue #1298).
+/// The external field over one channel read from a table (issues #1298, #1308).
 ///
 /// [`external_field_into`]'s walk and order of summation with the second
 /// channel's term absent: `H[v, m] = -sum_s sum_k table[x_sv, m, k] w[s, m, k]`.
 ///
 /// # Returns
 /// `Ok(())`, or `Err` naming the first violated precondition.
-pub fn categorical_external_field_into(
+pub fn table_external_field_into(
     shape: CoupledShape,
     table: &[f64],
-    symbols: &[u32],
+    rows: &[u32],
     weights: &[f64],
     field: &mut [f64],
 ) -> Result<(), String> {
-    check_table(&shape, "symbol", table, symbols)?;
+    check_table(&shape, "row", table, rows)?;
     let (n_positions, n_nodes, n_states) = (shape.n_positions, shape.n_nodes, shape.n_states);
     let block = shape.block();
-    if symbols.len() != n_positions * n_nodes {
+    if rows.len() != n_positions * n_nodes {
         return Err(format!(
             "the rows have {} entries, expected S * V = {}",
-            symbols.len(),
+            rows.len(),
             n_positions * n_nodes
         ));
     }
@@ -924,7 +929,7 @@ pub fn categorical_external_field_into(
             into.fill(0.0);
             for s in 0..n_positions {
                 let weight = &weights[s * block..][..block];
-                let scores = &table[row_index(symbols[s * n_nodes + v]) * block..][..block];
+                let scores = &table[row_index(rows[s * n_nodes + v]) * block..][..block];
                 for (m, cell) in into.iter_mut().enumerate() {
                     let mut accumulated = 0.0;
                     for k in 0..n_states {
@@ -1084,8 +1089,8 @@ pub(crate) fn trial_term<'a>(
 /// then its table `U`.
 ///
 /// `successes` and `success_table` both `None` run the one-channel kernel,
-/// [`categorical_class_posteriors_into`]: `totals` are then the symbols and
-/// `total_table` the transposed log emission matrices (issue #1298).
+/// [`table_class_posteriors_into`]: `totals` are then the one channel's rows
+/// and `total_table` its table (issues #1298, #1308).
 ///
 /// # Errors
 /// `ValueError` naming the first violated precondition, including a count
@@ -1142,7 +1147,7 @@ pub fn class_posteriors(
         refuse_terms_on_one_channel(exposure.is_some() || trials.is_some())?;
         return py
             .detach(|| {
-                categorical_class_posteriors_into(
+                table_class_posteriors_into(
                     shape,
                     total_table,
                     totals,
@@ -1206,7 +1211,7 @@ fn second_channel<'a>(
 fn refuse_terms_on_one_channel(factored: bool) -> PyResult<()> {
     if factored {
         return Err(PyValueError::new_err(
-            "an exposure or trial term factors a count channel; one channel by symbol takes neither",
+            "an exposure or trial term factors a count channel; one channel read from a table takes neither",
         ));
     }
     Ok(())
@@ -1216,7 +1221,7 @@ fn refuse_terms_on_one_channel(factored: bool) -> PyResult<()> {
 ///
 /// The exposure, the trial term and the one-channel mode are as
 /// [`class_posteriors`] takes them; the one-channel kernel is
-/// [`categorical_external_field_into`].
+/// [`table_external_field_into`].
 ///
 /// # Returns
 /// `None`; the result is written into `field`.
@@ -1262,7 +1267,7 @@ pub fn external_field(
     let Some((successes, success_table)) = second_channel(&successes, &success_table)? else {
         refuse_terms_on_one_channel(exposure.is_some() || trials.is_some())?;
         return py
-            .detach(|| categorical_external_field_into(shape, total_table, totals, weights, field))
+            .detach(|| table_external_field_into(shape, total_table, totals, weights, field))
             .map_err(PyValueError::new_err);
     };
     let tables = EmissionTables {
@@ -1279,6 +1284,67 @@ pub fn external_field(
     };
     py.detach(|| external_field_into(shape, &tables, totals, successes, weights, field))
         .map_err(PyValueError::new_err)
+}
+
+/// The Potts term of `eq:joint` at one labelling: `sum_e beta J_e [l_i == l_j]`.
+///
+/// The edges in the graph's order and the sum sequential in it, each term
+/// `(beta * J_e) * [l_i == l_j]`, the arithmetic of the NumPy `log_prior`.
+///
+/// # Returns
+/// The sum, or `Err` if an edge names a vertex past `labels`, or `edges` is
+/// not two vertices per coupling.
+pub fn coupled_log_prior_of(
+    labels: &[i64],
+    edges: &[i64],
+    coupling: &[f64],
+    beta: f64,
+) -> Result<f64, String> {
+    if edges.len() != 2 * coupling.len() {
+        return Err(format!(
+            "edges has {} entries, expected 2 per coupling = {}",
+            edges.len(),
+            2 * coupling.len()
+        ));
+    }
+    let n_nodes = labels.len() as i64;
+    let mut total = 0.0f64;
+    for (pair, &weight) in edges.chunks_exact(2).zip(coupling) {
+        let (first, second) = (pair[0], pair[1]);
+        if !(0..n_nodes).contains(&first) || !(0..n_nodes).contains(&second) {
+            return Err(format!(
+                "an edge ({first}, {second}) is past {n_nodes} vertices"
+            ));
+        }
+        let same = if labels[first as usize] == labels[second as usize] {
+            1.0
+        } else {
+            0.0
+        };
+        total += beta * weight * same;
+    }
+    Ok(total)
+}
+
+/// [`coupled_log_prior_of`] as a Python binding.
+///
+/// # Errors
+/// `ValueError` naming the first violated precondition.
+#[pyfunction]
+#[pyo3(signature = (labels, edges, coupling, beta))]
+pub fn coupled_log_prior(
+    labels: PyReadonlyArray1<'_, i64>,
+    edges: PyReadonlyArray1<'_, i64>,
+    coupling: PyReadonlyArray1<'_, f64>,
+    beta: f64,
+) -> PyResult<f64> {
+    coupled_log_prior_of(
+        borrowed(&labels, "labels")?,
+        borrowed(&edges, "edges")?,
+        borrowed(&coupling, "coupling")?,
+        beta,
+    )
+    .map_err(PyValueError::new_err)
 }
 
 /// Distinct values in first-appearance order: each value's code, and each code's value.
@@ -1569,7 +1635,7 @@ mod tests {
             &mut two.2,
         )
         .unwrap();
-        categorical_class_posteriors_into(
+        table_class_posteriors_into(
             shape,
             &total,
             &symbols,
@@ -1586,14 +1652,30 @@ mod tests {
         let weights = [0.25, 0.75, 0.6, 0.4];
         let (mut field_two, mut field_one) = (vec![0.0; 2], vec![0.0; 2]);
         external_field_into(shape, &tables, &symbols, &zeros, &weights, &mut field_two).unwrap();
-        categorical_external_field_into(shape, &total, &symbols, &weights, &mut field_one).unwrap();
+        table_external_field_into(shape, &total, &symbols, &weights, &mut field_one).unwrap();
         assert_eq!(field_one, field_two);
+    }
+
+    #[test]
+    fn the_label_prior_sums_beta_j_over_the_equal_edges() {
+        // A path 0-1-2-3 labelled [0, 0, 1, 1]: edges (0, 1) and (2, 3) agree,
+        // (1, 2) does not, so the sum is beta * (J_01 + J_23).
+        let labels = [0i64, 0, 1, 1];
+        let edges = [0i64, 1, 1, 2, 2, 3];
+        let coupling = [0.5, 2.0, 0.25];
+        let prior = coupled_log_prior_of(&labels, &edges, &coupling, 2.0).unwrap();
+        assert_eq!(prior, 2.0 * 0.5 + 2.0 * 0.25);
+        assert_eq!(coupled_log_prior_of(&labels, &[], &[], 2.0).unwrap(), 0.0);
+        let past = coupled_log_prior_of(&labels, &[0, 4], &[1.0], 1.0);
+        assert!(past.unwrap_err().contains("past 4 vertices"));
+        let short = coupled_log_prior_of(&labels, &[0], &[1.0], 1.0);
+        assert!(short.unwrap_err().contains("2 per coupling"));
     }
 
     #[test]
     fn a_symbol_past_the_alphabet_is_refused() {
         let (shape, total, _) = tiny();
-        let refused = categorical_external_field_into(
+        let refused = table_external_field_into(
             shape,
             &total,
             &[0u32, 2, 1, 0],

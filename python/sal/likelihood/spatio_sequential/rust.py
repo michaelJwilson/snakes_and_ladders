@@ -2,10 +2,11 @@
 
 The same two quantities :mod:`sal.likelihood.spatio_sequential`
 computes --- ``class_posteriors`` and ``external_field`` --- over the
-two-channel count emission of :mod:`sal.sim.count_pairs`,
-through ``src/coupled.rs``. The NumPy path stays and is the oracle
-(``likelihood/CLAUDE.md``); this is pinned against it at the ci instance and
-on a 64-vertex slice of the declared 5,041-vertex one.
+two-channel count emission of :mod:`sal.sim.count_pairs` and over every
+one-channel family (issues #1298, #1308), through ``src/coupled.rs``. The
+NumPy path stays and is the oracle (``likelihood/CLAUDE.md``); this is pinned
+against it at the ci instance and on a 64-vertex slice of the declared
+5,041-vertex one.
 
 **Why there is a Rust path at all.** `cProfile` on the NumPy path at the 5K
 instance, bin factor 10: one ``class_posteriors`` is 20.1 s, of which
@@ -52,14 +53,28 @@ density is then a function of the count *and* the exposure or trial count.
   call, and its tables the smallest. The numbers are in
   ``changelog.d/1064.added.md``.
 
-**The categorical emission is one channel** (issue #1298), the default
-model of :func:`~sal.search.spatio_sequential.fit_spatio_sequential`. Its
-density ``log B_m[k, x]`` is a function of the symbol alone, so its table is
-the family's own log emission matrix, transposed to ``[x, M, K]``, and the
-kernel reads one row per score with no second channel to add. Every class
-carries a :class:`~sal.emissions.CategoricalEmission` over one alphabet, or
-every class an :class:`~sal.sim.count_pairs.IndependentCountPair`; a mixture
-of the two, or any other family, is refused before the kernel is reached.
+**A one-channel model reads one table, keyed by what determines its density**
+(issues #1298, #1308). The kernel adds nothing to a row it reads, so no
+family's arithmetic is in Rust, and the families differ only in the row:
+
+- The categorical emission, the default model of
+  :func:`~sal.search.spatio_sequential.fit_spatio_sequential`, is a function
+  of the symbol: its table is the log emission matrix, ``[x, M, K]``
+  (:func:`symbol_table`).
+- A negative binomial or beta-binomial without a covariate is a function of
+  the count, and a beta-binomial under a trial count of the
+  ``(count, trial count)`` pair, in the ``range`` or ``distinct`` layout
+  above (:func:`one_channel_table`).
+- The Gaussian, a continuous exposure, the ``factored`` layout, and classes
+  of different families are scored by site: the table is each family's
+  ``log_density`` at every observation, ``(S * n_nodes, M, K)``, its row
+  ``s * n_nodes + v``. So is a keyed table with more rows than there are
+  sites, which would be more density evaluations than the sites themselves.
+
+The two-channel count emission and a one-channel family do not share a row,
+and classes mixing the two are refused. A table by site is built once per set
+of parameters where a fit hands its rows in (:class:`ObservationRows`), so
+the E step, the labelled joints and the field after one M step share it.
 
 A covariate grid, for a continuous covariate on a family that does not
 factor, serves neither family and is conserved in
@@ -78,6 +93,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
+from typing import Literal, cast
 
 import numpy as np
 
@@ -86,6 +102,7 @@ from sal.emissions import (
     BetaBinomialEmission,
     CategoricalEmission,
     EmissionFamily,
+    NegativeBinomialEmission,
     validated_trials,
 )
 from sal.emissions.bb import log_factorial, trial_tables
@@ -97,7 +114,7 @@ from sal.likelihood.spatio_sequential import (
     ClassPosteriors,
     CovariateRows,
     ObservationRows,
-    log_prior,
+    covariate_block,
 )
 from sal.sim.count_pairs import (
     SUCCESSES,
@@ -108,28 +125,22 @@ from sal.sim.spatio_sequential import SpatioSequentialParams
 
 
 def _categorical(params: SpatioSequentialParams) -> list[CategoricalEmission] | None:
-    """Every class's categorical family, or ``None`` where class 0 carries none (issue #1298).
+    """Every class's categorical family, or ``None`` where a class carries another (issue #1298).
+
+    A mixture of the categorical and another one-channel family is scored by
+    site (:func:`one_channel_table`, issue #1308).
 
     Raises
     ------
-    TypeError
-        If class 0 carries a categorical family and another class does not.
     ValueError
         If the classes' alphabets differ: one table serves every class, and a
         symbol past one class's alphabet has no density under it.
     """
-    if not isinstance(params.emissions[0], CategoricalEmission):
+    families = [
+        family for family in params.emissions if isinstance(family, CategoricalEmission)
+    ]
+    if len(families) < params.n_classes:
         return None
-    families = []
-    for m, family in enumerate(params.emissions):
-        if not isinstance(family, CategoricalEmission):
-            msg = (
-                f"class {m} carries a {type(family).__name__} and class 0 a "
-                f"CategoricalEmission; the Rust E step takes one emission type "
-                f"in every class"
-            )
-            raise TypeError(msg)
-        families.append(family)
     alphabets = {family.n_symbols for family in families}
     if len(alphabets) > 1:
         msg = (
@@ -146,21 +157,43 @@ def _families(params: SpatioSequentialParams) -> list[IndependentCountPair]:
     Raises
     ------
     TypeError
-        If a class does not carry one. The kernel tabulates two channels by
-        their integer counts, or one symbol (:func:`_categorical`), and a
-        family that is neither has nothing to tabulate.
+        If a class does not carry one: its table is over one channel
+        (:func:`one_channel_table`), and the two cannot share a row.
     """
     families = []
     for m, family in enumerate(params.emissions):
         if not isinstance(family, IndependentCountPair):
             msg = (
-                f"class {m} carries a {type(family).__name__}; the Rust E step "
-                f"is over the two-channel count emission or the categorical "
-                f"emission, one of them in every class"
+                f"class {m} carries a {type(family).__name__}; a two-channel "
+                f"table is over the two-channel count emission in every class"
             )
             raise TypeError(msg)
         families.append(family)
     return families
+
+
+def _refuse_mixed_channels(params: SpatioSequentialParams) -> bool:
+    """``True`` where every class carries the two-channel count emission.
+
+    Raises
+    ------
+    TypeError
+        If some classes carry it and others do not. It scores ``(S, n_nodes,
+        2)`` observations and a one-channel family ``(S, n_nodes)``, so no
+        table of either aligns with the other by site (issue #1308).
+    """
+    pairs = [isinstance(family, IndependentCountPair) for family in params.emissions]
+    if all(pairs):
+        return True
+    if any(pairs):
+        m = pairs.index(not pairs[0])
+        msg = (
+            f"class {m} carries a {type(params.emissions[m]).__name__} and class "
+            f"0 a {type(params.emissions[0]).__name__}; the two-channel count "
+            f"emission's rows do not align by site with a one-channel family's"
+        )
+        raise TypeError(msg)
+    return False
 
 
 #: The largest row a ``uint32`` index carries. A table with more rows would
@@ -332,8 +365,13 @@ def observation_rows(
 ) -> ObservationRows:
     """Every observation's table row in every channel, for ``covariate_rows``.
 
-    ``(S, n_nodes)`` observations are the categorical model's symbols, one
-    channel whose row is the symbol (issue #1298); they take no covariate.
+    ``(S, n_nodes)`` observations are one channel (issues #1298, #1308): its
+    row is the value where every value is a non-negative integer --- a symbol
+    or a count --- and the observation's own index ``s * n_nodes + v``
+    otherwise. Under an integer covariate and ``range`` or ``distinct``, the
+    row is the ``(count, trial count)`` pair's, as for the second channel
+    below; a family the pair does not key ignores it and is scored by site
+    (:func:`one_channel_table`).
     Without a covariate the row **is** the count, in both channels, and the
     layout does not enter. With one, the total's row is the count and its
     exposure is carried for the kernel; the successes' row is the count and
@@ -345,10 +383,11 @@ def observation_rows(
     Parameters
     ----------
     observations : np.ndarray
-        Shape ``(S, n_nodes, 2)``, integer counts, or ``(S, n_nodes)``,
-        non-negative integer symbols.
+        Shape ``(S, n_nodes, 2)``, integer counts, or ``(S, n_nodes)``, one
+        channel.
     covariate : np.ndarray | None
-        Shape ``(S, n_nodes, 2)``: the exposure, then the trial count.
+        Shape ``(S, n_nodes, 2)``: the exposure, then the trial count; or
+        ``(S, n_nodes)`` beside one channel.
     covariate_rows : CovariateRows
         The trial count's layout; ``range``, the default, is tied fastest
         with ``distinct`` in a fit at stress (``changelog.d/1064.added.md``).
@@ -360,16 +399,15 @@ def observation_rows(
     Raises
     ------
     ValueError
-        If ``covariate_rows`` is not a :data:`CovariateRows`, an exposure is
-        negative or not finite, a trial count is not a non-negative integer,
-        a symbol is negative or carries a covariate, or a row overflows a
-        ``uint32`` index.
+        If ``covariate_rows`` is not a :data:`CovariateRows`, an exposure of
+        two channels is negative or not finite, their trial count is not a
+        non-negative integer, or a row overflows a ``uint32`` index.
     """
     if covariate_rows not in COVARIATE_ROWS:
         msg = f"covariate_rows must be one of {COVARIATE_ROWS}, got {covariate_rows!r}"
         raise ValueError(msg)
     if observations.ndim == 2:
-        return _symbol_rows(observations, covariate, covariate_rows)
+        return _one_channel_rows(observations, covariate, covariate_rows)
     totals, successes = observations[..., TOTAL], observations[..., SUCCESSES]
     total = ChannelRows(_uint32(totals, "the totals"), int(totals.max()) + 1)
     plain = ChannelRows(_uint32(successes, "the successes"), int(successes.max()) + 1)
@@ -389,20 +427,48 @@ def observation_rows(
     )
 
 
-def _symbol_rows(
+def _counts(values: np.ndarray) -> bool:
+    """Whether every value is a non-negative integer a ``uint32`` row carries."""
+    if values.size == 0:
+        return False
+    if not np.issubdtype(values.dtype, np.integer):
+        if not bool(np.isfinite(values).all()):
+            return False
+        if not bool((values == np.floor(values)).all()):
+            return False
+    return float(values.min()) >= 0 and float(values.max()) < _ROW_LIMIT
+
+
+def _one_channel_rows(
     observations: np.ndarray, covariate: np.ndarray | None, layout: CovariateRows
 ) -> ObservationRows:
-    """The categorical model's one channel: each symbol is its own row (issue #1298)."""
-    if covariate is not None:
-        msg = "the categorical model's symbols take no covariate"
-        raise ValueError(msg)
-    if observations.size and int(observations.min()) < 0:
-        msg = f"every symbol must be non-negative, got {int(observations.min())}"
-        raise ValueError(msg)
-    symbols = ChannelRows(
-        _uint32(observations, "the symbols"), int(observations.max()) + 1
+    """One channel's rows: by value, by ``(count, trial count)`` pair, or by site (issue #1308).
+
+    The categorical model's symbols are their own rows (issue #1298), and so
+    are counts without a covariate. Values that are not non-negative
+    integers have no table by value, and each is its own site.
+    """
+    if not _counts(observations):
+        sites = np.arange(observations.size, dtype=np.int64).reshape(observations.shape)
+        _refuse_rows(observations.size, "the sites")
+        rows = ChannelRows(
+            np.ascontiguousarray(sites, dtype=np.uint32),
+            observations.size,
+            by_site=True,
+        )
+        return ObservationRows(layout, observations, covariate, rows, None)
+    plain = ChannelRows(
+        _uint32(observations, "the counts"), int(observations.max()) + 1
     )
-    return ObservationRows(layout, observations, None, symbols, None)
+    if covariate is None or layout == "factored" or not _counts(covariate):
+        return ObservationRows(layout, observations, covariate, plain, None)
+    try:
+        keyed = _trial_rows(observations, covariate, layout)
+    except ValueError:
+        # A pair past a `uint32` row: no family is keyed by it, and each is
+        # scored by site.
+        keyed = plain
+    return ObservationRows(layout, observations, covariate, keyed, None)
 
 
 def _trial_rows(
@@ -699,6 +765,10 @@ def emission_rows(
     )
 
 
+#: The key :attr:`ObservationRows.tables` holds a symbol table under.
+_SYMBOL = "symbol"
+
+
 @dataclass(frozen=True)
 class SymbolTable:
     """The categorical model's one channel: the symbols and their table (issue #1298).
@@ -741,7 +811,8 @@ def symbol_table(
         Shape ``(S, n_nodes)``, symbols.
     covariate_rows : CovariateRows | ObservationRows
         As :func:`emission_rows` takes it; the layout does not enter one
-        channel by symbol, and rows already built are reused.
+        channel by symbol. Rows already built keep the last table, as
+        :func:`one_channel_table`'s do (issue #1308).
 
     Returns
     -------
@@ -750,31 +821,238 @@ def symbol_table(
     Raises
     ------
     TypeError
-        If class 0 carries no categorical family, or another class does not.
+        If a class carries no categorical family.
     ValueError
-        If the alphabets differ, the observations carry two channels, or a
-        symbol lies outside the alphabet, as the family's ``validate``
-        refuses it.
+        If the alphabets differ, the observations carry two channels or a
+        covariate, or a symbol lies outside the alphabet, as the family's
+        ``validate`` refuses it.
     """
     families = _categorical(params)
     if families is None:
-        msg = (
-            f"class 0 carries a {type(params.emissions[0]).__name__}; a symbol "
-            f"table is over the categorical emission"
-        )
+        msg = "a symbol table is over the categorical emission in every class"
         raise TypeError(msg)
     rows = _rows_for(params, observations, covariate_rows)
+    held = rows.tables.get(_SYMBOL)
+    if held is not None and held[0] is params:
+        return cast(SymbolTable, held[1])
     if rows.successes is not None:
         msg = (
             "the categorical model takes (S, n_nodes) symbols; these observations "
             "carry two channels"
         )
         raise ValueError(msg)
+    if params.covariate is not None:
+        msg = "the categorical model's symbols take no covariate"
+        raise ValueError(msg)
     families[0].validate(observations)
     table = np.empty((families[0].n_symbols, params.n_classes, params.n_states))
     for m, family in enumerate(families):
         table[:, m, :] = family.log_matrix.t().numpy()
-    return SymbolTable(rows.total.rows, table)
+    built = SymbolTable(rows.total.rows, table)
+    if isinstance(covariate_rows, ObservationRows):
+        rows.tables[_SYMBOL] = (params, built)
+    return built
+
+
+#: What a one-channel table's row is keyed on (issue #1308): the count, the
+#: ``(count, trial count)`` pair of :data:`CovariateRows`'s ``range`` or
+#: ``distinct`` layout, or the site ``s * n_nodes + v``.
+RowKey = Literal["count", "pair", "site"]
+
+
+@dataclass(frozen=True)
+class OneChannelTable:
+    """A one-channel model's rows and table, the kernel's one-channel input (issue #1308).
+
+    Parameters
+    ----------
+    rows : np.ndarray
+        ``(S, n_nodes)`` contiguous ``uint32``, each observation's table row.
+    table : np.ndarray
+        ``table[row, m, k]``, the log-density under state ``k`` of class
+        ``m``, ``(n_rows, M, K)`` contiguous ``float64``.
+    key : RowKey
+        What a row is keyed on.
+    """
+
+    rows: np.ndarray
+    table: np.ndarray
+    key: RowKey
+
+
+def _row_key(
+    family: EmissionFamily, params: SpatioSequentialParams, rows: ChannelRows
+) -> RowKey:
+    """The row one class's family is tabulated by.
+
+    A negative binomial or beta-binomial without a covariate is a function of
+    the count; a beta-binomial under a trial count, of the pair where the
+    layout keys it. Everything else --- the Gaussian, a continuous exposure,
+    the ``factored`` layout, any other family --- is scored by site.
+    """
+    if rows.by_site:
+        return "site"
+    if isinstance(family, NegativeBinomialEmission | BetaBinomialEmission):
+        if params.covariate is None:
+            return "count"
+        if isinstance(family, BetaBinomialEmission) and rows.levels is not None:
+            return "pair"
+    return "site"
+
+
+def _site_table(
+    params: SpatioSequentialParams,
+    observations: np.ndarray,
+    labels: np.ndarray | None,
+) -> np.ndarray:
+    """Each site's log-density under every class and state, ``(S * n_nodes, M, K)``.
+
+    Each family's own ``log_density`` at the site's own covariate, the
+    oracle's arithmetic. With ``labels``, a class is scored at its members
+    alone, which is all the E step reads, and its other entries are zero.
+    """
+    import torch
+
+    n_positions, n_nodes = observations.shape[:2]
+    _refuse_bytes(n_positions * n_nodes, params, f"{n_positions * n_nodes} sites")
+    table = np.zeros((n_positions, n_nodes, params.n_classes, params.n_states))
+    every = np.arange(n_nodes)
+    for m, family in enumerate(params.emissions):
+        members = every if labels is None else np.flatnonzero(labels == m)
+        if members.size == 0:
+            continue
+        scores = family.log_density(
+            torch.as_tensor(observations[:, members], dtype=family.observation_dtype),
+            covariate=covariate_block(params, members),
+        )  # (S, members, K)
+        table[:, members, m, :] = scores.detach().numpy()
+    return table.reshape(n_positions * n_nodes, params.n_classes, params.n_states)
+
+
+def _keyed_table(
+    params: SpatioSequentialParams, observations: np.ndarray, rows: ChannelRows
+) -> OneChannelTable | None:
+    """The table by count or by pair, where every class is keyed alike and it is the smaller.
+
+    ``None`` where a class is scored by site, or where the keyed table has
+    more rows than there are sites: it is then more density evaluations than
+    scoring each site, and the cost is the data's, not its size's. At the
+    stress instance of ``spatio_sequential`` with trial counts in ``[10,
+    40)``, the pair table is 1,230 rows against 400 sites.
+    """
+    keys = {_row_key(family, params, rows) for family in params.emissions}
+    if len(keys) != 1:
+        return None
+    key = keys.pop()
+    n_sites = observations.shape[0] * observations.shape[1]
+    if key == "count" and rows.extent <= n_sites:
+        table = _count_table(params.emissions, params, rows.extent)
+        return OneChannelTable(rows.rows, table, key)
+    if key == "pair":
+        assert rows.levels is not None
+        n_rows = rows.extent * rows.levels.size
+        size = n_rows * params.n_classes * params.n_states * 8
+        if n_rows <= n_sites and size <= COVARIATE_TABLE_CEILING:
+            table = _outer_table(params.emissions, params, rows.extent, rows.levels)
+            return OneChannelTable(rows.rows, table, key)
+    return None
+
+
+def _may_key(
+    params: SpatioSequentialParams, covariate_rows: CovariateRows | ObservationRows
+) -> bool:
+    """Whether a table by count or by pair can serve every class, read from the types alone.
+
+    Every class a negative binomial or a beta-binomial, and under a covariate
+    every class a beta-binomial in a layout that keys the pair. Anything else
+    is scored by site whatever the rows hold, and they are not built for it.
+    """
+    if params.covariate is None:
+        return all(
+            isinstance(family, NegativeBinomialEmission | BetaBinomialEmission)
+            for family in params.emissions
+        )
+    layout = (
+        covariate_rows.layout
+        if isinstance(covariate_rows, ObservationRows)
+        else covariate_rows
+    )
+    return layout != "factored" and all(
+        isinstance(family, BetaBinomialEmission) for family in params.emissions
+    )
+
+
+#: The key :attr:`ObservationRows.tables` holds a one-channel table under.
+_ONE_CHANNEL = "one_channel"
+
+
+def one_channel_table(
+    params: SpatioSequentialParams,
+    observations: np.ndarray,
+    labels: np.ndarray | None = None,
+    *,
+    covariate_rows: CovariateRows | ObservationRows = "range",
+) -> OneChannelTable:
+    """A one-channel model's rows and table, every class's family tabulated (issue #1308).
+
+    One kernel path serves every family; what differs is the row. Where
+    every class is a negative binomial or a beta-binomial keyed alike --- by
+    count, or by ``(count, trial count)`` pair --- and that table has no more
+    rows than there are sites, the table is over those, built by the families
+    themselves. Otherwise every class is scored by site, so the tables align
+    whatever families the classes mix. The categorical model has its own
+    table, :func:`symbol_table`.
+
+    Parameters
+    ----------
+    params : SpatioSequentialParams
+        One-channel families, and the covariate where it carries one.
+    observations : np.ndarray
+        Shape ``(S, n_nodes)``, or ``(S, n_nodes, ...)`` for a family with
+        axes of its own, which is scored by site.
+    labels : np.ndarray | None
+        Where given, a by-site table scores each class at its members alone,
+        the E step's reads; ``None`` scores every class at every site, the
+        field's. Rows already built ignore it: their table serves every call
+        under the same parameters, and is built whole.
+    covariate_rows : CovariateRows | ObservationRows
+        As :func:`emission_rows` takes it. Rows already built keep the last
+        table in :attr:`ObservationRows.tables`, and return it while the
+        parameters are the same object.
+
+    Returns
+    -------
+    OneChannelTable
+
+    Raises
+    ------
+    ValueError
+        If ``covariate_rows`` is not a :data:`CovariateRows`, or a by-site
+        table passes :data:`COVARIATE_TABLE_CEILING`.
+    """
+    built = isinstance(covariate_rows, ObservationRows)
+    if built:
+        rows = _rows_for(params, observations, covariate_rows)
+        held = rows.tables.get(_ONE_CHANNEL)
+        if held is not None and held[0] is params:
+            return cast(OneChannelTable, held[1])
+    elif covariate_rows not in COVARIATE_ROWS:
+        msg = f"covariate_rows must be one of {COVARIATE_ROWS}, got {covariate_rows!r}"
+        raise ValueError(msg)
+    table = None
+    if _may_key(params, covariate_rows):
+        rows = _rows_for(params, observations, covariate_rows)
+        table = _keyed_table(params, observations, rows.total)
+    if table is None:
+        n_positions, n_nodes = observations.shape[:2]
+        sites = np.arange(n_positions * n_nodes, dtype=np.uint32).reshape(
+            n_positions, n_nodes
+        )
+        scored = _site_table(params, observations, None if built else labels)
+        table = OneChannelTable(sites, scored, "site")
+    if built:
+        rows.tables[_ONE_CHANNEL] = (params, table)
+    return table
 
 
 @dataclass(frozen=True)
@@ -792,16 +1070,25 @@ def _kernel_inputs(
     params: SpatioSequentialParams,
     observations: np.ndarray,
     covariate_rows: CovariateRows | ObservationRows,
+    labels: np.ndarray | None = None,
 ) -> _KernelInputs:
-    """The kernels' arrays, flat: one channel by symbol, or two by count.
+    """The kernels' arrays, flat: one channel by row, or two by count.
 
-    ``successes`` and ``success_table`` are ``None`` for the categorical
-    model, which is how the kernel is told it has one channel.
+    ``successes`` and ``success_table`` are ``None`` for a one-channel model,
+    which is how the kernel is told it has one channel. ``labels`` is as
+    :func:`one_channel_table` takes it.
     """
-    if _categorical(params) is not None:
-        one = symbol_table(params, observations, covariate_rows=covariate_rows)
+    if not _refuse_mixed_channels(params):
+        if _categorical(params) is not None:
+            symbols = symbol_table(params, observations, covariate_rows=covariate_rows)
+            return _KernelInputs(
+                symbols.symbols.reshape(-1), None, symbols.table.reshape(-1), None, {}
+            )
+        one = one_channel_table(
+            params, observations, labels, covariate_rows=covariate_rows
+        )
         return _KernelInputs(
-            one.symbols.reshape(-1), None, one.table.reshape(-1), None, {}
+            one.rows.reshape(-1), None, one.table.reshape(-1), None, {}
         )
     rows = emission_rows(params, observations, covariate_rows=covariate_rows)
     return _KernelInputs(
@@ -829,9 +1116,10 @@ def class_posteriors(
     Parameters
     ----------
     params : SpatioSequentialParams
-        The model, its emissions the two-channel count families.
+        The model: the two-channel count family in every class, or one-channel
+        families.
     observations : np.ndarray
-        Shape ``(S, n_nodes, 2)``, integer counts.
+        Shape ``(S, n_nodes, 2)``, integer counts, or ``(S, n_nodes)``.
     labels : np.ndarray
         One class per vertex, shape ``(n_nodes,)``.
     covariate_rows : CovariateRows | ObservationRows
@@ -843,7 +1131,8 @@ def class_posteriors(
         The posterior ``(M, S, K)``, the pairwise ``(M, S - 1, K, K)`` and the
         per-class log evidence ``(M,)``.
     """
-    inputs = _kernel_inputs(params, observations, covariate_rows)
+    labels = np.ascontiguousarray(labels, dtype=np.int64)
+    inputs = _kernel_inputs(params, observations, covariate_rows, labels)
     n_positions, n_nodes = observations.shape[:2]
     posterior = np.empty((params.n_classes, n_positions, params.n_states))
     pairwise = np.empty(
@@ -864,7 +1153,7 @@ def class_posteriors(
     oxisal.class_posteriors(
         inputs.totals,
         inputs.successes,
-        np.ascontiguousarray(labels, dtype=np.int64),
+        labels,
         inputs.total_table,
         inputs.success_table,
         np.ascontiguousarray(np.log(params.initial)).reshape(-1),
@@ -939,15 +1228,24 @@ def labelled_log_likelihood(
 
     The signature and the return of
     :func:`sal.likelihood.spatio_sequential.labelled_log_likelihood`,
-    over this module's E step. The Potts term is the oracle's own: it is a sum
-    over edges and costs nothing beside the emission densities.
+    over this module's E step. The Potts term is ``oxisal.coupled_log_prior``,
+    the oracle's :func:`~sal.likelihood.spatio_sequential.log_prior` term by
+    term and in its order, so bit for bit (issue #1308): at the stress
+    instance of ``spatio_sequential``, 180 edges, 1.21 us against the
+    vectorised NumPy's 13.1 us and the loop over edges' 543 us.
     ``covariate_rows`` is as :func:`emission_rows` takes it.
 
     Returns
     -------
     float
     """
-    own = float(log_prior(params, np.asarray(labels, dtype=np.int64)[None, :])[0])
+    graph = params.graph
+    own = oxisal.coupled_log_prior(
+        np.ascontiguousarray(labels, dtype=np.int64),
+        graph.edge_index.reshape(-1),
+        graph.edge_coupling,
+        float(params.beta),
+    )
     return own + float(
         class_posteriors(
             params, observations, labels, covariate_rows=covariate_rows
