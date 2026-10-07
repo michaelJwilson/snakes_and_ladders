@@ -251,6 +251,17 @@ class Session:
         self._directory.cleanup()
 
 
+def served_by(session: Session | None, solver: Solver) -> None:
+    """Refuse a ``session`` opened on another solver than ``solver``.
+
+    Every problem family's call reads it before it sends anything, so the
+    refusal is one wording; raises :class:`ValueError`.
+    """
+    if session is not None and session.solver is not solver:
+        msg = f"the session serves {session.solver}, not {solver}"
+        raise ValueError(msg)
+
+
 @contextmanager
 def session(
     solver: Solver,

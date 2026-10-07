@@ -5,7 +5,9 @@ iterations and one alone within 1e-11. Streamed Gaussian and Poisson steps
 against `GaussianHMM`, `PoissonHMM` (no priors or floors): within 1e-9
 relative (#997). Compiled Viterbi against `decode` (every position,
 log-probability 1e-11) and forward against `score` (1e-11; #997). Runtime
-goal: `test_goals.py`.
+goal: `test_goals.py`. `sal.external.hmm` (#1282): each call bitwise the
+adapter's on these fixtures, its `score` sal's forward recursion within
+1e-11, ragged and with one-position segments included.
 """
 
 from __future__ import annotations
@@ -15,11 +17,26 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
-from sal.emissions import GaussianEmission, PoissonEmission
+from sal.emissions import (
+    CategoricalEmission,
+    EmissionFamily,
+    GaussianEmission,
+    PoissonEmission,
+)
+from sal.external import Solver, provenance, session
+from sal.external import hmm as external_hmm
+from sal.external.hmm import emission_parameters, probabilities
 from sal.fixtures import load_params
 from sal.likelihood.hmm import hmm_log_likelihood, viterbi
 from sal.opt.em import EmConfig
-from sal.opt.hmm import baum_welch, baum_welch_family
+from sal.opt.hmm import (
+    baum_welch,
+    baum_welch_family,
+    forward_log_likelihood,
+    forward_log_likelihood_ragged,
+)
+from sal.opt.termination import Stop
+from sal.ragged import Ragged
 from sal.sim.hmm import HmmParams, simulate_sequences
 from sal.validation import hmmlearn
 
@@ -204,3 +221,194 @@ def test_the_hmm_log_likelihood_is_hmmlearns_score(family: str) -> None:
     )
     theirs = hmmlearn.score(observations, initial, transition, start)
     np.testing.assert_allclose(ours, theirs.log_likelihood, rtol=1e-11)
+
+
+# `sal.external.hmm` (issue #1282, step 5): each call sends the adapter's
+# bytes, so its answers are the adapter's bitwise on the adapter's fixtures;
+# a probability is compared through the `np.log` the call reads it back with,
+# a Gaussian variance through `np.sqrt`.
+
+#: The families' start, as test_the_streamed_family_fit_is_hmmlearns writes it.
+FAMILY_INITIAL = np.array([0.4, 0.3, 0.3])
+FAMILY_TRANSITION = np.array([[0.8, 0.1, 0.1], [0.1, 0.8, 0.1], [0.1, 0.1, 0.8]])
+
+
+def _family_start(family: str) -> EmissionFamily:
+    """The family's start, as the adapter's tests pose it."""
+    if family == "gaussian":
+        return GaussianEmission(
+            np.array([-1.5, 0.5, 2.5]), np.sqrt(np.array([1.2, 1.0, 1.8])), 1e-12
+        )
+    return PoissonEmission(np.array([2.0, 4.0, 10.0]))
+
+
+def _logs(*probabilities: np.ndarray) -> tuple[torch.Tensor, ...]:
+    return tuple(torch.log(torch.as_tensor(p)) for p in probabilities)
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("n_iter", [1, 10])
+def test_the_external_categorical_fit_is_the_adapters_bitwise(n_iter: int) -> None:
+    params = load_params(FIXTURE, HmmParams)
+    observations = simulate_sequences(params).observations
+    log_initial, log_transition, log_emission = _logs(*_start(params))
+    ours = external_hmm.fit(
+        observations,
+        log_initial,
+        log_transition,
+        CategoricalEmission.from_log(log_emission),
+        Solver.HMMLEARN,
+        EmConfig(max_iterations=n_iter, tolerance=-np.inf),
+    )
+    theirs = hmmlearn.baum_welch(
+        observations,
+        probabilities(log_initial),
+        probabilities(log_transition),
+        probabilities(log_emission),
+        n_iter,
+    )
+    assert isinstance(ours.components, CategoricalEmission)
+    assert np.array_equal(ours.log_initial.numpy(), np.log(theirs.initial))
+    assert np.array_equal(ours.log_transition.numpy(), np.log(theirs.transition))
+    assert np.array_equal(ours.components.log_matrix.numpy(), np.log(theirs.emission))
+    assert ours.spent == ours.termination.iterations == theirs.iterations == n_iter
+    assert ours.termination.reason is Stop.BUDGET
+    assert ours.provenance == provenance(Solver.HMMLEARN)
+
+
+#: The adapter's arguments: observations, initial, transition and emission.
+Sent = tuple[np.ndarray, np.ndarray, np.ndarray, dict[str, np.ndarray]]
+
+
+def _family_problem(
+    family: str,
+) -> tuple[np.ndarray, torch.Tensor, torch.Tensor, EmissionFamily, Sent]:
+    """The adapter's family fixture as `external.hmm` takes it, and the bytes the adapter is sent."""
+    observations = _family_sequences(family)
+    log_initial, log_transition = _logs(FAMILY_INITIAL, FAMILY_TRANSITION)
+    start = _family_start(family)
+    sent = (
+        observations,
+        probabilities(log_initial),
+        probabilities(log_transition),
+        emission_parameters(start),
+    )
+    return observations, log_initial, log_transition, start, sent
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("family", ["gaussian", "poisson"])
+def test_the_external_family_fit_is_the_adapters_bitwise(family: str) -> None:
+    observations, log_initial, log_transition, start, sent = _family_problem(family)
+    ours = external_hmm.fit(
+        observations,
+        log_initial,
+        log_transition,
+        start,
+        Solver.HMMLEARN,
+        EmConfig(max_iterations=10, tolerance=-np.inf),
+    )
+    theirs = hmmlearn.family_baum_welch(*sent, 10)
+    assert np.array_equal(ours.log_initial.numpy(), np.log(theirs.initial))
+    assert np.array_equal(ours.log_transition.numpy(), np.log(theirs.transition))
+    fitted = ours.components.named_parameters()
+    if family == "gaussian":
+        assert np.array_equal(fitted["mean"].numpy(), theirs.emission["mean"])
+        assert np.array_equal(
+            fitted["scale"].numpy(), np.sqrt(theirs.emission["variance"])
+        )
+    else:
+        assert np.array_equal(fitted["mean"].numpy(), theirs.emission["rate"])
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("family", ["gaussian", "poisson"])
+def test_the_external_path_and_score_are_the_adapters_bitwise(family: str) -> None:
+    observations, log_initial, log_transition, start, sent = _family_problem(family)
+    states, log_probability = external_hmm.viterbi(
+        observations, log_initial, log_transition, start, Solver.HMMLEARN
+    )
+    decoded = hmmlearn.viterbi(*sent)
+    assert np.array_equal(states, decoded.states)
+    assert log_probability == decoded.log_probability
+
+    scored = external_hmm.forward_log_likelihood(
+        observations, log_initial, log_transition, start, Solver.HMMLEARN
+    )
+    assert float(scored) == hmmlearn.score(*sent).log_likelihood
+    assert scored.spent == 1
+    assert scored.termination.reason is Stop.CONVERGED
+
+
+@pytest.mark.oracle
+def test_the_external_log_likelihood_is_sals_forward_recursion() -> None:
+    # The oracle: hmmlearn's `score` against `opt.hmm.forward_log_likelihood`
+    # at the fixture's start, and the ragged form, three segments of one
+    # position among them, against `forward_log_likelihood_ragged`; within
+    # the adapter's 1e-11 relative.
+    params = load_params(FIXTURE, HmmParams)
+    observations = simulate_sequences(params).observations
+    log_initial, log_transition, log_emission = _logs(*_start(params))
+    theirs = external_hmm.forward_log_likelihood(
+        observations, log_initial, log_transition, log_emission, Solver.HMMLEARN
+    )
+    ours = forward_log_likelihood(
+        torch.as_tensor(observations), log_initial, log_transition, log_emission
+    )
+    np.testing.assert_allclose(float(theirs), float(ours), rtol=1e-11)
+
+    lengths = (1, 14, 1, 30, 1, 53)
+    values = observations.reshape(-1)[: sum(lengths)]
+    ragged = external_hmm.forward_log_likelihood(
+        values,
+        log_initial,
+        log_transition,
+        log_emission,
+        Solver.HMMLEARN,
+        lengths=lengths,
+    )
+    density = CategoricalEmission.from_log(log_emission).log_density(
+        torch.as_tensor(values)
+    )
+    expected = forward_log_likelihood_ragged(
+        density, lengths, log_initial, log_transition
+    )
+    np.testing.assert_allclose(float(ragged), float(expected), rtol=1e-11)
+
+
+@pytest.mark.oracle
+def test_the_external_fit_stops_where_sals_does() -> None:
+    # EmConfig's relative test, run inside hmmlearn's loop: from one start,
+    # the default budget and tolerance stop both fits at the same iteration,
+    # and the last E step's log-likelihoods agree within 1e-11 relative.
+    observations = _family_sequences("gaussian")
+    log_initial, log_transition = _logs(FAMILY_INITIAL, FAMILY_TRANSITION)
+    start = _family_start("gaussian")
+    theirs = external_hmm.fit(
+        observations, log_initial, log_transition, start, Solver.HMMLEARN
+    )
+    ours = baum_welch_family(observations, log_initial, log_transition, start)
+    assert theirs.termination == ours.termination
+    assert theirs.termination.reason is Stop.CONVERGED
+    np.testing.assert_allclose(theirs.log_likelihood, ours.log_likelihood, rtol=1e-11)
+
+
+@pytest.mark.oracle
+def test_a_ragged_external_call_through_a_session_is_the_one_shot_call() -> None:
+    # A `Ragged` batch, a one-position segment first, through a session and
+    # through a fresh subprocess: the same bytes reach hmmlearn either way.
+    observations = _family_sequences("poisson").reshape(-1)[:70]
+    batch = Ragged(observations, (1, 29, 40))
+    log_initial, log_transition = _logs(FAMILY_INITIAL, FAMILY_TRANSITION)
+    start = _family_start("poisson")
+    arguments = (batch, log_initial, log_transition, start, Solver.HMMLEARN)
+    alone = external_hmm.viterbi(*arguments)
+    with session(Solver.HMMLEARN) as opened:
+        served = external_hmm.viterbi(*arguments, session=opened)
+        fitted = external_hmm.fit(
+            *arguments, EmConfig(max_iterations=3), session=opened
+        )
+    assert alone.states.shape == (70,)
+    assert np.array_equal(alone.states, served.states)
+    assert alone.log_probability == served.log_probability
+    assert fitted.spent == 3

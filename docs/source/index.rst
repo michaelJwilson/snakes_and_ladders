@@ -611,6 +611,12 @@ whether or not it has members yet.
 .. automodule:: sal.external.potts_inputs
    :members:
 
+.. automodule:: sal.external.hmm
+   :members:
+
+.. automodule:: sal.external.hmm_inputs
+   :members:
+
 .. automodule:: sal.external.frameworks
    :members:
 

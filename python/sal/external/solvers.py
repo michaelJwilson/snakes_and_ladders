@@ -16,7 +16,8 @@ distribution's metadata, so the framework is not imported to read it.
 This module is step 1 of #1282. The calls that pose a problem in sal's types
 and return sal's result types reach their framework through :func:`invoke`:
 :mod:`sal.external.potts`'s ``ground_state`` (step 3) and ``lower_bound``
-(step 4); ``hmm_fit``, ``viterbi`` and ``hmc_sample`` are later steps.
+(step 4), and :mod:`sal.external.hmm`'s ``fit``, ``viterbi`` and
+``forward_log_likelihood`` (step 5); ``hmc`` is a later step.
 """
 
 from __future__ import annotations
@@ -57,6 +58,18 @@ class Capability(StrEnum):
     POISSON_EMISSIONS = "poisson_emissions"
     #: Accepts a categorical emission.
     CATEGORICAL_EMISSIONS = "categorical_emissions"
+    #: Accepts a Gaussian emission over more than one channel, or with a flat one.
+    MULTI_CHANNEL_EMISSIONS = "multi_channel_emissions"
+    #: Accepts a binomial emission.
+    BINOMIAL_EMISSIONS = "binomial_emissions"
+    #: Accepts a negative binomial emission.
+    NEGATIVE_BINOMIAL_EMISSIONS = "negative_binomial_emissions"
+    #: Accepts a beta-binomial emission, in either parameterization.
+    BETA_BINOMIAL_EMISSIONS = "beta_binomial_emissions"
+    #: Accepts an emission over a pair of counts.
+    COUNT_PAIR_EMISSIONS = "count_pair_emissions"
+    #: Accepts an emission family no capability above names, such as a caller's own.
+    UNNAMED_EMISSIONS = "unnamed_emissions"
     #: Draws a Hamiltonian Monte Carlo chain from a log-density.
     HMC_SAMPLE = "hmc_sample"
 
@@ -98,7 +111,8 @@ _POTTS_MOVES = frozenset(
 #: lacks :attr:`Capability.MULTI_LABEL`; HiGHS solves the local-polytope LP,
 #: a bound (#1063), and its ILP, the minimum (#1274), so it is exact and
 #: no ground-state solver; hmmlearn fits the three families its
-#: adapter writes (#975, #997).
+#: adapter writes (#975, #997), and declares none of the other families'
+#: capabilities, so :mod:`sal.external.hmm` refuses them.
 DECLARED: Mapping[Solver, Declaration] = {
     Solver.GCO_EXPANSION: Declaration("gco", _POTTS_MOVES),
     Solver.GCO_SWAP: Declaration("gco", _POTTS_MOVES),
