@@ -15,6 +15,7 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
+from sal.backend import Backend
 from sal.likelihood import (
     pruning,
     pruning_analytic,
@@ -51,7 +52,9 @@ def test_the_torch_route_reproduces_the_oracle_bitwise() -> None:
 
     value = pruning_torch.log_likelihood(tau, k, pi, alignment, lengths)
 
-    assert float(value) == pruning.log_likelihood(tau, k, pi, alignment)
+    assert float(value) == pruning.log_likelihood(
+        tau, k, pi, alignment, backend=Backend.PYTHON
+    )
 
 
 @pytest.mark.oracle
@@ -61,7 +64,9 @@ def test_the_analytic_route_reproduces_the_oracle_bitwise() -> None:
 
     value = pruning_analytic.log_likelihood(tau, k, pi, alignment, lengths)
 
-    assert float(value) == pruning.log_likelihood(tau, k, pi, alignment)
+    assert float(value) == pruning.log_likelihood(
+        tau, k, pi, alignment, backend=Backend.PYTHON
+    )
 
 
 @pytest.mark.oracle
@@ -73,7 +78,9 @@ def test_the_cached_route_reproduces_the_oracle_bitwise() -> None:
         tau, k, pi, alignment, lengths, pruning_torch.PartialCache()
     )
 
-    assert value == pruning.log_likelihood(tau, k, pi, alignment)
+    assert value == pruning.log_likelihood(
+        tau, k, pi, alignment, backend=Backend.PYTHON
+    )
 
 
 @pytest.mark.oracle
@@ -85,7 +92,7 @@ def test_the_rust_route_meets_the_oracle_within_the_float64_bound() -> None:
 
     assert_allclose(
         value,
-        pruning.log_likelihood(tau, k, pi, alignment),
+        pruning.log_likelihood(tau, k, pi, alignment, backend=Backend.PYTHON),
         rtol=CROSS_DEVICE_RTOL_FLOAT64,
     )
 

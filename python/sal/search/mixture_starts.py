@@ -44,9 +44,11 @@ from __future__ import annotations
 
 import math
 import time
+from abc import abstractmethod
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Protocol
 
 import numpy as np
 import torch
@@ -681,6 +683,142 @@ STARTS: dict[
 DETERMINISTIC = frozenset({"objective", "perturbed", "quantile"})
 
 
+class MixtureStart(Protocol):
+    """A start :func:`lookup` returns: it seeds, and it says whether it polishes itself (issue #1301).
+
+    ``polishes`` is true only where :meth:`polished` already returns the
+    start's own polished fit, a :class:`BestOf` with
+    ``select=Selection.POLISHED``, so its seeding alone is not callable. A
+    caller tells the start to polish and does not ask what it is:
+    :meth:`polished` seeds and polishes once for a :class:`SingleStart` and a
+    seeded :class:`BestOf`, and polishes every seeding for a polished one.
+    The implementers are this protocol's ``__subclasses__()``.
+
+    Under the seam rule: one consuming module in the package,
+    :class:`TimedStart`, beside callers outside it that pick a start by name.
+    It is kept because without it each such caller branches on
+    ``isinstance(start, BestOf)`` and on its ``select``, the question this
+    seam answers once.
+    """
+
+    polishes: bool
+
+    @abstractmethod
+    def __call__(
+        self, instance: MixtureInstance, rng: np.random.Generator
+    ) -> Seeding[EmissionFamily]:
+        """The start's seeding of ``instance``."""
+
+    @abstractmethod
+    def polished(
+        self,
+        instance: MixtureInstance,
+        rng: np.random.Generator,
+        *,
+        seconds: float | None = None,
+        passes: int | None = None,
+        tolerance: float | None = None,
+    ) -> tuple[Seeding[EmissionFamily], MixturePolished]:
+        """The seeding and the EM fit the start hands over, within ``seconds`` or at ``passes``."""
+
+
+def _seeded_then_polished(
+    start: MixtureStart,
+    instance: MixtureInstance,
+    rng: np.random.Generator,
+    *,
+    seconds: float | None,
+    passes: int | None,
+    tolerance: float | None,
+) -> tuple[Seeding[EmissionFamily], MixturePolished]:
+    """One seeding by ``start``, polished once: the seconds cover both, as :class:`TimedStart`'s do."""
+    if (seconds is None) == (passes is None):
+        msg = "a polished start stops at seconds or at passes, exactly one"
+        raise ValueError(msg)
+    opened = time.perf_counter()
+    seeded = start(instance, rng)
+    if passes is not None:
+        return seeded, polish(instance, seeded.components, passes=passes)
+    left = (seconds or 0.0) - (time.perf_counter() - opened)
+    return seeded, polish(
+        instance,
+        seeded.components,
+        seconds=max(left, 0.0),
+        tolerance=POLISH_TOLERANCE if tolerance is None else tolerance,
+    )
+
+
+@dataclass(frozen=True)
+class SingleStart(MixtureStart):
+    """One run of a :data:`STARTS` entry, read by name at each call (issue #1301).
+
+    Calling it is calling ``STARTS[name]``, bitwise; :meth:`polished` seeds
+    once and polishes that seeding once.
+
+    Parameters
+    ----------
+    name : str
+        A key of :data:`STARTS`.
+
+    Raises
+    ------
+    ValueError
+        If ``name`` is not a start.
+    """
+
+    name: str
+
+    def __post_init__(self) -> None:
+        if self.name not in STARTS:
+            msg = f"not a start: {self.name!r}"
+            raise ValueError(msg)
+
+    @property
+    def polishes(self) -> bool:  # type: ignore[override]
+        """False: the start's seeding is not a fit."""
+        return False
+
+    def __call__(
+        self, instance: MixtureInstance, rng: np.random.Generator
+    ) -> Seeding[EmissionFamily]:
+        """``STARTS[name]``'s seeding of ``instance``.
+
+        Returns
+        -------
+        Seeding
+        """
+        return STARTS[self.name](instance, rng)
+
+    def polished(
+        self,
+        instance: MixtureInstance,
+        rng: np.random.Generator,
+        *,
+        seconds: float | None = None,
+        passes: int | None = None,
+        tolerance: float | None = None,
+    ) -> tuple[Seeding[EmissionFamily], MixturePolished]:
+        """The seeding and its one polish, within ``seconds`` or at ``passes``.
+
+        Returns
+        -------
+        tuple[Seeding[EmissionFamily], MixturePolished]
+
+        Raises
+        ------
+        ValueError
+            Unless exactly one of ``seconds`` and ``passes`` is given.
+        """
+        return _seeded_then_polished(
+            self, instance, rng, seconds=seconds, passes=passes, tolerance=tolerance
+        )
+
+
+#: Every :data:`STARTS` entry wrapped once, in its order, so :func:`lookup`
+#: returns a :class:`MixtureStart` for each.
+SINGLE_STARTS: dict[str, SingleStart] = {name: SingleStart(name) for name in STARTS}
+
+
 @dataclass(frozen=True)
 class _Seeding:
     """One seeding of a :class:`BestOf`: the start, and its polish when asked.
@@ -765,7 +903,7 @@ class Selection(StrEnum):
 
 
 @dataclass(frozen=True)
-class BestOf:
+class BestOf(MixtureStart):
     """A stochastic start run ``n`` times, the seeding of highest log-likelihood handed over (issue #905).
 
     Seeding ``i`` draws from the ``i``-th generator spawned from the cell's
@@ -837,6 +975,11 @@ class BestOf:
         if self.pool not in ("threads", "processes"):
             msg = f"best-of runs on threads or processes, got {self.pool!r}"
             raise ValueError(msg)
+
+    @property
+    def polishes(self) -> bool:  # type: ignore[override]
+        """Whether :meth:`polished` polishes every seeding: ``select`` is :attr:`Selection.POLISHED`."""
+        return self.select is Selection.POLISHED
 
     @property
     def key(self) -> str:
@@ -952,6 +1095,10 @@ class BestOf:
         if (seconds is None) == (passes is None):
             msg = "a polished best-of stops at seconds or at passes, exactly one"
             raise ValueError(msg)
+        if not self.polishes:
+            return _seeded_then_polished(
+                self, instance, rng, seconds=seconds, passes=passes, tolerance=tolerance
+            )
         rounds = math.ceil(self.n / min(self.workers, self.n))
         task = _Seeding(
             self.name,
@@ -1028,17 +1175,17 @@ BEST_OF_EM_STARTS: dict[str, BestOf] = {
 }
 
 
-def lookup(
-    name: str,
-) -> Callable[[MixtureInstance, np.random.Generator], Seeding[EmissionFamily]]:
-    """A start by name, from :data:`STARTS`, :data:`BEST_OF_STARTS` or :data:`BEST_OF_EM_STARTS`.
+def lookup(name: str) -> MixtureStart:
+    """A start by name, from :data:`SINGLE_STARTS`, :data:`BEST_OF_STARTS` or :data:`BEST_OF_EM_STARTS`.
 
     Returns
     -------
-    Callable[[MixtureInstance, np.random.Generator], Seeding[EmissionFamily]]
+    MixtureStart
+        Its ``polishes`` says whether :meth:`~MixtureStart.polished` is its
+        own polished fit; calling it seeds, unless it polishes.
     """
-    if name in STARTS:
-        return STARTS[name]
+    if name in SINGLE_STARTS:
+        return SINGLE_STARTS[name]
     if name in BEST_OF_STARTS:
         return BEST_OF_STARTS[name]
     return BEST_OF_EM_STARTS[name]
@@ -1385,11 +1532,10 @@ class TimedStart:
             msg = f"a fixed polish is counted in passes, not {self.passes.unit}"
             raise ValueError(msg)
         start = lookup(self.name)
-        every = isinstance(start, BestOf) and start.select is Selection.POLISHED
         chosen: MixturePolished | None = None
         with track(MemoryRun()) as outer:
             with track(MemoryRun()) as inner:
-                if isinstance(start, BestOf) and every:
+                if start.polishes:
                     seeded, chosen = start.polished(
                         instance,
                         rng,
