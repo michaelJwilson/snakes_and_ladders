@@ -75,7 +75,7 @@ from sal.sim.potts import (
     site_field,
 )
 
-from tests._chains import enumerated_law, fit_p_value
+from tests._chains import cell_counts, enumerated_law, fit_p_value
 from tests._rows import every_value
 from tests._scale import at_scale
 
@@ -473,6 +473,57 @@ def test_niedermayers_kernel_is_reversible_against_the_enumerated_law(
     flow = exact[:, None] * kernel / KERNEL_TRIALS
 
     assert np.abs(flow - flow.T).max() < 3.0 / np.sqrt(KERNEL_TRIALS), name
+
+
+#: Issue #1314: a 2x3 open lattice, three labels, a field N(0, 1) per (site,
+#: label) and 1.5 of the critical coupling: the corner of #1278's 64 x 64
+#: cross-check where Niedermayer sat on one label. 729 configurations.
+SITE_FIELD_SHAPE = (2, 3)
+SITE_FIELD = np.random.default_rng(1314).normal(0.0, 1.0, (6, 3))
+#: Records and the cluster steps between two. At 10 steps, Niedermayer and
+#: Wolff both returned p from 1e-6 to 0.03 over six seeds, under-thinned; at
+#: 25, seven seeds gave p from 0.006 to 0.78 (#1314).
+SITE_FIELD_RECORDS = 8_000
+SITE_FIELD_THIN = 25
+#: Cells expected fewer than this many visits are pooled into one: 665 of the
+#: 729 expect under 5, and one visit to a cell expecting 1e-7 decides an
+#: unpooled statistic.
+POOL_BELOW = 5.0
+
+
+@pytest.mark.oracle
+def test_niedermayer_is_exact_under_a_per_site_field_above_the_transition() -> None:
+    # The law #1278's 64 x 64 corner is read against: #1142 enumerates the
+    # uniform field only. Declared before the run: pooled chi-square p above
+    # SIGNIFICANCE. The 64 x 64 gap is a frozen chain, not this law (#1314).
+    graph = lattice_graph(SITE_FIELD_SHAPE, BoundaryCondition.OPEN, 1.0)
+    beta = 1.5 * critical_coupling(3)
+    index, probability = enumerated_law(graph, SITE_FIELD, temperature=1.0 / beta)
+    rows = site_field(SITE_FIELD, graph.n_nodes, n_states=3)
+    offsets, neighbours, couplings = graph.compressed_adjacency()
+    advance = chains.sweep_for(
+        PottsMove.NIEDERMAYER, graph, rows, offsets, neighbours, couplings, Backend.RUST
+    )
+    rng = np.random.default_rng(SEED)
+    state = np.zeros(graph.n_nodes, dtype=np.int64)
+    # Burn-in: a tenth of the recorded steps, as `_chi_square_against` discards.
+    for _ in range(SITE_FIELD_RECORDS * SITE_FIELD_THIN // 10):
+        advance(state, rng, beta)
+    visits = []
+    for _ in range(SITE_FIELD_RECORDS):
+        for _ in range(SITE_FIELD_THIN):
+            advance(state, rng, beta)
+        visits.append(tuple(state.tolist()))
+
+    observed = cell_counts(index, visits)
+    expected = probability * SITE_FIELD_RECORDS
+    kept = expected >= POOL_BELOW
+    p_value = chi_square_p_value(
+        np.append(observed[kept], observed[~kept].sum()),
+        np.append(expected[kept], expected[~kept].sum()),
+    )
+
+    assert p_value > SIGNIFICANCE, p_value
 
 
 @pytest.mark.analytic
