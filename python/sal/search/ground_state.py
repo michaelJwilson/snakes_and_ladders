@@ -45,7 +45,7 @@ sweep and the three-rung comparison are billed the same way.
 
 **One entry, from a start.** Every solver reads a :class:`Problem` --- the
 lattice, the field and ``q`` --- and a :class:`Rung` hands its own.
-:func:`ground_state` reaches every :data:`METHODS` entry and every
+:data:`ground_state` reaches every :data:`METHODS` entry and every
 :data:`ARMS` entry (issue #1038's tuned Swendsen-Wang, matched Wolff and warm
 chain, #1041's two expansion hybrids) from a ``(graph, field)``, and takes a
 ``start``, a ``schedule`` and a step count; with all three left ``None`` a run
@@ -63,6 +63,7 @@ from __future__ import annotations
 
 import copy
 import functools
+import inspect
 import operator
 import re
 import time
@@ -1272,31 +1273,451 @@ def run_bifurcation(
     )
 
 
-#: Every entry, in report order. ICM and Gibbs at T = 0 are two rows of one
-#: axis, named so the report cannot present them as independent methods.
+def _posed(
+    graph: PottsGraph,
+    field: SiteField | np.ndarray,
+    budget: Budget,
+    start: np.ndarray | None,
+) -> tuple[Problem, np.ndarray | None]:
+    """The :class:`Problem` a ``(graph, field)`` poses, its budget and start checked.
+
+    Shared by every explicit call and the chains :data:`ground_state` reads,
+    so each refuses a field not one row per node, a budget in another unit
+    and a start not one state in range per node, in one wording.
+    """
+    values = np.asarray(log_weight_of(field), dtype=np.float64)
+    if values.ndim != 2 or values.shape[0] != graph.n_nodes:
+        msg = (
+            f"the field is one row per node, ({graph.n_nodes}, n_states); got "
+            f"{values.shape}"
+        )
+        raise ValueError(msg)
+    if budget.unit is not Cost.SITE_VISITS:
+        msg = f"every entry is charged in site visits, not {budget.unit}"
+        raise ValueError(msg)
+    problem = Problem(graph, values, int(values.shape[1]))
+    if start is not None:
+        start = check_labelling(start, problem.n_nodes, problem.n_states)
+    return problem, start
+
+
+class GroundState:
+    """:data:`ground_state`: the generic call, and one explicit call per :data:`METHODS` entry (#1305).
+
+    ``ground_state(graph, field, method, budget, rng, ...)`` is a ``match``
+    on ``method`` onto the explicit call that holds the entry, such as
+    ``ground_state.icm(graph, field, budget, rng, ...)``; the arms and the
+    chains (:data:`ARMS`, :class:`SolverChain`) are the generic call's alone,
+    composed from the same parts. An explicit call takes the generic call's
+    arguments less ``method``, and only the keywords its algorithm reads:
+    ``schedule`` and ``steps`` on an anneal, ``backend`` and ``min_sites``
+    on a single-site descent. :data:`METHODS` is read from the explicit
+    calls, one entry per call, in their order here, the report order: the
+    entry ``icm-random`` is the call ``icm_random`` and the stage
+    :func:`run_icm_random` (``tests/regression/search/test_ground_state_explicit.py``).
+    """
+
+    @staticmethod
+    def field_argmax(
+        graph: PottsGraph,
+        field: SiteField | np.ndarray,
+        budget: Budget,
+        rng: np.random.Generator,
+        *,
+        start: np.ndarray | None = None,
+    ) -> MethodRun:
+        """:func:`run_field_argmax`: every site's own best class, the trap baseline."""
+        problem, start = _posed(graph, field, budget, start)
+        return run_field_argmax(problem, budget, rng, start=start)
+
+    @staticmethod
+    def icm(
+        graph: PottsGraph,
+        field: SiteField | np.ndarray,
+        budget: Budget,
+        rng: np.random.Generator,
+        *,
+        start: np.ndarray | None = None,
+        backend: Backend | None = None,
+        min_sites: int = 0,
+    ) -> MethodRun:
+        """:func:`run_icm`: iterated conditional modes in index order, to a clean sweep."""
+        problem, start = _posed(graph, field, budget, start)
+        return run_icm(
+            problem, budget, rng, start=start, backend=backend, min_sites=min_sites
+        )
+
+    @staticmethod
+    def icm_random(
+        graph: PottsGraph,
+        field: SiteField | np.ndarray,
+        budget: Budget,
+        rng: np.random.Generator,
+        *,
+        start: np.ndarray | None = None,
+        backend: Backend | None = None,
+        min_sites: int = 0,
+    ) -> MethodRun:
+        """:func:`run_icm_random`: ICM in a random order, every sweep of the budget run."""
+        problem, start = _posed(graph, field, budget, start)
+        return run_icm_random(
+            problem, budget, rng, start=start, backend=backend, min_sites=min_sites
+        )
+
+    @staticmethod
+    def anneal(
+        graph: PottsGraph,
+        field: SiteField | np.ndarray,
+        budget: Budget,
+        rng: np.random.Generator,
+        *,
+        start: np.ndarray | None = None,
+        schedule: ScheduleParams = ANNEAL_SCHEDULE,
+        steps: int | None = None,
+    ) -> MethodRun:
+        """:func:`run_annealed` on single-site moves: the fair annealed baseline."""
+        problem, start = _posed(graph, field, budget, start)
+        return run_anneal(
+            problem, budget, rng, start=start, schedule=schedule, steps=steps
+        )
+
+    @staticmethod
+    def swendsen_wang(
+        graph: PottsGraph,
+        field: SiteField | np.ndarray,
+        budget: Budget,
+        rng: np.random.Generator,
+        *,
+        start: np.ndarray | None = None,
+        schedule: ScheduleParams = ANNEAL_SCHEDULE,
+        steps: int | None = None,
+    ) -> MethodRun:
+        """:func:`run_annealed` on Swendsen-Wang: every cluster recoloured with its own accept step."""
+        problem, start = _posed(graph, field, budget, start)
+        return run_swendsen_wang(
+            problem, budget, rng, start=start, schedule=schedule, steps=steps
+        )
+
+    @staticmethod
+    def wolff(
+        graph: PottsGraph,
+        field: SiteField | np.ndarray,
+        budget: Budget,
+        rng: np.random.Generator,
+        *,
+        start: np.ndarray | None = None,
+        schedule: ScheduleParams = ANNEAL_SCHEDULE,
+        steps: int | None = None,
+    ) -> MethodRun:
+        """:func:`run_annealed` on Wolff: one cluster per step, the accept step on its field."""
+        problem, start = _posed(graph, field, budget, start)
+        return run_wolff(
+            problem, budget, rng, start=start, schedule=schedule, steps=steps
+        )
+
+    @staticmethod
+    def swendsen_wang_heat_bath(
+        graph: PottsGraph,
+        field: SiteField | np.ndarray,
+        budget: Budget,
+        rng: np.random.Generator,
+        *,
+        start: np.ndarray | None = None,
+        schedule: ScheduleParams = ANNEAL_SCHEDULE,
+        steps: int | None = None,
+    ) -> MethodRun:
+        """:func:`run_annealed` on Swendsen-Wang, each cluster relabelled by the heat bath on its field (#1142).
+
+        An entry because it reached a lower anneal energy than
+        :meth:`swendsen_wang` at equal sweeps on `spatio_tiling/release`,
+        five seeds.
+        """
+        problem, start = _posed(graph, field, budget, start)
+        return run_swendsen_wang_heat_bath(
+            problem, budget, rng, start=start, schedule=schedule, steps=steps
+        )
+
+    @staticmethod
+    def wolff_heat_bath(
+        graph: PottsGraph,
+        field: SiteField | np.ndarray,
+        budget: Budget,
+        rng: np.random.Generator,
+        *,
+        start: np.ndarray | None = None,
+        schedule: ScheduleParams = ANNEAL_SCHEDULE,
+        steps: int | None = None,
+    ) -> MethodRun:
+        """:func:`run_annealed` on Wolff, the cluster relabelled by the heat bath on its field (#1142).
+
+        An entry because it reached a lower anneal energy than :meth:`wolff`
+        at equal sweeps on `spatio_tiling/release`, five seeds.
+        """
+        problem, start = _posed(graph, field, budget, start)
+        return run_wolff_heat_bath(
+            problem, budget, rng, start=start, schedule=schedule, steps=steps
+        )
+
+    @staticmethod
+    def tempering(
+        graph: PottsGraph,
+        field: SiteField | np.ndarray,
+        budget: Budget,
+        rng: np.random.Generator,
+        *,
+        start: np.ndarray | None = None,
+        move: RungMoves = PottsMove.SINGLE_SITE,
+    ) -> MethodRun:
+        """:func:`run_tempering`: parallel tempering, charged for every replica.
+
+        ``move`` is each replica's move set, or one per rung (#1156, #1158);
+        the generic call runs the default.
+        """
+        problem, start = _posed(graph, field, budget, start)
+        return run_tempering(problem, budget, rng, start=start, move=move)
+
+    @staticmethod
+    def tempering_mixed(
+        graph: PottsGraph,
+        field: SiteField | np.ndarray,
+        budget: Budget,
+        rng: np.random.Generator,
+        *,
+        start: np.ndarray | None = None,
+    ) -> MethodRun:
+        """:func:`run_tempering_mixed`: tempering on per-rung moves (#1158).
+
+        An entry because it reached lower energy than :meth:`tempering` at
+        equal site visits on `spatio_only/release` (-10,215.9 against
+        -9,900.1) and `spatio_tiling/release` (-17,018.9 against -17,001.2),
+        five seeds, and tied at field x10 and x30.
+        """
+        problem, start = _posed(graph, field, budget, start)
+        return run_tempering_mixed(problem, budget, rng, start=start)
+
+    @staticmethod
+    def alpha_expansion(
+        graph: PottsGraph,
+        field: SiteField | np.ndarray,
+        budget: Budget,
+        rng: np.random.Generator,
+        *,
+        start: np.ndarray | None = None,
+    ) -> MethodRun:
+        """:func:`run_alpha_expansion`: the expansion, the one entry carrying a bound."""
+        problem, start = _posed(graph, field, budget, start)
+        return run_alpha_expansion(problem, budget, rng, start=start)
+
+    @staticmethod
+    def alpha_beta_swap(
+        graph: PottsGraph,
+        field: SiteField | np.ndarray,
+        budget: Budget,
+        rng: np.random.Generator,
+        *,
+        start: np.ndarray | None = None,
+    ) -> MethodRun:
+        """:func:`run_alpha_beta_swap`: the swap, the cheaper move with no bound."""
+        problem, start = _posed(graph, field, budget, start)
+        return run_alpha_beta_swap(problem, budget, rng, start=start)
+
+    @staticmethod
+    def max_product(
+        graph: PottsGraph,
+        field: SiteField | np.ndarray,
+        budget: Budget,
+        rng: np.random.Generator,
+        *,
+        start: np.ndarray | None = None,
+    ) -> MethodRun:
+        """:func:`run_max_product`: flooding max-product, refused rather than truncated."""
+        problem, start = _posed(graph, field, budget, start)
+        return run_max_product(problem, budget, rng, start=start)
+
+    @staticmethod
+    def bifurcation(
+        graph: PottsGraph,
+        field: SiteField | np.ndarray,
+        budget: Budget,
+        rng: np.random.Generator,
+        *,
+        start: np.ndarray | None = None,
+    ) -> MethodRun:
+        """:func:`run_bifurcation`: simulated bifurcation, one replica."""
+        problem, start = _posed(graph, field, budget, start)
+        return run_bifurcation(problem, budget, rng, start=start)
+
+    def __call__(
+        self,
+        graph: PottsGraph,
+        field: SiteField | np.ndarray,
+        method: str | SolverChain | SolverRealizations | SolverFusion | Then | BestOf,
+        budget: Budget,
+        rng: np.random.Generator,
+        *,
+        start: np.ndarray | None = None,
+        schedule: ScheduleParams | None = None,
+        steps: int | None = None,
+        backend: Backend | None = None,
+        min_sites: int = 0,
+    ) -> MethodRun:
+        """One :data:`METHODS` or :data:`ARMS` entry on any Potts problem, with no fixture behind it (issues #933, #1052).
+
+        Every solver reads a :class:`Problem` --- the lattice, the field and the
+        class count --- and nothing else: the ladder, the sizes and the optimum
+        a :class:`Rung` also carries are what the structural referee and the
+        bracket read. So a caller with a graph and a field --- a label step's
+        energy, say --- reaches every solver here without constructing a
+        fixture's rung.
+
+        A :data:`METHODS` name is a ``match`` onto its explicit call, such as
+        :meth:`GroundState.icm`, which returns the run unchanged; any other
+        ``method`` --- an arm, a chain, its text --- is read here and run on
+        the same parts, or refused by name (#1305).
+
+        With ``start``, ``schedule`` and ``steps`` left ``None`` the run is the
+        entry's own, bitwise. ``start`` replaces the labelling the solver would
+        draw or build: ICM and ICM in random order descend from it, the annealers
+        and the warm chain's descent start from it, the expansion and the swap
+        cut from it, and each hybrid hands it to its first part. ``field_argmax``,
+        ``tempering``, ``max-product`` and ``bifurcation`` have no single
+        starting labelling and refuse one, as does a chain or fusion that runs
+        one of them from the start it is handed, such as ``fuse-merge``.
+
+        Parameters
+        ----------
+        graph : PottsGraph
+            The lattice; every coupling non-negative.
+        field : SiteField | np.ndarray
+            ``h``, shape ``(n_nodes, n_states)``.
+        method : str | SolverChain | Then
+            A key of :data:`METHODS` or :data:`ARMS`; the text of a
+            :class:`SolverChain`, stages joined by ``>`` with their arguments,
+            e.g. ``swendsen-wang(t_start=1.0,reserve_cycles=10)>alpha-expansion``;
+            a :class:`SolverChain`; or a chain built by :func:`chain`. A key is
+            read as itself before it is read as a chain. ``a|b`` in the text is
+            realizations and ``a&b`` a fusion (:class:`SolverFusion`).
+        budget : Budget
+            In :attr:`~sal.cost.Cost.SITE_VISITS`, the unit every
+            entry is charged in.
+        rng : np.random.Generator
+            The method's generator.
+        start : np.ndarray | None
+            A labelling, shape ``(n_nodes,)``, states in ``[0, n_states)``.
+        schedule : ScheduleParams | None
+            The anneal's temperatures, in place of the entry's own; a name in
+            :data:`ANNEALED` only.
+        steps : int | None
+            The anneal's step count, fixed beforehand, in place of the budget's
+            rule; a name in :data:`ANNEALED` only.
+        backend : Backend | None
+            The descent's sweep, ``None`` for its default; a name in
+            :data:`FLOORED` only.
+        min_sites : int
+            The descent's floor (issue #1055): after each sweep a state holding
+            fewer sites is dissolved into those at or above it. A name in
+            :data:`FLOORED` only, where ``0``, the default, is the run before
+            the floor existed, bitwise.
+
+        Returns
+        -------
+        MethodRun
+
+        Raises
+        ------
+        ValueError
+            If ``method`` is in neither table, ``field`` is not one row per node,
+            the budget is in another unit, ``start`` is not one state in range
+            per node, the method refuses a start, ``schedule`` or ``steps``
+            is given to a method that runs no anneal, or ``backend`` or
+            ``min_sites > 0`` to one outside :data:`FLOORED`.
+        """
+        call: Callable[..., MethodRun]
+        match method:
+            case "field_argmax":
+                call = self.field_argmax
+            case "icm":
+                call = self.icm
+            case "icm-random":
+                call = self.icm_random
+            case "anneal":
+                call = self.anneal
+            case "swendsen-wang":
+                call = self.swendsen_wang
+            case "wolff":
+                call = self.wolff
+            case "swendsen-wang-heat-bath":
+                call = self.swendsen_wang_heat_bath
+            case "wolff-heat-bath":
+                call = self.wolff_heat_bath
+            case "tempering":
+                call = self.tempering
+            case "tempering-mixed":
+                call = self.tempering_mixed
+            case "alpha-expansion":
+                call = self.alpha_expansion
+            case "alpha-beta-swap":
+                call = self.alpha_beta_swap
+            case "max-product":
+                call = self.max_product
+            case "bifurcation":
+                call = self.bifurcation
+            case _:
+                return _composed(
+                    graph,
+                    field,
+                    method,
+                    budget,
+                    rng,
+                    start=start,
+                    schedule=schedule,
+                    steps=steps,
+                    backend=backend,
+                    min_sites=min_sites,
+                )
+        keywords = _given(method, _options(method), schedule, steps, backend, min_sites)
+        return call(graph, field, budget, rng, start=start, **keywords)
+
+
+def _explicit_names(namespace: type) -> tuple[str, ...]:
+    """The explicit calls of ``namespace``, its static methods, in their order."""
+    return tuple(
+        name
+        for name, value in vars(namespace).items()
+        if isinstance(value, staticmethod) and not name.startswith("_")
+    )
+
+
+@functools.cache
+def explicit_keywords(name: str) -> frozenset[str]:
+    """The keywords the explicit call for :data:`METHODS` entry ``name`` takes, ``start`` aside."""
+    call = getattr(GroundState, name.replace("-", "_"))
+    return frozenset(
+        parameter.name
+        for parameter in inspect.signature(call).parameters.values()
+        if parameter.kind is inspect.Parameter.KEYWORD_ONLY
+    ) - {"start"}
+
+
+def entry_name(call: str) -> str:
+    """The :data:`METHODS` name of explicit call ``call``: ``-`` for ``_``, but ``field_argmax``, named so before the rest."""
+    return call if call == "field_argmax" else call.replace("_", "-")
+
+
+#: Every entry, in report order: one per explicit call of
+#: :class:`GroundState`, named by :func:`entry_name`, each the stage
+#: ``run_<call>`` a chain runs on a :class:`Problem` (#1305). ICM and ICM in
+#: random order are two rows of one axis, named so the report cannot present
+#: them as independent methods.
 METHODS: dict[str, Method] = {
-    "field_argmax": run_field_argmax,
-    "icm": run_icm,
-    "icm-random": run_icm_random,
-    "anneal": run_anneal,
-    "swendsen-wang": run_swendsen_wang,
-    "wolff": run_wolff,
-    # Issue #1142: each cluster relabelled by the heat bath on its field. In
-    # METHODS because each reached a lower anneal energy than its uniform
-    # sibling at equal sweeps on `spatio_tiling/release`, five seeds.
-    "swendsen-wang-heat-bath": run_swendsen_wang_heat_bath,
-    "wolff-heat-bath": run_wolff_heat_bath,
-    "tempering": run_tempering,
-    # Issue #1158: per-rung moves. In METHODS because it reached lower energy
-    # than `tempering` at equal site visits on `spatio_only/release`
-    # (-10,215.9 against -9,900.1) and `spatio_tiling/release` (-17,018.9
-    # against -17,001.2), five seeds, and tied at field x10 and x30.
-    "tempering-mixed": run_tempering_mixed,
-    "alpha-expansion": run_alpha_expansion,
-    "alpha-beta-swap": run_alpha_beta_swap,
-    "max-product": run_max_product,
-    "bifurcation": run_bifurcation,
+    entry_name(name): globals()[f"run_{name}"] for name in _explicit_names(GroundState)
 }
+
+#: ``ground_state(graph, field, method, budget, rng, *, start, schedule,
+#: steps, backend, min_sites)``, the generic call, and its explicit calls,
+#: ``ground_state.icm`` and one per :data:`METHODS` entry (:class:`GroundState`).
+ground_state = GroundState()
+
 
 #: The two rows that are one axis, so a reader of the table is told rather
 #: than left to notice.
@@ -1335,17 +1756,13 @@ class SweepReserve:
 #: The names that are a single-site descent, and so take its ``backend`` and
 #: ``min_sites`` floor (issue #1055). The annealers, the cuts and the hybrids
 #: have no floor of their own and refuse one.
-FLOORED = frozenset({"icm", "icm-random"})
+FLOORED = frozenset(
+    name for name in METHODS if explicit_keywords(name) >= DESCENT_OPTIONS
+)
 
 #: The :data:`METHODS` names that run an anneal.
 _ANNEALED_METHODS = frozenset(
-    {
-        "anneal",
-        "swendsen-wang",
-        "wolff",
-        "swendsen-wang-heat-bath",
-        "wolff-heat-bath",
-    }
+    name for name in METHODS if explicit_keywords(name) >= ANNEAL_OPTIONS
 )
 
 #: Parts a chain can name beside :data:`METHODS` and :data:`ARMS`: the warm
@@ -1655,7 +2072,7 @@ class SolverChain:
 
     ``SolverChain.parse("swendsen-wang>alpha-expansion")`` reads one from
     its text, ``chain.stages[0].update(t_start=1.0, reserve_cycles=10)``
-    sets a stage's arguments, and :func:`ground_state` runs it. Each stage
+    sets a stage's arguments, and :data:`ground_state` runs it. Each stage
     starts from the labelling of the one before and gets the budget the
     stages before it left less its reserve; the run is the last stage's,
     ``spent`` summed. A stage is a :class:`SolverStage` or a
@@ -2095,7 +2512,7 @@ EXPANSION_SW_SCHEDULE = ScheduleParams(ScheduleShape.LINEAR, 0.3236, ANNEAL_END)
 
 #: The tuned, warm and hybrid solvers of issues #1038 and #1041, by name.
 #: Not in :data:`METHODS`, which is issue #906's table and whose rows
-#: `docs/nb/potts_starts.ipynb` reproduces; :func:`ground_state` reaches both.
+#: `docs/nb/potts_starts.ipynb` reproduces; :data:`ground_state` reaches both.
 @dataclass(frozen=True)
 class Fusion:
     """Alpha-expansion fused with each proposer's labelling in turn (issue #1070).
@@ -2213,114 +2630,15 @@ ANNEALED = _ANNEALED_METHODS | frozenset(
 )
 
 
-def ground_state(
-    graph: PottsGraph,
-    field: SiteField | np.ndarray,
-    method: str | SolverChain | SolverRealizations | SolverFusion | Then | BestOf,
-    budget: Budget,
-    rng: np.random.Generator,
-    *,
-    start: np.ndarray | None = None,
-    schedule: ScheduleParams | None = None,
-    steps: int | None = None,
-    backend: Backend | None = None,
-    min_sites: int = 0,
-) -> MethodRun:
-    """One :data:`METHODS` or :data:`ARMS` entry on any Potts problem, with no fixture behind it (issues #933, #1052).
-
-    Every solver reads a :class:`Problem` --- the lattice, the field and the
-    class count --- and nothing else: the ladder, the sizes and the optimum
-    a :class:`Rung` also carries are what the structural referee and the
-    bracket read. So a caller with a graph and a field --- a label step's
-    energy, say --- reaches every solver here without constructing a
-    fixture's rung.
-
-    With ``start``, ``schedule`` and ``steps`` left ``None`` the run is the
-    entry's own, bitwise. ``start`` replaces the labelling the solver would
-    draw or build: ICM and ICM in random order descend from it, the annealers
-    and the warm chain's descent start from it, the expansion and the swap
-    cut from it, and each hybrid hands it to its first part. ``field_argmax``,
-    ``tempering``, ``max-product`` and ``bifurcation`` have no single
-    starting labelling and refuse one, as does a chain or fusion that runs
-    one of them from the start it is handed, such as ``fuse-merge``.
-
-    Parameters
-    ----------
-    graph : PottsGraph
-        The lattice; every coupling non-negative.
-    field : SiteField | np.ndarray
-        ``h``, shape ``(n_nodes, n_states)``.
-    method : str | SolverChain | Then
-        A key of :data:`METHODS` or :data:`ARMS`; the text of a
-        :class:`SolverChain`, stages joined by ``>`` with their arguments,
-        e.g. ``swendsen-wang(t_start=1.0,reserve_cycles=10)>alpha-expansion``;
-        a :class:`SolverChain`; or a chain built by :func:`chain`. A key is
-        read as itself before it is read as a chain. ``a|b`` in the text is
-        realizations and ``a&b`` a fusion (:class:`SolverFusion`).
-    budget : Budget
-        In :attr:`~sal.cost.Cost.SITE_VISITS`, the unit every
-        entry is charged in.
-    rng : np.random.Generator
-        The method's generator.
-    start : np.ndarray | None
-        A labelling, shape ``(n_nodes,)``, states in ``[0, n_states)``.
-    schedule : ScheduleParams | None
-        The anneal's temperatures, in place of the entry's own; a name in
-        :data:`ANNEALED` only.
-    steps : int | None
-        The anneal's step count, fixed beforehand, in place of the budget's
-        rule; a name in :data:`ANNEALED` only.
-    backend : Backend | None
-        The descent's sweep, ``None`` for its default; a name in
-        :data:`FLOORED` only.
-    min_sites : int
-        The descent's floor (issue #1055): after each sweep a state holding
-        fewer sites is dissolved into those at or above it. A name in
-        :data:`FLOORED` only, where ``0``, the default, is the run before
-        the floor existed, bitwise.
-
-    Returns
-    -------
-    MethodRun
-
-    Raises
-    ------
-    ValueError
-        If ``method`` is in neither table, ``field`` is not one row per node,
-        the budget is in another unit, ``start`` is not one state in range
-        per node, the method refuses a start, ``schedule`` or ``steps``
-        is given to a method that runs no anneal, or ``backend`` or
-        ``min_sites > 0`` to one outside :data:`FLOORED`.
-    """
-    field = log_weight_of(field)
-    solvers = METHODS | ARMS
-    solver: Callable[..., MethodRun]
-    if isinstance(
-        method, Then | BestOf | SolverChain | SolverRealizations | SolverFusion
-    ):
-        solver, takes = method, method.takes
-    elif method in solvers:
-        solver, takes = solvers[method], _options(method)
-    elif any(token in method for token in (CHAIN, "(", REALIZATIONS, REPEAT, FUSE)):
-        composed = SolverChain.parse(method)
-        solver, takes = composed, composed.takes
-    else:
-        msg = (
-            f"no ground-state method {method!r}; the methods are {sorted(METHODS)} "
-            f"and the arms {sorted(ARMS)}, or a chain of those and "
-            f"{sorted(STAGES)} joined by {CHAIN!r}, each with its arguments"
-        )
-        raise ValueError(msg)
-    values = np.asarray(field, dtype=np.float64)
-    if values.ndim != 2 or values.shape[0] != graph.n_nodes:
-        msg = (
-            f"the field is one row per node, ({graph.n_nodes}, n_states); got "
-            f"{values.shape}"
-        )
-        raise ValueError(msg)
-    if budget.unit is not Cost.SITE_VISITS:
-        msg = f"every entry is charged in site visits, not {budget.unit}"
-        raise ValueError(msg)
+def _given(
+    method: object,
+    takes: frozenset[str],
+    schedule: ScheduleParams | None,
+    steps: int | None,
+    backend: Backend | None,
+    min_sites: int,
+) -> dict[str, Any]:
+    """The options :data:`ground_state` hands ``method``: those given, each refused where ``takes`` lacks it."""
     if (schedule is not None or steps is not None) and not takes & ANNEAL_OPTIONS:
         msg = (
             f"{method!r} runs no anneal, so takes no schedule or steps; those "
@@ -2333,9 +2651,6 @@ def ground_state(
             f"min_sites; those apply to {sorted(FLOORED)}"
         )
         raise ValueError(msg)
-    problem = Problem(graph, values, int(values.shape[1]))
-    if start is not None:
-        start = check_labelling(start, problem.n_nodes, problem.n_states)
     keywords: dict[str, Any] = {}
     if schedule is not None:
         keywords["schedule"] = schedule
@@ -2348,6 +2663,45 @@ def ground_state(
         keywords["backend"] = backend
     if min_sites != 0:
         keywords["min_sites"] = min_sites
+    return keywords
+
+
+def _composed(
+    graph: PottsGraph,
+    field: SiteField | np.ndarray,
+    method: str | SolverChain | SolverRealizations | SolverFusion | Then | BestOf,
+    budget: Budget,
+    rng: np.random.Generator,
+    *,
+    start: np.ndarray | None,
+    schedule: ScheduleParams | None,
+    steps: int | None,
+    backend: Backend | None,
+    min_sites: int,
+) -> MethodRun:
+    """:data:`ground_state`'s ``case _``: an arm, a chain, or a refusal naming ``method``."""
+    solver: Callable[..., MethodRun]
+    if isinstance(
+        method, Then | BestOf | SolverChain | SolverRealizations | SolverFusion
+    ):
+        solver, takes = method, method.takes
+    elif method in METHODS:
+        msg = f"{method!r} is a method, but no case of ground_state runs it"
+        raise ValueError(msg)
+    elif method in ARMS:
+        solver, takes = ARMS[method], _options(method)
+    elif any(token in method for token in (CHAIN, "(", REALIZATIONS, REPEAT, FUSE)):
+        composed = SolverChain.parse(method)
+        solver, takes = composed, composed.takes
+    else:
+        msg = (
+            f"no ground-state method {method!r}; the methods are {sorted(METHODS)} "
+            f"and the arms {sorted(ARMS)}, or a chain of those and "
+            f"{sorted(STAGES)} joined by {CHAIN!r}, each with its arguments"
+        )
+        raise ValueError(msg)
+    keywords = _given(method, takes, schedule, steps, backend, min_sites)
+    problem, start = _posed(graph, field, budget, start)
     return solver(problem, budget, rng, start=start, **keywords)
 
 

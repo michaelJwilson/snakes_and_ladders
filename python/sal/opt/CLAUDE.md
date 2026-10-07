@@ -52,4 +52,10 @@ PyTorch.
   HMM's hidden states leaves its likelihood unchanged — recovery is stated up
   to that symmetry, and the alignment is part of the test.
 
+- **A seeding rule has one home: its explicit call (#1305).**
+  `emission_mixture.seed` is a `match` on `SeedMethod` onto `seed.uniform`,
+  `seed.plus_plus` and `seed.kmeans`; `tests/regression/opt/test_opt_seed.py`
+  holds each member to one case and each pair of calls to bitwise-equal
+  starts.
+
 ## Discrete moves are in search/

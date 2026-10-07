@@ -17,8 +17,8 @@ the forward recursion of :mod:`sal.opt.hmm`.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from dataclasses import dataclass
-from typing import Literal, cast, get_args
+from dataclasses import dataclass, field
+from typing import Any, Literal, cast, get_args
 
 import numpy as np
 import torch
@@ -76,12 +76,17 @@ class ChannelRows:
         The covariate a factored channel's kernel term reads per observation:
         the exposure as ``float64`` or the trial count as ``uint32``, both
         ``(S, n_nodes)`` contiguous; ``None`` where nothing is factored.
+    by_site : bool
+        ``True`` where the observations are not non-negative integers, so no
+        table by value exists and each row is the observation's own index,
+        ``s * n_nodes + v`` (issue #1308).
     """
 
     rows: np.ndarray
     extent: int
     levels: np.ndarray | None = None
     covariate: np.ndarray | None = None
+    by_site: bool = False
 
 
 @dataclass(frozen=True)
@@ -102,10 +107,17 @@ class ObservationRows:
     covariate : np.ndarray | None
         The covariate, likewise.
     total : ChannelRows
-        The first channel's, or the symbols of the categorical model.
+        The first channel's, or the one channel of a one-channel model: by
+        symbol or count, by ``(count, trial count)`` pair, or by site
+        (issues #1298, #1308).
     successes : ChannelRows | None
-        The second channel's; ``None`` for the categorical model, which has
-        one (issue #1298).
+        The second channel's; ``None`` for a one-channel model.
+    tables : dict[str, tuple[SpatioSequentialParams, Any]]
+        The last one-channel table built from these rows, keyed by kind and
+        held with the parameters it was built under (issue #1308). A fit
+        scores one set of parameters through its E step, its labelled
+        log-likelihoods and its field, so the table is built once per M step
+        rather than once per call; any other parameters rebuild it.
     """
 
     layout: CovariateRows
@@ -113,6 +125,9 @@ class ObservationRows:
     covariate: np.ndarray | None
     total: ChannelRows
     successes: ChannelRows | None
+    tables: dict[str, tuple[SpatioSequentialParams, Any]] = field(
+        default_factory=dict, compare=False, repr=False
+    )
 
 
 def observation_rows(
@@ -184,13 +199,32 @@ def _paths(params: SpatioSequentialParams) -> np.ndarray:
     )
 
 
+#: Entries of the ``(labellings, edges)`` array :func:`log_prior` builds at
+#: once: 8 MiB of ``float64``. Enumeration hands it every labelling, and the
+#: rows are taken in blocks under this rather than all together.
+_PRIOR_BLOCK = 2**20
+
+
 def log_prior(params: SpatioSequentialParams, labellings: np.ndarray) -> np.ndarray:
-    """Unnormalized ``log p(l)``, the Potts term of ``eq:joint``, per labelling, shape ``(n_labellings,)``."""
+    """Unnormalized ``log p(l)``, the Potts term of ``eq:joint``, per labelling, shape ``(n_labellings,)``.
+
+    Vectorised over the edges (issue #1308): the loop over edges it replaces
+    was 543 us at a 10x10 lattice's 180 edges, this 13.1 us. Each term is
+    ``(beta * J_e) * [l_i == l_j]`` as the loop formed it, and the sum runs
+    in edge order through ``cumsum``, which is sequential, so the result is
+    the loop's bit for bit.
+    """
+    graph = params.graph
+    first, second = graph.edge_index[:, 0], graph.edge_index[:, 1]
+    weights = params.beta * graph.edge_coupling
     total = np.zeros(labellings.shape[0])
-    for (first, second), coupling in params.graph.weighted_edges():
-        total += (
-            params.beta * coupling * (labellings[:, first] == labellings[:, second])
-        )
+    if weights.size == 0:
+        return total
+    step = max(1, _PRIOR_BLOCK // weights.size)
+    for start in range(0, labellings.shape[0], step):
+        block = labellings[start : start + step]
+        terms = weights * (block[:, first] == block[:, second])
+        total[start : start + step] += np.cumsum(terms, axis=1)[:, -1]
     return total
 
 

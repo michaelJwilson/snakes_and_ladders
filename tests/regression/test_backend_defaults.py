@@ -24,22 +24,21 @@ _GIBBS = "no Rust route; NUMBA is the compiled route"
 _RETIRED_HMM = "no Rust route on the retired objective (#1189); deprecated"
 _GRADIENT = "differentiates; JAX and TORCH are the routes it admits"
 _TABULATED = (
-    "the Rust route tabulates the categorical and the two-channel count "
-    "emissions (#1298) and refuses the Gaussian, negative-binomial and "
-    "beta-binomial classes the default serves; categorical at "
-    "spatio_sequential/stress: "
+    "<2x on a family it serves at spatio_sequential/stress (#1308): each "
+    "family's log_density, scored by site under a covariate, is the cost "
+    "both routes share; "
 )
 EXCEPTIONS = {
     "likelihood/objective.py::BranchLengthObjective.__init__(backend)": _GRADIENT,
     "likelihood/objective.py::SubstitutionModelObjective.__init__(backend)": _GRADIENT,
     "likelihood/spatio_sequential/__init__.py::class_posteriors(backend)": (
-        _TABULATED + "5.4x"
+        _TABULATED + "1.09x, beta-binomial under trial counts"
     ),
     "likelihood/spatio_sequential/__init__.py::external_field(backend)": (
-        _TABULATED + "4.4x"
+        _TABULATED + "1.68x, beta-binomial under trial counts"
     ),
     "likelihood/spatio_sequential/__init__.py::labelled_log_likelihood(backend)": (
-        _TABULATED + "1.42x"
+        _TABULATED + "1.14x, beta-binomial under trial counts"
     ),
     "opt/hmm/objectives.py::HmmObjective.__init__(backend)": _RETIRED_HMM,
     "opt/hmm/objectives.py::GaussianHmmObjective.__init__(backend)": _RETIRED_HMM,
@@ -59,17 +58,15 @@ EXCEPTIONS = {
     "search/icm/__init__.py::iterated_conditional_modes(backend)": _GIBBS,
     "search/icm/__init__.py::merge_small_labels(backend)": _GIBBS,
     "search/trws/__init__.py::trws(backend)": _GIBBS,
-    "search/spatio_sequential.py::fit_spatio_sequential(backend)": (
-        _TABULATED + "1.41x"
-    ),
     "sim/count_pairs/__init__.py::simulate_count_pairs(backend)": (
         "<2x at stress: 1.05x (30.7 s against 29.1 s, "
         "spatio_sequential_counts/stress.yaml)"
     ),
 }
 
-#: The defaults #1283 flipped, and the ratio each was flipped on: stress
-#: size, min of 3, the oracle's time over the Rust route's.
+#: The defaults flipped under #1283's rule, and the ratio each was flipped on:
+#: stress size, min of 3, the oracle's time over the Rust route's; the least
+#: over the families a function serves where it serves several.
 FLIPPED = {
     "search/maxflow/__init__.py::max_flow(backend)": "131x, open 512^2",
     "search/maxflow/__init__.py::ising_ground_state(backend)": "315x, open 512^2",
@@ -87,6 +84,9 @@ FLIPPED = {
     "sample/potts_keyed.py::cluster_moves(backend)": "13.5x, 64^2",
     "likelihood/pruning/__init__.py::log_likelihood(backend)": "15.5x, tree_jc/stress",
     "learn/ranking.py::ground_state_target(backend)": "32.8x, spatio_only/stress",
+    "search/spatio_sequential.py::fit_spatio_sequential(backend)": (
+        "2.21x, negative binomial under exposure, spatio_sequential/stress (#1308)"
+    ),
 }
 
 #: The dunder methods a caller writes the parameters of.

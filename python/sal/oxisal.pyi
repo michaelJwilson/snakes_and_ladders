@@ -253,6 +253,9 @@ def external_field(
     log_beta: np.ndarray | None = None,
 ) -> None: ...
 def factorize(values: np.ndarray) -> tuple[np.ndarray, np.ndarray]: ...
+def coupled_log_prior(
+    labels: np.ndarray, edges: np.ndarray, coupling: np.ndarray, beta: float
+) -> float: ...
 def simulate_count_pairs(
     seed: int,
     states: np.ndarray,

@@ -6,12 +6,17 @@ now; and `expectation_maximization(observations, *start)` is the fit a
 hand-built weight vector and family start, bitwise. The public score
 `seed_scores` (#1236) draws the indices the private `_seed_scores` drew on
 main 25dde304, on 8 of 8 generators, and scores a 1-D Gaussian row set as
-the hand-computed ``(y - c) ** 2 / (2 sigma ** 2)``, bitwise.
+the hand-computed ``(y - c) ** 2 / (2 sigma ** 2)``, bitwise. `seed` is a
+`match` onto one explicit call per `SeedMethod` member, `seed.uniform`,
+`seed.plus_plus` and `seed.kmeans`, which returns the same start bitwise
+(#1305).
 """
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 import pytest
@@ -21,6 +26,7 @@ from sal.opt.em import EmConfig
 from sal.opt.emission_mixture import (
     ComponentsAt,
     CountPairSeeding,
+    Seed,
     SeedMethod,
     Start,
     expectation_maximization,
@@ -166,3 +172,82 @@ def test_the_public_score_is_half_the_squared_distance_on_a_gaussian() -> None:
     candidates = np.arange(3, dtype=np.float64)
     assert np.array_equal(score(0.0, candidates), [0.0, 0.125, 1.125])
     assert np.array_equal(score(2.0, candidates), [1.125, 0.5, 0.0])
+
+
+def _explicit_calls() -> list[str]:
+    return [
+        name for name, value in vars(Seed).items() if isinstance(value, staticmethod)
+    ]
+
+
+@pytest.mark.critical
+@pytest.mark.analytic
+def test_the_explicit_calls_are_the_seed_methods_one_each() -> None:
+    assert _explicit_calls() == [member.value for member in SeedMethod]
+    for name in _explicit_calls():
+        assert "method" not in inspect.signature(getattr(seed, name)).parameters
+
+
+@pytest.mark.critical
+@pytest.mark.analytic
+@pytest.mark.parametrize("method", list(SeedMethod))
+def test_the_match_reaches_each_methods_explicit_call_once(
+    monkeypatch: pytest.MonkeyPatch, method: SeedMethod
+) -> None:
+    reached: list[str] = []
+    sentinel: Any = object()
+    for name in _explicit_calls():
+
+        def record(*_args: Any, _name: str = name, **_kwargs: Any) -> Any:
+            reached.append(_name)
+            return sentinel
+
+        monkeypatch.setattr(Seed, name, staticmethod(record))
+    observations, n_components, at = _problem()
+    rng = np.random.default_rng(0)
+    assert seed(observations, n_components, at, method=method, rng=rng) is sentinel
+    assert reached == [method.value]
+
+
+@pytest.mark.analytic
+@pytest.mark.parametrize("method", list(SeedMethod))
+@pytest.mark.parametrize("by", ["member", "text"])
+def test_a_generic_seed_is_its_explicit_calls_bitwise(
+    method: SeedMethod, by: str
+) -> None:
+    observations, n_components, at = _problem()
+    rows = observations[::-1].copy()
+    named = method if by == "member" else str(method.value)
+    for given in (None, rows):
+        ours = seed(
+            observations,
+            n_components,
+            at,
+            method=named,
+            rng=np.random.default_rng(11),
+            rows=given,
+        )
+        theirs = getattr(seed, method.value)(
+            observations, n_components, at, rng=np.random.default_rng(11), rows=given
+        )
+        assert np.array_equal(ours.weights, theirs.weights)
+        mine, other = (
+            ours.components.named_parameters(),
+            theirs.components.named_parameters(),
+        )
+        assert mine.keys() == other.keys()
+        for key in mine:
+            assert torch.equal(mine[key], other[key]), key
+
+
+@pytest.mark.analytic
+def test_an_unknown_method_is_refused_by_name() -> None:
+    observations, n_components, at = _problem()
+    with pytest.raises(ValueError, match="no seeding rule 'forgy'"):
+        seed(
+            observations,
+            n_components,
+            at,
+            method="forgy",
+            rng=np.random.default_rng(0),
+        )

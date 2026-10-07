@@ -64,3 +64,11 @@ module. It is referenced here, never restated. What follows is local.
   limit `beta = 1 / 0` cannot express; it implements no kernel of its own, so
   there is no second physics to keep in step (#706). Above zero the wrapper is
   pinned bitwise against the sweep it delegates to.
+
+- **An entry has one home: its explicit call (#1305).** `ground_state` is a
+  `match` on a `METHODS` name onto `ground_state.icm` and its siblings, each
+  holding its algorithm's keywords; `METHODS`, `FLOORED` and the annealed
+  names are read from those calls, never kept beside them. Arms and chains
+  stay the generic call's, composed from the same stages.
+  `tests/regression/search/test_ground_state_explicit.py` holds each entry to
+  one case and each pair of calls to bitwise-equal runs.

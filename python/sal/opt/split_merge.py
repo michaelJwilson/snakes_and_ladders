@@ -355,7 +355,7 @@ def fit(
 ) -> EmissionMixtureFit:
     """Seed, fit, refine and restart a mixture in one call, from the observations alone (issue #1085).
 
-    Each restart seeds by :func:`~sal.opt.emission_mixture.seed` on its own
+    Each restart seeds by :data:`~sal.opt.emission_mixture.seed` on its own
     stream --- ``rng.spawn(restarts)``, in order --- fits by
     :func:`~sal.opt.emission_mixture.expectation_maximization`, and, with
     ``refine``, runs :func:`split_and_merge` from that fit with the seam the

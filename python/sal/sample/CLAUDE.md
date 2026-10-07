@@ -92,6 +92,14 @@ draws reach it without the module importing their type.
   warm-up it was read from, and a criterion is compared against another
   criterion at equal rungs and equal warm-up or not at all.
 
+- **A relabelling algorithm has one home: its explicit call (#1305).**
+  `relabel.relabel` is a `match` on `RelabelMethod` onto `relabel.stephens`
+  and one call per member, the module's function of that name. The generic
+  call offers every input to every method and hands each only what it reads;
+  a loop control a method does not take is refused.
+  `tests/regression/sample/test_relabel.py` holds each member to one case and
+  each pair of calls to bitwise-equal relabellings.
+
 ## Measured mixing limits
 
 A move whose law enumeration pins and whose chain still does not mix on an

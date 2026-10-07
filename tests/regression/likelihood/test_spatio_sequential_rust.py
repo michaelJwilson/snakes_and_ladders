@@ -16,7 +16,7 @@ import pytest
 import torch
 from sal import oxisal
 from sal.backend import Backend
-from sal.emissions import CategoricalEmission, GaussianEmission
+from sal.emissions import CategoricalEmission
 from sal.likelihood import spatio_sequential
 from sal.likelihood.spatio_sequential import (
     class_posteriors,
@@ -249,21 +249,15 @@ def test_the_categorical_table_is_the_family_s_own_log_density() -> None:
 
 @pytest.mark.smoke
 def test_a_family_the_kernel_does_not_tabulate_is_refused() -> None:
-    # The kernel tabulates two count channels or one symbol. Any other family,
-    # a mixture of the two, two alphabets, or a symbol past the alphabet is
-    # refused before the kernel is reached, and the refusal says which.
+    # The kernel reads two count channels or one table. The two-channel pair
+    # mixed with a one-channel family, two alphabets, or a symbol past the
+    # alphabet is refused before the kernel is reached, and the refusal says
+    # which. A Gaussian, refused before issue #1308, is scored by site.
     params, observations, labels = _categorical("ci")
-    gaussian = GaussianEmission(
-        np.zeros(params.n_states), np.ones(params.n_states), 1e-6
-    )
     pair = _ci().params.emissions[0]
     wider = CategoricalEmission(np.full((params.n_states, 4), 0.25))
 
-    with pytest.raises(TypeError, match="or the categorical emission"):
-        rust.class_posteriors(
-            replace(params, emissions=(gaussian, gaussian)), observations, labels
-        )
-    with pytest.raises(TypeError, match="one emission type in every class"):
+    with pytest.raises(TypeError, match="do not align by site"):
         rust.class_posteriors(
             replace(params, emissions=(params.emissions[0], pair)),
             observations,
