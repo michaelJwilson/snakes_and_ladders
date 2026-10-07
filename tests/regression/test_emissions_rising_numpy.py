@@ -42,7 +42,8 @@ _DIGAMMA_TOLERANCE = 1e-15
 
 #: NumPy against torch at and above :data:`LARGE_SHAPE`, over
 #: ``max(|f|, 1)``: the two difference Stirling's tail differently. Measured
-#: worst: 7.6e-20, and 108 of the 112 pairs bit for bit.
+#: worst: 5.9e-16, and 98 of the 112 pairs bit for bit: the plain route
+#: is taken at large ``m`` (issue #1329); 7.6e-20 before it.
 _TORCH_TOLERANCE = 1e-15
 
 
@@ -130,3 +131,46 @@ def test_the_digamma_rise_is_the_derivative() -> None:
     )
 
     np.testing.assert_allclose(digamma_rising(shape, count), difference, rtol=1e-8)
+
+
+def _plain_margin(
+    shape: NDArray[np.float64], count: NDArray[np.float64]
+) -> NDArray[np.float64]:
+    """The plain difference's error bound over the promise: at most 1 takes the plain route."""
+    from sal.emissions.rising import _LOG_PROMISE, _PLAIN_ERROR
+    from scipy.special import gammaln
+
+    rise, base = gammaln(shape + count), gammaln(shape)
+    bound = _PLAIN_ERROR * (
+        np.maximum(np.abs(rise), 1.0) + np.maximum(np.abs(base), 1.0)
+    )
+    margin: NDArray[np.float64] = bound / (
+        _LOG_PROMISE * np.maximum(np.abs(rise - base), 1.0)
+    )
+    return margin
+
+
+@pytest.mark.oracle
+def test_the_log_rising_factorial_is_exact_either_side_of_the_plain_route() -> None:
+    # The 16 pairs of a dense grid nearest the plain route's bound on each
+    # side (issue #1329), judged against mpmath at the same tolerance.
+    grid = np.meshgrid(
+        np.geomspace(1e-3, 1e4, 120), np.geomspace(1e-6, 1e6, 120), indexing="ij"
+    )
+    shape, count = grid[0].ravel(), grid[1].ravel()
+    margin = _plain_margin(shape, count)
+    plain = np.flatnonzero(margin <= 1.0)
+    series = np.flatnonzero(margin > 1.0)
+    pick = np.concatenate(
+        [
+            plain[np.argsort(-margin[plain])[:16]],
+            series[np.argsort(margin[series])[:16]],
+        ]
+    )
+    shape, count = shape[pick], count[pick]
+    want = _exact("loggamma", shape, count)
+
+    got = log_rising(shape, count)
+
+    error = np.abs(got - want) / np.maximum(np.abs(want), 1.0)
+    assert float(error.max()) <= _LOG_TOLERANCE

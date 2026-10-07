@@ -50,3 +50,32 @@ def test_digamma_rising_numpy(
     benchmark: object, pairs: tuple[NDArray[np.float64], NDArray[np.float64]]
 ) -> None:
     benchmark(digamma_rising, *pairs)  # type: ignore[operator]
+
+
+@pytest.fixture(scope="module")
+def table() -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """A count emission's table (issue #1329): 25 shapes log-uniform from 0.1
+    to 1e3 against 2,829 negative binomial counts, broadcast to 2,829 x 25."""
+    rng = np.random.default_rng(1329)
+    shape = 10.0 ** rng.uniform(-1.0, 3.0, 25)[None, :]
+    count = rng.negative_binomial(2, 0.02, 2829).astype(np.float64)[:, None]
+    x, m = np.broadcast_arrays(shape, count)
+    return np.ascontiguousarray(x), np.ascontiguousarray(m)
+
+
+@pytest.mark.benchmark
+def test_log_rising_numpy_table(
+    benchmark: object, table: tuple[NDArray[np.float64], NDArray[np.float64]]
+) -> None:
+    benchmark(log_rising, *table)  # type: ignore[operator]
+
+
+@pytest.mark.benchmark
+def test_log_rising_plain_table(
+    benchmark: object, table: tuple[NDArray[np.float64], NDArray[np.float64]]
+) -> None:
+    # The control: the plain difference everywhere, 5.8e-14 off mpmath.
+    from scipy.special import gammaln
+
+    shape, count = table
+    benchmark(lambda: gammaln(shape + count) - gammaln(shape))  # type: ignore[operator]
