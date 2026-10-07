@@ -254,3 +254,50 @@ The adapters gained two opt-in modes, with the default paths unchanged: `highs.l
 - TRW-S's decoded labelling on the triangular antiferromagnet is 10.5–33.6 above the ILP optimum at 36–144 sites; the optimum is a near three-colouring.
 - Five per-PR referee tests exceed the 10 s cap: four in this run's tier (BlackJAX integrator 26.2 s, the import guard 16.4 s, JAX torch routes 15.1 s, HiGHS converged 14.2 s) and the new HiGHS test in its own run (8.9 s idle; it may exceed 10 s under load).
 - The eight chain-stored memory goals cannot be met at 0.55; see Goals.
+
+## Rerun through `sal.external` at `8c509808` (#1274, on #1282)
+
+**TL;DR:** 100 of 100 referee tests pass: 97 per-PR and 3 release, against #1284's 73 of 73. Of the 131 goals, 105 are met, against #1284's 106. One verdict changed: gco's expansion at 71², q = 10, measured 0.71× in the suite and 0.45–0.48× in three isolated reruns. No goal constant moves.
+
+Commit `8c509808`: #1284 (`eb1cec29`) merged onto the #1282 stack (#1293, `eda21bfa`). The host, thread settings and goal-logging plugin are as in the rerun above. The extension was built with `infra/build_extension.sh` (release profile, fat LTO). `sal.__file__` resolves into the worktree. Load was 0.5–1.2, and nothing else ran during the timed runs.
+
+Routing: #1284's HiGHS ILP test calls `potts.lower_bound(..., integral=True)` through the module's session, and its gco tests call `potts.ground_state` through the module's session. `_forbidden.py` imports `stand_in` and `allowed_by` from `sal.external.potts_inputs`. `highs.local_polytope(integral=True)` lost its last caller and is removed. `pymaxflow.alpha_expansion` stays, because `sal.external` has no `aexpansion_grid`.
+
+### Pass counts
+
+| Framework | #1284 per-PR | This run | Of which #1284's tests | Of which #1293's |
+|---|---|---|---|---|
+| BlackJAX | 10 | 16 | 0 | 6 |
+| hmmlearn | 8 | 13 | 0 | 5 |
+| gco | 2 | 11 | 2 | 7 |
+| PyMaxflow | 3 | 8 | 2 | 3 |
+| HiGHS | 3 | 5 | 1 | 1 |
+| scikit-learn, rustworkx, JAX, Gymnasium, TorchRL, PyG | 34 | 34 | 0 | 0 |
+| infra (`test_validation.py`) | 10 | 10 | 0 | 0 |
+| **All** | **70** | **97** | **5** | **22** |
+
+#1284's five tests through `sal.external`: the HiGHS ILP test took 1.06 s, against 8.9 s through one-shot subprocesses. gco's forbidden-label oracle took 0.10 s, against 1.4 s. Both run under the session.
+
+### Goals delta
+
+Of the runtime goals, 63 of 72 are met (64 before); of the memory goals, 42 of 59 (unchanged). Every other framework's met count is unchanged.
+
+| Goal | #1284 | This run, in the suite | Isolated, 3 runs |
+|---|---|---|---|
+| gco expansion, 71², q = 10 | 58.6 ms, 0.42, met | 98.9 ms, 0.71, unmet | 63.8–68.0 ms, 0.45–0.48, met |
+| gco expansion, 142², q = 10 | 277 ms, 0.44, met | 343 ms, 0.55, met | 292–344 ms, 0.47–0.55, met 2 of 3 |
+
+The 142² goal sits at its 0.55 threshold, so its verdict depends on run-to-run variation. Among the unmet goals, these ratios moved by more than 0.1: PyMaxflow 142² from 0.80 to 0.66; PyG 284² from 1.21 to 0.95; TorchRL `surrogate_loss` from 3.57 to 2.96; gco swap 142² from 1.16 to 0.97. All four stay unmet.
+
+### Wall times
+
+| Run | #1284 | This run |
+|---|---|---|
+| Per-PR tier (pytest / wall) | 208 / 258 s, 70 tests, host shared | 174 / 177 s, 97 tests |
+| Goals, `-m goal` | 650 s | 647 s |
+| Release-only, `-m "validation and release"` | 476 s | 514 s |
+| HiGHS release LP | 442.6 s | 480.1 s (+8.5%) |
+| gco factor-two bound | 24.4 s | 23.6 s |
+| JAX mixture gradient | 8.1 s | 9.4 s |
+
+The HiGHS release test now makes both of its solves through `potts.lower_bound` in one session worker. #1284 ran the same LPs through the adapter, one subprocess each. This run does not separate HiGHS's own seconds from the 37.5 s difference. Free memory was 12 GB before the release run.
