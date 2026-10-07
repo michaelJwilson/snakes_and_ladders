@@ -88,6 +88,38 @@ class BifurcationResult:
     termination: Termination = dataclass_field(kw_only=True)
 
 
+def _leave_forbidden(
+    graph: PottsGraph, rows: np.ndarray, allowed: np.ndarray, labelling: np.ndarray
+) -> np.ndarray:
+    """``labelling`` with each site on a forbidden label moved to its best allowed one (issue #1324).
+
+    The penalty of :func:`~sal.sim.potts.penalized` keeps every *optimum*
+    allowed, not every rounding of a relaxation: on a 2x4 lattice at four
+    states one replica rounded a site onto a forbidden label. Each such
+    site, in index order, takes the allowed label maximizing
+    ``h_i(a) + sum_j J_ij [s_j == a]``, ties to the lowest index. The
+    penalty exceeds the site's whole coupling, so each move lowers the
+    penalized energy, and an allowed labelling is returned unchanged.
+    """
+    nodes = np.arange(labelling.size)
+    blocked = np.flatnonzero(~allowed[nodes, labelling])
+    if blocked.size == 0:
+        return labelling
+    out = labelling.copy()
+    adjacency = graph.incidence
+    for site in blocked:
+        score = rows[site].copy()
+        low, high = adjacency.offsets[site], adjacency.offsets[site + 1]
+        np.add.at(
+            score,
+            out[adjacency.neighbours[low:high]],
+            adjacency.couplings[low:high],
+        )
+        score[~allowed[site]] = -np.inf
+        out[site] = int(np.argmax(score))
+    return out
+
+
 def _coupling_scale(graph: PottsGraph, rows: np.ndarray) -> float:
     """``c_0`` so the largest drive any site can see is one half.
 
@@ -267,12 +299,11 @@ def simulated_bifurcation(
     )
     # The relaxation is continuous: a forbidden label's -inf is a finite
     # penalty no optimum takes (#1081).
-    rows = penalized(
-        graph,
-        site_field(
-            np.asarray(field, dtype=np.float64), graph.n_nodes, n_states=n_states
-        ),
+    given = site_field(
+        np.asarray(field, dtype=np.float64), graph.n_nodes, n_states=n_states
     )
+    rows = penalized(graph, given)
+    allowed = np.isfinite(given)
     c0 = _coupling_scale(graph, rows) if coupling_scale is None else coupling_scale
     index = graph.edge_index.reshape(-1, 2)
     first, second = index[:, 0], index[:, 1]
@@ -326,7 +357,9 @@ def simulated_bifurcation(
                 .cpu()
                 .numpy()
             )
-        labelling = np.asarray(np.argmax(final, axis=1), dtype=np.int64)
+        labelling = _leave_forbidden(
+            graph, rows, allowed, np.asarray(np.argmax(final, axis=1), dtype=np.int64)
+        )
         value = energy(graph, rows, labelling)
         if value < best_energy:
             best_energy, best_labelling = value, labelling
