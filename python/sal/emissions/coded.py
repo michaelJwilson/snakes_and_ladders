@@ -40,7 +40,7 @@ from sal.emissions.dense import log_emission as dense_log_emission
 from sal.emissions.nb import count_log_factor
 from sal.emissions.rising import scaled_rising_table
 
-__all__ = ["Coded", "Dense", "encode", "log_emission"]
+__all__ = ["Coded", "Dense", "encode", "log_emission", "log_emission_sum"]
 
 Family = NegativeBinomialEmission | BetaBinomialEmission | IndependentPair
 
@@ -345,3 +345,39 @@ def log_emission(family: Family, observations: Dense | Coded) -> NDArray[np.floa
     out = np.empty(family.n_states * n)
     oxisal.coded_log_emission(family.n_states, observations.inverse, out, **arguments)
     return out.reshape(family.n_states, n)
+
+
+def log_emission_sum(
+    family: Family, coded: Coded, weights: NDArray[np.float64] | None = None
+) -> NDArray[np.float64]:
+    """``sum_i w[k, i] log f_k(x_i)``, ``(K,)``: a per-state ``bincount`` over the inverse.
+
+    ``weights`` is ``(n,)``, ``(K, n)`` or ``None`` (each 1); an unobserved
+    observation (``-1``) contributes nothing. Without a covariate the sum is
+    ``sum_u table[k, u] W[k, u]`` with ``W`` the ``bincount`` of the weights
+    per code; with one, per observation. Both are sequential in Rust
+    (``coded_weighted_sum``), so the order is stated: bitwise a
+    ``np.cumsum`` in that order, and within a reduction-order tolerance of
+    the pairwise ``(w * log_emission).sum(axis=1)``. A code of zero total
+    weight is skipped, so ``0 * -inf`` never enters.
+    """
+    k = family.n_states
+    w = None if weights is None else np.ascontiguousarray(weights, dtype=np.float64)
+    if coded.covariate is None:
+        rows = np.arange(coded.weight.size, dtype=np.int32)
+        table = log_emission(
+            family, Coded(coded.label, coded.counts, rows, coded.weight, None)
+        )
+        values, index = table, coded.inverse
+    else:
+        values = log_emission(family, coded)
+        n = coded.inverse.size
+        index = np.where(
+            coded.inverse >= 0, np.arange(n, dtype=np.int32), np.int32(-1)
+        ).astype(np.int32)
+    return oxisal.coded_weighted_sum(
+        k,
+        np.ascontiguousarray(values).reshape(-1),
+        np.ascontiguousarray(index),
+        None if w is None else w.reshape(-1),
+    )

@@ -246,3 +246,29 @@ def test_what_encode_refuses() -> None:
         encode(np.array([1.5]))
     with pytest.raises(TypeError, match="Dense or Coded"):
         log_emission(NB, np.array([1.0]))  # type: ignore[arg-type]
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("name", IDS)
+def test_the_weighted_sum_is_the_sequential_sum(name: str) -> None:
+    """Bitwise the same-order ``cumsum``; within ``n * eps * sum |terms|`` of the pairwise sum."""
+    from sal.emissions.coded import log_emission_sum
+
+    _, family, counts, covariate = CASES[IDS.index(name)]
+    coded = encode(counts, covariate)
+    scores = log_emission(family, coded)
+    n = coded.inverse.size
+    gen = np.random.default_rng(1340)
+    for weights in (None, gen.random(n), gen.random((family.n_states, n))):
+        w = np.ones(n) if weights is None else weights
+        w = np.broadcast_to(w, scores.shape)
+        terms = np.where(coded.inverse >= 0, w * scores, 0.0)
+        got = log_emission_sum(family, coded, weights)
+        pairwise = terms.sum(axis=1)
+        bound = n * np.finfo(np.float64).eps * np.abs(terms).sum(axis=1)
+        same = got == pairwise  # -inf where a success exceeds its trials
+        with np.errstate(invalid="ignore"):
+            assert np.all(same | (np.abs(got - pairwise) <= bound))
+    if covariate is not None:
+        observed = terms[:, coded.inverse >= 0]
+        assert np.array_equal(_bits(got), _bits(np.cumsum(observed, axis=1)[:, -1]))

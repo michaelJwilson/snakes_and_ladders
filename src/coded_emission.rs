@@ -254,7 +254,10 @@ pub fn weighted_sum(
             .collect())
     } else {
         let bins = count(0);
-        Ok((0..n_states).into_par_iter().map(|k| dot(k, &bins)).collect())
+        Ok((0..n_states)
+            .into_par_iter()
+            .map(|k| dot(k, &bins))
+            .collect())
     }
 }
 
@@ -362,9 +365,15 @@ mod tests {
     fn a_weighted_sum_is_the_sequential_bincount_dot() {
         let values = [1.0, 2.0, f64::NEG_INFINITY, 4.0, 5.0, 6.0];
         let index = [0, 1, -1, 1, 0];
-        assert_eq!(weighted_sum(2, &values, &index, None).unwrap(), vec![1.0 * 2.0 + 2.0 * 2.0, 4.0 * 2.0 + 5.0 * 2.0]);
+        assert_eq!(
+            weighted_sum(2, &values, &index, None).unwrap(),
+            vec![1.0 * 2.0 + 2.0 * 2.0, 4.0 * 2.0 + 5.0 * 2.0]
+        );
         let w = [0.5, 0.25, 9.0, 0.25, 0.5];
-        assert_eq!(weighted_sum(2, &values, &index, Some(&w)).unwrap(), vec![1.0 + 1.0, 4.0 + 2.5]);
+        assert_eq!(
+            weighted_sum(2, &values, &index, Some(&w)).unwrap(),
+            vec![1.0 + 1.0, 4.0 + 2.5]
+        );
         assert!(weighted_sum(2, &values, &[3], None).is_err());
     }
 }
