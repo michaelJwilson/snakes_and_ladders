@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 import torch
 from sal.emissions import CountPairEmission
-from sal.emissions.dense import Order, log_emission
+from sal.emissions.coded import Dense, log_emission
 
 #: States, positions and replicates.
 N_STATES, N_POSITIONS, N_REPLICATES = 6, 20_000, 16
@@ -65,10 +65,8 @@ def test_dense_emission_log_density(benchmark: object, instance: Instance) -> No
 
 @pytest.mark.release
 @pytest.mark.benchmark
-@pytest.mark.parametrize("order", list(Order), ids=str)
-def test_dense_emission_tabulated(
-    benchmark: object, instance: Instance, order: Order
-) -> None:
-    """The tables and the Rust completion, in either order."""
+def test_dense_emission_tabulated(benchmark: object, instance: Instance) -> None:
+    """The tables and the Rust completion: ``coded.log_emission`` over a ``Dense`` (#1340)."""
     family, observations, covariate = instance
-    benchmark(log_emission, family, observations, covariate, order=order)  # type: ignore[operator]
+    dense = Dense(observations.reshape(-1, 2), covariate.reshape(-1, 2))
+    benchmark(log_emission, family, dense)  # type: ignore[operator]

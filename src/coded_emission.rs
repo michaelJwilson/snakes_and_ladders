@@ -119,22 +119,28 @@ pub fn coded_encode<'py>(
 
 /// The coded log-emission, `out[k * N + i]`, through [`log_emission_into`].
 ///
-/// `inverse` is `N` codes; `totals` and `total_table` are the `U` distinct
-/// totals and their table, one row per code, and `exposure`, `dispersion`
+/// `inverse` is `N` codes; `total_rows` and `success_rows`, where given,
+/// are each channel's own `N` rows, `-1` unobserved, so a channel's table
+/// has one row per distinct value of that channel rather than per code
+/// (a pair's totals, or a count shared across labels); absent, a channel
+/// reads `inverse`. `totals` and `total_table` are the distinct totals and
+/// their table, one row per row index, and `exposure`, `dispersion`
 /// and `mean` its exposure term; `successes`, `success_table` and the trial
-/// arguments the second channel, as `dense_log_emission` takes them. Every
+/// arguments the second channel, as `class_posteriors` takes them. Every
 /// array crosses once, contiguous and borrowed; the GIL is released.
 ///
 /// # Errors
 /// `ValueError` naming the first violated precondition.
 #[pyfunction]
-#[pyo3(signature = (n_states, inverse, out, totals=None, total_table=None, exposure=None, dispersion=None, mean=None, successes=None, success_table=None, trials=None, failure_table=None, trial_table=None, log_factorial=None, log_rate=None))]
+#[pyo3(signature = (n_states, inverse, out, total_rows=None, success_rows=None, totals=None, total_table=None, exposure=None, dispersion=None, mean=None, successes=None, success_table=None, trials=None, failure_table=None, trial_table=None, log_factorial=None, log_rate=None))]
 #[allow(clippy::too_many_arguments)]
 pub fn coded_log_emission(
     py: Python<'_>,
     n_states: usize,
     inverse: PyReadonlyArray1<'_, i32>,
     mut out: PyReadwriteArray1<'_, f64>,
+    total_rows: Option<PyReadonlyArray1<'_, i32>>,
+    success_rows: Option<PyReadonlyArray1<'_, i32>>,
     totals: Option<PyReadonlyArray1<'_, u32>>,
     total_table: Option<PyReadonlyArray1<'_, f64>>,
     exposure: Option<PyReadonlyArray1<'_, f64>>,
@@ -149,11 +155,31 @@ pub fn coded_log_emission(
     log_rate: Option<PyReadonlyArray1<'_, f64>>,
 ) -> PyResult<()> {
     let rows = borrowed(&inverse, "inverse")?;
+    let total_own = match &total_rows {
+        Some(own) => Some(borrowed(own, "total_rows")?),
+        None => None,
+    };
+    let success_own = match &success_rows {
+        Some(own) => Some(borrowed(own, "success_rows")?),
+        None => None,
+    };
+    if [total_own, success_own]
+        .iter()
+        .flatten()
+        .any(|own| own.len() != rows.len())
+    {
+        return Err(PyValueError::new_err(format!(
+            "a channel's rows are N = {} long, as the inverse",
+            rows.len()
+        )));
+    }
+    let total_index = total_own.unwrap_or(rows);
+    let success_index = success_own.unwrap_or(rows);
     let total = match (&totals, &total_table) {
         (None, None) => None,
         (Some(counts), Some(table)) => Some(TotalChannel {
             counts: borrowed(counts, "totals")?,
-            rows: Some(rows),
+            rows: Some(total_index),
             table: borrowed(table, "total_table")?,
             exposure: exposure_term(&exposure, &dispersion, &mean)?,
             order: ExposureOrder::Family,
@@ -168,7 +194,7 @@ pub fn coded_log_emission(
         (None, None) => None,
         (Some(counts), Some(table)) => Some(SuccessChannel {
             counts: borrowed(counts, "successes")?,
-            rows: Some(rows),
+            rows: Some(success_index),
             table: borrowed(table, "success_table")?,
             trials: trial_term(
                 &trials,

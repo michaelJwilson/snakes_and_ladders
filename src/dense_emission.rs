@@ -1,5 +1,6 @@
 //! The dense count log-emission, state-major, from the families' own tables
-//! (issue #1132), exposed to Python as `sal.oxisal.dense_log_emission`.
+//! (issue #1132), read by `sal.oxisal.coded_log_emission` (issue #1340) and by
+//! `sal.oxisal.dense_log_emission`, its deprecated direct binding.
 //!
 //! `src/coupled.rs` completes the negative binomial's exposure term and the
 //! beta-binomial's trial term per observation, but only inside the sums its
@@ -273,7 +274,10 @@ pub fn log_emission_into(
     Ok(())
 }
 
-/// [`log_emission_into`] as a Python binding.
+/// [`log_emission_into`] as a Python binding, deprecated for one cycle in
+/// favour of `sal.emissions.coded.log_emission` (issue #1340): kept for
+/// callers that pass their own tables. `family_order` is read by neither
+/// order since #1336; both complete the term in one order.
 ///
 /// `totals` and `total_table` name the first channel, and `exposure`,
 /// `dispersion` and `mean`, given together, its exposure; `family_order`

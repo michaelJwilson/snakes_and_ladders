@@ -488,6 +488,8 @@ def coded_log_emission(
     n_states: int,
     inverse: np.ndarray,
     out: np.ndarray,
+    total_rows: np.ndarray | None = None,
+    success_rows: np.ndarray | None = None,
     totals: np.ndarray | None = None,
     total_table: np.ndarray | None = None,
     exposure: np.ndarray | None = None,
@@ -501,6 +503,8 @@ def coded_log_emission(
     log_factorial: np.ndarray | None = None,
     log_rate: np.ndarray | None = None,
 ) -> None: ...
+
+# Deprecated for one cycle (#1340): use `sal.emissions.coded.log_emission`.
 def dense_log_emission(
     n_states: int,
     family_order: bool,

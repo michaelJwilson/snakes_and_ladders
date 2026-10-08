@@ -492,3 +492,122 @@ def test_partials_against_central_differences(name: str) -> None:
         fd = (4 * central(_STEP) - central(2 * _STEP)) / 3
         error = np.abs(fd - got[parameter]) * x[:, None] / np.maximum(np.abs(base), 1.0)
         assert error[finite].max() <= _FD_TOLERANCE, parameter
+
+
+#: Labels of the draws, three groups, and their log-rate offsets (stage 3).
+LABEL = np.random.default_rng(SEED + 1).integers(0, 3, N)
+SHIFT = np.array([-0.4, 0.0, 0.7])
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize(("name", "family", "counts", "covariate"), CASES, ids=IDS)
+def test_one_label_is_the_unlabelled_result_and_dense_is_coded_bitwise(
+    name: str, family: Any, counts: np.ndarray, covariate: np.ndarray | None
+) -> None:
+    del name  # the case's id
+    # Codes keyed on (label, count) share each channel's table, so a single
+    # label value, or several, read the unlabelled rows: bitwise.
+    plain = log_emission(family, encode(counts, covariate))
+    single = encode(counts, covariate, label=np.full(N, 5))
+    labelled = encode(counts, covariate, label=LABEL)
+    assert labelled.weight.size > encode(counts, covariate).weight.size
+    assert np.array_equal(_bits(log_emission(family, single)), _bits(plain))
+    assert np.array_equal(_bits(log_emission(family, labelled)), _bits(plain))
+    dense = Dense(counts, covariate, label=LABEL)
+    assert np.array_equal(
+        _bits(log_emission(family, dense, shift=SHIFT)),
+        _bits(log_emission(family, labelled, shift=SHIFT)),
+    )
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("name", ["nb", "nb-exposure", "pair-covariate"])
+def test_a_shift_is_the_numpy_pmf_at_the_shifted_rate(name: str) -> None:
+    # lambda = c mu exp(shift[label]) against negative_binomial_log_pmf with
+    # the rate multiplied by exp(shift), per observation, within _TOLERANCE.
+    _, family, counts, covariate = CASES[IDS.index(name)]
+    coded = encode(counts, covariate, label=LABEL)
+    got = log_emission(family, coded, shift=SHIFT)
+    total = family if name.startswith("nb") else family.total
+    y = counts if counts.ndim == 1 else counts[:, 0]
+    c = (
+        np.ones(N)
+        if covariate is None
+        else (covariate if covariate.ndim == 1 else covariate[:, 0])
+    )
+    rate = total.mean.numpy()[:, None] * (c * np.exp(SHIFT[LABEL]))[None, :]
+    pmf = negative_binomial_log_pmf(y, total.dispersion.numpy()[:, None], rate)
+    want = np.where(c == 0.0, 0.0, pmf)
+    if name == "pair-covariate":
+        assert covariate is not None
+        want = np.add(want, log_emission(BB, encode(counts[:, 1], covariate[:, 1])))
+    error = np.abs(got - want) / np.maximum(np.abs(want), 1.0)
+    assert float(error.max()) <= _TOLERANCE, float(error.max())
+    unshifted = log_emission(family, coded, shift=np.zeros(3))
+    assert not np.array_equal(got, unshifted)
+    with pytest.raises(ValueError, match="indexed by label"):
+        log_emission(family, coded, shift=SHIFT[:2])
+
+
+@pytest.mark.oracle
+def test_the_shift_partial_against_mpmath_and_central_differences() -> None:
+    import mpmath
+    from sal.emissions.coded import log_emission_partials
+
+    counts = np.array([0.0, 7.0, 100.0, 3.0, 12.0])
+    exposure = np.array([0.7, 1.3, 2.0, 0.0, 1.0])
+    label = np.array([0, 1, 2, 1, 0])
+    shift = np.array([-0.3, 0.5, 1.1])
+    r_values, mu_values = [0.5, 10.0, 1e4], [3.0, 50.0, 400.0]
+    family = NegativeBinomialEmission(r_values, mu_values)
+    coded = encode(counts, exposure, label=label)
+    got = log_emission_partials(family, coded, shift=shift)
+    assert set(got) == {"dispersion", "mean", "shift"}
+    plain = log_emission_partials(family, encode(counts, exposure))
+    assert set(plain) == {"dispersion", "mean"}
+
+    def nb(s: Any, y: float, r: float, mu: float, c: float) -> Any:
+        lam = mu * c * mpmath.exp(s)
+        return (
+            mpmath.loggamma(y + r)
+            - mpmath.loggamma(r)
+            - mpmath.loggamma(y + 1)
+            + r * mpmath.log(r / (r + lam))
+            + y * mpmath.log(lam / (r + lam))
+        )
+
+    with mpmath.workdps(100):
+        for k, (r, mu) in enumerate(zip(r_values, mu_values, strict=True)):
+            for i, (y, c) in enumerate(zip(counts, exposure, strict=True)):
+                if c == 0.0:
+                    assert got["shift"][k, i] == 0.0
+                    continue
+                s = mpmath.mpf(shift[label[i]])
+                want = float(mpmath.diff(partial(nb, y=y, r=r, mu=mu, c=c), s))
+                lam = mu * c * np.exp(shift[label[i]])
+                scale = y + lam * (r + y) / (r + lam)
+                assert abs(got["shift"][k, i] - want) <= _PARTIAL_TOLERANCE * scale
+
+    # Richardson central difference on the draws, an absolute step: the
+    # shift sits at zero for one label, where a relative step is none.
+    counts, cov = DRAWS["totals"][:500], DRAWS["exposure"][:500]
+    coded = encode(counts, cov, label=LABEL[:500])
+    partial_shift = log_emission_partials(NB, coded, shift=SHIFT)["shift"]
+    base = log_emission(NB, coded, shift=SHIFT)
+    for j in range(SHIFT.size):
+
+        def central(h: float, j: int = j) -> NDArray[np.float64]:
+            up, down = SHIFT.copy(), SHIFT.copy()
+            up[j] += h
+            down[j] -= h
+            delta = log_emission(NB, coded, shift=up) - log_emission(
+                NB, coded, shift=down
+            )
+            return delta / (2 * h)
+
+        fd = (4 * central(_STEP) - central(2 * _STEP)) / 3
+        mine = LABEL[:500] == j
+        error = np.abs(fd - partial_shift)[:, mine] / np.maximum(
+            np.abs(base[:, mine]), 1.0
+        )
+        assert error.max() <= _FD_TOLERANCE, (j, error.max())
