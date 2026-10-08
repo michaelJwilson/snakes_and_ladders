@@ -3321,6 +3321,17 @@ until a full sweep changes no label, ending `Stop.CONVERGED`; HMC
 sweeps plus polish (399 to 401) 9/12. Pinned in
 `tests/regression/sample/test_anneal_polish.py`.
 
+**The polish starts from `best` alone, and ends with a whole-label merge on
+request** ([#1374](https://github.com/michaelJwilson/snakes_and_ladders/issues/1374),
+[#1373](https://github.com/michaelJwilson/snakes_and_ladders/issues/1373)).
+`Polish.ICM` descends the schedule's `best`, one descent, charged;
+`Polish.ICM_MERGE` then merges labels greedily inside the Rust loop's one call,
+pinned bitwise to the NumPy `merge_labels` and to a brute-force greedy on
+2x3, q = 3. `stages` reports `init`, `polish`, `merge`; `final` is removed. At
+256x256, q = 8, 50 single-site sweeps: merge 9.4 ms of a 532 ms anneal, 8
+rounds, NumPy oracle 148 ms. Pinned in
+`tests/regression/sample/test_anneal_polish.py`.
+
 ## Milestone 2.0 — RL Definition
 
 **Landed as `app:rl` in the textbook**

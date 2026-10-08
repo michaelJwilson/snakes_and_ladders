@@ -74,15 +74,16 @@ def test_each_rung_lands_at_the_target_acceptance_and_samples_its_tempered_gauss
 
 #: The runs below on the base commit a764e71e, before `adaptation` and
 #: per-rung starts existed: the positions' sum, the best value, the per-rung
-#: acceptance and the swap acceptance; for annealing the final point's sum,
-#: the best value and the acceptance.
+#: acceptance and the swap acceptance; for annealing the best point's sum
+#: (#1374 removed the final point, whose sum was -0x1.b6b98779340b2p-1), the
+#: best value and the acceptance.
 TEMPERED_PIN = (
     "-0x1.cb90e25bd800ap+7",
     "0x1.74451d62fd6f8p-4",
     [1.0, 0.925, 1.0],
     [0.45, 0.25],
 )
-ANNEALED_PIN = ("-0x1.b6b98779340b2p-1", "0x1.c4f3d10ad6c60p-8", 0.975)
+ANNEALED_PIN = ("-0x1.8fdcaab923f50p-1", "0x1.c4f3d10ad6c60p-8", 0.975)
 
 
 @pytest.mark.smoke
@@ -111,7 +112,7 @@ def test_without_adaptation_both_runs_are_the_base_commits_bitwise() -> None:
     ) == TEMPERED_PIN
     assert tempered.adapted is None
     assert (
-        float(annealed.final.sum()).hex(),
+        float(annealed.best.sum()).hex(),
         float(annealed.value).hex(),
         annealed.acceptance_rate,
     ) == ANNEALED_PIN

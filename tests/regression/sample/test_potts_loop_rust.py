@@ -26,11 +26,16 @@ from sal.opt.budget import Budget
 from sal.opt.termination import Stop
 from sal.sample.loop import Moved, anneal_spent
 from sal.sample.potts_mcmc import PottsMove, Recolour, anneal_potts, sample_potts
-from sal.sample.potts_mcmc.chains import loop_codes, run_loop, step_visits
+from sal.sample.potts_mcmc.chains import (
+    loop_codes,
+    merge_labels,
+    run_loop,
+    step_visits,
+)
 from sal.sample.schedule import Polish, ramp
 from sal.search.alpha_expansion import Labelling
 from sal.search.icm import iterated_conditional_modes
-from sal.sim.potts import site_field
+from sal.sim.potts import energies, site_field
 
 from tests._chains import cell_counts, enumerated_law
 from tests.regression.sample.test_potts_recolour import (
@@ -200,12 +205,14 @@ def test_a_move_without_a_rust_kernel_runs_the_python_loop_bitwise() -> None:
 def test_the_polish_in_the_rust_loop_is_the_numba_descent_of_its_states(
     move: PottsMove,
 ) -> None:
-    """The polish the loop runs equals ``numba`` ICM from the same run's final and best, bitwise, unfloored (#1368).
+    """The polish the loop runs equals ``numba`` ICM from the same run's best, then the NumPy merge, bitwise, unfloored (#1368, #1373, #1374).
 
     An unfloored index-order descent draws nothing, so the polished and the
     unpolished call share the schedule's stream; the referee descends the
-    unpolished run's states with the ``numba`` kernel as ``chains._polished``
-    does and compares labelling, ``polish_spent``, ``spent`` and the stop.
+    unpolished run's best with the ``numba`` kernel as ``chains._descend``
+    does, merges it with :func:`~sal.sample.potts_mcmc.chains.merge_labels`,
+    and compares labelling, energy, each stage's ``spent``, ``spent`` and the
+    stop.
     """
     graph = _graph()
     schedule = ramp.linear(2.0, 0.2, 30)
@@ -222,6 +229,16 @@ def test_the_polish_in_the_rust_loop_is_the_numba_descent_of_its_states(
         )
         for polish in (None, Polish.ICM)
     )
+    merged = anneal_potts(
+        graph,
+        FIELD,
+        schedule,
+        np.random.default_rng(SEED),
+        move=[move],
+        recolour=Recolour.UNIFORM,
+        loop_backend=Backend.RUST,
+        polish=Polish.ICM_MERGE,
+    )
 
     def descend(start: np.ndarray) -> Labelling:
         return iterated_conditional_modes(
@@ -233,20 +250,25 @@ def test_the_polish_in_the_rust_loop_is_the_numba_descent_of_its_states(
             backend=Backend.NUMBA,
         )
 
-    final = descend(plain.final)
-    expected, sweeps = final, final.sweeps
-    if plain.energy < final.energy:
-        best = descend(plain.best)
-        sweeps += best.sweeps
-        if best.energy < final.energy:
-            expected = best
-    charged = sweeps * step_visits(PottsMove.SINGLE_SITE, graph)
-    np.testing.assert_array_equal(polished.final, final.labelling)
+    sweep = step_visits(PottsMove.SINGLE_SITE, graph)
+    expected = descend(plain.best)
+    charged = expected.sweeps * sweep
     np.testing.assert_array_equal(polished.best, expected.labelling)
+    assert polished.energy == expected.energy
     assert polished.polish_spent == charged
     assert polished.spent == plain.spent + charged
     assert polished.termination.reason is Stop.CONVERGED
     assert polished.polished_by == Polish.ICM.value
+
+    joined, rounds = merge_labels(
+        graph, site_field(FIELD, graph.n_nodes), expected.labelling
+    )
+    np.testing.assert_array_equal(merged.stages[1].best, expected.labelling)
+    np.testing.assert_array_equal(merged.best, joined)
+    assert merged.stages[2].spent == rounds * sweep
+    assert merged.polish_spent == charged + rounds * sweep
+    assert merged.termination.reason is Stop.CONVERGED
+    assert merged.polished_by == Polish.ICM_MERGE.value
 
 
 @pytest.mark.analytic
@@ -258,7 +280,10 @@ def test_a_floored_polish_in_the_rust_loop_ends_at_a_floored_fixed_point() -> No
         graph,
         FIELD,
         ramp.linear(2.0, 0.2, 30),
-        np.random.default_rng(SEED),
+        # From SEED's best the floor leaves site 0 alone on label 0, which
+        # forbids the surviving label 2: INFEASIBLE, as #1139 reads it. Seed
+        # 1's best descends to a floored fixed point (#1374).
+        np.random.default_rng(1),
         move=[PottsMove.WOLFF],
         recolour=Recolour.UNIFORM,
         loop_backend=Backend.RUST,
@@ -273,3 +298,56 @@ def test_a_floored_polish_in_the_rust_loop_ends_at_a_floored_fixed_point() -> No
     assert again.sweeps == 1
     np.testing.assert_array_equal(again.labelling, run.best)
     assert run.termination.reason is Stop.CONVERGED
+
+
+@pytest.mark.oracle
+def test_the_loops_stage_energies_are_the_numpy_energies() -> None:
+    """Each stage's energy the Rust loop returns equals :func:`energies` of its labelling to 1e-12 relative (#1373)."""
+    graph = _graph()
+    schedule = ramp.linear(2.0, 0.2, 30)
+    rows = site_field(FIELD, graph.n_nodes)
+    codes = loop_codes((PottsMove.SINGLE_SITE,), Backend.RUST)
+    assert codes is not None
+    ran = run_loop(
+        np.random.default_rng(SEED).integers(0, rows.shape[1], graph.n_nodes),
+        rows,
+        graph.compressed_adjacency(),
+        codes,
+        np.array([schedule(i) for i in range(schedule.n_steps)]),
+        np.random.default_rng(SEED),
+        n_main=schedule.n_steps,
+        track_best=True,
+        polish=True,
+        merge=True,
+    )
+    labellings = np.stack([ran["best"], ran["best_polished"], ran["merged"]])
+    expected = energies(graph, rows, labellings)
+    np.testing.assert_allclose(ran["stage_energies"], expected, rtol=1e-12, atol=0)
+    assert len(ran["stage_seconds"]) == 3
+
+
+@pytest.mark.analytic
+@pytest.mark.parametrize(
+    ("track_best", "polish", "merge", "match"),
+    [(False, True, False, "track_best"), (True, False, True, "needs polish")],
+)
+def test_the_loop_refuses_a_polish_without_its_input(
+    track_best: bool, polish: bool, merge: bool, match: str
+) -> None:
+    """The polish descends the best, and the merge ends the polish (#1373, #1374)."""
+    graph = _graph()
+    codes = loop_codes((PottsMove.SINGLE_SITE,), Backend.RUST)
+    assert codes is not None
+    with pytest.raises(ValueError, match=match):
+        run_loop(
+            np.zeros(graph.n_nodes, dtype=np.int64),
+            site_field(FIELD, graph.n_nodes),
+            graph.compressed_adjacency(),
+            codes,
+            np.array([1.0]),
+            np.random.default_rng(SEED),
+            n_main=1,
+            track_best=track_best,
+            polish=polish,
+            merge=merge,
+        )

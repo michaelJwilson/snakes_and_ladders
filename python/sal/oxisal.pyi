@@ -250,6 +250,7 @@ def potts_loop(
     seed: int,
     polish: bool = False,
     min_sites: int = 0,
+    merge: bool = False,
 ) -> dict[str, Any]: ...
 def icm_sweeps(
     state: np.ndarray,

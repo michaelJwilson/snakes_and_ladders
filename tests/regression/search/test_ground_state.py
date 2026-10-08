@@ -332,7 +332,6 @@ def test_the_rust_sweep_runs_the_per_site_field_and_matches_the_oracle() -> None
     ]
 
     np.testing.assert_array_equal(runs[0].best, runs[1].best)
-    np.testing.assert_array_equal(runs[0].final, runs[1].final)
     assert runs[0].energy == runs[1].energy
 
 

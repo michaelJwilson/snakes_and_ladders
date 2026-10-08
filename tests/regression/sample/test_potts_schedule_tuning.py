@@ -134,7 +134,6 @@ def test_auto_is_the_tuned_schedule_run_explicitly_bitwise() -> None:
     rng.spawn(len(GRID))
     given = anneal_potts(graph, FIELD, auto.tuned.params.build(N_STEPS), rng)
     np.testing.assert_array_equal(auto.best, given.best)
-    np.testing.assert_array_equal(auto.final, given.final)
     assert auto.energy == given.energy
 
 

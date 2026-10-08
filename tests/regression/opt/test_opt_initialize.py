@@ -431,7 +431,6 @@ def test_the_sampled_starts_are_their_runs_own_records_and_leave_the_cell_descen
     annealed = _annealed_start(0).run(objective)
     assert torch.equal(_annealed_start(0).starts(objective)[0], annealed.best)
     assert annealed.value == float(objective(annealed.best))
-    assert annealed.value <= float(objective(annealed.final))
 
     trapped = fit(objective)
     assert _on_the_lattice(trapped.theta) < LATTICE_TOLERANCE, trapped.theta

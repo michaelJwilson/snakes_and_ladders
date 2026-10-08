@@ -178,7 +178,6 @@ def test_the_null_run_leaves_an_annealed_run_bitwise() -> None:
         inside_annealed = _annealed()
 
     assert np.array_equal(inside_annealed.best, outside_annealed.best)
-    assert np.array_equal(inside_annealed.final, outside_annealed.final)
     assert inside_annealed.energy == outside_annealed.energy
     assert inside_annealed.spent == outside_annealed.spent
 
@@ -266,7 +265,7 @@ def test_the_annealer_records_one_energy_per_sweep_ending_at_the_result() -> Non
     energies = [value for _, value in run.series("energy")]
     assert energies == sorted(energies, reverse=True)
     assert run.last("temperature") == pytest.approx(0.1)
-    assert run.last("state_bytes") == float(annealed.final.nbytes)
+    assert run.last("state_bytes") == float(annealed.best.nbytes)
 
 
 @pytest.mark.smoke

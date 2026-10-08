@@ -190,7 +190,6 @@ def test_a_one_candidate_pilot_is_annealing_at_that_step_bitwise() -> None:
         start=start,
     )
     assert tuned.proposals == 12
-    assert torch.equal(tuned.chosen.final, annealed.final)
     assert torch.equal(tuned.chosen.best, annealed.best)
     assert tuned.chosen.lowest_energy == annealed.value
     assert tuned.spent == annealed.spent == 1 + 12 * 3
