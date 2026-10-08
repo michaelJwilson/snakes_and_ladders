@@ -475,7 +475,10 @@ def _log_rising_kernel(
             power *= inverse_square
         series = mi * h + (mi - 0.5) * step + total * gap
         if scaled:
-            out[i] = (series + mi * math.log1p((y - xi) / xi)) + recurrence
+            # No shift when `x` is already in the series' range: `log1p(0)`
+            # is 0, and at `x = inf` the ratio would be `inf / inf`.
+            moved = mi * math.log1p((y - xi) / xi) if y != xi else 0.0
+            out[i] = (series + moved) + recurrence
         else:
             out[i] = (series + mi * math.log(y)) + recurrence
 

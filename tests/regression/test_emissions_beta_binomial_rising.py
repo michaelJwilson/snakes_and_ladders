@@ -26,6 +26,7 @@ from sal.emissions.rising import (
     log_rising_into,
     on_distinct,
     on_distinct_array,
+    scaled_rising_array,
 )
 from scipy.special import logsumexp
 
@@ -230,3 +231,11 @@ def test_the_rust_count_kernel_is_the_pmf_within_the_route_tolerance(
             pmf = float(beta_binomial_log_pmf(z, n, a, b))
             worst = max(worst, abs(value - pmf) / max(abs(pmf), 1.0))
     assert worst <= ROUTE_TOLERANCE, worst
+
+
+@pytest.mark.analytic
+def test_the_scaled_rise_is_zero_at_an_infinite_shape() -> None:
+    # `R(x, m) - m log x -> 0` as `x -> inf` for finite `m`, as the docstring
+    # states; the kernel formed `inf / inf` there (found by #1335).
+    m = np.array([0.0, 1.0, 7.0, 1e6])
+    assert np.array_equal(scaled_rising_array(np.full(4, np.inf), m), np.zeros(4))
