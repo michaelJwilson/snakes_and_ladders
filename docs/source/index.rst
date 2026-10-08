@@ -860,6 +860,9 @@ whether or not it has members yet.
 .. automodule:: sal.qa.count_pair_hmm_anneal
    :members:
 
+.. automodule:: sal.qa.count_hmm_reference_starts
+   :members:
+
 .. automodule:: sal.qa.known_ground_states
    :members:
 

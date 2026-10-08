@@ -15,6 +15,7 @@ import pytest
 import torch
 from sal.fixtures import Scale
 from sal.qa import count_hmm_reference_starts as study
+from sal.sim.fixtures import fixture
 
 
 @pytest.fixture(autouse=True)
@@ -32,6 +33,9 @@ def test_the_tuned_anneal_reaches_the_restarts_optimum_on_the_ci_cell() -> None:
     # -7610.8566 and miss 14.0% (the CI cell's rare levels hold 20 to 40 of
     # 1,000 positions); #1393's reading was the anneal 2,300 nats short.
     instance = study.build(Scale.CI)
+    assert instance.params.observations_digest == (
+        fixture("count_hmm_reference", Scale.CI).params.observations_digest
+    )
     start = study.random_start(instance, np.random.default_rng([study.SEED, 0]))
     restart = study.run_restart(instance, start)
     annealed = study.run_anneal(
