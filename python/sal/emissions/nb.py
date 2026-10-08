@@ -36,6 +36,15 @@ from sal.emissions.counts import NegativeBinomialEmission
 from sal.emissions.rising import scaled_rising_array
 
 
+def _scaled_rising(
+    r: NDArray[np.float64], y: NDArray[np.float64]
+) -> NDArray[np.float64]:
+    """``S(r, y)``, and ``0`` at ``r = inf``: ``scaled_rising_array`` returns NaN there for ``y > 0``."""
+    with np.errstate(invalid="ignore"):
+        out: NDArray[np.float64] = np.where(np.isinf(r), 0.0, scaled_rising_array(r, y))
+    return out
+
+
 def count_log_factor(
     family: NegativeBinomialEmission, observations: ArrayLike | torch.Tensor
 ) -> NDArray[np.float64]:
@@ -55,7 +64,7 @@ def count_log_factor(
     """
     counts = np.asarray(observations, dtype=np.float64)[..., None]
     dispersion = family.dispersion.detach().numpy()
-    out: NDArray[np.float64] = scaled_rising_array(dispersion, counts) - gammaln(
+    out: NDArray[np.float64] = _scaled_rising(dispersion, counts) - gammaln(
         counts + 1.0
     )
     return out
@@ -102,6 +111,6 @@ def negative_binomial_log_pmf(
         q = rate_ / r
         decay = np.where(q == 0.0, rate_, r * np.log1p(q))
         rated = np.where(y == 0.0, 0.0, y * np.log(rate_ / (1.0 + q)))
-    table = scaled_rising_array(r, y) - gammaln(y + 1.0)
+    table = _scaled_rising(r, y) - gammaln(y + 1.0)
     out: NDArray[np.float64] = (table + rated) - decay
     return out

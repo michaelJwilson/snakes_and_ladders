@@ -20,23 +20,22 @@ from sal.emissions import (
 )
 from sal.emissions.bb import beta_binomial_log_pmf, density_table
 from sal.emissions.dense import Order, log_emission
-from sal.emissions.nb import exposure_table
 from sal.sim.count_pairs import IndependentCountPair
+from scipy.special import gammaln
 
 SEED = 20260926
 
 #: Positions and replicates of the draws.
 SHAPE = (400, 12)
 
-#: The family order against ``log_density``, relative per score: the two
-#: differ only in which ``log`` rounds ``r / t`` and ``mu c / t``. Measured
-#: 3.2 ulp on these draws.
-_FAMILY_ULPS = 16
-
-#: The tabulated order, in ulp of the three terms' summed magnitudes, as
-#: ``test_emissions_factored`` states it and for its reason: ``y ln mu`` in
-#: the table cancels against ``-y ln t``.
-_TABULATED_ULPS = 4
+#: The negative binomial against ``log_density``, in ulp of the terms'
+#: summed magnitudes (:func:`_nb_magnitude`), the scale #1064 judged the
+#: tabulated order on (issue #1335). Both orders are now
+#: :mod:`sal.emissions.nb`'s, whose ``S(r, y) - lgamma(y + 1)`` and
+#: ``y log(lambda / (1 + q))`` cancel ``y log r`` at small ``r``, so the
+#: family order's 16 ulp relative pin is restated at the tabulated order's
+#: declared 4 ulp of magnitudes, not re-recorded. Measured 0.97 ulp.
+_NB_ULPS = 4
 
 EPS = float(np.finfo(np.float64).eps)
 
@@ -94,40 +93,40 @@ def _worst_relative(got: np.ndarray, want: np.ndarray) -> float:
     return float((np.abs(got - want)[~zero] / np.abs(want[~zero])).max())
 
 
-@pytest.mark.oracle
-def test_the_family_order_is_the_density_within_the_rounding_of_its_logarithms() -> (
-    None
-):
-    got = log_emission(NB, DRAWS["totals"], DRAWS["exposure"], order=Order.FAMILY)
-    want = _density(NB, DRAWS["totals"], DRAWS["exposure"])
-
-    assert got.shape == (3, *SHAPE)
-    assert got.flags.c_contiguous
-    assert (want == 0.0).any()
-    worst = _worst_relative(got, want)
-    assert worst <= _FAMILY_ULPS * EPS, f"{worst / EPS:.1f} ulp"
-
-
-@pytest.mark.oracle
-def test_the_tabulated_order_is_the_density_within_the_factored_bound() -> None:
-    counts, exposure = DRAWS["totals"], DRAWS["exposure"]
-    got = log_emission(NB, counts, exposure, order=Order.TABULATED)
-    want = _density(NB, counts, exposure)
-
-    # The three terms the kernel sums, `B`, `y ln c` and `(y + r) ln t`, each
-    # at its magnitude: the scale the rounding of their sum is judged on.
-    table = exposure_table(NB, int(counts.max()) + 1).numpy()
+def _nb_magnitude(counts: np.ndarray, exposure: np.ndarray) -> np.ndarray:
+    """The summed magnitudes of every term either NB route forms, ``(*batch, K)``."""
     r, mu = NB.dispersion.numpy(), NB.mean.numpy()
     c = np.where(exposure == 0.0, 1.0, exposure)
     y = counts[..., None].astype(np.float64)
-    magnitude = (
-        np.abs(table[counts])
-        + np.abs(y * np.log(c))
-        + np.abs((y + r) * np.log(r + mu * c))
+    rate = mu * c
+    magnitude: np.ndarray = (
+        np.abs(gammaln(y + r))
+        + np.abs(gammaln(r))
+        + np.abs(gammaln(y + 1.0))
+        + np.abs(y * np.log(r))
+        + np.abs(y * np.log(rate / (r + rate)))
+        + np.abs(r * np.log1p(rate / r))
     )
+    return magnitude
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("order", list(Order), ids=str)
+def test_either_order_is_the_density_within_the_bound_of_its_terms(
+    order: Order,
+) -> None:
+    counts, exposure = DRAWS["totals"], DRAWS["exposure"]
+    got = log_emission(NB, counts, exposure, order=order)
+    want = _density(NB, counts, exposure)
+
+    assert got.shape == (3, *SHAPE)
+    assert got.flags.c_contiguous
+    assert np.array_equal(got, log_emission(NB, counts, exposure, order=Order.FAMILY))
     observed = exposure[..., 0] > 0.0
+    assert np.array_equal(got[:, ~observed], want[:, ~observed])
+    magnitude = _nb_magnitude(counts, exposure)
     error = np.moveaxis(np.abs(got - want), 0, -1)[observed] / magnitude[observed]
-    assert float(error.max()) <= _TABULATED_ULPS * EPS, f"{error.max() / EPS:.2f} ulp"
+    assert float(error.max()) <= _NB_ULPS * EPS, f"{error.max() / EPS:.2f} ulp"
 
 
 @pytest.mark.oracle
@@ -205,12 +204,13 @@ def test_a_pair_is_its_channels_summed_as_the_family_sums_them(
 
     assert np.array_equal(got, channels)
     if order is Order.FAMILY:
-        # The exposure's 16 ulp relative plus the beta-binomial's
-        # _DENSITY_TOLERANCE over max(|f|, 1) (#1332); measured 4.2e-14
-        # relative, where the bitwise channel of #1064 held 16 ulp.
+        # The negative binomial's _NB_ULPS of its terms' magnitudes plus the
+        # beta-binomial's _DENSITY_TOLERANCE over max(|f|, 1) (#1332, #1335).
         want = _density(pair, observations, covariate)
-        worst = float((np.abs(got - want) / np.maximum(np.abs(want), 1.0)).max())
-        assert worst <= _FAMILY_ULPS * EPS + _DENSITY_TOLERANCE, worst
+        bound = _NB_ULPS * EPS * np.moveaxis(
+            _nb_magnitude(DRAWS["totals"], DRAWS["exposure"]), -1, 0
+        ) + _DENSITY_TOLERANCE * np.maximum(np.abs(want), 1.0)
+        assert (np.abs(got - want) <= bound).all()
 
 
 @pytest.mark.smoke

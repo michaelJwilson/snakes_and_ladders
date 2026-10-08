@@ -14,20 +14,23 @@ import pytest
 import torch
 from sal.emissions import BetaBinomialEmission, NegativeBinomialEmission
 from sal.emissions.bb import beta_binomial_log_pmf, log_factorial, trial_tables
-from sal.emissions.nb import count_log_factor, exposure_table
+from sal.emissions.nb import (
+    count_log_factor,
+    exposure_table,
+    negative_binomial_log_pmf,
+)
+from scipy.special import gammaln
 
 SEED = 20260925
 
 #: Draws per state, each at its own covariate.
 N_DRAWS = 4_000
 
-#: Agreement of the table ``B`` completed as ``B + y ln c - (y + r) ln t``
-#: with the family's ``log_density``, which forms
-#: ``A + r ln(r / t) + y ln(mu c / t)``, in ulp of the three terms' summed
-#: magnitudes: ``y ln mu`` in ``B`` cancels against ``-y ln t``, so the error
-#: is the rounding of the terms and not of their difference. Measured 1.08 ulp
-#: on these draws, where relative to the score it is 1,380 ulp (262.9 at the ci
-#: instance of ``spatio_sequential_counts_covariate``, whose means are lower).
+#: The negative binomial's tables completed in :mod:`sal.emissions.nb`'s order
+#: against the family's ``log_density``, in ulp of the summed magnitudes of
+#: the terms either forms (issue #1335): the two differ in arithmetic, so the
+#: pin that was bitwise (the family's order) is restated at the tabulated
+#: order's declared 4 ulp of magnitudes, not re-recorded. Measured 1.05 ulp.
 _ULPS = 4
 
 
@@ -59,48 +62,49 @@ def _beta_binomial() -> tuple[BetaBinomialEmission, np.ndarray, np.ndarray]:
 
 
 @pytest.mark.oracle
-def test_the_count_log_factor_completed_in_the_familys_order_is_its_density_bitwise() -> (
+def test_the_count_log_factor_completed_in_order_is_the_pmf_bitwise_and_the_density_within_tolerance() -> (
     None
 ):
-    # `A` is `log_density`'s first three terms; the two exposure terms added
-    # in its order are the same operations on the same numbers.
+    # `(T + y log(lambda / (1 + q))) - r log1p(q)`, the order and the calls
+    # `negative_binomial_log_pmf` makes, so the same bits; `log_density`'s own
+    # arithmetic agrees within NB_ROUTE_TOLERANCE.
     family, counts, exposure = _negative_binomial()
-    y = torch.as_tensor(counts, dtype=torch.float64)
-    c = torch.as_tensor(exposure)[:, None]
-    r, mu = family.dispersion, family.mean
-    t = r + c * mu
-
+    r = family.dispersion.numpy()
+    rate = family.mean.numpy() * exposure[:, None]
+    q = rate / r
+    y = counts[:, None]
     assembled = (
-        count_log_factor(family, y)
-        + r * torch.log(r / t)
-        + y[:, None] * torch.log(c * mu / t)
-    )
+        count_log_factor(family, counts)
+        + np.where(y == 0.0, 0.0, y * np.log(rate / (1.0 + q)))
+    ) - r * np.log1p(q)
+    pmf = negative_binomial_log_pmf(y, r, rate)
+    assert np.array_equal(assembled, pmf)
 
-    assert torch.equal(assembled, family.log_density(y, covariate=c))
+    want = family.log_density(
+        torch.as_tensor(counts, dtype=torch.float64),
+        covariate=torch.as_tensor(exposure)[:, None],
+    ).numpy()
+    magnitude = (
+        np.abs(gammaln(y + r))
+        + np.abs(gammaln(r))
+        + np.abs(gammaln(y + 1.0))
+        + np.abs(y * np.log(r))
+        + np.abs(y * np.log(rate / (r + rate)))
+        + np.abs(r * np.log1p(q))
+    )
+    worst = float(np.max(np.abs(assembled - want) / magnitude))
+    assert worst <= _ULPS * np.finfo(np.float64).eps, (
+        f"{worst / np.finfo(np.float64).eps:.2f} ulp"
+    )
 
 
 @pytest.mark.oracle
-def test_the_exposure_table_completed_per_observation_is_the_density_to_its_rounding() -> (
-    None
-):
-    family, counts, exposure = _negative_binomial()
-    table = exposure_table(family, int(counts.max()) + 1)
-    y = torch.as_tensor(counts, dtype=torch.float64)
-    c = torch.as_tensor(exposure)[:, None]
-    r, mu = family.dispersion, family.mean
-
-    terms = (
-        table[counts],
-        y[:, None] * torch.log(c),
-        (y[:, None] + r) * torch.log(r + mu * c),
-    )
-    assembled = terms[0] + terms[1] - terms[2]
-    want = family.log_density(y, covariate=c)
-
-    magnitude = sum(term.abs() for term in terms)
-    worst = float(((assembled - want).abs() / magnitude).max())
-    assert worst <= _ULPS * np.finfo(np.float64).eps, (
-        f"{worst / np.finfo(np.float64).eps:.2f} ulp"
+def test_the_exposure_table_is_the_count_log_factor_by_count_bitwise() -> None:
+    family, counts, _ = _negative_binomial()
+    extent = int(counts.max()) + 1
+    assert np.array_equal(
+        exposure_table(family, extent)[counts.astype(np.int64)],
+        count_log_factor(family, counts),
     )
 
 

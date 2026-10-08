@@ -133,7 +133,6 @@ def _total_arguments(
     family: NegativeBinomialEmission,
     totals: np.ndarray,
     exposure: np.ndarray | None,
-    order: Order,
 ) -> dict[str, np.ndarray]:
     """The first channel's table and, under an exposure, its term, as the kernel takes them."""
     counts = _counts(totals, "count")
@@ -178,7 +177,6 @@ def _arguments(
     family: object,
     observations: np.ndarray,
     covariate: np.ndarray | None,
-    order: Order,
 ) -> tuple[tuple[int, ...], dict[str, np.ndarray]]:
     """The batch shape and the kernel's channel arguments for ``family``."""
     if isinstance(family, NegativeBinomialEmission):
@@ -186,7 +184,7 @@ def _arguments(
         exposure = (
             None if covariate is None else _singleton(covariate, "an exposure", shape)
         )
-        return shape, _total_arguments(family, observations, exposure, order)
+        return shape, _total_arguments(family, observations, exposure)
     if isinstance(family, BetaBinomialEmission):
         shape = observations.shape
         trials = (
@@ -225,7 +223,7 @@ def _arguments(
     exposure = None if channels.exposure is None else channels.exposure.reshape(-1)
     trials = None if channels.trials is None else channels.trials.reshape(-1)
     return shape, {
-        **_total_arguments(total, observations[..., 0], exposure, order),
+        **_total_arguments(total, observations[..., 0], exposure),
         **_success_arguments(successes, observations[..., 1], trials),
     }
 
@@ -272,8 +270,8 @@ def log_emission(
     """
     values = as_array(observations, torch.float64)
     given = None if covariate is None else as_array(covariate, torch.float64)
-    shape, arguments = _arguments(family, values, given, Order(order))
+    shape, arguments = _arguments(family, values, given)
     n_states = family.n_states
     out = np.empty(n_states * int(np.prod(shape, dtype=np.int64)))
-    oxisal.dense_log_emission(n_states, order == Order.FAMILY, out, **arguments)
+    oxisal.dense_log_emission(n_states, Order(order) is Order.FAMILY, out, **arguments)
     return out.reshape(n_states, *shape)
