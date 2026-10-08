@@ -28,6 +28,7 @@ SHARED_KEYS: dict[str, str] = {
     "spatio_sequential_counts_covariate": "par:coupled:covariate",
     "spatio_sequential_ragged": "par:coupled:ragged",
     "ragged_hmm": "par:hmm:ragged",
+    "count_hmm_reference": "par:hmm:counts",
 }
 
 #: Sections whose own text states every instance they carry at the declared

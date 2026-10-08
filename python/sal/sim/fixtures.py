@@ -59,6 +59,7 @@ from sal.inputs import library_versions
 from sal.opt.testfunctions import TestFunctionSuite
 from sal.sim.canonical import FrustratedLatticeParams
 from sal.sim.convolutional import TurboParams
+from sal.sim.count_hmm_cell import CountHmmReferenceParams
 from sal.sim.count_pairs import SpatioSequentialCountsParams
 from sal.sim.css import CssBicycleParams
 from sal.sim.emission_mixture import EmissionMixtureParams
@@ -73,6 +74,7 @@ from sal.sim.potts import (
     SpatioTilingParams,
 )
 from sal.sim.potts_chain import PottsParams
+from sal.sim.potts_cell import PottsReferenceParams
 from sal.sim.spatio_sequential import SpatioSequentialParams
 
 #: The repository root, from this file rather than a working directory: the
@@ -106,6 +108,8 @@ PARAMS: dict[str, type[Params]] = {
     "test-functions": TestFunctionSuite,
     "turbo": TurboParams,
     "polar": PolarParams,
+    "potts-reference": PottsReferenceParams,
+    "count-hmm-reference": CountHmmReferenceParams,
 }
 
 #: The oracles a fixture may state: an exhaustive sum over the instance, the

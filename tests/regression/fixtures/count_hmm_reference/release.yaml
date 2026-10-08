@@ -1,0 +1,34 @@
+model: count-hmm-reference
+oracle: none
+
+# The count-pair HMM reference cell (issue #1390) at 1e5 positions, the
+# stress cell's every other factor.
+seed: 1390
+n_positions: 100000
+# The generating levels are declared, not derived (python/sal/sim/
+# count_hmm_cell.py), and default to the downstream shape: K = 7 states
+# fitted against 8 generating levels (the low end of its 8 to 16). One level
+# holds 97%, two rare levels 1% each (the 1--2% band), and five trace levels
+# 0.2% each; "~98% on one level" and "rare levels at 1--2%" cannot both hold
+# exactly over 8 levels, and this is the reading taken. Pairs sharing a ladder
+# rung differ in rate, pairs sharing a rate differ in rung: equal in one
+# channel only, never both.
+n_fit_states: 7
+shares: [0.97, 0.01, 0.01, 0.002, 0.002, 0.002, 0.002, 0.002]
+ladder: [0, -1, 1, 0, 0, -2, 2, 1]
+rate: [0.5, 0.5, 0.5, 0.4, 0.6, 0.5, 0.3, 0.7]
+dispersion: [10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]
+concentration: [100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0]
+base_mean: 100.0
+delta_log_mean: 0.3
+# The dominant level stays with probability 1 - 1e-7, the downstream value;
+# the chain is reversible with stationary law shares. At that stay a segment
+# is one level almost surely, so segments of 20 are what put the rare levels
+# in the data.
+stay: 0.9999999
+segment_length: 20
+# Exposure log-normal(0, 0.2) per position; trials 1 + Poisson(39).
+exposure_spread: 0.2
+trials_mean: 40.0
+
+observations_digest: ec233aa601beefac
