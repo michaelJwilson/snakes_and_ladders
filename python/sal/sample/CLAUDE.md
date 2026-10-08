@@ -107,6 +107,17 @@ draws reach it without the module importing their type.
   ramp: it is an `AdaptiveSchedule`, walked by `loop.anneal_adaptive`.
   `tests/regression/sample/test_schedule_ramps.py` holds each member to an
   explicit call, a case and a `tune_schedule` candidate.
+- **Schedule pilot options default off (#1337).** `ScheduleTuning`'s
+  `racing`, `common` and `polish` leave a default run bitwise unchanged; under
+  `common` each pilot still owns its generator, a deep copy of the round's one
+  stream, so a thread pool returns the serial result bitwise.
+  `tests/regression/sample/test_schedule_racing.py` holds racing to a
+  hand-run halving and the polished rank to the polish applied by hand.
+- **A tuned ladder is `"auto"` beside a `LadderTuning` (#1337).**
+  `parallel_tempering`, `cluster_tempering` and `ground_state.run_tempering`
+  resolve it through `tune.resolve_ladder` onto `schedule.adapt_ladder`, on
+  pilots drawn from one child spawned first; a given ladder draws nothing
+  for it. `tests/regression/sample/test_ladder_tuning.py` holds the band.
 
 **One field behaviour on every Potts entry point (#1317).** Every entry point
 takes `move` as a move set applied in order and `recolour`: a cluster's

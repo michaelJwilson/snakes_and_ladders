@@ -12,7 +12,7 @@ import functools
 import math
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 from numpy.random import Generator
@@ -59,9 +59,13 @@ from sal.sample.schedule import (
 )
 from sal.sample.statistics import integrated_autocorrelation_time, split_rhat
 from sal.sample.tune import (
+    Ladder,
+    LadderTuning,
     Schedule,
     ScheduleTuning,
+    TunedLadder,
     TunedSchedule,
+    resolve_ladder,
     resolve_schedule,
 )
 from sal.sim.graph import PottsGraph
@@ -777,18 +781,22 @@ class TemperedChains(Tempered[np.ndarray]):
         :func:`sal.sample.tempered.up_fraction` read it, an
         exchange acceptance being a per-pair number a ladder can look
         healthy in while nothing crosses it (issue #756).
+    tuned_ladder : TunedLadder | None
+        The pilot that chose the ladder under ``temperatures="auto"`` (issue
+        #1337), ``None`` for a given ladder; its spend is not in ``spent``.
     """
 
     states: np.ndarray
     energy: float
     n_sweeps: int
     walkers: np.ndarray
+    tuned_ladder: TunedLadder | None = None
 
 
 def parallel_tempering(
     graph: PottsGraph,
     field: SiteField | np.ndarray,
-    temperatures: TempSchedule | Sequence[float],
+    temperatures: Ladder,
     rng: np.random.Generator,
     n_sweeps: int,
     burn_in: int = 0,
@@ -799,6 +807,7 @@ def parallel_tempering(
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.RUST,
     start: np.ndarray | None = None,
+    ladder_tuning: LadderTuning | None = None,
 ) -> TemperedChains:
     """Replicas at fixed temperatures, exchanging configurations by Metropolis.
 
@@ -839,10 +848,13 @@ def parallel_tempering(
         which refuses a negative one as :func:`anneal_potts` does.
     field : SiteField | np.ndarray
         External field, shape ``(n_states,)``.
-    temperatures : TempSchedule | Sequence[float]
+    temperatures : TempSchedule | Sequence[float] | Literal["auto"]
         The ladder, in any order; at least two, all positive. The stationary
         distribution depends on which pairs are adjacent for exchange, not on
-        the order.
+        the order. ``"auto"`` chooses it by
+        :func:`~sal.sample.schedule.adapt_ladder` on pilot runs of this
+        function from ``ladder_tuning.start``, drawn from one child spawned
+        from ``rng`` first (issue #1337).
     rng : np.random.Generator
         The parent generator: it spawns one child per replica and then draws
         only the exchange uniforms, so one seeded generator reproduces the run.
@@ -868,6 +880,10 @@ def parallel_tempering(
         replica's child generator, as before the parameter existed. A given
         start draws nothing, as :func:`anneal_potts`' does, so one step from a
         fixed pair is a draw from the product kernel's row (issue #1156).
+    ladder_tuning : LadderTuning | None
+        The pilot that chooses ``temperatures="auto"``, required with it and
+        refused without it. A given ladder draws nothing for it, so its run
+        is bitwise the run before #1337.
 
     Returns
     -------
@@ -885,7 +901,24 @@ def parallel_tempering(
         If a rung's entry holds anything but a ``PottsMove``.
     """
     field = log_weight_of(field)
-    temperatures = check_ladder(ladder(temperatures), needed_by="parallel tempering")
+
+    def pilot(candidate: tuple[float, ...]) -> tuple[list[float], int]:
+        run = parallel_tempering(
+            graph,
+            field,
+            candidate,
+            pilot_rng,
+            ladder_tuning.n_sweeps if ladder_tuning else 0,
+            move=move,
+            recolour=recolour,
+            backend=backend,
+            cluster_backend=cluster_backend,
+        )
+        return [float(value) for value in run.swap_acceptance], run.spent
+
+    pilot_rng = rng.spawn(1)[0] if isinstance(temperatures, str) else rng
+    given, tuned_ladder = resolve_ladder(temperatures, ladder_tuning, pilot)
+    temperatures = check_ladder(ladder(given), needed_by="parallel tempering")
     per_rung = tuple(
         move_set(rung, recolour) for rung in moves_per_rung(move, len(temperatures))
     )
@@ -952,6 +985,7 @@ def parallel_tempering(
         spent=run.spent,
         unit=Cost.SITE_VISITS,
         termination=Termination.after((burn_in + n_sweeps) * thin, converged=False),
+        tuned_ladder=tuned_ladder,
     )
 
 
@@ -1164,6 +1198,9 @@ class ClusterTempered(Tempered[np.ndarray]):
         ``best``'s energy.
     n_sweeps : int
         Steps run, each one Swendsen-Wang pass per replica.
+    tuned_ladder : TunedLadder | None
+        The pilot that chose the ladder under ``temperatures="auto"`` (issue
+        #1337), ``None`` for a given ladder; its spend is not in ``spent``.
     """
 
     states: np.ndarray
@@ -1172,12 +1209,13 @@ class ClusterTempered(Tempered[np.ndarray]):
     houdayer_accepts: int
     energy: float
     n_sweeps: int
+    tuned_ladder: TunedLadder | None = None
 
 
 def cluster_tempering(
     graph: PottsGraph,
     field: SiteField | np.ndarray,
-    temperatures: Sequence[float],
+    temperatures: Sequence[float] | Literal["auto"],
     rng: np.random.Generator,
     n_sweeps: int,
     *,
@@ -1186,6 +1224,7 @@ def cluster_tempering(
     thin: int = 1,
     record: bool = False,
     cluster_backend: Backend = Backend.RUST,
+    ladder_tuning: LadderTuning | None = None,
 ) -> ClusterTempered:
     """Parallel tempering on Swendsen-Wang passes, with Houdayer moves at the cold end (issue #1041).
 
@@ -1210,11 +1249,13 @@ def cluster_tempering(
         Every coupling non-negative.
     field : SiteField | np.ndarray
         ``(n_states,)`` or ``(n_nodes, n_states)``.
-    temperatures : Sequence[float]
-        The ladder, coldest first; at least two, all positive.
+    temperatures : Sequence[float] | Literal["auto"]
+        The ladder, coldest first; at least two, all positive. ``"auto"``
+        chooses it as :func:`parallel_tempering` does, on pilot runs of this
+        function (issue #1337).
     rng : np.random.Generator
         Spawns one child per replica, then draws the Houdayer seed sites and
-        every accept uniform.
+        every accept uniform; under ``"auto"`` it first spawns the pilots'.
     n_sweeps, burn_in, thin : int
         As :func:`parallel_tempering`.
     houdayer_pairs : int
@@ -1224,6 +1265,8 @@ def cluster_tempering(
         test reads and a ground-state search does not.
     cluster_backend : Backend
         Runs the Swendsen-Wang pass, as :func:`anneal_potts` states.
+    ladder_tuning : LadderTuning | None
+        As :func:`parallel_tempering`'s.
 
     Returns
     -------
@@ -1236,8 +1279,23 @@ def cluster_tempering(
         ``houdayer_pairs`` is outside ``[0, n_replicas - 1]``.
     """
     refuse_negative_coupling(PottsMove.SWENDSEN_WANG, graph)
+
+    def pilot(candidate: tuple[float, ...]) -> tuple[list[float], int]:
+        run = cluster_tempering(
+            graph,
+            field,
+            candidate,
+            pilot_rng,
+            ladder_tuning.n_sweeps if ladder_tuning else 0,
+            houdayer_pairs=min(houdayer_pairs, len(candidate) - 1),
+            cluster_backend=cluster_backend,
+        )
+        return [float(value) for value in run.swap_acceptance], run.spent
+
+    pilot_rng = rng.spawn(1)[0] if isinstance(temperatures, str) else rng
+    given, tuned_ladder = resolve_ladder(temperatures, ladder_tuning, pilot)
     temperatures = check_ladder(
-        ladder(temperatures),
+        ladder(given),
         needed_by="cluster tempering",
         monotone=Monotone.INCREASING,
     )
@@ -1305,6 +1363,7 @@ def cluster_tempering(
         spent=run.spent,
         unit=Cost.SITE_VISITS,
         termination=Termination.after((burn_in + n_sweeps) * thin, converged=False),
+        tuned_ladder=tuned_ladder,
     )
 
 

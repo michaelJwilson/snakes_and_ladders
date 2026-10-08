@@ -38,6 +38,7 @@ and the polished gap ranks it last.
 
 from __future__ import annotations
 
+import copy
 import functools
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
@@ -53,10 +54,12 @@ from sal.parallel import Pool, map_tasks
 from sal.sample import loop
 from sal.sample.loop import Moved, Step
 from sal.sample.schedule import (
+    AdaptedLadder,
     LadderTempSchedule,
     ScheduleParams,
     ScheduleShape,
     TempSchedule,
+    adapt_ladder,
 )
 from sal.track import NULL_RUN, track
 
@@ -427,24 +430,42 @@ class ScheduleTuning:
         ``grid``: each candidate anneals for ``(budget.size // len(grid)) //
         n_nodes`` sweeps.
     criterion : Criterion
-        What ranks the candidates: :attr:`Criterion.LOWEST_ENERGY` alone.
+        What ranks the candidates: :attr:`Criterion.LOWEST_ENERGY`, or
+        :attr:`Criterion.POLISHED_GAP` with ``polish`` (issue #1337).
     n_steps : int
         The tuned run's step count, at which the chosen schedule is built.
     grid : tuple[ScheduleParams, ...]
         The candidate schedules, :data:`SCHEDULE_GRID` unless named.
+    racing : bool
+        Successive halving (issue #1337): every candidate at a quarter of its
+        share, the better half kept, the share doubled, until one remains or
+        the full share is run. ``False``, the default, runs every candidate
+        once at the full share.
+    common : bool
+        Common random numbers (issue #1337): every candidate's pilot draws
+        from one spawned stream per round, so the starts are identical and
+        the comparison is paired. ``False``, the default, spawns one stream
+        per candidate.
+    polish : Callable[[np.ndarray], np.ndarray] | None
+        What :attr:`Criterion.POLISHED_GAP` applies to each pilot's best
+        labelling before scoring it; required with it and refused without it.
 
     Raises
     ------
     ValueError
-        If the budget is not in site visits, the criterion is not
-        :attr:`Criterion.LOWEST_ENERGY`, ``n_steps`` is below one or the grid
-        is empty.
+        If the budget is not in site visits, the criterion is neither
+        :attr:`Criterion.LOWEST_ENERGY` nor :attr:`Criterion.POLISHED_GAP`,
+        ``polish`` is given without :attr:`Criterion.POLISHED_GAP` or absent
+        with it, ``n_steps`` is below one or the grid is empty.
     """
 
     budget: Budget
     criterion: Criterion
     n_steps: int
     grid: tuple[ScheduleParams, ...] = field(default=SCHEDULE_GRID)
+    racing: bool = False
+    common: bool = False
+    polish: Callable[[np.ndarray], np.ndarray] | None = None
 
     def __post_init__(self) -> None:
         if self.budget.unit is not Cost.SITE_VISITS:
@@ -453,10 +474,18 @@ class ScheduleTuning:
                 f"budget is in {self.budget.unit.value!r}"
             )
             raise ValueError(msg)
-        if self.criterion is not Criterion.LOWEST_ENERGY:
+        if self.criterion not in (Criterion.LOWEST_ENERGY, Criterion.POLISHED_GAP):
             msg = (
-                f"a schedule is ranked by {Criterion.LOWEST_ENERGY.name}; "
-                f"{self.criterion.name} has no schedule pilot yet (#1317)"
+                f"a schedule is ranked by {Criterion.LOWEST_ENERGY.name} or "
+                f"{Criterion.POLISHED_GAP.name}; {self.criterion.name} has no "
+                "schedule pilot (#1317)"
+            )
+            raise ValueError(msg)
+        polishes = self.criterion is Criterion.POLISHED_GAP
+        if polishes != (self.polish is not None):
+            msg = (
+                f"a polish comes with {Criterion.POLISHED_GAP.name} and only "
+                f"with it; the criterion is {self.criterion.name}"
             )
             raise ValueError(msg)
         if self.n_steps < 1:
@@ -469,11 +498,23 @@ class ScheduleTuning:
 
 @dataclass(frozen=True)
 class ScheduleCandidate:
-    """One candidate schedule's pilot: its lowest energy and its spend."""
+    """One candidate schedule's pilot: its lowest energy, its spend, and the polished energy of its best.
+
+    ``polished_energy`` is ``None`` unless the pilot was ranked by
+    :attr:`Criterion.POLISHED_GAP` (issue #1337).
+    """
 
     params: ScheduleParams
     lowest_energy: float
     spent: int
+    polished_energy: float | None = None
+
+    @property
+    def score(self) -> float:
+        """What the candidate is ranked by: the polished energy where there is one, else the lowest."""
+        if self.polished_energy is not None:
+            return self.polished_energy
+        return self.lowest_energy
 
 
 @dataclass(frozen=True)
@@ -486,14 +527,18 @@ class TunedSchedule:
         The chosen candidate's.
     criterion : Criterion
     candidates : tuple[ScheduleCandidate, ...]
-        In grid order.
+        In grid order; under racing, each candidate's pilot from the last
+        round it ran in.
     sweeps : int
-        Each pilot's step count.
+        The final pilots' step count.
     spent : int
-        Site visits of every pilot.
+        Site visits of every pilot, every racing round included.
     unit : Cost
     termination : Termination
-        After one pilot per candidate, never converged.
+        After every pilot run, never converged.
+    rounds : tuple[tuple[int, int], ...]
+        ``(candidates, sweeps)`` per round: one round without racing, the
+        halving under it (issue #1337).
     """
 
     params: ScheduleParams
@@ -503,6 +548,7 @@ class TunedSchedule:
     spent: int
     unit: Cost
     termination: Termination
+    rounds: tuple[tuple[int, int], ...] = ()
 
 
 def _schedule_pilot(
@@ -514,14 +560,52 @@ def _schedule_pilot(
     move: PottsMoves,
     recolour: Recolour,
     sweeps: int,
+    polish: Callable[[np.ndarray], np.ndarray] | None = None,
 ) -> ScheduleCandidate:
     """One candidate's anneal on its own generator; thread-safe, it writes no shared state."""
     from sal.sample.potts_mcmc import anneal_potts
+    from sal.sim.potts import energy
 
     run = anneal_potts(
         graph, field, params.build(sweeps), rng, move=move, recolour=recolour
     )
-    return ScheduleCandidate(params, run.energy, run.spent)
+    if polish is None:
+        return ScheduleCandidate(params, run.energy, run.spent)
+    polished = energy(graph, field, polish(np.copy(run.best)))
+    return ScheduleCandidate(params, run.energy, run.spent, polished)
+
+
+def _common_pilot(
+    item: tuple[ScheduleParams, np.random.Generator],
+    *,
+    body: Callable[[ScheduleParams, np.random.Generator], ScheduleCandidate],
+) -> ScheduleCandidate:
+    """A pilot on the generator its item carries: a copy of the round's one stream, so starts are shared."""
+    params, rng = item
+    return body(params, rng)
+
+
+def _round(
+    body: Callable[..., ScheduleCandidate],
+    params: Sequence[ScheduleParams],
+    rng: np.random.Generator,
+    *,
+    common: bool,
+    workers: int,
+    pool: Pool,
+) -> list[ScheduleCandidate]:
+    """One pilot per candidate, on spawned streams: one each, or one shared under ``common``.
+
+    Under ``common`` the round spawns one child and hands every candidate its
+    own deep copy, so each body still owns its generator and a thread pool
+    returns the serial result bitwise.
+    """
+    if not common:
+        return map_tasks(body, params, workers=workers, pool=pool, generator=rng)
+    (shared,) = rng.spawn(1)
+    items = [(each, copy.deepcopy(shared)) for each in params]
+    paired = functools.partial(_common_pilot, body=body)
+    return map_tasks(paired, items, workers=workers, pool=pool)
 
 
 def tune_schedule(
@@ -536,6 +620,9 @@ def tune_schedule(
     grid: Sequence[ScheduleParams] = SCHEDULE_GRID,
     workers: int = 1,
     pool: Pool = "serial",
+    racing: bool = False,
+    common: bool = False,
+    polish: Callable[[np.ndarray], np.ndarray] | None = None,
 ) -> TunedSchedule:
     """The schedule of ``grid`` that ``criterion`` ranks first, from one annealing pilot per candidate.
 
@@ -546,9 +633,17 @@ def tune_schedule(
     :func:`~sal.sample.potts_mcmc.anneal_potts` under ``move`` and
     ``recolour``. Each pilot draws from its own generator spawned from
     ``rng`` by :func:`sal.parallel.map_tasks`, so a thread pool returns the
-    serial result bitwise. Ranked by the lowest energy, ties to grid order.
+    serial result bitwise. Ranked by the lowest energy, or under
+    :attr:`Criterion.POLISHED_GAP` by the energy of ``polish`` applied to each
+    pilot's best labelling, ties to grid order.
     A pilot is charged its own spend, which for a Wolff move is below its
     share: Wolff's step visits one cluster, not a sweep.
+
+    ``racing`` and ``common`` are :class:`ScheduleTuning`'s (issue #1337),
+    both off by default, which is the run before them bitwise. Racing's first
+    round runs ``max(2, sweeps // 4)`` steps, each round keeps the better
+    ``max(1, n // 2)`` by (score, grid index) and doubles the steps, capped at
+    ``sweeps``, and the round at ``sweeps`` or with one candidate is the last.
 
     Raises
     ------
@@ -557,7 +652,7 @@ def tune_schedule(
         fewer than two steps.
     """
     candidates_in = tuple(grid)
-    tuning = ScheduleTuning(budget, criterion, 1, candidates_in)
+    tuning = ScheduleTuning(budget, criterion, 1, candidates_in, racing, common, polish)
     sweeps = (tuning.budget.size // len(candidates_in)) // graph.n_nodes
     if sweeps < 2:
         msg = (
@@ -572,21 +667,43 @@ def tune_schedule(
         field=field,
         move=move,
         recolour=recolour,
-        sweeps=sweeps,
+        polish=polish,
     )
+    latest: dict[int, ScheduleCandidate] = {}
+    rounds: list[tuple[int, int]] = []
+    spent = 0
+    pilots = 0
+    alive = list(range(len(candidates_in)))
+    steps = sweeps if not racing else max(2, sweeps // 4)
     with track(NULL_RUN):
-        candidates = map_tasks(
-            body, candidates_in, workers=workers, pool=pool, generator=rng
-        )
-    index = min(range(len(candidates)), key=lambda k: (candidates[k].lowest_energy, k))
+        while True:
+            ran = _round(
+                functools.partial(body, sweeps=steps),
+                [candidates_in[k] for k in alive],
+                rng,
+                common=common,
+                workers=workers,
+                pool=pool,
+            )
+            rounds.append((len(alive), steps))
+            spent += sum(candidate.spent for candidate in ran)
+            pilots += len(ran)
+            latest.update(zip(alive, ran, strict=True))
+            if steps >= sweeps or len(alive) == 1:
+                break
+            ranked = sorted(alive, key=lambda k: (latest[k].score, k))
+            alive = sorted(ranked[: max(1, len(alive) // 2)])
+            steps = min(2 * steps, sweeps)
+    index = min(alive, key=lambda k: (latest[k].score, k))
     return TunedSchedule(
-        params=candidates[index].params,
+        params=candidates_in[index],
         criterion=criterion,
-        candidates=tuple(candidates),
-        sweeps=sweeps,
-        spent=sum(candidate.spent for candidate in candidates),
+        candidates=tuple(latest[k] for k in range(len(candidates_in))),
+        sweeps=steps,
+        spent=spent,
         unit=Cost.SITE_VISITS,
-        termination=Termination.after(len(candidates), converged=False),
+        termination=Termination.after(pilots, converged=False),
+        rounds=tuple(rounds),
     )
 
 
@@ -639,8 +756,150 @@ def resolve_schedule(
         criterion=tuning.criterion,
         rng=rng,
         grid=tuning.grid,
+        racing=tuning.racing,
+        common=tuning.common,
+        polish=tuning.polish,
     )
     return tuned.params.build(tuning.n_steps), tuned
+
+
+#: A ladder as a tempering entry point takes it: temperatures, or :data:`AUTO`
+#: with a :class:`LadderTuning` beside it (issue #1337).
+type Ladder = TempSchedule | Sequence[float] | Literal["auto"]
+
+
+@dataclass(frozen=True)
+class LadderTuning:
+    """How a tempering entry point given ``temperatures="auto"`` chooses its ladder (issue #1337).
+
+    Required beside ``"auto"`` as :class:`ScheduleTuning` is beside
+    ``schedule="auto"``: :func:`~sal.sample.schedule.adapt_ladder` runs on
+    pilot exchanges of the entry point's own sampler, from ``start``.
+
+    Parameters
+    ----------
+    budget : Budget
+        The pilots' cap, in :attr:`~sal.cost.Cost.SWEEPS` summed over
+        replicas: ``budget.size // (max_replicas * n_sweeps)`` measurements at
+        most, so no warm-up runs over it whatever the ladder grows to.
+    max_replicas : int
+        The ladder's cap, as :func:`~sal.sample.schedule.adapt_ladder` takes it.
+    start : tuple[float, ...]
+        The starting ladder, in the order the entry point takes; its
+        endpoints are kept.
+    band : tuple[float, float]
+        The target exchange acceptance per neighbouring pair.
+    n_sweeps : int
+        Sweeps per replica per measurement.
+
+    Raises
+    ------
+    ValueError
+        If the budget is not in sweeps, or buys no measurement.
+    """
+
+    budget: Budget
+    max_replicas: int
+    start: tuple[float, ...]
+    band: tuple[float, float] = (0.2, 0.3)
+    n_sweeps: int = 20
+
+    def __post_init__(self) -> None:
+        if self.budget.unit is not Cost.SWEEPS:
+            msg = (
+                f"a ladder pilot spends {Cost.SWEEPS.value!r}, and the budget "
+                f"is in {self.budget.unit.value!r}"
+            )
+            raise ValueError(msg)
+        if self.max_iterations < 1:
+            msg = (
+                f"a budget of {self.budget.size} sweeps buys no measurement of "
+                f"{self.max_replicas} replicas at {self.n_sweeps} sweeps"
+            )
+            raise ValueError(msg)
+
+    @property
+    def max_iterations(self) -> int:
+        """Measurements the budget buys at the ladder's cap."""
+        return self.budget.size // (self.max_replicas * self.n_sweeps)
+
+
+@dataclass(frozen=True)
+class TunedLadder:
+    """The ladder a pilot chose, with what it measured and spent (issue #1337).
+
+    Parameters
+    ----------
+    adapted : AdaptedLadder
+        :func:`~sal.sample.schedule.adapt_ladder`'s result: the ladder, its
+        last acceptances and ``within_band``.
+    spent : int
+        Site visits of every pilot run.
+    unit : Cost
+    termination : Termination
+        Converged where every pair is within the band, else on its budget.
+    """
+
+    adapted: AdaptedLadder
+    spent: int
+    unit: Cost
+    termination: Termination
+
+    @property
+    def within_band(self) -> bool:
+        """Whether every measured exchange acceptance lies in the band."""
+        return self.adapted.within_band
+
+
+def resolve_ladder(
+    temperatures: Ladder,
+    tuning: LadderTuning | None,
+    measure: Callable[[tuple[float, ...]], tuple[Sequence[float], int]],
+) -> tuple[TempSchedule | Sequence[float], TunedLadder | None]:
+    """``temperatures`` as given, or the ladder ``tuning``'s pilot chooses under ``"auto"``.
+
+    ``measure`` runs the entry point's sampler on a candidate ladder and
+    returns each neighbouring pair's acceptance and the site visits spent. A
+    given ladder calls nothing, so its run is bitwise the run before #1337.
+
+    Raises
+    ------
+    ValueError
+        If ``"auto"`` comes without a :class:`LadderTuning`, one comes with a
+        given ladder, or ``temperatures`` is another string.
+    """
+    if not isinstance(temperatures, str):
+        if tuning is not None:
+            msg = "a LadderTuning chooses temperatures='auto', and the ladder is given"
+            raise ValueError(msg)
+        return temperatures, None
+    if temperatures != AUTO:
+        msg = f"temperatures is a ladder or 'auto', got {temperatures!r}"
+        raise ValueError(msg)
+    if tuning is None:
+        msg = (
+            "temperatures='auto' needs a LadderTuning: the pilots' budget, "
+            "band, replica cap and starting ladder"
+        )
+        raise ValueError(msg)
+    spent = 0
+
+    def measured(candidate: tuple[float, ...]) -> Sequence[float]:
+        nonlocal spent
+        acceptance, cost = measure(candidate)
+        spent += cost
+        return acceptance
+
+    adapted = adapt_ladder(
+        measured, tuning.start, tuning.band, tuning.max_iterations, tuning.max_replicas
+    )
+    tuned = TunedLadder(
+        adapted,
+        spent,
+        Cost.SITE_VISITS,
+        Termination.after(adapted.rounds, converged=adapted.within_band),
+    )
+    return adapted.temperatures, tuned
 
 
 __all__ = [
@@ -649,15 +908,19 @@ __all__ = [
     "SCHEDULE_GRID",
     "Candidate",
     "Criterion",
+    "Ladder",
+    "LadderTuning",
     "Pilot",
     "Schedule",
     "ScheduleCandidate",
     "ScheduleTuning",
     "StepSize",
     "StepTuning",
+    "TunedLadder",
     "TunedSchedule",
     "TunedStep",
     "compress",
+    "resolve_ladder",
     "resolve_schedule",
     "tune_schedule",
     "tune_step",

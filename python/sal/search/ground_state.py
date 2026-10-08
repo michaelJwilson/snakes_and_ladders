@@ -67,10 +67,10 @@ import inspect
 import operator
 import re
 import time
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass, replace
 from dataclasses import field as dataclass_field
-from typing import Any, NoReturn, Protocol
+from typing import Any, Literal, NoReturn, Protocol
 
 import numpy as np
 
@@ -95,6 +95,8 @@ from sal.sample.potts_mcmc import (
     rung_moves,
 )
 from sal.sample.schedule import ScheduleParams, ScheduleShape
+from sal.sample.schedule import ladder as sal_ladder
+from sal.sample.tune import LadderTuning, TunedLadder, resolve_ladder
 from sal.search.alpha_expansion import (
     Labelling,
     alpha_beta_swap,
@@ -614,6 +616,7 @@ class MethodRun:
     trace: tuple[ClusterCounter, ...] = ()
     converged: bool = True
     termination: Termination = dataclass_field(kw_only=True)
+    tuned_ladder: TunedLadder | None = dataclass_field(default=None, kw_only=True)
 
 
 def step_cost(problem: Problem | Rung, move: PottsMove) -> int:
@@ -1049,6 +1052,8 @@ def run_tempering(
     *,
     move: RungMoves = PottsMove.SINGLE_SITE,
     start: np.ndarray | None = None,
+    temperatures: Sequence[float] | Literal["auto"] | None = None,
+    ladder_tuning: LadderTuning | None = None,
 ) -> MethodRun:
     """Parallel tempering over a geometric ladder, charged for every replica.
 
@@ -1063,18 +1068,52 @@ def run_tempering(
     compiled route; the single-cluster moves read none. The step count is
     fixed as :func:`run_annealed` fixes one, so a single-cluster move
     underspends, and ``spent`` is what the run charged.
+
+    ``temperatures`` is :func:`tempering_ladder` unless given; ``"auto"``
+    chooses it as :func:`~sal.sample.potts_mcmc.parallel_tempering` does,
+    from ``ladder_tuning`` (issue #1337), for one ``PottsMove`` on every
+    rung. The pilots' site visits come out of ``budget`` and are in
+    ``spent``, so a tuned ladder is compared at equal cost.
     """
     _refuse_start("tempering", start, "its ladder draws one labelling per replica")
     problem = _problem(problem)
+    tuned_ladder = None
+    if isinstance(temperatures, str) and not isinstance(move, PottsMove):
+        msg = "temperatures='auto' tunes one move set for every rung, not one per rung"
+        raise ValueError(msg)
+
+    def pilot(candidate: tuple[float, ...]) -> tuple[list[float], int]:
+        run = parallel_tempering(
+            problem.graph,
+            problem.field,
+            candidate,
+            pilot_rng,
+            ladder_tuning.n_sweeps if ladder_tuning else 0,
+            move=move,
+            recolour=Recolour.UNIFORM,
+            cluster_backend=Backend.RUST
+            if move in _COMPILED_CLUSTERS
+            else Backend.PYTHON,
+        )
+        return [float(value) for value in run.swap_acceptance], run.spent
+
+    pilot_rng = rng.spawn(1)[0] if isinstance(temperatures, str) else rng
+    given, tuned_ladder = resolve_ladder(
+        tempering_ladder() if temperatures is None else temperatures,
+        ladder_tuning,
+        pilot,
+    )
+    ladder = sal_ladder(given)
+    pilot_spent = 0 if tuned_ladder is None else tuned_ladder.spent
+    n_rungs = len(ladder)
     # Each bare move alone, as recorded: a sequence is taken as given (#1323).
-    entries = [move] * N_REPLICAS if isinstance(move, PottsMove) else list(move)
+    entries = [move] * n_rungs if isinstance(move, PottsMove) else list(move)
     per_rung = moves_per_rung(
         [(each,) if isinstance(each, PottsMove) else each for each in entries],
-        N_REPLICAS,
+        n_rungs,
     )
     per_step = sum(step_cost(problem, each) for rung in per_rung for each in rung)
-    per_replica = max(1, budget.size // per_step)
-    ladder = tempering_ladder()
+    per_replica = max(1, (budget.size - pilot_spent) // per_step)
     compiled = any(each in _COMPILED_CLUSTERS for rung in per_rung for each in rung)
     started = time.perf_counter()
     run = parallel_tempering(
@@ -1091,9 +1130,10 @@ def run_tempering(
     return MethodRun(
         labelling=run.best,
         energy=run.energy,
-        spent=run.spent,
+        spent=run.spent + pilot_spent,
         seconds=time.perf_counter() - started,
         termination=Termination.after(per_replica, converged=False),
+        tuned_ladder=tuned_ladder,
     )
 
 
