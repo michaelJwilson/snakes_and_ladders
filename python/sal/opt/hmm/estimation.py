@@ -32,7 +32,7 @@ from sal.emissions import (
 from sal.opt.em import EM, Degenerate, EmConfig, Unsettled, check_stages, em_loop
 from sal.opt.hmm.forward import Posteriors, forward_messages
 from sal.opt.m_step import MStep
-from sal.opt.termination import Termination
+from sal.opt.termination import Stop, Termination
 from sal.ragged import Ragged
 
 
@@ -535,6 +535,7 @@ def _streamed_family(
     m = components.n_states
     at_boundary = False
     frozen: set[int] = set()
+    degenerate: set[int] = set()
     unsettled: Unsettled | None = None
 
     def flat(tensor: torch.Tensor) -> np.ndarray:
@@ -618,15 +619,19 @@ def _streamed_family(
                 support, torch.from_numpy(histogram.reshape(-1, m)), covariate=exposure
             )
             if not reestimate.converged:
-                unsettled = Unsettled(reestimate.iterations, reestimate.residual)
+                unsettled = Unsettled(
+                    reestimate.iterations, reestimate.residual, reestimate.degenerate
+                )
                 msg = (
                     f"the emission M step did not settle after "
                     f"{reestimate.iterations} iterations, at a relative change "
-                    f"of {reestimate.residual:.3e}"
+                    f"of {reestimate.residual:.3e}, degenerate states "
+                    f"{reestimate.degenerate}"
                 )
                 raise Degenerate(msg, unsettled)
             at_boundary = at_boundary or reestimate.at_boundary
             frozen.update(reestimate.frozen)
+            degenerate.update(reestimate.degenerate)
             return (initial, transition, reestimate.components), log_likelihood
 
         step = tabled
@@ -636,6 +641,7 @@ def _streamed_family(
         (flat(log_initial), flat(log_transition), components),
         config=config,
     )
+    termination, unsettled = _held_degenerate(termination, unsettled, degenerate)
     return EmFit(
         log_initial=torch.from_numpy(initial),
         log_transition=torch.from_numpy(transition.reshape(m, m)),
@@ -646,6 +652,30 @@ def _streamed_family(
         spent=termination.iterations,
         frozen=tuple(sorted(frozen)),
         unsettled=unsettled,
+    )
+
+
+def _held_degenerate(
+    termination: Termination, unsettled: Unsettled | None, degenerate: set[int]
+) -> tuple[Termination, Unsettled | None]:
+    """End a fit that ran with a degenerate state as :attr:`Stop.DEGENERATE`, naming the states (issue #1346).
+
+    A state the M step re-estimated in part --- a beta-binomial under two
+    mean trials, its concentration held --- lets the fit run to its own stop,
+    but the parameters it returns are not all estimates, so the stop is not
+    reported as convergence. ``iterations`` are kept; ``unsettled`` names the
+    states with no inner solve behind them. A fit with no such state, or one
+    already ended degenerate, is returned as it came.
+    """
+    if not degenerate or termination.reason is Stop.DEGENERATE:
+        return termination, unsettled
+    return (
+        Termination(
+            converged=False,
+            iterations=termination.iterations,
+            reason=Stop.DEGENERATE,
+        ),
+        Unsettled(0, 0.0, tuple(sorted(degenerate))),
     )
 
 
@@ -932,6 +962,7 @@ def baum_welch_family(
 
     at_boundary = False
     frozen: set[int] = set()
+    degenerate: set[int] = set()
     unsettled: Unsettled | None = None
 
     def iterate(
@@ -1062,10 +1093,11 @@ def baum_welch_family(
             else m_step(components, data, previous, scored)
         )
         if not step.converged:
-            unsettled = Unsettled(step.iterations, step.residual)
+            unsettled = Unsettled(step.iterations, step.residual, step.degenerate)
             msg = (
                 f"the emission M step did not settle after {step.iterations} "
-                f"iterations, at a relative change of {step.residual:.3e}: a "
+                f"iterations, at a relative change of {step.residual:.3e}, "
+                f"degenerate states {step.degenerate}: a "
                 f"parameter read off iterations that never converged is not an "
                 f"estimate, and a monotone outer likelihood would not have "
                 f"shown it"
@@ -1073,6 +1105,7 @@ def baum_welch_family(
             raise Degenerate(msg, unsettled)
         at_boundary = at_boundary or step.at_boundary
         frozen.update(step.frozen)
+        degenerate.update(step.degenerate)
         return (log_initial, log_transition, kernels, step.components), log_likelihood
 
     (log_initial, log_transition, _, components), log_likelihood, termination = em_loop(
@@ -1080,6 +1113,7 @@ def baum_welch_family(
         (log_initial, log_transition, kernels, components),
         config=config,
     )
+    termination, unsettled = _held_degenerate(termination, unsettled, degenerate)
     return EmFit(
         log_initial=log_initial,
         log_transition=log_transition,

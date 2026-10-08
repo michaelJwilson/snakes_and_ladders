@@ -85,6 +85,14 @@ class Reestimate(Generic[FamilyT_co]):
         or one whose estimate is undefined on what it holds. **Not** an
         error: the fit goes on with the other states, and a caller reads
         which were held.
+    degenerate : tuple[int, ...]
+        States whose estimate the data cannot identify (issue #1346): a
+        negative-binomial dispersion at
+        :data:`~sal.emissions.mstep.DISPERSION_FLOOR`, which also sets
+        ``converged`` false so EM ends on it, or a beta-binomial state under
+        two mean trials, whose concentration is held while its rate is
+        re-estimated. EM ends such a fit with
+        :attr:`~sal.opt.termination.Stop.DEGENERATE`, naming the states.
     """
 
     components: FamilyT_co
@@ -93,6 +101,7 @@ class Reestimate(Generic[FamilyT_co]):
     iterations: int = 0
     residual: float = 0.0
     frozen: tuple[int, ...] = ()
+    degenerate: tuple[int, ...] = ()
 
 
 class ParameterDomainError(ValueError):

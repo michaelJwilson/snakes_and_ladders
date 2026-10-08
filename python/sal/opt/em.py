@@ -92,10 +92,16 @@ class Unsettled:
         Iterations the inner solve took before it stopped.
     residual : float
         Its residual where it stopped, in the solve's own relative units.
+    states : tuple[int, ...]
+        The states the M step reported degenerate (issue #1346): a
+        negative-binomial dispersion at its floor, or a beta-binomial state
+        under two mean trials. Empty where the solve did not settle on no
+        named state.
     """
 
     iterations: int
     residual: float
+    states: tuple[int, ...] = ()
 
 
 class Degenerate(ValueError):
