@@ -113,6 +113,11 @@ draws reach it without the module importing their type.
   stream, so a thread pool returns the serial result bitwise.
   `tests/regression/sample/test_schedule_racing.py` holds racing to a
   hand-run halving and the polished rank to the polish applied by hand.
+- **A tuned ladder is `"auto"` beside a `LadderTuning` (#1337).**
+  `parallel_tempering`, `cluster_tempering` and `ground_state.run_tempering`
+  resolve it through `tune.resolve_ladder` onto `schedule.adapt_ladder`, on
+  pilots drawn from one child spawned first; a given ladder draws nothing
+  for it. `tests/regression/sample/test_ladder_tuning.py` holds the band.
 
 **One field behaviour on every Potts entry point (#1317).** Every entry point
 takes `move` as a move set applied in order and `recolour`: a cluster's

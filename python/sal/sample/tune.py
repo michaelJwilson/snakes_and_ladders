@@ -54,10 +54,12 @@ from sal.parallel import Pool, map_tasks
 from sal.sample import loop
 from sal.sample.loop import Moved, Step
 from sal.sample.schedule import (
+    AdaptedLadder,
     LadderTempSchedule,
     ScheduleParams,
     ScheduleShape,
     TempSchedule,
+    adapt_ladder,
 )
 from sal.track import NULL_RUN, track
 
@@ -761,21 +763,164 @@ def resolve_schedule(
     return tuned.params.build(tuning.n_steps), tuned
 
 
+#: A ladder as a tempering entry point takes it: temperatures, or :data:`AUTO`
+#: with a :class:`LadderTuning` beside it (issue #1337).
+type Ladder = TempSchedule | Sequence[float] | Literal["auto"]
+
+
+@dataclass(frozen=True)
+class LadderTuning:
+    """How a tempering entry point given ``temperatures="auto"`` chooses its ladder (issue #1337).
+
+    Required beside ``"auto"`` as :class:`ScheduleTuning` is beside
+    ``schedule="auto"``: :func:`~sal.sample.schedule.adapt_ladder` runs on
+    pilot exchanges of the entry point's own sampler, from ``start``.
+
+    Parameters
+    ----------
+    budget : Budget
+        The pilots' cap, in :attr:`~sal.cost.Cost.SWEEPS` summed over
+        replicas: ``budget.size // (max_replicas * n_sweeps)`` measurements at
+        most, so no warm-up runs over it whatever the ladder grows to.
+    max_replicas : int
+        The ladder's cap, as :func:`~sal.sample.schedule.adapt_ladder` takes it.
+    start : tuple[float, ...]
+        The starting ladder, in the order the entry point takes; its
+        endpoints are kept.
+    band : tuple[float, float]
+        The target exchange acceptance per neighbouring pair.
+    n_sweeps : int
+        Sweeps per replica per measurement.
+
+    Raises
+    ------
+    ValueError
+        If the budget is not in sweeps, or buys no measurement.
+    """
+
+    budget: Budget
+    max_replicas: int
+    start: tuple[float, ...]
+    band: tuple[float, float] = (0.2, 0.3)
+    n_sweeps: int = 20
+
+    def __post_init__(self) -> None:
+        if self.budget.unit is not Cost.SWEEPS:
+            msg = (
+                f"a ladder pilot spends {Cost.SWEEPS.value!r}, and the budget "
+                f"is in {self.budget.unit.value!r}"
+            )
+            raise ValueError(msg)
+        if self.max_iterations < 1:
+            msg = (
+                f"a budget of {self.budget.size} sweeps buys no measurement of "
+                f"{self.max_replicas} replicas at {self.n_sweeps} sweeps"
+            )
+            raise ValueError(msg)
+
+    @property
+    def max_iterations(self) -> int:
+        """Measurements the budget buys at the ladder's cap."""
+        return self.budget.size // (self.max_replicas * self.n_sweeps)
+
+
+@dataclass(frozen=True)
+class TunedLadder:
+    """The ladder a pilot chose, with what it measured and spent (issue #1337).
+
+    Parameters
+    ----------
+    adapted : AdaptedLadder
+        :func:`~sal.sample.schedule.adapt_ladder`'s result: the ladder, its
+        last acceptances and ``within_band``.
+    spent : int
+        Site visits of every pilot run.
+    unit : Cost
+    termination : Termination
+        Converged where every pair is within the band, else on its budget.
+    """
+
+    adapted: AdaptedLadder
+    spent: int
+    unit: Cost
+    termination: Termination
+
+    @property
+    def within_band(self) -> bool:
+        """Whether every measured exchange acceptance lies in the band."""
+        return self.adapted.within_band
+
+
+def resolve_ladder(
+    temperatures: Ladder,
+    tuning: LadderTuning | None,
+    measure: Callable[[tuple[float, ...]], tuple[Sequence[float], int]],
+) -> tuple[TempSchedule | Sequence[float], TunedLadder | None]:
+    """``temperatures`` as given, or the ladder ``tuning``'s pilot chooses under ``"auto"``.
+
+    ``measure`` runs the entry point's sampler on a candidate ladder and
+    returns each neighbouring pair's acceptance and the site visits spent. A
+    given ladder calls nothing, so its run is bitwise the run before #1337.
+
+    Raises
+    ------
+    ValueError
+        If ``"auto"`` comes without a :class:`LadderTuning`, one comes with a
+        given ladder, or ``temperatures`` is another string.
+    """
+    if not isinstance(temperatures, str):
+        if tuning is not None:
+            msg = "a LadderTuning chooses temperatures='auto', and the ladder is given"
+            raise ValueError(msg)
+        return temperatures, None
+    if temperatures != AUTO:
+        msg = f"temperatures is a ladder or 'auto', got {temperatures!r}"
+        raise ValueError(msg)
+    if tuning is None:
+        msg = (
+            "temperatures='auto' needs a LadderTuning: the pilots' budget, "
+            "band, replica cap and starting ladder"
+        )
+        raise ValueError(msg)
+    spent = 0
+
+    def measured(candidate: tuple[float, ...]) -> Sequence[float]:
+        nonlocal spent
+        acceptance, cost = measure(candidate)
+        spent += cost
+        return acceptance
+
+    adapted = adapt_ladder(
+        measured, tuning.start, tuning.band, tuning.max_iterations, tuning.max_replicas
+    )
+    tuned = TunedLadder(
+        adapted,
+        spent,
+        Cost.SITE_VISITS,
+        Termination.after(adapted.rounds, converged=adapted.within_band),
+    )
+    return adapted.temperatures, tuned
+
+
 __all__ = [
     "AUTO",
     "GRID",
     "SCHEDULE_GRID",
     "Candidate",
     "Criterion",
+    "Ladder",
+    "LadderTuning",
     "Pilot",
     "Schedule",
     "ScheduleCandidate",
     "ScheduleTuning",
     "StepSize",
     "StepTuning",
+    "TunedLadder",
     "TunedSchedule",
     "TunedStep",
     "compress",
+    "resolve_ladder",
     "resolve_schedule",
     "tune_schedule",
     "tune_step",
