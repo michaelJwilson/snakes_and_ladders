@@ -400,6 +400,78 @@ def _cython_function(name: str) -> Callable[[float], float]:
     return ctypes.CFUNCTYPE(ctypes.c_double, ctypes.c_double)(address)
 
 
+def _series_terms(inverse: float, floor: float) -> int:
+    """How many series terms ``1 / y = inverse`` needs: :func:`_terms` at one ``y``, in scalars."""
+    terms = 1
+    while (
+        terms < 8
+        and abs(_DIGAMMA_SERIES[terms - 1]) * 2.0 * terms * inverse ** (2 * terms - 1)
+        >= floor
+    ):
+        terms += 1
+    return terms
+
+
+def _series_route(
+    xi: float,
+    mi: float,
+    series_from: float,
+    small_t: float,
+    floor: float,
+    scaled: bool,
+    known_terms: int,
+) -> float:
+    """The series route of :func:`_log_rising_kernel` at one pair: the recurrence up to ``series_from``, then the differenced series.
+
+    One body for :func:`_log_rising_kernel` and :func:`_scaled_rising_table_kernel`,
+    so the two take the series in the same arithmetic (issue #1341).
+    ``known_terms`` is :func:`_series_terms` at ``1 / x`` where the caller has
+    it, for ``x`` at or above ``series_from``; ``0`` has it counted here.
+    """
+    y = xi
+    recurrence = 0.0
+    while y < series_from:
+        recurrence += -math.log1p(mi / y)
+        y += 1.0
+    t = mi / y
+    step = math.log1p(t)
+    if abs(t) < small_t:
+        h = t * (-0.5 + t * (1.0 / 3.0 + t * (-0.25 + t * 0.2)))
+    else:
+        h = (step - t) / t
+    inverse = 1.0 / y
+    gap = -t / (y + mi)
+    upper = inverse + gap
+    upper_square = upper * upper
+    inverse_square = inverse * inverse
+    both = upper + inverse
+    power = inverse
+    p = 1.0
+    total = _LGAMMA_SERIES[0] * p
+    terms = known_terms if known_terms > 0 else _series_count(inverse, floor)
+    for k in range(1, terms):
+        p = p * upper_square + power * both
+        total += _LGAMMA_SERIES[k] * p
+        power *= inverse_square
+    series = mi * h + (mi - 0.5) * step + total * gap
+    if scaled:
+        # No shift when `x` is already in the series' range: `log1p(0)`
+        # is 0, and at `x = inf` the ratio would be `inf / inf`.
+        moved = mi * math.log1p((y - xi) / xi) if y != xi else 0.0
+        return (series + moved) + recurrence
+    return (series + mi * math.log(y)) + recurrence
+
+
+#: :func:`_series_route`, compiled by :func:`_kernels` on first use, as the
+#: kernels call it.
+_series_step: Callable[[float, float, float, float, float, bool, int], float] = (
+    _series_route
+)
+
+#: :func:`_series_terms`, compiled by :func:`_kernels` on first use.
+_series_count: Callable[[float, float], int] = _series_terms
+
+
 def _log_rising_kernel(
     x: NDArray[np.float64],
     m: NDArray[np.float64],
@@ -439,48 +511,50 @@ def _log_rising_kernel(
         elif bound <= promise * max(abs(plain), 1.0):
             out[i] = plain
             continue
-        y = xi
-        recurrence = 0.0
-        while y < series_from:
-            recurrence += -math.log1p(mi / y)
-            y += 1.0
-        t = mi / y
-        step = math.log1p(t)
-        if abs(t) < small_t:
-            h = t * (-0.5 + t * (1.0 / 3.0 + t * (-0.25 + t * 0.2)))
-        else:
-            h = (math.log1p(t) - t) / t
-        inverse = 1.0 / y
-        gap = -t / (y + mi)
-        upper = inverse + gap
-        upper_square = upper * upper
-        inverse_square = inverse * inverse
-        both = upper + inverse
-        power = inverse
-        p = 1.0
-        total = _LGAMMA_SERIES[0] * p
-        terms = 1
-        while (
-            terms < 8
-            and abs(_DIGAMMA_SERIES[terms - 1])
-            * 2.0
-            * terms
-            * inverse ** (2 * terms - 1)
-            >= floor
-        ):
-            terms += 1
-        for k in range(1, terms):
-            p = p * upper_square + power * both
-            total += _LGAMMA_SERIES[k] * p
-            power *= inverse_square
-        series = mi * h + (mi - 0.5) * step + total * gap
-        if scaled:
-            # No shift when `x` is already in the series' range: `log1p(0)`
-            # is 0, and at `x = inf` the ratio would be `inf / inf`.
-            moved = mi * math.log1p((y - xi) / xi) if y != xi else 0.0
-            out[i] = (series + moved) + recurrence
-        else:
-            out[i] = (series + mi * math.log(y)) + recurrence
+        out[i] = _series_step(xi, mi, series_from, small_t, floor, scaled, 0)
+
+
+def _scaled_rising_table_kernel(
+    shapes: NDArray[np.float64],
+    counts: NDArray[np.float64],
+    out: NDArray[np.float64],
+    series_from: float,
+    small_t: float,
+    plain_error: float,
+    promise: float,
+    floor: float,
+) -> None:
+    """``out[i, j] = S(shapes[i], counts[j])``, :func:`_log_rising_kernel`'s scaled route per pair.
+
+    ``gammaln(x)``, its bound term, ``log x`` and, from ``series_from`` up,
+    the series' term count are formed once per shape and read across the row; the route, the bound and the series are the
+    per-element kernel's, so each entry is it bit for bit (issue #1341).
+    """
+    for i in range(shapes.size):
+        xi = shapes[i]
+        base = _gammaln(xi)
+        base_size = max(abs(base), 1.0)
+        log_x = math.log(xi)
+        # From `series_from` up no shift is taken, so `y = x` in every column.
+        row_terms = _series_count(1.0 / xi, floor) if xi >= series_from else 0
+        for j in range(counts.size):
+            mi = counts[j]
+            if mi == 0.0:
+                value = 0.0
+            else:
+                rise = _gammaln(xi + mi)
+                plain = rise - base
+                bound = plain_error * (max(abs(rise), 1.0) + base_size)
+                shift = mi * log_x
+                value = plain - shift
+                # `not <=`, so a NaN bound, as at `x = inf`, takes the series.
+                if not bound + plain_error * abs(shift) <= promise * max(
+                    abs(value), 1.0
+                ):
+                    value = _series_step(
+                        xi, mi, series_from, small_t, floor, True, row_terms
+                    )
+            out[i, j] = value
 
 
 def _digamma_rising_kernel(
@@ -528,8 +602,8 @@ def _digamma_rising_kernel(
 
 
 @functools.cache
-def _kernels() -> tuple[Callable[..., None], Callable[..., None]]:
-    """:func:`_log_rising_kernel` and :func:`_digamma_rising_kernel`, compiled on first use (issue #1329).
+def _kernels() -> tuple[Callable[..., None], Callable[..., None], Callable[..., None]]:
+    """:func:`_log_rising_kernel`, :func:`_digamma_rising_kernel` and :func:`_scaled_rising_table_kernel`, compiled on first use (issue #1329).
 
     Compiled here rather than at import, so that importing this module does
     not import ``numba``: about 0.7 s and 0.2 s in the first call of a
@@ -542,10 +616,14 @@ def _kernels() -> tuple[Callable[..., None], Callable[..., None]]:
     """
     from numba import njit
 
-    global _gammaln  # noqa: PLW0603 - numba reads the pointer as a global at compile time
+    global _gammaln, _series_count, _series_step  # noqa: PLW0603 - numba reads these as globals at compile time
     _gammaln = _cython_function("gammaln")
-    return njit(nogil=True)(_log_rising_kernel), njit(nogil=True)(
-        _digamma_rising_kernel
+    _series_count = njit(nogil=True)(_series_terms)
+    _series_step = njit(nogil=True)(_series_route)
+    return (
+        njit(nogil=True)(_log_rising_kernel),
+        njit(nogil=True)(_digamma_rising_kernel),
+        njit(nogil=True)(_scaled_rising_table_kernel),
     )
 
 
@@ -633,6 +711,29 @@ def scaled_rising_array(x: ArrayLike, m: ArrayLike) -> NDArray[np.float64]:
         _LOG_PROMISE,
         _TERM_FLOOR,
         True,
+    )
+    return out
+
+
+def scaled_rising_table(shapes: ArrayLike, counts: ArrayLike) -> NDArray[np.float64]:
+    """``S(x, m) = lgamma(x + m) - lgamma(x) - m log x`` at every shape and count, ``(len(shapes), len(counts))``.
+
+    :func:`scaled_rising_array` of ``shapes[:, None]`` and ``counts[None, :]``
+    bit for bit, with ``gammaln(x)`` and ``log x`` formed once per shape
+    rather than once per pair (issue #1341). ``shapes`` and ``counts`` are
+    1-D; the result is ``float64`` and C-contiguous, and ``0`` at
+    ``x = inf`` and at ``m = 0``. The beta-binomial's
+    :func:`~sal.emissions.bb.trial_tables` and the negative binomial's
+    :func:`~sal.emissions.nb.count_log_factor` are built with it.
+    """
+    x = np.ascontiguousarray(shapes, dtype=np.float64)
+    m = np.ascontiguousarray(counts, dtype=np.float64)
+    if x.ndim != 1 or m.ndim != 1:
+        msg = f"shapes and counts are 1-D, got {x.shape} and {m.shape}"
+        raise ValueError(msg)
+    out = np.empty((x.size, m.size), dtype=np.float64)
+    _kernels()[2](
+        x, m, out, _SERIES_FROM, _SMALL_T, _PLAIN_ERROR, _LOG_PROMISE, _TERM_FLOOR
     )
     return out
 

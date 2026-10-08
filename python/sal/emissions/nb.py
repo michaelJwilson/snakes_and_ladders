@@ -33,13 +33,13 @@ from numpy.typing import ArrayLike, NDArray
 from scipy.special import gammaln
 
 from sal.emissions.counts import NegativeBinomialEmission
-from sal.emissions.rising import scaled_rising_array
+from sal.emissions.rising import scaled_rising_array, scaled_rising_table
 
 
 def _scaled_rising(
     r: NDArray[np.float64], y: NDArray[np.float64]
 ) -> NDArray[np.float64]:
-    """``S(r, y)``, and ``0`` at ``r = inf``: ``scaled_rising_array`` returns NaN there for ``y > 0``."""
+    """``S(r, y)``, and ``0`` at ``r = inf``."""
     with np.errstate(invalid="ignore"):
         out: NDArray[np.float64] = np.where(np.isinf(r), 0.0, scaled_rising_array(r, y))
     return out
@@ -62,10 +62,13 @@ def count_log_factor(
     np.ndarray
         Shape ``(..., n_states)``.
     """
-    counts = np.asarray(observations, dtype=np.float64)[..., None]
+    counts = np.asarray(observations, dtype=np.float64)
     dispersion = family.dispersion.detach().numpy()
-    out: NDArray[np.float64] = _scaled_rising(dispersion, counts) - gammaln(
-        counts + 1.0
+    table = scaled_rising_table(dispersion, counts.reshape(-1)).T
+    # `order="C"`: the transposed table would otherwise make the result
+    # column-major, and the Rust kernels read it row-major.
+    out: NDArray[np.float64] = np.subtract(
+        table.reshape(*counts.shape, -1), gammaln(counts[..., None] + 1.0), order="C"
     )
     return out
 
