@@ -184,7 +184,8 @@ def test_a_per_rung_start_maps_onto_the_tuned_rungs_by_nearest_temperature() -> 
     rows = np.array([[0] * 4, [1] * 4])
     states = chains._rung_starts(rows, (0.5, 1.0, 1.25, 1.5, 2.0), tuning, [], 4, 2)
     assert states[:, 0].tolist() == [0, 0, 0, 1, 1]
-    assert states.dtype == np.int64 and states.flags.c_contiguous
+    assert states.dtype == np.int64
+    assert states.flags.c_contiguous
 
 
 @pytest.mark.analytic

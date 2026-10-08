@@ -12,7 +12,7 @@ import functools
 import math
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any
 
 import numpy as np
 from numpy.random import Generator
