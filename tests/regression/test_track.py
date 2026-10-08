@@ -55,6 +55,7 @@ from sal.sample import (
     tempered,
 )
 from sal.sample.schedule import ExponentialTempSchedule, InverseTemperatures
+from sal.sandbox import potts_tempering
 from sal.sim.elementary_codes import hamming_code
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from sal.sim.hmm import HmmParams
@@ -149,8 +150,8 @@ def _annealed() -> potts_mcmc.AnnealedPotts:
     )
 
 
-def _tempered() -> potts_mcmc.TemperedChains:
-    return potts_mcmc.parallel_tempering(
+def _tempered() -> potts_tempering.TemperedChains:
+    return potts_tempering.parallel_tempering(
         _graph(),
         FIELD,
         TEMPERATURES,

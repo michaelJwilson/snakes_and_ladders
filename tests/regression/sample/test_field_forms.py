@@ -24,14 +24,14 @@ from sal.sample.annealed import (
     simulated_tempering,
 )
 from sal.sample.potts_keyed import cluster_moves
-from sal.sample.potts_mcmc import (
-    PottsMove,
-    adapt_ladder_potts,
-    parallel_tempering,
-    sample_potts_pair,
-)
+from sal.sample.potts_mcmc import PottsMove, sample_potts_pair
 from sal.sample.schedule import InverseTemperatures
-from sal.sample.tempered import adapt_ladder_round_trips, tempered_potts_pair
+from sal.sample.tempered import tempered_potts_pair
+from sal.sandbox.potts_tempering import (
+    adapt_ladder_potts,
+    adapt_ladder_round_trips,
+    parallel_tempering,
+)
 from sal.search.ground_state import ground_state
 from sal.search.maxflow import cut_energy, ising_ground_state
 from sal.search.tightening import dual_bound

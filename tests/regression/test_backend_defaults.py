@@ -73,7 +73,6 @@ FLIPPED = {
     "sample/potts_mcmc/sweeps.py::swendsen_wang_sweep(backend)": "47.2x, 64^2 q=3",
     "sample/potts_mcmc/chains.py::sample_potts(cluster_backend)": "35.6x, 64^2 q=3",
     "sample/potts_mcmc/chains.py::anneal_potts(cluster_backend)": "49.1x, 64^2 q=3",
-    "sample/potts_mcmc/chains.py::parallel_tempering(cluster_backend)": "34.2x",
     "sample/potts_mcmc/chains.py::sample_potts_pair(cluster_backend)": "19.8x",
     "sample/potts_mcmc/chains.py::sweep_for(cluster_backend)": "38.6x, 64^2 q=3",
     "sample/annealed.py::annealed_importance_sampling(cluster_backend)": "38.9x",

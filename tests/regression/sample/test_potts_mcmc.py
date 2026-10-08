@@ -34,15 +34,12 @@ from sal.sample.potts_mcmc import (
     PottsChain,
     PottsMove,
     Recolour,
-    TemperedChains,
-    adapt_ladder_potts,
     anneal_potts,
     autodiff_log_ratios,
     chains,
     energies,
     houdayer_cluster,
     niedermayer_threshold,
-    parallel_tempering,
     sample_potts,
     sample_potts_pair,
     sweeps,
@@ -57,6 +54,11 @@ from sal.sample.schedule import (
 from sal.sample.statistics import (
     chi_square_p_value,
     integrated_autocorrelation_time,
+)
+from sal.sandbox.potts_tempering import (
+    TemperedChains,
+    adapt_ladder_potts,
+    parallel_tempering,
 )
 from sal.search.icm import iterated_conditional_modes
 from sal.sim.canonical import (

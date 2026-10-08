@@ -607,7 +607,7 @@ def ladder(values: TempSchedule | Sequence[float]) -> tuple[float, ...]:
 
     **The order is the caller's, and the Potts temperings take it coldest
     first.** This reads the rungs as given and reorders nothing.
-    :func:`~sal.sample.potts_mcmc.parallel_tempering` and
+    :func:`~sal.sandbox.potts_tempering.parallel_tempering` and
     :func:`~sal.sample.potts_mcmc.cluster_tempering` require it strictly
     increasing, as :data:`Monotone.INCREASING` states, and refuse another
     order rather than reverse it (issue #1343); rung ``0`` is then the cold

@@ -67,10 +67,10 @@ import inspect
 import operator
 import re
 import time
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, replace
 from dataclasses import field as dataclass_field
-from typing import Any, Literal, NoReturn, Protocol
+from typing import Any, NoReturn, Protocol
 
 import numpy as np
 
@@ -88,15 +88,10 @@ from sal.sample.potts_mcmc import (
     ClusterCounter,
     PottsMove,
     Recolour,
-    RungMoves,
     anneal_potts,
-    moves_per_rung,
-    parallel_tempering,
-    rung_moves,
 )
 from sal.sample.schedule import ScheduleParams, ScheduleShape
-from sal.sample.schedule import ladder as sal_ladder
-from sal.sample.tune import LadderTuning, TunedLadder, resolve_ladder
+from sal.sample.tune import TunedLadder
 from sal.search.alpha_expansion import (
     Labelling,
     alpha_beta_swap,
@@ -134,13 +129,6 @@ ANNEAL_START, ANNEAL_END = 2.0, 0.05
 #: :class:`~sal.sample.schedule.ExponentialTempSchedule` the
 #: annealed entries ran on before a schedule could be passed (issue #1038).
 ANNEAL_SCHEDULE = ScheduleParams(ScheduleShape.EXPONENTIAL, ANNEAL_START, ANNEAL_END)
-
-#: Replicas in the tempering ladder, geometric over the same endpoints. The
-#: budget is divided by this, so a replica gets one sixth of the sweeps the
-#: single-site entry gets and the comparison is at equal cost rather than at
-#: equal sweeps per chain.
-N_REPLICAS = 6
-
 
 #: The move sets :func:`run_annealed` runs on the compiled cluster route.
 _COMPILED_CLUSTERS = frozenset(
@@ -1045,136 +1033,6 @@ run_swendsen_wang_heat_bath = functools.partial(
 run_wolff_heat_bath = functools.partial(run_annealed, move=PottsMove.WOLFF_HEAT_BATH)
 
 
-def run_tempering(
-    problem: Problem | Rung,
-    budget: Budget,
-    rng: np.random.Generator,
-    *,
-    move: RungMoves = PottsMove.SINGLE_SITE,
-    start: np.ndarray | None = None,
-    temperatures: Sequence[float] | Literal["auto"] | None = None,
-    ladder_tuning: LadderTuning | None = None,
-) -> MethodRun:
-    """Parallel tempering over a geometric ladder, charged for every replica.
-
-    The budget buys ``budget // sum_r step_cost(rung r)`` steps per replica,
-    a rung's step costing the :func:`step_cost` of each move it runs, rather
-    than that many per chain, which is the whole difference between a
-    comparison at equal cost and one at equal sweeps. ``move`` is the move set
-    each replica runs (issue #1156), or one entry per rung of the hot-first
-    ladder, each a move or a sequence of moves (issue #1158), as
-    :func:`~sal.sample.potts_mcmc.parallel_tempering` takes it. The cluster
-    backend is the compiled one where any move is on :func:`run_annealed`'s
-    compiled route; the single-cluster moves read none. The step count is
-    fixed as :func:`run_annealed` fixes one, so a single-cluster move
-    underspends, and ``spent`` is what the run charged.
-
-    ``temperatures`` is :func:`tempering_ladder` unless given; ``"auto"``
-    chooses it as :func:`~sal.sample.potts_mcmc.parallel_tempering` does,
-    from ``ladder_tuning`` (issue #1337), for one ``PottsMove`` on every
-    rung. The pilots' site visits come out of ``budget`` and are in
-    ``spent``, so a tuned ladder is compared at equal cost.
-    """
-    _refuse_start("tempering", start, "its ladder draws one labelling per replica")
-    problem = _problem(problem)
-    tuned_ladder = None
-    if isinstance(temperatures, str) and not isinstance(move, PottsMove):
-        msg = "temperatures='auto' tunes one move set for every rung, not one per rung"
-        raise ValueError(msg)
-
-    def pilot(candidate: tuple[float, ...]) -> tuple[list[float], int]:
-        run = parallel_tempering(
-            problem.graph,
-            problem.field,
-            candidate,
-            pilot_rng,
-            ladder_tuning.n_sweeps if ladder_tuning else 0,
-            move=move,
-            recolour=Recolour.UNIFORM,
-            cluster_backend=Backend.RUST
-            if move in _COMPILED_CLUSTERS
-            else Backend.PYTHON,
-        )
-        return [float(value) for value in run.swap_acceptance], run.spent
-
-    pilot_rng = rng.spawn(1)[0] if isinstance(temperatures, str) else rng
-    given, tuned_ladder = resolve_ladder(
-        tempering_ladder() if temperatures is None else temperatures,
-        ladder_tuning,
-        pilot,
-    )
-    ladder = sal_ladder(given)
-    pilot_spent = 0 if tuned_ladder is None else tuned_ladder.spent
-    n_rungs = len(ladder)
-    # Each bare move alone, as recorded: a sequence is taken as given (#1323).
-    entries = [move] * n_rungs if isinstance(move, PottsMove) else list(move)
-    per_rung = moves_per_rung(
-        [(each,) if isinstance(each, PottsMove) else each for each in entries],
-        n_rungs,
-    )
-    per_step = sum(step_cost(problem, each) for rung in per_rung for each in rung)
-    per_replica = max(1, (budget.size - pilot_spent) // per_step)
-    compiled = any(each in _COMPILED_CLUSTERS for rung in per_rung for each in rung)
-    started = time.perf_counter()
-    run = parallel_tempering(
-        problem.graph,
-        problem.field,
-        ladder,
-        rng,
-        per_replica,
-        move=per_rung,
-        # As the annealed arm: the recorded results' recolouring (#1323).
-        recolour=Recolour.UNIFORM,
-        cluster_backend=Backend.RUST if compiled else Backend.PYTHON,
-    )
-    return MethodRun(
-        labelling=run.best,
-        energy=run.energy,
-        spent=run.spent + pilot_spent,
-        seconds=time.perf_counter() - started,
-        termination=Termination.after(per_replica, converged=False),
-        tuned_ladder=tuned_ladder,
-    )
-
-
-def run_tempering_mixed(
-    problem: Problem | Rung,
-    budget: Budget,
-    rng: np.random.Generator,
-    *,
-    start: np.ndarray | None = None,
-) -> MethodRun:
-    """:func:`run_tempering` on the moves :func:`~sal.sample.potts_mcmc.rung_moves` picks per rung (issue #1158).
-
-    Heat-bath Swendsen-Wang on the rungs hot of the transition, heat-bath
-    Swendsen-Wang then a single-site sweep on the rest, at equal site visits
-    to ``tempering``: each rung's step charges both its moves, so the ladder
-    runs fewer steps on the same budget.
-    """
-    _refuse_start(
-        "tempering-mixed", start, "its ladder draws one labelling per replica"
-    )
-    problem = _problem(problem)
-    return run_tempering(
-        problem,
-        budget,
-        rng,
-        move=rung_moves(problem.graph, problem.field, tempering_ladder()),
-    )
-
-
-def tempering_ladder() -> tuple[float, ...]:
-    """The temperatures :func:`run_tempering` exchanges across, coldest first.
-
-    :data:`N_REPLICAS` rungs geometric from :data:`ANNEAL_END` to
-    :data:`ANNEAL_START`, the annealing schedule's endpoints, in the one order
-    the Potts temperings take (issue #1343).
-    """
-    return tuple(
-        float(value) for value in np.geomspace(ANNEAL_END, ANNEAL_START, N_REPLICAS)
-    )
-
-
 def run_alpha_expansion(
     problem: Problem | Rung,
     budget: Budget,
@@ -1518,43 +1376,6 @@ class GroundState:
         )
 
     @staticmethod
-    def tempering(
-        graph: PottsGraph,
-        field: SiteField | np.ndarray,
-        budget: Budget,
-        rng: np.random.Generator,
-        *,
-        start: np.ndarray | None = None,
-        move: RungMoves = PottsMove.SINGLE_SITE,
-    ) -> MethodRun:
-        """:func:`run_tempering`: parallel tempering, charged for every replica.
-
-        ``move`` is each replica's move set, or one per rung (#1156, #1158);
-        the generic call runs the default.
-        """
-        problem, start = _posed(graph, field, budget, start)
-        return run_tempering(problem, budget, rng, start=start, move=move)
-
-    @staticmethod
-    def tempering_mixed(
-        graph: PottsGraph,
-        field: SiteField | np.ndarray,
-        budget: Budget,
-        rng: np.random.Generator,
-        *,
-        start: np.ndarray | None = None,
-    ) -> MethodRun:
-        """:func:`run_tempering_mixed`: tempering on per-rung moves (#1158).
-
-        An entry because it reached lower energy than :meth:`tempering` at
-        equal site visits on `spatio_only/release` (-10,215.9 against
-        -9,900.1) and `spatio_tiling/release` (-17,018.9 against -17,001.2),
-        five seeds, and tied at field x10 and x30.
-        """
-        problem, start = _posed(graph, field, budget, start)
-        return run_tempering_mixed(problem, budget, rng, start=start)
-
-    @staticmethod
     def alpha_expansion(
         graph: PottsGraph,
         field: SiteField | np.ndarray,
@@ -1709,10 +1530,6 @@ class GroundState:
                 call = self.swendsen_wang_heat_bath
             case "wolff-heat-bath":
                 call = self.wolff_heat_bath
-            case "tempering":
-                call = self.tempering
-            case "tempering-mixed":
-                call = self.tempering_mixed
             case "alpha-expansion":
                 call = self.alpha_expansion
             case "alpha-beta-swap":

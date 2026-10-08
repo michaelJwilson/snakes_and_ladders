@@ -26,13 +26,7 @@ import numpy as np
 import pytest
 from sal.backend import Backend
 from sal.sample import annealed, potts_keyed, potts_mcmc, tempered
-from sal.sample.potts_mcmc import (
-    PottsMove,
-    Recolour,
-    move_set,
-    sample_potts,
-    sweep_at,
-)
+from sal.sample.potts_mcmc import PottsMove, Recolour, move_set, sample_potts, sweep_at
 from sal.sample.statistics import chi_square_p_value
 from sal.search.icm import SweepOrder, iterated_conditional_modes
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
@@ -361,7 +355,6 @@ ENTRY_POINTS = [
     potts_mcmc.sample_potts_pair,
     potts_mcmc.sample_potts_starts,
     potts_mcmc.anneal_potts,
-    potts_mcmc.parallel_tempering,
     potts_mcmc.sweep_for,
     annealed.annealed_importance_sampling,
     annealed.population_annealing,

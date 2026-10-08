@@ -602,6 +602,12 @@ whether or not it has members yet.
 .. automodule:: sal.sandbox.potts_mip
    :members:
 
+.. automodule:: sal.sandbox.adaptive_schedules
+   :members:
+
+.. automodule:: sal.sandbox.potts_tempering
+   :members:
+
 .. automodule:: sal.external
    :members:
 

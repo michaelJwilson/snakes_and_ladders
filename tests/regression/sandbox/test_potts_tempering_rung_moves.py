@@ -2,7 +2,7 @@
 
 On the 4-site, q = 3 graph of `test_potts_heat_bath_cluster.py` each rung's
 kernel is the product, in order, of its moves' kernels at its own ``beta``:
-heat-bath Swendsen-Wang from `test_potts_tempering_cluster.py`, and here the
+heat-bath Swendsen-Wang from `test_potts_tempering_moves.py`, and here the
 single-site heat-bath sweep (sites 0 to 3 in turn, each from its exact
 conditional) and the ghost-spin pass (like edges bonded at ``1 - exp(-beta
 J)``, each site to its own label's ghost at ``1 - exp(-beta K)`` with ``K = h
@@ -25,9 +25,9 @@ from sal.sample.potts_mcmc import (
     critical_ratio,
     field_ratio,
     move_set,
-    parallel_tempering,
     rung_moves,
 )
+from sal.sandbox.potts_tempering import parallel_tempering
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from sal.sim.potts import critical_coupling, forbid
 
@@ -40,7 +40,7 @@ from tests.regression.sample.test_potts_heat_bath_cluster import (
     _rows,
     _states,
 )
-from tests.regression.sample.test_potts_tempering_cluster import (
+from tests.regression.sandbox.test_potts_tempering_moves import (
     BETAS,
     ORIGIN,
     TEMPERATURES,
@@ -259,7 +259,7 @@ def test_one_move_per_rung_spelled_out_is_the_single_move_bitwise(
     # A PottsMove and the same move named once per rung, alone or in a
     # one-move tuple, are one chain: the same states, walkers, acceptances,
     # best energy and spend. The default's SHA-256 pin is
-    # `test_potts_tempering_cluster.py`'s.
+    # `test_potts_tempering_moves.py`'s.
     graph = lattice_graph((4, 4), BoundaryCondition.PERIODIC, 1.0)
     field = np.random.default_rng(1158).normal(0.0, 0.5, (16, 3))
 
