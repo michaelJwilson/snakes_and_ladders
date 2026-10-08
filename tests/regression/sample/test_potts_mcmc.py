@@ -39,7 +39,6 @@ from sal.sample.potts_mcmc import (
     chains,
     energies,
     houdayer_cluster,
-    niedermayer_threshold,
     sample_potts,
     sample_potts_pair,
     sweeps,
@@ -55,6 +54,8 @@ from sal.sample.statistics import (
     chi_square_p_value,
     integrated_autocorrelation_time,
 )
+from sal.sandbox import potts_moves
+from sal.sandbox.potts_moves import SandboxMove, niedermayer_threshold
 from sal.sandbox.potts_tempering import (
     TemperedChains,
     adapt_ladder_potts,
@@ -117,10 +118,10 @@ THINNING = {
     # than copied: at 15 the pair of chains on the frustrated lattice returned
     # p = 0.0 with a mean cluster of 8.3 sites in 9, the near-percolating
     # cluster being exactly what correlates successive sweeps there.
-    PottsMove.NIEDERMAYER: 25,
+    SandboxMove.NIEDERMAYER: 25,
     # A pass over every site, as Swendsen-Wang's is (issue #1041).
-    PottsMove.GHOST_SPIN: 5,
-    PottsMove.LABEL_DIRECTED: 5,
+    SandboxMove.GHOST_SPIN: 5,
+    SandboxMove.LABEL_DIRECTED: 5,
     # Each as the move it relabels differently (issue #1142).
     PottsMove.SWENDSEN_WANG_HEAT_BATH: 5,
     PottsMove.WOLFF_HEAT_BATH: 25,
@@ -133,9 +134,9 @@ SWEEPS_BY_MOVE = {
     PottsMove.SINGLE_SITE: SWEEPS,
     PottsMove.SWENDSEN_WANG: SWEEPS,
     PottsMove.WOLFF: SWEEPS,
-    PottsMove.NIEDERMAYER: SWEEPS,
-    PottsMove.GHOST_SPIN: SWEEPS,
-    PottsMove.LABEL_DIRECTED: SWEEPS,
+    SandboxMove.NIEDERMAYER: SWEEPS,
+    SandboxMove.GHOST_SPIN: SWEEPS,
+    SandboxMove.LABEL_DIRECTED: SWEEPS,
     PottsMove.SWENDSEN_WANG_HEAT_BATH: SWEEPS,
     PottsMove.WOLFF_HEAT_BATH: SWEEPS,
     PottsMove.LOCALLY_BALANCED: BALANCED_SWEEPS,
@@ -369,7 +370,7 @@ PAIR_SWEEPS = 10_000
 #: for the heat bath: Houdayer's move exchanges labels between the replicas
 #: rather than changing them, so a pair decorrelates more slowly than either
 #: chain alone at the same sweep count.
-PAIR_THINNING = {PottsMove.SINGLE_SITE: 10, PottsMove.NIEDERMAYER: 25}
+PAIR_THINNING = {PottsMove.SINGLE_SITE: 10, SandboxMove.NIEDERMAYER: 25}
 
 
 def _pair_chi_square(
@@ -404,7 +405,7 @@ def test_the_niedermayer_chain_is_drawn_from_the_exact_boltzmann_distribution(
     graph = ENUMERABLE[instance]()
 
     p_value = _chi_square_against(
-        graph, WITH_FIELD, PottsMove.NIEDERMAYER, SEED, sweeps=WIDE_SWEEPS
+        graph, WITH_FIELD, SandboxMove.NIEDERMAYER, SEED, sweeps=WIDE_SWEEPS
     )
 
     assert p_value > SIGNIFICANCE, p_value
@@ -413,7 +414,7 @@ def test_the_niedermayer_chain_is_drawn_from_the_exact_boltzmann_distribution(
 @pytest.mark.oracle
 @pytest.mark.release
 @pytest.mark.parametrize("instance", sorted(ENUMERABLE))
-@pytest.mark.parametrize("move", [PottsMove.SINGLE_SITE, PottsMove.NIEDERMAYER])
+@pytest.mark.parametrize("move", [PottsMove.SINGLE_SITE, SandboxMove.NIEDERMAYER])
 def test_each_replica_of_a_houdayer_pair_is_drawn_from_the_exact_boltzmann_distribution(
     instance: str, move: PottsMove
 ) -> None:
@@ -465,7 +466,7 @@ def test_niedermayers_kernel_is_reversible_against_the_enumerated_law(
     for position, values in enumerate(configurations):
         for _ in range(KERNEL_TRIALS):
             state = np.array(values, dtype=np.int64)
-            potts_mcmc.niedermayer_sweep(
+            potts_moves.niedermayer_sweep(
                 state,
                 rows,
                 offsets,
@@ -508,7 +509,13 @@ def test_niedermayer_is_exact_under_a_per_site_field_above_the_transition() -> N
     rows = site_field(SITE_FIELD, graph.n_nodes, n_states=3)
     offsets, neighbours, couplings = graph.compressed_adjacency()
     advance = chains.sweep_for(
-        PottsMove.NIEDERMAYER, graph, rows, offsets, neighbours, couplings, Backend.RUST
+        SandboxMove.NIEDERMAYER,
+        graph,
+        rows,
+        offsets,
+        neighbours,
+        couplings,
+        Backend.RUST,
     )
     rng = np.random.default_rng(SEED)
     state = np.zeros(graph.n_nodes, dtype=np.int64)
@@ -545,7 +552,7 @@ def test_a_mixed_couplings_cluster_percolates_and_an_antiferromagnets_nearly_doe
         ("frustrated", _frustrated_lattice()),
         ("ferromagnet", _wider_lattice()),
     ):
-        sizes[name] = _cluster_counter(graph, PottsMove.NIEDERMAYER).mean_size
+        sizes[name] = _cluster_counter(graph, SandboxMove.NIEDERMAYER).mean_size
 
     assert_allclose(sizes["mixed"], 8.94, atol=0.005)
     assert_allclose(sizes["frustrated"], 8.31, atol=0.005)
@@ -575,7 +582,7 @@ def test_the_threshold_at_zero_on_an_antiferromagnet_is_a_single_site_flip() -> 
             - energies(graph, rows, flipped[None])[0]
         )
         after = state.copy()
-        size = potts_mcmc.niedermayer_sweep(
+        size = potts_moves.niedermayer_sweep(
             after,
             rows,
             offsets,
@@ -612,12 +619,12 @@ def test_dropping_niedermayers_accept_step_is_caught(
         return True
 
     called: list[None] = []
-    monkeypatch.setattr(sweeps, "_niedermayer_accept", unconditional)
+    monkeypatch.setattr(potts_moves, "_niedermayer_accept", unconditional)
 
     p_value = _chi_square_against(
         _frustrated_lattice(),
         WITH_FIELD,
-        PottsMove.NIEDERMAYER,
+        SandboxMove.NIEDERMAYER,
         SEED,
         sweeps=ABLATION_SWEEPS,
     )
@@ -733,7 +740,7 @@ def test_niedermayers_rule_is_wolffs_bitwise_on_a_ferromagnet() -> None:
                 # Niedermayer has the oracle's stream alone (#1362).
                 backend=Backend.PYTHON,
             )
-            ours = potts_mcmc.niedermayer_sweep(
+            ours = potts_moves.niedermayer_sweep(
                 niedermayer,
                 rows,
                 offsets,
@@ -794,7 +801,7 @@ def _cluster_counter(
                 backend=Backend.PYTHON,
             )
         else:
-            potts_mcmc.niedermayer_sweep(
+            potts_moves.niedermayer_sweep(
                 state,
                 rows,
                 offsets,
@@ -818,8 +825,8 @@ def test_the_accepted_fraction_and_the_cluster_are_what_the_instance_makes_them(
     # ferromagnet the two agree on both readings.
     frustrated, ferromagnet = _frustrated_lattice(), _wider_lattice()
     readings = {
-        "frustrated": _cluster_counter(frustrated, PottsMove.NIEDERMAYER),
-        "ferro-niedermayer": _cluster_counter(ferromagnet, PottsMove.NIEDERMAYER),
+        "frustrated": _cluster_counter(frustrated, SandboxMove.NIEDERMAYER),
+        "ferro-niedermayer": _cluster_counter(ferromagnet, SandboxMove.NIEDERMAYER),
         "ferro-wolff": _cluster_counter(ferromagnet, PottsMove.WOLFF),
     }
 
@@ -1727,7 +1734,7 @@ def test_a_field_of_the_wrong_dimensionality_names_its_shape() -> None:
 
 @pytest.mark.smoke
 @pytest.mark.backend
-@pytest.mark.parametrize("move", [PottsMove.WOLFF, PottsMove.NIEDERMAYER])
+@pytest.mark.parametrize("move", [PottsMove.WOLFF, SandboxMove.NIEDERMAYER])
 def test_the_adjacency_converted_once_is_the_per_step_stream_bitwise(
     move: PottsMove,
 ) -> None:
@@ -1741,7 +1748,7 @@ def test_the_adjacency_converted_once_is_the_per_step_stream_bitwise(
     step = (
         potts_mcmc.wolff_sweep
         if move is PottsMove.WOLFF
-        else potts_mcmc.niedermayer_sweep
+        else potts_moves.niedermayer_sweep
     )
     for beta in (0.5, 1.0, 2.0):
         runs = []

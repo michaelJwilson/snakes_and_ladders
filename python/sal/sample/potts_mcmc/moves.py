@@ -7,12 +7,29 @@ this one, and it imports neither of them.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from enum import StrEnum
+from enum import EnumType, StrEnum
 
 from sal.sim.graph import PottsGraph
 
+#: The members that left for :mod:`sal.sandbox.potts_moves` under its
+#: "unsupported" rule (issue #1365), refused by name.
+_SANDBOXED_MOVES = frozenset({"NIEDERMAYER", "GHOST_SPIN", "LABEL_DIRECTED"})
 
-class PottsMove(StrEnum):
+
+class _MoveType(EnumType):
+    """:class:`PottsMove`'s metaclass: a sandboxed member's ``AttributeError`` names its new home."""
+
+    def __getattr__(cls, name: str) -> object:
+        if name in _SANDBOXED_MOVES:
+            msg = (
+                f"PottsMove.{name} is no longer supported: it is "
+                f"sal.sandbox.potts_moves.SandboxMove.{name} (issue #1365)"
+            )
+            raise AttributeError(msg)
+        raise AttributeError(name)
+
+
+class PottsMove(StrEnum, metaclass=_MoveType):
     """Which Monte Carlo move set a chain proposes from.
 
     A ``StrEnum`` for the reason `sal.search.infer.MoveSet` is one: an
@@ -25,11 +42,6 @@ class PottsMove(StrEnum):
     WOLFF = "wolff"
     LOCALLY_BALANCED = "locally-balanced"
     GIBBS_WITH_GRADIENTS = "gibbs-with-gradients"
-    NIEDERMAYER = "niedermayer"
-    # Issue #1041: the field as bonds to a ghost site per label, and
-    # Fortuin-Kasteleyn clusters proposed onto one label at a time.
-    GHOST_SPIN = "ghost-spin"
-    LABEL_DIRECTED = "label-directed"
     # Issue #1142: the Fortuin-Kasteleyn bonds, each cluster relabelled by
     # the heat bath on its summed field rather than a uniform proposal.
     # Deprecated by #1317: aliases of ``SWENDSEN_WANG`` and ``WOLFF`` with
@@ -41,15 +53,11 @@ class PottsMove(StrEnum):
 #: The move sets built on the Fortuin-Kasteleyn bond construction, which needs
 #: every coupling non-negative. Named rather than written as "not single-site":
 #: the gradient-informed moves are single-flip and run on an antiferromagnet,
-#: and a negation would have refused them with the clusters. Niedermayer's
-#: rule builds clusters on a coupling of either sign and is not in the set,
-#: which is the whole reason issue #756 adds it.
+#: and a negation would have refused them with the clusters.
 _CLUSTER_MOVES = frozenset(
     {
         PottsMove.SWENDSEN_WANG,
         PottsMove.WOLFF,
-        PottsMove.GHOST_SPIN,
-        PottsMove.LABEL_DIRECTED,
         PottsMove.SWENDSEN_WANG_HEAT_BATH,
         PottsMove.WOLFF_HEAT_BATH,
     }
@@ -71,7 +79,6 @@ class MoveKind(StrEnum):
     SWEEP = "sweep"
     WOLFF = "wolff"
     SWENDSEN_WANG = "swendsen-wang"
-    NIEDERMAYER = "niedermayer"
 
 
 class Recolour(StrEnum):
@@ -82,16 +89,14 @@ class Recolour(StrEnum):
     ``proportional to exp(beta sum_C h[i, label])`` over the allowed labels,
     the exact conditional given the bonds; ``UNIFORM`` proposes a label
     uniformly and accepts it on the cluster's field difference; ``PER_MOVE``
-    takes ``HEAT_BATH`` where the move has that form and ``UNIFORM`` where
-    it does not (issue #1323): the uniform proposal freezes under a strong
-    field, and Niedermayer accepted 1 of 320 moves at 1.5 beta_c (#1314).
+    takes ``HEAT_BATH`` for every supported cluster move (issue #1323): the
+    uniform proposal freezes under a strong field. The moves with no heat-bath
+    form left for :mod:`sal.sandbox.potts_moves` (issue #1365).
     """
 
     HEAT_BATH = "heat-bath"
     UNIFORM = "uniform"
     # Issue #1323: each move's own default, the entry points' default.
-    # ``HEAT_BATH`` for Wolff and Swendsen-Wang, ``UNIFORM`` for the cluster
-    # moves with no heat-bath form (Niedermayer, ghost-spin, label-directed).
     PER_MOVE = "per-move"
 
 
@@ -112,12 +117,6 @@ _HEAT_BATH_OF = {
 #: Gibbs sweep per step (issue #1323): a cluster move alone is not ergodic
 #: under a forbidden label. A sequence is the move set exactly as given.
 _COMPOSED = frozenset({PottsMove.WOLFF, PottsMove.SWENDSEN_WANG})
-
-#: The cluster moves whose label draw has no heat-bath form: Niedermayer's
-#: uniform proposal, the ghost spin's bonded label, the directed target.
-_NO_HEAT_BATH = frozenset(
-    {PottsMove.NIEDERMAYER, PottsMove.GHOST_SPIN, PottsMove.LABEL_DIRECTED}
-)
 
 
 def composed(move: PottsMove) -> tuple[PottsMove, ...]:
@@ -148,8 +147,7 @@ def move_set(
     Raises
     ------
     ValueError
-        If ``move`` is empty, or ``recolour`` is ``HEAT_BATH`` on a cluster
-        move with no heat-bath form, named.
+        If ``move`` is empty.
     TypeError
         If an entry is not a ``PottsMove``.
     """
@@ -162,15 +160,7 @@ def move_set(
         if not isinstance(each, PottsMove):
             msg = f"move holds PottsMove, got {each!r}"
             raise TypeError(msg)
-        if recolour is Recolour.HEAT_BATH and each in _NO_HEAT_BATH:
-            msg = (
-                f"{each} has no heat-bath recolouring: pass "
-                "recolour=Recolour.UNIFORM, or use wolff or swendsen-wang"
-            )
-            raise ValueError(msg)
-        heat_bath = recolour is Recolour.HEAT_BATH or (
-            recolour is Recolour.PER_MOVE and each not in _NO_HEAT_BATH
-        )
+        heat_bath = recolour is not Recolour.UNIFORM
         resolved.append(_HEAT_BATH_OF.get(each, each) if heat_bath else each)
     return tuple(resolved)
 
@@ -181,8 +171,8 @@ def refuse_negative_coupling(move: PottsMoves, graph: PottsGraph) -> None:
     One message for every entry point that runs one, rather than a copy of
     it apiece: the bond probability ``1 - exp(-J)`` is not a probability
     below zero, and an antiferromagnet has no like-spin clusters to flip.
-    Niedermayer's rule is not in :data:`_CLUSTER_MOVES` and is the move for
-    that case (issue #756).
+    Niedermayer's rule, the move for that case (issue #756), is
+    :mod:`sal.sandbox.potts_moves` (issue #1365).
     """
     clusters = [each for each in move_set(move) if each in _CLUSTER_MOVES]
     if clusters and min(graph.coupling, default=0.0) < 0.0:

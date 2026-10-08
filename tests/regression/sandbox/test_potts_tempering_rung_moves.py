@@ -21,6 +21,7 @@ import numpy as np
 import pytest
 from sal.backend import Backend
 from sal.sample.potts_mcmc import PottsMove, move_set
+from sal.sandbox.potts_moves import SandboxMove
 from sal.sandbox.potts_tempering import (
     critical_ratio,
     field_ratio,
@@ -52,7 +53,7 @@ from tests.regression.sandbox.test_potts_tempering_moves import (
 
 H = PottsMove.SWENDSEN_WANG_HEAT_BATH
 S = PottsMove.SINGLE_SITE
-G = PottsMove.GHOST_SPIN
+G = SandboxMove.GHOST_SPIN
 #: Two ladders, coldest rung first as :data:`TEMPERATURES` is: the issue's
 #: (single-site after heat-bath Swendsen-Wang cold, the cluster move alone
 #: hot), and one with the ghost-spin pass on each rung, before a sweep cold

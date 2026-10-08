@@ -25,6 +25,7 @@ from sal.sample.potts_mcmc import (
 )
 from sal.sample.potts_mcmc.chains import RHAT_THRESHOLD, observables
 from sal.sample.statistics import split_rhat
+from sal.sandbox.potts_moves import SandboxMove
 from sal.sim.graph import BoundaryCondition, lattice_graph
 from sal.sim.potts import critical_coupling, site_field
 
@@ -44,7 +45,7 @@ def test_the_frozen_niedermayer_chain_ends_not_mixing_and_its_starts_disagree() 
     starts = sample_potts_starts(
         graph,
         field,
-        PottsMove.NIEDERMAYER,
+        SandboxMove.NIEDERMAYER,
         np.random.default_rng(SEED),
         320,
         temperature=TEMPERATURE,
@@ -127,7 +128,7 @@ def test_a_rigid_niedermayer_pair_flips_every_step_by_hand() -> None:
     chain = sample_potts(
         graph,
         np.zeros(2),
-        PottsMove.NIEDERMAYER,
+        SandboxMove.NIEDERMAYER,
         np.random.default_rng(SEED),
         6,
         start=np.zeros(2, dtype=np.int64),
@@ -159,7 +160,7 @@ def test_recording_the_diagnostics_draws_no_random_number() -> None:
     # sweep per step on the same generator, with nothing drawn between.
     graph = lattice_graph((4, 4), BoundaryCondition.PERIODIC, 1.0)
     field = np.random.default_rng(1314).normal(0.0, 1.0, (16, 3))
-    for move in (PottsMove.NIEDERMAYER, PottsMove.SINGLE_SITE, PottsMove.WOLFF):
+    for move in (SandboxMove.NIEDERMAYER, PottsMove.SINGLE_SITE, PottsMove.WOLFF):
         chain = sample_potts(graph, field, move, np.random.default_rng(SEED), 30, 5, 2)
         rng = np.random.default_rng(SEED)
         rows = site_field(field, graph.n_nodes)
@@ -190,7 +191,7 @@ def test_thread_pool_starts_are_the_serial_run_bitwise() -> None:
         sample_potts_starts(
             graph,
             field,
-            PottsMove.NIEDERMAYER,
+            SandboxMove.NIEDERMAYER,
             np.random.default_rng(SEED),
             40,
             equilibration_sweeps=5,

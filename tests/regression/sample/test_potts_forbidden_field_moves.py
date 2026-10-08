@@ -25,7 +25,7 @@ import warnings
 import numpy as np
 import pytest
 from sal.backend import Backend
-from sal.sample.potts_mcmc import ghost_spin_sweep, label_directed_sweep
+from sal.sandbox.potts_moves import ghost_spin_sweep, label_directed_sweep
 from sal.sim.potts import energy
 
 from tests.regression.sample.test_potts_forbidden_labels import (

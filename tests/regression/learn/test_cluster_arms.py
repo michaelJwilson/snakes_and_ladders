@@ -30,18 +30,17 @@ from sal.learn.potts_nd import (
 )
 from sal.opt.budget import Budget
 from sal.sample.potts_keyed import (
-    NiedermayerMove,
     SwendsenWangMove,
     WolffMove,
     cluster_moves,
 )
 from sal.sample.potts_mcmc import (
     MoveKind,
-    niedermayer_sweep,
     swendsen_wang_sweep,
     wolff_sweep,
 )
 from sal.sample.schedule import ExponentialTempSchedule
+from sal.sandbox.potts_moves import NiedermayerMove, niedermayer_sweep
 from sal.search.ground_state import (
     ANNEAL_END,
     ANNEAL_START,

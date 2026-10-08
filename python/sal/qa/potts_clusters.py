@@ -81,6 +81,11 @@ from sal.sample.potts_mcmc import (
     swendsen_wang_sweep,
     wolff_sweep,
 )
+
+# The three arms whose moves left PottsMove run on the sandbox's drivers
+# (issue #1365); `sal.qa` may import the sandbox.
+from sal.sandbox.potts_moves import SandboxMove
+from sal.sandbox.potts_moves import run_annealed as run_sandboxed
 from sal.search.cluster_moves import (
     CLUSTER_LADDER_REPLICAS,
     run_cluster_tempering,
@@ -370,11 +375,11 @@ def _niedermayer_spend(task: tuple[int, int]) -> tuple[float, int]:
     """Niedermayer on Swendsen-Wang's tuned schedule at ``steps`` steps for one tuning seed: its energy and spend."""
     steps, seed = task
     rung = release_rung()
-    run = run_annealed(
+    run = run_sandboxed(
         rung,
         solver_budget(rung),
         np.random.default_rng([seed, 0]),
-        PottsMove.NIEDERMAYER,
+        SandboxMove.NIEDERMAYER,
         schedule=load_tuned().chosen["swendsen-wang"],
         steps=steps,
     )
@@ -460,7 +465,7 @@ def arms() -> dict[str, Callable[[np.random.Generator], RunStart]]:
         # a transposition for a recolouring. Swendsen-Wang's tuned schedule,
         # at the step count matched on the tuning seeds.
         "niedermayer matched": functools.partial(
-            run_annealed, move=PottsMove.NIEDERMAYER, schedule=sw, steps=matched
+            run_sandboxed, move=SandboxMove.NIEDERMAYER, schedule=sw, steps=matched
         ),
         "swendsen-wang>expansion": chain(
             part(
@@ -474,10 +479,10 @@ def arms() -> dict[str, Callable[[np.random.Generator], RunStart]]:
             "alpha-expansion", part("swendsen-wang", schedule=EXPANSION_SW_SCHEDULE)
         ),
         "ghost-spin": functools.partial(
-            run_annealed, move=PottsMove.GHOST_SPIN, schedule=sw
+            run_sandboxed, move=SandboxMove.GHOST_SPIN, schedule=sw
         ),
         "label-directed": functools.partial(
-            run_annealed, move=PottsMove.LABEL_DIRECTED, schedule=sw
+            run_sandboxed, move=SandboxMove.LABEL_DIRECTED, schedule=sw
         ),
         "tempering + houdayer": functools.partial(
             run_cluster_tempering, t_hot=sw.t_start, t_cold=sw.t_end

@@ -25,8 +25,9 @@ from sal.sample.potts_mcmc import (
     PottsMove,
     cluster_tempering,
     sample_potts,
-    sweeps,
 )
+from sal.sandbox import potts_moves
+from sal.sandbox.potts_moves import SandboxMove
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
 from tests._chains import cell_counts, enumerated_law
@@ -91,7 +92,7 @@ def _chain_distance(move: PottsMove, temperature: float = 1.0) -> tuple[float, f
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("move", [PottsMove.GHOST_SPIN, PottsMove.LABEL_DIRECTED])
+@pytest.mark.parametrize("move", [SandboxMove.GHOST_SPIN, SandboxMove.LABEL_DIRECTED])
 @pytest.mark.parametrize("temperature", [0.7, 1.0])
 def test_the_chain_draws_from_the_enumerated_gibbs_law(
     move: PottsMove, temperature: float
@@ -116,9 +117,9 @@ def test_dropping_the_hastings_term_is_refuted(monkeypatch: pytest.MonkeyPatch) 
     # Onto the target is proposed from every other label and off it with
     # probability (q - 1) / q, so without the log q term the target is
     # over-weighted.
-    monkeypatch.setattr(sweeps, "_label_hastings", lambda _: 0.0)
+    monkeypatch.setattr(potts_moves, "_label_hastings", lambda _: 0.0)
 
-    distance, bound = _chain_distance(PottsMove.LABEL_DIRECTED)
+    distance, bound = _chain_distance(SandboxMove.LABEL_DIRECTED)
 
     assert distance > bound, f"total variation {distance:.4f} <= {bound:.4f}"
 
@@ -129,16 +130,18 @@ def test_dropping_the_fields_negative_part_is_refuted(
 ) -> None:
     # `max(0, h)` without the shift: a label a site's field penalizes is
     # left as likely as the zero of the field, and nothing accepts it back.
-    monkeypatch.setattr(sweeps, "ghost_couplings", lambda rows: np.maximum(rows, 0.0))
+    monkeypatch.setattr(
+        potts_moves, "ghost_couplings", lambda rows: np.maximum(rows, 0.0)
+    )
 
-    distance, bound = _chain_distance(PottsMove.GHOST_SPIN)
+    distance, bound = _chain_distance(SandboxMove.GHOST_SPIN)
 
     assert distance > bound, f"total variation {distance:.4f} <= {bound:.4f}"
 
 
 @pytest.mark.oracle
 @pytest.mark.backend
-@pytest.mark.parametrize("move", [PottsMove.GHOST_SPIN, PottsMove.LABEL_DIRECTED])
+@pytest.mark.parametrize("move", [SandboxMove.GHOST_SPIN, SandboxMove.LABEL_DIRECTED])
 def test_the_compiled_union_find_is_the_same_chain(move: PottsMove) -> None:
     # The kernels differ between backends in the union-find alone, whose
     # roots `test_bond_roots.py` pins bitwise, so the chains are equal.

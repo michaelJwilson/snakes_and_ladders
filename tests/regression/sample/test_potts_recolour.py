@@ -28,6 +28,7 @@ from sal.backend import Backend
 from sal.sample import annealed, potts_keyed, potts_mcmc, tempered
 from sal.sample.potts_mcmc import PottsMove, Recolour, move_set, sample_potts, sweep_at
 from sal.sample.statistics import chi_square_p_value
+from sal.sandbox.potts_moves import SandboxMove
 from sal.search.icm import SweepOrder, iterated_conditional_modes
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
@@ -333,7 +334,8 @@ def test_a_single_move_is_its_resolved_move_set_bitwise(move: PottsMove) -> None
 
 @pytest.mark.smoke
 @pytest.mark.parametrize(
-    "move", [PottsMove.NIEDERMAYER, PottsMove.GHOST_SPIN, PottsMove.LABEL_DIRECTED]
+    "move",
+    [SandboxMove.NIEDERMAYER, SandboxMove.GHOST_SPIN, SandboxMove.LABEL_DIRECTED],
 )
 def test_a_move_without_a_heat_bath_recolouring_is_refused_by_name(
     move: PottsMove,
@@ -396,9 +398,9 @@ DEFAULTS = {
         PottsMove.SWENDSEN_WANG_HEAT_BATH,
         PottsMove.SINGLE_SITE,
     ),
-    PottsMove.NIEDERMAYER: (PottsMove.NIEDERMAYER,),
-    PottsMove.GHOST_SPIN: (PottsMove.GHOST_SPIN,),
-    PottsMove.LABEL_DIRECTED: (PottsMove.LABEL_DIRECTED,),
+    SandboxMove.NIEDERMAYER: (SandboxMove.NIEDERMAYER,),
+    SandboxMove.GHOST_SPIN: (SandboxMove.GHOST_SPIN,),
+    SandboxMove.LABEL_DIRECTED: (SandboxMove.LABEL_DIRECTED,),
 }
 
 
