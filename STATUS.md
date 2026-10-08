@@ -3340,7 +3340,12 @@ pinned bitwise to the NumPy `merge_labels` and to a brute-force greedy on
 2x3, q = 3. `stages` reports `init`, `polish`, `merge`; `final` is removed. At
 256x256, q = 8, 50 single-site sweeps: merge 9.4 ms of a 532 ms anneal, 8
 rounds, NumPy oracle 148 ms. Pinned in
-`tests/regression/sample/test_anneal_polish.py`.
+`tests/regression/sample/test_anneal_polish.py`. One pass is the joint fixed
+point of ICM and the merge on `potts_reference/stress` and five variants: no run
+of 774 gains from a second ICM pass, and the merge fires only on `margin_0.1`,
+collapsing to the one-label optimum at the TRW-S bound
+([#1390](https://github.com/michaelJwilson/snakes_and_ladders/issues/1390),
+[`docs/experiments/036`](docs/experiments/036-alternating-icm-and-the-label-merge.md)).
 
 **The tuned anneal against known ground states**
 ([#1378](https://github.com/michaelJwilson/snakes_and_ladders/issues/1378),

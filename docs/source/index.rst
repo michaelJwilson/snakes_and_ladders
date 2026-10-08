@@ -863,6 +863,9 @@ whether or not it has members yet.
 .. automodule:: sal.qa.known_ground_states
    :members:
 
+.. automodule:: sal.qa.icm_merge_alternation
+   :members:
+
 .. automodule:: sal.scripts
    :members:
 
