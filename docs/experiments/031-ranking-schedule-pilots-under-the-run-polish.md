@@ -32,4 +32,4 @@ Over `SCHEDULE_GRID`, single-site, 5 tuning seeds on each of `potts_lattice` ci/
 
 ## Finding
 
-They disagree on 13 of 25 tunings at 8-sweep pilots and 5 of 25 at 64, but no disagreement buys energy: the held-out differences (0.09 to 0.6) are below the 1.06 spread across seeds on `potts_reference`, and on ci, stress and the glass every choice reaches one energy. A `Polish` pilot charges its polish to `spent`, +3.3% (`ICM`) and +4.9% (`ICM_MERGE`) on `potts_reference` at 64 sweeps, +105% at 8 sweeps on 144 sites. The script is in the pull request: 19 s for both pilot lengths on 2 threads. Actions: `no actions`.
+They disagree on 13 of 25 tunings at 8-sweep pilots and 5 of 25 at 64, but no disagreement buys energy: the held-out differences (0.09 to 0.6) are below the 1.06 spread across seeds on `potts_reference`, and on ci, stress and the glass every choice reaches one energy. A `Polish` pilot charges its polish to `spent`, +3.3% (`ICM`) and +4.9% (`ICM_MERGE`) on `potts_reference` at 64 sweeps, +106% at 8 sweeps on 144 sites. The script is in the pull request: 19 s for both pilot lengths on 2 threads. Actions: `no actions`.
