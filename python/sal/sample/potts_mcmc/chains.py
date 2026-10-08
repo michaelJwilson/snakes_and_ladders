@@ -1638,6 +1638,17 @@ def cluster_tempering(
     ``exp(-(beta - beta') (E(s_new) - E(s)))``, and that is the Metropolis
     ratio applied here.
 
+    **On ``potts_reference``'s stress cell it loses to one long anneal
+    (#1402).** At ``q = 4`` on 3,000 sites, against the TRW-S bound over 8
+    seeds with ``Polish.ICM_MERGE``, it ends 17--59 nats above the bound at
+    4--256 times alpha-expansion+ICM's site visits on two hand-set ladders,
+    where one long anneal ends 3.0--0.6 nats above it. No ladder over
+    ``(0.05, 2.0)`` was found in ``(0.2, 0.3)``: the coldest pair reads
+    0.01--0.03 at every spacing tried, and ``"auto"``'s pilot is
+    :func:`~sal.sample.schedule.adapt_ladder`'s, whose limits that function
+    states. The pilot's site visits are ``tuned_ladder.spent``, not
+    ``spent``, as :func:`anneal_potts` reports its schedule pilot's.
+
     Parameters
     ----------
     graph : PottsGraph

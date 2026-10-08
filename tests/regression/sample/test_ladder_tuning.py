@@ -9,6 +9,8 @@ A given ladder is held bitwise to the run before the option existed.
 
 from __future__ import annotations
 
+import itertools
+import math
 from typing import Any
 
 import numpy as np
@@ -18,6 +20,7 @@ from sal.opt.budget import Budget
 from sal.opt.termination import Stop
 from sal.sample.loop import swap_log_ratio
 from sal.sample.potts_mcmc import chains, cluster_tempering
+from sal.sample.schedule import adapt_ladder
 from sal.sample.tune import LadderTuning, TunedLadder
 from sal.sandbox.potts_tempering import parallel_tempering, run_tempering
 from sal.search.ground_state import Problem
@@ -230,3 +233,48 @@ def test_the_exchange_ratio_does_not_read_the_ladder_order() -> None:
         assert swap_log_ratio(beta_i, beta_j, energy_i, energy_j) == swap_log_ratio(
             beta_j, beta_i, energy_j, energy_i
         )
+
+
+# --- the pilot's limits and its cost (#1402) ---------------------------------
+
+
+@pytest.mark.bug
+@pytest.mark.analytic
+def test_adapt_ladder_misses_a_band_one_geometric_ladder_reaches() -> None:
+    # Noiseless exchange acceptance exp(-|log(T_j / T_i)|): the geometric
+    # four-rung ladder over (0.05, 2.0) has every pair at 40^(-1/3) = 0.292,
+    # inside (0.2, 0.3). From the two endpoints a pair moves only beside one
+    # in the band, so the ladder bisects to 3 and 5 rungs and removes back,
+    # and ends out of band on its budget. Fails when the revision reaches it.
+    def measure(rungs: tuple[float, ...]) -> list[float]:
+        seen.append(len(rungs))
+        return [math.exp(-abs(math.log(b / a))) for a, b in itertools.pairwise(rungs)]
+
+    seen: list[int] = []
+    geometric = tuple(np.geomspace(0.05, 2.0, 4))
+    assert all(BAND[0] <= value <= BAND[1] for value in measure(geometric))
+    seen.clear()
+    adapted = adapt_ladder(measure, (0.05, 2.0), BAND, 50, 200)
+    assert not adapted.within_band
+    assert adapted.rounds == 50
+    assert set(seen) == {2, 3, 5}
+
+
+@pytest.mark.analytic
+def test_cluster_tempering_reports_the_pilot_apart_from_the_run() -> None:
+    # The pilot's visits are tuned_ladder.spent and the run's are spent, as
+    # anneal_potts reports its schedule pilot's. Each step charges one sweep,
+    # n_nodes + 2 n_edges, per replica and per Houdayer pair; the pilot runs
+    # one Houdayer pair on every ladder it measures.
+    graph = _graph()
+    per_sweep = graph.n_nodes + 2 * len(graph.edges)
+    tuning = _tuning()
+    run = cluster_tempering(
+        graph, FIELD, "auto", np.random.default_rng(0), 50, ladder_tuning=tuning
+    )
+    assert run.tuned_ladder is not None
+    adapted = run.tuned_ladder.adapted
+    assert run.spent == per_sweep * 50 * (len(run.temperatures) + 1)
+    assert run.tuned_ladder.spent == per_sweep * tuning.n_sweeps * (
+        adapted.replicas_measured + adapted.rounds
+    )

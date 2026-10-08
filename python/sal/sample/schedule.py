@@ -874,6 +874,17 @@ def adapt_ladder(
     is a ladder that never settles; ``within_band`` on the result says whether
     the caller's band was reachable.
 
+    **A band can be out of reach by construction (#1402).** A pair is moved
+    only beside a pair already in the band, so a ladder whose pairs are all
+    out of it changes only by bisection and by removal, which halves: from
+    two temperatures, a ladder whose pairs measure alike holds ``2^k + 1``.
+    On the noiseless ``exp(-|log(T_j / T_i)|)`` over ``(0.05, 2.0)`` the
+    geometric four-temperature ladder lies in ``(0.2, 0.3)``, and this
+    function cycles between three and five temperatures without reaching
+    it. A band one such ladder misses is reported as missed, never reached;
+    a measurement shorter than the chain's relaxation is a second way to
+    miss it, since the acceptance it reads is the transient's.
+
     Parameters
     ----------
     measure : Callable[[tuple[float, ...]], Sequence[float]]
