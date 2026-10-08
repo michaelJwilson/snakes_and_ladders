@@ -134,8 +134,6 @@ ANNEAL_SCHEDULE = ScheduleParams(ScheduleShape.EXPONENTIAL, ANNEAL_START, ANNEAL
 _COMPILED_CLUSTERS = frozenset(
     {
         PottsMove.SWENDSEN_WANG,
-        PottsMove.GHOST_SPIN,
-        PottsMove.LABEL_DIRECTED,
         PottsMove.SWENDSEN_WANG_HEAT_BATH,
     }
 )
@@ -608,9 +606,13 @@ class MethodRun:
 
 
 def step_cost(problem: Problem | Rung, move: PottsMove) -> int:
-    """Site visits one step of ``move`` is budgeted at: a sweep's, and a ghost bond per site for the ghost-spin pass."""
-    extra = problem.n_nodes if move is PottsMove.GHOST_SPIN else 0
-    return problem.visits_per_sweep + extra
+    """Site visits one step of ``move`` is budgeted at: a sweep's.
+
+    The ghost-spin pass's extra ghost bond per site left with it for
+    :func:`sal.sandbox.potts_moves.step_cost` (issue #1365).
+    """
+    del move
+    return problem.visits_per_sweep
 
 
 def run_annealed(
@@ -631,9 +633,7 @@ def run_annealed(
     accumulated cluster size is a stop on the state, which `search/CLAUDE.md`
     refuses, and the underspend is reported as the finding it is.
 
-    The ghost-spin pass also reads one ghost bond per site, so its step costs
-    :func:`step_cost` and it runs fewer steps on the same budget (issue
-    #1041); every other move's step costs ``visits_per_sweep``.
+    Every move's step costs ``visits_per_sweep`` (:func:`step_cost`).
 
     ``schedule``, ``steps`` and ``start`` are what issue #1038 varies, and
     their defaults are the run above bitwise. ``steps`` replaces the count
@@ -646,9 +646,9 @@ def run_annealed(
     started = time.perf_counter()
     # Swendsen-Wang on the compiled pass: the same law on another order of
     # draws, and the comparison reads no cluster counter (issue #923). The
-    # ghost-spin, label-directed and heat-bath Swendsen-Wang passes merge
-    # their bonds on the compiled union-find, which returns the Python roots,
-    # so the chain (issues #1041, #1142).
+    # heat-bath Swendsen-Wang pass merges
+    # its bonds on the compiled union-find, which returns the Python roots,
+    # so the chain (issue #1142).
     run = anneal_potts(
         problem.graph,
         problem.field,

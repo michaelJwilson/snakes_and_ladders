@@ -1,6 +1,6 @@
 """Per-rung tempering moves against single-site tempering, at equal site visits and equal wall time (issue #1158).
 
-The measurement behind :func:`~sal.sample.potts_mcmc.rung_moves`' threshold
+The measurement behind :func:`~sal.sandbox.potts_tempering.rung_moves`' threshold
 and the ``tempering-mixed`` row of `search.ground_state.METHODS`: each ladder
 through :func:`~sal.search.potts_tempering.run_tempering` for 1,000 sweeps' site
 visits at five seeds, the field scaled x1, x10 and x30; equal wall time gives
@@ -26,8 +26,13 @@ import numpy as np
 import pytest
 from sal.cost import Cost
 from sal.opt.budget import Budget
-from sal.sample.potts_mcmc import PottsMove, RungMoves, rung_moves
-from sal.sandbox.potts_tempering import run_tempering, tempering_ladder
+from sal.sample.potts_mcmc import PottsMove
+from sal.sandbox.potts_tempering import (
+    RungMoves,
+    run_tempering,
+    rung_moves,
+    tempering_ladder,
+)
 from sal.search.ground_state import Problem
 from sal.search.potts_starts import spatio_rung, tiling_rung
 from sal.sim.fixtures import fixture

@@ -82,16 +82,16 @@ DEFAULT_LADDER = (0.0, 0.25, 0.5, 1.0, 2.0, 4.0)
 #: Kinds whose move is supplied through
 #: :class:`~sal.learn.keyed.KeyedMove` rather than implemented
 #: here, since a cluster growth needs the graph this package will not import.
-CLUSTER_KINDS = (MoveKind.WOLFF, MoveKind.SWENDSEN_WANG, MoveKind.NIEDERMAYER)
+CLUSTER_KINDS = (MoveKind.WOLFF, MoveKind.SWENDSEN_WANG)
 
 #: Kinds whose action names a site and a target label. The rest name a
 #: temperature and nothing else, and visit every site.
-PARAMETRIC_KINDS = (MoveKind.FLIP, MoveKind.WOLFF, MoveKind.NIEDERMAYER)
+PARAMETRIC_KINDS = (MoveKind.FLIP, MoveKind.WOLFF)
 
 #: Kinds whose charge is the cluster they build and so is known only by
 #: building it. :meth:`PottsNDEnvironment.visits` runs the move for these;
 #: for the rest the charge is read in constant time.
-GROWN_KINDS = (MoveKind.WOLFF, MoveKind.NIEDERMAYER)
+GROWN_KINDS = (MoveKind.WOLFF,)
 
 
 class FeatureColumn(StrEnum):
@@ -122,9 +122,8 @@ class PottsAction(NamedTuple):
     Parameters
     ----------
     kind : MoveKind
-        ``FLIP``, ``WOLFF`` and ``NIEDERMAYER`` name a site and a label --- the
-        flipped site, or the cluster's root and the colour it is recoloured to
-        or transposed with. ``SWEEP`` and ``SWENDSEN_WANG`` name neither and
+        ``FLIP`` and ``WOLFF`` name a site and a label --- the flipped site,
+        or the cluster's root and the colour it is recoloured to. ``SWEEP`` and ``SWENDSEN_WANG`` name neither and
         visit every site.
     site, label : int
         The site and target label, or ``-1`` each where the kind names

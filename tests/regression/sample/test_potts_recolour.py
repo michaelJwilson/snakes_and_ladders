@@ -331,24 +331,6 @@ def test_a_single_move_is_its_resolved_move_set_bitwise(move: PottsMove) -> None
     assert one.mean_cluster_size == seq.mean_cluster_size
 
 
-@pytest.mark.smoke
-@pytest.mark.parametrize(
-    "move", [PottsMove.NIEDERMAYER, PottsMove.GHOST_SPIN, PottsMove.LABEL_DIRECTED]
-)
-def test_a_move_without_a_heat_bath_recolouring_is_refused_by_name(
-    move: PottsMove,
-) -> None:
-    with pytest.raises(ValueError, match=str(move)):
-        sample_potts(
-            _graph(),
-            FIELD,
-            [PottsMove.SINGLE_SITE, move],
-            np.random.default_rng(SEED),
-            1,
-            recolour=Recolour.HEAT_BATH,
-        )
-
-
 #: The public Potts entry points: every function that runs a Potts move set.
 ENTRY_POINTS = [
     potts_mcmc.sample_potts,
@@ -396,9 +378,6 @@ DEFAULTS = {
         PottsMove.SWENDSEN_WANG_HEAT_BATH,
         PottsMove.SINGLE_SITE,
     ),
-    PottsMove.NIEDERMAYER: (PottsMove.NIEDERMAYER,),
-    PottsMove.GHOST_SPIN: (PottsMove.GHOST_SPIN,),
-    PottsMove.LABEL_DIRECTED: (PottsMove.LABEL_DIRECTED,),
 }
 
 
