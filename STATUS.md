@@ -3355,6 +3355,16 @@ anneal at x16 is 0.83 nats off, alpha-expansion 0.96 in 8 ms, Glauber at
 [`docs/experiments/029-the-tuned-potts-anneal-against-known-ground-states.md`](docs/experiments/029-the-tuned-potts-anneal-against-known-ground-states.md);
 pinned at 12 x 12, q = 2 in `tests/regression/qa/test_known_ground_states.py`.
 
+**HMC tuning as an HMM start**
+([#1390](https://github.com/michaelJwilson/snakes_and_ladders/issues/1390),
+question 6). On `count_hmm_reference/stress`, Baum-Welch after every start at
+400 passes, `step_size="auto"`'s 49-gradient pilot (12%) chooses the
+8-proposal pilot's step on 6/8 starts; T0 = 10 x |log L|/n misses a median
+1.2% against restarts' 1.7% and trails on all four variants; level 5 (20
+positions) is kept by no run.
+[`docs/experiments/038-hmc-tuning-as-an-hmm-start.md`](docs/experiments/038-hmc-tuning-as-an-hmm-start.md);
+pinned at CI size in `tests/regression/qa/test_count_hmm_hmc_tuning.py`.
+
 ## Milestone 2.0 — RL Definition
 
 **Landed as `app:rl` in the textbook**
