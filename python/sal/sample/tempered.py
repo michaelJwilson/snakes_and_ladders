@@ -55,8 +55,11 @@ from sal.sample.gibbs import (
 from sal.sample.loop import Exchanging, Moved, Step, temper
 from sal.sample.potts_mcmc import (
     PottsMove,
+    PottsMoves,
+    Recolour,
     energies,
     houdayer_move,
+    move_set,
     parallel_tempering,
     refuse_negative_coupling,
     sweep_for,
@@ -434,7 +437,8 @@ def tempered_potts_pair(
     burn_in: int = 0,
     thin: int = 1,
     *,
-    move: PottsMove = PottsMove.SINGLE_SITE,
+    move: PottsMoves = PottsMove.SINGLE_SITE,
+    recolour: Recolour = Recolour.UNIFORM,
     houdayer: bool = True,
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.RUST,
@@ -502,6 +506,7 @@ def tempered_potts_pair(
     field = log_weight_of(field)
     temperatures = check_ladder(ladder(temperatures), needed_by="a tempered ensemble")
     _check_budget(n_sweeps, thin, burn_in)
+    move = move_set(move, recolour)
     refuse_negative_coupling(move, graph)
     rows = site_field(np.asarray(field, dtype=float), graph.n_nodes)
     n_states = int(rows.shape[1])

@@ -100,6 +100,14 @@ draws reach it without the module importing their type.
   `tests/regression/sample/test_relabel.py` holds each member to one case and
   each pair of calls to bitwise-equal relabellings.
 
+**One field behaviour on every Potts entry point (#1317).** Every entry point
+takes `move` as a move set applied in order, a single `PottsMove` being its
+one-element set bitwise, and `recolour`: a cluster's label is drawn by
+`Recolour.HEAT_BATH` or proposed by `Recolour.UNIFORM`, resolved once by
+`move_set`. A move with no heat-bath form refuses `HEAT_BATH` by name rather
+than ignoring it. A new entry point without both fails
+`tests/regression/sample/test_potts_recolour.py`.
+
 ## Measured mixing limits
 
 A move whose law enumeration pins and whose chain still does not mix on an

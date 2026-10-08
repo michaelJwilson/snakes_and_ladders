@@ -49,7 +49,10 @@ from sal.numerics import logsumexp
 from sal.sample.accept import accept
 from sal.sample.potts_mcmc import (
     PottsMove,
+    PottsMoves,
+    Recolour,
     energies,
+    move_set,
     refuse_negative_coupling,
     sweep_for,
 )
@@ -202,9 +205,10 @@ def _population(
     field: np.ndarray,
     rng: np.random.Generator,
     n_replicas: int,
-    move: PottsMove,
+    move: PottsMoves,
     backend: Backend,
     cluster_backend: Backend,
+    recolour: Recolour = Recolour.UNIFORM,
 ) -> tuple[
     np.ndarray,
     list[np.random.Generator],
@@ -221,6 +225,7 @@ def _population(
     :func:`~sal.sim.potts.energies` scores the population in
     one call and each row is still a buffer the kernel can borrow.
     """
+    move = move_set(move, recolour)
     refuse_negative_coupling(move, graph)
     if n_replicas < 2:
         msg = (
@@ -263,7 +268,8 @@ def annealed_importance_sampling(
     rng: np.random.Generator,
     n_replicas: int,
     *,
-    move: PottsMove = PottsMove.SINGLE_SITE,
+    move: PottsMoves = PottsMove.SINGLE_SITE,
+    recolour: Recolour = Recolour.UNIFORM,
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.RUST,
 ) -> LogPartition:
@@ -328,7 +334,7 @@ def annealed_importance_sampling(
     field = log_weight_of(field)
     ladder = _check_rungs(betas, from_zero=True)
     states, children, advance, rows = _population(
-        graph, field, rng, n_replicas, move, backend, cluster_backend
+        graph, field, rng, n_replicas, move, backend, cluster_backend, recolour
     )
     log_zero = _log_z_zero(graph, rows)
     log_n = np.log(n_replicas)
@@ -400,7 +406,8 @@ def population_annealing(
     rng: np.random.Generator,
     n_replicas: int,
     *,
-    move: PottsMove = PottsMove.SINGLE_SITE,
+    move: PottsMoves = PottsMove.SINGLE_SITE,
+    recolour: Recolour = Recolour.UNIFORM,
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.RUST,
     resample: Resampling = Resampling.SYSTEMATIC,
@@ -423,7 +430,7 @@ def population_annealing(
 
     Parameters
     ----------
-    graph, field, betas, rng, n_replicas, move, backend, cluster_backend
+    graph, field, betas, rng, n_replicas, move, backend, cluster_backend, recolour
         As :func:`annealed_importance_sampling`, with the parent generator
         drawing the resampling uniforms beside spawning the children.
     resample : Resampling
@@ -446,7 +453,7 @@ def population_annealing(
     field = log_weight_of(field)
     ladder = _check_rungs(betas, from_zero=True)
     states, children, advance, rows = _population(
-        graph, field, rng, n_replicas, move, backend, cluster_backend
+        graph, field, rng, n_replicas, move, backend, cluster_backend, recolour
     )
     log_zero = _log_z_zero(graph, rows)
     log_n = np.log(n_replicas)
@@ -570,7 +577,8 @@ def simulated_tempering(
     burn_in: int = 0,
     thin: int = 1,
     *,
-    move: PottsMove = PottsMove.SINGLE_SITE,
+    move: PottsMoves = PottsMove.SINGLE_SITE,
+    recolour: Recolour = Recolour.UNIFORM,
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.RUST,
 ) -> SimulatedTempered:
@@ -643,6 +651,7 @@ def simulated_tempering(
         rng.integers(0, n_states, size=graph.n_nodes), dtype=np.int64
     )
     offsets, neighbours, couplings = graph.compressed_adjacency()
+    move = move_set(move, recolour)
     refuse_negative_coupling(move, graph)
     advance = sweep_for(
         move, graph, rows, offsets, neighbours, couplings, backend, cluster_backend

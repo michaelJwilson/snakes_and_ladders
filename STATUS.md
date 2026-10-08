@@ -3158,6 +3158,17 @@ the three starts is 30.4 (energy) to 95.9 (an occupancy) against a declared 1.01
 a 2 x 3 heat-bath chain ends `CONVERGED` with R-hat at most 1.0014. Pinned in
 `tests/regression/sample/test_potts_mixing.py`. The move rule of Part B is open.
 
+**One field behaviour and move sets on every Potts entry point**
+([#1317](https://github.com/michaelJwilson/snakes_and_ladders/issues/1317), stage 1
+of 3). `recolour=Recolour.HEAT_BATH | UNIFORM` and `move` as a move set on ten
+entry points, defaults unchanged. On a 2 x 3, q = 3 lattice with a per-site
+field and one forbidden label, Wolff and Swendsen-Wang under both recolourings,
+alone and composed with a Gibbs sweep, fit the enumerated law at p >= 0.014
+(declared 1e-3); the enumerated Wolff heat-bath kernel equals random-scan Gibbs
+at zero coupling to 1.7e-16, keeps `pi` to 2.1e-17 and, composed, is
+irreducible; at `beta = 1e12` the Gibbs sweep is ICM's on all 486 allowed
+starts. Pinned in `tests/regression/sample/test_potts_recolour.py`.
+
 ## Milestone 2.0 — RL Definition
 
 **Landed as `app:rl` in the textbook**

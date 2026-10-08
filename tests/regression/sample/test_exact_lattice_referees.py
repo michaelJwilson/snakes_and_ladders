@@ -35,8 +35,7 @@ from dataclasses import dataclass
 import numpy as np
 import pytest
 from sal.backend import Backend
-from sal.sample.potts_mcmc import PottsMove
-from sal.sample.potts_mcmc.chains import sweep_for
+from sal.sample.potts_mcmc import PottsMove, sweep_for
 from sal.sample.statistics import integrated_autocorrelation_time
 from sal.sim.graph import BoundaryCondition, lattice_graph
 from sal.sim.potts import (

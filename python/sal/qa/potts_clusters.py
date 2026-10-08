@@ -76,7 +76,7 @@ from sal.qa.potts_schedule import load as load_tuned
 from sal.sample.potts_mcmc import (
     ClusterCounter,
     PottsMove,
-    Recolour,
+    RecolourOutcome,
     adjacency_lists,
     swendsen_wang_sweep,
     wolff_sweep,
@@ -157,7 +157,7 @@ class DiagnosedClusters(ClusterCounter):
     multi_mixed: int = 0
 
     def record(
-        self, members: np.ndarray, outcome: Recolour, graph: PottsGraph | None
+        self, members: np.ndarray, outcome: RecolourOutcome, graph: PottsGraph | None
     ) -> None:
         """Add one cluster, and read its members' preferences."""
         super().record(members, outcome, graph)

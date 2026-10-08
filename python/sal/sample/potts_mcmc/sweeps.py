@@ -48,7 +48,7 @@ from sal.sim.potts import (
 GUARD = 16.0
 
 
-class Recolour(NamedTuple):
+class RecolourOutcome(NamedTuple):
     """What one cluster recolouring proposed, and whether the field accepted it.
 
     Two booleans rather than one, because a proposal that drew the colour the
@@ -89,7 +89,7 @@ class ClusterCounter:
     spanning: int = 0
 
     def record(
-        self, members: np.ndarray, outcome: Recolour, graph: PottsGraph | None
+        self, members: np.ndarray, outcome: RecolourOutcome, graph: PottsGraph | None
     ) -> None:
         """Add one recoloured cluster."""
         self.sizes.append(int(members.shape[0]))
@@ -1119,7 +1119,9 @@ def niedermayer_sweep(
         state[held_members] = swapped
         state[swapped_members] = held
     if counter is not None:
-        counter.record(members, Recolour(proposed=True, accepted=accepted), graph)
+        counter.record(
+            members, RecolourOutcome(proposed=True, accepted=accepted), graph
+        )
     return len(cluster)
 
 
@@ -1484,7 +1486,7 @@ def wolff_heat_bath_sweep(
     state[members] = label
     if counter is not None:
         moved = label != current
-        counter.record(members, Recolour(proposed=moved, accepted=moved), graph)
+        counter.record(members, RecolourOutcome(proposed=moved, accepted=moved), graph)
     return int(members.shape[0])
 
 
@@ -1587,7 +1589,7 @@ def _recolour(
     rows: np.ndarray,
     rng: np.random.Generator,
     proposed: int | None = None,
-) -> Recolour:
+) -> RecolourOutcome:
     """Propose one colour for a whole cluster, accepting on the field alone.
 
     The proposal is uniform over every colour including the current one, which
@@ -1612,7 +1614,7 @@ def _recolour(
 
     Returns
     -------
-    Recolour
+    RecolourOutcome
         Whether a colour change was proposed at all, and whether it was
         accepted. Issue #551 reads the acceptance against temperature, and a
         run that never proposed is not a run that was rejected.
@@ -1628,7 +1630,7 @@ def _recolour_drawn(
     rows: np.ndarray,
     proposed: int,
     draw: Callable[[], float],
-) -> Recolour:
+) -> RecolourOutcome:
     """:func:`_recolour` with the colour already chosen and the uniform behind a call.
 
     The whole of the oracle's recolouring, factored out so the Rust pass's
@@ -1656,7 +1658,7 @@ def _recolour_drawn(
     """
     current = int(state[members[0]])
     if proposed == current:
-        return Recolour(proposed=False, accepted=False)
+        return RecolourOutcome(proposed=False, accepted=False)
     # Decided before the subtraction, which stays NumPy's in the rows' own
     # dtype, so a finite cluster's difference is the bits it was.
     offered = rows[members, proposed].sum()
@@ -1665,8 +1667,8 @@ def _recolour_drawn(
     )
     if accept_drawn(difference, draw):
         state[members] = proposed
-        return Recolour(proposed=True, accepted=True)
-    return Recolour(proposed=True, accepted=False)
+        return RecolourOutcome(proposed=True, accepted=True)
+    return RecolourOutcome(proposed=True, accepted=False)
 
 
 def bond_roots(
