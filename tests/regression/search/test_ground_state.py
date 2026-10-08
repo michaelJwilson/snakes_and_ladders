@@ -397,7 +397,7 @@ def test_the_runners_record_the_energy_their_kernels_return() -> None:
     ladder = tuple(
         float(value)
         for value in np.geomspace(
-            ground_state.ANNEAL_START, ground_state.ANNEAL_END, ground_state.N_REPLICAS
+            ground_state.ANNEAL_END, ground_state.ANNEAL_START, ground_state.N_REPLICAS
         )
     )
     kernel = parallel_tempering(

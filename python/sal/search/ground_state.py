@@ -1164,13 +1164,14 @@ def run_tempering_mixed(
 
 
 def tempering_ladder() -> tuple[float, ...]:
-    """The temperatures :func:`run_tempering` exchanges across, hottest first.
+    """The temperatures :func:`run_tempering` exchanges across, coldest first.
 
-    :data:`N_REPLICAS` rungs geometric from :data:`ANNEAL_START` to
-    :data:`ANNEAL_END`, the annealing schedule's endpoints.
+    :data:`N_REPLICAS` rungs geometric from :data:`ANNEAL_END` to
+    :data:`ANNEAL_START`, the annealing schedule's endpoints, in the one order
+    the Potts temperings take (issue #1343).
     """
     return tuple(
-        float(value) for value in np.geomspace(ANNEAL_START, ANNEAL_END, N_REPLICAS)
+        float(value) for value in np.geomspace(ANNEAL_END, ANNEAL_START, N_REPLICAS)
     )
 
 

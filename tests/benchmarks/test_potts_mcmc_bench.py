@@ -118,7 +118,7 @@ def test_release_tempering_steps_benchmark(
     from sal.sim.fixtures import fixture
 
     rung = tiling_rung(fixture("spatio_tiling", "release").params, "release")
-    ladder = tuple(np.geomspace(ANNEAL_START, ANNEAL_END, N_REPLICAS).tolist())
+    ladder = tuple(np.geomspace(ANNEAL_END, ANNEAL_START, N_REPLICAS).tolist())
     cluster_backend = Backend.RUST if move in _COMPILED_CLUSTERS else Backend.PYTHON
 
     run = benchmark(

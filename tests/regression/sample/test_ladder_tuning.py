@@ -9,12 +9,15 @@ A given ladder is held bitwise to the run before the option existed.
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import pytest
 from sal.cost import Cost
 from sal.opt.budget import Budget
 from sal.opt.termination import Stop
-from sal.sample.potts_mcmc import cluster_tempering, parallel_tempering
+from sal.sample.loop import swap_log_ratio
+from sal.sample.potts_mcmc import chains, cluster_tempering, parallel_tempering
 from sal.sample.tune import LadderTuning, TunedLadder
 from sal.search.ground_state import Problem, run_tempering
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
@@ -125,3 +128,104 @@ def test_a_given_ladder_is_unchanged_bitwise() -> None:
     assert first.tuned_ladder is None
     assert np.array_equal(first.states, second.states)
     assert first.energy == second.energy
+
+
+# --- one ladder order and a start per rung (#1343) ---------------------------
+
+#: Both Potts temperings, as a test calls them: a ladder, a seed, a start.
+SAMPLERS = (parallel_tempering, cluster_tempering)
+
+
+@pytest.mark.analytic
+@pytest.mark.parametrize("sampler", SAMPLERS, ids=lambda f: f.__name__)
+def test_both_temperings_refuse_a_ladder_hottest_first(sampler: Any) -> None:
+    # The one order is coldest first; the reverse is refused, naming it,
+    # rather than run as reversed draws.
+    with pytest.raises(ValueError, match="increasing, coldest first"):
+        sampler(_graph(), FIELD, START[::-1], np.random.default_rng(0), 2)
+
+
+@pytest.mark.analytic
+@pytest.mark.parametrize("sampler", SAMPLERS, ids=lambda f: f.__name__)
+def test_one_start_is_every_rungs_start_bitwise(sampler: Any) -> None:
+    # `(n_nodes,)` is the `(n_rungs, n_nodes)` start of that row repeated:
+    # the same chains, bitwise.
+    row = np.random.default_rng(1).integers(0, 3, size=16)
+    runs = [
+        sampler(_graph(), FIELD, START, np.random.default_rng(2), 5, start=start)
+        for start in (row, np.tile(row, (len(START), 1)))
+    ]
+    assert np.array_equal(runs[0].best, runs[1].best)
+    assert runs[0].energy == runs[1].energy
+    assert np.array_equal(runs[0].swap_acceptance, runs[1].swap_acceptance)
+
+
+@pytest.mark.analytic
+@pytest.mark.parametrize("sampler", SAMPLERS, ids=lambda f: f.__name__)
+def test_a_start_of_neither_shape_is_refused(sampler: Any) -> None:
+    # A one-dimensional start of the wrong length is `check_labelling`'s refusal.
+    for shape in ((len(START) - 1, 16), (15,), (len(START), 16, 1)):
+        with pytest.raises(ValueError, match=r"start (is one labelling|must hold one)"):
+            sampler(
+                _graph(),
+                FIELD,
+                START,
+                np.random.default_rng(0),
+                2,
+                start=np.zeros(shape, dtype=np.int64),
+            )
+
+
+@pytest.mark.analytic
+def test_a_per_rung_start_maps_onto_the_tuned_rungs_by_nearest_temperature() -> None:
+    # Starting rungs (0.5, 2.0); tuned rungs 0.5, 1.0, 1.25, 1.5, 2.0. 1.0 is
+    # nearer 0.5, 1.5 nearer 2.0, and 1.25 is equidistant and goes to the
+    # colder; the endpoints take their own rows.
+    tuning = LadderTuning(Budget(Cost.SWEEPS, 100), 5, (0.5, 2.0), n_sweeps=20)
+    rows = np.array([[0] * 4, [1] * 4])
+    states = chains._rung_starts(rows, (0.5, 1.0, 1.25, 1.5, 2.0), tuning, [], 4, 2)
+    assert states[:, 0].tolist() == [0, 0, 0, 1, 1]
+    assert states.dtype == np.int64
+    assert states.flags.c_contiguous
+
+
+@pytest.mark.analytic
+def test_auto_takes_a_start_per_starting_rung() -> None:
+    # Under "auto" the per-rung start is one row per rung of the starting
+    # ladder, whatever the tuned ladder grows to; one row per tuned rung is
+    # not that shape unless the two lengths agree.
+    rows = np.tile(np.arange(16) % 3, (len(START), 1))
+    run = cluster_tempering(
+        _graph(),
+        FIELD,
+        "auto",
+        np.random.default_rng(0),
+        5,
+        start=rows,
+        ladder_tuning=_tuning(),
+    )
+    assert run.tuned_ladder is not None
+    assert run.temperatures[0] == START[0]
+    with pytest.raises(ValueError, match="one per rung of the ladder given"):
+        cluster_tempering(
+            _graph(),
+            FIELD,
+            "auto",
+            np.random.default_rng(0),
+            5,
+            start=rows[:-1],
+            ladder_tuning=_tuning(),
+        )
+
+
+@pytest.mark.analytic
+def test_the_exchange_ratio_does_not_read_the_ladder_order() -> None:
+    # Reversing the ladder relabels each pair (i, i + 1) as (i + 1, i); the
+    # Metropolis exchange ratio is the same number under that relabelling, so
+    # the order changes which pair proposes first, not the law (#1343).
+    rng = np.random.default_rng(0)
+    for _ in range(100):
+        beta_i, beta_j, energy_i, energy_j = rng.normal(size=4)
+        assert swap_log_ratio(beta_i, beta_j, energy_i, energy_j) == swap_log_ratio(
+            beta_j, beta_i, energy_j, energy_i
+        )
