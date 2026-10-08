@@ -108,7 +108,7 @@ def test_dense_equals_its_coded_form_bitwise(
 
 
 @pytest.mark.oracle
-def test_encode_is_a_numpy_unique_and_a_single_label_changes_nothing() -> None:
+def test_encode_is_a_numpy_unique() -> None:
     counts, exposure = DRAWS["totals"], DRAWS["exposure"]
     coded = encode(counts, exposure)
     observed = exposure != 0.0
@@ -120,11 +120,6 @@ def test_encode_is_a_numpy_unique_and_a_single_label_changes_nothing() -> None:
     assert np.array_equal(coded.inverse[observed], inverse)
     assert (coded.inverse[~observed] == -1).all()
     assert np.array_equal(coded.weight, weight)
-    labelled = encode(counts, exposure, label=np.full(N, 3))
-    assert (labelled.label == 3).all()
-    assert np.array_equal(
-        _bits(log_emission(NB, labelled)), _bits(log_emission(NB, coded))
-    )
 
 
 @pytest.mark.oracle
@@ -136,7 +131,6 @@ def test_decode_is_the_one_hot_product_bitwise(name: str) -> None:
     table = log_emission(
         family,
         Coded(
-            coded.label,
             coded.counts,
             np.arange(coded.weight.size, dtype=np.int32),
             coded.weight,
@@ -225,9 +219,7 @@ def test_the_limits() -> None:
 
 
 @pytest.mark.analytic
-def test_what_stage_one_refuses() -> None:
-    with pytest.raises(ValueError, match="stage 3"):
-        encode(np.array([1.0, 2.0]), label=np.array([0, 1]))
+def test_what_encode_refuses() -> None:
     with pytest.raises(ValueError, match="non-negative integer"):
         encode(np.array([1.5]))
     with pytest.raises(TypeError, match="Dense or Coded"):
