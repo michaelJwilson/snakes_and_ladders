@@ -85,8 +85,13 @@ class IndependentPair(Protocol):
         ...
 
 
-def _counts(values: np.ndarray, name: str) -> np.ndarray:
-    """``values`` as contiguous ``uint32``, refused unless non-negative integers."""
+def checked_counts(values: np.ndarray, name: str) -> np.ndarray:
+    """``values`` flat as contiguous ``uint32``, refused unless non-negative integers below ``2**32``.
+
+    ``name`` is the count's name in the refusal. The raising sibling of
+    :func:`sal.opt.emission_mixture.as_counts`, which returns ``None``
+    instead (issue #1341).
+    """
     flat = np.ascontiguousarray(values, dtype=np.float64).reshape(-1)
     if flat.size and not (
         np.isfinite(flat).all()
@@ -135,7 +140,7 @@ def _total_arguments(
     exposure: np.ndarray | None,
 ) -> dict[str, np.ndarray]:
     """The first channel's table and, under an exposure, its term, as the kernel takes them."""
-    counts = _counts(totals, "count")
+    counts = checked_counts(totals, "count")
     extent = _extent(counts)
     if exposure is None:
         return {"totals": counts, "total_table": _density_table(family, extent)}
@@ -155,11 +160,11 @@ def _success_arguments(
     family: BetaBinomialEmission, successes: np.ndarray, trials: np.ndarray | None
 ) -> dict[str, np.ndarray]:
     """The second channel's table and, under a trial count, its term, as the kernel takes them."""
-    counts = _counts(successes, "success count")
+    counts = checked_counts(successes, "success count")
     extent = _extent(counts)
     if trials is None:
         return {"successes": counts, "success_table": _density_table(family, extent)}
-    per_observation = _counts(trials, "trial count")
+    per_observation = checked_counts(trials, "trial count")
     trials_extent = _extent(per_observation)
     tables = trial_tables(family, extent, trials_extent)
     return {

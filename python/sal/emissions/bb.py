@@ -28,7 +28,7 @@ from numpy.typing import ArrayLike, NDArray
 from scipy.special import gammaln
 
 from sal.emissions.counts import BetaBinomialEmission
-from sal.emissions.rising import scaled_rising_array
+from sal.emissions.rising import scaled_rising_array, scaled_rising_table
 
 
 @dataclass(frozen=True)
@@ -56,7 +56,7 @@ class TrialTables:
 def trial_tables(
     family: BetaBinomialEmission, successes_extent: int, trials_extent: int
 ) -> TrialTables:
-    """``U``, ``V`` and ``W``, each a :func:`~sal.emissions.rising.scaled_rising_array` table, and the log rates.
+    """``U``, ``V`` and ``W``, each a :func:`~sal.emissions.rising.scaled_rising_table` by count, and the log rates.
 
     Built once per M step; summed in the module's order they are
     :func:`beta_binomial_log_pmf` bit for bit.
@@ -74,14 +74,14 @@ def trial_tables(
     -------
     TrialTables
     """
-    successes = np.arange(successes_extent, dtype=np.float64)[:, None]
-    trials = np.arange(trials_extent, dtype=np.float64)[:, None]
+    successes = np.arange(successes_extent, dtype=np.float64)
+    trials = np.arange(trials_extent, dtype=np.float64)
     alpha = family.alpha.detach().numpy()
     beta = family.beta.detach().numpy()
     return TrialTables(
-        success=scaled_rising_array(alpha, successes),
-        failure=scaled_rising_array(beta, trials),
-        trial=scaled_rising_array(alpha + beta, trials),
+        success=np.ascontiguousarray(scaled_rising_table(alpha, successes).T),
+        failure=np.ascontiguousarray(scaled_rising_table(beta, trials).T),
+        trial=np.ascontiguousarray(scaled_rising_table(alpha + beta, trials).T),
         log_rate=np.stack(_log_rates(alpha, beta)),
     )
 

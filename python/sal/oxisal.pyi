@@ -230,7 +230,7 @@ def class_posteriors(
     failure_table: np.ndarray | None = None,
     trial_table: np.ndarray | None = None,
     log_factorial: np.ndarray | None = None,
-    log_beta: np.ndarray | None = None,
+    log_rate: np.ndarray | None = None,
 ) -> None: ...
 def external_field(
     totals: np.ndarray,
@@ -250,7 +250,7 @@ def external_field(
     failure_table: np.ndarray | None = None,
     trial_table: np.ndarray | None = None,
     log_factorial: np.ndarray | None = None,
-    log_beta: np.ndarray | None = None,
+    log_rate: np.ndarray | None = None,
 ) -> None: ...
 def factorize(values: np.ndarray) -> tuple[np.ndarray, np.ndarray]: ...
 def coupled_log_prior(
@@ -496,7 +496,7 @@ def dense_log_emission(
     failure_table: np.ndarray | None = None,
     trial_table: np.ndarray | None = None,
     log_factorial: np.ndarray | None = None,
-    log_beta: np.ndarray | None = None,
+    log_rate: np.ndarray | None = None,
 ) -> None: ...
 def count_mixture_value_and_gradient(
     log_weight: np.ndarray,

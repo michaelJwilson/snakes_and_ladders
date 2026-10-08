@@ -27,6 +27,7 @@ from sal.emissions.rising import (
     on_distinct,
     on_distinct_array,
     scaled_rising_array,
+    scaled_rising_table,
 )
 from scipy.special import logsumexp
 
@@ -239,3 +240,25 @@ def test_the_scaled_rise_is_zero_at_an_infinite_shape() -> None:
     # states; the kernel formed `inf / inf` there (found by #1335).
     m = np.array([0.0, 1.0, 7.0, 1e6])
     assert np.array_equal(scaled_rising_array(np.full(4, np.inf), m), np.zeros(4))
+
+
+@pytest.mark.oracle
+def test_the_scaled_rising_table_is_the_elementwise_kernel_bitwise() -> None:
+    # Hoisting gammaln(x) and log x per row reads the same values the
+    # per-element kernel forms, so the table is it bit for bit: across both
+    # routes, the shift below the series, x = inf and m = 0 (issue #1341).
+    rng = np.random.default_rng(1341)
+    shapes = np.concatenate(
+        [10.0 ** rng.uniform(-3, 16, size=200), [1.4616, 9.99, 10.0, 99.9, np.inf]]
+    )
+    counts = np.concatenate([np.arange(300.0), 10.0 ** rng.uniform(-6, 6, size=200)])
+
+    table = scaled_rising_table(shapes, counts)
+
+    want = scaled_rising_array(shapes[:, None], counts[None, :])
+    assert table.shape == (205, 500)
+    assert table.flags.c_contiguous
+    assert np.array_equal(table.view(np.int64), want.view(np.int64))
+    assert np.array_equal(table[-1], np.zeros(500))
+    with pytest.raises(ValueError, match="1-D"):
+        scaled_rising_table(shapes[:, None], counts)
