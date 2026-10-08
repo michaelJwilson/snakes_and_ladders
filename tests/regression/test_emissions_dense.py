@@ -241,3 +241,107 @@ def test_what_it_does_not_score_is_refused() -> None:
         coded_log_emission(NB, Dense(counts.reshape(-1), DRAWS["exposure"]))
     with pytest.raises(ValueError, match="finite and non-negative"):
         log_emission(NB, counts, -DRAWS["exposure"] - 1.0)
+
+
+def _binding(
+    family: object, observations: np.ndarray, covariate: np.ndarray | None
+) -> np.ndarray:
+    """``oxisal.dense_log_emission`` on tables built as #1132's caller built them, over every count."""
+    from sal import oxisal
+    from sal.emissions.bb import log_factorial, trial_tables
+    from sal.emissions.dense import checked_counts
+    from sal.emissions.nb import exposure_table
+
+    def total(
+        fam: NegativeBinomialEmission, y: np.ndarray, c: np.ndarray | None
+    ) -> dict[str, np.ndarray]:
+        counts = checked_counts(y, "count")
+        extent = int(counts.max()) + 1
+        if c is None:
+            grid = torch.arange(extent, dtype=torch.float64)
+            table = fam.log_density(grid).numpy()
+            return {
+                "totals": counts,
+                "total_table": np.ascontiguousarray(table).reshape(-1),
+            }
+        return {
+            "totals": counts,
+            "total_table": np.ascontiguousarray(exposure_table(fam, extent)).reshape(
+                -1
+            ),
+            "exposure": np.ascontiguousarray(c.reshape(-1)),
+            "dispersion": np.ascontiguousarray(fam.dispersion.numpy()),
+            "mean": np.ascontiguousarray(fam.mean.numpy()),
+        }
+
+    def success(
+        fam: BetaBinomialEmission, z: np.ndarray, n: np.ndarray | None
+    ) -> dict[str, np.ndarray]:
+        counts = checked_counts(z, "success count")
+        extent = int(counts.max()) + 1
+        if n is None:
+            table = density_table(fam, extent)
+            return {
+                "successes": counts,
+                "success_table": np.ascontiguousarray(table).reshape(-1),
+            }
+        trials = checked_counts(n, "trial count")
+        trials_extent = int(trials.max()) + 1
+        tables = trial_tables(fam, extent, trials_extent)
+        return {
+            "successes": counts,
+            "success_table": np.ascontiguousarray(tables.success).reshape(-1),
+            "trials": trials,
+            "failure_table": np.ascontiguousarray(tables.failure).reshape(-1),
+            "trial_table": np.ascontiguousarray(tables.trial).reshape(-1),
+            "log_factorial": log_factorial(trials_extent),
+            "log_rate": np.ascontiguousarray(tables.log_rate).reshape(-1),
+        }
+
+    if isinstance(family, NegativeBinomialEmission):
+        shape, arguments = observations.shape, total(family, observations, covariate)
+    elif isinstance(family, BetaBinomialEmission):
+        shape, arguments = observations.shape, success(family, observations, covariate)
+    else:
+        shape = observations.shape[:-1]
+        arguments = {
+            **total(NB, observations[..., 0], covariate[..., 0]),  # type: ignore[index]
+            **success(BB, observations[..., 1], covariate[..., 1]),  # type: ignore[index]
+        }
+    k = family.n_states  # type: ignore[attr-defined]
+    out = np.empty(k * int(np.prod(shape)))
+    oxisal.dense_log_emission(k, True, out, **arguments)
+    return out.reshape(k, *shape)
+
+
+def _binding_cases() -> list[tuple[str, object, np.ndarray, np.ndarray | None]]:
+    pair_obs = np.stack([DRAWS["totals"], DRAWS["successes"]], axis=-1)
+    pair_cov = np.concatenate([DRAWS["exposure"], DRAWS["trials"]], axis=-1)
+    pairs = _pairs()
+    return [
+        ("nb-exposure", NB, DRAWS["totals"], DRAWS["exposure"]),
+        ("bb-trials", BB, DRAWS["successes"], DRAWS["trials"]),
+        ("nb", NB, DRAWS["totals"], None),
+        ("bb", BB, DRAWS["successes"] + 2, None),
+        ("CountPairEmission", pairs[0], pair_obs, pair_cov),
+        ("IndependentCountPair", pairs[1], pair_obs, pair_cov),
+    ]
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize(
+    ("name", "family", "observations", "covariate"),
+    _binding_cases(),
+    ids=[case[0] for case in _binding_cases()],
+)
+def test_the_deprecated_binding_is_the_coded_route_bitwise(
+    name: str, family: object, observations: np.ndarray, covariate: np.ndarray | None
+) -> None:
+    # `oxisal.dense_log_emission`, kept for a caller passing its own tables
+    # (#1340), over tables at every count against the coded route at the
+    # distinct counts: one kernel, bitwise. Both were also pinned against the
+    # pre-fold `dense.log_emission` outputs on these six cases, bitwise.
+    del name  # the case's id
+    got = _binding(family, observations, covariate)
+    want = log_emission(family, observations, covariate)
+    assert np.array_equal(got.view(np.uint64), want.view(np.uint64))

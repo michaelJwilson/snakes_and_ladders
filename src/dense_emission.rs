@@ -1,6 +1,6 @@
 //! The dense count log-emission, state-major, from the families' own tables
-//! (issue #1132), read by `sal.oxisal.coded_log_emission` (issue #1340), the
-//! one Python entry: a dense observation set is its coded form.
+//! (issue #1132), read by `sal.oxisal.coded_log_emission` (issue #1340) and by
+//! `sal.oxisal.dense_log_emission`, its deprecated direct binding.
 //!
 //! `src/coupled.rs` completes the negative binomial's exposure term and the
 //! beta-binomial's trial term per observation, but only inside the sums its
@@ -25,9 +25,12 @@
 //! Plain Rust with no PyO3 types in [`log_emission_into`], so `cargo test`
 //! can link it, per `src/pruning.rs`'s module docs.
 
+use numpy::{PyReadonlyArray1, PyReadwriteArray1};
+use pyo3::exceptions::PyValueError;
+use pyo3::prelude::*;
 use rayon::prelude::*;
 
-use crate::coupled::{CoupledShape, ExposureTerm, TrialTerm};
+use crate::coupled::{borrowed, exposure_term, trial_term, CoupledShape, ExposureTerm, TrialTerm};
 
 /// Observations per tile: 4,096 columns of every state's row.
 const TILE: usize = 4096;
@@ -269,6 +272,104 @@ pub fn log_emission_into(
         }
     });
     Ok(())
+}
+
+/// [`log_emission_into`] as a Python binding, deprecated for one cycle in
+/// favour of `sal.emissions.coded.log_emission` (issue #1340): kept for
+/// callers that pass their own tables. `family_order` is read by neither
+/// order since #1336; both complete the term in one order.
+///
+/// `totals` and `total_table` name the first channel, and `exposure`,
+/// `dispersion` and `mean`, given together, its exposure; `family_order`
+/// says which order that term is completed in. `successes` and
+/// `success_table` name the second, and `trials`, `failure_table`,
+/// `trial_table`, `log_factorial` and `log_rate`, given together, its trial
+/// count, as `class_posteriors` takes them. Every array crosses once,
+/// contiguous and borrowed; the GIL is released for the whole pass.
+///
+/// # Returns
+/// `None`; the scores are written into `out`, `K * N`, state-major.
+///
+/// # Errors
+/// `ValueError` naming the first violated precondition.
+#[pyfunction]
+#[pyo3(signature = (n_states, family_order, out, totals=None, total_table=None, exposure=None, dispersion=None, mean=None, successes=None, success_table=None, trials=None, failure_table=None, trial_table=None, log_factorial=None, log_rate=None))]
+#[allow(clippy::too_many_arguments)]
+pub fn dense_log_emission(
+    py: Python<'_>,
+    n_states: usize,
+    family_order: bool,
+    mut out: PyReadwriteArray1<'_, f64>,
+    totals: Option<PyReadonlyArray1<'_, u32>>,
+    total_table: Option<PyReadonlyArray1<'_, f64>>,
+    exposure: Option<PyReadonlyArray1<'_, f64>>,
+    dispersion: Option<PyReadonlyArray1<'_, f64>>,
+    mean: Option<PyReadonlyArray1<'_, f64>>,
+    successes: Option<PyReadonlyArray1<'_, u32>>,
+    success_table: Option<PyReadonlyArray1<'_, f64>>,
+    trials: Option<PyReadonlyArray1<'_, u32>>,
+    failure_table: Option<PyReadonlyArray1<'_, f64>>,
+    trial_table: Option<PyReadonlyArray1<'_, f64>>,
+    log_factorial: Option<PyReadonlyArray1<'_, f64>>,
+    log_rate: Option<PyReadonlyArray1<'_, f64>>,
+) -> PyResult<()> {
+    let total = match (&totals, &total_table) {
+        (None, None) => None,
+        (Some(counts), Some(table)) => Some(TotalChannel {
+            counts: borrowed(counts, "totals")?,
+            rows: None,
+            table: borrowed(table, "total_table")?,
+            exposure: exposure_term(&exposure, &dispersion, &mean)?,
+            order: if family_order {
+                ExposureOrder::Family
+            } else {
+                ExposureOrder::Tabulated
+            },
+        }),
+        _ => {
+            return Err(PyValueError::new_err(
+                "the first channel takes totals and total_table together",
+            ))
+        }
+    };
+    let second = match (&successes, &success_table) {
+        (None, None) => None,
+        (Some(counts), Some(table)) => Some(SuccessChannel {
+            counts: borrowed(counts, "successes")?,
+            rows: None,
+            table: borrowed(table, "success_table")?,
+            trials: trial_term(
+                &trials,
+                &failure_table,
+                &trial_table,
+                &log_factorial,
+                &log_rate,
+            )?,
+        }),
+        _ => {
+            return Err(PyValueError::new_err(
+                "the second channel takes successes and success_table together",
+            ))
+        }
+    };
+    if total.is_none() && exposure.is_some() {
+        return Err(PyValueError::new_err("an exposure needs the first channel"));
+    }
+    if second.is_none() && trials.is_some() {
+        return Err(PyValueError::new_err(
+            "a trial count needs the second channel",
+        ));
+    }
+    let n = total
+        .as_ref()
+        .map(|channel| channel.counts.len())
+        .or_else(|| second.as_ref().map(|channel| channel.counts.len()))
+        .unwrap_or(0);
+    let out = out
+        .as_slice_mut()
+        .map_err(|_| PyValueError::new_err("out must be C-contiguous"))?;
+    py.detach(|| log_emission_into(n_states, n, total.as_ref(), second.as_ref(), out))
+        .map_err(PyValueError::new_err)
 }
 
 #[cfg(test)]

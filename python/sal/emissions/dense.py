@@ -6,6 +6,9 @@ is :func:`sal.emissions.coded.log_emission` over a
 dense observation set being scored through its coded form. This module keeps
 what that call and its siblings share: :class:`IndependentPair`, the
 independent count pair it scores, and :func:`checked_counts`.
+
+``sal.oxisal.dense_log_emission``, the kernel's direct binding for a caller
+holding its own tables, is deprecated for one cycle in favour of that call.
 """
 
 from __future__ import annotations

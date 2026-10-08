@@ -503,6 +503,25 @@ def coded_log_emission(
     log_factorial: np.ndarray | None = None,
     log_rate: np.ndarray | None = None,
 ) -> None: ...
+
+# Deprecated for one cycle (#1340): use `sal.emissions.coded.log_emission`.
+def dense_log_emission(
+    n_states: int,
+    family_order: bool,
+    out: np.ndarray,
+    totals: np.ndarray | None = None,
+    total_table: np.ndarray | None = None,
+    exposure: np.ndarray | None = None,
+    dispersion: np.ndarray | None = None,
+    mean: np.ndarray | None = None,
+    successes: np.ndarray | None = None,
+    success_table: np.ndarray | None = None,
+    trials: np.ndarray | None = None,
+    failure_table: np.ndarray | None = None,
+    trial_table: np.ndarray | None = None,
+    log_factorial: np.ndarray | None = None,
+    log_rate: np.ndarray | None = None,
+) -> None: ...
 def count_mixture_value_and_gradient(
     log_weight: np.ndarray,
     grad_log_weight: np.ndarray,
