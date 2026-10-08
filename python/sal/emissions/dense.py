@@ -21,14 +21,12 @@ term reads it as unobserved.
 rising factorials and log rates summed in :mod:`sal.emissions.bb`'s order
 (issue #1332), are
 :func:`~sal.emissions.bb.beta_binomial_log_pmf` bit for bit and the family's
-``log_density`` within 1e-14 ``max(|f|, 1)``. The negative binomial's exposure term is completed either in the family's
-order, ``A + r ln(r / t) + y ln(mu c / t)`` (:attr:`Order.FAMILY`, two
-logarithms a score, 2.3 ulp relative at the ci instance of
-``spatio_sequential_counts_covariate``), or as the coupled kernel does,
-``B + y ln c - (y + r) ln t`` (:attr:`Order.TABULATED`, one logarithm a
-score, 262.9 ulp there). Without an exposure the table is the density itself
-and both orders read it. ``order`` has no default: which rounding a caller
-takes is theirs to state.
+``log_density`` within 1e-14 ``max(|f|, 1)``. The negative binomial's
+tabulated scaled rising factorials, completed per observation in
+:mod:`sal.emissions.nb`'s order, are
+:func:`~sal.emissions.nb.negative_binomial_log_pmf` on the same numbers
+(issue #1335). Both :class:`Order` values read that one table and that one
+order; ``order`` is kept as the callers' stated argument.
 
 **No derivative is taken.** The result is a NumPy array, and nothing here
 tracks a gradient (root ``CLAUDE.md``). A caller differentiating the emission
@@ -51,7 +49,7 @@ from sal.emissions.counts import (
     CountPairEmission,
     NegativeBinomialEmission,
 )
-from sal.emissions.nb import count_log_factor, exposure_table
+from sal.emissions.nb import exposure_table
 
 #: The largest count a ``uint32`` carries; a larger one would wrap on the cast.
 _COUNT_LIMIT = 2**32 - 1
@@ -60,8 +58,8 @@ _COUNT_LIMIT = 2**32 - 1
 class Order(StrEnum):
     """The order the negative binomial's exposure term is completed in.
 
-    ``FAMILY`` is ``log_density``'s own, ``TABULATED`` the coupled kernel's;
-    the module docstring states what each costs and how far each rounds.
+    Since issue #1335 both read one table in :mod:`sal.emissions.nb`'s order
+    and score bit for bit alike; the argument is kept for its callers.
     """
 
     FAMILY = "family"
@@ -142,15 +140,12 @@ def _total_arguments(
     extent = _extent(counts)
     if exposure is None:
         return {"totals": counts, "total_table": _density_table(family, extent)}
-    grid = torch.arange(extent, dtype=torch.float64)
-    table = (
-        count_log_factor(family, grid)
-        if order is Order.FAMILY
-        else exposure_table(family, extent)
-    )
+    # One table and one order on every route (issue #1335); ``order`` is
+    # read by neither.
+    table = exposure_table(family, extent)
     return {
         "totals": counts,
-        "total_table": np.ascontiguousarray(table.numpy()).reshape(-1),
+        "total_table": np.ascontiguousarray(table).reshape(-1),
         "exposure": np.ascontiguousarray(exposure, dtype=np.float64),
         "dispersion": np.ascontiguousarray(family.dispersion.numpy()),
         "mean": np.ascontiguousarray(family.mean.numpy()),

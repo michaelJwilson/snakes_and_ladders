@@ -45,15 +45,13 @@
 //! Under a per-observation exposure `c` the total's density is a function of
 //! the count and a real number, and a table by count and distinct exposure has
 //! as many rows as there are observations. It splits instead:
-//! `log p(y | m, k, c) = A[y, m, k] + r ln(r / t) + y ln(mu c / t)` with
-//! `t = r + mu c`, `A` the `lgamma` terms the caller tabulates by count through
-//! the family, and the two exposure terms computed here in the pass that
-//! already sums the member scores. The kernel gains `ln` and no special
-//! function, and nothing of size `S x V x M x K` is built. The terms are the
-//! family's own, in its order: written as `y ln c - (y + r) ln t` with
-//! `r ln r + y ln mu` moved into `A`, one `ln` per score fewer, the per-score
-//! difference from the family was 263 ulp at the ci instance, the cancellation
-//! of terms near `y ln mu`; in the family's order it is 2.3 ulp.
+//! `log p(y | m, k, c) = ((T[y, m, k] + y ln(lambda / (1 + q))) - r ln_1p(q))`
+//! with `lambda = mu c`, `q = lambda / r`, `T = S(r, y) - lgamma(y + 1)` the
+//! scaled rising factorial the caller tabulates by count, and the two exposure
+//! terms computed here in the pass that already sums the member scores. The
+//! kernel gains `ln` and `ln_1p` and no special function, and nothing of size
+//! `S x V x M x K` is built. The order is `sal.emissions.nb`'s, the same on
+//! every route; it forms no term of size `r ln r` to cancel (issue #1335).
 //!
 //! **A beta-binomial trial count may be factored too** (issue #1064). Under a
 //! per-observation trial count `n` the second channel's density splits into
@@ -151,11 +149,14 @@ pub struct EmissionTables<'a> {
 
 /// The negative binomial's exposure, factored out of the first channel's table.
 ///
-/// `log p(y | m, k, c) = B[y, m, k] + y ln c - (y + r) ln t`, with
-/// `t = r_mk + mu_mk c` and `B[y, m, k] = lgamma(y + r) - lgamma(r) -
-/// lgamma(y + 1) + r ln r + y ln mu` the first channel's table. A zero exposure marks the count
-/// unobserved and it scores zero under every class and state, as the family
-/// scores it.
+/// `log p(y | m, k, c) = ((T[y, m, k] + y ln(lambda / (1 + q))) - D)`, summed
+/// in that order, with `lambda = mu_mk c`, `q = lambda / r_mk`, `D = r ln_1p(q)`
+/// (`D = lambda` where `q` is zero, the Poisson at `r = inf`) and
+/// `T[y, m, k] = S(r, y) - lgamma(y + 1)` the first channel's table, `S` the
+/// scaled log rising factorial (`sal.emissions.nb`, issue #1335): no term of
+/// size `r ln r` or `y ln r` is formed and cancelled. A zero exposure marks
+/// the count unobserved and it scores zero under every class and state, as
+/// the family scores it.
 #[derive(Clone, Copy)]
 pub struct ExposureTerm<'a> {
     /// `S * V` exposures, position-major, each non-negative.
@@ -166,13 +167,25 @@ pub struct ExposureTerm<'a> {
     pub mean: &'a [f64],
 }
 
+/// One score of [`ExposureTerm`], in its order: `sal.emissions.nb`'s
+/// `negative_binomial_log_pmf` on the same numbers.
+#[inline]
+pub(crate) fn exposure_score(table: f64, y: f64, r: f64, rate: f64) -> f64 {
+    let q = rate / r;
+    let decay = if q == 0.0 { rate } else { r * q.ln_1p() };
+    let rated = if y == 0.0 {
+        0.0
+    } else {
+        y * (rate / (1.0 + q)).ln()
+    };
+    (table + rated) - decay
+}
+
 impl ExposureTerm<'_> {
     /// The first channel's score at one observation, for every state of class `m`.
     ///
-    /// One logarithm per class and state, `ln t`, and `ln c` once per call:
-    /// the form chosen for speed over the family's order of operations, which
-    /// costs two logarithms and two divisions per score and agrees to fewer
-    /// ulp (issue #1064).
+    /// One `ln`, one `ln_1p` and two divisions per class and state, in the
+    /// order [`ExposureTerm`] states (issue #1335).
     #[inline]
     pub(crate) fn score_into(
         &self,
@@ -187,60 +200,14 @@ impl ExposureTerm<'_> {
             return;
         }
         let y = f64::from(count);
-        let y_log_c = y * c.ln();
-        // Pre-sliced rows, walked in three passes: `t`, `ln t`, the score. It
-        // is the same arithmetic in the same order, so bitwise to indexing
-        // `from + k`; the stress kernel's E step measured 0.88 s against
-        // 1.07 s indexed (issue #1064).
         let n = out.len();
         let (dispersion, mean, table) = (
             &self.dispersion[from..][..n],
             &self.mean[from..][..n],
             &table[..n],
         );
-        for ((cell, &r), &mu) in out.iter_mut().zip(dispersion).zip(mean) {
-            *cell = r + c * mu;
-        }
-        for cell in out.iter_mut() {
-            *cell = cell.ln();
-        }
-        for ((cell, &r), &b) in out.iter_mut().zip(dispersion).zip(table) {
-            *cell = b + y_log_c - (y + r) * *cell;
-        }
-    }
-
-    /// The same score in the family's order of operations, `table` the row of `A`.
-    ///
-    /// `A[y] + r ln(r / t) + y ln(mu c / t)`, `t = r + mu c`, `A[y] = lgamma(y +
-    /// r) - lgamma(r) - lgamma(y + 1)` (`sal.emissions.nb.count_log_factor`):
-    /// the operations of `NegativeBinomialEmission.log_density` on the same
-    /// numbers, so each score differs from it by the rounding of the two `ln`
-    /// alone. Two logarithms and two divisions per score where
-    /// [`Self::score_into`] takes one logarithm (issue #1132).
-    #[inline]
-    pub(crate) fn score_family_into(
-        &self,
-        table: &[f64],
-        count: u32,
-        c: f64,
-        from: usize,
-        out: &mut [f64],
-    ) {
-        if c == 0.0 {
-            out.fill(0.0);
-            return;
-        }
-        let y = f64::from(count);
-        let n = out.len();
-        let (dispersion, mean, table) = (
-            &self.dispersion[from..][..n],
-            &self.mean[from..][..n],
-            &table[..n],
-        );
-        for (((cell, &r), &mu), &a) in out.iter_mut().zip(dispersion).zip(mean).zip(table) {
-            let rate = c * mu;
-            let t = r + rate;
-            *cell = (a + r * (r / t).ln()) + y * (rate / t).ln();
+        for (((cell, &r), &mu), &t) in out.iter_mut().zip(dispersion).zip(mean).zip(table) {
+            *cell = exposure_score(t, y, r, c * mu);
         }
     }
 
@@ -1517,7 +1484,7 @@ mod tests {
         assert!(refused.unwrap_err().contains("past the table's extent"));
     }
 
-    /// `A[y] + r ln(r / t) + y ln(mu c / t)` written out for one class and
+    /// `(T[y] + y ln(lambda / (1 + q))) - r ln_1p(q)` written out for one class and
     /// two states, against the kernel's accumulation of it.
     #[test]
     fn an_exposure_term_is_added_to_the_count_table_and_zero_exposure_scores_zero() {
@@ -1544,7 +1511,9 @@ mod tests {
 
         let score = |b: f64, y: f64, c: f64| {
             let r = dispersion[0];
-            b + y * c.ln() - (y + r) * (r + mean[0] * c).ln()
+            let rate = mean[0] * c;
+            let q = rate / r;
+            (b + y * (rate / (1.0 + q)).ln()) - r * q.ln_1p()
         };
         // Vertex 0: count 0 at exposure 0.5, then count 1 at exposure 0,
         // which is unobserved and scores zero.
