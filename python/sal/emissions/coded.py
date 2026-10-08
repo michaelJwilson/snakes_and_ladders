@@ -38,9 +38,16 @@ from sal.emissions.counts import BetaBinomialEmission, NegativeBinomialEmission
 from sal.emissions.dense import IndependentPair, Order, checked_counts
 from sal.emissions.dense import log_emission as dense_log_emission
 from sal.emissions.nb import count_log_factor
-from sal.emissions.rising import scaled_rising_table
+from sal.emissions.rising import digamma_rising, scaled_rising_table
 
-__all__ = ["Coded", "Dense", "encode", "log_emission", "log_emission_sum"]
+__all__ = [
+    "Coded",
+    "Dense",
+    "encode",
+    "log_emission",
+    "log_emission_partials",
+    "log_emission_sum",
+]
 
 Family = NegativeBinomialEmission | BetaBinomialEmission | IndependentPair
 
@@ -380,3 +387,129 @@ def log_emission_sum(
         np.ascontiguousarray(index),
         None if w is None else w.reshape(-1),
     )
+
+
+def _gathered(
+    per_code: NDArray[np.float64], inverse: NDArray[np.int32]
+) -> NDArray[np.float64]:
+    """``(K, U)`` per code to ``(K, n)`` per observation; an unobserved one is 0."""
+    out = per_code[:, np.maximum(inverse, 0)]
+    out[:, inverse < 0] = 0.0
+    return np.ascontiguousarray(out)
+
+
+def _nb_partials(
+    family: NegativeBinomialEmission,
+    codes: NDArray[np.uint32],
+    inverse: NDArray[np.int32],
+    exposure: NDArray[np.float64] | None,
+) -> dict[str, NDArray[np.float64]]:
+    """``d/dr`` and ``d/dmu`` of the negative binomial's log pmf, ``(K, n)`` each.
+
+    With ``lam = c mu`` and ``q = lam / r``: ``d/dr = (psi(r + y) - psi(r)) -
+    log1p(q) + (lam - y) / (r + lam)`` and ``d/dmu = r (y - lam) / (mu (r +
+    lam))``; at ``r = inf`` (the Poisson) ``0`` and ``y / mu - c``.
+    """
+    r = family.dispersion.detach().numpy()[:, None]
+    mu = family.mean.detach().numpy()[:, None]
+    y_code = codes.astype(np.float64)[None, :]
+    finite = np.isfinite(r)
+    rising = digamma_rising(np.where(finite, r, 1.0), y_code)
+    y = _gathered(np.broadcast_to(y_code, rising.shape).copy(), inverse)
+    rising = _gathered(rising, inverse)
+    c = np.ones(inverse.size) if exposure is None else exposure
+    lam = mu * c[None, :]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        dr = rising - np.log1p(lam / r) + (lam - y) / (r + lam)
+        dmu = r * (y - lam) / (mu * (r + lam))
+    dr = np.where(finite, dr, 0.0)
+    dmu = np.where(finite, dmu, y / mu - c[None, :])
+    seen = (inverse >= 0) & (c != 0.0)
+    return {
+        "dispersion": np.ascontiguousarray(np.where(seen, dr, 0.0)),
+        "mean": np.ascontiguousarray(np.where(seen, dmu, 0.0)),
+    }
+
+
+def _bb_partials(
+    family: BetaBinomialEmission,
+    codes: NDArray[np.uint32],
+    inverse: NDArray[np.int32],
+    trials: NDArray[np.float64] | None,
+) -> dict[str, NDArray[np.float64]]:
+    """The beta-binomial's partials: ``alpha`` and ``beta``, or ``rate`` and ``concentration``.
+
+    ``d/da = R(a, z) - R(a + b, n)`` and ``d/db = R(b, n - z) - R(a + b, n)``,
+    ``R`` :func:`~sal.emissions.rising.digamma_rising`; with ``a = tau p``,
+    ``d/dp = tau (d/da - d/db)`` and ``d/dtau = p d/da + (1 - p) d/db``. At
+    ``tau = inf`` (the binomial) ``z / p - (n - z) / (1 - p)`` and ``0``. An
+    unobserved observation, or one past its trials, has 0.
+    """
+    a = family.alpha.detach().numpy()[:, None]
+    b = family.beta.detach().numpy()[:, None]
+    z = _gathered(
+        np.broadcast_to(
+            codes.astype(np.float64)[None, :], (a.shape[0], codes.size)
+        ).copy(),
+        inverse,
+    )
+    n = (
+        np.broadcast_to(family.trials.detach().numpy()[:, None], z.shape)
+        if trials is None
+        else np.broadcast_to(np.asarray(trials, dtype=np.float64)[None, :], z.shape)
+    )
+    inside = (inverse >= 0) & (z <= n) & (n > 0)
+    zz, nn = np.where(inside, z, 0.0), np.where(inside, n, 0.0)
+    limit = np.isinf(a + b)
+    safe_a, safe_b = np.where(limit, 1.0, a), np.where(limit, 1.0, b)
+    held = digamma_rising(safe_a + safe_b, nn)
+    da = digamma_rising(safe_a, zz) - held
+    db = digamma_rising(safe_b, nn - zz) - held
+    rate = getattr(family, "rate", None)
+    if rate is None:
+        return {
+            "alpha": np.ascontiguousarray(np.where(inside, da, 0.0)),
+            "beta": np.ascontiguousarray(np.where(inside, db, 0.0)),
+        }
+    p = rate.detach().numpy()[:, None]
+    tau = a + b
+    with np.errstate(invalid="ignore"):
+        dp = np.where(limit, zz / p - (nn - zz) / (1.0 - p), tau * (da - db))
+        dtau = np.where(limit, 0.0, p * da + (1.0 - p) * db)
+    return {
+        "rate": np.ascontiguousarray(np.where(inside, dp, 0.0)),
+        "concentration": np.ascontiguousarray(np.where(inside, dtau, 0.0)),
+    }
+
+
+def log_emission_partials(
+    family: Family, coded: Coded
+) -> dict[str, NDArray[np.float64]]:
+    """Each parameter's partial of every observation's log-density, ``{parameter: (K, n)}``.
+
+    The negative binomial gives ``dispersion`` and ``mean``; the
+    beta-binomial ``alpha`` and ``beta``, or ``rate`` and ``concentration``
+    for :class:`~sal.emissions.RateConcentrationBetaBinomialEmission`; the
+    independent pair both channels'. Through
+    :func:`~sal.emissions.rising.digamma_rising`, in NumPy: an unobserved
+    observation, or successes past their trials, have 0. ``r = inf`` and
+    ``tau = inf`` take their limits' partials, and the parameter that is
+    infinite has 0.
+    """
+    cov = coded.covariate
+    if isinstance(family, NegativeBinomialEmission):
+        return _nb_partials(family, coded.counts, coded.inverse, cov)
+    if isinstance(family, BetaBinomialEmission):
+        return _bb_partials(family, coded.counts, coded.inverse, cov)
+    total, successes = _pair_channels(family)
+    return {
+        **_nb_partials(
+            total, coded.counts[:, 0], coded.inverse, None if cov is None else cov[:, 0]
+        ),
+        **_bb_partials(
+            successes,
+            coded.counts[:, 1],
+            coded.inverse,
+            None if cov is None else cov[:, 1],
+        ),
+    }

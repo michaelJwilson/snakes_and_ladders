@@ -10,12 +10,15 @@ NumPy pmfs evaluated per observation (#1334, #1336).
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from functools import partial
 from typing import Any
 
 import numpy as np
 import pytest
 import scipy.sparse
 import torch
+from numpy.typing import NDArray
 from sal.emissions import (
     BetaBinomialEmission,
     CountPairEmission,
@@ -300,3 +303,192 @@ def test_infinite_concentration_is_the_binomial_on_every_route() -> None:
         log_emission(binomial, Dense(plain)),
     ):
         assert np.allclose(got[0], declared, rtol=1e-13, atol=1e-13)
+
+
+#: The partials against mpmath, over a scale: the summed magnitudes of the
+#: terms the partial is a difference of, so a cancelled partial (``tau`` at
+#: 1e16) is judged against what float64 can resolve in its terms.
+_PARTIAL_TOLERANCE = 1e-12
+
+#: Central differences, Richardson-extrapolated over steps ``h`` and ``2h``
+#: (relative), and the bound on ``|fd - partial| * x / max(|f|, 1)``.
+#: Truncation is ``O(h^4)``; rounding is the score's own floor (1e-13) times
+#: ``(4 / h + 1 / (2h)) / 3``, 1.5e-9 at ``h = 1e-4``. A plain central
+#: difference measured 2.0e-8 at 1e-4 and 1.6e-8 at 3e-5 (truncation, on the
+#: rate at p = 0.2), which is why it is extrapolated.
+_STEP, _FD_TOLERANCE = 1e-4, 1e-8
+
+
+def _mp_partial(log_pmf: Callable[[Any], Any], x0: float) -> float:
+    """``d log f / dx`` at ``x0`` by mpmath, as ``d/dt f(x0 (1 + t)) / x0`` at 100 digits."""
+    import mpmath  # type: ignore[import-untyped]
+
+    with mpmath.workdps(100):
+        x = mpmath.mpf(x0)
+        return float(mpmath.diff(lambda t: log_pmf(x * (1 + t)), 0) / x)
+
+
+@pytest.mark.oracle
+def test_negative_binomial_partials_against_mpmath() -> None:
+    import mpmath
+    from sal.emissions.coded import log_emission_partials
+
+    counts = np.array([0.0, 7.0, 100.0, 3.0])
+    exposure = np.array([0.7, 1.3, 2.0, 0.0])
+    r_values, mu_values = [0.5, 10.0, 1e4], [3.0, 50.0, 400.0]
+    family = NegativeBinomialEmission(r_values, mu_values)
+    got = log_emission_partials(family, encode(counts, exposure))
+
+    def nb(y: float, r: Any, mu: Any, c: float) -> Any:
+        lam = mu * c
+        return (
+            mpmath.loggamma(y + r)
+            - mpmath.loggamma(r)
+            - mpmath.loggamma(y + 1)
+            + r * mpmath.log(r / (r + lam))
+            + y * mpmath.log(lam / (r + lam))
+        )
+
+    for k, (r, mu) in enumerate(zip(r_values, mu_values, strict=True)):
+        for i, (y, c) in enumerate(zip(counts, exposure, strict=True)):
+            if c == 0.0:
+                assert got["dispersion"][k, i] == got["mean"][k, i] == 0.0
+                continue
+            want_r = _mp_partial(partial(nb, y, mu=mu, c=c), r)
+            want_mu = _mp_partial(partial(nb, y, r, c=c), mu)
+            lam = mu * c
+            scale_r = abs(want_r) + abs(np.log1p(lam / r)) + 1.0 + y / r
+            scale_mu = y / mu + c * (r + y) / (r + lam)
+            assert abs(got["dispersion"][k, i] - want_r) <= _PARTIAL_TOLERANCE * scale_r
+            assert abs(got["mean"][k, i] - want_mu) <= _PARTIAL_TOLERANCE * scale_mu
+
+
+@pytest.mark.oracle
+def test_beta_binomial_partials_against_mpmath() -> None:
+    """``tau`` from 10 to 1e16, ``n <= 100``: #1332's bounds."""
+    import mpmath
+    from sal.emissions.coded import log_emission_partials
+    from sal.emissions.rising import digamma_rising
+
+    successes = np.array([0.0, 13.0, 40.0, 57.0, 100.0])
+    trials = np.array([40.0, 40.0, 40.0, 100.0, 100.0])
+    rate, taus = [0.3, 0.6, 0.45], [10.0, 1e4, 1e16]
+    family = RateConcentrationBetaBinomialEmission([40.0] * 3, rate, taus)
+    got = log_emission_partials(family, encode(successes, trials))
+    shapes = BetaBinomialEmission([40.0] * 2, [3.0, 4e3], [7.0, 6e3])
+    by_shape = log_emission_partials(shapes, encode(successes, trials))
+
+    def bb(z: float, n: float, a: Any, b: Any) -> Any:
+        return (
+            mpmath.loggamma(n + 1)
+            - mpmath.loggamma(z + 1)
+            - mpmath.loggamma(n - z + 1)
+            + mpmath.loggamma(z + a)
+            + mpmath.loggamma(n - z + b)
+            - mpmath.loggamma(n + a + b)
+            - mpmath.loggamma(a)
+            - mpmath.loggamma(b)
+            + mpmath.loggamma(a + b)
+        )
+
+    def by_rate(z: float, n: float, p: Any, tau: Any) -> Any:
+        return bb(z, n, tau * p, tau * (1 - p))
+
+    for i, (z, n) in enumerate(zip(successes, trials, strict=True)):
+        for k, (p, tau) in enumerate(zip(rate, taus, strict=True)):
+            if z > n:
+                assert got["rate"][k, i] == got["concentration"][k, i] == 0.0
+                continue
+            a, b = tau * p, tau * (1 - p)
+            terms = (
+                abs(digamma_rising(a, z))
+                + abs(digamma_rising(b, n - z))
+                + 2 * abs(digamma_rising(a + b, n))
+            )
+            want_p = _mp_partial(partial(by_rate, z, n, tau=tau), p)
+            want_tau = _mp_partial(partial(by_rate, z, n, p), tau)
+            scale = max(float(tau * terms), abs(want_p))
+            assert abs(got["rate"][k, i] - want_p) <= _PARTIAL_TOLERANCE * scale
+            assert (
+                abs(got["concentration"][k, i] - want_tau) <= _PARTIAL_TOLERANCE * terms
+            )
+        for k, (a, b) in enumerate([(3.0, 7.0), (4e3, 6e3)]):
+            if z > n:
+                continue
+            terms = (
+                abs(digamma_rising(a, z))
+                + abs(digamma_rising(b, n - z))
+                + abs(digamma_rising(a + b, n))
+            )
+            for name, want in (
+                ("alpha", _mp_partial(partial(bb, z, n, b=b), a)),
+                ("beta", _mp_partial(partial(bb, z, n, a), b)),
+            ):
+                assert abs(by_shape[name][k, i] - want) <= _PARTIAL_TOLERANCE * terms
+
+
+@pytest.mark.oracle
+def test_partials_at_the_limits_and_the_pair() -> None:
+    """``r = inf`` and ``tau = inf`` take the Poisson's and the binomial's partials; a pair is its channels'."""
+    from sal.emissions.coded import log_emission_partials
+
+    y, c = np.array([0.0, 4.0, 9.0]), np.array([1.0, 0.5, 2.0])
+    poisson = log_emission_partials(
+        NegativeBinomialEmission([np.inf], [6.0]), encode(y, c)
+    )
+    assert (poisson["dispersion"] == 0.0).all()
+    assert np.allclose(poisson["mean"][0], y / 6.0 - c, rtol=1e-15, atol=0.0)
+    z, n = np.array([0.0, 3.0, 10.0]), np.array([10.0, 10.0, 10.0])
+    binomial = RateConcentrationBetaBinomialEmission([10.0], [0.3], [np.inf])
+    limit = log_emission_partials(binomial, encode(z, n))
+    assert (limit["concentration"] == 0.0).all()
+    assert np.allclose(limit["rate"][0], z / 0.3 - (n - z) / 0.7, rtol=1e-15, atol=0.0)
+    pair_counts = np.stack([DRAWS["totals"], DRAWS["successes"]], axis=1)
+    pair_cov = np.stack([DRAWS["exposure"], DRAWS["trials"]], axis=1)
+    pair = log_emission_partials(PAIR, encode(pair_counts, pair_cov))
+    total = log_emission_partials(NB, encode(DRAWS["totals"], DRAWS["exposure"]))
+    assert set(pair) == {"dispersion", "mean", "alpha", "beta"}
+    seen = DRAWS["exposure"] != 0.0
+    for name in ("dispersion", "mean"):
+        assert np.array_equal(pair[name][:, seen], total[name][:, seen])
+
+
+@pytest.mark.analytic
+@pytest.mark.parametrize("name", ["nb", "bb", "rate_concentration"])
+def test_partials_against_central_differences(name: str) -> None:
+    from sal.emissions.coded import Family, log_emission_partials
+
+    values: dict[str, list[float]]
+    build: Callable[[dict[str, list[float]]], Family]
+    if name == "nb":
+        counts, cov = DRAWS["totals"][:500], DRAWS["exposure"][:500]
+        values = {"dispersion": [4.0, 7.0, 12.0], "mean": [20.0, 80.0, 200.0]}
+        build = lambda v: NegativeBinomialEmission(v["dispersion"], v["mean"])  # noqa: E731
+    elif name == "bb":
+        counts, cov = DRAWS["successes"][:500], DRAWS["trials"][:500]
+        values = {"alpha": [2.4, 7.0, 19.5], "beta": [9.6, 7.0, 10.5]}
+        build = lambda v: BetaBinomialEmission([40.0] * 3, v["alpha"], v["beta"])  # noqa: E731
+    else:
+        counts, cov = DRAWS["successes"][:500], DRAWS["trials"][:500]
+        values = {"rate": [0.2, 0.5, 0.65], "concentration": [12.0, 14.0, 3e3]}
+        build = lambda v: RateConcentrationBetaBinomialEmission(  # noqa: E731
+            [40.0] * 3, v["rate"], v["concentration"]
+        )
+    coded = encode(counts, cov)
+    got = log_emission_partials(build(values), coded)
+    base = log_emission(build(values), coded)
+    finite = np.isfinite(base)
+    for parameter, given in values.items():
+        x = np.asarray(given)
+
+        def central(
+            h: float, x: NDArray[np.float64] = x, name: str = parameter
+        ) -> NDArray[np.float64]:
+            up = log_emission(build({**values, name: list(x * (1 + h))}), coded)
+            down = log_emission(build({**values, name: list(x * (1 - h))}), coded)
+            with np.errstate(invalid="ignore"):
+                return (up - down) / (2 * h * x[:, None])
+
+        fd = (4 * central(_STEP) - central(2 * _STEP)) / 3
+        error = np.abs(fd - got[parameter]) * x[:, None] / np.maximum(np.abs(base), 1.0)
+        assert error[finite].max() <= _FD_TOLERANCE, parameter
