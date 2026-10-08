@@ -3332,6 +3332,19 @@ pinned bitwise to the NumPy `merge_labels` and to a brute-force greedy on
 rounds, NumPy oracle 148 ms. Pinned in
 `tests/regression/sample/test_anneal_polish.py`.
 
+**The tuned anneal against known ground states**
+([#1378](https://github.com/michaelJwilson/snakes_and_ladders/issues/1378),
+Part A). At x1, x4 and x16 alpha-expansion+ICM's site visits, 32 seeds: exact
+on every zero-field lattice to 4,096 sites and on the 18-site glass at x16; in
+a field (q = 2 cut, q = 3 and 4 MIP) 0.00 exact-hit from 576 sites, median
+gap 0.29% to 1.29% at x16, where alpha-expansion+ICM is exact at x1 and
+restart-ICM 2.90% to 10.41% off; the eleven misses are #1391. On a
+3,000-site hex workload, q = 4, where TRW-S's decode meets its bound, the
+anneal at x16 is 0.83 nats off, alpha-expansion 0.96 in 8 ms, Glauber at
+4,000 sweeps 0.31 in 1.01 s, heat-bath Wolff alone 917.5 in 0.64 s.
+[`docs/experiments/029-the-tuned-potts-anneal-against-known-ground-states.md`](docs/experiments/029-the-tuned-potts-anneal-against-known-ground-states.md);
+pinned at 12 x 12, q = 2 in `tests/regression/qa/test_known_ground_states.py`.
+
 ## Milestone 2.0 — RL Definition
 
 **Landed as `app:rl` in the textbook**
