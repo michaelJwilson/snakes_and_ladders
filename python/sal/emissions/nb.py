@@ -1,78 +1,116 @@
-"""The negative binomial's exposure, factored out of its density (issue #1064).
+"""The negative binomial from scaled rising factorials, one construction on every route (issues #1064, #1335).
 
-Under a per-observation exposure ``c`` the density of
-:class:`~sal.emissions.counts.NegativeBinomialEmission` is
+Under a rate ``lambda = mu c`` --- the mean times a per-observation exposure
+``c``, ``c = 1`` without one --- the negative binomial's log pmf is
 
-    ``log p(y | k, c) = A_k(y) + r_k log(r_k / t) + y log(mu_k c / t)``,
-    ``t = r_k + mu_k c``, ``A_k(y) = lgamma(y + r_k) - lgamma(r_k) - lgamma(y + 1)``.
+    ``log p(y | r, lambda) = ((T(r, y) + y log(lambda / (1 + q))) - D)``,
+    ``T(r, y) = S(r, y) - lgamma(y + 1)``, ``q = lambda / r``,
+    ``D = r log1p(q)``, and ``D = lambda`` where ``q`` is ``0``,
 
-``A`` is a function of the count alone, so a caller scoring many exposures
-tabulates it once by count and forms the exposure terms per observation, which
-need logarithms and no ``lgamma``. A table by count *and* distinct exposure
-would instead have as many rows as there are observations.
+summed in that order, with ``S(r, y) = lgamma(r + y) - lgamma(r) - y log r``
+the scaled log rising factorial,
+:func:`~sal.emissions.rising.scaled_rising_array`. It is the textbook
+``lgamma(y + r) - lgamma(r) - lgamma(y + 1) + r log(r / t) + y log(lambda /
+t)``, ``t = r + lambda``, with the rising factorial's ``y log r`` collected
+into the ``log`` of one rounded quotient, ``r lambda / t``, and ``r log(r /
+t)`` written as ``-r log1p(q)``: no term of size ``r log r`` or ``y log r``
+is formed and cancelled, so ``S`` goes to ``0`` as ``r`` grows and the pmf to
+the Poisson's, which it is at ``r = inf``. ``T`` is a function of the count
+alone, so a caller scoring many exposures tabulates it once by count
+(:func:`count_log_factor`, :func:`exposure_table`) and completes the rest per
+observation: one ``log``, one ``log1p`` and two divisions a score, in the same
+order in ``src/coupled.rs`` and ``src/dense_emission.rs``. The tables summed in
+that order are :func:`negative_binomial_log_pmf` bit for bit. The torch
+:meth:`~sal.emissions.counts.NegativeBinomialEmission.log_density` keeps its
+own arithmetic and is held to a declared tolerance.
 """
 
 from __future__ import annotations
 
+import numpy as np
 import torch
+from numpy.typing import ArrayLike, NDArray
+from scipy.special import gammaln
 
-from sal.emissions.counts import NegativeBinomialEmission, lgamma_shifted
+from sal.emissions.counts import NegativeBinomialEmission
+from sal.emissions.rising import scaled_rising_array
+
+
+def _scaled_rising(
+    r: NDArray[np.float64], y: NDArray[np.float64]
+) -> NDArray[np.float64]:
+    """``S(r, y)``, and ``0`` at ``r = inf``: ``scaled_rising_array`` returns NaN there for ``y > 0``."""
+    with np.errstate(invalid="ignore"):
+        out: NDArray[np.float64] = np.where(np.isinf(r), 0.0, scaled_rising_array(r, y))
+    return out
 
 
 def count_log_factor(
-    family: NegativeBinomialEmission, observations: torch.Tensor
-) -> torch.Tensor:
-    """``A_k(y)``, the part of ``log_density`` that no exposure reaches.
-
-    These are :meth:`~sal.emissions.counts.NegativeBinomialEmission.log_density`'s
-    first three terms, in its order, so a caller completing them in that order
-    reproduces it to the rounding of its logarithm.
+    family: NegativeBinomialEmission, observations: ArrayLike | torch.Tensor
+) -> NDArray[np.float64]:
+    """``T_k(y) = S(r_k, y) - lgamma(y + 1)``, the part of the pmf that no exposure reaches.
 
     Parameters
     ----------
     family : NegativeBinomialEmission
         The family whose dispersions ``r`` enter.
-    observations : torch.Tensor
+    observations : ArrayLike | torch.Tensor
         Counts, any shape.
 
     Returns
     -------
-    torch.Tensor
+    np.ndarray
         Shape ``(..., n_states)``.
     """
-    counts = observations.unsqueeze(-1).to(family.mean.dtype)
-    return (
-        lgamma_shifted(counts, family.dispersion)
-        - torch.lgamma(family.dispersion)
-        - torch.lgamma(counts + 1.0)
+    counts = np.asarray(observations, dtype=np.float64)[..., None]
+    dispersion = family.dispersion.detach().numpy()
+    out: NDArray[np.float64] = _scaled_rising(dispersion, counts) - gammaln(
+        counts + 1.0
     )
+    return out
 
 
-def exposure_table(family: NegativeBinomialEmission, extent: int) -> torch.Tensor:
-    """``B_k(y) = A_k(y) + r_k log r_k + y log mu_k`` for every count ``y < extent``.
+def exposure_table(
+    family: NegativeBinomialEmission, extent: int
+) -> NDArray[np.float64]:
+    """:func:`count_log_factor` at every count ``y < extent``, ``(extent, n_states)``.
 
-    The exposure-free terms of ``B_k(y) + y log c - (y + r_k) log t``, the form
-    the Rust coupled kernel completes per observation with one logarithm per
-    score (``src/coupled.rs``). Moving ``r log r + y log mu`` into the table
-    saves that logarithm and costs the cancellation of ``y log mu`` against
-    ``-y log t``: 262.9 ulp relative to ``log_density`` at the ci instance of
-    ``spatio_sequential_counts_covariate``, against 2.3 in the family's order.
+    The table the Rust kernels complete per observation in the module's
+    order (``src/coupled.rs``, ``src/dense_emission.rs``).
+    """
+    return count_log_factor(family, np.arange(extent, dtype=np.float64))
+
+
+def negative_binomial_log_pmf(
+    counts: ArrayLike, dispersion: ArrayLike, rate: ArrayLike
+) -> NDArray[np.float64]:
+    """The negative binomial's log pmf, summed in the module's order; broadcasts.
+
+    The negative binomial on NumPy arrays (issue #1335), mean ``rate`` and
+    variance ``rate + rate**2 / dispersion``; ``dispersion = inf`` is the
+    Poisson. A count that is not a non-negative integer is not checked.
 
     Parameters
     ----------
-    family : NegativeBinomialEmission
-        The family tabulated.
-    extent : int
-        One past the largest count tabulated.
+    counts : ArrayLike
+        ``y``, non-negative integers.
+    dispersion : ArrayLike
+        ``r``, positive, ``inf`` allowed.
+    rate : ArrayLike
+        ``lambda = mu c``, non-negative.
 
     Returns
     -------
-    torch.Tensor
-        Shape ``(extent, n_states)``, row ``y`` the count ``y``.
+    np.ndarray
+        The broadcast shape of the three inputs.
     """
-    counts = torch.arange(extent, dtype=torch.float64)
-    return (
-        count_log_factor(family, counts)
-        + family.dispersion * torch.log(family.dispersion)
-        + counts.unsqueeze(-1) * torch.log(family.mean)
+    y, r, rate_ = np.broadcast_arrays(
+        *(np.asarray(v, dtype=np.float64) for v in (counts, dispersion, rate))
     )
+    with np.errstate(divide="ignore", invalid="ignore"):
+        q = rate_ / r
+        decay = np.where(q == 0.0, rate_, r * np.log1p(q))
+        rated = np.where(y == 0.0, 0.0, y * np.log(rate_ / (1.0 + q)))
+    table = _scaled_rising(r, y) - gammaln(y + 1.0)
+    out: NDArray[np.float64] = (table + rated) - decay
+    return out

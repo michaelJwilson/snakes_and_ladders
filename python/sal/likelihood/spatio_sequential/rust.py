@@ -31,10 +31,11 @@ density is then a function of the count *and* the exposure or trial count.
 - The negative binomial's exposure is continuous, and a table by count and
   distinct exposure has a row per observation: 2.3 GB per channel at the ci
   instance of ``spatio_sequential_counts_covariate``. It is factored: the
-  table is :func:`~sal.emissions.nb.exposure_table`, ``B_k(y)``, and the
-  kernel adds ``y log c - (y + r) log t``, ``t = r_k + mu_k c``: one
-  logarithm per score, chosen for speed over the family's order of
-  operations, 262.9 ulp relative at that instance rather than 2.3.
+  table is :func:`~sal.emissions.nb.exposure_table`, ``T_k(y) = S(r_k, y) -
+  lgamma(y + 1)``, and the kernel completes it in :mod:`sal.emissions.nb`'s
+  order, ``(T + y log(lambda / (1 + q))) - r log1p(q)``, ``lambda = mu_k c``,
+  ``q = lambda / r_k``: one ``log`` and one ``log1p`` per score, no term of
+  size ``r log r`` cancelled (issue #1335).
 - The beta-binomial's trial count is an integer, and its rows take one of
   three exact layouts, :data:`CovariateRows`, bitwise to one another.
   ``range`` and ``distinct`` tabulate every ``(successes, trial count)`` pair
@@ -547,7 +548,7 @@ def _total_table(
         return _count_table(sides, params, rows.extent), None
     table = np.empty((rows.extent, params.n_classes, params.n_states))
     for m, side in enumerate(sides):
-        table[:, m, :] = exposure_table(side, rows.extent).numpy()
+        table[:, m, :] = exposure_table(side, rows.extent)
     term = ExposureTerm(
         rows.covariate,
         np.ascontiguousarray(np.stack([side.dispersion.numpy() for side in sides])),
