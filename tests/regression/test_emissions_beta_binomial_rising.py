@@ -35,11 +35,19 @@ TAUS = (10.0, 1e3, 1e5, 1e8, 1e12, 1e16)
 #: The issue's absolute bound against ``mpmath``, in nats.
 ABSOLUTE = 1e-11
 
-#: The pmf against torch's ``log_density``, over ``max(|f|, 1)``: the sum of
-#: the two routes' errors against ``mpmath`` at 50 digits for ``tau <= 1e16``,
-#: ``n <= 40`` (2.0e-13 and 8.4e-15), rounded up. Not the issue's 1e-14: the
-#: unscaled rising factorials cancel, see the test below.
-TORCH_TOLERANCE = 3e-13
+#: The pmf against torch's ``log_density`` or the Rust count kernel, over ``max(|f|, 1)``, at
+#: ``n <= 40``. Both form ``log C`` from three ``lgamma`` of size up to
+#: ``lgamma(41) = 110.3``, each rounded to half an ulp: 3.7e-14 per route,
+#: 7.3e-14 between two, 1e-13 with the rest of the sum. Derived from the
+#: arithmetic, not fitted; the issue's 1e-14 is below this rounding, and
+#: torch alone is 1.15e-14 from ``mpmath`` at ``n <= 100``.
+ROUTE_TOLERANCE = 1e-13
+
+#: The pmf against ``mpmath`` over ``max(|f|, 1)`` at ``n <= 40``: ``log C``'s
+#: three ``lgamma`` rounded to half an ulp, ``1.5 eps lgamma(41) = 3.7e-14``,
+#: plus ``n eps = 0.9e-14`` from the two rates' logarithms. Derived; measured
+#: 1.4e-14 to 1.6e-14 from tau = 10 to 1e16, where the issue asked 1e-14.
+RELATIVE = 5e-14
 
 #: The rate ``p = a / tau`` at every concentration.
 RATE = 0.3
@@ -75,6 +83,8 @@ def test_the_pmf_is_mpmath_to_1e_11_at_every_concentration(tau: float) -> None:
     want = np.array([_exact(int(i), int(j), a, b) for i, j in pairs])
 
     assert float(np.abs(got - want).max()) <= ABSOLUTE
+    scale = np.maximum(np.abs(want), 1.0)
+    assert float((np.abs(got - want) / scale).max()) <= RELATIVE
 
 
 @pytest.mark.oracle
@@ -127,12 +137,10 @@ def test_off_support_scores_minus_infinity() -> None:
 def test_the_tables_are_the_pmf_bitwise_and_torch_within_its_promise(
     tau: float,
 ) -> None:
-    # The tables summed as `log C + U + V - W` are the NumPy pmf's operations
-    # on the same numbers. Torch's `log_density` keeps its own arithmetic and
-    # agrees within TORCH_TOLERANCE: the rising factorials are each of size
-    # n log tau and cancel to the pmf, so the tables carry eps n log tau
-    # absolute, measured 9.1e-14 over max(|f|, 1) against mpmath at 1e12 and
-    # 2.0e-13 at 1e16, where torch's scaled series is 7.2e-15.
+    # The tables summed in bb's order are the NumPy pmf's operations on the
+    # same numbers. Torch's `log_density` keeps its own arithmetic and agrees
+    # within ROUTE_TOLERANCE; measured 1.1e-14 at tau = 10 and 1.7e-14 at
+    # 1e12 over max(|f|, 1).
     rates = np.array([0.2, 0.5, 0.8])
     family = BetaBinomialEmission(
         [40.0] * 3, list(rates * tau), list((1.0 - rates) * tau)
@@ -143,13 +151,13 @@ def test_the_tables_are_the_pmf_bitwise_and_torch_within_its_promise(
     tables = trial_tables(family, 41, 41)
     factorial = log_factorial(41)
 
-    assembled = (
-        (
-            ((factorial[n] - factorial[z]) - factorial[n - z])[:, None]
-            + tables.success[z]
-        )
-        + tables.failure[n - z]
-    ) - tables.trial[n]
+    log_p, log_q = tables.log_rate
+    binomial = (
+        ((factorial[n] - factorial[z]) - factorial[n - z])[:, None] + z[:, None] * log_p
+    ) + (n - z)[:, None] * log_q
+    assembled = ((binomial + tables.success[z]) + tables.failure[n - z]) - tables.trial[
+        n
+    ]
     pmf = beta_binomial_log_pmf(
         z[:, None], n[:, None], family.alpha.numpy(), family.beta.numpy()
     )
@@ -160,7 +168,7 @@ def test_the_tables_are_the_pmf_bitwise_and_torch_within_its_promise(
 
     assert np.array_equal(assembled, pmf)
     scale = np.maximum(np.abs(pmf), 1.0)
-    assert float((np.abs(torch_scores - pmf) / scale).max()) <= TORCH_TOLERANCE
+    assert float((np.abs(torch_scores - pmf) / scale).max()) <= ROUTE_TOLERANCE
 
 
 @pytest.mark.oracle
@@ -193,3 +201,32 @@ def test_the_numpy_on_distinct_is_the_torch_one_bitwise() -> None:
 
     assert np.array_equal(got, want)
     assert np.array_equal(got, log_rising(shapes, values))
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("tau", TAUS, ids=str)
+def test_the_rust_count_kernel_is_the_pmf_within_the_route_tolerance(
+    tau: float,
+) -> None:
+    # `count_mixture::Rising`'s compensated prefix sums, one observation and
+    # one state at a time so the value is that observation's log pmf;
+    # measured 2.7e-14 over max(|f|, 1), the worst at tau = 10.
+    from sal import oxisal
+
+    a, b = RATE * tau, (1.0 - RATE) * tau
+    worst = 0.0
+    for n in range(0, 41, 3):
+        for z in range(n + 1):
+            value = oxisal.count_mixture_value_and_gradient(
+                np.zeros(1),
+                np.zeros(1),
+                successes=np.array([z], dtype=np.uint32),
+                alpha=np.array([a]),
+                beta=np.array([b]),
+                trials=np.array([float(n)]),
+                grad_alpha=np.zeros(1),
+                grad_beta=np.zeros(1),
+            )
+            pmf = float(beta_binomial_log_pmf(z, n, a, b))
+            worst = max(worst, abs(value - pmf) / max(abs(pmf), 1.0))
+    assert worst <= ROUTE_TOLERANCE, worst

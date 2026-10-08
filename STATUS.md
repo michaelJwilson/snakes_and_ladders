@@ -731,16 +731,17 @@ comparison.
 
 **Modules.** The evaluators and the oracle they are pinned to: `likelihood.brute_force`, `likelihood.parsimony`, `likelihood.algebraic`, `likelihood.polar` (successive cancellation and the list, #826), `likelihood.css`, `likelihood.mixture_assignments`, `likelihood.schedule`, `likelihood.spatio_sequential.rust`, and `likelihood.device`, which owns the cross-device tolerance this milestone's claims are stated against. `likelihood.ragged` is the gateway of the ragged path and its oracle, and `likelihood.ragged.rust` the compiled kernel behind it, conserved beside `sandbox.rectangular_hmm` (#666).
 
-**One beta-binomial construction from `log_rising`**
+**One beta-binomial construction from scaled rising factorials**
 ([#1332](https://github.com/michaelJwilson/snakes_and_ladders/issues/1332)).
-`bb.trial_tables` holds rising factorials `R(a, z)`, `R(b, j)`, `R(a + b, n)`
-and no `lgamma(a + b) - lgamma(a) - lgamma(b)`; the dense, coupled and
-spatio_sequential kernels sum `log C + U + V - W`. Against `mpmath` at 50
-digits the pmf is within 1e-11 nats for `tau` from 10 to 1e16 (5e-3 at 1e12
-before), and sums to 1 within 1e-12 over `n <= 100` at 1e16 (e^132 before).
-The tables are `bb.beta_binomial_log_pmf` bitwise and torch's `log_density`
-within 3e-13 `max(|f|, 1)`, not the 1e-14 asked: the unscaled rising
-factorials cancel to eps `n log tau`. Checked in
+`bb.trial_tables` holds `S(x, m) = R(x, m) - m log x` at `a`, `b` and
+`a + b` and the two log rates, with no `lgamma(a + b) - lgamma(a) -
+lgamma(b)`; the dense, coupled and spatio_sequential kernels sum them in one
+stated order. Against `mpmath` at 50 digits the pmf is within 1e-11 nats for
+`tau` from 10 to 1e16 (5e-3 at 1e12 before), 1.4e-14 to 1.6e-14 over
+`max(|f|, 1)` at `n <= 40`, and sums to 1 within 1e-12 over `n <= 100` at
+1e16 (e^132 before). The tables are `bb.beta_binomial_log_pmf` bitwise; torch
+and the Rust count kernel agree within 1e-13, derived from `log C`'s rounding,
+measured 1.1e-14 to 4.6e-14. Checked in
 `tests/regression/test_emissions_beta_binomial_rising.py`.
 
 **Polar codes are a row, and the CRC-aided list is built and measured**

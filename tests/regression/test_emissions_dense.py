@@ -40,10 +40,11 @@ _TABULATED_ULPS = 4
 
 EPS = float(np.finfo(np.float64).eps)
 
-#: The beta-binomial's rising-factorial tables against the family's ``lgamma``
-#: arithmetic, over ``max(|f|, 1)`` (issue #1332): the bitwise pin restated as
-#: a tolerance, the sum of the two routes' errors against ``mpmath`` at 50
-#: digits on these draws, 4.0e-14 and 2.8e-14, rounded up. Measured 6.5e-14.
+#: The beta-binomial's scaled rising factorials against the family's ``lgamma``
+#: arithmetic, over ``max(|f|, 1)`` (issue #1332). Both routes form ``log C``
+#: from three ``lgamma`` of size up to ``lgamma(41)``, each rounded to half an
+#: ulp: 3.7e-14 per route, 7.3e-14 between two, 1e-13 with the rest of the
+#: sum. Derived, not fitted. Measured 4.2e-14.
 _DENSITY_TOLERANCE = 1e-13
 
 NB = NegativeBinomialEmission([4.0, 7.0, 12.0], [20.0, 80.0, 200.0])

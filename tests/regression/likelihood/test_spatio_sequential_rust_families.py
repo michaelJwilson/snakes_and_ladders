@@ -44,6 +44,13 @@ from sal.sim.spatio_sequential import (
 #: Relative, on sums over sites (`test_spatio_sequential_rust.py`).
 LOG_TOLERANCE = 1e-12
 
+#: A beta-binomial score against torch's ``log_density``, over ``max(|f|, 1)``
+#: (issue #1332). Both routes form ``log C`` from three ``lgamma`` of size up
+#: to ``lgamma(n + 1)``, each rounded to half an ulp: at ``n <= 40`` that is
+#: ``1.5 eps lgamma(41) = 3.7e-14`` per route, so 7.3e-14 between two, and
+#: 1e-13 with the rest of the sum. Derived, not fitted; measured 1.1e-14.
+BB_TOLERANCE = 1e-13
+
 #: Absolute, on probabilities.
 POSTERIOR_TOLERANCE = 1e-8
 
@@ -167,7 +174,9 @@ def test_every_covariate_layout_matches_the_oracle(
 def test_each_table_is_keyed_as_stated_and_is_the_family_s_density(name: str) -> None:
     # The row each case is read by, and every row's entry is the family's own
     # `log_density` at that observation, bit for bit: the table is the
-    # oracle's arithmetic, not a second implementation of it.
+    # oracle's arithmetic, not a second implementation of it. A beta-binomial
+    # under a trial count is the NumPy pmf's scaled rising factorials (#1332):
+    # the torch density within BB_TOLERANCE over max(|f|, 1), measured below.
     import torch
 
     params, observations, labels = _instance(name)
@@ -181,13 +190,19 @@ def test_each_table_is_keyed_as_stated_and_is_the_family_s_density(name: str) ->
             if params.covariate is None
             else torch.as_tensor(params.covariate)[..., None]
         )
-        np.testing.assert_array_equal(
-            scores[:, :, m, :],
-            family.log_density(
-                torch.as_tensor(observations, dtype=family.observation_dtype),
-                covariate=covariate,
-            ).numpy(),
-        )
+        want = family.log_density(
+            torch.as_tensor(observations, dtype=family.observation_dtype),
+            covariate=covariate,
+        ).numpy()
+        got = scores[:, :, m, :]
+        if isinstance(family, BetaBinomialEmission) and covariate is not None:
+            finite = np.isfinite(want)
+            assert np.array_equal(np.isfinite(got), finite)
+            scale = np.maximum(np.abs(want[finite]), 1.0)
+            worst = float((np.abs(got[finite] - want[finite]) / scale).max())
+            assert worst <= BB_TOLERANCE, worst
+            continue
+        np.testing.assert_array_equal(got, want)
 
 
 @pytest.mark.oracle

@@ -246,31 +246,40 @@ class TrialTerm:
         ``(S, n_nodes)`` contiguous ``uint32``; zero marks the successes
         unobserved.
     failure : np.ndarray
-        ``V[j, m, k] = R(b_mk, j)``, ``(extent, M, K)`` contiguous.
+        ``V[j, m, k] = S(b_mk, j)``, ``(extent, M, K)`` contiguous.
     trial : np.ndarray
-        ``W[n, m, k] = R(a_mk + b_mk, n)``, ``(extent, M, K)`` contiguous.
+        ``W[n, m, k] = S(a_mk + b_mk, n)``, ``(extent, M, K)`` contiguous.
     log_factorial : np.ndarray
         ``lgamma(j + 1)``, ``(extent,)``.
+    log_rate : np.ndarray
+        ``log(a / (a + b))`` and ``log(b / (a + b))``, ``(2, M, K)`` contiguous.
     """
 
     trials: np.ndarray
     failure: np.ndarray
     trial: np.ndarray
     log_factorial: np.ndarray
+    log_rate: np.ndarray
 
     def arguments(self) -> dict[str, np.ndarray]:
-        """The kernel's four keyword arguments, flat."""
+        """The kernel's five keyword arguments, flat."""
         return {
             "trials": self.trials.reshape(-1),
             "failure_table": self.failure.reshape(-1),
             "trial_table": self.trial.reshape(-1),
             "log_factorial": self.log_factorial,
+            "log_rate": self.log_rate.reshape(-1),
         }
 
     @property
     def nbytes(self) -> int:
-        """The bytes of the three tables, the trial counts excluded."""
-        return self.failure.nbytes + self.trial.nbytes + self.log_factorial.nbytes
+        """The bytes of the four tables, the trial counts excluded."""
+        return (
+            self.failure.nbytes
+            + self.trial.nbytes
+            + self.log_factorial.nbytes
+            + self.log_rate.nbytes
+        )
 
 
 def _side(family: IndependentCountPair, channel: int) -> EmissionFamily:
@@ -557,12 +566,16 @@ def _success_table(
     success = np.empty((rows.extent, *shape))
     failure = np.empty((trials_extent, *shape))
     trial = np.empty((trials_extent, *shape))
+    log_rate = np.empty((2, *shape))
     for m, side in enumerate(sides):
         tables = trial_tables(side, rows.extent, trials_extent)
         success[:, m, :] = tables.success
         failure[:, m, :] = tables.failure
         trial[:, m, :] = tables.trial
-    term = TrialTerm(rows.covariate, failure, trial, log_factorial(trials_extent))
+        log_rate[:, m, :] = tables.log_rate
+    term = TrialTerm(
+        rows.covariate, failure, trial, log_factorial(trials_extent), log_rate
+    )
     return success, term
 
 

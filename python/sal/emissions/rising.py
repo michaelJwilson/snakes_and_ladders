@@ -409,8 +409,14 @@ def _log_rising_kernel(
     plain_error: float,
     promise: float,
     floor: float,
+    scaled: bool,
 ) -> None:
-    """``out[i] = lgamma(x[i] + m[i]) - lgamma(x[i])`` over flat, contiguous arrays."""
+    """``out[i] = lgamma(x[i] + m[i]) - lgamma(x[i])`` over flat, contiguous arrays.
+
+    With ``scaled``, ``out[i]`` is that less ``m[i] log x[i]``, from the series
+    alone (the caller passes ``plain_error = inf``), so nothing of size
+    ``m log x`` is formed and differenced (issue #1332).
+    """
     for i in range(x.size):
         xi = x[i]
         mi = m[i]
@@ -458,8 +464,11 @@ def _log_rising_kernel(
             p = p * upper_square + power * both
             total += _LGAMMA_SERIES[k] * p
             power *= inverse_square
-        scaled = mi * h + (mi - 0.5) * step + total * gap
-        out[i] = (scaled + mi * math.log(y)) + recurrence
+        series = mi * h + (mi - 0.5) * step + total * gap
+        if scaled:
+            out[i] = (series + mi * math.log1p((y - xi) / xi)) + recurrence
+        else:
+            out[i] = (series + mi * math.log(y)) + recurrence
 
 
 def _digamma_rising_kernel(
@@ -555,6 +564,7 @@ def log_rising(x: ArrayLike, m: ArrayLike) -> NDArray[np.float64]:
         _PLAIN_ERROR,
         _LOG_PROMISE,
         _TERM_FLOOR,
+        False,
     )
     return out
 
@@ -586,7 +596,32 @@ def log_rising_into(
         _PLAIN_ERROR,
         _LOG_PROMISE,
         _TERM_FLOOR,
+        False,
     )
+
+
+def scaled_rising_array(x: ArrayLike, m: ArrayLike) -> NDArray[np.float64]:
+    """``lgamma(x + m) - lgamma(x) - m log x``, :func:`scaled_rising` on NumPy arrays; broadcasts.
+
+    :func:`log_rising`'s compiled kernel on its series route at every ``x``
+    (below :data:`_SERIES_FROM` through the recurrence), less ``m log x``
+    inside the series rather than after it: ``0`` at ``x = inf`` and at
+    ``m = 0``, and no term of size ``m log x`` is differenced. The
+    beta-binomial's tables are these (issue #1332).
+    """
+    x_, m_, out = _flat(x, m)
+    _kernels()[0](
+        x_,
+        m_,
+        out.reshape(-1),
+        _SERIES_FROM,
+        _SMALL_T,
+        math.inf,
+        _LOG_PROMISE,
+        _TERM_FLOOR,
+        True,
+    )
+    return out
 
 
 def digamma_rising(x: ArrayLike, m: ArrayLike) -> NDArray[np.float64]:

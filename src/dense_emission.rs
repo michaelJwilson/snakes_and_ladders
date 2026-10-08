@@ -236,7 +236,7 @@ pub fn log_emission_into(
 /// `dispersion` and `mean`, given together, its exposure; `family_order`
 /// says which order that term is completed in. `successes` and
 /// `success_table` name the second, and `trials`, `failure_table`,
-/// `trial_table` and `log_factorial`, given together, its trial
+/// `trial_table`, `log_factorial` and `log_rate`, given together, its trial
 /// count, as `class_posteriors` takes them. Every array crosses once,
 /// contiguous and borrowed; the GIL is released for the whole pass.
 ///
@@ -246,7 +246,7 @@ pub fn log_emission_into(
 /// # Errors
 /// `ValueError` naming the first violated precondition.
 #[pyfunction]
-#[pyo3(signature = (n_states, family_order, out, totals=None, total_table=None, exposure=None, dispersion=None, mean=None, successes=None, success_table=None, trials=None, failure_table=None, trial_table=None, log_factorial=None))]
+#[pyo3(signature = (n_states, family_order, out, totals=None, total_table=None, exposure=None, dispersion=None, mean=None, successes=None, success_table=None, trials=None, failure_table=None, trial_table=None, log_factorial=None, log_rate=None))]
 #[allow(clippy::too_many_arguments)]
 pub fn dense_log_emission(
     py: Python<'_>,
@@ -264,6 +264,7 @@ pub fn dense_log_emission(
     failure_table: Option<PyReadonlyArray1<'_, f64>>,
     trial_table: Option<PyReadonlyArray1<'_, f64>>,
     log_factorial: Option<PyReadonlyArray1<'_, f64>>,
+    log_rate: Option<PyReadonlyArray1<'_, f64>>,
 ) -> PyResult<()> {
     let total = match (&totals, &total_table) {
         (None, None) => None,
@@ -288,7 +289,13 @@ pub fn dense_log_emission(
         (Some(counts), Some(table)) => Some(SuccessChannel {
             counts: borrowed(counts, "successes")?,
             table: borrowed(table, "success_table")?,
-            trials: trial_term(&trials, &failure_table, &trial_table, &log_factorial)?,
+            trials: trial_term(
+                &trials,
+                &failure_table,
+                &trial_table,
+                &log_factorial,
+                &log_rate,
+            )?,
         }),
         _ => {
             return Err(PyValueError::new_err(

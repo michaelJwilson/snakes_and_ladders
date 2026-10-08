@@ -104,11 +104,11 @@ def test_the_exposure_table_completed_per_observation_is_the_density_to_its_roun
     )
 
 
-#: The rising-factorial pmf against the family's ``lgamma`` arithmetic, over
-#: ``max(|f|, 1)``: the bitwise pin of #1064 restated as a tolerance (issue
-#: #1332), since the two now round differently. The bound is the sum of the
-#: two routes' own errors against ``mpmath`` at 50 digits on the dense
-#: fixture, 4.0e-14 and 2.8e-14, rounded up; measured below.
+#: The scaled rising-factorial pmf against the family's ``lgamma``
+#: arithmetic, over ``max(|f|, 1)`` (issue #1332). Both routes form ``log C``
+#: from three ``lgamma`` of size up to ``lgamma(41)``, each rounded to half an
+#: ulp: 3.7e-14 per route, 7.3e-14 between two, 1e-13 with the rest of the
+#: sum. Derived, not fitted.
 DENSITY_TOLERANCE = 1e-13
 
 
@@ -116,7 +116,7 @@ DENSITY_TOLERANCE = 1e-13
 def test_the_trial_tables_summed_in_order_are_the_numpy_pmf_bitwise() -> None:
     # `log C + U + V - W`, the order `beta_binomial_log_pmf` sums in and the
     # same `log_rising` and `gammaln` calls, so the same bits; the family's
-    # `log_density` agrees within DENSITY_TOLERANCE (measured 1.9e-14).
+    # `log_density` agrees within DENSITY_TOLERANCE (measured 4.2e-14).
     family, successes, trials = _beta_binomial()
     z, n = successes.astype(np.int64), trials.astype(np.int64)
     tables = trial_tables(family, int(z.max()) + 1, int(n.max()) + 1)
@@ -125,12 +125,13 @@ def test_the_trial_tables_summed_in_order_are_the_numpy_pmf_bitwise() -> None:
     zo, no = z[observed], n[observed]
 
     assembled = np.zeros((z.size, family.n_states))
+    log_p, log_q = tables.log_rate
+    binomial = (
+        ((factorial[no] - factorial[zo]) - factorial[no - zo])[:, None]
+        + zo[:, None] * log_p
+    ) + (no - zo)[:, None] * log_q
     assembled[observed] = (
-        (
-            ((factorial[no] - factorial[zo]) - factorial[no - zo])[:, None]
-            + tables.success[zo]
-        )
-        + tables.failure[no - zo]
+        (binomial + tables.success[zo]) + tables.failure[no - zo]
     ) - tables.trial[no]
     pmf = beta_binomial_log_pmf(
         zo[:, None], no[:, None], family.alpha.numpy(), family.beta.numpy()

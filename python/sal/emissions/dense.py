@@ -17,8 +17,9 @@ channel's plus the second's. The joint pair is refused: its trial count is the
 observed total, and a total of zero is a support point there where the trial
 term reads it as unobserved.
 
-**The order is the caller's.** The beta-binomial's four tabulated terms,
-``log C + U + V - W`` of rising factorials (issue #1332), are
+**The order is the caller's.** The beta-binomial's tabulated terms, scaled
+rising factorials and log rates summed in :mod:`sal.emissions.bb`'s order
+(issue #1332), are
 :func:`~sal.emissions.bb.beta_binomial_log_pmf` bit for bit and the family's
 ``log_density`` within 1e-14 ``max(|f|, 1)``. The negative binomial's exposure term is completed either in the family's
 order, ``A + r ln(r / t) + y ln(mu c / t)`` (:attr:`Order.FAMILY`, two
@@ -168,6 +169,7 @@ def _success_arguments(
         "failure_table": np.ascontiguousarray(tables.failure).reshape(-1),
         "trial_table": np.ascontiguousarray(tables.trial).reshape(-1),
         "log_factorial": log_factorial(trials_extent),
+        "log_rate": np.ascontiguousarray(tables.log_rate).reshape(-1),
     }
 
 

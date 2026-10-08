@@ -54,10 +54,11 @@ PROBLEM = "spatio_sequential_counts_covariate"
 _ULPS = 512
 _PER_SCORE = _ULPS * np.finfo(np.float64).eps
 
-#: The beta-binomial's rising factorials against the family's ``lgamma``
-#: arithmetic, over ``max(|f|, 1)`` (issue #1332): the sum of the two routes'
-#: errors against ``mpmath`` on the dense fixture, 4.0e-14 and 2.8e-14,
-#: rounded up, as ``test_emissions_dense`` declares it.
+#: The beta-binomial's scaled rising factorials against the family's ``lgamma``
+#: arithmetic, over ``max(|f|, 1)`` (issue #1332). Both routes form ``log C``
+#: from three ``lgamma`` of size up to ``lgamma(41)``, each rounded to half an
+#: ulp: 3.7e-14 per route, 7.3e-14 between two, 1e-13 with the rest of the
+#: sum. Derived, not fitted. Measured 4.6e-14.
 DENSITY_TOLERANCE = 1e-13
 
 #: Relative agreement of an evidence and a field with the NumPy oracle: the
