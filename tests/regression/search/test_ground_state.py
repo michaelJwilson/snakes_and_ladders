@@ -26,6 +26,7 @@ from sal.opt.budget import Budget
 from sal.opt.termination import Stop, Termination
 from sal.sample.potts_mcmc import (
     PottsMove,
+    Recolour,
     anneal_potts,
     parallel_tempering,
     sample_potts,
@@ -221,7 +222,8 @@ def test_the_field_accept_step_rejects(move: PottsMove) -> None:
         rung.field,
         ExponentialTempSchedule(2.0, 0.05, 40),
         np.random.default_rng(551),
-        move=move,
+        move=[move],
+        recolour=Recolour.UNIFORM,  # the move alone, uniform (#1323)
         # The oracle's pass, the one that records its accept steps; the
         # compiled default keeps no counter (#923, #1283).
         cluster_backend=Backend.PYTHON,
@@ -559,7 +561,8 @@ def test_the_compiled_swendsen_wang_anneal_keeps_no_counter() -> None:
         rung.field,
         schedule,
         np.random.default_rng(923),
-        move=PottsMove.SWENDSEN_WANG,
+        move=[PottsMove.SWENDSEN_WANG],
+        recolour=Recolour.UNIFORM,  # the move alone, uniform (#1323)
         cluster_backend=Backend.RUST,
     )
     oracle = anneal_potts(
@@ -567,7 +570,8 @@ def test_the_compiled_swendsen_wang_anneal_keeps_no_counter() -> None:
         rung.field,
         schedule,
         np.random.default_rng(923),
-        move=PottsMove.SWENDSEN_WANG,
+        move=[PottsMove.SWENDSEN_WANG],
+        recolour=Recolour.UNIFORM,  # the move alone, uniform (#1323)
         cluster_backend=Backend.PYTHON,
     )
     assert compiled.trace == ()

@@ -81,11 +81,18 @@ class Recolour(StrEnum):
     move (meaning by type, #1091). ``HEAT_BATH`` draws the label
     ``proportional to exp(beta sum_C h[i, label])`` over the allowed labels,
     the exact conditional given the bonds; ``UNIFORM`` proposes a label
-    uniformly and accepts it on the cluster's field difference.
+    uniformly and accepts it on the cluster's field difference; ``PER_MOVE``
+    takes ``HEAT_BATH`` where the move has that form and ``UNIFORM`` where
+    it does not (issue #1323): the uniform proposal freezes under a strong
+    field, and Niedermayer accepted 1 of 320 moves at 1.5 beta_c (#1314).
     """
 
     HEAT_BATH = "heat-bath"
     UNIFORM = "uniform"
+    # Issue #1323: each move's own default, the entry points' default.
+    # ``HEAT_BATH`` for Wolff and Swendsen-Wang, ``UNIFORM`` for the cluster
+    # moves with no heat-bath form (Niedermayer, ghost-spin, label-directed).
+    PER_MOVE = "per-move"
 
 
 #: What every Potts entry point takes as ``move``: one move set, or a
@@ -101,6 +108,11 @@ _HEAT_BATH_OF = {
     PottsMove.SWENDSEN_WANG_HEAT_BATH: PottsMove.SWENDSEN_WANG_HEAT_BATH,
 }
 
+#: The cluster moves a bare :class:`PottsMove` composes with a single-site
+#: Gibbs sweep per step (issue #1323): a cluster move alone is not ergodic
+#: under a forbidden label. A sequence is the move set exactly as given.
+_COMPOSED = frozenset({PottsMove.WOLFF, PottsMove.SWENDSEN_WANG})
+
 #: The cluster moves whose label draw has no heat-bath form: Niedermayer's
 #: uniform proposal, the ghost spin's bonded label, the directed target.
 _NO_HEAT_BATH = frozenset(
@@ -108,14 +120,25 @@ _NO_HEAT_BATH = frozenset(
 )
 
 
+def composed(move: PottsMove) -> tuple[PottsMove, ...]:
+    """A bare ``move`` as the set it runs: Wolff and Swendsen-Wang with a Gibbs sweep (issue #1323)."""
+    return (move, PottsMove.SINGLE_SITE) if move in _COMPOSED else (move,)
+
+
 def move_set(
-    move: PottsMoves, recolour: Recolour = Recolour.UNIFORM
+    move: PottsMoves, recolour: Recolour = Recolour.PER_MOVE
 ) -> tuple[PottsMove, ...]:
     """``move`` as a non-empty tuple applied in order, each cluster move under ``recolour``.
 
     A single :class:`PottsMove` is checked first, as
     :func:`~sal.sample.potts_mcmc.chains.moves_per_rung` checks it: it is a
-    ``str`` and so a ``Sequence``. ``recolour`` reaches the cluster moves of
+    ``str`` and so a ``Sequence``. Composition is read from the type (issue
+    #1323): a bare ``WOLFF`` or ``SWENDSEN_WANG`` is the move composed with a
+    single-site Gibbs sweep, ``(move, SINGLE_SITE)``, and a sequence is the
+    set exactly as given, so ``move=[PottsMove.WOLFF]`` with
+    ``recolour=Recolour.UNIFORM`` is the move before #1323. The result is a
+    sequence, so resolving it again under the same ``recolour`` returns it
+    unchanged. ``recolour`` reaches the cluster moves of
     the set; a single-site or gradient-informed move has no cluster to
     recolour and is returned as given. The deprecated members
     ``WOLFF_HEAT_BATH`` and ``SWENDSEN_WANG_HEAT_BATH`` name their recolouring
@@ -130,7 +153,7 @@ def move_set(
     TypeError
         If an entry is not a ``PottsMove``.
     """
-    moves = (move,) if isinstance(move, PottsMove) else tuple(move)
+    moves = composed(move) if isinstance(move, PottsMove) else tuple(move)
     if not moves:
         msg = "move is a PottsMove or a non-empty sequence of them"
         raise ValueError(msg)
@@ -145,7 +168,9 @@ def move_set(
                 "recolour=Recolour.UNIFORM, or use wolff or swendsen-wang"
             )
             raise ValueError(msg)
-        heat_bath = recolour is Recolour.HEAT_BATH
+        heat_bath = recolour is Recolour.HEAT_BATH or (
+            recolour is Recolour.PER_MOVE and each not in _NO_HEAT_BATH
+        )
         resolved.append(_HEAT_BATH_OF.get(each, each) if heat_bath else each)
     return tuple(resolved)
 

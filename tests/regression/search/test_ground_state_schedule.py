@@ -17,7 +17,7 @@ import pytest
 from sal.backend import Backend
 from sal.cost import Cost
 from sal.opt.budget import Budget
-from sal.sample.potts_mcmc import PottsMove, anneal_potts
+from sal.sample.potts_mcmc import PottsMove, Recolour, anneal_potts
 from sal.sample.schedule import (
     ExponentialTempSchedule,
     ScheduleParams,
@@ -83,7 +83,8 @@ def test_the_default_schedule_is_the_run_it_replaces_bitwise(
         rung.field,
         ExponentialTempSchedule(ANNEAL_START, ANNEAL_END, SWEEPS),
         np.random.default_rng([seed, 0]),
-        move=move,
+        move=[move],
+        recolour=Recolour.UNIFORM,  # the move alone, uniform (#1323)
         cluster_backend=Backend.RUST
         if move is PottsMove.SWENDSEN_WANG
         else Backend.PYTHON,

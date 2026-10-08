@@ -28,6 +28,7 @@ from sal.sample.potts_mcmc.moves import (
     PottsMove,
     PottsMoves,
     Recolour,
+    composed,
     move_set,
     refuse_negative_coupling,
 )
@@ -247,7 +248,7 @@ def sample_potts(
     thin: int = 1,
     *,
     temperature: float = 1.0,
-    recolour: Recolour = Recolour.UNIFORM,
+    recolour: Recolour = Recolour.PER_MOVE,
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.RUST,
     start: np.ndarray | None = None,
@@ -346,7 +347,15 @@ def sample_potts(
         )
     offsets, neighbours, couplings = graph.compressed_adjacency()
     advance = sweep_for(
-        move, graph, rows, offsets, neighbours, couplings, backend, cluster_backend
+        move,
+        graph,
+        rows,
+        offsets,
+        neighbours,
+        couplings,
+        backend,
+        cluster_backend,
+        recolour=recolour,
     )
 
     recorded = np.empty((n_sweeps, graph.n_nodes), dtype=np.int64)
@@ -433,14 +442,14 @@ def moves_per_rung(move: RungMoves, n_rungs: int) -> tuple[tuple[PottsMove, ...]
         If an entry holds anything but a ``PottsMove``.
     """
     if isinstance(move, PottsMove):
-        return ((move,),) * n_rungs
+        return (composed(move),) * n_rungs
     entries = tuple(move)
     if len(entries) != n_rungs:
         msg = f"move holds one entry per rung, {n_rungs}, got {len(entries)}"
         raise ValueError(msg)
     per_rung = []
     for entry in entries:
-        rung = (entry,) if isinstance(entry, PottsMove) else tuple(entry)
+        rung = composed(entry) if isinstance(entry, PottsMove) else tuple(entry)
         if not rung:
             msg = "a rung's moves are a non-empty sequence"
             raise ValueError(msg)
@@ -613,7 +622,7 @@ def anneal_potts(
     rng: np.random.Generator,
     *,
     move: PottsMoves = PottsMove.SINGLE_SITE,
-    recolour: Recolour = Recolour.UNIFORM,
+    recolour: Recolour = Recolour.PER_MOVE,
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.RUST,
     start: np.ndarray | None = None,
@@ -723,7 +732,7 @@ def anneal_potts(
         graph, rows, graph.compressed_adjacency(), backend, cluster_backend
     )
     origin = Moved(state, lattice.energy(state), None, 0)
-    walked = anneal(lattice.rung(move_set(move), trace), schedule, origin, rng, np.copy)
+    walked = anneal(lattice.rung(move, trace), schedule, origin, rng, np.copy)
     return AnnealedPotts(
         best=walked.best,
         energy=walked.energy,
@@ -786,7 +795,7 @@ def parallel_tempering(
     thin: int = 1,
     *,
     move: RungMoves = PottsMove.SINGLE_SITE,
-    recolour: Recolour = Recolour.UNIFORM,
+    recolour: Recolour = Recolour.PER_MOVE,
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.RUST,
     start: np.ndarray | None = None,
@@ -1361,7 +1370,7 @@ def sweep_for(
     backend: Backend,
     cluster_backend: Backend = Backend.RUST,
     *,
-    recolour: Recolour = Recolour.UNIFORM,
+    recolour: Recolour = Recolour.PER_MOVE,
 ) -> Callable[[np.ndarray, np.random.Generator, float], int]:
     """One sweep of ``move``, as a call taking a state, a generator and ``beta``.
 
@@ -1429,7 +1438,7 @@ def sample_potts_pair(
     *,
     temperature: float = 1.0,
     houdayer: bool = True,
-    recolour: Recolour = Recolour.UNIFORM,
+    recolour: Recolour = Recolour.PER_MOVE,
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.RUST,
 ) -> PottsPair:
@@ -1507,7 +1516,15 @@ def sample_potts_pair(
     ]
     offsets, neighbours, couplings = graph.compressed_adjacency()
     advance = sweep_for(
-        move, graph, rows, offsets, neighbours, couplings, backend, cluster_backend
+        move,
+        graph,
+        rows,
+        offsets,
+        neighbours,
+        couplings,
+        backend,
+        cluster_backend,
+        recolour=recolour,
     )
 
     recorded = [np.empty((n_sweeps, graph.n_nodes), dtype=np.int64) for _ in range(2)]
@@ -1626,6 +1643,9 @@ def _chain_from(
         backend=backend,
         cluster_backend=cluster_backend,
         start=start,
+        # ``move`` is resolved by the caller; under ``UNIFORM`` a resolved
+        # set is returned unchanged (issue #1323).
+        recolour=Recolour.UNIFORM,
     )
 
 
@@ -1639,7 +1659,7 @@ def sample_potts_starts(
     thin: int = 1,
     *,
     temperature: float = 1.0,
-    recolour: Recolour = Recolour.UNIFORM,
+    recolour: Recolour = Recolour.PER_MOVE,
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.RUST,
     equilibration_sweeps: int = 100,

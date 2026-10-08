@@ -444,7 +444,7 @@ def cluster_moves(
     backend: Backend = Backend.RUST,
     *,
     move: PottsMoves = KEYED_MOVES,
-    recolour: Recolour = Recolour.UNIFORM,
+    recolour: Recolour = Recolour.PER_MOVE,
 ) -> dict[MoveKind, WolffMove | SwendsenWangMove | NiedermayerMove]:
     """Every cluster move of ``move`` on one lattice, keyed as the environment expects them.
 
@@ -452,9 +452,11 @@ def cluster_moves(
     one field and a Swendsen-Wang move on another. ``backend`` reaches the
     Swendsen-Wang pass alone, which is the one with two implementations.
     ``move`` and ``recolour`` are every Potts entry point's (issue #1317):
-    the default builds all three, bitwise as before, and
-    ``recolour=Recolour.HEAT_BATH`` draws each Swendsen-Wang cluster's label
-    from its field weight at ``T > 0``.
+    the default ``recolour=Recolour.PER_MOVE`` draws each Swendsen-Wang
+    cluster's label from its field weight at ``T > 0`` and keeps Wolff
+    uniform, since a keyed Wolff action names the label (issue #1323);
+    ``recolour=Recolour.UNIFORM`` builds all three as before #1323. A keyed
+    arm applies one move, so a bare move is not composed with Gibbs.
 
     Houdayer's move is not here and cannot be: it acts on a *pair* of replicas
     and an arm's action carries one labelling to one labelling, so there is no
@@ -472,7 +474,13 @@ def cluster_moves(
     """
     field = log_weight_of(field)
     built: dict[MoveKind, WolffMove | SwendsenWangMove | NiedermayerMove] = {}
-    for each in move_set(move, recolour):
+    given_moves = (move,) if isinstance(move, PottsMove) else tuple(move)
+    move_set(given_moves, Recolour.UNIFORM)  # refuses an empty or untyped set
+    for given in given_moves:
+        # A keyed Wolff action names the label, so ``PER_MOVE`` keeps it
+        # uniform; an arm applies one move, so a bare move is not composed.
+        own = Recolour.UNIFORM if given is PottsMove.WOLFF else recolour
+        (each,) = move_set([given], own if recolour is Recolour.PER_MOVE else recolour)
         if each is PottsMove.WOLFF_HEAT_BATH:
             msg = (
                 "a keyed Wolff action names the label a heat bath would draw: "

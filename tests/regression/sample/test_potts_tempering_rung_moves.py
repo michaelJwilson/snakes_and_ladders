@@ -24,6 +24,7 @@ from sal.sample.potts_mcmc import (
     PottsMove,
     critical_ratio,
     field_ratio,
+    move_set,
     parallel_tempering,
     rung_moves,
 )
@@ -280,7 +281,10 @@ def test_one_move_per_rung_spelled_out_is_the_single_move_bitwise(
             result.spent,
         )
 
-    assert run(move) == run((move,) * 3) == run([(move,), (move,), (move,)])
+    # A bare cluster move is composed with a Gibbs sweep (#1323), so its
+    # one-tuple spelling is the set it resolves to.
+    spelled = move_set(move)
+    assert run(move) == run((move,) * 3) == run([spelled, spelled, spelled])
 
 
 @pytest.mark.analytic

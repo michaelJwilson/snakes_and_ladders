@@ -438,7 +438,7 @@ def tempered_potts_pair(
     thin: int = 1,
     *,
     move: PottsMoves = PottsMove.SINGLE_SITE,
-    recolour: Recolour = Recolour.UNIFORM,
+    recolour: Recolour = Recolour.PER_MOVE,
     houdayer: bool = True,
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.RUST,
@@ -520,7 +520,15 @@ def tempered_potts_pair(
 
     offsets, neighbours, couplings = graph.compressed_adjacency()
     advance = sweep_for(
-        move, graph, rows, offsets, neighbours, couplings, backend, cluster_backend
+        move,
+        graph,
+        rows,
+        offsets,
+        neighbours,
+        couplings,
+        backend,
+        cluster_backend,
+        recolour=recolour,
     )
     children = rng.spawn(len(temperatures))
 
